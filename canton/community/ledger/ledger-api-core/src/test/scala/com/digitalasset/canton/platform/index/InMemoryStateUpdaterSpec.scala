@@ -39,6 +39,7 @@ import com.digitalasset.canton.platform.apiserver.services.tracking.SubmissionTr
 import com.digitalasset.canton.platform.index.InMemoryStateUpdater.PrepareResult
 import com.digitalasset.canton.platform.index.InMemoryStateUpdaterSpec.*
 import com.digitalasset.canton.platform.indexer.parallel.ParallelIndexerSubscription.Batch
+import com.digitalasset.canton.platform.store.OffsetGen.offset
 import com.digitalasset.canton.platform.store.backend.ParameterStorageBackend.LedgerEnd
 import com.digitalasset.canton.platform.store.cache.{
   AchsStateCache,
@@ -57,7 +58,7 @@ import com.digitalasset.canton.platform.store.interfaces.TransactionLogUpdate.{
   TransactionRejected,
 }
 import com.digitalasset.canton.platform.store.interning.StringInterningView
-import com.digitalasset.canton.platform.{DispatcherState, InMemoryState}
+import com.digitalasset.canton.platform.{DispatcherState, InMemoryState, Key}
 import com.digitalasset.canton.protocol.{
   ContractInstance,
   ExampleContractFactory,
@@ -157,23 +158,20 @@ class InMemoryStateUpdaterSpec
   "prepare" should "throw exception for an empty vector" in new Scope {
     an[NoSuchElementException] should be thrownBy {
       InMemoryStateUpdater.prepare(
-        Vector.empty,
-        someLedgerEnd,
-        traceContext,
+        makeBatch(Vector.empty, someLedgerEnd, traceContext)
       )
     }
   }
 
   "prepare" should "prepare a batch of a single update" in new Scope {
     InMemoryStateUpdater.prepare(
-      Vector(update1),
-      someLedgerEnd,
-      traceContext,
+      makeBatch(Vector(update1), someLedgerEnd, traceContext)
     ) shouldBe PrepareResult(
       Vector(txLogUpdate1),
       someLedgerEnd,
       update1._2.traceContext,
       traceContext,
+      contractStateEvents = Vector.empty,
     )
   }
 
@@ -187,9 +185,7 @@ class InMemoryStateUpdaterSpec
     )
 
     val preparedWithHashResult = InMemoryStateUpdater.prepare(
-      Vector(updateWithTransactionHash),
-      someLedgerEnd,
-      traceContext,
+      makeBatch(Vector(updateWithTransactionHash), someLedgerEnd, traceContext)
     )
     inside(preparedWithHashResult.updates.loneElement) {
       case transactionAccepted: TransactionAccepted =>
@@ -197,9 +193,7 @@ class InMemoryStateUpdaterSpec
     }
 
     val preparedWithoutHashResult = InMemoryStateUpdater.prepare(
-      Vector(update1),
-      someLedgerEnd,
-      traceContext,
+      makeBatch(Vector(update1), someLedgerEnd, traceContext)
     )
     inside(preparedWithoutHashResult.updates.loneElement) {
       case transactionAccepted: TransactionAccepted =>
@@ -226,9 +220,7 @@ class InMemoryStateUpdaterSpec
     )
 
     val preparedWithTrafficCostResult = InMemoryStateUpdater.prepare(
-      Vector(accepted),
-      someLedgerEnd,
-      traceContext,
+      makeBatch(Vector(accepted), someLedgerEnd, traceContext)
     )
     inside(preparedWithTrafficCostResult.updates.loneElement) {
       case transactionAccepted: TransactionAccepted =>
@@ -247,9 +239,7 @@ class InMemoryStateUpdaterSpec
       actAs = List(party1),
     )
     val preparedRejectedWithTrafficCostResult = InMemoryStateUpdater.prepare(
-      Vector(rejected),
-      someLedgerEnd,
-      traceContext,
+      makeBatch(Vector(rejected), someLedgerEnd, traceContext)
     )
     inside(preparedRejectedWithTrafficCostResult.updates.loneElement) {
       case transactionRejected: TransactionRejected =>
@@ -268,9 +258,7 @@ class InMemoryStateUpdaterSpec
       completionInfo = completionInfo,
     )
     val prepareAssign = InMemoryStateUpdater.prepare(
-      Vector(assign),
-      someLedgerEnd,
-      traceContext,
+      makeBatch(Vector(assign), someLedgerEnd, traceContext)
     )
     inside(prepareAssign.updates.loneElement) { case reassignmentAccepted: ReassignmentAccepted =>
       // Submitting party filter should return the cost
@@ -288,9 +276,7 @@ class InMemoryStateUpdaterSpec
       completionInfo = completionInfo,
     )
     val prepareUnassign = InMemoryStateUpdater.prepare(
-      Vector(unassign),
-      someLedgerEnd,
-      traceContext,
+      makeBatch(Vector(unassign), someLedgerEnd, traceContext)
     )
     inside(prepareUnassign.updates.loneElement) { case reassignmentAccepted: ReassignmentAccepted =>
       // Submitting party filter should return the cost
@@ -304,40 +290,37 @@ class InMemoryStateUpdaterSpec
 
   "prepare" should "prepare a batch with reassignments" in new Scope {
     InMemoryStateUpdater.prepare(
-      Vector(update1, update7, update8),
-      someLedgerEnd,
-      traceContext,
+      makeBatch(Vector(update1, update7, update8), someLedgerEnd, traceContext)
     ) shouldBe PrepareResult(
       Vector(txLogUpdate1, assignLogUpdate, unassignLogUpdate),
       someLedgerEnd,
       update1._2.traceContext,
       traceContext,
+      contractStateEvents = Vector.empty,
     )
   }
 
   "prepare" should "prepare a batch with topology transaction" in new Scope {
     InMemoryStateUpdater.prepare(
-      Vector(update1, update9),
-      someLedgerEnd,
-      traceContext,
+      makeBatch(Vector(update1, update9), someLedgerEnd, traceContext)
     ) shouldBe PrepareResult(
       Vector(txLogUpdate1, topologyTransactionLogUpdate),
       someLedgerEnd,
       update1._2.traceContext,
       traceContext,
+      contractStateEvents = Vector.empty,
     )
   }
 
   "prepare" should "set last offset and eventSequentialId to last element" in new Scope {
     InMemoryStateUpdater.prepare(
-      Vector(update1, metadataChangedUpdate),
-      someLedgerEnd,
-      traceContext,
+      makeBatch(Vector(update1, metadataChangedUpdate), someLedgerEnd, traceContext)
     ) shouldBe PrepareResult(
       Vector(txLogUpdate1),
       someLedgerEnd,
       metadataChangedUpdate._2.traceContext,
       traceContext,
+      contractStateEvents = Vector.empty,
     )
   }
 
@@ -372,9 +355,7 @@ class InMemoryStateUpdaterSpec
       private val events =
         InMemoryStateUpdater
           .prepare(
-            Vector(update),
-            someLedgerEnd,
-            traceContext,
+            makeBatch(Vector(update), someLedgerEnd, traceContext)
           )
           .updates
           .collect { case txAccepted: TransactionLogUpdate.TransactionAccepted => txAccepted }
@@ -649,6 +630,7 @@ class InMemoryStateUpdaterSpec
       updates,
       ledgerEnd41,
       traceContext,
+      contractStateEvents = updatesContractStateEvents,
     )
 
     inMemoryState.cachesUpdatedUpto.get() shouldBe Some(Offset.tryFromLong(41L))
@@ -664,6 +646,7 @@ class InMemoryStateUpdaterSpec
         updates,
         ledgerEnd42,
         traceContext,
+        contractStateEvents = updatesContractStateEvents,
       )
     }
 
@@ -676,6 +659,7 @@ class InMemoryStateUpdaterSpec
       updates,
       ledgerEnd42,
       traceContext,
+      contractStateEvents = updatesContractStateEvents,
     )
 
     inMemoryState.cachesUpdatedUpto.get() shouldBe Some(Offset.tryFromLong(42L))
@@ -687,6 +671,24 @@ class InMemoryStateUpdaterSpec
 object InMemoryStateUpdaterSpec {
 
   import TraceContext.Implicits.Empty.*
+
+  private def makeBatch(
+      offsetsUpdates: Vector[(Offset, Update)],
+      ledgerEnd: LedgerEnd,
+      batchTraceContext: TraceContext,
+  ): Batch[Unit] =
+    Batch(
+      ledgerEnd = ledgerEnd,
+      batch = (),
+      batchSize = offsetsUpdates.size,
+      offsetsUpdates = offsetsUpdates,
+      missingDeactivatedActivations = Map.empty,
+      eventCount = 0L,
+      batchTraceContext = batchTraceContext,
+      distinctRawStrings = Nil,
+      usedInternalContractIds = Set.empty,
+      contractStateEvents = Vector.empty,
+    )
 
   private val txId1 = TestUpdateId("tx1")
   private val txId2 = TestUpdateId("tx2")
@@ -791,6 +793,7 @@ object InMemoryStateUpdaterSpec {
             assignmentExclusivity = Some(Timestamp.assertFromLong(123456L)),
             reassignmentCounter = 15L,
             nodeId = 0,
+            keyOpt = someContract.contractKeyWithMaintainers,
           )
         ),
         synchronizerId = synchronizerId2.toProtoPrimitive,
@@ -861,7 +864,7 @@ object InMemoryStateUpdaterSpec {
       metrics = LedgerApiServerMetrics.ForTesting,
     )(
       inMemoryState = inMemoryState,
-      prepare = (_, ledgerEnd, _) => result(ledgerEnd),
+      prepare = batch => result(batch.ledgerEnd),
       update = cachesUpdateCaptor,
     )
 
@@ -989,26 +992,55 @@ object InMemoryStateUpdaterSpec {
         tx_accepted_withoutCompletionStreamResponse,
         tx_rejected,
       )
+    val updatesContractStateEvents: Vector[ContractStateEvent] =
+      (tx_accepted_withCompletionStreamResponse.events ++
+        tx_accepted_withoutCompletionStreamResponse.events).zipWithIndex.collect {
+        case (created: CreatedEvent, idx) =>
+          ContractStateEvent.Activated(
+            contractId = created.contractId,
+            globalKey = None,
+            eventSequentialId = idx.toLong + 1L,
+            isInitial = true,
+          )
+      }
     val prepareResult: PrepareResult = PrepareResult(
       updates = updates,
       ledgerEnd = lastLedgerEnd,
       emptyTraceContext,
       traceContext,
+      contractStateEvents = updatesContractStateEvents,
     )
     val prepareResultOnlyReassignment: PrepareResult = PrepareResult(
       updates = Vector(assignLogUpdate),
       ledgerEnd = lastLedgerEnd,
       emptyTraceContext,
       traceContext,
+      contractStateEvents = Vector(
+        ContractStateEvent.Activated(
+          contractId = someContract.contractId,
+          globalKey = None,
+          eventSequentialId = 1L,
+          isInitial = false,
+        )
+      ),
+    )
+    val emptyFlatWitnessUpdates: Vector[TransactionLogUpdate] = Vector(
+      tx_accepted_withFlatEventWitnesses,
+      tx_accepted_withoutFlatEventWitnesses,
     )
     val prepareResultWithEmptyFlatEventWitnesses: PrepareResult = PrepareResult(
-      updates = Vector(
-        tx_accepted_withFlatEventWitnesses,
-        tx_accepted_withoutFlatEventWitnesses,
-      ),
+      updates = emptyFlatWitnessUpdates,
       ledgerEnd = lastLedgerEnd.copy(lastOffset = tx_accepted_withoutFlatEventWitnesses.offset),
       emptyTraceContext,
       traceContext,
+      contractStateEvents = Vector(
+        ContractStateEvent.Activated(
+          contractId = tx_accepted_withFlatEventWitnesses.events.head.contractId,
+          globalKey = None,
+          eventSequentialId = 1L,
+          isInitial = true,
+        )
+      ),
     )
 
     def result(ledgerEnd: LedgerEnd): PrepareResult =
@@ -1017,6 +1049,7 @@ object InMemoryStateUpdaterSpec {
         ledgerEnd,
         emptyTraceContext,
         traceContext,
+        contractStateEvents = Vector.empty,
       )
 
     def runFlow(
@@ -1033,6 +1066,7 @@ object InMemoryStateUpdaterSpec {
           batchTraceContext = tc,
           distinctRawStrings = Nil,
           usedInternalContractIds = Set.empty,
+          contractStateEvents = Vector.empty,
         ): Batch[?]
       })
         .via(inMemoryStateUpdater(false))
@@ -1067,7 +1101,13 @@ object InMemoryStateUpdaterSpec {
       packageVersion = None,
       commandId = "",
       workflowId = workflowId,
-      contractKey = None,
+      keyInfo = createdNode.keyOpt.map(k =>
+        TransactionLogUpdate.KeyInfo(
+          value = com.digitalasset.daml.lf.transaction.Versioned(createdNode.version, k.value),
+          hash = k.globalKey.hash,
+          maintainers = k.maintainers,
+        )
+      ),
       treeEventWitnesses = Set.empty,
       flatEventWitnesses = createdNode.stakeholders,
       submitters = Set.empty,
@@ -1075,8 +1115,6 @@ object InMemoryStateUpdaterSpec {
         .Versioned(createdNode.version, createdNode.arg),
       createSignatories = createdNode.signatories,
       createObservers = createdNode.stakeholders.diff(createdNode.signatories),
-      createKeyHash = createdNode.keyOpt.map(_.globalKey.hash),
-      createKeyMaintainers = createdNode.keyOpt.map(_.maintainers),
       authenticationData = someContractMetadataBytes,
       representativePackageId = representativePackageId,
     )
@@ -1084,17 +1122,29 @@ object InMemoryStateUpdaterSpec {
   implicit val defaultValueProviderCreatedEvent
       : DefaultValueProvider[NonEmptyVector[ContractStateEvent]] =
     new DefaultValueProvider[NonEmptyVector[ContractStateEvent]] {
-      override def default: NonEmptyVector[ContractStateEvent] =
+      override def default: NonEmptyVector[ContractStateEvent] = {
+        val createdEvent = toCreatedEvent(
+          genContract.inst.toCreateNode,
+          Offset.firstOffset,
+          TestUpdateId("yolo"),
+          NodeId(0),
+        )
         NonEmptyVector.one(
-          InMemoryStateUpdater.convertLogToStateEvent(
-            toCreatedEvent(
-              genContract.inst.toCreateNode,
-              Offset.firstOffset,
-              TestUpdateId("yolo"),
-              NodeId(0),
-            )
+          ContractStateEvent.Activated(
+            contractId = createdEvent.contractId,
+            globalKey = createdEvent.keyInfo.map(keyInfo =>
+              Key.assertBuild(
+                createdEvent.templateId,
+                createdEvent.packageName,
+                keyInfo.value.unversioned,
+                keyInfo.hash,
+              )
+            ),
+            eventSequentialId = 1L,
+            isInitial = true,
           )
         )
+      }
     }
 
   private val someTransactionMeta: TransactionMeta = TransactionMeta(
@@ -1144,9 +1194,6 @@ object InMemoryStateUpdaterSpec {
 
   private val anotherMetadataChangedUpdate =
     rawMetadataChangedUpdate(offset(15L), Timestamp.assertFromLong(1337L))
-
-  private def offset(idx: Long): Offset =
-    Offset.tryFromLong(1000000000L + idx)
 
   // traverse the list from left to right and if a None is found add the exact previous checkpoint in the result
   private def findCheckpointOffsets(
@@ -1260,6 +1307,7 @@ object InMemoryStateUpdaterSpec {
           batchTraceContext = emptyTraceContext,
           distinctRawStrings = Nil,
           usedInternalContractIds = Set.empty,
+          contractStateEvents = Vector.empty,
         )
       )
       .via(
@@ -1367,6 +1415,7 @@ object InMemoryStateUpdaterSpec {
           assignmentExclusivity = Some(Timestamp.assertFromLong(123456L)),
           reassignmentCounter = 15L,
           nodeId = 0,
+          keyOpt = someContract.contractKeyWithMaintainers,
         )
       ),
       recordTime = CantonTimestamp(Timestamp(t)),

@@ -4,6 +4,7 @@
 package com.digitalasset.canton.platform.store.backend.postgresql
 
 import com.digitalasset.canton.platform.store.backend.ContractStorageBackend
+import com.digitalasset.canton.platform.store.backend.ContractStorageBackend.ContractRef
 import com.digitalasset.canton.platform.store.backend.common.{
   ContractStorageBackendTemplate,
   QueryStrategy,
@@ -19,8 +20,11 @@ class PostgresContractStorageBackend(
     ledgerEndCache: LedgerEndCache,
 ) extends ContractStorageBackendTemplate(PostgresQueryStrategy, stringInterning, ledgerEndCache) {
 
-  private def toArrayLiteral(values: Iterable[Any]): String =
-    values.mkString("ARRAY[", ", ", "]")
+  private def toIntArrayLiteral(values: Iterable[Int]): String =
+    values.mkString("ARRAY[", ", ", "]::integer[]")
+
+  private def toLongArrayLiteral(values: Iterable[Long]): String =
+    values.mkString("ARRAY[", ", ", "]::bigint[]")
 
   override def lastActivations(synchronizerContracts: Iterable[(SynchronizerId, Long)])(
       connection: Connection
@@ -29,11 +33,11 @@ class PostgresContractStorageBackend(
       .map { ledgerEnd =>
         val inputWithIndex = synchronizerContracts.zipWithIndex
 
-        val indexArrayLiteral = toArrayLiteral(inputWithIndex.view.map(_._2))
-        val synchronizerIdArrayLiteral = toArrayLiteral(
+        val indexArrayLiteral = toIntArrayLiteral(inputWithIndex.view.map(_._2))
+        val synchronizerIdArrayLiteral = toIntArrayLiteral(
           inputWithIndex.view.map(_._1._1).map(stringInterning.synchronizerId.internalize)
         )
-        val internalContractIdArrayLiteral = toArrayLiteral(inputWithIndex.view.map(_._1._2))
+        val internalContractIdArrayLiteral = toLongArrayLiteral(inputWithIndex.view.map(_._1._2))
         // Resorting here to non-prepared statement as the combination of prepared statement and unnest and cross lateral join produced very inefficient query plans with PostgreSQL.
         // For Future reference:
         //   * Wrong query plan involved traversing the event_sequential_id index backwards in a index scan and eliminating candidates with filters on table itself (the good plan is the descending index only scan with index condition over the contract ID)
@@ -73,9 +77,9 @@ class PostgresContractStorageBackend(
   override final def supportsBatchKeyStateLookups: Boolean = true
 
   override def contractKeysPlain(
-      keyPageQueries: Seq[ContractStorageBackend.KeysPageQuery],
+      keyPageQueries: Seq[ContractStorageBackend.KeyLookupPageQuery],
       validAtEventSeqId: Long,
-  )(connection: Connection): Seq[ContractStorageBackend.KeysPageResult] =
+  )(connection: Connection): Seq[ContractStorageBackend.KeyLookupPageResult] =
     if (keyPageQueries.isEmpty) Seq.empty
     else {
       val queriesWithIndex = keyPageQueries.zipWithIndex
@@ -83,15 +87,15 @@ class PostgresContractStorageBackend(
       def toStringArrayLiteral(values: Iterable[String]): String =
         values.map(v => s"'$v'").mkString("ARRAY[", ", ", "]::text[]")
 
-      val indexArrayLiteral = toArrayLiteral(queriesWithIndex.view.map(_._2))
+      val indexArrayLiteral = toIntArrayLiteral(queriesWithIndex.view.map(_._2))
       val keyHashArrayLiteral = toStringArrayLiteral(
         queriesWithIndex.view.map(_._1.key.hash.bytes.toHexString)
       )
       val eventSeqIdUpperBounds = queriesWithIndex.view.map { case (q, _) =>
         q.nextPageToken.map(_ - 1).getOrElse(validAtEventSeqId)
       }
-      val upperBoundArrayLiteral = toArrayLiteral(eventSeqIdUpperBounds)
-      val limitArrayLiteral = toArrayLiteral(queriesWithIndex.view.map(_._1.limit))
+      val upperBoundArrayLiteral = toLongArrayLiteral(eventSeqIdUpperBounds)
+      val limitArrayLiteral = toIntArrayLiteral(queriesWithIndex.view.map(_._1.limit))
 
       val results: Vector[(Int, Long, Long)] = QueryStrategy.plainJdbcQuery(
         s"""
@@ -125,17 +129,20 @@ class PostgresContractStorageBackend(
         )
       )(connection)
 
-      val groupedResults: Map[Int, Vector[(Long, Long)]] =
-        results.groupBy(_._1).view.mapValues(_.map(t => (t._2, t._3))).toMap
+      val groupedResults: Map[Int, Vector[ContractRef]] =
+        results
+          .groupBy(_._1)
+          .view
+          .mapValues(_.map(t => ContractRef(internalContractId = t._3, eventSequentialId = t._2)))
+          .toMap
 
       queriesWithIndex.map { case (query, index) =>
-        val rows = groupedResults.getOrElse(index, Vector.empty)
-        val (eventSeqIds, internalContractIds) = rows.unzip
-        ContractStorageBackend.KeysPageResult(
-          internalContractIds = internalContractIds.take(query.limit),
+        val contractRefs = groupedResults.getOrElse(index, Vector.empty)
+        ContractStorageBackend.KeyLookupPageResult(
+          contractRefs = contractRefs.take(query.limit),
           nextPageToken = Option
-            .when(eventSeqIds.sizeIs == query.limit + 1)(
-              eventSeqIds.lastOption.map(_ + 1)
+            .when(contractRefs.sizeIs == query.limit + 1)(
+              contractRefs.lastOption.map(_.eventSequentialId + 1)
             )
             .flatten,
         )
