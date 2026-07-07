@@ -173,7 +173,7 @@ spec:
           {{- else }}
           valueFrom:
             secretKeyRef:
-              name: {{ $.Values.bulkStorage.s3.secretName }}
+              name: {{ $.Values.bulkStorage.staging.secretName }}
               key: secretAccessKey
           {{- end }}
         - name: SPLICE_APP_BULK_STORAGE_COMMITTED_ACCESS_KEY_ID
