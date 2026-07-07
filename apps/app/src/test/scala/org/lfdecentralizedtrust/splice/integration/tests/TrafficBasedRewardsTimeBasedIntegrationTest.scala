@@ -695,11 +695,11 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
 
       // Convert the assigned activity back to burn amount using app weight
       val reconstructedBurnSum = activity.records.map { r =>
-        val weight = scaledProvider match {
+        val activityWeight = scaledProvider match {
           case Some((party, w)) if r.party == party.toProtoPrimitive => w
           case _ => BigDecimal(1)
         }
-        BigDecimal(r.weight) / weight
+        BigDecimal(r.weight) / activityWeight
       }.sum
       withClue(
         s"$cluePrefix reconstructed burn should be within [totalTrafficCost - numFeaturedAppParties, totalTrafficCost]"

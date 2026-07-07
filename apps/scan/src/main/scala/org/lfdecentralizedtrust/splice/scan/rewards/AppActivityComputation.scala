@@ -7,9 +7,12 @@ import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.mediator.admin.v30
 import com.digitalasset.canton.tracing.TraceContext
+import com.digitalasset.daml.lf.data.Numeric
+import com.digitalasset.daml.lf.data.{assertRight as damlRight}
 import org.lfdecentralizedtrust.splice.scan.store.ScanRewardsReferenceStore
 import org.lfdecentralizedtrust.splice.scan.store.db.{DbAppActivityRecordStore, DbScanVerdictStore}
 
+import java.math.RoundingMode
 import scala.collection.immutable.SortedMap
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -18,6 +21,8 @@ import scala.concurrent.{ExecutionContext, Future}
   */
 object AppActivityComputation {
   val MaxTrafficCostBytes: Long = 100L * 1024 * 1024 // 100 MB
+
+  private val scale: Numeric.Scale = Numeric.Scale.assertFromInt(10)
 
   /** Bump this when the functional behavior of the app activity computation changes.
     * WARNING: this MUST be bumped with utmost care to avoid the loss of
@@ -165,7 +170,11 @@ class AppActivityComputation(
               s"No featured app weight found for party=$party"
             ),
           )
-        party -> (BigDecimal(burn) * weight).toLong
+        val weightNumeric = Numeric.assertFromBigDecimal(AppActivityComputation.scale, weight)
+        val burnNumeric = damlRight(Numeric.fromLong(AppActivityComputation.scale, burn))
+        val product =
+          damlRight(Numeric.multiply(AppActivityComputation.scale, burnNumeric, weightNumeric))
+        party -> product.setScale(0, RoundingMode.FLOOR).longValueExact()
       })
 
       Some(
