@@ -197,7 +197,7 @@ groups:
             They are converted first into more ProcessRewardsV2 contracts and then finally into RewardCouponV2 contracts
             by the delegate based ProcessRewardsTrigger.
 
-            If these contracts don't all disappear within 10min (when the next round starts), it means the issuance of
+            If these contracts don't all disappear within 10min (when the next round starts), it means the creation of
             minting allowances probably can't keep up and is falling behind.
 
             Suggested actions:
