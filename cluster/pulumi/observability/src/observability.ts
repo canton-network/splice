@@ -991,7 +991,12 @@ function createGrafanaAlerting(namespace: Input<string>) {
               ),
             ...(cantonBftEnabled
               ? {
-                  'cantonbft_alerts.yaml': readGrafanaAlertingFile('cantonbft_alerts.yaml'),
+                  'cantonbft_alerts.yaml': readGrafanaAlertingFile(
+                    'cantonbft_alerts.yaml'
+                  ).replaceAll(
+                    '$BFT_ORDERING_INGRESS_REQUESTS_QUEUED_THRESHOLD',
+                    monitoringConfig.alerting.alerts.cantonBft.mempoolMaxSizeThreshold.toString()
+                  ),
                 }
               : {}),
             'deleted_alerts.yaml': readGrafanaAlertingFile('deleted.yaml'),

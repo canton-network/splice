@@ -104,6 +104,11 @@ const MonitoringConfigSchema = z
           rejectionRateThreshold: z.number(),
           circuitBreakerStateThreshold: z.number(),
         }),
+        cantonBft: z.object({
+          // Alert if the number of ingress requests queued in the BFT ordering
+          // layer exceeds this threshold.
+          mempoolMaxSizeThreshold: z.number(),
+        }),
         scanConnectionDisagreement: z.object({
           // Fraction (0-1) of BFT consensus comparisons on a scan connection that may
           // return a response (successful or failed) disagreeing with the consensus
