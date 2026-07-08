@@ -60,9 +60,9 @@ groups:
         isPaused: false
       - uid: e2a9c7b4f1d6
         title: CantonBft Ingress Requests Queued
-        condition: ingress_requests_queued_threshold
+        condition: mempool_size_threshold
         data:
-          - refId: ingress_requests_queued
+          - refId: mempool_size
             relativeTimeRange:
               from: 300
               to: 0
@@ -75,14 +75,14 @@ groups:
               legendFormat: __auto
               maxDataPoints: 43200
               range: false
-              refId: ingress_requests_queued
-          - refId: ingress_requests_queued_threshold
+              refId: mempool_size
+          - refId: mempool_size_threshold
             datasourceUid: __expr__
             model:
               conditions:
                   - evaluator:
                       params:
-                          - $BFT_ORDERING_INGRESS_REQUESTS_QUEUED_THRESHOLD
+                          - $CANTON_BFT_MEMPOOL_SIZE_THRESHOLD
                       type: gt
                     operator:
                       type: and
@@ -96,9 +96,9 @@ groups:
                   name: Expression
                   type: __expr__
                   uid: __expr__
-              expression: ingress_requests_queued
+              expression: mempool_size
               hide: false
-              refId: ingress_requests_queued_threshold
+              refId: mempool_size_threshold
               type: threshold
         dashboardUid: ""
         panelId: 0
@@ -106,8 +106,8 @@ groups:
         execErrState: Alerting
         for: 5m
         annotations:
-          description: The number of ingress requests queued in the CantonBft ordering layer on namespace {{ $labels.namespace }} job {{ $labels.job }} is above the configured threshold.
+          description: The number of requests in the mempool of CantonBft for the namespace {{ $labels.namespace }} is above the configured threshold.
           severity: warning
-          summary: CantonBft ingress requests queued is {{ index $values "ingress_requests_queued" }} on {{ $labels.namespace }} {{ $labels.job }}
+          summary: CantonBft mempool size {{ index $values "mempool_size" }} in namespace {{ $labels.namespace }}
         labels: {}
         isPaused: false
