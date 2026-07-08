@@ -1126,6 +1126,7 @@
       "active": true,
       "alias": "apps-pg",
       "cloudSqlConfig": {
+        "databaseVersion": "POSTGRES_14",
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
