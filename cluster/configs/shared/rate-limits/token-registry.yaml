@@ -59,3 +59,63 @@ rateLimits:
       maxTokens: 10
       tokensPerFill: 5
       fillInterval: 60s
+  /registry/allocation/v2/settlement-factory:
+    name: registry-settlement-factory-v2
+    type: limited
+    maxTokens: 3000
+    tokensPerFill: 200
+    fillInterval: 60s
+    perIpLimits:
+      maxTokens: 10
+      tokensPerFill: 5
+      fillInterval: 60s
+  /registry/allocations/v2:
+    name: registry-allocations-v2
+    type: limited
+    maxTokens: 3000
+    tokensPerFill: 200
+    fillInterval: 60s
+    perIpLimits:
+      maxTokens: 10
+      tokensPerFill: 5
+      fillInterval: 60s
+  /registry/allocation-instruction/v2/allocation-factory:
+    name: registry-allocation-factory-v2
+    type: limited
+    maxTokens: 3000
+    tokensPerFill: 200
+    fillInterval: 60s
+    perIpLimits:
+      maxTokens: 10
+      tokensPerFill: 5
+      fillInterval: 60s
+  /registry/allocation-instruction/v2:
+    name: registry-allocation-instruction-v2
+    type: limited
+    maxTokens: 3000
+    tokensPerFill: 200
+    fillInterval: 60s
+    perIpLimits:
+      maxTokens: 10
+      tokensPerFill: 5
+      fillInterval: 60s
+  /registry/transfer-instruction/v2/transfer-factory:
+    name: registry-transfer-factory-v2
+    type: limited
+    maxTokens: 3000
+    tokensPerFill: 200
+    fillInterval: 60s
+    perIpLimits:
+      maxTokens: 10
+      tokensPerFill: 5
+      fillInterval: 60s
+  /registry/transfer-instruction/v2:
+    name: registry-transfer-instruction-v2
+    type: limited
+    maxTokens: 3000
+    tokensPerFill: 200
+    fillInterval: 60s
+    perIpLimits:
+      maxTokens: 10
+      tokensPerFill: 5
+      fillInterval: 60s

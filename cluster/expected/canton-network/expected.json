@@ -1818,10 +1818,58 @@
           "tokensPerFill": 200,
           "type": "limited"
         },
+        "/registry/allocation-instruction/v2": {
+          "fillInterval": "60s",
+          "maxTokens": 3000,
+          "name": "registry-allocation-instruction-v2",
+          "perIpLimits": {
+            "fillInterval": "60s",
+            "maxTokens": 10,
+            "tokensPerFill": 5
+          },
+          "tokensPerFill": 200,
+          "type": "limited"
+        },
+        "/registry/allocation-instruction/v2/allocation-factory": {
+          "fillInterval": "60s",
+          "maxTokens": 3000,
+          "name": "registry-allocation-factory-v2",
+          "perIpLimits": {
+            "fillInterval": "60s",
+            "maxTokens": 10,
+            "tokensPerFill": 5
+          },
+          "tokensPerFill": 200,
+          "type": "limited"
+        },
+        "/registry/allocation/v2/settlement-factory": {
+          "fillInterval": "60s",
+          "maxTokens": 3000,
+          "name": "registry-settlement-factory-v2",
+          "perIpLimits": {
+            "fillInterval": "60s",
+            "maxTokens": 10,
+            "tokensPerFill": 5
+          },
+          "tokensPerFill": 200,
+          "type": "limited"
+        },
         "/registry/allocations/v1": {
           "fillInterval": "60s",
           "maxTokens": 3000,
           "name": "registry-allocations",
+          "perIpLimits": {
+            "fillInterval": "60s",
+            "maxTokens": 10,
+            "tokensPerFill": 5
+          },
+          "tokensPerFill": 200,
+          "type": "limited"
+        },
+        "/registry/allocations/v2": {
+          "fillInterval": "60s",
+          "maxTokens": 3000,
+          "name": "registry-allocations-v2",
           "perIpLimits": {
             "fillInterval": "60s",
             "maxTokens": 10,
@@ -1870,6 +1918,30 @@
           "fillInterval": "60s",
           "maxTokens": 3000,
           "name": "registry-transfer-factory",
+          "perIpLimits": {
+            "fillInterval": "60s",
+            "maxTokens": 10,
+            "tokensPerFill": 5
+          },
+          "tokensPerFill": 200,
+          "type": "limited"
+        },
+        "/registry/transfer-instruction/v2": {
+          "fillInterval": "60s",
+          "maxTokens": 3000,
+          "name": "registry-transfer-instruction-v2",
+          "perIpLimits": {
+            "fillInterval": "60s",
+            "maxTokens": 10,
+            "tokensPerFill": 5
+          },
+          "tokensPerFill": 200,
+          "type": "limited"
+        },
+        "/registry/transfer-instruction/v2/transfer-factory": {
+          "fillInterval": "60s",
+          "maxTokens": 3000,
+          "name": "registry-transfer-factory-v2",
           "perIpLimits": {
             "fillInterval": "60s",
             "maxTokens": 10,
@@ -2129,10 +2201,58 @@
           "tokensPerFill": 200,
           "type": "limited"
         },
+        "/registry/allocation-instruction/v2": {
+          "fillInterval": "60s",
+          "maxTokens": 3000,
+          "name": "registry-allocation-instruction-v2",
+          "perIpLimits": {
+            "fillInterval": "60s",
+            "maxTokens": 10,
+            "tokensPerFill": 5
+          },
+          "tokensPerFill": 200,
+          "type": "limited"
+        },
+        "/registry/allocation-instruction/v2/allocation-factory": {
+          "fillInterval": "60s",
+          "maxTokens": 3000,
+          "name": "registry-allocation-factory-v2",
+          "perIpLimits": {
+            "fillInterval": "60s",
+            "maxTokens": 10,
+            "tokensPerFill": 5
+          },
+          "tokensPerFill": 200,
+          "type": "limited"
+        },
+        "/registry/allocation/v2/settlement-factory": {
+          "fillInterval": "60s",
+          "maxTokens": 3000,
+          "name": "registry-settlement-factory-v2",
+          "perIpLimits": {
+            "fillInterval": "60s",
+            "maxTokens": 10,
+            "tokensPerFill": 5
+          },
+          "tokensPerFill": 200,
+          "type": "limited"
+        },
         "/registry/allocations/v1": {
           "fillInterval": "60s",
           "maxTokens": 3000,
           "name": "registry-allocations",
+          "perIpLimits": {
+            "fillInterval": "60s",
+            "maxTokens": 10,
+            "tokensPerFill": 5
+          },
+          "tokensPerFill": 200,
+          "type": "limited"
+        },
+        "/registry/allocations/v2": {
+          "fillInterval": "60s",
+          "maxTokens": 3000,
+          "name": "registry-allocations-v2",
           "perIpLimits": {
             "fillInterval": "60s",
             "maxTokens": 10,
@@ -2181,6 +2301,30 @@
           "fillInterval": "60s",
           "maxTokens": 3000,
           "name": "registry-transfer-factory",
+          "perIpLimits": {
+            "fillInterval": "60s",
+            "maxTokens": 10,
+            "tokensPerFill": 5
+          },
+          "tokensPerFill": 200,
+          "type": "limited"
+        },
+        "/registry/transfer-instruction/v2": {
+          "fillInterval": "60s",
+          "maxTokens": 3000,
+          "name": "registry-transfer-instruction-v2",
+          "perIpLimits": {
+            "fillInterval": "60s",
+            "maxTokens": 10,
+            "tokensPerFill": 5
+          },
+          "tokensPerFill": 200,
+          "type": "limited"
+        },
+        "/registry/transfer-instruction/v2/transfer-factory": {
+          "fillInterval": "60s",
+          "maxTokens": 3000,
+          "name": "registry-transfer-factory-v2",
           "perIpLimits": {
             "fillInterval": "60s",
             "maxTokens": 10,
@@ -3014,6 +3158,270 @@
                           }
                         }
                       ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-settlement-factory-v2",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/allocation/v2/settlement-factory"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-settlement-factory-v2",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/allocation/v2/settlement-factory"
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "request_headers": {
+                            "descriptor_key": "client_ip",
+                            "header_name": "x-forwarded-for"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-allocations-v2",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/allocations/v2"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-allocations-v2",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/allocations/v2"
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "request_headers": {
+                            "descriptor_key": "client_ip",
+                            "header_name": "x-forwarded-for"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-allocation-factory-v2",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/allocation-instruction/v2/allocation-factory"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-allocation-factory-v2",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/allocation-instruction/v2/allocation-factory"
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "request_headers": {
+                            "descriptor_key": "client_ip",
+                            "header_name": "x-forwarded-for"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-allocation-instruction-v2",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/allocation-instruction/v2"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-allocation-instruction-v2",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/allocation-instruction/v2"
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "request_headers": {
+                            "descriptor_key": "client_ip",
+                            "header_name": "x-forwarded-for"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-transfer-factory-v2",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/transfer-instruction/v2/transfer-factory"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-transfer-factory-v2",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/transfer-instruction/v2/transfer-factory"
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "request_headers": {
+                            "descriptor_key": "client_ip",
+                            "header_name": "x-forwarded-for"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-transfer-instruction-v2",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/transfer-instruction/v2"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-transfer-instruction-v2",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/transfer-instruction/v2"
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "request_headers": {
+                            "descriptor_key": "client_ip",
+                            "header_name": "x-forwarded-for"
+                          }
+                        }
+                      ]
                     }
                   ]
                 },
@@ -3213,6 +3621,180 @@
                           {
                             "key": "header_match",
                             "value": "registry-transfer-factory"
+                          },
+                          {
+                            "key": "client_ip"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 10,
+                          "tokens_per_fill": 5
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-settlement-factory-v2"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 3000,
+                          "tokens_per_fill": 200
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-settlement-factory-v2"
+                          },
+                          {
+                            "key": "client_ip"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 10,
+                          "tokens_per_fill": 5
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-allocations-v2"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 3000,
+                          "tokens_per_fill": 200
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-allocations-v2"
+                          },
+                          {
+                            "key": "client_ip"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 10,
+                          "tokens_per_fill": 5
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-allocation-factory-v2"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 3000,
+                          "tokens_per_fill": 200
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-allocation-factory-v2"
+                          },
+                          {
+                            "key": "client_ip"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 10,
+                          "tokens_per_fill": 5
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-allocation-instruction-v2"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 3000,
+                          "tokens_per_fill": 200
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-allocation-instruction-v2"
+                          },
+                          {
+                            "key": "client_ip"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 10,
+                          "tokens_per_fill": 5
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-transfer-factory-v2"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 3000,
+                          "tokens_per_fill": 200
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-transfer-factory-v2"
+                          },
+                          {
+                            "key": "client_ip"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 10,
+                          "tokens_per_fill": 5
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-transfer-instruction-v2"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 3000,
+                          "tokens_per_fill": 200
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-transfer-instruction-v2"
                           },
                           {
                             "key": "client_ip"
@@ -4710,6 +5292,270 @@
                           }
                         }
                       ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-settlement-factory-v2",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/allocation/v2/settlement-factory"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-settlement-factory-v2",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/allocation/v2/settlement-factory"
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "request_headers": {
+                            "descriptor_key": "client_ip",
+                            "header_name": "x-forwarded-for"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-allocations-v2",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/allocations/v2"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-allocations-v2",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/allocations/v2"
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "request_headers": {
+                            "descriptor_key": "client_ip",
+                            "header_name": "x-forwarded-for"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-allocation-factory-v2",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/allocation-instruction/v2/allocation-factory"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-allocation-factory-v2",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/allocation-instruction/v2/allocation-factory"
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "request_headers": {
+                            "descriptor_key": "client_ip",
+                            "header_name": "x-forwarded-for"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-allocation-instruction-v2",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/allocation-instruction/v2"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-allocation-instruction-v2",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/allocation-instruction/v2"
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "request_headers": {
+                            "descriptor_key": "client_ip",
+                            "header_name": "x-forwarded-for"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-transfer-factory-v2",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/transfer-instruction/v2/transfer-factory"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-transfer-factory-v2",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/transfer-instruction/v2/transfer-factory"
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "request_headers": {
+                            "descriptor_key": "client_ip",
+                            "header_name": "x-forwarded-for"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-transfer-instruction-v2",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/transfer-instruction/v2"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-transfer-instruction-v2",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/transfer-instruction/v2"
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "request_headers": {
+                            "descriptor_key": "client_ip",
+                            "header_name": "x-forwarded-for"
+                          }
+                        }
+                      ]
                     }
                   ]
                 },
@@ -4909,6 +5755,180 @@
                           {
                             "key": "header_match",
                             "value": "registry-transfer-factory"
+                          },
+                          {
+                            "key": "client_ip"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 10,
+                          "tokens_per_fill": 5
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-settlement-factory-v2"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 3000,
+                          "tokens_per_fill": 200
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-settlement-factory-v2"
+                          },
+                          {
+                            "key": "client_ip"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 10,
+                          "tokens_per_fill": 5
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-allocations-v2"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 3000,
+                          "tokens_per_fill": 200
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-allocations-v2"
+                          },
+                          {
+                            "key": "client_ip"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 10,
+                          "tokens_per_fill": 5
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-allocation-factory-v2"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 3000,
+                          "tokens_per_fill": 200
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-allocation-factory-v2"
+                          },
+                          {
+                            "key": "client_ip"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 10,
+                          "tokens_per_fill": 5
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-allocation-instruction-v2"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 3000,
+                          "tokens_per_fill": 200
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-allocation-instruction-v2"
+                          },
+                          {
+                            "key": "client_ip"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 10,
+                          "tokens_per_fill": 5
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-transfer-factory-v2"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 3000,
+                          "tokens_per_fill": 200
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-transfer-factory-v2"
+                          },
+                          {
+                            "key": "client_ip"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 10,
+                          "tokens_per_fill": 5
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-transfer-instruction-v2"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 3000,
+                          "tokens_per_fill": 200
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-transfer-instruction-v2"
                           },
                           {
                             "key": "client_ip"

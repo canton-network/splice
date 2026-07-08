@@ -7,6 +7,7 @@ import { readAndParseYaml } from './configLoader';
 
 const scanYamlPath = path.join(__dirname, '../../../../../apps/scan/src/main/openapi/scan.yaml');
 const tokenRegistryYamlPaths = [
+  // V1 Specs
   path.join(
     __dirname,
     '../../../../../token-standard/splice-api-token-metadata-v1/openapi/token-metadata-v1.yaml'
@@ -22,6 +23,20 @@ const tokenRegistryYamlPaths = [
   path.join(
     __dirname,
     '../../../../../token-standard/splice-api-token-transfer-instruction-v1/openapi/transfer-instruction-v1.yaml'
+  ),
+
+  // V2 Specs
+  path.join(
+    __dirname,
+    '../../../../../token-standard/splice-api-token-allocation-v2/openapi/allocation-v2.yaml'
+  ),
+  path.join(
+    __dirname,
+    '../../../../../token-standard/splice-api-token-allocation-instruction-v2/openapi/allocation-instruction-v2.yaml'
+  ),
+  path.join(
+    __dirname,
+    '../../../../../token-standard/splice-api-token-transfer-instruction-v2/openapi/transfer-instruction-v2.yaml'
   ),
 ];
 
