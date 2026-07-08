@@ -121,6 +121,9 @@ const MonitoringConfigSchema = z
           // connection disagreement alerts. Matched as a regex against the
           // `scan_connection` label.
           excludedConnections: z.array(z.string()).default([]),
+          // Http status code (by their `http_status` label) to exclude from the disagreement alerts.
+          // Matched as a regex against the `http_status` label.
+          excludedHttpStatusCodes: z.array(z.string()).default([]),
         }),
         walletSweep: z.object({
           tolerance: z.number(),
