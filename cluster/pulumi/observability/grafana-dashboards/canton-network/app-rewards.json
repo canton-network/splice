@@ -456,8 +456,8 @@
                 "value": 0
               },
               {
-                "color": "red",
-                "value": 30
+                "color": "yellow",
+                "value": 60
               }
             ]
           },
@@ -648,7 +648,7 @@
               "mode": "none"
             },
             "thresholdsStyle": {
-              "mode": "off"
+              "mode": "dashed"
             }
           },
           "mappings": [],
@@ -660,8 +660,8 @@
                 "value": 0
               },
               {
-                "color": "red",
-                "value": 80
+                "color": "yellow",
+                "value": 40
               }
             ]
           }
@@ -1069,8 +1069,8 @@
                 "value": 0
               },
               {
-                "color": "red",
-                "value": 30
+                "color": "yellow",
+                "value": 60
               }
             ]
           },
@@ -1129,10 +1129,6 @@
               {
                 "color": "green",
                 "value": 0
-              },
-              {
-                "color": "red",
-                "value": 10000
               }
             ]
           }
@@ -1194,10 +1190,6 @@
               {
                 "color": "green",
                 "value": 0
-              },
-              {
-                "color": "red",
-                "value": 10000
               }
             ]
           }
@@ -1259,10 +1251,6 @@
               {
                 "color": "green",
                 "value": 0
-              },
-              {
-                "color": "red",
-                "value": 1000
               }
             ]
           }
@@ -1324,10 +1312,6 @@
               {
                 "color": "green",
                 "value": 0
-              },
-              {
-                "color": "red",
-                "value": 1000
               }
             ]
           }
@@ -1539,8 +1523,8 @@
                 "value": 0
               },
               {
-                "color": "red",
-                "value": 30
+                "color": "yellow",
+                "value": 60
               }
             ]
           },
@@ -2143,8 +2127,8 @@
                 "value": 0
               },
               {
-                "color": "red",
-                "value": 30
+                "color": "yellow",
+                "value": 60
               }
             ]
           },
@@ -2648,6 +2632,6 @@
   "timezone": "",
   "title": "Traffic-based app rewards (CIP-104)",
   "uid": "cnx7gsn",
-  "version": 40,
+  "version": 41,
   "weekStart": ""
 }
