@@ -1,6 +1,12 @@
 # Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+# DEPRECATED: This chart is unsupported after 2026-11-12, the PostgreSQL 14
+# end-of-life date. A newer PostgreSQL major version does not start on this
+# chart's data directory, so do not bump imageName; migrate to an externally
+# provisioned PostgreSQL instead. See
+# https://docs.canton.network/global-synchronizer/production-operations/validator-postgres-migration
+
 imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
 imageName: "postgres:14"
 
