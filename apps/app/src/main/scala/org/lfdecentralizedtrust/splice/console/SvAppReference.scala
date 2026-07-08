@@ -232,9 +232,9 @@ abstract class SvAppReference(
         HttpSvOperatorAppClient.CountVoteRequestResults(
           actionName,
           accepted,
-          requester,
-          effectiveFrom,
-          effectiveTo,
+          requester = requester,
+          effectiveFrom = effectiveFrom,
+          effectiveTo = effectiveTo,
         )
       )
     }
