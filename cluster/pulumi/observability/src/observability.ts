@@ -1019,10 +1019,19 @@ function createGrafanaAlerting(namespace: Input<string>) {
             ),
             'traffic_based_rewards_alerts.yaml': readGrafanaAlertingFile(
               'traffic_based_rewards_alerts.yaml'
-            ).replace(
-              '$FEATURED_APP_RIGHTS_LIVE_ROW_LIMIT',
-              monitoringConfig.alerting.alerts.trafficBasedRewards.featuredAppRightsLimit.toString()
-            ),
+            )
+              .replace(
+                '$FEATURED_APP_RIGHTS_LIVE_ROW_LIMIT',
+                monitoringConfig.alerting.alerts.trafficBasedRewards.featuredAppRightsLimit.toString()
+              )
+              .replace(
+                '$VERDICT_INGESTION_BATCH_SIZE_THRESHOLD',
+                monitoringConfig.alerting.alerts.trafficBasedRewards.verdictIngestionBatchSizeThreshold.toString()
+              )
+              .replace(
+                '$VERDICT_INGESTION_BATCH_SIZE_PENDING_PERIOD_MINUTES',
+                monitoringConfig.alerting.alerts.trafficBasedRewards.verdictIngestionBatchSizePendingPeriodMinutes.toString()
+              ),
           },
         }).map(([k, v]) => [k, defaultAlertSubstitutions(v)])
       ),

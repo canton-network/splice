@@ -133,6 +133,8 @@ const MonitoringConfigSchema = z
           .default({ thresholdPercent: 80 }),
         trafficBasedRewards: z.object({
           featuredAppRightsLimit: z.number(),
+          verdictIngestionBatchSizeThreshold: z.number(),
+          verdictIngestionBatchSizePendingPeriodMinutes: z.number(),
         }),
       }),
       logAlerts: z.object({}).catchall(z.string()).default({}),

@@ -198,6 +198,11 @@ monitoring:
         # Alert if we have more than this many featured app rights,
         # as too many rights may cause performance problems in computing app activity records.
         featuredAppRightsLimit: 10000
+        # Alert if the average batch size of verdict ingestion exceeds this threshold,
+        # as this may indicate that ingestion can't keep up.
+        verdictIngestionBatchSizeThreshold: 40
+        # Only alert after the average batch size of verdict ingestion exceeds the threshold for this many minutes
+        verdictIngestionBatchSizePendingPeriodMinutes: 60
     # Alert on secrets appearing in logs (JWTs, Bearer tokens, passwords, etc.)
     # Key=value secrets (excluding masked values)
     # JWTs identified by base64 header prefix "eyJhbGc" (decodes to '{"alg')
