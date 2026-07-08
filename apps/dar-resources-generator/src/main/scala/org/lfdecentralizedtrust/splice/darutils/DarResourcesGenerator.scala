@@ -55,10 +55,20 @@ object DarResourcesGenerator {
     "splice-wallet",
     "splice-amulet-name-service",
     "splice-wallet-payments",
+    "splitwell",
     "splice-validator-lifecycle",
     "splice-api-reward-assignment-v1",
   )
-  private val topLevelPackageOrderWithSplitwell: Seq[String] = topLevelPackageOrder :+ "splitwell"
+  private val topLevelPackageOrderWithoutSplitwell: Seq[String] = Seq(
+    "splice-amulet",
+    "splice-dso-governance",
+    "splice-util-batched-markers",
+    "splice-wallet",
+    "splice-amulet-name-service",
+    "splice-wallet-payments",
+    "splice-validator-lifecycle",
+    "splice-api-reward-assignment-v1",
+  )
   private val tokenStandardProductionPackageOrder: Seq[String] = Seq(
     "splice-api-token-metadata-v1",
     "splice-api-token-holding-v1",
@@ -139,12 +149,10 @@ object DarResourcesGenerator {
       "object DarResources {",
     ) ++
       indent(2, renderTokenStandard(grouped)) ++
-      topLevelPackageOrderWithSplitwell.flatMap { name =>
+      topLevelPackageOrder.flatMap { name =>
         val dars = grouped.getOrElse(
           name,
-          sys.error(
-            s"Package $name listed in topLevelPackageOrderWithSplitwell but not present in daml/dars/"
-          ),
+          sys.error(s"Package $name listed in topLevelPackageOrder but not present in daml/dars/"),
         )
         indent(2, renderPackage(name, dars, grouped))
       } ++
@@ -167,12 +175,14 @@ object DarResourcesGenerator {
     lines.mkString("\n")
   }
 
+  private val packageResourcesRenderOrder = topLevelPackageOrder.sorted
+
   private def renderPackageResources(): Seq[String] =
     Seq(
       "  lazy val packageResources: Seq[PackageResource] =",
       "  TokenStandard.allPackageResources ++ Seq(",
     ) ++
-      topLevelPackageOrderWithSplitwell.sorted.map(name => s"    DarResources.${camel(name)},") ++
+      packageResourcesRenderOrder.map(name => s"    DarResources.${camel(name)},") ++
       Seq(
         "  )",
         "",
@@ -183,7 +193,9 @@ object DarResourcesGenerator {
       "  lazy val corePackageResources: Seq[PackageResource] =",
       "  TokenStandard.allPackageResources ++ Seq(",
     ) ++
-      topLevelPackageOrder.sorted.map(name => s"    DarResources.${camel(name)},") ++
+      topLevelPackageOrderWithoutSplitwell.sorted.map(name =>
+        s"    DarResources.${camel(name)},"
+      ) ++
       Seq(
         "  )",
         "",
