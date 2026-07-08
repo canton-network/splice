@@ -850,11 +850,15 @@
           "type": "unlimited"
         },
         "/api/scan/v0/acs": {
-          "clientIp": true,
           "fillInterval": "60s",
-          "maxTokens": 10,
+          "maxTokens": 3000,
           "name": "acs",
-          "tokensPerFill": 5,
+          "perIpLimits": {
+            "fillInterval": "60s",
+            "maxTokens": 10,
+            "tokensPerFill": 5
+          },
+          "tokensPerFill": 100,
           "type": "limited"
         },
         "/api/scan/v0/active-synchronizer-serial": {
@@ -1054,51 +1058,75 @@
           "type": "unlimited"
         },
         "/registry/allocation-instruction/v1/allocation-factory": {
-          "clientIp": true,
           "fillInterval": "60s",
-          "maxTokens": 10,
+          "maxTokens": 3000,
           "name": "registry-allocation-factory",
-          "tokensPerFill": 5,
+          "perIpLimits": {
+            "fillInterval": "60s",
+            "maxTokens": 10,
+            "tokensPerFill": 5
+          },
+          "tokensPerFill": 200,
           "type": "limited"
         },
         "/registry/allocations/v1": {
-          "clientIp": true,
           "fillInterval": "60s",
-          "maxTokens": 10,
+          "maxTokens": 3000,
           "name": "registry-allocations",
-          "tokensPerFill": 5,
+          "perIpLimits": {
+            "fillInterval": "60s",
+            "maxTokens": 10,
+            "tokensPerFill": 5
+          },
+          "tokensPerFill": 200,
           "type": "limited"
         },
         "/registry/metadata/v1/info": {
-          "clientIp": true,
           "fillInterval": "60s",
-          "maxTokens": 10,
+          "maxTokens": 3000,
           "name": "registry-metadata-info",
-          "tokensPerFill": 5,
+          "perIpLimits": {
+            "fillInterval": "60s",
+            "maxTokens": 10,
+            "tokensPerFill": 5
+          },
+          "tokensPerFill": 200,
           "type": "limited"
         },
         "/registry/metadata/v1/instruments": {
-          "clientIp": true,
           "fillInterval": "60s",
-          "maxTokens": 10,
+          "maxTokens": 3000,
           "name": "registry-metadata-instruments",
-          "tokensPerFill": 5,
+          "perIpLimits": {
+            "fillInterval": "60s",
+            "maxTokens": 10,
+            "tokensPerFill": 5
+          },
+          "tokensPerFill": 200,
           "type": "limited"
         },
         "/registry/transfer-instruction/v1": {
-          "clientIp": true,
           "fillInterval": "60s",
-          "maxTokens": 10,
+          "maxTokens": 3000,
           "name": "registry-transfer-instruction",
-          "tokensPerFill": 5,
+          "perIpLimits": {
+            "fillInterval": "60s",
+            "maxTokens": 10,
+            "tokensPerFill": 5
+          },
+          "tokensPerFill": 200,
           "type": "limited"
         },
         "/registry/transfer-instruction/v1/transfer-factory": {
-          "clientIp": true,
           "fillInterval": "60s",
-          "maxTokens": 10,
+          "maxTokens": 3000,
           "name": "registry-transfer-factory",
-          "tokensPerFill": 5,
+          "perIpLimits": {
+            "fillInterval": "60s",
+            "maxTokens": 10,
+            "tokensPerFill": 5
+          },
+          "tokensPerFill": 200,
           "type": "limited"
         }
       }
@@ -1587,11 +1615,49 @@
                               }
                             ]
                           }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "acs",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/api/scan/v0/acs"
+                                }
+                              }
+                            ]
+                          }
                         },
                         {
                           "request_headers": {
                             "descriptor_key": "client_ip",
                             "header_name": "x-forwarded-for"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-allocations",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/allocations/v1"
+                                }
+                              }
+                            ]
                           }
                         }
                       ]
@@ -1637,11 +1703,49 @@
                               }
                             ]
                           }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-metadata-info",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/metadata/v1/info"
+                                }
+                              }
+                            ]
+                          }
                         },
                         {
                           "request_headers": {
                             "descriptor_key": "client_ip",
                             "header_name": "x-forwarded-for"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-metadata-instruments",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/metadata/v1/instruments"
+                                }
+                              }
+                            ]
                           }
                         }
                       ]
@@ -1687,11 +1791,49 @@
                               }
                             ]
                           }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-allocation-factory",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/allocation-instruction/v1/allocation-factory"
+                                }
+                              }
+                            ]
+                          }
                         },
                         {
                           "request_headers": {
                             "descriptor_key": "client_ip",
                             "header_name": "x-forwarded-for"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-transfer-instruction",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/transfer-instruction/v1"
+                                }
+                              }
+                            ]
                           }
                         }
                       ]
@@ -1737,6 +1879,25 @@
                               }
                             ]
                           }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-transfer-factory",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/transfer-instruction/v1/transfer-factory"
+                                }
+                              }
+                            ]
+                          }
                         },
                         {
                           "request_headers": {
@@ -1757,6 +1918,19 @@
                           {
                             "key": "header_match",
                             "value": "acs"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 3000,
+                          "tokens_per_fill": 100
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "acs"
                           },
                           {
                             "key": "client_ip"
@@ -1766,6 +1940,19 @@
                           "fill_interval": "60s",
                           "max_tokens": 10,
                           "tokens_per_fill": 5
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-allocations"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 3000,
+                          "tokens_per_fill": 200
                         }
                       },
                       {
@@ -1789,6 +1976,19 @@
                           {
                             "key": "header_match",
                             "value": "registry-metadata-info"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 3000,
+                          "tokens_per_fill": 200
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-metadata-info"
                           },
                           {
                             "key": "client_ip"
@@ -1798,6 +1998,19 @@
                           "fill_interval": "60s",
                           "max_tokens": 10,
                           "tokens_per_fill": 5
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-metadata-instruments"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 3000,
+                          "tokens_per_fill": 200
                         }
                       },
                       {
@@ -1821,6 +2034,19 @@
                           {
                             "key": "header_match",
                             "value": "registry-allocation-factory"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 3000,
+                          "tokens_per_fill": 200
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-allocation-factory"
                           },
                           {
                             "key": "client_ip"
@@ -1837,6 +2063,19 @@
                           {
                             "key": "header_match",
                             "value": "registry-transfer-instruction"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 3000,
+                          "tokens_per_fill": 200
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-transfer-instruction"
                           },
                           {
                             "key": "client_ip"
@@ -1846,6 +2085,19 @@
                           "fill_interval": "60s",
                           "max_tokens": 10,
                           "tokens_per_fill": 5
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-transfer-factory"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 3000,
+                          "tokens_per_fill": 200
                         }
                       },
                       {

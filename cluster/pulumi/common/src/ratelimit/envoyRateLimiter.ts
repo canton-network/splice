@@ -13,7 +13,7 @@ interface Limits {
 
 interface MatchedLimits extends Limits {
   type: 'limited';
-  clientIp: boolean;
+  perIpLimits?: Limits;
 }
 
 interface Banned {
@@ -170,36 +170,44 @@ export class RateLimitEnvoyFilter extends pulumi.ComponentResource {
     const effectiveRateLimits = validateEffectiveRateLimits(args);
 
     const rateLimitActions: unknown[] =
-      Object.entries(effectiveRateLimits || {}).map(([pathPrefix, rateLimit]) => {
-        return {
-          actions: [
-            {
-              header_value_match: {
-                descriptor_value: rateLimit.name,
-                expect_match: true,
-                headers: [
-                  {
-                    name: ':path',
-                    string_match: {
-                      prefix: pathPrefix,
-                      ignore_case: true,
-                    },
-                  },
-                ],
+      Object.entries(effectiveRateLimits || {}).flatMap(([pathPrefix, rateLimit]) => {
+        const actions = [];
+
+        // Action 1: generate the per-endpoint action
+        const baseAction = {
+          header_value_match: {
+            descriptor_value: rateLimit.name,
+            expect_match: true,
+            headers: [
+              {
+                name: ':path',
+                string_match: {
+                  prefix: pathPrefix,
+                  ignore_case: true,
+                },
               },
-            },
-            ...(rateLimit.clientIp
-              ? [
-                  {
-                    request_headers: {
-                      descriptor_key: 'client_ip',
-                      header_name: 'x-forwarded-for',
-                    },
-                  },
-                ]
-              : []),
-          ],
+            ],
+          },
         };
+
+        actions.push({ actions: [baseAction] });
+
+        // Action 2: generate the per-IP action if perIpLimits exists
+        if (rateLimit.perIpLimits) {
+          actions.push({
+            actions: [
+              baseAction,
+              {
+                request_headers: {
+                  descriptor_key: 'client_ip',
+                  header_name: 'x-forwarded-for',
+                },
+              },
+            ],
+          });
+        }
+
+        return actions;
       }) || [];
 
     const enableEnvoyRateLimitMetricsAnnotation = `
@@ -309,21 +317,44 @@ proxyStatsMatcher:
                       // simplified descriptors by combining with actions and requiring all the tokens of an action to be set
                       // a descriptor in practice is a subset of tags from a rate limit
                       // but important to note that for each rate limit only one descriptor can match, if multiple descriptors match, the first one is used
-                      descriptors: Object.values(effectiveRateLimits || {}).map(rateLimit => {
-                        return {
+                      descriptors: Object.values(effectiveRateLimits || {}).flatMap(rateLimit => {
+                        const descs = [];
+
+                        // per-endpoint bucket
+
+                        descs.push({
                           entries: [
                             {
                               key: 'header_match',
                               value: rateLimit.name,
                             },
-                            ...(rateLimit.clientIp ? [{ key: clientIpEntryKey }] : []),
                           ],
                           token_bucket: {
                             max_tokens: rateLimit.maxTokens,
                             tokens_per_fill: rateLimit.tokensPerFill,
                             fill_interval: rateLimit.fillInterval,
                           },
-                        };
+                        });
+
+                        // generate the per-IP bucket if configured
+                        if (rateLimit.perIpLimits) {
+                          descs.push({
+                            entries: [
+                              {
+                                key: 'header_match',
+                                value: rateLimit.name,
+                              },
+                              { key: clientIpEntryKey },
+                            ],
+                            token_bucket: {
+                              max_tokens: rateLimit.perIpLimits.maxTokens,
+                              tokens_per_fill: rateLimit.perIpLimits.tokensPerFill,
+                              fill_interval: rateLimit.perIpLimits.fillInterval,
+                            },
+                          });
+                        }
+
+                        return descs;
                       }),
                     },
                   },
