@@ -177,7 +177,7 @@ class UserWalletAutomationService(
     )
   }
 
-  if (rewardSharingConfig.beneficiaries.nonEmpty) {
+  if (rewardSharingConfig.beneficiaries.nonEmpty && !rewardSharingConfig.isExternal) {
     registerTrigger(
       new RewardSharingTrigger(
         triggerContext,

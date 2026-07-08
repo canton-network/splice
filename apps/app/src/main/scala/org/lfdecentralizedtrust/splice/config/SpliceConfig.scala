@@ -31,7 +31,7 @@ import org.lfdecentralizedtrust.splice.splitwell.config.{
   SplitwellSynchronizerConfig,
 }
 import org.lfdecentralizedtrust.splice.sv.config.*
-import org.lfdecentralizedtrust.splice.sv.{SvAppClientConfig}
+import org.lfdecentralizedtrust.splice.sv.SvAppClientConfig
 import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.FoundDso
 import org.lfdecentralizedtrust.splice.util.{Codec, SpliceRateLimitConfig}
 import org.lfdecentralizedtrust.splice.validator.config.*
@@ -39,6 +39,7 @@ import org.lfdecentralizedtrust.splice.wallet.config.{
   AppRewardBeneficiaryConfig,
   AutoAcceptTransfersConfig,
   RewardSharingConfig,
+  SharingAutomation,
   TransferPreapprovalConfig,
   TreasuryConfig,
   WalletAppClientConfig,
@@ -695,6 +696,13 @@ object SpliceConfig {
       deriveReader[AutoAcceptTransfersConfig]
     implicit val appRewardBeneficiaryConfigReader: ConfigReader[AppRewardBeneficiaryConfig] =
       deriveReader[AppRewardBeneficiaryConfig]
+    implicit val sharingAutomationReader: ConfigReader[SharingAutomation] =
+      ConfigReader.fromString {
+        case "built-in" => Right(SharingAutomation.BuiltIn)
+        case "external" => Right(SharingAutomation.External)
+        case other =>
+          Left(CannotConvert(other, "SharingAutomation", "expected \"built-in\" or \"external\""))
+      }
     implicit val rewardSharingConfigReader: ConfigReader[RewardSharingConfig] =
       deriveReader[RewardSharingConfig]
     implicit val validatorDecentralizedSynchronizerConfigReader
@@ -848,6 +856,13 @@ object SpliceConfig {
                   (),
                   ConfigValidationFailed(
                     s"Reward sharing batchSize for $party must be positive"
+                  ),
+                )
+                _ <- Either.cond(
+                  !(sharingConfig.isExternal && sharingConfig.beneficiaries.nonEmpty),
+                  (),
+                  ConfigValidationFailed(
+                    s"Reward sharing for $party uses external automation; beneficiaries must not be set"
                   ),
                 )
               } yield ()
@@ -1137,6 +1152,11 @@ object SpliceConfig {
       deriveWriter[AutoAcceptTransfersConfig]
     implicit val appRewardBeneficiaryConfigWriter: ConfigWriter[AppRewardBeneficiaryConfig] =
       deriveWriter[AppRewardBeneficiaryConfig]
+    implicit val sharingAutomationWriter: ConfigWriter[SharingAutomation] =
+      ConfigWriter.toString {
+        case SharingAutomation.BuiltIn => "built-in"
+        case SharingAutomation.External => "external"
+      }
     implicit val rewardSharingConfigWriter: ConfigWriter[RewardSharingConfig] =
       deriveWriter[RewardSharingConfig]
     implicit val validatorDecentralizedSynchronizerConfigWriter

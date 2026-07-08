@@ -55,6 +55,12 @@ final case class AppRewardBeneficiaryConfig(
     percentage: BigDecimal,
 )
 
+sealed trait SharingAutomation
+object SharingAutomation {
+  case object BuiltIn extends SharingAutomation
+  case object External extends SharingAutomation
+}
+
 /** Configuration for sharing traffic-based app reward coupons with beneficiaries.
   * @param minTtlAfterSharing minimum remaining coupon TTL before sharing is triggered;
   *   e.g., 30h means share when 30h of coupon lifetime remains (6h after creation for 36h coupons)
@@ -66,7 +72,10 @@ final case class RewardSharingConfig(
     minTtlAfterSharing: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofHours(30),
     beneficiaries: Seq[AppRewardBeneficiaryConfig] = Seq.empty,
     batchSize: Int = 100,
+    sharingAutomation: SharingAutomation = SharingAutomation.BuiltIn,
 ) {
+  def isExternal: Boolean = sharingAutomation == SharingAutomation.External
+
   def providerRemainder: BigDecimal = BigDecimal(1.0) - beneficiaries.map(_.percentage).sum
 
   @VisibleForTesting

@@ -165,9 +165,10 @@ class MintingDelegationCollectRewardsTrigger(
     // Without sharing config, all V2 coupons are mintable directly.
     // With sharing config, only assigned-to-us V2 coupons are mintable;
     // unassigned ones need sharing first.
-    val hasBeneficiaries = rewardSharingConfig.beneficiaries.nonEmpty
+    val isExternal = rewardSharingConfig.isExternal
+    val excludeUnassigned = rewardSharingConfig.beneficiaries.nonEmpty || isExternal
     val (unassignedV2, mintableV2) =
-      if (hasBeneficiaries)
+      if (excludeUnassigned)
         filteredCouponsData.rewardCouponsV2.partition(_.payload.beneficiary.isEmpty)
       else
         (Seq.empty, filteredCouponsData.rewardCouponsV2)
@@ -175,7 +176,7 @@ class MintingDelegationCollectRewardsTrigger(
 
     // Share when the TTL threshold is reached, or batch sharing with
     // amulet merging to reduce traffic costs by combining both in one transaction.
-    val shouldAssign = unassignedV2.nonEmpty &&
+    val shouldAssign = !isExternal && unassignedV2.nonEmpty &&
       (shouldShareNow(unassignedV2, rewardSharingConfig) || shouldMergeAmulets)
 
     val submission = buildMintSubmissionData(mintInputs, couponsToMint, amuletsToMerge)
