@@ -216,7 +216,7 @@ class UnsupportedPackageVettingIntegrationTest
       }
   }
 
-  "Unvetting amulet on the SV does not affect a validator that has splitwell depending on it" in {
+  "Unvetting amulet does not affect a validator that has splitwell depending on it" in {
     implicit env =>
       val aliceValidatorVettingTrigger =
         aliceValidatorBackend.validatorAutomation.trigger[ValidatorPackageVettingTrigger]
@@ -229,7 +229,7 @@ class UnsupportedPackageVettingIntegrationTest
       val amuletDependency = DarResources.amulet_0_1_0
 
       actAndCheck(
-        "alice uploads and vets splitwell_0_1_0 (which vets amulet_0_1_0 as a dependency)", {
+        "alice uploads and vets splitwell-0.1.0 (which vets amulet-0.1.0 as a dependency)", {
           aliceParticipant
             .uploadDarFiles(
               Seq(splitwellDar).map(UploadablePackage.fromResource),
@@ -241,7 +241,7 @@ class UnsupportedPackageVettingIntegrationTest
             .futureValue(timeout = PatienceConfiguration.Timeout(FiniteDuration(40, "seconds")))
         },
       )(
-        "both splitwell_0_1_0 and amulet_0_1_0 are vetted on alice's participant",
+        "both splitwell-0.1.0 and amulet-0.1.0 are vetted on alice's participant",
         _ => {
           val vettedIds = getVettedPackageIds(aliceParticipant, synchronizerId)
           vettedIds should contain(splitwellDar.packageId)
@@ -249,19 +249,21 @@ class UnsupportedPackageVettingIntegrationTest
         },
       )
 
-      loggerFactory.assertEventuallyLogsSeq(SuppressionRule.LevelAndAbove(Level.DEBUG))(
-        aliceValidatorVettingTrigger.resume(),
-        entries => {
-          forAtLeast(1, entries)(
-            _.message should include("Not running package unvetting")
-          )
-        },
-      )
+      clue("amulet-0.1.0 is unvetted on alice") {
+        loggerFactory.assertEventuallyLogsSeq(SuppressionRule.LevelAndAbove(Level.INFO))(
+          aliceValidatorVettingTrigger.resume(),
+          entries => {
+            forAtLeast(1, entries)(
+              _.message should include regex "Success: dars .*48cac5ba4b6bf78df6c3a952ce05409a1d2ef39c05351074679adc0cf9cd1351.* are removed .*"
+            )
+          },
+        )
+      }
 
-      clue("splitwell_0_1_0 and amulet_0_1_0 remain vetted after trigger ran") {
+      clue("splitwell-0.1.0 remains vetted after trigger ran") {
         val vettedIds = getVettedPackageIds(aliceParticipant, synchronizerId)
         vettedIds should contain(splitwellDar.packageId)
-        vettedIds should contain(amuletDependency.packageId)
+        vettedIds should not contain amuletDependency.packageId
       }
 
   }

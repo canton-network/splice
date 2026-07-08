@@ -11,6 +11,11 @@
 
     Next-release notes
 
+  - Validator
+
+    - Unsupported package versions are now automatically unvetted by the validator package vetting trigger,
+      aligning validator behavior with SVs.
+
   - Deployment
 
     - Helm

@@ -55,10 +55,10 @@ object DarResourcesGenerator {
     "splice-wallet",
     "splice-amulet-name-service",
     "splice-wallet-payments",
-    "splitwell",
     "splice-validator-lifecycle",
     "splice-api-reward-assignment-v1",
   )
+  private val topLevelPackageOrderWithSplitwell: Seq[String] = topLevelPackageOrder :+ "splitwell"
   private val tokenStandardProductionPackageOrder: Seq[String] = Seq(
     "splice-api-token-metadata-v1",
     "splice-api-token-holding-v1",
@@ -139,22 +139,25 @@ object DarResourcesGenerator {
       "object DarResources {",
     ) ++
       indent(2, renderTokenStandard(grouped)) ++
-      topLevelPackageOrder.flatMap { name =>
+      topLevelPackageOrderWithSplitwell.flatMap { name =>
         val dars = grouped.getOrElse(
           name,
-          sys.error(s"Package $name listed in topLevelPackageOrder but not present in daml/dars/"),
+          sys.error(
+            s"Package $name listed in topLevelPackageOrderWithSplitwell but not present in daml/dars/"
+          ),
         )
         indent(2, renderPackage(name, dars, grouped))
       } ++
       renderPackageResources() ++
+      renderCorePackageResources() ++
       Seq(
         """|  lazy val pkgIdToDarResource: Map[String, DarResource] =
-           |    packageResources.view.flatMap(_.all).map(resource => resource.packageId -> resource).toMap
+           |    corePackageResources.view.flatMap(_.all).map(resource => resource.packageId -> resource).toMap
            |
            |  // We don't index the map by PackageMetadata because that type contains some additional
            |  // fields that don't matter.
            |  lazy val pkgMetadataToDarResource: Map[(PackageName, PackageVersion), DarResource] =
-           |    packageResources.view
+           |    corePackageResources.view
            |      .flatMap(_.all)
            |      .map(resource => (resource.metadata.name, resource.metadata.version) -> resource)
            |      .toMap
@@ -164,14 +167,23 @@ object DarResourcesGenerator {
     lines.mkString("\n")
   }
 
-  private val packageResourcesRenderOrder = topLevelPackageOrder.sorted
-
   private def renderPackageResources(): Seq[String] =
     Seq(
       "  lazy val packageResources: Seq[PackageResource] =",
       "  TokenStandard.allPackageResources ++ Seq(",
     ) ++
-      packageResourcesRenderOrder.map(name => s"    DarResources.${camel(name)},") ++
+      topLevelPackageOrderWithSplitwell.sorted.map(name => s"    DarResources.${camel(name)},") ++
+      Seq(
+        "  )",
+        "",
+      )
+
+  private def renderCorePackageResources(): Seq[String] =
+    Seq(
+      "  lazy val corePackageResources: Seq[PackageResource] =",
+      "  TokenStandard.allPackageResources ++ Seq(",
+    ) ++
+      topLevelPackageOrder.sorted.map(name => s"    DarResources.${camel(name)},") ++
       Seq(
         "  )",
         "",
