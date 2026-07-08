@@ -22,6 +22,14 @@
 
     - Add a metric for the size of the most recent ACS snapshot
 
+  - Token Standard APIs
+
+    - Add the ``accountInputFieldsToShow`` property in the token metadata
+      API (``token-metadata-v1.yaml``).
+      This property allows instruments that support only account-ids or only
+      account providers to inform wallets of this fact.
+      This change is backwards compatible.
+
   - Daml
 
     - Adds support for specifying weight on the ``FeaturedAppRight`` contract as described in
