@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.integration.tests
 
+import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.topology.SynchronizerId
 import org.lfdecentralizedtrust.splice.automation.PackageVettingTrigger
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletconfig.{
@@ -35,7 +36,6 @@ import org.scalatest.concurrent.PatienceConfiguration
 
 import scala.concurrent.duration.DurationInt
 import scala.concurrent.duration.FiniteDuration
-
 import com.digitalasset.canton.logging.SuppressionRule
 import org.slf4j.event.Level
 
@@ -223,22 +223,34 @@ class UnsupportedPackageVettingIntegrationTest
 
       val synchronizerId =
         sv1Backend.participantClient.synchronizers.list_connected().head.synchronizerId
+      val splitwellSynchronizerId =
+        bobValidatorBackend.participantClient.synchronizers.id_of(
+          SynchronizerAlias.tryCreate("splitwell")
+        )
+
       val bobParticipant = bobValidatorBackend.appState.participantAdminConnection
+      val splitwellParticipant = splitwellValidatorBackend.appState.participantAdminConnection
 
       val splitwellDar = DarResources.splitwell_0_1_0
       val amuletDependency = DarResources.amulet_0_1_0
 
       actAndCheck(
-        "bob uploads and vets splitwell-0.1.0 (which vets amulet-0.1.0 as a dependency)", {
-          bobParticipant
-            .uploadDarFiles(
+        "bob and splitwell upload and vet splitwell-0.1.0 (which vets amulet-0.1.0 as a dependency)", {
+          val participants = Seq(bobParticipant, splitwellParticipant)
+          participants.foreach(
+            _.uploadDarFiles(
               Seq(splitwellDar).map(UploadablePackage.fromResource),
               RetryFor.Automation,
-            )
-            .futureValue
-          bobParticipant
-            .vetDars(synchronizerId, Seq(splitwellDar), None, None)
-            .futureValue(timeout = PatienceConfiguration.Timeout(FiniteDuration(40, "seconds")))
+            ).futureValue
+          )
+          participants.foreach(
+            _.vetDars(synchronizerId, Seq(splitwellDar), None, None)
+              .futureValue(timeout = PatienceConfiguration.Timeout(FiniteDuration(40, "seconds")))
+          )
+          participants.map(
+            _.vetDars(splitwellSynchronizerId, Seq(splitwellDar), None, None)
+              .futureValue(timeout = PatienceConfiguration.Timeout(FiniteDuration(40, "seconds")))
+          )
         },
       )(
         "both splitwell-0.1.0 and amulet-0.1.0 are vetted on bob's participant",
@@ -261,9 +273,18 @@ class UnsupportedPackageVettingIntegrationTest
       }
 
       clue("splitwell-0.1.0 remains vetted after trigger ran") {
-        val vettedIds = getVettedPackageIds(bobParticipant, synchronizerId)
-        vettedIds should contain(splitwellDar.packageId)
-        vettedIds should not contain amuletDependency.packageId
+        eventually() {
+          val vettedIds = getVettedPackageIds(bobParticipant, synchronizerId)
+          vettedIds should contain(splitwellDar.packageId)
+          vettedIds should not contain amuletDependency.packageId
+        }
+      }
+
+      clue("splitwell is still usable on bob") {
+        onboardWalletUser(bobWalletClient, bobValidatorBackend)
+        eventually() {
+          bobSplitwellClient.createInstallRequests() should not be empty
+        }
       }
 
   }
