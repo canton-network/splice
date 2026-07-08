@@ -1231,6 +1231,7 @@ class DbScanAppRewardsStoreTest
         updateHistory,
         DbAppActivityRecordStore.IngestionVersions(1, 0),
         isFirstSv,
+        initialRound = 0L,
         loggerFactory,
       )
       val store = new DbScanAppRewardsStore(

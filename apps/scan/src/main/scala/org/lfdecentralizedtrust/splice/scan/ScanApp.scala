@@ -285,6 +285,7 @@ class ScanApp(
                 config.activityIngestionUserVersion.fold(0)(_.toInt),
               ),
               config.isFirstSv,
+              initialRound.toLong,
               loggerFactory,
             )
           )

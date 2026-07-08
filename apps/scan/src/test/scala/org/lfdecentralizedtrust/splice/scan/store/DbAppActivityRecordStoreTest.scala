@@ -1107,6 +1107,7 @@ class DbAppActivityRecordStoreTest
         updateHistory,
         versions,
         isFirstSv,
+        initialRound = 0L,
         loggerFactory,
       )
       (store, updateHistory.historyId)
@@ -1138,6 +1139,7 @@ class DbAppActivityRecordStoreTest
         updateHistory,
         DbAppActivityRecordStore.IngestionVersions(1, 0),
         isFirstSv,
+        initialRound = 0L,
         loggerFactory,
       )
       val verdictStore = new DbScanVerdictStore(
