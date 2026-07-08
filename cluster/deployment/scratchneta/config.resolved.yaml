@@ -98,6 +98,8 @@ monitoring:
       scanConnectionDisagreement:
         alertThreshold: 0.1
         excludedConnections: []
+        excludedHttpStatusCodes:
+          - '404'
         excludedRequests:
           - 'getTransferInstructionAcceptContext'
           - 'getOpenAndIssuingMiningRounds'

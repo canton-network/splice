@@ -166,6 +166,7 @@ monitoring:
           - "getTransferInstructionAcceptContext" # exclude as it's really sensitive to ingestion and ROP delays
           - "getOpenAndIssuingMiningRounds" # exclude as it depends on (fast) mutable state and depends on the ROP delays
         excludedConnections: []
+        excludedHttpStatusCodes: ["404"]
       walletSweep:
         # Multiplier applied to a wallet sweep's configured maxBalance to set the alert threshold.
         # 1.5 means the alert fires if the balance is 50% higher than expected.
