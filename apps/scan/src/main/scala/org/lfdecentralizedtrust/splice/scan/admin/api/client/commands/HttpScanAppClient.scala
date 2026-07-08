@@ -3154,9 +3154,9 @@ object HttpScanAppClient {
         body = definitions.CountVoteResultsRequest(
           actionName,
           accepted,
-          requester,
-          effectiveFrom,
-          effectiveTo,
+          requester = requester,
+          effectiveFrom = effectiveFrom,
+          effectiveTo = effectiveTo,
         ),
         headers = headers,
       )
