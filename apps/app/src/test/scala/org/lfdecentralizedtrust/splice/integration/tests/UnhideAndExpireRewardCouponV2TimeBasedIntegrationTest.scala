@@ -1,7 +1,6 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.HasExecutionContext
-import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.metrics.MetricValue
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
@@ -9,7 +8,6 @@ import com.digitalasset.canton.topology.transaction.VettedPackage
 import com.digitalasset.canton.topology.{ForceFlag, ForceFlags, ParticipantId, PartyId}
 import com.digitalasset.daml.lf.data.Ref.{PackageId, PackageVersion}
 import java.time.Duration
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppRight
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.rewardassignmentv1.{
   RewardBeneficiary,
   RewardCoupon,
@@ -65,27 +63,15 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
       DarResources.amulet_0_1_19.metadata.version,
     )
 
-  private val minV2AmuletPackageId =
-    DarResources.amulet.getPackageIdWithVersion(minV2AmuletVersion.toString).value
-
-  private val latestAmuletDar: DarResource = DarResources.amulet.latest
-
   private val v2CapableAmuletPackageIds: Seq[String] =
     DarResources.amulet.all
       .filter(_.metadata.version >= minV2AmuletVersion)
       .map(_.packageId)
       .distinct
 
-  private val amuletVersionsAboveOldestV2: Seq[String] =
-    DarResources.amulet.all
-      .filter(_.metadata.version > minV2AmuletVersion)
-      .map(_.packageId)
-      .distinct
-
-  // Only the latest is unvetted, as this would still cause
-  // ProcessRewardsTrigger to create hidden coupons
-  private val darsUnvettedOnAliceAtStart: Seq[DarResource] = {
-    val latestAmuletIds = Set(latestAmuletDar.packageId)
+  // DARs that need to be uploaded and vetted when re-vetting alice for v2
+  private val v2CapableDarsUnvettedOnAlice: Seq[DarResource] = {
+    val v2CapableAmuletIds = v2CapableAmuletPackageIds.toSet
     Seq(
       DarResources.amulet,
       DarResources.amuletNameService,
@@ -94,8 +80,8 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
       DarResources.walletPayments,
     ).flatMap(_.all)
       .filter(d =>
-        latestAmuletIds.contains(d.packageId) ||
-          d.dependencyPackageIds.exists(latestAmuletIds.contains)
+        v2CapableAmuletIds.contains(d.packageId) ||
+          d.dependencyPackageIds.exists(v2CapableAmuletIds.contains)
       )
       .distinctBy(d => (d.metadata.name, d.metadata.version))
   }
@@ -103,22 +89,6 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
       .simpleTopology1SvWithSimTime(this.getClass.getSimpleName)
-      .withNoVettedPackages(implicit env => Seq(aliceValidatorBackend.participantClient))
-      .addConfigTransforms((_, config) => {
-        val aliceValidator = InstanceName.tryCreate("aliceValidator")
-        config.copy(
-          validatorApps = config.validatorApps +
-            (aliceValidator -> config
-              .validatorApps(aliceValidator)
-              .copy(
-                additionalPackagesToUnvet = darsUnvettedOnAliceAtStart
-                  .groupBy(_.metadata.name)
-                  .map { case (name, resources) =>
-                    name -> resources.map(_.metadata.version).toSet
-                  }
-              ))
-        )
-      })
       .addConfigTransform((_, config) =>
         ConfigTransforms.withRewardConfig(
           InitialRewardConfig(
@@ -152,7 +122,6 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
   "Unhide and expire of RewardCouponV2" in { implicit env =>
     val aliceParticipantId =
       aliceValidatorBackend.appState.participantAdminConnection.getParticipantId().futureValue
-    assertAliceVettedBelowLatest(aliceParticipantId)
 
     val (aliceParty, bobParty) = onboardAliceAndBobWithFeaturedRights()
 
@@ -186,6 +155,11 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
       assertOldestOpenRound(round.toLong)
     }
     // FA right now effective from round 4
+
+    // Unvet v2-capable amulet packages from alice after onboarding so
+    // ProcessRewardsTrigger sees her as having wrong vetting state.
+    unvetV2AmuletOnAlice(aliceParticipantId)
+
     doTransfer()
     advanceRoundsToNextRoundOpening
 
@@ -479,22 +453,6 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
       .futureValue
       .flatMap(_.mapping.packages.map(_.packageId))
 
-  private def assertAliceVettedBelowLatest(
-      aliceParticipantId: ParticipantId
-  )(implicit env: SpliceTestConsoleEnvironment): Unit =
-    clue("Alice's validator vets the second-latest amulet version but not the latest") {
-      eventually() {
-        val vetted = vettedPackagesOnSv1View(aliceParticipantId)
-        vetted should contain(
-          DarResources.amulet.others
-            .filter(_.metadata.version < latestAmuletDar.metadata.version)
-            .maxBy(_.metadata.version)
-            .packageId
-        )
-        vetted should not contain latestAmuletDar.packageId
-      }
-    }
-
   private def onboardAliceAndBobWithFeaturedRights()(implicit
       env: SpliceTestConsoleEnvironment
   ): (PartyId, PartyId) = {
@@ -503,25 +461,7 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
 
     bobWalletClient.tap(100)
     grantFeaturedAppRight(bobWalletClient)
-
-    // Alice can't self-grant while unvetted, so use dso directly
-    actAndCheck(
-      "DSO directly creates Alice's FeaturedAppRight",
-      sv1Backend.participantClientWithAdminToken.ledger_api_extensions.commands
-        .submitWithResult(
-          userId = sv1Backend.config.ledgerApiUser,
-          actAs = Seq(dsoParty),
-          readAs = Seq.empty,
-          update = new FeaturedAppRight(
-            dsoParty.toProtoPrimitive,
-            aliceParty.toProtoPrimitive,
-            java.util.Optional.empty(),
-          ).create,
-        ),
-    )(
-      "Alice's featured app right is visible in scan",
-      _ => sv1ScanBackend.lookupFeaturedAppRight(aliceParty) should not be empty,
-    )
+    grantFeaturedAppRight(aliceWalletClient)
 
     (aliceParty, bobParty)
   }
