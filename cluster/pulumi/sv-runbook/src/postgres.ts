@@ -40,7 +40,6 @@ export async function installPostgres(
     return new SplicePostgres(
       xns,
       name,
-      name,
       secretName,
       values,
       undefined,

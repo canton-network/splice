@@ -1,6 +1,7 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import * as gcp from '@pulumi/gcp';
+import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
 import * as random from '@pulumi/random';
 import * as _ from 'lodash';
@@ -12,9 +13,9 @@ import { spliceConfig } from './config/config';
 import { GcpProject } from './config/gcpConfig';
 import { hyperdiskSupportConfig } from './config/hyperdiskSupportConfig';
 import {
-  appsAffinityAndTolerations,
-  infraAffinityAndTolerations,
-  installSpliceHelmChart,
+    appsAffinityAndTolerations, CnInput,
+    infraAffinityAndTolerations,
+    installSpliceHelmChart,
 } from './helm';
 import { installPostgresPasswordSecret } from './secrets';
 import { standardStorageClassName } from './storage/storageClass';
@@ -369,7 +370,11 @@ type CloudPostgresOutput = {
   secretName: pulumi.Output<string>;
 };
 
-export class SplicePostgres extends pulumi.ComponentResource implements Postgres {
+/**
+ * Legacy Helm-backed postgres declaration kept for migration windows where the
+ * old splice-postgres release must stay declared to avoid Pulumi deleting it.
+ */
+export class LegacyHelmSplicePostgres extends pulumi.ComponentResource implements Postgres {
   instanceName: string;
   namespace: ExactNamespace;
   address: pulumi.Output<string>;
@@ -380,8 +385,7 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
   constructor(
     xns: ExactNamespace,
     instanceName: string,
-    alias: string,
-    secretName: string,
+    passwordSecret: k8s.core.v1.Secret,
     values?: ChartValues,
     overrideDbSizeFromValues?: boolean,
     disableProtection?: boolean,
@@ -389,10 +393,9 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
     useInfraAffinityAndTolerations: boolean = false
   ) {
     const logicalName = xns.logicalName + '-' + instanceName;
-    const logicalNameAlias = xns.logicalName + '-' + alias; // pulumi name before #12391
     super('canton:network:postgres', logicalName, [], {
       protect: disableProtection ? false : spliceConfig.pulumiProjectConfig.cloudSql.protected,
-      aliases: [{ name: logicalNameAlias, type: 'canton:network:postgres' }],
+      aliases: [],
     });
 
     this.instanceName = instanceName;
@@ -401,11 +404,6 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
     this.address = pulumi.output(
       `${this.instanceName}.${this.namespace.logicalName}.svc.cluster.local`
     );
-    const password = generatePassword(`${logicalName}-passwd`, {
-      parent: this,
-      aliases: [{ name: `${logicalNameAlias}-passwd` }],
-    }).result;
-    const passwordSecret = installPostgresPasswordSecret(xns, password, secretName);
     this.secretName = passwordSecret.metadata.name;
 
     // an initial database named cantonnet is created automatically (configured in the Helm chart).
@@ -436,7 +434,6 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
       }),
       version,
       {
-        aliases: [{ name: logicalNameAlias, type: 'kubernetes:helm.sh/v3:Release' }],
         dependsOn: [passwordSecret],
         ...(spliceConfig.pulumiProjectConfig.replacePostgresStatefulSetOnChanges
           ? {
@@ -464,7 +461,400 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
   }
 }
 
+/**
+ * Configuration for migrating data from a pre-existing PostgreSQL instance
+ * (one previously deployed via the splice-postgres Helm chart) into a
+ * freshly-created StatefulSet volume.
+ *
+ * The migration runs once, inside an init container, only when PGDATA is
+ * empty (i.e. on the very first pod start against a blank PVC). It uses
+ * `pg_dump` to produce a SQL dump from the source instance, which the
+ * official postgres image then restores automatically via its
+ * `/docker-entrypoint-initdb.d` mechanism before the main process starts.
+ */
+export interface PostgresMigrationSource {
+  host: string;
+  port?: number;
+  userName?: string;
+}
+
+export class SplicePostgres extends pulumi.ComponentResource implements Postgres {
+  instanceName: string;
+  namespace: ExactNamespace;
+  address: pulumi.Output<string>;
+  pg: Resource;
+  secretName: pulumi.Output<string>;
+  userName: string;
+
+  constructor(
+    xns: ExactNamespace,
+    instanceName: string,
+    secretName: string,
+    values?: ChartValues,
+    overrideDbSizeFromValues?: boolean,
+    disableProtection?: boolean,
+    version?: CnChartVersion,
+    useInfraAffinityAndTolerations: boolean = false,
+    importDataFromSplicePostgresHelmChart: boolean = false,
+    dependsOn: CnInput<pulumi.Resource>[] = [],
+  ) {
+    // Avoiding collisions with the name in LegacyHelmSplicePostgres
+    const deployedInstanceName = `${instanceName}-helmless`;
+    const logicalName = xns.logicalName + '-' + deployedInstanceName;
+    super('canton:network:postgres', logicalName, [], {
+      protect: disableProtection ? false : spliceConfig.pulumiProjectConfig.cloudSql.protected,
+      aliases: [],
+      dependsOn,
+    });
+
+    // Password keeps the same historical name to avoid re-creating it unnecessarily
+    const password = generatePassword(`${xns.logicalName}-${instanceName}-passwd`, {
+      parent: this,
+      aliases: [],
+    }).result;
+    const passwordSecret = installPostgresPasswordSecret(xns, password, secretName);
+    this.secretName = passwordSecret.metadata.name;
+
+    let migrationSource: PostgresMigrationSource | undefined = undefined;
+    if (importDataFromSplicePostgresHelmChart) {
+      new LegacyHelmSplicePostgres(
+        xns,
+        instanceName,
+        passwordSecret,
+        undefined,
+        undefined,
+        disableProtection,
+        version,
+        false
+      );
+
+      migrationSource = {
+        host: `${instanceName}.${xns.logicalName}.svc.cluster.local`,
+        port: 5432,
+        userName: 'cnadmin',
+      };
+    }
+
+    this.instanceName = deployedInstanceName;
+    this.namespace = xns;
+    const postgresUser: string = 'cnadmin';
+    const postgresDb: string = 'cantonnet';
+    this.userName = postgresUser;
+    this.address = pulumi.output(
+      `${this.instanceName}.${this.namespace.logicalName}.svc.cluster.local`
+    );
+
+    const smallDiskSize = clusterSmallDisk ? '240Gi' : undefined;
+    const supportsHyperdisk = useInfraAffinityAndTolerations
+      ? hyperdiskSupportConfig.hyperdiskSupport.enabledForInfra
+      : hyperdiskSupportConfig.hyperdiskSupport.enabled;
+
+    const volumeSize = overrideDbSizeFromValues
+      ? values?.db?.volumeSize || smallDiskSize || '2800Gi'
+      : smallDiskSize || '2800Gi';
+    const pvcTemplateName = supportsHyperdisk
+      ? 'pg-data-hd'
+      : (values?.db?.pvcTemplateName || 'pg-data');
+    const volumeStorageClass = supportsHyperdisk
+      ? standardStorageClassName
+      : (values?.db?.volumeStorageClass || 'standard-rwo');
+    // Plain PVC name in the same namespace (not a PV name and not namespaced as ns/name).
+    const existingClaimName: string | undefined = values?.db?.existingClaimName;
+    const mainDataVolumeName = existingClaimName ? 'pg-data-existing' : pvcTemplateName;
+    const maxConnections: number = values?.db?.maxConnections ?? 300;
+    const maxWalSize: string = values?.db?.maxWalSize ?? '2GB';
+    const imageName: string = values?.imageName ?? 'postgres:14';
+    const resources = _.merge(
+      { limits: { memory: '12Gi' }, requests: { cpu: '0.5', memory: '1Gi' } },
+      values?.resources || {}
+    );
+    const extraArgs: string[] = values?.extraArgs || [];
+    const affinityAndTolerations = useInfraAffinityAndTolerations
+      ? infraAffinityAndTolerations
+      : appsAffinityAndTolerations;
+
+    // Optional init container that migrates data from a pre-existing postgres instance.
+    // It runs pg_dump against the source and deposits the dump + a restore script into
+    // an emptyDir volume that the main container picks up via /docker-entrypoint-initdb.d.
+    const initContainers: k8s.types.input.core.v1.Container[] = [];
+    const migrationVolumes: k8s.types.input.core.v1.Volume[] = [];
+    // Extra volumeMounts added to the main postgres container
+    const migrationVolumeMounts: k8s.types.input.core.v1.VolumeMount[] = [];
+
+    if (migrationSource) {
+      const srcPort = String(migrationSource.port ?? 5432);
+      const srcUser = migrationSource.userName ?? postgresUser;
+
+      // Shell script executed by the init container.
+      // Only runs the dump when PGDATA is completely empty (first-ever pod start
+      // against a blank PVC).  On subsequent restarts PGDATA already has data, so
+      // the script exits immediately, keeping pod startup fast.
+      //
+      // The dump is stored as `migration.dump` (non-.sql extension) so that the
+      // postgres entrypoint does NOT auto-execute it.  Instead, `00-restore.sh`
+      // (which IS executed by the entrypoint) calls psql manually, giving us full
+      // control over error handling.
+      const migrationScript = [
+        'set -eu',
+        'if [ -n "$(ls -A "$PGDATA" 2>/dev/null)" ]; then',
+        '  echo "PGDATA already contains data, skipping migration."',
+        '  exit 0',
+        'fi',
+        'echo "PGDATA is empty. Dumping all databases from $SOURCE_HOST:$SOURCE_PORT ..."',
+        'pg_dumpall \\',
+        '  -h "$SOURCE_HOST" \\',
+        '  -p "$SOURCE_PORT" \\',
+        '  -U "$SOURCE_USER" \\',
+        '  --no-role-passwords \\',
+        '  -f /initdb/migration.sql',
+        // Write the restore script using a single-quoted heredoc so that
+        // $POSTGRES_USER / $POSTGRES_DB are NOT expanded now – they are
+        // expanded later by the postgres entrypoint when it runs the script.
+        "cat > /initdb/00-restore.sh << 'RESTORE_EOF'",
+        '#!/bin/sh',
+        'set -e',
+        '[ -f /docker-entrypoint-initdb.d/migration.sql ] || exit 0',
+        'echo "Restoring all databases from migration.sql ..."',
+        'psql --username "$POSTGRES_USER" --dbname postgres -f /docker-entrypoint-initdb.d/migration.sql',
+        'echo "Restore complete."',
+        'RESTORE_EOF',
+        'chmod +x /initdb/00-restore.sh',
+        'echo "Migration dump ready."',
+      ].join('\n');
+
+      migrationVolumes.push({ name: 'initdb-scripts', emptyDir: {} });
+      // Mount into the main container so postgres runs the restore script on first init
+      migrationVolumeMounts.push({
+        name: 'initdb-scripts',
+        mountPath: '/docker-entrypoint-initdb.d',
+      });
+
+      initContainers.push({
+        name: 'pg-migrate',
+        image: imageName,
+        imagePullPolicy: 'IfNotPresent',
+        securityContext: {
+          runAsNonRoot: true,
+          runAsUser: 999,
+          runAsGroup: 999,
+          allowPrivilegeEscalation: false,
+          privileged: false,
+          capabilities: { drop: ['ALL'] },
+        },
+        command: ['sh', '-c'],
+        args: [migrationScript],
+        env: [
+          { name: 'PGDATA', value: '/var/lib/postgresql/data/pgdata' },
+          { name: 'SOURCE_HOST', value: migrationSource.host },
+          { name: 'SOURCE_PORT', value: srcPort },
+          { name: 'SOURCE_USER', value: srcUser },
+          {
+            name: 'PGPASSWORD',
+            valueFrom: {
+              secretKeyRef: {
+                name: passwordSecret.metadata.name,
+                key: 'postgresPassword',
+              },
+            },
+          },
+        ],
+        volumeMounts: [
+          // Mount PGDATA read-only – we only inspect it to decide whether to dump
+          { name: mainDataVolumeName, mountPath: '/var/lib/postgresql/data', readOnly: true },
+          { name: 'initdb-scripts', mountPath: '/initdb' },
+        ],
+      });
+    }
+
+    // ConfigMap for non-secret environment variables
+    const configMap = new k8s.core.v1.ConfigMap(
+      `${logicalName}-configuration`,
+      {
+        metadata: {
+          name: `${deployedInstanceName}-configuration`,
+          namespace: xns.logicalName,
+        },
+        data: {
+          PGDATA: '/var/lib/postgresql/data/pgdata',
+          POSTGRES_DB: postgresDb,
+          POSTGRES_USER: postgresUser,
+          POSTGRES_INITDB_ARGS: '--data-checksums',
+        },
+      },
+      { parent: this, dependsOn: [xns.ns] }
+    );
+
+    // StatefulSet using the official postgres image
+    const statefulSet = new k8s.apps.v1.StatefulSet(
+      logicalName,
+      {
+        metadata: {
+          name: deployedInstanceName,
+          namespace: xns.logicalName,
+        },
+        spec: {
+          serviceName: deployedInstanceName,
+          replicas: 1,
+          selector: { matchLabels: { app: deployedInstanceName } },
+          template: {
+            metadata: {
+              labels: { app: deployedInstanceName, namespace: xns.logicalName },
+            },
+            spec: {
+              securityContext: {
+                seccompProfile: { type: 'RuntimeDefault' },
+                fsGroup: 999,
+                fsGroupChangePolicy: 'OnRootMismatch',
+              },
+              ...(initContainers.length > 0 ? { initContainers } : {}),
+              containers: [
+                {
+                  name: deployedInstanceName,
+                  image: imageName,
+                  imagePullPolicy: 'IfNotPresent',
+                  securityContext: {
+                    runAsNonRoot: true,
+                    runAsUser: 999,
+                    runAsGroup: 999,
+                    allowPrivilegeEscalation: false,
+                    privileged: false,
+                    capabilities: { drop: ['ALL'] },
+                  },
+                  args: [
+                    '-c',
+                    `max_connections=${maxConnections}`,
+                    '-c',
+                    `max_wal_size=${maxWalSize}`,
+                    ...extraArgs,
+                  ],
+                  env: [
+                    {
+                      name: 'POSTGRES_PASSWORD',
+                      valueFrom: {
+                        secretKeyRef: {
+                          name: this.secretName,
+                          key: 'postgresPassword',
+                        },
+                      },
+                    },
+                  ],
+                  envFrom: [{ configMapRef: { name: `${deployedInstanceName}-configuration` } }],
+                  livenessProbe: {
+                    exec: {
+                      command: ['psql', '-U', postgresUser, '-d', 'template1', '-c', 'SELECT 1'],
+                    },
+                    failureThreshold: 3,
+                    periodSeconds: 10,
+                    successThreshold: 1,
+                    timeoutSeconds: 1,
+                  },
+                  ports: [{ containerPort: 5432, name: 'postgresdb', protocol: 'TCP' }],
+                  resources,
+                  volumeMounts: [
+                    { mountPath: '/var/lib/postgresql/data', name: mainDataVolumeName },
+                    ...migrationVolumeMounts,
+                  ],
+                },
+              ],
+              restartPolicy: 'Always',
+              affinity: affinityAndTolerations.affinity,
+              tolerations: affinityAndTolerations.tolerations,
+              ...((existingClaimName || migrationVolumes.length > 0)
+                ? {
+                    volumes: [
+                      ...(existingClaimName
+                        ? [
+                            {
+                              name: mainDataVolumeName,
+                              persistentVolumeClaim: { claimName: existingClaimName },
+                            },
+                          ]
+                        : []),
+                      ...migrationVolumes,
+                    ],
+                  }
+                : {}),
+            },
+          },
+          ...(existingClaimName
+            ? {}
+            : {
+                volumeClaimTemplates: [
+                  {
+                    metadata: { name: pvcTemplateName },
+                    spec: {
+                      accessModes: ['ReadWriteOnce'],
+                      resources: { requests: { storage: volumeSize } },
+                      storageClassName: volumeStorageClass,
+                      volumeMode: 'Filesystem',
+                      ...(values?.db?.dataSource ? { dataSource: values.db.dataSource } : {}),
+                    },
+                  },
+                ],
+              }),
+        },
+      },
+      {
+        parent: this,
+        dependsOn: [passwordSecret, configMap],
+        ...(spliceConfig.pulumiProjectConfig.replacePostgresStatefulSetOnChanges
+          ? { replaceOnChanges: ['*'], deleteBeforeReplace: true }
+          : {}),
+      }
+    );
+
+    // Headless service for the StatefulSet
+    new k8s.core.v1.Service(
+      `${logicalName}-svc`,
+      {
+        metadata: {
+          name: deployedInstanceName,
+          namespace: xns.logicalName,
+        },
+        spec: {
+          ports: [{ name: 'postgresdb', port: 5432, protocol: 'TCP' }],
+          selector: { app: deployedInstanceName },
+        },
+      },
+      { parent: this, dependsOn: [xns.ns] }
+    );
+
+    this.pg = statefulSet;
+
+    this.registerOutputs({
+      address: statefulSet.id.apply(
+        () => `${deployedInstanceName}.${xns.logicalName}.svc.cluster.local`
+      ),
+      secretName: this.secretName,
+    });
+  }
+
+  addUser(_userName: string): PostgresUser {
+    return {
+      userName: 'cnadmin',
+      secretName: this.secretName,
+    };
+  }
+}
+
 // toplevel
+
+type SplicePostgresInstallOptions = {
+  isActive?: boolean;
+  migrationId?: number;
+  disableProtection?: boolean;
+  logicalDecoding?: boolean;
+  userName?: string;
+  existingInstanceName?: string;
+  existingSecretName?: string;
+  retainDbResourcesOnDelete?: boolean;
+  databaseVersion?: string;
+  /**
+   * Keep the legacy `splice-postgres` Helm release declared and import data
+   * from it into the new helm-less deployment via init-container dump/restore.
+   */
+  importDataFromSplicePostgresHelmChart?: boolean;
+};
 
 export async function installPostgres(
   xns: ExactNamespace,
@@ -473,17 +863,7 @@ export async function installPostgres(
   version: CnChartVersion,
   cloudSqlConfig: CloudSqlConfig,
   uniqueSecretName = false,
-  opts: {
-    isActive?: boolean;
-    migrationId?: number;
-    disableProtection?: boolean;
-    logicalDecoding?: boolean;
-    userName?: string;
-    existingInstanceName?: string;
-    existingSecretName?: string;
-    retainDbResourcesOnDelete?: boolean;
-    databaseVersion?: string;
-  } = {}
+  opts: SplicePostgresInstallOptions = {}
 ): Promise<Postgres> {
   const o = { isActive: true, ...opts };
   const secretName = uniqueSecretName ? instanceName + '-secrets' : 'postgres-secrets';
@@ -512,11 +892,12 @@ export async function installPostgres(
     : new SplicePostgres(
         xns,
         instanceName,
-        alias,
         secretName,
         undefined,
         undefined,
-        undefined,
-        version
+        o.disableProtection,
+        version,
+        false,
+        o.importDataFromSplicePostgresHelmChart ?? false
       );
 }

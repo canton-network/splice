@@ -21,11 +21,11 @@ export async function installNode(): Promise<void> {
   for (let i = 0; i < numInstances; i++) {
     const postgres = installPostgres(namespace, `postgres-${i}`, imagePullDeps);
     const postgresConf = {
-      host: `postgres-${i}`,
+      host: postgres.address,
       port: '5432',
       schema: 'cantonnet',
       secret: {
-        name: `postgres-${i}-secret`,
+        name: postgres.secretName,
         key: 'postgresPassword',
       },
     };

@@ -171,8 +171,6 @@ async function installValidator(
   const postgres = new SplicePostgres(
     xns,
     'postgres',
-    // can be removed once base version > 0.2.1
-    `postgres`,
     'postgres-secrets',
     postgresValues,
     true,
