@@ -21,17 +21,10 @@ interface ProposalVoteFormProps {
   currentSvPartyId: string;
   votes: ProposalVote[];
   onSubmissionStart?: () => void;
-  onSubmissionComplete?: () => void;
 }
 
 export const ProposalVoteForm: React.FC<ProposalVoteFormProps> = props => {
-  const {
-    voteRequestContractId,
-    currentSvPartyId,
-    votes,
-    onSubmissionStart,
-    onSubmissionComplete,
-  } = props;
+  const { voteRequestContractId, currentSvPartyId, votes, onSubmissionStart } = props;
   const { castVote } = useSvAdminClient();
   const yourVote = votes.find(vote => vote.sv === currentSvPartyId);
 
@@ -41,7 +34,6 @@ export const ProposalVoteForm: React.FC<ProposalVoteFormProps> = props => {
       return castVote(voteRequestContractId, accepted, url, reason);
     },
     onMutate: () => onSubmissionStart?.(),
-    onSettled: () => onSubmissionComplete?.(),
   });
 
   const form = useForm({
