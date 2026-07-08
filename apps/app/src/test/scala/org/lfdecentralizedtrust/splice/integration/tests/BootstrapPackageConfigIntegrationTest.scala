@@ -3,7 +3,6 @@
 
 package org.lfdecentralizedtrust.splice.integration.tests
 
-import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.admin.api.client.data.TemplateId
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.data.CantonTimestamp
@@ -183,13 +182,10 @@ class BootstrapPackageConfigIntegrationTest
       }
 
       Seq(aliceValidatorBackend, bobValidatorBackend, splitwellValidatorBackend).foreach { p =>
-        val splitwellSynchronizerId =
-          p.participantClient.synchronizers.id_of(SynchronizerAlias.tryCreate("splitwell"))
         versionBatches.foreach { batch =>
           val paths = batch.map(darPath)
-          Seq(decentralizedSynchronizerId, splitwellSynchronizerId).foreach { synchronizerId =>
-            p.participantClient.dars.upload_many(paths, synchronizerId = Some(synchronizerId))
-          }
+          p.participantClient.dars
+            .upload_many(paths, synchronizerId = Some(decentralizedSynchronizerId))
         }
       }
     }
