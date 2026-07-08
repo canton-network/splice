@@ -156,6 +156,10 @@ monitoring:
       sequencerRateLimits:
         rejectionRateThreshold: 0
         circuitBreakerStateThreshold: 0.5
+      cantonBft:
+        # Alert if the number of ingress requests queued in the BFT ordering layer
+        # exceeds this threshold, which may indicate issues with the ordering layer
+        mempoolMaxSizeThreshold: 100
       scanConnectionDisagreement:
         alertThreshold: 0.1
         excludedRequests:

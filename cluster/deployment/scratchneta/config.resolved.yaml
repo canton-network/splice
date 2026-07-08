@@ -54,6 +54,8 @@ monitoring:
       acsSnapshots:
         saveLatencyThresholdSeconds: 5400
         updateLatencyThresholdSeconds: 3
+      cantonBft:
+        mempoolMaxSizeThreshold: 100
       cloudSql:
         maintenance: false
       cometbft:
