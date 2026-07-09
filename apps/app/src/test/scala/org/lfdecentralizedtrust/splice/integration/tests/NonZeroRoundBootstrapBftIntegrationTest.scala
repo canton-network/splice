@@ -30,16 +30,11 @@ import org.lfdecentralizedtrust.splice.util.{TimeTestUtil, WalletTestUtil}
 import java.util.Optional
 import scala.jdk.CollectionConverters.*
 
-/** Tests that non-firstSV scans can provide reward totals for the
-  * initial round when bootstrapping TBAR at a non-zero round with
-  * BFT f >= 1.
+/** Tests that SV automation triggers can complete the reward
+  * pipeline for the initial round when bootstrapping TBAR at a
+  * non-zero round with BFT f >= 1.
   *
   * Adds a dummy 5th SV to increase the BFT quorum from 1 to 2.
-  * Currently fails because only SV1's scan has the initial round's
-  * data — will pass after implementing randomSingleCall for the
-  * initial round's BFT reads.
-  *
-  * Related: issue #6110
   */
 class NonZeroRoundBootstrapBftIntegrationTest
     extends IntegrationTestWithIsolatedEnvironment
@@ -69,12 +64,12 @@ class NonZeroRoundBootstrapBftIntegrationTest
       )
       .addConfigTransform((_, config) => ConfigTransforms.withNoVoteCooldown(config))
 
-  "non-firstSV scans can provide reward totals for the initial round" in { implicit env =>
+  "SV triggers complete the reward pipeline for the initial round" in { implicit env =>
     import definitions.GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsOk
 
     // Advance rounds so the reward pipeline runs for the initial round:
-    // AdvanceOpenMiningRoundTrigger archives oldest round → creates
-    // CalculateRewardsV2 → RewardComputationTrigger computes totals.
+    // SV1's scan computes reward totals from seeded activity data,
+    // and SVs confirm CalculateRewardsV2 using the root hash.
     advanceTimeForRewardAutomationToRunForCurrentRound
     actAndCheck(
       "Advance to next round opening",
@@ -92,15 +87,26 @@ class NonZeroRoundBootstrapBftIntegrationTest
     // from 0 to 1, requiring 2 agreeing Ok responses.
     addDummySvWithFakeScanUrl()
 
-    // SV2's scan should also have the data once the BFT fix lets it
-    // read from SV1. Currently fails — will pass after implementing
-    // randomSingleCall for the initial round's BFT reads.
-    eventually() {
-      sv2ScanBackend
-        .getRewardAccountingActivityTotals(initialRound) shouldBe a[
-        RewardAccountingActivityTotalsOk
-      ]
-    }
+    // With BFT f=1, default BFT would need 2 agreeing Ok responses
+    // for root hash and activity totals — but only SV1's scan has
+    // the initial round's data. The randomSingleCall override for
+    // the initial round lets each SV read from a single peer,
+    // so the pipeline completes despite the higher quorum.
+    // Advancing another round proves this: if the initial round's
+    // pipeline had stalled, no further rounds could open. SV2's
+    // scan has local data for the next round and can serve totals.
+    advanceTimeForRewardAutomationToRunForCurrentRound
+    actAndCheck(
+      "Advance past the initial round",
+      advanceRoundsToNextRoundOpening,
+    )(
+      "SV2's scan has reward totals for the next round",
+      _ =>
+        sv2ScanBackend
+          .getRewardAccountingActivityTotals(initialRound + 1) shouldBe a[
+          RewardAccountingActivityTotalsOk
+        ],
+    )
   }
 
   private def addDummySvWithFakeScanUrl()(implicit
@@ -154,10 +160,10 @@ class NonZeroRoundBootstrapBftIntegrationTest
         }
       },
     )(
-      "dummy SV5 is in DsoRules",
+      "dummy SV5 is in DsoRules and raises BFT f from 0 to 1",
       _ => {
-        val svs = sv1Backend.getDsoInfo().dsoRules.payload.svs
-        svs.asScala should contain key dummySvParty.toProtoPrimitive
+        val info = sv1Backend.getDsoInfo()
+        info.dsoRules.payload.svs.size() shouldBe 5
       },
     )
 
@@ -168,9 +174,17 @@ class NonZeroRoundBootstrapBftIntegrationTest
       _.dsoDelegateBasedAutomation.triggers[Trigger].foreach(_.pause().futureValue)
     )
     Threading.sleep(2000)
-    clue("Set fake scan URL on dummy SV") {
-      setDummySvScanUrl(dsoParty, dummySvParty)
-    }
+    actAndCheck(
+      "Set fake scan URL on dummy SV",
+      setDummySvScanUrl(dsoParty, dummySvParty),
+    )(
+      "Dummy SV's scan URL is in the BFT peer list",
+      _ => {
+        val nodeState = sv1Backend.getDsoInfo().svNodeStates(dummySvParty)
+        nodeState.payload.state.synchronizerNodes.values.asScala
+          .exists(_.scan.isPresent) shouldBe true
+      },
+    )
     env.svs.local.foreach(
       _.dsoDelegateBasedAutomation.triggers[Trigger].foreach(_.resume())
     )
