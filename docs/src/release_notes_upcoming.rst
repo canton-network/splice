@@ -31,6 +31,10 @@
       - Added security contexts for all Helm-based deployments intended for production.
         This improves the security of Kubernetes based deployments.
 
+  - Scan
+
+    - Add a metric for the size of the most recent ACS snapshot
+
   - Daml
 
     - Adds support for specifying weight on the ``FeaturedAppRight`` contract as described in

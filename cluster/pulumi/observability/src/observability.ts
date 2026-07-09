@@ -743,6 +743,9 @@ function substituteScanConnectionDisagreementAlerts(alert: string): string {
   if (config.excludedConnections.length > 0) {
     matchers.push(`scan_connection!~"${config.excludedConnections.join('|')}"`);
   }
+  if (config.excludedHttpStatusCodes.length > 0) {
+    matchers.push(`http_status!~"${config.excludedHttpStatusCodes.join('|')}"`);
+  }
   const bareFilter = matchers.join(', ');
   const filter = bareFilter ? `, ${bareFilter}` : '';
   const connectionMatchers: string[] = [];
@@ -991,7 +994,12 @@ function createGrafanaAlerting(namespace: Input<string>) {
               ),
             ...(cantonBftEnabled
               ? {
-                  'cantonbft_alerts.yaml': readGrafanaAlertingFile('cantonbft_alerts.yaml'),
+                  'cantonbft_alerts.yaml': readGrafanaAlertingFile(
+                    'cantonbft_alerts.yaml'
+                  ).replaceAll(
+                    '$BFT_ORDERING_INGRESS_REQUESTS_QUEUED_THRESHOLD',
+                    monitoringConfig.alerting.alerts.cantonBft.mempoolMaxSizeThreshold.toString()
+                  ),
                 }
               : {}),
             'deleted_alerts.yaml': readGrafanaAlertingFile('deleted.yaml'),
@@ -1014,10 +1022,19 @@ function createGrafanaAlerting(namespace: Input<string>) {
             ),
             'traffic_based_rewards_alerts.yaml': readGrafanaAlertingFile(
               'traffic_based_rewards_alerts.yaml'
-            ).replace(
-              '$FEATURED_APP_RIGHTS_LIVE_ROW_LIMIT',
-              monitoringConfig.alerting.alerts.trafficBasedRewards.featuredAppRightsLimit.toString()
-            ),
+            )
+              .replace(
+                '$FEATURED_APP_RIGHTS_LIVE_ROW_LIMIT',
+                monitoringConfig.alerting.alerts.trafficBasedRewards.featuredAppRightsLimit.toString()
+              )
+              .replace(
+                '$VERDICT_INGESTION_BATCH_SIZE_THRESHOLD',
+                monitoringConfig.alerting.alerts.trafficBasedRewards.verdictIngestionBatchSizeThreshold.toString()
+              )
+              .replace(
+                '$VERDICT_INGESTION_BATCH_SIZE_PENDING_PERIOD_MINUTES',
+                monitoringConfig.alerting.alerts.trafficBasedRewards.verdictIngestionBatchSizePendingPeriodMinutes.toString()
+              ),
           },
         }).map(([k, v]) => [k, defaultAlertSubstitutions(v)])
       ),

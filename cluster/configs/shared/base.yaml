@@ -156,12 +156,17 @@ monitoring:
       sequencerRateLimits:
         rejectionRateThreshold: 0
         circuitBreakerStateThreshold: 0.5
+      cantonBft:
+        # Alert if the number of ingress requests queued in the BFT ordering layer
+        # exceeds this threshold, which may indicate issues with the ordering layer
+        mempoolMaxSizeThreshold: 100
       scanConnectionDisagreement:
         alertThreshold: 0.1
         excludedRequests:
           - "getTransferInstructionAcceptContext" # exclude as it's really sensitive to ingestion and ROP delays
           - "getOpenAndIssuingMiningRounds" # exclude as it depends on (fast) mutable state and depends on the ROP delays
         excludedConnections: []
+        excludedHttpStatusCodes: ["404"]
       walletSweep:
         # Multiplier applied to a wallet sweep's configured maxBalance to set the alert threshold.
         # 1.5 means the alert fires if the balance is 50% higher than expected.
@@ -194,6 +199,11 @@ monitoring:
         # Alert if we have more than this many featured app rights,
         # as too many rights may cause performance problems in computing app activity records.
         featuredAppRightsLimit: 10000
+        # Alert if the average batch size of verdict ingestion exceeds this threshold,
+        # as this may indicate that ingestion can't keep up.
+        verdictIngestionBatchSizeThreshold: 40
+        # Only alert after the average batch size of verdict ingestion exceeds the threshold for this many minutes
+        verdictIngestionBatchSizePendingPeriodMinutes: 60
     # Alert on secrets appearing in logs (JWTs, Bearer tokens, passwords, etc.)
     # Key=value secrets (excluding masked values)
     # JWTs identified by base64 header prefix "eyJhbGc" (decodes to '{"alg')
