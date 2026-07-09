@@ -30,7 +30,6 @@ import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
   ExpireRewardCouponV2Trigger,
   UnhideRewardCouponV2Trigger,
 }
-import org.lfdecentralizedtrust.splice.sv.config.InitialRewardConfig
 import org.lfdecentralizedtrust.splice.util.{
   ChoiceContextWithDisclosures,
   TimeTestUtil,
@@ -89,15 +88,6 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
       .simpleTopology1SvWithSimTime(this.getClass.getSimpleName)
-      .addConfigTransform((_, config) =>
-        ConfigTransforms.withRewardConfig(
-          InitialRewardConfig(
-            mintingVersion = "RewardVersion_TrafficBasedAppRewards",
-            dryRunVersion = None,
-            appRewardCouponThreshold = BigDecimal("0"),
-          )
-        )(config)
-      )
       .addConfigTransform((_, config) =>
         updateAutomationConfig(ConfigurableApp.Validator)(
           _.withPausedTrigger[AcceptedTransferOfferTrigger]
