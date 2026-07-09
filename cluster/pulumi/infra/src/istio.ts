@@ -967,7 +967,9 @@ export function configureIstio(
   const docsAndReleases = configureDocsAndReleases(true, gateways);
   const publicInfo = configurePublicInfo(ingressNs.ns);
 
-  const publicTokenRegistry = configurePublicTokenRegistry(ingressNs.ns);
+  const publicTokenRegistry = infraConfig.istio.enablePublicTokenRegistry
+    ? configurePublicTokenRegistry(ingressNs.ns)
+    : [];
 
   const sequencerHighPerformanceGrpcRules = configureSequencerHighPerformanceGrpcDestinationRules(
     ingressNs.ns

@@ -57,6 +57,7 @@ export const InfraConfigSchema = z.object({
     istio: z.object({
       enableIngressAccessLogging: z.boolean(),
       enableClusterAccessLogging: z.boolean().default(false),
+      enablePublicTokenRegistry: z.boolean().default(false),
       istiodValues: z.object({}).catchall(z.any()).default({}),
       sequencerFlowControl: z.object({
         initialStreamWindowSize: z.int(),

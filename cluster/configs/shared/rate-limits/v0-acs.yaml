@@ -2,8 +2,8 @@ rateLimits:
   /api/scan/v0/acs:
     name: acs
     type: limited
-    maxTokens: 3000         # The per-endpoint global limit (shared between all ips)
-    tokensPerFill: 100
+    maxTokens: 500         # The per-endpoint global limit (shared between all ips)
+    tokensPerFill: 500
     fillInterval: 60s
     perIpLimits: # per-IP limit
       maxTokens: 10

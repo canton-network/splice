@@ -38,6 +38,7 @@ infra:
     proxyForIstioHttp: false
   istio:
     enableIngressAccessLogging: true
+    enablePublicTokenRegistry: true
     sequencerFlowControl:
       initialConnectionWindowSize: 52428800
       initialStreamWindowSize: 524288
@@ -218,13 +219,13 @@ sv:
           type: 'unlimited'
         /api/scan/v0/acs:
           fillInterval: '60s'
-          maxTokens: 3000
+          maxTokens: 500
           name: 'acs'
           perIpLimits:
             fillInterval: '60s'
             maxTokens: 10
             tokensPerFill: 5
-          tokensPerFill: 100
+          tokensPerFill: 500
           type: 'limited'
         /api/scan/v0/active-synchronizer-serial:
           name: 'activeSynchronizerSerial'
@@ -375,123 +376,123 @@ sv:
           type: 'unlimited'
         /registry/allocation-instruction/v1/allocation-factory:
           fillInterval: '60s'
-          maxTokens: 3000
+          maxTokens: 500
           name: 'registry-allocation-factory'
           perIpLimits:
             fillInterval: '60s'
             maxTokens: 10
             tokensPerFill: 5
-          tokensPerFill: 200
+          tokensPerFill: 500
           type: 'limited'
         /registry/allocation-instruction/v2:
           fillInterval: '60s'
-          maxTokens: 3000
+          maxTokens: 500
           name: 'registry-allocation-instruction-v2'
           perIpLimits:
             fillInterval: '60s'
             maxTokens: 10
             tokensPerFill: 5
-          tokensPerFill: 200
+          tokensPerFill: 500
           type: 'limited'
         /registry/allocation-instruction/v2/allocation-factory:
           fillInterval: '60s'
-          maxTokens: 3000
+          maxTokens: 500
           name: 'registry-allocation-factory-v2'
           perIpLimits:
             fillInterval: '60s'
             maxTokens: 10
             tokensPerFill: 5
-          tokensPerFill: 200
+          tokensPerFill: 500
           type: 'limited'
         /registry/allocation/v2/settlement-factory:
           fillInterval: '60s'
-          maxTokens: 3000
+          maxTokens: 500
           name: 'registry-settlement-factory-v2'
           perIpLimits:
             fillInterval: '60s'
             maxTokens: 10
             tokensPerFill: 5
-          tokensPerFill: 200
+          tokensPerFill: 500
           type: 'limited'
         /registry/allocations/v1:
           fillInterval: '60s'
-          maxTokens: 3000
+          maxTokens: 500
           name: 'registry-allocations'
           perIpLimits:
             fillInterval: '60s'
             maxTokens: 10
             tokensPerFill: 5
-          tokensPerFill: 200
+          tokensPerFill: 500
           type: 'limited'
         /registry/allocations/v2:
           fillInterval: '60s'
-          maxTokens: 3000
+          maxTokens: 500
           name: 'registry-allocations-v2'
           perIpLimits:
             fillInterval: '60s'
             maxTokens: 10
             tokensPerFill: 5
-          tokensPerFill: 200
+          tokensPerFill: 500
           type: 'limited'
         /registry/metadata/v1/info:
           fillInterval: '60s'
-          maxTokens: 3000
+          maxTokens: 500
           name: 'registry-metadata-info'
           perIpLimits:
             fillInterval: '60s'
             maxTokens: 10
             tokensPerFill: 5
-          tokensPerFill: 200
+          tokensPerFill: 500
           type: 'limited'
         /registry/metadata/v1/instruments:
           fillInterval: '60s'
-          maxTokens: 3000
+          maxTokens: 500
           name: 'registry-metadata-instruments'
           perIpLimits:
             fillInterval: '60s'
             maxTokens: 10
             tokensPerFill: 5
-          tokensPerFill: 200
+          tokensPerFill: 500
           type: 'limited'
         /registry/transfer-instruction/v1:
           fillInterval: '60s'
-          maxTokens: 3000
+          maxTokens: 500
           name: 'registry-transfer-instruction'
           perIpLimits:
             fillInterval: '60s'
             maxTokens: 10
             tokensPerFill: 5
-          tokensPerFill: 200
+          tokensPerFill: 500
           type: 'limited'
         /registry/transfer-instruction/v1/transfer-factory:
           fillInterval: '60s'
-          maxTokens: 3000
+          maxTokens: 500
           name: 'registry-transfer-factory'
           perIpLimits:
             fillInterval: '60s'
             maxTokens: 10
             tokensPerFill: 5
-          tokensPerFill: 200
+          tokensPerFill: 500
           type: 'limited'
         /registry/transfer-instruction/v2:
           fillInterval: '60s'
-          maxTokens: 3000
+          maxTokens: 500
           name: 'registry-transfer-instruction-v2'
           perIpLimits:
             fillInterval: '60s'
             maxTokens: 10
             tokensPerFill: 5
-          tokensPerFill: 200
+          tokensPerFill: 500
           type: 'limited'
         /registry/transfer-instruction/v2/transfer-factory:
           fillInterval: '60s'
-          maxTokens: 3000
+          maxTokens: 500
           name: 'registry-transfer-factory-v2'
           perIpLimits:
             fillInterval: '60s'
             maxTokens: 10
             tokensPerFill: 5
-          tokensPerFill: 200
+          tokensPerFill: 500
           type: 'limited'
 svs:
   sv:
