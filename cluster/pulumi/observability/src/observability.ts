@@ -36,7 +36,6 @@ import { local } from '@pulumi/command';
 import { getSecretVersionOutput } from '@pulumi/gcp/secretmanager/getSecretVersion';
 import { Input } from '@pulumi/pulumi';
 
-import { hyperdiskSupportConfig } from '../../common/src/config/hyperdiskSupportConfig';
 import {
   clusterIsResetPeriodically,
   enableAlertEmailToSupportTeam,
@@ -195,9 +194,7 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
             logFormat: 'json',
             storage: {
               volumeClaimTemplate: {
-                ...(hyperdiskSupportConfig.hyperdiskSupport.enabledForInfra
-                  ? { metadata: { name: 'alertmanager-hd-pvc' } }
-                  : {}),
+                metadata: { name: 'alertmanager-hd-pvc' },
                 spec: {
                   storageClassName: infraStandardStorageClassName,
                   accessModes: ['ReadWriteOnce'],
@@ -256,9 +253,7 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
             scrapeNativeHistograms: true,
             storageSpec: {
               volumeClaimTemplate: {
-                ...(hyperdiskSupportConfig.hyperdiskSupport.enabledForInfra
-                  ? { metadata: { name: 'prometheus-hd-pvc' } }
-                  : {}),
+                metadata: { name: 'prometheus-hd-pvc' },
                 spec: {
                   storageClassName: infraPremiumStorageClassName,
                   accessModes: ['ReadWriteOnce'],

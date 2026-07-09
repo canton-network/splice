@@ -1,8 +1,5 @@
 # Reference configuration options
 cluster:
-  hyperdiskSupport:
-    enabled: true
-    enabledForInfra: true
   nodePools:
     apps:
       minNodes: 0
