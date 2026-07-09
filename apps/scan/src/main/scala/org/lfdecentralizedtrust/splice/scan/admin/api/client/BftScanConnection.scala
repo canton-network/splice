@@ -140,6 +140,7 @@ class BftScanConnection(
     // In the future, before removing disableBackgroundRefresh flag, refactor the bootstrapWithSeedNodes();
     // BftCustom should not reuse the AllDsoScansBft class to fetch the initial DsoRules.
     val disableBackgroundRefresh: Boolean = false,
+    val initialRound: Option[Long] = None,
 )(implicit protected val ec: ExecutionContextExecutor, protected val mat: Materializer)
     extends FlagCloseableAsync
     with NamedLogging
@@ -1016,7 +1017,11 @@ class BftScanConnection(
       GetRewardAccountingActivityTotalsResponse(
         RewardAccountingActivityTotalsUndetermined(status = "Undetermined")
       )
-    val callConfig = BftCallConfig.default(scanList.scanConnections)
+    val callConfig =
+      if (initialRound.contains(roundNumber))
+        BftCallConfig.randomSingleCall(scanList.scanConnections)
+      else
+        BftCallConfig.default(scanList.scanConnections)
     if (!callConfig.enoughAvailableScans) Future.successful(undetermined)
     else
       bftCall[RewardAccountingActivityTotalsOk](
@@ -1064,7 +1069,11 @@ class BftScanConnection(
       GetRewardAccountingRootHashResponse(
         RewardAccountingRootHashUndetermined(status = "Undetermined")
       )
-    val callConfig = BftCallConfig.default(scanList.scanConnections)
+    val callConfig =
+      if (initialRound.contains(roundNumber))
+        BftCallConfig.randomSingleCall(scanList.scanConnections)
+      else
+        BftCallConfig.default(scanList.scanConnections)
     if (!callConfig.enoughAvailableScans) Future.successful(undetermined)
     else
       bftCall[String](
@@ -2027,6 +2036,7 @@ object BftScanConnection {
       clock: Clock,
       retryProvider: RetryProvider,
       loggerFactory: NamedLoggerFactory,
+      initialRound: Option[Long] = None,
   )(implicit
       ec: ExecutionContextExecutor,
       tc: TraceContext,
@@ -2078,6 +2088,7 @@ object BftScanConnection {
       clock,
       retryProvider,
       loggerFactory,
+      initialRound = initialRound,
     )
   }
 
