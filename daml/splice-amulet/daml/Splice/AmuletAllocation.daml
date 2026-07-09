@@ -50,7 +50,7 @@ template AmuletAllocation
       -- deadline specified in the allocation. This is used as a DoS protection mechanism.
   where
     signatory allocationInstrumentAdmin allocation, allocation.transferLeg.sender
-    observer allocation.settlement.executor
+    observer TSU.executorsFromSettlementInfoV1 allocation.settlement
 
     ensure isValidAllocationSpecificationV1 allocation &&
       allocation.transferLeg.instrumentId.id == amuletInstrumentIdName
@@ -103,7 +103,7 @@ template AmuletAllocation
         -- check all arguments
         let leg = allocation.transferLeg
         let dso = leg.instrumentId.admin
-        archiveAndCheckActors self actors [[dso, allocation.settlement.executor]]
+        archiveAndCheckActors self actors [dso :: TSU.executorsFromSettlementInfoV1 allocation.settlement]
         -- prudent engineering: these args are in principle already checked by SettlementFactory_SettleBatch,
         -- but we defensively check them here as well to avoid surprises for burn allocations settled
         -- directly via a call by the DSO party to Allocation_Settle.

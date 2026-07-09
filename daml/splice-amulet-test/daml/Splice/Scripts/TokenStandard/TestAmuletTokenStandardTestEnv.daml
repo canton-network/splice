@@ -44,7 +44,8 @@ data TestEnv = TestEnv with
   bob : Party
   bobAccount : V2.Account
   charlie : Party
-  provider : Party
+  provider1 : Party
+  provider2 : Party
   instrId : V2.InstrumentId
   now : Time
   legV2 : V2.TransferLeg
@@ -65,7 +66,8 @@ setupTest = do
   alice <- allocatePartyExact "alice"
   bob <- allocatePartyExact "bob"
   charlie <- allocatePartyExact "charlie"
-  provider <- allocatePartyExact "provider"
+  provider1 <- allocatePartyExact "provider1"
+  provider2 <- allocatePartyExact "provider2"
 
   let mkAccount = TSU.basicAccount
 
@@ -101,13 +103,14 @@ setupTest = do
     bob
     bobAccount = mkAccount bob
     charlie
-    provider
+    provider1
+    provider2
     instrId
     now
     registriesEnv = env
 
     settlementV2 = V2.SettlementInfo with
-      executors = [provider]
+      executors = [provider1, provider2]
       id = "settlement1"
       cid = None
       meta = emptyMetadata
@@ -129,14 +132,16 @@ setupTest = do
 
     allocationV1 = V1.AllocationSpecification with
       settlement = V1.SettlementInfo with
-        executor = provider
+        executor = provider1
         settlementRef = V1.Reference with
           id = "settlement1"
           cid = None
         requestedAt = now
         allocateBefore = now `addRelTime` days 7
         settleBefore = now `addRelTime` days 365
-        meta = emptyMetadata
+        meta = Metadata with
+          values = TextMap.fromList
+            [ (TSU.extraExecutorsMetaKey, partyToText provider2) ]
       transferLegId = "leg1"
       transferLeg = TSU.downcast_v2_v1_TransferLeg instrId.admin $ V2.TransferLeg with
         transferLegId = "leg1"
