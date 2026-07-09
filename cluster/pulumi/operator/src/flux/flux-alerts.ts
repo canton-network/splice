@@ -4,6 +4,7 @@ import * as k8s from '@pulumi/kubernetes';
 import { CLUSTER_BASENAME, clusterProdLike, config } from '@canton-network/splice-pulumi-common';
 
 import { namespace } from '../namespace';
+import { operatorFluxConfig } from './config';
 import { flux } from './flux';
 
 if (clusterProdLike) {
@@ -29,7 +30,7 @@ if (clusterProdLike) {
       },
       spec: {
         type: 'slack',
-        channel: config.requireEnv('SLACK_ALERT_NOTIFICATION_CHANNEL_FULL_NAME'),
+        channel: operatorFluxConfig.flux.alertSlackChannel,
         address: 'https://slack.com/api/chat.postMessage',
         secretRef: { name: slackToken.metadata.name },
       },
