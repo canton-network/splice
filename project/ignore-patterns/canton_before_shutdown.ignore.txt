@@ -1,0 +1,2 @@
+# TODO(DACH-NY/cn-test-failures#9055) can be removed when it's no longer a warn.
+LOCAL_VERDICT_FAILED_MODEL_CONFORMANCE_CHECK.*Rejected transaction due to a failed model conformance check: UnvettedPackages.*
