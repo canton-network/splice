@@ -43,8 +43,9 @@ const tablesToReplicate = [
   'update_history_exercises',
   'scan_verdict_store',
   'scan_verdict_transaction_view_store',
+  'app_activity_record_store',
 ];
-const flywayMigrationToWaitFor = 'V047__verdict_history_id.sql';
+const flywayMigrationToWaitFor = 'V068__app_activity_record_meta.sql';
 
 function cloudsdkComputeRegion() {
   return config.requireEnv('CLOUDSDK_COMPUTE_REGION');
