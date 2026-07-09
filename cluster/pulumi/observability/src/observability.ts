@@ -743,14 +743,15 @@ function substituteScanConnectionDisagreementAlerts(alert: string): string {
   if (config.excludedConnections.length > 0) {
     matchers.push(`scan_connection!~"${config.excludedConnections.join('|')}"`);
   }
-  if (config.excludedHttpStatusCodes.length > 0) {
-    matchers.push(`http_status!~"${config.excludedHttpStatusCodes.join('|')}"`);
-  }
   const bareFilter = matchers.join(', ');
   const filter = bareFilter ? `, ${bareFilter}` : '';
   const connectionMatchers: string[] = [];
   if (config.excludedConnections.length > 0) {
     connectionMatchers.push(`scan_connection!~"${config.excludedConnections.join('|')}"`);
+  }
+  if (config.excludedHttpStatusCodes.length > 0) {
+    matchers.push(`http_status!~"${config.excludedHttpStatusCodes.join('|')}"`);
+    connectionMatchers.push(`http_status!~"${config.excludedHttpStatusCodes.join('|')}"`);
   }
   const connectionBareFilter = connectionMatchers.join(', ');
   const connectionFilter = connectionBareFilter ? `, ${connectionBareFilter}` : '';
