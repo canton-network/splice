@@ -34,6 +34,9 @@
 
     - Adds support for specifying weight on the ``FeaturedAppRight`` contract as described in
       `CIP-0104 amendment <https://github.com/canton-foundation/cips/pull/238>`__.
+    - Fix a bug in ``AmuletAllocation``, which prohibited settling V1 amulet allocations when
+      using them with the Token Standard V2 feature of setting multiple
+      executors via metadata.
 
     - These changes require a Daml upgrade to the following versions:
 
