@@ -3,7 +3,6 @@
 
 package org.lfdecentralizedtrust.splice.integration.tests
 
-import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.topology.SynchronizerId
 import org.lfdecentralizedtrust.splice.automation.PackageVettingTrigger
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletconfig.{
@@ -37,6 +36,7 @@ import org.scalatest.concurrent.PatienceConfiguration
 import scala.concurrent.duration.DurationInt
 import scala.concurrent.duration.FiniteDuration
 import com.digitalasset.canton.logging.SuppressionRule
+import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.slf4j.event.Level
 
 class UnsupportedPackageVettingIntegrationTest
@@ -65,6 +65,9 @@ class UnsupportedPackageVettingIntegrationTest
             )
           } else c
         }(config)
+      )
+      .addConfigTransforms((_, config) =>
+        ConfigTransforms.useDecentralizedSynchronizerSplitwell()(config)
       )
 
   "Unsupported vetted packages are automatically removed by the package vetting trigger for SV and validator" in {
@@ -223,10 +226,6 @@ class UnsupportedPackageVettingIntegrationTest
 
       val synchronizerId =
         sv1Backend.participantClient.synchronizers.list_connected().head.synchronizerId
-      val splitwellSynchronizerId =
-        bobValidatorBackend.participantClient.synchronizers.id_of(
-          SynchronizerAlias.tryCreate("splitwell")
-        )
 
       val bobParticipant = bobValidatorBackend.appState.participantAdminConnection
       val splitwellParticipant = splitwellValidatorBackend.appState.participantAdminConnection
@@ -245,10 +244,6 @@ class UnsupportedPackageVettingIntegrationTest
           )
           participants.foreach(
             _.vetDars(synchronizerId, Seq(splitwellDar), None, None)
-              .futureValue(timeout = PatienceConfiguration.Timeout(FiniteDuration(40, "seconds")))
-          )
-          participants.map(
-            _.vetDars(splitwellSynchronizerId, Seq(splitwellDar), None, None)
               .futureValue(timeout = PatienceConfiguration.Timeout(FiniteDuration(40, "seconds")))
           )
         },
