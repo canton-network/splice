@@ -295,11 +295,8 @@ function main() {
   local migration_id=$3
   local requested_component="${4:-}"
 
-  # Get resolved config and extract hyperdisk support flag
-  local config
-  config=$(get_resolved_config)
   local hyperdisk_enabled
-  hyperdisk_enabled=$(echo "$config" | yq '.cluster.hyperdiskSupport.enabled // false')
+  hyperdisk_enabled="true"
 
   # TODO(#9361): support multiple domains / non-default-ID'd ones
   if [ "$1" == "validator" ]; then
