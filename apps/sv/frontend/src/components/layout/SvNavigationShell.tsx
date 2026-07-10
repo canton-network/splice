@@ -21,7 +21,7 @@ interface SvNavigationShellProps {
  */
 const SvNavigationShell: React.FC<SvNavigationShellProps> = ({ navLinks, onLogout, pageName }) => {
   const networkInstanceName = useNetworkInstanceName();
-  const knownColors = ['mainnet', 'testnet', 'devnet', 'scratchnet'];
+  const knownColors = ['mainnet', 'testnet', 'devnet', 'scratchnet', 'localnet'];
   const networkInstanceNameColor = knownColors.includes(networkInstanceName.toLowerCase())
     ? `colors.${networkInstanceName.toLowerCase()}`
     : 'colors.neutral.30';
