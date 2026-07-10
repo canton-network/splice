@@ -108,6 +108,7 @@ import org.lfdecentralizedtrust.splice.store.{
   AppStoreWithIngestion,
   PageLimit,
   SortOrder,
+  VoteResultsFilters,
   VotesStore,
 }
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChecksum
@@ -2119,11 +2120,13 @@ class HttpScanHandler(
       val after = body.pageToken.map(_.longValue)
       for {
         page <- votesStore.listVoteRequestResults(
-          body.actionName,
-          body.accepted,
-          body.requester,
-          body.effectiveFrom,
-          body.effectiveTo,
+          VoteResultsFilters(
+            body.actionName,
+            body.accepted,
+            requester = body.requester,
+            effectiveFrom = body.effectiveFrom,
+            effectiveTo = body.effectiveTo,
+          ),
           limit,
           after,
         )
@@ -2159,11 +2162,13 @@ class HttpScanHandler(
     withSpan(s"$workflowId.countVoteRequestResults") { _ => _ =>
       for {
         count <- votesStore.countVoteRequestResults(
-          body.actionName,
-          body.accepted,
-          body.requester,
-          body.effectiveFrom,
-          body.effectiveTo,
+          VoteResultsFilters(
+            body.actionName,
+            body.accepted,
+            requester = body.requester,
+            effectiveFrom = body.effectiveFrom,
+            effectiveTo = body.effectiveTo,
+          )
         )
       } yield ScanResource.CountVoteRequestResultsResponse.OK(
         definitions.CountVoteResultsResponse(count)

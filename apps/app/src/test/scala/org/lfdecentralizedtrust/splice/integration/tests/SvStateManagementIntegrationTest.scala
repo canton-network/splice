@@ -35,6 +35,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.amuletrules_
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
+import org.lfdecentralizedtrust.splice.store.VoteResultsFilters
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.CloseVoteRequestTrigger
 import org.lfdecentralizedtrust.splice.util.{Codec, TriggerTestUtil}
 
@@ -119,17 +120,13 @@ class SvStateManagementIntegrationTest extends SvIntegrationTestBase with Trigge
         sv1Backend.listVoteRequests() shouldBe empty withClue "VoteRequests"
 
         sv1Backend
-          .listVoteRequestResults(None, Some(false), None, None, None, 1)
+          .listVoteRequestResults(VoteResultsFilters(accepted = Some(false)), 1)
           ._1
           .loneElement
           .outcome shouldBe a[VRO_Rejected]
 
         sv1Backend.countVoteRequestResults(
-          None,
-          Some(false),
-          None,
-          None,
-          None,
+          VoteResultsFilters(accepted = Some(false))
         ) shouldBe 1L withClue "vote result count"
       },
     )
@@ -168,7 +165,7 @@ class SvStateManagementIntegrationTest extends SvIntegrationTestBase with Trigge
       _ => {
         sv1Backend.listVoteRequests() shouldBe empty withClue "VoteRequests"
         sv1Backend
-          .listVoteRequestResults(None, Some(false), None, None, None, 1)
+          .listVoteRequestResults(VoteResultsFilters(accepted = Some(false)), 1)
           ._1
           .loneElement
           .outcome shouldBe a[VRO_Expired]
@@ -209,7 +206,7 @@ class SvStateManagementIntegrationTest extends SvIntegrationTestBase with Trigge
       _ => {
         sv1Backend.listVoteRequests() shouldBe empty withClue "VoteRequests"
         sv1Backend
-          .listVoteRequestResults(None, Some(false), None, None, None, 1)
+          .listVoteRequestResults(VoteResultsFilters(accepted = Some(false)), 1)
           ._1
           .loneElement
           .outcome shouldBe a[VRO_Rejected]
@@ -594,7 +591,7 @@ class SvStateManagementIntegrationTest extends SvIntegrationTestBase with Trigge
       eventually() {
         val voteResult =
           sv1Backend
-            .listVoteRequestResults(None, Some(true), None, None, None, 1)
+            .listVoteRequestResults(VoteResultsFilters(accepted = Some(true)), 1)
             ._1
             .headOption
             .value

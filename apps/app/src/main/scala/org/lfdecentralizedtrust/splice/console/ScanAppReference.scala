@@ -33,6 +33,7 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   UpdateHistoryItemV2,
 }
 import org.lfdecentralizedtrust.splice.scan.{ScanApp, ScanAppBootstrap}
+import org.lfdecentralizedtrust.splice.store.VoteResultsFilters
 import org.lfdecentralizedtrust.splice.scan.automation.ScanAutomationService
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.TransferContextWithInstances
@@ -846,22 +847,14 @@ abstract class ScanAppReference(
 
   @Help.Summary("List vote results")
   def listVoteRequestResults(
-      actionName: Option[String],
-      accepted: Option[Boolean],
-      requester: Option[String],
-      effectiveFrom: Option[String],
-      effectiveTo: Option[String],
+      filters: VoteResultsFilters,
       limit: BigInt,
       pageToken: Option[BigInt] = None,
   ): (Seq[DsoRules_CloseVoteRequestResult], Option[BigInt]) = {
     consoleEnvironment.run {
       httpCommand(
         HttpScanAppClient.ListVoteRequestResults(
-          actionName,
-          accepted,
-          requester,
-          effectiveFrom,
-          effectiveTo,
+          filters,
           limit,
           pageToken,
         )

@@ -23,6 +23,7 @@ import org.lfdecentralizedtrust.splice.environment.{
   SpliceStatus,
 }
 import org.lfdecentralizedtrust.splice.http.v0.definitions
+import org.lfdecentralizedtrust.splice.store.VoteResultsFilters
 import org.lfdecentralizedtrust.splice.sv.{SvApp, SvAppBootstrap, SvAppClientConfig}
 import org.lfdecentralizedtrust.splice.sv.admin.api.client.commands.{
   HttpSvAdminAppClient,
@@ -197,22 +198,14 @@ abstract class SvAppReference(
   }
 
   def listVoteRequestResults(
-      actionName: Option[String],
-      accepted: Option[Boolean],
-      requester: Option[String],
-      effectiveFrom: Option[String],
-      effectiveTo: Option[String],
+      filters: VoteResultsFilters,
       limit: BigInt,
       pageToken: Option[BigInt] = None,
   ): (Seq[DsoRules_CloseVoteRequestResult], Option[BigInt]) = {
     consoleEnvironment.run {
       httpCommand(
         HttpSvOperatorAppClient.ListVoteRequestResults(
-          actionName,
-          accepted,
-          requester,
-          effectiveFrom,
-          effectiveTo,
+          filters,
           limit,
           pageToken,
         )
@@ -221,21 +214,11 @@ abstract class SvAppReference(
   }
 
   def countVoteRequestResults(
-      actionName: Option[String],
-      accepted: Option[Boolean],
-      requester: Option[String],
-      effectiveFrom: Option[String],
-      effectiveTo: Option[String],
+      filters: VoteResultsFilters
   ): Long = {
     consoleEnvironment.run {
       httpCommand(
-        HttpSvOperatorAppClient.CountVoteRequestResults(
-          actionName,
-          accepted,
-          requester = requester,
-          effectiveFrom = effectiveFrom,
-          effectiveTo = effectiveTo,
-        )
+        HttpSvOperatorAppClient.CountVoteRequestResults(filters)
       )
     }
   }

@@ -28,24 +28,20 @@ trait DbVotesTxLogStoreQueryBuilder[TXE]
       actionNameColumnName: String,
       acceptedColumnName: String,
       requesterNameColumnName: String,
-      actionName: Option[String],
-      accepted: Option[Boolean],
-      requester: Option[String],
-      effectiveFrom: Option[String],
-      effectiveTo: Option[String],
+      filters: VoteResultsFilters,
   ) = {
-    val actionNameCondition = actionName match {
+    val actionNameCondition = filters.actionName match {
       case Some(actionName) =>
         Some(sql"""#$actionNameColumnName like ${lengthLimited(
             s"%${lengthLimited(actionName)}%"
           )}""")
       case None => None
     }
-    val executedCondition = accepted match {
+    val executedCondition = filters.accepted match {
       case Some(accepted) => Some(sql"""#$acceptedColumnName = ${accepted}""")
       case None => None
     }
-    val effectivenessCondition = (effectiveFrom, effectiveTo) match {
+    val effectivenessCondition = (filters.effectiveFrom, filters.effectiveTo) match {
       case (Some(effectiveFrom), Some(effectiveTo)) =>
         Some(sql"""vote_effective_at between ${lengthLimited(
             effectiveFrom
@@ -58,7 +54,7 @@ trait DbVotesTxLogStoreQueryBuilder[TXE]
         Some(sql"""vote_effective_at < ${lengthLimited(effectiveTo)}""")
       case (None, None) => None
     }
-    val requesterCondition = requester match {
+    val requesterCondition = filters.requester match {
       case Some(requester) =>
         Some(sql"""#$requesterNameColumnName like ${lengthLimited(
             s"%${lengthLimited(requester)}%"
@@ -83,11 +79,7 @@ trait DbVotesTxLogStoreQueryBuilder[TXE]
       actionNameColumnName: String,
       acceptedColumnName: String,
       requesterNameColumnName: String,
-      actionName: Option[String],
-      accepted: Option[Boolean],
-      requester: Option[String],
-      effectiveFrom: Option[String],
-      effectiveTo: Option[String],
+      filters: VoteResultsFilters,
       limit: Limit,
       after: Option[Long] = None,
   ): SqlStreamingAction[Vector[
@@ -110,11 +102,7 @@ trait DbVotesTxLogStoreQueryBuilder[TXE]
       actionNameColumnName,
       acceptedColumnName,
       requesterNameColumnName,
-      actionName,
-      accepted,
-      requester,
-      effectiveFrom,
-      effectiveTo,
+      filters,
     ) ++ afterCondition.toList
     val whereClause = conditions.reduceLeft((a, b) => (a ++ sql""" and """ ++ b).toActionBuilder)
 
@@ -134,22 +122,14 @@ trait DbVotesTxLogStoreQueryBuilder[TXE]
       actionNameColumnName: String,
       acceptedColumnName: String,
       requesterNameColumnName: String,
-      actionName: Option[String],
-      accepted: Option[Boolean],
-      requester: Option[String],
-      effectiveFrom: Option[String],
-      effectiveTo: Option[String],
+      filters: VoteResultsFilters,
   ): SqlStreamingAction[Vector[Long], Long, Effect.Read] = {
     val whereClause = voteRequestResultsConditions(
       dbType,
       actionNameColumnName,
       acceptedColumnName,
       requesterNameColumnName,
-      actionName,
-      accepted,
-      requester,
-      effectiveFrom,
-      effectiveTo,
+      filters,
     ).reduceLeft((a, b) => (a ++ sql""" and """ ++ b).toActionBuilder)
     (sql"""select count(*) from #$txLogTableName where store_id = $txLogStoreId and """ ++ whereClause).toActionBuilder
       .as[Long]

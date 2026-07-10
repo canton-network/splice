@@ -59,6 +59,7 @@ import org.lfdecentralizedtrust.splice.store.{
   DbVotesAcsStoreQueryBuilder,
   DbVotesTxLogStoreQueryBuilder,
   Limit,
+  VoteResultsFilters,
   PageLimit,
   ResultsPage,
   SortOrder,
@@ -633,11 +634,7 @@ class DbScanStore(
   }
 
   override def listVoteRequestResults(
-      actionName: Option[String],
-      accepted: Option[Boolean],
-      requester: Option[String],
-      effectiveFrom: Option[String],
-      effectiveTo: Option[String],
+      filters: VoteResultsFilters,
       limit: Limit,
       after: Option[Long] = None,
   )(implicit tc: TraceContext): Future[ResultsPage[DsoRules_CloseVoteRequestResult]] = {
@@ -648,11 +645,7 @@ class DbScanStore(
       actionNameColumnName = "vote_action_name",
       acceptedColumnName = "vote_accepted",
       requesterNameColumnName = "vote_requester_name",
-      actionName = actionName,
-      accepted = accepted,
-      requester = requester,
-      effectiveFrom = effectiveFrom,
-      effectiveTo = effectiveTo,
+      filters = filters,
       limit = limit,
       after = after,
     )
@@ -669,11 +662,7 @@ class DbScanStore(
   }
 
   override def countVoteRequestResults(
-      actionName: Option[String],
-      accepted: Option[Boolean],
-      requester: Option[String],
-      effectiveFrom: Option[String],
-      effectiveTo: Option[String],
+      filters: VoteResultsFilters
   )(implicit tc: TraceContext): Future[Long] = {
     val query = countVoteRequestResultsQuery(
       txLogTableName = ScanTables.txLogTableName,
@@ -682,11 +671,7 @@ class DbScanStore(
       actionNameColumnName = "vote_action_name",
       acceptedColumnName = "vote_accepted",
       requesterNameColumnName = "vote_requester_name",
-      actionName = actionName,
-      accepted = accepted,
-      requester = requester,
-      effectiveFrom = effectiveFrom,
-      effectiveTo = effectiveTo,
+      filters = filters,
     )
     storage
       .query(query, "countVoteRequestResults")

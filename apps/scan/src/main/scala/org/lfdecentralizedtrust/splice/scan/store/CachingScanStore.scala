@@ -41,6 +41,7 @@ import org.lfdecentralizedtrust.splice.store.{
   SynchronizerStore,
   TxLogStore,
   UpdateHistory,
+  VoteResultsFilters,
 }
 import org.lfdecentralizedtrust.splice.util.{Contract, ContractWithState}
 
@@ -221,11 +222,7 @@ class CachingScanStore(
   )
 
   override def listVoteRequestResults(
-      actionName: Option[String],
-      accepted: Option[Boolean],
-      requester: Option[String],
-      effectiveFrom: Option[String],
-      effectiveTo: Option[String],
+      filters: VoteResultsFilters,
       limit: Limit,
       after: Option[Long] = None,
   )(implicit tc: TraceContext): Future[ResultsPage[DsoRules_CloseVoteRequestResult]] =
@@ -235,36 +232,20 @@ class CachingScanStore(
       store.listVoteRequestResults _ tupled,
     ).get(
       (
-        actionName,
-        accepted,
-        requester,
-        effectiveFrom,
-        effectiveTo,
+        filters,
         limit,
         after,
       )
     )
 
   override def countVoteRequestResults(
-      actionName: Option[String],
-      accepted: Option[Boolean],
-      requester: Option[String],
-      effectiveFrom: Option[String],
-      effectiveTo: Option[String],
+      filters: VoteResultsFilters
   )(implicit tc: TraceContext): Future[Long] =
     getCache(
       "countVoteRequestResults",
       cacheConfig.voteRequests,
-      store.countVoteRequestResults _ tupled,
-    ).get(
-      (
-        actionName,
-        accepted,
-        requester,
-        effectiveFrom,
-        effectiveTo,
-      )
-    )
+      (f: VoteResultsFilters) => store.countVoteRequestResults(f),
+    ).get(filters)
 
   override def listVoteRequestsByTrackingCid(
       voteRequestCids: Seq[VoteRequest.ContractId],

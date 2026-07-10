@@ -22,6 +22,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
+import org.lfdecentralizedtrust.splice.store.VoteResultsFilters
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.CloseVoteRequestTrigger
 import org.lfdecentralizedtrust.splice.util.SpliceUtil.defaultDsoRulesConfig
 import org.lfdecentralizedtrust.splice.util.*
@@ -1553,7 +1554,7 @@ class SvFrontendIntegrationTest
             .listVoteRequests()
             .filter(_.payload.reason.body == "first request") shouldBe empty
           sv1Backend
-            .listVoteRequestResults(None, Some(false), None, None, None, 10)
+            .listVoteRequestResults(VoteResultsFilters(accepted = Some(false)), 10)
             ._1
             .exists(_.request.reason.body == "first request") shouldBe true
         },
@@ -1591,7 +1592,7 @@ class SvFrontendIntegrationTest
             .listVoteRequests()
             .filter(_.payload.reason.body == "second request") shouldBe empty
           sv1Backend
-            .listVoteRequestResults(None, Some(false), None, None, None, 10)
+            .listVoteRequestResults(VoteResultsFilters(accepted = Some(false)), 10)
             ._1
             .count(r =>
               r.request.reason.body == "first request" || r.request.reason.body == "second request"
@@ -1601,7 +1602,7 @@ class SvFrontendIntegrationTest
 
       // Verify ordering via backend API: most recently completed first
       clue("vote results are ordered by completion time descending") {
-        val (results, _) = sv1Backend.listVoteRequestResults(None, None, None, None, None, 10)
+        val (results, _) = sv1Backend.listVoteRequestResults(VoteResultsFilters(), 10)
         val ourResults = results.filter(r =>
           r.request.reason.body == "first request" || r.request.reason.body == "second request"
         )
@@ -1613,13 +1614,13 @@ class SvFrontendIntegrationTest
       // Verify cursor-based pagination via backend API with limit=1
       clue("pagination returns correct pages") {
         val (firstPage, firstPageToken) =
-          sv1Backend.listVoteRequestResults(None, None, None, None, None, 1)
+          sv1Backend.listVoteRequestResults(VoteResultsFilters(), 1)
         firstPage.size shouldBe 1
         firstPage.head.request.reason.body shouldBe "second request"
         firstPageToken shouldBe defined
 
         val (secondPage, _) =
-          sv1Backend.listVoteRequestResults(None, None, None, None, None, 1, firstPageToken)
+          sv1Backend.listVoteRequestResults(VoteResultsFilters(), 1, firstPageToken)
         secondPage.size shouldBe 1
         secondPage.head.request.reason.body shouldBe "first request"
       }

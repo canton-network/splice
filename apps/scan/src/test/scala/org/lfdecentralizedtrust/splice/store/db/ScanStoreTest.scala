@@ -515,19 +515,11 @@ abstract class ScanStoreTest
             _ <- closeVoteRequest(store, 2)
             _ <- closeVoteRequest(store, 1)
             page1 <- store.listVoteRequestResults(
-              None,
-              None,
-              None,
-              None,
-              None,
+              VoteResultsFilters(),
               PageLimit.tryCreate(3),
             )
             page2 <- store.listVoteRequestResults(
-              None,
-              None,
-              None,
-              None,
-              None,
+              VoteResultsFilters(),
               PageLimit.tryCreate(3),
               page1.nextPageToken,
             )
@@ -585,19 +577,11 @@ abstract class ScanStoreTest
             _ <- closeVoteRequest(store, 2)
             _ <- closeVoteRequest(store, 6)
             page1 <- store.listVoteRequestResults(
-              None,
-              None,
-              None,
-              None,
-              None,
+              VoteResultsFilters(),
               PageLimit.tryCreate(3),
             )
             page2 <- store.listVoteRequestResults(
-              None,
-              None,
-              None,
-              None,
-              None,
+              VoteResultsFilters(),
               PageLimit.tryCreate(3),
               page1.nextPageToken,
             )
@@ -645,15 +629,15 @@ abstract class ScanStoreTest
               dummyDomain.create(_)(store.multiDomainAcsStore)
             )
             _ <- MonadUtil.sequentialTraverse(1 to 6)(closeVoteRequest(store, _))
-            total <- store.countVoteRequestResults(None, None, None, None, None)
-            acceptedCount <- store.countVoteRequestResults(None, Some(true), None, None, None)
-            rejectedCount <- store.countVoteRequestResults(None, Some(false), None, None, None)
+            total <- store.countVoteRequestResults(VoteResultsFilters())
+            acceptedCount <- store.countVoteRequestResults(
+              VoteResultsFilters(accepted = Some(true))
+            )
+            rejectedCount <- store.countVoteRequestResults(
+              VoteResultsFilters(accepted = Some(false))
+            )
             requesterCount <- store.countVoteRequestResults(
-              None,
-              None,
-              Some(userParty(1).toProtoPrimitive),
-              None,
-              None,
+              VoteResultsFilters(requester = Some(userParty(1).toProtoPrimitive))
             )
           } yield {
             total shouldBe 6L
@@ -1356,11 +1340,7 @@ abstract class ScanStoreTest
     } yield {
       store
         .listVoteRequestResults(
-          Some("AddSv"),
-          Some(true),
-          None,
-          None,
-          None,
+          VoteResultsFilters(actionName = Some("AddSv"), accepted = Some(true)),
           PageLimit.tryCreate(1),
         )
         .futureValue
@@ -1369,11 +1349,7 @@ abstract class ScanStoreTest
         .loneElement shouldBe result2
       store
         .listVoteRequestResults(
-          Some("SRARC_AddSv"),
-          Some(false),
-          None,
-          None,
-          None,
+          VoteResultsFilters(actionName = Some("SRARC_AddSv"), accepted = Some(false)),
           PageLimit.tryCreate(1),
         )
         .futureValue
@@ -1382,11 +1358,7 @@ abstract class ScanStoreTest
         .size shouldBe (0)
       store
         .listVoteRequestResults(
-          None,
-          None,
-          None,
-          None,
-          None,
+          VoteResultsFilters(),
           PageLimit.tryCreate(1),
         )
         .futureValue
@@ -1395,11 +1367,9 @@ abstract class ScanStoreTest
         .size shouldBe (1)
       store
         .listVoteRequestResults(
-          None,
-          None,
-          None,
-          Some(Instant.now().truncatedTo(ChronoUnit.MICROS).plusSeconds(3600).toString),
-          None,
+          VoteResultsFilters(effectiveFrom =
+            Some(Instant.now().truncatedTo(ChronoUnit.MICROS).plusSeconds(3600).toString)
+          ),
           PageLimit.tryCreate(1),
         )
         .futureValue
@@ -1408,11 +1378,9 @@ abstract class ScanStoreTest
         .size shouldBe (0)
       store
         .listVoteRequestResults(
-          None,
-          None,
-          None,
-          Some(Instant.now().truncatedTo(ChronoUnit.MICROS).minusSeconds(3600).toString),
-          None,
+          VoteResultsFilters(effectiveFrom =
+            Some(Instant.now().truncatedTo(ChronoUnit.MICROS).minusSeconds(3600).toString)
+          ),
           PageLimit.tryCreate(1),
         )
         .futureValue
@@ -2068,11 +2036,7 @@ class DbScanStoreTest
         // because ingestion in these store tests is simulated by directly interacting with the ingestion sink
         storeReingest
           .listVoteRequestResults(
-            Some("AddSv"),
-            Some(true),
-            None,
-            None,
-            None,
+            VoteResultsFilters(actionName = Some("AddSv"), accepted = Some(true)),
             PageLimit.tryCreate(1),
           )
           .futureValue

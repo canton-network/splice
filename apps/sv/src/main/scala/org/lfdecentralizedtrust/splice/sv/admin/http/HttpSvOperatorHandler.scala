@@ -34,7 +34,12 @@ import org.lfdecentralizedtrust.splice.http.{
 }
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.ScanConnection
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
-import org.lfdecentralizedtrust.splice.store.{ActiveVotesStore, AppStore, AppStoreWithIngestion}
+import org.lfdecentralizedtrust.splice.store.{
+  ActiveVotesStore,
+  AppStore,
+  AppStoreWithIngestion,
+  VoteResultsFilters,
+}
 import org.lfdecentralizedtrust.splice.sv.cometbft.CometBftClient
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvSvStore}
@@ -131,11 +136,13 @@ class HttpSvOperatorHandler(
       for {
         scanConnection <- scanConnectionF
         (voteResults, nextPageToken) <- scanConnection.listVoteRequestResults(
-          body.actionName,
-          body.accepted,
-          body.requester,
-          body.effectiveFrom,
-          body.effectiveTo,
+          VoteResultsFilters(
+            body.actionName,
+            body.accepted,
+            requester = body.requester,
+            effectiveFrom = body.effectiveFrom,
+            effectiveTo = body.effectiveTo,
+          ),
           body.limit.intValue,
           body.pageToken,
         )
@@ -174,11 +181,13 @@ class HttpSvOperatorHandler(
       for {
         scanConnection <- scanConnectionF
         count <- scanConnection.countVoteRequestResults(
-          body.actionName,
-          body.accepted,
-          body.requester,
-          body.effectiveFrom,
-          body.effectiveTo,
+          VoteResultsFilters(
+            body.actionName,
+            body.accepted,
+            requester = body.requester,
+            effectiveFrom = body.effectiveFrom,
+            effectiveTo = body.effectiveTo,
+          )
         )
       } yield {
         r0.CountVoteRequestResultsResponse.OK(

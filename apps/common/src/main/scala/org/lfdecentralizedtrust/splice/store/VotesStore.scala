@@ -124,14 +124,18 @@ trait ActiveVotesStore extends AppStore with DsoRulesStore with HasAmuletRules {
 
 }
 
+final case class VoteResultsFilters(
+    actionName: Option[String] = None,
+    accepted: Option[Boolean] = None,
+    requester: Option[String] = None,
+    effectiveFrom: Option[String] = None,
+    effectiveTo: Option[String] = None,
+)
+
 trait VotesStore extends ActiveVotesStore {
 
   def listVoteRequestResults(
-      actionName: Option[String],
-      accepted: Option[Boolean],
-      requester: Option[String],
-      effectiveFrom: Option[String],
-      effectiveTo: Option[String],
+      filters: VoteResultsFilters,
       limit: Limit = defaultLimit,
       after: Option[Long] = None,
   )(implicit
@@ -139,11 +143,7 @@ trait VotesStore extends ActiveVotesStore {
   ): Future[ResultsPage[DsoRules_CloseVoteRequestResult]]
 
   def countVoteRequestResults(
-      actionName: Option[String],
-      accepted: Option[Boolean],
-      requester: Option[String],
-      effectiveFrom: Option[String],
-      effectiveTo: Option[String],
+      filters: VoteResultsFilters
   )(implicit
       tc: TraceContext
   ): Future[Long]
