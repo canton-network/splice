@@ -8,10 +8,16 @@ export const OperatorDeploymentConfigSchema = z.object({
   reference: GitReferenceSchema,
   flux: z
     .object({
-      alertSlackChannel: z
-        .string()
-        .default(() => config.requireEnv('SLACK_ALERT_NOTIFICATION_CHANNEL_FULL_NAME')),
+      alertSlackChannel: z.string().optional(),
     })
+    .transform(flux => ({
+      ...flux,
+      get alertSlackChannel(): string {
+        return (
+          flux.alertSlackChannel ?? config.requireEnv('SLACK_ALERT_NOTIFICATION_CHANNEL_FULL_NAME')
+        );
+      },
+    }))
     .prefault({}),
 });
 
