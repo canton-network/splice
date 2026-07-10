@@ -64,7 +64,10 @@ export interface SvAdminClient {
     accepted?: boolean,
     pageToken?: number
   ) => Promise<ListDsoRulesVoteResultsResponse>;
-  countVoteRequestResults: () => Promise<CountVoteResultsResponse>;
+  countVoteRequestResults: (
+    accepted?: boolean,
+    effectiveTo?: string
+  ) => Promise<CountVoteResultsResponse>;
   getPreviousSvRewardWeight: (
     svParty: string,
     effectiveBefore?: string
@@ -165,8 +168,11 @@ export const SvAdminClientProvider: React.FC<React.PropsWithChildren<SvAdminProp
         };
         return await svAdminClient.listVoteRequestResults(request);
       },
-      countVoteRequestResults: async (): Promise<CountVoteResultsResponse> => {
-        return await svAdminClient.countVoteRequestResults({});
+      countVoteRequestResults: async (
+        accepted?: boolean,
+        effectiveTo?: string
+      ): Promise<CountVoteResultsResponse> => {
+        return await svAdminClient.countVoteRequestResults({ accepted, effectiveTo });
       },
       getPreviousSvRewardWeight: async (
         svParty: string,

@@ -10,8 +10,11 @@ export const useVoteRequestResultsCount = (): UseQueryResult<number> => {
   return useQuery({
     queryKey: ['voteRequestResultsCount'],
     queryFn: async () => {
-      const response = await countVoteRequestResults();
-      return response.count;
+      const [effective, notAccepted] = await Promise.all([
+        countVoteRequestResults(true, new Date().toISOString()),
+        countVoteRequestResults(false),
+      ]);
+      return effective.count + notAccepted.count;
     },
   });
 };

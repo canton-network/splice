@@ -1,6 +1,6 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, test } from 'vitest';
 import { SvConfigProvider } from '../../utils';
 import userEvent from '@testing-library/user-event';
@@ -103,12 +103,14 @@ describe('Governance Page', () => {
 
     await navigateToGovernancePage(user);
 
-    const expectedCount =
-      voteResultsAmuletRules.dso_rules_vote_results.length +
-      voteResultsDsoRules.dso_rules_vote_results.length;
+    const expectedCount = voteResultsAmuletRules.dso_rules_vote_results
+      .concat(voteResultsDsoRules.dso_rules_vote_results)
+      .filter(
+        r => r.outcome.tag !== 'VRO_Accepted' || new Date(r.outcome.value.effectiveAt) < new Date()
+      ).length;
 
     const badge = await screen.findByTestId('vote-history-section-badge-count');
-    expect(badge).toHaveTextContent(`${expectedCount}`);
+    await waitFor(() => expect(badge).toHaveTextContent(`${expectedCount}`));
   });
 
   test('should display inflight votes count in the section badge', async () => {
