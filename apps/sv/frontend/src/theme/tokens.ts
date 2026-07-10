@@ -16,9 +16,10 @@ export const layoutTokens = {
   /** Figma banner-testnet — bg-cyan-100 (styled export uses #C8F1FE) */
   bannerTestnet: '#cffafe',
   bannerText: '#18181b',
-  notificationBadge: '#f87171',
-  /** Figma accent-active — outline-violet-500 */
-  navActiveOutline: '#8b5cf6',
+  /** Figma red00 — Governance count badge */
+  notificationBadge: '#FD8575',
+  /** Figma Purple (Navigation) — active nav pill border */
+  navActiveOutline: '#875CFF',
   navAttention: '#F3FF97',
   fontBrand: '"Termina", sans-serif',
   fontUi: '"Inter", sans-serif',
