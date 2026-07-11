@@ -39,6 +39,7 @@ import org.lfdecentralizedtrust.splice.sv.automation.confirmation.{
   CalculateRewardsDryRunTrigger,
 }
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.ExpiredAmuletTransferInstructionTrigger
+import org.lfdecentralizedtrust.splice.sv.automation.singlesv.ReceiveSvRewardCouponTrigger
 import org.lfdecentralizedtrust.splice.util.{
   AmuletConfigUtil,
   ChoiceContextWithDisclosures,
@@ -115,6 +116,11 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
         updateAutomationConfig(ConfigurableApp.Validator)(
           _.withPausedTrigger[ReceiveFaucetCouponTrigger]
             .withPausedTrigger[CollectRewardsAndMergeAmuletsTrigger]
+        )(config)
+      )
+      .addConfigTransform((_, config) =>
+        updateAutomationConfig(ConfigurableApp.Sv)(
+          _.withPausedTrigger[ReceiveSvRewardCouponTrigger]
         )(config)
       )
 
