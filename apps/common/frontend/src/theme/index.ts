@@ -99,7 +99,7 @@ let theme = createTheme({
       testnet: '#C8F1FE',
       devnet: '#C6B2FF',
       scratchnet: '#FFFFFF',
-      localnet: '#BDC9DB'
+      localnet: '#BDC9DB',
     },
   },
 });
