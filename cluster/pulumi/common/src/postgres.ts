@@ -898,6 +898,6 @@ export async function installPostgres(
         o.disableProtection,
         version,
         false,
-        o.importDataFromSplicePostgresHelmChart ?? false
+        o.importDataFromSplicePostgresHelmChart ?? true
       );
 }
