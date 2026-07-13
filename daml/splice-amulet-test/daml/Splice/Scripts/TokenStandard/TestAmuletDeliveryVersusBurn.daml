@@ -8,6 +8,7 @@ import Daml.Script
 
 import DA.TextMap qualified as TextMap
 
+import Splice.Api.Token.MetadataV1
 import Splice.Api.Token.AllocationV1 qualified as V1
 import Splice.Api.Token.AllocationV2 qualified as V2
 
@@ -43,7 +44,7 @@ test_delivery_versus_burn = do
   -- in prod, we'd construct the choice context explicitly, but here it's easier to grab the factory choice context
   enrichedChoice <- V2.getSettlementFactory registryV2 V2.SettlementFactory_SettleBatch with
     actors = [dso]
-    settlement = settlementV2
+    settlement = burnSettlement
     transferLegs = []
     allocations = []
     extraArgs = emptyExtraArgs
@@ -51,7 +52,7 @@ test_delivery_versus_burn = do
 
   -- test burn via pre-allocated transfer leg using a V1 allocation
   WalletClientV2.allocateV1 registries V1.AllocationSpecification with
-    settlement = allocationV1.settlement with executor = dso
+    settlement = allocationV1.settlement with executor = dso; meta = emptyMetadata
     transferLegId = "leg1"
     transferLeg = TSU.downcast_v2_v1_TransferLeg instrId.admin burnLeg
   [(allocCid, _)] <- queryInterface @V2.Allocation dso

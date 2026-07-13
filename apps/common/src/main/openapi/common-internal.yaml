@@ -360,6 +360,33 @@ components:
             Cursor for the next page of results. Pass this as `pageToken` in the request.
             If absent or `null`, there are no more pages.
 
+    CountVoteResultsRequest:
+      description: |
+        Filters for counting vote results. Same semantics as the corresponding
+        fields on `ListVoteResultsRequest`.
+      type: object
+      properties:
+        actionName:
+          type: string
+        accepted:
+          type: boolean
+        requester:
+          type: string
+        effectiveFrom:
+          type: string
+        effectiveTo:
+          type: string
+
+    CountVoteResultsResponse:
+      type: object
+      required:
+        - count
+      properties:
+        count:
+          type: integer
+          format: int64
+          description: Total number of vote results matching the request filters.
+
     PreviousSvRewardWeightRequest:
       type: object
       required:

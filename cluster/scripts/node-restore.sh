@@ -437,10 +437,8 @@ function main() {
   local -r migration_id=$2
   local -r run_id=$3
 
-  local config
-  config=$(get_resolved_config)
   local hyperdisk_enabled
-  hyperdisk_enabled=$(echo "$config" | yq '.cluster.hyperdiskSupport.enabled // false')
+  hyperdisk_enabled="true"
 
   if [[ "$run_id" == *","* ]]; then
     _info " ** Validate backup ids ** "

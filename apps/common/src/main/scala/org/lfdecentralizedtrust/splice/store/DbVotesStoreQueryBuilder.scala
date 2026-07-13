@@ -23,6 +23,55 @@ trait DbVotesTxLogStoreQueryBuilder[TXE]
     with LimitHelpers
     with NamedLogging {
 
+  private def voteRequestResultsConditions(
+      dbType: String3,
+      actionNameColumnName: String,
+      acceptedColumnName: String,
+      requesterNameColumnName: String,
+      filters: VoteResultsFilters,
+  ) = {
+    val actionNameCondition = filters.actionName match {
+      case Some(actionName) =>
+        Some(sql"""#$actionNameColumnName like ${lengthLimited(
+            s"%${lengthLimited(actionName)}%"
+          )}""")
+      case None => None
+    }
+    val executedCondition = filters.accepted match {
+      case Some(accepted) => Some(sql"""#$acceptedColumnName = ${accepted}""")
+      case None => None
+    }
+    val effectivenessCondition = (filters.effectiveFrom, filters.effectiveTo) match {
+      case (Some(effectiveFrom), Some(effectiveTo)) =>
+        Some(sql"""vote_effective_at between ${lengthLimited(
+            effectiveFrom
+          )} and ${lengthLimited(
+            effectiveTo
+          )}""")
+      case (Some(effectiveFrom), None) =>
+        Some(sql"""vote_effective_at > ${lengthLimited(effectiveFrom)}""")
+      case (None, Some(effectiveTo)) =>
+        Some(sql"""vote_effective_at < ${lengthLimited(effectiveTo)}""")
+      case (None, None) => None
+    }
+    val requesterCondition = filters.requester match {
+      case Some(requester) =>
+        Some(sql"""#$requesterNameColumnName like ${lengthLimited(
+            s"%${lengthLimited(requester)}%"
+          )}""")
+      case None => None
+    }
+    NonEmptyList(
+      sql"""entry_type = ${dbType}""",
+      List(
+        actionNameCondition,
+        executedCondition,
+        requesterCondition,
+        effectivenessCondition,
+      ).flatten,
+    )
+  }
+
   def listVoteRequestResultsQuery(
       txLogTableName: String,
       txLogStoreId: TxLogStoreId,
@@ -30,11 +79,7 @@ trait DbVotesTxLogStoreQueryBuilder[TXE]
       actionNameColumnName: String,
       acceptedColumnName: String,
       requesterNameColumnName: String,
-      actionName: Option[String],
-      accepted: Option[Boolean],
-      requester: Option[String],
-      effectiveFrom: Option[String],
-      effectiveTo: Option[String],
+      filters: VoteResultsFilters,
       limit: Limit,
       after: Option[Long] = None,
   ): SqlStreamingAction[Vector[
@@ -52,47 +97,13 @@ trait DbVotesTxLogStoreQueryBuilder[TXE]
         )
       case None => None
     }
-    val actionNameCondition = actionName match {
-      case Some(actionName) =>
-        Some(sql"""#$actionNameColumnName like ${lengthLimited(
-            s"%${lengthLimited(actionName)}%"
-          )}""")
-      case None => None
-    }
-    val executedCondition = accepted match {
-      case Some(accepted) => Some(sql"""#$acceptedColumnName = ${accepted}""")
-      case None => None
-    }
-    val effectivenessCondition = (effectiveFrom, effectiveTo) match {
-      case (Some(effectiveFrom), Some(effectiveTo)) =>
-        Some(sql"""vote_effective_at between ${lengthLimited(
-            effectiveFrom
-          )} and ${lengthLimited(
-            effectiveTo
-          )}""")
-      case (Some(effectiveFrom), None) =>
-        Some(sql"""vote_effective_at > ${lengthLimited(effectiveFrom)}""")
-      case (None, Some(effectiveTo)) =>
-        Some(sql"""vote_effective_at < ${lengthLimited(effectiveTo)}""")
-      case (None, None) => None
-    }
-    val requesterCondition = requester match {
-      case Some(requester) =>
-        Some(sql"""#$requesterNameColumnName like ${lengthLimited(
-            s"%${lengthLimited(requester)}%"
-          )}""")
-      case None => None
-    }
-    val conditions = NonEmptyList(
-      sql"""entry_type = ${dbType}""",
-      List(
-        actionNameCondition,
-        executedCondition,
-        requesterCondition,
-        effectivenessCondition,
-        afterCondition,
-      ).flatten,
-    )
+    val conditions = voteRequestResultsConditions(
+      dbType,
+      actionNameColumnName,
+      acceptedColumnName,
+      requesterNameColumnName,
+      filters,
+    ) ++ afterCondition.toList
     val whereClause = conditions.reduceLeft((a, b) => (a ++ sql""" and """ ++ b).toActionBuilder)
 
     selectFromTxLogTable(
@@ -102,6 +113,26 @@ trait DbVotesTxLogStoreQueryBuilder[TXE]
       orderLimit =
         sql"""order by #$effectiveAtSortKey desc, entry_number desc limit ${sqlLimit(limit)}""",
     )
+  }
+
+  def countVoteRequestResultsQuery(
+      txLogTableName: String,
+      txLogStoreId: TxLogStoreId,
+      dbType: String3,
+      actionNameColumnName: String,
+      acceptedColumnName: String,
+      requesterNameColumnName: String,
+      filters: VoteResultsFilters,
+  ): SqlStreamingAction[Vector[Long], Long, Effect.Read] = {
+    val whereClause = voteRequestResultsConditions(
+      dbType,
+      actionNameColumnName,
+      acceptedColumnName,
+      requesterNameColumnName,
+      filters,
+    ).reduceLeft((a, b) => (a ++ sql""" and """ ++ b).toActionBuilder)
+    (sql"""select count(*) from #$txLogTableName where store_id = $txLogStoreId and """ ++ whereClause).toActionBuilder
+      .as[Long]
   }
 }
 

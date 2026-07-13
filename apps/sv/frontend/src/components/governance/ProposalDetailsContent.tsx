@@ -436,7 +436,7 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
               key={editFormKey}
               voteRequestContractId={contractId}
               currentSvPartyId={currentSvPartyId}
-              onSubmissionComplete={() => setVoteSubmitted(true)}
+              onSubmissionStart={() => setVoteSubmitted(true)}
               votes={votes}
             />
           </VoteSection>

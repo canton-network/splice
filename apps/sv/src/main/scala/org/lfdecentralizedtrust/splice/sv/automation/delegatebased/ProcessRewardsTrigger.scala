@@ -169,6 +169,11 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
       }
       .map { supportByProvider =>
         val withWrongVettingState = supportByProvider.collect { case (provider, false) => provider }
+        if (withWrongVettingState.nonEmpty) {
+          logger.info(
+            s"Providers with wrong vetting state for batch: ${withWrongVettingState.mkString(", ")}"
+          )
+        }
         damlSetOf(withWrongVettingState)
       }
   }

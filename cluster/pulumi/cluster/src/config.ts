@@ -13,6 +13,7 @@ const GkeNodePoolConfigSchema = z.object({
 const GkeClusterConfigSchema = z.object({
   nodePools: z.object({
     infra: GkeNodePoolConfigSchema,
+    additionalInfra: z.array(GkeNodePoolConfigSchema).default([]),
     apps: GkeNodePoolConfigSchema,
     additionalApps: z.array(GkeNodePoolConfigSchema).default([]),
   }),
