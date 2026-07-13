@@ -11,7 +11,6 @@ import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.environment.BuildInfo
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTestWithIsolatedEnvironment
-import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.InitialPackageConfig
 import org.lfdecentralizedtrust.splice.util.{DisclosedContracts, TimeTestUtil, WalletTestUtil}
 
 import scala.jdk.CollectionConverters.*
@@ -24,31 +23,12 @@ class ValidatorFaucetCapZeroTimeBasedIntegrationTest
     with WalletTestUtil
     with TimeTestUtil {
 
-  // Package versions from Splice 0.5.11 — the Daml versions currently deployed on MainNet,
-  // which do not include the Daml-side fix for the division-by-zero bug on cap=0 rounds.
-  // TODO(canton-network/splice#3461): Remove once MainNet has adopted the Daml versions from 0.5.16 or later
-  // Versions bumped to >= 0.1.19 for TBAR default: amulet_0_1_19 is the minimum version
-  // with the rewardConfig field required by traffic-based app rewards.
-  private val initialPackageConfig = InitialPackageConfig(
-    amuletVersion = "0.1.19",
-    amuletNameServiceVersion = "0.1.20",
-    dsoGovernanceVersion = "0.1.25",
-    validatorLifecycleVersion = "0.1.6",
-    walletVersion = "0.1.20",
-    walletPaymentsVersion = "0.1.19",
-  )
-
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
       .simpleTopology1SvWithSimTime(this.getClass.getSimpleName)
       // TODO(canton-network/splice#3461): Remove once MainNet has adopted the Daml versions from 0.5.16 or later
       .withNoVettedPackages(implicit env => env.validators.local.map(_.participantClient))
       .addConfigTransform((_, config) => ConfigTransforms.withValidatorFaucetCap(0)(config))
-      .addConfigTransform((_, config) =>
-        ConfigTransforms.updateAllSvAppFoundDsoConfigs_(
-          _.copy(initialPackageConfig = initialPackageConfig)
-        )(config)
-      )
 
   "system works with optValidatorFaucetCap=0 and handles stale liveness records" in {
     implicit env =>
