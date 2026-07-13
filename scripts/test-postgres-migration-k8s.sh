@@ -109,34 +109,43 @@ while read -r db; do
 done < "$WORK/dbs.txt"
 
 echo "### 5. Point the applications at the target"
+# Decide which releases to repoint BEFORE touching the secret: a release
+# qualifies when its persistence.host is the source instance, as a bare
+# service name or a cluster FQDN (Pulumi wires <name>.<ns>.svc.cluster.local).
+helm list -n "$NAMESPACE" -o json \
+  | jq -r '.[] | .name + " " + .chart' > "$WORK/releases.txt"
+: > "$WORK/repoint.txt"
+while read -r release chart; do
+  case "$chart" in splice-postgres-*) continue ;; esac
+  helm get values "$release" -n "$NAMESPACE" -o yaml > "$WORK/${release}-values.yaml"
+  host=$(yq '.persistence.host // ""' "$WORK/${release}-values.yaml")
+  case "$host" in
+    "$SOURCE_HOST" | "$SOURCE_HOST".*) echo "$release $chart" >> "$WORK/repoint.txt" ;;
+  esac
+done < "$WORK/releases.txt"
+[ -s "$WORK/repoint.txt" ] || { echo "FAIL: no release has persistence.host pointing at ${SOURCE_HOST}"; exit 1; }
+echo "releases to repoint:"; cat "$WORK/repoint.txt"
+
 kubectl create secret generic "$SECRET_NAME" \
   --from-literal=postgresPassword="$TARGET_PASSWORD" \
   -n "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
-# Recover values from live releases; repoint every release whose persistence.host
-# is the source instance. Participants upgrade first, mirroring install order.
-helm list -n "$NAMESPACE" -o json \
-  | jq -r '.[] | .name + " " + .chart' > "$WORK/releases.txt"
 repoint() { # repoint <release> <chart-with-version>
   local release=$1 chart=$2 name version
   name=$(sed -E 's/-([0-9]+\.[0-9]+\..+)$//' <<< "$chart")
   version=$(sed -E 's/^.+-([0-9]+\.[0-9]+\..+)$/\1/' <<< "$chart")
-  helm get values "$release" -n "$NAMESPACE" > "$WORK/${release}-values.yaml"
-  [ "$(yq '.persistence.host // ""' "$WORK/${release}-values.yaml")" = "$SOURCE_HOST" ] || return 0
   yq -i ".persistence.host = \"$TARGET_HOST\" | .persistence.port = 5432" "$WORK/${release}-values.yaml"
   echo "upgrading $release ($name $version)"
   helm upgrade "$release" "$HELM_REPO/$name" --version "$version" \
     -f "$WORK/${release}-values.yaml" -n "$NAMESPACE" --wait --timeout 10m
 }
+# participants first, mirroring install order
 while read -r release chart; do
   case "$chart" in splice-participant-*) repoint "$release" "$chart";; esac
-done < "$WORK/releases.txt"
+done < "$WORK/repoint.txt"
 while read -r release chart; do
-  case "$chart" in
-    splice-participant-* | splice-postgres-*) ;;
-    *) repoint "$release" "$chart";;
-  esac
-done < "$WORK/releases.txt"
+  case "$chart" in splice-participant-*) ;; *) repoint "$release" "$chart";; esac
+done < "$WORK/repoint.txt"
 
 echo "### 6. Verify"
 kubectl wait deployment --all --for=condition=Available -n "$NAMESPACE" --timeout=600s
