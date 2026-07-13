@@ -35,3 +35,10 @@
    - SV app
 
      - Add support for specifying weight in ``GrantFeaturedAppRight`` governance voting UI.
+
+  - Deployment
+
+    - splice-info
+
+      - ``/runtime/status.json`` now includes reachability for scan and sequencer (0 is good, 1 is lagging
+        behind, 2 is unreachable, 3 is lagging behind and unreachable).
