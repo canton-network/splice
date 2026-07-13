@@ -29,11 +29,15 @@ import org.lfdecentralizedtrust.splice.util.{
   UploadablePackage,
   WalletTestUtil,
 }
+import org.lfdecentralizedtrust.splice.config.ConfigTransforms.updateAllValidatorConfigs
 import org.lfdecentralizedtrust.splice.validator.automation.ValidatorPackageVettingTrigger
 import org.scalatest.concurrent.PatienceConfiguration
-import scala.concurrent.duration.DurationInt
 
+import scala.concurrent.duration.DurationInt
 import scala.concurrent.duration.FiniteDuration
+import com.digitalasset.canton.logging.SuppressionRule
+import org.lfdecentralizedtrust.splice.config.ConfigTransforms
+import org.slf4j.event.Level
 
 class UnsupportedPackageVettingIntegrationTest
     extends IntegrationTest
@@ -47,10 +51,23 @@ class UnsupportedPackageVettingIntegrationTest
       .withoutAliceValidatorConnectingToSplitwell
       // if other tests run before, packages that break this test might already be vetted
       .withNoVettedPackages(implicit env => env.validators.local.map(_.participantClient))
+      .withReducedAmuletRulesCacheTTL()
       .addConfigTransforms((_, config) =>
         updateAutomationConfig(ConfigurableApp.Sv)(
           _.withPausedTrigger[SvPackageVettingTrigger]
         )(config)
+      )
+      .addConfigTransforms((_, config) =>
+        updateAllValidatorConfigs { case (name, c) =>
+          if (name == "aliceValidator" || name == "bobValidator") {
+            c.copy(
+              automation = c.automation.withPausedTrigger[ValidatorPackageVettingTrigger]
+            )
+          } else c
+        }(config)
+      )
+      .addConfigTransforms((_, config) =>
+        ConfigTransforms.useDecentralizedSynchronizerSplitwell()(config)
       )
 
   "Unsupported vetted packages are automatically removed by the package vetting trigger for SV and validator" in {
@@ -78,12 +95,11 @@ class UnsupportedPackageVettingIntegrationTest
         unsupportedDarsToVetSv,
         sv1Backend.dsoAutomation.trigger[SvPackageVettingTrigger],
       )
-      // See https://github.com/DACH-NY/canton/issues/29834: set darsUnvettedByAutomation when unvetting works on non-sv validators
       test(
         aliceValidatorBackend.appState.participantAdminConnection,
         synchronizerId,
         unsupportedDarsToVetValidator,
-        Seq.empty,
+        unsupportedDarsToVetValidator,
         aliceValidatorBackend.validatorAutomation.trigger[ValidatorPackageVettingTrigger],
       )
   }
@@ -128,7 +144,7 @@ class UnsupportedPackageVettingIntegrationTest
     }
   }
 
-  "SVs unvet package versions above the configured PackageConfig, validators do not" in {
+  "SVs and validators unvet package versions above the configured PackageConfig" in {
     implicit env =>
       val synchronizerId =
         sv1Backend.participantClient.synchronizers.list_connected().head.synchronizerId
@@ -190,16 +206,81 @@ class UnsupportedPackageVettingIntegrationTest
         }
       }
 
-      clue("alice validator keeps package versions above the downgraded PackageConfig vetted") {
+      clue("alice validator unvets package versions above the downgraded PackageConfig") {
         eventually() {
           getVettedPackageIds(
             aliceValidatorBackend.appState.participantAdminConnection,
             synchronizerId,
-          ) should contain allElementsOf validatorDarsAbovePackageConfigVersion.map(_.packageId)
+          ) should contain noElementsOf validatorDarsAbovePackageConfigVersion.map(_.packageId)
         }
         eventually(40.seconds) {
           alicesTapsWithPackageId(DarResources.amulet_0_1_16.packageId)
         }
       }
+  }
+
+  "Unvetting amulet does not affect a validator that has splitwell depending on it" in {
+    implicit env =>
+      val bobValidatorVettingTrigger =
+        bobValidatorBackend.validatorAutomation.trigger[ValidatorPackageVettingTrigger]
+
+      val synchronizerId =
+        sv1Backend.participantClient.synchronizers.list_connected().head.synchronizerId
+
+      val bobParticipant = bobValidatorBackend.appState.participantAdminConnection
+      val splitwellParticipant = splitwellValidatorBackend.appState.participantAdminConnection
+
+      val splitwellDar = DarResources.splitwell_0_1_0
+      val amuletDependency = DarResources.amulet_0_1_0
+
+      actAndCheck(
+        "bob and splitwell upload and vet splitwell-0.1.0 (which vets amulet-0.1.0 as a dependency)", {
+          val participants = Seq(bobParticipant, splitwellParticipant)
+          participants.foreach(
+            _.uploadDarFiles(
+              Seq(splitwellDar).map(UploadablePackage.fromResource),
+              RetryFor.Automation,
+            ).futureValue
+          )
+          participants.foreach(
+            _.vetDars(synchronizerId, Seq(splitwellDar), None, None)
+              .futureValue(timeout = PatienceConfiguration.Timeout(FiniteDuration(40, "seconds")))
+          )
+        },
+      )(
+        "both splitwell-0.1.0 and amulet-0.1.0 are vetted on bob's participant",
+        _ => {
+          val vettedIds = getVettedPackageIds(bobParticipant, synchronizerId)
+          vettedIds should contain(splitwellDar.packageId)
+          vettedIds should contain(amuletDependency.packageId)
+        },
+      )
+
+      clue("amulet-0.1.0 is unvetted on bob") {
+        loggerFactory.assertEventuallyLogsSeq(SuppressionRule.LevelAndAbove(Level.INFO))(
+          bobValidatorVettingTrigger.resume(),
+          entries => {
+            forAtLeast(1, entries)(
+              _.message should include regex "Success: dars .*48cac5ba4b6bf78df6c3a952ce05409a1d2ef39c05351074679adc0cf9cd1351.* are removed .*"
+            )
+          },
+        )
+      }
+
+      clue("splitwell-0.1.0 remains vetted after trigger ran") {
+        eventually() {
+          val vettedIds = getVettedPackageIds(bobParticipant, synchronizerId)
+          vettedIds should contain(splitwellDar.packageId)
+          vettedIds should not contain amuletDependency.packageId
+        }
+      }
+
+      clue("splitwell is still usable on bob") {
+        onboardWalletUser(bobWalletClient, bobValidatorBackend)
+        eventually() {
+          bobSplitwellClient.createInstallRequests() should not be empty
+        }
+      }
+
   }
 }

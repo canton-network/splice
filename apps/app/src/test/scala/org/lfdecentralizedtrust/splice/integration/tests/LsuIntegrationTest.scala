@@ -405,7 +405,9 @@ class LsuIntegrationTest
       participants = false,
       enableBftSequencer = true,
       logSuffix = "global-synchronizer-upgrade",
-    )() {
+    )(
+      ProcessTestUtil.javaToolOptionsKey -> "-Xms8g -Xmx10g"
+    ) {
 
       clue(
         "Pause traffic transfer trigger on sv2 to simulate a participant that is connected to a non initialized sequencer past upgrade tiem"

@@ -15,6 +15,10 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   allocationv1,
   metadatav1,
 }
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppRight_Update
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules_UpdateFeaturedAppRight
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_UpdateFeaturedAppRight
 import org.lfdecentralizedtrust.splice.console.{ScanAppBackendReference, WalletAppClientReference}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.apps.tradingapp
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
@@ -36,6 +40,7 @@ import org.lfdecentralizedtrust.splice.sv.automation.confirmation.{
 }
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.ExpiredAmuletTransferInstructionTrigger
 import org.lfdecentralizedtrust.splice.util.{
+  AmuletConfigUtil,
   ChoiceContextWithDisclosures,
   TimeTestUtil,
   TriggerTestUtil,
@@ -46,6 +51,7 @@ import org.lfdecentralizedtrust.splice.wallet.admin.api.client.commands.HttpWall
 
 import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
+import scala.jdk.OptionConverters.*
 import scala.util.Random
 
 // Tests the TrafficSummary ingestion and AppActivityRecord creation for each
@@ -60,10 +66,14 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
     with WalletTestUtil
     with TriggerTestUtil
     with TimeTestUtil
+    with AmuletConfigUtil
     with ExternallySignedPartyTestUtil
     with TokenStandardTest {
 
   protected def rewardConfigMode: TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode
+
+  // Applicable for rounds >= 7
+  private val aliceActivityWeight = BigDecimal("2.2")
 
   private def dryRunEnabled: Boolean =
     rewardConfigMode == TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode.DryRun
@@ -211,6 +221,8 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
           advanceTimeAndWaitForRoundOpening
           assertOldestOpenRound(5)
 
+          updateFeaturedAppRightWeight(aliceParty, aliceActivityWeight)
+
           settleTrade(aliceParty, bobParty, venueParty)
           settleTrade(aliceParty, bobParty, venueParty)
 
@@ -350,20 +362,34 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
     clue("updateId3") {
       val event = fetchEvent(updateId3, "updateId3")
       assertTrafficSummary(event, "updateId3")
+      // Round 6 opened before the weight change, so alice still has the default weight.
       assertAppActivity(event, "updateId3", Set(venueParty, aliceParty), expectedRound = 6)
     }
 
     clue("updateId4") {
       val event = fetchEvent(updateId4, "updateId4")
       assertTrafficSummary(event, "updateId4")
-      assertAppActivity(event, "updateId4", Set(aliceParty, venueParty), expectedRound = 7)
+      // From round 7 onwards we see aliceActivityWeight
+      assertAppActivity(
+        event,
+        "updateId4",
+        Set(aliceParty, venueParty),
+        expectedRound = 7,
+        scaledProvider = Some(aliceParty -> aliceActivityWeight),
+      )
     }
 
     clue("Alice-submitted create TransferInstruction has app activity for alice") {
       val event = fetchEvent(aliceCreateId, "aliceCreateId")
       event.verdict shouldBe defined
       assertTrafficSummary(event, "aliceCreateId")
-      assertAppActivity(event, "aliceCreateId", Set(aliceParty), expectedRound = 7)
+      assertAppActivity(
+        event,
+        "aliceCreateId",
+        Set(aliceParty),
+        expectedRound = 7,
+        scaledProvider = Some(aliceParty -> aliceActivityWeight),
+      )
     }
 
     clue("SV-submitted expire TransferInstruction creates no app activity for alice") {
@@ -378,13 +404,25 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
       assertTrafficSummary(event, "updateId5")
       // Round 9: one DvP — venue has activity but will be below the coupon threshold;
       // alice's additional transfers push her above it.
-      assertAppActivity(event, "updateId5", Set(aliceParty, venueParty), expectedRound = 9)
+      assertAppActivity(
+        event,
+        "updateId5",
+        Set(aliceParty, venueParty),
+        expectedRound = 9,
+        scaledProvider = Some(aliceParty -> aliceActivityWeight),
+      )
     }
 
     clue("updateId6") {
       val event = fetchEvent(updateId6, "updateId6")
       assertTrafficSummary(event, "updateId6")
-      assertAppActivity(event, "updateId6", Set(aliceParty, venueParty), expectedRound = 10)
+      assertAppActivity(
+        event,
+        "updateId6",
+        Set(aliceParty, venueParty),
+        expectedRound = 10,
+        scaledProvider = Some(aliceParty -> aliceActivityWeight),
+      )
     }
 
     clue("updateId7") {
@@ -392,7 +430,13 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
       assertTrafficSummary(event, "updateId7")
       // Round 11: venue's FAP was cancelled in round 9, so only alice is a
       // featured-app provider here.
-      assertAppActivity(event, "updateId7", Set(aliceParty), expectedRound = 11)
+      assertAppActivity(
+        event,
+        "updateId7",
+        Set(aliceParty),
+        expectedRound = 11,
+        scaledProvider = Some(aliceParty -> aliceActivityWeight),
+      )
     }
 
     assertRewardCalcs(aliceParty, venueParty)
@@ -629,6 +673,7 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
       cluePrefix: String,
       expectedProviders: Set[PartyId],
       expectedRound: Long,
+      scaledProvider: Option[(PartyId, BigDecimal)] = None,
   ): Unit = {
     withClue(s"$cluePrefix should have app activity") {
       event.appActivityRecords shouldBe defined
@@ -646,13 +691,53 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
           r.weight should be > 0L
         }
       }
-      val weightSum = activity.records.map(_.weight).sum
       val numFeaturedAppParties = expectedProviders.size.toLong
+
+      // Convert the assigned activity back to burn amount using app weight
+      val reconstructedBurnSum = activity.records.map { r =>
+        val activityWeight = scaledProvider match {
+          case Some((party, w)) if r.party == party.toProtoPrimitive => w
+          case _ => BigDecimal(1)
+        }
+        BigDecimal(r.weight) / activityWeight
+      }.sum
       withClue(
-        s"$cluePrefix sum of weights should be within [totalTrafficCost - numFeaturedAppParties, totalTrafficCost]"
+        s"$cluePrefix reconstructed burn should be within [totalTrafficCost - numFeaturedAppParties, totalTrafficCost]"
       ) {
-        weightSum should be >= (totalTrafficCost - numFeaturedAppParties)
-        weightSum should be <= totalTrafficCost
+        reconstructedBurnSum should be >= BigDecimal(totalTrafficCost - numFeaturedAppParties)
+        reconstructedBurnSum should be <= BigDecimal(totalTrafficCost)
+      }
+    }
+  }
+
+  private def updateFeaturedAppRightWeight(
+      party: PartyId,
+      newWeight: BigDecimal,
+  )(implicit env: SpliceTestConsoleEnvironment): Unit = {
+    val rightCid = clue(s"Look up featured app right for $party") {
+      sv1ScanBackend.lookupFeaturedAppRight(party).value.contractId
+    }
+    val action = new ARC_DsoRules(
+      new SRARC_UpdateFeaturedAppRight(
+        new DsoRules_UpdateFeaturedAppRight(
+          rightCid,
+          new FeaturedAppRight_Update("updating activity weight", newWeight.bigDecimal),
+        )
+      )
+    )
+    votingFlow(action, effectivity = None, accept = true, expiration = Duration.ofSeconds(60))
+    clue(s"Wait for $party featured app right weight to be $newWeight") {
+      eventually() {
+        val weight = sv1ScanBackend
+          .lookupFeaturedAppRight(party)
+          .value
+          .payload
+          .activityWeight
+          .toScala
+          .map(BigDecimal(_))
+        withClue(s"activity weight for $party: ") {
+          weight.getOrElse(BigDecimal(1)).compare(newWeight) shouldBe 0
+        }
       }
     }
   }

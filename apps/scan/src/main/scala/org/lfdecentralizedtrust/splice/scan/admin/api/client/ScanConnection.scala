@@ -37,6 +37,7 @@ import org.lfdecentralizedtrust.splice.scan.admin.api.client.ScanConnection.*
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.TransferContextWithInstances
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
+import org.lfdecentralizedtrust.splice.store.VoteResultsFilters
 import org.lfdecentralizedtrust.splice.util.*
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
 import com.digitalasset.canton.config.RequireTypes.NonNegativeInt
@@ -310,17 +311,20 @@ trait ScanConnection
   ): Future[Option[ContractWithState[TransferPreapproval.ContractId, TransferPreapproval]]]
 
   def listVoteRequestResults(
-      actionName: Option[String],
-      accepted: Option[Boolean],
-      requester: Option[String],
-      effectiveFrom: Option[String],
-      effectiveTo: Option[String],
+      filters: VoteResultsFilters,
       limit: Int,
       pageToken: Option[BigInt] = None,
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
   ): Future[(Seq[DsoRules_CloseVoteRequestResult], Option[BigInt])]
+
+  def countVoteRequestResults(
+      filters: VoteResultsFilters
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[Long]
 
   def getPreviousSvRewardWeight(svParty: String, effectiveBefore: Option[String])(implicit
       ec: ExecutionContext,

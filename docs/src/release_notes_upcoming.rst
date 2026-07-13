@@ -11,9 +11,15 @@
 
     Next-release notes
 
-  - Deployment
+  - Validator
 
-    - Helm
+    - Unsupported package versions are now automatically unvetted by the validator package vetting trigger,
+      aligning validator behavior with SVs.
 
-      - Added security contexts for all Helm-based deployments intended for production.
-        This improves the security of Kubernetes based deployments.
+      You can disable validator unvetting by setting:
+
+      .. code-block:: yaml
+
+        - name: ADDITIONAL_CONFIG_UNSUPPORTED_DARS_UNVETTING
+          value: |
+            canton.validator-apps.validator_backend.parameters.enabled-features.enable-validator-dars-unvetting = false

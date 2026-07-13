@@ -12,7 +12,7 @@ sequencer:
   # Enable when using CantonBFT instead of CometBFT
   # driver:
   #   type: "cantonbft"
-  #   externalAddress: "sequencer-p2p-15.SERIAL_ID.sv.YOUR_HOSTNAME"
+  #   externalAddress: "sequencer-p2p-SERIAL_ID.sv.YOUR_HOSTNAME"
   #   externalPort: 443
   #   persistence:
   #     databaseName: sequencer_SERIAL_ID_cantonbft

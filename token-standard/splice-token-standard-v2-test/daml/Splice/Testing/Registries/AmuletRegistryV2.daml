@@ -15,6 +15,7 @@ module Splice.Testing.Registries.AmuletRegistryV2
     -- * Amulet registry specific functions
   , tapFaucet
   , featureApp
+  , featureApp'
   , createTransferPreapproval
   , beneficiariesToMetadata
 
@@ -208,6 +209,16 @@ featureApp registry provider = do
   (amuletRulesCid, _) <- getAmuletRules registry
   result <- submit (actAs provider <> readAs registry.dso) $ exerciseCmd amuletRulesCid AmuletRules_DevNet_FeatureApp with
     provider
+    activityWeight = None
+  return result.featuredAppRightCid
+
+-- | Mark a particular registry provider part as featured.
+featureApp' : AmuletRegistry -> Party -> Decimal -> Script (ContractId FeaturedAppRight)
+featureApp' registry provider weight = do
+  (amuletRulesCid, _) <- getAmuletRules registry
+  result <- submit (actAs provider <> readAs registry.dso) $ exerciseCmd amuletRulesCid AmuletRules_DevNet_FeatureApp with
+    provider
+    activityWeight = Some weight
   return result.featuredAppRightCid
 
 -- | Encode a list of beneficiaries as metadata to pass in via token standard choices.

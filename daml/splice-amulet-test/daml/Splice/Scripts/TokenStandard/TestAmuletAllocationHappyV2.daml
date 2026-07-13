@@ -13,7 +13,6 @@ import DA.Assert
 import DA.Foldable (forA_)
 import DA.List (sort)
 import DA.Map qualified as Map
-import DA.TextMap qualified as TextMap
 import DA.Time
 
 import Daml.Script
@@ -93,12 +92,42 @@ test_allocation_WithdrawV2_expiredLock = test_withdrawCancel_generic $ \TestEnv 
 test_allocation_CancelV2 : Script ()
 test_allocation_CancelV2 = test_withdrawCancel_generic $ \TestEnv {..} allocCid -> do
   context <- V2.getAllocation_CancelContext registryV2 allocCid emptyMetadata
-  submit (actAs provider <> discloseMany' context.disclosures) $
+  submit (actAs provider1 <> actAs provider2 <> discloseMany' context.disclosures) $
     exerciseCmd allocCid V2.Allocation_Cancel with
-      actors = [provider]
+      actors = [provider1, provider2]
       extraArgs = ExtraArgs with
         context = context.choiceContext
         meta = emptyMetadata
+  pure ()
+
+-- Test for a bug where multiple executors where not properly taken into account when
+-- computing the actors for V1 `AmuletAllocation`s.
+test_allocationV1_settleMultiExecutors : Script ()
+test_allocationV1_settleMultiExecutors = do
+  TestEnv {..} <- setupTest
+  WalletClientV2.allocateV1 registries allocationV1 with
+    transferLeg = allocationV1.transferLeg with
+      amount = 2.0
+  [(aliceAllocCid, _)] <- WalletClientV2.listAllocationsV2 aliceAccount alice
+  WalletClientV2.allocateV2 registries bob settlementV2
+    V2.AllocationSpecification with
+      admin = instrId.admin
+      authorizer = bobAccount
+      transferLegSides = [TSU.receiverSide legV2]
+      committed = False
+      nextIterationFunding = None
+      settlementDeadline = None
+      meta = emptyMetadata
+  [(bobAllocCid, _)] <- WalletClientV2.listAllocationsV2 bobAccount bob
+  let settleArg = V2.SettlementFactory_SettleBatch with
+        settlement = settlementV2
+        transferLegs = [legV2]
+        allocations = map TSU.nonIteratedAllocation [aliceAllocCid, bobAllocCid]
+        actors = [provider1, provider2]
+        extraArgs = emptyExtraArgs
+  enrichedChoice <- V2.getSettlementFactory registryV2 settleArg
+  submit (actAs provider1 <> actAs provider2 <> discloseMany' enrichedChoice.disclosures) $
+    exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
   pure ()
 
 
@@ -155,17 +184,17 @@ checkAllocationExtraObservers : TestEnv -> V2.Allocation -> Script ()
 checkAllocationExtraObservers (TestEnv {..}) alloc = do
   -- We always require the provider as an extra observer to never have extra
   -- views, independent of actors.
-  checkEq  "settleExtraObservers" [provider] $
+  checkEq  "settleExtraObservers" [provider1, provider2] $
     V2.allocation_settleExtraObservers alloc V2.Allocation_Settle with
-      actors = [provider, instrId.admin]
+      actors = [provider1, provider2, instrId.admin]
       extraArgs = emptyExtraArgs
       extraTransferLegSides = []
       nextIterationFunding = None
-  checkEq "cancelExtraObservers" [provider] $
+  checkEq "cancelExtraObservers" [provider1, provider2] $
     V2.allocation_cancelExtraObservers alloc V2.Allocation_Cancel with
-      actors = [provider]
+      actors = [provider1, provider2]
       extraArgs = emptyExtraArgs
-  checkEq "withdrawExtraObservers" [provider] $
+  checkEq "withdrawExtraObservers" [provider1, provider2] $
     V2.allocation_withdrawExtraObservers alloc V2.Allocation_Withdraw with
       actors = [alice]
       extraArgs = emptyExtraArgs
@@ -177,32 +206,27 @@ checkAllocationExtraObservers (TestEnv {..}) alloc = do
 test_allocationV1_singleExecutor_availableActions : Script ()
 test_allocationV1_singleExecutor_availableActions = do
   (TestEnv {..}) <- setupTest
-  WalletClientV2.allocateV1 registries allocationV1
+  WalletClientV2.allocateV1 registries allocationV1 with
+    settlement = allocationV1.settlement with
+      meta = emptyMetadata
   [(_, allocV1)] <- query @AmuletAllocation alice
   let allocView = view (toInterface @V2.Allocation allocV1)
   let expectedActions = Map.fromList
-        [ (V2.AA_Settle, [sort [provider, instrId.admin]])
-        , (V2.AA_Cancel, [[provider]])
+        [ (V2.AA_Settle, [sort [provider1, instrId.admin]])
+        , (V2.AA_Cancel, [[provider1]])
         , (V2.AA_Withdraw, [[alice]])
         ]
   checkEq "availableActions" expectedActions (map sort <$> allocView.availableActions)
 
-
 test_allocationV1_multiExecutors_availableActions : Script ()
 test_allocationV1_multiExecutors_availableActions = do
   (TestEnv {..}) <- setupTest
-  provider2 <- allocatePartyExact "provider2"
-  WalletClientV2.allocateV1 registries allocationV1 with
-    settlement = allocationV1.settlement with
-      meta = Metadata with
-        values = TextMap.fromList
-          [ (TSU.extraExecutorsMetaKey, partyToText provider2)
-          ]
+  WalletClientV2.allocateV1 registries allocationV1
   [(_, allocV1)] <- query @AmuletAllocation alice
   let allocView = view (toInterface @V2.Allocation allocV1)
   let expectedActions = Map.fromList
-        [ (V2.AA_Settle, [sort [provider, provider2, instrId.admin]])
-        , (V2.AA_Cancel, [[provider, provider2]])
+        [ (V2.AA_Settle, [sort [provider1, provider2, instrId.admin]])
+        , (V2.AA_Cancel, [[provider1, provider2]])
         , (V2.AA_Withdraw, [[alice]])
         ]
   checkEq "availableActions" expectedActions (map sort <$> allocView.availableActions)
@@ -210,18 +234,17 @@ test_allocationV1_multiExecutors_availableActions = do
 test_allocationV1_uncommitted_availableActions : Script ()
 test_allocationV1_uncommitted_availableActions = do
   (TestEnv {..}) <- setupTest
-  provider2 <- allocatePartyExact "provider2"
   WalletClientV2.allocateV2 registries alice
     settlementV2 with
-      executors = [provider, provider2]
+      executors = [provider1, provider2]
     allocationV2 with
       settlementDeadline = None
       committed = False
   [(_, allocV2)] <- query @AmuletAllocationV2 alice
   let allocView = view (toInterface @V2.Allocation allocV2)
   let expectedActions = Map.fromList
-        [ (V2.AA_Settle, [sort [provider, provider2, instrId.admin]])
-        , (V2.AA_Cancel, [[provider, provider2]])
+        [ (V2.AA_Settle, [sort [provider1, provider2, instrId.admin]])
+        , (V2.AA_Cancel, [[provider1, provider2]])
         , (V2.AA_Withdraw, [[alice]])
         ]
   checkEq "uncommitted.availableActions" expectedActions (map sort <$> allocView.availableActions)
@@ -229,18 +252,16 @@ test_allocationV1_uncommitted_availableActions = do
 test_allocationV2_committed_availableActions : Script ()
 test_allocationV2_committed_availableActions = do
   (TestEnv {..}) <- setupTest
-  provider2 <- allocatePartyExact "provider2"
   WalletClientV2.allocateV2 registries alice
-    settlementV2 with
-      executors = [provider, provider2]
+    settlementV2
     allocationV2 with
       settlementDeadline = None
       committed = True
   [(_, allocV2)] <- query @AmuletAllocationV2 alice
   let allocView = view (toInterface @V2.Allocation allocV2)
   let expectedActions = Map.fromList
-        [ (V2.AA_Settle, [sort [provider, provider2, instrId.admin]])
-        , (V2.AA_Cancel, [[provider, provider2]])
+        [ (V2.AA_Settle, [sort [provider1, provider2, instrId.admin]])
+        , (V2.AA_Cancel, [[provider1, provider2]])
           -- No withdraw for a fully committed allocation.
         ]
   checkEq "committed.availableActions" expectedActions (map sort <$> allocView.availableActions)
@@ -262,7 +283,7 @@ test_AllocationFactory_Allocate_observers = do
         extraArgs = emptyExtraArgs
         actors = [alice]
   -- Note: alice being an extra observer is not strictly required, but doesn't hurt.
-  checkEq "allocFactory.allocateExtraObservers" [provider, alice] $
+  checkEq "allocFactory.allocateExtraObservers" [provider1, provider2, alice] $
     V2.allocationFactory_allocateExtraObservers allocFactory allocArg
 
 test_SettlementFactory_Settle_observers : Script ()

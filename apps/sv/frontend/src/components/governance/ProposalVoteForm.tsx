@@ -10,7 +10,6 @@ import { ContractId } from '@daml/types';
 import { VoteRequest } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
 import { ProposalVote } from '../../utils/types';
 import { Alert, Box, Button, Stack, TextField, Typography } from '@mui/material';
-import { useEffect } from 'react';
 interface CastVoteArgs {
   accepted: boolean;
   url: string;
@@ -21,11 +20,11 @@ interface ProposalVoteFormProps {
   voteRequestContractId: ContractId<VoteRequest>;
   currentSvPartyId: string;
   votes: ProposalVote[];
-  onSubmissionComplete?: () => void;
+  onSubmissionStart?: () => void;
 }
 
 export const ProposalVoteForm: React.FC<ProposalVoteFormProps> = props => {
-  const { voteRequestContractId, currentSvPartyId, votes, onSubmissionComplete } = props;
+  const { voteRequestContractId, currentSvPartyId, votes, onSubmissionStart } = props;
   const { castVote } = useSvAdminClient();
   const yourVote = votes.find(vote => vote.sv === currentSvPartyId);
 
@@ -34,13 +33,8 @@ export const ProposalVoteForm: React.FC<ProposalVoteFormProps> = props => {
     mutationFn: async ({ accepted, url, reason }) => {
       return castVote(voteRequestContractId, accepted, url, reason);
     },
+    onMutate: () => onSubmissionStart?.(),
   });
-
-  useEffect(() => {
-    if (castVoteMutation.isSuccess || castVoteMutation.isError) {
-      onSubmissionComplete?.();
-    }
-  }, [castVoteMutation.isSuccess, castVoteMutation.isError, onSubmissionComplete]);
 
   const form = useForm({
     defaultValues: {

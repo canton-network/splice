@@ -27,7 +27,10 @@ const CloudArmorConfigSchema = z.object({
     .catchall(
       z.object({
         rulePreviewOnly: z.boolean().default(false),
-        hostname: z.string().regex(/^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/, 'valid DNS hostname'),
+        hostname: z
+          .string()
+          .regex(/^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/, 'valid DNS hostname')
+          .optional(),
         pathPrefix: z.string().regex(/^\/[^"]*$/, 'HTTP request path starting with /'),
         throttleAcrossAllEndpointsAllIps: z.object({
           withinIntervalSeconds: z.number().positive(),
@@ -54,6 +57,7 @@ export const InfraConfigSchema = z.object({
     istio: z.object({
       enableIngressAccessLogging: z.boolean(),
       enableClusterAccessLogging: z.boolean().default(false),
+      enablePublicTokenRegistry: z.boolean().default(false),
       istiodValues: z.object({}).catchall(z.any()).default({}),
       sequencerFlowControl: z.object({
         initialStreamWindowSize: z.int(),
