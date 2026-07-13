@@ -36,7 +36,7 @@ export type SvOnboarding =
   | {
       type: 'join-with-key';
       keys: CnInput<SvIdKey>;
-      sponsorRelease: pulumi.Resource;
+      sponsorRelease?: pulumi.Resource;
       sponsorApiUrl: string;
       sponsorScanUrl: string;
     };

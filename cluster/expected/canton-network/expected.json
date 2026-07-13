@@ -413,50 +413,6 @@
             "version": "0.3.21"
           }
         }
-      },
-      "disableOnboardingParticipantPromotionDelay": false,
-      "expectedValidatorOnboardings": [
-        {
-          "expiresIn": "24h",
-          "name": "splitwell2",
-          "secret": "splitwellsecret2"
-        },
-        {
-          "expiresIn": "24h",
-          "name": "validator12",
-          "secret": "validator1secret2"
-        }
-      ],
-      "identitiesBackupLocation": {
-        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
-        "value": {
-          "bucket": {
-            "bucketName": "da-cn-data-dumps",
-            "jsonCredentials": "{\"bucketName\":\"data-export-bucket-name\",\"secretName\":\"data-export-bucket-sa-key-secret\",\"jsonCredentials\":\"data-export-bucket-sa-key-secret-creds\"}",
-            "projectId": "da-cn-devnet",
-            "secretName": "cn-gcp-bucket-da-cn-devnet-da-cn-data-dumps"
-          }
-        }
-      },
-      "isDevNet": false,
-      "periodicBackupConfig": {
-        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
-        "value": {
-          "backupInterval": "10m",
-          "location": {
-            "bucket": {
-              "bucketName": "da-cn-data-dumps",
-              "jsonCredentials": "{\"bucketName\":\"data-export-bucket-name\",\"secretName\":\"data-export-bucket-sa-key-secret\",\"jsonCredentials\":\"data-export-bucket-sa-key-secret-creds\"}",
-              "projectId": "da-cn-devnet",
-              "secretName": "cn-gcp-bucket-da-cn-devnet-da-cn-data-dumps"
-            }
-          }
-        }
-      },
-      "splitPostgresInstances": true,
-      "topupConfig": {
-        "minTopupInterval": "1m",
-        "targetThroughput": 0
       }
     },
     "name": "dso",
