@@ -423,8 +423,6 @@ function main() {
 
   local config
   config=$(get_resolved_config)
-  local hyperdisk_enabled
-  hyperdisk_enabled=$(echo "$config" | yq '.cluster.hyperdiskSupport.enabled // false')
 
   # Determine whether the BFT sequencer is enabled for the migration being restored.
   # When it is, CometBFT is not used and there is nothing to restore for it.
