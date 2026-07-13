@@ -46,7 +46,8 @@ export function installPostgres(
     !spliceConfig.pulumiProjectConfig.cloudSql.protected,
     activeVersion,
     false,
-    spliceConfig.pulumiProjectConfig.splicePostgresHelmMigrationConfig,
+    spliceConfig.pulumiProjectConfig.splicePostgresHelmMigrationConfig
+      .importDataFromSplicePostgresHelmChart,
     dependsOn
   );
 }
