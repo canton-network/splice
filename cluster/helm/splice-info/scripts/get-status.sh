@@ -40,7 +40,7 @@ prom2json() {
     rm -rf "$P2J_TMPDIR" "$P2J_DIST"
   fi
 
-  "$P2J_BIN"
+  "$P2J_BIN" "$@"
 }
 
 sv_get_status() {
@@ -247,6 +247,11 @@ generate_sequencer_metrics_url() {
 }
 
 main() {
+  if ! prom2json --version &>/dev/null; then
+    echo "ERROR: prom2json is not installed. Exiting." >&2
+    return 1
+  fi
+
   if [[ -z "${SEQUENCER_METRICS_URL:-}" ]]; then
     update_serial_id
     SEQUENCER_METRICS_URL=$(generate_sequencer_metrics_url)
