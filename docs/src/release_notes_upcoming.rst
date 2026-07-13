@@ -31,3 +31,7 @@
       provision yourself; a managed service such as Amazon RDS or Google Cloud SQL is
       recommended. Follow the `migration guide <https://docs.canton.network/global-synchronizer/production-operations/validator-postgres-migration>`__ to move the data
       of an existing node before that date.
+
+   - SV app
+
+     - Add support for specifying weight in ``GrantFeaturedAppRight`` governance voting UI.
