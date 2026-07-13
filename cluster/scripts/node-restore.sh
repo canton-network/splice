@@ -156,17 +156,11 @@ function restore_pvc_postgres() {
   local -r namespace=$1
   local -r component=$2
   local -r run_id=$3
-  local -r hyperdisk_enabled=$4
 
   local template_name
   local storage_class
-  if [ "$hyperdisk_enabled" = "true" ]; then
-    template_name="pg-data-hd"
-    storage_class="hyperdisk-standard-rwo"
-  else
-    template_name="pg-data"
-    storage_class="standard-rwo"
-  fi
+  template_name="pg-data-hd"
+  storage_class="hyperdisk-standard-rwo"
 
   local -r ss_name="$component-pg"
   local -r pg_pod_name="$ss_name-0"
@@ -263,7 +257,6 @@ function restore_component() {
   local -r migration_id=$3
   local -r run_id=$4
   local -r restore_cluster=$5 # cluster to restore into (if different from current)
-  local -r hyperdisk_enabled=$6
   local -r deployment_names=$(component_to_deployments "$component" "$migration_id" "$namespace")
   local stack
 
@@ -275,20 +268,11 @@ function restore_component() {
 
     local cometbft_pvc_name
     local cometbft_snapshot_name
-    if [ "$hyperdisk_enabled" = "true" ]; then
-      cometbft_pvc_name="cometbft-migration-${migration_id}-hd-pvc"
-      cometbft_snapshot_name="${cometbft_pvc_name}-$run_id"
-    else
-      cometbft_pvc_name="global-domain-$migration_id-cometbft-cometbft-data"
-      cometbft_snapshot_name="${cometbft_pvc_name}-$run_id"
-    fi
+    cometbft_pvc_name="cometbft-migration-${migration_id}-hd-pvc"
+    cometbft_snapshot_name="${cometbft_pvc_name}-$run_id"
 
     local cometbft_storage_class
-    if [ "$hyperdisk_enabled" = "true" ]; then
-      cometbft_storage_class="hyperdisk-standard-rwo"
-    else
-      cometbft_storage_class="premium-rwo"
-    fi
+    cometbft_storage_class="hyperdisk-standard-rwo"
 
     restore_pvc_from_snapshot "$namespace" "$cometbft_snapshot_name" "$cometbft_pvc_name" "$cometbft_storage_class"
     kubectl scale deployment -n "$namespace" "${deployment_names}" --replicas=1
@@ -298,7 +282,7 @@ function restore_component() {
     type=$(get_postgres_type "$namespace-$instance-pg" "$stack")
     case "$type" in
       "canton:network:postgres")
-        restore_pvc_postgres "$namespace" "$instance" "$run_id" "$hyperdisk_enabled"
+        restore_pvc_postgres "$namespace" "$instance" "$run_id"
         ;;
       "canton:cloud:postgres")
         restore_cloudsql_postgres "$namespace" "$component" "$run_id" "$migration_id" "$restore_cluster"
@@ -437,9 +421,6 @@ function main() {
   local -r migration_id=$2
   local -r run_id=$3
 
-  local hyperdisk_enabled
-  hyperdisk_enabled="true"
-
   if [[ "$run_id" == *","* ]]; then
     _info " ** Validate backup ids ** "
     local map_keys
@@ -468,7 +449,7 @@ function main() {
   for component in "${@:4}"; do
     local component_run_id
     component_run_id=$(get_component_run_id "$run_id" "$component")
-    restore_component "$namespace" "$component" "$migration_id" "$component_run_id" "$restore_cluster" "$hyperdisk_enabled"
+    restore_component "$namespace" "$component" "$migration_id" "$component_run_id" "$restore_cluster"
   done
 
   _info " ** Waiting for all restore operations to finish ** "

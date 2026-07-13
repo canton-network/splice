@@ -7,7 +7,7 @@ import { fluxConfig } from '../config';
 import { namespace } from '../namespace';
 import { flux } from './flux';
 
-if (clusterProdLike) {
+if (clusterProdLike && fluxConfig.alertSlackChannel) {
   const slackToken = new k8s.core.v1.Secret('slack', {
     metadata: {
       name: 'slack',
