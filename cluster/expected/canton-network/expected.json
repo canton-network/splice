@@ -1144,22 +1144,45 @@
   {
     "custom": true,
     "id": "",
-    "inputs": {},
-    "name": "mock-sv-1-bulk-hmac",
+    "inputs": {
+      "bucket": "mock-sv-1-bulk-committed",
+      "member": "serviceAccount:undefined",
+      "role": "roles/storage.objectCreator"
+    },
+    "name": "mock-sv-1-bulk-committed-sa-role-creator",
     "provider": "",
-    "type": "gcp:storage/hmacKey:HmacKey"
+    "type": "gcp:storage/bucketIAMMember:BucketIAMMember"
   },
   {
     "custom": true,
     "id": "",
     "inputs": {
-      "bucket": "mock-sv-1-bulk",
+      "bucket": "mock-sv-1-bulk-committed",
       "member": "serviceAccount:undefined",
-      "role": "roles/storage.objectUser"
+      "role": "roles/storage.objectViewer"
     },
-    "name": "mock-sv-1-bulk-sa-role",
+    "name": "mock-sv-1-bulk-committed-sa-role-reader",
     "provider": "",
     "type": "gcp:storage/bucketIAMMember:BucketIAMMember"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "location": "europe-west6",
+      "name": "mock-sv-1-bulk-committed"
+    },
+    "name": "mock-sv-1-bulk-committed",
+    "provider": "",
+    "type": "gcp:storage/bucket:Bucket"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {},
+    "name": "mock-sv-1-bulk-sa-hmac",
+    "provider": "",
+    "type": "gcp:storage/hmacKey:HmacKey"
   },
   {
     "custom": true,
@@ -1176,10 +1199,57 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "location": "europe-west6",
-      "name": "mock-sv-1-bulk"
+      "bucket": "mock-sv-1-bulk-staging",
+      "member": "serviceAccount:undefined",
+      "role": "roles/storage.objectUser"
     },
-    "name": "mock-sv-1-bulk",
+    "name": "mock-sv-1-bulk-staging-sa-role",
+    "provider": "",
+    "type": "gcp:storage/bucketIAMMember:BucketIAMMember"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "location": "europe-west6",
+      "name": "mock-sv-1-bulk-staging"
+    },
+    "name": "mock-sv-1-bulk-staging",
+    "provider": "",
+    "type": "gcp:storage/bucket:Bucket"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "bucket": "mock-sv-da-1-bulk-committed",
+      "member": "serviceAccount:undefined",
+      "role": "roles/storage.objectCreator"
+    },
+    "name": "mock-sv-da-1-bulk-committed-sa-role-creator",
+    "provider": "",
+    "type": "gcp:storage/bucketIAMMember:BucketIAMMember"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "bucket": "mock-sv-da-1-bulk-committed",
+      "member": "serviceAccount:undefined",
+      "role": "roles/storage.objectViewer"
+    },
+    "name": "mock-sv-da-1-bulk-committed-sa-role-reader",
+    "provider": "",
+    "type": "gcp:storage/bucketIAMMember:BucketIAMMember"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "location": "europe-west6",
+      "name": "mock-sv-da-1-bulk-committed"
+    },
+    "name": "mock-sv-da-1-bulk-committed",
     "provider": "",
     "type": "gcp:storage/bucket:Bucket"
   },
@@ -1187,21 +1257,9 @@
     "custom": true,
     "id": "",
     "inputs": {},
-    "name": "mock-sv-da-1-bulk-hmac",
+    "name": "mock-sv-da-1-bulk-sa-hmac",
     "provider": "",
     "type": "gcp:storage/hmacKey:HmacKey"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "bucket": "mock-sv-da-1-bulk",
-      "member": "serviceAccount:undefined",
-      "role": "roles/storage.objectUser"
-    },
-    "name": "mock-sv-da-1-bulk-sa-role",
-    "provider": "",
-    "type": "gcp:storage/bucketIAMMember:BucketIAMMember"
   },
   {
     "custom": true,
@@ -1218,10 +1276,22 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "location": "europe-west6",
-      "name": "mock-sv-da-1-bulk"
+      "bucket": "mock-sv-da-1-bulk-staging",
+      "member": "serviceAccount:undefined",
+      "role": "roles/storage.objectUser"
     },
-    "name": "mock-sv-da-1-bulk",
+    "name": "mock-sv-da-1-bulk-staging-sa-role",
+    "provider": "",
+    "type": "gcp:storage/bucketIAMMember:BucketIAMMember"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "location": "europe-west6",
+      "name": "mock-sv-da-1-bulk-staging"
+    },
+    "name": "mock-sv-da-1-bulk-staging",
     "provider": "",
     "type": "gcp:storage/bucket:Bucket"
   },
@@ -2800,8 +2870,14 @@
         },
         "apiRequestLogLevel": "DEBUG",
         "bulkStorage": {
-          "s3": {
-            "bucketName": "mock-sv-1-bulk",
+          "committed": {
+            "bucketName": "mock-sv-1-bulk-committed",
+            "endpoint": "https://storage.googleapis.com",
+            "region": "europe-west6",
+            "secretName": "splice-app-bulk-storage-credentials"
+          },
+          "staging": {
+            "bucketName": "mock-sv-1-bulk-staging",
             "endpoint": "https://storage.googleapis.com",
             "region": "europe-west6",
             "secretName": "splice-app-bulk-storage-credentials"
@@ -3918,8 +3994,14 @@
         },
         "apiRequestLogLevel": "DEBUG",
         "bulkStorage": {
-          "s3": {
-            "bucketName": "mock-sv-da-1-bulk",
+          "committed": {
+            "bucketName": "mock-sv-da-1-bulk-committed",
+            "endpoint": "https://storage.googleapis.com",
+            "region": "europe-west6",
+            "secretName": "splice-app-bulk-storage-credentials"
+          },
+          "staging": {
+            "bucketName": "mock-sv-da-1-bulk-staging",
             "endpoint": "https://storage.googleapis.com",
             "region": "europe-west6",
             "secretName": "splice-app-bulk-storage-credentials"
