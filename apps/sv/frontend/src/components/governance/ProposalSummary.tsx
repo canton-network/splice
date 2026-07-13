@@ -31,6 +31,7 @@ type ProposalSummaryProps = BaseProposalSummaryProps &
     | {
         formType: 'grant-right';
         grantRight: string;
+        activityWeight: string;
       }
     | {
         formType: 'revoke-right';
@@ -105,7 +106,14 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
         )}
 
         {formType === 'grant-right' && (
-          <ProposalField id="grantRight" title="Provider Party ID" value={props.grantRight} />
+          <>
+            <ProposalField id="grantRight" title="Provider Party ID" value={props.grantRight} />
+            <ProposalField
+              id="grantRightActivityWeight"
+              title="Activity Weight"
+              value={props.activityWeight}
+            />
+          </>
         )}
 
         {formType === 'revoke-right' && (
