@@ -69,6 +69,7 @@ trait PackageVersionSupport extends NamedLogging {
     )
   }
 
+  // TODO(#6388): remove redundant version check
   def supportsConvertFeaturedAppActivityMarkerObservers(
       parties: Seq[PartyId],
       now: CantonTimestamp,
@@ -82,6 +83,7 @@ trait PackageVersionSupport extends NamedLogging {
       ignoreRedundantCheck = true,
     )
 
+  // TODO(#6388): remove redundant version check
   def supports24hSubmissionDelay(
       amuletParties: Seq[PartyId],
       dsoGovernanceParties: Seq[PartyId],
@@ -136,6 +138,7 @@ trait PackageVersionSupport extends NamedLogging {
       tc: TraceContext
   ): Future[FeatureSupport] = supports24hSubmissionDelay(amuletParties, dsoGovernanceParties, now)
 
+  // TODO(#6388): remove redundant version check
   def supports24hSubmissionDelayDsoGovernance(parties: Seq[PartyId], now: CantonTimestamp)(implicit
       tc: TraceContext
   ): Future[FeatureSupport] = {
@@ -149,6 +152,7 @@ trait PackageVersionSupport extends NamedLogging {
     )
   }
 
+  // TODO(#6388): remove redundant version check
   // TODO(#564) - ensure the right version is used
   def supportsPhysicalSynchronizers(parties: Seq[PartyId], now: CantonTimestamp)(implicit
       tc: TraceContext
@@ -163,6 +167,7 @@ trait PackageVersionSupport extends NamedLogging {
     )
   }
 
+  // TODO(#6388): remove redundant version check
   def supportsTrafficBasedAppRewards(parties: Seq[PartyId], now: CantonTimestamp)(implicit
       tc: TraceContext
   ): Future[FeatureSupport] =
@@ -175,6 +180,7 @@ trait PackageVersionSupport extends NamedLogging {
       ignoreRedundantCheck = true,
     )
 
+  // TODO(#6388): remove redundant version check
   def supportsMintingDelegation(parties: Seq[PartyId], now: CantonTimestamp)(implicit
       tc: TraceContext
   ): Future[FeatureSupport] =
