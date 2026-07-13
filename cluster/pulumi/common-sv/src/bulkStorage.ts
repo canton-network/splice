@@ -47,7 +47,10 @@ export function installScanBulkStorage(
     { dependsOn: [bucketServiceAccount] }
   );
 
-  const staging = new gcp.storage.Bucket(stagingBucketName, { name: stagingBucketName, location: GcpRegion });
+  const staging = new gcp.storage.Bucket(stagingBucketName, {
+    name: stagingBucketName,
+    location: GcpRegion,
+  });
   new gcp.storage.BucketIAMMember(
     `${stagingBucketName}-sa-role`,
     {
@@ -55,8 +58,12 @@ export function installScanBulkStorage(
       role: 'roles/storage.objectUser',
       member: pulumi.interpolate`serviceAccount:${bucketServiceAccount.email}`,
     },
-    { dependsOn: [staging, bucketServiceAccount] });
-  const committed = new gcp.storage.Bucket(committedBucketName, { name: committedBucketName, location: GcpRegion });
+    { dependsOn: [staging, bucketServiceAccount] }
+  );
+  const committed = new gcp.storage.Bucket(committedBucketName, {
+    name: committedBucketName,
+    location: GcpRegion,
+  });
   new gcp.storage.BucketIAMMember(
     `${committedBucketName}-sa-role-creator`,
     {

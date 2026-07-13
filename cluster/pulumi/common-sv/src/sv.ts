@@ -220,7 +220,16 @@ export async function installSvNode(
         ? svCometBftGovernanceKeySecret(xns, config.cometBftGovernanceKey)
         : []
     )
-    .concat(bulkStorageBuckets ? [bulkStorageBuckets.staging.secret, bulkStorageBuckets.staging.bucket, bulkStorageBuckets.committed.secret, bulkStorageBuckets.committed.bucket] : [])
+    .concat(
+      bulkStorageBuckets
+        ? [
+            bulkStorageBuckets.staging.secret,
+            bulkStorageBuckets.staging.bucket,
+            bulkStorageBuckets.committed.secret,
+            bulkStorageBuckets.committed.bucket,
+          ]
+        : []
+    )
     .concat(extraDependsOn);
 
   const defaultPostgres = config.splitPostgresInstances
@@ -603,18 +612,18 @@ function installScan(
     ...(config.bulkStorageBuckets
       ? {
           bulkStorage: {
-          staging: {
-            region: config.bulkStorageBuckets.staging.region,
-            bucketName: config.bulkStorageBuckets.staging.bucket.name,
+            staging: {
+              region: config.bulkStorageBuckets.staging.region,
+              bucketName: config.bulkStorageBuckets.staging.bucket.name,
               endpoint: 'https://storage.googleapis.com', // gcs endpoint for s3
               secretName: config.bulkStorageBuckets.staging.secret.metadata.name,
             },
-          committed: {
-            region: config.bulkStorageBuckets.committed.region,
-            bucketName: config.bulkStorageBuckets.committed.bucket.name,
-            endpoint: 'https://storage.googleapis.com', // gcs endpoint for s3
-            secretName: config.bulkStorageBuckets.committed.secret.metadata.name,
-          }
+            committed: {
+              region: config.bulkStorageBuckets.committed.region,
+              bucketName: config.bulkStorageBuckets.committed.bucket.name,
+              endpoint: 'https://storage.googleapis.com', // gcs endpoint for s3
+              secretName: config.bulkStorageBuckets.committed.secret.metadata.name,
+            },
           },
         }
       : {}),
