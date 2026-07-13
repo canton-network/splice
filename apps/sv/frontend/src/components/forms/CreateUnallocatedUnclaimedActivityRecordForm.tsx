@@ -107,7 +107,12 @@ export const CreateUnallocatedUnclaimedActivityRecordForm: React.FC = _ => {
 
   return (
     <>
-      <FormLayout form={form} id="create-unallocated-unclaimed-activity-record-form">
+      <FormLayout
+        form={form}
+        id="create-unallocated-unclaimed-activity-record-form"
+        actionName={form.state.values.action}
+        isReviewStep={showConfirmation}
+      >
         {showConfirmation ? (
           <ProposalSummary
             actionName={form.state.values.action}

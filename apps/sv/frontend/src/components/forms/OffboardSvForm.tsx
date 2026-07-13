@@ -97,7 +97,12 @@ export const OffboardSvForm: React.FC = _ => {
 
   return (
     <>
-      <FormLayout form={form} id="offboard-sv-form">
+      <FormLayout
+        form={form}
+        id="offboard-sv-form"
+        actionName={form.state.values.action}
+        isReviewStep={showConfirmation}
+      >
         {showConfirmation ? (
           <ProposalSummary
             actionName={form.state.values.action}

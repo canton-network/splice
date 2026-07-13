@@ -13,7 +13,7 @@ import dayjs from 'dayjs';
 import { GrantRevokeFeaturedAppForm } from '../../../components/forms/GrantRevokeFeaturedAppForm';
 import { server, svUrl } from '../../setup/setup';
 import { http, HttpResponse } from 'msw';
-import { PROPOSAL_SUMMARY_SUBTITLE, PROPOSAL_SUMMARY_TITLE } from '../../../utils/constants';
+import { PROPOSAL_REVIEW_TITLE, PROPOSAL_SUMMARY_SUBTITLE } from '../../../utils/constants';
 
 describe('SV user can', () => {
   test('login and see the SV party ID', async () => {
@@ -212,7 +212,7 @@ describe('Grant Featured App Form', () => {
 
     await user.click(submitButton);
 
-    expect(screen.getByText(PROPOSAL_SUMMARY_TITLE)).toBeInTheDocument();
+    expect(screen.getByText(PROPOSAL_REVIEW_TITLE)).toBeInTheDocument();
   });
 
   test('activity weight is optional and is sent to backend as null when left blank', async () => {
@@ -544,7 +544,7 @@ describe('Revoke Featured App Form', () => {
 
     await user.click(submitButton);
 
-    expect(screen.getByText(PROPOSAL_SUMMARY_TITLE)).toBeInTheDocument();
+    expect(screen.getByText(PROPOSAL_REVIEW_TITLE)).toBeInTheDocument();
     expect(screen.getByTestId('revokeProviderPartyId-title').textContent).toBe('Provider Party ID');
     expect(screen.getByTestId('revokeProviderPartyId-field').textContent).toBe(
       'a-party-id::1014912492'

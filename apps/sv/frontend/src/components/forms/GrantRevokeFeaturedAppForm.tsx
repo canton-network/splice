@@ -185,7 +185,12 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
 
   return (
     <>
-      <FormLayout form={form} id={`${testIdPrefix}-form`}>
+      <FormLayout
+        form={form}
+        id={`${testIdPrefix}-form`}
+        actionName={form.state.values.action}
+        isReviewStep={showConfirmation}
+      >
         {showConfirmation ? (
           <ProposalSummary
             actionName={form.state.values.action}

@@ -29,22 +29,22 @@ describe('Review Proposal Component', () => {
       />
     );
 
-    expect(screen.getByTestId('action-title').textContent).toBe('Action');
+    expect(screen.getByTestId('action-title').textContent).toBe('Proposal Type');
     expect(screen.getByTestId('action-field').textContent).toBe(actionName);
 
     expect(screen.getByTestId('url-title').textContent).toBe('Supporting URL');
     expect(screen.getByTestId('url-field').textContent).toBe(url);
 
-    expect(screen.getByTestId('summary-title').textContent).toBe('Summary');
+    expect(screen.getByTestId('summary-title').textContent).toBe('Proposal Summary');
     expect(screen.getByTestId('summary-field').textContent).toBe(summary);
 
     expect(screen.getByTestId('expiryDate-title').textContent).toBe('Quorum Threshold Deadline');
     expect(screen.getByTestId('expiryDate-field').textContent).toBe(expiryDate);
 
-    expect(screen.getByTestId('effectiveDate-title').textContent).toBe('Effective Date');
+    expect(screen.getByTestId('effectiveDate-title').textContent).toBe('Effective At');
     expect(screen.getByTestId('effectiveDate-field').textContent).toBe(effectiveDate);
 
-    expect(screen.getByTestId('offboardMember-title').textContent).toBe('Offboard Member');
+    expect(screen.getByTestId('offboardMember-title').textContent).toBe('Member');
     expect(screen.getByTestId('offboardMember-field').textContent).toBe(offboardMember);
   });
 
@@ -66,7 +66,7 @@ describe('Review Proposal Component', () => {
       />
     );
 
-    expect(screen.getByTestId('effectiveDate-title').textContent).toBe('Effective Date');
+    expect(screen.getByTestId('effectiveDate-title').textContent).toBe('Effective At');
     expect(screen.getByTestId('effectiveDate-field').textContent).toBe('Threshold');
   });
 
@@ -93,19 +93,19 @@ describe('Review Proposal Component', () => {
       />
     );
 
-    expect(screen.getByTestId('action-title').textContent).toBe('Action');
+    expect(screen.getByTestId('action-title').textContent).toBe('Proposal Type');
     expect(screen.getByTestId('action-field').textContent).toBe(actionName);
 
     expect(screen.getByTestId('url-title').textContent).toBe('Supporting URL');
     expect(screen.getByTestId('url-field').textContent).toBe(url);
 
-    expect(screen.getByTestId('summary-title').textContent).toBe('Summary');
+    expect(screen.getByTestId('summary-title').textContent).toBe('Proposal Summary');
     expect(screen.getByTestId('summary-field').textContent).toBe(summary);
 
     expect(screen.getByTestId('expiryDate-title').textContent).toBe('Quorum Threshold Deadline');
     expect(screen.getByTestId('expiryDate-field').textContent).toBe(expiryDate);
 
-    expect(screen.getByTestId('effectiveDate-title').textContent).toBe('Effective Date');
+    expect(screen.getByTestId('effectiveDate-title').textContent).toBe('Effective At');
     expect(screen.getByTestId('effectiveDate-field').textContent).toBe(effectiveDate);
 
     expect(screen.getByTestId('config-change-field-label').textContent).toBe(title);
@@ -133,19 +133,19 @@ describe('Review Proposal Component', () => {
       />
     );
 
-    expect(screen.getByTestId('action-title').textContent).toBe('Action');
+    expect(screen.getByTestId('action-title').textContent).toBe('Proposal Type');
     expect(screen.getByTestId('action-field').textContent).toBe(actionName);
 
     expect(screen.getByTestId('url-title').textContent).toBe('Supporting URL');
     expect(screen.getByTestId('url-field').textContent).toBe(url);
 
-    expect(screen.getByTestId('summary-title').textContent).toBe('Summary');
+    expect(screen.getByTestId('summary-title').textContent).toBe('Proposal Summary');
     expect(screen.getByTestId('summary-field').textContent).toBe(summary);
 
     expect(screen.getByTestId('expiryDate-title').textContent).toBe('Quorum Threshold Deadline');
     expect(screen.getByTestId('expiryDate-field').textContent).toBe(expiryDate);
 
-    expect(screen.getByTestId('effectiveDate-title').textContent).toBe('Effective Date');
+    expect(screen.getByTestId('effectiveDate-title').textContent).toBe('Effective At');
     expect(screen.getByTestId('effectiveDate-field').textContent).toBe(effectiveDate);
 
     expect(screen.getByTestId('grantRight-title').textContent).toBe('Provider Party ID');
@@ -177,19 +177,19 @@ describe('Review Proposal Component', () => {
       />
     );
 
-    expect(screen.getByTestId('action-title').textContent).toBe('Action');
+    expect(screen.getByTestId('action-title').textContent).toBe('Proposal Type');
     expect(screen.getByTestId('action-field').textContent).toBe(actionName);
 
     expect(screen.getByTestId('url-title').textContent).toBe('Supporting URL');
     expect(screen.getByTestId('url-field').textContent).toBe(url);
 
-    expect(screen.getByTestId('summary-title').textContent).toBe('Summary');
+    expect(screen.getByTestId('summary-title').textContent).toBe('Proposal Summary');
     expect(screen.getByTestId('summary-field').textContent).toBe(summary);
 
     expect(screen.getByTestId('expiryDate-title').textContent).toBe('Quorum Threshold Deadline');
     expect(screen.getByTestId('expiryDate-field').textContent).toBe(expiryDate);
 
-    expect(screen.getByTestId('effectiveDate-title').textContent).toBe('Effective Date');
+    expect(screen.getByTestId('effectiveDate-title').textContent).toBe('Effective At');
     expect(screen.getByTestId('effectiveDate-field').textContent).toBe(effectiveDate);
 
     expect(screen.getByTestId('revokeProviderPartyId-title').textContent).toBe('Provider Party ID');
@@ -288,22 +288,22 @@ describe('Review Proposal Component', () => {
       />
     );
 
-    expect(screen.getByTestId('action-title').textContent).toBe('Action');
+    expect(screen.getByTestId('action-title').textContent).toBe('Proposal Type');
     expect(screen.getByTestId('action-field').textContent).toBe(actionName);
 
     expect(screen.getByTestId('url-title').textContent).toBe('Supporting URL');
     expect(screen.getByTestId('url-field').textContent).toBe(url);
 
-    expect(screen.getByTestId('summary-title').textContent).toBe('Summary');
+    expect(screen.getByTestId('summary-title').textContent).toBe('Proposal Summary');
     expect(screen.getByTestId('summary-field').textContent).toBe(summary);
 
     expect(screen.getByTestId('expiryDate-title').textContent).toBe('Quorum Threshold Deadline');
     expect(screen.getByTestId('expiryDate-field').textContent).toBe(expiryDate);
 
-    expect(screen.getByTestId('effectiveDate-title').textContent).toBe('Effective Date');
+    expect(screen.getByTestId('effectiveDate-title').textContent).toBe('Effective At');
     expect(screen.getByTestId('effectiveDate-field').textContent).toBe(effectiveDate);
 
-    expect(screen.getByText('Proposed Changes')).toBeDefined();
+    expect(screen.getByText('Proposed Configuration Changes')).toBeDefined();
     expect(screen.getByText(numThresholdTitle)).toBeDefined();
     expect(screen.getByText(voteCooldownTitle)).toBeDefined();
 
@@ -360,22 +360,22 @@ describe('Review Proposal Component', () => {
       />
     );
 
-    expect(screen.getByTestId('action-title').textContent).toBe('Action');
+    expect(screen.getByTestId('action-title').textContent).toBe('Proposal Type');
     expect(screen.getByTestId('action-field').textContent).toBe(actionName);
 
     expect(screen.getByTestId('url-title').textContent).toBe('Supporting URL');
     expect(screen.getByTestId('url-field').textContent).toBe(url);
 
-    expect(screen.getByTestId('summary-title').textContent).toBe('Summary');
+    expect(screen.getByTestId('summary-title').textContent).toBe('Proposal Summary');
     expect(screen.getByTestId('summary-field').textContent).toBe(summary);
 
     expect(screen.getByTestId('expiryDate-title').textContent).toBe('Quorum Threshold Deadline');
     expect(screen.getByTestId('expiryDate-field').textContent).toBe(expiryDate);
 
-    expect(screen.getByTestId('effectiveDate-title').textContent).toBe('Effective Date');
+    expect(screen.getByTestId('effectiveDate-title').textContent).toBe('Effective At');
     expect(screen.getByTestId('effectiveDate-field').textContent).toBe(effectiveDate);
 
-    expect(screen.getByText('Proposed Changes')).toBeDefined();
+    expect(screen.getByText('Proposed Configuration Changes')).toBeDefined();
     expect(screen.getByText(feeTitle)).toBeDefined();
     expect(screen.getByText(feeRateTitle)).toBeDefined();
 

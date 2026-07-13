@@ -193,7 +193,12 @@ export const SetAmuletConfigRulesForm: () => JSX.Element = () => {
   );
 
   return (
-    <FormLayout form={form} id="set-amulet-config-rules-form">
+    <FormLayout
+      form={form}
+      id="set-amulet-config-rules-form"
+      actionName={form.state.values.common.action}
+      isReviewStep={showConfirmation}
+    >
       {showConfirmation ? (
         <ProposalSummary
           actionName={form.state.values.common.action}

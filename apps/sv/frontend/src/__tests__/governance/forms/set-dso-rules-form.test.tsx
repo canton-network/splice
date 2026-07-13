@@ -267,7 +267,7 @@ describe('Set DSO Config Rules Form', () => {
 
     await user.click(submitButton);
 
-    expect(screen.getByText('Proposal Summary')).toBeInTheDocument();
+    expect(screen.getByText('Proposal Review')).toBeInTheDocument();
     expect(screen.queryByText('JSON')).not.toBeInTheDocument();
     expect(screen.getByTestId('json-diff-toggle')).toHaveTextContent('Show JSON');
   });

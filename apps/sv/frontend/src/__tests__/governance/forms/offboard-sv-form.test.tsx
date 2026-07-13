@@ -13,7 +13,7 @@ import dayjs from 'dayjs';
 import { OffboardSvForm } from '../../../components/forms/OffboardSvForm';
 import { server, svUrl } from '../../setup/setup';
 import { http, HttpResponse } from 'msw';
-import { PROPOSAL_SUMMARY_SUBTITLE, PROPOSAL_SUMMARY_TITLE } from '../../../utils/constants';
+import { PROPOSAL_REVIEW_TITLE, PROPOSAL_SUMMARY_SUBTITLE } from '../../../utils/constants';
 
 describe('SV user can', () => {
   test('login and see the SV party ID', async () => {
@@ -231,7 +231,7 @@ describe('Offboard SV Form', () => {
 
     await user.click(submitButton);
 
-    expect(screen.getByText(PROPOSAL_SUMMARY_TITLE)).toBeInTheDocument();
+    expect(screen.getByText(PROPOSAL_REVIEW_TITLE)).toBeInTheDocument();
   });
 
   test('should show error on form if submission fails', async () => {

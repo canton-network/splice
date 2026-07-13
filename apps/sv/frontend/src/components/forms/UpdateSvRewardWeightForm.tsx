@@ -117,7 +117,12 @@ export const UpdateSvRewardWeightForm: React.FC = _ => {
 
   return (
     <>
-      <FormLayout form={form} id="update-sv-reward-weight-form">
+      <FormLayout
+        form={form}
+        id="update-sv-reward-weight-form"
+        actionName={form.state.values.action}
+        isReviewStep={showConfirmation}
+      >
         {showConfirmation ? (
           <ProposalSummary
             actionName={form.state.values.action}
