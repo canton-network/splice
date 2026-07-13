@@ -92,6 +92,19 @@ while read -r db; do
   echo "copied: $db"
 done < "$WORK/dbs.txt"
 
+echo "### 4b. Compare table counts per database (source vs target)"
+count_tables() { # count_tables <host> <password> <db>
+  pgpod pg-client "$2" psql -h "$1" -U cnadmin -d "$3" -tA \
+    -c "SELECT count(*) FROM pg_tables WHERE schemaname NOT IN ('pg_catalog','information_schema')" \
+    | grep -vE '^$|^pod '
+}
+while read -r db; do
+  src=$(count_tables "$SOURCE_HOST" "$POSTGRES_PASSWORD" "$db")
+  tgt=$(count_tables "$TARGET_HOST" "$TARGET_PASSWORD" "$db")
+  echo "tables in ${db}: source=${src} target=${tgt}"
+  [ "$src" = "$tgt" ] || { echo "FAIL: table count mismatch in ${db}"; exit 1; }
+done < "$WORK/dbs.txt"
+
 echo "### 5. Point the applications at the target"
 kubectl create secret generic "$SECRET_NAME" \
   --from-literal=postgresPassword="$TARGET_PASSWORD" \
