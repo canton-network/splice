@@ -296,6 +296,11 @@ cluster:
       minNodes: 0
       maxNodes: 1
       zones: '*'
+    additionalInfra:
+    - nodeType: n4-standard-8
+      minNodes: 1
+      maxNodes: 3
+      zones: '*'
 gha:
   githubRepo: "https://github.com/canton-network/splice"
   runnerVersion: "0.5.10"

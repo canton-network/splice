@@ -38,7 +38,7 @@
       "datasource": {
         "uid": "prometheus"
       },
-      "description": "Number of active CalculateRewardsV2 contracts, as seen by the scan app.\n\nOne such contract should be created when a round is closed, and should be archived as soon as SVs finish voting on the root hash of the reward merkle tree.",
+      "description": "Number of active CalculateRewardsV2 contracts, as seen by the sv app.\n\nOne such contract should be created when a round is closed, and should be archived as soon as SVs finish voting on the root hash of the reward merkle tree (usually within a minute).",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -101,106 +101,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
+        "w": 12,
         "x": 0,
-        "y": 1
-      },
-      "id": 32,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "12.4.0",
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "max by (namespace)(splice_scan_reward_computation_calculate_rewards_v2_active_contracts{namespace=~\"$namespace\", dryRun=\"${dryRun:text}\"} != -1)",
-          "legendFormat": "{{namespace}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "CalculateRewardsV2 contracts in scan",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "uid": "prometheus"
-      },
-      "description": "Number of active CalculateRewardsV2 contracts, as seen by the sv app.\n\nOne such contract should be created when a round is closed, and should be archived as soon as SVs finish voting on the root hash of the reward merkle tree.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "showValues": false,
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "#EAB839",
-                "value": 1
-              },
-              {
-                "color": "red",
-                "value": 2
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 8,
         "y": 1
       },
       "id": 33,
@@ -221,20 +123,20 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "max by (namespace)(splice_calculate_rewards_v2_active_contracts{namespace=~\"$namespace\", dryRun=\"${dryRun:text}\"} != -1)",
-          "legendFormat": "{{namespace}}",
+          "expr": "max by (namespace,dryRun)((splice_calculate_rewards_v2_active_contracts{namespace=~\"$namespace\", dryRun=~\"$dryRun\"} != -1))",
+          "legendFormat": "{{namespace}} {{dryRun}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "CalculateRewardsV2 contracts in sv app",
+      "title": "CalculateRewardsV2 contracts",
       "type": "timeseries"
     },
     {
       "datasource": {
         "uid": "prometheus"
       },
-      "description": "Number of active ProcessRewardsV2 contracts, as seen by the sv app.\n\nA few such contract should be created when the SVs finish voting on the root hash of the reward merkle tree, and they should be archived as the SVs create the corresponding minting allowances.",
+      "description": "Number of active ProcessRewardsV2 contracts, as seen by the sv app.\n\nA few such contract should be created when the SVs finish voting on the root hash of the reward merkle tree, and they should be archived as the SVs create the corresponding minting allowances. Within a few minutes, there should be no ProcessRewardsV2 contracts left.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -297,8 +199,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 16,
+        "w": 12,
+        "x": 12,
         "y": 1
       },
       "id": 34,
@@ -319,14 +221,172 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "",
-          "legendFormat": "{{namespace}} scan",
+          "expr": "max by (namespace, dryRun)(splice_process_rewards_v2_active_contracts{namespace=~\"$namespace\", dryRun=\"$dryRun\"} != -1)",
+          "legendFormat": "{{namespace}} {{dryRun}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "ProcessRewardsV2 contracts in sv app",
+      "title": "ProcessRewardsV2 contracts",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "uid": "prometheus"
+      },
+      "description": "Stacked time series for the number of active RewardCouponV2 contracts, as seen by the sv app. Data is averages across all selected SVs, and disaggregated by contract age into 4 hardcoded buckets.\n\nRewardCouponV2 contracts have a TTL of 36h by default, validators may decide to wait a few rounds in order to batch the minting of reward coupons.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 50,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineStyle": {
+              "fill": "solid"
+            },
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 9
+      },
+      "id": 35,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.0",
+      "targets": [
+        {
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "avg by (bucket, ageLowerBound, ageUpperBound)(splice_reward_coupon_v2_active_contracts{namespace=~\"$namespace\"} != -1)",
+          "instant": false,
+          "legendFormat": "{{ageLowerBound}} - {{ageUpperBound}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "RewardCouponV2 contracts, average across all SVs, by contract age",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "uid": "prometheus"
+      },
+      "description": "Leaderboard of parties with hidden reward coupons.\n\nHidden coupons are created when a party is due rewards, but has not vetted the required package. The reward coupons are created without the party as observer in that case. As soon as the party vets the required package, the party is added as observer.\n\nIf you ever see any parties here, tell their validator node to upgrade or fix their package vetting.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 9
+      },
+      "id": 32,
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true
+      },
+      "pluginVersion": "12.4.0",
+      "targets": [
+        {
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "max by (namespace)(splice_scan_reward_computation_reward_coupons_v2_hidden_coupons{namespace=~\"$namespace\"})",
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Parties with hidden coupons",
+      "type": "table"
     },
     {
       "collapsed": false,
@@ -334,7 +394,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 9
+        "y": 17
       },
       "id": 7,
       "panels": [],
@@ -396,8 +456,8 @@
                 "value": 0
               },
               {
-                "color": "red",
-                "value": 30
+                "color": "yellow",
+                "value": 60
               }
             ]
           },
@@ -409,7 +469,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 10
+        "y": 18
       },
       "id": 10,
       "options": {
@@ -508,7 +568,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 10
+        "y": 18
       },
       "id": 20,
       "options": {
@@ -588,7 +648,7 @@
               "mode": "none"
             },
             "thresholdsStyle": {
-              "mode": "off"
+              "mode": "dashed"
             }
           },
           "mappings": [],
@@ -600,8 +660,8 @@
                 "value": 0
               },
               {
-                "color": "red",
-                "value": 80
+                "color": "yellow",
+                "value": 40
               }
             ]
           }
@@ -612,7 +672,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 10
+        "y": 18
       },
       "id": 19,
       "options": {
@@ -636,24 +696,13 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_avg(rate(splice_scan_verdict_ingestion_batch_size{namespace=~\"$namespace\"}[$__rate_interval]))",
+          "expr": "(histogram_sum(sum by(namespace)(rate(splice_scan_verdict_ingestion_batch_size[10m])))\n/\nhistogram_count(sum by(namespace)(rate(splice_scan_verdict_ingestion_batch_size[10m]))))",
           "legendFormat": "{{namespace}} avg",
           "range": true,
           "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "histogram_quantile(0.99, rate(splice_scan_verdict_ingestion_batch_size{namespace=~\"$namespace\"}[$__rate_interval]))",
-          "legendFormat": "{{namespace}} 99th",
-          "range": true,
-          "refId": "B"
         }
       ],
-      "title": "Saturation: verdict batch size",
+      "title": "Saturation: verdict batch size (10min running average)",
       "type": "timeseries"
     },
     {
@@ -662,7 +711,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 18
+        "y": 26
       },
       "id": 13,
       "panels": [],
@@ -736,7 +785,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 19
+        "y": 27
       },
       "id": 24,
       "options": {
@@ -760,14 +809,14 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, rate(splice_trigger_latency_duration_seconds{namespace=~\"$namespace\", trigger_name=\"RewardComputationTrigger\", trigger_type=\"taskbased\"}[$__rate_interval]))",
+          "expr": "histogram_quantile(0.5, rate(splice_trigger_latency_duration_seconds{namespace=~\"$namespace\", trigger_name=\"RewardComputationTrigger\", trigger_type=\"taskbased\"}[$__rate_interval]))",
           "instant": true,
           "legendFormat": "{{namespace}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Latency: trigger task duration",
+      "title": "Latency: median trigger task duration",
       "type": "timeseries"
     },
     {
@@ -835,7 +884,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 19
+        "y": 27
       },
       "id": 14,
       "options": {
@@ -933,7 +982,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 19
+        "y": 27
       },
       "id": 21,
       "options": {
@@ -1020,8 +1069,8 @@
                 "value": 0
               },
               {
-                "color": "red",
-                "value": 30
+                "color": "yellow",
+                "value": 60
               }
             ]
           },
@@ -1033,7 +1082,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 27
+        "y": 35
       },
       "id": 11,
       "options": {
@@ -1080,10 +1129,6 @@
               {
                 "color": "green",
                 "value": 0
-              },
-              {
-                "color": "red",
-                "value": 10000
               }
             ]
           }
@@ -1094,7 +1139,7 @@
         "h": 8,
         "w": 4,
         "x": 8,
-        "y": 27
+        "y": 35
       },
       "id": 22,
       "options": {
@@ -1145,10 +1190,6 @@
               {
                 "color": "green",
                 "value": 0
-              },
-              {
-                "color": "red",
-                "value": 10000
               }
             ]
           }
@@ -1159,7 +1200,7 @@
         "h": 8,
         "w": 4,
         "x": 12,
-        "y": 27
+        "y": 35
       },
       "id": 16,
       "options": {
@@ -1210,10 +1251,6 @@
               {
                 "color": "green",
                 "value": 0
-              },
-              {
-                "color": "red",
-                "value": 1000
               }
             ]
           }
@@ -1224,7 +1261,7 @@
         "h": 8,
         "w": 4,
         "x": 16,
-        "y": 27
+        "y": 35
       },
       "id": 18,
       "options": {
@@ -1275,10 +1312,6 @@
               {
                 "color": "green",
                 "value": 0
-              },
-              {
-                "color": "red",
-                "value": 1000
               }
             ]
           }
@@ -1289,7 +1322,7 @@
         "h": 8,
         "w": 4,
         "x": 20,
-        "y": 27
+        "y": 35
       },
       "id": 17,
       "options": {
@@ -1328,7 +1361,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 35
+        "y": 43
       },
       "id": 3,
       "panels": [],
@@ -1402,7 +1435,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 36
+        "y": 44
       },
       "id": 25,
       "options": {
@@ -1426,14 +1459,14 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, rate(splice_trigger_latency_duration_seconds{namespace=~\"$namespace\", trigger_name=~\"CalculateRewards${dryRun}\", trigger_type=\"taskbased\"}[$__rate_interval]))",
+          "expr": "histogram_quantile(0.5, rate(splice_trigger_latency_duration_seconds{namespace=~\"$namespace\", trigger_name=~\"CalculateRewards.*Trigger\", dryRun=~\"$dryRun\", trigger_type=\"taskbased\"}[$__rate_interval]))",
           "instant": true,
-          "legendFormat": "{{namespace}}",
+          "legendFormat": "{{namespace}} {{dryRun}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Latency: trigger task duration",
+      "title": "Latency: median trigger task duration",
       "type": "timeseries"
     },
     {
@@ -1490,8 +1523,8 @@
                 "value": 0
               },
               {
-                "color": "red",
-                "value": 30
+                "color": "yellow",
+                "value": 60
               }
             ]
           },
@@ -1503,7 +1536,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 36
+        "y": 44
       },
       "id": 12,
       "options": {
@@ -1599,7 +1632,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 36
+        "y": 44
       },
       "id": 4,
       "options": {
@@ -1620,9 +1653,9 @@
         {
           "editorMode": "code",
           "exemplar": false,
-          "expr": "histogram_avg(rate(splice_calculate_rewards_v2_processing_delay_duration_seconds{namespace=~\"$namespace\", dryRun=\"${dryRun:text}\"}[$__rate_interval]))",
+          "expr": "histogram_avg(rate(splice_calculate_rewards_v2_processing_delay_duration_seconds{namespace=~\"$namespace\", dryRun=~\"$dryRun\"}[$__rate_interval]))",
           "instant": true,
-          "legendFormat": "{{namespace}}",
+          "legendFormat": "{{namespace}} {{dryRun}}",
           "range": true,
           "refId": "A"
         }
@@ -1695,7 +1728,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 44
+        "y": 52
       },
       "id": 1,
       "options": {
@@ -1719,8 +1752,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(splice_trigger_completed_total{trigger_name=\"ProcessRewards${dryRun}\",outcome=~\"success|failure\", namespace=~\"$namespace\"}[$__rate_interval])",
-          "legendFormat": "{{namespace}} {{outcome}}",
+          "expr": "rate(splice_trigger_completed_total{trigger_name=~\"ProcessRewardsTrigger.*\", dryRun=\"$dryRun\", outcome=~\"success|failure\", namespace=~\"$namespace\"}[$__rate_interval])",
+          "legendFormat": "{{namespace}} {{dryRun}} {{outcome}}",
           "range": true,
           "refId": "A"
         }
@@ -1793,7 +1826,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 44
+        "y": 52
       },
       "id": 26,
       "options": {
@@ -1818,9 +1851,9 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum by(statusCode, namespace, node_type, trigger_name) (rate(splice_trigger_attempted_total{namespace=~\"$namespace\", trigger_name=\"CalculateRewards${dryRun}\", statusCode!~\"OK\"}[$__rate_interval]))",
+          "expr": "sum by(statusCode, namespace, node_type, trigger_name) (rate(splice_trigger_attempted_total{namespace=~\"$namespace\", trigger_name=~\"CalculateRewards.*Trigger\", dryRun=\"$dryRun\", statusCode!~\"OK\"}[$__rate_interval]))",
           "instant": false,
-          "legendFormat": "{{namespace}} {{statusCode}}",
+          "legendFormat": "{{namespace}} {{dryRun}} {{statusCode}}",
           "range": true,
           "refId": "A"
         }
@@ -1895,7 +1928,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 44
+        "y": 52
       },
       "id": 27,
       "options": {
@@ -1916,9 +1949,9 @@
         {
           "editorMode": "code",
           "exemplar": false,
-          "expr": "rate(splice_calculate_rewards_v2_root_hash_bft_reads{namespace=~\"$namespace\"}[$__rate_interval])",
+          "expr": "rate(splice_calculate_rewards_v2_root_hash_bft_reads{namespace=~\"$namespace\", dryRun=~\"$dryRun\"}[$__rate_interval])",
           "instant": true,
-          "legendFormat": "{{namespace}}",
+          "legendFormat": "{{namespace}} {{dryRun}}",
           "range": true,
           "refId": "A"
         }
@@ -1932,7 +1965,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 52
+        "y": 60
       },
       "id": 5,
       "panels": [],
@@ -2006,7 +2039,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 53
+        "y": 61
       },
       "id": 29,
       "options": {
@@ -2030,14 +2063,14 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, rate(splice_trigger_latency_duration_seconds{namespace=~\"$namespace\", trigger_name=\"ProcessRewards${dryRun}\", trigger_type=\"taskbased\"}[$__rate_interval]))",
+          "expr": "histogram_quantile(0.5, rate(splice_trigger_latency_duration_seconds{namespace=~\"$namespace\", trigger_name=~\"ProcessRewards.*Trigger\", dryRun=~\"$dryRun\", trigger_type=\"taskbased\"}[$__rate_interval]))",
           "instant": true,
-          "legendFormat": "{{namespace}}",
+          "legendFormat": "{{namespace}} {{dryRun}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Latency: trigger task duration",
+      "title": "Latency: median trigger task duration",
       "type": "timeseries"
     },
     {
@@ -2094,8 +2127,8 @@
                 "value": 0
               },
               {
-                "color": "red",
-                "value": 30
+                "color": "yellow",
+                "value": 60
               }
             ]
           },
@@ -2107,7 +2140,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 53
+        "y": 61
       },
       "id": 30,
       "options": {
@@ -2203,7 +2236,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 53
+        "y": 61
       },
       "id": 6,
       "options": {
@@ -2223,7 +2256,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "histogram_avg(rate(splice_process_rewards_v2_processing_delay_duration_seconds{namespace=~\"$namespace\", dryRun=\"${dryRun:text}\"}[$__rate_interval]))",
+          "expr": "histogram_avg(rate(splice_process_rewards_v2_processing_delay_duration_seconds{namespace=~\"$namespace\", dryRun=~\"$dryRun\"}[$__rate_interval]))",
           "legendFormat": "{{namespace}}",
           "range": true,
           "refId": "A"
@@ -2297,7 +2330,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 61
+        "y": 69
       },
       "id": 2,
       "options": {
@@ -2321,8 +2354,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "rate(splice_trigger_completed_total{trigger_name=\"ProcessRewards${dryRun}\",outcome=~\"success|failure\", namespace=~\"$namespace\"}[$__rate_interval])",
-          "legendFormat": "{{namespace}} {{trigger_name}} {{outcome}}",
+          "expr": "rate(splice_trigger_completed_total{trigger_name=~\"ProcessRewards.*Trigger\", dryRun=~\"$dryRun\", outcome=~\"success|failure\", namespace=~\"$namespace\"}[$__rate_interval])",
+          "legendFormat": "{{namespace}} {{dryRun}} {{outcome}}",
           "range": true,
           "refId": "A"
         }
@@ -2335,7 +2368,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Note: this is a delegate based trigger. It is normal that this trigger fails (e.g., with FAILED_PRECONDITION/UNKNOWN_CONTRACT_SYNCHRONIZERS) if multiple SVs attempt to complete a task at the same time.",
+      "description": "Note: this is a delegate based trigger. It is normal that this trigger fails due to contention as multiple SVs attempt to complete the same task at the same time. Example errors:\n\n- FAILED_PRECONDITION: UNKNOWN_CONTRACT_SYNCHRONIZERS: The following contracts have been archived\n- NOT_FOUND: LOCAL_VERDICT_INACTIVE_CONTRACTS: Rejected transaction is referring to inactive contracts\n- ABORTED: LOCAL_VERDICT_LOCKED_CONTRACTS: Rejected transaction is referring to locked contracts",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2396,7 +2429,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 61
+        "y": 69
       },
       "id": 28,
       "options": {
@@ -2421,9 +2454,9 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum by(statusCode, namespace, node_type, trigger_name) (rate(splice_trigger_attempted_total{namespace=~\"$namespace\", trigger_name=\"ProcessRewards${dryRun}\", statusCode!~\"OK\"}[$__rate_interval])) > 0",
+          "expr": "sum by(statusCode, namespace, node_type, trigger_name) (rate(splice_trigger_attempted_total{namespace=~\"$namespace\", trigger_name=~\"ProcessRewards.*Trigger\", dryRun=~\"$dryRun\", statusCode!~\"OK\"}[$__rate_interval])) > 0",
           "instant": false,
-          "legendFormat": "{{namespace}} {{statusCode}}",
+          "legendFormat": "{{namespace}} {{true}} {{statusCode}}",
           "range": true,
           "refId": "A"
         }
@@ -2489,8 +2522,7 @@
                 "value": 80
               }
             ]
-          },
-          "unit": "s"
+          }
         },
         "overrides": []
       },
@@ -2498,7 +2530,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 61
+        "y": 69
       },
       "id": 31,
       "options": {
@@ -2519,9 +2551,9 @@
         {
           "editorMode": "code",
           "exemplar": false,
-          "expr": "rate(splice_process_rewards_v2_batch_bft_reads_total{namespace=~\"$namespace\", dryRun=\"${dryRun:text}\"}[$__rate_interval])",
+          "expr": "rate(splice_process_rewards_v2_batch_bft_reads_total{namespace=~\"$namespace\", dryRun=\"$dryRun\"}[$__rate_interval])",
           "instant": true,
-          "legendFormat": "{{namespace}}",
+          "legendFormat": "{{namespace}} {{dryRun}}",
           "range": true,
           "refId": "A"
         }
@@ -2562,28 +2594,44 @@
         "type": "query"
       },
       {
+        "allowCustomValue": true,
         "current": {
-          "text": "DryRunTrigger",
-          "value": "DryRunTrigger"
+          "text": [
+            "false"
+          ],
+          "value": [
+            "false"
+          ]
         },
-        "includeAll": false,
-        "label": "Dry run",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(splice_calculate_rewards_v2_processing_delay_duration_seconds,dryRun)",
+        "includeAll": true,
+        "multi": true,
         "name": "dryRun",
         "options": [],
-        "query": "true : DryRunTrigger, false : Trigger",
-        "type": "custom",
-        "valuesFormat": "csv"
+        "query": {
+          "qryType": 1,
+          "query": "label_values(splice_calculate_rewards_v2_processing_delay_duration_seconds,dryRun)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "regexApplyTo": "value",
+        "type": "query"
       }
     ]
   },
   "time": {
-    "from": "now-30m",
+    "from": "now-1h",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
   "title": "Traffic-based app rewards (CIP-104)",
   "uid": "cnx7gsn",
-  "version": 28,
+  "version": 41,
   "weekStart": ""
 }

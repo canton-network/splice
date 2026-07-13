@@ -152,7 +152,7 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
           value: {
             dsoAction: {
               tag: 'SRARC_GrantFeaturedAppRight',
-              value: { provider: formValues.idValue },
+              value: { provider: formValues.idValue, activityWeight: null },
             },
           },
         }),

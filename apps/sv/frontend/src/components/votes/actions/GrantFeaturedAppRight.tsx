@@ -30,7 +30,7 @@ const GrantFeaturedAppRight: React.FC<{
       value: {
         dsoAction: {
           tag: 'SRARC_GrantFeaturedAppRight',
-          value: { provider: provider },
+          value: { provider: provider, activityWeight: null },
         },
       },
     });

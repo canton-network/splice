@@ -383,6 +383,7 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
           update = new FeaturedAppRight(
             dsoParty.toProtoPrimitive,
             aliceParty.toProtoPrimitive,
+            java.util.Optional.empty(),
           ).create,
         ),
     )(

@@ -133,6 +133,10 @@ Circuit breaker .* tripped after .* failures.*(Command|Splice)CircuitBreakerTest
 # This is more likely in test code where we run multiple apps against the same database, all trying to create the same index.
 Index .* should be created and is invalid, dropping it
 
+# TODO(#4738) - remove this
+processTaskWithRetry failed with an unknown exception, not retrying.*SqlIndexInitializationTrigger.*PSQLException: ERROR: tuple concurrently updated
+Skipping processing of.*due to unexpected failure.*SqlIndexInitializationTrigger.*PSQLException: ERROR: tuple concurrently updated
+
 # Injected errors in s3Mock
 Simulated S3 error
 

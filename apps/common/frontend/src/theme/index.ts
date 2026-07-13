@@ -27,6 +27,7 @@ declare module '@mui/material/styles' {
   }
 
   interface Palette {
+    neutral: Palette['primary'];
     colors: {
       neutral: Record<string, string>;
       primary: Record<string, string>;
@@ -40,6 +41,7 @@ declare module '@mui/material/styles' {
   }
   // allow configuration using `createTheme`
   interface PaletteOptions {
+    neutral?: PaletteOptions['primary'];
     colors?: {
       neutral?: Record<string, string>;
       primary?: Record<string, string>;
@@ -50,6 +52,12 @@ declare module '@mui/material/styles' {
       devnet: string;
       scratchnet: string;
     };
+  }
+}
+
+declare module '@mui/material/Badge' {
+  interface BadgePropsColorOverrides {
+    neutral: true;
   }
 }
 
@@ -111,6 +119,13 @@ theme = createTheme(theme, {
     tertiary: {
       main: '#875CFF',
     },
+    neutral: theme.palette.augmentColor({
+      color: {
+        main: theme.palette.colors.neutral[25],
+        contrastText: '#E2E2E2',
+      },
+      name: 'neutral',
+    }),
     warning: {
       main: '#FD8575',
     },

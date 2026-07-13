@@ -27,7 +27,7 @@ import {
 import { SupportedActionTag, ProposalListingData } from '../utils/types';
 import { Link as RouterLink } from 'react-router';
 import { InfoOutlined, WarningAmberOutlined } from '@mui/icons-material';
-import { useInfiniteVoteRequestResults } from '../hooks';
+import { useInfiniteVoteRequestResults, useVoteRequestResultsCount } from '../hooks';
 
 function getAction(action: ActionRequiringConfirmation): string {
   switch (action.tag) {
@@ -48,6 +48,7 @@ export const Governance: React.FC = () => {
   const dsoInfosQuery = votesHooks.useDsoInfos();
   const listVoteRequestsQuery = votesHooks.useListDsoRulesVoteRequests();
   const voteResultsInfiniteQuery = useInfiniteVoteRequestResults();
+  const voteResultsCountQuery = useVoteRequestResultsCount();
 
   const voteRequestIds = listVoteRequestsQuery.data
     ? listVoteRequestsQuery.data.map(v => v.payload.trackingCid || v.contractId)
@@ -182,6 +183,7 @@ export const Governance: React.FC = () => {
 
           <ProposalListingSection
             sectionTitle="Inflight Votes"
+            badgeCount={inflightRequests.length}
             data={inflightRequests}
             noDataMessage="No proposals are currently in flight. Proposals you have voted on will appear here while awaiting the voting threshold or deadline."
             uniqueId="inflight-proposals"
@@ -192,6 +194,7 @@ export const Governance: React.FC = () => {
 
           <ProposalListingSection
             sectionTitle="Vote History"
+            badgeCount={voteResultsCountQuery.data}
             data={voteHistory}
             noDataMessage="No data to show. You can see your vote history here after proposals meet their threshold deadline."
             uniqueId="vote-history"
