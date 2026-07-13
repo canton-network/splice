@@ -6,9 +6,7 @@ import {
   mustInstallValidator1,
 } from '@canton-network/splice-pulumi-common-validator/src/validators';
 import { runSvCantonForAllMigrations } from '@canton-network/splice-pulumi-sv-canton/pulumi';
-import {
-  runSvProjectForAllSvs,
-} from '@canton-network/splice-pulumi-sv/pulumi';
+import { runSvProjectForAllSvs } from '@canton-network/splice-pulumi-sv/pulumi';
 
 import { awaitAllOrThrowAllExceptions, Operation, PulumiAbortController, stack } from './pulumi';
 import { upOperation, upStack } from './pulumiOperations';
@@ -60,7 +58,7 @@ async function runAllStacksUp() {
 runAllStacksUp().catch((err: unknown) => {
   console.error(
     `\nPulumi up finished with errors. See the summary above for details.\n` +
-    (err instanceof Error ? err.message : String(err))
+      (err instanceof Error ? err.message : String(err))
   );
   process.exit(1);
 });

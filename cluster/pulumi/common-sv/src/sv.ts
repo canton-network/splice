@@ -32,6 +32,7 @@ import {
   persistentHeapDumpsPvc,
   sanitizedForPostgres,
   spliceInstanceNames,
+  SplicePostgresHelmMigrationConfig,
   svCometBftGovernanceKeySecret,
   SvIdKey,
   svUserIds,
@@ -231,6 +232,7 @@ export async function installSvNode(
         'postgres',
         config.version,
         spliceConfig.pulumiProjectConfig.cloudSql,
+        spliceConfig.pulumiProjectConfig.splicePostgresHelmMigrationConfig,
         false,
         {
           logicalDecoding: !!baseConfig.scanApp?.bigQuery,
@@ -245,6 +247,7 @@ export async function installSvNode(
       `cn-apps-pg`,
       config.version,
       svConfig.appsPg?.cloudSql ?? spliceConfig.pulumiProjectConfig.cloudSql,
+      spliceConfig.pulumiProjectConfig.splicePostgresHelmMigrationConfig,
       true,
       {
         logicalDecoding: !!baseConfig.scanApp?.bigQuery,

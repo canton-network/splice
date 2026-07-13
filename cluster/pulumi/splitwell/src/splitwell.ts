@@ -51,6 +51,7 @@ export async function installSplitwell(
         'splitwell-pg',
         activeVersion,
         spliceConfig.pulumiProjectConfig.cloudSql,
+        spliceConfig.pulumiProjectConfig.splicePostgresHelmMigrationConfig,
         splitPostgresInstances
       );
 
@@ -81,6 +82,7 @@ export async function installSplitwell(
       'sw-pg',
       activeVersion,
       spliceConfig.pulumiProjectConfig.cloudSql,
+      spliceConfig.pulumiProjectConfig.splicePostgresHelmMigrationConfig,
       true
     ));
   const splitwellDbName = 'app_splitwell';
@@ -127,6 +129,7 @@ export async function installSplitwell(
       'validator-pg',
       activeVersion,
       spliceConfig.pulumiProjectConfig.cloudSql,
+      spliceConfig.pulumiProjectConfig.splicePostgresHelmMigrationConfig,
       true
     ));
   const validatorDbName = 'val_splitwell';

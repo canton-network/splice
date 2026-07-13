@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { z } from 'zod';
 
-import { CloudSqlConfigSchema } from './cloudSql';
+import { CloudSqlConfigSchema, SplicePostgresHelmMigrationSchema } from './database';
 import { defaultActiveMigration, SynchronizerMigrationSchema } from './migrationSchema';
 
 // This is a config that's relevant for all (most) pulumi projects. For project-specific configuration,
@@ -13,6 +13,9 @@ const PulumiProjectConfigSchema = z.object({
   hasPublicInfo: z.boolean(),
   interAppsDependencies: z.boolean(),
   cloudSql: CloudSqlConfigSchema,
+  splicePostgresHelmMigrationConfig: SplicePostgresHelmMigrationSchema.default({
+    importDataFromSplicePostgresHelmChart: true,
+  }),
   allowDowngrade: z.boolean(),
   replacePostgresStatefulSetOnChanges: z.boolean().default(false),
 });

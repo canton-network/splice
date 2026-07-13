@@ -7,6 +7,7 @@ import {
   EnvVarConfigSchema,
   K8sResourceSchema,
   spliceConfig,
+  SplicePostgresHelmMigrationSchema,
 } from '@canton-network/splice-pulumi-common';
 import { z } from 'zod';
 
@@ -18,6 +19,9 @@ export const SvMediatorConfigSchema = z
     additionalEnvVars: z.array(EnvVarConfigSchema).default([]),
     additionalJvmOptions: z.string().optional(),
     cloudSql: CloudSqlWithOverrideConfigSchema,
+    splicePostgresHelmMigration: SplicePostgresHelmMigrationSchema.default({
+      importDataFromSplicePostgresHelmChart: true,
+    }),
     resources: K8sResourceSchema,
   })
   .strict();
@@ -27,6 +31,9 @@ export const SvSequencerConfigSchema = z
     additionalEnvVars: z.array(EnvVarConfigSchema).default([]),
     additionalJvmOptions: z.string().optional(),
     cloudSql: CloudSqlWithOverrideConfigSchema,
+    splicePostgresHelmMigration: SplicePostgresHelmMigrationSchema.default({
+      importDataFromSplicePostgresHelmChart: true,
+    }),
     resources: K8sResourceSchema,
   })
   .strict();

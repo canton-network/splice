@@ -8,14 +8,20 @@ import * as _ from 'lodash';
 import { Resource } from '@pulumi/pulumi';
 
 import { CnChartVersion } from './artifacts';
-import { clusterSmallDisk, CloudSqlConfig, config } from './config';
+import {
+  clusterSmallDisk,
+  CloudSqlConfig,
+  config,
+  SplicePostgresHelmMigrationConfig,
+} from './config';
 import { spliceConfig } from './config/config';
 import { GcpProject } from './config/gcpConfig';
 import { hyperdiskSupportConfig } from './config/hyperdiskSupportConfig';
 import {
-    appsAffinityAndTolerations, CnInput,
-    infraAffinityAndTolerations,
-    installSpliceHelmChart,
+  appsAffinityAndTolerations,
+  CnInput,
+  infraAffinityAndTolerations,
+  installSpliceHelmChart,
 } from './helm';
 import { installPostgresPasswordSecret } from './secrets';
 import { standardStorageClassName } from './storage/storageClass';
@@ -496,7 +502,7 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
     version?: CnChartVersion,
     useInfraAffinityAndTolerations: boolean = false,
     importDataFromSplicePostgresHelmChart: boolean = false,
-    dependsOn: CnInput<pulumi.Resource>[] = [],
+    dependsOn: CnInput<pulumi.Resource>[] = []
   ) {
     // Avoiding collisions with the name in LegacyHelmSplicePostgres
     const deployedInstanceName = `${instanceName}-helmless`;
@@ -525,7 +531,7 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
         overrideDbSizeFromValues,
         disableProtection,
         version,
-        useInfraAffinityAndTolerations,
+        useInfraAffinityAndTolerations
       );
 
       migrationSource = {
@@ -554,10 +560,10 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
       : smallDiskSize || '2800Gi';
     const pvcTemplateName = supportsHyperdisk
       ? 'pg-data-hd'
-      : (values?.db?.pvcTemplateName || 'pg-data');
+      : values?.db?.pvcTemplateName || 'pg-data';
     const volumeStorageClass = supportsHyperdisk
       ? standardStorageClassName
-      : (values?.db?.volumeStorageClass || 'standard-rwo');
+      : values?.db?.volumeStorageClass || 'standard-rwo';
     // Plain PVC name in the same namespace (not a PV name and not namespaced as ns/name).
     const existingClaimName: string | undefined = values?.db?.existingClaimName;
     const mainDataVolumeName = existingClaimName ? 'pg-data-existing' : pvcTemplateName;
@@ -759,7 +765,7 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
               restartPolicy: 'Always',
               affinity: affinityAndTolerations.affinity,
               tolerations: affinityAndTolerations.tolerations,
-              ...((existingClaimName || migrationVolumes.length > 0)
+              ...(existingClaimName || migrationVolumes.length > 0
                 ? {
                     volumes: [
                       ...(existingClaimName
@@ -862,6 +868,7 @@ export async function installPostgres(
   alias: string,
   version: CnChartVersion,
   cloudSqlConfig: CloudSqlConfig,
+  splicePostgresHelmMigrationConfig: SplicePostgresHelmMigrationConfig,
   uniqueSecretName = false,
   opts: SplicePostgresInstallOptions = {}
 ): Promise<Postgres> {
@@ -898,6 +905,6 @@ export async function installPostgres(
         o.disableProtection,
         version,
         false,
-        o.importDataFromSplicePostgresHelmChart ?? true
+        splicePostgresHelmMigrationConfig.importDataFromSplicePostgresHelmChart
       );
 }

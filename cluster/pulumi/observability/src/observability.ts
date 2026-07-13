@@ -1199,6 +1199,6 @@ function installPostgres(namespace: ExactNamespace): SplicePostgres {
     true, // disableProtection
     undefined, // chart version
     true, // useInfraAffinityAndTolerations
-      true, // importDataFromSplicePostgresHelmChart
+    true // importDataFromSplicePostgresHelmChart
   );
 }

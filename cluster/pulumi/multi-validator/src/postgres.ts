@@ -46,7 +46,7 @@ export function installPostgres(
     !spliceConfig.pulumiProjectConfig.cloudSql.protected,
     activeVersion,
     false,
-    true, // we want to keep them
-      dependsOn,
+    spliceConfig.pulumiProjectConfig.splicePostgresHelmMigrationConfig,
+    dependsOn
   );
 }

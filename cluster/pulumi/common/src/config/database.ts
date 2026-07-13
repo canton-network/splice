@@ -24,3 +24,8 @@ export const CloudSqlConfigSchema = z.object({
   databaseVersion: z.string().default('POSTGRES_14'),
 });
 export type CloudSqlConfig = z.infer<typeof CloudSqlConfigSchema>;
+
+export const SplicePostgresHelmMigrationSchema = z.object({
+  importDataFromSplicePostgresHelmChart: z.boolean().default(true),
+});
+export type SplicePostgresHelmMigrationConfig = z.infer<typeof SplicePostgresHelmMigrationSchema>;

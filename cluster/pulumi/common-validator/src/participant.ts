@@ -45,6 +45,7 @@ export async function installParticipant(
       `participant-pg`,
       activeVersion,
       spliceConfig.pulumiProjectConfig.cloudSql,
+      spliceConfig.pulumiProjectConfig.splicePostgresHelmMigrationConfig,
       true
     ));
   const participantValues: ChartValues = {

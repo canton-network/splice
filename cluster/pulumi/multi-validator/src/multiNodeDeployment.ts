@@ -152,7 +152,8 @@ export class MultiNodeDeployment extends pulumi.ComponentResource {
                   command: [
                     'bash',
                     '-c',
-                      args.postgres.host.apply((host) =>                     `
+                    args.postgres.host.apply(
+                      host => `
                         function createDb() {
                           local dbname="$1"
 
@@ -170,8 +171,9 @@ export class MultiNodeDeployment extends pulumi.ComponentResource {
                         ${Array.from(
                           { length: numNodesPerInstance },
                           (_, i) => `createDb ${args.postgres.db}_${zeroPad(i, 2)}`
-                      ).join('\n')}
-                      `),
+                        ).join('\n')}
+                      `
+                    ),
                   ],
                 },
               ],

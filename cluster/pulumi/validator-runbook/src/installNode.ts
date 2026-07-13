@@ -176,6 +176,7 @@ async function installValidator(
     true,
     supportsValidatorRunbookReset,
     validatorVersion
+    // importDataFromSplicePostgresHelmChart doesn't matter, let runbooks reset or use CloudSQL
   );
   const participantAddress = (
     await installParticipant(
