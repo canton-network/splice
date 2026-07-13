@@ -521,11 +521,11 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
         xns,
         instanceName,
         passwordSecret,
-        undefined,
-        undefined,
+        values,
+        overrideDbSizeFromValues,
         disableProtection,
         version,
-        false
+        useInfraAffinityAndTolerations,
       );
 
       migrationSource = {
