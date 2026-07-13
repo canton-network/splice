@@ -1,1 +1,3 @@
-!include($SPLICE_ROOT/cluster/configs/shared/scratchnet.yaml) {}
+!include($SPLICE_ROOT/cluster/configs/shared/scratchnet.yaml)
+synchronizerMigration:
+  splitSvDeploymentEnabled: true
