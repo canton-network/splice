@@ -45,9 +45,11 @@ OVERRIDES="{\"metadata\":{\"annotations\":{\"sidecar.istio.io/inject\":\"false\"
 pgpod() { # pgpod <name> <password> <args...>: run a one-off psql/bash pod
   local name=$1 password=$2
   shift 2
+  # </dev/null: an attached pod otherwise consumes the stdin of enclosing
+  # while-read loops and silently drops loop iterations
   kubectl run "$name" --rm -i --restart=Never -n "$NAMESPACE" \
     --image="$PG_CLIENT_IMAGE" --env=PGPASSWORD="$password" \
-    --overrides="$OVERRIDES" -- "$@"
+    --overrides="$OVERRIDES" -- "$@" < /dev/null
 }
 
 echo "### 0. Probe the target (reachability, CREATEDB, connection limit)"
@@ -75,6 +77,7 @@ echo "### 3. Create the databases on the target"
 while read -r db; do
   [ "$db" = "cantonnet" ] && continue
   pgpod pg-client "$TARGET_PASSWORD" psql -h "$TARGET_HOST" -U cnadmin -d cantonnet \
+    -c "DROP DATABASE IF EXISTS \"${db}\" WITH (FORCE)" \
     -c "CREATE DATABASE \"${db}\""
 done < "$WORK/dbs.txt"
 
@@ -87,7 +90,7 @@ while read -r db; do
     --overrides="$OVERRIDES" -- \
     bash -c "PGPASSWORD=\$SOURCE_PGPASSWORD pg_dump -h $SOURCE_HOST -U cnadmin -Fc '${db}' \
       | PGPASSWORD=\$TARGET_PGPASSWORD pg_restore -h $TARGET_HOST -U cnadmin \
-          --no-owner --no-privileges --exit-on-error -d '${db}'" \
+          --no-owner --no-privileges --exit-on-error -d '${db}'" < /dev/null \
     || { echo "FAIL: copy of ${db}"; exit 1; }
   echo "copied: $db"
 done < "$WORK/dbs.txt"
