@@ -286,6 +286,7 @@ export const SetDsoConfigRulesForm: () => JSX.Element = () => {
             }}
             children={_ => (
               <EffectiveDateField
+                title="Effective At"
                 initialEffectiveDate={initialEffectiveDate.format(dateTimeFormatISO)}
                 id="set-dso-config-rules-effective-date"
               />

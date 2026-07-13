@@ -202,6 +202,7 @@ export const UpdateSvRewardWeightForm: React.FC = _ => {
               }}
               children={_ => (
                 <EffectiveDateField
+                  title="Effective At"
                   initialEffectiveDate={initialEffectiveDate.format(dateTimeFormatISO)}
                   id="update-sv-reward-weight-effective-date"
                 />

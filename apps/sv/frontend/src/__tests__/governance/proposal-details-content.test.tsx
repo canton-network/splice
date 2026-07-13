@@ -160,8 +160,8 @@ describe('Proposal Details Content', () => {
       </Wrapper>
     );
 
-    const pageTitle = screen.getByTestId('proposal-details-title');
-    expect(pageTitle.textContent).toMatch(/Proposal Details/);
+    const pageTitle = screen.getByTestId('proposal-details-proposal-details');
+    expect(pageTitle).toBeInTheDocument();
 
     const action = screen.getByTestId('proposal-details-action-value');
     expect(action.textContent).toMatch(/Offboard Member/);

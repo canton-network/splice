@@ -13,3 +13,15 @@ export const CREATE_PROPOSAL_CARD_PADDING_Y = '60px';
 
 /** Read-only review field surface (Figma grey54). */
 export const CREATE_PROPOSAL_FIELD_SURFACE_BG = '#363636';
+
+/** Figma Blue (Primary CTA) — enabled Review/Submit Proposal. */
+export const CREATE_PROPOSAL_PRIMARY_CTA = '#96E4FD';
+
+/** Figma Yellow (Secondary CTA) — Cancel outline and JSON toggle. */
+export const CREATE_PROPOSAL_SECONDARY_CTA = '#F3FF97';
+
+/** Figma disabled primary CTA surface (stone-500). */
+export const CREATE_PROPOSAL_DISABLED_CTA_BG = '#78716C';
+
+/** Figma disabled primary CTA label (neutral 25%). */
+export const CREATE_PROPOSAL_DISABLED_CTA_TEXT = '#404040';

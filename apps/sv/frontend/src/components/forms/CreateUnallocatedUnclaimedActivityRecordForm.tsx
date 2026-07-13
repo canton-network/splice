@@ -205,6 +205,7 @@ export const CreateUnallocatedUnclaimedActivityRecordForm: React.FC = _ => {
               }}
               children={_ => (
                 <EffectiveDateField
+                  title="Effective At"
                   initialEffectiveDate={initialEffectiveDate.format(dateTimeFormatISO)}
                   id="create-unallocated-unclaimed-activity-record-effective-date"
                 />

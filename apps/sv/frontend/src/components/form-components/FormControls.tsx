@@ -3,6 +3,10 @@
 
 import { Box, Button } from '@mui/material';
 import { useState } from 'react';
+import {
+  createProposalCancelButtonSx,
+  createProposalSubmitButtonSx,
+} from '../../constants/formButtonStyles';
 import { useFormContext } from '../../hooks/formContext';
 import { useNavigate } from 'react-router';
 import { CancelProposalDialog } from '../governance/CancelProposalDialog';
@@ -11,18 +15,6 @@ export interface FormControlsProps {
   showConfirmation?: boolean;
   onEdit: () => void;
 }
-
-const pillButtonSx = {
-  height: '39px',
-  px: '16px',
-  py: '10px',
-};
-
-const cancelButtonSx = {
-  ...pillButtonSx,
-  bgcolor: 'transparent',
-  '&:hover': { bgcolor: 'transparent' },
-};
 
 export const FormControls: React.FC<FormControlsProps> = props => {
   const { showConfirmation, onEdit } = props;
@@ -59,11 +51,11 @@ export const FormControls: React.FC<FormControlsProps> = props => {
         data-testid="form-controls"
       >
         <Button
-          variant="outlined"
+          disableElevation
           data-testid="cancel-button"
           onClick={handleCancel}
           type="button"
-          sx={cancelButtonSx}
+          sx={createProposalCancelButtonSx}
         >
           {cancelTitle}
         </Button>
@@ -72,19 +64,12 @@ export const FormControls: React.FC<FormControlsProps> = props => {
           selector={state => [state.canSubmit, state.isSubmitting]}
           children={([canSubmit, isSubmitting]) => (
             <Button
-              variant="pill"
+              disableElevation
               type="submit"
               disabled={!canSubmit || isSubmitting}
               id="submit-button"
               data-testid="submit-button"
-              sx={{
-                ...pillButtonSx,
-                '&:disabled': {
-                  bgcolor: '#78716C',
-                  color: '#363636',
-                  border: 'none',
-                },
-              }}
+              sx={createProposalSubmitButtonSx}
             >
               {isSubmitting ? 'Submitting' : submitTitle}
             </Button>

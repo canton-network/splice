@@ -270,6 +270,7 @@ export const SetAmuletConfigRulesForm: () => JSX.Element = () => {
             }}
             children={_ => (
               <EffectiveDateField
+                title="Effective At"
                 initialEffectiveDate={initialEffectiveDate.format(dateTimeFormatISO)}
                 id="set-amulet-config-rules-effective-date"
               />

@@ -157,6 +157,8 @@ export const OffboardSvForm: React.FC = _ => {
               }}
               children={_ => (
                 <EffectiveDateField
+                  title="Effective At"
+                  description="Select the date and time the proposal will take effect"
                   initialEffectiveDate={initialEffectiveDate.format(dateTimeFormatISO)}
                   id="offboard-sv-effective-date"
                 />

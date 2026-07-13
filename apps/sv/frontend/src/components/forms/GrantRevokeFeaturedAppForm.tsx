@@ -328,6 +328,7 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
               }}
               children={_ => (
                 <EffectiveDateField
+                  title="Effective At"
                   initialEffectiveDate={initialEffectiveDate.format(dateTimeFormatISO)}
                   id={`${testIdPrefix}-effective-date`}
                 />
