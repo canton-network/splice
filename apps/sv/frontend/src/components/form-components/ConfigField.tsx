@@ -88,24 +88,41 @@ export const ConfigField: React.FC<ConfigFieldProps> = props => {
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: `1fr ${CREATE_PROPOSAL_CONFIG_INPUT_WIDTH}`,
+          gridTemplateColumns: `minmax(0, 1fr) ${CREATE_PROPOSAL_CONFIG_INPUT_WIDTH}`,
+          columnGap: 2,
           alignItems: 'start',
           minWidth: 0,
         }}
       >
-        <Box sx={{ minWidth: 0, pr: 2 }}>
+        <Box
+          sx={{
+            minWidth: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '4px',
+            overflow: 'hidden',
+          }}
+        >
           <Typography
             component="p"
             data-testid={`config-label-${configChange.fieldName}`}
-            sx={CREATE_PROPOSAL_FIELD_BODY_SX}
+            sx={{ ...CREATE_PROPOSAL_FIELD_BODY_SX, m: 0, wordBreak: 'break-word' }}
           >
             {configChange.label}
           </Typography>
           <Typography
-            fontFamily="'Source Code Pro', monospace"
-            color="colors.neutral.70"
-            sx={{ mt: 0.5, lineHeight: '22px' }}
+            component="p"
             data-testid={`config-field-name-${configChange.fieldName}`}
+            sx={{
+              fontFamily: "'Source Code Pro', monospace",
+              fontSize: '14px',
+              fontWeight: 400,
+              lineHeight: '22px',
+              color: '#d5d7dd',
+              m: 0,
+              wordBreak: 'break-all',
+              overflowWrap: 'anywhere',
+            }}
           >
             {configChange.fieldName}
           </Typography>
