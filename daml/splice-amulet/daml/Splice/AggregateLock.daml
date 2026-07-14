@@ -16,7 +16,7 @@ isValidAggregateLockedAllocation dso alloc =
   and [ alloc.allocation.admin == dso
       , alloc.allocation.committed
       , null alloc.allocation.transferLegSides
-      , TM.lookup alloc.allocation.meta.values "cip-105/type" == Some "aggregateLock"
+      , TM.lookup "cip-105/type" alloc.allocation.meta.values == Some "aggregateLock"
       , alloc.allocation.expiresAt == Some maxBound
       ]
 
@@ -25,14 +25,17 @@ isValidVestingLockedDestination dso alloc =
   and [ alloc.allocation.admin == dso
       , alloc.allocation.committed
       , null alloc.allocation.transferLegSides
-      , TM.lookup alloc.allocation.meta.values "cip-105/type" == Some "aggregateLock"
+      , TM.lookup "cip-105/type" alloc.allocation.meta.values == Some "aggregateLock"
       , alloc.allocation.expiresAt == Some maxBound
       ]
 
 type ControllerSets = [[Party]]
 
-controllerSetFromMeta : Text -> ControllerSets
-controllerSetFromMeta = map partyFromText . splitOn ";"
+partiesFromText : Text -> Optional [Party]
+partiesFromText = mapA partyFromText . splitOn ","
+
+controllerSetFromMeta : Text -> Optional ControllerSets
+controllerSetFromMeta = mapA partiesFromText . splitOn ";"
 
 data AggregateLocked = AggregateLocked with
   unlockControllerSets : ControllerSets
@@ -72,6 +75,7 @@ template AggregateLock
           if not allowImmediateUnlock then require "Unlock without vesting is only allowed when specifically enabled" else pure ()
           require "Must be a valid governance-locked allocation" $ isValidAggregateLockedAllocation locked
           require "Must be a valid empty vesting unlock allocation" $ isValidVestingLockedDestination withdrawToCid
+          require "Must have amounts reserved within the next settlement iteration" $ isSome locked.allocation.nextIterationFunding
           let
             info = SettlementInfo with
               executors = [ dso ]
@@ -79,6 +83,10 @@ template AggregateLock
               cid = Some self
               meta = emptyMetadata
             transferLegId = "unlock"
+
+          newLockedAmount <- case locked.allocation.nextIterationFunding of
+            Some a -> pure $ a - amount
+            None -> require "Must have amounts reserved within the next settlement iteration" False
 
           exercise factoryCid $ SettlementFactory_SettleBatch with
             settlement = info
@@ -95,7 +103,7 @@ template AggregateLock
               ]
             allocations =
               [ FinalizedAllocation with
-                  allocationCid = locked
+                  allocationCid = lockedCid
                   extraTransferLegSides =
                     [ TransferLegSide with
                       transferLegId
@@ -105,10 +113,9 @@ template AggregateLock
                       instrumentId
                       meta = emptyMetadata
                     ]
-                    -- TODO: what's newLockedAmount
                   nextIterationFunding = Some $ M.singleton instrumentId newLockedAmount
               , FinalizedAllocation with
-                  allocationCid = locked
+                  allocationCid = withdrawToCid
                   extraTransferLegSides =
                     [ TransferLegSide with
                       transferLegId
@@ -118,10 +125,9 @@ template AggregateLock
                       instrumentId
                       meta = emptyMetadata
                     ]
-                    -- TODO: what's newLockedAmount
                   nextIterationFunding = Some $ M.singleton instrumentId newLockedAmount
               ]
-    
+{-
     nonconsuming choice AggregateLock_Substitute : SettlementFactory_SettleBatchResult -- AggregateLock_SubstituteResult
       with
         factoryCid : ContractId SettlementFactory
@@ -134,7 +140,7 @@ template AggregateLock
         controller authorizers
         do
           unlocking <- fetch lockedCid
-          locking <- fetch withdrawToCid
+          withdrawTo <- fetch withdrawToCid
           let ownerParty = fromSomeNote "Account must be basic" $ unlocking.allocation.authorizer.owner
           let aggLockedAmulet = aggLockedAmuletFromMeta unlocking.meta ownerParty
           require "Substitute controller must be one of the options" $ any (\conj -> all (`elem` authorizers) conj) substituteControllerSets
@@ -172,7 +178,7 @@ template AggregateLock
               ]
             allocations =
               [ FinalizedAllocation with
-                  allocationCid = unlocking
+                  allocationCid = unlockingCid
                   extraTransferLegSides =
                     [ TransferLegSide with
                       transferLegId
@@ -185,7 +191,7 @@ template AggregateLock
                     -- TODO: what's newLockedAmount
                   nextIterationFunding = Some $ M.singleton instrumentId newLockedAmount
               , FinalizedAllocation with
-                  allocationCid = unlocking
+                  allocationCid = unlockingCid
                   extraTransferLegSides =
                     [ TransferLegSide with
                       transferLegId
@@ -198,7 +204,7 @@ template AggregateLock
                     -- TODO: what's newLockedAmount
                   nextIterationFunding = Some $ M.singleton instrumentId newLockedAmount
               ]
-
+-}
   {- data AggregateLock_UnlockResult
   = AggregateLock_UnlockResult_Vesting with
       vesting : ContractId VestedAmulet
