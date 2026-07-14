@@ -247,6 +247,10 @@ svs:
       cantonLogLevel: INFO
       apiRequestLogLevel: DEBUG
 infra:
+  ipWhitelisting:
+    extraWhitelistedIngress:
+      - 1.2.3.4/32
+      - 2.3.4.5/32
   extraCustomResources:
     deny-onboard-prepare-endpoint:
       apiVersion: security.istio.io/v1

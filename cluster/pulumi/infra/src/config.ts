@@ -122,10 +122,11 @@ export function loadIPRanges(svsOnly: boolean = false): pulumi.Output<string[]> 
   const configWhitelistedIps = infraConfig.ipWhitelisting?.extraWhitelistedIngress || [];
   const excludedIps = infraConfig.ipWhitelisting?.excludedIps || [];
 
-  return internalWhitelistedIps.apply(whitelists =>
-    whitelists
+  return internalWhitelistedIps.apply(whitelists => {
+    const ips = whitelists
       .concat(externalIpRanges)
       .concat(configWhitelistedIps)
-      .filter(ip => excludedIps.indexOf(ip) < 0)
-  );
+      .filter(ip => excludedIps.indexOf(ip) < 0);
+    return [...new Set(ips)];
+  });
 }
