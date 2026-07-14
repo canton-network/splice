@@ -1,0 +1,63 @@
+name: Publish CF Docs Snippets
+
+on:
+  workflow_dispatch:
+
+  push:
+    branches:
+      - main
+    paths:
+      - docs/src/**
+      - apps/app/src/pack/examples/**
+      - cluster/helm/**
+      - gha-scripts/cf-docs/**
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  publish_cfdocs_snippets:
+    # Requires repository variable ENABLE_SYNC_PROCESS=true (see source-repo-workflow-readme.md).
+    if: vars.ENABLE_SYNC_PROCESS == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Extract snippet data
+        run: node gha-scripts/cf-docs/generateOutputDocs.js
+
+      - name: Store artifact output
+        id: store-artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ github.event.repository.name }}-snippets
+          path: docs-output/
+
+      - name: Prepare additional params
+        id: additional-params
+        run: echo "short_sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Generate snippet writer app token
+        id: writer-token
+        uses: actions/create-github-app-token@3a38478537b0cedb864eaff129aacbe19810c233 # v2.2.1
+        with:
+          app-id: ${{ secrets.CF_DOCS_SNIPPET_WRITER_APP_ID }}
+          private-key: ${{ secrets.CF_DOCS_SNIPPET_WRITER_PRIVATE_KEY }}
+          owner: ${{ vars.MAIN_REPO_ORG }}
+          repositories: ${{ vars.MAIN_REPO_NAME }}
+
+      - name: Update main docs repo
+        uses: passeidireto/trigger-external-workflow-action@main
+        env:
+          PAYLOAD_run-id: ${{ github.run_id }}
+          PAYLOAD_artifact-id: ${{ steps.store-artifact.outputs.artifact-id }}
+          PAYLOAD_repo-name: ${{ github.event.repository.name }}
+          PAYLOAD_repo-org: ${{ github.repository_owner }}
+          PAYLOAD_repo-version: main
+          PAYLOAD_trigger_sha_short: ${{ steps.additional-params.outputs.short_sha }}
+        with:
+          repository: ${{ vars.MAIN_REPO_ORG }}/${{ vars.MAIN_REPO_NAME }}
+          event: update_snippets
+          github_pat: ${{ steps.writer-token.outputs.token }}
