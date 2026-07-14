@@ -19,10 +19,7 @@ export const SvMediatorConfigSchema = z
     additionalEnvVars: z.array(EnvVarConfigSchema).default([]),
     additionalJvmOptions: z.string().optional(),
     cloudSql: CloudSqlWithOverrideConfigSchema,
-    splicePostgresHelmMigration: SplicePostgresHelmMigrationSchema.default({
-      postgresImage: 'postgres:18',
-      importDataFromSplicePostgresHelmChart: true,
-    }),
+    splicePostgresHelmMigration: SplicePostgresHelmMigrationSchema,
     resources: K8sResourceSchema,
   })
   .strict();
@@ -32,10 +29,7 @@ export const SvSequencerConfigSchema = z
     additionalEnvVars: z.array(EnvVarConfigSchema).default([]),
     additionalJvmOptions: z.string().optional(),
     cloudSql: CloudSqlWithOverrideConfigSchema,
-    splicePostgresHelmMigration: SplicePostgresHelmMigrationSchema.default({
-      postgresImage: 'postgres:18',
-      importDataFromSplicePostgresHelmChart: true,
-    }),
+    splicePostgresHelmMigration: SplicePostgresHelmMigrationSchema,
     resources: K8sResourceSchema,
   })
   .strict();

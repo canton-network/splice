@@ -13,10 +13,7 @@ const PulumiProjectConfigSchema = z.object({
   hasPublicInfo: z.boolean(),
   interAppsDependencies: z.boolean(),
   cloudSql: CloudSqlConfigSchema,
-  splicePostgresHelmMigrationConfig: SplicePostgresHelmMigrationSchema.default({
-    postgresImage: 'postgres:18',
-    importDataFromSplicePostgresHelmChart: true,
-  }),
+  splicePostgresHelmMigrationConfig: SplicePostgresHelmMigrationSchema,
   allowDowngrade: z.boolean(),
   replacePostgresStatefulSetOnChanges: z.boolean().default(false),
 });
