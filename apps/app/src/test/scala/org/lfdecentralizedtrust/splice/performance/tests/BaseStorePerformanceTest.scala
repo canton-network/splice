@@ -118,8 +118,8 @@ abstract class BaseStorePerformanceTest(
       }
 
     // Running unforked puts sbt's test jar on the classpath Flyway scans.
-    // So, unlike in forked approach, Flyway finds the jar but can't read it, so it skips it with a WARN.
-    // "Skipping unloadable jar file: ...apps-app_*-tests.jar" WARN.
+    // So, unlike in forked approach, Flyway finds the jar but can't read it.
+    // Flyway skips it with a WARN. "Skipping unloadable jar file: ...apps-app_*-tests.jar" WARN.
     // That log line is handled via an ignore pattern in project/ignore-patterns/canton_network_test_log.ignore.txt
     // Migrations aren't affected — the actual migration files are read from the main resources.
     new DbMigrations(storage.dbConfig, false, timeouts, loggerFactory)
