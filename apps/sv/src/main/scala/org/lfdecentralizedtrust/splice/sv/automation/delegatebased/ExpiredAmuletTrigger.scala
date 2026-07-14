@@ -12,10 +12,13 @@ import org.apache.pekko.stream.Materializer
 
 import scala.concurrent.{ExecutionContext, Future}
 import ExpiredAmuletTrigger.*
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.Amulet
 import org.lfdecentralizedtrust.splice.environment.PackageIdResolver
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 import org.lfdecentralizedtrust.splice.sv.store.IgnoredPartiesStore
+import org.lfdecentralizedtrust.splice.sv.util.ContractStakeholders
+import org.lfdecentralizedtrust.splice.sv.util.ContractStakeholders.amuletStakeholders
 
 import java.util.Optional
 import scala.jdk.CollectionConverters.*
@@ -40,32 +43,32 @@ class ExpiredAmuletTrigger(
       splice.amulet.Amulet.COMPANION,
       svTaskContext.vettingLookupService,
       PackageIdResolver.Package.SpliceAmulet,
-      c => Seq(c.dso, c.owner).map(PartyId.tryFromProtoPrimitive(_)),
+      c => amuletStakeholders(c),
     )
     with SvTaskBasedTrigger[Task]
-    with IgnoredAmuletVersionGuard {
+    with IgnoredAmuletVersionGuard
+    with ContractStakeholders[Amulet] {
   private val store = svTaskContext.dsoStore
 
   override def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = {
-    val informees =
-      task.work.expiredContracts.map(c => PartyId.tryFromProtoPrimitive(c.payload.owner)).toSet
+    val (nonDsoStakeholders, stakeholders) =
+      computeBatchStakeholders(task.work.expiredContracts, store.key.dsoParty)
     completeWithIgnoredAmuletVersionCheck(
       task.work.vettedVersion.toString,
-      informees,
+      nonDsoStakeholders,
       enableUnresponsivePartiesAutoIgnore = true,
-    )(completeExpiryTaskAsDsoDelegate(task, controller, informees))
+    )(completeExpiryTaskAsDsoDelegate(task, controller, stakeholders))
   }
 
   private def completeExpiryTaskAsDsoDelegate(
       task: Task,
       controller: String,
-      informees: Set[PartyId],
+      allParties: Set[PartyId],
   )(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = {
-    val allParties = informees + store.key.dsoParty
     for {
       dsoRules <- store.getDsoRules()
       supports24hSubmissionDelay <- svTaskContext.packageVersionSupport.supports24hSubmissionDelay(
