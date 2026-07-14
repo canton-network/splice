@@ -171,7 +171,7 @@ export class V2TransactionParser {
       decodedPayload = Holding.decoder.runWithException(holdingView.viewValue);
     } catch (err) {
       console.error(
-        `Failed to decode Holding. View: ${holdingView}. Error: ${err}`,
+        `Failed to decode Holding. View: ${JSON.stringify(holdingView)}. Error: ${JSON.stringify(err)}`,
       );
       throw err;
     }
