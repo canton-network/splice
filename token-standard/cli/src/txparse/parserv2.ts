@@ -166,10 +166,16 @@ export class V2TransactionParser {
       return null;
     }
 
-    const result = holdingViewToResult(
-      createdEvent.contractId,
-      Holding.decoder.runWithException(holdingView.viewValue),
-    );
+    let decodedPayload: Holding;
+    try {
+      decodedPayload = Holding.decoder.runWithException(holdingView.viewValue);
+    } catch (err) {
+      console.error(
+        `Failed to decode Holding. View: ${holdingView}. Error: ${err}`,
+      );
+      throw err;
+    }
+    const result = holdingViewToResult(createdEvent.contractId, decodedPayload);
 
     return {
       holding: result,
