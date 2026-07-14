@@ -53,7 +53,7 @@ rateLimits:
     name: registry-transfer-factory
     type: limited
     maxTokens: 500
-    tokensPerFill: 500
+    tokensPerFill: 500 # Higher limit: transfer-factory generates the most registry traffic
     fillInterval: 60s
     perIpLimits:
       maxTokens: 50
