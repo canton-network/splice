@@ -59,7 +59,7 @@ class WalletRewardsTimeBasedIntegrationTest
             // Alice shares 40% with bob; the implicit remainder (60%) goes to alice.
             c.copy(
               rewardSharingConfigByParty = Map(
-                aliceValidatorPartyId.toProtoPrimitive -> RewardSharingConfig(
+                aliceValidatorPartyId.toProtoPrimitive -> RewardSharingConfig.BuiltIn(
                   minTtlAfterSharing = NonNegativeFiniteDuration.ofHours(30),
                   beneficiaries = Seq(
                     AppRewardBeneficiaryConfig(bobValidatorPartyId, BigDecimal(0.4))

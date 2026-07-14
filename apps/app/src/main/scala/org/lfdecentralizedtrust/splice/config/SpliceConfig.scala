@@ -39,7 +39,6 @@ import org.lfdecentralizedtrust.splice.wallet.config.{
   AppRewardBeneficiaryConfig,
   AutoAcceptTransfersConfig,
   RewardSharingConfig,
-  SharingAutomation,
   TransferPreapprovalConfig,
   TreasuryConfig,
   WalletAppClientConfig,
@@ -66,7 +65,7 @@ import com.digitalasset.canton.admin.api.client.data.{
   SubmissionRequestAmplification,
 }
 import com.digitalasset.canton.tracing.TraceContext
-import com.typesafe.config.{Config, ConfigRenderOptions}
+import com.typesafe.config.{Config, ConfigObject, ConfigRenderOptions, ConfigValueFactory}
 import com.typesafe.config.ConfigException.UnresolvedSubstitution
 import org.slf4j.{Logger, LoggerFactory}
 import pureconfig.configurable.{genericMapReader, genericMapWriter}
@@ -696,15 +695,33 @@ object SpliceConfig {
       deriveReader[AutoAcceptTransfersConfig]
     implicit val appRewardBeneficiaryConfigReader: ConfigReader[AppRewardBeneficiaryConfig] =
       deriveReader[AppRewardBeneficiaryConfig]
-    implicit val sharingAutomationReader: ConfigReader[SharingAutomation] =
-      ConfigReader.fromString {
-        case "built-in" => Right(SharingAutomation.BuiltIn)
-        case "external" => Right(SharingAutomation.External)
-        case other =>
-          Left(CannotConvert(other, "SharingAutomation", "expected \"built-in\" or \"external\""))
+    implicit val rewardSharingConfigReader: ConfigReader[RewardSharingConfig] = {
+      val builtInReader = deriveReader[RewardSharingConfig.BuiltIn]
+      // Keyed on an optional "sharing-automation" field (defaults to "built-in") rather than
+      // pureconfig's coproduct discriminator, so operators keep the existing flat config format.
+      ConfigReader.fromCursor { cursor =>
+        cursor.asObjectCursor.flatMap { objCursor =>
+          val automationCursor = objCursor.atKeyOrUndefined("sharing-automation")
+          val automation =
+            if (automationCursor.isUndefined) Right("built-in") else automationCursor.asString
+          automation.flatMap {
+            case "built-in" => builtInReader.from(objCursor)
+            case "external" =>
+              if (objCursor.atKeyOrUndefined("beneficiaries").isUndefined)
+                Right(RewardSharingConfig.External)
+              else
+                objCursor.failed[RewardSharingConfig](new FailureReason {
+                  override def description: String =
+                    "beneficiaries must not be set when sharing-automation is external"
+                })
+            case other =>
+              objCursor.failed[RewardSharingConfig](
+                CannotConvert(other, "SharingAutomation", "expected \"built-in\" or \"external\"")
+              )
+          }
+        }
       }
-    implicit val rewardSharingConfigReader: ConfigReader[RewardSharingConfig] =
-      deriveReader[RewardSharingConfig]
+    }
     implicit val validatorDecentralizedSynchronizerConfigReader
         : ConfigReader[ValidatorDecentralizedSynchronizerConfig] =
       deriveReader[ValidatorDecentralizedSynchronizerConfig].emap(config => {
@@ -834,38 +851,35 @@ object SpliceConfig {
           ) {
             case (Left(err), _) => Left(err)
             case (Right(()), (party, sharingConfig)) =>
-              for {
-                _ <- Either.cond(
-                  sharingConfig.beneficiaries.forall(b =>
-                    b.percentage > 0 && b.percentage <= BigDecimal(1.0)
-                  ),
-                  (),
-                  ConfigValidationFailed(
-                    s"Reward sharing percentages for $party must be in (0.0, 1.0]"
-                  ),
-                )
-                _ <- Either.cond(
-                  sharingConfig.beneficiaries.map(_.percentage).sum <= BigDecimal(1.0),
-                  (),
-                  ConfigValidationFailed(
-                    s"Reward sharing percentages for $party must sum to at most 1.0"
-                  ),
-                )
-                _ <- Either.cond(
-                  sharingConfig.batchSize > 0,
-                  (),
-                  ConfigValidationFailed(
-                    s"Reward sharing batchSize for $party must be positive"
-                  ),
-                )
-                _ <- Either.cond(
-                  !(sharingConfig.isExternal && sharingConfig.beneficiaries.nonEmpty),
-                  (),
-                  ConfigValidationFailed(
-                    s"Reward sharing for $party uses external automation; beneficiaries must not be set"
-                  ),
-                )
-              } yield ()
+              sharingConfig match {
+                case RewardSharingConfig.External => Right(())
+                case builtIn: RewardSharingConfig.BuiltIn =>
+                  for {
+                    _ <- Either.cond(
+                      builtIn.beneficiaries.forall(b =>
+                        b.percentage > 0 && b.percentage <= BigDecimal(1.0)
+                      ),
+                      (),
+                      ConfigValidationFailed(
+                        s"Reward sharing percentages for $party must be in (0.0, 1.0]"
+                      ),
+                    )
+                    _ <- Either.cond(
+                      builtIn.beneficiaries.map(_.percentage).sum <= BigDecimal(1.0),
+                      (),
+                      ConfigValidationFailed(
+                        s"Reward sharing percentages for $party must sum to at most 1.0"
+                      ),
+                    )
+                    _ <- Either.cond(
+                      builtIn.batchSize > 0,
+                      (),
+                      ConfigValidationFailed(
+                        s"Reward sharing batchSize for $party must be positive"
+                      ),
+                    )
+                  } yield ()
+              }
           }
         } yield conf
       }
@@ -1152,13 +1166,21 @@ object SpliceConfig {
       deriveWriter[AutoAcceptTransfersConfig]
     implicit val appRewardBeneficiaryConfigWriter: ConfigWriter[AppRewardBeneficiaryConfig] =
       deriveWriter[AppRewardBeneficiaryConfig]
-    implicit val sharingAutomationWriter: ConfigWriter[SharingAutomation] =
-      ConfigWriter.toString {
-        case SharingAutomation.BuiltIn => "built-in"
-        case SharingAutomation.External => "external"
+    implicit val rewardSharingConfigWriter: ConfigWriter[RewardSharingConfig] = {
+      val builtInWriter = deriveWriter[RewardSharingConfig.BuiltIn]
+      ConfigWriter.fromFunction {
+        case RewardSharingConfig.External =>
+          ConfigValueFactory.fromMap(
+            java.util.Collections.singletonMap("sharing-automation", "external")
+          )
+        case builtIn: RewardSharingConfig.BuiltIn =>
+          builtInWriter.to(builtIn) match {
+            case obj: ConfigObject =>
+              obj.withValue("sharing-automation", ConfigValueFactory.fromAnyRef("built-in"))
+            case other => other
+          }
       }
-    implicit val rewardSharingConfigWriter: ConfigWriter[RewardSharingConfig] =
-      deriveWriter[RewardSharingConfig]
+    }
     implicit val validatorDecentralizedSynchronizerConfigWriter
         : ConfigWriter[ValidatorDecentralizedSynchronizerConfig] =
       deriveWriter[ValidatorDecentralizedSynchronizerConfig]

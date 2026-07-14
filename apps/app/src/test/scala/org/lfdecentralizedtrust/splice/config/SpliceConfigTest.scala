@@ -87,8 +87,8 @@ class SpliceConfigTest extends AsyncWordSpec with BaseTest {
   }
 
   // Shared helper for RewardSharingConfig tests
-  private def mkSharingCfg(percentages: BigDecimal*): RewardSharingConfig =
-    RewardSharingConfig(
+  private def mkSharingCfg(percentages: BigDecimal*): RewardSharingConfig.BuiltIn =
+    RewardSharingConfig.BuiltIn(
       minTtlAfterSharing = NonNegativeFiniteDuration.ofHours(30),
       beneficiaries = percentages.zipWithIndex.map { case (pct, i) =>
         AppRewardBeneficiaryConfig(
@@ -262,7 +262,7 @@ class SpliceConfigTest extends AsyncWordSpec with BaseTest {
       val overwrite = ConfigFactory.parseString(mkHoconConfig(mkBeneficiary("bob", "0.4")))
       val validConfig = CantonConfig.mergeConfigs(config, Seq(overwrite))
       val loaded = SpliceConfig.loadAndValidate(validConfig).value
-      sharingConfigOf(loaded).isExternal shouldBe false
+      sharingConfigOf(loaded) shouldBe a[RewardSharingConfig.BuiltIn]
     }
 
     "accept sharing-automation = external with no beneficiaries" in {
@@ -277,7 +277,7 @@ class SpliceConfigTest extends AsyncWordSpec with BaseTest {
       )
       val validConfig = CantonConfig.mergeConfigs(config, Seq(overwrite))
       val loaded = SpliceConfig.loadAndValidate(validConfig).value
-      sharingConfigOf(loaded).isExternal shouldBe true
+      sharingConfigOf(loaded) shouldBe RewardSharingConfig.External
     }
 
     "accept explicit sharing-automation = built-in with beneficiaries" in {
@@ -294,7 +294,7 @@ class SpliceConfigTest extends AsyncWordSpec with BaseTest {
       )
       val validConfig = CantonConfig.mergeConfigs(config, Seq(overwrite))
       val loaded = SpliceConfig.loadAndValidate(validConfig).value
-      sharingConfigOf(loaded).isExternal shouldBe false
+      sharingConfigOf(loaded) shouldBe a[RewardSharingConfig.BuiltIn]
     }
 
     "reject sharing-automation = external with beneficiaries" in {

@@ -67,7 +67,7 @@ class WalletMintingDelegationTimeBasedIntegrationTest
           if (name == "aliceValidator") {
             c.copy(
               rewardSharingConfigByParty = Map(
-                sharingAppProvider.partyId.toProtoPrimitive -> RewardSharingConfig(
+                sharingAppProvider.partyId.toProtoPrimitive -> RewardSharingConfig.BuiltIn(
                   minTtlAfterSharing = NonNegativeFiniteDuration.ofHours(25),
                   beneficiaries = Seq(
                     AppRewardBeneficiaryConfig(sharingRecipient.partyId, BigDecimal(0.4))

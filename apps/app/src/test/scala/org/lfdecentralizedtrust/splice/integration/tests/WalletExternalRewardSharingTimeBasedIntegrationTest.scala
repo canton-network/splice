@@ -15,7 +15,7 @@ import org.lfdecentralizedtrust.splice.util.{
 }
 import org.lfdecentralizedtrust.splice.validator.automation.ReceiveFaucetCouponTrigger
 import org.lfdecentralizedtrust.splice.wallet.automation.RewardSharingTrigger
-import org.lfdecentralizedtrust.splice.wallet.config.{RewardSharingConfig, SharingAutomation}
+import org.lfdecentralizedtrust.splice.wallet.config.RewardSharingConfig
 
 /** Verifies that a party configured with external reward-sharing automation is
   * left untouched by the validator: the built-in RewardSharingTrigger is not
@@ -49,9 +49,7 @@ class WalletExternalRewardSharingTimeBasedIntegrationTest
             // may be set (external + beneficiaries is a hard config error).
             c.copy(
               rewardSharingConfigByParty = Map(
-                aliceValidatorPartyId.toProtoPrimitive -> RewardSharingConfig(
-                  sharingAutomation = SharingAutomation.External
-                )
+                aliceValidatorPartyId.toProtoPrimitive -> RewardSharingConfig.External
               )
             )
           } else c
