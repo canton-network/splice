@@ -11,7 +11,6 @@ import {
   CLUSTER_NAME,
   clusterProdLike,
   commandScriptPath,
-  createVolumeSnapshot,
   DecentralizedSynchronizerUpgradeConfig,
   ExactNamespace,
   GCP_PROJECT,
@@ -993,7 +992,7 @@ function createGrafanaAlerting(namespace: Input<string>) {
                   'cantonbft_alerts.yaml': readGrafanaAlertingFile(
                     'cantonbft_alerts.yaml'
                   ).replaceAll(
-                    '$BFT_ORDERING_INGRESS_REQUESTS_QUEUED_THRESHOLD',
+                    '$CANTON_BFT_MEMPOOL_SIZE_THRESHOLD',
                     monitoringConfig.alerting.alerts.cantonBft.mempoolMaxSizeThreshold.toString()
                   ),
                 }
