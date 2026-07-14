@@ -560,7 +560,7 @@
                     }
                   }
                 ],
-                "image": "postgres:14",
+                "image": "postgres:18",
                 "name": "pg-init"
               }
             ],
@@ -1008,7 +1008,7 @@
                     }
                   }
                 ],
-                "image": "postgres:14",
+                "image": "postgres:18",
                 "name": "pg-init"
               }
             ],
@@ -1456,7 +1456,7 @@
                     }
                   }
                 ],
-                "image": "postgres:14",
+                "image": "postgres:18",
                 "name": "pg-init"
               }
             ],
@@ -1904,7 +1904,7 @@
                     }
                   }
                 ],
-                "image": "postgres:14",
+                "image": "postgres:18",
                 "name": "pg-init"
               }
             ],
@@ -2352,7 +2352,7 @@
                     }
                   }
                 ],
-                "image": "postgres:14",
+                "image": "postgres:18",
                 "name": "pg-init"
               }
             ],
@@ -2833,7 +2833,7 @@
                     }
                   }
                 ],
-                "image": "postgres:14",
+                "image": "postgres:18",
                 "name": "pg-init"
               }
             ],
@@ -3282,7 +3282,7 @@
                     }
                   }
                 ],
-                "image": "postgres:14",
+                "image": "postgres:18",
                 "name": "pg-init"
               }
             ],
@@ -3731,7 +3731,7 @@
                     }
                   }
                 ],
-                "image": "postgres:14",
+                "image": "postgres:18",
                 "name": "pg-init"
               }
             ],
@@ -4180,7 +4180,7 @@
                     }
                   }
                 ],
-                "image": "postgres:14",
+                "image": "postgres:18",
                 "name": "pg-init"
               }
             ],
@@ -4629,7 +4629,7 @@
                     }
                   }
                 ],
-                "image": "postgres:14",
+                "image": "postgres:18",
                 "name": "pg-init"
               }
             ],
@@ -4907,7 +4907,7 @@
                     }
                   }
                 ],
-                "image": "postgres:14",
+                "image": "postgres:18",
                 "imagePullPolicy": "IfNotPresent",
                 "livenessProbe": {
                   "exec": {
@@ -5003,7 +5003,7 @@
                     }
                   }
                 ],
-                "image": "postgres:14",
+                "image": "postgres:18",
                 "imagePullPolicy": "IfNotPresent",
                 "name": "pg-migrate",
                 "securityContext": {
@@ -5140,12 +5140,22 @@
           "name": "cn-mocknet"
         },
         "db": {
+          "maxConnections": 1000,
           "pvcTemplateName": "pg-data-hd",
+          "volumeSize": "100Gi",
           "volumeStorageClass": "hyperdisk-standard-rwo"
         },
         "imageRepo": "us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker",
         "persistence": {
           "secretName": "postgres-0-secret"
+        },
+        "resources": {
+          "limits": {
+            "memory": "12Gi"
+          },
+          "requests": {
+            "memory": "5Gi"
+          }
         },
         "tolerations": [
           {
@@ -5292,7 +5302,7 @@
                     }
                   }
                 ],
-                "image": "postgres:14",
+                "image": "postgres:18",
                 "imagePullPolicy": "IfNotPresent",
                 "livenessProbe": {
                   "exec": {
@@ -5388,7 +5398,7 @@
                     }
                   }
                 ],
-                "image": "postgres:14",
+                "image": "postgres:18",
                 "imagePullPolicy": "IfNotPresent",
                 "name": "pg-migrate",
                 "securityContext": {
@@ -5525,12 +5535,22 @@
           "name": "cn-mocknet"
         },
         "db": {
+          "maxConnections": 1000,
           "pvcTemplateName": "pg-data-hd",
+          "volumeSize": "100Gi",
           "volumeStorageClass": "hyperdisk-standard-rwo"
         },
         "imageRepo": "us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker",
         "persistence": {
           "secretName": "postgres-1-secret"
+        },
+        "resources": {
+          "limits": {
+            "memory": "12Gi"
+          },
+          "requests": {
+            "memory": "5Gi"
+          }
         },
         "tolerations": [
           {
@@ -5677,7 +5697,7 @@
                     }
                   }
                 ],
-                "image": "postgres:14",
+                "image": "postgres:18",
                 "imagePullPolicy": "IfNotPresent",
                 "livenessProbe": {
                   "exec": {
@@ -5773,7 +5793,7 @@
                     }
                   }
                 ],
-                "image": "postgres:14",
+                "image": "postgres:18",
                 "imagePullPolicy": "IfNotPresent",
                 "name": "pg-migrate",
                 "securityContext": {
@@ -5910,12 +5930,22 @@
           "name": "cn-mocknet"
         },
         "db": {
+          "maxConnections": 1000,
           "pvcTemplateName": "pg-data-hd",
+          "volumeSize": "100Gi",
           "volumeStorageClass": "hyperdisk-standard-rwo"
         },
         "imageRepo": "us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker",
         "persistence": {
           "secretName": "postgres-2-secret"
+        },
+        "resources": {
+          "limits": {
+            "memory": "12Gi"
+          },
+          "requests": {
+            "memory": "5Gi"
+          }
         },
         "tolerations": [
           {
@@ -6062,7 +6092,7 @@
                     }
                   }
                 ],
-                "image": "postgres:14",
+                "image": "postgres:18",
                 "imagePullPolicy": "IfNotPresent",
                 "livenessProbe": {
                   "exec": {
@@ -6158,7 +6188,7 @@
                     }
                   }
                 ],
-                "image": "postgres:14",
+                "image": "postgres:18",
                 "imagePullPolicy": "IfNotPresent",
                 "name": "pg-migrate",
                 "securityContext": {
@@ -6295,12 +6325,22 @@
           "name": "cn-mocknet"
         },
         "db": {
+          "maxConnections": 1000,
           "pvcTemplateName": "pg-data-hd",
+          "volumeSize": "100Gi",
           "volumeStorageClass": "hyperdisk-standard-rwo"
         },
         "imageRepo": "us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker",
         "persistence": {
           "secretName": "postgres-3-secret"
+        },
+        "resources": {
+          "limits": {
+            "memory": "12Gi"
+          },
+          "requests": {
+            "memory": "5Gi"
+          }
         },
         "tolerations": [
           {
@@ -6447,7 +6487,7 @@
                     }
                   }
                 ],
-                "image": "postgres:14",
+                "image": "postgres:18",
                 "imagePullPolicy": "IfNotPresent",
                 "livenessProbe": {
                   "exec": {
@@ -6543,7 +6583,7 @@
                     }
                   }
                 ],
-                "image": "postgres:14",
+                "image": "postgres:18",
                 "imagePullPolicy": "IfNotPresent",
                 "name": "pg-migrate",
                 "securityContext": {
@@ -6680,12 +6720,22 @@
           "name": "cn-mocknet"
         },
         "db": {
+          "maxConnections": 1000,
           "pvcTemplateName": "pg-data-hd",
+          "volumeSize": "100Gi",
           "volumeStorageClass": "hyperdisk-standard-rwo"
         },
         "imageRepo": "us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker",
         "persistence": {
           "secretName": "postgres-4-secret"
+        },
+        "resources": {
+          "limits": {
+            "memory": "12Gi"
+          },
+          "requests": {
+            "memory": "5Gi"
+          }
         },
         "tolerations": [
           {

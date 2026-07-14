@@ -1142,7 +1142,7 @@
                     }
                   }
                 ],
-                "image": "postgres:14",
+                "image": "postgres:18",
                 "imagePullPolicy": "IfNotPresent",
                 "livenessProbe": {
                   "exec": {
@@ -1238,7 +1238,7 @@
                     }
                   }
                 ],
-                "image": "postgres:14",
+                "image": "postgres:18",
                 "imagePullPolicy": "IfNotPresent",
                 "name": "pg-migrate",
                 "securityContext": {
@@ -1352,15 +1352,8 @@
                 {
                   "matchExpressions": [
                     {
-                      "key": "cn_apps",
+                      "key": "cn_infra",
                       "operator": "Exists"
-                    },
-                    {
-                      "key": "cn_apps",
-                      "operator": "In",
-                      "values": [
-                        "hyperdisk"
-                      ]
                     }
                   ]
                 }
@@ -1376,6 +1369,7 @@
         },
         "db": {
           "pvcTemplateName": "pg-data-hd",
+          "volumeSize": "20Gi",
           "volumeStorageClass": "hyperdisk-standard-rwo"
         },
         "imageRepo": "us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker",
@@ -1385,7 +1379,7 @@
         "tolerations": [
           {
             "effect": "NoSchedule",
-            "key": "cn_apps",
+            "key": "cn_infra",
             "operator": "Exists"
           }
         ]
