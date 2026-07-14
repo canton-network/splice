@@ -5,20 +5,29 @@ import Splice.Api.Token.HoldingV2 (Account)
 import Splice.Api.Token.MetadataV1
 import Splice.Util
 
-import DA.Map as M
+import qualified DA.Map as M
 import DA.Optional
 import DA.Text
-import DA.TextMap as TM
+import qualified DA.TextMap as TM
 
 
 isValidAggregateLockedAllocation : Party -> V2.Allocation -> Bool
 isValidAggregateLockedAllocation dso alloc =
-  True
---  alloc.allocation.admin = dso
---  && alloc.allocation.
+  and [ alloc.allocation.admin == dso
+      , alloc.allocation.committed
+      , null alloc.allocation.transferLegSides
+      , TM.lookup alloc.allocation.meta.values "cip-105/type" == Some "aggregateLock"
+      , alloc.allocation.expiresAt == Some maxBound
+      ]
 
-baseLockedMetadata = emptyMetadata
-baseVestingMetadata = emptyMetadata
+isValidVestingLockedDestination : Party -> V2.Allocation -> Bool
+isValidVestingLockedDestination dso alloc =
+  and [ alloc.allocation.admin == dso
+      , alloc.allocation.committed
+      , null alloc.allocation.transferLegSides
+      , TM.lookup alloc.allocation.meta.values "cip-105/type" == Some "aggregateLock"
+      , alloc.allocation.expiresAt == Some maxBound
+      ]
 
 type ControllerSets = [[Party]]
 
@@ -61,8 +70,7 @@ template AggregateLock
           require "Unlock controller must be one of the options" $ any (\conj -> all (`elem` authorizers) conj) unlockControllerSets
           require "Not allowed to unlock to a different party than locked the funds" $ locked.allocation.authorizer == withdrawTo.allocation.authorizer
           if not allowImmediateUnlock then require "Unlock without vesting is only allowed when specifically enabled" else pure ()
-          -- TODO: What is isValidGovernanceLocked?
-          require "Must be a valid goverance-locked allocation" $ isValidGovernanceLocked locked
+          require "Must be a valid governance-locked allocation" $ isValidAggregateLockedAllocation locked
           require "Must be a valid empty vesting unlock allocation" $ isValidVestingLockedDestination withdrawToCid
           let
             info = SettlementInfo with
@@ -95,7 +103,7 @@ template AggregateLock
                       otherside = authorizer
                       amount
                       instrumentId
-                      meta = baseLockedMetadata
+                      meta = emptyMetadata
                     ]
                     -- TODO: what's newLockedAmount
                   nextIterationFunding = Some $ M.singleton instrumentId newLockedAmount
@@ -108,7 +116,7 @@ template AggregateLock
                       otherside = authorizer
                       amount
                       instrumentId
-                      meta = baseLockedMetadata
+                      meta = emptyMetadata
                     ]
                     -- TODO: what's newLockedAmount
                   nextIterationFunding = Some $ M.singleton instrumentId newLockedAmount
@@ -132,8 +140,7 @@ template AggregateLock
           require "Substitute controller must be one of the options" $ any (\conj -> all (`elem` authorizers) conj) substituteControllerSets
           require "Not allowed to unlock to a different party than locked the funds" $ unlocking.allocation.authorizer == withdrawTo.allocation.authorizer
           if not allowImmediateUnlock then require "Unlock without vesting is only allowed when specifically enabled" else pure ()
-          -- TODO: What is isValidGovernanceLocked?
-          require "Must be a valid goverance-locked allocation" $ isValidGovernanceLocked unlocking
+          require "Must be a valid goverance-locked allocation" $ isValidAggregateLockedAllocation unlocking
           require "Must be a valid empty vesting unlock allocation" $ isValidVestingLockedDestination withdrawToCid
           let
             info = SettlementInfo with
@@ -173,7 +180,7 @@ template AggregateLock
                       otherside = authorizer
                       amount
                       instrumentId
-                      meta = baseLockedMetadata
+                      meta = emptyMetadata
                     ]
                     -- TODO: what's newLockedAmount
                   nextIterationFunding = Some $ M.singleton instrumentId newLockedAmount
@@ -186,7 +193,7 @@ template AggregateLock
                       otherside = authorizer
                       amount
                       instrumentId
-                      meta = baseLockedMetadata
+                      meta = emptyMetadata
                     ]
                     -- TODO: what's newLockedAmount
                   nextIterationFunding = Some $ M.singleton instrumentId newLockedAmount
