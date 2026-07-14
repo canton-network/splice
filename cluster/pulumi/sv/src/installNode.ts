@@ -30,7 +30,7 @@ export async function installNode(sv: string, auth0Client: Auth0Client): Promise
   const auth0Config = auth0Client.getCfg();
   const ledgerApiUserSecret = installLedgerApiUserSecret(auth0Client, xns, 'sv', 'sv');
   const ledgerApiUserSecretSource = auth0UserNameEnvVarSource('sv', true);
-  if (splitSvDeploymentEnabled) {
+  if (splitSvDeploymentEnabled && staticConfig.nodeName !== svRunbookConfig.nodeName) {
     await installSvNodeStandalone(xns, staticConfig, config, auth0Client);
   }
   await installParticipant(
