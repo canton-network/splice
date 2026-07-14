@@ -13,7 +13,11 @@ import dayjs from 'dayjs';
 import { OffboardSvForm } from '../../../components/forms/OffboardSvForm';
 import { server, svUrl } from '../../setup/setup';
 import { http, HttpResponse } from 'msw';
-import { PROPOSAL_REVIEW_TITLE, PROPOSAL_SUMMARY_SUBTITLE } from '../../../utils/constants';
+import {
+  CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE,
+  PROPOSAL_REVIEW_TITLE,
+  PROPOSAL_SUMMARY_SUBTITLE,
+} from '../../../utils/constants';
 
 describe('SV user can', () => {
   test('login and see the SV party ID', async () => {
@@ -45,7 +49,7 @@ describe('Offboard SV Form', () => {
     );
 
     expect(screen.getByTestId('offboard-sv-form')).toBeInTheDocument();
-    expect(screen.getByText('Proposal type')).toBeInTheDocument();
+    expect(screen.getByText(CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE)).toBeInTheDocument();
 
     const actionInput = screen.getByTestId('offboard-sv-action');
     expect(actionInput).toBeInTheDocument();

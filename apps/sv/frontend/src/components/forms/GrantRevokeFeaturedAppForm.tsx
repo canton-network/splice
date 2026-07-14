@@ -13,7 +13,16 @@ import {
 import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import { useAppForm } from '../../hooks/form';
 import { useStore } from '@tanstack/react-form';
-import { SUPPORTING_URL_LABEL, THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
+import {
+  CREATE_PROPOSAL_LABEL_EFFECTIVE_AT,
+  CREATE_PROPOSAL_LABEL_FEATURED_APP_CONTRACT_ID,
+  CREATE_PROPOSAL_LABEL_PROPOSAL_SUMMARY,
+  CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE,
+  CREATE_PROPOSAL_LABEL_PROVIDER_PARTY_ID,
+  CREATE_PROPOSAL_LABEL_SUPPORTING_URL,
+  CREATE_PROPOSAL_LABEL_THRESHOLD_DEADLINE,
+  THRESHOLD_DEADLINE_SUBTITLE,
+} from '../../utils/constants';
 import { CommonProposalFormData } from '../../utils/types';
 import { ContractId } from '@daml/types';
 import { FeaturedAppRight } from '@daml.js/splice-amulet/lib/Splice/Amulet';
@@ -49,13 +58,13 @@ export type GrantRevokeFeaturedAppFormData = CommonProposalFormData & ExtraFormF
 
 const GRANT_REVOKE_FEATURED_APP_CONFIG = {
   SRARC_GrantFeaturedAppRight: {
-    providerFieldTitle: 'Provider Party ID',
+    providerFieldTitle: CREATE_PROPOSAL_LABEL_PROVIDER_PARTY_ID,
     testIdPrefix: 'grant-featured-app',
     reviewFormKey: 'grant-right' as const,
   },
   SRARC_RevokeFeaturedAppRight: {
-    providerFieldTitle: 'Provider Party ID',
-    rightCidFieldTitle: 'Featured Application Contract ID',
+    providerFieldTitle: CREATE_PROPOSAL_LABEL_PROVIDER_PARTY_ID,
+    rightCidFieldTitle: CREATE_PROPOSAL_LABEL_FEATURED_APP_CONTRACT_ID,
     testIdPrefix: 'revoke-featured-app',
     reviewFormKey: 'revoke-right' as const,
   },
@@ -209,7 +218,73 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
         ) : (
           <>
             <form.AppField name="action">
-              {field => <field.ProposalTypeField id={`${testIdPrefix}-action`} />}
+              {field => (
+                <field.ProposalTypeField
+                  id={`${testIdPrefix}-action`}
+                  title={CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE}
+                />
+              )}
+            </form.AppField>
+
+            <form.AppField
+              name="expiryDate"
+              validators={{
+                onChange: ({ value }) => validateExpiration(value),
+                onBlur: ({ value }) => validateExpiration(value),
+              }}
+            >
+              {field => (
+                <field.DateField
+                  title={CREATE_PROPOSAL_LABEL_THRESHOLD_DEADLINE}
+                  description={THRESHOLD_DEADLINE_SUBTITLE}
+                  id={`${testIdPrefix}-expiry-date`}
+                />
+              )}
+            </form.AppField>
+
+            <form.AppField
+              name="effectiveDate"
+              validators={{
+                onChange: ({ value }) => validateEffectiveDate(value),
+                onBlur: ({ value }) => validateEffectiveDate(value),
+              }}
+              children={_ => (
+                <EffectiveDateField
+                  title={CREATE_PROPOSAL_LABEL_EFFECTIVE_AT}
+                  initialEffectiveDate={initialEffectiveDate.format(dateTimeFormatISO)}
+                  id={`${testIdPrefix}-effective-date`}
+                />
+              )}
+            />
+
+            <form.AppField
+              name="summary"
+              validators={{
+                onBlur: ({ value }) => validateSummary(value),
+                onChange: ({ value }) => validateSummary(value),
+              }}
+            >
+              {field => (
+                <field.ProposalSummaryField
+                  id={`${testIdPrefix}-summary`}
+                  title={CREATE_PROPOSAL_LABEL_PROPOSAL_SUMMARY}
+                />
+              )}
+            </form.AppField>
+
+            <form.AppField
+              name="url"
+              validators={{
+                onBlur: ({ value }) => validateUrl(value),
+                onChange: ({ value }) => validateUrl(value),
+              }}
+            >
+              {field => (
+                <field.TextField
+                  title={CREATE_PROPOSAL_LABEL_SUPPORTING_URL}
+                  id={`${testIdPrefix}-url`}
+                />
+              )}
             </form.AppField>
 
             {formAction === 'SRARC_GrantFeaturedAppRight' && (
@@ -303,57 +378,6 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
                 </form.AppField>
               </>
             )}
-
-            <form.AppField
-              name="expiryDate"
-              validators={{
-                onChange: ({ value }) => validateExpiration(value),
-                onBlur: ({ value }) => validateExpiration(value),
-              }}
-            >
-              {field => (
-                <field.DateField
-                  title="Quorum Threshold Deadline"
-                  description={THRESHOLD_DEADLINE_SUBTITLE}
-                  id={`${testIdPrefix}-expiry-date`}
-                />
-              )}
-            </form.AppField>
-
-            <form.AppField
-              name="effectiveDate"
-              validators={{
-                onChange: ({ value }) => validateEffectiveDate(value),
-                onBlur: ({ value }) => validateEffectiveDate(value),
-              }}
-              children={_ => (
-                <EffectiveDateField
-                  title="Effective At"
-                  initialEffectiveDate={initialEffectiveDate.format(dateTimeFormatISO)}
-                  id={`${testIdPrefix}-effective-date`}
-                />
-              )}
-            />
-
-            <form.AppField
-              name="summary"
-              validators={{
-                onBlur: ({ value }) => validateSummary(value),
-                onChange: ({ value }) => validateSummary(value),
-              }}
-            >
-              {field => <field.ProposalSummaryField id={`${testIdPrefix}-summary`} />}
-            </form.AppField>
-
-            <form.AppField
-              name="url"
-              validators={{
-                onBlur: ({ value }) => validateUrl(value),
-                onChange: ({ value }) => validateUrl(value),
-              }}
-            >
-              {field => <field.TextField title={SUPPORTING_URL_LABEL} id={`${testIdPrefix}-url`} />}
-            </form.AppField>
           </>
         )}
 

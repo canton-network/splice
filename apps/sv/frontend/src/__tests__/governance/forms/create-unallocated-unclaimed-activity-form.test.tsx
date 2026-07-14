@@ -10,7 +10,11 @@ import { describe, expect, test } from 'vitest';
 import App from '../../../App';
 import { CreateUnallocatedUnclaimedActivityRecordForm } from '../../../components/forms/CreateUnallocatedUnclaimedActivityRecordForm';
 import { SvConfigProvider } from '../../../utils';
-import { PROPOSAL_REVIEW_TITLE, PROPOSAL_SUMMARY_SUBTITLE } from '../../../utils/constants';
+import {
+  CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE,
+  PROPOSAL_REVIEW_TITLE,
+  PROPOSAL_SUMMARY_SUBTITLE,
+} from '../../../utils/constants';
 import { Wrapper } from '../../helpers';
 import { svPartyId } from '../../mocks/constants';
 import { server, svUrl } from '../../setup/setup';
@@ -47,7 +51,7 @@ describe('Create Unallocated Unclaimed Activity Record Form', () => {
     expect(
       screen.getByTestId('create-unallocated-unclaimed-activity-record-form')
     ).toBeInTheDocument();
-    expect(screen.getByText('Proposal type')).toBeInTheDocument();
+    expect(screen.getByText(CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE)).toBeInTheDocument();
 
     const actionInput = screen.getByTestId('create-unallocated-unclaimed-activity-record-action');
     expect(actionInput).toBeInTheDocument();

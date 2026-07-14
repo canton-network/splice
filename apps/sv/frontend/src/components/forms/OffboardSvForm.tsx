@@ -22,7 +22,15 @@ import { EffectiveDateField } from '../form-components/EffectiveDateField';
 import { ProposalSummary } from '../governance/ProposalSummary';
 import { ProposalSubmissionError } from '../form-components/ProposalSubmissionError';
 import { useProposalMutation } from '../../hooks/useProposalMutation';
-import { SUPPORTING_URL_LABEL, THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
+import {
+  CREATE_PROPOSAL_LABEL_EFFECTIVE_AT,
+  CREATE_PROPOSAL_LABEL_MEMBER,
+  CREATE_PROPOSAL_LABEL_PROPOSAL_SUMMARY,
+  CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE,
+  CREATE_PROPOSAL_LABEL_SUPPORTING_URL,
+  CREATE_PROPOSAL_LABEL_THRESHOLD_DEADLINE,
+  THRESHOLD_DEADLINE_SUBTITLE,
+} from '../../utils/constants';
 
 interface ExtraFormFields {
   sv: string;
@@ -118,18 +126,11 @@ export const OffboardSvForm: React.FC = _ => {
         ) : (
           <>
             <form.AppField name="action">
-              {field => <field.ProposalTypeField id="offboard-sv-action" />}
-            </form.AppField>
-
-            <form.AppField
-              name="sv"
-              validators={{
-                onBlur: ({ value }) => validateSvSelection(value),
-                onChange: ({ value }) => validateSvSelection(value),
-              }}
-            >
               {field => (
-                <field.SelectField title="Member" options={svOptions} id="offboard-sv-member" />
+                <field.ProposalTypeField
+                  id="offboard-sv-action"
+                  title={CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE}
+                />
               )}
             </form.AppField>
 
@@ -142,7 +143,7 @@ export const OffboardSvForm: React.FC = _ => {
             >
               {field => (
                 <field.DateField
-                  title="Quorum Threshold Deadline"
+                  title={CREATE_PROPOSAL_LABEL_THRESHOLD_DEADLINE}
                   description={THRESHOLD_DEADLINE_SUBTITLE}
                   id="offboard-sv-expiry-date"
                 />
@@ -157,7 +158,7 @@ export const OffboardSvForm: React.FC = _ => {
               }}
               children={_ => (
                 <EffectiveDateField
-                  title="Effective At"
+                  title={CREATE_PROPOSAL_LABEL_EFFECTIVE_AT}
                   description="Select the date and time the proposal will take effect"
                   initialEffectiveDate={initialEffectiveDate.format(dateTimeFormatISO)}
                   id="offboard-sv-effective-date"
@@ -172,7 +173,12 @@ export const OffboardSvForm: React.FC = _ => {
                 onChange: ({ value }) => validateSummary(value),
               }}
             >
-              {field => <field.ProposalSummaryField id="offboard-sv-summary" />}
+              {field => (
+                <field.ProposalSummaryField
+                  id="offboard-sv-summary"
+                  title={CREATE_PROPOSAL_LABEL_PROPOSAL_SUMMARY}
+                />
+              )}
             </form.AppField>
 
             <form.AppField
@@ -182,7 +188,28 @@ export const OffboardSvForm: React.FC = _ => {
                 onChange: ({ value }) => validateUrl(value),
               }}
             >
-              {field => <field.TextField title={SUPPORTING_URL_LABEL} id="offboard-sv-url" />}
+              {field => (
+                <field.TextField
+                  title={CREATE_PROPOSAL_LABEL_SUPPORTING_URL}
+                  id="offboard-sv-url"
+                />
+              )}
+            </form.AppField>
+
+            <form.AppField
+              name="sv"
+              validators={{
+                onBlur: ({ value }) => validateSvSelection(value),
+                onChange: ({ value }) => validateSvSelection(value),
+              }}
+            >
+              {field => (
+                <field.SelectField
+                  title={CREATE_PROPOSAL_LABEL_MEMBER}
+                  options={svOptions}
+                  id="offboard-sv-member"
+                />
+              )}
             </form.AppField>
           </>
         )}

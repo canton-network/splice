@@ -20,7 +20,20 @@ import { useAppForm } from '../../hooks/form';
 import { useProposalMutation } from '../../hooks/useProposalMutation';
 import { buildDsoConfigChanges } from '../../utils/buildDsoConfigChanges';
 import { buildDsoRulesConfigFromChanges } from '../../utils/buildDsoRulesConfigFromChanges';
-import { SUPPORTING_URL_LABEL, THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
+import {
+  CREATE_PROPOSAL_CONFIG_ROW_DIVIDER_GAP,
+  CREATE_PROPOSAL_CONFIG_ROW_GAP,
+  CREATE_PROPOSAL_FIELD_LABEL_SX,
+} from '../../constants/createProposalLayout';
+import {
+  CREATE_PROPOSAL_LABEL_CONFIGURATION,
+  CREATE_PROPOSAL_LABEL_EFFECTIVE_AT,
+  CREATE_PROPOSAL_LABEL_PROPOSAL_SUMMARY,
+  CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE,
+  CREATE_PROPOSAL_LABEL_SUPPORTING_URL,
+  CREATE_PROPOSAL_LABEL_THRESHOLD_DEADLINE,
+  THRESHOLD_DEADLINE_SUBTITLE,
+} from '../../utils/constants';
 import {
   buildPendingConfigFields,
   configFormDataToConfigChanges,
@@ -238,29 +251,13 @@ export const SetDsoConfigRulesForm: () => JSX.Element = () => {
           )}
 
           <form.AppField name="common.action">
-            {field => <field.ProposalTypeField id="set-dso-config-rules-action" />}
+            {field => (
+              <field.ProposalTypeField
+                id="set-dso-config-rules-action"
+                title={CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE}
+              />
+            )}
           </form.AppField>
-
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Typography variant="h6" gutterBottom>
-              Configuration
-            </Typography>
-
-            {dsoConfigChanges.map((change, index) => (
-              <form.AppField name={`config.${change.fieldName}`} key={index}>
-                {field => (
-                  <field.ConfigField
-                    configChange={change}
-                    key={index}
-                    pendingFieldInfo={pendingConfigFields.find(
-                      f => f.fieldName === change.fieldName
-                    )}
-                    effectiveDate={form.state.values.common.effectiveDate.effectiveDate}
-                  />
-                )}
-              </form.AppField>
-            ))}
-          </Box>
 
           <form.AppField
             name="common.expiryDate"
@@ -271,7 +268,7 @@ export const SetDsoConfigRulesForm: () => JSX.Element = () => {
           >
             {field => (
               <field.DateField
-                title="Quorum Threshold Deadline"
+                title={CREATE_PROPOSAL_LABEL_THRESHOLD_DEADLINE}
                 description={THRESHOLD_DEADLINE_SUBTITLE}
                 id="set-dso-config-rules-expiry-date"
               />
@@ -286,7 +283,7 @@ export const SetDsoConfigRulesForm: () => JSX.Element = () => {
             }}
             children={_ => (
               <EffectiveDateField
-                title="Effective At"
+                title={CREATE_PROPOSAL_LABEL_EFFECTIVE_AT}
                 initialEffectiveDate={initialEffectiveDate.format(dateTimeFormatISO)}
                 id="set-dso-config-rules-effective-date"
               />
@@ -300,7 +297,12 @@ export const SetDsoConfigRulesForm: () => JSX.Element = () => {
               onChange: ({ value }) => validateSummary(value),
             }}
           >
-            {field => <field.ProposalSummaryField id="set-dso-config-rules-summary" />}
+            {field => (
+              <field.ProposalSummaryField
+                id="set-dso-config-rules-summary"
+                title={CREATE_PROPOSAL_LABEL_PROPOSAL_SUMMARY}
+              />
+            )}
           </form.AppField>
 
           <form.AppField
@@ -311,9 +313,42 @@ export const SetDsoConfigRulesForm: () => JSX.Element = () => {
             }}
           >
             {field => (
-              <field.TextField title={SUPPORTING_URL_LABEL} id="set-dso-config-rules-url" />
+              <field.TextField
+                title={CREATE_PROPOSAL_LABEL_SUPPORTING_URL}
+                id="set-dso-config-rules-url"
+              />
             )}
           </form.AppField>
+
+          <Box
+            sx={{ display: 'flex', flexDirection: 'column', gap: CREATE_PROPOSAL_CONFIG_ROW_GAP }}
+          >
+            <Typography component="p" sx={{ ...CREATE_PROPOSAL_FIELD_LABEL_SX, mb: 0 }}>
+              {CREATE_PROPOSAL_LABEL_CONFIGURATION}
+            </Typography>
+
+            {dsoConfigChanges.map(change => (
+              <form.AppField name={`config.${change.fieldName}`} key={change.fieldName}>
+                {field => (
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: CREATE_PROPOSAL_CONFIG_ROW_DIVIDER_GAP,
+                    }}
+                  >
+                    <field.ConfigField
+                      configChange={change}
+                      pendingFieldInfo={pendingConfigFields.find(
+                        f => f.fieldName === change.fieldName
+                      )}
+                      effectiveDate={form.state.values.common.effectiveDate.effectiveDate}
+                    />
+                  </Box>
+                )}
+              </form.AppField>
+            ))}
+          </Box>
         </>
       )}
 

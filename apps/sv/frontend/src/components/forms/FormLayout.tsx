@@ -8,6 +8,7 @@ import {
   CREATE_PROPOSAL_CARD_BORDER_RADIUS,
   CREATE_PROPOSAL_CARD_PADDING_Y,
   CREATE_PROPOSAL_FIELD_MAX_WIDTH,
+  CREATE_PROPOSAL_SECTION_GAP,
 } from '../../constants/createProposalLayout';
 
 export interface FormLayoutProps {
@@ -46,7 +47,13 @@ export const FormLayout: React.FC<FormLayoutProps> = props => {
             }}
           >
             <Box
-              sx={{ display: 'flex', flexDirection: 'column', gap: 4, width: '100%', minWidth: 0 }}
+              sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: CREATE_PROPOSAL_SECTION_GAP,
+                width: '100%',
+                minWidth: 0,
+              }}
             >
               {children}
             </Box>

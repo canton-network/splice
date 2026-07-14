@@ -3,7 +3,12 @@
 
 import { Box, Typography } from '@mui/material';
 import React from 'react';
-import { CREATE_PROPOSAL_FIELD_SURFACE_BG } from '../../constants/createProposalLayout';
+import {
+  CREATE_PROPOSAL_FIELD_BODY_SX,
+  CREATE_PROPOSAL_FIELD_HELPER_SX,
+  CREATE_PROPOSAL_FIELD_LABEL_SX,
+  CREATE_PROPOSAL_FIELD_SURFACE_BG,
+} from '../../constants/createProposalLayout';
 
 export interface ProposalReviewFieldProps {
   id: string;
@@ -22,26 +27,16 @@ export const ProposalReviewField: React.FC<ProposalReviewFieldProps> = ({
     <Typography
       component="p"
       data-testid={`${id}-title`}
-      sx={{
-        fontFamily: "'Inter', sans-serif",
-        fontSize: '12px',
-        fontWeight: 400,
-        lineHeight: '20px',
-        letterSpacing: '0.04em',
-        textTransform: 'uppercase',
-        color: 'text.secondary',
-        mb: 1,
-      }}
+      sx={{ ...CREATE_PROPOSAL_FIELD_LABEL_SX, mb: 1 }}
     >
       {label}
     </Typography>
 
     {subtitle && (
       <Typography
-        variant="body2"
-        color="text.secondary"
+        component="p"
         data-testid={`${id}-subtitle`}
-        sx={{ mb: 1 }}
+        sx={{ ...CREATE_PROPOSAL_FIELD_HELPER_SX, mb: 1 }}
       >
         {subtitle}
       </Typography>
@@ -60,13 +55,10 @@ export const ProposalReviewField: React.FC<ProposalReviewFieldProps> = ({
     >
       {typeof value === 'string' ? (
         <Typography
-          variant="body2"
+          component="p"
           data-testid={`${id}-field`}
           sx={{
-            fontFamily: "'Lato', sans-serif",
-            fontSize: '14px',
-            lineHeight: '22px',
-            color: 'text.primary',
+            ...CREATE_PROPOSAL_FIELD_BODY_SX,
             wordBreak: 'break-word',
             width: '100%',
           }}

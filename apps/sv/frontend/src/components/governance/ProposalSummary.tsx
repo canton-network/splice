@@ -69,7 +69,6 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
         component="h2"
         data-testid="proposal-review-title"
         sx={{
-          fontFamily: "'Lato', sans-serif",
           fontWeight: 700,
           fontSize: '20px',
           lineHeight: '28px',

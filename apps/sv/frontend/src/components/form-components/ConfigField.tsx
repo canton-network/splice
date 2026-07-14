@@ -17,6 +17,10 @@ import { useFieldContext } from '../../hooks/formContext';
 import type { ConfigChange, PendingConfigFieldInfo } from '../../utils/types';
 import { nextScheduledSynchronizerUpgradeFormat } from '@canton-network/splice-common-frontend-utils';
 import { configFieldFieldSx, configFieldInputSx } from '../../themes/fieldStyles';
+import {
+  CREATE_PROPOSAL_CONFIG_INPUT_WIDTH,
+  CREATE_PROPOSAL_FIELD_BODY_SX,
+} from '../../constants/createProposalLayout';
 
 dayjs.extend(relativeTime);
 
@@ -83,27 +87,37 @@ export const ConfigField: React.FC<ConfigFieldProps> = props => {
     <>
       <Box
         sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'flex-start',
-          gap: 2,
+          display: 'grid',
+          gridTemplateColumns: `1fr ${CREATE_PROPOSAL_CONFIG_INPUT_WIDTH}`,
+          alignItems: 'start',
           minWidth: 0,
         }}
       >
-        <Box sx={{ minWidth: 0, flex: 1, pr: 1 }}>
-          <Typography variant="body1" data-testid={`config-label-${configChange.fieldName}`}>
+        <Box sx={{ minWidth: 0, pr: 2 }}>
+          <Typography
+            component="p"
+            data-testid={`config-label-${configChange.fieldName}`}
+            sx={CREATE_PROPOSAL_FIELD_BODY_SX}
+          >
             {configChange.label}
           </Typography>
           <Typography
             fontFamily="'Source Code Pro', monospace"
             color="colors.neutral.70"
-            sx={{ mt: 1 }}
+            sx={{ mt: 0.5, lineHeight: '22px' }}
             data-testid={`config-field-name-${configChange.fieldName}`}
           >
             {configChange.fieldName}
           </Typography>
         </Box>
-        <Box sx={{ width: 238, maxWidth: '100%', minWidth: 0, flexShrink: 0 }}>
+        <Box
+          sx={{
+            width: CREATE_PROPOSAL_CONFIG_INPUT_WIDTH,
+            maxWidth: '100%',
+            minWidth: 0,
+            flexShrink: 0,
+          }}
+        >
           {configChange.options ? (
             <FormControl size="small" fullWidth disabled={isDisabled}>
               <Select
@@ -129,6 +143,11 @@ export const ConfigField: React.FC<ConfigFieldProps> = props => {
             <MuiTextField
               {...textFieldProps}
               fullWidth
+              sx={{
+                '& .MuiInputBase-root': {
+                  minHeight: 48,
+                },
+              }}
               // We choose empty string to represent fields that could be undefined because their values have not been set.
               value={field.state.value?.value || ''}
               onBlur={field.handleBlur}
