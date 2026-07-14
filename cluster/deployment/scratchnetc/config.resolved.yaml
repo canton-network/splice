@@ -373,93 +373,93 @@ sv:
           type: 'unlimited'
         /registry/allocation-instruction/v1/allocation-factory:
           fillInterval: '60s'
-          maxTokens: 500
+          maxTokens: 200
           name: 'registry-allocation-factory'
           perIpLimits:
             fillInterval: '60s'
-            maxTokens: 10
-            tokensPerFill: 5
-          tokensPerFill: 500
+            maxTokens: 30
+            tokensPerFill: 30
+          tokensPerFill: 200
           type: 'limited'
         /registry/allocation-instruction/v2:
           fillInterval: '60s'
-          maxTokens: 500
+          maxTokens: 200
           name: 'registry-allocation-instruction-v2'
           perIpLimits:
             fillInterval: '60s'
-            maxTokens: 10
-            tokensPerFill: 5
-          tokensPerFill: 500
+            maxTokens: 30
+            tokensPerFill: 30
+          tokensPerFill: 200
           type: 'limited'
         /registry/allocation-instruction/v2/allocation-factory:
           fillInterval: '60s'
-          maxTokens: 500
+          maxTokens: 200
           name: 'registry-allocation-factory-v2'
           perIpLimits:
             fillInterval: '60s'
-            maxTokens: 10
-            tokensPerFill: 5
-          tokensPerFill: 500
+            maxTokens: 30
+            tokensPerFill: 30
+          tokensPerFill: 200
           type: 'limited'
         /registry/allocation/v2/settlement-factory:
           fillInterval: '60s'
-          maxTokens: 500
+          maxTokens: 200
           name: 'registry-settlement-factory-v2'
           perIpLimits:
             fillInterval: '60s'
-            maxTokens: 10
-            tokensPerFill: 5
-          tokensPerFill: 500
+            maxTokens: 30
+            tokensPerFill: 30
+          tokensPerFill: 200
           type: 'limited'
         /registry/allocations/v1:
           fillInterval: '60s'
-          maxTokens: 500
+          maxTokens: 200
           name: 'registry-allocations'
           perIpLimits:
             fillInterval: '60s'
-            maxTokens: 10
-            tokensPerFill: 5
-          tokensPerFill: 500
+            maxTokens: 30
+            tokensPerFill: 30
+          tokensPerFill: 200
           type: 'limited'
         /registry/allocations/v2:
           fillInterval: '60s'
-          maxTokens: 500
+          maxTokens: 200
           name: 'registry-allocations-v2'
           perIpLimits:
             fillInterval: '60s'
-            maxTokens: 10
-            tokensPerFill: 5
-          tokensPerFill: 500
+            maxTokens: 30
+            tokensPerFill: 30
+          tokensPerFill: 200
           type: 'limited'
         /registry/metadata/v1/info:
           fillInterval: '60s'
-          maxTokens: 500
+          maxTokens: 200
           name: 'registry-metadata-info'
           perIpLimits:
             fillInterval: '60s'
-            maxTokens: 10
-            tokensPerFill: 5
-          tokensPerFill: 500
+            maxTokens: 30
+            tokensPerFill: 30
+          tokensPerFill: 200
           type: 'limited'
         /registry/metadata/v1/instruments:
           fillInterval: '60s'
-          maxTokens: 500
+          maxTokens: 200
           name: 'registry-metadata-instruments'
           perIpLimits:
             fillInterval: '60s'
-            maxTokens: 10
-            tokensPerFill: 5
-          tokensPerFill: 500
+            maxTokens: 30
+            tokensPerFill: 30
+          tokensPerFill: 200
           type: 'limited'
         /registry/transfer-instruction/v1:
           fillInterval: '60s'
-          maxTokens: 500
+          maxTokens: 200
           name: 'registry-transfer-instruction'
           perIpLimits:
             fillInterval: '60s'
-            maxTokens: 10
-            tokensPerFill: 5
-          tokensPerFill: 500
+            maxTokens: 30
+            tokensPerFill: 30
+          tokensPerFill: 200
           type: 'limited'
         /registry/transfer-instruction/v1/transfer-factory:
           fillInterval: '60s'
@@ -467,19 +467,19 @@ sv:
           name: 'registry-transfer-factory'
           perIpLimits:
             fillInterval: '60s'
-            maxTokens: 10
-            tokensPerFill: 5
+            maxTokens: 50
+            tokensPerFill: 50
           tokensPerFill: 500
           type: 'limited'
         /registry/transfer-instruction/v2:
           fillInterval: '60s'
-          maxTokens: 500
+          maxTokens: 200
           name: 'registry-transfer-instruction-v2'
           perIpLimits:
             fillInterval: '60s'
-            maxTokens: 10
-            tokensPerFill: 5
-          tokensPerFill: 500
+            maxTokens: 30
+            tokensPerFill: 30
+          tokensPerFill: 200
           type: 'limited'
         /registry/transfer-instruction/v2/transfer-factory:
           fillInterval: '60s'
@@ -487,8 +487,8 @@ sv:
           name: 'registry-transfer-factory-v2'
           perIpLimits:
             fillInterval: '60s'
-            maxTokens: 10
-            tokensPerFill: 5
+            maxTokens: 50
+            tokensPerFill: 50
           tokensPerFill: 500
           type: 'limited'
 svs:
