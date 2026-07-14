@@ -440,6 +440,7 @@ export class LegacyHelmSplicePostgres extends pulumi.ComponentResource implement
       }),
       version,
       {
+        aliases: [{ name: instanceName, type: 'kubernetes:helm.sh/v3:Release' }],
         dependsOn: [passwordSecret],
         ...(spliceConfig.pulumiProjectConfig.replacePostgresStatefulSetOnChanges
           ? {
@@ -496,12 +497,12 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
     xns: ExactNamespace,
     instanceName: string,
     secretName: string,
+    splicePostgresHelmMigrationConfig: SplicePostgresHelmMigrationConfig,
     values?: ChartValues,
     overrideDbSizeFromValues?: boolean,
     disableProtection?: boolean,
     version?: CnChartVersion,
     useInfraAffinityAndTolerations: boolean = false,
-    importDataFromSplicePostgresHelmChart: boolean = false,
     dependsOn: CnInput<pulumi.Resource>[] = []
   ) {
     // Avoiding collisions with the name in LegacyHelmSplicePostgres
@@ -516,13 +517,14 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
     // Password keeps the same historical name to avoid re-creating it unnecessarily
     const password = generatePassword(`${xns.logicalName}-${instanceName}-passwd`, {
       parent: this,
-      aliases: [],
+      // same name, no parent, because multi-validators were creating their own without a parent
+      aliases: [{ parent: undefined, name: `${xns.logicalName}-${instanceName}-passwd` }],
     }).result;
     const passwordSecret = installPostgresPasswordSecret(xns, password, secretName);
     this.secretName = passwordSecret.metadata.name;
 
     let migrationSource: PostgresMigrationSource | undefined = undefined;
-    if (importDataFromSplicePostgresHelmChart) {
+    if (splicePostgresHelmMigrationConfig.importDataFromSplicePostgresHelmChart) {
       new LegacyHelmSplicePostgres(
         xns,
         instanceName,
@@ -569,7 +571,7 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
     const mainDataVolumeName = existingClaimName ? 'pg-data-existing' : pvcTemplateName;
     const maxConnections: number = values?.db?.maxConnections ?? 300;
     const maxWalSize: string = values?.db?.maxWalSize ?? '2GB';
-    const imageName: string = values?.imageName ?? 'postgres:14';
+    const imageName: string = splicePostgresHelmMigrationConfig.postgresImage;
     const resources = _.merge(
       { limits: { memory: '12Gi' }, requests: { cpu: '0.5', memory: '1Gi' } },
       values?.resources || {}
@@ -900,11 +902,11 @@ export async function installPostgres(
         xns,
         instanceName,
         secretName,
+        splicePostgresHelmMigrationConfig,
         undefined,
         undefined,
         o.disableProtection,
         version,
-        false,
-        splicePostgresHelmMigrationConfig.importDataFromSplicePostgresHelmChart
+        false
       );
 }

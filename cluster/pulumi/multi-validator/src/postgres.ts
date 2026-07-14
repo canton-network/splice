@@ -29,6 +29,7 @@ export function installPostgres(
     xns,
     name,
     secretName,
+    spliceConfig.pulumiProjectConfig.splicePostgresHelmMigrationConfig,
     {
       db: {
         volumeSize: config.postgresPvcSize,
@@ -46,8 +47,6 @@ export function installPostgres(
     !spliceConfig.pulumiProjectConfig.cloudSql.protected,
     activeVersion,
     false,
-    spliceConfig.pulumiProjectConfig.splicePostgresHelmMigrationConfig
-      .importDataFromSplicePostgresHelmChart,
     dependsOn
   );
 }

@@ -20,6 +20,7 @@ export const SvMediatorConfigSchema = z
     additionalJvmOptions: z.string().optional(),
     cloudSql: CloudSqlWithOverrideConfigSchema,
     splicePostgresHelmMigration: SplicePostgresHelmMigrationSchema.default({
+      postgresImage: 'postgres:18',
       importDataFromSplicePostgresHelmChart: true,
     }),
     resources: K8sResourceSchema,
@@ -32,6 +33,7 @@ export const SvSequencerConfigSchema = z
     additionalJvmOptions: z.string().optional(),
     cloudSql: CloudSqlWithOverrideConfigSchema,
     splicePostgresHelmMigration: SplicePostgresHelmMigrationSchema.default({
+      postgresImage: 'postgres:18',
       importDataFromSplicePostgresHelmChart: true,
     }),
     resources: K8sResourceSchema,

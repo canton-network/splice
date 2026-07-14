@@ -172,11 +172,11 @@ async function installValidator(
     xns,
     'postgres',
     'postgres-secrets',
+    { importDataFromSplicePostgresHelmChart: false, postgresImage: 'postgres:18' },
     postgresValues,
     true,
     supportsValidatorRunbookReset,
     validatorVersion
-    // importDataFromSplicePostgresHelmChart doesn't matter, let runbooks reset or use CloudSQL
   );
   const participantAddress = (
     await installParticipant(

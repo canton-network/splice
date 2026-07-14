@@ -140,7 +140,7 @@ export class MultiNodeDeployment extends pulumi.ComponentResource {
               initContainers: [
                 {
                   name: 'pg-init',
-                  image: 'postgres:14',
+                  image: 'postgres:18',
                   env: [
                     {
                       name: 'PGPASSWORD',

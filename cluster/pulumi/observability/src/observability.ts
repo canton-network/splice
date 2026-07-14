@@ -1194,11 +1194,11 @@ function installPostgres(namespace: ExactNamespace): SplicePostgres {
     namespace,
     'grafana-postgres',
     'grafana-postgres-secret',
+    { postgresImage: 'postgres:18', importDataFromSplicePostgresHelmChart: true },
     { db: { volumeSize: '20Gi' } }, // A tiny pvc should be enough for grafana
     true, // overrideDbSizeFromValues
     true, // disableProtection
     undefined, // chart version
-    true, // useInfraAffinityAndTolerations
-    true // importDataFromSplicePostgresHelmChart
+    true // useInfraAffinityAndTolerations
   );
 }

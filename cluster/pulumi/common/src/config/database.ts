@@ -26,6 +26,7 @@ export const CloudSqlConfigSchema = z.object({
 export type CloudSqlConfig = z.infer<typeof CloudSqlConfigSchema>;
 
 export const SplicePostgresHelmMigrationSchema = z.object({
+  postgresImage: z.string().default('postgres:18'),
   importDataFromSplicePostgresHelmChart: z.boolean().default(true),
 });
 export type SplicePostgresHelmMigrationConfig = z.infer<typeof SplicePostgresHelmMigrationSchema>;
