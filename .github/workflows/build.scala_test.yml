@@ -57,12 +57,6 @@ on:
         description: "Canton protocol version"
         type: string
         required: true
-# FIXME:
-      oss_only:
-        description: "Restrict upstream dependencies (e.g. Canton) to OSS versions (the equivalent of OSS_ONLY=1 in local checkouts)"
-        required: false
-        type: boolean
-        default: false
       postgres_image:
         description: "The image to use for PostgreSQL"
         required: false

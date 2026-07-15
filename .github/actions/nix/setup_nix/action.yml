@@ -70,11 +70,6 @@ runs:
       run: |
         set -euxo pipefail
 
-        if [[ ${{ inputs.target }} == 'default' ]]; then
-          echo "Must use OSS only dependencies in GitHub-hosted runners"
-          exit 1
-        fi
-
         echo "Latest nix cache:"
 
         wget -q "https://storage.googleapis.com/splice-nix-cache-public/${cache_key}.tar.gz" -O cache.tar.gz || true

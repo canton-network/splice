@@ -17,11 +17,6 @@ on:
         type: string
         required: false
         default: ""
-      oss_only:
-        description: "Restrict upstream dependencies (e.g. Canton) to OSS versions (skips tests that do not support running in OSS)"
-        required: false
-        type: boolean
-        default: false
   workflow_dispatch:
     inputs:
       commit_sha:
@@ -39,11 +34,6 @@ on:
         type: string
         required: false
         default: "35"
-      oss_only:
-        description: "Restrict upstream dependencies (e.g. Canton) to OSS versions (skips tests that do not support running in OSS)"
-        required: false
-        type: boolean
-        default: false
 
 permissions:
   id-token: write # Required for GCP Workload Identity for failure notifications
@@ -313,21 +303,6 @@ jobs:
       daml_base_version: ${{ inputs.daml_base_version }}
       protocol_version: ${{ inputs.protocol_version }}
       oss_only: ${{ inputs.oss_only }}
-    secrets: inherit
-
-  scala_test_canton_enterprise:
-    uses: ./.github/workflows/build.scala_test.yml
-    if: ${{ ! inputs.oss_only }}
-    with:
-      runs_on: self-hosted-k8s-large
-      test_names_file: 'test-full-class-names-canton-enterprise.log'
-      start_canton_options: -w
-      parallelism: 1
-      test_name: canton-enterprise
-      with_gcp_creds: true
-      commit_sha: ${{ inputs.commit_sha }}
-      daml_base_version: ${{ inputs.daml_base_version }}
-      protocol_version: ${{ inputs.protocol_version }}
     secrets: inherit
 
   ui_tests:

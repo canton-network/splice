@@ -2616,11 +2616,6 @@ updateTestConfigForParallelRuns := {
       (t: String) => !isTimeBasedTest(t) && !isFrontEndTest(t) && isCometBftTest(t),
     ),
     (
-      "tests requiring Canton Enterprise",
-      "test-full-class-names-canton-enterprise.log",
-      (t: String) => isEnterpriseIntegrationTest(t),
-    ),
-    (
       "tests to check logical sync roll-forward upgrade",
       "test-full-class-names-roll-forward-lsu.log",
       (t: String) => isLSURollForwardTest(t),
