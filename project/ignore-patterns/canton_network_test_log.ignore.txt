@@ -173,4 +173,6 @@ api/sv/v0/onboard/validator \(POST\) resulted in a timeout
 # In BaseStorePerformanceTest, we run migrations in an unforked sbt JVM, so Flyway
 # finds the sbt test jar (apps-app_*-tests.jar). But, Flyway cannot open it,
 # so it skips it with this WARN. It contains no migrations, so this is harmless and unrelated to DB migrations.
-Skipping unloadable jar file:.*FlywayExecutor
+# The same warning is emitted by both the FlywayExecutor and the ClassPathScanner loggers.
+# a single pattern matching the message (the unloadable sbt tests jar) covers both.
+Skipping unloadable jar file: file:.*-tests\.jar
