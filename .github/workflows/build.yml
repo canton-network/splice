@@ -358,7 +358,6 @@ jobs:
     - scala_test_with_docker_no_canton
     - scala_test_with_docker_and_canton_simtime
     - scala_test_app_upgrade
-    - scala_test_canton_enterprise
     - scala_test_without_canton
     - ui_tests
     - ts_cli_tests
@@ -405,5 +404,4 @@ jobs:
         uses: re-actors/alls-green@05ac9388f0aebcb5727afa17fcccfecd6f8ec5fe # v1.2.2
         with:
           jobs: ${{ env.JOBS }}
-          # Allow skipping the enterprise-only jobs
-          allowed-skips: scala_test_with_cometbft, scala_test_docker_compose, scala_test_local_net, scala_test_canton_enterprise
+          allowed-skips: scala_test_with_cometbft, scala_test_docker_compose, scala_test_local_net
