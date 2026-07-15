@@ -38,8 +38,3 @@ if [[ -z "$IGNORE_PRIVATE_ENVRC" ]]; then
         ARTIFACTORY_USER \
         ARTIFACTORY_PASSWORD
 fi
-
-if [ "$IS_ENTERPRISE" != "true" ]; then
-    echo ""
-    _warning "Note: Using Canton community instead of Canton enterprise. Certain tests which rely on Enterprise features will fail locally."
-fi
