@@ -729,7 +729,7 @@ testValidatorLicenseRequest = do
   assert (null requests)
 
   [(_, fetchedLicense)] <- queryFilter @ValidatorLicense dso (\l -> l.validator == v1)
-  fetchedLicense.sponsor === sv1
+  fetchedLicense.sponsor === v1 
   fetchedLicense.validator === v1
 
   pure ()
