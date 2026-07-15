@@ -214,6 +214,141 @@ describe('Grant Featured App Form', () => {
 
     expect(screen.getByText(PROPOSAL_SUMMARY_TITLE)).toBeInTheDocument();
   });
+
+  test('activity weight is optional and is sent to backend as null when left blank', async () => {
+    let requestBody = '';
+    server.use(
+      http.post(`${svUrl}/v0/admin/sv/voterequest/create`, async ({ request }) => {
+        requestBody = await request.text();
+        return HttpResponse.json({});
+      })
+    );
+
+    const user = userEvent.setup();
+
+    render(
+      <Wrapper>
+        <GrantRevokeFeaturedAppForm selectedAction="SRARC_GrantFeaturedAppRight" />
+      </Wrapper>
+    );
+
+    const activityWeightInput = screen.getByTestId('grant-featured-app-activityWeight');
+    expect(activityWeightInput.getAttribute('value')).toBe('');
+
+    const actionInput = screen.getByTestId('grant-featured-app-action');
+    const submitButton = screen.getByTestId('submit-button');
+
+    const summaryInput = screen.getByTestId('grant-featured-app-summary');
+    await user.type(summaryInput, 'Summary of the proposal');
+
+    const urlInput = screen.getByTestId('grant-featured-app-url');
+    await user.type(urlInput, 'https://example.com');
+
+    const providerInput = screen.getByTestId('grant-featured-app-idValue');
+    await user.type(providerInput, 'a-party-id::1014912492');
+
+    await user.click(activityWeightInput);
+
+    await user.click(actionInput); // using this to trigger the onBlur event which triggers the validation
+
+    await waitFor(() => {
+      expect(screen.queryByText('Validating provider...')).not.toBeInTheDocument();
+    });
+
+    await waitFor(async () => {
+      expect(submitButton).not.toBeDisabled();
+    });
+
+    await user.click(submitButton); // review proposal
+
+    expect(screen.getByTestId('grantRightActivityWeight-field').textContent).toBe('');
+
+    await user.click(submitButton); // submit proposal
+
+    await waitFor(() => {
+      expect(requestBody).toContain('"activityWeight":null');
+    });
+  });
+
+  test('should send explicit activity weight to backend when provided', async () => {
+    let requestBody = '';
+    server.use(
+      http.post(`${svUrl}/v0/admin/sv/voterequest/create`, async ({ request }) => {
+        requestBody = await request.text();
+        return HttpResponse.json({});
+      })
+    );
+
+    const user = userEvent.setup();
+
+    render(
+      <Wrapper>
+        <GrantRevokeFeaturedAppForm selectedAction="SRARC_GrantFeaturedAppRight" />
+      </Wrapper>
+    );
+
+    const actionInput = screen.getByTestId('grant-featured-app-action');
+    const submitButton = screen.getByTestId('submit-button');
+
+    const summaryInput = screen.getByTestId('grant-featured-app-summary');
+    await user.type(summaryInput, 'Summary of the proposal');
+
+    const urlInput = screen.getByTestId('grant-featured-app-url');
+    await user.type(urlInput, 'https://example.com');
+
+    const providerInput = screen.getByTestId('grant-featured-app-idValue');
+    await user.type(providerInput, 'a-party-id::1014912492');
+
+    const activityWeightInput = screen.getByTestId('grant-featured-app-activityWeight');
+    await user.type(activityWeightInput, '2.5');
+
+    await user.click(actionInput); // using this to trigger the onBlur event which triggers the validation
+
+    await waitFor(() => {
+      expect(screen.queryByText('Validating provider...')).not.toBeInTheDocument();
+    });
+
+    await waitFor(async () => {
+      expect(submitButton).not.toBeDisabled();
+    });
+
+    await user.click(submitButton); // review proposal
+    await user.click(submitButton); // submit proposal
+
+    await waitFor(() => {
+      expect(requestBody).toContain('"activityWeight":"2.5"');
+    });
+  });
+
+  test('activity weight rejects negative numbers and more than 10 decimal places', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <Wrapper>
+        <GrantRevokeFeaturedAppForm selectedAction="SRARC_GrantFeaturedAppRight" />
+      </Wrapper>
+    );
+
+    const activityWeightInput = screen.getByTestId('grant-featured-app-activityWeight');
+    const activityWeightError = screen.getByTestId('grant-featured-app-activityWeight-error');
+
+    await user.type(activityWeightInput, '-1');
+    await waitFor(() => {
+      expect(activityWeightError.textContent).toBe('Weight must be a valid non-negative number');
+    });
+
+    await user.clear(activityWeightInput);
+    await user.type(activityWeightInput, '1.1234567891');
+    await waitFor(() => {
+      expect(activityWeightError.textContent).toBe('');
+    });
+
+    await user.clear(activityWeightInput);
+    await user.type(activityWeightInput, '1.12345678912');
+    await waitFor(() => {
+      expect(activityWeightError.textContent).toBe('Weight can have at most 10 decimal places');
+    });
+  });
 });
 
 describe('Revoke Featured App Form', () => {

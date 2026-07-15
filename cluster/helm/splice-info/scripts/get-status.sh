@@ -23,7 +23,7 @@ CURL_CMD=(curl -fs -m "$CURL_TIMEOUT")
 prom2json() {
   P2J_VERSION="1.5.0"
   P2J_ARCH="linux-amd64"
-  P2J_BIN="$HOME/.prom2json-$P2J_VERSION"
+  P2J_BIN="/tmp/.prom2json-$P2J_VERSION"
   P2J_URL="https://github.com/prometheus/prom2json/releases/download/v$P2J_VERSION/prom2json-$P2J_VERSION.$P2J_ARCH.tar.gz"
   P2J_EXPECTED_SHA="5935363cc8c88360e3aa275ddc5a754ad95f6bab6b6052978e686300baa5a4d6"
 
@@ -40,7 +40,7 @@ prom2json() {
     rm -rf "$P2J_TMPDIR" "$P2J_DIST"
   fi
 
-  "$P2J_BIN"
+  "$P2J_BIN" "$@"
 }
 
 sv_get_status() {
@@ -247,6 +247,11 @@ generate_sequencer_metrics_url() {
 }
 
 main() {
+  if ! prom2json --version &>/dev/null; then
+    echo "ERROR: prom2json is not installed. Exiting." >&2
+    return 1
+  fi
+
   if [[ -z "${SEQUENCER_METRICS_URL:-}" ]]; then
     update_serial_id
     SEQUENCER_METRICS_URL=$(generate_sequencer_metrics_url)

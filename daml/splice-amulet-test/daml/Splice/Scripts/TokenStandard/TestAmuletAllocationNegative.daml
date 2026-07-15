@@ -467,7 +467,7 @@ test_settleBatchV2_wrongActor = test_settleBatchV2_generic $ \SettleTestEnv {..}
         actors = [bob]
   pure $ (,) choiceArg $
     expectMessageContains "'actors' does not have the same elements as one of 'allowed actors'" <>
-    expectMessageContains "allowed actors: [['provider']]"
+    expectMessageContains "allowed actors: [['provider1','provider2']]"
 
 test_settleBatchV2_tooFewAllocs : Script ()
 test_settleBatchV2_tooFewAllocs = test_settleBatchV2_generic $ \SettleTestEnv {..} TestEnv {..} -> do
@@ -478,7 +478,7 @@ test_settleBatchV2_tooFewAllocs = test_settleBatchV2_generic $ \SettleTestEnv {.
           [ V2.FinalizedAllocation aliceAllocCid [TSU.senderSide legV2] None
           ]
         extraArgs = emptyExtraArgs
-        actors = [provider]
+        actors = [provider1, provider2]
   pure $ (,) choiceArg $
     expectMessageContains "'missing authorizations' is not equal to 'empty set'." <>
     expectMessageContains "side = ReceiverSide"
@@ -492,7 +492,7 @@ test_settleBatchV2_tooManyAllocs = test_settleBatchV2_generic $ \SettleTestEnv {
           [ V2.FinalizedAllocation aliceAllocCid [TSU.senderSide legV2] None
           ]
         extraArgs = emptyExtraArgs
-        actors = [provider]
+        actors = [provider1, provider2]
   pure $ (,) choiceArg $
     expectMessageContains "'superfluous authorizations' is not equal to 'empty set'" <>
     expectMessageContains "side = SenderSide"
@@ -507,7 +507,7 @@ test_settleBatchV2_duplicate_transferLegs = test_settleBatchV2_generic $ \Settle
           , V2.FinalizedAllocation bobAllocCid [] None
           ]
         extraArgs = emptyExtraArgs
-        actors = [provider]
+        actors = [provider1, provider2]
   pure $ (,) choiceArg $
     expectMessageContains "Expected unique SettleBatch.transferLegsIds, but found duplicates:" <>
     expectMessageContains "leg1"
@@ -523,7 +523,7 @@ test_settleBatchV2_duplicateAllocs_same_cid = test_settleBatchV2_generic $ \Sett
           , V2.FinalizedAllocation bobAllocCid [] None
           ]
         extraArgs = emptyExtraArgs
-        actors = [provider]
+        actors = [provider1, provider2]
   pure $ (,) choiceArg $
     expectMessageContains "Expected unique transferLegIds of allocated authorizations, but found duplicates" <>
     expectMessageContains "ReceiverSide"
@@ -539,7 +539,7 @@ test_settleBatchV2_duplicateAllocs_different_cid = test_settleBatchV2_generic $ 
           [ V2.FinalizedAllocation aliceAllocCid [TSU.senderSide legV2] None ] <>
           [ V2.FinalizedAllocation bobAllocCid [] None | (bobAllocCid, _) <- bobAllocs ]
         extraArgs = emptyExtraArgs
-        actors = [provider]
+        actors = [provider1, provider2]
   pure $ (,) choiceArg $
     expectMessageContains "Expected unique transferLegIds of allocated authorizations, but found duplicates" <>
     expectMessageContains "ReceiverSide"
@@ -554,7 +554,7 @@ test_settleBatchV2_nonIterated_noExtraLegs = test_settleBatchV2_generic $ \Settl
           , V2.FinalizedAllocation bobAllocCid [TSU.receiverSide legV2] None
           ]
         extraArgs = emptyExtraArgs
-        actors = [provider]
+        actors = [provider1, provider2]
   pure $ (,) choiceArg $
     expectMessageContains "'finalizedAllocation.extraTransferLegSides' is not equal to 'expected value'" <>
     expectMessageContains "expected value: []"
@@ -569,7 +569,7 @@ test_settleBatchV2_nonIterated_noNextIterationFunding = test_settleBatchV2_gener
           , V2.FinalizedAllocation bobAllocCid [] (Some TextMap.empty)
           ]
         extraArgs = emptyExtraArgs
-        actors = [provider]
+        actors = [provider1, provider2]
   pure $ (,) choiceArg $
     expectMessageContains "no next iteration funding allowed when iterated settlement is disabled"
 
@@ -595,13 +595,13 @@ test_settleBatchV2_wrongAllocationAdmin = do
           , V2.FinalizedAllocation bobAllocCid [TSU.receiverSide legV2] None
           ]
         extraArgs = emptyExtraArgs
-        actors = [provider]
+        actors = [provider1, provider2]
   -- need to avoid fetching choice contexts for the actual allocations, as they can't be resolved
   -- by the AmuletRegistryV2 scripts due to the different admin
   enrichedChoice <- V2.getSettlementFactory registryV2 choiceArg with allocations = []
   submitMustFail''
     (expectMessageContains  "'allocation.admin' is not equal to 'expected value'")
-    (actAs provider <> discloseMany' enrichedChoice.disclosures) $
+    (foldMap actAs choiceArg.actors <> discloseMany' enrichedChoice.disclosures) $
       exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg with allocations = choiceArg.allocations
 
 test_settleBatchV2_nextIterationFunding_wrongInstrumentId: Script ()
@@ -614,7 +614,7 @@ test_settleBatchV2_nextIterationFunding_wrongInstrumentId = test_settleBatchV2_g
           , V2.FinalizedAllocation bobAllocCid [] None
           ]
         extraArgs = emptyExtraArgs
-        actors = [provider]
+        actors = [provider1, provider2]
   pure $ (,) choiceArg $
     expectMessageContains "'nextIterationFunding.instrumentId' is not equal to 'expected value'" <>
     expectMessageContains "BAD_INSTRUMENT_ID"
@@ -650,11 +650,11 @@ test_settleBatchV2_decimal_overflow = do
           , V2.FinalizedAllocation bobAllocCid [TSU.receiverSide leg1, TSU.receiverSide leg2, TSU.senderSide leg3] None
           ]
         extraArgs = emptyExtraArgs
-        actors = [provider]
+        actors = [provider1, provider2]
   enrichedChoice <- V2.getSettlementFactory registryV2 choiceArg
   submitMustFail''
     (expectMessageContains  "ArithmeticError while evaluating (ADD_NUMERIC -2.0 -9999999999999999999999999999.9999999999)")
-    (actAs provider <> discloseMany' enrichedChoice.disclosures) $
+    (foldMap actAs choiceArg.actors <> discloseMany' enrichedChoice.disclosures) $
       exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
 
 test_settleBatchV2_generic : (SettleTestEnv -> TestEnv -> Script (V2.SettlementFactory_SettleBatch, FailureStatusCheck)) -> Script ()
@@ -671,9 +671,8 @@ test_settleBatchV2_generic mkTest = do
   [(bobAllocCid, _)] <- WalletClientV2.listAllocationsV2 bobAccount bob
   (choiceArg, check) <- mkTest (SettleTestEnv {..}) testEnv
   enrichedChoice <- V2.getSettlementFactory registryV2 choiceArg
-  let [actor] = choiceArg.actors
   submitMustFail'' check
-    (actAs actor <> discloseMany' enrichedChoice.disclosures) $
+    (foldMap actAs choiceArg.actors <> discloseMany' enrichedChoice.disclosures) $
       exerciseCmd enrichedChoice.factoryCid enrichedChoice.arg
 
 
@@ -688,7 +687,7 @@ test_allocation_Settle_generic mkTest = do
     transferLegs = []
     allocations = []
     extraArgs = emptyExtraArgs
-    actors = [provider, instrId.admin]
+    actors = [provider1, provider2, instrId.admin]
   (choiceArg, check) <- mkTest env enrichedChoice.arg.extraArgs
   [(aliceAllocCid, _)] <- WalletClientV2.listAllocationsV2 aliceAccount alice
   submitMustFail'' check (foldMap actAs choiceArg.actors) $ exerciseCmd aliceAllocCid choiceArg
@@ -701,7 +700,7 @@ test_allocationv1_Settle_nonEmpty_extraLegs = test_allocation_Settle_generic $ \
         extraTransferLegSides = [TSU.senderSide legV2]
         nextIterationFunding = None
         extraArgs
-        actors = [provider, instrId.admin]
+        actors = [provider1, provider2, instrId.admin]
     , expectMessageContains "'arg.extraTransferLegSides' is not equal to 'expected value'"  <>
       expectMessageContains "expected value: []"
     )
@@ -714,7 +713,7 @@ test_allocationv1_Settle_set_nextIterationFunding = test_allocation_Settle_gener
         extraTransferLegSides = []
         nextIterationFunding = Some $ TextMap.fromList [(instrId.id, 0.0)]
         extraArgs
-        actors = [provider, instrId.admin]
+        actors = [provider1, provider2, instrId.admin]
     , expectMessageContains "'arg.nextIterationFunding' is not equal to 'expected value'"  <>
       expectMessageContains "expected value: None"
     )
@@ -731,7 +730,7 @@ test_allocationv2_Settle_iterated_extraTransferLeg_nonBasicAccount = test_alloca
         extraTransferLegSides = [TSU.senderSide legV2 with receiver = nonBasicAccount]
         nextIterationFunding = None
         extraArgs
-        actors = [provider, instrId.admin]
+        actors = [provider1, provider2, instrId.admin]
     , expectMessageContains $ "Expected a basic account for field 'transferLeg.otherside', but got: " <> show nonBasicAccount
     )
 
@@ -745,7 +744,7 @@ test_allocationv1_Settle_wrongActor = test_allocation_Settle_generic $ \TestEnv{
         extraArgs
         actors = [alice]
     , expectMessageContains "'actors' does not have the same elements as one of 'allowed actors'" <>
-      expectMessageContains ("allowed actors: [[" <> show instrId.admin <> ",'provider']]")
+      expectMessageContains ("allowed actors: [[" <> show instrId.admin <> ",'provider1','provider2']]")
     )
 
 test_allocationv2_Settle_wrongActor : Script ()
@@ -758,7 +757,7 @@ test_allocationv2_Settle_wrongActor = test_allocation_Settle_generic $ \TestEnv{
         extraArgs
         actors = [alice]
     , expectMessageContains "'actors' does not have the same elements as one of 'allowed actors'" <>
-      expectMessageContains ("allowed actors: [[" <> show instrId.admin <> ",'provider']]")
+      expectMessageContains ("allowed actors: [[" <> show instrId.admin <> ",'provider1','provider2']]")
     )
 
 test_allocationv1_Settle_after_settlementDeadline : Script ()
@@ -770,7 +769,7 @@ test_allocationv1_Settle_after_settlementDeadline = test_allocation_Settle_gener
         extraTransferLegSides = []
         nextIterationFunding = None
         extraArgs
-        actors = [provider, instrId.admin]
+        actors = [provider1, provider2, instrId.admin]
     , expectErrorId "stdlib.daml.com/deadline-exceeded"
     )
 
@@ -784,7 +783,7 @@ test_allocationv2_Settle_after_settlementDeadline = test_allocation_Settle_gener
         extraTransferLegSides = []
         nextIterationFunding = None
         extraArgs
-        actors = [provider, instrId.admin]
+        actors = [provider1, provider2, instrId.admin]
     , expectErrorId "stdlib.daml.com/deadline-exceeded"
     )
 
@@ -800,7 +799,7 @@ test_allocationv1_Cancel_wrongActor = do
 
   submitMustFail''
     ( expectMessageContains "'actors' does not have the same elements as one of 'allowed actors'" <>
-      expectMessageContains ("allowed actors: [['provider'],[" <> show instrId.admin <> "]]")
+      expectMessageContains ("allowed actors: [['provider1','provider2'],[" <> show instrId.admin <> "]]")
     )
     (actAs alice) $ exerciseCmd aliceAllocCid V2.Allocation_Cancel with
       extraArgs = emptyExtraArgs
@@ -814,7 +813,7 @@ test_allocationv2_Cancel_wrongActor = do
 
   submitMustFail''
     ( expectMessageContains "'actors' does not have the same elements as one of 'allowed actors'" <>
-      expectMessageContains ("allowed actors: [['provider'],[" <> show instrId.admin <> "]]")
+      expectMessageContains ("allowed actors: [['provider1','provider2'],[" <> show instrId.admin <> "]]")
     )
     (actAs alice) $ exerciseCmd aliceAllocCid V2.Allocation_Cancel with
       extraArgs = emptyExtraArgs
@@ -834,9 +833,9 @@ test_allocationv1_Withdraw_wrongActor = do
     ( expectMessageContains "'actors' does not have the same elements as one of 'allowed actors'" <>
       expectMessageContains ("allowed actors: [['alice']]")
     )
-    (actAs provider) $ exerciseCmd aliceAllocCid V2.Allocation_Withdraw with
+    (actAs provider1) $ exerciseCmd aliceAllocCid V2.Allocation_Withdraw with
       extraArgs = emptyExtraArgs
-      actors = [provider]
+      actors = [provider1]
 
 test_allocationv2_Withdraw_wrongActor : Script ()
 test_allocationv2_Withdraw_wrongActor = do
@@ -848,9 +847,9 @@ test_allocationv2_Withdraw_wrongActor = do
     ( expectMessageContains "'actors' does not have the same elements as one of 'allowed actors'" <>
       expectMessageContains ("allowed actors: [['alice']]")
     )
-    (actAs provider) $ exerciseCmd aliceAllocCid V2.Allocation_Withdraw with
+    (actAs provider1) $ exerciseCmd aliceAllocCid V2.Allocation_Withdraw with
       extraArgs = emptyExtraArgs
-      actors = [provider]
+      actors = [provider1]
 
 test_allocationv2_Withdraw_committed_expired_but_deadlineNotReached : Script ()
 test_allocationv2_Withdraw_committed_expired_but_deadlineNotReached = do

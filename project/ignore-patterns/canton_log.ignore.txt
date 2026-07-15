@@ -198,4 +198,10 @@ Mempool received client request but this node is currently blacklisted, rejectin
 # This should go away with latest Canton bump
 Flyway upgrade recommended: PostgreSQL 18.4 is newer than this version of Flyway and support has not been tested. The latest supported version of PostgreSQL is 17
 
+# TODO(DACH-NY/cn-test-failures#9055) can be removed when it's no longer a warn.
+LOCAL_VERDICT_FAILED_MODEL_CONFORMANCE_CHECK.*Rejected transaction due to a failed model conformance check: UnvettedPackages.*
+
 # Make sure to have a trailing newline
+
+# TODO(DACH-NY/cn-test-failures#9136) remove once Canton fixes this race condition from not storing packages in dependency order
+INTERNAL/Missing package-id.*in package metadata view

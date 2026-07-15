@@ -104,6 +104,11 @@ const MonitoringConfigSchema = z
           rejectionRateThreshold: z.number(),
           circuitBreakerStateThreshold: z.number(),
         }),
+        cantonBft: z.object({
+          // Alert if the number of ingress requests queued in the BFT ordering
+          // layer exceeds this threshold.
+          mempoolMaxSizeThreshold: z.number(),
+        }),
         scanConnectionDisagreement: z.object({
           // Fraction (0-1) of BFT consensus comparisons on a scan connection that may
           // return a response (successful or failed) disagreeing with the consensus
@@ -116,6 +121,9 @@ const MonitoringConfigSchema = z
           // connection disagreement alerts. Matched as a regex against the
           // `scan_connection` label.
           excludedConnections: z.array(z.string()).default([]),
+          // Http status code (by their `http_status` label) to exclude from the disagreement alerts.
+          // Matched as a regex against the `http_status` label.
+          excludedHttpStatusCodes: z.array(z.string()).default([]),
         }),
         walletSweep: z.object({
           tolerance: z.number(),
@@ -128,6 +136,8 @@ const MonitoringConfigSchema = z
           .default({ thresholdPercent: 80 }),
         trafficBasedRewards: z.object({
           featuredAppRightsLimit: z.number(),
+          verdictIngestionBatchSizeThreshold: z.number(),
+          verdictIngestionBatchSizePendingPeriodMinutes: z.number(),
         }),
       }),
       logAlerts: z.object({}).catchall(z.string()).default({}),

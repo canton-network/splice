@@ -218,7 +218,10 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
           )}
 
           {proposalDetails.action === 'SRARC_GrantFeaturedAppRight' && (
-            <FeatureAppSection provider={proposalDetails.proposal.provider} />
+            <FeatureAppSection
+              provider={proposalDetails.proposal.provider}
+              activityWeight={proposalDetails.proposal.activityWeight}
+            />
           )}
 
           {proposalDetails.action === 'SRARC_RevokeFeaturedAppRight' && (
@@ -247,7 +250,7 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
                 label="Proposed Changes"
                 value={<ConfigValuesChanges changes={proposalDetails.proposal.configChanges} />}
               />
-              <JsonDiffAccordion>
+              <JsonDiffAccordion variant="review">
                 {amuletConfigToCompareWith ? (
                   <PrettyJsonDiff
                     changes={{
@@ -268,7 +271,7 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
                 label="Proposed Changes"
                 value={<ConfigValuesChanges changes={proposalDetails.proposal.configChanges} />}
               />
-              <JsonDiffAccordion>
+              <JsonDiffAccordion variant="review">
                 {dsoConfigToCompareWith?.[1] ? (
                   <PrettyJsonDiff
                     changes={{
@@ -436,7 +439,7 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
               key={editFormKey}
               voteRequestContractId={contractId}
               currentSvPartyId={currentSvPartyId}
-              onSubmissionComplete={() => setVoteSubmitted(true)}
+              onSubmissionStart={() => setVoteSubmitted(true)}
               votes={votes}
             />
           </VoteSection>
@@ -576,9 +579,10 @@ const OffboardMemberSection = ({ memberPartyId }: OffboardMemberSectionProps) =>
 
 interface FeatureAppSectionProps {
   provider: string;
+  activityWeight: string;
 }
 
-const FeatureAppSection = ({ provider }: FeatureAppSectionProps) => {
+const FeatureAppSection = ({ provider, activityWeight }: FeatureAppSectionProps) => {
   return (
     <Box
       id="proposal-details-feature-app-section"
@@ -595,6 +599,12 @@ const FeatureAppSection = ({ provider }: FeatureAppSectionProps) => {
           />
         }
         labelId="proposal-details-feature-app-label"
+      />
+      <DetailItem
+        label="Activity Weight"
+        value={activityWeight}
+        labelId="proposal-details-feature-app-activity-weight-label"
+        valueId="proposal-details-feature-app-activity-weight-value"
       />
     </Box>
   );

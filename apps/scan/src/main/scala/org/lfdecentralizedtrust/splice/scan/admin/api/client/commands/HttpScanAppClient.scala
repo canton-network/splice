@@ -53,7 +53,7 @@ import org.lfdecentralizedtrust.splice.scan.admin.http.{
   ProtobufJsonScanHttpEncodings,
 }
 import org.lfdecentralizedtrust.splice.store.HistoryBackfilling.SourceMigrationInfo
-import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore
+import org.lfdecentralizedtrust.splice.store.{MultiDomainAcsStore, VoteResultsFilters}
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryResponse
 import org.lfdecentralizedtrust.splice.util.{
   ChoiceContextWithDisclosures,
@@ -3086,11 +3086,7 @@ object HttpScanAppClient {
   }
 
   case class ListVoteRequestResults(
-      actionName: Option[String],
-      accepted: Option[Boolean],
-      requester: Option[String],
-      effectiveFrom: Option[String],
-      effectiveTo: Option[String],
+      filters: VoteResultsFilters,
       limit: BigInt,
       pageToken: Option[BigInt] = None,
   ) extends InternalBaseCommand[
@@ -3107,13 +3103,13 @@ object HttpScanAppClient {
     ): EitherT[Future, Either[Throwable, HttpResponse], http.ListVoteRequestResultsResponse] =
       client.listVoteRequestResults(
         body = definitions.ListVoteResultsRequest(
-          actionName,
-          accepted,
-          requester,
-          effectiveFrom,
-          effectiveTo,
-          limit,
-          pageToken,
+          filters.actionName,
+          filters.accepted,
+          requester = filters.requester,
+          effectiveFrom = filters.effectiveFrom,
+          effectiveTo = filters.effectiveTo,
+          limit = limit,
+          pageToken = pageToken,
         ),
         headers = headers,
       )
@@ -3132,6 +3128,35 @@ object HttpScanAppClient {
         )
         .toSeq
       Right((results, response.nextPageToken))
+    }
+  }
+
+  case class CountVoteRequestResults(
+      filters: VoteResultsFilters
+  ) extends InternalBaseCommand[
+        http.CountVoteRequestResultsResponse,
+        Long,
+      ] {
+
+    override def submitRequest(
+        client: ScanClient,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[Throwable, HttpResponse], http.CountVoteRequestResultsResponse] =
+      client.countVoteRequestResults(
+        body = definitions.CountVoteResultsRequest(
+          filters.actionName,
+          filters.accepted,
+          requester = filters.requester,
+          effectiveFrom = filters.effectiveFrom,
+          effectiveTo = filters.effectiveTo,
+        ),
+        headers = headers,
+      )
+
+    override def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ) = { case http.CountVoteRequestResultsResponse.OK(response) =>
+      Right(response.count)
     }
   }
 

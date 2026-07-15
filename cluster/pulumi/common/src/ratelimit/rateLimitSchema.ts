@@ -10,7 +10,7 @@ export const BucketRateLimitSchema = z.object({
 
 const BucketMatchedRateLimitSchema = BucketRateLimitSchema.extend({
   type: z.literal('limited'),
-  clientIp: z.boolean(),
+  perIpLimits: BucketRateLimitSchema.optional(),
 });
 
 export const BannedSchema = z.object({

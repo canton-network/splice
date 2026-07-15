@@ -43,7 +43,8 @@ function latest_full_backup_run_id_kube() {
   local is_sv=$3
   local expected_components=$4
   local before_timestamp=$5
-  if [ "$is_sv" == "true" ]; then
+  local include_cometbft=$6
+  if [ "$is_sv" == "true" ] && [ "$include_cometbft" == "true" ]; then
       expected_components="$expected_components cometbft"
   fi
 
@@ -138,6 +139,20 @@ function main() {
     before_timestamp=$(date +%s)
   fi
 
+  local config
+  config=$(get_resolved_config)
+  local bft_sequencer_enabled
+  bft_sequencer_enabled=$(echo "$config" | yq "
+    ([.synchronizerMigration.active, .synchronizerMigration.upgrade, .synchronizerMigration.legacy]
+      + (.synchronizerMigration.archived // [])
+      + (.synchronizerMigration.additionalLegacy // []))
+    | map(select(.id == $migration_id))
+    | .[0].sequencer.enableBftSequencer // false")
+  local include_cometbft="true"
+  if [ "$bft_sequencer_enabled" == "true" ]; then
+    include_cometbft="false"
+  fi
+
   case "$namespace" in
       sv|sv-[0-9]|sv-[0-9][0-9]|sv-da-*)
           is_sv=true
@@ -156,7 +171,7 @@ function main() {
   type=$(get_postgres_type "$full_instance" "$stack")
   # We only check the postgres type of one component and assume other components have the same type.
   if [ "$type" == "canton:network:postgres" ]; then
-    backup_run_id=$(latest_full_backup_run_id_kube "$namespace" "$migration_id" "$is_sv" "$expected_components" "$before_timestamp")
+    backup_run_id=$(latest_full_backup_run_id_kube "$namespace" "$migration_id" "$is_sv" "$expected_components" "$before_timestamp" "$include_cometbft")
     echo "$backup_run_id"
   elif [ "$type" == "canton:cloud:postgres" ]; then
     backup_map_id=$(latest_full_backup_run_id_gcloud "$namespace" "$migration_id" "$is_sv" "$expected_components" "$before_timestamp")

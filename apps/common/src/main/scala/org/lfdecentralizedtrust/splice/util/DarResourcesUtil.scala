@@ -9,7 +9,7 @@ import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.daml.lf.data.Ref.{PackageName, PackageVersion}
 import org.lfdecentralizedtrust.splice.environment.DarResource
 import org.lfdecentralizedtrust.splice.environment.DarResources.{
-  packageResources,
+  corePackageResources,
   pkgIdToDarResource,
   pkgMetadataToDarResource,
 }
@@ -18,12 +18,12 @@ object DarResourcesUtil extends NamedLogging {
 
   override protected def loggerFactory: NamedLoggerFactory = NamedLoggerFactory.root
 
-  val minimalPackageVersions: Seq[DarResource] = packageResources.flatMap(pkg =>
+  val minimalPackageVersions: Seq[DarResource] = corePackageResources.flatMap(pkg =>
     pkg.all.filter(p => p.metadata.version == pkg.minimumInitialization.metadata.version)
   )
 
   val supportedPackageVersions: Seq[DarResource] =
-    packageResources.flatMap(pkg =>
+    corePackageResources.flatMap(pkg =>
       pkg.all.filter(p => p.metadata.version >= pkg.minimumInitialization.metadata.version)
     )
 
@@ -37,7 +37,7 @@ object DarResourcesUtil extends NamedLogging {
     pkgMetadataToDarResource.get((name, version))
 
   def lookupAllPackageVersions(name: PackageName): Seq[DarResource] =
-    packageResources.view.flatMap(_.all).toSeq.filter(_.metadata.name == name)
+    corePackageResources.view.flatMap(_.all).toSeq.filter(_.metadata.name == name)
 
   // TODO(canton-network/splice#4049): remove `enableUnsupportedDarsUnvetting` once not needed anymore
   def getRequiredPackageVersions(
@@ -61,7 +61,7 @@ object DarResourcesUtil extends NamedLogging {
           false
         }
       }
-    packageResources.view
+    corePackageResources.view
       .flatMap(_.all)
       .toSeq
       .filter(_.metadata.name == name)
@@ -86,7 +86,7 @@ object DarResourcesUtil extends NamedLogging {
       packageConfigMap: Map[PackageName, PackageVersion],
   )(implicit tc: TraceContext): Seq[DarResource] = {
     val allSupportedVersionsPackageIds =
-      packageResources
+      corePackageResources
         .flatMap { pkg =>
           val versionFromAmuletRules = packageConfigMap.getOrElse(
             pkg.latest.metadata.name,
@@ -107,7 +107,7 @@ object DarResourcesUtil extends NamedLogging {
   }
 
   private def lookupMinimumPackageResource(name: PackageName): DarResource =
-    packageResources
+    corePackageResources
       .find(_.latest.metadata.name == name)
       .getOrElse(throw new NoSuchElementException(s"Could not find PackageResource for $name."))
       .minimumInitialization

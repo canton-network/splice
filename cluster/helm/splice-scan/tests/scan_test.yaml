@@ -466,14 +466,22 @@ tests:
         secretOverrides:
           postgresPassword: "vault:kv/data/scan/postgres-password"
       bulkStorage:
-        s3:
+        staging:
           endpoint: "mock-endpoint"
           region: "mock-region"
           bucketName: "mock-bucket"
           secretName: "mock-secret"
           secretOverrides:
-            accessKey: "vault:kv/data/scan/s3-access-key"
-            secretAccessKey: "vault:kv/data/scan/s3-secret-key"
+            accessKey: "vault:kv/data/scan/staging-access-key"
+            secretAccessKey: "vault:kv/data/scan/staging-secret-key"
+        committed:
+          endpoint: "mock-endpoint"
+          region: "mock-region"
+          bucketName: "mock-bucket"
+          secretName: "mock-secret"
+          secretOverrides:
+            accessKey: "vault:kv/data/scan/committed-access-key"
+            secretAccessKey: "vault:kv/data/scan/committed-secret-key"
       auth:
         jwksUrl: "https://mock.com/.well-known/jwks.json"
         audience: "mock_audience"
@@ -494,11 +502,17 @@ tests:
           path: spec.template.spec.initContainers[?(@.name=='scan-init')].env[?(@.name=='PGPASSWORD')].value
           pattern: "vault:kv/data/scan/postgres-password"
       - matchRegex:
-          path: spec.template.spec.containers[?(@.name=='scan-app')].env[?(@.name=='SPLICE_APP_BULK_STORAGE_S3_ACCESS_KEY_ID')].value
-          pattern: "vault:kv/data/scan/s3-access-key"
+          path: spec.template.spec.containers[?(@.name=='scan-app')].env[?(@.name=='SPLICE_APP_BULK_STORAGE_STAGING_ACCESS_KEY_ID')].value
+          pattern: "vault:kv/data/scan/staging-access-key"
       - matchRegex:
-          path: spec.template.spec.containers[?(@.name=='scan-app')].env[?(@.name=='SPLICE_APP_BULK_STORAGE_S3_SECRET_ACCESS_KEY')].value
-          pattern: "vault:kv/data/scan/s3-secret-key"
+          path: spec.template.spec.containers[?(@.name=='scan-app')].env[?(@.name=='SPLICE_APP_BULK_STORAGE_STAGING_SECRET_ACCESS_KEY')].value
+          pattern: "vault:kv/data/scan/staging-secret-key"
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='scan-app')].env[?(@.name=='SPLICE_APP_BULK_STORAGE_COMMITTED_ACCESS_KEY_ID')].value
+          pattern: "vault:kv/data/scan/committed-access-key"
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='scan-app')].env[?(@.name=='SPLICE_APP_BULK_STORAGE_COMMITTED_SECRET_ACCESS_KEY')].value
+          pattern: "vault:kv/data/scan/committed-secret-key"
       - notExists:
           path: spec.template.spec.containers[?(@.name=='scan-app')].env[?(@.valueFrom.secretKeyRef)]
       - matchRegex:
