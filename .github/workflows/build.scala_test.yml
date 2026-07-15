@@ -57,6 +57,7 @@ on:
         description: "Canton protocol version"
         type: string
         required: true
+# FIXME:
       oss_only:
         description: "Restrict upstream dependencies (e.g. Canton) to OSS versions (the equivalent of OSS_ONLY=1 in local checkouts)"
         required: false
@@ -162,6 +163,3 @@ jobs:
           failure_notifications_slack_channel: ${{ secrets.FAILURE_NOTIFICATIONS_SLACK_CHANNEL }}
           daml_base_version: ${{ inputs.daml_base_version }}
           protocol_version: ${{ inputs.protocol_version }}
-          oss_only: ${{ inputs.oss_only }}
-          artifactory_user: ${{ inputs.oss_only && '' || vars.ARTIFACTORY_USER }}
-          artifactory_password: ${{ inputs.oss_only && '' || secrets.ARTIFACTORY_PASSWORD }}

@@ -36,8 +36,6 @@ jobs:
       - name: Build docs
         uses: ./.github/actions/sbt/execute_sbt_command
         with:
-          artifactory_user: ${{ vars.ARTIFACTORY_USER }}
-          artifactory_password: ${{ secrets.ARTIFACTORY_PASSWORD }}
           # We Test/compile here as the docs job is the one that pushes to the SBT cache
           # as it finishes fastest and we want to ensure that it includes test sources.
           cmd: "Test/compile docs/bundle"

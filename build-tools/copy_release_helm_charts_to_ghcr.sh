@@ -3,7 +3,7 @@
 # Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Copies release helm charts for app charts defined in app_charts_file from artifactory to ghcr.io
+# Copies release helm charts for app charts defined in app_charts_file from dev to release in ghcr
 set -eou pipefail
 
 VERSION=""
