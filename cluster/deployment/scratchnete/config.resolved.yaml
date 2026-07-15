@@ -542,6 +542,7 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      enableAntiAffinity: false
       resources:
         limits:
           cpu: '3'
@@ -616,6 +617,7 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      enableAntiAffinity: false
       resources:
         limits:
           cpu: '3'
@@ -690,6 +692,7 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      enableAntiAffinity: false
       resources:
         limits:
           cpu: '3'
@@ -764,6 +767,7 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      enableAntiAffinity: false
       resources:
         limits:
           cpu: '3'
@@ -838,6 +842,7 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      enableAntiAffinity: false
       resources:
         limits:
           cpu: '3'
@@ -912,6 +917,7 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      enableAntiAffinity: false
       resources:
         limits:
           cpu: '3'
@@ -986,6 +992,7 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      enableAntiAffinity: false
       resources:
         limits:
           cpu: '3'
@@ -1060,6 +1067,7 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      enableAntiAffinity: false
       resources:
         limits:
           cpu: '3'
@@ -1134,6 +1142,7 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      enableAntiAffinity: false
       resources:
         limits:
           cpu: '3'
@@ -1208,6 +1217,7 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      enableAntiAffinity: false
       resources:
         limits:
           cpu: '3'
@@ -1282,6 +1292,7 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      enableAntiAffinity: false
       resources:
         limits:
           cpu: '3'
@@ -1356,6 +1367,7 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      enableAntiAffinity: false
       resources:
         limits:
           cpu: '3'
@@ -1430,6 +1442,7 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      enableAntiAffinity: false
       resources:
         limits:
           cpu: '3'
@@ -1504,6 +1517,7 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      enableAntiAffinity: false
       resources:
         limits:
           cpu: '3'
@@ -1578,6 +1592,7 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      enableAntiAffinity: false
       resources:
         limits:
           cpu: '3'
@@ -1652,6 +1667,7 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      enableAntiAffinity: false
       resources:
         limits:
           cpu: '3'
@@ -1726,6 +1742,7 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      enableAntiAffinity: false
       resources:
         limits:
           cpu: '3'
@@ -1803,6 +1820,7 @@ svs:
           cpu: '2'
           memory: '2Gi'
     sequencer:
+      enableAntiAffinity: false
       resources:
         limits:
           cpu: '3'
