@@ -49,6 +49,13 @@ type ProposalSummaryProps = BaseProposalSummaryProps &
         amount: string;
         expiresAt: string;
       }
+    | {
+        formType: 'update-right';
+        providerPartyId: string;
+        rightCid: string;
+        newActivityWeight: string;
+        reason: string;
+      }
   );
 
 export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
@@ -137,6 +144,27 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
               value={props.revokeRight}
               scrollableIdentifier
             />
+          </>
+        )}
+
+        {formType === 'update-right' && (
+          <>
+            <ProposalField
+              id="updateProviderPartyId"
+              title="Provider Party ID"
+              value={props.providerPartyId}
+            />
+            <ProposalField
+              id="updateRight"
+              title="Featured Application Contract ID"
+              value={props.rightCid}
+            />
+            <ProposalField
+              id="updateActivityWeight"
+              title="Activity Weight"
+              value={props.newActivityWeight}
+            />
+            <ProposalField id="updateReason" title="Reason" value={props.reason} />
           </>
         )}
 

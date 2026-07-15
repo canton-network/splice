@@ -228,6 +228,14 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
             <UnfeatureAppSection rightContractId={proposalDetails.proposal.rightContractId} />
           )}
 
+          {proposalDetails.action === 'SRARC_UpdateFeaturedAppRight' && (
+            <UpdateFeatureAppSection
+              rightContractId={proposalDetails.proposal.rightContractId}
+              newActivityWeight={proposalDetails.proposal.newActivityWeight}
+              reason={proposalDetails.proposal.reason}
+            />
+          )}
+
           {proposalDetails.action === 'SRARC_UpdateSvRewardWeight' && (
             <UpdateSvRewardWeightSection
               svToUpdate={proposalDetails.proposal.svToUpdate}
@@ -654,6 +662,72 @@ const UnfeatureAppSection = ({ rightContractId }: UnfeatureAppSectionProps) => {
           />
         }
         labelId="proposal-details-unfeature-app-label"
+      />
+    </Box>
+  );
+};
+
+interface UpdateFeatureAppSectionProps {
+  rightContractId: string;
+  newActivityWeight: string;
+  reason: string;
+}
+
+const UpdateFeatureAppSection = ({
+  rightContractId,
+  newActivityWeight,
+  reason,
+}: UpdateFeatureAppSectionProps) => {
+  const svAdminClient = useSvAdminClient();
+  const providerQuery = useQuery({
+    queryKey: ['featuredAppRightProvider', rightContractId],
+    queryFn: async () => {
+      const response = await svAdminClient.lookupFeaturedAppRightByContractId(rightContractId);
+      const contract = response.featured_app_right;
+      return (contract?.payload as { provider?: string } | undefined)?.provider ?? null;
+    },
+  });
+  return (
+    <Box
+      id="proposal-details-update-feature-app-section"
+      data-testid="proposal-details-update-feature-app-section"
+      sx={{ display: 'contents' }}
+    >
+      {providerQuery.data && (
+        <DetailItem
+          label="Provider Party ID"
+          value={
+            <CopyableIdentifier
+              value={providerQuery.data}
+              size="large"
+              data-testid="proposal-details-update-feature-value"
+            />
+          }
+          labelId="proposal-details-update-feature-label"
+        />
+      )}
+      <DetailItem
+        label="Featured Application Contract ID"
+        value={
+          <CopyableIdentifier
+            value={rightContractId}
+            size="large"
+            data-testid="proposal-details-update-feature-app-value"
+          />
+        }
+        labelId="proposal-details-update-feature-app-label"
+      />
+      <DetailItem
+        label="Activity Weight"
+        value={newActivityWeight}
+        labelId="proposal-details-update-feature-value"
+        valueId="proposal-details-update-feature-app-label"
+      />
+      <DetailItem
+        label="Reason"
+        value={reason}
+        labelId="proposal-details-update-feature-value"
+        valueId="proposal-details-update-feature-app-label"
       />
     </Box>
   );

@@ -22,7 +22,6 @@ import {
   validateEffectiveDate,
   validateExpiration,
   validateExpiryEffectiveDate,
-  validateRevokeFeaturedAppRight,
   validatePartyId,
   validateSummary,
   validateUrl,
@@ -34,7 +33,7 @@ import { ProposalSummary } from '../governance/ProposalSummary';
 import { ProposalSubmissionError } from '../form-components/ProposalSubmissionError';
 import { useProposalMutation } from '../../hooks/useProposalMutation';
 import { useSvAdminClient } from '../../contexts/SvAdminServiceContext';
-import { Option } from '../form-components/SelectField';
+import { useFeaturedAppRightPicker } from '../../hooks/useFeaturedAppRightPicker';
 
 type ProviderId = string;
 type FeaturedAppRightId = string;
@@ -75,8 +74,7 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
   const initialExpiration = getInitialExpiration(dsoInfosQuery.data);
   const initialEffectiveDate = dayjs(initialExpiration).add(1, 'day');
   const [showConfirmation, setShowConfirmation] = useState(false);
-  const [revokeRightOptions, setRevokeRightOptions] = useState<Option[]>([]);
-  const [providerSearched, setProviderSearched] = useState(false);
+  const picker = useFeaturedAppRightPicker(svAdminClient);
   const mutation = useProposalMutation();
 
   // TODO(#1819): use either search params or props and not both.
@@ -101,34 +99,6 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
     } catch {
       return 'Provider party not found on ledger';
     }
-  };
-
-  const loadFeaturedAppRightsAndValidate = async (value: string) => {
-    if (validatePartyId(value)) return undefined;
-
-    try {
-      const response = await svAdminClient.listFeaturedAppRightsByProvider(value);
-      const options = response.featured_app_rights.map((contract: { contract_id: string }) => ({
-        key: contract.contract_id,
-        value: contract.contract_id,
-      }));
-      setRevokeRightOptions(options);
-      setProviderSearched(true);
-      return undefined;
-    } catch {
-      setRevokeRightOptions([]);
-      setProviderSearched(false);
-      return 'Could not load featured app rights for this provider';
-    }
-  };
-
-  const validateRevokeRightSelection = (value: string): string | false => {
-    const requiredError = validateRevokeFeaturedAppRight(value);
-    if (requiredError) return requiredError;
-
-    return revokeRightOptions.some(option => option.value === value)
-      ? false
-      : 'Select a valid contract id';
   };
 
   const defaultValues: GrantRevokeFeaturedAppFormData = {
@@ -202,16 +172,16 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
     if (formAction !== 'SRARC_RevokeFeaturedAppRight') return;
 
     const currentRightCid = form.state.values.rightCid;
-    const hasSelectedOption = revokeRightOptions.some(option => option.value === currentRightCid);
+    const hasSelectedOption = picker.rightOptions.some(option => option.value === currentRightCid);
     if (hasSelectedOption) return;
 
-    const nextRightCid = revokeRightOptions.length === 1 ? revokeRightOptions[0].value : '';
+    const nextRightCid = picker.rightOptions.length === 1 ? picker.rightOptions[0].value : '';
     form.setFieldValue('rightCid', nextRightCid);
-  }, [form, formAction, revokeRightOptions]);
+  }, [form, formAction, picker.rightOptions]);
 
   const partyId = useStore(form.store, state => state.values.partyId);
   const providerHasNoRights =
-    providerSearched && revokeRightOptions.length === 0 && !validatePartyId(partyId);
+    picker.providerSearched && picker.rightOptions.length === 0 && !validatePartyId(partyId);
 
   return (
     <>
@@ -284,7 +254,7 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
                   validators={{
                     onChange: ({ value }) => validatePartyId(value),
                     onChangeAsyncDebounceMs: 500,
-                    onChangeAsync: ({ value }) => loadFeaturedAppRightsAndValidate(value),
+                    onChangeAsync: ({ value }) => picker.loadFeaturedAppRightsAndValidate(value),
                   }}
                 >
                   {field => (
@@ -294,8 +264,7 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
                       scrollableIdentifier
                       subtitle={field.state.meta.isValidating ? 'Loading app rights...' : undefined}
                       onChange={() => {
-                        setRevokeRightOptions([]);
-                        setProviderSearched(false);
+                        picker.resetOptions();
                       }}
                     />
                   )}
@@ -304,17 +273,17 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
                 <form.AppField
                   name="rightCid"
                   validators={{
-                    onBlur: ({ value }) => validateRevokeRightSelection(value),
-                    onChange: ({ value }) => validateRevokeRightSelection(value),
+                    onBlur: ({ value }) => picker.validateRightSelection(value),
+                    onChange: ({ value }) => picker.validateRightSelection(value),
                   }}
                 >
                   {field => (
                     <field.SelectField
                       title={rightCidFieldTitle!}
                       id={`${testIdPrefix}-rightCid`}
-                      options={revokeRightOptions}
+                      options={picker.rightOptions}
                       scrollableIdentifier
-                      disabled={revokeRightOptions.length === 0}
+                      disabled={picker.rightOptions.length === 0}
                       placeholder={
                         providerHasNoRights
                           ? 'No featured application rights found for this provider'
