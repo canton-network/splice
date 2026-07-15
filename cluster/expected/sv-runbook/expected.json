@@ -1167,14 +1167,14 @@
         },
         "/registry/transfer-instruction/v1/transfer-factory": {
           "fillInterval": "60s",
-          "maxTokens": 720,
+          "maxTokens": 730,
           "name": "registry-transfer-factory",
           "perIpLimits": {
             "fillInterval": "60s",
             "maxTokens": 120,
             "tokensPerFill": 120
           },
-          "tokensPerFill": 720,
+          "tokensPerFill": 730,
           "type": "limited"
         },
         "/registry/transfer-instruction/v2": {
@@ -2432,8 +2432,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 720,
-                          "tokens_per_fill": 720
+                          "max_tokens": 730,
+                          "tokens_per_fill": 730
                         }
                       },
                       {
