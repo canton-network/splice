@@ -36,7 +36,7 @@ import scala.jdk.CollectionConverters.*
   *
   * Adds a dummy 5th SV to increase the BFT quorum from 1 to 2.
   */
-class NonZeroRoundBootstrapBftIntegrationTest
+class NonZeroRoundBootstrapBftTimeBasedIntegrationTest
     extends IntegrationTestWithIsolatedEnvironment
     with HasExecutionContext
     with WalletTestUtil
