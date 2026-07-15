@@ -2,12 +2,13 @@ module Splice.AggregateLock where
 
 import Splice.Api.Token.AllocationV2 as V2
 import Splice.Api.Token.MetadataV1
+import Splice.TokenStandard.Utils.Internal.Conversions (decodeTime)
 import Splice.Util
 
 import DA.Optional
 import DA.Text
 import qualified DA.TextMap as TM
-
+import DA.Time
 
 isValidAggregateLockedAllocation : Party -> V2.AllocationView -> Bool
 isValidAggregateLockedAllocation dso alloc =
@@ -25,7 +26,11 @@ isValidVestingLockedDestination dso alloc =
       , null alloc.allocation.transferLegSides
       , TM.lookup "cip-105/type" alloc.allocation.meta.values == Some "vestingLock"
       , alloc.expiresAt == Some maxBound
+      , TM.member "cip-105/vestingLock.startDate" metaValues
+      , TM.member "cip-105/vestingLock.endDate" metaValues
+      -- TODO: Check the period is valid, check startDate < endDate
       ]
+  where metaValues = alloc.allocation.meta.values
 
 type ControllerSets = [[Party]]
 
@@ -59,6 +64,24 @@ validateVestingSchedule VestingSchedule_SV now meta =
   in
     now < start && end `subTime` start == days 365 + hours 6
 validateVestingSchedule VestingSchedule_Immediate _ _ = True
+
+calculateAvailableWithdrawAmount : Time -> V2.AllocationView -> Decimal -> Decimal
+calculateAvailableWithdrawAmount currentDateTime alloc nextIterationFundAmount = max 0.0 availAmount
+  where
+    availAmount = if currentDateTime >= endDate
+      then nextIterationFundAmount
+      else 0.0
+      -- (initialAmount * totalVestedPercentageElapsed) - withdrawnAmount
+    meta = alloc.allocation.meta.values
+    -- The initial amount represents the total that was locked initially when thrown into vesting state
+    initialAmount = fromSome $ TM.lookup "cip-105/vestingLock.initialAmount" meta
+    startDate = decodeTime . fromSome $ TM.lookup "cip-105/vestingLock.startDate" meta
+    endDate = decodeTime . fromSome $ TM.lookup "cip-105/vestingLock.endDate" meta
+    --totalUnlockPeriod = intToDecimal . convertRelTimeToMicroseconds $ subTime endDate startDate
+    --unlockPeriodElapsed = intToDecimal . convertRelTimeToMicroseconds $ subTime currentDateTime startDate
+    --totalVestedPercentageElapsed : Decimal = unlockPeriodElapsed / totalUnlockPeriod
+    --withdrawnAmount = initialAmount - nextIterationFundAmount
+
 
 -- | The intention is to treat the overall aggregate lock for a SV as if it is
 -- "the settlement" for the allocations locked to it, and use iterated
@@ -148,3 +171,20 @@ template AggregateLock
                     ]
                   nextIterationFunding = Some $ TM.singleton instrumentId amount
               ]
+    -- Choice temporarily lives here and it will be moved, testing/draft purposes atm
+    nonconsuming choice VestingLock_Withdraw : () -- AllocationResult
+      with
+        authorizers : [Party]
+        vestingLockCid : ContractId Allocation
+      where
+        controller authorizers
+        do
+          -- remainingLocked stays in nextIterationFunding
+          vestingLock <- view <$> fetch vestingLockCid
+
+          require "There are no remaining funds to withdraw"
+            $ isSome vestingLock.allocation.nextIterationFunding
+          require "There must be an initialAmount set for the vestingLock"
+            $ TM.member "cip-105/vestingLock.initialAmount" vestingLock.allocation.meta.values
+
+          pure ()

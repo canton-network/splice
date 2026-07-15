@@ -10,6 +10,7 @@ import DA.Assert
 import DA.List (sort)
 import DA.Map qualified as Map
 import DA.TextMap qualified as TextMap
+import DA.Time (addRelTime, days, hours)
 
 import Daml.Script
 
@@ -24,6 +25,7 @@ import Splice.Testing.Tokens.TestTokenV2 qualified as TestTokenV2
 
 import Splice.Testing.Utils
 import Splice.Testing.Registries.TestTokenV2_RegistryV2 qualified as TestTokenRegistryV2
+import Splice.TokenStandard.Utils.Internal.Conversions (encodeTime)
 import Splice.Testing.TokenStandard.RegistryApiV2 qualified as V2
 import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
 import Splice.Testing.TokenStandard.MultiRegistry qualified as MultiRegistry
@@ -43,6 +45,31 @@ test_allocation_WithdrawV2 = test_allocation_withdrawCancel_generic $ \TestEnv {
       extraArgs = ExtraArgs with
         context = context.choiceContext
         meta = emptyMetadata
+  pure ()
+
+-- This is a temporary test script
+test_vesting_lock_WithdrawV2 : Script ()
+test_vesting_lock_WithdrawV2 = do
+  TestEnv {..} <- setupTest
+  now <- getTime
+  let endDate : Time = addRelTime now $ (days 365) + (hours 6)
+      vestingInitialAmount : Decimal = 3652.5
+
+  let allocationV2 = V2.AllocationSpecification with
+        admin = instrId.admin
+        authorizer = TSU.basicAccount alice
+        transferLegSides = []
+        committed = False
+        nextIterationFunding = Some $ TextMap.fromList [(instrId.id, vestingInitialAmount)]
+        settlementDeadline = None
+        meta = Metadata with
+            values = TextMap.fromList
+                [ ("cip-105/type", "vestingLock")
+                , ("cip-105/vestingLock.initialAmount", show vestingInitialAmount)
+                , ("cip-105/vestingLock.startDate", encodeTime now)
+                , ("cip-105/vestingLock.endDate", encodeTime endDate)
+                ]
+
   pure ()
 
 -- TODO(tech-debt): add support for dealing with stale references to locked tokens

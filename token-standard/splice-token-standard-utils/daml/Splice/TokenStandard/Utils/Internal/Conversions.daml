@@ -27,6 +27,9 @@ module Splice.TokenStandard.Utils.Internal.Conversions (
   partiesToMeta,
   dropMeta,
   validateNoMeta,
+  -- TODO: Is exporting the below cool?
+  encodeTime,
+  decodeTime,
 
   -- * Transfer utils
   reasonMetaKey,
