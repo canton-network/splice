@@ -447,7 +447,6 @@ function main() {
     fi
   fi
 
-  # Build the list of components to restore, dropping CometBFT when the BFT sequencer is enabled.
   local -a components=()
   for component in "${@:4}"; do
     if [ "$component" == "cometbft" ] && [ "$bft_sequencer_enabled" == "true" ]; then
