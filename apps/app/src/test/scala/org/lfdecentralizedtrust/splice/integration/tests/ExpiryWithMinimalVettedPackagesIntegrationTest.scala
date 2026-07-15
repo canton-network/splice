@@ -265,8 +265,7 @@ class AmuletExpiryV1FallbackIntegrationTest
 class ExpiryWithIgnoredAmuletVersionIntegrationTest
     extends ExpiryWithMinimalVettedPackagesIntegrationTestBase {
 
-  // Bumped from amulet_0_1_15 to amulet_0_1_19 for TBAR default: 0.1.15 is
-  // below minimumInitialization and no longer in the supported package set.
+  // Amulet version 0.1.19 is just below the minimumInitialization version.
   override val ignoredAmuletVersions: Set[String] = Set(
     DarResources.amulet_0_1_19.metadata.version.toString
   )
