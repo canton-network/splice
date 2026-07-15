@@ -35,6 +35,7 @@ class DbSvSvStore(
     ingestionConfig: IngestionConfig,
     acsStoreDescriptorUserVersion: Option[Long] = None,
     override val defaultLimit: Limit,
+    override val permissionedSynchronizer: Boolean = false,
 )(implicit
     override protected val ec: ExecutionContext,
     templateJsonDecoder: TemplateJsonDecoder,

@@ -187,6 +187,7 @@ class DbSvSvStoreTest
       participantId = mkParticipantId("SvSvStoreTest"),
       IngestionConfig(),
       defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),
+      permissionedSynchronizer = true,
     )(parallelExecutionContext, implicitly, implicitly)
     for {
       _ <- store.multiDomainAcsStore.testIngestionSink.initialize()
