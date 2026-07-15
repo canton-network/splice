@@ -1,6 +1,9 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+import { merge } from 'lodash';
 import { z } from 'zod';
+
+import { spliceConfig } from './config';
 
 export const CloudSqlConfigSchema = z.object({
   enabled: z.boolean(),
@@ -18,5 +21,6 @@ export const CloudSqlConfigSchema = z.object({
   // https://cloud.google.com/sql/docs/mysql/backup-recovery/backups#retained-backups
   // controls the number of automated gcp sql backups to retain
   backupsToRetain: z.number().optional(),
+  databaseVersion: z.string().default('POSTGRES_14'),
 });
 export type CloudSqlConfig = z.infer<typeof CloudSqlConfigSchema>;

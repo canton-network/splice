@@ -33,6 +33,9 @@ function get_cloudsql_id() {
 function get_stack_for_namespace_component() {
   local namespace=$1
   local component=$2
+  
+  local split_sv_deployment
+  split_sv_deployment=$(get_resolved_config | yq '.synchronizerMigration.splitSvDeploymentEnabled // false')
 
   local stack=""
   if [[ "${namespace}" =~ sv.* ]]; then
@@ -42,6 +45,8 @@ function get_stack_for_namespace_component() {
       stack="sv-canton"
     elif [[ "${component}" == "mediator" ]]; then
       stack="sv-canton"
+    elif [[ "${split_sv_deployment}" == "true" ]]; then
+      stack="sv"
     else
       stack="canton-network"
     fi

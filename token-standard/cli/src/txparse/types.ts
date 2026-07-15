@@ -1,5 +1,10 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+// Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+import { Account } from "@daml.js/splice-api-token-holding-v2-1.0.0/lib/Splice/Api/Token/HoldingV2";
+import { TransferLegSide } from "@daml.js/splice-api-token-transfer-events-v2-1.0.0/lib/Splice/Api/Token/TransferEventsV2";
+
+// SPDX-License-Identifier: Apache-2.0
 export interface Transaction {
   updateId: string;
   offset: number;
@@ -29,9 +34,9 @@ export interface Holding {
 
 export interface HoldingLock {
   holders: string[];
-  expiresAt?: string;
-  expiresAfter?: string;
-  context?: string;
+  expiresAt: string | null;
+  expiresAfter: string | null;
+  context: string | null;
 }
 
 export interface HoldingsChange {
@@ -77,8 +82,18 @@ export type Label =
   | Mint
   | Unlock
   | ExpireDust
-  | UnknownAction;
+  | UnknownAction
+  | SettleV2Allocation
+  | V2Label;
 type UnknownAction = RawArchive | RawCreate;
+export interface V2Label {
+  type: "V2";
+  admin: string;
+  account: Account;
+  transferLegSides: TransferLegSide[];
+  reason: string | null;
+  meta: any;
+}
 interface BaseLabel {
   type: string;
   meta: any;
@@ -125,6 +140,10 @@ interface Unlock extends KnownLabel {
 
 interface ExpireDust extends KnownLabel {
   type: "ExpireDust";
+}
+
+interface SettleV2Allocation extends KnownLabel {
+  type: "SettleV2Allocation";
 }
 
 interface RawArchive extends BaseLabel {

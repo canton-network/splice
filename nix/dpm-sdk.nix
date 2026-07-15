@@ -28,8 +28,7 @@ pkgs.stdenv.mkDerivation {
         select(   .key == "damlc"
                or .key == "daml-script"
                or .key == "canton-enterprise"
-               or .key == "codegen-java"
-               or .key == "codegen-js"
+               or .key == "codegen"
                )
               )' \
       $out/sdk-manifest.yaml

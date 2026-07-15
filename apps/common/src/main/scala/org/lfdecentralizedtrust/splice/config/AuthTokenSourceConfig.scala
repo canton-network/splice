@@ -39,6 +39,8 @@ object AuthTokenSourceConfig {
       audience: String,
       scope: Option[String],
       requestTimeout: NonNegativeDuration = NonNegativeDuration.ofSeconds(30),
+      httpBasicAuth: Boolean =
+        false, // Authenticate using http basic auth instead of passing client_id/secret in the request body.
       adminToken: Option[String],
   ) extends AuthTokenSourceConfig
 
@@ -57,6 +59,7 @@ object AuthTokenSourceConfig {
             audience,
             scope,
             requestTimeout,
+            basicAuth,
             adminToken,
           ) =>
         ClientCredentials(
@@ -66,6 +69,7 @@ object AuthTokenSourceConfig {
           audience,
           scope,
           requestTimeout,
+          basicAuth,
           hide(adminToken),
         )
     }

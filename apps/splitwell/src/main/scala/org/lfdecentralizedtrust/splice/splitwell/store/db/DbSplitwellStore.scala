@@ -37,6 +37,7 @@ import scala.concurrent.{ExecutionContext, Future}
 
 class DbSplitwellStore(
     override val key: SplitwellStore.Key,
+    override val dsoPartyId: PartyId,
     override protected[this] val domainConfig: SplitwellSynchronizerConfig,
     storage: DbStorage,
     override protected val loggerFactory: NamedLoggerFactory,

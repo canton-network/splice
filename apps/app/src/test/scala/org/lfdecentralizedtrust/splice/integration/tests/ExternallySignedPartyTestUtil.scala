@@ -61,7 +61,7 @@ trait ExternallySignedPartyTestUtil extends TestCommon {
     )
   }
 
-  private def submitTopologyAndOnboard(
+  def submitTopologyAndOnboard(
       validatorBackend: ValidatorAppBackendReference,
       partyHint: String,
       keyPair: CryptoKeyPair[PublicKey, PrivateKey],

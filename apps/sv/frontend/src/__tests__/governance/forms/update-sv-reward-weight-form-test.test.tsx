@@ -45,11 +45,11 @@ describe('Update Super Validator Reward Weight Form', () => {
     );
 
     expect(screen.getByTestId('update-sv-reward-weight-form')).toBeInTheDocument();
-    expect(screen.getByText('Action')).toBeInTheDocument();
+    expect(screen.getByText('Proposal type')).toBeInTheDocument();
 
     const actionInput = screen.getByTestId('update-sv-reward-weight-action');
     expect(actionInput).toBeInTheDocument();
-    expect(actionInput.getAttribute('value')).toBe('Update Super Validator Reward Weight');
+    expect(actionInput.textContent).toBe('Update Super Validator Reward Weight');
 
     const summaryInput = screen.getByTestId('update-sv-reward-weight-summary');
     expect(summaryInput).toBeInTheDocument();

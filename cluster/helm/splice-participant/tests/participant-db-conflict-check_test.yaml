@@ -1,0 +1,72 @@
+# Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+suite: "participant db conflict check"
+templates:
+  - participant.yaml
+set:
+  # Things we need just to pass the schema
+  persistence:
+    host: mock-pg-host
+    schema: participant
+    databaseName: participant-3
+  auth:
+    jwksUrl: "https://mock.com/.well-known/jwks.json"
+    targetAudience: "mock_audience"
+tests:
+  - it: "includes the participant db conflict check in the pg-init container by default"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: pg-init
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "datname LIKE 'participant%'"
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "Refusing to create participant database '\\$\\{DB_TO_CREATE\\}'"
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "A participant database should only be created during a fresh deployment"
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "persistence.enableParticipantDbConflictCheck=false"
+  - it: "includes the conflict check when explicitly enabled"
+    set:
+      persistence:
+        enableParticipantDbConflictCheck: true
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "Refusing to create participant database"
+  - it: "omits the conflict check when disabled"
+    set:
+      persistence:
+        enableParticipantDbConflictCheck: false
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - notMatchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "Refusing to create participant database"
+      - notMatchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "datname LIKE 'participant%'"
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "create database \\$\\{DB_TO_CREATE\\}"
+  - it: "still creates the database when the conflict check is enabled"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "create database \\$\\{DB_TO_CREATE\\}"

@@ -11,7 +11,7 @@ import {
   CLUSTER_NAME,
   clusterProdLike,
   commandScriptPath,
-  createVolumeSnapshot,
+  DecentralizedSynchronizerUpgradeConfig,
   ExactNamespace,
   GCP_PROJECT,
   GrafanaKeys,
@@ -35,7 +35,6 @@ import { local } from '@pulumi/command';
 import { getSecretVersionOutput } from '@pulumi/gcp/secretmanager/getSecretVersion';
 import { Input } from '@pulumi/pulumi';
 
-import { hyperdiskSupportConfig } from '../../common/src/config/hyperdiskSupportConfig';
 import {
   clusterIsResetPeriodically,
   enableAlertEmailToSupportTeam,
@@ -106,7 +105,6 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
   const namespaceName = namespace.logicalName;
   const postgres = installPostgres(namespace);
   const adminPassword = grafanaKeysFromSecret().adminPassword;
-  const migrationSnapshots = getVolumeSnapshotsForHyperdiskMigration(namespaceName);
   const prometheusStack = new k8s.helm.v3.Release(
     'observability-metrics',
     {
@@ -195,9 +193,7 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
             logFormat: 'json',
             storage: {
               volumeClaimTemplate: {
-                ...(hyperdiskSupportConfig.hyperdiskSupport.enabledForInfra
-                  ? { metadata: { name: 'alertmanager-hd-pvc' } }
-                  : {}),
+                metadata: { name: 'alertmanager-hd-pvc' },
                 spec: {
                   storageClassName: infraStandardStorageClassName,
                   accessModes: ['ReadWriteOnce'],
@@ -206,7 +202,6 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
                       storage: '5Gi',
                     },
                   },
-                  ...(migrationSnapshots.alertManager ? migrationSnapshots.alertManager : {}),
                 },
               },
             },
@@ -257,9 +252,7 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
             scrapeNativeHistograms: true,
             storageSpec: {
               volumeClaimTemplate: {
-                ...(hyperdiskSupportConfig.hyperdiskSupport.enabledForInfra
-                  ? { metadata: { name: 'prometheus-hd-pvc' } }
-                  : {}),
+                metadata: { name: 'prometheus-hd-pvc' },
                 spec: {
                   storageClassName: infraPremiumStorageClassName,
                   accessModes: ['ReadWriteOnce'],
@@ -268,7 +261,6 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
                       storage: prometheusConfig.storageSize,
                     },
                   },
-                  ...(migrationSnapshots.prometheus ? migrationSnapshots.prometheus : {}),
                 },
               },
             },
@@ -394,7 +386,7 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
             type: 'Recreate',
           },
           persistence: {
-            enabled: !hyperdiskSupportConfig.hyperdiskSupport.migratingInfra,
+            enabled: true,
             type: 'pvc',
             accessModes: ['ReadWriteOnce'],
             size: '5Gi',
@@ -736,6 +728,47 @@ function defaultAlertSubstitutions(alert: string): string {
   );
 }
 
+function substituteScanConnectionDisagreementAlerts(alert: string): string {
+  const config = monitoringConfig.alerting.alerts.scanConnectionDisagreement;
+  const matchers: string[] = [];
+  if (config.excludedRequests.length > 0) {
+    matchers.push(`request!~"${config.excludedRequests.join('|')}"`);
+  }
+  if (config.excludedConnections.length > 0) {
+    matchers.push(`scan_connection!~"${config.excludedConnections.join('|')}"`);
+  }
+  const bareFilter = matchers.join(', ');
+  const filter = bareFilter ? `, ${bareFilter}` : '';
+  const connectionMatchers: string[] = [];
+  if (config.excludedConnections.length > 0) {
+    connectionMatchers.push(`scan_connection!~"${config.excludedConnections.join('|')}"`);
+  }
+  if (config.excludedHttpStatusCodes.length > 0) {
+    matchers.push(`http_status!~"${config.excludedHttpStatusCodes.join('|')}"`);
+    connectionMatchers.push(`http_status!~"${config.excludedHttpStatusCodes.join('|')}"`);
+  }
+  const connectionBareFilter = connectionMatchers.join(', ');
+  const connectionFilter = connectionBareFilter ? `, ${connectionBareFilter}` : '';
+  return alert
+    .replaceAll('$SCAN_DISAGREEMENT_FILTER_BARE', bareFilter)
+    .replaceAll('$SCAN_DISAGREEMENT_CONNECTION_FILTER_BARE', connectionBareFilter)
+    .replaceAll('$SCAN_DISAGREEMENT_CONNECTION_FILTER', connectionFilter)
+    .replaceAll('$SCAN_DISAGREEMENT_FILTER', filter)
+    .replaceAll(
+      '$SCAN_DISAGREEMENT_SUCCESS_THRESHOLD_PERCENT',
+      (config.alertThreshold * 100).toString()
+    )
+    .replaceAll('$SCAN_DISAGREEMENT_SUCCESS_THRESHOLD', config.alertThreshold.toString());
+}
+
+function substituteDsoMissedConfirmationsAlerts(alert: string): string {
+  const config = monitoringConfig.alerting.alerts.dsoMissedConfirmations;
+  return alert
+    .replaceAll('$DSO_MISSED_CONFIRMATIONS_THRESHOLD', config.threshold.toString())
+    .replaceAll('$DSO_MISSED_CONFIRMATIONS_WINDOW_SECONDS', (config.windowMinutes * 60).toString())
+    .replaceAll('$DSO_MISSED_CONFIRMATIONS_WINDOW_MINUTES', config.windowMinutes.toString());
+}
+
 // AmuletMetrics was previously using owner.toString instead of owner.toProtoPrimitive
 // This function makes it compatible for both.
 function partyIdTransform(partyId: string) {
@@ -753,6 +786,8 @@ function createGrafanaAlerting(namespace: Input<string>) {
     .concat(standardSvConfigsBasic)
     .map(sv => sv.sweep!)
     .filter(e => e != undefined);
+  const cantonBftEnabled =
+    DecentralizedSynchronizerUpgradeConfig.active.sequencer.enableBftSequencer;
   const cometbftPruningHighestBlockRetain = allSvsConfiguration
     .map(sv => sv.pruning?.cometbft?.retainBlocks)
     .filter((retainBlocks): retainBlocks is number => retainBlocks !== undefined)
@@ -833,19 +868,25 @@ function createGrafanaAlerting(namespace: Input<string>) {
                 loadTesterConfig?.minRate ? loadTesterConfig?.minRate.toString() : '1.0'
               )
               .replaceAll('$NODATA', loadTesterConfig?.enable ? 'Alerting' : 'OK'),
-            'cometbft_alerts.yaml': readGrafanaAlertingFile('cometbft_alerts.yaml')
-              .replaceAll(
-                '$EXPECTED_MAX_BLOCK_RATE_PER_SECOND',
-                monitoringConfig.alerting.alerts.cometbft.expectedMaxBlocksPerSecond.toString()
-              )
-              .replaceAll(
-                '$COMETBFT_PRUNING_DISABLED',
-                (cometbftPruningHighestBlockRetain === undefined).toString()
-              )
-              .replaceAll(
-                '$COMETBFT_RETAIN_BLOCKS',
-                String((cometbftPruningHighestBlockRetain || 0) * 1.05)
-              ),
+            ...(cantonBftEnabled
+              ? {
+                  'cometbft_deleted_alerts.yaml': readGrafanaAlertingFile('cometbft_deleted.yaml'),
+                }
+              : {
+                  'cometbft_alerts.yaml': readGrafanaAlertingFile('cometbft_alerts.yaml')
+                    .replaceAll(
+                      '$EXPECTED_MAX_BLOCK_RATE_PER_SECOND',
+                      monitoringConfig.alerting.alerts.cometbft.expectedMaxBlocksPerSecond.toString()
+                    )
+                    .replaceAll(
+                      '$COMETBFT_PRUNING_DISABLED',
+                      (cometbftPruningHighestBlockRetain === undefined).toString()
+                    )
+                    .replaceAll(
+                      '$COMETBFT_RETAIN_BLOCKS',
+                      String((cometbftPruningHighestBlockRetain || 0) * 1.05)
+                    ),
+                }),
             'automation_alerts.yaml': readGrafanaAlertingFile('automation_alerts.yaml')
               .replaceAll(
                 '$CONTENTION_THRESHOLD_PERCENTAGE_PER_NAMESPACE',
@@ -927,6 +968,12 @@ function createGrafanaAlerting(namespace: Input<string>) {
             'sequencer_connection_pool_alerts.yaml': readGrafanaAlertingFile(
               'sequencer_connection_pool_alerts.yaml'
             ),
+            'dso_missed_confirmations_alerts.yaml': substituteDsoMissedConfirmationsAlerts(
+              readGrafanaAlertingFile('dso_missed_confirmations_alerts.yaml')
+            ),
+            'scan_connection_disagreement_alerts.yaml': substituteScanConnectionDisagreementAlerts(
+              readGrafanaAlertingFile('scan_connection_disagreement_alerts.yaml')
+            ),
             'extra_k8s_alerts.yaml': readGrafanaAlertingFile('extra_k8s_alerts.yaml'),
             'sequencer_rate_limit_alerts.yaml': readGrafanaAlertingFile(
               'sequencer_rate_limit_alerts.yaml'
@@ -939,6 +986,16 @@ function createGrafanaAlerting(namespace: Input<string>) {
                 '$SEQUENCER_RATE_LIMIT_CIRCUIT_BREAKER_STATE_THRESHOLD',
                 monitoringConfig.alerting.alerts.sequencerRateLimits.circuitBreakerStateThreshold.toString()
               ),
+            ...(cantonBftEnabled
+              ? {
+                  'cantonbft_alerts.yaml': readGrafanaAlertingFile(
+                    'cantonbft_alerts.yaml'
+                  ).replaceAll(
+                    '$CANTON_BFT_MEMPOOL_SIZE_THRESHOLD',
+                    monitoringConfig.alerting.alerts.cantonBft.mempoolMaxSizeThreshold.toString()
+                  ),
+                }
+              : {}),
             'deleted_alerts.yaml': readGrafanaAlertingFile('deleted.yaml'),
             'templates.yaml': substituteSlackNotificationTemplate(
               readGrafanaAlertingFile('templates.yaml')
@@ -959,10 +1016,19 @@ function createGrafanaAlerting(namespace: Input<string>) {
             ),
             'traffic_based_rewards_alerts.yaml': readGrafanaAlertingFile(
               'traffic_based_rewards_alerts.yaml'
-            ).replace(
-              '$FEATURED_APP_RIGHTS_LIVE_ROW_LIMIT',
-              monitoringConfig.alerting.alerts.trafficBasedRewards.featuredAppRightsLimit.toString()
-            ),
+            )
+              .replace(
+                '$FEATURED_APP_RIGHTS_LIVE_ROW_LIMIT',
+                monitoringConfig.alerting.alerts.trafficBasedRewards.featuredAppRightsLimit.toString()
+              )
+              .replace(
+                '$VERDICT_INGESTION_BATCH_SIZE_THRESHOLD',
+                monitoringConfig.alerting.alerts.trafficBasedRewards.verdictIngestionBatchSizeThreshold.toString()
+              )
+              .replace(
+                '$VERDICT_INGESTION_BATCH_SIZE_PENDING_PERIOD_MINUTES',
+                monitoringConfig.alerting.alerts.trafficBasedRewards.verdictIngestionBatchSizePendingPeriodMinutes.toString()
+              ),
           },
         }).map(([k, v]) => [k, defaultAlertSubstitutions(v)])
       ),
@@ -1129,34 +1195,4 @@ function installPostgres(namespace: ExactNamespace): SplicePostgres {
     undefined, // chart version
     true // useInfraAffinityAndTolerations
   );
-}
-
-function getVolumeSnapshotsForHyperdiskMigration(namespaceName: string) {
-  if (
-    hyperdiskSupportConfig.hyperdiskSupport.enabledForInfra &&
-    hyperdiskSupportConfig.hyperdiskSupport.migratingInfra
-  ) {
-    const { dataSource: prometheusDataSource } = createVolumeSnapshot({
-      resourceName: `prometheus-hd-migration-snapshot`,
-      snapshotName: `prometheus-migration-snapshot`,
-      namespace: namespaceName,
-      pvcName: `prometheus-prometheus-prometheus-db-prometheus-prometheus-prometheus-0`,
-    });
-    const { dataSource: alertManagerDataSource } = createVolumeSnapshot({
-      resourceName: `alertmanager-hd-migration-snapshot`,
-      snapshotName: `alertmanager-migration-snapshot`,
-      namespace: namespaceName,
-      pvcName: `alertmanager-prometheus-alertmanager-db-alertmanager-prometheus-alertmanager-0`,
-    });
-    return {
-      prometheus: {
-        dataSource: prometheusDataSource,
-      },
-      alertManager: {
-        dataSource: alertManagerDataSource,
-      },
-    };
-  } else {
-    return {};
-  }
 }

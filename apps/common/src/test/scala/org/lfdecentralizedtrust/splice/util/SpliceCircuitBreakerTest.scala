@@ -2,9 +2,11 @@ package org.lfdecentralizedtrust.splice.util
 
 import com.digitalasset.base.error.ErrorCode
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
+import com.digitalasset.canton.error.MediatorError
 import com.digitalasset.canton.participant.protocol.TransactionProcessor.SubmissionErrors
 import com.digitalasset.canton.{BaseTest, HasActorSystem, HasExecutionContext}
 import com.digitalasset.canton.time.SimClock
+import com.digitalasset.canton.topology.PartyId
 import io.grpc.StatusRuntimeException
 import org.apache.pekko.actor.Scheduler
 import org.apache.pekko.pattern.CircuitBreakerOpenException
@@ -39,7 +41,13 @@ class SpliceCircuitBreakerTest
       randomFactor = 0.0,
       resetFailuresAfter = NonNegativeFiniteDuration.ofMinutes(1),
     )
-    SpliceCircuitBreaker("test", config, clock, loggerFactory)
+    SpliceCircuitBreaker(
+      "test",
+      config,
+      clock,
+      PartyId.tryFromProtoPrimitive("dso::namespace"),
+      loggerFactory,
+    )
   }
 
   "SpliceCircuitBreaker" should {
@@ -79,6 +87,42 @@ class SpliceCircuitBreakerTest
         whenReady(future.failed) { ex =>
           ex shouldBe a[StatusRuntimeException]
           cb.isClosed shouldBe true
+        }
+      }
+    }
+
+    "not open after unresponsive party errors not including the dso party" in {
+      val cb = createCircuitBreaker()
+
+      val ignoredError =
+        MediatorError.Timeout.Reject(unresponsiveParties = "alice::namespace,bob::namespace")
+      val exception = ErrorCode.asGrpcError(ignoredError)
+      1 to 20 foreach { _ =>
+        val future = cb.withCircuitBreaker(Future.failed(exception))
+
+        whenReady(future.failed) { ex =>
+          ex shouldBe a[StatusRuntimeException]
+          cb.isClosed shouldBe true
+        }
+      }
+    }
+
+    "open after unresponsive party errors including the dso party" in {
+      val cb = createCircuitBreaker()
+
+      val ignoredError =
+        MediatorError.Timeout.Reject(unresponsiveParties = "alice::namespace,dso::namespace")
+      val exception = ErrorCode.asGrpcError(ignoredError)
+      val future = cb.withCircuitBreaker(Future.failed(exception))
+      whenReady(future.failed) { ex =>
+        ex shouldBe a[StatusRuntimeException]
+        cb.isClosed shouldBe true
+      }
+      loggerFactory.suppressWarnings {
+        val future2 = cb.withCircuitBreaker(Future.failed(exception))
+        whenReady(future2.failed) { ex =>
+          ex shouldBe a[StatusRuntimeException]
+          cb.isOpen shouldBe true
         }
       }
     }

@@ -28,6 +28,8 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   DsoRules_CloseVoteRequestResult,
   VoteRequest,
 }
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_UpdateSvRewardWeight
 import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.{
   ExternalPartyAmuletRules,
   TransferCommand,
@@ -57,6 +59,7 @@ import org.lfdecentralizedtrust.splice.store.{
   DbVotesAcsStoreQueryBuilder,
   DbVotesTxLogStoreQueryBuilder,
   Limit,
+  VoteResultsFilters,
   PageLimit,
   ResultsPage,
   SortOrder,
@@ -631,11 +634,7 @@ class DbScanStore(
   }
 
   override def listVoteRequestResults(
-      actionName: Option[String],
-      accepted: Option[Boolean],
-      requester: Option[String],
-      effectiveFrom: Option[String],
-      effectiveTo: Option[String],
+      filters: VoteResultsFilters,
       limit: Limit,
       after: Option[Long] = None,
   )(implicit tc: TraceContext): Future[ResultsPage[DsoRules_CloseVoteRequestResult]] = {
@@ -645,13 +644,8 @@ class DbScanStore(
       dbType = EntryType.VoteRequestTxLogEntry,
       actionNameColumnName = "vote_action_name",
       acceptedColumnName = "vote_accepted",
-      effectiveAtColumnName = "vote_effective_at",
       requesterNameColumnName = "vote_requester_name",
-      actionName = actionName,
-      accepted = accepted,
-      requester = requester,
-      effectiveFrom = effectiveFrom,
-      effectiveTo = effectiveTo,
+      filters = filters,
       limit = limit,
       after = after,
     )
@@ -666,6 +660,66 @@ class DbScanStore(
       afterToken = limited.lastOption.map(_.entryNumber)
     } yield ResultsPage(recentVoteResults, afterToken)
   }
+
+  override def countVoteRequestResults(
+      filters: VoteResultsFilters
+  )(implicit tc: TraceContext): Future[Long] = {
+    val query = countVoteRequestResultsQuery(
+      txLogTableName = ScanTables.txLogTableName,
+      txLogStoreId = txLogStoreId,
+      dbType = EntryType.VoteRequestTxLogEntry,
+      actionNameColumnName = "vote_action_name",
+      acceptedColumnName = "vote_accepted",
+      requesterNameColumnName = "vote_requester_name",
+      filters = filters,
+    )
+    storage
+      .query(query, "countVoteRequestResults")
+      .map(_.headOption.getOrElse(0L))
+  }
+
+  override def lookupLatestSvRewardWeightChange(
+      svParty: PartyId,
+      effectiveBefore: Option[String],
+  )(implicit tc: TraceContext): Future[Option[Long]] = {
+    val svPartyPath =
+      "entry_data->'result'->'request'->'action'->'value'->'dsoAction'->'value'->>'svParty'"
+    val where = (sql"""
+           entry_type = ${EntryType.VoteRequestTxLogEntry} and
+           vote_action_name = ${lengthLimited("SRARC_UpdateSvRewardWeight")} and
+           vote_accepted = true and
+           #$svPartyPath = ${svParty.toProtoPrimitive}""" ++ (effectiveBefore match {
+      case Some(e) => sql" and vote_effective_at < ${lengthLimited(e)}"
+      case None => sql""
+    })).toActionBuilder
+    for {
+      row <- storage
+        .querySingle(
+          selectFromTxLogTable(
+            txLogTableName,
+            txLogStoreId,
+            where = where,
+            orderLimit = sql"order by vote_effective_at desc limit 1",
+          ).headOption,
+          "lookupLatestSvRewardWeightChange",
+        )
+        .value
+    } yield row
+      .map(txLogEntryFromRow[VoteRequestTxLogEntry](txLogConfig))
+      .flatMap(_.result)
+      .flatMap(newRewardWeightOf)
+  }
+
+  private def newRewardWeightOf(result: DsoRules_CloseVoteRequestResult): Option[Long] =
+    result.request.action match {
+      case arc: ARC_DsoRules =>
+        arc.dsoAction match {
+          case srarc: SRARC_UpdateSvRewardWeight =>
+            Some(srarc.dsoRules_UpdateSvRewardWeightValue.newRewardWeight.longValue)
+          case _ => None
+        }
+      case _ => None
+    }
 
   override def listVoteRequestsByTrackingCid(
       trackingCids: Seq[VoteRequest.ContractId],

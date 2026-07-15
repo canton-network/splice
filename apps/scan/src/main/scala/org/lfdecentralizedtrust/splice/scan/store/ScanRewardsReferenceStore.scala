@@ -32,6 +32,8 @@ trait ScanRewardsReferenceStore extends AppStore {
 
   def key: ScanRewardsReferenceStore.Key
 
+  override def dsoPartyId = key.dsoParty
+
   /** Waits for this store to be initialized.
     * All other methods on this store will independently wait for initialization
     * to complete before returning results, this method is useful for cases where
@@ -59,7 +61,7 @@ trait ScanRewardsReferenceStore extends AppStore {
 
   def lookupFeaturedAppPartiesAsOf(
       asOf: CantonTimestamp
-  )(implicit tc: TraceContext): Future[Set[String]]
+  )(implicit tc: TraceContext): Future[Map[String, BigDecimal]]
 
   /** Returns the set of SV participant UIDs from the DsoRules active as of the given time.
     * Returns an empty set only if asOf time is before the creation time of oldest DsoRules ingested.

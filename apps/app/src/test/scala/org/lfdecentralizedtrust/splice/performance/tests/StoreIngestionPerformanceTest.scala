@@ -49,8 +49,7 @@ abstract class StoreIngestionPerformanceTest(
       ingestionConfig,
     ) {
 
-  def run(): Future[Unit] = {
-    val storage = initializeStorage()
+  def run(): Future[Unit] = withStorage { storage =>
     val store = mkStore(storage)
     TraceContext
       .withNewTraceContext(this.getClass.getName) { implicit tc =>

@@ -3,61 +3,26 @@
 import * as gcp from '@pulumi/gcp';
 import { config, GCP_PROJECT } from '@canton-network/splice-pulumi-common';
 
-import { hyperdiskSupportConfig } from '../../common/src/config/hyperdiskSupportConfig';
 import { gkeClusterConfig, GkeNodePoolConfig } from './config';
 
-export function installNodePools(): void {
+export async function installNodePools(): Promise<void> {
   const clusterName = `cn-${config.requireEnv('GCP_CLUSTER_BASENAME')}net`;
   const cluster = config.optionalEnv('CLOUDSDK_COMPUTE_ZONE')
     ? `projects/${GCP_PROJECT}/locations/${config.requireEnv('CLOUDSDK_COMPUTE_ZONE')}/clusters/${clusterName}`
     : clusterName;
-
-  const nodepoolLocation = config.optionalEnv('CLOUDSDK_HYPERDISK_NODEPOOL_COMPUTE_ZONE');
-
-  if (gkeClusterConfig.nodePools.hyperdiskApps) {
-    hyperdiskNodePool(cluster, gkeClusterConfig.nodePools.hyperdiskApps, nodepoolLocation);
-  }
-  const appsNodePoolConfig = gkeClusterConfig.nodePools.apps;
-
-  if (
-    hyperdiskSupportConfig.hyperdiskSupport.enabled &&
-    !hyperdiskSupportConfig.hyperdiskSupport.migrating
-  ) {
-    hyperdiskNodePool(cluster, appsNodePoolConfig, nodepoolLocation);
-  } else {
-    appsNodePool(cluster, appsNodePoolConfig);
-  }
-
+  const zones = await gcp.compute.getZones({
+    region: config.requireEnv('CLOUDSDK_COMPUTE_REGION'),
+  });
   const nodePoolComputeZone = config.optionalEnv('CLOUDSDK_NODEPOOL_COMPUTE_ZONE');
-  new gcp.container.NodePool(
-    'cn-infra-node-pool',
-    {
-      cluster,
-      nodeConfig: {
-        machineType: gkeClusterConfig.nodePools.infra.nodeType,
-        taints: [
-          {
-            effect: 'NO_SCHEDULE',
-            key: 'cn_infra',
-            value: 'true',
-          },
-        ],
-        labels: {
-          cn_infra: 'true',
-        },
-        loggingVariant: 'DEFAULT',
-      },
-      nodeLocations: nodePoolComputeZone ? [nodePoolComputeZone] : undefined,
-      initialNodeCount: 1,
-      autoscaling: {
-        minNodeCount: gkeClusterConfig.nodePools.infra.minNodes,
-        maxNodeCount: gkeClusterConfig.nodePools.infra.maxNodes,
-      },
-    },
-    {
-      replaceOnChanges: ['nodeConfig.machineType'],
-    }
-  );
+
+  installAppsNodePools(cluster, zones.names, [
+    gkeClusterConfig.nodePools.apps,
+    ...gkeClusterConfig.nodePools.additionalApps,
+  ]);
+  installInfraNodePools(cluster, zones.names, nodePoolComputeZone, [
+    gkeClusterConfig.nodePools.infra,
+    ...gkeClusterConfig.nodePools.additionalInfra,
+  ]);
 
   new gcp.container.NodePool('gke-node-pool', {
     cluster,
@@ -80,56 +45,95 @@ export function installNodePools(): void {
     },
   });
 }
-function hyperdiskNodePool(cluster: string, config: GkeNodePoolConfig, location?: string) {
-  new gcp.container.NodePool('cn-apps-node-pool-hd', {
-    cluster,
-    nodeConfig: {
-      machineType: config.nodeType,
-      bootDisk: {
-        diskType: 'hyperdisk-balanced',
-        sizeGb: config.bootDiskSizeGb || 100,
-      },
-      taints: [
-        {
-          effect: 'NO_SCHEDULE',
-          key: 'cn_apps',
-          value: 'true',
+
+function installAppsNodePools(
+  cluster: string,
+  allZones: string[],
+  configs: Array<GkeNodePoolConfig>
+): Array<gcp.container.NodePool> {
+  const defaultZone = config.optionalEnv('CLOUDSDK_HYPERDISK_NODEPOOL_COMPUTE_ZONE');
+  return configs.map((config, index) => {
+    const name =
+      index === 0
+        ? 'cn-apps-node-pool-hd' // for backwards compat
+        : `cn-apps-node-pool-${index}-hd`;
+    return new gcp.container.NodePool(name, {
+      cluster,
+      nodeConfig: {
+        machineType: config.nodeType,
+        bootDisk: {
+          diskType: 'hyperdisk-balanced',
+          sizeGb: config.bootDiskSizeGb || 100,
         },
-      ],
-      labels: {
-        cn_apps: 'hyperdisk',
+        taints: [
+          {
+            effect: 'NO_SCHEDULE',
+            key: 'cn_apps',
+            value: 'true',
+          },
+        ],
+        labels: {
+          cn_apps: 'hyperdisk',
+        },
+        loggingVariant: 'DEFAULT',
       },
-      loggingVariant: 'DEFAULT',
-    },
-    nodeLocations: location ? [location] : undefined,
-    initialNodeCount: 0,
-    autoscaling: {
-      minNodeCount: config.minNodes,
-      maxNodeCount: config.maxNodes,
-    },
+      nodeLocations:
+        config.zones === '*'
+          ? allZones
+          : (config.zones ?? (defaultZone !== undefined ? [defaultZone] : undefined)),
+      initialNodeCount: 0,
+      autoscaling: {
+        locationPolicy: 'ANY',
+        minNodeCount: config.minNodes,
+        maxNodeCount: config.maxNodes,
+      },
+    });
   });
 }
-function appsNodePool(cluster: string, appsNodePoolConfig: GkeNodePoolConfig) {
-  new gcp.container.NodePool('cn-apps-node-pool', {
-    cluster,
-    nodeConfig: {
-      machineType: appsNodePoolConfig.nodeType,
-      taints: [
-        {
-          effect: 'NO_SCHEDULE',
-          key: 'cn_apps',
-          value: 'true',
+
+function installInfraNodePools(
+  cluster: string,
+  allZones: string[],
+  defaultZone: string | undefined,
+  configs: Array<GkeNodePoolConfig>
+): Array<gcp.container.NodePool> {
+  return configs.map((config, index) => {
+    const name =
+      index === 0
+        ? 'cn-infra-node-pool' // for backwards compat
+        : `cn-infra-node-pool-${index}`;
+    return new gcp.container.NodePool(
+      name,
+      {
+        cluster,
+        nodeConfig: {
+          machineType: config.nodeType,
+          taints: [
+            {
+              effect: 'NO_SCHEDULE',
+              key: 'cn_infra',
+              value: 'true',
+            },
+          ],
+          labels: {
+            cn_infra: 'true',
+          },
+          loggingVariant: 'DEFAULT',
         },
-      ],
-      labels: {
-        cn_apps: 'standard',
+        nodeLocations:
+          config.zones === '*'
+            ? allZones
+            : (config.zones ?? (defaultZone !== undefined ? [defaultZone] : undefined)),
+        initialNodeCount: 1,
+        autoscaling: {
+          locationPolicy: 'ANY',
+          minNodeCount: config.minNodes,
+          maxNodeCount: config.maxNodes,
+        },
       },
-      loggingVariant: 'DEFAULT',
-    },
-    initialNodeCount: 0,
-    autoscaling: {
-      minNodeCount: appsNodePoolConfig.minNodes,
-      maxNodeCount: appsNodePoolConfig.maxNodes,
-    },
+      {
+        replaceOnChanges: ['nodeConfig.machineType'],
+      }
+    );
   });
 }

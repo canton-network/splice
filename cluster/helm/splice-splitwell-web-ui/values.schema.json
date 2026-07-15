@@ -1,7 +1,43 @@
 {
   "$schema": "http://json-schema.org/schema#",
   "type": "object",
+  "required": ["imageName"],
   "properties": {
+    "securityContexts": {
+      "type": ["object", "null"],
+      "properties": {
+        "pod": {
+          "type": ["object", "null"]
+        },
+        "containers": {
+          "type": ["object", "null"],
+          "properties": {
+            "splitwellWebUi": {
+              "type": ["object", "null"]
+            }
+          },
+          "required": ["splitwellWebUi"]
+        }
+      },
+      "required": ["pod", "containers"]
+    },
+    "serviceAccountName": {
+      "type": "string"
+    },
+    "imageName": {
+      "type": "string"
+    },
+    "secretOverrides": {
+      "type": "object",
+      "properties": {
+        "clientId": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      }
+    },
     "auth": {
       "type": "object",
       "description": "The authentication configuration for the application"

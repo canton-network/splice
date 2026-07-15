@@ -44,6 +44,7 @@ export const dsoInfo = {
             fee: '0.03',
           },
           maxNumLockHolders: '50',
+          tokenStandardMaxTTL: null,
           transferFee: {
             initialRate: '0.01',
             steps: [

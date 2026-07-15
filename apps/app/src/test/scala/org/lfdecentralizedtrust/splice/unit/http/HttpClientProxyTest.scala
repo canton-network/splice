@@ -169,6 +169,7 @@ class HttpClientProxyTest
               new OAuthApi(
                 NonNegativeDuration.ofSeconds(20),
                 HttpClientMetrics(metricsFactory),
+                httpBasicAuth = false,
                 loggerFactory,
               )
             api.getWellKnown(wellKnownUrlString).futureValue shouldBe an[WellKnownResponse]

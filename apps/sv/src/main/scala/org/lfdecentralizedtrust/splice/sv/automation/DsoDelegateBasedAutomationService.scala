@@ -98,6 +98,15 @@ class DsoDelegateBasedAutomationService(
         expiredAmuletIgnoredPartiesStore,
       )
     )
+    registerTrigger(
+      new ExpiredAmuletAllocationV2Trigger(
+        config,
+        clock,
+        triggerContext,
+        svTaskContext,
+        expiredAmuletIgnoredPartiesStore,
+      )
+    )
     registerTrigger(new ExpiredSvOnboardingRequestTrigger(triggerContext, svTaskContext))
     registerTrigger(new CloseVoteRequestTrigger(triggerContext, svTaskContext))
     registerTrigger(new ExpiredSvOnboardingConfirmedTrigger(triggerContext, svTaskContext))
@@ -167,6 +176,16 @@ class DsoDelegateBasedAutomationService(
     )
 
     registerTrigger(
+      new ExpireRewardCouponV2Trigger(
+        config,
+        triggerContext,
+        svTaskContext,
+      )
+    )
+
+    registerTrigger(new UnhideRewardCouponV2Trigger(config, triggerContext, svTaskContext))
+
+    registerTrigger(
       new BootstrapExternalPartyConfigStateInstructionTrigger(
         triggerContext,
         svTaskContext,
@@ -206,6 +225,7 @@ object DsoDelegateBasedAutomationService extends AutomationServiceCompanion {
     aTrigger[ExpiredLockedAmuletTrigger],
     aTrigger[ExpiredAmuletTransferInstructionTrigger],
     aTrigger[ExpiredAmuletAllocationTrigger],
+    aTrigger[ExpiredAmuletAllocationV2Trigger],
     aTrigger[ExpiredSvOnboardingRequestTrigger],
     aTrigger[CloseVoteRequestTrigger],
     aTrigger[ExpiredSvOnboardingConfirmedTrigger],
@@ -227,6 +247,8 @@ object DsoDelegateBasedAutomationService extends AutomationServiceCompanion {
     aTrigger[ExpiredUnclaimedActivityRecordTrigger],
     aTrigger[MergeUnclaimedDevelopmentFundCouponsTrigger],
     aTrigger[ExpiredDevelopmentFundCouponTrigger],
+    aTrigger[ExpireRewardCouponV2Trigger],
+    aTrigger[UnhideRewardCouponV2Trigger],
     aTrigger[BootstrapExternalPartyConfigStateInstructionTrigger],
     aTrigger[ProcessRewardsTrigger],
     aTrigger[ProcessRewardsDryRunTrigger],

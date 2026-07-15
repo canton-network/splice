@@ -1,0 +1,377 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- | Internal module implementing conversion functions between v1 and v2 of the token standard.
+--
+-- Import 'Splice.TokenStandard.Utils' to get access to the public ones.
+module Splice.TokenStandard.Utils.Internal.Conversions (
+  -- * API conversion
+  BackwardCompatible(..),
+  ForwardCompatible(..),
+
+  -- * AnyContractId conversion
+  fromAnyContractId,
+  toAnyContractId,
+
+  -- * Metadata conversion
+  tokenStandardV2Namespace,
+  expiresAtMetaKey,
+  providerMetaKey,
+  accountIdMetaKey,
+
+  timeToMeta,
+  timeFromMeta,
+  expiresAtToMeta,
+  maxTime,
+  partiesFromMeta,
+  partiesToMeta,
+  dropMeta,
+  validateNoMeta,
+
+  -- * Transfer utils
+  reasonMetaKey,
+  txKindMetaKey,
+  senderMetaKey,
+  receiverMetaKey,
+  reasonFromMeta,
+  reasonToMeta,
+  mkMetaTransferFrom,
+  v1HistoryTagAsUnlockV1,
+
+  -- * Account utils
+  accountPrincipal,
+  accountParties,
+  isRegularAccount,
+  regularAccountParties,
+  regularAccountOwner,
+
+  specialAccountOwnerStubV1,
+  accountOwnerForV1,
+
+  basicAccount,
+  isBasicAccount,
+  ensureBasicAccount,
+
+  -- ** Account metadata conversion
+  accountToMeta,
+  accountFromMeta,
+  dropAccountMeta,
+  ensureNoAccountMeta,
+  validateNoAccountMeta,
+
+  -- ** Available to pending actions conversion
+  availableToPendingActions,
+
+) where
+
+import DA.Action
+import DA.Date
+import DA.List (dedupSort)
+import DA.Map qualified as Map
+import DA.Optional
+import DA.Text qualified as T
+import DA.Time
+import DA.TextMap qualified as TextMap
+
+import Splice.Api.Token.MetadataV1
+import Splice.Api.Token.HoldingV1 qualified as HoldingV1
+import Splice.Api.Token.HoldingV2 qualified as HoldingV2
+
+
+
+-- Utils
+--------
+
+epoch : Time
+epoch = time (date 1970 Jan 1) 0 0 0
+
+maxTime : Time
+maxTime = time (date 9999 Dec 31) 23 59 59 `addRelTime` microseconds 999999
+
+encodeTime : Time -> Text
+encodeTime t = show (convertRelTimeToMicroseconds(t `subTime` epoch))
+
+decodeTime : Text -> Time
+decodeTime t = case T.parseInt t of
+  Some i -> epoch `addRelTime` (convertMicrosecondsToRelTime i)
+  None -> error ("Cannot parse time " <> t)
+
+
+-- AnyContractId conversion
+------------------------------
+
+fromAnyContractId : AnyContractId -> ContractId t
+fromAnyContractId = coerceContractId
+
+toAnyContractId : ContractId t -> AnyContractId
+toAnyContractId = coerceContractId
+
+
+-- Metadata utils
+-------------------------
+
+-- | Namespace for token standard V2 which is published as CIP-112.
+tokenStandardV2Namespace : Text
+tokenStandardV2Namespace = "cip-112/"
+
+insertOptional : Text -> Optional a -> TextMap.TextMap a -> TextMap.TextMap a
+insertOptional k ov m = case ov of
+  None -> m
+  Some v -> TextMap.insert k v m
+
+timeToMeta : Text -> Time -> Metadata -> Metadata
+timeToMeta field t meta =
+  Metadata $ TextMap.insert field (encodeTime t) meta.values
+
+timeFromMeta : Text -> Metadata -> Optional Time
+timeFromMeta field meta = decodeTime <$> TextMap.lookup field meta.values
+
+
+-- Account utils
+----------------
+
+-- | Party to use for as a stub for special accounts when reporting them
+-- through V1 APIs. Minimize the use of this function where possible.
+specialAccountOwnerStubV1 : Party
+specialAccountOwnerStubV1 =
+  fromSomeNote "specialAccountOwnerStubV1: invalid party" $
+  partyFromText "cip-112_no-owner::1220000000000000000000000000000000000000000000000000000000000000abcd"
+
+-- | Owner of an account for V1 APIs that do expect a party to be given.
+-- Uses the `specialAccountOwnerStubV1` for special accounts.
+accountOwnerForV1 : HoldingV2.Account -> Party
+accountOwnerForV1 account = fromOptional specialAccountOwnerStubV1 account.owner
+
+-- | The principal of an account, which is the owner for regular accounts,
+-- and the instrument admin for special accounts.
+accountPrincipal : Party -> HoldingV2.Account -> Party
+accountPrincipal admin account = fromOptional admin account.owner
+
+-- | Construct the basic account for an owner.
+basicAccount : Party -> HoldingV2.Account
+basicAccount owner = HoldingV2.Account (Some owner) None ""
+
+-- | True if the account is a basic account.
+isBasicAccount : HoldingV2.Account -> Bool
+isBasicAccount account =
+  isRegularAccount account && isNone account.provider && T.isEmpty account.id
+
+-- | True iff the account is a regular account, i.e., has an owner specified.
+isRegularAccount : HoldingV2.Account -> Bool
+isRegularAccount account = isSome account.owner
+
+-- | The principal of an account and the provider, if set.
+accountParties : Party -> HoldingV2.Account -> [Party]
+accountParties admin account = case account.provider of
+    Some provider | provider /= principal -> [principal, provider]
+    _ -> [principal]
+  where
+    principal = accountPrincipal admin account
+
+-- | Get the account parties of a regular account. Fails if the account is no
+-- regular account.
+--
+-- Prefer to use `accountParties` where possible, as that function works for both regular and special accounts.
+regularAccountParties : HoldingV2.Account -> [Party]
+regularAccountParties account = case account.provider of
+    Some provider | provider /= owner -> [owner, provider]
+    _ -> [owner]
+  where
+    owner = regularAccountOwner account
+
+-- | Get the owner of a regular account. Fails the it is not regular account.
+regularAccountOwner : HoldingV2.Account -> Party
+regularAccountOwner account =
+  fromSomeNote ("Expected a regular account, but got the special account: " <> show account) account.owner
+
+providerMetaKey : Text -> Text
+providerMetaKey field = tokenStandardV2Namespace <> field <> ".provider"
+
+accountIdMetaKey : Text -> Text
+accountIdMetaKey field = tokenStandardV2Namespace <> field <> ".id"
+
+expiresAtMetaKey : Text
+expiresAtMetaKey = tokenStandardV2Namespace <> "expiresAt"
+
+accountToMeta : Text -> HoldingV2.Account -> Metadata -> Metadata
+accountToMeta field account meta =
+  Metadata $
+  (if T.isEmpty account.id then identity else TextMap.insert (accountIdMetaKey field) account.id) $
+  insertOptional (providerMetaKey field) (partyToText <$> account.provider) $
+  meta.values
+
+accountFromMeta : Party -> Text -> Metadata -> HoldingV2.Account
+accountFromMeta owner field meta =
+  HoldingV2.Account with
+    provider = (TextMap.lookup (providerMetaKey field) meta.values) >>= partyFromText
+    id = fromOptional "" $ TextMap.lookup (accountIdMetaKey field) meta.values
+    owner = if owner == specialAccountOwnerStubV1 then None else Some owner
+
+dropAccountMeta : Text -> Metadata -> Metadata
+dropAccountMeta fieldName meta =
+  Metadata $
+  TextMap.delete (providerMetaKey fieldName) $
+  TextMap.delete (accountIdMetaKey fieldName) $
+  meta.values
+
+ensureNoAccountMeta : Text -> Text -> Metadata -> Update ()
+ensureNoAccountMeta path fieldName meta = do
+    check (providerMetaKey fieldName)
+    check (accountIdMetaKey fieldName)
+  where
+    check k = case TextMap.lookup k meta.values of
+      None -> pure ()
+      Some v -> fail $ "Unexpected account information in metadata of '" <> path <> "' in metadata key '" <> k <> "': " <> show v
+
+ensureBasicAccount : Text -> HoldingV2.Account -> Update ()
+ensureBasicAccount fieldName account = do
+  unless (isBasicAccount account) $
+    abort $ "Expected a basic account for field '" <> fieldName <> "', but got: " <> show account
+
+validateNoAccountMeta : Text -> Metadata -> Bool
+validateNoAccountMeta fieldName meta =
+    validateNoMeta (providerMetaKey fieldName) meta &&
+    validateNoMeta (accountIdMetaKey fieldName) meta
+
+validateNoMeta : Text -> Metadata -> Bool
+validateNoMeta fieldName meta = isNone $ TextMap.lookup fieldName meta.values
+
+dropMeta : Text -> Metadata -> Metadata
+dropMeta field meta = Metadata $ TextMap.delete field meta.values
+
+partiesToMeta : Text -> [Party] -> Metadata -> Metadata
+partiesToMeta field parties meta
+  | null parties = meta
+  | otherwise =
+      Metadata $
+      TextMap.insert field (T.intercalate "," (map partyToText parties)) $
+      meta.values
+
+partiesFromMeta : Text -> Metadata -> [Party]
+partiesFromMeta field meta =
+    case TextMap.lookup field meta.values of
+      None -> []
+      Some txt -> map tryPartyFromText (T.splitOn "," txt)
+  where
+    tryPartyFromText p = case partyFromText p of
+      None -> error $ "Invalid party in metadata field '" <> field <> "': " <> p
+      Some party -> party
+
+-- | Report early expiry of instructions or allocations in the V1 metadata.
+expiresAtToMeta : Optional Time -> Metadata -> Metadata
+expiresAtToMeta None meta = meta
+expiresAtToMeta (Some t) meta = timeToMeta expiresAtMetaKey t meta
+
+
+-- Holding change metadata
+--------------------------
+
+cip56Prefix : Text
+cip56Prefix = "splice.lfdecentralizedtrust.org/"
+
+-- | Short, human-readable reason for the transaction.
+reasonMetaKey : Text
+reasonMetaKey = cip56Prefix <> "reason"
+
+-- | Kind of the transaction.
+txKindMetaKey : Text
+txKindMetaKey = cip56Prefix <> "tx-kind"
+
+-- | The sender of a transfer.
+senderMetaKey : Text
+senderMetaKey = cip56Prefix <> "sender"
+
+-- | The receiver of a transfer.
+--
+-- Note: this keys is not defined in CIP-56, but matches the sender key, and is
+-- useful for transfer metadata, so we add it here for consistency.
+receiverMetaKey : Text
+receiverMetaKey = cip56Prefix <> "receiver"
+
+-- | Extra the transfer reason from the metadata. Returns an empty string if no reason is found.
+reasonFromMeta : Metadata -> Text
+reasonFromMeta (Metadata meta) = fromOptional "" $ TextMap.lookup reasonMetaKey meta
+
+-- |  Add the given reason to the metadata, if it's not empty.
+reasonToMeta : Text -> Metadata -> Metadata
+reasonToMeta reason (Metadata meta)
+  | T.isEmpty reason = Metadata meta
+  | otherwise = Metadata $ TextMap.insert reasonMetaKey reason meta
+
+-- | Metadata to tag a transfer for V1 transaction history parsing.
+mkMetaTransferFrom : Party -> Text -> Metadata
+mkMetaTransferFrom sender reason =
+  reasonToMeta reason $ Metadata with
+    values = TextMap.fromList [(txKindMetaKey, "transfer"), (senderMetaKey, partyToText sender)]
+
+-- | Tag a holdings change as an unlock for V1 tx history parsers.
+v1HistoryTagAsUnlockV1 : Metadata -> Metadata
+v1HistoryTagAsUnlockV1 (Metadata meta) = Metadata $ TextMap.insert txKindMetaKey "unlock" meta
+
+
+-- Available to pending actions conversion
+------------------------------------------
+
+-- | Convert a map of named available actions to an approximate list of pending actions,
+-- using `joint-` to mark actions that require joint-authorization, and using `or` to combine
+-- multiple actions available to a party.
+availableToPendingActions : (a -> Text) -> Map.Map a [[Party]] -> Map.Map Party Text
+availableToPendingActions actionName availableActions =
+    fmap (T.intercalate " or " . dedupSort) allActions
+  where
+    allActions = Map.fromListWithR (++) $ do
+      (action, possibleActors) <- Map.toList availableActions
+      actors0 <- possibleActors
+      let actors = dedupSort actors0
+      let prefix = if length actors > 1 then "joint-" else ""
+      actor <- actors
+      pure (actor, [prefix <> actionName action])
+
+
+-- Class based conversion
+---------------------------
+
+-- | A backwards compatible API upgrade from v1 to v2.
+class BackwardCompatible v1 v2 where
+  upcast : v1 -> v2
+
+class ForwardCompatible v1 v2 where
+  downcast : v2 -> v1
+
+
+-- Holding
+----------
+
+instance ForwardCompatible HoldingV1.InstrumentId HoldingV2.InstrumentId where
+  downcast (HoldingV2.InstrumentId {..}) = HoldingV1.InstrumentId with ..
+
+instance BackwardCompatible HoldingV1.InstrumentId HoldingV2.InstrumentId where
+  upcast (HoldingV1.InstrumentId {..}) = HoldingV2.InstrumentId with ..
+
+instance ForwardCompatible HoldingV1.Lock HoldingV2.Lock where
+  downcast (HoldingV2.Lock {..}) = HoldingV1.Lock with ..
+
+instance BackwardCompatible HoldingV1.Lock HoldingV2.Lock where
+  upcast (HoldingV1.Lock {..}) = HoldingV2.Lock with ..
+
+instance ForwardCompatible (ContractId HoldingV1.Holding) (ContractId HoldingV2.Holding) where
+  downcast = coerceInterfaceContractId
+
+instance BackwardCompatible (ContractId HoldingV1.Holding) (ContractId HoldingV2.Holding) where
+  upcast = coerceInterfaceContractId
+
+instance ForwardCompatible HoldingV1.HoldingView HoldingV2.HoldingView where
+  downcast v2 = HoldingV1.HoldingView with
+    owner = accountOwnerForV1 v2.account
+    instrumentId = downcast v2.instrumentId
+    amount = v2.amount
+    lock = downcast <$> v2.lock
+    meta = accountToMeta "account" v2.account v2.meta
+
+instance BackwardCompatible HoldingV1.HoldingView HoldingV2.HoldingView where
+  upcast v1 = HoldingV2.HoldingView with
+    account = accountFromMeta v1.owner "account" v1.meta
+    instrumentId = upcast v1.instrumentId
+    amount = v1.amount
+    lock = upcast <$> v1.lock
+    meta = dropAccountMeta "account" v1.meta

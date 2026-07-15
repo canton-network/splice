@@ -115,12 +115,14 @@ class SplitwellApp(
     participantId <- appInitStep("Get participant id") {
       participantAdminConnection.getParticipantId()
     }
+    dsoParty <- scanConnection.getDsoPartyId()
     storeKey = SplitwellStore.Key(providerParty = partyId)
     domainMigrationId <- appInitStep(s"Resolving domain migration id") {
       resolveDomainMigrationId(scanConnection)
     }
     store = SplitwellStore(
       storeKey,
+      dsoParty,
       storage,
       config.domains,
       loggerFactory,

@@ -2,12 +2,9 @@ package org.lfdecentralizedtrust.splice.integration.plugins
 
 import cats.data.Chain
 import com.digitalasset.canton.ScalaFuturesWithPatience
-import com.digitalasset.canton.integration.EnvironmentSetupPlugin
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules_AddSv
-import org.lfdecentralizedtrust.splice.config.SpliceConfig
 import org.lfdecentralizedtrust.splice.console.ScanAppBackendReference
-import org.lfdecentralizedtrust.splice.environment.SpliceEnvironment
 import org.lfdecentralizedtrust.splice.http.v0.definitions.DamlValueEncoding.members.CompactJson
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   EventHistoryItem,
@@ -25,7 +22,7 @@ import scala.annotation.tailrec
 
 class EventHistorySanityCheckPlugin(
     protected val loggerFactory: NamedLoggerFactory
-) extends EnvironmentSetupPlugin[SpliceConfig, SpliceEnvironment]
+) extends SpliceEnvironmentSetupPlugin
     with Matchers
     with Eventually
     with Inspectors
@@ -33,8 +30,7 @@ class EventHistorySanityCheckPlugin(
     with LoneElement {
 
   override def beforeEnvironmentDestroyed(
-      config: SpliceConfig,
-      environment: SpliceTestConsoleEnvironment,
+      environment: SpliceTestConsoleEnvironment
   ): Unit = {
     val initializedScans = environment.scans.local.filter(_.is_initialized)
     if (initializedScans.nonEmpty) {

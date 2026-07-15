@@ -67,7 +67,7 @@ class FeaturedAppActivityMarkerTrigger(
     store
       .featuredAppActivityMarkerCountAboveOrEqualTo(
         activityMarkerCatchupModeThreshold,
-        ignoredPartiesStore.getAll,
+        Some(ignoredPartiesStore),
       )
       .flatMap {
         case false =>
@@ -182,7 +182,7 @@ class FeaturedAppActivityMarkerTrigger(
         hashMinBoundIncl,
         hashMaxBoundIncl,
         numMarkers,
-        ignoredPartiesStore.getAll,
+        Some(ignoredPartiesStore),
       )
       .map(markers =>
         markers

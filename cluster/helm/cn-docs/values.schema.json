@@ -5,8 +5,54 @@
     "networkName"
   ],
   "properties": {
+    "securityContexts": {
+      "type": "object",
+      "properties": {
+        "pod": {
+          "type": "object"
+        },
+        "containers": {
+          "type": "object",
+          "properties": {
+            "docs": {
+              "type": "object"
+            },
+            "gcsProxy": {
+              "type": "object"
+            }
+          },
+          "required": ["docs", "gcsProxy"]
+        }
+      },
+      "required": ["pod", "containers"]
+    },
+    "serviceAccountName": {
+      "type": "string"
+    },
     "networkName": {
       "type": "string"
+    },
+    "docs": {
+      "type": "object",
+      "required": [
+        "imageName"
+      ],
+      "properties": {
+        "imageName": {
+          "type": "string"
+        }
+      }
+    },
+    "gcsProxy": {
+      "type": "object",
+      "required": [
+        "imageName"
+      ],
+      "properties": {
+        "imageName": {
+          "type": "string"
+        }
+      }
     }
   }
 }

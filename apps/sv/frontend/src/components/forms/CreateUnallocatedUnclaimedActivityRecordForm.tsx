@@ -126,10 +126,51 @@ export const CreateUnallocatedUnclaimedActivityRecordForm: React.FC = _ => {
           <>
             <form.AppField name="action">
               {field => (
+                <field.ProposalTypeField id="create-unallocated-unclaimed-activity-record-action" />
+              )}
+            </form.AppField>
+
+            <form.AppField
+              name="beneficiary"
+              validators={{
+                onBlur: ({ value }) => validateMintedBeneficiary(value),
+                onChange: ({ value }) => validateMintedBeneficiary(value),
+              }}
+            >
+              {field => (
                 <field.TextField
-                  title="Action"
-                  id="create-unallocated-unclaimed-activity-record-action"
-                  muiTextFieldProps={{ disabled: true }}
+                  title="Beneficiary"
+                  id="create-unallocated-unclaimed-activity-record-beneficiary"
+                />
+              )}
+            </form.AppField>
+
+            <form.AppField
+              name="amount"
+              validators={{
+                onBlur: ({ value }) => validateRewardAmount(value),
+                onChange: ({ value }) => validateRewardAmount(value),
+              }}
+            >
+              {field => (
+                <field.TextField
+                  title="Amount"
+                  id="create-unallocated-unclaimed-activity-record-amount"
+                />
+              )}
+            </form.AppField>
+
+            <form.AppField
+              name="mintBefore"
+              validators={{
+                onChange: ({ value }) => validateMintBefore(value),
+                onBlur: ({ value }) => validateMintBefore(value),
+              }}
+            >
+              {field => (
+                <field.DateField
+                  title="Must Mint Before"
+                  id="create-unallocated-unclaimed-activity-record-mint-before"
                 />
               )}
             </form.AppField>
@@ -187,51 +228,6 @@ export const CreateUnallocatedUnclaimedActivityRecordForm: React.FC = _ => {
                 <field.TextField
                   title="URL"
                   id="create-unallocated-unclaimed-activity-record-url"
-                />
-              )}
-            </form.AppField>
-
-            <form.AppField
-              name="beneficiary"
-              validators={{
-                onBlur: ({ value }) => validateMintedBeneficiary(value),
-                onChange: ({ value }) => validateMintedBeneficiary(value),
-              }}
-            >
-              {field => (
-                <field.TextField
-                  title="Beneficiary"
-                  id="create-unallocated-unclaimed-activity-record-beneficiary"
-                />
-              )}
-            </form.AppField>
-
-            <form.AppField
-              name="amount"
-              validators={{
-                onBlur: ({ value }) => validateRewardAmount(value),
-                onChange: ({ value }) => validateRewardAmount(value),
-              }}
-            >
-              {field => (
-                <field.TextField
-                  title="Amount"
-                  id="create-unallocated-unclaimed-activity-record-amount"
-                />
-              )}
-            </form.AppField>
-
-            <form.AppField
-              name="mintBefore"
-              validators={{
-                onChange: ({ value }) => validateMintBefore(value),
-                onBlur: ({ value }) => validateMintBefore(value),
-              }}
-            >
-              {field => (
-                <field.DateField
-                  title="Must Mint Before"
-                  id="create-unallocated-unclaimed-activity-record-mint-before"
                 />
               )}
             </form.AppField>

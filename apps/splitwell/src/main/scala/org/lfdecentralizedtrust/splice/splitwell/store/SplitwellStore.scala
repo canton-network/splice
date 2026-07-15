@@ -185,6 +185,7 @@ trait SplitwellStore extends AppStore {
 object SplitwellStore {
   def apply(
       key: Key,
+      dsoParty: PartyId,
       storage: DbStorage,
       domainConfig: SplitwellSynchronizerConfig,
       loggerFactory: NamedLoggerFactory,
@@ -200,6 +201,7 @@ object SplitwellStore {
   ): SplitwellStore =
     new DbSplitwellStore(
       key,
+      dsoParty,
       domainConfig,
       storage,
       loggerFactory,

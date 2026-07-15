@@ -7,51 +7,31 @@
 
 .. release-notes:: Upcoming
 
-  - Deployment
+  .. note::
 
-      - The ``migration.id`` value is no longer required by the SV (sv, validator, scan apps) and validator (validator app) helm charts and has been removed.
-        These apps now resolve the synchronizer migration id automatically at start-up. For the scan helm chart the
-        ``migration.id`` value is now optional and only needs to be set to bootstrap a scan that does not yet have any
-        migration id in its database (e.g. the network-founding or a freshly joining scan).
+    Next-release notes
 
-      - SV
+  - Validator
 
-          - The ``migration.id`` value was removed from the SV helm charts (sv, validator, scan apps).
-            These apps now resolve the synchronizer migration id automatically at start-up from their database.
-            A freshly joining scan that does not yet have any migration id in its database bootstraps it from the
-            scan of the SV sponsoring the onboarding, configured via the new optional ``sponsorScanUrl`` value in the
-            scan helm chart.
+    - Unsupported package versions are now automatically unvetted by the validator package vetting trigger,
+      aligning validator behavior with SVs.
 
-          - Increase ``sv-app`` default memory requests from 3Gi to 6Gi to ensure the max heap size fits in the requests and to avoid OOM evictions.
+      You can disable validator unvetting by setting:
 
-      - Validator
+      .. code-block:: yaml
 
-          - The ``migration.id`` value was removed from the validator (validator app) helm chart. For docker-compose
-            deployments the ``-m <migration_id>`` flag of the validator ``start.sh`` script is now optional (if you deployed your validator before this change you **must** keep this flag set to the existing value). The validator
-            resolves the synchronizer migration id automatically at start-up from its database. The migration id is now only
-            used to name the participant database for backwards compatibility: if provided, the database
-            ``participant-<migration_id>`` is used (set this to the migration id you previously deployed with); if omitted,
-            the database ``participant`` is used, which is recommended for new deployments.
+        - name: ADDITIONAL_CONFIG_UNSUPPORTED_DARS_UNVETTING
+          value: |
+            canton.validator-apps.validator_backend.parameters.enabled-features.enable-validator-dars-unvetting = false
 
-      .. Important::
+    - The ``splice-postgres`` Helm chart is deprecated and will not be supported after
+      2026-11-12, the PostgreSQL 14 end-of-life date. Published chart versions remain
+      available, but receive no further updates after that date, and no new chart versions
+      will be published after 2026-10-12. Run Splice against a PostgreSQL instance you
+      provision yourself; a managed service such as Amazon RDS or Google Cloud SQL is
+      recommended. Follow the `migration guide <https://docs.canton.network/global-synchronizer/production-operations/validator-postgres-migration>`__ to move the data
+      of an existing node before that date.
 
-          The migration id must still be kept for participant database naming for backwards compatibility (``persistence.databaseName`` helm value,
-          ``CANTON_PARTICIPANT_POSTGRES_DB`` docker compose env variable) to ensure the participant uses the currently configured database.
+   - SV app
 
-          For docker-compose validator deployments, pass the same ``-m <migration_id>`` you previously deployed with to keep
-          using the existing ``participant-<migration_id>`` database, or omit it on new deployments to use the ``participant`` database.
-
-  - Scan
-
-    - The following deprecated endpoints have been removed from the public API:
-
-        - ``/v0/activities``
-
-  - Bug fixes
-
-    - Validator
-
-        - Fixed a bug where validators using the ``bft-custom`` scan client configuration
-          would incorrectly attempt to establish scan connections with all scan nodes during
-          the validator startup. The scan client now strictly confines all scan connections to
-          configured, trusted SV endpoints.
+     - Add support for specifying weight in ``GrantFeaturedAppRight`` governance voting UI.

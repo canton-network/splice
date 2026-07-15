@@ -87,6 +87,7 @@ class UserWalletService(
         "treasury",
         params.circuitBreakers.mediumPriority,
         clock,
+        store.dsoPartyId,
         loggerFactory,
       ),
     ),

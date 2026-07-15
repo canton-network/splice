@@ -3,7 +3,7 @@
 
 module Splice.Wallet.TransferPreapproval where
 
-import Splice.Util
+import DA.Assert
 import Splice.AmuletRules
 
 template TransferPreapprovalProposal
@@ -25,7 +25,7 @@ template TransferPreapprovalProposal
       controller provider
       do
         now <- getTime
-        require "expiresAt is not in the past" (now < expiresAt)
+        assertWithinDeadline "expiresAt is not in the past" expiresAt
         AmuletRules_CreateTransferPreapprovalResult{..} <- exercise context.amuletRules AmuletRules_CreateTransferPreapproval
           with
             context
@@ -34,6 +34,7 @@ template TransferPreapprovalProposal
             provider
             expiresAt
             expectedDso
+            optCreatedAt = Some now
         return TransferPreapprovalProposal_AcceptResult with ..
 
 data TransferPreapprovalProposal_AcceptResult = TransferPreapprovalProposal_AcceptResult with

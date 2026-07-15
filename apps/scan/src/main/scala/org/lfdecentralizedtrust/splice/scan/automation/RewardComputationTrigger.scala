@@ -65,6 +65,12 @@ class RewardComputationTrigger(
         // - rounds where the rewards are already computed
         // - rounds with incomplete activity
         candidates <- rewardsReferenceStore.listActiveCalculateRewardsV2()
+        _ = rewardMetrics.calculateRewardsContractCountDryRun.updateValue(
+          candidates.count(_.payload.dryRun)
+        )
+        _ = rewardMetrics.calculateRewardsContractCountMinting.updateValue(
+          candidates.count(!_.payload.dryRun)
+        )
         candidateRounds = candidates.map(_.payload.round.number.toLong).distinct.sorted
         computedRounds <- appRewardsStore.roundsWithComputedRewards(candidateRounds)
         afterComputedFilter = candidateRounds.filterNot(computedRounds.contains)

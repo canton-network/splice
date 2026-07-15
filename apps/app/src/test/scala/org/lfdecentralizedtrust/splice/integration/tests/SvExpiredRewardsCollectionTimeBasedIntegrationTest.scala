@@ -1,5 +1,8 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
+import com.digitalasset.canton.config.NonNegativeFiniteDuration
+import monocle.macros.syntax.lens.*
+import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   AppRewardCoupon,
   ValidatorRewardCoupon,
@@ -13,6 +16,15 @@ import scala.concurrent.duration.*
 class SvExpiredRewardsCollectionTimeBasedIntegrationTest
     extends SvTimeBasedIntegrationTestBase
     with SvTestUtil {
+
+  override def environmentDefinition =
+    super.environmentDefinition.addConfigTransform((_, config) =>
+      ConfigTransforms.updateAllValidatorConfigs_(
+        // Bump lifetime above base duration to burn fees and generate validator rewards
+        _.focus(_.transferPreapproval.preapprovalLifetime)
+          .replace(NonNegativeFiniteDuration.ofDays(100))
+      )(config)
+    )
 
   "collect expired reward coupons" in { implicit env =>
     def getRewardCoupons(

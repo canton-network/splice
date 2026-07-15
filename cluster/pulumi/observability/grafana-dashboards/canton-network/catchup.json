@@ -106,7 +106,9 @@
       "id": 1,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "displayMode": "table",
           "placement": "right",
           "showLegend": true,
@@ -132,7 +134,7 @@
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "{{namespace}} migration $migration",
+          "legendFormat": "{{namespace}}-{{job}}",
           "range": true,
           "refId": "A",
           "useBackend": false
@@ -214,7 +216,9 @@
       "id": 18,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "displayMode": "table",
           "placement": "right",
           "showLegend": true,
@@ -241,7 +245,7 @@
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "processing time {{namespace}} migration $migration / min",
+          "legendFormat": "processing time {{namespace}}-{{job}} / min",
           "range": true,
           "refId": "B",
           "useBackend": false
@@ -323,7 +327,9 @@
       "id": 3,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "displayMode": "table",
           "placement": "right",
           "showLegend": true,
@@ -431,7 +437,9 @@
       "id": 2,
       "options": {
         "legend": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "displayMode": "table",
           "placement": "right",
           "showLegend": true,
@@ -457,7 +465,7 @@
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "{{namespace}}",
+          "legendFormat": "{{namespace}}-{{job}}",
           "range": true,
           "refId": "A",
           "useBackend": false
@@ -791,7 +799,7 @@
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{namespace}}",
+          "legendFormat": "{{namespace}}-{{job}}",
           "range": true,
           "refId": "A",
           "useBackend": false
@@ -894,7 +902,7 @@
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "{{job}}",
+          "legendFormat": "{{namespace}}-{{job}}",
           "range": true,
           "refId": "A",
           "useBackend": false
@@ -1100,7 +1108,7 @@
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "{{namespace}}",
+          "legendFormat": "{{namespace}}-{{job}}",
           "range": true,
           "refId": "A",
           "useBackend": false
@@ -1148,7 +1156,9 @@
         "minVizWidth": 75,
         "orientation": "auto",
         "reduceOptions": {
-          "calcs": ["lastNotNull"],
+          "calcs": [
+            "lastNotNull"
+          ],
           "fields": "",
           "values": false
         },
@@ -1305,8 +1315,14 @@
       },
       {
         "current": {
-          "text": ["sv-1"],
-          "value": ["sv-1"]
+          "text": [
+            "sv",
+            "sv-1"
+          ],
+          "value": [
+            "sv",
+            "sv-1"
+          ]
         },
         "datasource": {
           "type": "prometheus",
@@ -1364,6 +1380,6 @@
   "timezone": "",
   "title": "Global Domain Catchup",
   "uid": "ca9df344-c699-4efe-83c2-5fb2639d96d9",
-  "version": 2,
+  "version": 1,
   "weekStart": ""
 }

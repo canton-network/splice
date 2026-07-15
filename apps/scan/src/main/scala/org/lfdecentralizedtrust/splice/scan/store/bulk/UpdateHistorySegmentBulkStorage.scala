@@ -190,7 +190,7 @@ object UpdateHistorySegmentBulkStorage {
       tc: TraceContext,
       ec: ExecutionContext,
       actorSystem: ActorSystem,
-  ): Flow[UpdatesSegment, Seq[String], NotUsed] =
+  ): Flow[UpdatesSegment, (UpdatesSegment, Seq[String]), NotUsed] =
     Flow[UpdatesSegment].flatMapConcat { (segment: UpdatesSegment) =>
       new UpdateHistorySegmentBulkStorage(
         storageConfig,
@@ -200,7 +200,7 @@ object UpdateHistorySegmentBulkStorage {
         segment,
         historyMetrics,
         loggerFactory,
-      ).getSource
+      ).getSource.map(keys => (segment, keys))
     }
 
   def asSource(

@@ -13,25 +13,11 @@ import {
 } from '@canton-network/splice-pulumi-common';
 import { PartyAllocatorConfig } from '@canton-network/splice-pulumi-common-validator';
 
-import { hyperdiskSupportConfig } from '../../common/src/config/hyperdiskSupportConfig';
-
 export function installPartyAllocator(
   xns: ExactNamespace,
   config: PartyAllocatorConfig,
   dependsOn: CnInput<pulumi.Resource>[]
 ): InstalledHelmChart {
-  const dataSource =
-    hyperdiskSupportConfig.hyperdiskSupport.enabled &&
-    hyperdiskSupportConfig.hyperdiskSupport.migrating
-      ? {
-          dataSource: createVolumeSnapshot({
-            resourceName: `party-allocator-keys-migration-snapshot`,
-            snapshotName: `party-allocator-keys-snapshot`,
-            namespace: xns.logicalName,
-            pvcName: `party-allocator-keys`,
-          }).dataSource,
-        }
-      : {};
   return installSpliceHelmChart(
     xns,
     'party-allocator',
@@ -52,10 +38,7 @@ export function installPartyAllocator(
       pvc: {
         ...(config.pvcSize ? { size: config.pvcSize } : {}),
         volumeStorageClass: standardStorageClassName,
-        name: hyperdiskSupportConfig.hyperdiskSupport.enabled
-          ? 'party-allocator-keys-hd-pvc'
-          : 'party-allocator-keys',
-        ...dataSource,
+        name: 'party-allocator-keys-hd-pvc',
       },
     },
     activeVersion,

@@ -5,14 +5,20 @@ import { ActionRequiringConfirmation } from '@daml.js/splice-dso-governance/lib/
 import { useSearchParams } from 'react-router';
 import { useDsoInfos } from '../../contexts/SvContext';
 import dayjs from 'dayjs';
-import { createProposalActions, getInitialExpiration } from '../../utils/governance';
+import {
+  activityWeightToOptional,
+  createProposalActions,
+  getInitialExpiration,
+} from '../../utils/governance';
 import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import { useAppForm } from '../../hooks/form';
+import { useStore } from '@tanstack/react-form';
 import { THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
 import { CommonProposalFormData } from '../../utils/types';
 import { ContractId } from '@daml/types';
 import { FeaturedAppRight } from '@daml.js/splice-amulet/lib/Splice/Amulet';
 import {
+  validateActivityWeight,
   validateEffectiveDate,
   validateExpiration,
   validateExpiryEffectiveDate,
@@ -37,6 +43,7 @@ interface ExtraFormField {
   idValue: ProviderId;
   partyId: ProviderId;
   rightCid: FeaturedAppRightId;
+  activityWeight: string;
 }
 
 export type GrantRevokeFeaturedAppFormData = CommonProposalFormData & ExtraFormField;
@@ -69,6 +76,7 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
   const initialEffectiveDate = dayjs(initialExpiration).add(1, 'day');
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [revokeRightOptions, setRevokeRightOptions] = useState<Option[]>([]);
+  const [providerSearched, setProviderSearched] = useState(false);
   const mutation = useProposalMutation();
 
   // TODO(#1819): use either search params or props and not both.
@@ -105,9 +113,11 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
         value: contract.contract_id,
       }));
       setRevokeRightOptions(options);
+      setProviderSearched(true);
       return undefined;
     } catch {
       setRevokeRightOptions([]);
+      setProviderSearched(false);
       return 'Could not load featured app rights for this provider';
     }
   };
@@ -133,6 +143,7 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
     idValue: '',
     partyId: '',
     rightCid: '',
+    activityWeight: '',
   };
 
   const form = useAppForm({
@@ -148,7 +159,10 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
           value: {
             dsoAction: {
               tag: 'SRARC_GrantFeaturedAppRight',
-              value: { provider: formValues.idValue },
+              value: {
+                provider: formValues.idValue,
+                activityWeight: activityWeightToOptional(formValues.activityWeight),
+              },
             },
           },
         }),
@@ -195,6 +209,10 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
     form.setFieldValue('rightCid', nextRightCid);
   }, [form, formAction, revokeRightOptions]);
 
+  const partyId = useStore(form.store, state => state.values.partyId);
+  const providerHasNoRights =
+    providerSearched && revokeRightOptions.length === 0 && !validatePartyId(partyId);
+
   return (
     <>
       <FormLayout form={form} id={`${testIdPrefix}-form`}>
@@ -207,6 +225,7 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
             effectiveDate={form.state.values.effectiveDate.effectiveDate}
             formType={reviewFormKey}
             grantRight={form.state.values.idValue}
+            activityWeight={form.state.values.activityWeight}
             providerPartyId={form.state.values.partyId}
             revokeRight={form.state.values.rightCid}
             onEdit={() => setShowConfirmation(false)}
@@ -215,14 +234,94 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
         ) : (
           <>
             <form.AppField name="action">
-              {field => (
-                <field.TextField
-                  title="Action"
-                  id={`${testIdPrefix}-action`}
-                  muiTextFieldProps={{ disabled: true }}
-                />
-              )}
+              {field => <field.ProposalTypeField id={`${testIdPrefix}-action`} />}
             </form.AppField>
+
+            {formAction === 'SRARC_GrantFeaturedAppRight' && (
+              <form.AppField
+                name="idValue"
+                validators={{
+                  onBlur: ({ value }) => validatePartyId(value),
+                  onChange: ({ value }) => validatePartyId(value),
+                  onChangeAsyncDebounceMs: 500,
+                  onChangeAsync: ({ value }) => validateGrantProviderExists(value),
+                  onBlurAsync: ({ value }) => validateGrantProviderExists(value),
+                }}
+              >
+                {field => (
+                  <field.TextField
+                    title={providerFieldTitle}
+                    id={`${testIdPrefix}-idValue`}
+                    subtitle={field.state.meta.isValidating ? 'Validating provider...' : undefined}
+                  />
+                )}
+              </form.AppField>
+            )}
+
+            {formAction === 'SRARC_GrantFeaturedAppRight' && (
+              <form.AppField
+                name="activityWeight"
+                validators={{
+                  onBlur: ({ value }) => validateActivityWeight(value),
+                  onChange: ({ value }) => validateActivityWeight(value),
+                }}
+              >
+                {field => (
+                  <field.TextField
+                    title="Activity Weight"
+                    id={`${testIdPrefix}-activityWeight`}
+                    subtitle="Optional. Leave blank to use the default weight"
+                  />
+                )}
+              </form.AppField>
+            )}
+
+            {formAction === 'SRARC_RevokeFeaturedAppRight' && (
+              <>
+                <form.AppField
+                  name="partyId"
+                  validators={{
+                    onChange: ({ value }) => validatePartyId(value),
+                    onChangeAsyncDebounceMs: 500,
+                    onChangeAsync: ({ value }) => loadFeaturedAppRightsAndValidate(value),
+                  }}
+                >
+                  {field => (
+                    <field.TextField
+                      title={providerFieldTitle}
+                      id={`${testIdPrefix}-partyId`}
+                      subtitle={field.state.meta.isValidating ? 'Loading app rights...' : undefined}
+                      onChange={() => {
+                        setRevokeRightOptions([]);
+                        setProviderSearched(false);
+                      }}
+                    />
+                  )}
+                </form.AppField>
+
+                <form.AppField
+                  name="rightCid"
+                  validators={{
+                    onBlur: ({ value }) => validateRevokeRightSelection(value),
+                    onChange: ({ value }) => validateRevokeRightSelection(value),
+                  }}
+                >
+                  {field => (
+                    <field.SelectField
+                      title={rightCidFieldTitle!}
+                      id={`${testIdPrefix}-rightCid`}
+                      options={revokeRightOptions}
+                      disabled={revokeRightOptions.length === 0}
+                      placeholder={
+                        providerHasNoRights
+                          ? 'No featured application rights found for this provider'
+                          : undefined
+                      }
+                    />
+                  )}
+                </form.AppField>
+              </>
+            )}
 
             <form.AppField
               name="expiryDate"
@@ -273,66 +372,6 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
             >
               {field => <field.TextField title="URL" id={`${testIdPrefix}-url`} />}
             </form.AppField>
-
-            {formAction === 'SRARC_GrantFeaturedAppRight' && (
-              <form.AppField
-                name="idValue"
-                validators={{
-                  onBlur: ({ value }) => validatePartyId(value),
-                  onChange: ({ value }) => validatePartyId(value),
-                  onChangeAsyncDebounceMs: 500,
-                  onChangeAsync: ({ value }) => validateGrantProviderExists(value),
-                  onBlurAsync: ({ value }) => validateGrantProviderExists(value),
-                }}
-              >
-                {field => (
-                  <field.TextField
-                    title={providerFieldTitle}
-                    id={`${testIdPrefix}-idValue`}
-                    subtitle={field.state.meta.isValidating ? 'Validating provider...' : undefined}
-                  />
-                )}
-              </form.AppField>
-            )}
-
-            {formAction === 'SRARC_RevokeFeaturedAppRight' && (
-              <>
-                <form.AppField
-                  name="partyId"
-                  validators={{
-                    onChange: ({ value }) => validatePartyId(value),
-                    onChangeAsyncDebounceMs: 500,
-                    onChangeAsync: ({ value }) => loadFeaturedAppRightsAndValidate(value),
-                  }}
-                >
-                  {field => (
-                    <field.TextField
-                      title={providerFieldTitle}
-                      id={`${testIdPrefix}-partyId`}
-                      subtitle={field.state.meta.isValidating ? 'Loading app rights...' : undefined}
-                      onChange={() => setRevokeRightOptions([])}
-                    />
-                  )}
-                </form.AppField>
-
-                <form.AppField
-                  name="rightCid"
-                  validators={{
-                    onBlur: ({ value }) => validateRevokeRightSelection(value),
-                    onChange: ({ value }) => validateRevokeRightSelection(value),
-                  }}
-                >
-                  {field => (
-                    <field.SelectField
-                      title={rightCidFieldTitle!}
-                      id={`${testIdPrefix}-rightCid`}
-                      options={revokeRightOptions}
-                      disabled={revokeRightOptions.length === 0}
-                    />
-                  )}
-                </form.AppField>
-              </>
-            )}
           </>
         )}
 

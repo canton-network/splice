@@ -9,6 +9,12 @@ from failure_notification_args import *
 import requests
 import sys
 import os
+import logging
+
+logging.basicConfig(
+  level=logging.INFO,
+  format="%(asctime)s [%(levelname)s] %(message)s",
+)
 
 if __name__ == "__main__":
   args = parse_args()
@@ -23,7 +29,7 @@ if __name__ == "__main__":
 
   token = os.environ.get('FAILURE_NOTIFICATIONS_TOKEN')
   if not token:
-    print("FAILURE_NOTIFICATIONS_TOKEN is not set")
+    logging.error("FAILURE_NOTIFICATIONS_TOKEN is not set")
     sys.exit(1)
 
   r = requests.post(
@@ -45,8 +51,11 @@ if __name__ == "__main__":
     },
   )
   if r.status_code != 200:
-    print(f"Error sending notifications: {r.text}")
+    logging.error(
+      "Error sending notifications: HTTP %d %s: %s",
+      r.status_code, r.reason, r.text,
+    )
     sys.exit(1)
   else:
-    print(f"Sent notification: {r.text}")
+    logging.info("Sent notification: %s", r.text)
     sys.exit(0)

@@ -38,6 +38,7 @@ import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   AnsEntry,
   GetDsoInfoResponse,
+  GetRewardAccountingActivityTotalsResponse,
   GetRewardAccountingBatchResponse,
   GetRewardAccountingRootHashResponse,
   HoldingsSummaryRequestV1,
@@ -45,6 +46,8 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   HoldingsSummaryResponseV1,
   LookupTransferCommandStatusResponse,
   MigrationSchedule,
+  RewardAccountingActivityTotalsOk,
+  RewardAccountingActivityTotalsUndetermined,
   RewardAccountingRootHashOk,
   RewardAccountingRootHashUndetermined,
 }
@@ -62,7 +65,7 @@ import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAp
 }
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
 import org.lfdecentralizedtrust.splice.scan.store.ScanStore
-import org.lfdecentralizedtrust.splice.store.DsoRulesStore
+import org.lfdecentralizedtrust.splice.store.{DsoRulesStore, VoteResultsFilters}
 import org.lfdecentralizedtrust.splice.store.HistoryBackfilling.SourceMigrationInfo
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryResponse
 import org.lfdecentralizedtrust.splice.util.{
@@ -98,10 +101,12 @@ import io.grpc.Status
 import org.apache.pekko.http.scaladsl.model.*
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.admin.api.client.commands.HttpCommandException
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv1.Allocation
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv1
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationinstructionv1
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationinstructionv2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv1
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv1.TransferInstruction
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   DsoRules_CloseVoteRequestResult,
   VoteRequest,
@@ -114,7 +119,6 @@ import org.lfdecentralizedtrust.tokenstandard.{
   metadata,
   transferinstruction,
 }
-import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v1.definitions.TransferFactoryWithChoiceContext
 import org.slf4j.event.Level
 
 import java.util.concurrent.ConcurrentHashMap
@@ -296,6 +300,12 @@ class BftScanConnection(
       tc: TraceContext
   ): Future[Option[HttpScanAppClient.RollForwardLsu]] = {
     bftCall(_.lookupRollForwardLsu(), "lookupRollForwardLsu")
+  }
+
+  override def getLsu()(implicit
+      tc: TraceContext
+  ): Future[Option[HttpScanAppClient.Lsu]] = {
+    bftCall(_.getLsu(), "getLsu")
   }
 
   override def getParticipantSynchronizerPermission(
@@ -492,11 +502,7 @@ class BftScanConnection(
     bftCall(_.lookupTransferPreapprovalByParty(receiver), "lookupTransferPreapprovalByParty")
 
   override def listVoteRequestResults(
-      actionName: Option[String],
-      accepted: Option[Boolean],
-      requester: Option[String],
-      effectiveFrom: Option[String],
-      effectiveTo: Option[String],
+      filters: VoteResultsFilters,
       limit: Int,
       pageToken: Option[BigInt] = None,
   )(implicit
@@ -504,15 +510,29 @@ class BftScanConnection(
       tc: TraceContext,
   ): Future[(Seq[DsoRules_CloseVoteRequestResult], Option[BigInt])] = bftCall(
     _.listVoteRequestResults(
-      actionName,
-      accepted,
-      requester,
-      effectiveFrom,
-      effectiveTo,
+      filters,
       limit,
       pageToken,
     ),
     "listVoteRequestResults",
+  )
+
+  override def countVoteRequestResults(
+      filters: VoteResultsFilters
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[Long] = bftCall(
+    _.countVoteRequestResults(filters),
+    "countVoteRequestResults",
+  )
+
+  override def getPreviousSvRewardWeight(svParty: String, effectiveBefore: Option[String])(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[Option[Long]] = bftCall(
+    _.getPreviousSvRewardWeight(svParty, effectiveBefore),
+    "getPreviousSvRewardWeight",
   )
 
   override def getImportUpdates(
@@ -601,10 +621,23 @@ class BftScanConnection(
           transferinstructionv1.TransferFactory.ContractId,
           transferinstructionv1.TransferFactory_Transfer,
         ],
-        TransferFactoryWithChoiceContext.TransferKind,
+        transferinstruction.v1.definitions.TransferFactoryWithChoiceContext.TransferKind,
     )
   ] =
     bftCall(_.getTransferFactory(choiceArgs), "getTransferFactory")
+
+  def getTransferFactoryV2(choiceArgs: transferinstructionv2.TransferFactory_Transfer)(implicit
+      tc: TraceContext
+  ): Future[
+    (
+        FactoryChoiceWithDisclosures[
+          transferinstructionv2.TransferFactory.ContractId,
+          transferinstructionv2.TransferFactory_Transfer,
+        ],
+        transferinstruction.v2.definitions.TransferFactoryWithChoiceContext.TransferKind,
+    )
+  ] =
+    bftCall(_.getTransferFactoryV2(choiceArgs), "getTransferFactoryV2")
 
   def getTransferFactoryRaw(arg: transferinstruction.v1.definitions.GetFactoryRequest)(implicit
       ec: ExecutionContext,
@@ -612,25 +645,52 @@ class BftScanConnection(
   ): Future[transferinstruction.v1.definitions.TransferFactoryWithChoiceContext] =
     bftCall(_.getTransferFactoryRaw(arg), "getTransferFactoryRaw")
 
-  def getTransferInstructionAcceptContext(
-      instructionCid: TransferInstruction.ContractId
+  def getTransferFactoryV2Raw(arg: transferinstruction.v2.definitions.GetFactoryRequest)(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[transferinstruction.v2.definitions.TransferFactoryWithChoiceContext] =
+    bftCall(_.getTransferFactoryV2Raw(arg), "getTransferFactoryV2Raw")
+
+  def getTransferInstructionAcceptContextV2(
+      instructionCid: transferinstructionv1.TransferInstruction.ContractId
   )(implicit tc: TraceContext): Future[ChoiceContextWithDisclosures] = bftCall(
     _.getTransferInstructionAcceptContext(instructionCid),
     "getTransferInstructionAcceptContext",
   )
 
+  def getTransferInstructionAcceptContextV2(
+      instructionCid: transferinstructionv2.TransferInstruction.ContractId
+  )(implicit tc: TraceContext): Future[ChoiceContextWithDisclosures] = bftCall(
+    _.getTransferInstructionAcceptContextV2(instructionCid),
+    "getTransferInstructionAcceptContextV2",
+  )
+
   def getTransferInstructionRejectContext(
-      instructionCid: TransferInstruction.ContractId
+      instructionCid: transferinstructionv1.TransferInstruction.ContractId
   )(implicit tc: TraceContext): Future[ChoiceContextWithDisclosures] = bftCall(
     _.getTransferInstructionRejectContext(instructionCid),
     "getTransferInstructionRejectContext",
   )
 
+  def getTransferInstructionRejectContextV2(
+      instructionCid: transferinstructionv2.TransferInstruction.ContractId
+  )(implicit tc: TraceContext): Future[ChoiceContextWithDisclosures] = bftCall(
+    _.getTransferInstructionRejectContextV2(instructionCid),
+    "getTransferInstructionRejectContextV2",
+  )
+
   def getTransferInstructionWithdrawContext(
-      instructionCid: TransferInstruction.ContractId
+      instructionCid: transferinstructionv1.TransferInstruction.ContractId
   )(implicit tc: TraceContext): Future[ChoiceContextWithDisclosures] = bftCall(
     _.getTransferInstructionWithdrawContext(instructionCid),
     "getTransferInstructionWithdrawContext",
+  )
+
+  def getTransferInstructionWithdrawContextV2(
+      instructionCid: transferinstructionv2.TransferInstruction.ContractId
+  )(implicit tc: TraceContext): Future[ChoiceContextWithDisclosures] = bftCall(
+    _.getTransferInstructionWithdrawContextV2(instructionCid),
+    "getTransferInstructionWithdrawContextV2",
   )
 
   def getTransferInstructionAcceptContextRaw(
@@ -641,6 +701,14 @@ class BftScanConnection(
     "getTransferInstructionAcceptContextRaw",
   )
 
+  def getTransferInstructionAcceptContextV2Raw(
+      instructionCid: String,
+      body: transferinstruction.v2.definitions.GetChoiceContextRequest,
+  )(implicit tc: TraceContext): Future[transferinstruction.v2.definitions.ChoiceContext] = bftCall(
+    _.getTransferInstructionAcceptContextV2Raw(instructionCid, body),
+    "getTransferInstructionAcceptContextV2Raw",
+  )
+
   def getTransferInstructionRejectContextRaw(
       instructionCid: String,
       body: transferinstruction.v1.definitions.GetChoiceContextRequest,
@@ -649,12 +717,28 @@ class BftScanConnection(
     "getTransferInstructionRejectContextRaw",
   )
 
+  def getTransferInstructionRejectContextV2Raw(
+      instructionCid: String,
+      body: transferinstruction.v2.definitions.GetChoiceContextRequest,
+  )(implicit tc: TraceContext): Future[transferinstruction.v2.definitions.ChoiceContext] = bftCall(
+    _.getTransferInstructionRejectContextV2Raw(instructionCid, body),
+    "getTransferInstructionRejectContextV2Raw",
+  )
+
   def getTransferInstructionWithdrawContextRaw(
       instructionCid: String,
       body: transferinstruction.v1.definitions.GetChoiceContextRequest,
   )(implicit tc: TraceContext): Future[transferinstruction.v1.definitions.ChoiceContext] = bftCall(
     _.getTransferInstructionWithdrawContextRaw(instructionCid, body),
     "getTransferInstructionWithdrawContextRaw",
+  )
+
+  def getTransferInstructionWithdrawContextV2Raw(
+      instructionCid: String,
+      body: transferinstruction.v2.definitions.GetChoiceContextRequest,
+  )(implicit tc: TraceContext): Future[transferinstruction.v2.definitions.ChoiceContext] = bftCall(
+    _.getTransferInstructionWithdrawContextV2Raw(instructionCid, body),
+    "getTransferInstructionWithdrawContextV2Raw",
   )
 
   def getRegistryInfo()(implicit
@@ -679,7 +763,7 @@ class BftScanConnection(
     bftCall(_.listInstruments(pageSize, pageToken), "listInstruments")
 
   def getAllocationTransferContext(
-      allocationCid: Allocation.ContractId
+      allocationCid: allocationv1.Allocation.ContractId
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
@@ -707,6 +791,35 @@ class BftScanConnection(
   ): Future[allocation.v1.definitions.ChoiceContext] =
     bftCall(_.getAllocationCancelContextRaw(allocationId, body), "getAllocationCancelContextRaw")
 
+  def getSettlementFactoryRaw(
+      body: allocation.v2.definitions.GetFactoryRequest
+  )(implicit ec: ExecutionContext, tc: TraceContext) =
+    bftCall(_.getSettlementFactoryRaw(body), "getSettlementFactoryRaw")
+
+  def getAllocationV2CancelContextRaw(
+      allocationId: String,
+      body: allocation.v2.definitions.GetChoiceContextRequest,
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[allocation.v2.definitions.ChoiceContext] =
+    bftCall(
+      _.getAllocationV2CancelContextRaw(allocationId, body),
+      "getAllocationV2CancelContextRaw",
+    )
+
+  def getAllocationV2WithdrawContextRaw(
+      allocationId: String,
+      body: allocation.v2.definitions.GetChoiceContextRequest,
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[allocation.v2.definitions.ChoiceContext] =
+    bftCall(
+      _.getAllocationV2WithdrawContextRaw(allocationId, body),
+      "getAllocationV2WithdrawContextRaw",
+    )
+
   def getAllocationWithdrawContextRaw(
       allocationId: String,
       body: allocation.v1.definitions.GetChoiceContextRequest,
@@ -720,20 +833,28 @@ class BftScanConnection(
     )
 
   def getAllocationCancelContext(
-      allocationCid: Allocation.ContractId
+      allocationCid: allocationv1.Allocation.ContractId
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
   ): Future[ChoiceContextWithDisclosures] =
     bftCall(_.getAllocationCancelContext(allocationCid), "getAllocationCancelContext")
 
-  def getAllocationWithdrawContext(
-      allocationCid: Allocation.ContractId
+  def getAllocationWithdrawContextV1(
+      allocationCid: allocationv1.Allocation.ContractId
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
   ): Future[ChoiceContextWithDisclosures] =
-    bftCall(_.getAllocationWithdrawContext(allocationCid), "getAllocationWithdrawContext")
+    bftCall(_.getAllocationWithdrawContextV1(allocationCid), "getAllocationWithdrawContextV1")
+
+  def getAllocationWithdrawContextV2(
+      allocationCid: allocationv2.Allocation.ContractId
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[ChoiceContextWithDisclosures] =
+    bftCall(_.getAllocationWithdrawContextV2(allocationCid), "getAllocationWithdrawContext")
 
   def getAllocationFactory(choiceArgs: allocationinstructionv1.AllocationFactory_Allocate)(implicit
       ec: ExecutionContext,
@@ -746,11 +867,50 @@ class BftScanConnection(
   ] =
     bftCall(_.getAllocationFactory(choiceArgs), "getAllocationFactory")
 
+  def getAllocationFactoryV2(choiceArgs: allocationinstructionv2.AllocationFactory_Allocate)(
+      implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[
+    FactoryChoiceWithDisclosures[
+      allocationinstructionv2.AllocationFactory.ContractId,
+      allocationinstructionv2.AllocationFactory_Allocate,
+    ]
+  ] =
+    bftCall(_.getAllocationFactoryV2(choiceArgs), "getAllocationFactoryV2")
+
+  def getAllocationFactoryV2Raw(body: allocationinstruction.v2.definitions.GetFactoryRequest)(
+      implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[
+    allocationinstruction.v2.definitions.FactoryWithChoiceContext
+  ] =
+    bftCall(_.getAllocationFactoryV2Raw(body), "getAllocationFactoryV2Raw")
+
   def getAllocationFactoryRaw(arg: allocationinstruction.v1.definitions.GetFactoryRequest)(implicit
       ec: ExecutionContext,
       tc: TraceContext,
   ): Future[allocationinstruction.v1.definitions.FactoryWithChoiceContext] =
     bftCall(_.getAllocationFactoryRaw(arg), "getAllocationFactoryRaw")
+
+  def getAllocationInstructionAcceptContextRaw(
+      allocationInstructionCid: String,
+      body: allocationinstruction.v2.definitions.GetChoiceContextRequest,
+  )(implicit tc: TraceContext): Future[allocationinstruction.v2.definitions.ChoiceContext] =
+    bftCall(
+      _.getAllocationInstructionAcceptContextRaw(allocationInstructionCid, body),
+      "getAllocationInstructionAcceptContextRaw",
+    )
+
+  def getAllocationInstructionWithdrawContext(
+      allocationInstructionCid: String,
+      body: allocationinstruction.v2.definitions.GetChoiceContextRequest,
+  )(implicit tc: TraceContext): Future[allocationinstruction.v2.definitions.ChoiceContext] =
+    bftCall(
+      _.getAllocationInstructionWithdrawContext(allocationInstructionCid, body),
+      "getAllocationInstructionWithdrawContext",
+    )
 
   private def bftCall[T](
       call: SingleScanConnection => Future[T],
@@ -802,6 +962,7 @@ class BftScanConnection(
             logger,
             shortenResponsesForLog,
             consensusLogConfig,
+            connectionMetrics,
           ),
           logger,
           (_: String) => ConsensusNotReachedRetryable,
@@ -851,6 +1012,54 @@ class BftScanConnection(
       tc: TraceContext,
   ): Future[NonNegativeInt] =
     bftCall(_.getActivePhysicalSynchronizerSerial(), "getActivePhysicalSynchronizerSerial")
+
+  /** This is special because in addition to 'Ok' we can receive
+    * 'Undetermined' - This might indicate that scan is yet to process activity totals for this round
+    * 'CannotProvide' - Indicates that scan does not have required app-activity data to provide a response
+    *
+    * So simple equality comparison on responses is not possible, and we treat
+    * the two non-Ok responses as a "no response" by throwing IgnoreResponse so
+    * that this does not cause grouping in executeCall.
+    *
+    * And if no response could be obtained via bft we respond with 'Undetermined'
+    */
+  override def getRewardAccountingActivityTotals(roundNumber: Long)(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[GetRewardAccountingActivityTotalsResponse] = {
+    val undetermined =
+      GetRewardAccountingActivityTotalsResponse(
+        RewardAccountingActivityTotalsUndetermined(status = "Undetermined")
+      )
+    val callConfig = BftCallConfig.default(scanList.scanConnections)
+    if (!callConfig.enoughAvailableScans) Future.successful(undetermined)
+    else
+      bftCall[RewardAccountingActivityTotalsOk](
+        call = scan =>
+          scan.getRewardAccountingActivityTotals(roundNumber).flatMap {
+            case GetRewardAccountingActivityTotalsResponse.members
+                  .RewardAccountingActivityTotalsOk(ok) =>
+              Future.successful(ok)
+            case _: GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsUndetermined |
+                _: GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsCannotProvide =>
+              Future.failed(BftScanConnection.IgnoreResponse(scan.url))
+          },
+        endpoint = "getRewardAccountingActivityTotals",
+        callConfig = callConfig,
+        consensusLogConfig = BftScanConnection.ConsensusLogConfig(
+          disagreementLogLevel = Level.WARN,
+          onlyLogDisagreementsInSuccessResponse = true,
+          agreementLogLevel = Some(Level.INFO),
+        ),
+      )
+        .transform(tryTotals =>
+          Success(
+            tryTotals.toOption.fold(undetermined)(ok =>
+              GetRewardAccountingActivityTotalsResponse(ok)
+            )
+          )
+        )
+  }
 
   /** This is special because in addition to 'Ok' we can receive
     * 'Undetermined' - This might indicate that scan is yet to process root hash for this round
@@ -940,7 +1149,12 @@ object BftScanConnection {
       logger: TracedLogger,
       shortenResponsesForLog: T => Any = identity[T],
       consensusLogConfig: ConsensusLogConfig = ConsensusLogConfig(),
-  )(implicit ec: ExecutionContext, tc: TraceContext): Future[T] = {
+      connectionMetrics: Option[ScanConnectionMetrics] = None,
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+      mc: MetricsContext = MetricsContext.Empty,
+  ): Future[T] = {
     require(requestFrom.nonEmpty, "At least one request must be made.")
 
     val responses =
@@ -978,7 +1192,13 @@ object BftScanConnection {
                 )
                 finalResponse.tryFailure(exception): Unit
               case Some(consensusResponse) =>
-                logDisagreements(logger, consensusResponse, responses, consensusLogConfig)
+                logDisagreements(
+                  logger,
+                  consensusResponse,
+                  responses,
+                  consensusLogConfig,
+                  connectionMetrics,
+                )
             }
           }
         }
@@ -1023,10 +1243,35 @@ object BftScanConnection {
       consensusResponse: Try[T],
       responses: ConcurrentHashMap[BftScanConnection.ScanResponse[T], List[Uri]],
       consensusLogConfig: ConsensusLogConfig,
-  )(implicit ec: ExecutionContext, tc: TraceContext): Unit = {
+      connectionMetrics: Option[ScanConnectionMetrics],
+  )(implicit ec: ExecutionContext, tc: TraceContext, mc: MetricsContext): Unit = {
     implicit val elc: ErrorLoggingContext = ErrorLoggingContext.fromTracedLogger(logger)
+    def recordConsensus(url: Uri, consensus: String, extraLabels: Map[String, String]): Unit =
+      connectionMetrics.foreach { metrics =>
+        val context = mc.merge(
+          MetricsContext(
+            Map(
+              "scan_connection" -> url.authority.host.address(),
+              "consensus" -> consensus,
+            ) ++ extraLabels
+          )
+        )
+        metrics.bftPerConnectionConsensus.mark()(context)
+      }
+    def disagreementLabels(response: BftScanConnection.ScanResponse[T]): Map[String, String] =
+      response match {
+        case _: SuccessfulResponse[?] => Map("success" -> "true")
+        case HttpFailureResponse(status, _) =>
+          Map("success" -> "false", "http_status" -> status.intValue.toString)
+        case NonJsonHttpFailureResponse(status) =>
+          Map("success" -> "false", "http_status" -> status.intValue.toString)
+        case TextFailureResponse(status, _) =>
+          Map("success" -> "false", "http_status" -> status.intValue.toString)
+        case _: ExceptionFailureResponse[?] => Map("success" -> "false")
+      }
     keyToGroupResponses(consensusResponse).foreach { consensusResponseKey =>
       val agreeingScanUrls = responses.remove(consensusResponseKey)
+      agreeingScanUrls.foreach(recordConsensus(_, "agree", Map.empty))
       consensusLogConfig.agreementLogLevel.foreach { level =>
         LoggerUtil.logAtLevel(
           level,
@@ -1034,6 +1279,8 @@ object BftScanConnection {
         )
       }
       responses.forEach { (disagreeingResponse, scanUrls) =>
+        val extraLabels = disagreementLabels(disagreeingResponse)
+        scanUrls.foreach(recordConsensus(_, "disagree", extraLabels))
         val shouldLog = disagreeingResponse match {
           case _: SuccessfulResponse[?] => true
           case _ => !consensusLogConfig.onlyLogDisagreementsInSuccessResponse
@@ -1687,7 +1934,7 @@ object BftScanConnection {
             clock,
             retryProvider,
             loggerFactory,
-            None,
+            connectionMetrics,
           )
 
           _ <- retryProvider.waitUntil(

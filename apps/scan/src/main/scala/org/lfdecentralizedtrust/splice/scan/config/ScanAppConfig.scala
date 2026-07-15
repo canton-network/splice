@@ -16,6 +16,7 @@ import org.lfdecentralizedtrust.splice.config.{
   SpliceBackendConfig,
   SpliceInstanceNamesConfig,
   SpliceParametersConfig,
+  SplicePostgresConfig,
 }
 
 import org.lfdecentralizedtrust.splice.store.Limit
@@ -27,7 +28,7 @@ trait BaseScanAppConfig {}
 final case class ScanSynchronizerConfig(
     sequencer: FullClientConfig,
     mediator: FullClientConfig,
-    bftSequencerConfig: Option[BftSequencerConfig],
+    cantonBft: Option[CantonBftPeerConfig],
 )
 
 final case class MediatorVerdictIngestionConfig(
@@ -40,9 +41,12 @@ final case class BulkStorageConfig(
     snapshotPollingInterval: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(30),
     // When more updates are not yet available, how long to wait for more.
     updatesPollingInterval: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(30),
+    // When BFT was not reached on objects, how long to wait before retrying.
+    bftRetryInterval: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(30),
     // The maximum parallelization for uploading multiple parts of the same object
     maxParallelPartUploads: Int = 4,
-    s3: Option[S3Config] = None,
+    staging: Option[S3Config] = None,
+    committed: Option[S3Config] = None,
 )
 
 /** @param miningRoundsCacheTimeToLiveOverride Intended only for testing!
@@ -51,6 +55,7 @@ final case class BulkStorageConfig(
 case class ScanAppBackendConfig(
     override val adminApi: AdminServerConfig = AdminServerConfig(),
     override val storage: DbConfig,
+    postgres: SplicePostgresConfig = SplicePostgresConfig(),
     svUser: String,
     override val participantClient: ParticipantClientConfig,
     synchronizerNodes: ScanSynchronizerNodesConfig,
@@ -83,6 +88,8 @@ case class ScanAppBackendConfig(
     txLogStoreDescriptorUserVersion: Option[Long] = None,
     activityIngestionUserVersion: Option[Long] = None,
     bulkStorage: BulkStorageConfig = BulkStorageConfig(),
+    tokenStandardSettlement: TokenStandardConfig.SettlementConfig =
+      TokenStandardConfig.SettlementConfig(),
     publicUrl: Option[Uri] = None,
     // The thresholdDate from which external transaction hashes are included in the updates from internal ScanAPIs.
     // TODO(#4249): use on-ledger synchronization for switching record times
@@ -90,6 +97,10 @@ case class ScanAppBackendConfig(
       ScanAppBackendConfig.DefaultExternalTransactionHashThresholdTime,
     globalSynchronizerAlias: SynchronizerAlias = SynchronizerAlias.tryCreate("global"),
     rollForwardLsu: Option[ScanRollForwardLsuConfig] = None,
+    // Set to false to disable the DB-level exclusive lock that prevents two scan instances
+    // from running concurrently against the same database.  Only disable for migration scenarios
+    // where intentional overlap is required.
+    instanceLockEnabled: Boolean = true,
 ) extends SpliceBackendConfig
     with BaseScanAppConfig // TODO(DACH-NY/canton-network-node#736): fork or generalize this trait.
     {

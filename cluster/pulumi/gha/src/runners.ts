@@ -72,8 +72,9 @@ function installDockerRunnerScaleSet(
   repo: string,
   dependsOn: Resource[]
 ): k8s.helm.v3.Release {
+  const shortName = repo == 'splice' ? name : name.replace('self-hosted-', '');
   return new k8s.helm.v3.Release(
-    `${name}-${repo}`,
+    `${shortName}-${repo}`,
     {
       chart: 'oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set',
       version: ghaConfig.runnerScaleSetVersion,
@@ -305,7 +306,7 @@ function installDockerRunnerScaleSets(
     .filter(spec => spec.docker)
     .forEach(spec => {
       installDockerRunnerScaleSet(
-        repo == 'splice' ? `self-hosted-docker-${spec.name}` : `docker-${spec.name}`,
+        `self-hosted-docker-${spec.name}`,
         runnersNamespace,
         controller,
         tokenSecret,
@@ -337,7 +338,8 @@ function installK8sRunnerScaleSet(
   dependsOn: Resource[],
   performanceTestsDb?: PerformanceTestDb
 ): Release {
-  const podConfigMapName = `${name}-pod-config-${repo}`;
+  const shortName = repo == 'splice' ? name : name.replace('self-hosted-', '');
+  const podConfigMapName = `${shortName}-pod-config-${repo}`;
   // A configMap that will be mounted to runner pods and provide additional pod spec for the workflow pods
   const workflowPodConfigMap = cachePvcName.apply(
     cachePvcName =>
@@ -425,7 +427,7 @@ function installK8sRunnerScaleSet(
   const runnerImage = `${DOCKER_REPO}/splice-test-runner-hook:${ghaConfig.runnerHookVersion}`;
 
   return new k8s.helm.v3.Release(
-    `${name}-${repo}`,
+    `${shortName}-${repo}`,
     {
       chart: 'oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set',
       version: ghaConfig.runnerScaleSetVersion,
@@ -673,7 +675,7 @@ function installK8sRunnerScaleSets(
     .forEach(spec => {
       installK8sRunnerScaleSet(
         runnersNamespace,
-        repo == 'splice' ? `self-hosted-k8s-${spec.name}` : `k8s-${spec.name}`,
+        `self-hosted-k8s-${spec.name}`,
         tokenSecret,
         cachePvcName,
         spec.resources,

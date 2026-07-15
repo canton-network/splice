@@ -1,0 +1,21 @@
+name: Automatically trigger an upgrade test on PRs
+on:
+  pull_request_target:
+    # This is only triggered on PR creation to avoid spamming the PR with comments on every update.
+    # It is up to the author to decided if subsequent changes require another upgrade test.
+    types: [ opened ]
+    paths:
+      - 'cluster/pulumi/**/package.json'
+      - 'nix/**'
+permissions: # permissions have to match pr_cluster_test permissions as called workflows cannot escalate their own permissions
+  contents: read
+  issues: read
+  pull-requests: write
+  id-token: write
+jobs:
+  request_upgrade_test:
+    uses: ./.github/workflows/pr_cluster_test.yml
+    secrets: inherit
+    with:
+      workflow: upgrade_test
+      pr_number: ${{ github.event.pull_request.number }}

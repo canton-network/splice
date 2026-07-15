@@ -254,6 +254,7 @@ class SvApp(
         participantAdminConnection,
         config.domains.global.alias,
         config.parameters.spliceCachingConfigs.physicalSynchronizerExpiration,
+        retryProvider,
         loggerFactory,
       )
 

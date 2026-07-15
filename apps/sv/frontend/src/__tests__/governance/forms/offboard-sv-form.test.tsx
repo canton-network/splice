@@ -45,11 +45,11 @@ describe('Offboard SV Form', () => {
     );
 
     expect(screen.getByTestId('offboard-sv-form')).toBeInTheDocument();
-    expect(screen.getByText('Action')).toBeInTheDocument();
+    expect(screen.getByText('Proposal type')).toBeInTheDocument();
 
     const actionInput = screen.getByTestId('offboard-sv-action');
     expect(actionInput).toBeInTheDocument();
-    expect(actionInput.getAttribute('value')).toBe('Offboard Member');
+    expect(actionInput.textContent).toBe('Offboard Member');
 
     const summaryInput = screen.getByTestId('offboard-sv-summary');
     expect(summaryInput).toBeInTheDocument();

@@ -79,6 +79,7 @@ abstract class SpliceAppAutomationService[Store <: AppStore](
         s"$name-priority-connection",
         config,
         clock,
+        store.dsoPartyId,
         loggerFactory,
       ),
       completionOffsetCallback,

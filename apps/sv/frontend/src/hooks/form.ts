@@ -11,6 +11,7 @@ import { FormControls } from '../components/form-components/FormControls';
 import { EffectiveDateField } from '../components/form-components/EffectiveDateField';
 import { FormErrors } from '../components/form-components/FormErrors';
 import { ProposalSummaryField } from '../components/form-components/ProposalSummaryField';
+import { ProposalTypeField } from '../components/form-components/ProposalTypeField';
 
 export const { useAppForm } = createFormHook({
   fieldComponents: {
@@ -19,6 +20,7 @@ export const { useAppForm } = createFormHook({
     EffectiveDateField,
     SelectField,
     ProposalSummaryField,
+    ProposalTypeField,
     TextField,
   },
   formComponents: {

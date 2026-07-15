@@ -7,6 +7,7 @@ import com.digitalasset.canton.config.{ApiLoggingConfig, NonNegativeDuration}
 import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import org.apache.pekko.http.scaladsl.model.{FormData, HttpMethods, HttpRequest, HttpResponse}
+import org.apache.pekko.http.scaladsl.model.headers.{Authorization, BasicHttpCredentials}
 import org.apache.pekko.http.scaladsl.unmarshalling.{Unmarshal, Unmarshaller}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.tracing.TraceContext
@@ -26,15 +27,25 @@ object OAuthApi {
       scope: Option[String],
       grant_type: String = "client_credentials",
   ) {
-    def toFormData = FormData(
-      Map(
-        "client_id" -> client_id,
-        "client_secret" -> client_secret,
+    def toFormDataAndHeaders(httpBasicAuth: Boolean) = {
+      val formParams = Map(
         "audience" -> audience,
         "grant_type" -> grant_type,
-      )
-        ++ scope.filter(_.nonEmpty).map("scope" -> _)
-    )
+      ) ++ scope.filter(_.nonEmpty).map("scope" -> _)
+      if (httpBasicAuth) {
+        (
+          FormData(formParams),
+          Seq(Authorization(BasicHttpCredentials(client_id, client_secret))),
+        )
+      } else {
+        (
+          FormData(
+            formParams ++ Seq("client_id" -> client_id, "client_secret" -> client_secret)
+          ),
+          Seq.empty,
+        )
+      }
+    }
   }
 
   /** expires_in is in seconds */
@@ -66,6 +77,7 @@ trait OAuthApiJson extends SprayJsonSupport with DefaultJsonProtocol {
 class OAuthApi(
     requestTimeout: NonNegativeDuration,
     httpClientMetrics: HttpClientMetrics,
+    httpBasicAuth: Boolean,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit actorSystem: ActorSystem)
     extends OAuthApiJson
@@ -126,14 +138,17 @@ class OAuthApi(
 
     val payload = ClientCredentialRequest(clientId, clientSecret, audience, scope)
 
-    val responseFuture: Future[HttpResponse] =
+    val responseFuture: Future[HttpResponse] = {
+      val (formData, headers) = payload.toFormDataAndHeaders(httpBasicAuth)
       httpClient.executeRequest(clientName, "requestToken")(
         HttpRequest(
           method = HttpMethods.POST,
           uri = tokenUrl,
-          entity = payload.toFormData.toEntity,
+          entity = formData.toEntity,
+          headers = headers,
         )
       )
+    }
 
     for {
       res <- responseFuture

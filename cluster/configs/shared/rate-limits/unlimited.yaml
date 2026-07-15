@@ -105,6 +105,10 @@ rateLimits:
     name: sv-voteresults
     type: unlimited
 
+  /api/scan/v0/admin/sv/previous-sv-reward-weight:
+    name: sv-previous-sv-reward-weight
+    type: unlimited
+
   /api/scan/v0/amulet-price:
     name: amulet-price-votes
     type: unlimited
@@ -187,6 +191,10 @@ rateLimits:
 
   /api/scan/v0/roll-forward-lsu:
     name: rollForwardLsu
+    type: unlimited
+
+  /api/scan/v0/lsu:
+    name: lsu
     type: unlimited
 
   /api/scan/v0/internal/reward-accounting-process:

@@ -24,10 +24,13 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.decentralizedsynchron
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.decentralizedsynchronizer as decentralizedsynchronizerCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   DsoRules,
+  DsoRules_UpdateSvRewardWeight,
   Reason,
   Vote,
   VoteRequest,
 }
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_UpdateSvRewardWeight
 import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.FaucetState
 import org.lfdecentralizedtrust.splice.codegen.java.splice.{
@@ -475,6 +478,234 @@ abstract class ScanStoreTest
           val store = mkStore().futureValue
           val voteRequestContracts = mkVoteRequests()
           assertListOfAllPastVoteRequestResults(voteRequestContracts, store)
+        }
+
+        "return results in effective-at order, independent of ingestion and record time" in {
+          val baseTime = Instant.now().truncatedTo(ChronoUnit.MICROS)
+          def recordTime(n: Int) = baseTime.plusSeconds(n.toLong)
+          def effectiveAt(n: Int) = baseTime.plus((5 - n).toLong, ChronoUnit.DAYS)
+          val voteRequests = (1 to 4).map { n =>
+            voteRequest(
+              requester = userParty(n),
+              votes = Seq(
+                new Vote(userParty(n).toProtoPrimitive, true, new Reason("", ""), Optional.empty())
+              ),
+            )
+          }
+          val results =
+            (1 to 4).map(n =>
+              mkVoteRequestResult(voteRequests(n - 1), effectiveAt = effectiveAt(n))
+            )
+          def closeVoteRequest(store: ScanStore, n: Int) =
+            dummyDomain.exercise(
+              contract = dsoRules(dsoParty),
+              interfaceId = Some(DsoRules.TEMPLATE_ID_WITH_PACKAGE_ID),
+              choiceName = DsoRulesCloseVoteRequest.choice.name,
+              choiceArgument = mkCloseVoteRequest(voteRequests(n - 1).contractId),
+              exerciseResult = results(n - 1).toValue,
+              recordTime = recordTime(n),
+            )(store.multiDomainAcsStore)
+          for {
+            store <- mkStore()
+            _ <- MonadUtil.sequentialTraverse(voteRequests)(
+              dummyDomain.create(_)(store.multiDomainAcsStore)
+            )
+            _ <- closeVoteRequest(store, 3)
+            _ <- closeVoteRequest(store, 4)
+            _ <- closeVoteRequest(store, 2)
+            _ <- closeVoteRequest(store, 1)
+            page1 <- store.listVoteRequestResults(
+              VoteResultsFilters(),
+              PageLimit.tryCreate(3),
+            )
+            page2 <- store.listVoteRequestResults(
+              VoteResultsFilters(),
+              PageLimit.tryCreate(3),
+              page1.nextPageToken,
+            )
+          } yield {
+            page1.resultsInPage.map(_.request.requester) shouldBe
+              Seq(1, 2, 3).map(userParty(_).toProtoPrimitive)
+            page2.resultsInPage.map(_.request.requester) shouldBe
+              Seq(4).map(userParty(_).toProtoPrimitive)
+          }
+        }
+
+        "order by coalesce(effectiveAt, completedAt) across mixed precision, tie-broken by entry_number" in {
+          val base = Instant.parse("2024-03-01T10:00:00Z")
+          val accepted = Set(1, 3, 4, 6)
+          val sortKeyAt = Map(
+            1 -> base.plusSeconds(1),
+            2 -> base.plusSeconds(2).plusMillis(500),
+            3 -> base.plusSeconds(10),
+            4 -> base.plusSeconds(10),
+            5 -> base.plusSeconds(20).plusNanos(123000),
+            6 -> base.plusSeconds(45).plusMillis(900),
+          )
+          def recordTime(n: Int) = base.plusSeconds(100L + n.toLong)
+          val voteRequests = (1 to 6).map { n =>
+            voteRequest(
+              requester = userParty(n),
+              votes = Seq(
+                new Vote(userParty(n).toProtoPrimitive, true, new Reason("", ""), Optional.empty())
+              ),
+            )
+          }
+          val results =
+            (1 to 6).map(n =>
+              if (accepted(n)) mkVoteRequestResult(voteRequests(n - 1), effectiveAt = sortKeyAt(n))
+              else mkRejectedVoteRequestResult(voteRequests(n - 1), completedAt = sortKeyAt(n))
+            )
+          def closeVoteRequest(store: ScanStore, n: Int) =
+            dummyDomain.exercise(
+              contract = dsoRules(dsoParty),
+              interfaceId = Some(DsoRules.TEMPLATE_ID_WITH_PACKAGE_ID),
+              choiceName = DsoRulesCloseVoteRequest.choice.name,
+              choiceArgument = mkCloseVoteRequest(voteRequests(n - 1).contractId),
+              exerciseResult = results(n - 1).toValue,
+              recordTime = recordTime(n),
+            )(store.multiDomainAcsStore)
+          for {
+            store <- mkStore()
+            _ <- MonadUtil.sequentialTraverse(voteRequests)(
+              dummyDomain.create(_)(store.multiDomainAcsStore)
+            )
+            _ <- closeVoteRequest(store, 3)
+            _ <- closeVoteRequest(store, 1)
+            _ <- closeVoteRequest(store, 5)
+            _ <- closeVoteRequest(store, 4)
+            _ <- closeVoteRequest(store, 2)
+            _ <- closeVoteRequest(store, 6)
+            page1 <- store.listVoteRequestResults(
+              VoteResultsFilters(),
+              PageLimit.tryCreate(3),
+            )
+            page2 <- store.listVoteRequestResults(
+              VoteResultsFilters(),
+              PageLimit.tryCreate(3),
+              page1.nextPageToken,
+            )
+          } yield {
+            page1.resultsInPage.map(_.request.requester) shouldBe
+              Seq(6, 5, 4).map(userParty(_).toProtoPrimitive)
+            page2.resultsInPage.map(_.request.requester) shouldBe
+              Seq(3, 2, 1).map(userParty(_).toProtoPrimitive)
+          }
+        }
+      }
+
+      "countVoteRequestResults" should {
+
+        "count vote results matching the filters" in {
+          val base = Instant.parse("2024-03-01T10:00:00Z")
+          val accepted = Set(1, 3, 4, 6)
+          def sortKeyAt(n: Int) = base.plusSeconds(n.toLong)
+          def recordTime(n: Int) = base.plusSeconds(100L + n.toLong)
+          val voteRequests = (1 to 6).map { n =>
+            voteRequest(
+              requester = userParty(n),
+              votes = Seq(
+                new Vote(userParty(n).toProtoPrimitive, true, new Reason("", ""), Optional.empty())
+              ),
+            )
+          }
+          val results =
+            (1 to 6).map(n =>
+              if (accepted(n)) mkVoteRequestResult(voteRequests(n - 1), effectiveAt = sortKeyAt(n))
+              else mkRejectedVoteRequestResult(voteRequests(n - 1), completedAt = sortKeyAt(n))
+            )
+          def closeVoteRequest(store: ScanStore, n: Int) =
+            dummyDomain.exercise(
+              contract = dsoRules(dsoParty),
+              interfaceId = Some(DsoRules.TEMPLATE_ID_WITH_PACKAGE_ID),
+              choiceName = DsoRulesCloseVoteRequest.choice.name,
+              choiceArgument = mkCloseVoteRequest(voteRequests(n - 1).contractId),
+              exerciseResult = results(n - 1).toValue,
+              recordTime = recordTime(n),
+            )(store.multiDomainAcsStore)
+          for {
+            store <- mkStore()
+            _ <- MonadUtil.sequentialTraverse(voteRequests)(
+              dummyDomain.create(_)(store.multiDomainAcsStore)
+            )
+            _ <- MonadUtil.sequentialTraverse(1 to 6)(closeVoteRequest(store, _))
+            total <- store.countVoteRequestResults(VoteResultsFilters())
+            acceptedCount <- store.countVoteRequestResults(
+              VoteResultsFilters(accepted = Some(true))
+            )
+            rejectedCount <- store.countVoteRequestResults(
+              VoteResultsFilters(accepted = Some(false))
+            )
+            requesterCount <- store.countVoteRequestResults(
+              VoteResultsFilters(requester = Some(userParty(1).toProtoPrimitive))
+            )
+          } yield {
+            total shouldBe 6L
+            acceptedCount shouldBe 4L
+            rejectedCount shouldBe 2L
+            requesterCount shouldBe 1L
+          }
+        }
+      }
+
+      "lookupLatestSvRewardWeightChange" should {
+
+        "return the weight of the latest accepted UpdateSvRewardWeight before the given time" in {
+          val sv = userParty(42)
+          val firstVoteAt = Instant.now().truncatedTo(ChronoUnit.MICROS)
+          val secondVoteAt = firstVoteAt.plusSeconds(10)
+          def updateWeightAction(weight: Long) = new ARC_DsoRules(
+            new SRARC_UpdateSvRewardWeight(
+              new DsoRules_UpdateSvRewardWeight(sv.toProtoPrimitive, weight)
+            )
+          )
+          val firstVote =
+            voteRequest(
+              requester = userParty(1),
+              votes = Seq.empty,
+              action = updateWeightAction(30000L),
+            )
+          val secondVote =
+            voteRequest(
+              requester = userParty(1),
+              votes = Seq.empty,
+              action = updateWeightAction(50000L),
+            )
+          for {
+            store <- mkStore()
+            noVotes <- store.lookupLatestSvRewardWeightChange(sv, None)
+            _ <- dummyDomain.create(firstVote)(store.multiDomainAcsStore)
+            _ <- dummyDomain.exercise(
+              contract = dsoRules(dsoParty),
+              interfaceId = Some(DsoRules.TEMPLATE_ID_WITH_PACKAGE_ID),
+              choiceName = DsoRulesCloseVoteRequest.choice.name,
+              mkCloseVoteRequest(firstVote.contractId),
+              mkVoteRequestResult(firstVote, effectiveAt = firstVoteAt).toValue,
+              txEffectiveAt = firstVoteAt,
+              recordTime = firstVoteAt,
+            )(store.multiDomainAcsStore)
+            _ <- dummyDomain.create(secondVote)(store.multiDomainAcsStore)
+            _ <- dummyDomain.exercise(
+              contract = dsoRules(dsoParty),
+              interfaceId = Some(DsoRules.TEMPLATE_ID_WITH_PACKAGE_ID),
+              choiceName = DsoRulesCloseVoteRequest.choice.name,
+              mkCloseVoteRequest(secondVote.contractId),
+              mkVoteRequestResult(secondVote, effectiveAt = secondVoteAt).toValue,
+              txEffectiveAt = secondVoteAt,
+              recordTime = secondVoteAt,
+            )(store.multiDomainAcsStore)
+            latest <- store.lookupLatestSvRewardWeightChange(sv, None)
+            beforeSecondVote <- store.lookupLatestSvRewardWeightChange(
+              sv,
+              Some(secondVoteAt.toString),
+            )
+            unknown <- store.lookupLatestSvRewardWeightChange(userParty(999), None)
+          } yield {
+            noVotes shouldBe None
+            latest shouldBe Some(50000L)
+            beforeSecondVote shouldBe Some(30000L)
+            unknown shouldBe None
+          }
         }
       }
 
@@ -1109,11 +1340,7 @@ abstract class ScanStoreTest
     } yield {
       store
         .listVoteRequestResults(
-          Some("AddSv"),
-          Some(true),
-          None,
-          None,
-          None,
+          VoteResultsFilters(actionName = Some("AddSv"), accepted = Some(true)),
           PageLimit.tryCreate(1),
         )
         .futureValue
@@ -1122,11 +1349,7 @@ abstract class ScanStoreTest
         .loneElement shouldBe result2
       store
         .listVoteRequestResults(
-          Some("SRARC_AddSv"),
-          Some(false),
-          None,
-          None,
-          None,
+          VoteResultsFilters(actionName = Some("SRARC_AddSv"), accepted = Some(false)),
           PageLimit.tryCreate(1),
         )
         .futureValue
@@ -1135,11 +1358,7 @@ abstract class ScanStoreTest
         .size shouldBe (0)
       store
         .listVoteRequestResults(
-          None,
-          None,
-          None,
-          None,
-          None,
+          VoteResultsFilters(),
           PageLimit.tryCreate(1),
         )
         .futureValue
@@ -1148,11 +1367,9 @@ abstract class ScanStoreTest
         .size shouldBe (1)
       store
         .listVoteRequestResults(
-          None,
-          None,
-          None,
-          Some(Instant.now().truncatedTo(ChronoUnit.MICROS).plusSeconds(3600).toString),
-          None,
+          VoteResultsFilters(effectiveFrom =
+            Some(Instant.now().truncatedTo(ChronoUnit.MICROS).plusSeconds(3600).toString)
+          ),
           PageLimit.tryCreate(1),
         )
         .futureValue
@@ -1161,11 +1378,9 @@ abstract class ScanStoreTest
         .size shouldBe (0)
       store
         .listVoteRequestResults(
-          None,
-          None,
-          None,
-          Some(Instant.now().truncatedTo(ChronoUnit.MICROS).minusSeconds(3600).toString),
-          None,
+          VoteResultsFilters(effectiveFrom =
+            Some(Instant.now().truncatedTo(ChronoUnit.MICROS).minusSeconds(3600).toString)
+          ),
           PageLimit.tryCreate(1),
         )
         .futureValue
@@ -1217,6 +1432,7 @@ trait AmuletTransferUtil { self: StoreTestBase =>
       receiver.toProtoPrimitive,
       receiverFeeRatio.bigDecimal,
       amount.bigDecimal,
+      Optional.empty(),
       Optional.empty(),
     )
 
@@ -1455,6 +1671,7 @@ trait AmuletTransferUtil { self: StoreTestBase =>
           receiver.toProtoPrimitive,
           amuletContract.payload.amount.initialAmount,
           new roundCodegen.OpenMiningRound.ContractId(openMiningRoundCid),
+          Optional.empty(),
         ).toValue,
         new AmuletRules_MintResult(
           new splice.amulet.AmuletCreateSummary[amuletCodegen.Amulet.ContractId](
@@ -1819,11 +2036,7 @@ class DbScanStoreTest
         // because ingestion in these store tests is simulated by directly interacting with the ingestion sink
         storeReingest
           .listVoteRequestResults(
-            Some("AddSv"),
-            Some(true),
-            None,
-            None,
-            None,
+            VoteResultsFilters(actionName = Some("AddSv"), accepted = Some(true)),
             PageLimit.tryCreate(1),
           )
           .futureValue

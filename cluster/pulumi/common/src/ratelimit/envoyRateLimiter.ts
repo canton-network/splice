@@ -3,7 +3,7 @@
 import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
 
-import { parseScanYamlEndpoints } from '../config/scanEndpoints';
+import { parseScanYamlEndpoints, parseTokenRegistrySpecEndpoints } from '../config/scanEndpoints';
 
 interface Limits {
   maxTokens: number;
@@ -13,7 +13,7 @@ interface Limits {
 
 interface MatchedLimits extends Limits {
   type: 'limited';
-  clientIp: boolean;
+  perIpLimits?: Limits;
 }
 
 interface Banned {
@@ -74,7 +74,9 @@ export function extractPathPrefixes(
       const isBanned = rl.type === 'banned';
       return { pathPrefix, isBanned };
     })
-    .filter(info => info.pathPrefix.startsWith('/api/scan'));
+    .filter(
+      info => info.pathPrefix.startsWith('/api/scan') || info.pathPrefix.startsWith('/registry')
+    );
 }
 
 function validateEndpointCoverage(
@@ -115,16 +117,28 @@ function validateEffectiveRateLimits(
 
   const { missing, orphaned } = validateEndpointCoverage(scanEndpoints, configuredScanPrefixes);
 
-  if (missing.length > 0 || orphaned.length > 0) {
+  const tokenRegistryEndpoints = parseTokenRegistrySpecEndpoints();
+
+  const configuredRegistryPrefixes = Object.keys(args.rateLimits || {}).filter(pathPrefix =>
+    pathPrefix.startsWith('/registry')
+  );
+
+  const registryValidation = validateEndpointCoverage(
+    tokenRegistryEndpoints,
+    configuredRegistryPrefixes
+  );
+
+  const totalMissing = missing.concat(registryValidation.missing);
+  const totalOrphaned = orphaned.concat(registryValidation.orphaned);
+
+  if (totalMissing.length > 0 || totalOrphaned.length > 0) {
     const errorParts: string[] = ['Rate limit configuration errors:'];
-    if (missing.length > 0) {
-      errorParts.push(
-        `- Missing rate limit prefixes for scan.yaml endpoints: ${missing.join(', ')}`
-      );
+    if (totalMissing.length > 0) {
+      errorParts.push(`- Missing rate limit prefixes for endpoints: ${totalMissing.join(', ')}`);
     }
-    if (orphaned.length > 0) {
+    if (totalOrphaned.length > 0) {
       errorParts.push(
-        `- Orphaned rate limit prefixes not matching any scan.yaml endpoint: ${orphaned.join(', ')}`
+        `- Orphaned rate limit prefixes not matching any schema route: ${totalOrphaned.join(', ')}`
       );
     }
     throw new Error(errorParts.join('\n'));
@@ -156,36 +170,44 @@ export class RateLimitEnvoyFilter extends pulumi.ComponentResource {
     const effectiveRateLimits = validateEffectiveRateLimits(args);
 
     const rateLimitActions: unknown[] =
-      Object.entries(effectiveRateLimits || {}).map(([pathPrefix, rateLimit]) => {
-        return {
-          actions: [
-            {
-              header_value_match: {
-                descriptor_value: rateLimit.name,
-                expect_match: true,
-                headers: [
-                  {
-                    name: ':path',
-                    string_match: {
-                      prefix: pathPrefix,
-                      ignore_case: true,
-                    },
-                  },
-                ],
+      Object.entries(effectiveRateLimits || {}).flatMap(([pathPrefix, rateLimit]) => {
+        const actions = [];
+
+        // Action 1: generate the per-endpoint action
+        const baseAction = {
+          header_value_match: {
+            descriptor_value: rateLimit.name,
+            expect_match: true,
+            headers: [
+              {
+                name: ':path',
+                string_match: {
+                  prefix: pathPrefix,
+                  ignore_case: true,
+                },
               },
-            },
-            ...(rateLimit.clientIp
-              ? [
-                  {
-                    request_headers: {
-                      descriptor_key: 'client_ip',
-                      header_name: 'x-forwarded-for',
-                    },
-                  },
-                ]
-              : []),
-          ],
+            ],
+          },
         };
+
+        actions.push({ actions: [baseAction] });
+
+        // Action 2: generate the per-IP action if perIpLimits exists
+        if (rateLimit.perIpLimits) {
+          actions.push({
+            actions: [
+              baseAction,
+              {
+                request_headers: {
+                  descriptor_key: 'client_ip',
+                  header_name: 'x-forwarded-for',
+                },
+              },
+            ],
+          });
+        }
+
+        return actions;
       }) || [];
 
     const enableEnvoyRateLimitMetricsAnnotation = `
@@ -295,21 +317,44 @@ proxyStatsMatcher:
                       // simplified descriptors by combining with actions and requiring all the tokens of an action to be set
                       // a descriptor in practice is a subset of tags from a rate limit
                       // but important to note that for each rate limit only one descriptor can match, if multiple descriptors match, the first one is used
-                      descriptors: Object.values(effectiveRateLimits || {}).map(rateLimit => {
-                        return {
+                      descriptors: Object.values(effectiveRateLimits || {}).flatMap(rateLimit => {
+                        const descs = [];
+
+                        // per-endpoint bucket
+
+                        descs.push({
                           entries: [
                             {
                               key: 'header_match',
                               value: rateLimit.name,
                             },
-                            ...(rateLimit.clientIp ? [{ key: clientIpEntryKey }] : []),
                           ],
                           token_bucket: {
                             max_tokens: rateLimit.maxTokens,
                             tokens_per_fill: rateLimit.tokensPerFill,
                             fill_interval: rateLimit.fillInterval,
                           },
-                        };
+                        });
+
+                        // generate the per-IP bucket if configured
+                        if (rateLimit.perIpLimits) {
+                          descs.push({
+                            entries: [
+                              {
+                                key: 'header_match',
+                                value: rateLimit.name,
+                              },
+                              { key: clientIpEntryKey },
+                            ],
+                            token_bucket: {
+                              max_tokens: rateLimit.perIpLimits.maxTokens,
+                              tokens_per_fill: rateLimit.perIpLimits.tokensPerFill,
+                              fill_interval: rateLimit.perIpLimits.fillInterval,
+                            },
+                          });
+                        }
+
+                        return descs;
                       }),
                     },
                   },

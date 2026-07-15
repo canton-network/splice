@@ -1,7 +1,65 @@
 {
   "$schema": "http://json-schema.org/schema#",
   "type": "object",
+  "required": ["imageName"],
   "properties": {
+    "securityContexts": {
+      "type": "object",
+      "properties": {
+        "pod": {
+          "type": "object"
+        },
+        "containers": {
+          "type": "object",
+          "properties": {
+            "sv": {
+              "type": "object"
+            },
+            "svWebUi": {
+              "type": "object"
+            },
+            "persistence": {
+              "type": "object"
+            }
+          },
+          "required": ["sv", "svWebUi", "persistence"]
+        }
+      },
+      "required": ["pod", "containers"]
+    },
+    "serviceAccountName": {
+      "type": "string"
+    },
+    "imageName": {
+      "type": "string"
+    },
+    "secretOverrides": {
+      "type": "object",
+      "properties": {
+        "svPublicKey": { "type": "string" },
+        "svPrivateKey": { "type": "string" }
+      }
+    },
+    "ui": {
+      "type": "object",
+      "required": ["imageName"],
+      "properties": {
+        "imageName": {
+          "type": "string"
+        },
+        "secretOverrides": {
+          "type": "object",
+          "properties": {
+            "clientId": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
     "uiPollInterval": {
       "type": "number",
       "description": "The interval in milliseconds to poll the UI for updates"
@@ -299,6 +357,12 @@
                 },
                 "secretName": {
                   "type": "string"
+                },
+                "secretOverrides": {
+                  "type": "object",
+                  "properties": {
+                    "jsonCredentials": { "type": "string" }
+                  }
                 }
               },
               "required": [
@@ -432,6 +496,32 @@
             },
             "targetAudience": {
               "type": "string"
+            },
+            "secretOverrides": {
+              "type": "object",
+              "properties": {
+                "ledgerApiUser": {
+                  "type": "string"
+                },
+                "audience": {
+                  "type": "string"
+                },
+                "token": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string"
+                },
+                "clientId": {
+                  "type": "string"
+                },
+                "clientSecret": {
+                  "type": "string"
+                },
+                "scope": {
+                  "type": "string"
+                }
+              }
             }
           }
         },
@@ -446,7 +536,8 @@
             "host",
             "port",
             "user",
-            "secretName"
+            "secretName",
+            "initImageName"
           ],
           "properties": {
             "databaseName": {
@@ -465,6 +556,15 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 65535
+            },
+            "initImageName": {
+              "type": "string"
+            },
+            "secretOverrides": {
+              "type": "object",
+              "properties": {
+                "postgresPassword": { "type": "string" }
+              }
             }
           }
         },
@@ -526,6 +626,7 @@
   "$defs": {
     "synchronizer": {
       "type": "object",
+      "additionalProperties": false,
       "required": [
         "sequencerPublicUrl",
         "sequencerAddress",

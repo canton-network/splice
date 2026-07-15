@@ -4,14 +4,13 @@
 package org.lfdecentralizedtrust.splice.sv.automation.delegatebased
 
 import com.digitalasset.base.error.utils.ErrorDetails
-import com.digitalasset.base.error.utils.ErrorDetails.ErrorInfoDetail
-import com.digitalasset.canton.error.MediatorError
 import com.digitalasset.canton.topology.PartyId
 import io.grpc.StatusRuntimeException
 import io.grpc.protobuf.StatusProto
 import org.lfdecentralizedtrust.splice.automation.{TaskOutcome, TaskSuccess}
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 import org.lfdecentralizedtrust.splice.sv.store.IgnoredPartiesStore
+import org.lfdecentralizedtrust.splice.util.UnresponsiveParties
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -61,17 +60,7 @@ trait IgnoredAmuletVersionGuard {
     val statusProto = StatusProto.fromThrowable(ex)
     val errorDetails = ErrorDetails.from(statusProto)
     errorDetails
-      .collectFirst { case ErrorInfoDetail(MediatorError.Timeout.id, metadata) =>
-        metadata
-          .get("unresponsiveParties")
-          .toList
-          .flatMap(
-            _.split(',').filter(_.nonEmpty).flatMap { partyStr =>
-              PartyId.fromProtoPrimitive(partyStr, "unresponsiveParties").toOption
-            }
-          )
-          .toSet
-      }
+      .collectFirst { case UnresponsiveParties(parties) => parties }
       .getOrElse(Set.empty)
   }
 

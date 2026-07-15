@@ -17,6 +17,7 @@ import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.protocol.LocalRejectError.ConsistencyRejections.LockedContracts
 import com.digitalasset.canton.protocol.LocalRejectErrorCode
 import com.digitalasset.canton.time.Clock
+import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
 import io.grpc.StatusRuntimeException
 import org.apache.pekko.actor.Scheduler
@@ -31,6 +32,7 @@ class SpliceCircuitBreaker(
     name: String,
     config: CircuitBreakerConfig,
     clock: Clock,
+    dsoPartyId: PartyId,
     override val loggerFactory: NamedLoggerFactory,
 )(implicit
     ec: ExecutionContext,
@@ -115,6 +117,8 @@ class SpliceCircuitBreaker(
         ErrorDetails
           .from(ex)
           .collect {
+            case UnresponsiveParties(parties) =>
+              !parties.contains(dsoPartyId)
             case ErrorDetails.ErrorInfoDetail(errorCodeId, metadata)
                 if metadata.contains("category") =>
               val categoryIgnored = metadata
@@ -142,12 +146,14 @@ object SpliceCircuitBreaker {
       name: String,
       config: CircuitBreakerConfig,
       clock: Clock,
+      dsoPartyId: PartyId,
       loggerFactory: NamedLoggerFactory,
   )(implicit scheduler: Scheduler, ec: ExecutionContext): SpliceCircuitBreaker =
     new SpliceCircuitBreaker(
       name,
       config,
       clock,
+      dsoPartyId,
       loggerFactory,
     )
 }

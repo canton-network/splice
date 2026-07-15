@@ -47,11 +47,11 @@ describe('Create Unallocated Unclaimed Activity Record Form', () => {
     expect(
       screen.getByTestId('create-unallocated-unclaimed-activity-record-form')
     ).toBeInTheDocument();
-    expect(screen.getByText('Action')).toBeInTheDocument();
+    expect(screen.getByText('Proposal type')).toBeInTheDocument();
 
     const actionInput = screen.getByTestId('create-unallocated-unclaimed-activity-record-action');
     expect(actionInput).toBeInTheDocument();
-    expect(actionInput.getAttribute('value')).toBe('Create Unclaimed Activity Record');
+    expect(actionInput.textContent).toBe('Create Unclaimed Activity Record');
 
     const summaryInput = screen.getByTestId('create-unallocated-unclaimed-activity-record-summary');
     expect(summaryInput).toBeInTheDocument();

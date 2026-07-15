@@ -4,6 +4,8 @@
 
 set -Eeo pipefail
 
+export POSTGRES_INITDB_ARGS="--data-checksums ${POSTGRES_INITDB_ARGS:-}"
+
 docker-ensure-initdb.sh
 source docker-entrypoint.sh
 

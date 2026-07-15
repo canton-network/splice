@@ -1,8 +1,5 @@
 # Reference configuration options
 cluster:
-  hyperdiskSupport:
-    enabled: true
-    enabledForInfra: true
   nodePools:
     apps:
       minNodes: 0
@@ -27,6 +24,7 @@ infra:
     proxyForIstioHttp: false
   istio:
     enableIngressAccessLogging: true
+    enablePublicTokenRegistry: true
     sequencerFlowControl:
       # See https://github.com/DACH-NY/canton-network-internal/issues/4901
       # The values are somewhat arbitrary so more fine tuning may be appropriate.
@@ -122,6 +120,9 @@ monitoring:
         total:
           rate: 25
           overMinutes: 5
+      dsoMissedConfirmations:
+        threshold: 0 # alert as soon as there's any confirmation missing
+        windowMinutes: 10
       cloudSql:
         maintenance: false
       cometbft:
@@ -147,12 +148,23 @@ monitoring:
           seconds: 1200
       acsSnapshots:
         # This task repeats every ~3h
-        saveLatencyThresholdSeconds: 2700
+        saveLatencyThresholdSeconds: 5400
         # This task repeats every ~30sec
         updateLatencyThresholdSeconds: 3
       sequencerRateLimits:
         rejectionRateThreshold: 0
         circuitBreakerStateThreshold: 0.5
+      cantonBft:
+        # Alert if the number of ingress requests queued in the BFT ordering layer
+        # exceeds this threshold, which may indicate issues with the ordering layer
+        mempoolMaxSizeThreshold: 100
+      scanConnectionDisagreement:
+        alertThreshold: 0.1
+        excludedRequests:
+          - "getTransferInstructionAcceptContext" # exclude as it's really sensitive to ingestion and ROP delays
+          - "getOpenAndIssuingMiningRounds" # exclude as it depends on (fast) mutable state and depends on the ROP delays
+        excludedConnections: []
+        excludedHttpStatusCodes: ["404"]
       walletSweep:
         # Multiplier applied to a wallet sweep's configured maxBalance to set the alert threshold.
         # 1.5 means the alert fires if the balance is 50% higher than expected.
@@ -185,6 +197,11 @@ monitoring:
         # Alert if we have more than this many featured app rights,
         # as too many rights may cause performance problems in computing app activity records.
         featuredAppRightsLimit: 10000
+        # Alert if the average batch size of verdict ingestion exceeds this threshold,
+        # as this may indicate that ingestion can't keep up.
+        verdictIngestionBatchSizeThreshold: 40
+        # Only alert after the average batch size of verdict ingestion exceeds the threshold for this many minutes
+        verdictIngestionBatchSizePendingPeriodMinutes: 60
     # Alert on secrets appearing in logs (JWTs, Bearer tokens, passwords, etc.)
     # Key=value secrets (excluding masked values)
     # JWTs identified by base64 header prefix "eyJhbGc" (decodes to '{"alg')
@@ -207,7 +224,12 @@ cloudArmor:
       pathPrefix: /api/scan
       throttleAcrossAllEndpointsAllIps:
         withinIntervalSeconds: 60
-        maxRequestsBeforeHttp429: 0
+        maxRequestsBeforeHttp429: 0    # Keeps scan completely closed to the public
+    tokenRegistry:
+      pathPrefix: /registry
+      throttleAcrossAllEndpointsAllIps:
+        withinIntervalSeconds: 60
+        maxRequestsBeforeHttp429: 200
 multiValidator:
   postgresPvcSize: '100Gi'
   resources:
@@ -231,7 +253,7 @@ multiValidator:
 sv:
   scan:
     externalRateLimits:
-      !include(./rate-limits/v0-acs.yaml;./rate-limits/unlimited.yaml;./rate-limits/public-banned.yaml)
+      !include(./rate-limits/v0-acs.yaml;./rate-limits/unlimited.yaml;./rate-limits/public-banned.yaml;./rate-limits/token-registry.yaml)
       globalLimits:
         maxTokens: 2147483647
         tokensPerFill: 2147483647

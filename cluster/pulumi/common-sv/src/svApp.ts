@@ -4,12 +4,13 @@ import * as pulumi from '@pulumi/pulumi';
 import {
   CLUSTER_HOSTNAME,
   DecentralizedSynchronizerMigrationConfig,
+  EnvVarConfig,
   MigrationInfo,
   pvcSuffix,
   standardStorageClassName,
 } from '@canton-network/splice-pulumi-common';
 
-import { EnvVarConfig, SingleSvConfiguration } from './singleSvConfig';
+import { SingleSvConfiguration } from './singleSvConfig';
 import {
   CometbftSynchronizerNode,
   DecentralizedSynchronizerNode,
@@ -77,6 +78,18 @@ export function valuesForSvApp(
         },
       ]
     : [];
+  const cantonBftPruningConfig = config.pruning?.cantonBft?.enabled
+    ? [
+        {
+          name: 'ADDITIONAL_CONFIG_CANTON_BFT_PRUNING',
+          value: `canton.sv-apps.sv.local-synchronizer-nodes.current.sequencer.canton-bft-pruning {
+                    cron = "${config.pruning.cantonBft.cron}"
+                    max-duration = "${config.pruning.cantonBft.maxDuration}"
+                    retention = "${config.pruning.cantonBft.retentionPeriod}"
+                  }`,
+        },
+      ]
+    : [];
   const additionalPackagesToUnvetConfig =
     config.svApp?.additionalPackagesToUnvet &&
     Object.keys(config.svApp.additionalPackagesToUnvet).length > 0
@@ -95,6 +108,7 @@ export function valuesForSvApp(
   const additionalEnvVars = (config.svApp?.additionalEnvVars || [])
     .concat(bftSequencerConnectionEnvVars)
     .concat(mediatorPruningConfig)
+    .concat(cantonBftPruningConfig)
     .concat(additionalPackagesToUnvetConfig);
 
   const synchronizerValues: { synchronizers: object } = {

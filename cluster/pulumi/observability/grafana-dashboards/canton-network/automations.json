@@ -45,6 +45,7 @@
             "mode": "thresholds"
           },
           "mappings": [],
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -89,9 +90,11 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "count by (namspace, job, automation_service, exported_service, party) (splice_automation_background_service_health{namespace=~\"$namespace\", node_type=~\"$app\"} == 1) or vector(0)",
-          "legendFormat": "__auto",
-          "range": true,
+          "exemplar": false,
+          "expr": "count by (namespace, job, automation_service) (splice_automation_background_service_health{namespace=~\"$namespace\", node_type=~\"$app\"} == 1)",
+          "instant": true,
+          "legendFormat": "{{namespace}} {{job}} {{automation_service}}",
+          "range": false,
           "refId": "A"
         }
       ],
@@ -1620,18 +1623,7 @@
         "includeAll": false,
         "multi": true,
         "name": "trigger_type",
-        "options": [
-          {
-            "selected": true,
-            "text": "taskbased",
-            "value": "taskbased"
-          },
-          {
-            "selected": true,
-            "text": "polling",
-            "value": "polling"
-          }
-        ],
+        "options": [],
         "query": "taskbased, polling",
         "type": "custom",
         "valuesFormat": "csv"
@@ -1666,6 +1658,6 @@
   "timezone": "",
   "title": "Automations",
   "uid": "a3e1385f-6f03-46d9-908c-34aca0f507a6",
-  "version": 3,
+  "version": 2,
   "weekStart": ""
 }

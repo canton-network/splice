@@ -34,6 +34,10 @@ abstract class SpliceBackendConfig extends LocalNodeConfig {
 abstract class GrpcClientConfig extends NodeConfig {}
 abstract class HttpClientConfig extends NetworkAppNodeConfig {}
 
+final case class SplicePostgresConfig(
+    clientConnectionCheckInterval: NonNegativeFiniteDuration = NonNegativeFiniteDuration ofSeconds 5
+)
+
 final case class CircuitBreakerConfig(
     maxFailures: Int = 20,
     callTimeout: NonNegativeFiniteDuration =
@@ -87,6 +91,7 @@ final case class EnabledFeaturesConfig(
     // On 3.5 we should be able to set it to false.
     reconnectOnSynchronizerConfigurationChange: Boolean = true,
     enableUnsupportedDarsUnvetting: Boolean = true,
+    enableValidatorDarsUnvetting: Boolean = true,
     ignorePartyIdWithIgnoredAmulet: Boolean = true,
     naiveUnresponsivePartiesAutoIgnore: Boolean = true,
 )

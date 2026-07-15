@@ -41,7 +41,7 @@ import org.lfdecentralizedtrust.splice.scan.admin.api.client.{
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
 import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
-import org.lfdecentralizedtrust.splice.sv.{BftSequencerConfig, LocalSynchronizerNode}
+import org.lfdecentralizedtrust.splice.sv.{CantonBftSequencerConfig, LocalSynchronizerNode}
 import org.lfdecentralizedtrust.splice.sv.automation.SvDsoAutomationService.{
   LocalSequencerClientConfig,
   LocalSequencerClientContext,
@@ -384,6 +384,15 @@ class SvDsoAutomationService(
     )
 
     registerTrigger(
+      new ReconcileSequencingParametersTrigger(
+        triggerContext,
+        participantAdminConnection,
+        config.cantonBftSequencingParameters,
+        config.domains.global.alias,
+      )
+    )
+
+    registerTrigger(
       new LsuAnnouncementTrigger(
         triggerContext,
         dsoStore,
@@ -401,7 +410,7 @@ class SvDsoAutomationService(
     )
     def registerTriggersForSynchronizers(node: LocalSynchronizerNode): Unit = {
       node.sequencerConfig match {
-        case BftSequencerConfig() =>
+        case CantonBftSequencerConfig() =>
           registerTrigger(
             new SvBftSequencerPeerOffboardingTrigger(
               triggerContext,
@@ -487,6 +496,8 @@ class SvDsoAutomationService(
         triggerContext,
         dsoStore,
         connection(SpliceLedgerConnectionPriority.Medium),
+        () => getOrCreateOwnScanConnection(),
+        () => getOrCreatePeerScanConnection(),
       )
     )
     registerTrigger(
@@ -524,6 +535,13 @@ class SvDsoAutomationService(
         connection(SpliceLedgerConnectionPriority.Medium),
         () => getOrCreateOwnScanConnection(),
         () => getOrCreatePeerScanConnection(),
+      )
+    )
+
+    registerTrigger(
+      new ConfirmationMismatchReportTrigger(
+        triggerContext,
+        dsoStore,
       )
     )
 
@@ -582,6 +600,12 @@ class SvDsoAutomationService(
     )
     registerTrigger(
       new AmuletPriceMetricsTrigger(
+        triggerContext,
+        dsoStore,
+      )
+    )
+    registerTrigger(
+      new RewardMetricsTrigger(
         triggerContext,
         dsoStore,
       )
@@ -720,6 +744,7 @@ object SvDsoAutomationService extends AutomationServiceCompanion {
       aTrigger[ArchiveClosedMiningRoundsTrigger],
       aTrigger[CalculateRewardsTrigger],
       aTrigger[CalculateRewardsDryRunTrigger],
+      aTrigger[ConfirmationMismatchReportTrigger],
       aTrigger[RestartDsoDelegateBasedAutomationTrigger],
       aTrigger[AnsSubscriptionInitialPaymentTrigger],
       aTrigger[SvPackageVettingTrigger],
@@ -748,10 +773,12 @@ object SvDsoAutomationService extends AutomationServiceCompanion {
       aTrigger[FollowAmuletConversionRateFeedTrigger],
       aTrigger[CopyVotesTrigger],
       aTrigger[AmuletPriceMetricsTrigger],
+      aTrigger[RewardMetricsTrigger],
       aTrigger[CreateBootstrapExternalPartyConfigStateInstructionTrigger],
       aTrigger[LsuTrigger],
       aTrigger[LsuAnnouncementTrigger],
       aTrigger[LsuTransferTrafficTrigger],
       aTrigger[LsuSequencingTestTrigger],
+      aTrigger[ReconcileSequencingParametersTrigger],
     )
 }

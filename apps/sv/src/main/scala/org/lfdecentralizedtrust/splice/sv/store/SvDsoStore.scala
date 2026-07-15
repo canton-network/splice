@@ -54,6 +54,7 @@ import com.digitalasset.canton.util.ShowUtil.*
 import io.grpc.Status
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 
+import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.OptionConverters.*
 
@@ -79,6 +80,8 @@ trait SvDsoStore
     SvDsoStore.contractFilter(key.dsoParty, domainMigrationId)
 
   def key: SvStore.Key
+
+  override def dsoPartyId = key.dsoParty
 
   def domainMigrationId: Long
 
@@ -197,12 +200,12 @@ trait SvDsoStore
 
   /** List amulets that are expired and can never be used as transfer input. */
   def listExpiredAmulets(
-      ignoredParties: Set[PartyId]
+      ignoredPartiesStore: Option[IgnoredPartiesStore] = None
   ): ListExpiredContracts[splice.amulet.Amulet.ContractId, splice.amulet.Amulet]
 
   /** List amulet transfer instructions that are expired */
   def listExpiredAmuletTransferInstructions(
-      ignoredParties: Set[PartyId]
+      ignoredPartiesStore: Option[IgnoredPartiesStore] = None
   ): ListExpiredContracts[
     splice.amulettransferinstruction.AmuletTransferInstruction.ContractId,
     splice.amulettransferinstruction.AmuletTransferInstruction,
@@ -210,15 +213,23 @@ trait SvDsoStore
 
   /** List amulet allocations that are expired */
   def listExpiredAmuletAllocations(
-      ignoredParties: Set[PartyId]
+      ignoredPartiesStore: Option[IgnoredPartiesStore] = None
   ): ListExpiredContracts[
     splice.amuletallocation.AmuletAllocation.ContractId,
     splice.amuletallocation.AmuletAllocation,
   ]
 
+  /** List amulet allocations V2 that are expired */
+  def listExpiredAmuletAllocationsV2(
+      ignoredParties: Set[PartyId]
+  ): ListExpiredContracts[
+    splice.amuletallocationv2.AmuletAllocationV2.ContractId,
+    splice.amuletallocationv2.AmuletAllocationV2,
+  ]
+
   /** List locked amulets that are expired and can never be used as transfer input. */
   def listLockedExpiredAmulets(
-      ignoredParties: Set[PartyId]
+      ignoredPartiesStore: Option[IgnoredPartiesStore] = None
   ): ListExpiredContracts[splice.amulet.LockedAmulet.ContractId, splice.amulet.LockedAmulet]
 
   def listExpiredVoteRequests(): ListExpiredContracts[VoteRequest.ContractId, VoteRequest] =
@@ -227,6 +238,12 @@ trait SvDsoStore
   def listConfirmations(
       action: splice.dsorules.ActionRequiringConfirmation,
       limit: Limit = defaultLimit,
+  )(implicit
+      tc: TraceContext
+  ): Future[Seq[Contract[splice.dsorules.Confirmation.ContractId, splice.dsorules.Confirmation]]]
+
+  def listAllConfirmations(
+      limit: Limit = defaultLimit
   )(implicit
       tc: TraceContext
   ): Future[Seq[Contract[splice.dsorules.Confirmation.ContractId, splice.dsorules.Confirmation]]]
@@ -425,12 +442,13 @@ trait SvDsoStore
   final def getExpiredCouponsInBatchesPerRoundAndCouponType(
       domain: SynchronizerId,
       enableExpireValidatorFaucet: Boolean,
-      ignoredExpiredRewardsPartyIds: Set[PartyId],
+      ignoredPartiesStore: Option[IgnoredPartiesStore] = None,
       batchSize: Limit = PageLimit.tryCreate(100),
       numBatches: Limit = PageLimit.tryCreate(100),
   )(implicit
       tc: TraceContext
   ): Future[Seq[ExpiredRewardCouponsBatch]] = {
+    val ignoredExpiredRewardsPartyIds = ignoredPartiesStore.fold(Set.empty[PartyId])(_.getAll)
     def associateRoundContractWithBatch[T](
         batches: Seq[SvDsoStore.RoundBatch[T]],
         roundMap: Map[
@@ -564,12 +582,42 @@ trait SvDsoStore
     splice.amulet.rewardaccountingv2.ProcessRewardsV2,
   ]]]
 
+  /** Returns a random sample of up to `limit` `ProcessRewardsV2` contracts, drawn from an
+    * arbitrary (unordered) subset of up to 1000 contracts.
+    */
+  def listProcessRewardsV2Sample(
+      dryRun: Boolean,
+      limit: Limit,
+  )(implicit tc: TraceContext): Future[Seq[AssignedContract[
+    splice.amulet.rewardaccountingv2.ProcessRewardsV2.ContractId,
+    splice.amulet.rewardaccountingv2.ProcessRewardsV2,
+  ]]]
+
   def listRewardCouponsV2(
       limit: Limit = defaultLimit
   )(implicit tc: TraceContext): Future[Seq[AssignedContract[
     splice.amulet.RewardCouponV2.ContractId,
     splice.amulet.RewardCouponV2,
   ]]]
+
+  /** Returns the histogram for the remaining age (i.e., difference between now and the
+    * contract creation time) of all active RewardCouponV2 contracts.
+    *
+    * @param t1 The upper bound of the first age bucket (exclusive).
+    * @param t2 The upper bound of the second age bucket (exclusive).
+    * @param t3 The upper bound of the third age bucket (exclusive).
+    * @param now The current timestamp to use for calculating the remaining age of the contracts.
+    * @param limit The maximum number of contracts to consider for the histogram.
+    */
+  def getRewardCouponsV2AgeHistogram(
+      t1: FiniteDuration,
+      t2: FiniteDuration,
+      t3: FiniteDuration,
+      now: CantonTimestamp,
+      limit: Limit,
+  )(implicit
+      tc: TraceContext
+  ): Future[(Long, Long, Long, Long)]
 
   /** Returns the dry-run `CalculateRewardsV2` and `ProcessRewardsV2` contracts whose
     * round number is in the given set.
@@ -737,6 +785,42 @@ trait SvDsoStore
     multiDomainAcsStore.listExpiredFromPayloadExpiry(
       splice.amulet.DevelopmentFundCoupon.COMPANION
     )
+
+  def listExpiredRewardCouponsV2(
+      ignoredPartiesStore: Option[IgnoredPartiesStore] = None
+  ): ListExpiredContracts[
+    splice.amulet.RewardCouponV2.ContractId,
+    splice.amulet.RewardCouponV2,
+  ]
+
+  /** Does a random sample of coupon providers from the set of coupons where 'providerIsObserver' is false.
+    * Returns only the parties, not the coupons, to keep the query index-only.
+    */
+  def listNonObserverRewardCouponsV2ProvidersSample(
+      limit: Limit
+  )(implicit tc: TraceContext): Future[Seq[PartyId]]
+
+  def listNonObserverRewardCouponsV2ForProvider(
+      rewardParty: PartyId,
+      limit: Limit,
+  )(implicit tc: TraceContext): Future[
+    Seq[Contract[splice.amulet.RewardCouponV2.ContractId, splice.amulet.RewardCouponV2]]
+  ]
+
+  /** Returns the providers with the most hidden ('providerIsObserver' is false) `RewardCouponV2` contracts,
+    * together with their coupon counts.
+    *
+    * couponScanLimit - max number of coupons/rows scanned.
+    *                   Useful for avoiding potentially very slow queries.
+    * maxProviders - max number of parties to count the coupons for.
+    *
+    * Due the couponScanLimit the coupon count could be lower than actual,
+    * but it is fine if the data is to be used for metrics.
+    */
+  def listTopNonObserverRewardCouponV2Providers(
+      couponScanLimit: Int,
+      maxProviders: Int,
+  )(implicit tc: TraceContext): Future[Seq[(PartyId, Long)]]
 
   def listSvOnboardingConfirmed(
       limit: Limit = defaultLimit
@@ -1097,7 +1181,7 @@ trait SvDsoStore
   /** Whether there are more than the given number of featured app activity markers. */
   def featuredAppActivityMarkerCountAboveOrEqualTo(
       threshold: Int,
-      ignoredParties: Set[PartyId],
+      ignoredPartiesStore: Option[IgnoredPartiesStore],
   )(implicit
       tc: TraceContext
   ): Future[Boolean]
@@ -1106,7 +1190,7 @@ trait SvDsoStore
       contractIdHashLbIncl: Int,
       contractIdHashUbIncl: Int,
       limit: Int,
-      ignoredParties: Set[PartyId],
+      ignoredPartiesStore: Option[IgnoredPartiesStore],
   )(implicit tc: TraceContext): Future[Seq[Contract[
     splice.amulet.FeaturedAppActivityMarker.ContractId,
     splice.amulet.FeaturedAppActivityMarker,
@@ -1350,6 +1434,7 @@ object SvDsoStore {
           rewardParty = Some(PartyId.tryFromProtoPrimitive(contract.payload.provider)),
           rewardAmount = Some(contract.payload.amount),
           contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
+          rewardBeneficiaryIsObserver = Some(contract.payload.providerIsObserver),
         )
       },
       mkFilter(splice.amulet.rewardaccountingv2.CalculateRewardsV2.COMPANION)(
@@ -1569,6 +1654,7 @@ object SvDsoStore {
       ) { contract =>
         DsoAcsStoreRowData(
           contract,
+          // TODO(#5743): use the more precise `expiresAt` time once the minimal `splice-amulet` version contains that field
           contractExpiresAt =
             Some(Timestamp.assertFromInstant(contract.payload.transfer.executeBefore)),
         )
@@ -1578,8 +1664,22 @@ object SvDsoStore {
       ) { contract =>
         DsoAcsStoreRowData(
           contract,
+          // TODO(#5743): use the more precise `expiresAt` time once the minimal `splice-amulet` version contains that field
           contractExpiresAt =
             Some(Timestamp.assertFromInstant(contract.payload.allocation.settlement.settleBefore)),
+        )
+      },
+      mkFilter(splice.amuletallocationv2.AmuletAllocationV2.COMPANION)(
+        co => co.payload.allocation.admin == dso,
+        versionGuard = { case (pkgVersionSupport, now) =>
+          (tc) =>
+            pkgVersionSupport
+              .supportsAmuletAllocationV2(Seq(dsoParty), now)(tc)
+        },
+      ) { contract =>
+        DsoAcsStoreRowData(
+          contract,
+          contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
         )
       },
     )

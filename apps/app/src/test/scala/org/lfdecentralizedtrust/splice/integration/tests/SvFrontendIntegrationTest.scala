@@ -22,6 +22,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
+import org.lfdecentralizedtrust.splice.store.VoteResultsFilters
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.CloseVoteRequestTrigger
 import org.lfdecentralizedtrust.splice.util.SpliceUtil.defaultDsoRulesConfig
 import org.lfdecentralizedtrust.splice.util.*
@@ -30,6 +31,7 @@ import org.openqa.selenium.support.ui.Select
 import org.slf4j.event.Level
 
 import scala.jdk.CollectionConverters.*
+import scala.jdk.OptionConverters.*
 import java.util.Optional
 
 class SvFrontendIntegrationTest
@@ -166,7 +168,6 @@ class SvFrontendIntegrationTest
           _ => {
             checkValidatorLicenseRow(
               licenseRows.size.toLong,
-              sv1Backend.getDsoInfo().svParty,
               newValidatorParty,
             )
           },
@@ -1421,6 +1422,7 @@ class SvFrontendIntegrationTest
     "NEW UI: Grant and Revoke Featured App Right" in { implicit env =>
       val providerParty = sv3Backend.getDsoInfo().svParty
       val providerPartyId = providerParty.toProtoPrimitive
+      val activityWeight = BigDecimal("2.5")
 
       // First, create a Grant proposal for the provider.
       val grantProposalContractId = assertCreateProposal(
@@ -1428,6 +1430,7 @@ class SvFrontendIntegrationTest
         "grant-featured-app",
       ) { implicit webDriver =>
         fillOutTextField("grant-featured-app-idValue", providerPartyId)
+        fillOutTextField("grant-featured-app-activityWeight", activityWeight.toString)
       }
 
       clue("vote the grant request to execution before creating revoke request") {
@@ -1454,16 +1457,20 @@ class SvFrontendIntegrationTest
           else voteRequest.contractId
         }
 
+        // With 4 SVs, 3 votes pass a request: sv1 (requester) and sv2 already
+        // voted in assertCreateProposal, so sv3's vote here reaches the threshold
+        // and archives the VoteRequest. We don't cast sv4's redundant vote: it
+        // races the archival and ~once a month fails with NOT_FOUND, flaking.
         eventuallySucceeds() {
           sv3Backend.castVote(grantTrackingCid, true, "", "")
         }
 
-        eventuallySucceeds() {
-          sv4Backend.castVote(grantTrackingCid, true, "", "")
-        }
-
         eventually() {
-          sv1ScanBackend.lookupFeaturedAppRight(providerParty) shouldBe a[Some[?]]
+          val featuredAppRight = sv1ScanBackend.lookupFeaturedAppRight(providerParty)
+          featuredAppRight shouldBe a[Some[?]]
+          featuredAppRight.value.payload.activityWeight.toScala.map(
+            BigDecimal(_)
+          ) shouldBe Some(activityWeight)
         }
       }
 
@@ -1554,7 +1561,7 @@ class SvFrontendIntegrationTest
             .listVoteRequests()
             .filter(_.payload.reason.body == "first request") shouldBe empty
           sv1Backend
-            .listVoteRequestResults(None, Some(false), None, None, None, 10)
+            .listVoteRequestResults(VoteResultsFilters(accepted = Some(false)), 10)
             ._1
             .exists(_.request.reason.body == "first request") shouldBe true
         },
@@ -1592,7 +1599,7 @@ class SvFrontendIntegrationTest
             .listVoteRequests()
             .filter(_.payload.reason.body == "second request") shouldBe empty
           sv1Backend
-            .listVoteRequestResults(None, Some(false), None, None, None, 10)
+            .listVoteRequestResults(VoteResultsFilters(accepted = Some(false)), 10)
             ._1
             .count(r =>
               r.request.reason.body == "first request" || r.request.reason.body == "second request"
@@ -1602,7 +1609,7 @@ class SvFrontendIntegrationTest
 
       // Verify ordering via backend API: most recently completed first
       clue("vote results are ordered by completion time descending") {
-        val (results, _) = sv1Backend.listVoteRequestResults(None, None, None, None, None, 10)
+        val (results, _) = sv1Backend.listVoteRequestResults(VoteResultsFilters(), 10)
         val ourResults = results.filter(r =>
           r.request.reason.body == "first request" || r.request.reason.body == "second request"
         )
@@ -1614,13 +1621,13 @@ class SvFrontendIntegrationTest
       // Verify cursor-based pagination via backend API with limit=1
       clue("pagination returns correct pages") {
         val (firstPage, firstPageToken) =
-          sv1Backend.listVoteRequestResults(None, None, None, None, None, 1)
+          sv1Backend.listVoteRequestResults(VoteResultsFilters(), 1)
         firstPage.size shouldBe 1
         firstPage.head.request.reason.body shouldBe "second request"
         firstPageToken shouldBe defined
 
         val (secondPage, _) =
-          sv1Backend.listVoteRequestResults(None, None, None, None, None, 1, firstPageToken)
+          sv1Backend.listVoteRequestResults(VoteResultsFilters(), 1, firstPageToken)
         secondPage.size shouldBe 1
         secondPage.head.request.reason.body shouldBe "first request"
       }
