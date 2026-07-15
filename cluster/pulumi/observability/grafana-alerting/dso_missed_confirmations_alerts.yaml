@@ -16,7 +16,7 @@ groups:
               datasourceUid: prometheus
               model:
                 editorMode: code
-                expr: sum by (namespace) (increase(daml_mediator_timeout_non_responsive_participants_total{party=~"DSO::.*"}[$DSO_MISSED_CONFIRMATIONS_WINDOW_MINUTESm])) / sum by (namespace) (increase(daml_mediator_requests_total[$DSO_MISSED_CONFIRMATIONS_WINDOW_MINUTESm]))
+                expr: max by (party) (increase(daml_mediator_timeout_non_responsive_participants_total{party=~"DSO::.*"}[$DSO_MISSED_CONFIRMATIONS_WINDOW_MINUTESm]))
                 instant: true
                 intervalMs: 1000
                 legendFormat: __auto
@@ -57,6 +57,6 @@ groups:
             __dashboardUid__: cnck4jp
             __panelId__: "1"
             severity: critical
-            summary: The DSO party in namespace {{ $labels.namespace }} is missing more than $DSO_MISSED_CONFIRMATIONS_THRESHOLD_PERCENT% of its confirmations over the last $DSO_MISSED_CONFIRMATIONS_WINDOW_MINUTES minutes.
+            summary: The DSO party in namespace {{ $labels.namespace }} missed more than $DSO_MISSED_CONFIRMATIONS_THRESHOLD of its confirmations over the last $DSO_MISSED_CONFIRMATIONS_WINDOW_MINUTES minutes.
           labels: {}
           isPaused: false

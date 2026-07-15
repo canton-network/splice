@@ -74,7 +74,7 @@ monitoring:
       deployment:
         pendingPeriodMinutes: 5
       dsoMissedConfirmations:
-        threshold: 0.01
+        threshold: 0
         windowMinutes: 10
       gcpQuotas:
         excludedApproachingMetrics: []

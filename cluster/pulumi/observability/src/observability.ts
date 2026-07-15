@@ -764,7 +764,6 @@ function substituteScanConnectionDisagreementAlerts(alert: string): string {
 function substituteDsoMissedConfirmationsAlerts(alert: string): string {
   const config = monitoringConfig.alerting.alerts.dsoMissedConfirmations;
   return alert
-    .replaceAll('$DSO_MISSED_CONFIRMATIONS_THRESHOLD_PERCENT', (config.threshold * 100).toString())
     .replaceAll('$DSO_MISSED_CONFIRMATIONS_THRESHOLD', config.threshold.toString())
     .replaceAll('$DSO_MISSED_CONFIRMATIONS_WINDOW_SECONDS', (config.windowMinutes * 60).toString())
     .replaceAll('$DSO_MISSED_CONFIRMATIONS_WINDOW_MINUTES', config.windowMinutes.toString());
