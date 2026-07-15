@@ -626,126 +626,132 @@ class TestTokenV2SettlementIntegrationTest
 
       val (settleTradeTx, _) = actAndCheck(
         "Venue settles the trade", {
-          val allAllocations = {
-            venueValidator.participantClientWithAdminToken.ledger_api.state.acs.of_party(
-              party = venueParty,
-              filterInterfaces = Seq(allocationv2.Allocation.TEMPLATE_ID).map(templateId =>
-                TemplateId(
-                  templateId.getPackageId,
-                  templateId.getModuleName,
-                  templateId.getEntityName,
-                )
-              ),
-              includeCreatedEventBlob = true,
-            )
-          }
-          // sanity check
-          (bobAllocationCids ++ aliceAllocationCids).foreach { cid =>
-            allAllocations
-              .find(_.contractId == cid.contractId)
-              .valueOrFail(s"No allocation found for cid $cid")
-          }
-          val amuletAllocations =
-            allAllocations.filter(_.event.signatories.contains(dsoParty.toProtoPrimitive))
-          val usdAllocations =
-            allAllocations.filter(_.event.signatories.contains(ttAdminParty.toProtoPrimitive))
-          val settleBatch = new allocationv2.SettlementFactory_SettleBatch(
-            new allocationv2.SettlementInfo(
-              java.util.List.of(venueParty.toProtoPrimitive),
-              "OTCTrade",
-              java.util.Optional.of(new metadatav1.AnyContract.ContractId(otcTrade.id.contractId)),
-              emptyMetadata,
-            ),
-            transferLegsFromTrade(otcTrade).asJava,
-            allAllocations
-              .map(alloc =>
-                new allocationv2.FinalizedAllocation(
-                  new allocationv2.Allocation.ContractId(alloc.contractId),
-                  java.util.List.of(),
-                  java.util.Optional.empty[java.util.Map[String, java.math.BigDecimal]](),
-                )
+          // UpdateExternalPartyConfigStateTrigger might run concurrently and cause a LOCAL_VERDICT_INACTIVE_CONTRACTS
+          // because of the ExternalPartyConfigState being updated.
+          // In the real world, we expect the venue to also just retry re-fetching all contexts
+          eventuallySucceeds() {
+            val allAllocations = {
+              venueValidator.participantClientWithAdminToken.ledger_api.state.acs.of_party(
+                party = venueParty,
+                filterInterfaces = Seq(allocationv2.Allocation.TEMPLATE_ID).map(templateId =>
+                  TemplateId(
+                    templateId.getPackageId,
+                    templateId.getModuleName,
+                    templateId.getEntityName,
+                  )
+                ),
+                includeCreatedEventBlob = true,
               )
-              .asJava,
-            /*actors = */ java.util.List.of(venueParty.toProtoPrimitive),
-            emptyExtraArgs,
-          )
-          val amuletContext = sv1ScanBackend.getSettlementFactoryV2(settleBatch)
-          val bobUsdcHoldings = getHoldings(bobParty, bobValidatorBackend)
-            .map(_.contractId)
-            .map(id => new holdingv2.Holding.ContractId(id))
-          val usdcContext = registry.getContext(
-            bobUsdcHoldings
-          )
-          venueValidator.participantClientWithAdminToken.ledger_api_extensions.commands
-            .submitJava(
-              actAs = Seq(venueParty),
-              commands = otcTrade.id
-                .exerciseOTCTrade_Settle(
-                  Map[String, tradingappv2.SettlementBatch](
-                    dsoParty.toProtoPrimitive -> new SettlementBatchV2(
-                      amuletAllocations
-                        .map(alloc => new allocationv2.Allocation.ContractId(alloc.contractId))
-                        .asJava,
-                      java.util.List.of(),
-                      amuletContext.factoryId,
-                      amuletContext.args.extraArgs,
-                    ),
-                    ttAdminParty.toProtoPrimitive -> new SettlementBatchV2(
-                      usdAllocations
-                        .map(alloc => new allocationv2.Allocation.ContractId(alloc.contractId))
-                        .asJava,
-                      java.util.List.of(
-                        new tradingappv2.MissingAllocation(
-                          java.util.Optional.empty(),
-                          tokenRulesId.toInterface(
-                            allocationinstructionv2.AllocationFactory.INTERFACE
-                          ),
-                          new allocationinstructionv2.AllocationFactory_Allocate(
-                            new allocationv2.SettlementInfo(
-                              java.util.List.of(venueParty.toProtoPrimitive),
-                              "OTCTradeProposal",
-                              java.util.Optional.of(
-                                new metadatav1.AnyContract.ContractId(otcTrade.id.contractId)
-                              ),
-                              emptyMetadata,
-                            ),
-                            new allocationv2.AllocationSpecification(
-                              ttAdminParty.toProtoPrimitive,
-                              basicAccount(venueParty),
-                              java.util.List.of(
-                                new allocationv2.TransferLegSide(
-                                  "alicetovenue0.2USDC",
-                                  allocationv2.TransferSide.RECEIVERSIDE,
-                                  basicAccount(aliceParty),
-                                  BigDecimal(0.2).bigDecimal,
-                                  usdcInstrumentName,
-                                  emptyMetadata,
-                                )
-                              ),
-                              java.util.Optional.empty(),
-                              java.util.Optional.empty(),
-                              false,
-                              emptyMetadata,
-                            ),
-                            Instant.now(),
-                            java.util.List.of(),
-                            new metadatav1.ExtraArgs(usdcContext.choiceContext, emptyMetadata),
-                            java.util.List.of(venueParty.toProtoPrimitive),
-                          ),
-                        )
-                      ),
-                      new allocationv2.SettlementFactory.ContractId(tokenRulesId.contractId),
-                      new metadatav1.ExtraArgs(usdcContext.choiceContext, emptyMetadata),
-                    ),
-                  ).asJava,
-                  java.util.List.of(),
+            }
+            // sanity check
+            (bobAllocationCids ++ aliceAllocationCids).foreach { cid =>
+              allAllocations
+                .find(_.contractId == cid.contractId)
+                .valueOrFail(s"No allocation found for cid $cid")
+            }
+            val amuletAllocations =
+              allAllocations.filter(_.event.signatories.contains(dsoParty.toProtoPrimitive))
+            val usdAllocations =
+              allAllocations.filter(_.event.signatories.contains(ttAdminParty.toProtoPrimitive))
+            val settleBatch = new allocationv2.SettlementFactory_SettleBatch(
+              new allocationv2.SettlementInfo(
+                java.util.List.of(venueParty.toProtoPrimitive),
+                "OTCTrade",
+                java.util.Optional
+                  .of(new metadatav1.AnyContract.ContractId(otcTrade.id.contractId)),
+                emptyMetadata,
+              ),
+              transferLegsFromTrade(otcTrade).asJava,
+              allAllocations
+                .map(alloc =>
+                  new allocationv2.FinalizedAllocation(
+                    new allocationv2.Allocation.ContractId(alloc.contractId),
+                    java.util.List.of(),
+                    java.util.Optional.empty[java.util.Map[String, java.math.BigDecimal]](),
+                  )
                 )
-                .commands()
-                .asScala
-                .toSeq,
-              disclosedContracts =
-                usdcContext.disclosedContracts ++ amuletContext.disclosedContracts,
+                .asJava,
+              /*actors = */ java.util.List.of(venueParty.toProtoPrimitive),
+              emptyExtraArgs,
             )
+            val amuletContext = sv1ScanBackend.getSettlementFactoryV2(settleBatch)
+            val bobUsdcHoldings = getHoldings(bobParty, bobValidatorBackend)
+              .map(_.contractId)
+              .map(id => new holdingv2.Holding.ContractId(id))
+            val usdcContext = registry.getContext(
+              bobUsdcHoldings
+            )
+            venueValidator.participantClientWithAdminToken.ledger_api_extensions.commands
+              .submitJava(
+                actAs = Seq(venueParty),
+                commands = otcTrade.id
+                  .exerciseOTCTrade_Settle(
+                    Map[String, tradingappv2.SettlementBatch](
+                      dsoParty.toProtoPrimitive -> new SettlementBatchV2(
+                        amuletAllocations
+                          .map(alloc => new allocationv2.Allocation.ContractId(alloc.contractId))
+                          .asJava,
+                        java.util.List.of(),
+                        amuletContext.factoryId,
+                        amuletContext.args.extraArgs,
+                      ),
+                      ttAdminParty.toProtoPrimitive -> new SettlementBatchV2(
+                        usdAllocations
+                          .map(alloc => new allocationv2.Allocation.ContractId(alloc.contractId))
+                          .asJava,
+                        java.util.List.of(
+                          new tradingappv2.MissingAllocation(
+                            java.util.Optional.empty(),
+                            tokenRulesId.toInterface(
+                              allocationinstructionv2.AllocationFactory.INTERFACE
+                            ),
+                            new allocationinstructionv2.AllocationFactory_Allocate(
+                              new allocationv2.SettlementInfo(
+                                java.util.List.of(venueParty.toProtoPrimitive),
+                                "OTCTradeProposal",
+                                java.util.Optional.of(
+                                  new metadatav1.AnyContract.ContractId(otcTrade.id.contractId)
+                                ),
+                                emptyMetadata,
+                              ),
+                              new allocationv2.AllocationSpecification(
+                                ttAdminParty.toProtoPrimitive,
+                                basicAccount(venueParty),
+                                java.util.List.of(
+                                  new allocationv2.TransferLegSide(
+                                    "alicetovenue0.2USDC",
+                                    allocationv2.TransferSide.RECEIVERSIDE,
+                                    basicAccount(aliceParty),
+                                    BigDecimal(0.2).bigDecimal,
+                                    usdcInstrumentName,
+                                    emptyMetadata,
+                                  )
+                                ),
+                                java.util.Optional.empty(),
+                                java.util.Optional.empty(),
+                                false,
+                                emptyMetadata,
+                              ),
+                              Instant.now(),
+                              java.util.List.of(),
+                              new metadatav1.ExtraArgs(usdcContext.choiceContext, emptyMetadata),
+                              java.util.List.of(venueParty.toProtoPrimitive),
+                            ),
+                          )
+                        ),
+                        new allocationv2.SettlementFactory.ContractId(tokenRulesId.contractId),
+                        new metadatav1.ExtraArgs(usdcContext.choiceContext, emptyMetadata),
+                      ),
+                    ).asJava,
+                    java.util.List.of(),
+                  )
+                  .commands()
+                  .asScala
+                  .toSeq,
+                disclosedContracts =
+                  usdcContext.disclosedContracts ++ amuletContext.disclosedContracts,
+              )
+          }
         },
       )(
         "The balances are updated",
