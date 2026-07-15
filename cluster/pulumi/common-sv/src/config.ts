@@ -77,7 +77,6 @@ export interface SvConfig extends StaticSvConfig, SingleSvConfiguration {
   identitiesBackupLocation: BucketLocation;
   bootstrappingDumpConfig?: BootstrappingDumpConfig;
   topupConfig?: ValidatorTopupConfig;
-  splitPostgresInstances: boolean;
   disableOnboardingParticipantPromotionDelay: boolean;
   onboardingPollingInterval?: string;
   cometBftGovernanceKey?: CnInput<SvCometBftGovernanceKey>;

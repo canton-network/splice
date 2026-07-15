@@ -80,7 +80,6 @@ import {
   installBucketSecret,
 } from '@canton-network/splice-pulumi-common/src/buckets';
 import { spliceConfig } from '@canton-network/splice-pulumi-common/src/config/config';
-import { SplitPostgresInstances } from '@canton-network/splice-pulumi-common/src/config/configs';
 import { initialAmuletPrice } from '@canton-network/splice-pulumi-common/src/initialAmuletPrice';
 import { Postgres } from '@canton-network/splice-pulumi-common/src/postgres';
 import { installRateLimits } from '@canton-network/splice-pulumi-common/src/ratelimit/rateLimit';
@@ -168,7 +167,6 @@ export async function installSvNodeStandalone(
       isDevNet,
       ...(await readBackupConfig()),
       topupConfig: svValidatorTopupConfig,
-      splitPostgresInstances: SplitPostgresInstances,
       disableOnboardingParticipantPromotionDelay,
       onboardingPollingInterval: svOnboardingPollingInterval,
       cometBftGovernanceKey:
@@ -341,33 +339,17 @@ export async function installSvNode(
     .concat(bulkStorageBucket ? [bulkStorageBucket.secret, bulkStorageBucket.bucket] : [])
     .concat(extraDependsOn);
 
-  const defaultPostgres = config.splitPostgresInstances
-    ? undefined
-    : await postgres.installPostgres(
-        xns,
-        'postgres',
-        'postgres',
-        config.version,
-        spliceConfig.pulumiProjectConfig.cloudSql,
-        false,
-        {
-          logicalDecoding: !!baseConfig.scanApp?.bigQuery,
-        }
-      );
-
-  const appsPostgres =
-    defaultPostgres ||
-    (await postgres.installPostgres(
-      xns,
-      `cn-apps-pg`,
-      `cn-apps-pg`,
-      config.version,
-      svConfig.appsPg?.cloudSql ?? spliceConfig.pulumiProjectConfig.cloudSql,
-      true,
-      {
-        logicalDecoding: !!baseConfig.scanApp?.bigQuery,
-      }
-    ));
+  const appsPostgres = await postgres.installPostgres(
+    xns,
+    `cn-apps-pg`,
+    `cn-apps-pg`,
+    config.version,
+    svConfig.appsPg?.cloudSql ?? spliceConfig.pulumiProjectConfig.cloudSql,
+    true,
+    {
+      logicalDecoding: !!baseConfig.scanApp?.bigQuery,
+    }
+  );
 
   const canton = new SynchronizerNodes(
     decentralizedSynchronizerUpgradeConfig,
