@@ -16,14 +16,7 @@ import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.topology.store.TimeQuery
 import com.digitalasset.canton.topology.{Member, PartyId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
-import com.digitalasset.canton.util.{
-  ByteStringUtil,
-  ErrorUtil,
-  GrpcStreamingUtils,
-  MaxBytesToDecompress,
-  MonadUtil,
-  ResourceUtil,
-}
+import com.digitalasset.canton.util.{ByteStringUtil, ErrorUtil, GrpcStreamingUtils, MaxBytesToDecompress, MonadUtil, ResourceUtil}
 import com.digitalasset.canton.util.ShowUtil.*
 import com.digitalasset.daml.lf.data.Time.Timestamp
 import com.github.blemale.scaffeine.{Cache, Scaffeine}
@@ -36,81 +29,28 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.{amulet, ans as ansCo
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.decentralizedsynchronizer.SynchronizerNodeConfig
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.svstate.SvNodeState
-import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.{
-  ExternalPartyAmuletRules,
-  TransferCommand,
-}
-import org.lfdecentralizedtrust.splice.codegen.java.splice.round.{
-  ClosedMiningRound,
-  IssuingMiningRound,
-  OpenMiningRound,
-  SummarizingMiningRound,
-}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.{ExternalPartyAmuletRules, TransferCommand}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.round.{ClosedMiningRound, IssuingMiningRound, OpenMiningRound, SummarizingMiningRound}
 import org.lfdecentralizedtrust.splice.config.{SpliceInstanceNamesConfig, Thresholds}
-import org.lfdecentralizedtrust.splice.environment.{
-  PackageVersionSupport,
-  ParticipantAdminConnection,
-  SequencerAdminConnection,
-  SynchronizerNodeService,
-}
-import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.{
-  TopologySnapshot,
-  TopologyTransactionType,
-}
+import org.lfdecentralizedtrust.splice.environment.{PackageVersionSupport, ParticipantAdminConnection, SequencerAdminConnection, SynchronizerNodeService}
+import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.{TopologySnapshot, TopologyTransactionType}
 import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.TopologyTransactionType.AuthorizedState
-import org.lfdecentralizedtrust.splice.http.{
-  HttpFeatureSupportHandler,
-  HttpValidatorLicensesHandler,
-  HttpVotesHandler,
-  UrlValidator,
-}
+import org.lfdecentralizedtrust.splice.http.{HttpFeatureSupportHandler, HttpValidatorLicensesHandler, HttpVotesHandler, UrlValidator}
 import org.lfdecentralizedtrust.splice.http.v0.{definitions, scan as v0}
-import org.lfdecentralizedtrust.splice.http.v0.definitions.{
-  AcsRequest,
-  BatchListVotesByVoteRequestsRequest,
-  DamlValueEncoding,
-  CountVoteResultsRequest,
-  ErrorResponse,
-  EventHistoryRequest,
-  HoldingsStateRequest,
-  HoldingsSummaryRequest,
-  HoldingsSummaryRequestV1,
-  ListBulkUpdateHistoryObjectsRequest,
-  ListVoteResultsRequest,
-  MaybeCachedContractWithState,
-  PreviousSvRewardWeightRequest,
-  PreviousSvRewardWeightResponse,
-  UpdateHistoryItem,
-  UpdateHistoryItemV2WithHash,
-  UpdateHistoryRequestV2,
-  UpdateHistoryTransactionV2WithHash,
-}
+import org.lfdecentralizedtrust.splice.http.v0.definitions.{AcsRequest, BatchListVotesByVoteRequestsRequest, CountVoteResultsRequest, DamlValueEncoding, ErrorResponse, EventHistoryRequest, GetBulkObjectChecksumsRequest, HoldingsStateRequest, HoldingsSummaryRequest, HoldingsSummaryRequestV1, ListBulkUpdateHistoryObjectsRequest, ListVoteResultsRequest, MaybeCachedContractWithState, PreviousSvRewardWeightRequest, PreviousSvRewardWeightResponse, UpdateHistoryItem, UpdateHistoryItemV2WithHash, UpdateHistoryRequestV2, UpdateHistoryTransactionV2WithHash}
 import org.lfdecentralizedtrust.splice.http.v0.scan.ScanResource
 import org.lfdecentralizedtrust.splice.scan.ScanSynchronizerNode
 import org.lfdecentralizedtrust.splice.scan.admin.http.ScanHttpEncodings.updateV1ToUpdateV2
 import org.lfdecentralizedtrust.splice.scan.config.{CantonBftPeerConfig, ScanRollForwardLsuConfig}
 import org.lfdecentralizedtrust.splice.scan.dso.DsoAnsResolver
-import org.lfdecentralizedtrust.splice.scan.store.{
-  AcsSnapshotStore,
-  AppActivityStore,
-  ScanEventStore,
-  ScanStore,
-  TxLogEntry,
-}
+import org.lfdecentralizedtrust.splice.scan.store.{AcsSnapshotStore, AppActivityStore, ScanEventStore, ScanStore, TxLogEntry}
 import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorageReader
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.QueryAcsSnapshotResult
 import org.lfdecentralizedtrust.splice.scan.store.bulk.AcsSnapshotBulkStorage.AcsSnapshotObjects
 import org.lfdecentralizedtrust.splice.scan.store.bulk.UpdateHistoryBulkStorage.UpdateHistoryObjectsResponse
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.TxLogBackfillingState
-import org.lfdecentralizedtrust.splice.store.{
-  AppStore,
-  AppStoreWithIngestion,
-  PageLimit,
-  SortOrder,
-  VoteResultsFilters,
-  VotesStore,
-}
+import org.lfdecentralizedtrust.splice.store.{AppStore, AppStoreWithIngestion, PageLimit, SortOrder, VoteResultsFilters, VotesStore}
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChecksum
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingState
 import org.lfdecentralizedtrust.splice.store.UpdateHistory
@@ -118,13 +58,7 @@ import org.lfdecentralizedtrust.splice.store.UpdateHistory
 import java.lang.IllegalStateException
 import scala.collection.immutable.SortedMap
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanAppRewardsStore
-import org.lfdecentralizedtrust.splice.util.{
-  Codec,
-  Contract,
-  ContractWithState,
-  PackageQualifiedName,
-  QualifiedName,
-}
+import org.lfdecentralizedtrust.splice.util.{Codec, Contract, ContractWithState, PackageQualifiedName, QualifiedName}
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
 
 import java.io.ByteArrayInputStream
@@ -2645,6 +2579,27 @@ class HttpScanHandler(
               )
             )
           }
+      }
+    }
+  }
+
+  override def getBulkObjectChecksums(respond: ScanResource.GetBulkObjectChecksumsResponse.type)(body: GetBulkObjectChecksumsRequest)(extracted: TraceContext): Future[ScanResource.GetBulkObjectChecksumsResponse] = {
+    implicit val tc = extracted
+    withSpan(s"$workflowId.getBulkObjectChecksums") { _ => _ =>
+      bulkStorage.fold(
+        Future.failed[ScanResource.GetBulkObjectChecksumsResponse](
+          Status.UNIMPLEMENTED
+            .withDescription("Bulk storage is not configured")
+            .asRuntimeException()
+        )
+      ) { bulkStorage =>
+        bulkStorage.getObjectChecksums(body.objectKeys).map { checksums =>
+          ScanResource.GetBulkObjectChecksumsResponse.OK(
+            definitions.GetBulkObjectChecksumsResponse(
+              checksums.toVector
+            )
+          )
+        }
       }
     }
   }

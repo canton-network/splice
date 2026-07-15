@@ -12,91 +12,32 @@ import com.daml.tls.TlsClientConfig
 import com.digitalasset.canton.config.RequireTypes
 import com.digitalasset.canton.config.RequireTypes.NonNegativeInt
 import org.lfdecentralizedtrust.splice.admin.api.client.commands.HttpCommand
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
-  FeaturedAppRight,
-  UnclaimedDevelopmentFundCoupon,
-}
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.{
-  AmuletRules,
-  AppTransferContext,
-  TransferPreapproval,
-}
-import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.{
-  ExternalPartyAmuletRules,
-  TransferCommandCounter,
-}
-import org.lfdecentralizedtrust.splice.codegen.java.splice.round.{
-  ClosedMiningRound,
-  IssuingMiningRound,
-  OpenMiningRound,
-}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{FeaturedAppRight, UnclaimedDevelopmentFundCoupon}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.{AmuletRules, AppTransferContext, TransferPreapproval}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.{ExternalPartyAmuletRules, TransferCommandCounter}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.round.{ClosedMiningRound, IssuingMiningRound, OpenMiningRound}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.ans as ansCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.ans.AnsRules
 import org.lfdecentralizedtrust.splice.config.SpliceInstanceNamesConfig
 import org.lfdecentralizedtrust.splice.http.v0.{definitions, scan as http}
-import org.lfdecentralizedtrust.tokenstandard.{
-  allocation,
-  allocationinstruction,
-  metadata,
-  transferinstruction,
-}
-import org.lfdecentralizedtrust.splice.http.v0.scan.{
-  ForceAcsSnapshotNowResponse,
-  GetDateOfFirstSnapshotAfterResponse,
-  GetDateOfMostRecentSnapshotBeforeResponse,
-  GetLsuResponse,
-  ListBulkAcsSnapshotObjectsResponse,
-  ListBulkUpdateHistoryObjectsResponse,
-}
-import org.lfdecentralizedtrust.splice.scan.admin.http.{
-  CompactJsonScanHttpEncodings,
-  ProtobufJsonScanHttpEncodings,
-}
+import org.lfdecentralizedtrust.tokenstandard.{allocation, allocationinstruction, metadata, transferinstruction}
+import org.lfdecentralizedtrust.splice.http.v0.scan.{ForceAcsSnapshotNowResponse, GetBulkObjectChecksumsResponse, GetDateOfFirstSnapshotAfterResponse, GetDateOfMostRecentSnapshotBeforeResponse, GetLsuResponse, ListBulkAcsSnapshotObjectsResponse, ListBulkUpdateHistoryObjectsResponse}
+import org.lfdecentralizedtrust.splice.scan.admin.http.{CompactJsonScanHttpEncodings, ProtobufJsonScanHttpEncodings}
 import org.lfdecentralizedtrust.splice.store.HistoryBackfilling.SourceMigrationInfo
 import org.lfdecentralizedtrust.splice.store.{MultiDomainAcsStore, VoteResultsFilters}
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryResponse
-import org.lfdecentralizedtrust.splice.util.{
-  ChoiceContextWithDisclosures,
-  Codec,
-  Contract,
-  ContractWithState,
-  DomainRecordTimeRange,
-  FactoryChoiceWithDisclosures,
-  PackageQualifiedName,
-  TemplateJsonDecoder,
-}
+import org.lfdecentralizedtrust.splice.util.{ChoiceContextWithDisclosures, Codec, Contract, ContractWithState, DomainRecordTimeRange, FactoryChoiceWithDisclosures, PackageQualifiedName, TemplateJsonDecoder}
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.bindings.p2p.grpc.P2PGrpcNetworking.P2PEndpoint
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.BftBlockOrdererConfig.P2PEndpointConfig
-import com.digitalasset.canton.topology.{
-  Member,
-  ParticipantId,
-  PartyId,
-  PhysicalSynchronizerId,
-  SequencerId,
-  SynchronizerId,
-}
+import com.digitalasset.canton.topology.{Member, ParticipantId, PartyId, PhysicalSynchronizerId, SequencerId, SynchronizerId}
 import com.digitalasset.daml.lf.data.Time.Timestamp
 import com.google.protobuf.ByteString
 import org.apache.pekko.stream.scaladsl.Source
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
-  allocationinstructionv1,
-  allocationinstructionv2,
-  allocationv1,
-  allocationv2,
-  metadatav1,
-  transferinstructionv1,
-  transferinstructionv2,
-}
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
-  DsoRules_CloseVoteRequestResult,
-  VoteRequest,
-}
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.{
-  BulkStorageDownloadResponse,
-  ScanStreamClient,
-}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{allocationinstructionv1, allocationinstructionv2, allocationv1, allocationv2, metadatav1, transferinstructionv1, transferinstructionv2}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{DsoRules_CloseVoteRequestResult, VoteRequest}
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.{BulkStorageDownloadResponse, ScanStreamClient}
 
 import java.util.Base64
 import java.time.Instant
@@ -3368,6 +3309,32 @@ object HttpScanAppClient {
       case http.ListBulkUpdateHistoryObjectsResponse.NotFound(err) => Left(err.error)
       case http.ListBulkUpdateHistoryObjectsResponse.BadRequest(err) => Left(err.error)
       case http.ListBulkUpdateHistoryObjectsResponse.NotImplemented(err) => Left(err.error)
+    }
+  }
+
+  case class GetBulkObjectChecksums(
+      objectKeys: Seq[String]
+  ) extends InternalBaseCommand[
+        http.GetBulkObjectChecksumsResponse,
+        definitions.GetBulkObjectChecksumsResponse,
+      ] {
+    override def submitRequest(
+        client: Client,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[Throwable, HttpResponse], GetBulkObjectChecksumsResponse] =
+      client.getBulkObjectChecksums(
+        definitions.GetBulkObjectChecksumsRequest(objectKeys.toVector),
+        headers,
+      )
+
+    override protected def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ): PartialFunction[GetBulkObjectChecksumsResponse, Either[
+      String,
+      definitions.GetBulkObjectChecksumsResponse,
+    ]] = {
+      case http.GetBulkObjectChecksumsResponse.OK(response) => Right(response)
+      case http.GetBulkObjectChecksumsResponse.NotImplemented(err) => Left(err.error)
     }
   }
 

@@ -143,6 +143,22 @@ class BulkStorageReader(
       }
   }
 
+  def getObjectChecksums(
+      objectKeys: Seq[String]
+  ): Future[Seq[String]] = {
+    for {
+      committed <- committedS3Connection.getChecksums(objectKeys)
+      staging <- stagingS3Connection.getChecksums(objectKeys)
+    } yield {
+      objectKeys.map { key =>
+        committed.find(_.key == key).orElse(staging.find(_.key == key)) match {
+          case Some(obj) => obj.checksum
+          case None => ""
+        }
+      }
+    }
+  }
+
   private def getSegmentStartingAt(
       startTimestamp: Option[CantonTimestamp]
   ): Future[Option[(CantonTimestamp, CantonTimestamp)]] =
