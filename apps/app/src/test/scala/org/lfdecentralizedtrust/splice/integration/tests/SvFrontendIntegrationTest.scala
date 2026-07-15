@@ -1430,10 +1430,7 @@ class SvFrontendIntegrationTest
         "grant-featured-app",
       ) { implicit webDriver =>
         fillOutTextField("grant-featured-app-idValue", providerPartyId)
-        inside(find(id("grant-featured-app-activityWeight"))) { case Some(element) =>
-          element.underlying.clear()
-          element.underlying.sendKeys(activityWeight.toString)
-        }
+        fillOutTextField("grant-featured-app-activityWeight", activityWeight.toString)
       }
 
       clue("vote the grant request to execution before creating revoke request") {
