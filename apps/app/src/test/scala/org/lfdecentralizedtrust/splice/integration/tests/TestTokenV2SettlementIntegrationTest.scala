@@ -252,7 +252,7 @@ class TestTokenV2SettlementIntegrationTest
         )
 
       // Bob accepts
-      val transferInstruction =
+      val transferInstruction = eventually() {
         Contract
           .fromCreatedEvent(transferinstructionv2.TransferInstruction.INTERFACE)(
             CreatedEvent.fromProto(
@@ -275,6 +275,7 @@ class TestTokenV2SettlementIntegrationTest
             )
           )
           .valueOrFail("Failed to read transferinstructionv2.TransferInstruction")
+      }
       val acceptContext =
         registry.getContext(
           transferInstruction.payload.transfer.inputHoldingCids.asScala.toSeq
