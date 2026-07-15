@@ -24,7 +24,7 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   SpliceTestConsoleEnvironment,
 }
 import org.lfdecentralizedtrust.splice.automation.Trigger
-import org.lfdecentralizedtrust.splice.sv.config.InitialRewardConfig
+import org.lfdecentralizedtrust.splice.sv.automation.singlesv.onboarding.SvOnboardingUnlimitedTrafficTrigger
 import org.lfdecentralizedtrust.splice.util.{TimeTestUtil, WalletTestUtil}
 
 import java.util.Optional
@@ -48,15 +48,6 @@ class NonZeroRoundBootstrapBftIntegrationTest
     EnvironmentDefinition
       .simpleTopology4SvsWithSimTime(this.getClass.getSimpleName)
       .withoutAutomaticRewardsCollectionAndAmuletMerging
-      .addConfigTransform((_, config) =>
-        ConfigTransforms.withRewardConfig(
-          InitialRewardConfig(
-            mintingVersion = "RewardVersion_TrafficBasedAppRewards",
-            dryRunVersion = None,
-            appRewardCouponThreshold = BigDecimal("0"),
-          )
-        )(config)
-      )
       .addConfigTransforms((_, config) =>
         ConfigTransforms.updateAllSvAppFoundDsoConfigs_(
           _.copy(initialRound = initialRound)
@@ -66,41 +57,88 @@ class NonZeroRoundBootstrapBftIntegrationTest
 
   "SV triggers complete the reward pipeline for the initial round" in { implicit env =>
     import definitions.GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsOk
+    import definitions.GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsCannotProvide
 
-    // Advance rounds so the reward pipeline runs for the initial round:
-    // SV1's scan computes reward totals from seeded activity data,
-    // and SVs confirm CalculateRewardsV2 using the root hash.
+    // Add a dummy 5th SV with a fake scan URL BEFORE any round
+    // advancement. This raises BFT f from 0 to 1, so the initial
+    // round's reward pipeline runs under the higher quorum.
+    addDummySvWithFakeScanUrl()
+
+    // The dummy SV's participant doesn't exist on the sequencer, so
+    // this trigger would poll indefinitely logging "does not yet have
+    // a traffic state". Pause it to avoid log noise on CI.
+    env.svs.local.foreach(
+      _.dsoAutomation.trigger[SvOnboardingUnlimitedTrafficTrigger].pause().futureValue
+    )
+
+    // With f=1, BFT reads need 2 agreeing Ok responses — but only
+    // SV1's scan has the initial round's data. The randomSingleCall
+    // override for the initial round lets each SV read from a single
+    // peer, so the pipeline completes despite the higher quorum.
     advanceTimeForRewardAutomationToRunForCurrentRound
     actAndCheck(
       "Advance to next round opening",
       advanceRoundsToNextRoundOpening,
     )(
-      "SV1's scan has reward totals for the initial round",
-      _ =>
+      "SV1's scan has reward totals and the initial round is issuing",
+      _ => {
         sv1ScanBackend
           .getRewardAccountingActivityTotals(initialRound) shouldBe a[
           RewardAccountingActivityTotalsOk
-        ],
+        ]
+
+        // The round becoming IssuingMiningRound is DSO-level proof:
+        // under BFT f=1, the SummarizingMiningRoundTrigger on each
+        // SV must obtain reward accounting totals. For the initial
+        // round, only SV1 has local data; other SVs fall back to
+        // BFT read (randomSingleCall). If that path failed, fewer
+        // than f+1=2 SVs could submit summaries and the round would
+        // not advance.
+        val (_, issuingRounds) = sv1ScanBackend.getOpenAndIssuingMiningRounds()
+        issuingRounds.exists(
+          _.payload.round.number == initialRound
+        ) shouldBe true
+
+        // SV2's scan does NOT have local reward activity data for
+        // the initial round — only SV1's scan seeded it. SV2's SV
+        // trigger obtained the totals via BFT (randomSingleCall),
+        // but the scan HTTP endpoint queries the local store, so it
+        // returns CannotProvide.
+        sv2ScanBackend
+          .getRewardAccountingActivityTotals(initialRound) shouldBe a[
+          RewardAccountingActivityTotalsCannotProvide
+        ]
+      },
     )
 
-    // Add a dummy 5th SV with a fake scan URL. This increases BFT f
-    // from 0 to 1, requiring 2 agreeing Ok responses.
-    addDummySvWithFakeScanUrl()
+    // Advance two ticks so that verdict ingestion processes batches
+    // that see OpenMiningRound(initialRound+1) already archived.
+    // A single tick archives the round, but the verdict batch for
+    // that tick may be processed before the rewards reference store
+    // has indexed the archival — so lookupLatestArchivedOpenMiningRound
+    // returns None and last_archived_round stays at initialRound.
+    // The second tick generates new verdicts that find the archival
+    // already indexed, bumping last_archived_round.
+    advanceTimeAndWaitForRoundOpening
+    advanceTimeAndWaitForRoundOpening
 
-    // With BFT f=1, default BFT would need 2 agreeing Ok responses
-    // for root hash and activity totals — but only SV1's scan has
-    // the initial round's data. The randomSingleCall override for
-    // the initial round lets each SV read from a single peer,
-    // so the pipeline completes despite the higher quorum.
-    // Advancing another round proves this: if the initial round's
-    // pipeline had stalled, no further rounds could open. SV2's
-    // scan has local data for the next round and can serve totals.
-    advanceTimeForRewardAutomationToRunForCurrentRound
+    // Wait for RewardComputationTrigger to compute totals for the
+    // next round now that last_archived_round covers it.
+    eventually() {
+      sv1ScanBackend
+        .getRewardAccountingActivityTotals(initialRound + 1) shouldBe a[
+        RewardAccountingActivityTotalsOk
+      ]
+    }
+
+    // Advance another round to confirm the pipeline continues past
+    // the initial round under normal BFT (f+1=2) without
+    // randomSingleCall.
     actAndCheck(
       "Advance past the initial round",
       advanceRoundsToNextRoundOpening,
     )(
-      "SV2's scan has reward totals for the next round",
+      "SV2's scan has local reward totals for the next round",
       _ =>
         sv2ScanBackend
           .getRewardAccountingActivityTotals(initialRound + 1) shouldBe a[
@@ -128,7 +166,7 @@ class NonZeroRoundBootstrapBftIntegrationTest
           dummySvParty.toProtoPrimitive,
           "Dummy-SV5",
           1000L,
-          "dummy-participant-id",
+          "PAR::dummy-sv5::dummy",
           new Round(initialRound),
         )
       )
