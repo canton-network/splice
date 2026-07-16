@@ -33,7 +33,7 @@ function get_cloudsql_id() {
 function get_stack_for_namespace_component() {
   local namespace=$1
   local component=$2
-  
+
   local split_sv_deployment
   split_sv_deployment=$(get_resolved_config | yq '.synchronizerMigration.splitSvDeploymentEnabled // false')
 
@@ -89,7 +89,7 @@ function canton_bft_db_enabled() {
       + (.synchronizerMigration.archived // []))
     | map(select(. != null and .id == ${migration_id}))
     | .[0]
-    | ((.sequencer.enableBftSequencer // true) and (.sequencer.dedicatedBftSequencerDb // true))
+    | ((.sequencer.enableBftSequencer // false) and (.sequencer.dedicatedBftSequencerDb // true))
   "
 }
 
