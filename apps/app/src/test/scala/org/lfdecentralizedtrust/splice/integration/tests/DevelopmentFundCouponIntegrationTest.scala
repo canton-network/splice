@@ -512,7 +512,7 @@ class DevelopmentFundCouponIntegrationTest
         // clockSkewAutomationDelay grace period (5s), so 10s of this budget are always
         // consumed before the DsoRules_ExpireDevelopmentFundCoupon submission can even
         // start; leave enough headroom for slow sequencing on loaded CI runners.
-        eventually(40.seconds) {
+        eventually(30.seconds) {
           aliceValidatorWalletClient
             .listActiveDevelopmentFundCoupons() shouldBe empty withClue "alice coupons"
         }
