@@ -68,7 +68,7 @@ class StoreMetrics(metricsFactory: LabeledMetricsFactory)(metricsContext: Metric
         summary = "Counter for the number of active contracts added to the store",
         Traffic,
         "Counter for the number of active contracts added to the store. This is _not_ an absolute value of the size, it can only be used to track changes. Note that for an individual transaction this is netted against acsSizeDecrease so ony one of the two will increase. Note that this is only in the given store. The participant might have contracts we do not ingest.",
-      ),
+      )
     )(metricsContext)
 
   // we track increase and decrease separately as promql's increase doesn't work for counters that go up and down
@@ -80,7 +80,7 @@ class StoreMetrics(metricsFactory: LabeledMetricsFactory)(metricsContext: Metric
         summary = "Counter for the number of active contracts removed to the store",
         Traffic,
         "Counter for the number of active contracts removed from the store. This is _not_ an absolute value of the size, it can only be used to track changes. Note that for an individual transaction this is netted against acsSizeIncrease so ony one of the two will increase. Note that this is only in the given store. The participant might have contracts we do not ingest.",
-      ),
+      )
     )(metricsContext)
 
   val ingestedTxLogEntries: Meter = metricsFactory.meter(

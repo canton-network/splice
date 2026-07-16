@@ -1151,37 +1151,36 @@ final class DbMultiDomainAcsStore[TXE](
           // reading ACS data before it has finished ingesting.
           _ <- clearDataForCurrentMigrationId()
           _ <- source.runWith(
-            Sink.foreachAsync[Seq[BaseLedgerConnection.ActiveContractsItem]](1) {
-              batch =>
-                val summaryState = MutableIngestionSummary.empty
-                logger.debug(
-                  s"Ingesting ACS batch with size: ${batch.size}"
-                )
-                metrics.ingestionTimePerACSBatch
-                  .timeFuture {
-                    ingestAcsBatch(
-                      offset,
-                      batch.collect { case ActiveContractsItem.ActiveContract(contract) =>
-                        contract
-                      },
-                      batch.collect { case ActiveContractsItem.IncompleteUnassign(unassign) =>
-                        unassign
-                      },
-                      batch.collect { case ActiveContractsItem.IncompleteAssign(assign) => assign },
-                      summaryState,
+            Sink.foreachAsync[Seq[BaseLedgerConnection.ActiveContractsItem]](1) { batch =>
+              val summaryState = MutableIngestionSummary.empty
+              logger.debug(
+                s"Ingesting ACS batch with size: ${batch.size}"
+              )
+              metrics.ingestionTimePerACSBatch
+                .timeFuture {
+                  ingestAcsBatch(
+                    offset,
+                    batch.collect { case ActiveContractsItem.ActiveContract(contract) =>
+                      contract
+                    },
+                    batch.collect { case ActiveContractsItem.IncompleteUnassign(unassign) =>
+                      unassign
+                    },
+                    batch.collect { case ActiveContractsItem.IncompleteAssign(assign) => assign },
+                    summaryState,
+                  )
+                }
+                .map { _ =>
+                  val summary = summaryState
+                    .toIngestionSummary(
+                      synchronizerIdToRecordTime = Map.empty,
+                      offset = offset,
+                      acsSizeDiff = summaryState.acsSizeDiff,
+                      metrics = metrics,
                     )
-                  }
-                  .map { _ =>
-                    val summary = summaryState
-                      .toIngestionSummary(
-                        synchronizerIdToRecordTime = Map.empty,
-                        offset = offset,
-                        acsSizeDiff = summaryState.acsSizeDiff,
-                        metrics = metrics,
-                      )
-                    handleIngestionSummary(summary)
-                    logger.debug(show"Ingested ACS batch $summary")
-                  }
+                  handleIngestionSummary(summary)
+                  logger.debug(show"Ingested ACS batch $summary")
+                }
             }
           )
           // A store is considered initialized if the last ingested offset is set
