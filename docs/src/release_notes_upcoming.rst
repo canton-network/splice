@@ -44,7 +44,7 @@
       issue in initializing the metric on startup. Note that these
       metrics can only be used to track changes but not absolute
       sizes. ``splice_history_acs_snapshots_snapshot_size`` provides
-      an absolute size, however it counts rows not contracts so it
+      an absolute size for SVs, however it counts rows not contracts so it
       counts contracts with multiple stakeholders multiple times.
 
   - Deployment
