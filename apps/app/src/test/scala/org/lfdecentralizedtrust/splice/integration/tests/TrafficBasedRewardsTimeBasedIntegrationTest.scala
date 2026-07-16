@@ -186,7 +186,7 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
         // meta row is created and bootstrap rounds have activity data
         // available.
         for (round <- 1 to 3) {
-          advanceTimeAndWaitForRoundOpening
+          advanceRoundsToNextRoundOpening
           assertOldestOpenRound(round.toLong)
         }
 
