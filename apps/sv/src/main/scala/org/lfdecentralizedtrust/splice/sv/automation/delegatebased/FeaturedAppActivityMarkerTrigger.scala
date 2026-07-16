@@ -89,7 +89,7 @@ class FeaturedAppActivityMarkerTrigger(
 
   def splitBatchByVettingState(
       batch: CrossVersionBatch
-  )(implicit tc: TraceContext): Future[Seq[Task]] =
+  )(implicit tc: TraceContext): Future[Seq[Task]] = {
     svTaskContext.vettingLookupService
       .splitBatch(
         PackageIdResolver.Package.SpliceAmulet,
@@ -104,6 +104,7 @@ class FeaturedAppActivityMarkerTrigger(
                 batch.retrievalKind,
                 _,
                 version,
+                getInformeesFromContracts(batch.markers),
               )
             )
           case (None, markers) =>
@@ -112,6 +113,7 @@ class FeaturedAppActivityMarkerTrigger(
         }
 
       }
+  }
 
   private def retrieveBatchesBySvIndex(
       dsoRules: dsorules.DsoRules
@@ -198,26 +200,25 @@ class FeaturedAppActivityMarkerTrigger(
   override def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = {
-    val informees = getInformeesFromContracts(task.markers)
     completeWithIgnoredAmuletVersionCheck(
       task.vettedAmuletVersion.toString,
-      informees,
+      task.stakeholders,
+      store.key.dsoParty,
       // ignoring a party would mean their featured app activity markers do not get converted into rewards
       enableUnresponsivePartiesAutoIgnore = false,
-    )(completeExpiryTaskAsDsoDelegate(task, controller, informees))
+    )(completeExpiryTaskAsDsoDelegate(task, controller))
   }
 
   private def completeExpiryTaskAsDsoDelegate(
       task: Task,
       controller: String,
-      informees: Set[PartyId],
   )(implicit tc: TraceContext): Future[TaskOutcome] = {
     for {
       dsoRules <- store.getDsoRules()
       amuletRules <- store.getAmuletRules()
       now = context.clock.now
       openMiningRound <- store.getLatestUsableOpenMiningRound(now)
-      stakeholders = informees + PartyId.tryFromProtoPrimitive(dsoRules.payload.dso)
+      stakeholders = task.stakeholders
       supportsConvertFeaturedAppActivityMarkerObservers <-
         if (svConfig.convertFeaturedAppActivityMarkerObservers) {
           svTaskContext.packageVersionSupport
@@ -292,6 +293,7 @@ object FeaturedAppActivityMarkerTrigger
         Contract[amulet.FeaturedAppActivityMarker.ContractId, amulet.FeaturedAppActivityMarker]
       ],
       vettedAmuletVersion: PackageVersion,
+      stakeholders: Set[PartyId],
   ) extends PrettyPrinting {
     override def pretty: Pretty[this.type] =
       prettyOfClass(
@@ -299,11 +301,12 @@ object FeaturedAppActivityMarkerTrigger
         param("numMarkers", _.markers.size),
         param("vettedAmuletVersion", _.vettedAmuletVersion),
         param("markerCids", _.markers.map(_.contractId.contractId.unquoted)),
+        param("stakeholders", _.stakeholders),
       )
   }
 
   override def informees(payload: amulet.FeaturedAppActivityMarker): Seq[String] =
     Seq(payload.provider, payload.beneficiary)
 
-  override def dso(payload: amulet.FeaturedAppActivityMarker): Option[String] = Some(payload.dso)
+  override def dso(payload: amulet.FeaturedAppActivityMarker): String = payload.dso
 }

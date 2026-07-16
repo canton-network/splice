@@ -4,7 +4,6 @@
 package org.lfdecentralizedtrust.splice.sv.automation.delegatebased
 
 import com.digitalasset.canton.time.Clock
-import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
@@ -43,7 +42,7 @@ class ExpiredAmuletAllocationV2Trigger(
       splice.amuletallocationv2.AmuletAllocationV2.COMPANION,
       svTaskContext.vettingLookupService,
       PackageIdResolver.Package.SpliceAmulet,
-      ExpiredAmuletAllocationV2Trigger.getInformees,
+      ExpiredAmuletAllocationV2Trigger.getStakeholders,
     )
     with SvTaskBasedTrigger[ExpiredAmuletAllocationV2Trigger.Task]
     with IgnoredAmuletVersionGuard {
@@ -56,21 +55,20 @@ class ExpiredAmuletAllocationV2Trigger(
   )(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = {
-    val expiredStakeholders =
-      ExpiredAmuletAllocationV2Trigger.getInformeesFromAssignedContracts(task.work.expiredContracts)
     completeWithIgnoredAmuletVersionCheck(
       task.work.vettedVersion.toString,
-      expiredStakeholders,
+      task.work.stakeholders,
+      store.key.dsoParty,
       enableUnresponsivePartiesAutoIgnore = true,
-    )(completeExpiryTaskAsDsoDelegate(task, controller, expiredStakeholders))
+    )(completeExpiryTaskAsDsoDelegate(task, controller))
   }
 
   private def completeExpiryTaskAsDsoDelegate(
       task: ExpiredAmuletAllocationV2Trigger.Task,
       controller: String,
-      informees: Set[PartyId],
   )(implicit tc: TraceContext): Future[TaskOutcome] = {
-    val stakeholders = informees + store.key.dsoParty
+    val stakeholders = task.work.stakeholders
+    val informees = stakeholders - store.key.dsoParty
     for {
       packageSupport <- svTaskContext.packageVersionSupport.supportsAmuletAllocationV2(
         stakeholders.toSeq,
@@ -167,9 +165,9 @@ object ExpiredAmuletAllocationV2Trigger
       ]
     ]
 
-  override def informees(payload: splice.amuletallocationv2.AmuletAllocationV2): Seq[String] = Seq(
-    payload.allocation.admin
-  ) ++ payload.allocation.authorizer.owner.toScala.toList ++ payload.settlement.executors.asScala
+  override def informees(payload: splice.amuletallocationv2.AmuletAllocationV2): Seq[String] =
+    payload.allocation.authorizer.owner.toScala.toList ++ payload.settlement.executors.asScala
 
-  override def dso(payload: splice.amuletallocationv2.AmuletAllocationV2): Option[String] = None
+  override def dso(payload: splice.amuletallocationv2.AmuletAllocationV2): String =
+    payload.allocation.admin
 }

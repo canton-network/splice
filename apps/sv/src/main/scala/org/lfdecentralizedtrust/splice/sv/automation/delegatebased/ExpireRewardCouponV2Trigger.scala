@@ -11,13 +11,7 @@ import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
 
 import scala.concurrent.{ExecutionContext, Future}
-import ExpireRewardCouponV2Trigger.{
-  Task,
-  Coupon,
-  CouponCid,
-  getStakeholders,
-  getInformeesFromAssignedContracts,
-}
+import ExpireRewardCouponV2Trigger.{Task, Coupon, CouponCid, getStakeholders}
 import org.lfdecentralizedtrust.splice.environment.{DarResources, PackageIdResolver}
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
@@ -60,7 +54,7 @@ class ExpireRewardCouponV2Trigger(
       )
     } else {
       val cids = expiredCoupons.map(_.contractId).asJava
-      val expiryInformees = getInformeesFromAssignedContracts(expiredCoupons)
+      val expiryInformees = (task.work.stakeholders - store.key.dsoParty)
         .map(_.toProtoPrimitive)
         .toSeq
         .distinct
@@ -107,5 +101,5 @@ object ExpireRewardCouponV2Trigger extends ContractStakeholders[splice.amulet.Re
   ) payload.provider +: payload.beneficiary.toScala.toList
   else Seq.empty
 
-  override def dso(payload: splice.amulet.RewardCouponV2): Option[String] = Some(payload.dso)
+  override def dso(payload: splice.amulet.RewardCouponV2): String = payload.dso
 }

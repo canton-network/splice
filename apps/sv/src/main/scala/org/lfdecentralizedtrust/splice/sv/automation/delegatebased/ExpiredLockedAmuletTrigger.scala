@@ -6,13 +6,12 @@ package org.lfdecentralizedtrust.splice.sv.automation.delegatebased
 import org.lfdecentralizedtrust.splice.automation.*
 import org.lfdecentralizedtrust.splice.codegen.java.splice
 import org.lfdecentralizedtrust.splice.environment.PackageIdResolver
-import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
 
 import scala.concurrent.{ExecutionContext, Future}
-import ExpiredLockedAmuletTrigger.{Task, getStakeholders, getInformeesFromAssignedContracts}
+import ExpiredLockedAmuletTrigger.{Task, getStakeholders}
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 import org.lfdecentralizedtrust.splice.sv.store.IgnoredPartiesStore
@@ -50,20 +49,19 @@ class ExpiredLockedAmuletTrigger(
   override def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = {
-    val informees = getInformeesFromAssignedContracts(task.work.expiredContracts)
     completeWithIgnoredAmuletVersionCheck(
       task.work.vettedVersion.toString,
-      informees,
+      task.work.stakeholders,
+      store.key.dsoParty,
       enableUnresponsivePartiesAutoIgnore = true,
-    )(completeExpiryTaskAsDsoDelegate(task, controller, informees))
+    )(completeExpiryTaskAsDsoDelegate(task, controller))
   }
 
   private def completeExpiryTaskAsDsoDelegate(
       task: Task,
       controller: String,
-      informees: Set[PartyId],
   )(implicit tc: TraceContext): Future[TaskOutcome] = {
-    val stakeholders = informees + store.key.dsoParty
+    val stakeholders = task.work.stakeholders
     for {
       dsoRules <- store.getDsoRules()
       supports24hSubmissionDelay <- svTaskContext.packageVersionSupport.supports24hSubmissionDelay(
@@ -141,5 +139,5 @@ object ExpiredLockedAmuletTrigger extends ContractStakeholders[splice.amulet.Loc
   override def informees(payload: splice.amulet.LockedAmulet): Seq[String] =
     Seq(payload.amulet.owner) ++ payload.lock.holders.asScala
 
-  override def dso(payload: splice.amulet.LockedAmulet): Option[String] = Some(payload.amulet.dso)
+  override def dso(payload: splice.amulet.LockedAmulet): String = payload.amulet.dso
 }

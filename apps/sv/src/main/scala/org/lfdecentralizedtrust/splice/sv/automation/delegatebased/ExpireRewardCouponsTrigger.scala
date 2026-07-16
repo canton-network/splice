@@ -166,6 +166,7 @@ class ExpireRewardCouponsTrigger(
     completeWithIgnoredAmuletVersionCheck(
       task.vettedAmuletVersion.toString,
       informees,
+      store.dsoPartyId,
       enableUnresponsivePartiesAutoIgnore = true,
     )(completeExpiryTaskAsDsoDelegate(task, controller))
   }
@@ -320,24 +321,24 @@ object ValidatorCoupons extends ContractStakeholders[splice.amulet.ValidatorRewa
   override def informees(payload: splice.amulet.ValidatorRewardCoupon): Seq[String] = Seq(
     payload.user
   )
-  override def dso(payload: splice.amulet.ValidatorRewardCoupon): Option[String] = Some(payload.dso)
+  override def dso(payload: splice.amulet.ValidatorRewardCoupon): String = payload.dso
 }
 
 object AppRewardCoupons extends ContractStakeholders[splice.amulet.AppRewardCoupon] {
   override def informees(payload: splice.amulet.AppRewardCoupon): Seq[String] =
     Seq(payload.provider) ++ payload.beneficiary.toScala.toList
-  override def dso(payload: splice.amulet.AppRewardCoupon): Option[String] = Some(payload.dso)
+  override def dso(payload: splice.amulet.AppRewardCoupon): String = payload.dso
 }
 
 object SvRewardCoupons extends ContractStakeholders[splice.amulet.SvRewardCoupon] {
   override def informees(payload: splice.amulet.SvRewardCoupon): Seq[String] =
     Seq(payload.sv, payload.beneficiary)
-  override def dso(payload: splice.amulet.SvRewardCoupon): Option[String] = Some(payload.dso)
+  override def dso(payload: splice.amulet.SvRewardCoupon): String = payload.dso
 }
 
 object ValidatorFaucetCoupons extends ContractStakeholders[ValidatorFaucetCoupon] {
   override def informees(payload: ValidatorFaucetCoupon): Seq[String] = Seq(payload.validator)
-  override def dso(payload: ValidatorFaucetCoupon): Option[String] = Some(payload.dso)
+  override def dso(payload: ValidatorFaucetCoupon): String = payload.dso
 }
 
 object ValidatorLivenessActivityRecords
@@ -345,5 +346,5 @@ object ValidatorLivenessActivityRecords
   override def informees(payload: ValidatorLivenessActivityRecord): Seq[String] = Seq(
     payload.validator
   )
-  override def dso(payload: ValidatorLivenessActivityRecord): Option[String] = Some(payload.dso)
+  override def dso(payload: ValidatorLivenessActivityRecord): String = payload.dso
 }

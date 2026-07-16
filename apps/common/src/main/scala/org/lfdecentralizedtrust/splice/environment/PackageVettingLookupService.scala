@@ -89,13 +89,13 @@ class PackageVettingLookupService(
   }
 
   def splitBatch[T](pkg: PackageIdResolver.Package, batch: Seq[T], batchSize: Int)(
-      informees: T => Seq[PartyId]
+      stakeholders: T => Seq[PartyId]
   )(implicit
       tc: TraceContext
   ): Future[Map[Option[PackageVersion], Seq[Seq[T]]]] =
     for {
       versionedBatch <- MonadUtil.sequentialTraverse(batch)(t =>
-        lookupVettingState(informees(t), pkg).map(_ -> t)
+        lookupVettingState(stakeholders(t), pkg).map(_ -> t)
       )
     } yield versionedBatch
       .groupMapReduce(_._1)(p => Seq(p._2))(_ ++ _)

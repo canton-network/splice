@@ -4,28 +4,26 @@
 package org.lfdecentralizedtrust.splice.sv.util
 
 import com.digitalasset.canton.topology.PartyId
-import org.lfdecentralizedtrust.splice.util.{AssignedContract, Contract}
+import org.lfdecentralizedtrust.splice.util.Contract
 
 trait ContractStakeholders[T] {
 
   def informees(payload: T): Seq[String]
 
-  def dso(payload: T): Option[String]
-
-  final def getInformees(payload: T): Seq[PartyId] =
-    informees(payload).map(PartyId.tryFromProtoPrimitive)
-
-  final def getDsoParty(payload: T): Seq[PartyId] =
-    dso(payload).map(PartyId.tryFromProtoPrimitive).toList
+  def dso(payload: T): String
 
   final def getStakeholders(payload: T): Seq[PartyId] =
-    getInformees(payload) ++ getDsoParty(payload)
+    getInformees(payload) :+ getDsoParty(payload)
 
-  final def getInformeesFromAssignedContracts[TCid](
-      contracts: Seq[AssignedContract[TCid, T]]
+  private final def getInformees(payload: T): Seq[PartyId] =
+    informees(payload).map(PartyId.tryFromProtoPrimitive)
+
+  private final def getDsoParty(payload: T): PartyId =
+    PartyId.tryFromProtoPrimitive(dso(payload))
+
+  final def getInformeesFromContracts[TCid](
+      contracts: Seq[Contract[TCid, T]]
   ): Set[PartyId] =
     contracts.flatMap(c => getInformees(c.payload)).toSet
 
-  final def getInformeesFromContracts[TCid](contracts: Seq[Contract[TCid, T]]): Set[PartyId] =
-    contracts.flatMap(c => getInformees(c.payload)).toSet
 }
