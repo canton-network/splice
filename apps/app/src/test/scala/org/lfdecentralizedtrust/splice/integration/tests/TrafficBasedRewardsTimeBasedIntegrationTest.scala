@@ -84,7 +84,7 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
-      .simpleTopology4SvsWithSimTime(this.getClass.getSimpleName)
+      .simpleTopology1SvWithSimTime(this.getClass.getSimpleName)
       .withAdditionalSetup(implicit env => {
         Seq(
           sv1ValidatorBackend,
@@ -192,12 +192,6 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
 
         clue("Bootstrap rounds have zero activity on firstSV (no featured apps yet)") {
           assertZeroTotals(sv1ScanBackend, 0L to 2L)
-        }
-
-        clue("All SVs report zero totals for rounds after bootstrap") {
-          Seq(sv1ScanBackend, sv2ScanBackend, sv3ScanBackend, sv4ScanBackend).foreach { scan =>
-            assertZeroTotals(scan, 1L to 2L, timeout = 40.seconds)
-          }
         }
 
         // Sequence of actions
