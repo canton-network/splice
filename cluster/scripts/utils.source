@@ -43,6 +43,8 @@ function get_stack_for_namespace_component() {
       stack="sv"
     elif [[ "${component}" == "sequencer" ]]; then
       stack="sv-canton"
+    elif [[ "${component}" == "cantonBft" ]]; then
+      stack="sv-canton"
     elif [[ "${component}" == "mediator" ]]; then
       stack="sv-canton"
     elif [[ "${split_sv_deployment}" == "true" ]]; then
@@ -62,14 +64,33 @@ create_component_instance() {
     local migration_id="$2"
     local namespace="$3"
 
-    if [[ ("$component" == "sequencer" || "$component" == "mediator")
+    local instance_base="$component"
+    if [[ "$component" == "cantonBft" ]]; then
+        instance_base="sequencer-bft"
+    fi
+
+    if [[ ("$component" == "sequencer" || "$component" == "cantonBft" || "$component" == "mediator")
        && ("$namespace" != "splitwell" && "$namespace" != "validator1" && "$namespace" != "sv") ]]; then
-        component_instance="${component}-${migration_id}"
+        component_instance="${instance_base}-${migration_id}"
     else
-        component_instance="${component}"
+        component_instance="${instance_base}"
     fi
 
     echo "$component_instance"
+}
+
+function canton_bft_db_enabled() {
+  local migration_id=$1
+  local config=$2
+
+  echo "$config" | yq "
+    ([.synchronizerMigration.active, .synchronizerMigration.upgrade, .synchronizerMigration.legacy]
+      + (.synchronizerMigration.additionalLegacy // [])
+      + (.synchronizerMigration.archived // []))
+    | map(select(. != null and .id == ${migration_id}))
+    | .[0]
+    | ((.sequencer.enableBftSequencer // true) and (.sequencer.dedicatedBftSequencerDb // true))
+  "
 }
 
 function get_resolved_config() {
