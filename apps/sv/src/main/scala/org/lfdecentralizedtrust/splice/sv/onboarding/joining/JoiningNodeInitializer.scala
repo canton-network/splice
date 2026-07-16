@@ -175,21 +175,23 @@ class JoiningNodeInitializer(
       )
     )
     for {
-      // If we're not onboarded yet, this waits for the sponsoring SV
-      dsoPartyId <- getDsoPartyId(initConnection)
-
-      _ <- requestParticipantSynchronizerPermission(dsoPartyId)
-
-      // Register domain with manualConnect=true. Confusingly, this still connects the first time.
-      // However, it won't connect if we crash and get here again which is what we're really after.
-      // If the url is unset, we skip this step. This is fine if the node has already initialized its
-      // own sequencer.
-      registeredGlobalSync <- domainConfigO.traverse(
-        participantAdminConnection.ensureSynchronizerRegisteredWithManualConnect(
-          _,
-          RetryFor.WaitingOnInitDependency,
-        )
-      )
+      (dsoPartyId, registeredGlobalSync) <- (
+        // If we're not onboarded yet, this waits for the sponsoring SV
+        for {
+          id <- getDsoPartyId(initConnection)
+          _ <- requestParticipantSynchronizerPermission(id)
+        } yield id,
+        // Register domain with manualConnect=true. Confusingly, this still connects the first time.
+        // However, it won't connect if we crash and get here again which is what we're really after.
+        // If the url is unset, we skip this step. This is fine if the node has already initialized its
+        // own sequencer.
+        domainConfigO.traverse(
+          participantAdminConnection.ensureSynchronizerRegisteredWithManualConnect(
+            _,
+            RetryFor.WaitingOnInitDependency,
+          )
+        ),
+      ).tupled
 
       psid <- participantAdminConnection
         .getPhysicalSynchronizerId(config.domains.global.alias)
