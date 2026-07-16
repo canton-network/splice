@@ -13,8 +13,6 @@ import {
 } from '@canton-network/splice-pulumi-common';
 import { PartyAllocatorConfig } from '@canton-network/splice-pulumi-common-validator';
 
-import { hyperdiskSupportConfig } from '../../common/src/config/hyperdiskSupportConfig';
-
 export function installPartyAllocator(
   xns: ExactNamespace,
   config: PartyAllocatorConfig,
@@ -40,9 +38,7 @@ export function installPartyAllocator(
       pvc: {
         ...(config.pvcSize ? { size: config.pvcSize } : {}),
         volumeStorageClass: standardStorageClassName,
-        name: hyperdiskSupportConfig.hyperdiskSupport.enabled
-          ? 'party-allocator-keys-hd-pvc'
-          : 'party-allocator-keys',
+        name: 'party-allocator-keys-hd-pvc',
       },
     },
     activeVersion,

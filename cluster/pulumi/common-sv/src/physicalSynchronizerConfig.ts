@@ -31,6 +31,7 @@ export const SvSequencerConfigSchema = z
     cloudSql: CloudSqlWithOverrideConfigSchema,
     splicePostgresHelmMigration: SplicePostgresHelmMigrationSchema,
     resources: K8sResourceSchema,
+    enableAntiAffinity: z.boolean().default(true),
   })
   .strict();
 export type SvSequencerConfig = z.infer<typeof SvSequencerConfigSchema>;

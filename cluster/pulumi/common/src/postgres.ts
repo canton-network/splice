@@ -16,7 +16,6 @@ import {
 } from './config';
 import { spliceConfig } from './config/config';
 import { GcpProject } from './config/gcpConfig';
-import { hyperdiskSupportConfig } from './config/hyperdiskSupportConfig';
 import {
   appsAffinityAndTolerations,
   CnInput,
@@ -414,9 +413,6 @@ export class LegacyHelmSplicePostgres extends pulumi.ComponentResource implement
 
     // an initial database named cantonnet is created automatically (configured in the Helm chart).
     const smallDiskSize = clusterSmallDisk ? '240Gi' : undefined;
-    const supportsHyperdisk = useInfraAffinityAndTolerations
-      ? hyperdiskSupportConfig.hyperdiskSupport.enabledForInfra
-      : hyperdiskSupportConfig.hyperdiskSupport.enabled;
 
     const pg = installSpliceHelmChart(
       xns,
@@ -427,12 +423,8 @@ export class LegacyHelmSplicePostgres extends pulumi.ComponentResource implement
           volumeSize: overrideDbSizeFromValues
             ? values?.db?.volumeSize || smallDiskSize
             : smallDiskSize,
-          ...(supportsHyperdisk
-            ? {
-                volumeStorageClass: standardStorageClassName,
-                pvcTemplateName: 'pg-data-hd',
-              }
-            : {}),
+          volumeStorageClass: standardStorageClassName,
+          pvcTemplateName: 'pg-data-hd',
         },
         persistence: {
           secretName: this.secretName,
@@ -553,19 +545,12 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
     );
 
     const smallDiskSize = clusterSmallDisk ? '240Gi' : undefined;
-    const supportsHyperdisk = useInfraAffinityAndTolerations
-      ? hyperdiskSupportConfig.hyperdiskSupport.enabledForInfra
-      : hyperdiskSupportConfig.hyperdiskSupport.enabled;
 
     const volumeSize = overrideDbSizeFromValues
       ? values?.db?.volumeSize || smallDiskSize || '2800Gi'
       : smallDiskSize || '2800Gi';
-    const pvcTemplateName = supportsHyperdisk
-      ? 'pg-data-hd'
-      : values?.db?.pvcTemplateName || 'pg-data';
-    const volumeStorageClass = supportsHyperdisk
-      ? standardStorageClassName
-      : values?.db?.volumeStorageClass || 'standard-rwo';
+    const pvcTemplateName = 'pg-data-hd';
+    const volumeStorageClass = standardStorageClassName;
     // Plain PVC name in the same namespace (not a PV name and not namespaced as ns/name).
     const existingClaimName: string | undefined = values?.db?.existingClaimName;
     const mainDataVolumeName = existingClaimName ? 'pg-data-existing' : pvcTemplateName;

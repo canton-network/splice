@@ -143,30 +143,55 @@ spec:
         - name: ADDITIONAL_CONFIG_BULK_STORAGE
           value: |
             canton.scan-apps.scan-app.bulk-storage {
-              s-3 = {
-                endpoint = "{{ .s3.endpoint }}"
-                region = "{{ .s3.region }}"
-                bucket-name = "{{ .s3.bucketName }}"
-                access-key-id = ${SPLICE_APP_BULK_STORAGE_S3_ACCESS_KEY_ID}
-                secret-access-key = ${SPLICE_APP_BULK_STORAGE_S3_SECRET_ACCESS_KEY}
+              staging = {
+                endpoint = "{{ .staging.endpoint }}"
+                region = "{{ .staging.region }}"
+                bucket-name = "{{ .staging.bucketName }}"
+                access-key-id = ${SPLICE_APP_BULK_STORAGE_STAGING_ACCESS_KEY_ID}
+                secret-access-key = ${SPLICE_APP_BULK_STORAGE_STAGING_SECRET_ACCESS_KEY}
+              }
+              committed = {
+                endpoint = "{{ .committed.endpoint }}"
+                region = "{{ .committed.region }}"
+                bucket-name = "{{ .committed.bucketName }}"
+                access-key-id = ${SPLICE_APP_BULK_STORAGE_COMMITTED_ACCESS_KEY_ID}
+                secret-access-key = ${SPLICE_APP_BULK_STORAGE_COMMITTED_SECRET_ACCESS_KEY}
               }
             }
-        - name: SPLICE_APP_BULK_STORAGE_S3_ACCESS_KEY_ID
-          {{- if (($.Values.bulkStorage.s3).secretOverrides).accessKey }}
-          value: {{ $.Values.bulkStorage.s3.secretOverrides.accessKey | quote }}
+        - name: SPLICE_APP_BULK_STORAGE_STAGING_ACCESS_KEY_ID
+          {{- if (($.Values.bulkStorage.staging).secretOverrides).accessKey }}
+          value: {{ $.Values.bulkStorage.staging.secretOverrides.accessKey | quote }}
           {{- else }}
           valueFrom:
             secretKeyRef:
-              name: {{ $.Values.bulkStorage.s3.secretName }}
+              name: {{ $.Values.bulkStorage.staging.secretName }}
               key: accessKey
-          {{ end }}
-        - name: SPLICE_APP_BULK_STORAGE_S3_SECRET_ACCESS_KEY
-          {{- if (($.Values.bulkStorage.s3).secretOverrides).secretAccessKey }}
-          value: {{ $.Values.bulkStorage.s3.secretOverrides.secretAccessKey | quote }}
+          {{- end }}
+        - name: SPLICE_APP_BULK_STORAGE_STAGING_SECRET_ACCESS_KEY
+          {{- if (($.Values.bulkStorage.staging).secretOverrides).secretAccessKey }}
+          value: {{ $.Values.bulkStorage.staging.secretOverrides.secretAccessKey | quote }}
           {{- else }}
           valueFrom:
             secretKeyRef:
-              name: {{ $.Values.bulkStorage.s3.secretName }}
+              name: {{ $.Values.bulkStorage.staging.secretName }}
+              key: secretAccessKey
+          {{- end }}
+        - name: SPLICE_APP_BULK_STORAGE_COMMITTED_ACCESS_KEY_ID
+          {{- if (($.Values.bulkStorage.committed).secretOverrides).accessKey }}
+          value: {{ $.Values.bulkStorage.committed.secretOverrides.accessKey | quote }}
+          {{- else }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ $.Values.bulkStorage.committed.secretName }}
+              key: accessKey
+          {{- end }}
+        - name: SPLICE_APP_BULK_STORAGE_COMMITTED_SECRET_ACCESS_KEY
+          {{- if (($.Values.bulkStorage.committed).secretOverrides).secretAccessKey }}
+          value: {{ $.Values.bulkStorage.committed.secretOverrides.secretAccessKey | quote }}
+          {{- else }}
+          valueFrom:
+            secretKeyRef:
+              name: {{ $.Values.bulkStorage.committed.secretName }}
               key: secretAccessKey
           {{- end }}
         {{- end }}

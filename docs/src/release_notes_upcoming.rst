@@ -11,42 +11,34 @@
 
     Next-release notes
 
+  - Validator
+
+    - Unsupported package versions are now automatically unvetted by the validator package vetting trigger,
+      aligning validator behavior with SVs.
+
+      You can disable validator unvetting by setting:
+
+      .. code-block:: yaml
+
+        - name: ADDITIONAL_CONFIG_UNSUPPORTED_DARS_UNVETTING
+          value: |
+            canton.validator-apps.validator_backend.parameters.enabled-features.enable-validator-dars-unvetting = false
+
+    - The ``splice-postgres`` Helm chart is deprecated and will not be supported after
+      2026-11-12, the PostgreSQL 14 end-of-life date. Published chart versions remain
+      available, but receive no further updates after that date, and no new chart versions
+      will be published after 2026-10-12. Run Splice against a PostgreSQL instance you
+      provision yourself; a managed service such as Amazon RDS or Google Cloud SQL is
+      recommended. Follow the `migration guide <https://docs.canton.network/global-synchronizer/production-operations/validator-postgres-migration>`__ to move the data
+      of an existing node before that date.
+
+  - SV app
+
+    - Add support for specifying weight in ``GrantFeaturedAppRight`` governance voting UI.
+
   - Deployment
 
-    - Helm
+    - splice-info
 
-      - Added security contexts for all Helm-based deployments intended for production.
-        This improves the security of Kubernetes based deployments.
-
-  - Scan
-
-    - Add a metric for the size of the most recent ACS snapshot
-
-  - Token Standard APIs
-
-    - Add the ``accountInputFieldsToShow`` property in the token metadata
-      API (``token-metadata-v1.yaml``).
-      This property allows instruments that support only account-ids or only
-      account providers to inform wallets of this fact.
-      This change is backwards compatible.
-
-  - Daml
-
-    - Adds support for specifying weight on the ``FeaturedAppRight`` contract as described in
-      `CIP-0104 amendment <https://github.com/canton-foundation/cips/pull/238>`__.
-    - Fix a bug in ``AmuletAllocation``, which prohibited settling V1 amulet allocations when
-      using them with the Token Standard V2 feature of setting multiple
-      executors via metadata.
-
-    - These changes require a Daml upgrade to the following versions:
-
-        ================== =======
-        name               version
-        ================== =======
-        amulet             0.1.22
-        amuletNameService  0.1.23
-        dsoGovernance      0.1.28
-        validatorLifecycle 0.1.8
-        wallet             0.1.23
-        walletPayments     0.1.22
-        ================== =======
+      - ``/runtime/status.json`` now includes reachability for scan and sequencer (0 is good, 1 is lagging
+        behind, 2 is unreachable, 3 is lagging behind and unreachable).

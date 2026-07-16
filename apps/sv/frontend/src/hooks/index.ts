@@ -12,6 +12,7 @@ import { useSequencerStatus } from './useSequencerStatus';
 import { useValidatorLicenses } from './useValidatorLicenses';
 import { useValidatorOnboardings } from './useValidatorOnboardings';
 import { useVoteRequest } from './useVoteRequest';
+import { useVoteRequestResultsCount } from './useVoteRequestResultsCount';
 
 export {
   useAmuletPriceVotes,
@@ -27,4 +28,5 @@ export {
   useValidatorLicenses,
   useValidatorOnboardings,
   useVoteRequest,
+  useVoteRequestResultsCount,
 };

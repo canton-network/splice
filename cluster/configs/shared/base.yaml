@@ -1,8 +1,5 @@
 # Reference configuration options
 cluster:
-  hyperdiskSupport:
-    enabled: true
-    enabledForInfra: true
   nodePools:
     apps:
       minNodes: 0
@@ -27,6 +24,7 @@ infra:
     proxyForIstioHttp: false
   istio:
     enableIngressAccessLogging: true
+    enablePublicTokenRegistry: true
     sequencerFlowControl:
       # See https://github.com/DACH-NY/canton-network-internal/issues/4901
       # The values are somewhat arbitrary so more fine tuning may be appropriate.
@@ -123,7 +121,7 @@ monitoring:
           rate: 25
           overMinutes: 5
       dsoMissedConfirmations:
-        threshold: 0.01
+        threshold: 0 # alert as soon as there's any confirmation missing
         windowMinutes: 10
       cloudSql:
         maintenance: false
@@ -226,7 +224,12 @@ cloudArmor:
       pathPrefix: /api/scan
       throttleAcrossAllEndpointsAllIps:
         withinIntervalSeconds: 60
-        maxRequestsBeforeHttp429: 0
+        maxRequestsBeforeHttp429: 0    # Keeps scan completely closed to the public
+    tokenRegistry:
+      pathPrefix: /registry
+      throttleAcrossAllEndpointsAllIps:
+        withinIntervalSeconds: 60
+        maxRequestsBeforeHttp429: 200
 multiValidator:
   postgresPvcSize: '100Gi'
   resources:
@@ -250,7 +253,7 @@ multiValidator:
 sv:
   scan:
     externalRateLimits:
-      !include(./rate-limits/v0-acs.yaml;./rate-limits/unlimited.yaml;./rate-limits/public-banned.yaml)
+      !include(./rate-limits/v0-acs.yaml;./rate-limits/unlimited.yaml;./rate-limits/public-banned.yaml;./rate-limits/token-registry.yaml)
       globalLimits:
         maxTokens: 2147483647
         tokensPerFill: 2147483647

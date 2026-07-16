@@ -11,7 +11,6 @@ import {
   CLUSTER_NAME,
   clusterProdLike,
   commandScriptPath,
-  createVolumeSnapshot,
   DecentralizedSynchronizerUpgradeConfig,
   ExactNamespace,
   GCP_PROJECT,
@@ -36,7 +35,6 @@ import { local } from '@pulumi/command';
 import { getSecretVersionOutput } from '@pulumi/gcp/secretmanager/getSecretVersion';
 import { Input } from '@pulumi/pulumi';
 
-import { hyperdiskSupportConfig } from '../../common/src/config/hyperdiskSupportConfig';
 import {
   clusterIsResetPeriodically,
   enableAlertEmailToSupportTeam,
@@ -195,9 +193,7 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
             logFormat: 'json',
             storage: {
               volumeClaimTemplate: {
-                ...(hyperdiskSupportConfig.hyperdiskSupport.enabledForInfra
-                  ? { metadata: { name: 'alertmanager-hd-pvc' } }
-                  : {}),
+                metadata: { name: 'alertmanager-hd-pvc' },
                 spec: {
                   storageClassName: infraStandardStorageClassName,
                   accessModes: ['ReadWriteOnce'],
@@ -256,9 +252,7 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
             scrapeNativeHistograms: true,
             storageSpec: {
               volumeClaimTemplate: {
-                ...(hyperdiskSupportConfig.hyperdiskSupport.enabledForInfra
-                  ? { metadata: { name: 'prometheus-hd-pvc' } }
-                  : {}),
+                metadata: { name: 'prometheus-hd-pvc' },
                 spec: {
                   storageClassName: infraPremiumStorageClassName,
                   accessModes: ['ReadWriteOnce'],
@@ -743,14 +737,15 @@ function substituteScanConnectionDisagreementAlerts(alert: string): string {
   if (config.excludedConnections.length > 0) {
     matchers.push(`scan_connection!~"${config.excludedConnections.join('|')}"`);
   }
-  if (config.excludedHttpStatusCodes.length > 0) {
-    matchers.push(`http_status!~"${config.excludedHttpStatusCodes.join('|')}"`);
-  }
   const bareFilter = matchers.join(', ');
   const filter = bareFilter ? `, ${bareFilter}` : '';
   const connectionMatchers: string[] = [];
   if (config.excludedConnections.length > 0) {
     connectionMatchers.push(`scan_connection!~"${config.excludedConnections.join('|')}"`);
+  }
+  if (config.excludedHttpStatusCodes.length > 0) {
+    matchers.push(`http_status!~"${config.excludedHttpStatusCodes.join('|')}"`);
+    connectionMatchers.push(`http_status!~"${config.excludedHttpStatusCodes.join('|')}"`);
   }
   const connectionBareFilter = connectionMatchers.join(', ');
   const connectionFilter = connectionBareFilter ? `, ${connectionBareFilter}` : '';
@@ -769,7 +764,6 @@ function substituteScanConnectionDisagreementAlerts(alert: string): string {
 function substituteDsoMissedConfirmationsAlerts(alert: string): string {
   const config = monitoringConfig.alerting.alerts.dsoMissedConfirmations;
   return alert
-    .replaceAll('$DSO_MISSED_CONFIRMATIONS_THRESHOLD_PERCENT', (config.threshold * 100).toString())
     .replaceAll('$DSO_MISSED_CONFIRMATIONS_THRESHOLD', config.threshold.toString())
     .replaceAll('$DSO_MISSED_CONFIRMATIONS_WINDOW_SECONDS', (config.windowMinutes * 60).toString())
     .replaceAll('$DSO_MISSED_CONFIRMATIONS_WINDOW_MINUTES', config.windowMinutes.toString());
@@ -997,7 +991,7 @@ function createGrafanaAlerting(namespace: Input<string>) {
                   'cantonbft_alerts.yaml': readGrafanaAlertingFile(
                     'cantonbft_alerts.yaml'
                   ).replaceAll(
-                    '$BFT_ORDERING_INGRESS_REQUESTS_QUEUED_THRESHOLD',
+                    '$CANTON_BFT_MEMPOOL_SIZE_THRESHOLD',
                     monitoringConfig.alerting.alerts.cantonBft.mempoolMaxSizeThreshold.toString()
                   ),
                 }

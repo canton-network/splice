@@ -117,14 +117,11 @@ abstract class BaseStorePerformanceTest(
         case Left(err) => throw new RuntimeException(s"Failed to create storage: $err")
       }
 
-    /** Suppress Flyway ClassPathScanner warnings about unloadable test jars (apps-app_2.13-0.1.0-SNAPSHOT-tests.jar)
-      * TODO(#4790): This is a temporary workaround, w/o adding ignored logs.
-      */
-    org.slf4j.LoggerFactory
-      .getLogger("org.flywaydb.core.internal.scanner.classpath.ClassPathScanner")
-      .asInstanceOf[ch.qos.logback.classic.Logger]
-      .setLevel(ch.qos.logback.classic.Level.ERROR)
-
+    // Running unforked puts sbt's test jar on the classpath Flyway scans.
+    // So, unlike in forked approach, Flyway finds the jar but can't read it.
+    // Flyway skips it with a WARN. "Skipping unloadable jar file: ...apps-app_*-tests.jar" WARN.
+    // That log line is handled via an ignore pattern in project/ignore-patterns/canton_network_test_log.ignore.txt
+    // Migrations aren't affected — the actual migration files are read from the main resources.
     new DbMigrations(storage.dbConfig, false, timeouts, loggerFactory)
       .migrateDatabase()
       .map(_ => storage)

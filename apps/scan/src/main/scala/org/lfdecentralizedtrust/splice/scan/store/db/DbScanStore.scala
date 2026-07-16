@@ -59,6 +59,7 @@ import org.lfdecentralizedtrust.splice.store.{
   DbVotesAcsStoreQueryBuilder,
   DbVotesTxLogStoreQueryBuilder,
   Limit,
+  VoteResultsFilters,
   PageLimit,
   ResultsPage,
   SortOrder,
@@ -633,11 +634,7 @@ class DbScanStore(
   }
 
   override def listVoteRequestResults(
-      actionName: Option[String],
-      accepted: Option[Boolean],
-      requester: Option[String],
-      effectiveFrom: Option[String],
-      effectiveTo: Option[String],
+      filters: VoteResultsFilters,
       limit: Limit,
       after: Option[Long] = None,
   )(implicit tc: TraceContext): Future[ResultsPage[DsoRules_CloseVoteRequestResult]] = {
@@ -648,11 +645,7 @@ class DbScanStore(
       actionNameColumnName = "vote_action_name",
       acceptedColumnName = "vote_accepted",
       requesterNameColumnName = "vote_requester_name",
-      actionName = actionName,
-      accepted = accepted,
-      requester = requester,
-      effectiveFrom = effectiveFrom,
-      effectiveTo = effectiveTo,
+      filters = filters,
       limit = limit,
       after = after,
     )
@@ -666,6 +659,23 @@ class DbScanStore(
         .map(_.result.getOrElse(throw txMissingField()))
       afterToken = limited.lastOption.map(_.entryNumber)
     } yield ResultsPage(recentVoteResults, afterToken)
+  }
+
+  override def countVoteRequestResults(
+      filters: VoteResultsFilters
+  )(implicit tc: TraceContext): Future[Long] = {
+    val query = countVoteRequestResultsQuery(
+      txLogTableName = ScanTables.txLogTableName,
+      txLogStoreId = txLogStoreId,
+      dbType = EntryType.VoteRequestTxLogEntry,
+      actionNameColumnName = "vote_action_name",
+      acceptedColumnName = "vote_accepted",
+      requesterNameColumnName = "vote_requester_name",
+      filters = filters,
+    )
+    storage
+      .query(query, "countVoteRequestResults")
+      .map(_.headOption.getOrElse(0L))
   }
 
   override def lookupLatestSvRewardWeightChange(

@@ -4,7 +4,6 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.admin.api.client.data.TemplateId
-import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.topology.{ParticipantId, PartyId}
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
@@ -75,14 +74,7 @@ class BootstrapPackageConfigIntegrationTest
           _.copy(initialPackageConfig = initialPackageConfig)
         )(config)
       )
-      .addConfigTransform((_, conf) =>
-        ConfigTransforms.updateAllValidatorAppConfigs_(c =>
-          // Reduce the cache TTL. Otherwise alice validator takes forever to see the new amulet rules version
-          c.copy(scanClient =
-            c.scanClient.setAmuletRulesCacheTimeToLive(NonNegativeFiniteDuration.ofSeconds(1))
-          )
-        )(conf)
-      )
+      .withReducedAmuletRulesCacheTTL()
       .addConfigTransform((_, config) =>
         ConfigTransforms.useDecentralizedSynchronizerSplitwell()(config)
       )

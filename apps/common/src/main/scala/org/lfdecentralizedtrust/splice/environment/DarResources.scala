@@ -10067,13 +10067,25 @@ object DarResources {
       DarResources.splitwell,
     )
 
+  lazy val corePackageResources: Seq[PackageResource] =
+    TokenStandard.allPackageResources ++ Seq(
+      DarResources.amulet,
+      DarResources.amuletNameService,
+      DarResources.apiRewardAssignmentV1,
+      DarResources.dsoGovernance,
+      DarResources.utilBatchedMarkers,
+      DarResources.validatorLifecycle,
+      DarResources.wallet,
+      DarResources.walletPayments,
+    )
+
   lazy val pkgIdToDarResource: Map[String, DarResource] =
-    packageResources.view.flatMap(_.all).map(resource => resource.packageId -> resource).toMap
+    corePackageResources.view.flatMap(_.all).map(resource => resource.packageId -> resource).toMap
 
   // We don't index the map by PackageMetadata because that type contains some additional
   // fields that don't matter.
   lazy val pkgMetadataToDarResource: Map[(PackageName, PackageVersion), DarResource] =
-    packageResources.view
+    corePackageResources.view
       .flatMap(_.all)
       .map(resource => (resource.metadata.name, resource.metadata.version) -> resource)
       .toMap
