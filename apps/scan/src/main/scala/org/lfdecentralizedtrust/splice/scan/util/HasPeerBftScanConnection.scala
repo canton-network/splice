@@ -2,12 +2,12 @@ package org.lfdecentralizedtrust.splice.scan.util
 
 import com.digitalasset.canton.lifecycle.SyncCloseable
 import com.digitalasset.canton.logging.NamedLoggerFactory
+import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.Mutex
 import org.apache.pekko.stream.Materializer
-import org.lfdecentralizedtrust.splice.automation.TriggerContext
-import org.lfdecentralizedtrust.splice.config.UpgradesConfig
-import org.lfdecentralizedtrust.splice.environment.SpliceLedgerClient
+import org.lfdecentralizedtrust.splice.config.{AutomationConfig, UpgradesConfig}
+import org.lfdecentralizedtrust.splice.environment.{RetryProvider, SpliceLedgerClient}
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
@@ -28,8 +28,10 @@ trait HasPeerBftScanConnection {
       store: ScanStore,
       svName: String,
       ledgerClient: SpliceLedgerClient,
-      context: TriggerContext,
+      automationConfig: AutomationConfig,
       upgradesConfig: UpgradesConfig,
+      clock: Clock,
+      retryProvider: RetryProvider,
       loggerFactory: NamedLoggerFactory,
   )(implicit
       tc: TraceContext,
@@ -50,11 +52,11 @@ trait HasPeerBftScanConnection {
                 ledgerClient,
                 // When the network is starting up, the pool of SVs is changing fast
                 // Using a short refresh interval to quickly pick up new SVs
-                scansRefreshInterval = context.config.pollingInterval,
+                scansRefreshInterval = automationConfig.pollingInterval,
                 amuletRulesCacheTimeToLive = ScanAppClientConfig.DefaultAmuletRulesCacheTimeToLive,
                 upgradesConfig,
-                context.clock,
-                context.retryProvider,
+                clock,
+                retryProvider,
                 loggerFactory,
               )
             } yield {

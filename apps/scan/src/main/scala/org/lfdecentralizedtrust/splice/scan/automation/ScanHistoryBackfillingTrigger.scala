@@ -14,7 +14,10 @@ import org.lfdecentralizedtrust.splice.automation.{
 import org.lfdecentralizedtrust.splice.config.UpgradesConfig
 import org.lfdecentralizedtrust.splice.environment.SpliceLedgerClient
 import org.lfdecentralizedtrust.splice.http.HttpClient
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.BackfillingScanConnection
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.{
+  BackfillingScanConnection,
+  BftScanConnection,
+}
 import org.lfdecentralizedtrust.splice.scan.store.ScanHistoryBackfilling.{
   FoundingTransactionTreeUpdate,
   InitialTransactionTreeUpdate,
@@ -238,15 +241,25 @@ class ScanHistoryBackfillingTrigger(
     }
   }
 
+  private def getOrCreateScanConnection()(implicit
+      tc: TraceContext,
+      ec: ExecutionContextExecutor,
+      mat: Materializer,
+      httpClient: HttpClient,
+      templateJsonDecoder: TemplateJsonDecoder,
+  ): Future[BftScanConnection] = getOrCreateScanConnection(
+    store,
+    svName,
+    ledgerClient,
+    context.config,
+    upgradesConfig,
+    context.clock,
+    context.retryProvider,
+    loggerFactory,
+  )
+
   private def performBackfilling()(implicit traceContext: TraceContext): Future[TaskOutcome] = for {
-    connection <- getOrCreateScanConnection(
-      store,
-      svName,
-      ledgerClient,
-      context,
-      upgradesConfig,
-      loggerFactory,
-    )
+    connection <- getOrCreateScanConnection()
     backfilling = getOrCreateBackfilling(connection)
     outcome <- backfilling.backfill().map {
       case HistoryBackfilling.Outcome.MoreWorkAvailableNow(workDone) =>
@@ -278,14 +291,7 @@ class ScanHistoryBackfillingTrigger(
   private def performImportUpdatesBackfilling()(implicit
       traceContext: TraceContext
   ): Future[TaskOutcome] = for {
-    connection <- getOrCreateScanConnection(
-      store,
-      svName,
-      ledgerClient,
-      context,
-      upgradesConfig,
-      loggerFactory,
-    )
+    connection <- getOrCreateScanConnection()
     backfilling = getOrCreateBackfilling(connection)
     outcome <- backfilling.backfillImportUpdates().map {
       case ImportUpdatesBackfilling.Outcome.MoreWorkAvailableNow(workDone) =>
