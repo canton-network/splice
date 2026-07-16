@@ -1419,7 +1419,7 @@ class SvFrontendIntegrationTest
       }
     }
 
-    "NEW UI: Grant and Revoke Featured App Right" in { implicit env =>
+    "NEW UI: Grant, Update and Revoke Featured App Right" in { implicit env =>
       val providerParty = sv3Backend.getDsoInfo().svParty
       val providerPartyId = providerParty.toProtoPrimitive
       val activityWeight = BigDecimal("2.5")
@@ -1435,23 +1435,7 @@ class SvFrontendIntegrationTest
 
       clue("vote the grant request to execution before creating revoke request") {
         val grantTrackingCid = eventually() {
-          val voteRequest: Contract[VoteRequest.ContractId, VoteRequest] = sv1Backend
-            .listVoteRequests()
-            .find { request =>
-              val requestCid = request.contractId.contractId
-              val trackingCid =
-                if (request.payload.trackingCid.isPresent) {
-                  Some(request.payload.trackingCid.get.contractId)
-                } else {
-                  None
-                }
-              requestCid == grantProposalContractId || trackingCid.contains(grantProposalContractId)
-            }
-            .getOrElse(
-              fail(
-                s"Could not find vote request for grant proposal contract id: $grantProposalContractId"
-              )
-            )
+          val voteRequest: Contract[VoteRequest.ContractId, VoteRequest] = voteProposalToExecution(grantProposalContractId)
 
           if (voteRequest.payload.trackingCid.isPresent) voteRequest.payload.trackingCid.get
           else voteRequest.contractId
@@ -1471,6 +1455,38 @@ class SvFrontendIntegrationTest
           featuredAppRight.value.payload.activityWeight.toScala.map(
             BigDecimal(_)
           ) shouldBe Some(activityWeight)
+        }
+      }
+
+      val newActivityWeight = BigDecimal("3.0")
+
+      val updateProposalContractId = assertCreateProposal(
+        "SRARC_UpdateFeaturedAppRight",
+        "update-featured-app",
+      ) { implicit webDriver =>
+        fillOutTextField("update-featured-app-partyId", providerPartyId)
+        selectFirstMuiOption("update-featured-app-rightCid-dropdown")
+        fillOutTextField("update-featured-app-activityWeight", newActivityWeight.toString)
+        fillOutTextField("update-featured-app-reason", "increasing weight")
+      }
+
+      clue("vote the update request to execution") {
+        val updateTrackingCid = eventually() {
+          val voteRequest = voteProposalToExecution(updateProposalContractId)
+          if (voteRequest.payload.trackingCid.isPresent) voteRequest.payload.trackingCid.get
+          else voteRequest.contractId
+        }
+
+        eventuallySucceeds() {
+          sv3Backend.castVote(updateTrackingCid, isAccepted = true, "", "")
+        }
+
+        eventually() {
+          val featuredAppRight = sv1ScanBackend.lookupFeaturedAppRight(providerParty)
+          featuredAppRight shouldBe a[Some[?]]
+          featuredAppRight.value.payload.activityWeight.toScala.map(
+            BigDecimal(_)
+          ) shouldBe Some(newActivityWeight)
         }
       }
 
@@ -1653,6 +1669,29 @@ class SvFrontendIntegrationTest
         }
       }
     }
+  }
+
+  def voteProposalToExecution(
+     proposalContractId: String
+  )(implicit env: SpliceTestConsoleEnvironment) = {
+    val voteRequest: Contract[VoteRequest.ContractId, VoteRequest] = sv1Backend
+      .listVoteRequests()
+      .find { request =>
+        val requestCid = request.contractId.contractId
+        val trackingCid =
+          if (request.payload.trackingCid.isPresent) {
+            Some(request.payload.trackingCid.get.contractId)
+          } else {
+            None
+          }
+        requestCid == proposalContractId || trackingCid.contains(proposalContractId)
+      }
+      .getOrElse(
+        fail(
+          s"Could not find vote request for proposal contract id: $proposalContractId"
+        )
+      )
+    voteRequest
   }
 
   def changeAction(actionName: String)(implicit webDriver: WebDriverType) = {
