@@ -38,11 +38,8 @@ async function checkActionSelection(actionName: string, actionValue: string, tes
   const selectInput = actionDropdown.querySelector('[role="combobox"]') as HTMLElement;
   await user.click(selectInput);
 
-  await waitFor(async () => {
-    const actionToSelect = screen.getByText(actionName);
-    expect(actionToSelect).toBeInTheDocument();
-    await user.click(actionToSelect);
-  });
+  const actionToSelect = await screen.findByText(actionName);
+  await user.click(actionToSelect);
 
   const nextButton = screen.getByText('Next');
   expect(nextButton).toBeInTheDocument();
@@ -191,20 +188,19 @@ describe('Create Proposal', () => {
 
     const nextButton = screen.getByText('Next');
     expect(nextButton).toBeDefined();
-    expect(nextButton.getAttribute('disabled')).toBeDefined();
+    expect(nextButton.getAttribute('disabled')).not.toBeNull();
 
     const actionDropdown = screen.getByTestId('select-action');
     expect(actionDropdown).toBeDefined();
 
     const selectInput = actionDropdown.querySelector('[role="combobox"]') as HTMLElement;
-    user.click(selectInput);
+    await user.click(selectInput);
+
+    const actionToSelect = await screen.findByText('Offboard Member');
+    await user.click(actionToSelect);
 
     await waitFor(() => {
-      const actionToSelect = screen.getByText('Offboard Member');
-      expect(actionToSelect).toBeDefined();
-      user.click(actionToSelect);
+      expect(nextButton.getAttribute('disabled')).toBeNull();
     });
-
-    expect(nextButton.getAttribute('disabled')).toBe('');
   });
 });

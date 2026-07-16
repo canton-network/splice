@@ -909,8 +909,10 @@ describe('Proposal Details > Votes & Voting', () => {
     // This is because awaiting the button click makes it very difficult for the test runner to see the loading state
     user.click(acceptButton);
 
-    await waitFor(async () => {
-      expect(acceptButton.getAttribute('disabled')).toBeDefined();
+    // once submission starts, the vote buttons are unmounted (replaced by the
+    // "Submitting..." state and then the submission message)
+    await waitFor(() => {
+      expect(acceptButton).not.toBeInTheDocument();
     });
 
     const submissionMessage = await screen.findByTestId('submission-message');
@@ -972,8 +974,10 @@ describe('Proposal Details > Votes & Voting', () => {
     // This is because awaiting the button click makes it very difficult for the test runner to see the loading state
     user.click(acceptButton);
 
-    await waitFor(async () => {
-      expect(acceptButton.getAttribute('disabled')).toBeDefined();
+    // once submission starts, the vote buttons are unmounted (replaced by the
+    // "Submitting..." state and then the submission message)
+    await waitFor(() => {
+      expect(acceptButton).not.toBeInTheDocument();
     });
 
     const submissionMessage = await screen.findByTestId('submission-message');
