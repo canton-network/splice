@@ -1,14 +1,18 @@
 package org.lfdecentralizedtrust.splice.scan.util
 
+import com.digitalasset.canton.lifecycle.SyncCloseable
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.Mutex
+import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.automation.TriggerContext
 import org.lfdecentralizedtrust.splice.config.UpgradesConfig
 import org.lfdecentralizedtrust.splice.environment.SpliceLedgerClient
+import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
 import org.lfdecentralizedtrust.splice.scan.store.ScanStore
+import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 
 import scala.concurrent.{ExecutionContextExecutor, Future, blocking}
 
@@ -20,14 +24,20 @@ trait HasPeerBftScanConnection {
   @volatile
   private var connectionVar: Option[BftScanConnection] = None
 
-  def getOrCreateScanConnection(
+  protected def getOrCreateScanConnection(
       store: ScanStore,
       svName: String,
       ledgerClient: SpliceLedgerClient,
       context: TriggerContext,
       upgradesConfig: UpgradesConfig,
       loggerFactory: NamedLoggerFactory,
-  )(implicit tc: TraceContext): Future[BftScanConnection] =
+  )(implicit
+      tc: TraceContext,
+      ec: ExecutionContextExecutor,
+      mat: Materializer,
+      httpClient: HttpClient,
+      templateJsonDecoder: TemplateJsonDecoder,
+  ): Future[BftScanConnection] =
     blocking {
       mutex.exclusive {
         connectionVar match {
@@ -54,5 +64,14 @@ trait HasPeerBftScanConnection {
         }
       }
     }
+
+  protected def closeScanConnection(): Option[SyncCloseable] =
+    connectionVar
+      .map(connection =>
+        SyncCloseable(
+          "closing scan connection",
+          connection.close(),
+        )
+      )
 
 }

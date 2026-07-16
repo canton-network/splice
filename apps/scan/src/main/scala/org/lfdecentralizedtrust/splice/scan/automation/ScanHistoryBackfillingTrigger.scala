@@ -14,11 +14,7 @@ import org.lfdecentralizedtrust.splice.automation.{
 import org.lfdecentralizedtrust.splice.config.UpgradesConfig
 import org.lfdecentralizedtrust.splice.environment.SpliceLedgerClient
 import org.lfdecentralizedtrust.splice.http.HttpClient
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.{
-  BackfillingScanConnection,
-  BftScanConnection,
-}
-import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.BackfillingScanConnection
 import org.lfdecentralizedtrust.splice.scan.store.ScanHistoryBackfilling.{
   FoundingTransactionTreeUpdate,
   InitialTransactionTreeUpdate,
@@ -35,7 +31,7 @@ import org.lfdecentralizedtrust.splice.store.{
 }
 import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 import com.digitalasset.canton.data.CantonTimestamp
-import com.digitalasset.canton.lifecycle.{AsyncOrSyncCloseable, SyncCloseable}
+import com.digitalasset.canton.lifecycle.AsyncOrSyncCloseable
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
@@ -282,7 +278,14 @@ class ScanHistoryBackfillingTrigger(
   private def performImportUpdatesBackfilling()(implicit
       traceContext: TraceContext
   ): Future[TaskOutcome] = for {
-    connection <- getOrCreateScanConnection()
+    connection <- getOrCreateScanConnection(
+      store,
+      svName,
+      ledgerClient,
+      context,
+      upgradesConfig,
+      loggerFactory,
+    )
     backfilling = getOrCreateBackfilling(connection)
     outcome <- backfilling.backfillImportUpdates().map {
       case ImportUpdatesBackfilling.Outcome.MoreWorkAvailableNow(workDone) =>
@@ -304,14 +307,7 @@ class ScanHistoryBackfillingTrigger(
   } yield outcome
 
   override def closeAsync(): Seq[AsyncOrSyncCloseable] = {
-    connectionVar
-      .map(connection =>
-        SyncCloseable(
-          "closing scan connection",
-          connection.close(),
-        )
-      )
-      .toList
+    closeScanConnection().toList
   }
 }
 
