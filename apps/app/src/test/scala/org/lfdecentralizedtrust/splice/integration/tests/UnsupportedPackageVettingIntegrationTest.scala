@@ -45,6 +45,11 @@ class UnsupportedPackageVettingIntegrationTest
     with AmuletConfigUtil
     with WalletTestUtil {
 
+  // Prevent failures due to:
+  //   NO_VETTED_INTERFACE_IMPLEMENTATION_PACKAGE(9,f5ce331d):
+  //   No vetted package for rendering the interface view for package-name 'splice-amulet'
+  override protected def runTokenStandardCliSanityCheck: Boolean = false
+
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
       .simpleTopology1Sv(this.getClass.getSimpleName)

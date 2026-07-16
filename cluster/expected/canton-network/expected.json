@@ -413,50 +413,6 @@
             "version": "0.3.21"
           }
         }
-      },
-      "disableOnboardingParticipantPromotionDelay": false,
-      "expectedValidatorOnboardings": [
-        {
-          "expiresIn": "24h",
-          "name": "splitwell2",
-          "secret": "splitwellsecret2"
-        },
-        {
-          "expiresIn": "24h",
-          "name": "validator12",
-          "secret": "validator1secret2"
-        }
-      ],
-      "identitiesBackupLocation": {
-        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
-        "value": {
-          "bucket": {
-            "bucketName": "da-cn-data-dumps",
-            "jsonCredentials": "{\"bucketName\":\"data-export-bucket-name\",\"secretName\":\"data-export-bucket-sa-key-secret\",\"jsonCredentials\":\"data-export-bucket-sa-key-secret-creds\"}",
-            "projectId": "da-cn-devnet",
-            "secretName": "cn-gcp-bucket-da-cn-devnet-da-cn-data-dumps"
-          }
-        }
-      },
-      "isDevNet": false,
-      "periodicBackupConfig": {
-        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
-        "value": {
-          "backupInterval": "10m",
-          "location": {
-            "bucket": {
-              "bucketName": "da-cn-data-dumps",
-              "jsonCredentials": "{\"bucketName\":\"data-export-bucket-name\",\"secretName\":\"data-export-bucket-sa-key-secret\",\"jsonCredentials\":\"data-export-bucket-sa-key-secret-creds\"}",
-              "projectId": "da-cn-devnet",
-              "secretName": "cn-gcp-bucket-da-cn-devnet-da-cn-data-dumps"
-            }
-          }
-        }
-      },
-      "splitPostgresInstances": true,
-      "topupConfig": {
-        "minTopupInterval": "1m",
-        "targetThroughput": 0
       }
     },
     "name": "dso",
@@ -1144,22 +1100,45 @@
   {
     "custom": true,
     "id": "",
-    "inputs": {},
-    "name": "mock-sv-1-bulk-hmac",
+    "inputs": {
+      "bucket": "mock-sv-1-bulk-committed",
+      "member": "serviceAccount:undefined",
+      "role": "roles/storage.objectCreator"
+    },
+    "name": "mock-sv-1-bulk-committed-sa-role-creator",
     "provider": "",
-    "type": "gcp:storage/hmacKey:HmacKey"
+    "type": "gcp:storage/bucketIAMMember:BucketIAMMember"
   },
   {
     "custom": true,
     "id": "",
     "inputs": {
-      "bucket": "mock-sv-1-bulk",
+      "bucket": "mock-sv-1-bulk-committed",
       "member": "serviceAccount:undefined",
-      "role": "roles/storage.objectUser"
+      "role": "roles/storage.objectViewer"
     },
-    "name": "mock-sv-1-bulk-sa-role",
+    "name": "mock-sv-1-bulk-committed-sa-role-reader",
     "provider": "",
     "type": "gcp:storage/bucketIAMMember:BucketIAMMember"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "location": "europe-west6",
+      "name": "mock-sv-1-bulk-committed"
+    },
+    "name": "mock-sv-1-bulk-committed",
+    "provider": "",
+    "type": "gcp:storage/bucket:Bucket"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {},
+    "name": "mock-sv-1-bulk-sa-hmac",
+    "provider": "",
+    "type": "gcp:storage/hmacKey:HmacKey"
   },
   {
     "custom": true,
@@ -1176,10 +1155,57 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "location": "europe-west6",
-      "name": "mock-sv-1-bulk"
+      "bucket": "mock-sv-1-bulk-staging",
+      "member": "serviceAccount:undefined",
+      "role": "roles/storage.objectUser"
     },
-    "name": "mock-sv-1-bulk",
+    "name": "mock-sv-1-bulk-staging-sa-role",
+    "provider": "",
+    "type": "gcp:storage/bucketIAMMember:BucketIAMMember"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "location": "europe-west6",
+      "name": "mock-sv-1-bulk-staging"
+    },
+    "name": "mock-sv-1-bulk-staging",
+    "provider": "",
+    "type": "gcp:storage/bucket:Bucket"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "bucket": "mock-sv-da-1-bulk-committed",
+      "member": "serviceAccount:undefined",
+      "role": "roles/storage.objectCreator"
+    },
+    "name": "mock-sv-da-1-bulk-committed-sa-role-creator",
+    "provider": "",
+    "type": "gcp:storage/bucketIAMMember:BucketIAMMember"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "bucket": "mock-sv-da-1-bulk-committed",
+      "member": "serviceAccount:undefined",
+      "role": "roles/storage.objectViewer"
+    },
+    "name": "mock-sv-da-1-bulk-committed-sa-role-reader",
+    "provider": "",
+    "type": "gcp:storage/bucketIAMMember:BucketIAMMember"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "location": "europe-west6",
+      "name": "mock-sv-da-1-bulk-committed"
+    },
+    "name": "mock-sv-da-1-bulk-committed",
     "provider": "",
     "type": "gcp:storage/bucket:Bucket"
   },
@@ -1187,21 +1213,9 @@
     "custom": true,
     "id": "",
     "inputs": {},
-    "name": "mock-sv-da-1-bulk-hmac",
+    "name": "mock-sv-da-1-bulk-sa-hmac",
     "provider": "",
     "type": "gcp:storage/hmacKey:HmacKey"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "bucket": "mock-sv-da-1-bulk",
-      "member": "serviceAccount:undefined",
-      "role": "roles/storage.objectUser"
-    },
-    "name": "mock-sv-da-1-bulk-sa-role",
-    "provider": "",
-    "type": "gcp:storage/bucketIAMMember:BucketIAMMember"
   },
   {
     "custom": true,
@@ -1218,10 +1232,22 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "location": "europe-west6",
-      "name": "mock-sv-da-1-bulk"
+      "bucket": "mock-sv-da-1-bulk-staging",
+      "member": "serviceAccount:undefined",
+      "role": "roles/storage.objectUser"
     },
-    "name": "mock-sv-da-1-bulk",
+    "name": "mock-sv-da-1-bulk-staging-sa-role",
+    "provider": "",
+    "type": "gcp:storage/bucketIAMMember:BucketIAMMember"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "location": "europe-west6",
+      "name": "mock-sv-da-1-bulk-staging"
+    },
+    "name": "mock-sv-da-1-bulk-staging",
     "provider": "",
     "type": "gcp:storage/bucket:Bucket"
   },
@@ -1808,146 +1834,146 @@
         },
         "/registry/allocation-instruction/v1/allocation-factory": {
           "fillInterval": "60s",
-          "maxTokens": 500,
+          "maxTokens": 720,
           "name": "registry-allocation-factory",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 10,
-            "tokensPerFill": 5
+            "maxTokens": 120,
+            "tokensPerFill": 120
           },
-          "tokensPerFill": 500,
+          "tokensPerFill": 720,
           "type": "limited"
         },
         "/registry/allocation-instruction/v2": {
           "fillInterval": "60s",
-          "maxTokens": 500,
+          "maxTokens": 720,
           "name": "registry-allocation-instruction-v2",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 10,
-            "tokensPerFill": 5
+            "maxTokens": 120,
+            "tokensPerFill": 120
           },
-          "tokensPerFill": 500,
+          "tokensPerFill": 720,
           "type": "limited"
         },
         "/registry/allocation-instruction/v2/allocation-factory": {
           "fillInterval": "60s",
-          "maxTokens": 500,
+          "maxTokens": 720,
           "name": "registry-allocation-factory-v2",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 10,
-            "tokensPerFill": 5
+            "maxTokens": 120,
+            "tokensPerFill": 120
           },
-          "tokensPerFill": 500,
+          "tokensPerFill": 720,
           "type": "limited"
         },
         "/registry/allocation/v2/settlement-factory": {
           "fillInterval": "60s",
-          "maxTokens": 500,
+          "maxTokens": 720,
           "name": "registry-settlement-factory-v2",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 10,
-            "tokensPerFill": 5
+            "maxTokens": 120,
+            "tokensPerFill": 120
           },
-          "tokensPerFill": 500,
+          "tokensPerFill": 720,
           "type": "limited"
         },
         "/registry/allocations/v1": {
           "fillInterval": "60s",
-          "maxTokens": 500,
+          "maxTokens": 720,
           "name": "registry-allocations",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 10,
-            "tokensPerFill": 5
+            "maxTokens": 120,
+            "tokensPerFill": 120
           },
-          "tokensPerFill": 500,
+          "tokensPerFill": 720,
           "type": "limited"
         },
         "/registry/allocations/v2": {
           "fillInterval": "60s",
-          "maxTokens": 500,
+          "maxTokens": 720,
           "name": "registry-allocations-v2",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 10,
-            "tokensPerFill": 5
+            "maxTokens": 120,
+            "tokensPerFill": 120
           },
-          "tokensPerFill": 500,
+          "tokensPerFill": 720,
           "type": "limited"
         },
         "/registry/metadata/v1/info": {
           "fillInterval": "60s",
-          "maxTokens": 500,
+          "maxTokens": 720,
           "name": "registry-metadata-info",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 10,
-            "tokensPerFill": 5
+            "maxTokens": 120,
+            "tokensPerFill": 120
           },
-          "tokensPerFill": 500,
+          "tokensPerFill": 720,
           "type": "limited"
         },
         "/registry/metadata/v1/instruments": {
           "fillInterval": "60s",
-          "maxTokens": 500,
+          "maxTokens": 720,
           "name": "registry-metadata-instruments",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 10,
-            "tokensPerFill": 5
+            "maxTokens": 120,
+            "tokensPerFill": 120
           },
-          "tokensPerFill": 500,
+          "tokensPerFill": 720,
           "type": "limited"
         },
         "/registry/transfer-instruction/v1": {
           "fillInterval": "60s",
-          "maxTokens": 500,
+          "maxTokens": 720,
           "name": "registry-transfer-instruction",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 10,
-            "tokensPerFill": 5
+            "maxTokens": 120,
+            "tokensPerFill": 120
           },
-          "tokensPerFill": 500,
+          "tokensPerFill": 720,
           "type": "limited"
         },
         "/registry/transfer-instruction/v1/transfer-factory": {
           "fillInterval": "60s",
-          "maxTokens": 500,
+          "maxTokens": 730,
           "name": "registry-transfer-factory",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 10,
-            "tokensPerFill": 5
+            "maxTokens": 120,
+            "tokensPerFill": 120
           },
-          "tokensPerFill": 500,
+          "tokensPerFill": 730,
           "type": "limited"
         },
         "/registry/transfer-instruction/v2": {
           "fillInterval": "60s",
-          "maxTokens": 500,
+          "maxTokens": 720,
           "name": "registry-transfer-instruction-v2",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 10,
-            "tokensPerFill": 5
+            "maxTokens": 120,
+            "tokensPerFill": 120
           },
-          "tokensPerFill": 500,
+          "tokensPerFill": 720,
           "type": "limited"
         },
         "/registry/transfer-instruction/v2/transfer-factory": {
           "fillInterval": "60s",
-          "maxTokens": 500,
+          "maxTokens": 720,
           "name": "registry-transfer-factory-v2",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 10,
-            "tokensPerFill": 5
+            "maxTokens": 120,
+            "tokensPerFill": 120
           },
-          "tokensPerFill": 500,
+          "tokensPerFill": 720,
           "type": "limited"
         }
       }
@@ -2191,146 +2217,146 @@
         },
         "/registry/allocation-instruction/v1/allocation-factory": {
           "fillInterval": "60s",
-          "maxTokens": 500,
+          "maxTokens": 720,
           "name": "registry-allocation-factory",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 10,
-            "tokensPerFill": 5
+            "maxTokens": 120,
+            "tokensPerFill": 120
           },
-          "tokensPerFill": 500,
+          "tokensPerFill": 720,
           "type": "limited"
         },
         "/registry/allocation-instruction/v2": {
           "fillInterval": "60s",
-          "maxTokens": 500,
+          "maxTokens": 720,
           "name": "registry-allocation-instruction-v2",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 10,
-            "tokensPerFill": 5
+            "maxTokens": 120,
+            "tokensPerFill": 120
           },
-          "tokensPerFill": 500,
+          "tokensPerFill": 720,
           "type": "limited"
         },
         "/registry/allocation-instruction/v2/allocation-factory": {
           "fillInterval": "60s",
-          "maxTokens": 500,
+          "maxTokens": 720,
           "name": "registry-allocation-factory-v2",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 10,
-            "tokensPerFill": 5
+            "maxTokens": 120,
+            "tokensPerFill": 120
           },
-          "tokensPerFill": 500,
+          "tokensPerFill": 720,
           "type": "limited"
         },
         "/registry/allocation/v2/settlement-factory": {
           "fillInterval": "60s",
-          "maxTokens": 500,
+          "maxTokens": 720,
           "name": "registry-settlement-factory-v2",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 10,
-            "tokensPerFill": 5
+            "maxTokens": 120,
+            "tokensPerFill": 120
           },
-          "tokensPerFill": 500,
+          "tokensPerFill": 720,
           "type": "limited"
         },
         "/registry/allocations/v1": {
           "fillInterval": "60s",
-          "maxTokens": 500,
+          "maxTokens": 720,
           "name": "registry-allocations",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 10,
-            "tokensPerFill": 5
+            "maxTokens": 120,
+            "tokensPerFill": 120
           },
-          "tokensPerFill": 500,
+          "tokensPerFill": 720,
           "type": "limited"
         },
         "/registry/allocations/v2": {
           "fillInterval": "60s",
-          "maxTokens": 500,
+          "maxTokens": 720,
           "name": "registry-allocations-v2",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 10,
-            "tokensPerFill": 5
+            "maxTokens": 120,
+            "tokensPerFill": 120
           },
-          "tokensPerFill": 500,
+          "tokensPerFill": 720,
           "type": "limited"
         },
         "/registry/metadata/v1/info": {
           "fillInterval": "60s",
-          "maxTokens": 500,
+          "maxTokens": 720,
           "name": "registry-metadata-info",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 10,
-            "tokensPerFill": 5
+            "maxTokens": 120,
+            "tokensPerFill": 120
           },
-          "tokensPerFill": 500,
+          "tokensPerFill": 720,
           "type": "limited"
         },
         "/registry/metadata/v1/instruments": {
           "fillInterval": "60s",
-          "maxTokens": 500,
+          "maxTokens": 720,
           "name": "registry-metadata-instruments",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 10,
-            "tokensPerFill": 5
+            "maxTokens": 120,
+            "tokensPerFill": 120
           },
-          "tokensPerFill": 500,
+          "tokensPerFill": 720,
           "type": "limited"
         },
         "/registry/transfer-instruction/v1": {
           "fillInterval": "60s",
-          "maxTokens": 500,
+          "maxTokens": 720,
           "name": "registry-transfer-instruction",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 10,
-            "tokensPerFill": 5
+            "maxTokens": 120,
+            "tokensPerFill": 120
           },
-          "tokensPerFill": 500,
+          "tokensPerFill": 720,
           "type": "limited"
         },
         "/registry/transfer-instruction/v1/transfer-factory": {
           "fillInterval": "60s",
-          "maxTokens": 500,
+          "maxTokens": 730,
           "name": "registry-transfer-factory",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 10,
-            "tokensPerFill": 5
+            "maxTokens": 120,
+            "tokensPerFill": 120
           },
-          "tokensPerFill": 500,
+          "tokensPerFill": 730,
           "type": "limited"
         },
         "/registry/transfer-instruction/v2": {
           "fillInterval": "60s",
-          "maxTokens": 500,
+          "maxTokens": 720,
           "name": "registry-transfer-instruction-v2",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 10,
-            "tokensPerFill": 5
+            "maxTokens": 120,
+            "tokensPerFill": 120
           },
-          "tokensPerFill": 500,
+          "tokensPerFill": 720,
           "type": "limited"
         },
         "/registry/transfer-instruction/v2/transfer-factory": {
           "fillInterval": "60s",
-          "maxTokens": 500,
+          "maxTokens": 720,
           "name": "registry-transfer-factory-v2",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 10,
-            "tokensPerFill": 5
+            "maxTokens": 120,
+            "tokensPerFill": 120
           },
-          "tokensPerFill": 500,
+          "tokensPerFill": 720,
           "type": "limited"
         }
       }
@@ -3467,8 +3493,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 500,
-                          "tokens_per_fill": 500
+                          "max_tokens": 720,
+                          "tokens_per_fill": 720
                         }
                       },
                       {
@@ -3483,8 +3509,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 10,
-                          "tokens_per_fill": 5
+                          "max_tokens": 120,
+                          "tokens_per_fill": 120
                         }
                       },
                       {
@@ -3496,8 +3522,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 500,
-                          "tokens_per_fill": 500
+                          "max_tokens": 720,
+                          "tokens_per_fill": 720
                         }
                       },
                       {
@@ -3512,8 +3538,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 10,
-                          "tokens_per_fill": 5
+                          "max_tokens": 120,
+                          "tokens_per_fill": 120
                         }
                       },
                       {
@@ -3525,8 +3551,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 500,
-                          "tokens_per_fill": 500
+                          "max_tokens": 720,
+                          "tokens_per_fill": 720
                         }
                       },
                       {
@@ -3541,8 +3567,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 10,
-                          "tokens_per_fill": 5
+                          "max_tokens": 120,
+                          "tokens_per_fill": 120
                         }
                       },
                       {
@@ -3554,8 +3580,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 500,
-                          "tokens_per_fill": 500
+                          "max_tokens": 720,
+                          "tokens_per_fill": 720
                         }
                       },
                       {
@@ -3570,8 +3596,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 10,
-                          "tokens_per_fill": 5
+                          "max_tokens": 120,
+                          "tokens_per_fill": 120
                         }
                       },
                       {
@@ -3583,8 +3609,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 500,
-                          "tokens_per_fill": 500
+                          "max_tokens": 720,
+                          "tokens_per_fill": 720
                         }
                       },
                       {
@@ -3599,8 +3625,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 10,
-                          "tokens_per_fill": 5
+                          "max_tokens": 120,
+                          "tokens_per_fill": 120
                         }
                       },
                       {
@@ -3612,8 +3638,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 500,
-                          "tokens_per_fill": 500
+                          "max_tokens": 730,
+                          "tokens_per_fill": 730
                         }
                       },
                       {
@@ -3628,8 +3654,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 10,
-                          "tokens_per_fill": 5
+                          "max_tokens": 120,
+                          "tokens_per_fill": 120
                         }
                       },
                       {
@@ -3641,8 +3667,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 500,
-                          "tokens_per_fill": 500
+                          "max_tokens": 720,
+                          "tokens_per_fill": 720
                         }
                       },
                       {
@@ -3657,8 +3683,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 10,
-                          "tokens_per_fill": 5
+                          "max_tokens": 120,
+                          "tokens_per_fill": 120
                         }
                       },
                       {
@@ -3670,8 +3696,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 500,
-                          "tokens_per_fill": 500
+                          "max_tokens": 720,
+                          "tokens_per_fill": 720
                         }
                       },
                       {
@@ -3686,8 +3712,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 10,
-                          "tokens_per_fill": 5
+                          "max_tokens": 120,
+                          "tokens_per_fill": 120
                         }
                       },
                       {
@@ -3699,8 +3725,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 500,
-                          "tokens_per_fill": 500
+                          "max_tokens": 720,
+                          "tokens_per_fill": 720
                         }
                       },
                       {
@@ -3715,8 +3741,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 10,
-                          "tokens_per_fill": 5
+                          "max_tokens": 120,
+                          "tokens_per_fill": 120
                         }
                       },
                       {
@@ -3728,8 +3754,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 500,
-                          "tokens_per_fill": 500
+                          "max_tokens": 720,
+                          "tokens_per_fill": 720
                         }
                       },
                       {
@@ -3744,8 +3770,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 10,
-                          "tokens_per_fill": 5
+                          "max_tokens": 120,
+                          "tokens_per_fill": 120
                         }
                       },
                       {
@@ -3757,8 +3783,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 500,
-                          "tokens_per_fill": 500
+                          "max_tokens": 720,
+                          "tokens_per_fill": 720
                         }
                       },
                       {
@@ -3773,8 +3799,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 10,
-                          "tokens_per_fill": 5
+                          "max_tokens": 120,
+                          "tokens_per_fill": 120
                         }
                       },
                       {
@@ -3786,8 +3812,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 500,
-                          "tokens_per_fill": 500
+                          "max_tokens": 720,
+                          "tokens_per_fill": 720
                         }
                       },
                       {
@@ -3802,8 +3828,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 10,
-                          "tokens_per_fill": 5
+                          "max_tokens": 120,
+                          "tokens_per_fill": 120
                         }
                       }
                     ],
@@ -4007,8 +4033,14 @@
         },
         "apiRequestLogLevel": "DEBUG",
         "bulkStorage": {
-          "s3": {
-            "bucketName": "mock-sv-1-bulk",
+          "committed": {
+            "bucketName": "mock-sv-1-bulk-committed",
+            "endpoint": "https://storage.googleapis.com",
+            "region": "europe-west6",
+            "secretName": "splice-app-bulk-storage-credentials"
+          },
+          "staging": {
+            "bucketName": "mock-sv-1-bulk-staging",
             "endpoint": "https://storage.googleapis.com",
             "region": "europe-west6",
             "secretName": "splice-app-bulk-storage-credentials"
@@ -5604,8 +5636,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 500,
-                          "tokens_per_fill": 500
+                          "max_tokens": 720,
+                          "tokens_per_fill": 720
                         }
                       },
                       {
@@ -5620,8 +5652,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 10,
-                          "tokens_per_fill": 5
+                          "max_tokens": 120,
+                          "tokens_per_fill": 120
                         }
                       },
                       {
@@ -5633,8 +5665,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 500,
-                          "tokens_per_fill": 500
+                          "max_tokens": 720,
+                          "tokens_per_fill": 720
                         }
                       },
                       {
@@ -5649,8 +5681,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 10,
-                          "tokens_per_fill": 5
+                          "max_tokens": 120,
+                          "tokens_per_fill": 120
                         }
                       },
                       {
@@ -5662,8 +5694,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 500,
-                          "tokens_per_fill": 500
+                          "max_tokens": 720,
+                          "tokens_per_fill": 720
                         }
                       },
                       {
@@ -5678,8 +5710,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 10,
-                          "tokens_per_fill": 5
+                          "max_tokens": 120,
+                          "tokens_per_fill": 120
                         }
                       },
                       {
@@ -5691,8 +5723,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 500,
-                          "tokens_per_fill": 500
+                          "max_tokens": 720,
+                          "tokens_per_fill": 720
                         }
                       },
                       {
@@ -5707,8 +5739,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 10,
-                          "tokens_per_fill": 5
+                          "max_tokens": 120,
+                          "tokens_per_fill": 120
                         }
                       },
                       {
@@ -5720,8 +5752,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 500,
-                          "tokens_per_fill": 500
+                          "max_tokens": 720,
+                          "tokens_per_fill": 720
                         }
                       },
                       {
@@ -5736,8 +5768,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 10,
-                          "tokens_per_fill": 5
+                          "max_tokens": 120,
+                          "tokens_per_fill": 120
                         }
                       },
                       {
@@ -5749,8 +5781,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 500,
-                          "tokens_per_fill": 500
+                          "max_tokens": 730,
+                          "tokens_per_fill": 730
                         }
                       },
                       {
@@ -5765,8 +5797,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 10,
-                          "tokens_per_fill": 5
+                          "max_tokens": 120,
+                          "tokens_per_fill": 120
                         }
                       },
                       {
@@ -5778,8 +5810,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 500,
-                          "tokens_per_fill": 500
+                          "max_tokens": 720,
+                          "tokens_per_fill": 720
                         }
                       },
                       {
@@ -5794,8 +5826,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 10,
-                          "tokens_per_fill": 5
+                          "max_tokens": 120,
+                          "tokens_per_fill": 120
                         }
                       },
                       {
@@ -5807,8 +5839,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 500,
-                          "tokens_per_fill": 500
+                          "max_tokens": 720,
+                          "tokens_per_fill": 720
                         }
                       },
                       {
@@ -5823,8 +5855,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 10,
-                          "tokens_per_fill": 5
+                          "max_tokens": 120,
+                          "tokens_per_fill": 120
                         }
                       },
                       {
@@ -5836,8 +5868,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 500,
-                          "tokens_per_fill": 500
+                          "max_tokens": 720,
+                          "tokens_per_fill": 720
                         }
                       },
                       {
@@ -5852,8 +5884,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 10,
-                          "tokens_per_fill": 5
+                          "max_tokens": 120,
+                          "tokens_per_fill": 120
                         }
                       },
                       {
@@ -5865,8 +5897,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 500,
-                          "tokens_per_fill": 500
+                          "max_tokens": 720,
+                          "tokens_per_fill": 720
                         }
                       },
                       {
@@ -5881,8 +5913,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 10,
-                          "tokens_per_fill": 5
+                          "max_tokens": 120,
+                          "tokens_per_fill": 120
                         }
                       },
                       {
@@ -5894,8 +5926,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 500,
-                          "tokens_per_fill": 500
+                          "max_tokens": 720,
+                          "tokens_per_fill": 720
                         }
                       },
                       {
@@ -5910,8 +5942,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 10,
-                          "tokens_per_fill": 5
+                          "max_tokens": 120,
+                          "tokens_per_fill": 120
                         }
                       },
                       {
@@ -5923,8 +5955,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 500,
-                          "tokens_per_fill": 500
+                          "max_tokens": 720,
+                          "tokens_per_fill": 720
                         }
                       },
                       {
@@ -5939,8 +5971,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 10,
-                          "tokens_per_fill": 5
+                          "max_tokens": 120,
+                          "tokens_per_fill": 120
                         }
                       }
                     ],
@@ -6033,8 +6065,14 @@
         },
         "apiRequestLogLevel": "DEBUG",
         "bulkStorage": {
-          "s3": {
-            "bucketName": "mock-sv-da-1-bulk",
+          "committed": {
+            "bucketName": "mock-sv-da-1-bulk-committed",
+            "endpoint": "https://storage.googleapis.com",
+            "region": "europe-west6",
+            "secretName": "splice-app-bulk-storage-credentials"
+          },
+          "staging": {
+            "bucketName": "mock-sv-da-1-bulk-staging",
             "endpoint": "https://storage.googleapis.com",
             "region": "europe-west6",
             "secretName": "splice-app-bulk-storage-credentials"

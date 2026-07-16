@@ -22,6 +22,7 @@ participant:
     requests:
       cpu: "1"
 sequencer:
+  enableAntiAffinity: false
   # formerly the effect of `SEQUENCER_LOW_RESOURCES=true`
   resources:
     limits:

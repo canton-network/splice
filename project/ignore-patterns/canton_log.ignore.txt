@@ -94,6 +94,9 @@ ACS_COMMITMENT_MISMATCH.*aliceValidatorLocalNewForValidatorReonboardingIT
 # In principle the confirmations from three of the mediators and counter-participants should be sufficient, but who knows what we do in all tests; ignoring unless it causes problems
 Response message for request.*timed out.*c.d.c.p.p.TransactionProcessor:participant=
 
+# Transient WARN triggered by a shutdown of the sync connection while the participant is sending confirmation responses.
+Failed to send responses: RequestFailed\(No connection available\).*c.d.c.p.p.TransactionProcessor:participant=
+
 # TODO(#936): remove these ignores if possible
 The operation 'insert block' has failed with an exception
 Now retrying operation 'insert block'
@@ -177,7 +180,7 @@ Missing successor information for the following sequencers.*sv4
 Skipping insertion of pending onboarding flag clearance operation as no party ID was provided
 
 # LSU: submissions on the old physical synchronizer after the upgrade time has passed are rejected
-Request failed for server-DefaultSequencer-0.\\n  GrpcRequestRefusedByServer: FAILED_PRECONDITION/SEQUENCER_SUBMISSION_AFTER_UPGRADE_TIME
+GrpcRequestRefusedByServer: FAILED_PRECONDITION/SEQUENCER_SUBMISSION_AFTER_UPGRADE_TIME
 # LSU SV4 migrates late
 SEQ::sv4.*Sequencer can't take requests because it is behind on processing events
 Sequencer can't take requests because it is behind on processing events.*sequencer=>sv4StandaloneSequencer

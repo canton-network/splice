@@ -121,7 +121,7 @@ monitoring:
           rate: 25
           overMinutes: 5
       dsoMissedConfirmations:
-        threshold: 0.01
+        threshold: 0 # alert as soon as there's any confirmation missing
         windowMinutes: 10
       cloudSql:
         maintenance: false

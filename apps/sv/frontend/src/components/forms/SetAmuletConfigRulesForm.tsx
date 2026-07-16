@@ -293,7 +293,7 @@ export const SetAmuletConfigRulesForm: () => JSX.Element = () => {
         </>
       )}
 
-      <JsonDiffAccordion>
+      <JsonDiffAccordion variant={showConfirmation ? 'review' : 'form'}>
         {amuletConfigToCompareWith && amuletConfigToCompareWith[1] ? (
           <PrettyJsonDiff
             changes={{

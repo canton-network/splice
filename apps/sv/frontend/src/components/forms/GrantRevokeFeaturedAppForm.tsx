@@ -5,7 +5,11 @@ import { ActionRequiringConfirmation } from '@daml.js/splice-dso-governance/lib/
 import { useSearchParams } from 'react-router';
 import { useDsoInfos } from '../../contexts/SvContext';
 import dayjs from 'dayjs';
-import { createProposalActions, getInitialExpiration } from '../../utils/governance';
+import {
+  activityWeightToOptional,
+  createProposalActions,
+  getInitialExpiration,
+} from '../../utils/governance';
 import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import { useAppForm } from '../../hooks/form';
 import { useStore } from '@tanstack/react-form';
@@ -14,6 +18,7 @@ import { CommonProposalFormData } from '../../utils/types';
 import { ContractId } from '@daml/types';
 import { FeaturedAppRight } from '@daml.js/splice-amulet/lib/Splice/Amulet';
 import {
+  validateActivityWeight,
   validateEffectiveDate,
   validateExpiration,
   validateExpiryEffectiveDate,
@@ -38,6 +43,7 @@ interface ExtraFormField {
   idValue: ProviderId;
   partyId: ProviderId;
   rightCid: FeaturedAppRightId;
+  activityWeight: string;
 }
 
 export type GrantRevokeFeaturedAppFormData = CommonProposalFormData & ExtraFormField;
@@ -137,6 +143,7 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
     idValue: '',
     partyId: '',
     rightCid: '',
+    activityWeight: '',
   };
 
   const form = useAppForm({
@@ -152,7 +159,10 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
           value: {
             dsoAction: {
               tag: 'SRARC_GrantFeaturedAppRight',
-              value: { provider: formValues.idValue, activityWeight: null },
+              value: {
+                provider: formValues.idValue,
+                activityWeight: activityWeightToOptional(formValues.activityWeight),
+              },
             },
           },
         }),
@@ -215,6 +225,7 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
             effectiveDate={form.state.values.effectiveDate.effectiveDate}
             formType={reviewFormKey}
             grantRight={form.state.values.idValue}
+            activityWeight={form.state.values.activityWeight}
             providerPartyId={form.state.values.partyId}
             revokeRight={form.state.values.rightCid}
             onEdit={() => setShowConfirmation(false)}
@@ -242,6 +253,24 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
                     title={providerFieldTitle}
                     id={`${testIdPrefix}-idValue`}
                     subtitle={field.state.meta.isValidating ? 'Validating provider...' : undefined}
+                  />
+                )}
+              </form.AppField>
+            )}
+
+            {formAction === 'SRARC_GrantFeaturedAppRight' && (
+              <form.AppField
+                name="activityWeight"
+                validators={{
+                  onBlur: ({ value }) => validateActivityWeight(value),
+                  onChange: ({ value }) => validateActivityWeight(value),
+                }}
+              >
+                {field => (
+                  <field.TextField
+                    title="Activity Weight"
+                    id={`${testIdPrefix}-activityWeight`}
+                    subtitle="Optional. Leave blank to use the default weight"
                   />
                 )}
               </form.AppField>

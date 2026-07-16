@@ -20,6 +20,8 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.rewardaccounti
   BatchOfBatches,
   BatchOfMintingAllowances,
 }
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRules
+import org.lfdecentralizedtrust.splice.environment.PackageIdResolver
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   GetRewardAccountingBatchResponse,
   RewardAccountingMintingAllowance,
@@ -27,12 +29,13 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.{BftScanConnection, ScanConnection}
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.store.PageLimit
-import org.lfdecentralizedtrust.splice.util.AssignedContract
+import org.lfdecentralizedtrust.splice.util.{AmuletConfigSchedule, AssignedContract, Contract}
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
 import com.daml.metrics.api.{MetricInfo, MetricName, MetricsContext}
 import com.daml.metrics.api.MetricsContext.Implicits.empty
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.tracing.TraceContext
+import com.digitalasset.daml.lf.language.Ast
 import io.grpc.Status
 import io.opentelemetry.api.trace.Tracer
 import org.lfdecentralizedtrust.splice.codegen.java.da.set.types.Set as DamlSet
@@ -82,11 +85,16 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
     val batchHash = processRewards.payload.batchHash.value
     val batchF = fetchBatch(round, batchHash)
     val dsoRulesF = store.getDsoRules()
+    val amuletRulesF = store.getAmuletRules()
     for {
       batch <- batchF
       dsoRules <- dsoRulesF
+      amuletRules <- amuletRulesF
       damlBatch = convertBatch(batch)
-      providersWithWrongVettingState <- determineProvidersWithWrongVettingState(batch)
+      providersWithWrongVettingState <- determineProvidersWithWrongVettingState(
+        batch,
+        amuletRules,
+      )
       choiceArg = new ProcessRewardsV2_ProcessBatch(
         damlBatch,
         providersWithWrongVettingState,
@@ -149,7 +157,8 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
     }
 
   private def determineProvidersWithWrongVettingState(
-      batch: GetRewardAccountingBatchResponse
+      batch: GetRewardAccountingBatchResponse,
+      amuletRules: Contract[AmuletRules.ContractId, AmuletRules],
   )(implicit tc: TraceContext): Future[DamlSet[String]] = {
     val providers = batch match {
       case GetRewardAccountingBatchResponse.members.RewardAccountingBatchOfMintingAllowances(
@@ -160,12 +169,34 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
         Vector.empty[String]
     }
     val now = context.clock.now
+
+    // Checking for vetting state on the active amulet version is conservative,
+    // but it ensures that we don't hit issues where the common version vetted by
+    // all providers in a batch is below the version where V2 was introduced. (see #6372)
+    //
+    // Being conservative here is OK, as this keeps our vetting state checking
+    // simple, while avoiding potential issues in the submission of ProcessBatch.
+    // And also because the UnhideRewardCouponV2Trigger would make the coupons
+    // visible based on the vetting state of each party.
+    // In practice we expect most providers to have vetted the active amulet version.
+    val activeAmuletVersionMetadata = Ast.PackageMetadata(
+      PackageIdResolver.Package.SpliceAmulet.packageName,
+      PackageIdResolver.readPackageVersion(
+        AmuletConfigSchedule(amuletRules).getConfigAsOf(now).packageConfig,
+        PackageIdResolver.Package.SpliceAmulet,
+      ),
+      None,
+    )
     Future
       .traverse(providers) { provider =>
         val partyId = PartyId.tryFromProtoPrimitive(provider)
         svTaskContext.packageVersionSupport
-          .supportsTrafficBasedAppRewards(Seq(partyId), now)
-          .map(support => provider -> support.supported)
+          .isPackageSupported(
+            Seq(PackageIdResolver.Package.SpliceAmulet -> Seq(store.key.dsoParty, partyId)),
+            now,
+            activeAmuletVersionMetadata,
+          )
+          .map(supported => provider -> supported.supported)
       }
       .map { supportByProvider =>
         val withWrongVettingState = supportByProvider.collect { case (provider, false) => provider }

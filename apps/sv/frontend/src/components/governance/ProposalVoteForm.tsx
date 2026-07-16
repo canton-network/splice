@@ -126,7 +126,6 @@ export const ProposalVoteForm: React.FC<ProposalVoteFormProps> = props => {
                       '& .MuiFilledInput-root': {
                         borderRadius: 1,
                         paddingTop: 1,
-                        fontFamily: 'Lato',
                         '&:before, &:after': {
                           display: 'none',
                         },
@@ -180,7 +179,6 @@ export const ProposalVoteForm: React.FC<ProposalVoteFormProps> = props => {
                     sx={{
                       '& .MuiFilledInput-root': {
                         borderRadius: 1,
-                        fontFamily: 'Lato',
                         '&:before, &:after': {
                           display: 'none',
                         },
