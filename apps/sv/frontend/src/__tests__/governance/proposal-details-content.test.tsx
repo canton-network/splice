@@ -13,6 +13,7 @@ import {
   ProposalVote,
   ProposalVotingInformation,
   UnclaimedActivityRecordProposal,
+  UpdateFeatureAppProposal,
   UpdateSvRewardWeightProposal,
 } from '../../utils/types';
 import userEvent from '@testing-library/user-event';
@@ -283,6 +284,64 @@ describe('Proposal Details Content', () => {
 
     const rightContractIdValue = screen.getByTestId('proposal-details-unfeature-app-value');
     expect(rightContractIdValue.textContent).toMatch(/rightContractId/);
+  });
+
+  test('should render update featured app proposal details', () => {
+    const updateFeaturedAppDetails = {
+      actionName: 'Update Featured Application',
+      action: 'SRARC_UpdateFeaturedAppRight',
+      proposal: {
+        rightContractId: 'rightCid123',
+        newActivityWeight: '2.5',
+        reason: 'boosting rewards',
+      } as UpdateFeatureAppProposal,
+    } as ProposalDetails;
+
+    render(
+      <Wrapper>
+        <ProposalDetailsContent
+          currentSvPartyId={voteRequest.votingInformation.requester}
+          contractId={voteRequest.contractId}
+          proposalDetails={updateFeaturedAppDetails}
+          votingInformation={voteRequest.votingInformation}
+          votes={voteRequest.votes}
+        />
+      </Wrapper>
+    );
+
+    const action = screen.getByTestId('proposal-details-action-value');
+    expect(action.textContent).toMatch('Update Featured Application');
+
+    const updateFeaturedAppSection = screen.getByTestId(
+      'proposal-details-update-feature-app-section'
+    );
+    expect(updateFeaturedAppSection).toBeInTheDocument();
+
+    const updateFeaturedAppLabel = screen.getByTestId('proposal-details-update-feature-app-label');
+    expect(updateFeaturedAppLabel.textContent).toMatch('Featured Application Contract ID');
+
+    const updateFeaturedAppValue = screen.getByTestId('proposal-details-update-feature-app-value');
+    expect(updateFeaturedAppValue.textContent).toMatch('rightCid123');
+
+    const updateFeaturedActivityWeightLabel = screen.getByTestId(
+      'proposal-details-update-feature-activity-weight-label'
+    );
+    expect(updateFeaturedActivityWeightLabel.textContent).toMatch('Activity Weight');
+
+    const updateFeaturedActivityWeightValue = screen.getByTestId(
+      'proposal-details-update-feature-activity-weight-value'
+    );
+    expect(updateFeaturedActivityWeightValue.textContent).toMatch('2.5');
+
+    const updateFeaturedReasonLabel = screen.getByTestId(
+      'proposal-details-update-feature-reason-label'
+    );
+    expect(updateFeaturedReasonLabel.textContent).toMatch('Reason');
+
+    const updateFeaturedReasonValue = screen.getByTestId(
+      'proposal-details-update-feature-reason-value'
+    );
+    expect(updateFeaturedReasonValue.textContent).toMatch('boosting rewards');
   });
 
   test('should render update sv reward weight proposal details', () => {

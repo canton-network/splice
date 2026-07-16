@@ -720,14 +720,14 @@ const UpdateFeatureAppSection = ({
       <DetailItem
         label="Activity Weight"
         value={newActivityWeight}
-        labelId="proposal-details-update-feature-value"
-        valueId="proposal-details-update-feature-app-label"
+        labelId="proposal-details-update-feature-activity-weight-label"
+        valueId="proposal-details-update-feature-activity-weight-value"
       />
       <DetailItem
         label="Reason"
         value={reason}
-        labelId="proposal-details-update-feature-value"
-        valueId="proposal-details-update-feature-app-label"
+        labelId="proposal-details-update-feature-reason-label"
+        valueId="proposal-details-update-feature-reason-value"
       />
     </Box>
   );

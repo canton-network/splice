@@ -201,6 +201,60 @@ describe('Review Proposal Component', () => {
     expect(screen.getByTestId('revokeRight-field').textContent).toBe(contractId);
   });
 
+  test('should render review proposal component for update feature application', () => {
+    const actionName = 'Update Featured Application';
+    const providerPartyId = 'a-party-id::1014912492';
+    const rightCid = 'bcde123456';
+    const newActivityWeight = '2.5';
+    const reason = 'boosting rewards';
+
+    render(
+      <ProposalSummary
+        actionName={actionName}
+        url={url}
+        summary={summary}
+        expiryDate={expiryDate}
+        effectiveDate={effectiveDate}
+        formType="update-right"
+        providerPartyId={providerPartyId}
+        rightCid={rightCid}
+        newActivityWeight={newActivityWeight}
+        reason={reason}
+        onEdit={() => {}}
+        onSubmit={() => {}}
+      />
+    );
+
+    expect(screen.getByTestId('action-title').textContent).toBe('Action');
+    expect(screen.getByTestId('action-field').textContent).toBe(actionName);
+
+    expect(screen.getByTestId('url-title').textContent).toBe('URL');
+    expect(screen.getByTestId('url-field').textContent).toBe(url);
+
+    expect(screen.getByTestId('summary-title').textContent).toBe('Summary');
+    expect(screen.getByTestId('summary-field').textContent).toBe(summary);
+
+    expect(screen.getByTestId('expiryDate-title').textContent).toBe('Threshold Deadline');
+    expect(screen.getByTestId('expiryDate-field').textContent).toBe(expiryDate);
+
+    expect(screen.getByTestId('effectiveDate-title').textContent).toBe('Effective Date');
+    expect(screen.getByTestId('effectiveDate-field').textContent).toBe(effectiveDate);
+
+    expect(screen.getByTestId('updateProviderPartyId-title').textContent).toBe('Provider Party ID');
+    expect(screen.getByTestId('updateProviderPartyId-field').textContent).toBe(providerPartyId);
+
+    expect(screen.getByTestId('updateRight-title').textContent).toBe(
+      'Featured Application Contract ID'
+    );
+    expect(screen.getByTestId('updateRight-field').textContent).toBe(rightCid);
+
+    expect(screen.getByTestId('updateActivityWeight-title').textContent).toBe('Activity Weight');
+    expect(screen.getByTestId('updateActivityWeight-field').textContent).toBe(newActivityWeight);
+
+    expect(screen.getByTestId('updateReason-title').textContent).toBe('Reason');
+    expect(screen.getByTestId('updateReason-field').textContent).toBe(reason);
+  });
+
   test('should render review proposal component for dso rules config', () => {
     const actionName = 'Set DSO Rules Configuration';
     const numThresholdTitle = 'Number of Unclaimed Rewards Threshold';

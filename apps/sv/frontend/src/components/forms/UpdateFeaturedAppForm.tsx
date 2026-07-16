@@ -140,7 +140,9 @@ export const UpdateFeaturedAppForm: React.FC = () => {
                 <field.TextField
                   title={'Provider Party ID'}
                   id={`${idPrefix}-partyId`}
-                  subtitle={field.state.meta.isValidating ? 'Loading app rights...' : undefined}
+                  subtitle={
+                    field.state.meta.isValidating ? 'Loading featured app rights...' : undefined
+                  }
                   onChange={() => {
                     picker.resetOptions();
                   }}
