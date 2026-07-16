@@ -99,14 +99,14 @@ class FeaturedAppActivityMarkerTrigger(
       .map {
         _.toSeq.flatMap {
           case (Some(version), markerBatches) =>
-            markerBatches.map(
+            markerBatches.map { markers =>
               Task(
                 batch.retrievalKind,
-                _,
+                markers,
                 version,
-                getInformeesFromContracts(batch.markers),
+                getInformeesFromContracts(markers),
               )
-            )
+            }
           case (None, markers) =>
             logger.warn(show"No vetted amulet version for $markers")
             Seq.empty
@@ -202,7 +202,7 @@ class FeaturedAppActivityMarkerTrigger(
   ): Future[TaskOutcome] = {
     completeWithIgnoredAmuletVersionCheck(
       task.vettedAmuletVersion.toString,
-      task.stakeholders,
+      task.informees,
       store.key.dsoParty,
       // ignoring a party would mean their featured app activity markers do not get converted into rewards
       enableUnresponsivePartiesAutoIgnore = false,
@@ -218,7 +218,7 @@ class FeaturedAppActivityMarkerTrigger(
       amuletRules <- store.getAmuletRules()
       now = context.clock.now
       openMiningRound <- store.getLatestUsableOpenMiningRound(now)
-      stakeholders = task.stakeholders
+      stakeholders = task.informees + store.key.dsoParty
       supportsConvertFeaturedAppActivityMarkerObservers <-
         if (svConfig.convertFeaturedAppActivityMarkerObservers) {
           svTaskContext.packageVersionSupport
@@ -293,7 +293,7 @@ object FeaturedAppActivityMarkerTrigger
         Contract[amulet.FeaturedAppActivityMarker.ContractId, amulet.FeaturedAppActivityMarker]
       ],
       vettedAmuletVersion: PackageVersion,
-      stakeholders: Set[PartyId],
+      informees: Set[PartyId],
   ) extends PrettyPrinting {
     override def pretty: Pretty[this.type] =
       prettyOfClass(
@@ -301,7 +301,7 @@ object FeaturedAppActivityMarkerTrigger
         param("numMarkers", _.markers.size),
         param("vettedAmuletVersion", _.vettedAmuletVersion),
         param("markerCids", _.markers.map(_.contractId.contractId.unquoted)),
-        param("stakeholders", _.stakeholders),
+        param("informees", _.informees),
       )
   }
 
