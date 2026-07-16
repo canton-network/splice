@@ -16,7 +16,7 @@ groups:
             datasourceUid: prometheus
             model:
               editorMode: code
-              expr: avg_over_time(sum by (node_type) (splice_store_acs_size{namespace="sv-1"})[1d:1h])
+              expr: avg_over_time(sum by (node_type) (splice_history_acs_snapshots_snapshot_size{namespace="sv-1"})[1d:1h])
               instant: true
               intervalMs: 1000
               legendFormat: __auto
@@ -33,7 +33,7 @@ groups:
                 type: prometheus
                 uid: prometheus
               editorMode: code
-              expr: avg_over_time(sum by (node_type) (splice_store_acs_size{namespace="sv-1"})[7d:1h] offset 1d) or avg_over_time(sum by (node_type) (splice_store_acs_size{namespace="sv-1"})[1d:1h])
+              expr: avg_over_time(sum by (node_type) (splice_history_acs_snapshots_snapshot_size{namespace="sv-1"})[7d:1h] offset 1d) or avg_over_time(sum by (node_type) (splice_history_acs_snapshots_snapshot_size{namespace="sv-1"})[1d:1h])
               instant: true
               intervalMs: 1000
               legendFormat: __auto
