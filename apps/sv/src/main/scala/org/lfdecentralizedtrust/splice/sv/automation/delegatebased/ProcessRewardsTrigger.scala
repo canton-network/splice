@@ -178,6 +178,7 @@ private[delegatebased] abstract class ProcessRewardsTriggerBase(
     // simple, while avoiding potential issues in the submission of ProcessBatch.
     // And also because the UnhideRewardCouponV2Trigger would make the coupons
     // visible based on the vetting state of each party.
+    // In practice we expect most providers to have vetted the active amulet version.
     val activeAmuletVersionMetadata = Ast.PackageMetadata(
       PackageIdResolver.Package.SpliceAmulet.packageName,
       PackageIdResolver.readPackageVersion(

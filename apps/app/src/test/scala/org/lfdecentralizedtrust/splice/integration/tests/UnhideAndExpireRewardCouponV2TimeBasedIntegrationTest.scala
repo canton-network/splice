@@ -274,6 +274,12 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
             minV2AmuletPackageId
           vettedPackagesOnSv1View(bobParticipantId)
             .intersect(amuletVersionsAboveOldestV2) shouldBe empty
+
+          val aliceVettedAboveMin =
+            vettedPackagesOnSv1View(aliceParticipantId).intersect(amuletVersionsAboveOldestV2)
+          val bobVettedAboveMin =
+            vettedPackagesOnSv1View(bobParticipantId).intersect(amuletVersionsAboveOldestV2)
+          aliceVettedAboveMin.intersect(bobVettedAboveMin) shouldBe empty
         },
       )
 
