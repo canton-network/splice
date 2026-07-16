@@ -118,6 +118,9 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
             .withPausedTrigger[CollectRewardsAndMergeAmuletsTrigger]
         )(config)
       )
+      // Pause SV reward collection so that it does not race against
+      // advanceTimeAndWaitForRoundOpening in the activity block,
+      // which would cause "Skipped N SV rewards" warnings
       .addConfigTransform((_, config) =>
         updateAutomationConfig(ConfigurableApp.Sv)(
           _.withPausedTrigger[ReceiveSvRewardCouponTrigger]
