@@ -43,7 +43,7 @@ class ExpiredAmuletAllocationV2Trigger(
       splice.amuletallocationv2.AmuletAllocationV2.COMPANION,
       svTaskContext.vettingLookupService,
       PackageIdResolver.Package.SpliceAmulet,
-      ExpiredAmuletAllocationV2Trigger.getObservers,
+      ExpiredAmuletAllocationV2Trigger.getInformees,
     )
     with SvTaskBasedTrigger[ExpiredAmuletAllocationV2Trigger.Task]
     with IgnoredAmuletVersionGuard {
@@ -57,7 +57,7 @@ class ExpiredAmuletAllocationV2Trigger(
       tc: TraceContext
   ): Future[TaskOutcome] = {
     val expiredStakeholders =
-      ExpiredAmuletAllocationV2Trigger.getObserversFromAssignedContracts(task.work.expiredContracts)
+      ExpiredAmuletAllocationV2Trigger.getInformeesFromAssignedContracts(task.work.expiredContracts)
     completeWithIgnoredAmuletVersionCheck(
       task.work.vettedVersion.toString,
       expiredStakeholders,
@@ -68,9 +68,9 @@ class ExpiredAmuletAllocationV2Trigger(
   private def completeExpiryTaskAsDsoDelegate(
       task: ExpiredAmuletAllocationV2Trigger.Task,
       controller: String,
-      observers: Set[PartyId],
+      informees: Set[PartyId],
   )(implicit tc: TraceContext): Future[TaskOutcome] = {
-    val stakeholders = observers + store.key.dsoParty
+    val stakeholders = informees + store.key.dsoParty
     for {
       packageSupport <- svTaskContext.packageVersionSupport.supportsAmuletAllocationV2(
         stakeholders.toSeq,
@@ -122,7 +122,7 @@ class ExpiredAmuletAllocationV2Trigger(
             expireAllocations =
               new splice.externalpartyamuletrules.ExternalPartyAmuletRules_ExpireAmuletAllocationsV2(
                 cancellations.asJava,
-                observers.map(_.toProtoPrimitive).toList.asJava,
+                informees.map(_.toProtoPrimitive).toList.asJava,
               )
             res <- svTaskContext
               .connection(SpliceLedgerConnectionPriority.AmuletExpiry)
@@ -167,7 +167,7 @@ object ExpiredAmuletAllocationV2Trigger
       ]
     ]
 
-  override def observers(payload: splice.amuletallocationv2.AmuletAllocationV2): Seq[String] = Seq(
+  override def informees(payload: splice.amuletallocationv2.AmuletAllocationV2): Seq[String] = Seq(
     payload.allocation.admin
   ) ++ payload.allocation.authorizer.owner.toScala.toList ++ payload.settlement.executors.asScala
 

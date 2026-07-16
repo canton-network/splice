@@ -16,7 +16,7 @@ import ExpireRewardCouponV2Trigger.{
   Coupon,
   CouponCid,
   getStakeholders,
-  getObserversFromAssignedContracts,
+  getInformeesFromAssignedContracts,
 }
 import org.lfdecentralizedtrust.splice.environment.{DarResources, PackageIdResolver}
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
@@ -60,7 +60,7 @@ class ExpireRewardCouponV2Trigger(
       )
     } else {
       val cids = expiredCoupons.map(_.contractId).asJava
-      val expiryObservers = getObserversFromAssignedContracts(expiredCoupons)
+      val expiryInformees = getInformeesFromAssignedContracts(expiredCoupons)
         .map(_.toProtoPrimitive)
         .toSeq
         .distinct
@@ -73,7 +73,7 @@ class ExpireRewardCouponV2Trigger(
             amuletRules.contractId,
             new AmuletRules_ClaimExpiredRewardsV2(
               cids,
-              expiryObservers.asJava,
+              expiryInformees.asJava,
             ),
             controller,
           )
@@ -102,7 +102,7 @@ object ExpireRewardCouponV2Trigger extends ContractStakeholders[splice.amulet.Re
       BatchedMultiDomainExpiredContractTrigger.Batch[CouponCid, Coupon]
     ]
 
-  override def observers(payload: splice.amulet.RewardCouponV2): Seq[String] = if (
+  override def informees(payload: splice.amulet.RewardCouponV2): Seq[String] = if (
     payload.providerIsObserver
   ) payload.provider +: payload.beneficiary.toScala.toList
   else Seq.empty

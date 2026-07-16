@@ -29,7 +29,7 @@ import FeaturedAppActivityMarkerTrigger.{
   CrossVersionBatch,
   Task,
   getStakeholders,
-  getObserversFromContracts,
+  getInformeesFromContracts,
 }
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
@@ -198,26 +198,26 @@ class FeaturedAppActivityMarkerTrigger(
   override def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = {
-    val observers = getObserversFromContracts(task.markers)
+    val informees = getInformeesFromContracts(task.markers)
     completeWithIgnoredAmuletVersionCheck(
       task.vettedAmuletVersion.toString,
-      observers,
+      informees,
       // ignoring a party would mean their featured app activity markers do not get converted into rewards
       enableUnresponsivePartiesAutoIgnore = false,
-    )(completeExpiryTaskAsDsoDelegate(task, controller, observers))
+    )(completeExpiryTaskAsDsoDelegate(task, controller, informees))
   }
 
   private def completeExpiryTaskAsDsoDelegate(
       task: Task,
       controller: String,
-      observers: Set[PartyId],
+      informees: Set[PartyId],
   )(implicit tc: TraceContext): Future[TaskOutcome] = {
     for {
       dsoRules <- store.getDsoRules()
       amuletRules <- store.getAmuletRules()
       now = context.clock.now
       openMiningRound <- store.getLatestUsableOpenMiningRound(now)
-      stakeholders = observers + PartyId.tryFromProtoPrimitive(dsoRules.payload.dso)
+      stakeholders = informees + PartyId.tryFromProtoPrimitive(dsoRules.payload.dso)
       supportsConvertFeaturedAppActivityMarkerObservers <-
         if (svConfig.convertFeaturedAppActivityMarkerObservers) {
           svTaskContext.packageVersionSupport
@@ -302,7 +302,7 @@ object FeaturedAppActivityMarkerTrigger
       )
   }
 
-  override def observers(payload: amulet.FeaturedAppActivityMarker): Seq[String] =
+  override def informees(payload: amulet.FeaturedAppActivityMarker): Seq[String] =
     Seq(payload.provider, payload.beneficiary)
 
   override def dso(payload: amulet.FeaturedAppActivityMarker): Option[String] = Some(payload.dso)

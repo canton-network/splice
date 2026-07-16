@@ -156,16 +156,16 @@ class ExpireRewardCouponsTrigger(
   override def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = {
-    val observers = ValidatorCoupons.getObserversFromContracts(task.batch.validatorCoupons) ++
-      AppRewardCoupons.getObserversFromContracts(task.batch.appCoupons) ++
-      SvRewardCoupons.getObserversFromContracts(task.batch.svRewardCoupons) ++
-      ValidatorFaucetCoupons.getObserversFromContracts(task.batch.validatorFaucets) ++
-      ValidatorLivenessActivityRecords.getObserversFromContracts(
+    val informees = ValidatorCoupons.getInformeesFromContracts(task.batch.validatorCoupons) ++
+      AppRewardCoupons.getInformeesFromContracts(task.batch.appCoupons) ++
+      SvRewardCoupons.getInformeesFromContracts(task.batch.svRewardCoupons) ++
+      ValidatorFaucetCoupons.getInformeesFromContracts(task.batch.validatorFaucets) ++
+      ValidatorLivenessActivityRecords.getInformeesFromContracts(
         task.batch.validatorLivenessActivityRecords
       )
     completeWithIgnoredAmuletVersionCheck(
       task.vettedAmuletVersion.toString,
-      observers,
+      informees,
       enableUnresponsivePartiesAutoIgnore = true,
     )(completeExpiryTaskAsDsoDelegate(task, controller))
   }
@@ -317,32 +317,32 @@ object ExpireRewardCouponsTrigger {
 }
 
 object ValidatorCoupons extends ContractStakeholders[splice.amulet.ValidatorRewardCoupon] {
-  override def observers(payload: splice.amulet.ValidatorRewardCoupon): Seq[String] = Seq(
+  override def informees(payload: splice.amulet.ValidatorRewardCoupon): Seq[String] = Seq(
     payload.user
   )
   override def dso(payload: splice.amulet.ValidatorRewardCoupon): Option[String] = Some(payload.dso)
 }
 
 object AppRewardCoupons extends ContractStakeholders[splice.amulet.AppRewardCoupon] {
-  override def observers(payload: splice.amulet.AppRewardCoupon): Seq[String] =
+  override def informees(payload: splice.amulet.AppRewardCoupon): Seq[String] =
     Seq(payload.provider) ++ payload.beneficiary.toScala.toList
   override def dso(payload: splice.amulet.AppRewardCoupon): Option[String] = Some(payload.dso)
 }
 
 object SvRewardCoupons extends ContractStakeholders[splice.amulet.SvRewardCoupon] {
-  override def observers(payload: splice.amulet.SvRewardCoupon): Seq[String] =
+  override def informees(payload: splice.amulet.SvRewardCoupon): Seq[String] =
     Seq(payload.sv, payload.beneficiary)
   override def dso(payload: splice.amulet.SvRewardCoupon): Option[String] = Some(payload.dso)
 }
 
 object ValidatorFaucetCoupons extends ContractStakeholders[ValidatorFaucetCoupon] {
-  override def observers(payload: ValidatorFaucetCoupon): Seq[String] = Seq(payload.validator)
+  override def informees(payload: ValidatorFaucetCoupon): Seq[String] = Seq(payload.validator)
   override def dso(payload: ValidatorFaucetCoupon): Option[String] = Some(payload.dso)
 }
 
 object ValidatorLivenessActivityRecords
     extends ContractStakeholders[ValidatorLivenessActivityRecord] {
-  override def observers(payload: ValidatorLivenessActivityRecord): Seq[String] = Seq(
+  override def informees(payload: ValidatorLivenessActivityRecord): Seq[String] = Seq(
     payload.validator
   )
   override def dso(payload: ValidatorLivenessActivityRecord): Option[String] = Some(payload.dso)

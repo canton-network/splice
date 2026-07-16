@@ -14,8 +14,8 @@ import org.apache.pekko.stream.Materializer
 import scala.concurrent.{ExecutionContext, Future}
 import ExpiredAmuletTransferInstructionTrigger.{
   Task,
-  getObservers,
-  getObserversFromAssignedContracts,
+  getInformees,
+  getInformeesFromAssignedContracts,
 }
 import com.digitalasset.canton.util.MonadUtil
 import org.lfdecentralizedtrust.splice.environment.PackageIdResolver
@@ -47,7 +47,7 @@ class ExpiredAmuletTransferInstructionTrigger(
       svTaskContext.vettingLookupService,
       PackageIdResolver.Package.SpliceAmulet,
       instruction =>
-        getObservers(instruction) :+
+        getInformees(instruction) :+
           PartyId.tryFromProtoPrimitive(
             svTaskContext.dsoStore.key.dsoParty.partyId.toProtoPrimitive
           ),
@@ -60,20 +60,20 @@ class ExpiredAmuletTransferInstructionTrigger(
   override def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = {
-    val observers = getObserversFromAssignedContracts(task.work.expiredContracts)
+    val informees = getInformeesFromAssignedContracts(task.work.expiredContracts)
     completeWithIgnoredAmuletVersionCheck(
       task.work.vettedVersion.toString,
-      observers,
+      informees,
       enableUnresponsivePartiesAutoIgnore = true,
-    )(completeExpiryTaskAsDsoDelegate(task, controller, observers))
+    )(completeExpiryTaskAsDsoDelegate(task, controller, informees))
   }
 
   private def completeExpiryTaskAsDsoDelegate(
       task: Task,
       controller: String,
-      observers: Set[PartyId],
+      informees: Set[PartyId],
   )(implicit tc: TraceContext): Future[TaskOutcome] = {
-    val allParties = observers + store.key.dsoParty
+    val allParties = informees + store.key.dsoParty
 
     for {
       packageSupport <- svTaskContext.packageVersionSupport.supportsExpireTransferInstructions(
@@ -119,7 +119,7 @@ class ExpiredAmuletTransferInstructionTrigger(
 
             inputs = inputsWithParties.map(_._1)
 
-            observers = inputsWithParties.flatMap(_._2).toSet + store.key.dsoParty
+            informees = inputsWithParties.flatMap(_._2).toSet + store.key.dsoParty
 
             res <-
               if (inputs.isEmpty) {
@@ -131,7 +131,7 @@ class ExpiredAmuletTransferInstructionTrigger(
                   new splice.amuletrules.AmuletRules_Amulet_ExpireTransferInstructions(
                     dsoRules.payload.dso,
                     inputs.asJava,
-                    observers.map(_.toProtoPrimitive).toList.asJava,
+                    informees.map(_.toProtoPrimitive).toList.asJava,
                   )
 
                 svTaskContext
@@ -175,7 +175,7 @@ object ExpiredAmuletTransferInstructionTrigger
       ]
     ]
 
-  override def observers(
+  override def informees(
       payload: splice.amulettransferinstruction.AmuletTransferInstruction
   ): Seq[String] = Seq(payload.transfer.sender, payload.transfer.receiver)
 
