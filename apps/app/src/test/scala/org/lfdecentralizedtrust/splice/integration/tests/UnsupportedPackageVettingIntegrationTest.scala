@@ -269,6 +269,7 @@ class UnsupportedPackageVettingIntegrationTest
               _.message should include regex "Success: dars .*48cac5ba4b6bf78df6c3a952ce05409a1d2ef39c05351074679adc0cf9cd1351.* are removed .*"
             )
           },
+          timeUntilSuccess = 40.seconds,
         )
       }
 
