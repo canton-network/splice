@@ -178,3 +178,7 @@ api/sv/v0/onboard/validator \(POST\) resulted in a timeout
 # The same warning is emitted by both the FlywayExecutor and the ClassPathScanner loggers.
 # a single pattern matching the message (the unloadable sbt tests jar) covers both.
 Skipping unloadable jar file: file:.*-tests\.jar
+
+# The BFT bootstrap test adds a dummy 5th SV with an unreachable scan URL (http://localhost:1)
+# to raise f from 0 to 1. All BFT peers attempt to connect to this URL and log warnings.
+Failed to connect to scan of.*NonZeroRoundBootstrapBftTimeBasedIntegrationTest
