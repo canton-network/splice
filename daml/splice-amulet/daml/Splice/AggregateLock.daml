@@ -65,22 +65,24 @@ validateVestingSchedule VestingSchedule_SV now meta =
     now < start && end `subTime` start == days 365 + hours 6
 validateVestingSchedule VestingSchedule_Immediate _ _ = True
 
-calculateAvailableWithdrawAmount : Time -> V2.AllocationView -> Decimal -> Decimal
-calculateAvailableWithdrawAmount currentDateTime alloc nextIterationFundAmount = max 0.0 availAmount
+-- TODO: Potentially make return type, it's own data type?
+calculateAvailableWithdrawAmount : Time -> V2.AllocationView -> Decimal -> (Decimal, Decimal)
+calculateAvailableWithdrawAmount currentDateTime alloc nextIterationFundAmount = max (0.0, 0.0) availAmount
   where
     availAmount = if currentDateTime >= endDate
-      then nextIterationFundAmount
-      else 0.0
-      -- (initialAmount * totalVestedPercentageElapsed) - withdrawnAmount
+      then (nextIterationFundAmount, 0.0)
+      else (availableWithdrawAmount, remainingVestingAmount)
+    availableWithdrawAmount = (initialAmount * totalVestedRatioElapsed) - withdrawnAmount
+    remainingVestingAmount = nextIterationFundAmount - availableWithdrawAmount
     meta = alloc.allocation.meta.values
     -- The initial amount represents the total that was locked initially when thrown into vesting state
-    initialAmount = fromSome $ TM.lookup "cip-105/vestingLock.initialAmount" meta
-    startDate = decodeTime . fromSome $ TM.lookup "cip-105/vestingLock.startDate" meta
-    endDate = decodeTime . fromSome $ TM.lookup "cip-105/vestingLock.endDate" meta
-    --totalUnlockPeriod = intToDecimal . convertRelTimeToMicroseconds $ subTime endDate startDate
-    --unlockPeriodElapsed = intToDecimal . convertRelTimeToMicroseconds $ subTime currentDateTime startDate
-    --totalVestedPercentageElapsed : Decimal = unlockPeriodElapsed / totalUnlockPeriod
-    --withdrawnAmount = initialAmount - nextIterationFundAmount
+    initialAmount : Decimal = fromSome . parseDecimal . fromSome $ TM.lookup "cip-105/vestingLock.initialAmount" meta
+    startDate : Time  =  decodeTime . fromSome $ TM.lookup "cip-105/vestingLock.startDate" meta
+    endDate : Time = decodeTime . fromSome $ TM.lookup "cip-105/vestingLock.endDate" meta
+    totalUnlockPeriod : Decimal = intToDecimal . convertRelTimeToMicroseconds $ subTime endDate startDate
+    unlockPeriodElapsed : Decimal = intToDecimal . convertRelTimeToMicroseconds $ subTime currentDateTime startDate
+    totalVestedRatioElapsed : Decimal = unlockPeriodElapsed / totalUnlockPeriod
+    withdrawnAmount = initialAmount - nextIterationFundAmount
 
 
 -- | The intention is to treat the overall aggregate lock for a SV as if it is
@@ -172,8 +174,10 @@ template AggregateLock
                   nextIterationFunding = Some $ TM.singleton instrumentId amount
               ]
     -- Choice temporarily lives here and it will be moved, testing/draft purposes atm
-    nonconsuming choice VestingLock_Withdraw : () -- AllocationResult
+    -- Note: this whole choice is WIP
+    nonconsuming choice VestingLock_Withdraw : () -- TODO: Return type possibly AllocationResult
       with
+        factoryCid : ContractId SettlementFactory
         authorizers : [Party]
         vestingLockCid : ContractId Allocation
       where
@@ -181,10 +185,64 @@ template AggregateLock
         do
           -- remainingLocked stays in nextIterationFunding
           vestingLock <- view <$> fetch vestingLockCid
+          now <- getTime
 
+          -- TODO: Probably add valid unlockController set check?
+          -- TODO: Potentially do case statement with nextIterationFunding optionals
           require "There are no remaining funds to withdraw"
             $ isSome vestingLock.allocation.nextIterationFunding
+
+          let mNextIterationFunding = TM.lookup instrumentId $ fromSome vestingLock.allocation.nextIterationFunding
+          require ("The instrumentId " <> show instrumentId <> ", does not exist under the nextIterationFunding")
+            $ isSome mNextIterationFunding
           require "There must be an initialAmount set for the vestingLock"
             $ TM.member "cip-105/vestingLock.initialAmount" vestingLock.allocation.meta.values
+
+          let (availableWithdrawAmount, remainingVestingAmount) : (Decimal, Decimal) = calculateAvailableWithdrawAmount now vestingLock
+                $ fromSome mNextIterationFunding
+
+          require ("Current eligible withdraw amount for vesting lock is not greater than 0.0. "
+                  <> "currentEligibleWithdrawableAmount came back = '"
+                  <> show availableWithdrawAmount
+                  <> "'."
+                  )
+            $ availableWithdrawAmount > 0.0
+
+          let
+            info = SettlementInfo with
+              executors = [ dso ]
+              id = "VestingLock_Withdraw"
+              cid = Some $ coerceContractId vestingLockCid
+              meta = emptyMetadata
+            transferLegId = "withdraw"
+
+          exercise factoryCid $ SettlementFactory_SettleBatch with
+            settlement = info
+            actors = [ dso ]
+            extraArgs = ExtraArgs emptyChoiceContext emptyMetadata
+            transferLegs =
+              [ TransferLeg with
+                  transferLegId
+                  sender = vestingLock.allocation.authorizer
+                  receiver = vestingLock.allocation.authorizer
+                  amount = availableWithdrawAmount
+                  instrumentId
+                  meta = emptyMetadata
+              ]
+            allocations =
+              [ FinalizedAllocation with
+                  allocationCid = vestingLockCid
+                  extraTransferLegSides =
+                    [ TransferLegSide with
+                      transferLegId
+                      side = SenderSide
+                      otherside = vestingLock.allocation.authorizer
+                      amount = remainingVestingAmount
+                      instrumentId
+                      meta = emptyMetadata
+                    ]
+                  nextIterationFunding = Some $ TM.singleton instrumentId remainingVestingAmount
+              ]
+
 
           pure ()
