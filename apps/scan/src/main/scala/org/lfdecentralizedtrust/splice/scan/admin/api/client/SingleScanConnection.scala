@@ -32,6 +32,7 @@ import org.lfdecentralizedtrust.splice.environment.{
 }
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
+  GetBulkObjectChecksumsResponse,
   GetRewardAccountingActivityTotalsResponse,
   GetRewardAccountingBatchResponse,
   GetRewardAccountingRootHashResponse,
@@ -1026,6 +1027,14 @@ class SingleScanConnection private[client] (
     runHttpCmd(
       config.adminApi.url,
       HttpScanAppClient.GetRewardAccountingBatch(roundNumber, batchHash),
+    )
+
+  override def getBulkObjectChecksums(
+      objectKeys: Seq[String]
+  )(implicit ec: ExecutionContext, tc: TraceContext): Future[GetBulkObjectChecksumsResponse] =
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetBulkObjectChecksums(objectKeys),
     )
 }
 
