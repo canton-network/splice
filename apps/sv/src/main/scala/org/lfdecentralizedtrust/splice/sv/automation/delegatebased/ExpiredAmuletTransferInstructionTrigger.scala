@@ -12,12 +12,17 @@ import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
 
 import scala.concurrent.{ExecutionContext, Future}
-import ExpiredAmuletTransferInstructionTrigger.*
+import ExpiredAmuletTransferInstructionTrigger.{
+  Task,
+  getObservers,
+  getObserversFromAssignedContracts,
+}
 import com.digitalasset.canton.util.MonadUtil
 import org.lfdecentralizedtrust.splice.environment.PackageIdResolver
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 import org.lfdecentralizedtrust.splice.sv.store.IgnoredPartiesStore
+import org.lfdecentralizedtrust.splice.sv.util.ContractStakeholders
 
 import scala.jdk.CollectionConverters.*
 
@@ -42,11 +47,10 @@ class ExpiredAmuletTransferInstructionTrigger(
       svTaskContext.vettingLookupService,
       PackageIdResolver.Package.SpliceAmulet,
       instruction =>
-        Seq(
-          instruction.transfer.sender,
-          instruction.transfer.receiver,
-          svTaskContext.dsoStore.key.dsoParty.partyId.toProtoPrimitive,
-        ).map(PartyId.tryFromProtoPrimitive),
+        getObservers(instruction) :+
+          PartyId.tryFromProtoPrimitive(
+            svTaskContext.dsoStore.key.dsoParty.partyId.toProtoPrimitive
+          ),
     )
     with SvTaskBasedTrigger[Task]
     with IgnoredAmuletVersionGuard {
@@ -56,24 +60,20 @@ class ExpiredAmuletTransferInstructionTrigger(
   override def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = {
-    val informees = task.work.expiredContracts
-      .map(c => PartyId.tryFromProtoPrimitive(c.payload.transfer.sender))
-      .toSet ++ task.work.expiredContracts
-      .map(c => PartyId.tryFromProtoPrimitive(c.payload.transfer.receiver))
-      .toSet
+    val observers = getObserversFromAssignedContracts(task.work.expiredContracts)
     completeWithIgnoredAmuletVersionCheck(
       task.work.vettedVersion.toString,
-      informees,
+      observers,
       enableUnresponsivePartiesAutoIgnore = true,
-    )(completeExpiryTaskAsDsoDelegate(task, controller, informees))
+    )(completeExpiryTaskAsDsoDelegate(task, controller, observers))
   }
 
   private def completeExpiryTaskAsDsoDelegate(
       task: Task,
       controller: String,
-      informees: Set[PartyId],
+      observers: Set[PartyId],
   )(implicit tc: TraceContext): Future[TaskOutcome] = {
-    val allParties = informees + store.key.dsoParty
+    val allParties = observers + store.key.dsoParty
 
     for {
       packageSupport <- svTaskContext.packageVersionSupport.supportsExpireTransferInstructions(
@@ -119,7 +119,7 @@ class ExpiredAmuletTransferInstructionTrigger(
 
             inputs = inputsWithParties.map(_._1)
 
-            informees = inputsWithParties.flatMap(_._2).toSet + store.key.dsoParty
+            observers = inputsWithParties.flatMap(_._2).toSet + store.key.dsoParty
 
             res <-
               if (inputs.isEmpty) {
@@ -131,7 +131,7 @@ class ExpiredAmuletTransferInstructionTrigger(
                   new splice.amuletrules.AmuletRules_Amulet_ExpireTransferInstructions(
                     dsoRules.payload.dso,
                     inputs.asJava,
-                    informees.map(_.toProtoPrimitive).toList.asJava,
+                    observers.map(_.toProtoPrimitive).toList.asJava,
                   )
 
                 svTaskContext
@@ -165,7 +165,8 @@ class ExpiredAmuletTransferInstructionTrigger(
   }
 }
 
-object ExpiredAmuletTransferInstructionTrigger {
+object ExpiredAmuletTransferInstructionTrigger
+    extends ContractStakeholders[splice.amulettransferinstruction.AmuletTransferInstruction] {
   type Task =
     ScheduledTaskTrigger.ReadyTask[
       BatchedMultiDomainExpiredContractTrigger.Batch[
@@ -173,4 +174,12 @@ object ExpiredAmuletTransferInstructionTrigger {
         splice.amulettransferinstruction.AmuletTransferInstruction,
       ]
     ]
+
+  override def observers(
+      payload: splice.amulettransferinstruction.AmuletTransferInstruction
+  ): Seq[String] = Seq(payload.transfer.sender, payload.transfer.receiver)
+
+  override def dso(
+      payload: splice.amulettransferinstruction.AmuletTransferInstruction
+  ): Option[String] = None
 }

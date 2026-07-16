@@ -12,12 +12,13 @@ import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
 
 import scala.concurrent.{ExecutionContext, Future}
-import ExpiredAmuletAllocationTrigger.*
+import ExpiredAmuletAllocationTrigger.{Task, getObservers, getObserversFromAssignedContracts}
 import com.digitalasset.canton.util.MonadUtil
 import org.lfdecentralizedtrust.splice.environment.PackageIdResolver
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 import org.lfdecentralizedtrust.splice.sv.store.IgnoredPartiesStore
+import org.lfdecentralizedtrust.splice.sv.util.ContractStakeholders
 
 import scala.jdk.CollectionConverters.*
 
@@ -42,11 +43,10 @@ class ExpiredAmuletAllocationTrigger(
       svTaskContext.vettingLookupService,
       PackageIdResolver.Package.SpliceAmulet,
       allocation =>
-        Seq(
-          allocation.allocation.transferLeg.sender,
-          allocation.allocation.settlement.executor,
-          svTaskContext.dsoStore.key.dsoParty.partyId.toProtoPrimitive,
-        ).map(PartyId.tryFromProtoPrimitive),
+        getObservers(allocation) :+
+          PartyId.tryFromProtoPrimitive(
+            svTaskContext.dsoStore.key.dsoParty.partyId.toProtoPrimitive
+          ),
     )
     with SvTaskBasedTrigger[Task]
     with IgnoredAmuletVersionGuard {
@@ -56,35 +56,31 @@ class ExpiredAmuletAllocationTrigger(
   override def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = {
-    val informees = task.work.expiredContracts.flatMap { contract =>
-      val sender = PartyId.tryFromProtoPrimitive(contract.payload.allocation.transferLeg.sender)
-      val executor = PartyId.tryFromProtoPrimitive(contract.payload.allocation.settlement.executor)
-      Seq(sender, executor)
-    }.toSet
+    val observers = getObserversFromAssignedContracts(task.work.expiredContracts)
     completeWithIgnoredAmuletVersionCheck(
       task.work.vettedVersion.toString,
-      informees,
+      observers,
       enableUnresponsivePartiesAutoIgnore = true,
-    )(completeExpiryTaskAsDsoDelegate(task, controller, informees))
+    )(completeExpiryTaskAsDsoDelegate(task, controller, observers))
   }
 
   private def completeExpiryTaskAsDsoDelegate(
       task: Task,
       controller: String,
-      informees: Set[PartyId],
+      observers: Set[PartyId],
   )(implicit tc: TraceContext): Future[TaskOutcome] = {
-    val allParties = informees + store.key.dsoParty
+    val stakeholders = observers + store.key.dsoParty
 
     for {
       packageSupport <- svTaskContext.packageVersionSupport.supportsExpireAmuletAllocations(
-        allParties.toSeq,
+        stakeholders.toSeq,
         Seq(store.key.dsoParty),
         clock.now,
       )
       res <-
         if (!packageSupport.supported) {
           logger.info(
-            s"Skipping expiry of ${task.work.expiredContracts.size} allocations because not all parties have vetted the required Amulet package version. Parties: ${allParties
+            s"Skipping expiry of ${task.work.expiredContracts.size} allocations because not all parties have vetted the required Amulet package version. Parties: ${stakeholders
                 .mkString(", ")}"
           )
           Future.successful(
@@ -102,7 +98,7 @@ class ExpiredAmuletAllocationTrigger(
             )
 
             inputs = inputsWithParties.map(_._1)
-            informees = inputsWithParties.flatMap(_._2).toSet
+            observers = inputsWithParties.flatMap(_._2).toSet
 
             res <-
               if (inputs.isEmpty) {
@@ -114,7 +110,7 @@ class ExpiredAmuletAllocationTrigger(
                   new splice.externalpartyamuletrules.ExternalPartyAmuletRules_ExpireAmuletAllocations(
                     dsoRules.payload.dso,
                     inputs.asJava,
-                    informees.map(_.toProtoPrimitive).toList.asJava,
+                    observers.map(_.toProtoPrimitive).toList.asJava,
                   )
 
                 svTaskContext
@@ -180,7 +176,8 @@ class ExpiredAmuletAllocationTrigger(
   }
 }
 
-object ExpiredAmuletAllocationTrigger {
+object ExpiredAmuletAllocationTrigger
+    extends ContractStakeholders[splice.amuletallocation.AmuletAllocation] {
   type Task =
     ScheduledTaskTrigger.ReadyTask[
       BatchedMultiDomainExpiredContractTrigger.Batch[
@@ -188,4 +185,9 @@ object ExpiredAmuletAllocationTrigger {
         splice.amuletallocation.AmuletAllocation,
       ]
     ]
+
+  override def observers(payload: splice.amuletallocation.AmuletAllocation): Seq[String] =
+    Seq(payload.allocation.transferLeg.sender, payload.allocation.settlement.executor)
+
+  override def dso(payload: splice.amuletallocation.AmuletAllocation): Option[String] = None
 }

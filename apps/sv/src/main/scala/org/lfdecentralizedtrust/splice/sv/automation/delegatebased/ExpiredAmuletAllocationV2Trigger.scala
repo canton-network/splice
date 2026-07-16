@@ -15,6 +15,7 @@ import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerC
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 import org.lfdecentralizedtrust.splice.sv.store.IgnoredPartiesStore
 import org.lfdecentralizedtrust.splice.util.{ChoiceContextWithDisclosures, TokenStandardMetadata}
+import org.lfdecentralizedtrust.splice.sv.util.ContractStakeholders
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
@@ -42,7 +43,7 @@ class ExpiredAmuletAllocationV2Trigger(
       splice.amuletallocationv2.AmuletAllocationV2.COMPANION,
       svTaskContext.vettingLookupService,
       PackageIdResolver.Package.SpliceAmulet,
-      ExpiredAmuletAllocationV2Trigger.allocationV2Stakeholders,
+      ExpiredAmuletAllocationV2Trigger.getObservers,
     )
     with SvTaskBasedTrigger[ExpiredAmuletAllocationV2Trigger.Task]
     with IgnoredAmuletVersionGuard {
@@ -55,9 +56,8 @@ class ExpiredAmuletAllocationV2Trigger(
   )(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = {
-    val expiredStakeholders = task.work.expiredContracts.flatMap { contract =>
-      ExpiredAmuletAllocationV2Trigger.allocationV2Stakeholders(contract.payload)
-    }.toSet
+    val expiredStakeholders =
+      ExpiredAmuletAllocationV2Trigger.getObserversFromAssignedContracts(task.work.expiredContracts)
     completeWithIgnoredAmuletVersionCheck(
       task.work.vettedVersion.toString,
       expiredStakeholders,
@@ -68,19 +68,18 @@ class ExpiredAmuletAllocationV2Trigger(
   private def completeExpiryTaskAsDsoDelegate(
       task: ExpiredAmuletAllocationV2Trigger.Task,
       controller: String,
-      informees: Set[PartyId],
+      observers: Set[PartyId],
   )(implicit tc: TraceContext): Future[TaskOutcome] = {
-    val allParties = informees + store.key.dsoParty
-
+    val stakeholders = observers + store.key.dsoParty
     for {
       packageSupport <- svTaskContext.packageVersionSupport.supportsAmuletAllocationV2(
-        allParties.toSeq,
+        stakeholders.toSeq,
         clock.now,
       )
       res <-
         if (!packageSupport.supported) {
           logger.info(
-            s"Skipping expiry of ${task.work.expiredContracts.size} allocations because not all parties have vetted the required Amulet package version. Parties: ${allParties
+            s"Skipping expiry of ${task.work.expiredContracts.size} allocations because not all parties have vetted the required Amulet package version. Parties: ${stakeholders
                 .mkString(", ")}"
           )
           Future.successful(
@@ -123,7 +122,7 @@ class ExpiredAmuletAllocationV2Trigger(
             expireAllocations =
               new splice.externalpartyamuletrules.ExternalPartyAmuletRules_ExpireAmuletAllocationsV2(
                 cancellations.asJava,
-                informees.map(_.toProtoPrimitive).toList.asJava,
+                observers.map(_.toProtoPrimitive).toList.asJava,
               )
             res <- svTaskContext
               .connection(SpliceLedgerConnectionPriority.AmuletExpiry)
@@ -158,7 +157,8 @@ class ExpiredAmuletAllocationV2Trigger(
 
 }
 
-object ExpiredAmuletAllocationV2Trigger {
+object ExpiredAmuletAllocationV2Trigger
+    extends ContractStakeholders[splice.amuletallocationv2.AmuletAllocationV2] {
   type Task =
     ScheduledTaskTrigger.ReadyTask[
       BatchedMultiDomainExpiredContractTrigger.Batch[
@@ -167,9 +167,9 @@ object ExpiredAmuletAllocationV2Trigger {
       ]
     ]
 
-  private def allocationV2Stakeholders(allocation: splice.amuletallocationv2.AmuletAllocationV2) =
-    (Seq(
-      allocation.allocation.admin
-    ) ++ allocation.allocation.authorizer.owner.toScala.toList ++ allocation.settlement.executors.asScala)
-      .map(PartyId.tryFromProtoPrimitive)
+  override def observers(payload: splice.amuletallocationv2.AmuletAllocationV2): Seq[String] = Seq(
+    payload.allocation.admin
+  ) ++ payload.allocation.authorizer.owner.toScala.toList ++ payload.settlement.executors.asScala
+
+  override def dso(payload: splice.amuletallocationv2.AmuletAllocationV2): Option[String] = None
 }

@@ -11,14 +11,12 @@ import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
 
 import scala.concurrent.{ExecutionContext, Future}
-import ExpiredAmuletTrigger.*
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.Amulet
 import org.lfdecentralizedtrust.splice.environment.PackageIdResolver
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 import org.lfdecentralizedtrust.splice.sv.store.IgnoredPartiesStore
 import org.lfdecentralizedtrust.splice.sv.util.ContractStakeholders
-import org.lfdecentralizedtrust.splice.sv.util.ContractStakeholders.amuletStakeholders
+import ExpiredAmuletTrigger.{Task, getStakeholders, getObserversFromAssignedContracts}
 
 import java.util.Optional
 import scala.jdk.CollectionConverters.*
@@ -43,36 +41,35 @@ class ExpiredAmuletTrigger(
       splice.amulet.Amulet.COMPANION,
       svTaskContext.vettingLookupService,
       PackageIdResolver.Package.SpliceAmulet,
-      c => amuletStakeholders(c),
+      getStakeholders,
     )
     with SvTaskBasedTrigger[Task]
-    with IgnoredAmuletVersionGuard
-    with ContractStakeholders[Amulet] {
+    with IgnoredAmuletVersionGuard {
   private val store = svTaskContext.dsoStore
 
   override def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = {
-    val (nonDsoStakeholders, stakeholders) =
-      computeBatchStakeholders(task.work.expiredContracts, store.key.dsoParty)
+    val observers = getObserversFromAssignedContracts(task.work.expiredContracts)
     completeWithIgnoredAmuletVersionCheck(
       task.work.vettedVersion.toString,
-      nonDsoStakeholders,
+      observers,
       enableUnresponsivePartiesAutoIgnore = true,
-    )(completeExpiryTaskAsDsoDelegate(task, controller, stakeholders))
+    )(completeExpiryTaskAsDsoDelegate(task, controller, observers))
   }
 
   private def completeExpiryTaskAsDsoDelegate(
       task: Task,
       controller: String,
-      allParties: Set[PartyId],
+      observers: Set[PartyId],
   )(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = {
+    val stakeholders = observers + store.key.dsoParty
     for {
       dsoRules <- store.getDsoRules()
       supports24hSubmissionDelay <- svTaskContext.packageVersionSupport.supports24hSubmissionDelay(
-        allParties.toSeq,
+        stakeholders.toSeq,
         Seq(store.key.dsoParty),
         context.clock.now,
       )
@@ -134,7 +131,7 @@ class ExpiredAmuletTrigger(
   }
 }
 
-object ExpiredAmuletTrigger {
+object ExpiredAmuletTrigger extends ContractStakeholders[splice.amulet.Amulet] {
   type Task =
     ScheduledTaskTrigger.ReadyTask[
       BatchedMultiDomainExpiredContractTrigger.Batch[
@@ -142,4 +139,8 @@ object ExpiredAmuletTrigger {
         splice.amulet.Amulet,
       ]
     ]
+
+  override def observers(payload: splice.amulet.Amulet): Seq[String] = Seq(payload.owner)
+
+  override def dso(payload: splice.amulet.Amulet): Option[String] = Some(payload.dso)
 }
