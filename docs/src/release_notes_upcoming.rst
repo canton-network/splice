@@ -32,6 +32,13 @@
       recommended. Follow the `migration guide <https://docs.canton.network/global-synchronizer/production-operations/validator-postgres-migration>`__ to move the data
       of an existing node before that date.
 
-   - SV app
+  - SV app
 
-     - Add support for specifying weight in ``GrantFeaturedAppRight`` governance voting UI.
+    - Add support for specifying weight in ``GrantFeaturedAppRight`` governance voting UI.
+
+  - Deployment
+
+    - splice-info
+
+      - ``/runtime/status.json`` now includes reachability for scan and sequencer (0 is good, 1 is lagging
+        behind, 2 is unreachable, 3 is lagging behind and unreachable).

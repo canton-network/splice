@@ -28,7 +28,6 @@ jobs:
           cache_version: 8
           test_name: deployment_test
           with_sbt: false
-          target: 'oss'
 
       - name: Helm tests
         uses: ./.github/actions/nix/run_bash_command_in_nix

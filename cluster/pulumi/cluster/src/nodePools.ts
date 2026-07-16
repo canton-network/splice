@@ -82,11 +82,7 @@ function installAppsNodePools(
           ? allZones
           : (config.zones ?? (defaultZone !== undefined ? [defaultZone] : undefined)),
       initialNodeCount: 0,
-      autoscaling: {
-        locationPolicy: 'ANY',
-        minNodeCount: config.minNodes,
-        maxNodeCount: config.maxNodes,
-      },
+      autoscaling: autoscalingConfigOf(config),
     });
   });
 }
@@ -125,15 +121,23 @@ function installInfraNodePools(
             ? allZones
             : (config.zones ?? (defaultZone !== undefined ? [defaultZone] : undefined)),
         initialNodeCount: 1,
-        autoscaling: {
-          locationPolicy: 'ANY',
-          minNodeCount: config.minNodes,
-          maxNodeCount: config.maxNodes,
-        },
+        autoscaling: autoscalingConfigOf(config),
       },
       {
         replaceOnChanges: ['nodeConfig.machineType'],
       }
     );
   });
+}
+
+function autoscalingConfigOf(config: GkeNodePoolConfig): gcp.container.NodePoolArgs['autoscaling'] {
+  return {
+    // Location policy decides how nodes are allocated across zones when more then one zone is configured.
+    // By default it is set to BALANCED, which is useful in HA scenarios. We configure multiple zones on
+    // scratchnets and in CI to get better availability of compute resources so ANY is more suitable.
+    // For single-zone clusters, which includes prod clusters, this doesn't matter.
+    locationPolicy: 'ANY',
+    minNodeCount: config.minNodes,
+    maxNodeCount: config.maxNodes,
+  };
 }

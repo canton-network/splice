@@ -43,7 +43,6 @@ jobs:
         with:
           cache_version: 8
           test_name: ts_cli
-          target: 'oss'
 
       - name: Run Token Standard CLI tests
         if: steps.skip.outputs.skip != 'true'

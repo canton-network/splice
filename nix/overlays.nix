@@ -1,4 +1,3 @@
-{ use_enterprise }:
 [(self: super: {
   # We need the old version as our code is not compatible with the new one.
   # Just overwriting the version does not work as they changed the build code to be

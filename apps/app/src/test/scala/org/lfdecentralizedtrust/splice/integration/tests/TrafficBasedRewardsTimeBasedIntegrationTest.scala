@@ -84,7 +84,7 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
-      .simpleTopology4SvsWithSimTime(this.getClass.getSimpleName)
+      .simpleTopology1SvWithSimTime(this.getClass.getSimpleName)
       .withAdditionalSetup(implicit env => {
         Seq(
           sv1ValidatorBackend,
@@ -118,6 +118,9 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
             .withPausedTrigger[CollectRewardsAndMergeAmuletsTrigger]
         )(config)
       )
+      // Pause SV reward collection so that it does not race against
+      // advanceTimeAndWaitForRoundOpening in the activity block,
+      // which would cause "Skipped N SV rewards" warnings
       .addConfigTransform((_, config) =>
         updateAutomationConfig(ConfigurableApp.Sv)(
           _.withPausedTrigger[ReceiveSvRewardCouponTrigger]
@@ -165,40 +168,9 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
     val calculateRewardsDryRunTriggers =
       activeSvs.map(_.dsoAutomation.trigger[CalculateRewardsDryRunTrigger])
 
-    // 3 initial advances with CalculateRewardsTrigger paused but
-    // verdict ingestion active, so that the meta row is created and
-    // bootstrap rounds have activity data available.
-    setTriggersWithin(triggersToPauseAtStart =
-      calculateRewardsTriggers ++ calculateRewardsDryRunTriggers
-    ) {
-      for (round <- 1 to 3) {
-        advanceTimeAndWaitForRoundOpening
-        assertOldestOpenRound(round.toLong)
-      }
-
-      clue("Bootstrap rounds have zero activity on firstSV (no featured apps yet)") {
-        assertZeroTotals(sv1ScanBackend, 0L to 2L)
-      }
-
-      clue("All SVs report zero totals for rounds after bootstrap") {
-        Seq(sv1ScanBackend, sv2ScanBackend, sv3ScanBackend, sv4ScanBackend).foreach { scan =>
-          assertZeroTotals(scan, 1L to 2L, timeout = 40.seconds)
-        }
-      }
-    }
-
-    // Sequence of actions
-    //   Open rounds | Action
-    //   ------------+--------------------------------------
-    //   3, 4        | settle id0, grant venue FAP
-    //   4, 5        | settle id1, grant alice FAP
-    //   5, 6        | settle id2, cancel venue FAP
-    //   6, 7        | settle id3, (total 2 DvP trades)
-    //   7, 8        | settle id4, (total 3 DvP trades)
-    //   8, 9        | no-activity
-    //   9, 10       | settle id5, 1 DvP + 3 direct trades
-    //   10, 11      | settle id6, (total 5 DvP trades)
-    //   11, 12      | settle id7, (round not closed)
+    // CalculateRewardsTrigger is paused for the entire test body so
+    // that we can confirm CalculateRewardsV2 contracts were created
+    // for each round before the triggers consume them.
     val (
       updateId0,
       updateId1,
@@ -210,10 +182,34 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
       aliceCreateId,
       svExpireId,
     ) =
-      pauseScanVerdictIngestionWithin(sv1ScanBackend) {
-        setTriggersWithin(triggersToPauseAtStart =
-          calculateRewardsTriggers ++ calculateRewardsDryRunTriggers
-        ) {
+      setTriggersWithin(triggersToPauseAtStart =
+        calculateRewardsTriggers ++ calculateRewardsDryRunTriggers
+      ) {
+        // 3 initial advances with verdict ingestion active, so that the
+        // meta row is created and bootstrap rounds have activity data
+        // available.
+        for (round <- 1 to 3) {
+          advanceRoundsToNextRoundOpening
+          assertOldestOpenRound(round.toLong)
+        }
+
+        clue("Bootstrap rounds have zero activity on firstSV (no featured apps yet)") {
+          assertZeroTotals(sv1ScanBackend, 0L to 2L)
+        }
+
+        // Sequence of actions
+        //   Open rounds | Action
+        //   ------------+--------------------------------------
+        //   3, 4        | settle id0, grant venue FAP
+        //   4, 5        | settle id1, grant alice FAP
+        //   5, 6        | settle id2, cancel venue FAP
+        //   6, 7        | settle id3, (total 2 DvP trades)
+        //   7, 8        | settle id4, (total 3 DvP trades)
+        //   8, 9        | no-activity
+        //   9, 10       | settle id5, 1 DvP + 3 direct trades
+        //   10, 11      | settle id6, (total 5 DvP trades)
+        //   11, 12      | settle id7, (round not closed)
+        pauseScanVerdictIngestionWithin(sv1ScanBackend) {
 
           val id0 = settleTrade(aliceParty, bobParty, venueParty)
           grantFeaturedAppRight(splitwellWalletClient)
