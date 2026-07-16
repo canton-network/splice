@@ -21,6 +21,7 @@ trait ContractStakeholders[T] {
   private final def getDsoParty(payload: T): PartyId =
     PartyId.tryFromProtoPrimitive(dso(payload))
 
+  // ExpireRewardCouponTrigger and FeaturedAppActivityMarkerTrigger do not use BatchedMultiDomainExpiredContractTrigger
   final def getInformeesFromContracts[TCid](
       contracts: Seq[Contract[TCid, T]]
   ): Set[PartyId] =
