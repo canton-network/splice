@@ -188,3 +188,7 @@ Connection for .* with psid .* is no longer active \(status: .*\), skipping upda
 # ingestion restarts. This can result in long delays in signalWhenIngested.
 # See https://github.com/DACH-NY/cn-test-failures/issues/10095.
 signalWhenIngested.* has not completed after .* milliseconds
+
+# The BFT bootstrap test adds a dummy 5th SV with an unreachable scan URL (http://localhost:1)
+# to raise f from 0 to 1. All BFT peers attempt to connect to this URL and log warnings.
+Failed to connect to scan of.*NonZeroRoundBootstrapBftTimeBasedIntegrationTest
