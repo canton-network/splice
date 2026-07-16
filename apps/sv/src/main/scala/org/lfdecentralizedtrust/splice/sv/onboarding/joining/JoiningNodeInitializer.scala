@@ -175,11 +175,11 @@ class JoiningNodeInitializer(
       )
     )
     for {
+      // If we're not onboarded yet, this waits for the sponsoring SV
       dsoPartyId <- getDsoPartyId(initConnection)
 
       _ <- requestParticipantSynchronizerPermission(dsoPartyId)
 
-      // If we're not onboarded yet, this waits for the sponsoring SV
       // Register domain with manualConnect=true. Confusingly, this still connects the first time.
       // However, it won't connect if we crash and get here again which is what we're really after.
       // If the url is unset, we skip this step. This is fine if the node has already initialized its
