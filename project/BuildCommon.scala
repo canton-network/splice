@@ -1487,7 +1487,6 @@ object BuildCommon {
       .dependsOn(
         `canton-traffic-enforcement-api`,
         `canton-ledger-api-core`,
-        DamlProjects.`ledger-api-proto`,
         `canton-util-observability`,
         `canton-community-testing` % Test,
         `canton-community-common` % "compile->compile;test->test",
@@ -1507,8 +1506,8 @@ object BuildCommon {
         libraryDependencies ++= {
           import CantonDependencies._
           Seq(
+            apache_commons_io,
             canton_ledger_api_scala,
-            commons_io,
             pekko_actor_typed,
             pekko_stream,
             pekko_projection_core,
@@ -1520,7 +1519,7 @@ object BuildCommon {
             // in prod code as well
             pekko_projection_testkit,
             pekko_slf4j % "compile->compile;test->test",
-            pureconfig_core,
+            pureconfig,
             pureconfig_generic,
             scalapb_runtime,
             scalapb_runtime_grpc,

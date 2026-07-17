@@ -26,6 +26,8 @@ object CantonDependencies {
   lazy val anorm = "org.playframework.anorm" %% "anorm" % "2.7.0"
   lazy val apispec_version = "0.11.7"
   lazy val pekko_version = "1.2.1"
+  lazy val pekko_projection_version = "1.1.0"
+  lazy val pekko_persistence_version = "1.2.1"
   lazy val pekko_http_version = "1.2.0"
   lazy val auth0_java = "com.auth0" % "java-jwt" % "4.2.1"
   lazy val auth0_jwks = "com.auth0" % "jwks-rsa" % "0.21.2"
@@ -52,6 +54,8 @@ object CantonDependencies {
   lazy val reflections = "org.reflections" % "reflections" % "0.10.2"
   lazy val pureconfig = "com.github.pureconfig" %% "pureconfig" % pureconfig_version
   lazy val pureconfig_cats = "com.github.pureconfig" %% "pureconfig-cats" % pureconfig_version
+  lazy val pureconfig_generic =
+    "com.github.pureconfig" %% "pureconfig-generic" % pureconfig_version // TODO(SC) exclude ("com.chuusai", s"shapeless_$scala_version_short")
 
   lazy val scala_collection_contrib =
     "org.scala-lang.modules" %% "scala-collection-contrib" % "0.2.2"
@@ -154,6 +158,19 @@ object CantonDependencies {
   lazy val pekko_http = "org.apache.pekko" %% "pekko-http" % pekko_http_version
   lazy val pekko_http_core = "org.apache.pekko" %% "pekko-http-core" % pekko_http_version
   lazy val pekko_http_testkit = "org.apache.pekko" %% "pekko-http-testkit" % pekko_http_version
+
+  lazy val pekko_projection_core =
+    "org.apache.pekko" %% "pekko-projection-core" % pekko_projection_version
+  lazy val pekko_projection_jdbc =
+    "org.apache.pekko" %% "pekko-projection-jdbc" % pekko_projection_version
+  lazy val pekko_projection_slick =
+    "org.apache.pekko" %% "pekko-projection-slick" % pekko_projection_version
+  lazy val pekko_projection_testkit =
+    "org.apache.pekko" %% "pekko-projection-testkit" % pekko_projection_version
+  lazy val pekko_persistence =
+    "org.apache.pekko" %% "pekko-persistence" % pekko_persistence_version
+  lazy val pekko_persistence_query =
+    "org.apache.pekko" %% "pekko-persistence-query" % pekko_persistence_version
 
   lazy val scala_logging = "com.typesafe.scala-logging" %% "scala-logging" % "3.9.5"
   lazy val scalacheck = "org.scalacheck" %% "scalacheck" % scalacheck_version

@@ -47,6 +47,7 @@ lazy val `canton-sequencer-driver-api` = BuildCommon.`canton-sequencer-driver-ap
 lazy val `canton-kms-driver-api` = BuildCommon.`canton-kms-driver-api`
 lazy val `canton-community-reference-driver` = BuildCommon.`canton-community-reference-driver`
 lazy val `canton-observability-metrics-testing` = BuildCommon.`canton-observability-metrics-testing`
+lazy val `canton-traffic-enforcement-component` = BuildCommon.`canton-traffic-enforcement-component`
 
 lazy val `splice-wartremover-extension` = Wartremover.`splice-wartremover-extension`
 
