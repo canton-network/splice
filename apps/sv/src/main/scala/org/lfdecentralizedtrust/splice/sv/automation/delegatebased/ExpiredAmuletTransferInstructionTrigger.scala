@@ -12,12 +12,13 @@ import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
 
 import scala.concurrent.{ExecutionContext, Future}
-import ExpiredAmuletTransferInstructionTrigger.*
+import ExpiredAmuletTransferInstructionTrigger.{Task, getStakeholders}
 import com.digitalasset.canton.util.MonadUtil
 import org.lfdecentralizedtrust.splice.environment.PackageIdResolver
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 import org.lfdecentralizedtrust.splice.sv.store.IgnoredPartiesStore
+import org.lfdecentralizedtrust.splice.sv.util.ContractStakeholders
 
 import scala.jdk.CollectionConverters.*
 
@@ -41,12 +42,7 @@ class ExpiredAmuletTransferInstructionTrigger(
       splice.amulettransferinstruction.AmuletTransferInstruction.COMPANION,
       svTaskContext.vettingLookupService,
       PackageIdResolver.Package.SpliceAmulet,
-      instruction =>
-        Seq(
-          instruction.transfer.sender,
-          instruction.transfer.receiver,
-          svTaskContext.dsoStore.key.dsoParty.partyId.toProtoPrimitive,
-        ).map(PartyId.tryFromProtoPrimitive),
+      getStakeholders,
     )
     with SvTaskBasedTrigger[Task]
     with IgnoredAmuletVersionGuard {
@@ -56,35 +52,29 @@ class ExpiredAmuletTransferInstructionTrigger(
   override def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = {
-    val informees = task.work.expiredContracts
-      .map(c => PartyId.tryFromProtoPrimitive(c.payload.transfer.sender))
-      .toSet ++ task.work.expiredContracts
-      .map(c => PartyId.tryFromProtoPrimitive(c.payload.transfer.receiver))
-      .toSet
     completeWithIgnoredAmuletVersionCheck(
       task.work.vettedVersion.toString,
-      informees,
+      task.work.stakeholders,
+      store.key.dsoParty,
       enableUnresponsivePartiesAutoIgnore = true,
-    )(completeExpiryTaskAsDsoDelegate(task, controller, informees))
+    )(completeExpiryTaskAsDsoDelegate(task, controller))
   }
 
   private def completeExpiryTaskAsDsoDelegate(
       task: Task,
       controller: String,
-      informees: Set[PartyId],
   )(implicit tc: TraceContext): Future[TaskOutcome] = {
-    val allParties = informees + store.key.dsoParty
-
+    val stakeholders = task.work.stakeholders
     for {
       packageSupport <- svTaskContext.packageVersionSupport.supportsExpireTransferInstructions(
-        allParties.toSeq,
+        stakeholders.toSeq,
         Seq(store.key.dsoParty),
         clock.now,
       )
       res <-
         if (!packageSupport.supported) {
           logger.info(
-            s"Skipping expiry of ${task.work.expiredContracts.size} transfer instructions because not all parties have vetted the required Amulet package version. Parties: ${allParties
+            s"Skipping expiry of ${task.work.expiredContracts.size} transfer instructions because not all parties have vetted the required Amulet package version. Parties: ${stakeholders
                 .mkString(", ")}"
           )
           Future.successful(
@@ -165,7 +155,8 @@ class ExpiredAmuletTransferInstructionTrigger(
   }
 }
 
-object ExpiredAmuletTransferInstructionTrigger {
+object ExpiredAmuletTransferInstructionTrigger
+    extends ContractStakeholders[splice.amulettransferinstruction.AmuletTransferInstruction] {
   type Task =
     ScheduledTaskTrigger.ReadyTask[
       BatchedMultiDomainExpiredContractTrigger.Batch[
@@ -173,4 +164,12 @@ object ExpiredAmuletTransferInstructionTrigger {
         splice.amulettransferinstruction.AmuletTransferInstruction,
       ]
     ]
+
+  override def informees(
+      payload: splice.amulettransferinstruction.AmuletTransferInstruction
+  ): Seq[String] = Seq(payload.transfer.sender, payload.transfer.receiver)
+
+  override def dso(
+      payload: splice.amulettransferinstruction.AmuletTransferInstruction
+  ): String = payload.transfer.instrumentId.admin
 }

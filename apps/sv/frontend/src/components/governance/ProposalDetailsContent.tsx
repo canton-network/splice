@@ -510,8 +510,8 @@ const VoteItem: React.FC<VoteItemProps> = ({
       }}
       data-testid="proposal-details-vote"
     >
-      <Box sx={{ flexGrow: 1 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+      <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
           <MemberIdentifier
             partyId={voter}
             size="large"

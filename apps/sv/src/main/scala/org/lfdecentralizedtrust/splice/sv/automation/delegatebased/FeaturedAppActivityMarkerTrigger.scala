@@ -25,10 +25,16 @@ import com.digitalasset.canton.util.ShowUtil.*
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
-import FeaturedAppActivityMarkerTrigger.{CrossVersionBatch, Task}
+import FeaturedAppActivityMarkerTrigger.{
+  CrossVersionBatch,
+  Task,
+  getStakeholders,
+  getInformeesFromContracts,
+}
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 import org.lfdecentralizedtrust.splice.sv.store.IgnoredPartiesStore
+import org.lfdecentralizedtrust.splice.sv.util.ContractStakeholders
 
 import java.util.Optional
 import scala.util.Random
@@ -83,32 +89,31 @@ class FeaturedAppActivityMarkerTrigger(
 
   def splitBatchByVettingState(
       batch: CrossVersionBatch
-  )(implicit tc: TraceContext): Future[Seq[Task]] =
+  )(implicit tc: TraceContext): Future[Seq[Task]] = {
     svTaskContext.vettingLookupService
       .splitBatch(
         PackageIdResolver.Package.SpliceAmulet,
         batch.markers,
         batchSize,
-      )(c =>
-        Seq(c.payload.provider, c.payload.beneficiary, c.payload.dso)
-          .map(PartyId.tryFromProtoPrimitive(_))
-      )
+      )(c => getStakeholders(c.payload))
       .map {
         _.toSeq.flatMap {
           case (Some(version), markerBatches) =>
-            markerBatches.map(
+            markerBatches.map { markers =>
               Task(
                 batch.retrievalKind,
-                _,
+                markers,
                 version,
+                getInformeesFromContracts(markers),
               )
-            )
+            }
           case (None, markers) =>
             logger.warn(show"No vetted amulet version for $markers")
             Seq.empty
         }
 
       }
+  }
 
   private def retrieveBatchesBySvIndex(
       dsoRules: dsorules.DsoRules
@@ -195,34 +200,30 @@ class FeaturedAppActivityMarkerTrigger(
   override def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = {
-    val informees = task.markers
-      .flatMap(m => Seq(m.payload.provider, m.payload.beneficiary))
-      .map(PartyId.tryFromProtoPrimitive)
-      .toSet
     completeWithIgnoredAmuletVersionCheck(
       task.vettedAmuletVersion.toString,
-      informees,
+      task.informees,
+      store.key.dsoParty,
       // ignoring a party would mean their featured app activity markers do not get converted into rewards
       enableUnresponsivePartiesAutoIgnore = false,
-    )(completeExpiryTaskAsDsoDelegate(task, controller, informees))
+    )(completeExpiryTaskAsDsoDelegate(task, controller))
   }
 
   private def completeExpiryTaskAsDsoDelegate(
       task: Task,
       controller: String,
-      informees: Set[PartyId],
   )(implicit tc: TraceContext): Future[TaskOutcome] = {
     for {
       dsoRules <- store.getDsoRules()
       amuletRules <- store.getAmuletRules()
       now = context.clock.now
       openMiningRound <- store.getLatestUsableOpenMiningRound(now)
-      allParties = informees + PartyId.tryFromProtoPrimitive(dsoRules.payload.dso)
+      stakeholders = task.informees + store.key.dsoParty
       supportsConvertFeaturedAppActivityMarkerObservers <-
         if (svConfig.convertFeaturedAppActivityMarkerObservers) {
           svTaskContext.packageVersionSupport
             .supportsConvertFeaturedAppActivityMarkerObservers(
-              allParties.toSeq,
+              stakeholders.toSeq,
               context.clock.now,
             )
             .map(_.supported)
@@ -240,7 +241,7 @@ class FeaturedAppActivityMarkerTrigger(
             Option
               .when(
                 supportsConvertFeaturedAppActivityMarkerObservers
-              )(allParties.toSeq.map(_.toProtoPrimitive).asJava)
+              )(stakeholders.toSeq.map(_.toProtoPrimitive).asJava)
               .toJava,
           ),
           Optional.of(controller),
@@ -270,7 +271,8 @@ class FeaturedAppActivityMarkerTrigger(
     } yield markers.exists(_.isEmpty)
 }
 
-object FeaturedAppActivityMarkerTrigger {
+object FeaturedAppActivityMarkerTrigger
+    extends ContractStakeholders[amulet.FeaturedAppActivityMarker] {
   final case class CrossVersionBatch(
       retrievalKind: String,
       markers: Seq[
@@ -291,6 +293,7 @@ object FeaturedAppActivityMarkerTrigger {
         Contract[amulet.FeaturedAppActivityMarker.ContractId, amulet.FeaturedAppActivityMarker]
       ],
       vettedAmuletVersion: PackageVersion,
+      informees: Set[PartyId],
   ) extends PrettyPrinting {
     override def pretty: Pretty[this.type] =
       prettyOfClass(
@@ -298,6 +301,12 @@ object FeaturedAppActivityMarkerTrigger {
         param("numMarkers", _.markers.size),
         param("vettedAmuletVersion", _.vettedAmuletVersion),
         param("markerCids", _.markers.map(_.contractId.contractId.unquoted)),
+        param("informees", _.informees),
       )
   }
+
+  override def informees(payload: amulet.FeaturedAppActivityMarker): Seq[String] =
+    Seq(payload.provider, payload.beneficiary)
+
+  override def dso(payload: amulet.FeaturedAppActivityMarker): String = payload.dso
 }

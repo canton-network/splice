@@ -198,9 +198,17 @@ class TestTokenV2SettlementIntegrationTest
       // make venue and ttadmin featured app parties
       splitwellWalletClient.selfGrantFeaturedAppRight()
       aliceValidatorWalletLocalClient.selfGrantFeaturedAppRight()
-      advanceRoundsByOneTickViaAutomation()
-      advanceRoundsByOneTickViaAutomation()
-      advanceRoundsByOneTickViaAutomation()
+      // We need to make sure that after this block, the oldest active OpenMiningRound
+      // has an `openAt` time that is after the time the first OpenMiningRound was archived,
+      // otherwise the ingestion start approximation in
+      // `DbScanRewardsReferenceStore.lookupActiveOpenMiningRounds` might filter out the
+      // OpenMiningRound contract and AppActivityComputation won't ingest activity records.
+      clue("Advance rounds") {
+        advanceRoundsByOneTickViaAutomation() // archives round 0, open rounds are 1-3
+        advanceRoundsByOneTickViaAutomation() // archives round 1, open rounds are 2-4
+        advanceRoundsByOneTickViaAutomation() // archives round 2, open rounds are 3-5
+        advanceRoundsByOneTickViaAutomation() // archives round 3, open rounds are 4-6
+      }
 
       // Create BatchingUtilityV2 contracts for Alice and Bob
       val batchingUtilityIds: Map[PartyId, BatchingUtility.ContractId] =

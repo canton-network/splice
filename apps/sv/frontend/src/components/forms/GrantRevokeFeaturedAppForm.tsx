@@ -252,6 +252,7 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
                   <field.TextField
                     title={providerFieldTitle}
                     id={`${testIdPrefix}-idValue`}
+                    scrollableIdentifier
                     subtitle={field.state.meta.isValidating ? 'Validating provider...' : undefined}
                   />
                 )}
@@ -290,6 +291,7 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
                     <field.TextField
                       title={providerFieldTitle}
                       id={`${testIdPrefix}-partyId`}
+                      scrollableIdentifier
                       subtitle={field.state.meta.isValidating ? 'Loading app rights...' : undefined}
                       onChange={() => {
                         setRevokeRightOptions([]);
@@ -311,6 +313,7 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
                       title={rightCidFieldTitle!}
                       id={`${testIdPrefix}-rightCid`}
                       options={revokeRightOptions}
+                      scrollableIdentifier
                       disabled={revokeRightOptions.length === 0}
                       placeholder={
                         providerHasNoRights

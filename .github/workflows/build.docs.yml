@@ -29,15 +29,12 @@ jobs:
           test_name: docs
           save_nix_cache: true
           save_nix_cache_to_gcp: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
-          target: 'oss'
           upload_workload_identity_provider: ${{ secrets.GOOGLE_WORKLOAD_IDENTITY_PROVIDER_SPLICE }}
           upload_service_account: ${{ secrets.CACHE_UPLOADER_SA }}
 
       - name: Build docs
         uses: ./.github/actions/sbt/execute_sbt_command
         with:
-          artifactory_user: ${{ vars.ARTIFACTORY_USER }}
-          artifactory_password: ${{ secrets.ARTIFACTORY_PASSWORD }}
           # We Test/compile here as the docs job is the one that pushes to the SBT cache
           # as it finishes fastest and we want to ensure that it includes test sources.
           cmd: "Test/compile docs/bundle"
