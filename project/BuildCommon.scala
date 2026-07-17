@@ -974,6 +974,7 @@ object BuildCommon {
         `canton-ledger-api-core` % "compile->compile;test->test",
         `canton-ledger-json-api`,
         `canton-community-admin-api`,
+        `canton-traffic-enforcement-component`,
       )
       .enablePlugins(DamlPlugin)
       .settings(
@@ -1230,6 +1231,7 @@ object BuildCommon {
         `canton-ledger-common` % "compile->compile;test->test",
         `canton-community-common` % "compile->compile;test->test",
         `canton-daml-adjustable-clock` % "test->test",
+        `canton-traffic-enforcement-api`,
         `canton-daml-tls` % "test->test",
       )
       .disablePlugins(
@@ -1447,6 +1449,86 @@ object BuildCommon {
         // JvmRulesPlugin.damlRepoHeaderSettings,
       )
   }
+
+  lazy val `canton-traffic-enforcement-api` =
+    sbt
+      .Project(
+        "canton-traffic-enforcement-api",
+        file("canton/community/traffic-enforcement/api"),
+      )
+      .dependsOn(`canton-util-observability`, `canton-community-base`)
+      .settings(
+        sharedCantonCommunitySettings,
+        enablePublishLibrary,
+        Compile / PB.protoSources := Seq(baseDirectory.value / "protobuf"),
+        Compile / PB.targets := Seq(
+          scalapb.gen(flatPackage = true) -> (Compile / sourceManaged).value / "protobuf"
+        ),
+        /* TODO (SC) Compile / bufLintCheck := (Compile / bufLintCheck)
+          .dependsOn(
+            // these proto files are loaded by buf.work.yaml
+            `canton-google-common-protos-scala` / PB.unpackDependencies
+          )
+          .value, */
+        libraryDependencies ++= Seq(
+          scalapb_runtime,
+          scalapb_runtime_grpc,
+        ),
+        // commented out from Canton OS repo as settings don't apply to us (yet)
+        // addProtobufFilesToHeaderCheck(Compile),
+      )
+
+  lazy val `canton-traffic-enforcement-component` =
+    sbt
+      .Project(
+        "canton-traffic-enforcement-component",
+        file("canton/community/traffic-enforcement/component"),
+      )
+      .dependsOn(
+        `canton-traffic-enforcement-api`,
+        `canton-ledger-api-core`,
+        DamlProjects.`ledger-api-proto`,
+        `canton-util-observability`,
+        `canton-community-testing` % Test,
+        `canton-community-common` % "compile->compile;test->test",
+      )
+      .enablePlugins(DamlPlugin)
+      .settings(
+        // TODO (SC) sharedCantonCommunitySettings,
+        Compile / PB.targets := Seq(
+          scalapb.gen(flatPackage = false) -> (Compile / sourceManaged).value / "protobuf"
+        ),
+        /* TODO (SC) Compile / bufLintCheck := (Compile / bufLintCheck)
+          .dependsOn(
+            // these proto files are loaded by buf.work.yaml
+            `canton-google-common-protos-scala` / PB.unpackDependencies
+          )
+          .value, */
+        libraryDependencies ++= {
+          import CantonDependencies._
+          Seq(
+            canton_ledger_api_scala,
+            commons_io,
+            pekko_actor_typed,
+            pekko_stream,
+            pekko_projection_core,
+            pekko_projection_jdbc,
+            pekko_projection_slick,
+            pekko_persistence,
+            pekko_persistence_query,
+            // Scope not only to test on purpose as we use the in-memory implementation
+            // in prod code as well
+            pekko_projection_testkit,
+            pekko_slf4j % "compile->compile;test->test",
+            pureconfig_core,
+            pureconfig_generic,
+            scalapb_runtime,
+            scalapb_runtime_grpc,
+            logback_classic % Runtime,
+            scalatest % Test,
+          )
+        },
+      )
 
   lazy val `canton-community-reference-driver` = {
     import CantonDependencies._
