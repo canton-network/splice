@@ -269,6 +269,10 @@ class ScanApp(
           retryProvider.metricsFactory,
           config.automation,
           backoffClock = new WallClock(retryProvider.timeouts, loggerFactory),
+          store,
+          svName,
+          ledgerClient,
+          amuletAppParameters.upgradesConfig,
           retryProvider,
           loggerFactory,
         )

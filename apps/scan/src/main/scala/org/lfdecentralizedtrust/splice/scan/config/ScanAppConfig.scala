@@ -47,6 +47,7 @@ final case class BulkStorageConfig(
     maxParallelPartUploads: Int = 4,
     staging: Option[S3Config] = None,
     committed: Option[S3Config] = None,
+    bftCheckEnabled: Boolean = true,
 )
 
 /** @param miningRoundsCacheTimeToLiveOverride Intended only for testing!

@@ -12,32 +12,92 @@ import com.daml.tls.TlsClientConfig
 import com.digitalasset.canton.config.RequireTypes
 import com.digitalasset.canton.config.RequireTypes.NonNegativeInt
 import org.lfdecentralizedtrust.splice.admin.api.client.commands.HttpCommand
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{FeaturedAppRight, UnclaimedDevelopmentFundCoupon}
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.{AmuletRules, AppTransferContext, TransferPreapproval}
-import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.{ExternalPartyAmuletRules, TransferCommandCounter}
-import org.lfdecentralizedtrust.splice.codegen.java.splice.round.{ClosedMiningRound, IssuingMiningRound, OpenMiningRound}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
+  FeaturedAppRight,
+  UnclaimedDevelopmentFundCoupon,
+}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.{
+  AmuletRules,
+  AppTransferContext,
+  TransferPreapproval,
+}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.{
+  ExternalPartyAmuletRules,
+  TransferCommandCounter,
+}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.round.{
+  ClosedMiningRound,
+  IssuingMiningRound,
+  OpenMiningRound,
+}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.ans as ansCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.ans.AnsRules
 import org.lfdecentralizedtrust.splice.config.SpliceInstanceNamesConfig
 import org.lfdecentralizedtrust.splice.http.v0.{definitions, scan as http}
-import org.lfdecentralizedtrust.tokenstandard.{allocation, allocationinstruction, metadata, transferinstruction}
-import org.lfdecentralizedtrust.splice.http.v0.scan.{ForceAcsSnapshotNowResponse, GetBulkObjectChecksumsResponse, GetDateOfFirstSnapshotAfterResponse, GetDateOfMostRecentSnapshotBeforeResponse, GetLsuResponse, ListBulkAcsSnapshotObjectsResponse, ListBulkUpdateHistoryObjectsResponse}
-import org.lfdecentralizedtrust.splice.scan.admin.http.{CompactJsonScanHttpEncodings, ProtobufJsonScanHttpEncodings}
+import org.lfdecentralizedtrust.tokenstandard.{
+  allocation,
+  allocationinstruction,
+  metadata,
+  transferinstruction,
+}
+import org.lfdecentralizedtrust.splice.http.v0.scan.{
+  ForceAcsSnapshotNowResponse,
+  GetBulkObjectChecksumsResponse,
+  GetDateOfFirstSnapshotAfterResponse,
+  GetDateOfMostRecentSnapshotBeforeResponse,
+  GetLsuResponse,
+  ListBulkAcsSnapshotObjectsResponse,
+  ListBulkUpdateHistoryObjectsResponse,
+}
+import org.lfdecentralizedtrust.splice.scan.admin.http.{
+  CompactJsonScanHttpEncodings,
+  ProtobufJsonScanHttpEncodings,
+}
 import org.lfdecentralizedtrust.splice.store.HistoryBackfilling.SourceMigrationInfo
 import org.lfdecentralizedtrust.splice.store.{MultiDomainAcsStore, VoteResultsFilters}
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryResponse
-import org.lfdecentralizedtrust.splice.util.{ChoiceContextWithDisclosures, Codec, Contract, ContractWithState, DomainRecordTimeRange, FactoryChoiceWithDisclosures, PackageQualifiedName, TemplateJsonDecoder}
+import org.lfdecentralizedtrust.splice.util.{
+  ChoiceContextWithDisclosures,
+  Codec,
+  Contract,
+  ContractWithState,
+  DomainRecordTimeRange,
+  FactoryChoiceWithDisclosures,
+  PackageQualifiedName,
+  TemplateJsonDecoder,
+}
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.bindings.p2p.grpc.P2PGrpcNetworking.P2PEndpoint
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.BftBlockOrdererConfig.P2PEndpointConfig
-import com.digitalasset.canton.topology.{Member, ParticipantId, PartyId, PhysicalSynchronizerId, SequencerId, SynchronizerId}
+import com.digitalasset.canton.topology.{
+  Member,
+  ParticipantId,
+  PartyId,
+  PhysicalSynchronizerId,
+  SequencerId,
+  SynchronizerId,
+}
 import com.digitalasset.daml.lf.data.Time.Timestamp
 import com.google.protobuf.ByteString
 import org.apache.pekko.stream.scaladsl.Source
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{allocationinstructionv1, allocationinstructionv2, allocationv1, allocationv2, metadatav1, transferinstructionv1, transferinstructionv2}
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{DsoRules_CloseVoteRequestResult, VoteRequest}
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.{BulkStorageDownloadResponse, ScanStreamClient}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
+  allocationinstructionv1,
+  allocationinstructionv2,
+  allocationv1,
+  allocationv2,
+  metadatav1,
+  transferinstructionv1,
+  transferinstructionv2,
+}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
+  DsoRules_CloseVoteRequestResult,
+  VoteRequest,
+}
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.{
+  BulkStorageDownloadResponse,
+  ScanStreamClient,
+}
 
 import java.util.Base64
 import java.time.Instant

@@ -11,10 +11,12 @@ import com.digitalasset.canton.{HasActorSystem, HasExecutionContext}
 import org.slf4j.event.Level
 import org.apache.pekko.stream.scaladsl.Keep
 import org.apache.pekko.stream.testkit.scaladsl.{TestSink, TestSource}
+import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.scan.config.BulkStorageConfig
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChecksum
 import org.lfdecentralizedtrust.splice.store.{HasS3Mock, StoreTestBase}
 import org.lfdecentralizedtrust.splice.store.db.SplicePostgresTest
+import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 
 import java.security.MessageDigest
 import java.util.Base64
@@ -29,7 +31,9 @@ class BulkStorageCommitFromStagingTest
     with SplicePostgresTest {
 
   override val initialBuckets = Seq("staging", "committed")
-  val appConfig = BulkStorageConfig()
+  val appConfig = BulkStorageConfig(
+    bftCheckEnabled = false // TODO: enable here or in a different test
+  )
 
   "BulkStorageCommitFromStaging" should {
     "successfully move objects from staging to committed S3 bucket" in {
@@ -68,11 +72,21 @@ class BulkStorageCommitFromStagingTest
       committedS3Connection: S3BucketConnectionForUnitTests,
       objsWithDigests: Seq[ObjectKeyAndChecksum],
   ) = {
+    implicit val httpClient: HttpClient = null // not used when bft reads are disabled
+    implicit val templateJsonDecoder: TemplateJsonDecoder =
+      null // not used when bft reads are disabled
     val flow = BulkStorageCommitFromStaging[String](
       stagingS3Connection,
       committedS3Connection,
       _ => Future.successful(objsWithDigests),
       appConfig,
+      null, // not used when bft reads are disabled
+      null, // not used when bft reads are disabled
+      null, // not used when bft reads are disabled
+      null, // not used when bft reads are disabled
+      null, // not used when bft reads are disabled
+      null, // not used when bft reads are disabled
+      null, // not used when bft reads are disabled
       loggerFactory,
     )
 

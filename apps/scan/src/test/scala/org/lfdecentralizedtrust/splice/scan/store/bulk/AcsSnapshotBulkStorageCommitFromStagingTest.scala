@@ -19,6 +19,7 @@ import org.apache.pekko.actor.Cancellable
 import org.apache.pekko.stream.scaladsl.Source
 import org.lfdecentralizedtrust.splice.config.AutomationConfig
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
+import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.scan.config.{BulkStorageConfig, ScanStorageConfig}
 import org.lfdecentralizedtrust.splice.scan.store.{ScanKeyValueProvider, ScanKeyValueStore}
 import org.lfdecentralizedtrust.splice.store.{
@@ -31,6 +32,7 @@ import org.lfdecentralizedtrust.splice.store.{
 import scala.concurrent.Future
 import scala.util.Using
 import org.lfdecentralizedtrust.splice.store.db.SplicePostgresTest
+import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 import org.scalatest.Assertion
 import org.slf4j.event.Level
 
@@ -52,7 +54,8 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
     zstdCompressionLevel = 3,
   )
   val appConfig = BulkStorageConfig(
-    snapshotPollingInterval = NonNegativeFiniteDuration.ofSeconds(5)
+    snapshotPollingInterval = NonNegativeFiniteDuration.ofSeconds(5),
+    bftCheckEnabled = false, // TODO: enable here or in a different test
   )
 
   override val initialBuckets: Seq[String] = Seq("staging", "committed")
@@ -97,6 +100,9 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
       )
 
       def withNewCommitService(body: => Assertion): Assertion = {
+        implicit val httpClient: HttpClient = null // not used when bft reads are disabled
+        implicit val templateJsonDecoder: TemplateJsonDecoder =
+          null // not used when bft reads are disabled
         val retryProvider =
           RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory)
         val acsCommittedWriter = new AcsSnapshotBulkStorageCommitFromStaging(
@@ -104,6 +110,13 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
           committedConnection,
           reader,
           appConfig,
+          null, // not used when bft reads are disabled
+          null, // not used when bft reads are disabled
+          null, // not used when bft reads are disabled
+          null, // not used when bft reads are disabled
+          null, // not used when bft reads are disabled
+          null, // not used when bft reads are disabled
+          null, // not used when bft reads are disabled
           loggerFactory,
         )
         val commitService = {

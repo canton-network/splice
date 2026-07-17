@@ -4,24 +4,41 @@
 package org.lfdecentralizedtrust.splice.scan.store.bulk
 
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
+import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.tracing.TraceContext
 import io.grpc.{Status, StatusRuntimeException}
 import org.apache.pekko.NotUsed
 import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.stream.scaladsl.Flow
+import org.lfdecentralizedtrust.splice.config.{AutomationConfig, UpgradesConfig}
+import org.lfdecentralizedtrust.splice.environment.{RetryProvider, SpliceLedgerClient}
+import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.scan.config.BulkStorageConfig
+import org.lfdecentralizedtrust.splice.scan.store.ScanStore
 import org.lfdecentralizedtrust.splice.store.{S3BucketConnection, TimestampWithMigrationId}
+import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContextExecutor, Future}
 
 class UpdateHistoryBulkStorageCommitFromStaging(
     stagingS3Connection: S3BucketConnection,
     committedS3Connection: S3BucketConnection,
     bulkStorageReader: BulkStorageReader,
     appConfig: BulkStorageConfig,
+    store: ScanStore,
+    svName: String,
+    ledgerClient: SpliceLedgerClient,
+    automationConfig: AutomationConfig,
+    upgradesConfig: UpgradesConfig,
+    clock: Clock,
+    retryProvider: RetryProvider,
     val loggerFactory: NamedLoggerFactory,
-)(implicit ec: ExecutionContext, actorSystem: ActorSystem)
-    extends UpdateHistoryBulkStorageWriter
+)(implicit
+    ec: ExecutionContextExecutor,
+    actorSystem: ActorSystem,
+    httpClient: HttpClient,
+    templateJsonDecoder: TemplateJsonDecoder,
+) extends UpdateHistoryBulkStorageWriter
     with NamedLogging {
   override def processSegmentsFlow(implicit
       tc: TraceContext
@@ -39,6 +56,13 @@ class UpdateHistoryBulkStorageCommitFromStaging(
               Seq.empty
           },
       appConfig,
+      store,
+      svName,
+      ledgerClient,
+      automationConfig,
+      upgradesConfig,
+      clock,
+      retryProvider,
       loggerFactory,
     )
 

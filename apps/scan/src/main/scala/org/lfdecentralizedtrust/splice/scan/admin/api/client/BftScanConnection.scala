@@ -1125,7 +1125,11 @@ class BftScanConnection(
   override def getBulkObjectChecksums(
       objectKeys: Seq[String]
   )(implicit ec: ExecutionContext, tc: TraceContext): Future[GetBulkObjectChecksumsResponse] =
-    bftCall(_.getBulkObjectChecksums(objectKeys), "getBulkObjectChecksums")
+    bftCall(
+      _.getBulkObjectChecksums(objectKeys),
+      "getBulkObjectChecksums",
+      consensusFailureLogLevel = Level.DEBUG,
+    )
 }
 trait HasUrl {
   def url: Uri
