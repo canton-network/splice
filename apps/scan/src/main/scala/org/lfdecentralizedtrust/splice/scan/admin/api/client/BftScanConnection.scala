@@ -907,7 +907,8 @@ class BftScanConnection(
       tc: TraceContext,
   ): Future[T]
   = bftCallWithScanUris(
-      call, endpoint, callConfig, consensusFailureLogLevel, shortenResponsesForLog)
+      call, endpoint, callConfig, consensusFailureLogLevel,
+      shortenResponsesForLog = shortenResponsesForLog)
     .map(_._1)
 
   private def bftCallWithScanUris[T](
@@ -915,6 +916,7 @@ class BftScanConnection(
       endpoint: String,
       callConfig: BftCallConfig,
       consensusFailureLogLevel: Level = Level.WARN,
+      disagreementLogLevel: Level = Level.INFO,
       shortenResponsesForLog: T => Any = identity[T],
   )(implicit
       ec: ExecutionContext,
@@ -957,6 +959,7 @@ class BftScanConnection(
             nTargetSuccess = callConfig.targetSuccess,
             logger,
             shortenResponsesForLog,
+            disagreementLogLevel,
             connectionMetrics,
           ),
           logger,
@@ -1047,6 +1050,7 @@ class BftScanConnection(
           },
         endpoint = "getRewardAccountingActivityTotals",
         callConfig = callConfig,
+        disagreementLogLevel = Level.WARN,
       )
         .transformWith {
           case Success((totals, consensusUris)) =>
@@ -1094,6 +1098,7 @@ class BftScanConnection(
           },
         endpoint = "getRewardAccountingRootHash",
         callConfig = callConfig,
+        disagreementLogLevel = Level.WARN,
       )
         .transformWith {
           case Success ((rootHash, consensusUris)) =>
@@ -1146,6 +1151,7 @@ object BftScanConnection {
       nTargetSuccess: Int,
       logger: TracedLogger,
       shortenResponsesForLog: T => Any = identity[T],
+      disagreementLogLevel: Level = Level.INFO,
       connectionMetrics: Option[ScanConnectionMetrics] = None,
   )(implicit
       ec: ExecutionContext,
@@ -1193,6 +1199,7 @@ object BftScanConnection {
                   logger,
                   consensusResponse.map(_._1),
                   responses,
+                  disagreementLogLevel,
                   connectionMetrics,
                 )
             }
@@ -1238,8 +1245,10 @@ object BftScanConnection {
       logger: TracedLogger,
       consensusResponse: Try[T],
       responses: ConcurrentHashMap[BftScanConnection.ScanResponse[T], List[Uri]],
+      disagreementLogLevel: Level,
       connectionMetrics: Option[ScanConnectionMetrics],
   )(implicit ec: ExecutionContext, tc: TraceContext, mc: MetricsContext): Unit = {
+    implicit val elc: ErrorLoggingContext = ErrorLoggingContext.fromTracedLogger(logger)
     def recordConsensus(url: Uri, consensus: String, extraLabels: Map[String, String]): Unit =
       connectionMetrics.foreach { metrics =>
         val context = mc.merge(
@@ -1269,7 +1278,8 @@ object BftScanConnection {
       responses.forEach { (disagreeingResponse, scanUrls) =>
         val extraLabels = disagreementLabels(disagreeingResponse)
         scanUrls.foreach(recordConsensus(_, "disagree", extraLabels))
-        logger.info(
+        LoggerUtil.logAtLevel(
+          disagreementLogLevel,
           s"""The following Scan URLs disagreed with consensus:
              |${scanUrls.map(url => s"  $url").mkString("\n")}
              |consensus response: $consensusResponse

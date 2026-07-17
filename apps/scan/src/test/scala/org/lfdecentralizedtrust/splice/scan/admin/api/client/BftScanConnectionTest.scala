@@ -1319,7 +1319,7 @@ class BftScanConnectionTest
       }
     }
 
-    "logs disagreements at INFO level" in {
+    "logs disagreements at WARN level" in {
       val round = 42L
       val connections = getMockedConnections(n = 4)
       makeMockReturnRootHashOk(connections(0), round, "aabb")
@@ -1329,11 +1329,11 @@ class BftScanConnectionTest
       val bft = getBft(connections)
 
       loggerFactory
-        .assertEventuallyLogsSeq(SuppressionRule.Level(Level.INFO))(
+        .assertEventuallyLogsSeq(SuppressionRule.Level(Level.WARN))(
           bft.getRewardAccountingRootHash(round),
           logs =>
             logs.exists(log =>
-              log.level == Level.INFO && log.message.contains(
+              log.level == Level.WARN && log.message.contains(
                 "disagreed with consensus"
               )
             ) should be(true),
@@ -1438,7 +1438,7 @@ class BftScanConnectionTest
       }
     }
 
-    "logs disagreements at INFO level" in {
+    "logs disagreements at WARN level" in {
       val round = 42L
       val connections = getMockedConnections(n = 4)
       makeMockReturnActivityTotalsOk(connections(0), round, 100L, 10L, 5L)
@@ -1448,11 +1448,11 @@ class BftScanConnectionTest
       val bft = getBft(connections)
 
       loggerFactory
-        .assertEventuallyLogsSeq(SuppressionRule.Level(Level.INFO))(
+        .assertEventuallyLogsSeq(SuppressionRule.Level(Level.WARN))(
           bft.getRewardAccountingActivityTotals(round),
           logs =>
             logs.exists(log =>
-              log.level == Level.INFO && log.message.contains(
+              log.level == Level.WARN && log.message.contains(
                 "disagreed with consensus"
               )
             ) should be(true),

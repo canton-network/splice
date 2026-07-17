@@ -36,6 +36,7 @@ import org.lfdecentralizedtrust.splice.sv.automation.RewardMetricsTrigger
 import org.lfdecentralizedtrust.splice.sv.automation.confirmation.{
   CalculateRewardsDryRunTrigger,
   CalculateRewardsTrigger,
+  SummarizingMiningRoundTrigger,
 }
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
   ProcessRewardsDryRunTrigger,
@@ -347,9 +348,53 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
         }
       }
 
-      confirmBftRead(bobParty)
+      withExpectedRewardTriggersLogging(_ => confirmBftRead(bobParty))
 
       confirmMismatchingRootHashIsFlagged(bobParty)
+  }
+
+  // sv2's CalculateRewardsTrigger and SummarizingMiningRoundTrigger report the
+  // scan URIs that formed the BFT consensus at INFO. Capture their logs for the
+  // whole duration of `body`. When `confirmBftRead` is passed as the body, BFT
+  // reads may start at any point after sv2's own scan starts answering
+  // CannotProvide.
+  //
+  // The oldest open round is read before running `body` and must match the
+  // round `body` performs the BFT reads for; this holds under sim time as
+  // rounds only advance when the test advances the clock.
+  private def withExpectedRewardTriggersLogging[A](
+      body: Unit => A
+  )(implicit env: SpliceTestConsoleEnvironment): A = {
+    val round = oldestOpenRound
+    val bftReadLogs =
+      (SuppressionRule.forLogger[CalculateRewardsTrigger] ||
+        SuppressionRule.forLogger[SummarizingMiningRoundTrigger]) &&
+        SuppressionRule.LevelAndAbove(Level.INFO)
+
+    loggerFactory.assertEventuallyLogsSeq(bftReadLogs)(
+      body(()),
+      logs => {
+        // sv3 is stopped and sv2's own scan is not part of its peer BFT connection,
+        // so only sv1's and sv4's scans can form the consensus.
+        val expectedScanUris = Set("http://localhost:5012", "http://localhost:5312")
+        def bftReadLogged(subject: String) =
+          forAtLeast(1, logs) { log =>
+            val prefix =
+              s"Obtained the $subject for round $round via BFT read from consensus scans: "
+            log.loggerName should include("SV=sv2")
+            log.message should include(prefix)
+            val scanUris = log.message
+              .substring(log.message.indexOf(prefix) + prefix.length)
+              .stripSuffix(".")
+              .split(", ")
+              .toSeq
+            scanUris should not be empty
+            forAll(scanUris)(uri => expectedScanUris should contain(uri))
+          }
+        bftReadLogged("root-hash")
+        bftReadLogged("reward accounting totals")
+      },
+    )
   }
 
   private def metricValue(
