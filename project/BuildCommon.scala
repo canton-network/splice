@@ -1231,6 +1231,7 @@ object BuildCommon {
         `canton-ledger-common` % "compile->compile;test->test",
         `canton-community-common` % "compile->compile;test->test",
         `canton-daml-adjustable-clock` % "test->test",
+        `canton-traffic-enforcement-api`,
         `canton-daml-tls` % "test->test",
       )
       .disablePlugins(
@@ -1255,7 +1256,6 @@ object BuildCommon {
           guava,
           bouncycastle_bcprov_jdk15on % Test,
           bouncycastle_bcpkix_jdk15on % Test,
-          canton_traffic_enforcement_api,
           scalaz_scalacheck % Test,
           grpc_netty_shaded,
           grpc_services,
@@ -1450,6 +1450,34 @@ object BuildCommon {
       )
   }
 
+  lazy val `canton-traffic-enforcement-api` =
+    sbt
+      .Project(
+        "canton-traffic-enforcement-api",
+        file("canton/community/traffic-enforcement/api"),
+      )
+      .dependsOn(`canton-util-observability`, `canton-community-base`)
+      .settings(
+        sharedCantonCommunitySettings,
+        enablePublishLibrary,
+        Compile / PB.protoSources := Seq(baseDirectory.value / "protobuf"),
+        Compile / PB.targets := Seq(
+          scalapb.gen(flatPackage = true) -> (Compile / sourceManaged).value / "protobuf"
+        ),
+        /* TODO (SC) Compile / bufLintCheck := (Compile / bufLintCheck)
+          .dependsOn(
+            // these proto files are loaded by buf.work.yaml
+            `canton-google-common-protos-scala` / PB.unpackDependencies
+          )
+          .value, */
+        libraryDependencies ++= Seq(
+          scalapb_runtime,
+          scalapb_runtime_grpc,
+        ),
+        // commented out from Canton OS repo as settings don't apply to us (yet)
+        // addProtobufFilesToHeaderCheck(Compile),
+      )
+
   lazy val `canton-traffic-enforcement-component` =
     sbt
       .Project(
@@ -1457,6 +1485,7 @@ object BuildCommon {
         file("canton/community/traffic-enforcement/component"),
       )
       .dependsOn(
+        `canton-traffic-enforcement-api`,
         `canton-ledger-api-core`,
         `canton-util-observability`,
         `canton-community-testing` % Test,
@@ -1478,7 +1507,6 @@ object BuildCommon {
           import CantonDependencies._
           Seq(
             apache_commons_io,
-            canton_traffic_enforcement_api,
             canton_ledger_api_scala,
             pekko_actor_typed,
             pekko_stream,
