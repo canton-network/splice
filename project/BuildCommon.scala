@@ -1300,6 +1300,7 @@ object BuildCommon {
     sbt.Project
       .apply("canton-ledger-json-api", file("canton/community/ledger/ledger-json-api"))
       .dependsOn(
+        `canton-util-observability`,
         `canton-ledger-common` % "test->test",
         `canton-community-testing` % Test,
       )
@@ -1326,6 +1327,7 @@ object BuildCommon {
           CantonDependencies.canton_transcode_json,
           CantonDependencies.canton_transcode_proto_scala,
           CantonDependencies.canton_transcode_daml_lf,
+          circe_generic_extras,
           pekko_http,
           pekko_http_core,
           daml_lf_api_type_signature,
