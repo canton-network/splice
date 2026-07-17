@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.scan.store.bulk
 
+import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.logging.{NamedLoggerFactory, SuppressionRule}
 import com.digitalasset.canton.resource.DbStorage
@@ -10,10 +11,12 @@ import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.{HasActorSystem, HasExecutionContext}
 import org.apache.pekko.NotUsed
+import org.apache.pekko.http.scaladsl.model.StatusCodes
 import org.apache.pekko.stream.Materializer
 import org.slf4j.event.Level
 import org.apache.pekko.stream.scaladsl.{Flow, Keep}
 import org.apache.pekko.stream.testkit.scaladsl.{TestSink, TestSource}
+import org.lfdecentralizedtrust.splice.admin.http.HttpErrorWithHttpCode
 import org.lfdecentralizedtrust.splice.config.{AutomationConfig, UpgradesConfig}
 import org.lfdecentralizedtrust.splice.environment.{RetryProvider, SpliceLedgerClient}
 import org.lfdecentralizedtrust.splice.http.HttpClient
@@ -30,6 +33,7 @@ import java.security.MessageDigest
 import java.util.Base64
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.jdk.CollectionConverters.*
+import scala.concurrent.duration.*
 
 class BulkStorageCommitFromStagingTest
     extends StoreTestBase
@@ -105,7 +109,9 @@ class BulkStorageCommitFromStagingTest
   }
 
   "BulkStorageCommitFromStaging with BFT reads enabled" should {
-    val appConfig = BulkStorageConfig()
+    val appConfig = BulkStorageConfig(
+      bftRetryInterval = NonNegativeFiniteDuration.ofSeconds(1)
+    )
 
     "successfully move objects from staging to committed S3 bucket when there's full consensus" in {
       val (stagingS3Connection, committedS3Connection, objsWithDigests) = setupTest
@@ -126,6 +132,75 @@ class BulkStorageCommitFromStagingTest
       )
 
       assertObjectsMoved(stagingS3Connection, committedS3Connection, objsWithDigests)
+    }
+
+    "wait until all objects are known to the peers" in {
+      val (stagingS3Connection, committedS3Connection, objsWithDigests) = setupTest
+
+      val mockConnection = mock[BftScanConnection]
+
+      val flow =
+        newCopyFlow(mockConnection, stagingS3Connection, committedS3Connection, objsWithDigests)
+
+      val (pub, sub) = TestSource
+        .probe[String]
+        .via(flow)
+        .toMat(TestSink.probe[String])(Keep.both)
+        .run()
+
+      clue("When one object is not known to the peers, the copy flow should not complete") {
+        when(
+          mockConnection
+            .getBulkObjectChecksums(any[Seq[String]])(any[ExecutionContext], any[TraceContext])
+        )
+          .thenReturn(
+            Future.successful(
+              new GetBulkObjectChecksumsResponse(
+                objsWithDigests.map(_.checksum).toVector.updated(1, "")
+              )
+            )
+          )
+        sub.request(1)
+        pub.sendNext("go")
+        sub.expectNoMessage(20.seconds)
+
+        stagingS3Connection.listObjects.futureValue
+          .contents()
+          .asScala should have size objsWithDigests.size.toLong
+        committedS3Connection.listObjects.futureValue.contents().asScala shouldBe empty
+      }
+
+      clue("Simulate disagreement across peers") {
+        when(
+          mockConnection
+            .getBulkObjectChecksums(any[Seq[String]])(any[ExecutionContext], any[TraceContext])
+        )
+          .thenReturn(
+            Future.failed(
+              HttpErrorWithHttpCode(StatusCodes.BadGateway, "Simulated disagreement across peers")
+            )
+          )
+        sub.expectNoMessage(20.seconds)
+      }
+
+      clue(
+        "Make the missing object known to all peers, the copy flow should now complete successfully"
+      ) {
+        when(
+          mockConnection
+            .getBulkObjectChecksums(any[Seq[String]])(any[ExecutionContext], any[TraceContext])
+        )
+          .thenReturn(
+            Future.successful(
+              new GetBulkObjectChecksumsResponse(
+                objsWithDigests.map(_.checksum).toVector
+              )
+            )
+          )
+
+        sub.expectNext(20.seconds, "go")
+        assertObjectsMoved(stagingS3Connection, committedS3Connection, objsWithDigests)
+      }
     }
 
     def newCopyFlow(
