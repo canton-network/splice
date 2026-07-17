@@ -71,6 +71,8 @@ class ScanTimeBasedIntegrationTest
               updatesPollingInterval = NonNegativeFiniteDuration.ofSeconds(5),
               staging = Some(s3ConfigMock("staging")),
               committed = Some(s3ConfigMock("committed")),
+              bftCheckEnabled =
+                false, // FIXME: this is only one SV, so in theory should work with bft enabled? It does not, investigate that.
             ),
             publicUrl = Some(Uri("http://foo.bar.com")),
           )

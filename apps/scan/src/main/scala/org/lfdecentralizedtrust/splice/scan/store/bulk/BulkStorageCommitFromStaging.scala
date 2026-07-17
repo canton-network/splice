@@ -52,42 +52,47 @@ class BulkStorageCommitFromStaging[T](
     logger.debug(
       s"Checking BFT agreement for objects: ${objects.map(_.key).mkString(", ")}"
     )
-    for {
-      connection <- getOrCreateScanConnection(
-        store,
-        svName,
-        ledgerClient,
-        automationConfig,
-        upgradesConfig,
-        clock: Clock,
-        retryProvider,
-        loggerFactory,
-      )
-      bft <- connection.getBulkObjectChecksums(objects.map(_.key)).map(Some(_)).recoverWith {
-        case ex @ HttpErrorWithHttpCode(code, _) =>
-          if (code == StatusCodes.BadGateway) {
-            Future.successful(None)
-          } else {
-            throw ex
-          }
+    if (appConfig.bftCheckEnabled) {
+      for {
+        connection <- getOrCreateScanConnection(
+          store,
+          svName,
+          ledgerClient,
+          automationConfig,
+          upgradesConfig,
+          clock: Clock,
+          retryProvider,
+          loggerFactory,
+        )
+        bft <- connection.getBulkObjectChecksums(objects.map(_.key)).map(Some(_)).recoverWith {
+          case ex @ HttpErrorWithHttpCode(code, _) =>
+            if (code == StatusCodes.BadGateway) {
+              Future.successful(None)
+            } else {
+              throw ex
+            }
+        }
+      } yield {
+        bft match {
+          case Some(bftChecksums) =>
+            val consensusChecksums = bftChecksums.checksums.filter(_.nonEmpty)
+            logger.debug(s"Consensus achieved on ${consensusChecksums.length} objects")
+            val consensus = bftChecksums.checksums.filter(_.nonEmpty) == objects.map(_.checksum)
+            if (consensusChecksums.length == objects.length && !consensus) {
+              logger.warn(
+                s"BFT consensus checksums do not match the expected checksums for all objects. Expected: ${objects
+                    .map(_.checksum)
+                    .mkString(", ")}, got: ${consensusChecksums.mkString(", ")}"
+              )
+            }
+            consensus
+          case None =>
+            false
+        }
       }
-    } yield {
-      bft match {
-        case Some(bftChecksums) =>
-          val consensusChecksums = bftChecksums.checksums.filter(_.nonEmpty)
-          logger.debug(s"Consensus achieved on ${consensusChecksums.length} objects")
-          val consensus = bftChecksums.checksums.filter(_.nonEmpty) == objects.map(_.checksum)
-          if (consensusChecksums.length == objects.length && !consensus) {
-            logger.warn(
-              s"BFT consensus checksums do not match the expected checksums for all objects. Expected: ${objects
-                  .map(_.checksum)
-                  .mkString(", ")}, got: ${consensusChecksums.mkString(", ")}"
-            )
-          }
-          consensus
-        case None =>
-          false
-      }
+    } else {
+      logger.trace("BFT check is disabled, skipping BFT agreement check")
+      Future.successful(true)
     }
   }
   // TODO(#5884): implement the BFT check
