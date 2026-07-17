@@ -4,15 +4,23 @@
 package org.lfdecentralizedtrust.splice.scan.store.bulk
 
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
-import com.digitalasset.canton.logging.SuppressionRule
+import com.digitalasset.canton.logging.{NamedLoggerFactory, SuppressionRule}
 import com.digitalasset.canton.resource.DbStorage
+import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.{HasActorSystem, HasExecutionContext}
+import org.apache.pekko.NotUsed
+import org.apache.pekko.stream.Materializer
 import org.slf4j.event.Level
-import org.apache.pekko.stream.scaladsl.Keep
+import org.apache.pekko.stream.scaladsl.{Flow, Keep}
 import org.apache.pekko.stream.testkit.scaladsl.{TestSink, TestSource}
+import org.lfdecentralizedtrust.splice.config.{AutomationConfig, UpgradesConfig}
+import org.lfdecentralizedtrust.splice.environment.{RetryProvider, SpliceLedgerClient}
 import org.lfdecentralizedtrust.splice.http.HttpClient
+import org.lfdecentralizedtrust.splice.http.v0.definitions.GetBulkObjectChecksumsResponse
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
 import org.lfdecentralizedtrust.splice.scan.config.BulkStorageConfig
+import org.lfdecentralizedtrust.splice.scan.store.ScanStore
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChecksum
 import org.lfdecentralizedtrust.splice.store.{HasS3Mock, StoreTestBase}
 import org.lfdecentralizedtrust.splice.store.db.SplicePostgresTest
@@ -20,7 +28,7 @@ import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 
 import java.security.MessageDigest
 import java.util.Base64
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.jdk.CollectionConverters.*
 
 class BulkStorageCommitFromStagingTest
@@ -31,16 +39,21 @@ class BulkStorageCommitFromStagingTest
     with SplicePostgresTest {
 
   override val initialBuckets = Seq("staging", "committed")
-  val appConfig = BulkStorageConfig(
-    bftCheckEnabled = false // TODO: enable here or in a different test
-  )
+  implicit val httpClient: HttpClient = null
+  implicit val templateJsonDecoder: TemplateJsonDecoder = null
 
   "BulkStorageCommitFromStaging" should {
+    val appConfig = BulkStorageConfig(
+      bftCheckEnabled = false
+    )
+
     "successfully move objects from staging to committed S3 bucket" in {
 
       val (stagingS3Connection, committedS3Connection, objsWithDigests) = setupTest
 
-      triggerCopyFlow(stagingS3Connection, committedS3Connection, objsWithDigests)
+      triggerCopyFlowAndAssertCompletion(
+        newCopyFlow(stagingS3Connection, committedS3Connection, objsWithDigests)
+      )
 
       assertObjectsMoved(stagingS3Connection, committedS3Connection, objsWithDigests)
     }
@@ -58,38 +71,106 @@ class BulkStorageCommitFromStagingTest
 
       loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(Level.DEBUG))(
         {
-          triggerCopyFlow(stagingS3Connection, committedS3Connection, objsWithDigests)
+          triggerCopyFlowAndAssertCompletion(
+            newCopyFlow(stagingS3Connection, committedS3Connection, objsWithDigests)
+          )
         },
         logEntries => forExactly(1, logEntries)(_.message should include("Skipping copy")),
       )
 
       assertObjectsMoved(stagingS3Connection, committedS3Connection, objsWithDigests)
     }
+
+    def newCopyFlow(
+        stagingS3Connection: S3BucketConnectionForUnitTests,
+        committedS3Connection: S3BucketConnectionForUnitTests,
+        objsWithDigests: Seq[ObjectKeyAndChecksum],
+    ) = {
+      BulkStorageCommitFromStaging[String](
+        stagingS3Connection,
+        committedS3Connection,
+        _ => Future.successful(objsWithDigests),
+        appConfig,
+        null, // not used when bft reads are disabled
+        null, // not used when bft reads are disabled
+        null, // not used when bft reads are disabled
+        null, // not used when bft reads are disabled
+        null, // not used when bft reads are disabled
+        null, // not used when bft reads are disabled
+        null, // not used when bft reads are disabled
+        loggerFactory,
+      )
+    }
+
   }
 
-  private def triggerCopyFlow(
-      stagingS3Connection: S3BucketConnectionForUnitTests,
-      committedS3Connection: S3BucketConnectionForUnitTests,
-      objsWithDigests: Seq[ObjectKeyAndChecksum],
-  ) = {
-    implicit val httpClient: HttpClient = null // not used when bft reads are disabled
-    implicit val templateJsonDecoder: TemplateJsonDecoder =
-      null // not used when bft reads are disabled
-    val flow = BulkStorageCommitFromStaging[String](
-      stagingS3Connection,
-      committedS3Connection,
-      _ => Future.successful(objsWithDigests),
-      appConfig,
-      null, // not used when bft reads are disabled
-      null, // not used when bft reads are disabled
-      null, // not used when bft reads are disabled
-      null, // not used when bft reads are disabled
-      null, // not used when bft reads are disabled
-      null, // not used when bft reads are disabled
-      null, // not used when bft reads are disabled
-      loggerFactory,
-    )
+  "BulkStorageCommitFromStaging with BFT reads enabled" should {
+    val appConfig = BulkStorageConfig()
 
+    "successfully move objects from staging to committed S3 bucket when there's full consensus" in {
+      val (stagingS3Connection, committedS3Connection, objsWithDigests) = setupTest
+
+      val mockConnection = mock[BftScanConnection]
+      when(
+        mockConnection
+          .getBulkObjectChecksums(any[Seq[String]])(any[ExecutionContext], any[TraceContext])
+      )
+        .thenReturn(
+          Future.successful(
+            new GetBulkObjectChecksumsResponse(objsWithDigests.map(_.checksum).toVector)
+          )
+        )
+
+      triggerCopyFlowAndAssertCompletion(
+        newCopyFlow(mockConnection, stagingS3Connection, committedS3Connection, objsWithDigests)
+      )
+
+      assertObjectsMoved(stagingS3Connection, committedS3Connection, objsWithDigests)
+    }
+
+    def newCopyFlow(
+        bftScanConnection: BftScanConnection,
+        stagingS3Connection: S3BucketConnectionForUnitTests,
+        committedS3Connection: S3BucketConnectionForUnitTests,
+        objsWithDigests: Seq[ObjectKeyAndChecksum],
+    ) = {
+      new BulkStorageCommitFromStaging[String](
+        stagingS3Connection,
+        committedS3Connection,
+        _ => Future.successful(objsWithDigests),
+        appConfig,
+        null, // we're mocking the bft reads
+        null, // we're mocking the bft reads
+        null, // we're mocking the bft reads
+        null, // we're mocking the bft reads
+        null, // we're mocking the bft reads
+        null, // we're mocking the bft reads
+        null, // we're mocking the bft reads
+        loggerFactory,
+      ) {
+        override protected def getOrCreateScanConnection(
+            store: ScanStore,
+            svName: String,
+            ledgerClient: SpliceLedgerClient,
+            automationConfig: AutomationConfig,
+            upgradesConfig: UpgradesConfig,
+            clock: Clock,
+            retryProvider: RetryProvider,
+            loggerFactory: NamedLoggerFactory,
+        )(implicit
+            tc: TraceContext,
+            ec: ExecutionContextExecutor,
+            mat: Materializer,
+            httpClient: HttpClient,
+            templateJsonDecoder: TemplateJsonDecoder,
+        ): Future[BftScanConnection] = Future.successful(bftScanConnection)
+      }.getFlow
+    }
+  }
+
+  private def triggerCopyFlowAndAssertCompletion(
+      flow: Flow[String, String, NotUsed]
+  ) = {
     val (pub, sub) = TestSource
       .probe[String]
       .via(flow)
