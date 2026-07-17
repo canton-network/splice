@@ -545,7 +545,6 @@ object BuildCommon {
         `canton-community-synchronizer`,
         `canton-community-participant`,
         `canton-community-integration-testing` % "test",
-        `canton-ledger-api-core` % "test->test",
       )
       .enablePlugins(DamlPlugin)
       .settings(
@@ -556,6 +555,7 @@ object BuildCommon {
         disableTests,
         removeTestSources,
         libraryDependencies ++= Seq(
+          CantonDependencies.canton_ledger_api_core,
           scala_logging,
           jul_to_slf4j,
           janino, // not used at compile time, but required for conditionals in logback configuration
@@ -971,7 +971,6 @@ object BuildCommon {
       .apply("canton-community-participant", file("canton/community/participant"))
       .dependsOn(
         `canton-community-common` % "compile->compile;test->test",
-        `canton-ledger-api-core` % "compile->compile;test->test",
         `canton-ledger-json-api`,
         `canton-community-admin-api`,
         `canton-traffic-enforcement-component`,
@@ -982,6 +981,7 @@ object BuildCommon {
         sharedCantonSettings,
         excludeTranscodeConflictingDependencies,
         libraryDependencies ++= Seq(
+          canton_ledger_api_core,
           scala_logging,
           scalatest % Test,
           scalatestScalacheck % Test,
@@ -1222,61 +1222,6 @@ object BuildCommon {
       )
   }
 
-  lazy val `canton-ledger-api-core` = {
-    import CantonDependencies._
-    sbt.Project
-      .apply("canton-ledger-api-core", file("canton/community/ledger/ledger-api-core"))
-      .dependsOn(
-        `canton-base-errors` % "test->test",
-        `canton-ledger-common` % "compile->compile;test->test",
-        `canton-community-common` % "compile->compile;test->test",
-        `canton-daml-adjustable-clock` % "test->test",
-        `canton-daml-tls` % "test->test",
-      )
-      .disablePlugins(
-        WartRemover,
-        ScalafmtPlugin,
-      ) // to accommodate different daml repo coding style
-      .settings(
-        removeTestSources,
-        sharedCantonSettings,
-        sharedSettings,
-        scalacOptions += "-Wconf:src=src_managed/.*:silent",
-        Compile / PB.targets := Seq(
-          scalapb.gen(flatPackage = false) -> (Compile / sourceManaged).value / "protobuf"
-        ),
-        libraryDependencies ++= Seq(
-          CantonDependencies.canton_ledger_api_scala,
-          auth0_java,
-          auth0_jwks,
-          circe_core,
-          daml_ports,
-          hikaricp,
-          guava,
-          bouncycastle_bcprov_jdk15on % Test,
-          bouncycastle_bcpkix_jdk15on % Test,
-          canton_traffic_enforcement_api,
-          scalaz_scalacheck % Test,
-          grpc_netty_shaded,
-          grpc_services,
-          grpc_protobuf,
-          postgres,
-          h2,
-          flyway,
-          oracle,
-          anorm,
-          scalapb_runtime_grpc,
-          scalapb_json4s % Test,
-          scalapb_runtime,
-          scalaz_scalacheck % Test,
-          testcontainers % Test,
-          testcontainers_postgresql % Test,
-        ),
-        Test / parallelExecution := true,
-        Test / fork := false,
-      )
-  }
-
   // this project builds scala protobuf versions that include
   // java conversions of a few google standard items
   // the google protobuf files are extracted from the provided jar files
@@ -1355,7 +1300,6 @@ object BuildCommon {
     sbt.Project
       .apply("canton-ledger-json-api", file("canton/community/ledger/ledger-json-api"))
       .dependsOn(
-        `canton-ledger-api-core`,
         `canton-ledger-common` % "test->test",
         `canton-community-testing` % Test,
       )
@@ -1378,6 +1322,7 @@ object BuildCommon {
           .map(cat => s"cat=$cat:silent")
           .mkString(",", ",", ""),
         libraryDependencies ++= Seq(
+          CantonDependencies.canton_ledger_api_core,
           CantonDependencies.canton_transcode_json,
           CantonDependencies.canton_transcode_proto_scala,
           CantonDependencies.canton_transcode_daml_lf,
@@ -1457,7 +1402,6 @@ object BuildCommon {
         file("canton/community/traffic-enforcement/component"),
       )
       .dependsOn(
-        `canton-ledger-api-core`,
         `canton-util-observability`,
         `canton-community-testing` % Test,
         `canton-community-common` % "compile->compile;test->test",
@@ -1479,6 +1423,7 @@ object BuildCommon {
           Seq(
             apache_commons_io,
             canton_traffic_enforcement_api,
+            canton_ledger_api_core,
             canton_ledger_api_scala,
             pekko_actor_typed,
             pekko_stream,

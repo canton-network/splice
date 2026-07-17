@@ -97,6 +97,7 @@ object CantonDependencies {
     "com.daml" %% "daml-grpc-utils" % canton_library_version
 
   lazy val canton_java_bindings = "com.daml" % "bindings-java" % canton_library_version
+  lazy val canton_ledger_api_core = "com.daml" %% "ledger-api-core" % canton_library_version
   lazy val canton_ledger_api_scala = "com.daml" %% "ledger-api-scala" % canton_library_version
   lazy val canton_observability_metrics =
     "com.daml" %% "observability-metrics" % canton_library_version

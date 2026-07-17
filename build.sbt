@@ -35,7 +35,6 @@ lazy val `canton-pekko-fork` = BuildCommon.`canton-pekko-fork`
 lazy val `canton-magnolify-addon` = BuildCommon.`canton-magnolify-addon`
 lazy val `canton-scalatest-addon` = BuildCommon.`canton-scalatest-addon`
 lazy val `canton-ledger-common` = BuildCommon.`canton-ledger-common`
-lazy val `canton-ledger-api-core` = BuildCommon.`canton-ledger-api-core`
 lazy val `canton-ledger-api-value` = BuildCommon.`canton-ledger-api-value`
 lazy val `canton-ledger-json-api` = BuildCommon.`canton-ledger-json-api`
 lazy val `canton-daml-adjustable-clock` = BuildCommon.`canton-daml-adjustable-clock`
@@ -150,7 +149,6 @@ lazy val root: Project = (project in file("."))
     `canton-community-synchronizer`,
     `canton-community-participant`,
     `canton-ledger-common`,
-    `canton-ledger-api-core`,
     `canton-ledger-api-value`,
     `canton-google-common-protos-scala`,
     `canton-observability-metrics-testing`,
@@ -2503,10 +2501,7 @@ updateTestConfigForParallelRuns := {
   val allTestNames =
     definedTests
       .all(
-        ScopeFilter(inAggregates(root), inConfigurations(Test)) -- ScopeFilter(
-          inProjects(`canton-ledger-api-core`),
-          inConfigurations(Test),
-        )
+        ScopeFilter(inAggregates(root), inConfigurations(Test))
       )
       .value
       .flatten
