@@ -19,7 +19,10 @@ import org.lfdecentralizedtrust.splice.util.{
   WalletTestUtil,
 }
 import org.lfdecentralizedtrust.splice.validator.automation.ReceiveFaucetCouponTrigger
-import org.lfdecentralizedtrust.splice.wallet.automation.CollectRewardsAndMergeAmuletsTrigger
+import org.lfdecentralizedtrust.splice.wallet.automation.{
+  CollectRewardsAndMergeAmuletsTrigger,
+  RewardSharingTrigger,
+}
 import org.lfdecentralizedtrust.splice.wallet.config.{
   AppRewardBeneficiaryConfig,
   RewardSharingConfig,
@@ -31,6 +34,10 @@ import scala.concurrent.duration.DurationInt
   * that the sharing trigger correctly assigns beneficiaries with the right
   * amounts (batching multiple coupons), that the minting trigger does not
   * re-assign unshared coupons, and that balances reflect the minted rewards.
+  * The test also verifies external mode: a party configured External gets no
+  * built-in sharing trigger, and its unassigned reward coupons are left
+  * untouched (neither shared nor collected). This confirms that built-in and
+  * external modes co-exist in one environment without interfering.
   */
 @org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_19
 class WalletRewardsTimeBasedIntegrationTest
@@ -54,6 +61,8 @@ class WalletRewardsTimeBasedIntegrationTest
         }
         val aliceValidatorPartyId = validatorPartyId("alice_validator_user", "aliceValidator")
         val bobValidatorPartyId = validatorPartyId("bob_validator_user", "bobValidator")
+        val splitwellValidatorPartyId =
+          validatorPartyId("splitwell_validator_user", "splitwellValidator")
         updateAllValidatorConfigs { case (name, c) =>
           if (name == "aliceValidator") {
             // Alice shares 40% with bob; the implicit remainder (60%) goes to alice.
@@ -65,6 +74,12 @@ class WalletRewardsTimeBasedIntegrationTest
                     AppRewardBeneficiaryConfig(bobValidatorPartyId, BigDecimal(0.4))
                   ),
                 )
+              )
+            )
+          } else if (name == "splitwellValidator") {
+            c.copy(
+              rewardSharingConfigByParty = Map(
+                splitwellValidatorPartyId.toProtoPrimitive -> RewardSharingConfig.External
               )
             )
           } else c
@@ -88,6 +103,22 @@ class WalletRewardsTimeBasedIntegrationTest
       waitForWalletUser(bobValidatorWalletClient)
       val aliceValidatorParty = aliceValidatorBackend.getValidatorPartyId()
       val bobValidatorParty = bobValidatorBackend.getValidatorPartyId()
+      val splitwellValidatorParty = splitwellValidatorBackend.getValidatorPartyId()
+
+      clue("alice (built in) has sharing trigger; splitwell (external) does not") {
+        val aliceAutomation = aliceValidatorBackend
+          .userWalletAutomation(aliceValidatorWalletClient.config.ledgerApiUser)
+          .futureValue
+        aliceAutomation.triggers[RewardSharingTrigger] should not be empty
+
+        eventually() {
+          val splitwellWallet = splitwellValidatorBackend.appState.walletManager
+            .valueOrFail("WalletManager is expected to be defined")
+            .lookupEndUserPartyWallet(splitwellValidatorParty)
+            .valueOrFail("Expected splitwell validator to have a wallet")
+          splitwellWallet.automation.triggers[RewardSharingTrigger] shouldBe empty
+        }
+      }
 
       // Tap amulet and do a transfer from alice to bob
       aliceWalletClient.tap(walletAmuletToUsd(50))
@@ -111,6 +142,7 @@ class WalletRewardsTimeBasedIntegrationTest
 
       val bobV2Amount = BigDecimal(1000.0)
       val aliceV2Amounts = Seq(BigDecimal(10.0), BigDecimal(5.0))
+      val splitwellV2Amount = BigDecimal(7.0)
 
       val openRounds = eventually() {
         import math.Ordering.Implicits.*
@@ -145,6 +177,11 @@ class WalletRewardsTimeBasedIntegrationTest
         .pause()
         .futureValue
 
+      splitwellValidatorBackend.validatorAutomation
+        .trigger[ReceiveFaucetCouponTrigger]
+        .pause()
+        .futureValue
+
       val bobRewardTrigger = bobValidatorBackend
         .userWalletAutomation(bobValidatorWalletClient.config.ledgerApiUser)
         .futureValue
@@ -159,10 +196,11 @@ class WalletRewardsTimeBasedIntegrationTest
         // Bob (no sharing config) → his coupon stays unminted (trigger paused).
         // Alice (has sharing config, 2 coupons) → shared then minted,
         // exercising batching via additionalCoupons in AssignBeneficiaries.
-        clue("Create unassigned RewardCouponV2 for both validators") {
+        clue("Create unassigned RewardCouponV2 for all validators") {
           createRewardCouponsV2(
             Seq(
-              (bobValidatorParty, bobV2Amount, None)
+              (bobValidatorParty, bobV2Amount, None),
+              (splitwellValidatorParty, splitwellV2Amount, None),
             ) ++ aliceV2Amounts.map((aliceValidatorParty, _, None))
           )
         }
@@ -222,6 +260,27 @@ class WalletRewardsTimeBasedIntegrationTest
               }
             bobAssigned should not be empty withClue
               "Bob should have an assigned coupon from alice's sharing"
+          }
+        }
+
+        clue("splitwell's external coupon is neither shared nor collected") {
+          val splitwellWallet = splitwellValidatorBackend.appState.walletManager
+            .valueOrFail("WalletManager is expected to be defined")
+            .lookupEndUserPartyWallet(splitwellValidatorParty)
+            .valueOrFail("Expected splitwell validator to have a wallet")
+          eventually() {
+            val coupons = splitwellWallet.store.multiDomainAcsStore
+              .listContracts(RewardCouponV2.COMPANION)
+              .futureValue
+              .filter(_.payload.provider == splitwellValidatorParty.toProtoPrimitive)
+
+            coupons should have size 1 withClue
+              "the single unassigned coupon must still be present"
+
+            coupons.filter(_.payload.beneficiary.isPresent) shouldBe
+              empty withClue "external mode must not assign beneficiaries"
+
+            BigDecimal(coupons.head.payload.amount) shouldBe splitwellV2Amount
           }
         }
 
