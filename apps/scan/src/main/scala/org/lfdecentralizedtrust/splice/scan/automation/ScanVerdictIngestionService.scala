@@ -267,6 +267,7 @@ class ScanVerdictIngestionService(
             items,
             appActivityRecords,
             lastArchivedRoundO,
+            hasTrafficSummaries = summaryByTime.nonEmpty,
           )
         } yield {
           val lastRecordTime = verdicts.lastOption

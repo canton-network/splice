@@ -46,7 +46,8 @@ object DbAppActivityRecordStore {
     * @param codeVersion code version of the ingestion logic
     * @param userVersion operator-configured version from ScanAppConfig
     * @param startedIngestingAt record time (microseconds since epoch) of the first
-    *                           verdict in the first batch with activity records
+    *                           verdict batch with traffic summaries, or None during
+    *                           bootstrap before the sequencer serves traffic
     * @param earliestIngestedRound the earliest round number in the first batch with activity records
     * @param lastArchivedRound the highest round number which has been archived as of
     *                          the max record_time of the ingested verdicts
@@ -55,7 +56,7 @@ object DbAppActivityRecordStore {
       historyId: Long,
       codeVersion: Int,
       userVersion: Int,
-      startedIngestingAt: Long,
+      startedIngestingAt: Option[Long],
       earliestIngestedRound: Long,
       lastArchivedRound: Option[Long],
   )
@@ -112,13 +113,13 @@ class DbAppActivityRecordStore(
   private val startedIngestingAtRef =
     new AtomicReference[Option[Long]](None)
 
-  /** The record time of the first activity record in the store. */
+  /** The record time of the first verdict batch with traffic summaries. */
   def startedIngestingAt(implicit tc: TraceContext): Future[Option[Long]] =
     startedIngestingAtRef.get() match {
       case some @ Some(_) => Future.successful(some)
       case None =>
         lookupActivityRecordMeta(ingestionVersions.code, ingestionVersions.user).map { metaO =>
-          val tsO = metaO.map(_.startedIngestingAt)
+          val tsO = metaO.flatMap(_.startedIngestingAt)
           tsO.foreach(ts => startedIngestingAtRef.compareAndSet(None, Some(ts)))
           tsO
         }
@@ -303,11 +304,16 @@ class DbAppActivityRecordStore(
     * activity records exist (e.g., no featured app providers).
     * On a fresh firstSV with no archived rounds, bootstraps round 0
     * as complete.
+    *
+    * @param hasTrafficSummaries true when the current verdict batch
+    *        contains traffic summaries from the sequencer.  Controls
+    *        whether `started_ingesting_at` is populated in the meta row.
     */
   def insertAppActivityRecordsDBIO(
       items: Seq[AppActivityRecordT],
       firstRecordTimeMicros: Long,
       lastArchivedRoundO: Option[Long] = None,
+      hasTrafficSummaries: Boolean = false,
   )(implicit tc: TraceContext): DBIO[Unit] = {
     val insertRecords =
       if (items.isEmpty) DBIO.successful(())
@@ -334,16 +340,22 @@ class DbAppActivityRecordStore(
     val lastArchived = lastArchivedRoundO
       .orElse(if (isFirstSv) Some(0L) else None)
 
+    val startedIngestingAtO =
+      if (hasTrafficSummaries) Some(firstRecordTimeMicros) else None
+
     for {
       _ <- insertRecords
       ensureResult <- earliestRound match {
         case Some(earliest) =>
-          ensureMetaDBIO((firstRecordTimeMicros, earliest), lastArchived)
+          ensureMetaDBIO((startedIngestingAtO, earliest), lastArchived)
         case None =>
           // No archived rounds and not firstSV — skip meta creation.
           // A later verdict batch will create it.
           DBIO.successful(Resume: MetaCheckResult)
       }
+      _ <-
+        if (hasTrafficSummaries) updateStartedIngestingAtIfNullDBIO(firstRecordTimeMicros)
+        else DBIO.successful(0)
       _ <- (ensureResult, lastArchivedRoundO) match {
         // We already have meta row, so do the update in place.
         case (Resume, Some(round)) => updateLastArchivedRoundDBIO(round)
@@ -381,7 +393,7 @@ class DbAppActivityRecordStore(
         historyId = prs.<<[Long],
         codeVersion = prs.<<[Int],
         userVersion = prs.<<[Int],
-        startedIngestingAt = prs.<<[Long],
+        startedIngestingAt = prs.<<[Option[Long]],
         earliestIngestedRound = prs.<<[Long],
         lastArchivedRound = prs.<<[Option[Long]],
       )
@@ -406,7 +418,7 @@ class DbAppActivityRecordStore(
   def insertActivityRecordMetaDBIO(
       codeVersion: Int,
       userVersion: Int,
-      startedIngestingAt: Long,
+      startedIngestingAt: Option[Long],
       earliestIngestedRound: Long,
       lastArchivedRound: Option[Long],
   ) =
@@ -416,6 +428,15 @@ class DbAppActivityRecordStore(
              earliest_ingested_round, last_archived_round)
           values ($historyId, $codeVersion, $userVersion, $startedIngestingAt,
                   $earliestIngestedRound, $lastArchivedRound)
+    """.asUpdate
+
+  private def updateStartedIngestingAtIfNullDBIO(ts: Long) =
+    sql"""update #${Tables.activityRecordMeta}
+          set started_ingesting_at = $ts
+          where history_id = $historyId
+            and activity_ingestion_code_version = ${ingestionVersions.code}
+            and activity_ingestion_user_version = ${ingestionVersions.user}
+            and started_ingesting_at is null
     """.asUpdate
 
   private def updateLastArchivedRoundDBIO(round: Long) =
@@ -431,7 +452,7 @@ class DbAppActivityRecordStore(
   def insertActivityRecordMetaForTesting(
       codeVersion: Int,
       userVersion: Int,
-      startedIngestingAt: Long,
+      startedIngestingAt: Option[Long],
       earliestIngestedRound: Long,
       lastArchivedRound: Option[Long],
   )(implicit tc: TraceContext): Future[Unit] =
@@ -452,19 +473,19 @@ class DbAppActivityRecordStore(
 
   /** DBIO action that checks/inserts the meta row.
     *
-    * @param ingestionStart `Some((firstRecordTimeMicros, earliestRound))` when
-    *                       the batch has activity records, `None` otherwise.
+    * @param ingestionStart `(startedIngestingAtO, earliestRound)` — the timestamp
+    *                       is None during bootstrap (before traffic summaries are available)
     * @param lastArchivedRoundO the last archived round to store when inserting
     *                           a new meta row
     */
   def ensureMetaDBIO(
-      ingestionStart: (Long, Long),
+      ingestionStart: (Option[Long], Long),
       lastArchivedRoundO: Option[Long] = None,
       exitOnDowngrade: Boolean = true,
   )(implicit tc: TraceContext): DBIO[MetaCheckResult] = {
     val codeVersion = ingestionVersions.code
     val userVersion = ingestionVersions.user
-    val (firstRecordTimeMicros, earliestRound) = ingestionStart
+    val (startedIngestingAtO, earliestRound) = ingestionStart
     if (metaChecked.get()) DBIO.successful(Resume)
     else {
       for {
@@ -484,7 +505,7 @@ class DbAppActivityRecordStore(
             insertActivityRecordMetaDBIO(
               codeVersion,
               userVersion,
-              firstRecordTimeMicros,
+              startedIngestingAtO,
               earliestRound,
               lastArchivedRoundO,
             ).map { _ =>

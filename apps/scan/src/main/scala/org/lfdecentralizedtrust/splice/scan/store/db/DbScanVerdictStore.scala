@@ -486,6 +486,7 @@ class DbScanVerdictStore(
       items: NonEmptyList[(VerdictT, Long => Seq[TransactionViewT])],
       appActivityRecords: Seq[(CantonTimestamp, AppActivityRecordT)],
       lastArchivedRoundO: Option[Long] = None,
+      hasTrafficSummaries: Boolean = false,
   )(implicit tc: TraceContext): Future[Unit] = {
     import profile.api.jdbcActionExtensionMethods
 
@@ -499,6 +500,7 @@ class DbScanVerdictStore(
         resolvedAppActivityRecords,
         items.head._1.recordTime.toMicros,
         lastArchivedRoundO,
+        hasTrafficSummaries,
       )
     } yield ()
 
@@ -546,11 +548,17 @@ class DbScanVerdictStore(
       items: Seq[AppActivityRecordT],
       firstRecordTimeMicros: Long,
       lastArchivedRoundO: Option[Long],
+      hasTrafficSummaries: Boolean,
   )(implicit tc: TraceContext): DBIO[Unit] =
     appActivityRecordStoreO match {
       case None => DBIO.successful(())
       case Some(s) =>
-        s.insertAppActivityRecordsDBIO(items, firstRecordTimeMicros, lastArchivedRoundO)
+        s.insertAppActivityRecordsDBIO(
+          items,
+          firstRecordTimeMicros,
+          lastArchivedRoundO,
+          hasTrafficSummaries,
+        )
     }
 
   private def afterFilters(
