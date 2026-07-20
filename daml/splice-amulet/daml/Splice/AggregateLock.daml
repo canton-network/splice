@@ -175,7 +175,7 @@ template AggregateLock
               ]
     -- Choice temporarily lives here and it will be moved, testing/draft purposes atm
     -- Note: this whole choice is WIP
-    nonconsuming choice VestingLock_Withdraw : () -- TODO: Return type possibly AllocationResult
+    nonconsuming choice VestingLock_Withdraw : AllocationResult
       with
         factoryCid : ContractId SettlementFactory
         authorizers : [Party]
@@ -211,12 +211,12 @@ template AggregateLock
           let
             info = SettlementInfo with
               executors = [ dso ]
-              id = "VestingLock_Withdraw"
-              cid = Some $ coerceContractId vestingLockCid
+              id = "AggregateLock"
+              cid = Some $ coerceContractId self
               meta = emptyMetadata
             transferLegId = "withdraw"
 
-          exercise factoryCid $ SettlementFactory_SettleBatch with
+          batchResults <- exercise factoryCid $ SettlementFactory_SettleBatch with
             settlement = info
             actors = [ dso ]
             extraArgs = ExtraArgs emptyChoiceContext emptyMetadata
@@ -240,9 +240,18 @@ template AggregateLock
                       amount = remainingVestingAmount
                       instrumentId
                       meta = emptyMetadata
+                    , TransferLegSide with
+                      transferLegId
+                      side = ReceiverSide
+                      otherside = vestingLock.allocation.authorizer
+                      amount = remainingVestingAmount
+                      instrumentId
+                      meta = emptyMetadata
                     ]
                   nextIterationFunding = Some $ TM.singleton instrumentId remainingVestingAmount
               ]
 
+          -- TODO: Fix hacky way potentially
+          let (allocationResult::_) = batchResults.allocationSettleResults
 
-          pure ()
+          pure allocationResult
