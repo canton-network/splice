@@ -8,22 +8,28 @@ import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.logging.{NamedLoggerFactory, SuppressionRule}
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.time.Clock
+import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.{HasActorSystem, HasExecutionContext}
 import org.apache.pekko.NotUsed
-import org.apache.pekko.http.scaladsl.model.StatusCodes
+import org.apache.pekko.http.scaladsl.model.Uri
+import org.lfdecentralizedtrust.splice.config.NetworkAppClientConfig
+import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
+import org.lfdecentralizedtrust.splice.test.HasRetryProvider
 import org.apache.pekko.stream.Materializer
 import org.slf4j.event.Level
 import org.apache.pekko.stream.scaladsl.{Flow, Keep}
 import org.apache.pekko.stream.testkit.scaladsl.{TestSink, TestSource}
-import org.lfdecentralizedtrust.splice.admin.http.HttpErrorWithHttpCode
 import org.lfdecentralizedtrust.splice.config.{AutomationConfig, UpgradesConfig}
 import org.lfdecentralizedtrust.splice.environment.{RetryProvider, SpliceLedgerClient}
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.http.v0.definitions.GetBulkObjectChecksumsResponse
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.{
+  BftScanConnection,
+  SingleScanConnection,
+}
 import org.lfdecentralizedtrust.splice.scan.config.BulkStorageConfig
-import org.lfdecentralizedtrust.splice.scan.store.ScanStore
+import org.lfdecentralizedtrust.splice.scan.store.{ScanInfo, ScanStore}
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChecksum
 import org.lfdecentralizedtrust.splice.store.{HasS3Mock, StoreTestBase}
 import org.lfdecentralizedtrust.splice.store.db.SplicePostgresTest
@@ -40,7 +46,8 @@ class BulkStorageCommitFromStagingTest
     with HasExecutionContext
     with HasActorSystem
     with HasS3Mock
-    with SplicePostgresTest {
+    with SplicePostgresTest
+    with HasRetryProvider {
 
   override val initialBuckets = Seq("staging", "committed")
   implicit val httpClient: HttpClient = null
@@ -116,20 +123,19 @@ class BulkStorageCommitFromStagingTest
     "successfully move objects from staging to committed S3 bucket when there's full consensus" in {
       val (stagingS3Connection, committedS3Connection, objsWithDigests) = setupTest
 
-      val mockConnection = mock[BftScanConnection]
-      when(
-        mockConnection
-          .getBulkObjectChecksums(any[Seq[String]])(any[ExecutionContext], any[TraceContext])
-      )
-        .thenReturn(
-          Future.successful(
-            new GetBulkObjectChecksumsResponse(objsWithDigests.map(_.checksum).toVector)
-          )
-        )
+      val mockScanConnections = new MockScanConnections(objsWithDigests)
+      Seq.range(0, 7).foreach { i =>
+        mockScanConnections.scanAgrees(i)
+      }
 
-      triggerCopyFlowAndAssertCompletion(
-        newCopyFlow(mockConnection, stagingS3Connection, committedS3Connection, objsWithDigests)
+      val flow = newCopyFlow(
+        stagingS3Connection,
+        committedS3Connection,
+        objsWithDigests,
+        mockScanConnections,
       )
+
+      triggerCopyFlowAndAssertCompletion(flow)
 
       assertObjectsMoved(stagingS3Connection, committedS3Connection, objsWithDigests)
     }
@@ -137,10 +143,14 @@ class BulkStorageCommitFromStagingTest
     "wait until all objects are known to the peers" in {
       val (stagingS3Connection, committedS3Connection, objsWithDigests) = setupTest
 
-      val mockConnection = mock[BftScanConnection]
+      val mockScanConnections = new MockScanConnections(objsWithDigests)
 
-      val flow =
-        newCopyFlow(mockConnection, stagingS3Connection, committedS3Connection, objsWithDigests)
+      val flow = newCopyFlow(
+        stagingS3Connection,
+        committedS3Connection,
+        objsWithDigests,
+        mockScanConnections,
+      )
 
       val (pub, sub) = TestSource
         .probe[String]
@@ -148,79 +158,166 @@ class BulkStorageCommitFromStagingTest
         .toMat(TestSink.probe[String])(Keep.both)
         .run()
 
-      clue("When one object is not known to the peers, the copy flow should not complete") {
-        when(
-          mockConnection
-            .getBulkObjectChecksums(any[Seq[String]])(any[ExecutionContext], any[TraceContext])
-        )
-          .thenReturn(
-            Future.successful(
-              new GetBulkObjectChecksumsResponse(
-                objsWithDigests.map(_.checksum).toVector.updated(1, "")
-              )
-            )
+      try {
+        clue("When one object is not known to the peers, the copy flow should not complete") {
+          Seq.range(0, 2).foreach(i => mockScanConnections.scanAgrees(i))
+          Seq.range(2, 7).foreach(i => mockScanConnections.scanMissingAnObject(i, 1))
+
+          sub.request(1)
+          pub.sendNext("go")
+          sub.expectNoMessage(20.seconds)
+
+          stagingS3Connection.listObjects.futureValue
+            .contents()
+            .asScala should have size objsWithDigests.size.toLong
+          committedS3Connection.listObjects.futureValue.contents().asScala shouldBe empty
+        }
+
+        clue(
+          "Simulate a majority disagreeing with our digests, the copy flow should not complete and an error should be emitted"
+        ) {
+          Seq.range(2, 7).foreach(i => mockScanConnections.scanDisagreesOnDigest(i, 1))
+          loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(Level.ERROR))(
+            {
+              sub.expectNoMessage(20.seconds)
+            },
+            logEntries =>
+              forAtLeast(1, logEntries)(
+                _.message should include(
+                  "BFT consensus checksums do not match the expected checksums for all objects"
+                )
+              ),
           )
-        sub.request(1)
-        pub.sendNext("go")
-        sub.expectNoMessage(20.seconds)
+          stagingS3Connection.listObjects.futureValue
+            .contents()
+            .asScala should have size objsWithDigests.size.toLong
+          committedS3Connection.listObjects.futureValue.contents().asScala shouldBe empty
 
-        stagingS3Connection.listObjects.futureValue
-          .contents()
-          .asScala should have size objsWithDigests.size.toLong
-        committedS3Connection.listObjects.futureValue.contents().asScala shouldBe empty
-      }
+        }
 
-      clue("Simulate disagreement across peers") {
-        when(
-          mockConnection
-            .getBulkObjectChecksums(any[Seq[String]])(any[ExecutionContext], any[TraceContext])
-        )
-          .thenReturn(
-            Future.failed(
-              HttpErrorWithHttpCode(StatusCodes.BadGateway, "Simulated disagreement across peers")
-            )
-          )
-        sub.expectNoMessage(20.seconds)
-      }
-
-      clue(
-        "Make the missing object known to all peers, the copy flow should now complete successfully"
-      ) {
-        when(
-          mockConnection
-            .getBulkObjectChecksums(any[Seq[String]])(any[ExecutionContext], any[TraceContext])
-        )
-          .thenReturn(
-            Future.successful(
-              new GetBulkObjectChecksumsResponse(
-                objsWithDigests.map(_.checksum).toVector
-              )
-            )
-          )
-
-        sub.expectNext(20.seconds, "go")
-        assertObjectsMoved(stagingS3Connection, committedS3Connection, objsWithDigests)
+        clue("Enough scans do agree - the copy flow should complete successfully") {
+          Seq.range(2, 5).foreach(i => mockScanConnections.scanAgrees(i))
+          sub.expectNext(20.seconds, "go")
+          assertObjectsMoved(stagingS3Connection, committedS3Connection, objsWithDigests)
+        }
+      } catch {
+        case ex: Throwable =>
+          pub.sendComplete()
+          sub.cancel()
+          throw ex
       }
     }
 
+    class MockScanConnections(
+        objsWithDigests: Seq[ObjectKeyAndChecksum]
+    ) {
+
+      private val singleScanConnections: Seq[SingleScanConnection] = Seq.range(0, 7).map { i =>
+        val mockConn = mock[SingleScanConnection]
+        when(mockConn.config) thenReturn ScanAppClientConfig(
+          NetworkAppClientConfig(
+            Uri(s"http://dummy-admin-$i")
+          )
+        )
+        when(mockConn.url) thenReturn Uri(s"http://scan_$i")
+        mockConn
+      }
+
+      def scanAgrees(idx: Integer): Unit = {
+        when(
+          singleScanConnections(idx)
+            .getBulkObjectChecksums(any[Seq[String]])(any[ExecutionContext], any[TraceContext])
+        )
+          .thenReturn(
+            Future.successful(
+              new GetBulkObjectChecksumsResponse(objsWithDigests.map(_.checksum).toVector)
+            )
+          )
+        ()
+      }
+
+      def scanDisagreesOnDigest(scanIdx: Integer, objIdx: Integer): Unit = {
+        when(
+          singleScanConnections(scanIdx)
+            .getBulkObjectChecksums(any[Seq[String]])(any[ExecutionContext], any[TraceContext])
+        )
+          .thenReturn(
+            Future.successful(
+              new GetBulkObjectChecksumsResponse(
+                objsWithDigests.map(_.checksum).updated(objIdx, "wrong-digest").toVector
+              )
+            )
+          )
+      }
+
+      def scanMissingAnObject(scanIdx: Integer, objIdx: Integer): Unit = {
+        when(
+          singleScanConnections(scanIdx)
+            .getBulkObjectChecksums(any[Seq[String]])(any[ExecutionContext], any[TraceContext])
+        )
+          .thenReturn(
+            Future.successful(
+              new GetBulkObjectChecksumsResponse(
+                objsWithDigests.map(_.checksum).updated(objIdx, "").toVector
+              )
+            )
+          )
+      }
+
+      private val scanList = new BftScanConnection.AllDsoScansBft(
+        initialScanConnections = singleScanConnections,
+        initialFailedConnections = Map.empty,
+        connectionBuilder = _ => Future.failed(new RuntimeException("Shouldn't be refreshing!")),
+        scanUrlsChangedCallback = _ => Future.unit,
+        getScans = BftScanConnection.Bft.getScansInDsoRules,
+        scansRefreshInterval = NonNegativeFiniteDuration.ofDays(10),
+        retryProvider = testRetryProvider,
+        loggerFactory = loggerFactory,
+      )
+      val bftConnection = new BftScanConnection(
+        amuletLedgerClient = mock[SpliceLedgerClient],
+        amuletRulesCacheTimeToLive = NonNegativeFiniteDuration.ofSeconds(1),
+        scanList = scanList,
+        clock = wallClock,
+        retryProvider = testRetryProvider,
+        loggerFactory = loggerFactory,
+      )
+      private val syncId = "dummy::dummy"
+      val scanStore: ScanStore = mock[ScanStore]
+      when(scanStore.getDecentralizedSynchronizerId()(any[TraceContext]))
+        .thenReturn(Future.successful(SynchronizerId.tryFromString(syncId)))
+      when(scanStore.listDsoScans()(any[TraceContext]))
+        .thenReturn(
+          Future.successful(
+            Seq(
+              syncId -> Seq
+                .range(0, 7)
+                .map(i => ScanInfo(s"https://dummy-admin-$i", s"sv-$i"))
+                .toVector
+            ).toVector
+          )
+        )
+
+    }
+
     def newCopyFlow(
-        bftScanConnection: BftScanConnection,
         stagingS3Connection: S3BucketConnectionForUnitTests,
         committedS3Connection: S3BucketConnectionForUnitTests,
         objsWithDigests: Seq[ObjectKeyAndChecksum],
+        mockScanConnections: MockScanConnections,
     ) = {
       new BulkStorageCommitFromStaging[String](
         stagingS3Connection,
         committedS3Connection,
         _ => Future.successful(objsWithDigests),
         appConfig,
-        null, // we're mocking the bft reads
-        null, // we're mocking the bft reads
-        null, // we're mocking the bft reads
-        null, // we're mocking the bft reads
-        null, // we're mocking the bft reads
-        null, // we're mocking the bft reads
-        null, // we're mocking the bft reads
+        mockScanConnections.scanStore,
+        "sv-1",
+        null, // no ledger client, we're using real BFT with mock single connections
+        AutomationConfig(),
+        UpgradesConfig(),
+        wallClock,
+        testRetryProvider,
         loggerFactory,
       ) {
         override protected def getOrCreateScanConnection(
@@ -238,7 +335,7 @@ class BulkStorageCommitFromStagingTest
             mat: Materializer,
             httpClient: HttpClient,
             templateJsonDecoder: TemplateJsonDecoder,
-        ): Future[BftScanConnection] = Future.successful(bftScanConnection)
+        ): Future[BftScanConnection] = Future.successful(mockScanConnections.bftConnection)
       }.getFlow
     }
   }
@@ -252,9 +349,18 @@ class BulkStorageCommitFromStagingTest
       .toMat(TestSink.probe[String])(Keep.both)
       .run()
 
-    sub.request(1)
-    pub.sendNext("go")
-    sub.expectNext("go")
+    try {
+      sub.request(1)
+      pub.sendNext("go")
+      sub.expectNext("go")
+      pub.sendComplete()
+      sub.expectComplete()
+    } catch {
+      case ex: Throwable =>
+        pub.sendComplete()
+        sub.cancel()
+        throw ex
+    }
   }
 
   private def assertObjectsMoved(

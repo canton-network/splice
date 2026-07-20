@@ -97,7 +97,7 @@ import scala.util.{Failure, Success}
   * to query for the DSO party id.
   */
 class SingleScanConnection private[client] (
-    private[client] val config: ScanAppClientConfig,
+    val config: ScanAppClientConfig,
     upgradesConfig: UpgradesConfig,
     protected val clock: Clock,
     retryProvider: RetryProvider,

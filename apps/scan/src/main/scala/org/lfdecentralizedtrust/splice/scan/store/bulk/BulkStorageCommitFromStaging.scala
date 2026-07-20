@@ -79,7 +79,7 @@ class BulkStorageCommitFromStaging[T](
             logger.debug(s"Consensus achieved on ${consensusChecksums.length} objects")
             val consensus = bftChecksums.checksums.filter(_.nonEmpty) == objects.map(_.checksum)
             if (consensusChecksums.length == objects.length && !consensus) {
-              logger.warn(
+              logger.error(
                 s"BFT consensus checksums do not match the expected checksums for all objects. Expected: ${objects
                     .map(_.checksum)
                     .mkString(", ")}, got: ${consensusChecksums.mkString(", ")}"
