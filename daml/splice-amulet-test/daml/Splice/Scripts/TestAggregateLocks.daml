@@ -1,0 +1,109 @@
+{-# LANGUAGE ApplicativeDo #-}
+module Splice.Scripts.TestAggregateLocks where
+
+import DA.Time
+import Daml.Script
+import Splice.Amulet
+import Splice.AggregateLock
+import Splice.AmuletRules
+import Splice.Expiry
+import Splice.Scripts.Util
+import Splice.TokenStandard.Utils qualified as TSU
+import Splice.Api.Token.AllocationV2 qualified as V2
+import Splice.Testing.TokenStandard.RegistryApiV2
+import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
+import Splice.Testing.Registries.AmuletRegistryV2
+import Splice.Api.Token.MetadataV1
+import Splice.Api.Token.AllocationV2
+import Splice.Api.Token.AllocationInstructionV2
+import Splice.AmuletAllocationV2
+import Splice.Testing.Utils
+
+import Splice.ExternalPartyAmuletRules
+
+import DA.Assert
+import DA.Optional
+import DA.Functor
+import DA.Foldable (mapA_, sequence_)
+import qualified DA.TextMap as TM
+
+import Splice.Scripts.TokenStandard.TestAmuletTokenStandardTestEnv
+import Splice.Testing.Registries.AmuletRegistryV2 qualified as AmuletRegistryV2
+
+
+lockForGovernance : TestEnv -> TM.TextMap Decimal -> Metadata -> Party -> ContractId AggregateLock -> Script AllocationInstructionResult
+lockForGovernance (TestEnv {..}) amounts meta party aggCid = do
+    WalletClientV2.allocateV2 registries bob lockSettlementInfo lockAllocation
+  where
+    lockSettlementInfo = V2.SettlementInfo with
+      executors = [ instrId.admin ]
+      id = "AggregateLock"
+      cid = Some $ coerceContractId aggCid
+      meta = emptyMetadata
+    lockAllocation = V2.AllocationSpecification with
+      admin = instrId.admin
+      authorizer = TSU.basicAccount bob
+      transferLegSides = []
+      committed = True
+      nextIterationFunding = Some $ amounts -- TM.fromList [(instrId.id, amount)]
+      settlementDeadline = Some maxBound
+      meta
+
+lockForAggregate : TestEnv -> Decimal -> Party -> ContractId AggregateLock -> Script AllocationInstructionResult
+lockForAggregate te amount = lockForGovernance te (TM.fromList [(te.instrId.id, amount)]) $ Metadata $ TM.fromList
+  [ ("cip-105/type", "aggregateLock") ]
+
+lockForVesting : TestEnv -> Party -> ContractId AggregateLock -> Script AllocationInstructionResult
+lockForVesting te = lockForGovernance te TM.empty $ Metadata $ TM.fromList
+  [ ("cip-105/type", "vestingLock")
+  , ("cip-105/vestingPeriod", "365") ]
+
+testAggregateLockHappyPath : Script ()
+testAggregateLockHappyPath = do
+  env@TestEnv{..} <- setupTest
+  now <- getTime
+  let dso = env.instrId.admin
+
+  AmuletRegistryV2.tapFaucet registriesEnv.amuletV2 bob 1800.0
+  
+  aggLock <- submit (actAs [alice, dso]) $ createCmd AggregateLock with
+    dso
+    instrumentId = env.instrId.id
+    vestingSchedule = VestingSchedule_SV
+  Some aggLockDisclosure <- queryDisclosure dso aggLock
+
+  -- Lock some funds for the aggregate
+  AllocationInstructionResult { output = AllocationInstructionResult_Completed locked } <- lockForAggregate env 1000.0 bob aggLock
+
+  -- Check total for the aggregate; needs to be implemented.
+ 
+  AllocationInstructionResult { output = AllocationInstructionResult_Completed vestingInput } <- lockForVesting env bob aggLock
+
+  -- use getSettlementFactory to get the extraArgs and disclosures to call AggregateLock_Unlock
+  enriched <- getSettlementFactory registriesEnv.amuletV2 $ SettlementFactory_SettleBatch with
+    settlement = SettlementInfo with
+      executors = [ dso ]
+      id = "AggregateLock"
+      cid = None
+      meta = emptyMetadata
+    actors = [ dso ]
+    extraArgs = emptyExtraArgs
+    transferLegs = []
+    allocations = []
+
+  submit (actAs bob <> disclose aggLockDisclosure <> discloseMany' enriched.disclosures ) $ exerciseCmd aggLock $ AggregateLock_Unlock with
+    factoryCid = enriched.factoryCid
+    lockedCid = locked
+    withdrawToCid = vestingInput
+    authorizers = [ bob ]
+    amount = 100.0
+    extraArgs = enriched.arg.extraArgs
+
+  allocations <- query @AmuletAllocationV2 bob
+
+  debug allocations
+
+  assert $ length allocations == 2
+
+  -- Need to check other than via inspection that the two allocations actually exist with correct values.
+

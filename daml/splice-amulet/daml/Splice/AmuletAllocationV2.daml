@@ -230,7 +230,9 @@ computeAllocationExpiryInternal transferConfig oldExpiresAt settlementDeadline =
       | maxTime `subTime` oldExpiresAt <= maxTTL = maxTime
       | otherwise = oldExpiresAt `addRelTime` maxTTL
 
+-- FIXME: the exception to allow Some maxBound is for infinite-duration governance locks, and should probably be limited more explicitly to only those cases.
 computeAllocationExpiry : TransferConfigV2 Amulet -> Time -> Optional Time -> Update Time
+computeAllocationExpiry transferConfig oldExpiresAt settlementDeadline | settlementDeadline == Some maxBound = pure maxBound
 computeAllocationExpiry transferConfig oldExpiresAt settlementDeadline = do
   let expiresAt = computeAllocationExpiryInternal transferConfig oldExpiresAt settlementDeadline
   assertWithinDeadline "allocation.expiresAt" expiresAt

@@ -23,7 +23,7 @@ isValidVestingLockedDestination dso alloc =
   and [ alloc.allocation.admin == dso
       , alloc.allocation.committed
       , null alloc.allocation.transferLegSides
-      , TM.lookup "cip-105/type" alloc.allocation.meta.values == Some "aggregateLock"
+      , TM.lookup "cip-105/type" alloc.allocation.meta.values == Some "vestingLock"
       , alloc.expiresAt == Some maxBound
       ]
 
@@ -46,6 +46,15 @@ governanceLockedControllersFromMeta meta acctParty = GovernanceLockedControllers
   where
     controllerSetFromMetaMap key = fromOptional [[acctParty]] $ controllerSetFromMeta =<< key `TM.lookup` meta.values
 
+data VestingSchedule
+  = VestingSchedule_SV
+  | VestingSchedule_Immediate
+  deriving (Show, Eq, Ord)
+
+validateVestingSchedule : VestingSchedule -> Metadata -> Bool
+validateVestingSchedule VestingSchedule_SV meta =
+  TM.lookup "cip-105/vestingPeriod" meta.values == Some "365" -- Placeholder check, depends on vesting impl.
+validateVestingSchedule VestingSchedule_Immediate _ = True
 
 -- | The intention is to treat the overall aggregate lock for a SV as if it is
 -- "the settlement" for the allocations locked to it, and use iterated
@@ -58,7 +67,7 @@ template AggregateLock
   with
     dso: Party
     instrumentId : Text
-    allowImmediateUnlock : Bool
+    vestingSchedule : VestingSchedule
   where
     signatory dso
     nonconsuming choice AggregateLock_Unlock : SettlementFactory_SettleBatchResult
@@ -68,6 +77,7 @@ template AggregateLock
         withdrawToCid : ContractId Allocation
         authorizers : [ Party ]
         amount : Decimal
+        extraArgs : ExtraArgs
       where
         controller authorizers
         do
@@ -78,14 +88,14 @@ template AggregateLock
           let GovernanceLockedControllers{..} = governanceLockedControllersFromMeta locked.meta ownerParty
           require "Unlock controller must be one of the options" $ any (\conj -> all (`elem` authorizers) conj) unlockControllerSets
           require "Not allowed to unlock to a different party than locked the funds" $ locked.allocation.authorizer == withdrawTo.allocation.authorizer
-          if not allowImmediateUnlock then require "Unlock without vesting is only allowed when specifically enabled" False else pure ()
           require "Must be a valid governance-locked allocation" $ isValidAggregateLockedAllocation dso locked
           require "Must be a valid empty vesting unlock allocation" $ isValidVestingLockedDestination dso withdrawTo
           require "Must have amounts reserved within the next settlement iteration" $ isSome locked.allocation.nextIterationFunding
+          require "Vesting allocation must have a correct schedule configuration" $ validateVestingSchedule vestingSchedule withdrawTo.allocation.meta
           let
             info = SettlementInfo with
               executors = [ dso ]
-              id = "AggregateLock_Unlock"
+              id = "AggregateLock"
               cid = Some $ coerceContractId self
               meta = emptyMetadata
             transferLegId = "unlock"
@@ -97,7 +107,7 @@ template AggregateLock
           exercise factoryCid $ SettlementFactory_SettleBatch with
             settlement = info
             actors = [ dso ]
-            extraArgs = ExtraArgs emptyChoiceContext emptyMetadata
+            extraArgs
             transferLegs =
               [ TransferLeg with
                   transferLegId
@@ -125,11 +135,11 @@ template AggregateLock
                   extraTransferLegSides =
                     [ TransferLegSide with
                       transferLegId
-                      side = SenderSide
+                      side = ReceiverSide
                       otherside = locked.allocation.authorizer
                       amount
                       instrumentId
                       meta = emptyMetadata
                     ]
-                  nextIterationFunding = Some $ TM.singleton instrumentId newLockedAmount
+                  nextIterationFunding = Some $ TM.singleton instrumentId amount
               ]
