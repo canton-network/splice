@@ -59,15 +59,28 @@ class StoreMetrics(metricsFactory: LabeledMetricsFactory)(metricsContext: Metric
       )
     )
 
-  val acsSize: Gauge[Long] =
-    metricsFactory.gauge(
+  // we track increase and decrease separately as promql's increase doesn't work for counters that go up and down
+  // and delta will not handle resets to 0 after a restart properly.
+  val acsSizeIncrease: Meter =
+    metricsFactory.meter(
       MetricInfo(
-        name = prefix :+ "acs-size",
-        summary = "The number of active contracts in this store",
+        name = prefix :+ "acs-size-increase",
+        summary = "Counter for the number of active contracts added to the store",
         Traffic,
-        "The number of active contracts in this store. Note that this is only in the given store. The participant might have contracts we do not ingest.",
-      ),
-      0L,
+        "Counter for the number of active contracts added to the store. This is _not_ an absolute value of the size, it can only be used to track changes. Note that for an individual transaction this is netted against acsSizeDecrease so ony one of the two will increase. Note that this is only in the given store. The participant might have contracts we do not ingest.",
+      )
+    )(metricsContext)
+
+  // we track increase and decrease separately as promql's increase doesn't work for counters that go up and down
+  // and delta will not handle resets to 0 after a restart properly.
+  val acsSizeDecrease: Meter =
+    metricsFactory.meter(
+      MetricInfo(
+        name = prefix :+ "acs-size-decrease",
+        summary = "Counter for the number of active contracts removed to the store",
+        Traffic,
+        "Counter for the number of active contracts removed from the store. This is _not_ an absolute value of the size, it can only be used to track changes. Note that for an individual transaction this is netted against acsSizeIncrease so ony one of the two will increase. Note that this is only in the given store. The participant might have contracts we do not ingest.",
+      )
     )(metricsContext)
 
   val ingestedTxLogEntries: Meter = metricsFactory.meter(
@@ -158,7 +171,6 @@ class StoreMetrics(metricsFactory: LabeledMetricsFactory)(metricsContext: Metric
   }
 
   override def close(): Unit = {
-    acsSize.close()
     perSynchronizerLastIngestedRecordTimeMs.values.foreach(_.close())
     perSynchronizerLastSeenRecordTimeMs.values.foreach(_.close())
   }

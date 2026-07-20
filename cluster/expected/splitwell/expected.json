@@ -638,6 +638,7 @@
       "active": true,
       "alias": "participant-pg",
       "cloudSqlConfig": {
+        "databaseVersion": "POSTGRES_14",
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
@@ -838,6 +839,7 @@
       "active": true,
       "alias": "sw-pg",
       "cloudSqlConfig": {
+        "databaseVersion": "POSTGRES_14",
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
@@ -966,6 +968,7 @@
       "active": true,
       "alias": "validator-pg",
       "cloudSqlConfig": {
+        "databaseVersion": "POSTGRES_14",
         "enabled": true,
         "enterprisePlus": false,
         "flags": {

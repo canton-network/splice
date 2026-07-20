@@ -2,44 +2,24 @@
 // SPDX-License-Identifier: Apache-2.0
 import * as pulumi from '@pulumi/pulumi';
 import {
-  activeVersion,
   Auth0Client,
-  BucketConfig,
-  BucketLocation,
-  BootstrappingDumpConfig,
   CnInput,
-  config,
   DecentralizedSynchronizerMigrationConfig,
-  ExpectedValidatorOnboarding,
-  SvCometBftGovernanceKey,
-  svCometBftGovernanceKeyFromSecret,
-  SvIdKey,
-  svKeyFromSecret,
-  ValidatorTopupConfig,
+  exactNamespace,
 } from '@canton-network/splice-pulumi-common';
 import {
-  approvedSvIdentities,
   configForSv,
   coreSvsToDeploy,
-  initialRound,
-  StaticCometBftConfigWithNodeName,
   StaticSvConfig,
-  SvOnboarding,
 } from '@canton-network/splice-pulumi-common-sv';
-import { InstalledSv, installSvNode } from '@canton-network/splice-pulumi-common-sv/src/sv';
+import {
+  InstalledSv,
+  installSvNodeStandalone,
+} from '@canton-network/splice-pulumi-common-sv/src/sv';
 
 interface DsoArgs {
   auth0Client: Auth0Client;
-  expectedValidatorOnboardings: ExpectedValidatorOnboarding[]; // Only used by the sv1
-  isDevNet: boolean;
-  periodicBackupConfig?: BucketConfig;
-  identitiesBackupLocation: BucketLocation;
-  bootstrappingDumpConfig?: BootstrappingDumpConfig;
-  topupConfig?: ValidatorTopupConfig;
-  splitPostgresInstances: boolean;
   decentralizedSynchronizerUpgradeConfig: DecentralizedSynchronizerMigrationConfig;
-  onboardingPollingInterval?: string;
-  disableOnboardingParticipantPromotionDelay: boolean;
 }
 
 export class Dso extends pulumi.ComponentResource {
@@ -47,59 +27,17 @@ export class Dso extends pulumi.ComponentResource {
   sv1: Promise<InstalledSv>;
   allSvs: Promise<InstalledSv[]>;
 
-  private joinViaSv1(sv1: pulumi.Resource, keys: CnInput<SvIdKey>): SvOnboarding {
-    return {
-      type: 'join-with-key',
-      sponsorApiUrl: `http://sv-app.sv-1:5014`,
-      sponsorScanUrl: `http://scan-app.sv-1:5012`,
-      sponsorRelease: sv1,
-      keys,
-    };
-  }
-
   private async installSvNode(
     svConf: StaticSvConfig,
-    onboarding: SvOnboarding,
-    nodeConfigs: {
-      sv1: StaticCometBftConfigWithNodeName;
-      peers: StaticCometBftConfigWithNodeName[];
-    },
-    expectedValidatorOnboardings: ExpectedValidatorOnboarding[],
-    isFirstSv = false,
-    cometBftGovernanceKey: CnInput<SvCometBftGovernanceKey> | undefined = undefined,
     extraDependsOn: CnInput<pulumi.Resource>[] = []
-  ) {
+  ): Promise<InstalledSv> {
+    const xns = exactNamespace(svConf.nodeName, true);
     const dynamicConfig = configForSv(svConf.nodeName);
-    return installSvNode(
-      {
-        isFirstSv,
-        nodeName: svConf.nodeName,
-        ingressName: svConf.ingressName,
-        onboardingName: svConf.onboardingName,
-        nodeConfigs,
-        cometBft: svConf.cometBft,
-        validatorWalletUser: svConf.validatorWalletUser,
-        auth0ValidatorAppName: svConf.auth0ValidatorAppName,
-        auth0SvAppName: svConf.auth0SvAppName,
-        onboarding,
-        auth0Client: this.args.auth0Client,
-        expectedValidatorOnboardings,
-        isDevNet: this.args.isDevNet,
-        periodicBackupConfig: this.args.periodicBackupConfig,
-        identitiesBackupLocation: this.args.identitiesBackupLocation,
-        bootstrappingDumpConfig: this.args.bootstrappingDumpConfig,
-        topupConfig: this.args.topupConfig,
-        splitPostgresInstances: this.args.splitPostgresInstances,
-        disableOnboardingParticipantPromotionDelay:
-          this.args.disableOnboardingParticipantPromotionDelay,
-        onboardingPollingInterval: this.args.onboardingPollingInterval,
-        sweep: svConf.sweep,
-        cometBftGovernanceKey,
-        initialRound: initialRound?.toString(),
-        version: dynamicConfig.versionOverride ?? activeVersion,
-        ...dynamicConfig,
-      },
-      this.args.decentralizedSynchronizerUpgradeConfig,
+    return await installSvNodeStandalone(
+      xns,
+      svConf,
+      dynamicConfig,
+      this.args.auth0Client,
       extraDependsOn
     );
   }
@@ -108,60 +46,7 @@ export class Dso extends pulumi.ComponentResource {
     const relevantSvConfs = coreSvsToDeploy;
     const [sv1Conf, ...restSvConfs] = relevantSvConfs;
 
-    const svIdKeys = restSvConfs.reduce<Record<string, pulumi.Output<SvIdKey>>>((acc, conf) => {
-      const secretName = conf.svIdKeySecretName ?? conf.nodeName.replaceAll('-', '') + '-id';
-      return {
-        ...acc,
-        [conf.onboardingName]: svKeyFromSecret(secretName),
-      };
-    }, {});
-
-    const cometBftGovernanceKeys = relevantSvConfs
-      .filter(conf => configForSv(conf.nodeName)?.participant?.kms)
-      .reduce<Record<string, pulumi.Output<SvCometBftGovernanceKey>>>((acc, conf) => {
-        const secretName =
-          conf.cometBftGovernanceKeySecretName ??
-          conf.nodeName.replaceAll('-', '') + '-cometbft-governance-key';
-        return {
-          ...acc,
-          [conf.onboardingName]: svCometBftGovernanceKeyFromSecret(secretName),
-        };
-      }, {});
-
-    const sv1CometBftConf = {
-      ...sv1Conf.cometBft,
-      nodeName: sv1Conf.nodeName,
-      ingressName: sv1Conf.ingressName,
-    };
-    const peerCometBftConfs = restSvConfs.map(conf => ({
-      ...conf.cometBft,
-      nodeName: conf.nodeName,
-      ingressName: conf.ingressName,
-    }));
-
-    const sv1SvRewardWeightBps = (() => {
-      const found = approvedSvIdentities().find(
-        identity => identity.name == sv1Conf.onboardingName
-      );
-      return found ? found.rewardWeightBps : 10000;
-    })();
-
-    const sv1 = await this.installSvNode(
-      sv1Conf,
-      {
-        type: 'found-dso',
-        sv1SvRewardWeightBps,
-        roundZeroDuration: config.optionalEnv('ROUND_ZERO_DURATION'),
-        initialRound: initialRound?.toString(),
-      },
-      {
-        sv1: sv1CometBftConf,
-        peers: peerCometBftConfs,
-      },
-      this.args.expectedValidatorOnboardings,
-      true,
-      cometBftGovernanceKeys[sv1Conf.onboardingName]
-    );
+    const sv1 = await this.installSvNode(sv1Conf);
 
     // TODO(#893): long-term CantonBFT deployments should be robust enough to onboard in parallel again?
     const incrementalOnboarding =
@@ -177,19 +62,8 @@ export class Dso extends pulumi.ComponentResource {
       }
       const [conf, ...remainingConfigs] = configs;
 
-      const onboarding: SvOnboarding = this.joinViaSv1(sv1.svApp, svIdKeys[conf.onboardingName]);
-      const cometBft = {
-        sv1: sv1CometBftConf,
-        peers: peerCometBftConfs.filter(c => c.id !== conf.cometBft.id), // remove self from peer list
-      };
-
       const newSv = await this.installSvNode(
         conf,
-        onboarding,
-        cometBft,
-        [],
-        false,
-        cometBftGovernanceKeys[conf.onboardingName],
         incrementalOnboarding ? previousSvs.map(sv => sv.svApp) : []
       );
       return installSvNodes(remainingConfigs, [...previousSvs, newSv]);

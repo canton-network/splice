@@ -10,6 +10,7 @@ import {
   installCloudSQLMaintenanceUpdateAlerts,
   installCloudSqlTxIdUtilizationAlert,
   installClusterMaintenanceUpdateAlerts,
+  installNatAlerts,
   installGcpLoggingAlerts,
   installGcpQuotaAlerts,
   installLoggedSecretsAlerts,
@@ -53,5 +54,6 @@ if (enableAlerts && !clusterIsResetPeriodically) {
     }
     installGcpQuotaAlerts(notificationChannel, monitoringConfig.alerting.alerts.gcpQuotas);
     installCloudSqlTxIdUtilizationAlert(notificationChannel);
+    installNatAlerts(notificationChannel, monitoringConfig.alerting.alerts.natPortUsage);
   }
 }

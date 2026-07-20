@@ -4,6 +4,7 @@
     "id": "",
     "inputs": {
       "autoscaling": {
+        "locationPolicy": "ANY",
         "maxNodeCount": 1,
         "minNodeCount": 0
       },
@@ -18,7 +19,7 @@
           "cn_apps": "hyperdisk"
         },
         "loggingVariant": "DEFAULT",
-        "machineType": "c4-standard-16",
+        "machineType": "n4-standard-16",
         "taints": [
           {
             "effect": "NO_SCHEDULE",
@@ -26,12 +27,9 @@
             "value": "true"
           }
         ]
-      },
-      "nodeLocations": [
-        "europe-west6-z"
-      ]
+      }
     },
-    "name": "cn-apps-node-pool-hd",
+    "name": "cn-apps-node-pool-1-hd",
     "provider": "",
     "type": "gcp:container/nodePool:NodePool"
   },
@@ -40,7 +38,8 @@
     "id": "",
     "inputs": {
       "autoscaling": {
-        "maxNodeCount": 20,
+        "locationPolicy": "ANY",
+        "maxNodeCount": 1,
         "minNodeCount": 0
       },
       "cluster": "cn-mocknet",
@@ -54,7 +53,7 @@
           "cn_apps": "hyperdisk"
         },
         "loggingVariant": "DEFAULT",
-        "machineType": "n2-standard-16",
+        "machineType": "n4d-standard-16",
         "taints": [
           {
             "effect": "NO_SCHEDULE",
@@ -62,10 +61,7 @@
             "value": "true"
           }
         ]
-      },
-      "nodeLocations": [
-        "europe-west6-z"
-      ]
+      }
     },
     "name": "cn-apps-node-pool-hd",
     "provider": "",
@@ -76,6 +72,37 @@
     "id": "",
     "inputs": {
       "autoscaling": {
+        "locationPolicy": "ANY",
+        "maxNodeCount": 3,
+        "minNodeCount": 1
+      },
+      "cluster": "cn-mocknet",
+      "initialNodeCount": 1,
+      "nodeConfig": {
+        "labels": {
+          "cn_infra": "true"
+        },
+        "loggingVariant": "DEFAULT",
+        "machineType": "n4-standard-8",
+        "taints": [
+          {
+            "effect": "NO_SCHEDULE",
+            "key": "cn_infra",
+            "value": "true"
+          }
+        ]
+      }
+    },
+    "name": "cn-infra-node-pool-1",
+    "provider": "",
+    "type": "gcp:container/nodePool:NodePool"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "autoscaling": {
+        "locationPolicy": "ANY",
         "maxNodeCount": 3,
         "minNodeCount": 1
       },

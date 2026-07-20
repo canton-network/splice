@@ -2487,7 +2487,7 @@ updateTestConfigForParallelRuns := {
   def isDockerComposeBasedTest(name: String): Boolean =
     name contains "DockerCompose"
   def isWithDockerWithoutCantonTest(name: String): Boolean =
-    name.contains("LocalNet") || name.contains("BulkStorageTest") || name.contains("S3Upload")
+    name.contains("LocalNet") || name.contains("BulkStorage") || name.contains("S3Upload")
   def isWithDockerWithSimtimeCantonTest(name: String): Boolean =
     name contains "ScanTimeBasedIntegrationTest"
   def isCometBftTest(name: String): Boolean =
@@ -2614,11 +2614,6 @@ updateTestConfigForParallelRuns := {
       "tests with wall clock time using CometBFT",
       "test-cometbft-full-class-names.log",
       (t: String) => !isTimeBasedTest(t) && !isFrontEndTest(t) && isCometBftTest(t),
-    ),
-    (
-      "tests requiring Canton Enterprise",
-      "test-full-class-names-canton-enterprise.log",
-      (t: String) => isEnterpriseIntegrationTest(t),
     ),
     (
       "tests to check logical sync roll-forward upgrade",

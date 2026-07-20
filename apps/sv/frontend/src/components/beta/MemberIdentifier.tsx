@@ -11,17 +11,6 @@ interface MemberIdentifierProps {
   'data-testid': string;
 }
 
-function abbreviatePartyId(partyId: string, length = 10): string {
-  const [partyHint, hash] = partyId.split('::');
-  if (hash === undefined) {
-    return partyHint;
-  }
-
-  const partOfHash = hash.slice(0, length);
-
-  return `${partyHint}::${partOfHash}...`;
-}
-
 const MemberIdentifier: React.FC<MemberIdentifierProps> = ({
   partyId,
   isYou,
@@ -29,7 +18,7 @@ const MemberIdentifier: React.FC<MemberIdentifierProps> = ({
   'data-testid': testId,
 }) => (
   <CopyableIdentifier
-    value={abbreviatePartyId(partyId)}
+    value={partyId}
     copyValue={partyId}
     badge={isYou ? 'You' : undefined}
     size={size}

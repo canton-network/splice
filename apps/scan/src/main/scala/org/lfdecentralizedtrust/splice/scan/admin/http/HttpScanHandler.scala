@@ -69,6 +69,7 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   AcsRequest,
   BatchListVotesByVoteRequestsRequest,
   DamlValueEncoding,
+  CountVoteResultsRequest,
   ErrorResponse,
   EventHistoryRequest,
   HoldingsStateRequest,
@@ -107,6 +108,7 @@ import org.lfdecentralizedtrust.splice.store.{
   AppStoreWithIngestion,
   PageLimit,
   SortOrder,
+  VoteResultsFilters,
   VotesStore,
 }
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChecksum
@@ -2118,11 +2120,13 @@ class HttpScanHandler(
       val after = body.pageToken.map(_.longValue)
       for {
         page <- votesStore.listVoteRequestResults(
-          body.actionName,
-          body.accepted,
-          body.requester,
-          body.effectiveFrom,
-          body.effectiveTo,
+          VoteResultsFilters(
+            body.actionName,
+            body.accepted,
+            requester = body.requester,
+            effectiveFrom = body.effectiveFrom,
+            effectiveTo = body.effectiveTo,
+          ),
           limit,
           after,
         )
@@ -2146,6 +2150,29 @@ class HttpScanHandler(
           )
         )
       }
+    }
+  }
+
+  override def countVoteRequestResults(
+      respond: ScanResource.CountVoteRequestResultsResponse.type
+  )(
+      body: CountVoteResultsRequest
+  )(extracted: TraceContext): Future[ScanResource.CountVoteRequestResultsResponse] = {
+    implicit val tc: TraceContext = extracted
+    withSpan(s"$workflowId.countVoteRequestResults") { _ => _ =>
+      for {
+        count <- votesStore.countVoteRequestResults(
+          VoteResultsFilters(
+            body.actionName,
+            body.accepted,
+            requester = body.requester,
+            effectiveFrom = body.effectiveFrom,
+            effectiveTo = body.effectiveTo,
+          )
+        )
+      } yield ScanResource.CountVoteRequestResultsResponse.OK(
+        definitions.CountVoteResultsResponse(count)
+      )
     }
   }
 
@@ -2572,7 +2599,7 @@ class HttpScanHandler(
         )
       ) { case (bulkStorage, publicUrl) =>
         val recordTimeTs = Codec.tryDecode(Codec.OffsetDateTime)(atOrBeforeRecordTime)
-        bulkStorage.getAcsSnapshotAtOrBefore(recordTimeTs).map {
+        bulkStorage.getCommittedObjectsForAcsSnapshotAtOrBefore(recordTimeTs).map {
           case AcsSnapshotObjects(ts, objects) =>
             ScanResource.ListBulkAcsSnapshotObjectsResponse.OK(
               definitions.ListBulkAcsSnapshotObjectsResponse(
@@ -2604,7 +2631,7 @@ class HttpScanHandler(
         val afterTs = Codec.tryDecode(Codec.OffsetDateTime)(body.startRecordTime)
         val upToTs = Codec.tryDecode(Codec.OffsetDateTime)(body.endRecordTime)
         bulkStorage
-          .getUpdatesBetweenDates(
+          .getCommittedUpdatesBetweenDates(
             afterTs,
             upToTs,
             PageLimit.tryCreate(body.pageSize),

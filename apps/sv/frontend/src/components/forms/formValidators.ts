@@ -66,6 +66,19 @@ export const rewardAmountSchema = z
     { message: 'Amount can have at most 10 decimal places' }
   );
 
+export const activityWeightSchema = z
+  .string()
+  .refine(v => v === '' || /^\d+(\.\d+)?$/.test(v), {
+    message: 'Weight must be a valid non-negative number',
+  })
+  .refine(
+    v => {
+      const dotIndex = v.indexOf('.');
+      return dotIndex === -1 || v.length - dotIndex - 1 <= 10;
+    },
+    { message: 'Weight can have at most 10 decimal places' }
+  );
+
 export const validateWeight = (value: string): string | false => {
   const result = svWeightSchema.safeParse(value);
   return result.success ? false : result.error.issues[0].message;
@@ -73,6 +86,11 @@ export const validateWeight = (value: string): string | false => {
 
 export const validateRewardAmount = (value: string): string | false => {
   const result = rewardAmountSchema.safeParse(value);
+  return result.success ? false : result.error.issues[0].message;
+};
+
+export const validateActivityWeight = (value: string): string | false => {
+  const result = activityWeightSchema.safeParse(value);
   return result.success ? false : result.error.issues[0].message;
 };
 

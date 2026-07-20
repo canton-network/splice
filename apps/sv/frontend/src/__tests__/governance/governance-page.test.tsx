@@ -1,11 +1,12 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, test } from 'vitest';
 import { SvConfigProvider } from '../../utils';
 import userEvent from '@testing-library/user-event';
 import App from '../../App';
 import { navigateToGovernancePage } from '../helpers';
+import { voteResultsAmuletRules, voteResultsDsoRules } from '../mocks/constants';
 
 type UserEvent = ReturnType<typeof userEvent.setup>;
 
@@ -93,6 +94,34 @@ describe('Governance Page', () => {
     expect(voteRequests.length).toBe(5);
 
     expect(true).toBe(true);
+  });
+
+  test('should display total vote history count in the section badge', async () => {
+    const user = userEvent.setup();
+
+    render(<GovernanceWithConfig />);
+
+    await navigateToGovernancePage(user);
+
+    const expectedCount = voteResultsAmuletRules.dso_rules_vote_results
+      .concat(voteResultsDsoRules.dso_rules_vote_results)
+      .filter(
+        r => r.outcome.tag !== 'VRO_Accepted' || new Date(r.outcome.value.effectiveAt) < new Date()
+      ).length;
+
+    const badge = await screen.findByTestId('vote-history-section-badge-count');
+    await waitFor(() => expect(badge).toHaveTextContent(`${expectedCount}`));
+  });
+
+  test('should display inflight votes count in the section badge', async () => {
+    const user = userEvent.setup();
+
+    render(<GovernanceWithConfig />);
+
+    await navigateToGovernancePage(user);
+
+    const badge = screen.getByTestId('inflight-proposals-section-badge-count');
+    expect(badge).toHaveTextContent('');
   });
 
   test('click on Details link to see Proposal Details (Action Required)', async () => {

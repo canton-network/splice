@@ -38,13 +38,15 @@ const ProposalForm: React.FC<{ action: SupportedActionTag }> = ({ action }) => {
   }
 };
 
+const CREATE_PROPOSAL_MAX_WIDTH = 1583;
+
 export const CreateProposal: React.FC = () => {
   const [searchParams, _] = useSearchParams();
   const action = searchParams.get('action');
   const selectedAction = createProposalActions.find(a => a.value === action);
 
   return (
-    <Box sx={{ p: 4 }}>
+    <Box sx={{ maxWidth: CREATE_PROPOSAL_MAX_WIDTH, mx: 'auto', p: 4 }}>
       {selectedAction ? (
         <ProposalForm action={selectedAction.value as SupportedActionTag} />
       ) : (

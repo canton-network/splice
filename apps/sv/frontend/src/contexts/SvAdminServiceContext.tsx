@@ -10,6 +10,7 @@ import BigNumber from 'bignumber.js';
 import React, { useContext, useMemo } from 'react';
 import {
   CastVoteRequest,
+  CountVoteResultsResponse,
   createConfiguration,
   CreateVoteRequest,
   GetPartyToParticipantResponseV1,
@@ -63,6 +64,10 @@ export interface SvAdminClient {
     accepted?: boolean,
     pageToken?: number
   ) => Promise<ListDsoRulesVoteResultsResponse>;
+  countVoteRequestResults: (
+    accepted?: boolean,
+    effectiveTo?: string
+  ) => Promise<CountVoteResultsResponse>;
   getPreviousSvRewardWeight: (
     svParty: string,
     effectiveBefore?: string
@@ -162,6 +167,12 @@ export const SvAdminClientProvider: React.FC<React.PropsWithChildren<SvAdminProp
           pageToken: pageToken,
         };
         return await svAdminClient.listVoteRequestResults(request);
+      },
+      countVoteRequestResults: async (
+        accepted?: boolean,
+        effectiveTo?: string
+      ): Promise<CountVoteResultsResponse> => {
+        return await svAdminClient.countVoteRequestResults({ accepted, effectiveTo });
       },
       getPreviousSvRewardWeight: async (
         svParty: string,

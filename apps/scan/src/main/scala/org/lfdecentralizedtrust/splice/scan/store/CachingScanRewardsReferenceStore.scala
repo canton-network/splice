@@ -31,8 +31,8 @@ class CachingScanRewardsReferenceStore private[splice] (
     with NamedLogging {
 
   private val featuredAppPartiesCache
-      : ScaffeineCache.TracedAsyncLoadingCache[Future, CantonTimestamp, Set[String]] =
-    ScaffeineCache.buildTracedAsync[Future, CantonTimestamp, Set[String]](
+      : ScaffeineCache.TracedAsyncLoadingCache[Future, CantonTimestamp, Map[String, BigDecimal]] =
+    ScaffeineCache.buildTracedAsync[Future, CantonTimestamp, Map[String, BigDecimal]](
       Scaffeine()
         .maximumSize(2L),
       loader = implicit tc => asOf => store.lookupFeaturedAppPartiesAsOf(asOf),
@@ -57,7 +57,7 @@ class CachingScanRewardsReferenceStore private[splice] (
 
   override def lookupFeaturedAppPartiesAsOf(
       asOf: CantonTimestamp
-  )(implicit tc: TraceContext): Future[Set[String]] =
+  )(implicit tc: TraceContext): Future[Map[String, BigDecimal]] =
     featuredAppPartiesCache.get(asOf)
 
   override def lookupSvParticipantIdsAsOf(

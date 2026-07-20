@@ -19,6 +19,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.validatoronboarding a
 import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
 import org.lfdecentralizedtrust.splice.environment.SpliceStatus
 import org.lfdecentralizedtrust.splice.http.v0.{definitions, sv_operator as http}
+import org.lfdecentralizedtrust.splice.store.VoteResultsFilters
 import org.lfdecentralizedtrust.splice.util.{Codec, Contract, TemplateJsonDecoder}
 import org.lfdecentralizedtrust.splice.sv.util.ValidatorOnboarding
 import com.digitalasset.canton.admin.api.client.data.NodeStatus
@@ -244,11 +245,7 @@ object HttpSvOperatorAppClient {
   }
 
   case class ListVoteRequestResults(
-      actionName: Option[String],
-      accepted: Option[Boolean],
-      requester: Option[String],
-      effectiveFrom: Option[String],
-      effectiveTo: Option[String],
+      filters: VoteResultsFilters,
       limit: BigInt,
       pageToken: Option[BigInt] = None,
   ) extends BaseCommand[
@@ -265,13 +262,13 @@ object HttpSvOperatorAppClient {
     ): EitherT[Future, Either[Throwable, HttpResponse], http.ListVoteRequestResultsResponse] =
       client.listVoteRequestResults(
         body = definitions.ListVoteResultsRequest(
-          actionName,
-          accepted,
-          requester,
-          effectiveFrom,
-          effectiveTo,
-          limit,
-          pageToken,
+          filters.actionName,
+          filters.accepted,
+          requester = filters.requester,
+          effectiveFrom = filters.effectiveFrom,
+          effectiveTo = filters.effectiveTo,
+          limit = limit,
+          pageToken = pageToken,
         ),
         headers = headers,
       )
@@ -290,6 +287,35 @@ object HttpSvOperatorAppClient {
         )
         .toSeq
       Right((results, response.nextPageToken))
+    }
+  }
+
+  case class CountVoteRequestResults(
+      filters: VoteResultsFilters
+  ) extends BaseCommand[
+        http.CountVoteRequestResultsResponse,
+        Long,
+      ] {
+
+    override def submitRequest(
+        client: Client,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[Throwable, HttpResponse], http.CountVoteRequestResultsResponse] =
+      client.countVoteRequestResults(
+        body = definitions.CountVoteResultsRequest(
+          filters.actionName,
+          filters.accepted,
+          requester = filters.requester,
+          effectiveFrom = filters.effectiveFrom,
+          effectiveTo = filters.effectiveTo,
+        ),
+        headers = headers,
+      )
+
+    override def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ) = { case http.CountVoteRequestResultsResponse.OK(response) =>
+      Right(response.count)
     }
   }
 

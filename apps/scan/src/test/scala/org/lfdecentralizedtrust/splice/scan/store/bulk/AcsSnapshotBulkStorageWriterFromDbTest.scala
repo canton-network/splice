@@ -18,7 +18,8 @@ import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.{HasActorSystem, HasExecutionContext}
 import io.grpc.StatusRuntimeException
-import org.apache.pekko.stream.scaladsl.Sink
+import org.apache.pekko.actor.Cancellable
+import org.apache.pekko.stream.scaladsl.{Sink, Source}
 import org.lfdecentralizedtrust.splice.config.AutomationConfig
 import org.lfdecentralizedtrust.splice.environment.{DarResources, RetryProvider, SpliceMetrics}
 import org.lfdecentralizedtrust.splice.http.v0.definitions as httpApi
@@ -40,7 +41,6 @@ import org.lfdecentralizedtrust.splice.store.{
   S3BucketConnection,
   StoreTestBase,
   TimestampWithMigrationId,
-  UpdateHistory,
 }
 import org.lfdecentralizedtrust.splice.util.PackageQualifiedName
 import org.mockito.ArgumentMatchers.anyString
@@ -55,7 +55,7 @@ import scala.jdk.CollectionConverters.*
 import scala.concurrent.duration.*
 import scala.util.Using
 
-class AcsSnapshotBulkStorageTest
+class AcsSnapshotBulkStorageWriterFromDbTest
     extends StoreTestBase
     with HasExecutionContext
     with HasActorSystem
@@ -77,7 +77,7 @@ class AcsSnapshotBulkStorageTest
 
   "AcsSnapshotBulkStorage" should {
     "successfully dump a single ACS snapshot" in {
-      val bucketConnection = new S3BucketConnectionForUnitTests(s3ConfigMock, loggerFactory)
+      val bucketConnection = new S3BucketConnectionForUnitTests(s3ConfigMock(), loggerFactory)
       val ts = CantonTimestamp.tryFromInstant(Instant.parse("2026-01-02T00:00:00Z"))
       val store = new MockAcsSnapshotStore(ts).store
       val metricsFactory = new InMemoryMetricsFactory
@@ -153,12 +153,11 @@ class AcsSnapshotBulkStorageTest
     }
 
     "correctly process multiple ACS snapshots" in {
-      val bucketConnection = new S3BucketConnectionForUnitTests(s3ConfigMock, loggerFactory)
+      val bucketConnection = new S3BucketConnectionForUnitTests(s3ConfigMock(), loggerFactory)
       val ts1 = CantonTimestamp.tryFromInstant(Instant.now().truncatedTo(ChronoUnit.DAYS))
       val ts2 = ts1.add(3.hours)
       val ts3 = ts1.add(24.hours)
       val store = new MockAcsSnapshotStore(ts1)
-      val updateHistory = mockUpdateHistory()
       val s3BucketConnection = getS3BucketConnectionWithInjectedErrors(bucketConnection)
       val metricsFactory = new InMemoryMetricsFactory
 
@@ -168,7 +167,7 @@ class AcsSnapshotBulkStorageTest
         RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory)
       }
       val historyMetrics = new HistoryMetrics(metricsFactory)(MetricsContext.Empty)
-      val bulkStorageProcessor = new AcsSnapshotBulkStorageWriterFromDb(
+      val acsSnapshotWriter = new AcsSnapshotBulkStorageWriterFromDb(
         bulkStorageTestConfig,
         appConfig,
         store.store,
@@ -178,37 +177,34 @@ class AcsSnapshotBulkStorageTest
       )
       val progress = new AcsSnapshotBulkStoragePersistentProgress(
         "latest_acs_snapshot_in_bulk_storage",
+        "first_acs_snapshot_in_bulk_storage",
         kvProvider,
-        historyMetrics.BulkStorage.latestAcsSnapshot,
+        historyMetrics.BulkStorage.latestAcsSnapshotStaging,
         loggerFactory,
       )
       val bulkStorage = new AcsSnapshotBulkStorage(
-        "Test AcsSnapshotBulkStorage",
-        bulkStorageProcessor,
+        "AcsSnapshotBulkStorageUnitTest",
+        acsSnapshotWriter,
         progress,
         appConfig,
-        store.store,
-        updateHistory,
+        Source.single(true).mapMaterializedValue(_ => Cancellable.alreadyCancelled),
         loggerFactory,
       )
       val reader = new BulkStorageReader(
-        acsSnapshotBulkStorage = bulkStorage,
-        updateHistoryBulkStorage = null, // not needed for this test
+        acsSnapshotStagingProgress = progress,
+        acsSnapshotCommittedProgress = progress,
+        updateHistoryStagingProgress = null, // no updates history in this test
+        updateHistoryCommittedProgress = null, // no updates history in this test
         bulkStorageTestConfig,
         s3BucketConnection,
+        s3BucketConnection, // we use the same bucket for staging and committed for this test, as we don't run the commit from staging flow
         loggerFactory,
-      )
-
-      val svc = bulkStorage.asRetryableService(
-        AutomationConfig(pollingInterval = NonNegativeFiniteDuration.ofSeconds(1)), // Fast retries
-        new WallClock(timeouts, loggerFactory),
-        retryProvider,
       )
 
       def assertLatestSnapshotInMetrics(ts: CantonTimestamp) = {
         val latestSnapshotMetrics = metricsFactory.metrics.gauges
           .get(
-            SpliceMetrics.MetricsPrefix :+ "history" :+ "bulk-storage" :+ "latest-acs-snapshot"
+            SpliceMetrics.MetricsPrefix :+ "history" :+ "bulk-storage" :+ s"latest-acs-snapshot-staging"
           )
           .value
         latestSnapshotMetrics
@@ -216,14 +212,15 @@ class AcsSnapshotBulkStorageTest
           .value
           .value
           .get()
-          ._1 shouldBe ts.toEpochMilli * 1000
+          ._1 shouldBe ts.toEpochMilli * 1000 withClue s"Latest snapshot timestamp in staging bucket should be $ts"
       }
       def assertGetObjects(
           queryTs: CantonTimestamp,
           expectedTs: CantonTimestamp,
           expectedNumObjects: Int,
       ) = {
-        val getObjectsResult = reader.getAcsSnapshotAtOrBefore(queryTs).futureValue
+        val getObjectsResult =
+          reader.getCommittedObjectsForAcsSnapshotAtOrBefore(queryTs).futureValue
         getObjectsResult.objects.map(_.key) should contain theSameElementsInOrderAs
           (0 until expectedNumObjects).map(i =>
             s"$expectedTs~${expectedTs.add(1.days)}/ACS_$i.zstd"
@@ -235,14 +232,20 @@ class AcsSnapshotBulkStorageTest
         succeed
       }
 
-      Using.resources(svc, retryProvider) { (_, _) =>
-        val ex = reader.getAcsSnapshotAtOrBefore(ts1).failed.futureValue
-        ex shouldBe a[StatusRuntimeException]
-        ex.asInstanceOf[StatusRuntimeException]
-          .getStatus
-          .getCode shouldBe io.grpc.Status.Code.NOT_FOUND
-        ex.getMessage should include("no snapshot in bulk storage yet")
+      val ex = reader.getCommittedObjectsForAcsSnapshotAtOrBefore(ts1).failed.futureValue
+      ex shouldBe a[StatusRuntimeException]
+      ex.asInstanceOf[StatusRuntimeException]
+        .getStatus
+        .getCode shouldBe io.grpc.Status.Code.NOT_FOUND
+      ex.getMessage should include("no snapshot in committed bulk storage yet")
 
+      val svc = bulkStorage.asPekkoRetryingService(
+        AutomationConfig(pollingInterval = NonNegativeFiniteDuration.ofSeconds(1)), // Fast retries
+        new WallClock(timeouts, loggerFactory),
+        retryProvider,
+      )
+
+      Using.resources(svc, retryProvider) { (_, _) =>
         clue("Initially, a single snapshot is dumped") {
           eventually(4.minutes) {
             val persistedTs1 = progress.readLatestProcessedSnapshotTimestamp.futureValue
@@ -282,7 +285,7 @@ class AcsSnapshotBulkStorageTest
         }
 
         val ex1 = reader
-          .getAcsSnapshotAtOrBefore(ts1.minus(java.time.Duration.ofDays(1)))
+          .getCommittedObjectsForAcsSnapshotAtOrBefore(ts1.minus(java.time.Duration.ofDays(1)))
           .failed
           .futureValue
         ex1 shouldBe a[StatusRuntimeException]
@@ -294,15 +297,6 @@ class AcsSnapshotBulkStorageTest
 
       }
     }
-  }
-
-  private def mockUpdateHistory() = {
-    val store = mock[UpdateHistory]
-    when(store.isReady).thenReturn(true)
-    when(
-      store.isHistoryBackfilled(anyLong)(any[TraceContext])
-    ).thenReturn(Future.successful(true))
-    store
   }
 
   class MockAcsSnapshotStore(val initialSnapshotTimestamp: CantonTimestamp) {

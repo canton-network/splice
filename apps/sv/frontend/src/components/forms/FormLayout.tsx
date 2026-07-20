@@ -24,7 +24,7 @@ export const FormLayout: React.FC<FormLayoutProps> = props => {
           alignItems: 'center',
         }}
       >
-        <Box sx={{ minWidth: '80%' }}>
+        <Box sx={{ width: '80%', maxWidth: '100%', minWidth: 0, boxSizing: 'border-box' }}>
           <form
             onSubmit={e => {
               e.preventDefault();
@@ -32,7 +32,11 @@ export const FormLayout: React.FC<FormLayoutProps> = props => {
               form.handleSubmit();
             }}
           >
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{children}</Box>
+            <Box
+              sx={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%', minWidth: 0 }}
+            >
+              {children}
+            </Box>
           </form>
         </Box>
       </Paper>

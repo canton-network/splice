@@ -566,7 +566,9 @@ template WalletAppInstall
       with
         amuletRulesCid : ContractId AmuletRules
       controller validatorParty
-      do result <- exercise amuletRulesCid $ AmuletRules_DevNet_FeatureApp endUserParty
+      do result <- exercise amuletRulesCid $ AmuletRules_DevNet_FeatureApp with
+           provider = endUserParty
+           activityWeight = None
          return WalletAppInstall_FeaturedAppRights_SelfGrantResult with
            featuredAppRight = result.featuredAppRightCid
 

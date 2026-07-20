@@ -183,7 +183,7 @@ spec:
 {{- define "splice-util-lib.log-level" }}
 - name: LOG_LEVEL_CANTON
   value: {{ .logLevel | default "INFO" }}
-- name: LOG_API_REQUEST_CANTON
+- name: LOG_LEVEL_API_REQUEST
   value: {{ .apiRequestLogLevel | default "DEBUG" }}
 - name: LOG_LEVEL_STDOUT
   value: {{ .logLevelStdout | default "DEBUG" }}

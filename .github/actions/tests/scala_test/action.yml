@@ -8,12 +8,6 @@ inputs:
   start_canton_options:
     description: "Options for start-canton.sh"
     required: true
-  artifactory_user:
-    description: "The Artifactory user"
-    required: true
-  artifactory_password:
-    description: "The Artifactory password"
-    required: true
   test_suite_name:
     description: "Name of the test suite"
     required: true
@@ -93,10 +87,6 @@ inputs:
   protocol_version:
     description: "Synchronizer Protocol Version"
     required: true
-  oss_only:
-    description: "Restrict upstream dependencies (e.g. Canton) to OSS versions (the equivalent of OSS_ONLY=1 in local checkouts)"
-    required: false
-    default: "false"
   cache_version:
     description: "Cache version"
     required: true
@@ -109,12 +99,7 @@ runs:
       with:
         test_name: ${{ inputs.test_suite_name }}
         with_sbt: false # we setup SBT later while canton is starting up
-        artifactory_user: ${{ inputs.artifactory_user }}
-        artifactory_password: ${{ inputs.artifactory_password }}
-        target: ${{ inputs.oss_only == true && 'oss' || 'default' }}
-        # The docs job saves the oss nix cache, here we save the non-oss one, but only in one runner to reduce contention
-        # TODO(#1296): When this runner stops using non-oss, move this to one that does
-        save_nix_cache: ${{ inputs.runner_index == 0 && inputs.test_suite_name == 'canton-enterprise' }}
+        target: 'default'
 
     - name: Wait for postgres
       uses: ./.github/actions/nix/run_bash_command_in_nix
@@ -230,8 +215,6 @@ runs:
       uses: ./.github/actions/nix/run_bash_command_in_nix
       with:
         cmd: |
-          export ARTIFACTORY_USER="${{ inputs.artifactory_user }}"
-          export ARTIFACTORY_PASSWORD="${{ inputs.artifactory_password }}"
           export CIRCLE_REPOSITORY_URL="${{ github.repositoryUrl }}"
           export CIRCLE_SHA1="${{ github.sha }}"
           /usr/bin/sudo mkdir -p ~/.docker/buildx
@@ -258,8 +241,6 @@ runs:
       uses: ./.github/actions/sbt/execute_sbt_command
       with:
         extra_env_vars: "POSTGRES_DB=postgres POSTGRES_HOST=localhost POSTGRES_USER=postgres POSTGRES_PASSWORD=postgres INITIAL_PACKAGE_VERSIONS=${{ steps.daml_package_versions.outputs.initial_package_versions }} PROTOCOL_VERSION=${{ inputs.protocol_version }}"
-        artifactory_user: ${{ inputs.artifactory_user }}
-        artifactory_password: ${{ inputs.artifactory_password }}
         cmd: ${{ steps.list_tests.outputs.RUN_SPLITTED_TESTS_CMD }}
         additional_nix_args: "--keep GITHUB_ACTION"
         extra_parameters: -DAUTH0_MANAGEMENT_API_CLIENT_ID=${{ inputs.auth0_management_api_client_id }} -DAUTH0_MANAGEMENT_API_CLIENT_SECRET=${{ inputs.auth0_management_api_client_secret }}
