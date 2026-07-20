@@ -98,6 +98,55 @@ class SpliceCircuitBreakerTest
         ex.getCause shouldBe lastFailure
         ex.getCause.getMessage shouldBe "root cause failure"
       }
+
+      eventually() {
+        cb.isHalfOpen shouldBe true
+      }
+
+      val newFailure = new RuntimeException("new root cause failure")
+      loggerFactory.suppressWarnings {
+        val future4 = cb.withCircuitBreaker(Future.failed(newFailure))
+        whenReady(future4.failed) { ex =>
+          ex shouldBe newFailure
+          cb.isOpen shouldBe true
+        }
+      }
+      val future5 = cb.withCircuitBreaker(Future.successful("should not reach here"))
+      whenReady(future5.failed) { ex =>
+        ex shouldBe a[SpliceCircuitBreakerOpenException]
+        ex.getCause shouldBe newFailure
+        ex.getCause.getMessage shouldBe "new root cause failure"
+      }
+
+      eventually() {
+        cb.isHalfOpen shouldBe true
+      }
+      val successFuture = cb.withCircuitBreaker(Future.successful("success"))
+      whenReady(successFuture) { result =>
+        result shouldBe "success"
+        cb.isClosed shouldBe true
+      }
+
+      val thirdFailure = new RuntimeException("third root cause failure")
+      val future6 = cb.withCircuitBreaker(Future.failed(new RuntimeException("test failure 3")))
+      whenReady(future6.failed) { ex =>
+        ex shouldBe a[RuntimeException]
+        cb.isClosed shouldBe true
+      }
+      loggerFactory.suppressWarnings {
+        val future7 = cb.withCircuitBreaker(Future.failed(thirdFailure))
+        whenReady(future7.failed) { ex =>
+          ex shouldBe thirdFailure
+          cb.isOpen shouldBe true
+        }
+      }
+
+      val future8 = cb.withCircuitBreaker(Future.successful("should not reach here"))
+      whenReady(future8.failed) { ex =>
+        ex shouldBe a[SpliceCircuitBreakerOpenException]
+        ex.getCause shouldBe thirdFailure
+        ex.getCause.getMessage shouldBe "third root cause failure"
+      }
     }
 
     "not open after failures with ignored error categories" in {
