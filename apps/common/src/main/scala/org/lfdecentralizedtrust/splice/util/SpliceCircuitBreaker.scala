@@ -21,10 +21,11 @@ import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
 import io.grpc.StatusRuntimeException
 import org.apache.pekko.actor.Scheduler
-import org.apache.pekko.pattern.{CircuitBreaker, CircuitBreakerOpenException}
+import org.apache.pekko.pattern.CircuitBreaker
 import org.lfdecentralizedtrust.splice.config.CircuitBreakerConfig
 
 import java.util.concurrent.atomic.AtomicReference
+import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
@@ -40,6 +41,7 @@ class SpliceCircuitBreaker(
 ) extends NamedLogging {
 
   private val lastFailure: AtomicReference[Option[CantonTimestamp]] = new AtomicReference(None)
+  private val lastException: AtomicReference[Option[Throwable]] = new AtomicReference(None)
 
   private val errorCategoriesToIgnore: Set[ErrorCategory] = Set(
     InvalidIndependentOfSystemState,
@@ -53,7 +55,7 @@ class SpliceCircuitBreaker(
     LockedContracts
   )
 
-  val underlying = new CircuitBreaker(
+  private val underlying: CircuitBreaker = new CircuitBreaker(
     scheduler,
     maxFailures = config.maxFailures,
     callTimeout = config.callTimeout.underlying,
@@ -71,14 +73,16 @@ class SpliceCircuitBreaker(
     logger.info(s"Circuit breaker $name moving to closed state")(TraceContext.empty)
   }
 
+  @SuppressWarnings(Array("org.wartremover.warts.Null"))
   def withCircuitBreaker[T](body: => Future[T])(implicit tc: TraceContext): Future[T] = {
     if (underlying.isClosed || underlying.isHalfOpen) {
       callAndMark(body)
     } else {
       Future.failed(
-        new CircuitBreakerOpenException(
+        new SpliceCircuitBreakerOpenException(
           underlying.resetTimeout,
           s"Circuit breaker $name is open, calls are failing fast",
+          lastException.get().orNull,
         )
       )
     }
@@ -106,8 +110,11 @@ class SpliceCircuitBreaker(
         if (!isFailureIgnored(exception)) {
           underlying.fail()
           lastFailure.set(Some(clock.now))
+          lastException.set(Some(exception))
         }
-      case Success(_) => underlying.succeed()
+      case Success(_) =>
+        underlying.succeed()
+        lastException.set(None)
     }
   }
 
@@ -157,3 +164,9 @@ object SpliceCircuitBreaker {
       loggerFactory,
     )
 }
+
+class SpliceCircuitBreakerOpenException(
+    val remainingDuration: FiniteDuration,
+    message: String,
+    cause: Throwable,
+) extends RuntimeException(message, cause)
