@@ -51,10 +51,14 @@ data VestingSchedule
   | VestingSchedule_Immediate
   deriving (Show, Eq, Ord)
 
-validateVestingSchedule : VestingSchedule -> Metadata -> Bool
-validateVestingSchedule VestingSchedule_SV meta =
-  TM.lookup "cip-105/vestingPeriod" meta.values == Some "365" -- Placeholder check, depends on vesting impl.
-validateVestingSchedule VestingSchedule_Immediate _ = True
+validateVestingSchedule : VestingSchedule -> Time -> Metadata -> Bool
+validateVestingSchedule VestingSchedule_SV now meta =
+  let
+    start = decodeTime $ fromSomeNote "start must exist" (TM.lookup "cip-105/vestingLock.startDate" meta.values)
+    end = decodeTime $ fromSomeNote "end must exist" (TM.lookup "cip-105/vestingLock.endDate" meta.values)
+  in
+    now < start && end `subTime` start == days 365 + hours 6
+validateVestingSchedule VestingSchedule_Immediate _ _ = True
 
 -- | The intention is to treat the overall aggregate lock for a SV as if it is
 -- "the settlement" for the allocations locked to it, and use iterated
@@ -91,7 +95,8 @@ template AggregateLock
           require "Must be a valid governance-locked allocation" $ isValidAggregateLockedAllocation dso locked
           require "Must be a valid empty vesting unlock allocation" $ isValidVestingLockedDestination dso withdrawTo
           require "Must have amounts reserved within the next settlement iteration" $ isSome locked.allocation.nextIterationFunding
-          require "Vesting allocation must have a correct schedule configuration" $ validateVestingSchedule vestingSchedule withdrawTo.allocation.meta
+          now <- getTime
+          require "Vesting allocation must have a correct schedule configuration" $ validateVestingSchedule vestingSchedule now withdrawTo.allocation.meta
           let
             info = SettlementInfo with
               executors = [ dso ]

@@ -29,6 +29,7 @@ import qualified DA.TextMap as TM
 
 import Splice.Scripts.TokenStandard.TestAmuletTokenStandardTestEnv
 import Splice.Testing.Registries.AmuletRegistryV2 qualified as AmuletRegistryV2
+import Splice.TokenStandard.Utils.Internal.Conversions (encodeTime)
 
 
 lockForGovernance : TestEnv -> TM.TextMap Decimal -> Metadata -> Party -> ContractId AggregateLock -> Script AllocationInstructionResult
@@ -53,15 +54,15 @@ lockForAggregate : TestEnv -> Decimal -> Party -> ContractId AggregateLock -> Sc
 lockForAggregate te amount = lockForGovernance te (TM.fromList [(te.instrId.id, amount)]) $ Metadata $ TM.fromList
   [ ("cip-105/type", "aggregateLock") ]
 
-lockForVesting : TestEnv -> Party -> ContractId AggregateLock -> Script AllocationInstructionResult
-lockForVesting te = lockForGovernance te TM.empty $ Metadata $ TM.fromList
+lockForVesting : Time -> TestEnv -> Party -> ContractId AggregateLock -> Script AllocationInstructionResult
+lockForVesting now te = lockForGovernance te TM.empty $ Metadata $ TM.fromList
   [ ("cip-105/type", "vestingLock")
-  , ("cip-105/vestingPeriod", "365") ]
+  , ("cip-105/vestingLock.startDate", encodeTime now)
+  , ("cip-105/vestingLock.endDate", encodeTime $ addRelTime now $ days 365 + hours 6) ]
 
 testAggregateLockHappyPath : Script ()
 testAggregateLockHappyPath = do
   env@TestEnv{..} <- setupTest
-  now <- getTime
   let dso = env.instrId.admin
 
   AmuletRegistryV2.tapFaucet registriesEnv.amuletV2 bob 1800.0
@@ -77,7 +78,8 @@ testAggregateLockHappyPath = do
 
   -- Check total for the aggregate; needs to be implemented.
  
-  AllocationInstructionResult { output = AllocationInstructionResult_Completed vestingInput } <- lockForVesting env bob aggLock
+  now <- getTime
+  AllocationInstructionResult { output = AllocationInstructionResult_Completed vestingInput } <- lockForVesting (addRelTime now $ minutes 5) env bob aggLock
 
   -- use getSettlementFactory to get the extraArgs and disclosures to call AggregateLock_Unlock
   enriched <- getSettlementFactory registriesEnv.amuletV2 $ SettlementFactory_SettleBatch with
