@@ -504,8 +504,8 @@ class SequencerBftPeerReconcilerSpec extends AnyFlatSpec with BaseTest with HasR
     )
   }
 
-  private def configuredPeer(host: P2PEndpoint.Id): P2PEndpoint =
-    BftSequencer(serialId, selfSequencerId, host.url).peerId
+  private def configuredPeer(host: P2PEndpoint.Id): (P2PEndpoint, Option[SequencerId]) =
+    BftSequencer(serialId, selfSequencerId, host.url).peerId -> None
 
   private def withNetworkStatus(
       entries: (Option[SequencerId], Option[P2PEndpoint.Id])*

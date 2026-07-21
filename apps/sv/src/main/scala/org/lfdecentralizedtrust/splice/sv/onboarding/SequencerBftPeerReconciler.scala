@@ -78,11 +78,9 @@ abstract class SequencerBftPeerReconciler(
             configuredPeers <- sequencerAdminConnection
               .listConfiguredPeerEndpoints()
             peersToAdd = dsoSequencerEndpoints
-              .filterNot(endpoint => configuredPeers.exists(_.id == endpoint.id))
-            peersWithNoDsoRulesEndpoint = configuredPeers
-              .filterNot(peer => dsoSequencerEndpoints.exists(_.id == peer.id))
+              .filterNot(endpoint => configuredPeers.map(_._1).exists(_.id == endpoint.id))
             peersToRemove <- computePeersToRemove(
-              configuredPeers,
+              configuredPeers.map(_._1),
               dsoSequencersWithEndpoint,
             )
           } yield {
@@ -91,7 +89,7 @@ abstract class SequencerBftPeerReconciler(
                 BftPeerDifference(
                   peersToAdd,
                   peersToRemove.map(_.id),
-                  configuredPeers,
+                  configuredPeers.map(_._1),
                 )
               )
             else Seq()

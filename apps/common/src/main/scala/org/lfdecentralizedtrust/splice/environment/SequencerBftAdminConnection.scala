@@ -41,7 +41,7 @@ trait SequencerBftAdminConnection {
 
   def listConfiguredPeerEndpoints()(implicit
       tc: TraceContext
-  ): Future[Seq[P2PEndpoint]] = {
+  ): Future[Seq[(P2PEndpoint, Option[SequencerId])]] = {
     runCmd(
       SequencerBftAdminCommands.ListConfiguredEndpoints
     )
