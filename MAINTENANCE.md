@@ -18,6 +18,9 @@
 3. In case you have also made configuration changes to Canton in `simple-topology-canton.conf`, remember
    to also make the corresponding changes for our cluster deployments. It is recommended to test any configuration
    changes on scratchnet first.
+4. Make sure to run full CI with `[ci]` for a "bump canton" PR.
+5. An upgrade cluster test will be requested automatically for PRs bumping the Canton version.
+   Feel free to skip it if you didn't make any config changes as Canton already has sufficient testing on their side.
 
 ## Bumping Daml Compiler & SDK version
 
