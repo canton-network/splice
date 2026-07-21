@@ -55,7 +55,7 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
   )
   val appConfig = BulkStorageConfig(
     snapshotPollingInterval = NonNegativeFiniteDuration.ofSeconds(5),
-    bftCheckEnabled = false, // TODO: enable here or in a different test
+    bftCheckEnabled = false, // bft checks are tested elsewhere
   )
 
   override val initialBuckets: Seq[String] = Seq("staging", "committed")

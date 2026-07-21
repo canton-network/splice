@@ -173,33 +173,37 @@ class BulkStorageCommitFromStagingTest
           committedS3Connection.listObjects.futureValue.contents().asScala shouldBe empty
         }
 
-        clue(
-          "Simulate a majority disagreeing with our digests, the copy flow should not complete and an error should be emitted"
-        ) {
-          Seq.range(2, 7).foreach(i => mockScanConnections.scanDisagreesOnDigest(i, 1))
-          loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(Level.ERROR))(
-            {
+        // errors on mismatching digests continue past the first clue for some time until enough scans are updated to agree on the digests,
+        // so we make the assertion on the logs fairly wide here to avoid the late error logs failing the log checker
+        loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(Level.ERROR))(
+          {
+            clue(
+              "Simulate a majority disagreeing with our digests, the copy flow should not complete and an error should be emitted"
+            ) {
+              Seq.range(2, 7).foreach(i => mockScanConnections.scanDisagreesOnDigest(i, 1))
               sub.expectNoMessage(20.seconds)
-            },
-            logEntries =>
-              forAtLeast(1, logEntries)(
-                _.message should include(
-                  "All objects are known to the BFT peers, but the checksums do not match"
-                )
-              ),
-          )
-          stagingS3Connection.listObjects.futureValue
-            .contents()
-            .asScala should have size objsWithDigests.size.toLong
-          committedS3Connection.listObjects.futureValue.contents().asScala shouldBe empty
+              stagingS3Connection.listObjects.futureValue
+                .contents()
+                .asScala should have size objsWithDigests.size.toLong
+              committedS3Connection.listObjects.futureValue.contents().asScala shouldBe empty
 
-        }
+            }
 
-        clue("Enough scans do agree - the copy flow should complete successfully") {
-          Seq.range(2, 5).foreach(i => mockScanConnections.scanAgrees(i))
-          sub.expectNext(20.seconds, "go")
-          assertObjectsMoved(stagingS3Connection, committedS3Connection, objsWithDigests)
-        }
+            clue("Enough scans do agree - the copy flow should complete successfully") {
+              Seq.range(2, 5).foreach(i => mockScanConnections.scanAgrees(i))
+              sub.expectNext(20.seconds, "go")
+              assertObjectsMoved(stagingS3Connection, committedS3Connection, objsWithDigests)
+            }
+
+          },
+          logEntries =>
+            forAtLeast(1, logEntries)(
+              _.message should include(
+                "All objects are known to the BFT peers, but the checksums do not match"
+              )
+            ),
+        )
+
       } catch {
         case ex: Throwable =>
           pub.sendError(ex)

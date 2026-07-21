@@ -58,7 +58,7 @@ class UpdateHistoryBulkStorageTest
   )
   val appConfig = BulkStorageConfig(
     updatesPollingInterval = NonNegativeFiniteDuration.ofSeconds(5),
-    bftCheckEnabled = false, // TODO: enable here or in a different test
+    bftCheckEnabled = false, // bft checks are tested elsewhere
   )
 
   "UpdateHistoryBulkStorage" should {
