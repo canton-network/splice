@@ -336,7 +336,8 @@ describe('Update Featured App Form', () => {
       'a-party-id::1014912492'
     );
     expect(screen.getByTestId('updateRight-field').textContent).toBe('rightCid123');
-    expect(screen.getByTestId('updateActivityWeight-field').textContent).toBe('2.5');
+    expect(screen.getByTestId('config-change-current-value').textContent).toBe('1.0');
+    expect(screen.getByTestId('config-change-new-value').textContent).toBe('2.5');
     expect(screen.getByTestId('updateReason-field').textContent).toBe('test');
   });
 });

@@ -50,9 +50,10 @@ type ProposalSummaryProps = BaseProposalSummaryProps &
         expiresAt: string;
       }
     | {
-        formType: 'update-right';
+        formType: 'update-right-weight';
         providerPartyId: string;
         rightCid: string;
+        currentActivityWeight: string;
         newActivityWeight: string;
         reason: string;
       }
@@ -147,7 +148,7 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
           </>
         )}
 
-        {formType === 'update-right' && (
+        {formType === 'update-right-weight' && (
           <>
             <ProposalField
               id="updateProviderPartyId"
@@ -161,8 +162,19 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
             />
             <ProposalField
               id="updateActivityWeight"
-              title="Activity Weight"
-              value={props.newActivityWeight}
+              title="Proposed Changes"
+              value={
+                <ConfigValuesChanges
+                  changes={[
+                    {
+                      label: 'Activity Weight',
+                      fieldName: 'newActivityWeight',
+                      currentValue: props.currentActivityWeight,
+                      newValue: props.newActivityWeight,
+                    },
+                  ]}
+                />
+              }
             />
             <ProposalField id="updateReason" title="Reason" value={props.reason} />
           </>

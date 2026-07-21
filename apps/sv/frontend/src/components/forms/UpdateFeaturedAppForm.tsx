@@ -100,9 +100,14 @@ export const UpdateFeaturedAppForm: React.FC = () => {
   }, [form, picker.rightOptions]);
 
   const partyId = useStore(form.store, state => state.values.partyId);
+  const rightCid = useStore(form.store, state => state.values.rightCid);
+  const currentWeight = picker.currentWeights[rightCid] ?? 'None';
 
   const providerHasNoRights =
     picker.providerSearched && picker.rightOptions.length === 0 && !validatePartyId(partyId);
+
+  const requiredActivityWeightSubtitle =
+    "Required. Scales the app's share of traffic-based rewards";
 
   return (
     <>
@@ -114,10 +119,11 @@ export const UpdateFeaturedAppForm: React.FC = () => {
             summary={form.state.values.summary}
             expiryDate={form.state.values.expiryDate}
             effectiveDate={form.state.values.effectiveDate.effectiveDate}
-            formType="update-right"
+            formType="update-right-weight"
             providerPartyId={form.state.values.partyId}
             rightCid={form.state.values.rightCid}
             newActivityWeight={form.state.values.newActivityWeight}
+            currentActivityWeight={currentWeight}
             reason={form.state.values.reason}
             onEdit={() => setShowConfirmation(false)}
             onSubmit={() => {}}
@@ -183,7 +189,11 @@ export const UpdateFeaturedAppForm: React.FC = () => {
                 <field.TextField
                   title="Activity Weight"
                   id={`${idPrefix}-activityWeight`}
-                  subtitle="Required. Scales the app's share of traffic-based rewards"
+                  subtitle={
+                    rightCid
+                      ? `Current Weight: ${currentWeight}. ${requiredActivityWeightSubtitle}`
+                      : requiredActivityWeightSubtitle
+                  }
                 />
               )}
             </form.AppField>

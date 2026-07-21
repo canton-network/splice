@@ -205,6 +205,7 @@ describe('Review Proposal Component', () => {
     const actionName = 'Update Featured Application';
     const providerPartyId = 'a-party-id::1014912492';
     const rightCid = 'bcde123456';
+    const currentActivityWeight = '1.0';
     const newActivityWeight = '2.5';
     const reason = 'boosting rewards';
 
@@ -215,9 +216,10 @@ describe('Review Proposal Component', () => {
         summary={summary}
         expiryDate={expiryDate}
         effectiveDate={effectiveDate}
-        formType="update-right"
+        formType="update-right-weight"
         providerPartyId={providerPartyId}
         rightCid={rightCid}
+        currentActivityWeight={currentActivityWeight}
         newActivityWeight={newActivityWeight}
         reason={reason}
         onEdit={() => {}}
@@ -248,8 +250,10 @@ describe('Review Proposal Component', () => {
     );
     expect(screen.getByTestId('updateRight-field').textContent).toBe(rightCid);
 
-    expect(screen.getByTestId('updateActivityWeight-title').textContent).toBe('Activity Weight');
-    expect(screen.getByTestId('updateActivityWeight-field').textContent).toBe(newActivityWeight);
+    expect(screen.getByTestId('config-change-current-value').textContent).toBe(
+      currentActivityWeight
+    );
+    expect(screen.getByTestId('config-change-new-value').textContent).toBe(newActivityWeight);
 
     expect(screen.getByTestId('updateReason-title').textContent).toBe('Reason');
     expect(screen.getByTestId('updateReason-field').textContent).toBe(reason);

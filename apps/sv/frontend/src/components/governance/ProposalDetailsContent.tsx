@@ -684,7 +684,13 @@ const UpdateFeatureAppSection = ({
     queryFn: async () => {
       const response = await svAdminClient.lookupFeaturedAppRightByContractId(rightContractId);
       const contract = response.featured_app_right;
-      return (contract?.payload as { provider?: string } | undefined)?.provider ?? null;
+      const payload = contract?.payload as
+        | { provider?: string; activityWeight?: string | null }
+        | undefined;
+      return {
+        provider: payload?.provider ?? null,
+        currentWeight: payload?.activityWeight ?? '',
+      };
     },
   });
   return (
@@ -693,12 +699,12 @@ const UpdateFeatureAppSection = ({
       data-testid="proposal-details-update-feature-app-section"
       sx={{ display: 'contents' }}
     >
-      {providerQuery.data && (
+      {providerQuery?.data?.provider && (
         <DetailItem
           label="Provider Party ID"
           value={
             <CopyableIdentifier
-              value={providerQuery.data}
+              value={providerQuery.data?.provider}
               size="large"
               data-testid="proposal-details-update-feature-value"
             />
@@ -718,10 +724,19 @@ const UpdateFeatureAppSection = ({
         labelId="proposal-details-update-feature-app-label"
       />
       <DetailItem
-        label="Activity Weight"
-        value={newActivityWeight}
-        labelId="proposal-details-update-feature-activity-weight-label"
-        valueId="proposal-details-update-feature-activity-weight-value"
+        label="Proposed Changes"
+        value={
+          <ConfigValuesChanges
+            changes={[
+              {
+                label: 'Activity Weight',
+                fieldName: 'newActivityWeight',
+                currentValue: providerQuery.data?.currentWeight ?? '',
+                newValue: newActivityWeight,
+              },
+            ]}
+          />
+        }
       />
       <DetailItem
         label="Reason"

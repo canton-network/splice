@@ -286,7 +286,7 @@ describe('Proposal Details Content', () => {
     expect(rightContractIdValue.textContent).toMatch(/rightContractId/);
   });
 
-  test('should render update featured app proposal details', () => {
+  test('should render update featured app proposal details', async () => {
     const updateFeaturedAppDetails = {
       actionName: 'Update Featured Application',
       action: 'SRARC_UpdateFeaturedAppRight',
@@ -323,15 +323,13 @@ describe('Proposal Details Content', () => {
     const updateFeaturedAppValue = screen.getByTestId('proposal-details-update-feature-app-value');
     expect(updateFeaturedAppValue.textContent).toMatch('rightCid123');
 
-    const updateFeaturedActivityWeightLabel = screen.getByTestId(
-      'proposal-details-update-feature-activity-weight-label'
-    );
-    expect(updateFeaturedActivityWeightLabel.textContent).toMatch('Activity Weight');
+    await waitFor(() => {
+      const currentFeaturedAppWeight = screen.getByTestId('config-change-current-value');
+      expect(currentFeaturedAppWeight.textContent).toMatch('1.0');
+    });
 
-    const updateFeaturedActivityWeightValue = screen.getByTestId(
-      'proposal-details-update-feature-activity-weight-value'
-    );
-    expect(updateFeaturedActivityWeightValue.textContent).toMatch('2.5');
+    const newFeaturedAppWeight = screen.getByTestId('config-change-new-value');
+    expect(newFeaturedAppWeight.textContent).toMatch('2.5');
 
     const updateFeaturedReasonLabel = screen.getByTestId(
       'proposal-details-update-feature-reason-label'
@@ -342,6 +340,38 @@ describe('Proposal Details Content', () => {
       'proposal-details-update-feature-reason-value'
     );
     expect(updateFeaturedReasonValue.textContent).toMatch('boosting rewards');
+  });
+
+  test('should show only new weight when featured app right is not found', async () => {
+    const updateFeaturedAppDetails = {
+      actionName: 'Update Featured Application',
+      action: 'SRARC_UpdateFeaturedAppRight',
+      proposal: {
+        rightContractId: 'archivedRightCid', // <- not 'rightCid123', so the mock returns not-found
+        newActivityWeight: '2.5',
+        reason: 'boosting rewards',
+      } as UpdateFeatureAppProposal,
+    } as ProposalDetails;
+
+    render(
+      <Wrapper>
+        <ProposalDetailsContent
+          currentSvPartyId={voteRequest.votingInformation.requester}
+          contractId={voteRequest.contractId}
+          proposalDetails={updateFeaturedAppDetails}
+          votingInformation={voteRequest.votingInformation}
+          votes={voteRequest.votes}
+        />
+      </Wrapper>
+    );
+
+    // new value still shows
+    await waitFor(() => {
+      const newFeaturedAppWeight = screen.getByTestId('config-change-new-value');
+      expect(newFeaturedAppWeight.textContent).toMatch('2.5');
+    });
+    // ...but there's no current-value box (contract archived → currentWeight '')
+    expect(screen.queryByTestId('config-change-current-value')).toBeNull();
   });
 
   test('should render update sv reward weight proposal details', () => {

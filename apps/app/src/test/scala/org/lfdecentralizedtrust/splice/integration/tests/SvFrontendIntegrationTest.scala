@@ -1435,7 +1435,8 @@ class SvFrontendIntegrationTest
 
       clue("vote the grant request to execution before creating revoke request") {
         val grantTrackingCid = eventually() {
-          val voteRequest: Contract[VoteRequest.ContractId, VoteRequest] = voteProposalToExecution(grantProposalContractId)
+          val voteRequest: Contract[VoteRequest.ContractId, VoteRequest] =
+            getVoteRequestForProposal(grantProposalContractId)
 
           if (voteRequest.payload.trackingCid.isPresent) voteRequest.payload.trackingCid.get
           else voteRequest.contractId
@@ -1472,7 +1473,7 @@ class SvFrontendIntegrationTest
 
       clue("vote the update request to execution") {
         val updateTrackingCid = eventually() {
-          val voteRequest = voteProposalToExecution(updateProposalContractId)
+          val voteRequest = getVoteRequestForProposal(updateProposalContractId)
           if (voteRequest.payload.trackingCid.isPresent) voteRequest.payload.trackingCid.get
           else voteRequest.contractId
         }
@@ -1671,8 +1672,8 @@ class SvFrontendIntegrationTest
     }
   }
 
-  def voteProposalToExecution(
-     proposalContractId: String
+  def getVoteRequestForProposal(
+      proposalContractId: String
   )(implicit env: SpliceTestConsoleEnvironment) = {
     val voteRequest: Contract[VoteRequest.ContractId, VoteRequest] = sv1Backend
       .listVoteRequests()
