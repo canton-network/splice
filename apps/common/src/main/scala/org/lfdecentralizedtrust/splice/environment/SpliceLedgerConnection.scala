@@ -17,6 +17,7 @@ import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.admin.api.client.data.parties.PartyDetails
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.data.CantonTimestamp
+import com.digitalasset.canton.error.TransactionRoutingError
 import com.digitalasset.canton.ledger.error.LedgerApiErrors
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
@@ -679,9 +680,13 @@ class BaseLedgerConnection(
         )
         .recover {
           case ex: StatusRuntimeException
-              if ErrorDetails.matches(ex, LedgerApiErrors.NoPreferredPackagesFound) =>
+              if ErrorDetails.matches(ex, LedgerApiErrors.NoPreferredPackagesFound) ||
+                ErrorDetails.matches(
+                  ex,
+                  TransactionRoutingError.TopologyErrors.UnknownInformees,
+                ) =>
             logger.info(
-              s"No preferred packages found for packageRequirements $packageRequirements on synchronizer $synchronizerId with vetting time $vettingAsOfTime"
+              s"No preferred packages found for packageRequirements $packageRequirements on synchronizer $synchronizerId with vetting time $vettingAsOfTime: ${ex.getStatus.getDescription}"
             )
             Seq.empty
         },

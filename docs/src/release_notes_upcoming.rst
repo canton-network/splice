@@ -7,13 +7,3 @@
 
 .. release-notes:: Upcoming
 
-  .. note::
-
-    Next-release notes
-
-  - Deployment
-
-    - Helm
-
-      - Added security contexts for all Helm-based deployments intended for production.
-        This improves the security of Kubernetes based deployments.

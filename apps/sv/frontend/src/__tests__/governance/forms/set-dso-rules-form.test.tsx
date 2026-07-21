@@ -73,7 +73,11 @@ describe('Set DSO Config Rules Form', () => {
       /Unable to find an element/
     );
 
-    expect(screen.getByTestId('json-diffs-details')).toBeInTheDocument();
+    const jsonDiffsToggle = screen.getByTestId('json-diff-toggle');
+    expect(screen.getByText('JSON')).toBeInTheDocument();
+    expect(jsonDiffsToggle).toHaveTextContent('Show JSON');
+    expect(jsonDiffsToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByTestId('json-diffs-details')).not.toBeVisible();
   });
 
   test('should render errors when submit button is clicked on new form', async () => {
@@ -264,6 +268,8 @@ describe('Set DSO Config Rules Form', () => {
     await user.click(submitButton);
 
     expect(screen.getByText('Proposal Summary')).toBeInTheDocument();
+    expect(screen.queryByText('JSON')).not.toBeInTheDocument();
+    expect(screen.getByTestId('json-diff-toggle')).toHaveTextContent('Show JSON');
   });
 
   test('should show error on form if submission fails', async () => {
@@ -374,19 +380,22 @@ describe('Set DSO Config Rules Form', () => {
     const c2Input = screen.getByTestId('config-field-voteCooldownTime');
     await user.type(c2Input, '9999');
 
-    const jsonDiffs = screen.getByText('JSON Diffs');
-    expect(jsonDiffs).toBeInTheDocument();
+    const jsonDiffsToggle = screen.getByTestId('json-diff-toggle');
+    expect(jsonDiffsToggle).toHaveTextContent('Show JSON');
+    expect(jsonDiffsToggle).toHaveAttribute('aria-expanded', 'false');
 
-    await user.click(jsonDiffs);
-    expect(await screen.findByTestId('config-diffs-display')).toBeInTheDocument();
+    await user.click(jsonDiffsToggle);
+    expect(await screen.findByTestId('config-diffs-display')).toBeVisible();
+    expect(jsonDiffsToggle).toHaveTextContent('Hide JSON');
+    expect(jsonDiffsToggle).toHaveAttribute('aria-expanded', 'true');
 
     const reviewButton = screen.getByTestId('submit-button');
     await waitFor(async () => {
       expect(reviewButton.getAttribute('disabled')).not.toBeInTheDocument();
     });
 
-    expect(jsonDiffs).toBeInTheDocument();
-    await user.click(jsonDiffs);
+    expect(jsonDiffsToggle).toBeInTheDocument();
+    await user.click(jsonDiffsToggle);
     expect(await screen.findByTestId('config-diffs-display')).toBeInTheDocument();
   });
 

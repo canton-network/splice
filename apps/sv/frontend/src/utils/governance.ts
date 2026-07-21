@@ -134,7 +134,10 @@ export function buildProposal(action: ActionRequiringConfirmation, dsoInfo?: Dso
           dsoAction.value.expiresAt
         );
       case 'SRARC_GrantFeaturedAppRight':
-        return createGrantFeatureAppProposal(dsoAction.value.provider);
+        return createGrantFeatureAppProposal(
+          dsoAction.value.provider,
+          dsoAction.value.activityWeight ?? ''
+        );
       case 'SRARC_RevokeFeaturedAppRight':
         return createRevokeFeatureAppProposal(dsoAction.value.rightCid);
       case 'SRARC_SetConfig':
@@ -156,9 +159,13 @@ function createOffboardMemberProposal(memberToOffboard: string): OffBoardMemberP
   return { memberToOffboard };
 }
 
-function createGrantFeatureAppProposal(provider: string): FeatureAppProposal {
+function createGrantFeatureAppProposal(
+  provider: string,
+  activityWeight: string
+): FeatureAppProposal {
   return {
     provider: provider,
+    activityWeight: activityWeight,
   };
 }
 
@@ -272,6 +279,10 @@ export function formatBasisPoints(value: string): string {
 export function getSvRewardWeight(svs: [string, SvInfo][], svPartyId: string): string {
   const svInfo = svs.find(sv => sv[0] === svPartyId);
   return svInfo ? svInfo[1].svRewardWeight : '';
+}
+
+export function activityWeightToOptional(weight: string): string | null {
+  return weight.trim() === '' ? null : weight;
 }
 
 export function buildPendingConfigFields(

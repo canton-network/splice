@@ -5,7 +5,6 @@ This guide outlines steps to resolve common issues that a contributor might enco
 ## Prerequisites
 
 - Install **`nix`**, **`direnv`**, and **`sbt`** as per [DEVELOPMENT.md](./DEVELOPMENT.md)
-- Ensure access to JFrog Artifactory (`splice-developers` team). Contact your team lead if access is denied.
 
 ## Steps
 

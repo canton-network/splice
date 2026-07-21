@@ -80,7 +80,11 @@ describe('Set Amulet Config Rules Form', () => {
       { timeout: 1000 }
     );
 
-    expect(screen.getByTestId('json-diffs-details')).toBeInTheDocument();
+    const jsonDiffsToggle = screen.getByTestId('json-diff-toggle');
+    expect(screen.getByText('JSON')).toBeInTheDocument();
+    expect(jsonDiffsToggle).toHaveTextContent('Show JSON');
+    expect(jsonDiffsToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByTestId('json-diffs-details')).not.toBeVisible();
   });
 
   test(
@@ -275,6 +279,8 @@ describe('Set Amulet Config Rules Form', () => {
     await user.click(submitButton);
 
     expect(screen.getByText(PROPOSAL_SUMMARY_TITLE)).toBeInTheDocument();
+    expect(screen.queryByText('JSON')).not.toBeInTheDocument();
+    expect(screen.getByTestId('json-diff-toggle')).toHaveTextContent('Show JSON');
   });
 
   test('should show error on form if submission fails', { timeout: 10000 }, async () => {
@@ -376,19 +382,22 @@ describe('Set Amulet Config Rules Form', () => {
     const c2Input = screen.getByTestId('config-field-transferConfigTransferFeeInitialRate');
     await user.type(c2Input, '9.99');
 
-    const jsonDiffs = screen.getByText('JSON Diffs');
-    expect(jsonDiffs).toBeInTheDocument();
+    const jsonDiffsToggle = screen.getByTestId('json-diff-toggle');
+    expect(jsonDiffsToggle).toHaveTextContent('Show JSON');
+    expect(jsonDiffsToggle).toHaveAttribute('aria-expanded', 'false');
 
-    await user.click(jsonDiffs);
-    expect(await screen.findByTestId('config-diffs-display')).toBeInTheDocument();
+    await user.click(jsonDiffsToggle);
+    expect(await screen.findByTestId('config-diffs-display')).toBeVisible();
+    expect(jsonDiffsToggle).toHaveTextContent('Hide JSON');
+    expect(jsonDiffsToggle).toHaveAttribute('aria-expanded', 'true');
 
     const reviewButton = screen.getByTestId('submit-button');
     await waitFor(async () => {
       expect(reviewButton.getAttribute('disabled')).toBeNull();
     });
 
-    expect(jsonDiffs).toBeInTheDocument();
-    await user.click(jsonDiffs);
+    expect(jsonDiffsToggle).toBeInTheDocument();
+    await user.click(jsonDiffsToggle);
     expect(await screen.findByTestId('config-diffs-display')).toBeInTheDocument();
   });
 

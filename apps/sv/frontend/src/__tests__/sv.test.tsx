@@ -372,7 +372,7 @@ describe('SetAmuletRules', () => {
         (calledWithBody.action as any).value.amuletRulesAction.value.newConfig.transferConfig
           .transferFee.steps
         // the second element is gone
-      ).toStrictEqual(initialSteps.filter((_, i) => i !== 1));
+      ).toStrictEqual(initialSteps.filter((_: unknown, i: number) => i !== 1));
     },
     { timeout: 20000 }
   );

@@ -191,6 +191,15 @@ class HistoryMetrics(metricsFactory: LabeledMetricsFactory)(implicit
       ),
       -1,
     )(metricsContext)
+
+    override lazy val snapshotSize: Gauge[Int] = metricsFactory.gauge(
+      MetricInfo(
+        name = acsSnapshotsPrefix :+ "snapshot-size",
+        summary = "Number of rows copied in the latest acs snapshot",
+        Traffic,
+      ),
+      0,
+    )(metricsContext)
   }
 
   object AcsSnapshotsBackfilling extends AcsSnapshotsMetrics {
@@ -244,6 +253,15 @@ class HistoryMetrics(metricsFactory: LabeledMetricsFactory)(implicit
         qualification = Errors,
       ),
       -1,
+    )(metricsContext)
+
+    override lazy val snapshotSize: Gauge[Int] = metricsFactory.gauge(
+      MetricInfo(
+        name = acsSnapshotsPrefix :+ "snapshot-size",
+        summary = "Number of rows copied in the latest acs snapshot",
+        Traffic,
+      ),
+      0,
     )(metricsContext)
   }
 
@@ -469,9 +487,11 @@ class HistoryMetrics(metricsFactory: LabeledMetricsFactory)(implicit
     AcsSnapshots.latestRecordTimeSave.close()
     AcsSnapshots.latestRecordTimeUpdate.close()
     AcsSnapshots.waitingForLock.close()
+    AcsSnapshots.snapshotSize.close()
     AcsSnapshotsBackfilling.latestRecordTimeSave.close()
     AcsSnapshotsBackfilling.latestRecordTimeUpdate.close()
     AcsSnapshotsBackfilling.waitingForLock.close()
+    AcsSnapshotsBackfilling.snapshotSize.close()
   }
 }
 
@@ -486,5 +506,6 @@ object HistoryMetrics {
     def latencyUpdate: Timer
     def latencySave: Timer
     def waitingForLock: Gauge[Int]
+    def snapshotSize: Gauge[Int]
   }
 }

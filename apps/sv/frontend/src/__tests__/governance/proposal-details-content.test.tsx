@@ -417,7 +417,11 @@ describe('Proposal Details Content', () => {
     const maxNumInputsNewValue = within(changes[1]).getByTestId('config-change-new-value');
     expect(maxNumInputsNewValue.textContent).toBe('4');
 
-    expect(screen.getByTestId('json-diffs-details')).toBeInTheDocument();
+    const jsonDiffsToggle = screen.getByTestId('json-diff-toggle');
+    expect(jsonDiffsToggle).toHaveTextContent('Show JSON');
+    expect(jsonDiffsToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('JSON')).not.toBeInTheDocument();
+    expect(screen.getByTestId('json-diffs-details')).not.toBeVisible();
   });
 
   test('should render dso rules config changes', () => {
@@ -498,7 +502,11 @@ describe('Proposal Details Content', () => {
     );
     expect(dsoNumUnclaimedRewardsThresholdNewValue.textContent).toBe('20');
 
-    expect(screen.getByTestId('json-diffs-details')).toBeInTheDocument();
+    const jsonDiffsToggle = screen.getByTestId('json-diff-toggle');
+    expect(jsonDiffsToggle).toHaveTextContent('Show JSON');
+    expect(jsonDiffsToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('JSON')).not.toBeInTheDocument();
+    expect(screen.getByTestId('json-diffs-details')).not.toBeVisible();
   });
 });
 

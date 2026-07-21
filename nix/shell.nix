@@ -1,6 +1,5 @@
 { pkgs, x86Pkgs, variant }:
 let
-  use_enterprise = if variant == "enterprise" then true else false;
   inherit (pkgs) stdenv fetchzip;
   sources = builtins.fromJSON (builtins.readFile ./canton-sources.json);
   cometbftDriverSources = builtins.fromJSON (builtins.readFile ./cometbft-driver-sources.json);
@@ -152,9 +151,8 @@ in pkgs.mkShell {
   DAML_COMPILER_VERSION = "${dpmSdkSources.version}";
   COMETBFT_RELEASE_VERSION = "${cometbftDriverSources.version}";
   COMETBFT_IMAGE_SHA256 = "${cometbftDriverSources.image_sha256}";
-  COMETBFT_DRIVER = if use_enterprise then "${pkgs.cometbft_driver}" else "";
+  COMETBFT_DRIVER = "${pkgs.cometbft_driver}";
   PULUMI_HOME = "${pkgs.pulumi-bin}";
-  IS_ENTERPRISE = if use_enterprise then "true" else "false";
   # Avoid sbt-assembly falling over. See https://github.com/sbt/sbt-assembly/issues/496
   LC_ALL = if stdenv.isDarwin then "" else "C.UTF-8";
   # Avoid "warning: setlocale: LC_ALL: cannot change locale (C.UTF-8)"

@@ -18,108 +18,8 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 3573,
   "links": [],
   "panels": [
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            },
-            "inspect": false
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green"
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Trend #A"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "ACS size"
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 26,
-        "w": 24,
-        "x": 0,
-        "y": 0
-      },
-      "id": 2,
-      "options": {
-        "cellHeight": "sm",
-        "footer": {
-          "countRows": false,
-          "fields": "",
-          "reducer": [
-            "sum"
-          ],
-          "show": false
-        },
-        "showHeader": true,
-        "sortBy": [
-          {
-            "desc": true,
-            "displayName": "ACS size"
-          }
-        ]
-      },
-      "pluginVersion": "12.0.2",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "editorMode": "code",
-          "expr": "sum by (namespace, store_name, store_party) (splice_store_acs_size{namespace=~\"$namespace\",store_name=~\"$store_name\"})",
-          "instant": false,
-          "legendFormat": "__auto",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "ACS Size",
-      "transformations": [
-        {
-          "id": "timeSeriesTable",
-          "options": {
-            "A": {
-              "timeField": "Time"
-            }
-          }
-        }
-      ],
-      "type": "table"
-    },
     {
       "datasource": {
         "type": "prometheus",
@@ -154,6 +54,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -168,7 +69,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": 0
               },
               {
                 "color": "red",
@@ -184,7 +86,7 @@
         "h": 20,
         "w": 24,
         "x": 0,
-        "y": 26
+        "y": 0
       },
       "id": 1,
       "options": {
@@ -200,7 +102,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.0.2",
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "datasource": {
@@ -208,20 +110,20 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum without (__name__,endpoint,instance,job,migration,otel_scope) (splice_store_acs_size{namespace=~\"$namespace\",store_name=~\"$store_name\"})",
+          "expr": "(increase(splice_store_acs_size_increase_total{namespace=~\"$namespace\",store_name=~\"$store_name\"}[24h]))-(increase(splice_store_acs_size_decrease_total{namespace=~\"$namespace\",store_name=~\"$store_name\"}[24h]))",
           "instant": false,
-          "legendFormat": "__auto",
+          "legendFormat": "{{namespace}} {{store_name}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Splice Store ACS Size",
+      "title": "Splice Store ACS Change in last 24h",
       "type": "timeseries"
     }
   ],
   "preload": false,
   "refresh": "",
-  "schemaVersion": 41,
+  "schemaVersion": 42,
   "tags": [],
   "templating": {
     "list": [
@@ -247,6 +149,7 @@
         },
         "refresh": 1,
         "regex": "",
+        "regexApplyTo": "value",
         "type": "query"
       },
       {
@@ -271,6 +174,7 @@
         },
         "refresh": 1,
         "regex": "",
+        "regexApplyTo": "value",
         "type": "query"
       }
     ]
@@ -283,5 +187,6 @@
   "timezone": "",
   "title": "Splice Store ACS Size",
   "uid": "dduss3xr5or28c",
-  "version": 1
+  "version": 1,
+  "weekStart": ""
 }

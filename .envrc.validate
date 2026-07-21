@@ -34,12 +34,5 @@ if [[ -z "$IGNORE_PRIVATE_ENVRC" ]]; then
         AUTH0_VALIDATOR_MANAGEMENT_API_CLIENT_ID \
         AUTH0_VALIDATOR_MANAGEMENT_API_CLIENT_SECRET \
         AUTH0_TESTS_MANAGEMENT_API_CLIENT_ID \
-        AUTH0_TESTS_MANAGEMENT_API_CLIENT_SECRET \
-        ARTIFACTORY_USER \
-        ARTIFACTORY_PASSWORD
-fi
-
-if [ "$IS_ENTERPRISE" != "true" ]; then
-    echo ""
-    _warning "Note: Using Canton community instead of Canton enterprise. Certain tests which rely on Enterprise features will fail locally."
+        AUTH0_TESTS_MANAGEMENT_API_CLIENT_SECRET
 fi

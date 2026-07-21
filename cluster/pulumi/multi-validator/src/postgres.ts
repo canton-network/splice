@@ -15,7 +15,6 @@ import {
   createVolumeSnapshot,
 } from '@canton-network/splice-pulumi-common';
 
-import { hyperdiskSupportConfig } from '../../common/src/config/hyperdiskSupportConfig';
 import { multiValidatorConfig } from './config';
 
 export function installPostgres(
@@ -45,12 +44,8 @@ export function installPostgres(
       db: {
         volumeSize: config.postgresPvcSize,
         maxConnections: 1000,
-        ...(hyperdiskSupportConfig.hyperdiskSupport.enabled
-          ? {
-              volumeStorageClass: standardStorageClassName,
-              pvcTemplateName: 'pg-data-hd',
-            }
-          : {}),
+        volumeStorageClass: standardStorageClassName,
+        pvcTemplateName: 'pg-data-hd',
       },
       resources: config.resources?.postgres,
       appsAffinityAndTolerations,

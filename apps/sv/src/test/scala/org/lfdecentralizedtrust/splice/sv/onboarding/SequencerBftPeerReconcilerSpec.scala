@@ -91,6 +91,8 @@ class SequencerBftPeerReconcilerSpec extends AnyFlatSpec with BaseTest with HasR
       )
     )
 
+    withNetworkStatus()
+
     withScanSequencers(
       BftSequencer(
         serialId,
@@ -389,7 +391,7 @@ class SequencerBftPeerReconcilerSpec extends AnyFlatSpec with BaseTest with HasR
     result.toRemove should contain only sequencer1Host
   }
 
-  it should "keep a configured peer and log a warning when no sequencer id can be found for it in the network status" in {
+  it should "keep a configured peer when no sequencer id can be found for it in the network status" in {
     withConfiguredDsoSequencers(
       Seq(
         createSequencerConfig(sequencer1Id),
@@ -419,12 +421,7 @@ class SequencerBftPeerReconcilerSpec extends AnyFlatSpec with BaseTest with HasR
       (Some(sequencer1Id), Some(sequencer1Host))
     )
 
-    val result = loggerFactory.assertLogs(
-      reconciler.diffDsoRulesWithTopology().futureValue,
-      _.warningMessage should include(
-        s"Could not find a sequencer id for the configured peer endpoint ${sequencer2Host}"
-      ),
-    )
+    val result = reconciler.diffDsoRulesWithTopology().futureValue
     result should be(empty)
   }
 

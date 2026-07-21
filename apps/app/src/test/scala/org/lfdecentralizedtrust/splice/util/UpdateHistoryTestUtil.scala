@@ -336,7 +336,7 @@ trait UpdateHistoryTestUtil extends TestCommon {
         CompactJsonScanHttpEncodings().httpToLapiUpdate(
           scanClient.getUpdate(fromHistory.update.updateId, encoding = CompactJson)
         )
-      fromPointwiseLookup.update shouldBe fromHistory
+      dropTrailingNones(fromPointwiseLookup.update) shouldBe fromHistory
     })
 
     succeed

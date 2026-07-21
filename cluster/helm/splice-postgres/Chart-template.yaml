@@ -7,7 +7,13 @@ type: application
 version: VERSION_NUMBER
 appVersion: VERSION_NUMBER
 
-description: Splice Self-Hosted PGSQL
+description: >
+  DEPRECATED: This chart is unsupported after 2026-11-12, the PostgreSQL 14
+  end-of-life date, and receives no PostgreSQL version upgrades. Run Splice
+  against a PostgreSQL instance you provision yourself; see the migration guide
+  at https://docs.canton.network/global-synchronizer/production-operations/validator-postgres-migration
+
+deprecated: true
 
 dependencies:
 - name: splice-util-lib

@@ -10,7 +10,6 @@ import { CnChartVersion } from './artifacts';
 import { clusterSmallDisk, CloudSqlConfig, config } from './config';
 import { spliceConfig } from './config/config';
 import { GcpProject } from './config/gcpConfig';
-import { hyperdiskSupportConfig } from './config/hyperdiskSupportConfig';
 import {
   appsAffinityAndTolerations,
   infraAffinityAndTolerations,
@@ -118,7 +117,7 @@ export class CloudPostgres
     const databaseInstance = new gcp.sql.DatabaseInstance(
       name,
       {
-        databaseVersion: 'POSTGRES_14',
+        databaseVersion: cloudSqlConfig.databaseVersion,
         // keep always false as this is the terraform provider and cannot be manually removed
         // https://github.com/pulumi/pulumi-gcp/issues/1209
         deletionProtection: false,
@@ -410,9 +409,6 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
 
     // an initial database named cantonnet is created automatically (configured in the Helm chart).
     const smallDiskSize = clusterSmallDisk ? '240Gi' : undefined;
-    const supportsHyperdisk = useInfraAffinityAndTolerations
-      ? hyperdiskSupportConfig.hyperdiskSupport.enabledForInfra
-      : hyperdiskSupportConfig.hyperdiskSupport.enabled;
 
     const pg = installSpliceHelmChart(
       xns,
@@ -423,12 +419,8 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
           volumeSize: overrideDbSizeFromValues
             ? values?.db?.volumeSize || smallDiskSize
             : smallDiskSize,
-          ...(supportsHyperdisk
-            ? {
-                volumeStorageClass: standardStorageClassName,
-                pvcTemplateName: 'pg-data-hd',
-              }
-            : {}),
+          volumeStorageClass: standardStorageClassName,
+          pvcTemplateName: 'pg-data-hd',
         },
         persistence: {
           secretName: this.secretName,
@@ -482,6 +474,7 @@ export async function installPostgres(
     existingInstanceName?: string;
     existingSecretName?: string;
     retainDbResourcesOnDelete?: boolean;
+    databaseVersion?: string;
   } = {}
 ): Promise<Postgres> {
   const o = { isActive: true, ...opts };

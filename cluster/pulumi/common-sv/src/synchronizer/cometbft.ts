@@ -23,7 +23,6 @@ import {
   withAddedDependencies,
 } from '@canton-network/splice-pulumi-common';
 import { CnChartVersion } from '@canton-network/splice-pulumi-common/src/artifacts';
-import { hyperdiskSupportConfig } from '@canton-network/splice-pulumi-common/src/config/hyperdiskSupportConfig';
 import { jsonStringify, Output } from '@pulumi/pulumi';
 
 import { svsConfig } from '../config';
@@ -103,14 +102,6 @@ export function installCometBftNode(
       ? undefined
       : installCometBftKeysSecret(xns, nodeConfig.validator.keyAddress, migrationId);
 
-  let hyperdiskDbValues = {};
-  if (hyperdiskSupportConfig.hyperdiskSupport.enabled) {
-    hyperdiskDbValues = {
-      pvcName: `cometbft-migration-${migrationId}-hd-pvc`,
-      volumeStorageClass: standardStorageClassName,
-    };
-  }
-
   const cometbftChartValues = _.mergeWith(cometBftValues, {
     sv1: nodeConfigs.sv1,
     istioVirtualService: {
@@ -146,7 +137,8 @@ export function installCometBftNode(
     },
     db: {
       volumeSize: clusterSmallDisk ? '240Gi' : pvcSize || svsConfig?.cometbft?.volumeSize,
-      ...hyperdiskDbValues,
+      pvcName: `cometbft-migration-${migrationId}-hd-pvc`,
+      volumeStorageClass: standardStorageClassName,
     },
     extraLogLevelFlags: svConfiguration.logging?.cometbftExtraLogLevelFlags,
     serviceAccountName: imagePullServiceAccountName,

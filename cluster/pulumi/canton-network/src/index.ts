@@ -11,11 +11,9 @@ async function auth0CacheAndInstallCluster(auth0Fetch: Auth0Fetch) {
 
   installClusterVersion();
 
-  const cluster = await installCluster(auth0Fetch);
+  await installCluster(auth0Fetch);
 
   await auth0Fetch.saveAuth0Cache();
-
-  return cluster;
 }
 
 async function main() {

@@ -116,6 +116,7 @@ describe('Review Proposal Component', () => {
   test('should render review proposal component for feature application', () => {
     const actionName = 'Feature Application';
     const provider = 'Digital-Asset-Eng-2';
+    const activityWeight = '2.5';
 
     render(
       <ProposalSummary
@@ -126,6 +127,7 @@ describe('Review Proposal Component', () => {
         effectiveDate={effectiveDate}
         formType="grant-right"
         grantRight={provider}
+        activityWeight={activityWeight}
         onEdit={() => {}}
         onSubmit={() => {}}
       />
@@ -148,6 +150,11 @@ describe('Review Proposal Component', () => {
 
     expect(screen.getByTestId('grantRight-title').textContent).toBe('Provider Party ID');
     expect(screen.getByTestId('grantRight-field').textContent).toBe(provider);
+
+    expect(screen.getByTestId('grantRightActivityWeight-title').textContent).toBe(
+      'Activity Weight'
+    );
+    expect(screen.getByTestId('grantRightActivityWeight-field').textContent).toBe(activityWeight);
   });
 
   test('should render review proposal component for unfeature application', () => {

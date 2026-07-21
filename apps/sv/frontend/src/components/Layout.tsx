@@ -9,9 +9,12 @@ import {
 } from '@canton-network/splice-common-frontend';
 
 import { Logout } from '@mui/icons-material';
-import { Box, Button, Divider, Stack, Typography } from '@mui/material';
+import { Box, Button, Divider, GlobalStyles, Stack, Typography } from '@mui/material';
 import Container from '@mui/material/Container';
 import Link from '@mui/material/Link';
+
+import { partyIdScrollGlobalStyles } from './beta/identifierStyles';
+import PartyIdScrollTracks from './PartyIdScrollTracks';
 
 import { useFeatureSupport } from '../contexts/SvContext';
 import { useNetworkInstanceName } from '../hooks/index';
@@ -49,6 +52,8 @@ const Layout: React.FC<LayoutProps> = (props: LayoutProps) => {
 
   return (
     <Box bgcolor="colors.neutral.20" display="flex" flexDirection="column" minHeight="100vh">
+      <GlobalStyles styles={partyIdScrollGlobalStyles} />
+      <PartyIdScrollTracks />
       {networkInstanceName === undefined ? (
         <></>
       ) : (

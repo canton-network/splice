@@ -309,7 +309,7 @@ export const SetDsoConfigRulesForm: () => JSX.Element = () => {
         </>
       )}
 
-      <JsonDiffAccordion>
+      <JsonDiffAccordion variant={showConfirmation ? 'review' : 'form'}>
         {dsoConfigToCompareWith[1] ? (
           <PrettyJsonDiff
             changes={{

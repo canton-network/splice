@@ -1,7 +1,7 @@
 apiVersion: 1
 groups:
   - orgId: 1
-    name: canton-bft-blacklisted-members
+    name: canton-bft
     folder: canton
     interval: 1m
     rules:
@@ -56,5 +56,58 @@ groups:
           description: The CantonBft member {{ $labels.blacklist_sequencer }} is blacklisted.
           severity: warning
           summary: CantonBft member {{ $labels.blacklist_sequencer }} is blacklisted for {{ index $values "blacklisted_epochs" }} epochs
+        labels: {}
+        isPaused: false
+      - uid: e2a9c7b4f1d6
+        title: CantonBft Ingress Requests Queued
+        condition: mempool_size_threshold
+        data:
+          - refId: mempool_size
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              editorMode: code
+              expr: max by (namespace, job)(daml_sequencer_bftordering_ingress_requests_queued)
+              instant: true
+              intervalMs: 1000
+              legendFormat: __auto
+              maxDataPoints: 43200
+              range: false
+              refId: mempool_size
+          - refId: mempool_size_threshold
+            datasourceUid: __expr__
+            model:
+              conditions:
+                  - evaluator:
+                      params:
+                          - $CANTON_BFT_MEMPOOL_SIZE_THRESHOLD
+                      type: gt
+                    operator:
+                      type: and
+                    query:
+                      params: []
+                    reducer:
+                      params: []
+                      type: last
+                    type: query
+              datasource:
+                  name: Expression
+                  type: __expr__
+                  uid: __expr__
+              expression: mempool_size
+              hide: false
+              refId: mempool_size_threshold
+              type: threshold
+        dashboardUid: ""
+        panelId: 0
+        noDataState: OK
+        execErrState: Alerting
+        for: 5m
+        annotations:
+          description: The number of requests in the mempool of CantonBft for the namespace {{ $labels.namespace }} is above the configured threshold.
+          severity: warning
+          summary: CantonBft mempool size {{ index $values "mempool_size" }} in namespace {{ $labels.namespace }}
         labels: {}
         isPaused: false
