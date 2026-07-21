@@ -317,15 +317,6 @@ export async function initDumpConfig({
                 ...args.inputs,
                 secretData,
               };
-            } else if (args.inputs.secret == 'artifactory-keys') {
-              const secretData = JSON.stringify({
-                username: 'art_user',
-                password: 's3cr3t',
-              });
-              return {
-                ...args.inputs,
-                secretData,
-              };
             } else if (args.inputs.secret == 'us-central1-artifact-reader-key') {
               const secretData = JSON.stringify({
                 type: 'service_account',
