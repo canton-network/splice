@@ -184,7 +184,7 @@ class BulkStorageCommitFromStagingTest
             logEntries =>
               forAtLeast(1, logEntries)(
                 _.message should include(
-                  "BFT consensus checksums do not match the expected checksums for all objects"
+                  "All objects are known to the BFT peers, but the checksums do not match"
                 )
               ),
           )
@@ -202,7 +202,7 @@ class BulkStorageCommitFromStagingTest
         }
       } catch {
         case ex: Throwable =>
-          pub.sendComplete()
+          pub.sendError(ex)
           sub.cancel()
           throw ex
       }
@@ -230,7 +230,12 @@ class BulkStorageCommitFromStagingTest
         )
           .thenReturn(
             Future.successful(
-              new GetBulkObjectChecksumsResponse(objsWithDigests.map(_.checksum).toVector)
+              new GetBulkObjectChecksumsResponse(
+                objsWithDigests
+                  .map(_.checksum)
+                  .map(digest => new GetBulkObjectChecksumsResponse.Checksums(Some(digest)))
+                  .toVector
+              )
             )
           )
         ()
@@ -244,7 +249,11 @@ class BulkStorageCommitFromStagingTest
           .thenReturn(
             Future.successful(
               new GetBulkObjectChecksumsResponse(
-                objsWithDigests.map(_.checksum).updated(objIdx, "wrong-digest").toVector
+                objsWithDigests
+                  .map(_.checksum)
+                  .updated(objIdx, "wrong-digest")
+                  .map(digest => new GetBulkObjectChecksumsResponse.Checksums(Some(digest)))
+                  .toVector
               )
             )
           )
@@ -258,7 +267,12 @@ class BulkStorageCommitFromStagingTest
           .thenReturn(
             Future.successful(
               new GetBulkObjectChecksumsResponse(
-                objsWithDigests.map(_.checksum).updated(objIdx, "").toVector
+                objsWithDigests
+                  .map(_.checksum)
+                  .map(Some(_))
+                  .updated(objIdx, None)
+                  .map(oDigest => new GetBulkObjectChecksumsResponse.Checksums(oDigest))
+                  .toVector
               )
             )
           )

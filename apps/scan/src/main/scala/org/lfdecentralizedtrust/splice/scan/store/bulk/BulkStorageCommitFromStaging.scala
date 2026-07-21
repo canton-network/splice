@@ -9,7 +9,7 @@ import com.digitalasset.canton.tracing.TraceContext
 import org.apache.pekko.NotUsed
 import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.http.scaladsl.model.StatusCodes
-import org.apache.pekko.stream.scaladsl.{Flow, Sink, Source}
+import org.apache.pekko.stream.scaladsl.{Flow, Source}
 import org.lfdecentralizedtrust.splice.admin.http.HttpErrorWithHttpCode
 import org.lfdecentralizedtrust.splice.config.{AutomationConfig, UpgradesConfig}
 import org.lfdecentralizedtrust.splice.environment.{RetryProvider, SpliceLedgerClient}
@@ -78,7 +78,9 @@ class BulkStorageCommitFromStaging[T](
             val consensusChecksums = bftChecksums.checksums.filter(_.value.isDefined)
             logger.debug(s"Consensus achieved on ${consensusChecksums.length} objects")
             val consensus =
-              bftChecksums.checksums.filter(_.value.isDefined) == objects.map(_.checksum)
+              bftChecksums.checksums.filter(_.value.isDefined).map(_.value) == objects.map(oc =>
+                Some(oc.checksum)
+              )
             if (consensusChecksums.length == objects.length && !consensus) {
               logger.error(
                 s"All objects are known to the BFT peers, but the checksums do not match. This indicates an error in the actual data generated for bulk storage. Expected: ${objects
@@ -103,7 +105,7 @@ class BulkStorageCommitFromStaging[T](
     (T, Seq[ObjectKeyAndChecksum]),
     NotUsed,
   ] = {
-    Flow[(T, Seq[ObjectKeyAndChecksum])].mapAsync(parallelism = 1) { case (t, obj) =>
+    Flow[(T, Seq[ObjectKeyAndChecksum])].flatMapConcat { case (t, obj) =>
       Source
         .repeat(obj)
         .mapAsync(parallelism = 1)(obj => checkBftForObjects(obj).map(result => (obj, result)))
@@ -121,8 +123,7 @@ class BulkStorageCommitFromStaging[T](
             Source.single((obj, false)).delay(appConfig.bftRetryInterval.underlying)
         }
         .takeWhile({ case (_, bftReached) => !bftReached }, inclusive = true)
-        .runWith(Sink.last)
-        .map { case (obj, _) => (t, obj) }
+        .collect { case (o, true) => (t, o) }
     }
   }
 
