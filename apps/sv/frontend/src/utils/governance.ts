@@ -5,6 +5,7 @@ import type {
   ActionRequiringConfirmation,
   AmuletRules_ActionRequiringConfirmation,
   DsoRules_ActionRequiringConfirmation,
+  DsoRules_CloseVoteRequestResult,
   DsoRules_SetConfig,
   DsoRulesConfig,
   SvInfo,
@@ -25,6 +26,7 @@ import type {
   PendingConfigFieldInfo,
   Proposal,
   ProposalListingStatus,
+  ProposalListingData,
   SupportedActionTag,
   UnclaimedActivityRecordProposal,
   UnfeatureAppProposal,
@@ -125,6 +127,56 @@ export function computeYourVote(votes: Vote[], svPartyId: string | undefined): Y
 
   const vote = votes.find(vote => vote.sv === svPartyId);
   return vote ? (vote.accept ? 'accepted' : 'rejected') : 'no-vote';
+}
+
+export function getGovernanceActionTag(action: ActionRequiringConfirmation): string {
+  switch (action.tag) {
+    case 'ARC_AmuletRules':
+      return action.value.amuletRulesAction.tag;
+    case 'ARC_DsoRules':
+      return action.value.dsoAction.tag;
+    default:
+      return 'Action tag not defined.';
+  }
+}
+
+export function buildVoteHistoryData(
+  voteResults: DsoRules_CloseVoteRequestResult[],
+  amuletName: string,
+  svPartyId: string | undefined,
+  votingThreshold: bigint,
+  svs: { entriesArray(): [string, SvInfo][] } | undefined
+): ProposalListingData[] {
+  return voteResults
+    .filter(
+      vr =>
+        (vr.outcome.tag === 'VRO_Accepted' &&
+          dayjs(vr.outcome.value.effectiveAt).isBefore(dayjs())) ||
+        vr.outcome.tag === 'VRO_Expired' ||
+        vr.outcome.tag === 'VRO_Rejected'
+    )
+    .map(vr => {
+      const votes = vr.request.votes.entriesArray().map(e => e[1]);
+
+      return {
+        contractId: vr.request.trackingCid,
+        actionName:
+          actionTagToTitle(amuletName)[
+            getGovernanceActionTag(vr.request.action) as SupportedActionTag
+          ],
+        description: vr.request.reason.body,
+        votingThresholdDeadline: dayjs(vr.request.voteBefore).format(dateTimeFormatISO),
+        voteTakesEffect:
+          (vr.outcome.tag === 'VRO_Accepted' &&
+            dayjs(vr.outcome.value.effectiveAt).format(dateTimeFormatISO)) ||
+          dayjs(vr.completedAt).format(dateTimeFormatISO),
+        yourVote: computeYourVote(votes, svPartyId),
+        status: getVoteResultStatus(vr.outcome),
+        voteStats: computeVoteStats(votes),
+        acceptanceThreshold: votingThreshold,
+        requester: getRequesterPartyId(vr.request.requester, svs),
+      } as ProposalListingData;
+    });
 }
 
 export function buildProposal(action: ActionRequiringConfirmation, dsoInfo?: DsoInfo): Proposal {
