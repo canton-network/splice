@@ -140,7 +140,7 @@ class BulkStorageCommitFromStagingTest
       assertObjectsMoved(stagingS3Connection, committedS3Connection, objsWithDigests)
     }
 
-    "wait until all objects are known to the peers" in {
+    "wait until all objects are known to the peers, and report disagreement on consensus correctly" in {
       val (stagingS3Connection, committedS3Connection, objsWithDigests) = setupTest
 
       val mockScanConnections = new MockScanConnections(objsWithDigests)
@@ -375,7 +375,7 @@ class BulkStorageCommitFromStagingTest
       sub.expectComplete()
     } catch {
       case ex: Throwable =>
-        pub.sendComplete()
+        pub.sendError(ex)
         sub.cancel()
         throw ex
     }
