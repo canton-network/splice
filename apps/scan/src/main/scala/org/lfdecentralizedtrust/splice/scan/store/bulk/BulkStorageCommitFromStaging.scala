@@ -75,12 +75,13 @@ class BulkStorageCommitFromStaging[T](
       } yield {
         bft match {
           case Some(bftChecksums) =>
-            val consensusChecksums = bftChecksums.checksums.filter(_.nonEmpty)
+            val consensusChecksums = bftChecksums.checksums.filter(_.value.isDefined)
             logger.debug(s"Consensus achieved on ${consensusChecksums.length} objects")
-            val consensus = bftChecksums.checksums.filter(_.nonEmpty) == objects.map(_.checksum)
+            val consensus =
+              bftChecksums.checksums.filter(_.value.isDefined) == objects.map(_.checksum)
             if (consensusChecksums.length == objects.length && !consensus) {
               logger.error(
-                s"BFT consensus checksums do not match the expected checksums for all objects. Expected: ${objects
+                s"All objects are known to the BFT peers, but the checksums do not match. This indicates an error in the actual data generated for bulk storage. Expected: ${objects
                     .map(_.checksum)
                     .mkString(", ")}, got: ${consensusChecksums.mkString(", ")}"
               )

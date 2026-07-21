@@ -2665,7 +2665,7 @@ class HttpScanHandler(
         bulkStorage.getObjectChecksums(body.objectKeys).map { checksums =>
           ScanResource.GetBulkObjectChecksumsResponse.OK(
             definitions.GetBulkObjectChecksumsResponse(
-              checksums.toVector
+              checksums.map(definitions.GetBulkObjectChecksumsResponse.Checksums(_)).toVector
             )
           )
         }

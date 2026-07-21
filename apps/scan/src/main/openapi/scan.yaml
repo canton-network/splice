@@ -4260,7 +4260,10 @@ components:
             The list of checksums for the requested bulk storage objects (in the same order as the object_keys).
           type: array
           items:
-            type: string
+            type: object
+            properties:
+              value:
+                type: string
 
     BulkStorageObjectRef:
       type: object
