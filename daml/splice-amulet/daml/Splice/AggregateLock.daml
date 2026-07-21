@@ -217,6 +217,9 @@ template AggregateLock
               cid = Some $ coerceContractId self
               meta = emptyMetadata
             transferLegId = "withdraw"
+            nextIterationFunding
+              | remainingVestingAmount <= 0.0 = None
+              | otherwise = Some $ TM.singleton instrumentId remainingVestingAmount
 
           batchResults <- exercise factoryCid $ SettlementFactory_SettleBatch with
             settlement = info
@@ -250,7 +253,7 @@ template AggregateLock
                       instrumentId
                       meta = emptyMetadata
                     ]
-                  nextIterationFunding = Some $ TM.singleton instrumentId remainingVestingAmount
+                  nextIterationFunding = nextIterationFunding
               ]
 
           -- TODO: Fix hacky way potentially

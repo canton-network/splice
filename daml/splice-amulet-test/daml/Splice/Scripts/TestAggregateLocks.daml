@@ -133,27 +133,34 @@ testAggregateLockHappyPath = do
     authorizers = [ bob ]
     vestingLockCid = toInterfaceContractId vestingLockAllocationCid
     extraArgs = enriched.arg.extraArgs
+  debug vestingAllocResult
 
   -- Time needs to pass to be able to withdraw fron the VestedAmulet
   passTime (days 365)
 
   let holdingCids = fromSome $ TM.lookup env.instrId.id tmHoldingCids
-  debug holdingCids
-
   holdings <- queryInterface @Holding bob
-  debug holdings
+  -- The holdings would include both locked/unlocked, so we filter
   let [(_, (Some unlockedHolding))] = filter (\(hcid, (Some h)) -> isNone h.lock && hcid `elem` holdingCids) holdings
   debug unlockedHolding
 
   let tolerance = 0.01
   assert $ (abs $ unlockedHolding.amount - 10.0) < tolerance
 
---  submit (actAs bob <> disclose aggLockDisclosure <> discloseMany' enriched.disclosures ) $ exerciseCmd aggLock $ VestingLock_Withdraw with
---    factoryCid = enriched.factoryCid
---    authorizers = [ bob ]
---    vestingLockCid = toInterfaceContractId vestingLockAllocationCid
---    extraArgs = enriched.arg.extraArgs
+  (AllocationResult vestingAllocResult' tmHoldingCids' _) <- submit (actAs bob <> disclose aggLockDisclosure <> discloseMany' enriched.disclosures ) $ exerciseCmd aggLock $ VestingLock_Withdraw with
+    factoryCid = enriched.factoryCid
+    authorizers = [ bob ]
+    vestingLockCid = fromSome $ vestingAllocResult.nextIterationAllocationCid
+    extraArgs = enriched.arg.extraArgs
 
---
---  assertEq False True
-  pure ()
+  debug vestingAllocResult'
+  -- We should have no more remaining amount vesting, once the full period has passed
+  assertEq None $ vestingAllocResult'.nextIterationAllocationCid
+
+  let holdingCids' = fromSome $ TM.lookup env.instrId.id tmHoldingCids'
+  holdings' <- queryInterface @Holding bob
+  -- The holdings would include both locked/unlocked, so we filter
+  let [(_, (Some unlockedHolding'))] = filter (\(hcid, (Some h)) -> isNone h.lock && hcid `elem` holdingCids') holdings'
+  debug unlockedHolding'
+
+  assertEq initialAmountToUnlock $ unlockedHolding.amount + unlockedHolding'.amount
