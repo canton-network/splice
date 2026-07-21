@@ -491,8 +491,7 @@ export function installNatAlerts(
       {
         displayName: `NAT dropped sent packets in ${CLUSTER_BASENAME}`,
         conditionPrometheusQueryLanguage: {
-          query:
-            'sum by (nat_gateway_name, reason) (router_googleapis_com:nat_dropped_sent_packets_count{monitored_resource="nat_gateway"}) > 0',
+          query: `sum by (nat_gateway_name, reason) (router_googleapis_com:nat_dropped_sent_packets_count{monitored_resource="nat_gateway"}) > ${natConfig.droppedSentPacketsThreshold}`,
           ...prometheusDefaults,
         },
       },
