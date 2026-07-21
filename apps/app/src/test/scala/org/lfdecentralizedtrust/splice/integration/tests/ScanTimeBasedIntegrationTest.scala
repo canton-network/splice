@@ -71,7 +71,8 @@ class ScanTimeBasedIntegrationTest
               updatesPollingInterval = NonNegativeFiniteDuration.ofSeconds(5),
               staging = Some(s3ConfigMock("staging")),
               committed = Some(s3ConfigMock("committed")),
-              bftCheckEnabled = false, // bft checks don't work with a single scan. The bft functionality is tested in the unit test.
+              bftCheckEnabled =
+                false, // bft checks don't work with a single scan. The bft functionality is tested in the unit test.
             ),
             publicUrl = Some(Uri("http://foo.bar.com")),
           )

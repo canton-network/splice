@@ -76,7 +76,9 @@ class BulkStorageCommitFromStaging[T](
         bft match {
           case Some(bftChecksums) =>
             val consensusChecksums = bftChecksums.checksums.filter(_.value.isDefined)
-            logger.debug(s"Consensus achieved on ${consensusChecksums.length} out of ${objects.length} objects")
+            logger.debug(
+              s"Consensus achieved on ${consensusChecksums.length} out of ${objects.length} objects"
+            )
             val consensus =
               bftChecksums.checksums.filter(_.value.isDefined).map(_.value) == objects.map(oc =>
                 Some(oc.checksum)
