@@ -13,8 +13,7 @@
 
 ## Bumping Canton
 
-1. Choose the Canton version you wish to upgrade to. The currently published versions on
-   Artifactory can be found [here](https://digitalasset.jfrog.io/ui/repos/tree/General/canton-enterprise).
+1. Choose the Canton version you wish to upgrade to.
 2. Update the hashes in `nix/canton-sources.json` by running: `build-tools/bump-canton.sh <version>`
 3. In case you have also made configuration changes to Canton in `simple-topology-canton.conf`, remember
    to also make the corresponding changes for our cluster deployments. It is recommended to test any configuration

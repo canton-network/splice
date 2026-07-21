@@ -34,7 +34,6 @@ jobs:
         with:
           cache_version: 8
           test_name: daml_test
-          target: 'oss'
 
       - name: Run Daml tests
         if: steps.skip.outputs.skip != 'true'

@@ -4,6 +4,7 @@
 import { Box, Typography } from '@mui/material';
 import { THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
 import type { ConfigChange } from '../../utils/types';
+import { scrollContainerSx, scrollableIdentifierFieldSx } from '../beta/identifierStyles';
 import { ConfigValuesChanges } from './ConfigValuesChanges';
 
 interface BaseProposalSummaryProps {
@@ -31,6 +32,7 @@ type ProposalSummaryProps = BaseProposalSummaryProps &
     | {
         formType: 'grant-right';
         grantRight: string;
+        activityWeight: string;
       }
     | {
         formType: 'revoke-right';
@@ -84,6 +86,7 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
               id="svRewardWeightMember"
               title="Member"
               value={props.svRewardWeightMember}
+              scrollableIdentifier
             />
             <ProposalField
               id="configChange"
@@ -105,7 +108,19 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
         )}
 
         {formType === 'grant-right' && (
-          <ProposalField id="grantRight" title="Provider Party ID" value={props.grantRight} />
+          <>
+            <ProposalField
+              id="grantRight"
+              title="Provider Party ID"
+              value={props.grantRight}
+              scrollableIdentifier
+            />
+            <ProposalField
+              id="grantRightActivityWeight"
+              title="Activity Weight"
+              value={props.activityWeight}
+            />
+          </>
         )}
 
         {formType === 'revoke-right' && (
@@ -114,22 +129,34 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
               id="revokeProviderPartyId"
               title="Provider Party ID"
               value={props.providerPartyId}
+              scrollableIdentifier
             />
             <ProposalField
               id="revokeRight"
               title="Featured Application Contract ID"
               value={props.revokeRight}
+              scrollableIdentifier
             />
           </>
         )}
 
         {formType === 'offboard' && (
-          <ProposalField id="offboardMember" title="Offboard Member" value={props.offboardMember} />
+          <ProposalField
+            id="offboardMember"
+            title="Offboard Member"
+            value={props.offboardMember}
+            scrollableIdentifier
+          />
         )}
 
         {formType === 'create-unallocated-unclaimed-activity-record' && (
           <>
-            <ProposalField id="beneficiary" title="Beneficiary" value={props.beneficiary} />
+            <ProposalField
+              id="beneficiary"
+              title="Beneficiary"
+              value={props.beneficiary}
+              scrollableIdentifier
+            />
 
             <ProposalField id="amount" title="Amount" value={props.amount} />
 
@@ -156,10 +183,12 @@ interface ProposalFieldProps {
   title: string;
   subtitle?: string;
   value: React.ReactNode;
+  scrollableIdentifier?: boolean;
 }
 
 const ProposalField: React.FC<ProposalFieldProps> = props => {
-  const { id, title, subtitle, value } = props;
+  const { id, title, subtitle, value, scrollableIdentifier = false } = props;
+
   return (
     <Box sx={{ minWidth: '80%' }}>
       <Typography
@@ -186,9 +215,22 @@ const ProposalField: React.FC<ProposalFieldProps> = props => {
         )}
 
         {typeof value === 'string' ? (
-          <Typography variant="body2" data-testid={`${id}-field`} color="grey">
-            {value}
-          </Typography>
+          scrollableIdentifier ? (
+            <Box sx={scrollContainerSx} data-testid={`${id}-field-scroll`}>
+              <Typography
+                variant="body2"
+                color="grey"
+                data-testid={`${id}-field`}
+                sx={scrollableIdentifierFieldSx}
+              >
+                {value}
+              </Typography>
+            </Box>
+          ) : (
+            <Typography variant="body2" data-testid={`${id}-field`} color="grey">
+              {value}
+            </Typography>
+          )
         ) : (
           value
         )}

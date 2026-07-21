@@ -8,18 +8,28 @@ import {
   Typography,
 } from '@mui/material';
 import { useFieldContext } from '../../hooks/formContext';
+import { scrollableTextFieldSx } from '../beta/identifierStyles';
 
 export interface TextFieldProps {
   id: string;
   title: string;
   subtitle?: string;
+  scrollableIdentifier?: boolean;
   muiTextFieldProps?: MuiTextFieldProps;
   onChange?: (value: string) => void;
   onBlur?: () => void;
 }
 
 export const TextField: React.FC<TextFieldProps> = props => {
-  const { title, subtitle, id, muiTextFieldProps, onChange, onBlur } = props;
+  const {
+    title,
+    subtitle,
+    id,
+    scrollableIdentifier = false,
+    muiTextFieldProps,
+    onChange,
+    onBlur,
+  } = props;
   const field = useFieldContext<string>();
   return (
     <Box>
@@ -48,6 +58,7 @@ export const TextField: React.FC<TextFieldProps> = props => {
         }}
         inputProps={{ 'data-testid': id }}
         id={id}
+        sx={scrollableIdentifier ? scrollableTextFieldSx : undefined}
         {...muiTextFieldProps}
       />
       {subtitle && (

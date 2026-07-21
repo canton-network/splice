@@ -43,7 +43,6 @@ jobs:
         with:
           cache_version: 8
           test_name: ui_tests
-          target: 'oss'
 
       - name: Run UI tests
         if: steps.skip.outputs.skip != 'true'

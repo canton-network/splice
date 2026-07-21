@@ -6,16 +6,16 @@ package org.lfdecentralizedtrust.splice.sv.automation.delegatebased
 import org.lfdecentralizedtrust.splice.automation.*
 import org.lfdecentralizedtrust.splice.codegen.java.splice
 import org.lfdecentralizedtrust.splice.environment.PackageIdResolver
-import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
 
 import scala.concurrent.{ExecutionContext, Future}
-import ExpiredLockedAmuletTrigger.*
+import ExpiredLockedAmuletTrigger.{Task, getStakeholders}
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 import org.lfdecentralizedtrust.splice.sv.store.IgnoredPartiesStore
+import org.lfdecentralizedtrust.splice.sv.util.ContractStakeholders
 
 import java.util.Optional
 import scala.jdk.CollectionConverters.*
@@ -40,9 +40,7 @@ class ExpiredLockedAmuletTrigger(
       splice.amulet.LockedAmulet.COMPANION,
       svTaskContext.vettingLookupService,
       PackageIdResolver.Package.SpliceAmulet,
-      c =>
-        (Seq(c.amulet.dso, c.amulet.owner) ++ c.lock.holders.asScala)
-          .map(PartyId.tryFromProtoPrimitive(_)),
+      getStakeholders,
     )
     with SvTaskBasedTrigger[Task]
     with IgnoredAmuletVersionGuard {
@@ -51,30 +49,23 @@ class ExpiredLockedAmuletTrigger(
   override def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = {
-    val informees = task.work.expiredContracts
-      .flatMap(c =>
-        PartyId.tryFromProtoPrimitive(
-          c.payload.amulet.owner
-        ) +: c.payload.lock.holders.asScala.toSeq.map(PartyId.tryFromProtoPrimitive(_))
-      )
-      .toSet
     completeWithIgnoredAmuletVersionCheck(
       task.work.vettedVersion.toString,
-      informees,
+      task.work.stakeholders,
+      store.key.dsoParty,
       enableUnresponsivePartiesAutoIgnore = true,
-    )(completeExpiryTaskAsDsoDelegate(task, controller, informees))
+    )(completeExpiryTaskAsDsoDelegate(task, controller))
   }
 
   private def completeExpiryTaskAsDsoDelegate(
       task: Task,
       controller: String,
-      informees: Set[PartyId],
   )(implicit tc: TraceContext): Future[TaskOutcome] = {
-    val allParties = informees + store.key.dsoParty
+    val stakeholders = task.work.stakeholders
     for {
       dsoRules <- store.getDsoRules()
       supports24hSubmissionDelay <- svTaskContext.packageVersionSupport.supports24hSubmissionDelay(
-        allParties.toSeq,
+        stakeholders.toSeq,
         Seq(store.key.dsoParty),
         context.clock.now,
       )
@@ -136,7 +127,7 @@ class ExpiredLockedAmuletTrigger(
   }
 }
 
-object ExpiredLockedAmuletTrigger {
+object ExpiredLockedAmuletTrigger extends ContractStakeholders[splice.amulet.LockedAmulet] {
   type Task =
     ScheduledTaskTrigger.ReadyTask[
       BatchedMultiDomainExpiredContractTrigger.Batch[
@@ -144,4 +135,9 @@ object ExpiredLockedAmuletTrigger {
         splice.amulet.LockedAmulet,
       ]
     ]
+
+  override def informees(payload: splice.amulet.LockedAmulet): Seq[String] =
+    Seq(payload.amulet.owner) ++ payload.lock.holders.asScala
+
+  override def dso(payload: splice.amulet.LockedAmulet): String = payload.amulet.dso
 }

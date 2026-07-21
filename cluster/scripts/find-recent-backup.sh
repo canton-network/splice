@@ -17,11 +17,11 @@ function usage() {
 
 function is_full_backup_kube() {
   local component_backup_names=$1
-  local expected_components=$2
+  local expected_patterns=$2
 
   # Check if all expected components can be found in the component_backup_names
-  for component in $expected_components; do
-    count=$(echo "$component_backup_names" | grep -c "$component")
+  for pattern in $expected_patterns; do
+    count=$(echo "$component_backup_names" | grep -c -F -- "$pattern")
     if [ "$count" -ne 1 ]; then
       return 1
     fi
@@ -43,8 +43,17 @@ function latest_full_backup_run_id_kube() {
   local is_sv=$3
   local expected_components=$4
   local before_timestamp=$5
-  if [ "$is_sv" == "true" ]; then
-      expected_components="$expected_components cometbft"
+  local include_cometbft=$6
+
+  local expected_patterns=""
+  for component in $expected_components; do
+    local instance
+    instance="$(create_component_instance "$component" "$migration_id" "$namespace")"
+    expected_patterns="${expected_patterns:+$expected_patterns }-${instance}-pg-"
+  done
+
+  if [ "$is_sv" == "true" ] && [ "$include_cometbft" == "true" ]; then
+      expected_patterns="$expected_patterns cometbft"
   fi
 
   local all_run_ids
@@ -53,7 +62,7 @@ function latest_full_backup_run_id_kube() {
 
   while read -r run_id; do
     component_backup_names=$(get_component_backup_names_kube "$migration_id" "$run_id")
-    if is_full_backup_kube "$component_backup_names" "$expected_components"; then
+    if is_full_backup_kube "$component_backup_names" "$expected_patterns"; then
       echo "$run_id"
       return 0
     fi
@@ -70,6 +79,7 @@ function latest_full_backup_run_id_gcloud() {
   local stack
 
   declare -A backup_id_dict
+  local sequencer_end_time=""
 
   # participant backup must be newer than cn-apps backup
   stack=$(get_stack_for_namespace_component "$namespace" "participant")
@@ -89,6 +99,7 @@ function latest_full_backup_run_id_gcloud() {
 
   for component in $expected_components; do
     [ "$component" == "participant" ] && continue
+    [ "$component" == "cantonBft" ] && continue
 
     stack=$(get_stack_for_namespace_component "$namespace" "$component")
     instance="$(create_component_instance "$component" "$migration_id" "$namespace")"
@@ -97,20 +108,42 @@ function latest_full_backup_run_id_gcloud() {
     local cloudsql_id
     cloudsql_id=$(get_cloudsql_id "$full_component_instance" "$stack")
 
-    local backup_id
+    local entry
     if [ "$component" == "cn-apps" ]; then
       # cn-apps backup must be older than participant backup
-      backup_id=$(gcloud sql backups list --instance "$cloudsql_id" --format=json | jq -r --arg pt "$participant_end_time" '[.[] | select(.endTime <= $pt)] | first | .id')
+      entry=$(gcloud sql backups list --instance "$cloudsql_id" --format=json | jq -r --arg pt "$participant_end_time" '[.[] | select(.endTime <= $pt)] | first | "\(.id) \(.endTime)"')
     else
-      backup_id=$(gcloud sql backups list --instance "$cloudsql_id" --format=json | jq -r --argjson ts "$before_timestamp" '[.[] | select(.endTime <= ($ts | todate))] | first | .id')
+      entry=$(gcloud sql backups list --instance "$cloudsql_id" --format=json | jq -r --argjson ts "$before_timestamp" '[.[] | select(.endTime <= ($ts | todate))] | first | "\(.id) \(.endTime)"')
     fi
+    local backup_id
+    backup_id=$(echo "$entry" | awk '{print $1}')
+    local backup_end_time
+    backup_end_time=$(echo "$entry" | awk '{print $2}')
 
     if [ -z "$backup_id" ] || [ "$backup_id" == "null" ]; then
       _error "No backup found for component $component (instance $cloudsql_id) before timestamp $before_timestamp"
     fi
 
     backup_id_dict[$component]="$backup_id"
+
+    if [ "$component" == "sequencer" ]; then
+      sequencer_end_time="$backup_end_time"
+    fi
   done
+
+  # cantonBft backup must be older than the sequencer backup
+  if [[ " $expected_components " == *" cantonBft "* ]]; then
+    stack=$(get_stack_for_namespace_component "$namespace" "cantonBft")
+    instance="$(create_component_instance "cantonBft" "$migration_id" "$namespace")"
+    local bft_cloudsql_id
+    bft_cloudsql_id=$(get_cloudsql_id "$namespace-$instance-pg" "$stack")
+    local bft_backup_id
+    bft_backup_id=$(gcloud sql backups list --instance "$bft_cloudsql_id" --format=json | jq -r --arg st "$sequencer_end_time" '[.[] | select(.endTime <= $st)] | first | .id')
+    if [ -z "$bft_backup_id" ] || [ "$bft_backup_id" == "null" ]; then
+      _error "No backup found for component cantonBft (instance $bft_cloudsql_id) before sequencer backup time $sequencer_end_time"
+    fi
+    backup_id_dict["cantonBft"]="$bft_backup_id"
+  fi
 
   local result=""
   for component in "${!backup_id_dict[@]}"; do
@@ -138,11 +171,30 @@ function main() {
     before_timestamp=$(date +%s)
   fi
 
+  local config
+  config=$(get_resolved_config)
+  local bft_sequencer_enabled
+  bft_sequencer_enabled=$(echo "$config" | yq "
+    ([.synchronizerMigration.active, .synchronizerMigration.upgrade, .synchronizerMigration.legacy]
+      + (.synchronizerMigration.archived // [])
+      + (.synchronizerMigration.additionalLegacy // []))
+    | map(select(.id == $migration_id))
+    | .[0].sequencer.enableBftSequencer // false")
+  local include_cometbft="true"
+  if [ "$bft_sequencer_enabled" == "true" ]; then
+    include_cometbft="false"
+  fi
+
   case "$namespace" in
       sv|sv-[0-9]|sv-[0-9][0-9]|sv-da-*)
           is_sv=true
           full_instance="$namespace-cn-apps-pg"
           expected_components="cn-apps sequencer participant mediator"
+          local bft_db_enabled
+          bft_db_enabled=$(canton_bft_db_enabled "$migration_id" "$config")
+          if [ "$bft_db_enabled" == "true" ]; then
+            expected_components="$expected_components cantonBft"
+          fi
           stack=$(get_stack_for_namespace_component "$namespace" "cn-apps")
           ;;
       *)
@@ -156,7 +208,7 @@ function main() {
   type=$(get_postgres_type "$full_instance" "$stack")
   # We only check the postgres type of one component and assume other components have the same type.
   if [ "$type" == "canton:network:postgres" ]; then
-    backup_run_id=$(latest_full_backup_run_id_kube "$namespace" "$migration_id" "$is_sv" "$expected_components" "$before_timestamp")
+    backup_run_id=$(latest_full_backup_run_id_kube "$namespace" "$migration_id" "$is_sv" "$expected_components" "$before_timestamp" "$include_cometbft")
     echo "$backup_run_id"
   elif [ "$type" == "canton:cloud:postgres" ]; then
     backup_map_id=$(latest_full_backup_run_id_gcloud "$namespace" "$migration_id" "$is_sv" "$expected_components" "$before_timestamp")

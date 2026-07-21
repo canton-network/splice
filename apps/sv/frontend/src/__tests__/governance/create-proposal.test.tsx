@@ -92,9 +92,6 @@ describe('Create Proposal', () => {
       </TestWrapper>
     );
 
-    const actionSelectionTitle = screen.getByText('Select an Action');
-    expect(actionSelectionTitle).toBeDefined();
-
     const actionDropdown = screen.getByTestId('select-action');
     expect(actionDropdown).toBeDefined();
 

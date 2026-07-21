@@ -27,3 +27,9 @@ rsync -av --delete --exclude version.sbt --exclude community-build.sbt --exclude
     canton/
 # remove any broken symlinks after the copy
 find -L canton/ -type l -exec rm {} +
+
+canton_bft_src="$1/community/app/src/pack/examples/13-observability/grafana/dashboards/Canton"
+canton_bft_dest="cluster/pulumi/observability/grafana-dashboards/canton-bft"
+rm -rf "$canton_bft_dest"
+mkdir -p "$canton_bft_dest"
+cp "$canton_bft_src"/*.json "$canton_bft_dest/"

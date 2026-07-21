@@ -40,6 +40,8 @@ start=$(date +%s)
 start_time=$(date -u -d @"$start" '+%Y-%m-%dT%H:%M:%S.%3NZ')
 timeout_hours="8"
 timeout_secs=$(( timeout_hours * 3600 ))
+stall_start=$(date +%s)
+stall_timeout_secs=3600
 
 # Helper to query Prometheus for a single value
 # Fetch data from 2 minutes ago
@@ -47,11 +49,11 @@ timeout_secs=$(( timeout_hours * 3600 ))
 function query_prom() {
   local default=${2:-"180"}
   local ts
-  ts=$(date -d '2 minutes ago' +%s) 
+  ts=$(date -d '2 minutes ago' +%s)
   curl -ksf "${PROM}/api/v1/query" \
     --data-urlencode "query=${1}" \
     --data-urlencode "time=${ts}" \
- | jq -r ".data.result[0].value[1] // \"${default}\"" 
+ | jq -r ".data.result[0].value[1] // \"${default}\""
 }
 
 function query_seq_delay() {
@@ -83,7 +85,7 @@ rate_sample_count=0
 _info "Monitoring catchup for ${namespace}"
 _info "Thresholds: seq>=${seq_min_eps} eps, participant>=${part_min_eps} eps, mediator>=${med_min_eps} eps"
 _info "Caught-up when: seq<=${seq_delay_ok}s, participant<=${part_delay_ok}s, mediator<=${med_delay_ok}s"
-_info "Test timeout: ${timeout_hours}h"
+_info "Test timeout: ${timeout_hours}h | Stall timeout: 1h of zero progress"
 
 while true; do
   elapsed=$(( $(date +%s) - start ))
@@ -120,6 +122,21 @@ while true; do
   rate_sample_count=$((rate_sample_count + 1))
 
   _info "Mean rates so far> seq: $(echo "scale=1; $seq_rate_sum / $rate_sample_count" | bc) eps, participant: $(echo "scale=1; $part_rate_sum / $rate_sample_count" | bc) eps, mediator: $(echo "scale=1; $med_rate_sum / $rate_sample_count" | bc) eps"
+
+  # Check that the catchup is making progress, otherwise abort after 1h of zero progress
+  all_zero=$(echo "$seq_rate == 0 && $part_rate == 0 && $med_rate == 0" | bc -l)
+  if [ "$all_zero" = "1" ]; then
+    stall_elapsed=$(( $(date +%s) - stall_start ))
+    _info "Zero progress for ${stall_elapsed}s / ${stall_timeout_secs}s before giving up"
+    if [ "$stall_elapsed" -ge "$stall_timeout_secs" ]; then
+      _error_msg "No progress for over 1 hour, aborting catchup test"
+      outcome="stalled"
+      break
+    fi
+  else
+    stall_start=$(date +%s)
+  fi
+
   sleep "$poll_interval"
 done
 
@@ -144,6 +161,9 @@ med_ok=$(echo  "$med_rate_mean  >= $med_min_eps"  | bc -l)
 if [ "$outcome" = "success" ]; then
   icon="✅"
   exit_code=0
+elif [ "$outcome" = "stalled" ]; then
+  icon="🚨"
+  exit_code=1
 else
   icon="❌"
   exit_code=1
@@ -154,7 +174,7 @@ grafana_domain_link="${grafana_base}/d/ca9df344-c699-4efe-83c2-5fb2639d96d9/glob
 grafana_participant_link="${grafana_base}/d/edkzo5ukgeqyoc/participant?orgId=1&timezone=UTC&var-namespace=${namespace}&var-job=All&var-participant=All&viewPanel=panel-13&from=${start_time}&to=${end_time}"
 
 message="${icon} *SV Catchup Test — \`${namespace}\` on \`${GCP_CLUSTER_BASENAME}\`*
-Outcome: ${outcome} | Duration: ${elapsed_mins}m | Started: ${start_time} | Ended: ${end_time}
+Outcome: ${outcome}$([ "$outcome" = "stalled" ] && echo " — no events processed for 1h, aborting test, node may be stuck") | Duration: ${elapsed_mins}m | Started: ${start_time} | Ended: ${end_time}
 
 *Per-component mean rates over catchup window (${rate_sample_count} samples):*
 • Sequencer: \`$(printf "%.1f" "$seq_rate_mean")\` events/s  (expected ≥ ${seq_min_eps})  $([ "$seq_ok" = "1" ] && echo "✅" || echo "❌")

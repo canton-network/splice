@@ -16,11 +16,7 @@ jobs:
       uses: ./.github/actions/nix/setup_nix
       with:
         cache_version: 8
-        artifactory_user: dummy
-        artifactory_password: dummy
-        target: oss
     - name: Check github scripts
       uses: ./.github/actions/nix/run_bash_command_in_nix
       with:
         cmd: bash gha-scripts/scripts/check-build.sh
-    

@@ -23,7 +23,7 @@ Failed to update unsequenced submission.*NOT_SEQUENCED_TIMEOUT
 SEQUENCER_SUBSCRIPTION_LOST.*: Lost subscription to domain .* Will try to recover automatically.
 
 # It seems this happens when a transaction is in-flight and we advance time. We should just retry.
-INTERPRETATION_TIME_EXCEEDED.*: Interpretation time exceeds limit of Ledger Effective Time
+INTERPRETATION_TIME_EXCEEDED.*: (Interpretation )?[Tt]ime exceeds limit of Ledger Effective Time
 
 Could not send a time-advancing message
 

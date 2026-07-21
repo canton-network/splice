@@ -557,6 +557,11 @@ class HttpWalletHandler(
         Codec.tryDecodeJavaContractId(subsCodegen.SubscriptionRequest.COMPANION)(
           contractId
         )
+      val commandId = CommandId(
+        "org.lfdecentralizedtrust.splice.wallet.acceptSubscriptionRequest",
+        Seq(userWallet.store.key.endUserParty),
+        contractId,
+      )
       retryProvider.retryForClientCalls(
         "accept_subscription",
         "Accept subscription and make initial payment",
@@ -567,6 +572,12 @@ class HttpWalletHandler(
             d0.AcceptSubscriptionRequestResponse(
               Codec.encodeContractId(outcome.contractIdValue)
             ),
+          dedupConfig = Some(
+            AmuletOperationDedupConfig(
+              commandId,
+              dedupDuration,
+            )
+          ),
         ),
         logger,
       )

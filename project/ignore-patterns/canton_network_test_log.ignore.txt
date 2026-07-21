@@ -133,6 +133,10 @@ Circuit breaker .* tripped after .* failures.*(Command|Splice)CircuitBreakerTest
 # This is more likely in test code where we run multiple apps against the same database, all trying to create the same index.
 Index .* should be created and is invalid, dropping it
 
+# TODO(#4738) - remove this
+processTaskWithRetry failed with an unknown exception, not retrying.*SqlIndexInitializationTrigger.*PSQLException: ERROR: tuple concurrently updated
+Skipping processing of.*due to unexpected failure.*SqlIndexInitializationTrigger.*PSQLException: ERROR: tuple concurrently updated
+
 # Injected errors in s3Mock
 Simulated S3 error
 
@@ -165,3 +169,10 @@ Ryuk has been disabled
 
 # Calls to this have retries; if the retries were not enough, we'll get a louder error.
 api/sv/v0/onboard/validator \(POST\) resulted in a timeout
+
+# In BaseStorePerformanceTest, we run migrations in an unforked sbt JVM, so Flyway
+# finds the sbt test jar (apps-app_*-tests.jar). But, Flyway cannot open it,
+# so it skips it with this WARN. It contains no migrations, so this is harmless and unrelated to DB migrations.
+# The same warning is emitted by both the FlywayExecutor and the ClassPathScanner loggers.
+# a single pattern matching the message (the unloadable sbt tests jar) covers both.
+Skipping unloadable jar file: file:.*-tests\.jar

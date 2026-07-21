@@ -141,6 +141,7 @@ export const CreateUnallocatedUnclaimedActivityRecordForm: React.FC = _ => {
                 <field.TextField
                   title="Beneficiary"
                   id="create-unallocated-unclaimed-activity-record-beneficiary"
+                  scrollableIdentifier
                 />
               )}
             </form.AppField>

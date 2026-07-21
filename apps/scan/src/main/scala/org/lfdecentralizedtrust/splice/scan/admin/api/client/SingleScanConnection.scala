@@ -44,6 +44,7 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
 import org.lfdecentralizedtrust.splice.store.HistoryBackfilling.SourceMigrationInfo
+import org.lfdecentralizedtrust.splice.store.VoteResultsFilters
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryResponse
 import org.lfdecentralizedtrust.splice.util.{
   ChoiceContextWithDisclosures,
@@ -567,11 +568,7 @@ class SingleScanConnection private[client] (
     )
 
   override def listVoteRequestResults(
-      actionName: Option[String],
-      accepted: Option[Boolean],
-      requester: Option[String],
-      effectiveFrom: Option[String],
-      effectiveTo: Option[String],
+      filters: VoteResultsFilters,
       limit: Int,
       pageToken: Option[BigInt] = None,
   )(implicit
@@ -580,14 +577,20 @@ class SingleScanConnection private[client] (
   ): Future[(Seq[DsoRules_CloseVoteRequestResult], Option[BigInt])] = runHttpCmd(
     config.adminApi.url,
     HttpScanAppClient.ListVoteRequestResults(
-      actionName,
-      accepted,
-      requester,
-      effectiveFrom,
-      effectiveTo,
+      filters,
       limit,
       pageToken,
     ),
+  )
+
+  override def countVoteRequestResults(
+      filters: VoteResultsFilters
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[Long] = runHttpCmd(
+    config.adminApi.url,
+    HttpScanAppClient.CountVoteRequestResults(filters),
   )
 
   override def getPreviousSvRewardWeight(svParty: String, effectiveBefore: Option[String])(implicit

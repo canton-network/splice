@@ -59,6 +59,16 @@ object DarResourcesGenerator {
     "splice-validator-lifecycle",
     "splice-api-reward-assignment-v1",
   )
+  private val topLevelPackageOrderWithoutSplitwell: Seq[String] = Seq(
+    "splice-amulet",
+    "splice-dso-governance",
+    "splice-util-batched-markers",
+    "splice-wallet",
+    "splice-amulet-name-service",
+    "splice-wallet-payments",
+    "splice-validator-lifecycle",
+    "splice-api-reward-assignment-v1",
+  )
   private val tokenStandardProductionPackageOrder: Seq[String] = Seq(
     "splice-api-token-metadata-v1",
     "splice-api-token-holding-v1",
@@ -147,14 +157,15 @@ object DarResourcesGenerator {
         indent(2, renderPackage(name, dars, grouped))
       } ++
       renderPackageResources() ++
+      renderCorePackageResources() ++
       Seq(
         """|  lazy val pkgIdToDarResource: Map[String, DarResource] =
-           |    packageResources.view.flatMap(_.all).map(resource => resource.packageId -> resource).toMap
+           |    corePackageResources.view.flatMap(_.all).map(resource => resource.packageId -> resource).toMap
            |
            |  // We don't index the map by PackageMetadata because that type contains some additional
            |  // fields that don't matter.
            |  lazy val pkgMetadataToDarResource: Map[(PackageName, PackageVersion), DarResource] =
-           |    packageResources.view
+           |    corePackageResources.view
            |      .flatMap(_.all)
            |      .map(resource => (resource.metadata.name, resource.metadata.version) -> resource)
            |      .toMap
@@ -172,6 +183,19 @@ object DarResourcesGenerator {
       "  TokenStandard.allPackageResources ++ Seq(",
     ) ++
       packageResourcesRenderOrder.map(name => s"    DarResources.${camel(name)},") ++
+      Seq(
+        "  )",
+        "",
+      )
+
+  private def renderCorePackageResources(): Seq[String] =
+    Seq(
+      "  lazy val corePackageResources: Seq[PackageResource] =",
+      "  TokenStandard.allPackageResources ++ Seq(",
+    ) ++
+      topLevelPackageOrderWithoutSplitwell.sorted.map(name =>
+        s"    DarResources.${camel(name)},"
+      ) ++
       Seq(
         "  )",
         "",
