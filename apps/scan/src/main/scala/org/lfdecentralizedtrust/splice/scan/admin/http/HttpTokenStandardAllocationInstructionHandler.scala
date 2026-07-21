@@ -48,16 +48,6 @@ class HttpTokenStandardAllocationInstructionHandler(
       for {
         externalPartyAmuletRules <- store.getExternalPartyAmuletRules()
         amuletRules <- store.getAmuletRules()
-        newestOpenRound <- store
-          .lookupLatestUsableOpenMiningRound(now)
-          .map(
-            _.getOrElse(
-              throw io.grpc.Status.NOT_FOUND
-                .withDescription(s"No open usable OpenMiningRound found.")
-                .asRuntimeException()
-            )
-          )
-        // TODO(#4950) Don't include amulet rules and newest open round when informees all have vetted the newest version.
         externalPartyConfigStateO <- store.lookupLatestExternalPartyConfigState()
       } yield {
         val activeSynchronizerId =
@@ -74,10 +64,6 @@ class HttpTokenStandardAllocationInstructionHandler(
           v1.definitions.FactoryWithChoiceContext(
             externalPartyAmuletRules.contractId.contractId,
             choiceContextBuilder
-              .addContracts(
-                "amulet-rules" -> amuletRules,
-                "open-round" -> newestOpenRound.contract,
-              )
               .addOptionalContract("external-party-config-state" -> externalPartyConfigStateO)
               .disclose(externalPartyAmuletRules.contract)
               .build(),
