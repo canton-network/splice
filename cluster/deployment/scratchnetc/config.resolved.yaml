@@ -49,7 +49,7 @@ monitoring:
     alerts:
       acsCommitments:
         checkpointDelay:
-          seconds: 1200
+          seconds: 2400
         completedDelay:
           seconds: 3600
         computeDuration:
