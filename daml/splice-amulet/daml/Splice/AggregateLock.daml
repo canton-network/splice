@@ -180,6 +180,7 @@ template AggregateLock
         factoryCid : ContractId SettlementFactory
         authorizers : [Party]
         vestingLockCid : ContractId Allocation
+        extraArgs : ExtraArgs
       where
         controller authorizers
         do
@@ -195,6 +196,7 @@ template AggregateLock
           let mNextIterationFunding = TM.lookup instrumentId $ fromSome vestingLock.allocation.nextIterationFunding
           require ("The instrumentId " <> show instrumentId <> ", does not exist under the nextIterationFunding")
             $ isSome mNextIterationFunding
+        -- TODO:  DOUBLE we get the right type in meta values
           require "There must be an initialAmount set for the vestingLock"
             $ TM.member "cip-105/vestingLock.initialAmount" vestingLock.allocation.meta.values
 
@@ -219,7 +221,7 @@ template AggregateLock
           batchResults <- exercise factoryCid $ SettlementFactory_SettleBatch with
             settlement = info
             actors = [ dso ]
-            extraArgs = ExtraArgs emptyChoiceContext emptyMetadata
+            extraArgs
             transferLegs =
               [ TransferLeg with
                   transferLegId
@@ -237,14 +239,14 @@ template AggregateLock
                       transferLegId
                       side = SenderSide
                       otherside = vestingLock.allocation.authorizer
-                      amount = remainingVestingAmount
+                      amount = availableWithdrawAmount
                       instrumentId
                       meta = emptyMetadata
                     , TransferLegSide with
                       transferLegId
                       side = ReceiverSide
                       otherside = vestingLock.allocation.authorizer
-                      amount = remainingVestingAmount
+                      amount = availableWithdrawAmount
                       instrumentId
                       meta = emptyMetadata
                     ]
@@ -252,6 +254,6 @@ template AggregateLock
               ]
 
           -- TODO: Fix hacky way potentially
-          let (allocationResult::_) = batchResults.allocationSettleResults
+          let [allocationResult] = batchResults.allocationSettleResults
 
           pure allocationResult
