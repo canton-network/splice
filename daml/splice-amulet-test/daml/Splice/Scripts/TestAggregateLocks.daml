@@ -135,9 +135,6 @@ testAggregateLockHappyPath = do
     extraArgs = enriched.arg.extraArgs
   debug vestingAllocResult
 
-  -- Time needs to pass to be able to withdraw fron the VestedAmulet
-  passTime (days 365)
-
   let holdingCids = fromSome $ TM.lookup env.instrId.id tmHoldingCids
   holdings <- queryInterface @Holding bob
   -- The holdings would include both locked/unlocked, so we filter
@@ -146,6 +143,9 @@ testAggregateLockHappyPath = do
 
   let tolerance = 0.01
   assert $ (abs $ unlockedHolding.amount - 10.0) < tolerance
+
+  -- Let's try to withdraw the rest (now we should be past endDate)
+  passTime (days 365)
 
   (AllocationResult vestingAllocResult' tmHoldingCids' _) <- submit (actAs bob <> disclose aggLockDisclosure <> discloseMany' enriched.disclosures ) $ exerciseCmd aggLock $ VestingLock_Withdraw with
     factoryCid = enriched.factoryCid
