@@ -29,6 +29,7 @@ import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
+@SuppressWarnings(Array("org.wartremover.warts.Null"))
 class SpliceCircuitBreaker(
     name: String,
     config: CircuitBreakerConfig,
@@ -65,7 +66,8 @@ class SpliceCircuitBreaker(
     randomFactor = config.randomFactor,
   ).onOpen {
     logger.warn(
-      s"Circuit breaker $name tripped after ${config.maxFailures} failures"
+      s"Circuit breaker $name tripped after ${config.maxFailures} failures. Attaching last failure",
+      lastException.get().orNull,
     )(TraceContext.empty)
   }.onHalfOpen {
     logger.info(s"Circuit breaker $name moving to half-open state")(TraceContext.empty)
@@ -73,7 +75,6 @@ class SpliceCircuitBreaker(
     logger.info(s"Circuit breaker $name moving to closed state")(TraceContext.empty)
   }
 
-  @SuppressWarnings(Array("org.wartremover.warts.Null"))
   def withCircuitBreaker[T](body: => Future[T])(implicit tc: TraceContext): Future[T] = {
     if (underlying.isClosed || underlying.isHalfOpen) {
       callAndMark(body)
