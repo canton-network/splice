@@ -790,6 +790,8 @@ object BuildCommon {
         `canton-observability-metrics-testing`,
       )
       .settings(
+        Compile / unmanagedSources / excludeFilter :=
+          (Compile / unmanagedSources / excludeFilter).value || "UseLedgerApiTestTool.scala",
         excludeTranscodeConflictingDependencies,
         sharedCantonSettings,
 
