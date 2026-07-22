@@ -32,7 +32,7 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions
 import org.lfdecentralizedtrust.splice.http.v0.definitions.TransactionHistoryRequest
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
-  IntegrationTestWithIsolatedEnvironment,
+  IntegrationTest,
   SpliceTestConsoleEnvironment,
 }
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.DomainSequencers
@@ -56,7 +56,7 @@ import scala.jdk.OptionConverters.RichOptional
 
 @org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceDsoGovernance_0_1_24
 class LsuIntegrationTest
-    extends IntegrationTestWithIsolatedEnvironment
+    extends IntegrationTest
     with ExternallySignedPartyTestUtil
     with ProcessTestUtil
     with SvTestUtil
@@ -212,9 +212,6 @@ class LsuIntegrationTest
   }
 
   "cancel a scheduled logical synchronizer upgrade" in { implicit env =>
-    initDso(includeLocal = false)
-    startAllSync(aliceValidatorBackend, splitwellValidatorBackend)
-
     val topologyFreezeTime = CantonTimestamp.now()
     // Use an upgrade time 1h in the future so that the upgrade nodes have enough time to be
     // started, initialized and to publish their sequencer successors before we cancel.
