@@ -73,17 +73,23 @@ function query_med_rate() {
 
 # Wait for BFT ordering to catch up (block delay < 2 min) before measuring catchup rates.
 function wait_for_bft_ordering() {
-  local bft_delay_threshold bft_poll_interval bft_wait_start bft_wait_secs
+  local bft_delay_threshold bft_poll_interval bft_wait_start bft_wait_secs bft_timeout_secs
   bft_delay_threshold=120
   bft_poll_interval=30
+  bft_timeout_secs=$((3600 * 4)) # 4 hours
   bft_wait_start=$(date +%s)
   _info "Waiting for BFT ordering block delay to drop below ${bft_delay_threshold}s..."
   while true; do
     bft_delay=$(query_bft_delay)
+    bft_wait_secs=$(( $(date +%s) - bft_wait_start ))
     _info "BFT ordering block delay: ${bft_delay}s (threshold: ${bft_delay_threshold}s)"
     if (( $(echo "$bft_delay < $bft_delay_threshold" | bc -l) )); then
       _info "BFT ordering caught up"
       break
+    fi
+    if [ "$bft_wait_secs" -ge "$bft_timeout_secs" ]; then
+      _error_msg "BFT ordering did not catch up within $((bft_timeout_secs / 60))m (last delay: ${bft_delay}s)"
+      exit 1
     fi
     sleep "$bft_poll_interval"
   done
