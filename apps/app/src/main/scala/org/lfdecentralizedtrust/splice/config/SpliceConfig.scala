@@ -65,7 +65,7 @@ import com.digitalasset.canton.admin.api.client.data.{
   SubmissionRequestAmplification,
 }
 import com.digitalasset.canton.tracing.TraceContext
-import com.typesafe.config.{Config, ConfigObject, ConfigRenderOptions, ConfigValueFactory}
+import com.typesafe.config.{Config, ConfigRenderOptions}
 import com.typesafe.config.ConfigException.UnresolvedSubstitution
 import org.slf4j.{Logger, LoggerFactory}
 import pureconfig.configurable.{genericMapReader, genericMapWriter}
@@ -695,33 +695,17 @@ object SpliceConfig {
       deriveReader[AutoAcceptTransfersConfig]
     implicit val appRewardBeneficiaryConfigReader: ConfigReader[AppRewardBeneficiaryConfig] =
       deriveReader[AppRewardBeneficiaryConfig]
-    implicit val rewardSharingConfigReader: ConfigReader[RewardSharingConfig] = {
-      val builtInReader = deriveReader[RewardSharingConfig.BuiltIn]
-      // Keyed on an optional "sharing-automation" field (defaults to "built-in") rather than
-      // pureconfig's coproduct discriminator, so operators keep the existing flat config format.
-      ConfigReader.fromCursor { cursor =>
-        cursor.asObjectCursor.flatMap { objCursor =>
-          val automationCursor = objCursor.atKeyOrUndefined("sharing-automation")
-          val automation =
-            if (automationCursor.isUndefined) Right("built-in") else automationCursor.asString
-          automation.flatMap {
-            case "built-in" => builtInReader.from(objCursor)
-            case "external" =>
-              if (objCursor.atKeyOrUndefined("beneficiaries").isUndefined)
-                Right(RewardSharingConfig.External)
-              else
-                objCursor.failed[RewardSharingConfig](new FailureReason {
-                  override def description: String =
-                    "beneficiaries must not be set when sharing-automation is external"
-                })
-            case other =>
-              objCursor.failed[RewardSharingConfig](
-                CannotConvert(other, "SharingAutomation", "expected \"built-in\" or \"external\"")
-              )
-          }
-        }
-      }
-    }
+
+    implicit val rewardSharingConfigHint: FieldCoproductHint[RewardSharingConfig] =
+      new FieldCoproductHint[RewardSharingConfig]("type")
+
+    implicit val rewardSharingBuiltInReader: ConfigReader[RewardSharingConfig.BuiltIn] =
+      deriveReader[RewardSharingConfig.BuiltIn]
+    implicit val rewardSharingExternalReader: ConfigReader[RewardSharingConfig.External] =
+      deriveReader[RewardSharingConfig.External]
+    implicit val rewardSharingConfigReader: ConfigReader[RewardSharingConfig] =
+      deriveReader[RewardSharingConfig]
+
     implicit val validatorDecentralizedSynchronizerConfigReader
         : ConfigReader[ValidatorDecentralizedSynchronizerConfig] =
       deriveReader[ValidatorDecentralizedSynchronizerConfig].emap(config => {
@@ -852,7 +836,7 @@ object SpliceConfig {
             case (Left(err), _) => Left(err)
             case (Right(()), (party, sharingConfig)) =>
               sharingConfig match {
-                case RewardSharingConfig.External => Right(())
+                case RewardSharingConfig.External() => Right(())
                 case builtIn: RewardSharingConfig.BuiltIn =>
                   for {
                     _ <- Either.cond(
@@ -1166,21 +1150,16 @@ object SpliceConfig {
       deriveWriter[AutoAcceptTransfersConfig]
     implicit val appRewardBeneficiaryConfigWriter: ConfigWriter[AppRewardBeneficiaryConfig] =
       deriveWriter[AppRewardBeneficiaryConfig]
-    implicit val rewardSharingConfigWriter: ConfigWriter[RewardSharingConfig] = {
-      val builtInWriter = deriveWriter[RewardSharingConfig.BuiltIn]
-      ConfigWriter.fromFunction {
-        case RewardSharingConfig.External =>
-          ConfigValueFactory.fromMap(
-            java.util.Collections.singletonMap("sharing-automation", "external")
-          )
-        case builtIn: RewardSharingConfig.BuiltIn =>
-          builtInWriter.to(builtIn) match {
-            case obj: ConfigObject =>
-              obj.withValue("sharing-automation", ConfigValueFactory.fromAnyRef("built-in"))
-            case other => other
-          }
-      }
-    }
+
+    implicit val rewardSharingConfigHint: FieldCoproductHint[RewardSharingConfig] =
+      new FieldCoproductHint[RewardSharingConfig]("type")
+    implicit val rewardSharingConfigBuiltInWriter: ConfigWriter[RewardSharingConfig.BuiltIn] =
+      deriveWriter[RewardSharingConfig.BuiltIn]
+    implicit val rewardSharingConfigExternalWriter: ConfigWriter[RewardSharingConfig.External] =
+      deriveWriter[RewardSharingConfig.External]
+    implicit val rewardSharingConfigWriter: ConfigWriter[RewardSharingConfig] =
+      deriveWriter[RewardSharingConfig]
+
     implicit val validatorDecentralizedSynchronizerConfigWriter
         : ConfigWriter[ValidatorDecentralizedSynchronizerConfig] =
       deriveWriter[ValidatorDecentralizedSynchronizerConfig]

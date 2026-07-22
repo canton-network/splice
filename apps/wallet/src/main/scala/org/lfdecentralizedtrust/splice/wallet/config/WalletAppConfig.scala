@@ -65,7 +65,7 @@ object RewardSharingConfig {
   /** Off-node automation owns beneficiary assignment: the node holds unassigned coupons back
     * and leaves them untouched rather than assigning or minting them itself.
     */
-  case object External extends RewardSharingConfig
+  case class External() extends RewardSharingConfig
 
   /** The node performs beneficiary assignment and minting itself.
     * @param minTtlAfterSharing minimum remaining coupon TTL before sharing is triggered;

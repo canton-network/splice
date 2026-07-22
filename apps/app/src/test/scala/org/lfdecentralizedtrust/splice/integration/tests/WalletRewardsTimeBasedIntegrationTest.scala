@@ -79,7 +79,7 @@ class WalletRewardsTimeBasedIntegrationTest
           } else if (name == "splitwellValidator") {
             c.copy(
               rewardSharingConfigByParty = Map(
-                splitwellValidatorPartyId.toProtoPrimitive -> RewardSharingConfig.External
+                splitwellValidatorPartyId.toProtoPrimitive -> RewardSharingConfig.External()
               )
             )
           } else c

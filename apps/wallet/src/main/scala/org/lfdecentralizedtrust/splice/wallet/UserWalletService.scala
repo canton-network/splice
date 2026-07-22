@@ -102,7 +102,7 @@ class UserWalletService(
         scanConnection,
         mintUnassignedRewardCouponsV2 = rewardSharingConfig match {
           case RewardSharingConfig.BuiltIn(_, beneficiaries, _) => beneficiaries.isEmpty
-          case RewardSharingConfig.External => false
+          case RewardSharingConfig.External() => false
         },
         loggerFactory,
       )

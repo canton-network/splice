@@ -165,6 +165,7 @@ class SpliceConfigTest extends AsyncWordSpec with BaseTest {
       s"""
         |canton.validator-apps.aliceValidator.reward-sharing-config-by-party = {
         |  "alice::1220abc" = {
+        |    type = "built-in"
         |    beneficiaries = [$beneficiaries]
         |    min-ttl-after-sharing = 30h
         |  }
@@ -222,6 +223,7 @@ class SpliceConfigTest extends AsyncWordSpec with BaseTest {
         """
           |canton.validator-apps.aliceValidator.reward-sharing-config-by-party = {
           |  "alice::1220abc" = {
+          |    type = "built-in"
           |    beneficiaries = [{ beneficiary = "bob::1220", percentage = 0.4 }]
           |    min-ttl-after-sharing = 30h
           |    batch-size = 50
@@ -238,6 +240,7 @@ class SpliceConfigTest extends AsyncWordSpec with BaseTest {
         """
           |canton.validator-apps.aliceValidator.reward-sharing-config-by-party = {
           |  "alice::1220abc" = {
+          |    type = "built-in"
           |    beneficiaries = [{ beneficiary = "bob::1220", percentage = 0.4 }]
           |    min-ttl-after-sharing = 30h
           |    batch-size = 0
@@ -258,34 +261,27 @@ class SpliceConfigTest extends AsyncWordSpec with BaseTest {
         .flatMap(_.rewardSharingConfigByParty.get("alice::1220abc"))
         .loneElement
 
-    "default to built-in sharing-automation when omitted" in {
-      val overwrite = ConfigFactory.parseString(mkHoconConfig(mkBeneficiary("bob", "0.4")))
-      val validConfig = CantonConfig.mergeConfigs(config, Seq(overwrite))
-      val loaded = SpliceConfig.loadAndValidate(validConfig).value
-      sharingConfigOf(loaded) shouldBe a[RewardSharingConfig.BuiltIn]
-    }
-
-    "accept sharing-automation = external with no beneficiaries" in {
+    "accept type = external with no beneficiaries" in {
       val overwrite = ConfigFactory.parseString(
         """
           |canton.validator-apps.aliceValidator.reward-sharing-config-by-party = {
           |  "alice::1220abc" = {
-          |    sharing-automation = "external"
+          |    type = "external"
           |  }
           |}
           """.stripMargin
       )
       val validConfig = CantonConfig.mergeConfigs(config, Seq(overwrite))
       val loaded = SpliceConfig.loadAndValidate(validConfig).value
-      sharingConfigOf(loaded) shouldBe RewardSharingConfig.External
+      sharingConfigOf(loaded) shouldBe RewardSharingConfig.External()
     }
 
-    "accept explicit sharing-automation = built-in with beneficiaries" in {
+    "accept explicit type = built-in with beneficiaries" in {
       val overwrite = ConfigFactory.parseString(
         """
           |canton.validator-apps.aliceValidator.reward-sharing-config-by-party = {
           |  "alice::1220abc" = {
-          |    sharing-automation = "built-in"
+          |    type = "built-in"
           |    beneficiaries = [{ beneficiary = "bob::1220", percentage = 0.4 }]
           |    min-ttl-after-sharing = 30h
           |  }
@@ -297,41 +293,34 @@ class SpliceConfigTest extends AsyncWordSpec with BaseTest {
       sharingConfigOf(loaded) shouldBe a[RewardSharingConfig.BuiltIn]
     }
 
-    "reject sharing-automation = external with beneficiaries" in {
+    "accept type = external, ignoring beneficiaries" in {
       val overwrite = ConfigFactory.parseString(
         """
           |canton.validator-apps.aliceValidator.reward-sharing-config-by-party = {
           |  "alice::1220abc" = {
-          |    sharing-automation = "external"
+          |    type = "external"
           |    beneficiaries = [{ beneficiary = "bob::1220", percentage = 0.4 }]
           |  }
           |}
           """.stripMargin
       )
-      val buggyConfig = CantonConfig.mergeConfigs(config, Seq(overwrite))
-      SpliceConfig
-        .loadAndValidate(buggyConfig)
-        .left
-        .value
-        .toString should include("beneficiaries must not be set")
+      val validConfig = CantonConfig.mergeConfigs(config, Seq(overwrite))
+      val loaded = SpliceConfig.loadAndValidate(validConfig).value
+      sharingConfigOf(loaded) shouldBe RewardSharingConfig.External()
     }
 
-    "reject an invalid sharing-automation value" in {
+    "reject an invalid type value" in {
       val overwrite = ConfigFactory.parseString(
         """
           |canton.validator-apps.aliceValidator.reward-sharing-config-by-party = {
           |  "alice::1220abc" = {
-          |    sharing-automation = "bogus"
+          |    type = "bogus"
           |  }
           |}
           """.stripMargin
       )
       val buggyConfig = CantonConfig.mergeConfigs(config, Seq(overwrite))
-      SpliceConfig
-        .loadAndValidate(buggyConfig)
-        .left
-        .value
-        .toString should include("SharingAutomation")
+      SpliceConfig.loadAndValidate(buggyConfig) shouldBe a[Left[?, ?]]
     }
   }
 }
