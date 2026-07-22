@@ -17,6 +17,8 @@ import org.apache.pekko.http.scaladsl.model.{
   HttpHeader,
   HttpRequest,
   HttpResponse,
+  MediaType,
+  MediaTypes,
   StatusCode,
   StatusCodes,
 }
@@ -50,6 +52,27 @@ trait HttpClient {
 }
 
 object HttpClient {
+  private object ResponseErrorByStatus {
+    def unapply(resp: HttpResponse): Option[StatusCode] =
+      resp.status match {
+        case code @ (StatusCodes.ServerError(_) | StatusCodes.ClientError(_)) => Some(code)
+        case _ => None
+      }
+  }
+
+  private val validContentTypes: Set[MediaType] = Set(
+    MediaTypes.`application/json`,
+    MediaTypes.`application/octet-stream`,
+    MediaTypes.`text/plain`,
+  )
+
+  private def httpFnErrors(
+      nonErrorStatusCode: Set[StatusCode]
+  ): PartialFunction[HttpResponse, Unit] = {
+    case ResponseErrorByStatus(code) if !nonErrorStatusCode.contains(code) =>
+    case resp if !validContentTypes.contains(resp.entity.contentType.mediaType) =>
+  }
+
   def createHttpFn(
       clientName: String,
       operationName: String,
@@ -61,10 +84,7 @@ object HttpClient {
   ): HttpRequest => Future[HttpResponse] = {
     httpClientWithErrors(
       httpClient.executeRequest(clientName, operationName),
-      {
-        case code @ (StatusCodes.ServerError(_) | StatusCodes.ClientError(_))
-            if !nonErrorStatusCode.contains(code) =>
-      },
+      httpFnErrors(nonErrorStatusCode),
     )
   }
 
@@ -91,7 +111,7 @@ object HttpClient {
 
   private def httpClientWithErrors(
       nextClient: HttpRequest => Future[HttpResponse],
-      errors: PartialFunction[StatusCode, Unit],
+      errors: PartialFunction[HttpResponse, Unit],
   )(
       req: HttpRequest
   )(implicit ec: ExecutionContext, mat: Materializer) = {
@@ -102,7 +122,7 @@ object HttpClient {
             Future.failed[HttpResponse](error)
           }
         )
-        .applyOrElse(_resp.status, (_: StatusCode) => Future.successful(_resp))
+        .applyOrElse(_resp, Future.successful(_: HttpResponse))
     }
   }
 

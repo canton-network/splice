@@ -11,6 +11,7 @@ org.lfdecentralizedtrust.splice.environment.ActiveContractsRestartTest
 org.lfdecentralizedtrust.splice.environment.CommandCircuitBreakerTest
 org.lfdecentralizedtrust.splice.environment.CommandIdDedupTest
 org.lfdecentralizedtrust.splice.environment.TopologyAwarePackageVersionSupportTest
+org.lfdecentralizedtrust.splice.http.NonJsonResponseTest
 org.lfdecentralizedtrust.splice.http.NonProxyHostsTest
 org.lfdecentralizedtrust.splice.http.UrlValidatorTest
 org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnectionTest
