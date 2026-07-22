@@ -7,7 +7,7 @@ import sbt.*
 object CantonDependencies {
   // Slightly changed compared to Canton OSS repo to avoid the need for a meta sbt project
   val version: String = "3.5.0-snapshot.20260401.14638.0.v9a1531c5"
-  val canton_library_version = "3.5.6"
+  val canton_library_version = "3.5.7-snapshot.20260630.19042.0.vc85c6a30"
   val daml_language_versions = Seq("2.1")
   val daml_libraries_version = version
   // Defined in `../nix/dpm-sdk-sources.json`, as the compiler version is also used by
