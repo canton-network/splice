@@ -13,9 +13,9 @@ import Splice.Schedule
 import Splice.Util
 
 -- TODO(#14972): Get rid of the unused Amulet data type
-data Amulet = Amulet deriving (Show, Eq)
+data Amulet = Amulet deriving (Show, Eq, Serializable)
 -- ^ Deprecated type for specifying amounts and fees in units of Amulet. Use Splice.Amulet.Amulet directly instead.
-data USD = USD deriving (Show, Eq)
+data USD = USD deriving (Show, Eq, Serializable)
 
 -- | Configuration determining the fees and limits for Amulet transfers granted by
 -- the AmuletRules.
@@ -32,7 +32,7 @@ data TransferConfig unit = TransferConfig with
     maxNumLockHolders : Int -- ^ Maximum number of lock holders allowed for a locked amulet.
     tokenStandardMaxTTL : Optional RelTime
       -- ^ Maximum time to live for token standard state contracts (allocations and transfer instructions).  Defaults to 90 days.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 transferConfigToTransferConfigV2 : TransferConfig unit -> TransferConfigV2 unit
 transferConfigToTransferConfigV2 tc = TransferConfigV2 with
@@ -49,7 +49,7 @@ data TransferConfigV2 unit = TransferConfigV2 with
     maxNumOutputs : Int
     maxNumLockHolders : Int
     tokenStandardMaxTTL : Optional RelTime
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- | Get the TTL for token standard state contracts, falling back to a default if not specified.
 getTokenStandardMaxTTL : TransferConfigV2 unit -> RelTime
@@ -65,7 +65,7 @@ data RewardVersion
       -- ^ Version of app rewards pre CIP-104
   | RewardVersion_TrafficBasedAppRewards
       -- ^ Traffic-based app rewards as introduced in CIP-104
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 useTrafficBasedAppRewards : Optional RewardVersion -> Bool
 useTrafficBasedAppRewards rv = case rv of
@@ -85,7 +85,7 @@ data RewardConfig = RewardConfig with
     appRewardCouponThreshold : Decimal -- ^ Threshold for minting reward coupons, in USD.
     -- This threshold is not enforced in daml, but it must be used while building the Merkle-tree
     -- to ignore minting allowances lower than this value.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 
 -- Full AmuletConfig
@@ -112,7 +112,7 @@ data AmuletConfig unit = AmuletConfig with
     rewardConfig : Optional RewardConfig
       -- ^ Configuration for the reward accounting and calculation. If None, then on-ledger reward tracking is used.
     transferPreapprovalBaseDuration : Optional RelTime -- ^ Base duration of a transfer pre-approval granted for free on creation and renewal. Default: 90 days.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 getExternalPartyConfigStateTickDuration : AmuletConfig a -> RelTime
 getExternalPartyConfigStateTickDuration config = fromOptional (hours 24) config.externalPartyConfigStateTickDuration
@@ -185,7 +185,7 @@ data PackageConfig = PackageConfig
     validatorLifecycle : Text
     wallet : Text
     walletPayments : Text
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 -- | Package configs are not constrained at the Daml level to maximize flexibility.
 -- In particular, empty packages versions might be used in the future to indicate that

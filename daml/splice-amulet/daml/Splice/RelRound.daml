@@ -11,7 +11,7 @@ import Splice.Types (Round(..))
 -- | The equivalent of RelTime for rounds, i.e., a delta between
 -- two rounds
 newtype RelRound = RelRound with diff : Int
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Serializable)
 
 addRelRound : Round -> RelRound -> Round
 addRelRound round i = Round with number = round.number + i.diff

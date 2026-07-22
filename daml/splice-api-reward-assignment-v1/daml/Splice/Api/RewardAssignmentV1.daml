@@ -25,7 +25,7 @@ data RewardCouponView = RewardCouponView
       -- ^ The maximum number of new beneficiaries that can be assigned to the coupon in a single assignment.
     meta : Metadata
       -- ^ Metadata associated with this coupon. Provided for extensibility.
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 -- | Specification of a beneficiary of rewards.
 data RewardBeneficiary = RewardBeneficiary
@@ -34,7 +34,7 @@ data RewardBeneficiary = RewardBeneficiary
       -- ^ The party that is granted the right to mint amulet for this activity.
     percentage : Decimal
       -- ^ Percentage (specified as a number between 0.0 and 1.0) of the reward minting allowance to assign to this beneficiary .
-  deriving (Show, Eq, Ord)
+  deriving (Show, Eq, Ord, Serializable)
 
 -- | A coupon representing the right to mint a certain amount of rewards.
 interface RewardCoupon where
@@ -73,4 +73,4 @@ interface RewardCoupon where
 data RewardCoupon_AssignBeneficiariesResult = RewardCoupon_AssignBeneficiariesResult with
     newBeneficiariesCouponCids : [(Party, [ContractId RewardCoupon])]
       -- ^ The coupons created for the newly assigned beneficiaries.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)

@@ -18,6 +18,7 @@ import Splice.DSO.DecentralizedSynchronizer
 import Splice.DsoRules
 
 data DsoBootstrap_BootstrapResult = DsoBootstrap_BootstrapResult
+  deriving (Serializable)
 
 -- | A template for bootstrapping DsoRules and AmuletRules.
 template DsoBootstrap with

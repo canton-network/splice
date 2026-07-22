@@ -1,13 +1,14 @@
 sdk-version: 3.5.2
 name: splice-validator-lifecycle
 source: daml
-version: 0.1.8
+version: 0.1.9
 dependencies:
   - daml-prim
   - daml-stdlib
 data-dependencies:
 - ../splice-util/.daml/dist/splice-util-current.dar
 build-options:
+  - --explicit-serializable=yes
   - --ghc-option=-Wunused-binds
   - --ghc-option=-Wunused-matches
   - --target=2.1

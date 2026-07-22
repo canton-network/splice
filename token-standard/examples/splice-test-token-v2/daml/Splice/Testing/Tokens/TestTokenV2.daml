@@ -160,7 +160,7 @@ template TokenRules with
 data TokenRules_OfferMintResult = TokenRules_OfferMintResult with
     offerCid : ContractId TokenTransferOffer
     meta : Metadata
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- | Create a V2 transfer offer.
 --
