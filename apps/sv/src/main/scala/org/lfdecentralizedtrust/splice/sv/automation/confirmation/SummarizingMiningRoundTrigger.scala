@@ -241,7 +241,7 @@ class SummarizingMiningRoundTrigger(
         response <- bftScan.getRewardAccountingActivityTotalsWithScanUris(round)
       } yield response match {
         case (RewardAccountingActivityTotalsOk(ok), scanUris) =>
-          logger.info(s"Obtained the reward accounting totals for round $round via BFT read from consensus scans: ${scanUris.mkString(", ")}.")
+          logger.info(s"Obtained the reward accounting totals for round $round via BFT read from scans: ${scanUris.mkString(", ")}.")
           ok
         case _ => totalsUnavailable("could not obtain reward accounting totals via BFT read.")
       }

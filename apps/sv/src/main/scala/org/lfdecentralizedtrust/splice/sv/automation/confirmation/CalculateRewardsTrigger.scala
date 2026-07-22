@@ -163,7 +163,7 @@ abstract class CalculateRewardsTriggerBase(
       } yield response match {
         case (RewardAccountingRootHashOk(ok), scanUris) =>
           logger.info(
-            s"Obtained the root-hash for round $round via BFT read from consensus scans: ${scanUris.mkString(", ")}."
+            s"Obtained the root-hash for round $round via BFT read from scans: ${scanUris.mkString(", ")}."
   )
           new Hash(ok.rootHash)
         case _ => rootHashUnavailable("could not obtain root-hash via BFT read.")

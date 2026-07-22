@@ -1259,7 +1259,7 @@ class BftScanConnectionTest
           case (GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok), uris) =>
             ok.rootHash should be("aabb")
             ok.roundNumber should be(round)
-            uris.size should be >= 2
+            uris.size should be(2)
         }
       }
     }
@@ -1378,7 +1378,7 @@ class BftScanConnectionTest
             ok.totalAppActivityWeight should be(100L)
             ok.activePartiesCount should be(10L)
             ok.activityRecordsCount should be(5L)
-            uris.size should be >= 2
+            uris.size should be(2)
         }
       }
     }

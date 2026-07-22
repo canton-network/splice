@@ -375,7 +375,7 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
         def bftReadLogged(subject: String) =
           forAtLeast(1, logs) { log =>
             val prefix =
-              s"Obtained the $subject for round $round via BFT read from consensus scans: "
+              s"Obtained the $subject for round $round via BFT read from scans: "
             log.loggerName should include("SV=sv2")
             log.message should include(prefix)
             val scanUris = log.message
@@ -383,7 +383,7 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
               .stripSuffix(".")
               .split(", ")
               .toSeq
-            scanUris should not be empty
+            scanUris.size should be(1)
             forAll(scanUris)(uri => expectedScanUris should contain(uri))
           }
         bftReadLogged("root-hash")
