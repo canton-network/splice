@@ -323,14 +323,17 @@ class DbAppActivityRecordStore(
         }
 
     // earliestRound: the lowest round covered by this ingestion batch.
+    //   - Always -1 on firstSV (present since genesis, round 0 is complete)
     //   - From activity records when present
     //   - From lastArchivedRound when no featured apps produced records
-    //   - From bootstrap (-1) on a fresh firstSV with no archived rounds
-    val earliestRound = items
-      .map(_.roundNumber)
-      .minOption
-      .orElse(lastArchivedRoundO)
-      .orElse(if (isFirstSv) Some(-1L) else None)
+    val earliestRound = if (isFirstSv) {
+      Some(-1L)
+    } else {
+      items
+        .map(_.roundNumber)
+        .minOption
+        .orElse(lastArchivedRoundO)
+    }
 
     // lastArchived: the highest round archived as of this verdict batch.
     //   - From the caller when available

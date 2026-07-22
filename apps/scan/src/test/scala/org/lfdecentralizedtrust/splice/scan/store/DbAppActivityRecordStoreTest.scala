@@ -356,6 +356,44 @@ class DbAppActivityRecordStoreTest
         countAfter shouldBe 0L
       }
     }
+
+    "set earliestIngestedRound to -1 on firstSV even when lastArchivedRoundO is present" in {
+      for {
+        (appStore, verdictStore) <- newStores(isFirstSv = true)
+        baseTs = CantonTimestamp.now()
+
+        _ <- verdictStore.insertVerdictsWithAppActivityRecords(
+          NonEmptyList.of(mkVerdict(verdictStore, "update-firstsv-lagged", baseTs) -> noViews),
+          Seq.empty,
+          lastArchivedRoundO = Some(1L),
+          hasTrafficSummaries = true,
+        )
+        meta <- appStore.lookupActivityRecordMeta(1, 0)
+      } yield {
+        meta shouldBe defined
+        meta.value.earliestIngestedRound shouldBe -1L
+        meta.value.lastArchivedRound shouldBe Some(1L)
+      }
+    }
+
+    "set earliestIngestedRound to -1 on firstSV even when activity records exist" in {
+      for {
+        (appStore, verdictStore) <- newStores(isFirstSv = true)
+        baseTs = CantonTimestamp.now()
+
+        _ <- verdictStore.insertVerdictsWithAppActivityRecords(
+          NonEmptyList.of(mkVerdict(verdictStore, "update-firstsv-records", baseTs) -> noViews),
+          Seq(baseTs -> mkRecord(0L, 0L, Seq("app1::provider"), Seq(100L))),
+          lastArchivedRoundO = Some(1L),
+          hasTrafficSummaries = true,
+        )
+        meta <- appStore.lookupActivityRecordMeta(1, 0)
+      } yield {
+        meta shouldBe defined
+        meta.value.earliestIngestedRound shouldBe -1L
+        meta.value.lastArchivedRound shouldBe Some(1L)
+      }
+    }
   }
 
   "earliestRoundWithCompleteAppActivity" should {
@@ -1061,7 +1099,9 @@ class DbAppActivityRecordStoreTest
   /** Creates both an app activity record store and a verdict store backed by
     * the same UpdateHistory, for testing insertVerdictsWithAppActivityRecords.
     */
-  private def newStores(): Future[(DbAppActivityRecordStore, DbScanVerdictStore)] = {
+  private def newStores(
+      isFirstSv: Boolean = false
+  ): Future[(DbAppActivityRecordStore, DbScanVerdictStore)] = {
     val participantId = mkParticipantId("activity-test")
     val updateHistory = new UpdateHistory(
       storage.underlying,
@@ -1080,7 +1120,7 @@ class DbAppActivityRecordStoreTest
         storage.underlying,
         updateHistory,
         DbAppActivityRecordStore.IngestionVersions(1, 0),
-        isFirstSv = false,
+        isFirstSv = isFirstSv,
         loggerFactory,
       )
       val verdictStore = new DbScanVerdictStore(
