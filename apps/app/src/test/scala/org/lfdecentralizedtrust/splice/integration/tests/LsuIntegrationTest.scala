@@ -321,9 +321,6 @@ class LsuIntegrationTest
   }
 
   "upgrade synchronizer to new physical synchronizer without downtime" in { implicit env =>
-    initDso(includeLocal = false)
-    startAllSync(aliceValidatorBackend, splitwellValidatorBackend)
-
     val allNodes = Seq[AppBackendReference](
       sv1ScanBackend,
       sv2ScanBackend,
@@ -340,6 +337,10 @@ class LsuIntegrationTest
       sv3ValidatorBackend,
       sv4ValidatorBackend,
     )
+    // restart to clear any caches
+    allNodes.par.foreach(_.stop())
+    initDso(includeLocal = false)
+    startAllSync(aliceValidatorBackend, splitwellValidatorBackend)
     actAndCheck("Create some transaction history", sv1WalletClient.tap(1337))(
       "Scan transaction history is recorded and wallet balance is updated",
       _ => {
