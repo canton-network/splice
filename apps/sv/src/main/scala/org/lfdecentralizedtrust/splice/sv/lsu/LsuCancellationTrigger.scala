@@ -51,7 +51,11 @@ class LsuCancellationTrigger(
         .getPhysicalSynchronizerId()
       sequencerId <- currentSynchronizerNode.sequencerAdminConnection.getSequencerId
       successor <- currentSynchronizerNode.sequencerAdminConnection
-        .lookupSequencerSuccessors(physicalSynchronizerId.logical, sequencerId)
+        .lookupSequencerSuccessors(
+          physicalSynchronizerId.logical,
+          sequencerId,
+          Some(TopologyChangeOp.Replace),
+        )
       removedAnnouncement <- currentSynchronizerNode.sequencerAdminConnection
         .lookupSynchronizerLsuAnnouncement(
           physicalSynchronizerId.logical,
