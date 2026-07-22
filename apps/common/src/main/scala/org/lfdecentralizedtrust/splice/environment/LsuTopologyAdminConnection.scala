@@ -6,7 +6,7 @@ package org.lfdecentralizedtrust.splice.environment
 import cats.data.EitherT
 import cats.implicits.catsSyntaxOptionId
 import com.digitalasset.canton.admin.api.client.commands.TopologyAdminCommands
-import com.digitalasset.canton.config.RequireTypes.{NonNegativeInt, PositiveInt}
+import com.digitalasset.canton.config.RequireTypes.NonNegativeInt
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.topology.{PhysicalSynchronizerId, SequencerId, SynchronizerId}
 import com.digitalasset.canton.topology.admin.grpc.{BaseQuery, TopologyStoreId}
@@ -32,7 +32,11 @@ import scala.concurrent.{ExecutionContext, Future}
 trait LsuTopologyAdminConnection {
   this: TopologyAdminConnection =>
 
-  def lookupSequencerSuccessors(synchronizerId: SynchronizerId, sequencerId: SequencerId)(implicit
+  def lookupSequencerSuccessors(
+      synchronizerId: SynchronizerId,
+      sequencerId: SequencerId,
+      ops: Option[TopologyChangeOp],
+  )(implicit
       tc: TraceContext,
       ec: ExecutionContext,
   ): Future[Option[TopologyResult[LsuSequencerConnectionSuccessor]]] = runCmd(
@@ -41,7 +45,7 @@ trait LsuTopologyAdminConnection {
         TopologyStoreId.Synchronizer(synchronizerId),
         proposals = false,
         timeQuery = TimeQuery.HeadState,
-        ops = Some(TopologyChangeOp.Replace),
+        ops = ops,
         filterSigningKey = "",
         protocolVersion = None,
       ),
@@ -58,33 +62,25 @@ trait LsuTopologyAdminConnection {
       tc: TraceContext,
       ec: ExecutionContext,
   ): Future[TopologyResult[LsuSequencerConnectionSuccessor]] = {
-    retryProvider.ensureThat(
-      RetryFor.Automation,
-      s"sequencer_successor_$sequencerId",
-      s"sequencer successor for $sequencerId is published with connection $connection",
-      lookupSequencerSuccessors(synchronizerId.logical, sequencerId).map { result =>
-        result.filter(_.mapping.connection == connection).toRight(result)
+    ensureTopologyMappingO(
+      synchronizerId.logical,
+      s"sequencer successor for $sequencerId with connection $connection",
+      _ =>
+        EitherT
+          .liftF(lookupSequencerSuccessors(synchronizerId.logical, sequencerId, None))
+          .subflatMap {
+            case Some(successor)
+                if successor.mapping.connection == connection && successor.mapping.successorPsid == synchronizerId =>
+              Right(successor)
+            case Some(existing) => Left(existing.some)
+            case None => Left(None)
+          },
+      { (_: Option[TopologyMapping]) =>
+        Right(
+          LsuSequencerConnectionSuccessor(sequencerId, synchronizerId, connection)
+        )
       },
-      (previous: Option[TopologyResult[LsuSequencerConnectionSuccessor]]) => {
-        logger.info(s"Adding sequencer $sequencerId successor with connection $connection")
-        (previous match {
-          case Some(successor) =>
-            proposeMapping(
-              synchronizerId.logical,
-              successor.mapping.copy(connection = connection),
-              successor.base.serial + PositiveInt.one,
-              isProposal = false,
-            )
-          case None =>
-            proposeMapping(
-              synchronizerId.logical,
-              LsuSequencerConnectionSuccessor(sequencerId, synchronizerId, connection),
-              PositiveInt.one,
-              isProposal = false,
-            )
-        }).map(_ => ())
-      },
-      logger,
+      retryFor = RetryFor.Automation,
     )
   }
 
@@ -98,6 +94,7 @@ trait LsuTopologyAdminConnection {
       lookupSequencerSuccessors(
         synchronizerId,
         sequencerId,
+        Some(TopologyChangeOp.Replace),
       ),
       proposal = true,
     )
