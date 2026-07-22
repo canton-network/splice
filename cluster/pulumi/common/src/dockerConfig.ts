@@ -20,7 +20,7 @@ export class DockerConfig {
     const googleCreds = DockerConfig.fetchGoogleCredentialsFromSecret(
       'us-central1-artifact-reader-key'
     );
-    this.jsonConfig = googleCreds.apply((google) => {
+    this.jsonConfig = googleCreds.apply(google => {
       const googleAuth = DockerConfig.toAuthField(google);
       const conf = Buffer.from(
         JSON.stringify({
