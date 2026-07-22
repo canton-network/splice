@@ -493,6 +493,10 @@ export function installNatAlerts(
         conditionPrometheusQueryLanguage: {
           query: `sum by (nat_gateway_name, reason) (router_googleapis_com:nat_dropped_sent_packets_count{monitored_resource="nat_gateway"}) > ${natConfig.droppedSentPacketsThreshold}`,
           ...prometheusDefaults,
+          // Ignore temporary spikes (likely caused by dynamic port allocation).
+          // We mostly care about sustained dropped sent packets,
+          // which most often indicates that we don't have enough ports available to the VMs.
+          duration: '20m',
         },
       },
     ],
