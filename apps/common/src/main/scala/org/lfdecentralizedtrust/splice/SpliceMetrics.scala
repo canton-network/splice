@@ -9,11 +9,7 @@ import com.daml.metrics.api.{MetricName, MetricsContext}
 import com.digitalasset.canton.environment.BaseMetrics
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.metrics.ActiveRequestsMetrics.GrpcServerMetricsX
-import com.digitalasset.canton.metrics.{
-  DbStorageHistograms,
-  DbStorageMetrics,
-  DeclarativeApiMetrics,
-}
+import com.digitalasset.canton.metrics.{DbStorageMetrics, DeclarativeApiMetrics}
 import org.lfdecentralizedtrust.splice.admin.api.client.{DamlGrpcClientMetrics, GrpcClientMetrics}
 import org.lfdecentralizedtrust.splice.http.{HttpClientMetrics, HttpServerMetrics}
 
@@ -31,7 +27,7 @@ trait SpliceMetrics extends BaseMetrics {
 abstract class BaseSpliceMetrics(
     nodeType: String,
     override val openTelemetryMetricsFactory: LabeledMetricsFactory,
-    storageHistograms: DbStorageHistograms,
+    histograms: SpliceHistograms,
     loggerFactory: NamedLoggerFactory,
 ) extends SpliceMetrics {
 
@@ -50,7 +46,7 @@ abstract class BaseSpliceMetrics(
   override def healthMetrics: HealthMetrics = new HealthMetrics(openTelemetryMetricsFactory)
 
   override def storageMetrics: DbStorageMetrics =
-    new DbStorageMetrics(storageHistograms, openTelemetryMetricsFactory)
+    new DbStorageMetrics(histograms.dbStorageHistograms, openTelemetryMetricsFactory)
 
   override def httpServerMetrics: HttpServerMetrics = new HttpServerMetrics(
     openTelemetryMetricsFactory,
@@ -59,4 +55,20 @@ abstract class BaseSpliceMetrics(
   override def httpClientMetrics: HttpClientMetrics = new HttpClientMetrics(
     openTelemetryMetricsFactory
   )
+
+  override def cryptoMetrics = crypto
+
+  private[this] val crypto = {
+    import com.digitalasset.canton.metrics.{
+      CryptoMetrics,
+      SigningMetrics,
+      DecryptionMetrics,
+      KmsMetrics,
+    }
+    new CryptoMetrics(
+      new SigningMetrics(histograms.signingHistograms, openTelemetryMetricsFactory),
+      new DecryptionMetrics(histograms.decryptionHistograms, openTelemetryMetricsFactory),
+      Some(new KmsMetrics(prefix, openTelemetryMetricsFactory)),
+    )
+  }
 }

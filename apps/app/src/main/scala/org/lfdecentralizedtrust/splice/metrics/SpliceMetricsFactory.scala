@@ -6,7 +6,8 @@ package org.lfdecentralizedtrust.splice.metrics
 import com.daml.metrics.api.MetricsContext
 import com.digitalasset.canton.config.ProcessingTimeout
 import com.digitalasset.canton.logging.NamedLoggerFactory
-import com.digitalasset.canton.metrics.{DbStorageHistograms, MetricsFactoryProvider}
+import com.digitalasset.canton.metrics.MetricsFactoryProvider
+import org.lfdecentralizedtrust.splice.SpliceHistograms
 import org.lfdecentralizedtrust.splice.scan.metrics.ScanAppMetrics
 import org.lfdecentralizedtrust.splice.splitwell.metrics.SplitwellAppMetrics
 import org.lfdecentralizedtrust.splice.sv.metrics.SvAppMetrics
@@ -16,7 +17,7 @@ import scala.collection.concurrent.TrieMap
 
 case class SpliceMetricsFactory(
     metricsFactoryProvider: MetricsFactoryProvider,
-    storageHistograms: DbStorageHistograms,
+    histograms: SpliceHistograms,
     loggerFactory: NamedLoggerFactory,
     timeouts: ProcessingTimeout,
 ) {
@@ -32,7 +33,7 @@ case class SpliceMetricsFactory(
         val metricsContext = MetricsContext("node_name" -> name, "node_type" -> "validator")
         new ValidatorAppMetrics(
           metricsFactoryProvider.generateMetricsFactory(metricsContext),
-          storageHistograms,
+          histograms,
           loggerFactory,
         )
       },
@@ -45,7 +46,7 @@ case class SpliceMetricsFactory(
         val metricsContext = MetricsContext("node_name" -> name, "node_type" -> "sv")
         new SvAppMetrics(
           metricsFactoryProvider.generateMetricsFactory(metricsContext),
-          storageHistograms,
+          histograms,
           loggerFactory,
         )
       },
@@ -58,7 +59,7 @@ case class SpliceMetricsFactory(
         val metricsContext = MetricsContext("node_name" -> name, "node_type" -> "scan")
         new ScanAppMetrics(
           metricsFactoryProvider.generateMetricsFactory(metricsContext),
-          storageHistograms,
+          histograms,
           loggerFactory,
           timeouts,
         )
@@ -72,7 +73,7 @@ case class SpliceMetricsFactory(
         val metricsContext = MetricsContext("node_name" -> name, "node_type" -> "splitwell")
         new SplitwellAppMetrics(
           metricsFactoryProvider.generateMetricsFactory(metricsContext),
-          storageHistograms,
+          histograms,
           loggerFactory,
         )
       },

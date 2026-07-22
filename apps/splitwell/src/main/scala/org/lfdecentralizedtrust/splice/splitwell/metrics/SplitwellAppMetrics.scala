@@ -5,8 +5,7 @@ package org.lfdecentralizedtrust.splice.splitwell.metrics
 
 import com.daml.metrics.api.MetricHandle.LabeledMetricsFactory
 import com.digitalasset.canton.logging.NamedLoggerFactory
-import org.lfdecentralizedtrust.splice.BaseSpliceMetrics
-import com.digitalasset.canton.metrics.DbStorageHistograms
+import org.lfdecentralizedtrust.splice.{BaseSpliceMetrics, SpliceHistograms}
 
 /** Modelled after [[com.digitalasset.canton.synchronizer.metrics.DomainMetrics]].
   *
@@ -14,6 +13,6 @@ import com.digitalasset.canton.metrics.DbStorageHistograms
   */
 class SplitwellAppMetrics(
     metricsFactory: LabeledMetricsFactory,
-    storageHistograms: DbStorageHistograms,
+    histograms: SpliceHistograms,
     loggerFactory: NamedLoggerFactory,
-) extends BaseSpliceMetrics("splitwell", metricsFactory, storageHistograms, loggerFactory) {}
+) extends BaseSpliceMetrics("splitwell", metricsFactory, histograms, loggerFactory) {}

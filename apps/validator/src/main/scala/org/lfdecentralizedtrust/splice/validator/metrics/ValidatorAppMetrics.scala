@@ -5,16 +5,15 @@ package org.lfdecentralizedtrust.splice.validator.metrics
 
 import com.daml.metrics.api.MetricHandle.LabeledMetricsFactory
 import com.digitalasset.canton.logging.NamedLoggerFactory
-import com.digitalasset.canton.metrics.DbStorageHistograms
-import org.lfdecentralizedtrust.splice.BaseSpliceMetrics
+import org.lfdecentralizedtrust.splice.{BaseSpliceMetrics, SpliceHistograms}
 import org.lfdecentralizedtrust.splice.metrics.ScanConnectionMetrics
 
 /** Modelled after [[com.digitalasset.canton.synchronizer.metrics.DomainMetrics]].
   */
 class ValidatorAppMetrics(
     metricsFactory: LabeledMetricsFactory,
-    storageHistograms: DbStorageHistograms,
+    histograms: SpliceHistograms,
     loggerFactory: NamedLoggerFactory,
-) extends BaseSpliceMetrics("validator", metricsFactory, storageHistograms, loggerFactory) {
+) extends BaseSpliceMetrics("validator", metricsFactory, histograms, loggerFactory) {
   val scanConnections = new ScanConnectionMetrics(metricsFactory)
 }

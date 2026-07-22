@@ -115,7 +115,7 @@ abstract class Environment[Config <: SharedCantonConfig[Config]](
   }
 
   private val currentConfig = new AtomicReference[Config](initialConfig)
-  private val histogramInventory = new HistogramInventory()
+  protected[this] val histogramInventory = new HistogramInventory()
   private val histograms = new CantonHistograms()(histogramInventory)
   val dbStorageHistograms = new DbStorageHistograms(
     MetricName("cn")

@@ -11,6 +11,7 @@ import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.participant.ParticipantNodeBootstrapFactoryImpl
 import com.digitalasset.canton.synchronizer.mediator.MediatorNodeBootstrapFactoryImpl
 import com.digitalasset.canton.synchronizer.sequencer.SequencerNodeBootstrapFactoryImpl
+import org.lfdecentralizedtrust.splice.SpliceHistograms
 import org.lfdecentralizedtrust.splice.config.SpliceConfig
 import org.lfdecentralizedtrust.splice.metrics.SpliceMetricsFactory
 import org.lfdecentralizedtrust.splice.scan.ScanAppBootstrap
@@ -38,12 +39,21 @@ class SpliceEnvironment(
   // dump config (without sensitive data) to ease debugging
   logger.info(s"SpliceEnvironment with config = {\n${config.dumpString}\n}")
 
-  lazy val metrics = SpliceMetricsFactory(
-    metricsRegistry,
-    dbStorageHistograms,
-    loggerFactory,
-    config.parameters.timeouts.processing,
-  )
+  lazy val metrics = {
+    import com.daml.metrics.api.MetricName
+    import com.digitalasset.canton.metrics.{DecryptionHistograms, SigningHistograms}
+    val histograms = SpliceHistograms(
+      dbStorageHistograms,
+      new SigningHistograms(MetricName("cn"))(histogramInventory),
+      new DecryptionHistograms(MetricName("cn"))(histogramInventory),
+    )
+    SpliceMetricsFactory(
+      metricsRegistry,
+      histograms,
+      loggerFactory,
+      config.parameters.timeouts.processing,
+    )
+  }
 
   protected def createValidator(
       name: String,
