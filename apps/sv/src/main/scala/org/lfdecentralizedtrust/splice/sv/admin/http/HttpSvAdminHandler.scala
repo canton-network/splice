@@ -46,15 +46,6 @@ class HttpSvAdminHandler(
     withSpan(s"$workflowId.cancelLogicalSynchronizerUpgrade") { _ => _ =>
       for {
         decentralizedSynchronizer <- dsoStore.getDsoRules().map(_.domain)
-        sequencerId <- synchronizerNodeService.sequencerAdminConnection().flatMap(_.getSequencerId)
-        _ <- synchronizerNodeService
-          .sequencerAdminConnection()
-          .flatMap(
-            _.removeSequencerSuccessor(
-              decentralizedSynchronizer,
-              sequencerId,
-            )
-          )
         _ <- participantAdminConnection
           .removeLsuAnnouncement(decentralizedSynchronizer)
       } yield r0.CancelLogicalSynchronizerUpgradeResponseOK
