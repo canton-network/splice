@@ -16,7 +16,7 @@ import org.lfdecentralizedtrust.splice.util.StandaloneCanton
 
 import java.nio.file.{Path, Paths}
 
-class ParticipantKmsIdentitiesEnterpriseIntegrationTest
+class ParticipantKmsIdentitiesIntegrationTest
     extends IntegrationTestWithIsolatedEnvironment
     with StandaloneCanton {
 

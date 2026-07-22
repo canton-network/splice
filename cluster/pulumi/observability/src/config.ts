@@ -26,6 +26,13 @@ const GcpQuotasConfigSchema = z.object({
     }),
 });
 
+const NatPortUsageConfigSchema = z.object({
+  thresholdPercent: z.number().min(0).max(100),
+  droppedSentPacketsThreshold: z.number().min(0),
+});
+
+export type NatPortUsageConfig = z.infer<typeof NatPortUsageConfigSchema>;
+
 const MonitoringConfigSchema = z
   .object({
     enableGrafanaServiceAccountToken: z.boolean(),
@@ -129,11 +136,12 @@ const MonitoringConfigSchema = z
           tolerance: z.number(),
         }),
         gcpQuotas: GcpQuotasConfigSchema,
-        natPortUsage: z
-          .object({
-            thresholdPercent: z.number().min(0).max(100),
-          })
-          .default({ thresholdPercent: 80 }),
+        natPortUsage: NatPortUsageConfigSchema.default({
+          thresholdPercent: 80,
+          // `default 30` because every once in a while (likely due to dynamic port allocation),
+          // a few packets (less than 1/s) get dropped and getting alerted on it every time can be very noisy.
+          droppedSentPacketsThreshold: 30,
+        }),
         trafficBasedRewards: z.object({
           featuredAppRightsLimit: z.number(),
           verdictIngestionBatchSizeThreshold: z.number(),
@@ -160,12 +168,6 @@ const MonitoringConfigSchema = z
 export const monitoringConfig = MonitoringConfigSchema.parse(clusterSubConfig('monitoring'));
 
 export type GcpQuotaAlertsConfig = z.infer<typeof GcpQuotasConfigSchema>;
-
-const NatPortUsageConfigSchema = z.object({
-  thresholdPercent: z.number().min(0).max(100),
-});
-
-export type NatPortUsageConfig = z.infer<typeof NatPortUsageConfigSchema>;
 
 const PrometheusConfigSchema = z.object({
   prometheus: z.object({

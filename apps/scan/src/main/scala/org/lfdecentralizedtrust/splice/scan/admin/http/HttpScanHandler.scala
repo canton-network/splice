@@ -2526,7 +2526,7 @@ class HttpScanHandler(
                         val entry = definitions.SynchronizerBftSequencer(
                           psid.serial.unwrap.toLong,
                           id.toProtoPrimitive,
-                          bftSequencer.p2pUrl,
+                          bftSequencer.p2pUrl.toString,
                         )
                         initializedBftSequencersCache.put(idx, entry).discard
                         Some(entry)

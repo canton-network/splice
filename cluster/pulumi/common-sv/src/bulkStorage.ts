@@ -11,42 +11,76 @@ import {
 
 import { BulkStorageConfig } from './singleSvConfig';
 
-export type BulkStorageBucket = {
+type BulkStorageBucket = {
   bucket: gcp.storage.Bucket;
   region: string;
   secret: k8s.core.v1.Secret;
 };
 
+export type BulkStorageBuckets = {
+  staging: BulkStorageBucket;
+  committed: BulkStorageBucket;
+};
+
 export function installScanBulkStorage(
   xns: ExactNamespace,
   bulkStorageConfig: BulkStorageConfig
-): BulkStorageBucket | undefined {
+): BulkStorageBuckets | undefined {
   if (!bulkStorageConfig.enabled) {
     return;
   }
 
-  const bucketName = `${ClusterBasename}-${xns.logicalName}-bulk`;
+  const stagingBucketName = `${ClusterBasename}-${xns.logicalName}-bulk-staging`;
+  const committedBucketName = `${ClusterBasename}-${xns.logicalName}-bulk-committed`;
+  const saName = `${ClusterBasename}-${xns.logicalName}-bulk-sa`;
+
   // TODO(#3429): review other bucket configs
-  const bucket = new gcp.storage.Bucket(bucketName, { name: bucketName, location: GcpRegion });
-  const bucketServiceAccount = new gcp.serviceaccount.Account(`${bucketName}-sa`, {
-    accountId: `${bucketName}-sa`,
+  const bucketServiceAccount = new gcp.serviceaccount.Account(saName, {
+    accountId: saName,
     displayName: 'Service Account for Bulk-Storage Bucket Read/Write Access',
   });
-  new gcp.storage.BucketIAMMember(
-    `${bucketName}-sa-role`,
-    {
-      bucket: bucket.name,
-      role: 'roles/storage.objectUser',
-      member: pulumi.interpolate`serviceAccount:${bucketServiceAccount.email}`,
-    },
-    { dependsOn: [bucket, bucketServiceAccount] }
-  );
   const hmacKey = new gcp.storage.HmacKey(
-    `${bucketName}-hmac`,
+    `${saName}-hmac`,
     {
       serviceAccountEmail: bucketServiceAccount.email,
     },
     { dependsOn: [bucketServiceAccount] }
+  );
+
+  const staging = new gcp.storage.Bucket(stagingBucketName, {
+    name: stagingBucketName,
+    location: GcpRegion,
+  });
+  new gcp.storage.BucketIAMMember(
+    `${stagingBucketName}-sa-role`,
+    {
+      bucket: staging.name,
+      role: 'roles/storage.objectUser',
+      member: pulumi.interpolate`serviceAccount:${bucketServiceAccount.email}`,
+    },
+    { dependsOn: [staging, bucketServiceAccount] }
+  );
+  const committed = new gcp.storage.Bucket(committedBucketName, {
+    name: committedBucketName,
+    location: GcpRegion,
+  });
+  new gcp.storage.BucketIAMMember(
+    `${committedBucketName}-sa-role-creator`,
+    {
+      bucket: committed.name,
+      role: 'roles/storage.objectCreator',
+      member: pulumi.interpolate`serviceAccount:${bucketServiceAccount.email}`,
+    },
+    { dependsOn: [committed, bucketServiceAccount] }
+  );
+  new gcp.storage.BucketIAMMember(
+    `${committedBucketName}-sa-role-reader`,
+    {
+      bucket: committed.name,
+      role: 'roles/storage.objectViewer',
+      member: pulumi.interpolate`serviceAccount:${bucketServiceAccount.email}`,
+    },
+    { dependsOn: [committed, bucketServiceAccount] }
   );
 
   const accessKey = hmacKey.accessId;
@@ -72,8 +106,15 @@ export function installScanBulkStorage(
   );
 
   return {
-    region: GcpRegion,
-    bucket,
-    secret,
-  } as BulkStorageBucket;
+    staging: {
+      bucket: staging,
+      region: GcpRegion,
+      secret,
+    },
+    committed: {
+      bucket: committed,
+      region: GcpRegion,
+      secret,
+    },
+  };
 }

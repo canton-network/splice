@@ -300,10 +300,14 @@ class ScanIntegrationTest
     bftSequencers should have size 2
     val expectedSequencerId =
       sv1Backend.appState.localSynchronizerNodes.current.sequencerAdminConnection.getSequencerId.futureValue
-    val currentSequencer = bftSequencers.find(_.url == "http://testUrl:8081").value
-    currentSequencer.id shouldBe expectedSequencerId
-    val legacySequencer = bftSequencers.find(_.url == "http://legacyUrl:8082").value
-    legacySequencer.id shouldBe expectedSequencerId
+    forExactly(1, bftSequencers) { sequencer =>
+      sequencer.url shouldBe "http://testurl:8081"
+      sequencer.id shouldBe expectedSequencerId
+    }
+    forExactly(1, bftSequencers) { sequencer =>
+      sequencer.url shouldBe "http://legacyurl:8082"
+      sequencer.id shouldBe expectedSequencerId
+    }
   }
 
   "respect rate limit" in { implicit env =>

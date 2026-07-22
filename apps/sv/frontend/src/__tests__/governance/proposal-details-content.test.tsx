@@ -417,7 +417,11 @@ describe('Proposal Details Content', () => {
     const maxNumInputsNewValue = within(changes[1]).getByTestId('config-change-new-value');
     expect(maxNumInputsNewValue.textContent).toBe('4');
 
-    expect(screen.getByTestId('json-diffs-details')).toBeInTheDocument();
+    const jsonDiffsToggle = screen.getByTestId('json-diff-toggle');
+    expect(jsonDiffsToggle).toHaveTextContent('Show JSON');
+    expect(jsonDiffsToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('JSON')).not.toBeInTheDocument();
+    expect(screen.getByTestId('json-diffs-details')).not.toBeVisible();
   });
 
   test('should render dso rules config changes', () => {
@@ -498,7 +502,11 @@ describe('Proposal Details Content', () => {
     );
     expect(dsoNumUnclaimedRewardsThresholdNewValue.textContent).toBe('20');
 
-    expect(screen.getByTestId('json-diffs-details')).toBeInTheDocument();
+    const jsonDiffsToggle = screen.getByTestId('json-diff-toggle');
+    expect(jsonDiffsToggle).toHaveTextContent('Show JSON');
+    expect(jsonDiffsToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('JSON')).not.toBeInTheDocument();
+    expect(screen.getByTestId('json-diffs-details')).not.toBeVisible();
   });
 });
 
@@ -901,8 +909,10 @@ describe('Proposal Details > Votes & Voting', () => {
     // This is because awaiting the button click makes it very difficult for the test runner to see the loading state
     user.click(acceptButton);
 
-    await waitFor(async () => {
-      expect(acceptButton.getAttribute('disabled')).toBeDefined();
+    // once submission starts, the vote buttons are unmounted (replaced by the
+    // "Submitting..." state and then the submission message)
+    await waitFor(() => {
+      expect(acceptButton).not.toBeInTheDocument();
     });
 
     const submissionMessage = await screen.findByTestId('submission-message');
@@ -964,8 +974,10 @@ describe('Proposal Details > Votes & Voting', () => {
     // This is because awaiting the button click makes it very difficult for the test runner to see the loading state
     user.click(acceptButton);
 
-    await waitFor(async () => {
-      expect(acceptButton.getAttribute('disabled')).toBeDefined();
+    // once submission starts, the vote buttons are unmounted (replaced by the
+    // "Submitting..." state and then the submission message)
+    await waitFor(() => {
+      expect(acceptButton).not.toBeInTheDocument();
     });
 
     const submissionMessage = await screen.findByTestId('submission-message');

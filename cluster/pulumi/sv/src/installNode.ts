@@ -7,6 +7,7 @@ import {
   exactNamespace,
   imagePullSecretWithNonDefaultServiceAccount,
   installLedgerApiUserSecret,
+  spliceConfig,
 } from '@canton-network/splice-pulumi-common';
 import {
   configForSv,
@@ -14,18 +15,24 @@ import {
   svConfigs,
   svRunbookConfig,
 } from '@canton-network/splice-pulumi-common-sv';
+import { installSvNodeStandalone } from '@canton-network/splice-pulumi-common-sv/src/sv';
 
 import { installParticipant } from './participant';
 
 export async function installNode(sv: string, auth0Client: Auth0Client): Promise<void> {
+  const splitSvDeploymentEnabled =
+    spliceConfig.configuration.synchronizerMigration.splitSvDeploymentEnabled;
   const staticConfig = findStaticConfigOrFail(sv);
   const config = configForSv(staticConfig.nodeName);
-  const xns = exactNamespace(staticConfig.nodeName, true, true);
+  const xns = exactNamespace(staticConfig.nodeName, true, !splitSvDeploymentEnabled);
   const serviceAccountName = 'sv';
   const imagePullDeps = imagePullSecretWithNonDefaultServiceAccount(xns, serviceAccountName);
   const auth0Config = auth0Client.getCfg();
   const ledgerApiUserSecret = installLedgerApiUserSecret(auth0Client, xns, 'sv', 'sv');
   const ledgerApiUserSecretSource = auth0UserNameEnvVarSource('sv', true);
+  if (splitSvDeploymentEnabled && staticConfig.nodeName !== svRunbookConfig.nodeName) {
+    await installSvNodeStandalone(xns, staticConfig, config, auth0Client);
+  }
   await installParticipant(
     {
       xns,

@@ -1,10 +1,15 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
-import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.topology.SequencingParameters
+import com.digitalasset.canton.config.PositiveFiniteDuration
+import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.topology.{
+  BlacklistLeaderSelectionPolicyConfig,
+  SequencingParameters,
+}
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTest
+import org.lfdecentralizedtrust.splice.sv.config.BftSequencingParameters
 import org.lfdecentralizedtrust.splice.util.StandaloneCanton
 
 class SvReconcileBftSequencingParametersIntegrationTest
@@ -27,13 +32,26 @@ class SvReconcileBftSequencingParametersIntegrationTest
               (InstanceName.tryCreate("sv1Local") ->
                 c.svApps(InstanceName.tryCreate("sv1"))
                   .copy(
-                    cantonBftSequencingParameters = None
+                    cantonBftSequencingParameters = Some(
+                      BftSequencingParameters(
+                        pbftViewChangeTimeout = PositiveFiniteDuration.ofSeconds(5),
+                        segmentLength = SequencingParameters.DefaultSegmentLength.length,
+                        blacklistLeaderSelectionPolicyConfig =
+                          SequencingParameters.DefaultLeaderSelectionPolicyConfig.copy(
+                            howLongToBlacklist =
+                              BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.Exponential(
+                                initialValue = 1L,
+                                maximumEpochBlacklisted = Some(250L),
+                              )
+                          ),
+                      )
+                    )
                   ))
           ),
       )
       .withManualStart
 
-  "SV automation can set and unset bft sequencing parameters" in { implicit env =>
+  "SV automation can modify bft sequencing parameters" in { implicit env =>
     withCantonSvNodes(
       (
         Some(sv1Backend),
@@ -56,12 +74,26 @@ class SvReconcileBftSequencingParametersIntegrationTest
         .value
       bftParameters.pbftViewChangeTimeout shouldBe com.digitalasset.canton.time.PositiveFiniteDuration
         .tryOfSeconds(5)
+      bftParameters.blacklistLeaderSelectionPolicyConfig.howLongToBlacklist shouldBe a[
+        BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.Linear
+      ]
       sv1Backend.stop()
-      actAndCheck("Restart with sequencing parameters unset", sv1LocalBackend.startSync())(
+      actAndCheck(
+        "Restart with modified bft sequencing parameters unset",
+        sv1LocalBackend.startSync(),
+      )(
         "sequencing parameters are unset",
         _ => {
-          sv1LocalBackend.participantClient.topology.sequencing_parameters
-            .list(decentralizedSynchronizerId) shouldBe empty
+          val parameters = sv1Backend.participantClient.topology.sequencing_parameters
+            .list(decentralizedSynchronizerId)
+            .loneElement
+          val bytes = parameters.item.payload.value
+          val bftParameters = SequencingParameters
+            .fromByteString(sv1Backend.config.localSynchronizerNodes.current.protocolVersion, bytes)
+            .value
+          bftParameters.blacklistLeaderSelectionPolicyConfig.howLongToBlacklist shouldBe a[
+            BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.Exponential
+          ]
         },
       )
       sv1LocalBackend.stop()

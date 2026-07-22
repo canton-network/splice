@@ -177,6 +177,7 @@ abstract class InStackDecentralizedSynchronizerNode
           ),
           pvc: persistentHeapDumpsPvc(),
           serviceAccountName: imagePullServiceAccountName,
+          enableAntiAffinity: physicalSynchronizerConfig.sequencer.enableAntiAffinity,
         },
       },
       this.version,

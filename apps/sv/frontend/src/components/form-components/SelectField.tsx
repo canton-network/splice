@@ -12,6 +12,7 @@ import {
 } from '@mui/material';
 import type { FormEvent } from 'react';
 import { useFieldContext } from '../../hooks/formContext';
+import { scrollableSelectFieldSx } from '../beta/identifierStyles';
 
 export type Option = { key: string; value: string };
 export interface SelectFieldProps {
@@ -21,10 +22,11 @@ export interface SelectFieldProps {
   onChange?: () => void;
   disabled?: boolean;
   placeholder?: string;
+  scrollableIdentifier?: boolean;
 }
 
 export const SelectField: React.FC<SelectFieldProps> = props => {
-  const { title, options, id, disabled = false, placeholder } = props;
+  const { title, options, id, disabled = false, placeholder, scrollableIdentifier = false } = props;
   const externalOnChange = props.onChange ?? (() => {});
   const field = useFieldContext<string>();
   const handleSelectValueChange = (value: string) => {
@@ -45,6 +47,7 @@ export const SelectField: React.FC<SelectFieldProps> = props => {
         <Select
           value={field.state.value}
           displayEmpty
+          sx={scrollableIdentifier ? scrollableSelectFieldSx : undefined}
           renderValue={selected => {
             if (!selected) {
               return showPlaceholder ? (

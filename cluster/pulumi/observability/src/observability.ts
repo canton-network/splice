@@ -11,7 +11,6 @@ import {
   CLUSTER_NAME,
   clusterProdLike,
   commandScriptPath,
-  createVolumeSnapshot,
   DecentralizedSynchronizerUpgradeConfig,
   ExactNamespace,
   GCP_PROJECT,
@@ -765,7 +764,6 @@ function substituteScanConnectionDisagreementAlerts(alert: string): string {
 function substituteDsoMissedConfirmationsAlerts(alert: string): string {
   const config = monitoringConfig.alerting.alerts.dsoMissedConfirmations;
   return alert
-    .replaceAll('$DSO_MISSED_CONFIRMATIONS_THRESHOLD_PERCENT', (config.threshold * 100).toString())
     .replaceAll('$DSO_MISSED_CONFIRMATIONS_THRESHOLD', config.threshold.toString())
     .replaceAll('$DSO_MISSED_CONFIRMATIONS_WINDOW_SECONDS', (config.windowMinutes * 60).toString())
     .replaceAll('$DSO_MISSED_CONFIRMATIONS_WINDOW_MINUTES', config.windowMinutes.toString());
@@ -993,7 +991,7 @@ function createGrafanaAlerting(namespace: Input<string>) {
                   'cantonbft_alerts.yaml': readGrafanaAlertingFile(
                     'cantonbft_alerts.yaml'
                   ).replaceAll(
-                    '$BFT_ORDERING_INGRESS_REQUESTS_QUEUED_THRESHOLD',
+                    '$CANTON_BFT_MEMPOOL_SIZE_THRESHOLD',
                     monitoringConfig.alerting.alerts.cantonBft.mempoolMaxSizeThreshold.toString()
                   ),
                 }
