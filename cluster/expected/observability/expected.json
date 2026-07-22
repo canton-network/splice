@@ -951,7 +951,7 @@
       "conditions": [
         {
           "conditionPrometheusQueryLanguage": {
-            "duration": "0s",
+            "duration": "20m",
             "evaluationInterval": "30s",
             "query": "sum by (nat_gateway_name, reason) (router_googleapis_com:nat_dropped_sent_packets_count{monitored_resource=\"nat_gateway\"}) > 30"
           },
