@@ -28,3 +28,7 @@
           functionality is expected to be fully removed in 0.8.0 so
           this only provides a bit more time to migrate but you must
           complete the migration.
+
+    - Deployment
+
+        - The sequencer and mediator can now be configured with independent ``additionalJvmOptions`` via the new ``sequencer.additionalJvmOptions`` and ``mediator.additionalJvmOptions`` values in the ``splice-global-domain`` helm chart.

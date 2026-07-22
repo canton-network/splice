@@ -53,7 +53,7 @@ spec:
         {{- end}}
           env:
             - name: JAVA_TOOL_OPTIONS
-              value: "{{ .Values.defaultJvmOptions }} {{ .Values.additionalJvmOptions }} -Dlogback.configurationFile=/app/logback/logback.xml"
+              value: "{{ .Values.defaultJvmOptions }} {{ .Values.sequencer.additionalJvmOptions }} -Dlogback.configurationFile=/app/logback/logback.xml"
             - name: CANTON_DOMAIN_POSTGRES_SERVER
               value: {{ .Values.sequencer.persistence.host }}
             - name: CANTON_DOMAIN_POSTGRES_PORT
