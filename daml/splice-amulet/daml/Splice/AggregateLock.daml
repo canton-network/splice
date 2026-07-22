@@ -3,10 +3,12 @@ module Splice.AggregateLock where
 import Splice.Api.Token.AllocationV2 as V2
 import Splice.Api.Token.MetadataV1
 import Splice.TokenStandard.Utils.Internal.Conversions (decodeTime)
+import Splice.Types (ForDso(..))
 import Splice.Util
 
 import DA.Optional
 import DA.Text
+import qualified DA.List as L
 import qualified DA.TextMap as TM
 import DA.Time
 
@@ -28,7 +30,6 @@ isValidVestingLockedDestination dso alloc =
       , alloc.expiresAt == Some maxBound
       , TM.member "cip-105/vestingLock.startDate" metaValues
       , TM.member "cip-105/vestingLock.endDate" metaValues
-      -- TODO: Check the period is valid, check startDate < endDate
       ]
   where metaValues = alloc.allocation.meta.values
 
@@ -110,8 +111,8 @@ template AggregateLock
       where
         controller authorizers
         do
-          locked <- view <$> fetch lockedCid
-          withdrawTo <- view <$> fetch withdrawToCid
+          locked <- view <$> fetchCheckedInterface (ForDso with dso) lockedCid
+          withdrawTo <- view <$> fetchCheckedInterface (ForDso with dso) withdrawToCid
           ownerParty <- whenNone locked.allocation.authorizer.owner $
             assertFail "The requirement 'governance locked allocations must be owned by basic accounts' was not met"
           let GovernanceLockedControllers{..} = governanceLockedControllersFromMeta locked.meta ownerParty
@@ -184,26 +185,29 @@ template AggregateLock
       where
         controller authorizers
         do
-          -- remainingLocked stays in nextIterationFunding
-          vestingLock <- view <$> fetch vestingLockCid
+          vestingLock <- view <$> fetchCheckedInterface (ForDso with dso) vestingLockCid
           now <- getTime
+          ownerParty <- whenNone vestingLock.allocation.authorizer.owner $
+            assertFail "The requirement 'governance locked allocations must be owned by basic accounts' was not met"
 
-          -- TODO: Probably add valid unlockController set check?
-          -- TODO: Potentially do case statement with nextIterationFunding optionals
-          require "There are no remaining funds to withdraw"
-            $ isSome vestingLock.allocation.nextIterationFunding
-
-          let mNextIterationFunding = TM.lookup instrumentId $ fromSome vestingLock.allocation.nextIterationFunding
-          require ("The instrumentId " <> show instrumentId <> ", does not exist under the nextIterationFunding")
-            $ isSome mNextIterationFunding
-        -- TODO:  DOUBLE we get the right type in meta values
+          require "Must be a valid vesting unlock allocation" $ isValidVestingLockedDestination dso vestingLock
           require "There must be an initialAmount set for the vestingLock"
             $ TM.member "cip-105/vestingLock.initialAmount" vestingLock.allocation.meta.values
+          let GovernanceLockedControllers{..} = governanceLockedControllersFromMeta vestingLock.meta ownerParty
+          require "Unlock controller must be one of the options" $ any (\conj -> all (`elem` authorizers) conj) unlockControllerSets
 
-          let (availableWithdrawAmount, remainingVestingAmount) : (Decimal, Decimal) = calculateAvailableWithdrawAmount now vestingLock
-                $ fromSome mNextIterationFunding
+          let mNextIterationFunding = case vestingLock.allocation.nextIterationFunding of
+                None -> None
+                Some nextIterationFundingTM ->
+                  TM.lookup instrumentId nextIterationFundingTM
+          require ("VestingLock's nextIterationFunding should have remaining funds to withdraw for instrumentId " <> show instrumentId)
+            $ isSome mNextIterationFunding
+          let nextIterationFundingAmount = fromSome mNextIterationFunding
 
-          require ("Current eligible withdraw amount for vesting lock is not greater than 0.0. "
+          let (availableWithdrawAmount, remainingVestingAmount) : (Decimal, Decimal) =
+                calculateAvailableWithdrawAmount now vestingLock nextIterationFundingAmount
+
+          require ("Current eligible withdraw amount for vesting lock should be greater than 0.0. "
                   <> "currentEligibleWithdrawableAmount came back = '"
                   <> show availableWithdrawAmount
                   <> "'."
@@ -256,7 +260,9 @@ template AggregateLock
                   nextIterationFunding = nextIterationFunding
               ]
 
-          -- TODO: Fix hacky way potentially
+          -- We should have one result from settleBatch
+          require "VestingUnlock_Withdraw should result in one allocation result. " $
+            L.length batchResults.allocationSettleResults == 1
           let [allocationResult] = batchResults.allocationSettleResults
 
           pure allocationResult

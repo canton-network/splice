@@ -71,7 +71,7 @@ testAggregateLockHappyPath = do
 
   AmuletRegistryV2.tapFaucet registriesEnv.amuletV2 bob 1800.0
   
-  aggLock <- submit (actAs [alice, dso]) $ createCmd AggregateLock with
+  aggLock <- submit (actAs dso) $ createCmd AggregateLock with
     dso
     instrumentId = env.instrId.id
     vestingSchedule = VestingSchedule_SV
@@ -125,7 +125,7 @@ testAggregateLockHappyPath = do
     vestingLockCid = toInterfaceContractId vestingLockAllocationCid
     extraArgs = enriched.arg.extraArgs
 
-  -- Time needs to pass to be able to withdraw fron the VestedAmulet
+  -- Time needs to pass to be able to withdraw from the VestingLock
   passTime (days 10)
 
   (AllocationResult vestingAllocResult tmHoldingCids _) <- submit (actAs bob <> disclose aggLockDisclosure <> discloseMany' enriched.disclosures ) $ exerciseCmd aggLock $ VestingLock_Withdraw with
