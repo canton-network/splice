@@ -212,6 +212,9 @@ class LsuIntegrationTest
   }
 
   "cancel a scheduled logical synchronizer upgrade" in { implicit env =>
+    initDso(includeLocal = false)
+    startAllSync(aliceValidatorBackend, splitwellValidatorBackend)
+
     val topologyFreezeTime = CantonTimestamp.now()
     // Use an upgrade time 1h in the future so that the upgrade nodes have enough time to be
     // started, initialized and to publish their sequencer successors before we cancel.
@@ -320,6 +323,7 @@ class LsuIntegrationTest
   "upgrade synchronizer to new physical synchronizer without downtime" in { implicit env =>
     initDso(includeLocal = false)
     startAllSync(aliceValidatorBackend, splitwellValidatorBackend)
+
     val allNodes = Seq[AppBackendReference](
       sv1ScanBackend,
       sv2ScanBackend,
