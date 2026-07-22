@@ -216,51 +216,109 @@ class LsuIntegrationTest
   "cancel a scheduled logical synchronizer upgrade" in { implicit env =>
     initDso(includeLocal = false)
     startAllSync(aliceValidatorBackend, splitwellValidatorBackend)
+
     val topologyFreezeTime = CantonTimestamp.now()
-    val upgradeTime = CantonTimestamp.now().plusSeconds(120)
+    // Use an upgrade time 1h in the future so that the upgrade nodes have enough time to be
+    // started, initialized and to publish their sequencer successors before we cancel.
+    val upgradeTime = CantonTimestamp.now().plus(Duration.ofHours(1))
 
-    clue("Schedule logical synchronizer upgrade") {
-      scheduleLsu(topologyFreezeTime, upgradeTime, 1L)
-    }
+    val newSynchronizerSerial = decentralizedSynchronizerPSId.serial + NonNegativeInt.one
+    val successorPsid = decentralizedSynchronizerPSId.copy(
+      serial = newSynchronizerSerial,
+      protocolVersion = successorPv,
+    )
+    val svNodesDoingTheLsu = Seq(sv1Backend, sv2Backend, sv3Backend, sv4Backend)
 
-    clue("Wait for LSU announcement to be proposed") {
-      waitForLsuAnnouncement()
-    }
-
-    clue("Cancel LSU from all SVs") {
-      Seq(sv1Backend, sv2Backend, sv3Backend, sv4Backend).par.foreach { sv =>
-        sv.cancelLogicalSynchronizerUpgrade()
+    withCantonSvNodes(
+      (
+        None,
+        None,
+        None,
+        None,
+      ),
+      participants = false,
+      enableBftSequencer = true,
+      logSuffix = "cancel-global-synchronizer-upgrade",
+    )(
+      ProcessTestUtil.javaToolOptionsKey -> "-Xms8g -Xmx10g"
+    ) {
+      clue(s"Schedule logical synchronizer upgrade at $upgradeTime") {
+        scheduleLsu(topologyFreezeTime, upgradeTime, newSynchronizerSerial.value.toLong)
       }
-    }
 
-    clue("LSU announcement has been removed from topology state") {
-      eventually() {
+      clue("Wait for LSU announcement to be proposed") {
+        waitForLsuAnnouncement()
+      }
+
+      clue("Upgrade nodes are started and initialized before cancelling") {
+        svNodesDoingTheLsu.foreach { backend =>
+          val upgradeSequencerClient = backend.sequencerClientFor(_.successor.value)
+          val upgradeMediatorClient = backend.mediatorClientFor(_.successor.value)
+          clue(s"check ${backend.name} initialized sequencer from synchronizer predecessor") {
+            eventuallySucceeds(3.minutes) {
+              upgradeSequencerClient.physical_synchronizer_id shouldBe successorPsid
+            }
+          }
+          clue(s"check ${backend.name} initialized mediator") {
+            eventuallySucceeds(2.minutes) {
+              upgradeMediatorClient.health.initialized() shouldBe true
+            }
+          }
+        }
+      }
+
+      clue("Sequencer successors were published for all upgrade nodes") {
+        eventually() {
+          val successors =
+            sv1Backend.participantClientWithAdminToken.topology.lsu.sequencer_successors
+              .list(store = Some(Synchronizer(decentralizedSynchronizerId)))
+          successors should have size svNodesDoingTheLsu.size.toLong
+          successors.map(_.item.successorPsid).toSet shouldBe Set(successorPsid)
+        }
+      }
+
+      clue("Cancel LSU from all SVs") {
+        svNodesDoingTheLsu.par.foreach { sv =>
+          sv.cancelLogicalSynchronizerUpgrade()
+        }
+      }
+
+      clue("LSU announcement has been removed from topology state") {
+        eventually() {
+          sv1Backend.participantClientWithAdminToken.topology.lsu.announcement
+            .list(
+              store = Some(Synchronizer(decentralizedSynchronizerId)),
+              operation = Some(TopologyChangeOp.Replace),
+            ) shouldBe empty
+        }
+      }
+
+      clue("Sequencer successors have been removed from topology state") {
+        eventually() {
+          sv1Backend.participantClientWithAdminToken.topology.lsu.sequencer_successors
+            .list(store = Some(Synchronizer(decentralizedSynchronizerId))) shouldBe empty
+        }
+      }
+
+      clue("Removal transaction exists in topology history") {
+        val removals = sv1Backend.participantClientWithAdminToken.topology.lsu.announcement
+          .list(
+            store = Some(Synchronizer(decentralizedSynchronizerId)),
+            timeQuery = TimeQuery.Range(None, None),
+            operation = Some(TopologyChangeOp.Remove),
+          )
+        removals should not be empty
+      }
+
+      clue("Trigger does not re-create the cancelled announcement") {
+        // Wait long enough for the trigger to have run multiple times
+        Threading.sleep(10_000)
         sv1Backend.participantClientWithAdminToken.topology.lsu.announcement
           .list(
             store = Some(Synchronizer(decentralizedSynchronizerId)),
             operation = Some(TopologyChangeOp.Replace),
           ) shouldBe empty
       }
-    }
-
-    clue("Removal transaction exists in topology history") {
-      val removals = sv1Backend.participantClientWithAdminToken.topology.lsu.announcement
-        .list(
-          store = Some(Synchronizer(decentralizedSynchronizerId)),
-          timeQuery = TimeQuery.Range(None, None),
-          operation = Some(TopologyChangeOp.Remove),
-        )
-      removals should not be empty
-    }
-
-    clue("Trigger does not re-create the cancelled announcement") {
-      // Wait long enough for the trigger to have run multiple times
-      Threading.sleep(10_000)
-      sv1Backend.participantClientWithAdminToken.topology.lsu.announcement
-        .list(
-          store = Some(Synchronizer(decentralizedSynchronizerId)),
-          operation = Some(TopologyChangeOp.Replace),
-        ) shouldBe empty
     }
   }
 
