@@ -125,8 +125,10 @@ class AppActivityComputation(
                 }
               case None =>
                 // Skip activity record computation as we don't have the necessary round data ingested.
-                // This can happen for freshly onboarded SVs, but is not
-                // expected to happen once the first activity record has been computed.
+                // This can happen for freshly onboarded SVs whose round history
+                // doesn't cover the verdict's sequencing time. It cannot happen
+                // after ingestion starts because lookupActiveOpenMiningRounds blocks
+                // until the reference store has caught up to the verdict batch.
                 logger.debug(
                   s"No round data found for sequencingTime=${summary.sequencingTime}, skipping activity record computation"
                 )
