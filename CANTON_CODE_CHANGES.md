@@ -18,6 +18,7 @@ to know which and/or what changes we'll need to upstream before the switch.
 * `BaseLedgerApiAdministration.consoleEnvironment` made public
 * `BaseLedgerApiAdministration.optionallyAwait` made public
 * `BaseLedgerApiAdministration.timeouts` made public
+* `Environment#histogramInventory` made protected
 * `LedgerApiCommandRunner.ledgerApiCommand` made public
 * `AdminCommandRunner.adminCommand` made public
 * `DynamicDomainParameters` made public
@@ -26,6 +27,7 @@ to know which and/or what changes we'll need to upstream before the switch.
 * `ActiveContract.loadFromByteString` made public
 * ``PositiveFiniteDuration` config reader and writer made public
 * `ProofOfOwnership` made public
+* `JcePureCrypto#signBytes` overridden to expand to public
 ## Misc
 * Added support for interface filters in ledger api ACS commands. TODO (#638): This should be upstreamed.
 * Generalization of `MetricsFactory`

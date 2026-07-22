@@ -844,6 +844,13 @@ class JcePureCrypto(
           }
     }
 
+  override def signBytes(
+      bytes: ByteString,
+      signingKey: SigningPrivateKey,
+      usage: NonEmpty[Set[SigningKeyUsage]],
+      signingAlgorithmSpec: SigningAlgorithmSpec = signingAlgorithmSpecs.default,
+  )(implicit traceContext: TraceContext): Either[SigningError, Signature] =
+    super.signBytes(bytes, signingKey, usage, signingAlgorithmSpec)
 }
 
 object JcePureCrypto {
