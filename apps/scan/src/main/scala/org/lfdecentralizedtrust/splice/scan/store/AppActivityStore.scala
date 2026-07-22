@@ -36,6 +36,6 @@ trait AppActivityStore {
       tc: TraceContext
   ): Future[Option[Long]]
 
-  /** The record time of the first activity record in the store. */
+  /** The record time of the first verdict batch with traffic summaries. */
   def startedIngestingAt(implicit tc: TraceContext): Future[Option[Long]]
 }
