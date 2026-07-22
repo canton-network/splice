@@ -367,6 +367,7 @@ object BuildCommon {
     //      """
     //    ),
     scalacOptions ++= Seq(
+      "-Xsource-features:leading-infix",
       "-Wconf:src=src_managed/.*:silent",
       // disable scala 3 migration warnings for canton as we're not gonna fix those
       "-Wconf:cat=scala3-migration:silent",
