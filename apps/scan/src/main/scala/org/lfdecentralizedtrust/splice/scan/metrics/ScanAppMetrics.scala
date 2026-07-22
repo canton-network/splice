@@ -6,7 +6,8 @@ package org.lfdecentralizedtrust.splice.scan.metrics
 import com.daml.metrics.api.MetricHandle.LabeledMetricsFactory
 import com.digitalasset.canton.config.ProcessingTimeout
 import com.digitalasset.canton.logging.NamedLoggerFactory
-import org.lfdecentralizedtrust.splice.{BaseSpliceMetrics, SpliceHistograms}
+import org.lfdecentralizedtrust.splice.BaseSpliceMetrics
+import org.lfdecentralizedtrust.splice.metrics.SpliceHistograms
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanStoreMetrics
 
 /** Modelled after [[com.digitalasset.canton.synchronizer.metrics.DomainMetrics]].

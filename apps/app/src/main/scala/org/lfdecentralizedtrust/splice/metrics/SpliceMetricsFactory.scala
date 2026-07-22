@@ -7,7 +7,6 @@ import com.daml.metrics.api.MetricsContext
 import com.digitalasset.canton.config.ProcessingTimeout
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.metrics.MetricsFactoryProvider
-import org.lfdecentralizedtrust.splice.SpliceHistograms
 import org.lfdecentralizedtrust.splice.scan.metrics.ScanAppMetrics
 import org.lfdecentralizedtrust.splice.splitwell.metrics.SplitwellAppMetrics
 import org.lfdecentralizedtrust.splice.sv.metrics.SvAppMetrics

@@ -5,8 +5,8 @@ package org.lfdecentralizedtrust.splice.validator.metrics
 
 import com.daml.metrics.api.MetricHandle.LabeledMetricsFactory
 import com.digitalasset.canton.logging.NamedLoggerFactory
-import org.lfdecentralizedtrust.splice.{BaseSpliceMetrics, SpliceHistograms}
-import org.lfdecentralizedtrust.splice.metrics.ScanConnectionMetrics
+import org.lfdecentralizedtrust.splice.BaseSpliceMetrics
+import org.lfdecentralizedtrust.splice.metrics.{ScanConnectionMetrics, SpliceHistograms}
 
 /** Modelled after [[com.digitalasset.canton.synchronizer.metrics.DomainMetrics]].
   */
