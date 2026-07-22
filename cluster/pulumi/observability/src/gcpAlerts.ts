@@ -495,7 +495,7 @@ export function installNatAlerts(
           // Ignore temporary spikes (likely caused by dynamic port allocation).
           // We mostly care about sustained dropped sent packets,
           // which most often indicates that we don't have enough ports available to the VMs.
-          duration: '20m',
+          duration: '1200s',
         },
       },
     ],
