@@ -394,6 +394,39 @@ class DbAppActivityRecordStoreTest
         meta.value.lastArchivedRound shouldBe Some(1L)
       }
     }
+
+    "populate startedIngestingAt on second batch when first batch has no traffic summaries" in {
+      for {
+        (appStore, verdictStore) <- newStores(isFirstSv = true)
+        baseTs = CantonTimestamp.now()
+        secondTs = baseTs.plusSeconds(10)
+
+        // First batch: no traffic summaries — meta row created with started_ingesting_at = NULL
+        _ <- verdictStore.insertVerdictsWithAppActivityRecords(
+          NonEmptyList.of(mkVerdict(verdictStore, "update-bootstrap", baseTs) -> noViews),
+          Seq.empty,
+          lastArchivedRoundO = Some(0L),
+          hasTrafficSummaries = false,
+        )
+        meta1 <- appStore.lookupActivityRecordMeta(1, 0)
+        startedAt1 <- appStore.startedIngestingAt
+
+        // Second batch: traffic summaries arrive — updateStartedIngestingAtIfNullDBIO fills in the value
+        _ <- verdictStore.insertVerdictsWithAppActivityRecords(
+          NonEmptyList.of(mkVerdict(verdictStore, "update-with-summaries", secondTs) -> noViews),
+          Seq.empty,
+          lastArchivedRoundO = Some(0L),
+          hasTrafficSummaries = true,
+        )
+        startedAt2 <- appStore.startedIngestingAt
+      } yield {
+        meta1 shouldBe defined
+        meta1.value.earliestIngestedRound shouldBe -1L
+        meta1.value.startedIngestingAt shouldBe None
+        startedAt1 shouldBe None
+        startedAt2 shouldBe Some(secondTs.toMicros)
+      }
+    }
   }
 
   "earliestRoundWithCompleteAppActivity" should {
