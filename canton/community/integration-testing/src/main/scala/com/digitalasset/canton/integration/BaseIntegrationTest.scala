@@ -15,8 +15,6 @@ import com.digitalasset.canton.{
   TestPredicateFiltersFixtureAnyWordSpec,
   config,
 }
-import com.digitalasset.canton.config.SharedCantonConfig
-import com.digitalasset.canton.environment.Environment
 import org.scalactic.source
 import org.scalactic.source.Position
 import org.scalatest.wordspec.FixtureAnyWordSpec
