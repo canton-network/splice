@@ -852,6 +852,21 @@ class DbAppActivityRecordStoreTest
       }
     }
 
+    "insert meta with started_ingesting_at = NULL when startedIngestingAtO is None" in {
+      for {
+        (store, _) <- newStore()
+        r1 <- runEnsureMeta(store, (None, -1L), Some(0L))
+        meta <- store.lookupActivityRecordMeta(1, 0)
+        startedAt <- store.startedIngestingAt
+      } yield {
+        r1 shouldBe InsertMeta
+        meta.value.startedIngestingAt shouldBe None
+        meta.value.earliestIngestedRound shouldBe -1L
+        meta.value.lastArchivedRound shouldBe Some(0L)
+        startedAt shouldBe None
+      }
+    }
+
     "use actual earliest_ingested_round on version bump" in {
       for {
         (store, _) <- newStore(
