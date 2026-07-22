@@ -32,3 +32,7 @@
     - Deployment
 
         - The sequencer and mediator can now be configured with independent ``additionalJvmOptions`` via the new ``sequencer.additionalJvmOptions`` and ``mediator.additionalJvmOptions`` values in the ``splice-global-domain`` helm chart.
+
+    - SV app
+
+      - Add support for updating weight via ``UpdateFeaturedAppRight`` governance voting UI.
