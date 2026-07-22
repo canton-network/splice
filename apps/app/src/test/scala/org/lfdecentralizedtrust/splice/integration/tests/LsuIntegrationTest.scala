@@ -321,6 +321,8 @@ class LsuIntegrationTest
   }
 
   "upgrade synchronizer to new physical synchronizer without downtime" in { implicit env =>
+    initDso(includeLocal = false)
+    startAllSync(aliceValidatorBackend, splitwellValidatorBackend)
     val allNodes = Seq[AppBackendReference](
       sv1ScanBackend,
       sv2ScanBackend,
