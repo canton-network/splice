@@ -1,10 +1,18 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
+import com.daml.metrics.api.noop.NoOpMetricsFactory
+import com.daml.metrics.api.{MetricName, MetricsContext, HistogramInventory}
 import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.config.{CachingConfigs, CryptoProvider, CryptoSchemeConfig}
 import com.digitalasset.canton.crypto.*
 import com.digitalasset.canton.crypto.provider.jce.JcePureCrypto
 import com.digitalasset.canton.crypto.v30 as cryptoProto
+import com.digitalasset.canton.metrics.{
+  SigningHistograms,
+  DecryptionMetrics,
+  SigningMetrics,
+  DecryptionHistograms,
+}
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.util.HexString
 import com.digitalasset.canton.version.ProtocolVersion
@@ -133,6 +141,20 @@ trait ExternallySignedPartyTestUtil extends TestCommon {
       )
   }
 
+  private[this] val noOpMetricsFactory = new NoOpMetricsFactory
+  private[this] val histogramInventory = new HistogramInventory()
+  private[this] implicit val metricsContext: MetricsContext = new MetricsContext(Map.empty)
+
+  private[this] lazy val signingMetrics = new SigningMetrics(
+    new SigningHistograms(MetricName("splice-test"))(histogramInventory),
+    noOpMetricsFactory,
+  )(metricsContext)
+
+  private[this] lazy val decryptionMetrics = new DecryptionMetrics(
+    new DecryptionHistograms(MetricName("splice-test"))(histogramInventory),
+    noOpMetricsFactory,
+  )(metricsContext)
+
   // The parameters here are just defaults so don't really matter
   def crypto(implicit ec: ExecutionContext) = new JcePureCrypto(
     CryptoProvider.Jce.symmetric.default,
@@ -150,6 +172,8 @@ trait ExternallySignedPartyTestUtil extends TestCommon {
     CachingConfigs.defaultPublicKeyConversionCache,
     None,
     PositiveInt.tryCreate(1),
+    signingMetrics,
+    decryptionMetrics,
     loggerFactory,
   )
 

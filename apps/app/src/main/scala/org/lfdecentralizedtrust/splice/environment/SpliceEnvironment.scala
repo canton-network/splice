@@ -40,11 +40,10 @@ class SpliceEnvironment(
 
   lazy val metrics = {
     import com.daml.metrics.api.MetricName
-    import com.digitalasset.canton.metrics.{DecryptionHistograms, SigningHistograms}
     val histograms = SpliceHistograms(
       MetricName("cn"),
       dbStorageHistograms,
-    )
+    )(histogramInventory)
     SpliceMetricsFactory(
       metricsRegistry,
       histograms,
