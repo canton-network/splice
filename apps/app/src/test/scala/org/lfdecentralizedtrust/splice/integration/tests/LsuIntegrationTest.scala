@@ -81,8 +81,9 @@ class LsuIntegrationTest
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
-    SynchronizerUpgradeUtil.migrationDumpDir.delete()
+    SynchronizerUpgradeUtil.migrationDumpDir.delete(swallowIOExceptions = true)
   }
+
   private val successorPv = ProtocolVersion.v35
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
