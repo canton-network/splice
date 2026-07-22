@@ -39,6 +39,7 @@ import com.digitalasset.canton.logging.SuppressionRule
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.slf4j.event.Level
 
+@org.lfdecentralizedtrust.splice.util.scalatesttags.NoDamlCompatibilityCheck
 class UnsupportedPackageVettingIntegrationTest
     extends IntegrationTest
     with PackageUnvettingUtil
