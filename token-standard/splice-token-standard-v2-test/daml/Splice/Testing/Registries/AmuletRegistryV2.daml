@@ -79,7 +79,7 @@ import Daml.Script
 data AmuletRegistry = AmuletRegistry with
     dso : Party
     instrumentId : InstrumentId
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Serializable)
 
 instance RegistryApi AmuletRegistry where
   getTransferFactory = registryApi_getTransferFactory
@@ -113,7 +113,7 @@ data AmuletRegistryConfig = AmuletRegistryConfig
     initialAmuletPrice : Decimal
     demoTime : Time
     dsoPartyName : Text
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- | Recommended default configuration for setting up the mock amulet registry.
 defaultAmuletRegistryConfig : AmuletRegistryConfig

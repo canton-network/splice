@@ -32,7 +32,7 @@ relTimeToSeconds dt = relTimeToMicros dt / 1e6
 -------------------------
 
 newtype RatePerRound = RatePerRound with rate : Decimal
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Serializable)
 
 chargeRatePerRound : RatePerRound -> RelRound -> Decimal
 chargeRatePerRound rate dt = rate.rate * intToDecimal dt.diff
@@ -53,7 +53,7 @@ positiveRatePerRound r = r.rate >= 0.0
 -- | A fixed fee independent of the action being taken.
 -- TODO(M3-90): check whether this name matches usage in financial terms, it probably isn't. Should it be 'flat-fee', 'constantfee', ... ???
 newtype FixedFee = FixedFee with fee : Decimal
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Serializable)
 
 scaleFixedFee : Decimal -> FixedFee -> FixedFee
 scaleFixedFee s f = FixedFee with fee = s * f.fee
@@ -69,7 +69,7 @@ data SteppedRate = SteppedRate
   with
     initialRate : Decimal
     steps : [(Decimal, Decimal)]
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Serializable)
 
 validSteppedRate : SteppedRate -> Bool
 validSteppedRate SteppedRate{initialRate, steps} =
@@ -124,7 +124,7 @@ data ExpiringAmount = ExpiringAmount with
     initialAmount : Decimal
     createdAt : Round
     ratePerRound : RatePerRound
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Serializable)
 
 validExpiringAmount : ExpiringAmount -> Bool
 validExpiringAmount e =
@@ -160,7 +160,7 @@ instance Patchable RatePerRound where
 ----------------
 data RatePerDay = RatePerDay with
     rate : Decimal
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Serializable)
 
 chargeRatePerDay : RatePerDay -> RelTime -> Decimal
 chargeRatePerDay rate dt = rate.rate * relTimeToDays dt

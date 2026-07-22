@@ -56,93 +56,116 @@ import Splice.Util
 data AmuletRules_Amulet_ExpireTransferInstructionsResult = AmuletRules_Amulet_ExpireTransferInstructionsResult
   with
     results : [TransferInstructionResult]
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 data AmuletRules_ExpireTransferInstructionInput = AmuletRules_ExpireTransferInstructionInput
   with
     transferInstructionCid : ContractId TransferInstruction
     expireLock : Bool
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 data AmuletRules_BootstrapExternalPartyConfigStateResult = AmuletRules_BootstrapExternalPartyConfigStateResult
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 data AmuletRules_ComputeFeesResult = AmuletRules_ComputeFeesResult with
     fees : [Decimal]
+  deriving (Serializable)
 
 data AmuletRules_MergeMemberTrafficContractsResult = AmuletRules_MergeMemberTrafficContractsResult with
     mergedTrafficCid : ContractId MemberTraffic
+  deriving (Serializable)
 
 data AmuletRules_MintResult = AmuletRules_MintResult with
     amuletSum : AmuletCreateSummary (ContractId Amulet)
+  deriving (Serializable)
 
 data AmuletRules_DevNet_TapResult = AmuletRules_DevNet_TapResult with
     amuletSum : AmuletCreateSummary (ContractId Amulet)
     meta : Optional Metadata
+  deriving (Serializable)
 
 data AmuletRules_DevNet_FeatureAppResult = AmuletRules_DevNet_FeatureAppResult with
     featuredAppRightCid : ContractId FeaturedAppRight
+  deriving (Serializable)
 
 data AmuletRules_Bootstrap_RoundsResult = AmuletRules_Bootstrap_RoundsResult with
     openMiningRoundCid : ContractId OpenMiningRound
     initialRound : Optional Round
+  deriving (Serializable)
 
 data AmuletRules_AdvanceOpenMiningRoundsResult = AmuletRules_AdvanceOpenMiningRoundsResult with
     summarizingRoundCid : ContractId SummarizingMiningRound
     openRoundCid : ContractId OpenMiningRound
+  deriving (Serializable)
 
 data AmuletRules_MiningRound_StartIssuingResult = AmuletRules_MiningRound_StartIssuingResult with
     issuingRoundCid : ContractId IssuingMiningRound
     unclaimedDevelopmentFundCouponCid : Optional (ContractId UnclaimedDevelopmentFundCoupon)
+  deriving (Serializable)
 
 data AmuletRules_MiningRound_CloseResult = AmuletRules_MiningRound_CloseResult with
     closedRoundCid : ContractId ClosedMiningRound
+  deriving (Serializable)
 
 data AmuletRules_MiningRound_ArchiveResult = AmuletRules_MiningRound_ArchiveResult
+  deriving (Serializable)
 
 data AmuletRules_ClaimExpiredRewardsResult = AmuletRules_ClaimExpiredRewardsResult with
     unclaimedRewardCid : Optional (ContractId UnclaimedReward)
+  deriving (Serializable)
 
 -- The following results are intentionally empty to save on storage cost incurred in Scan.
 -- These choices are driven by automation, which reads its results indirectly via the update to their backing stores.
 data AmuletRules_ClaimExpiredRewardsV2Result = AmuletRules_ClaimExpiredRewardsV2Result {}
+  deriving (Serializable)
 
 data AmuletRules_StartProcessingRewardsV2Result = AmuletRules_StartProcessingRewardsV2Result {}
+  deriving (Serializable)
 
 data AmuletRules_UnhideRewardCouponsV2Result = AmuletRules_UnhideRewardCouponsV2Result {}
+  deriving (Serializable)
 
 data AmuletRules_ArchiveDryRunRewardAccountingV2Result = AmuletRules_ArchiveDryRunRewardAccountingV2Result {}
+  deriving (Serializable)
 
 data AmuletRules_MergeUnclaimedRewardsResult = AmuletRules_MergeUnclaimedRewardsResult with
     unclaimedRewardCid : ContractId UnclaimedReward
+  deriving (Serializable)
 
 data AmuletRules_MergeUnclaimedDevelopmentFundCouponsResult = AmuletRules_MergeUnclaimedDevelopmentFundCouponsResult with
     unclaimedDevelopmentFundCouponCid : ContractId UnclaimedDevelopmentFundCoupon
+  deriving (Serializable)
 
 data AmuletRules_AllocateDevelopmentFundCouponResult = AmuletRules_AllocateDevelopmentFundCouponResult with
     developmentFundCouponCid : ContractId DevelopmentFundCoupon
     optUnclaimedDevelopmentFundCouponCid : Optional (ContractId UnclaimedDevelopmentFundCoupon)
+  deriving (Serializable)
 
 data AmuletRules_SetConfigResult = AmuletRules_SetConfigResult with
     newAmuletRules : ContractId AmuletRules
+  deriving (Serializable)
 
 data AmuletRules_AddFutureAmuletConfigScheduleResult = AmuletRules_AddFutureAmuletConfigScheduleResult with
     newAmuletRules : ContractId AmuletRules
+  deriving (Serializable)
 
 data AmuletRules_RemoveFutureAmuletConfigScheduleResult = AmuletRules_RemoveFutureAmuletConfigScheduleResult with
     newAmuletRules : ContractId AmuletRules
+  deriving (Serializable)
 
 data AmuletRules_UpdateFutureAmuletConfigScheduleResult = AmuletRules_UpdateFutureAmuletConfigScheduleResult with
     newAmuletRules : ContractId AmuletRules
+  deriving (Serializable)
 
 data AmuletRules_ConvertFeaturedAppActivityMarkersResult = AmuletRules_ConvertFeaturedAppActivityMarkersResult with
     appRewardCouponCids : [ContractId AppRewardCoupon]
+  deriving (Serializable)
 
 
 data AmuletRules_UpdateExternalPartyConfigStatesResult = AmuletRules_UpdateExternalPartyConfigStatesResult
   with
     newExternalPartyConfigStateCid : ContractId ExternalPartyConfigState
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 -- | The rules governing how Amulet users can modify the Amulet state managed by the DSO party.
 template AmuletRules
@@ -997,13 +1020,13 @@ data OpenMiningRoundTriple = OpenMiningRoundTriple
     round0Cid : ContractId OpenMiningRound
     round1Cid : ContractId OpenMiningRound
     round2Cid : ContractId OpenMiningRound
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 data ValidatedOpenMiningRounds = ValidatedOpenMiningRounds
   with
     oldestRound : OpenMiningRound
     latestUsableRound : OpenMiningRound
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 validateOpenMiningRoundTriple : Party -> OpenMiningRoundTriple -> Update ValidatedOpenMiningRounds
 validateOpenMiningRoundTriple dso roundTriple = do
@@ -1042,7 +1065,7 @@ data InvalidTransferReason
   | ExtInvalidTransferReason with
       dummyUnitField : ()
         -- ^ Extension constructor (and field) to work around the current lack of upgrading for variants in Daml 3.0
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 mkUnknownSynchronizerFailure : Text -> FailureStatus
 mkUnknownSynchronizerFailure synchronizerId =
@@ -1115,6 +1138,7 @@ checkTransferConstraints transfer summary transferConfigAmulet
 data RewardsIssuanceConfig = RewardsIssuanceConfig with
     issueAppRewards : Bool
     issueValidatorRewards : Bool
+  deriving (Serializable)
 
 -- | Execute a transfer.
 executeTransfer : ContractId TransferEventsV2.EventLog -> RewardsIssuanceConfig -> TransferContext -> Party -> Transfer -> Update TransferResult
@@ -1215,7 +1239,7 @@ data TransferContextSummary = TransferContextSummary with
     openRound : OpenMiningRound
     issuingMiningRounds : Map Round IssuingMiningRound
     validatorRights : Map Party (ContractId ValidatorRight)
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 data TransferContextSummaryV2 = TransferContextSummaryV2 with
     dso : Party
@@ -1227,7 +1251,7 @@ data TransferContextSummaryV2 = TransferContextSummaryV2 with
     validatorRights : Map Party (ContractId ValidatorRight)
     rewardCalculationVersion : Optional RewardVersion
     eventLogCid : Optional (ContractId TransferEventsV2.EventLog)
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 data TransferInputsSummary = TransferInputsSummary with
     totalAmuletAmount : Decimal
@@ -1245,7 +1269,7 @@ data TransferInputsSummary = TransferInputsSummary with
     totalDevelopmentFundAmount : Optional Decimal
       -- ^ Note: Same rationale as above — made optional to ensure compatibility with
       -- the upgrade checker on package upload because `TransferInputsSummary` is serializable.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 type TransferOutputsSummary = [PreprocessedTransferOutput]
 
@@ -1255,7 +1279,7 @@ data PreprocessedTransferOutput = PreprocessedTransferOutput with
     amount : Decimal -- ^ Amount of amulet held by this output (after deducting fees)
     lock : Optional TimeLock -- ^ Whether to lock the amulet or not
     meta : Optional Metadata -- ^ Metadata to attach to the output amulet
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 summarizeAndValidateContext : ContractId TransferEventsV2.EventLog -> TransferContext -> Party -> Transfer -> Update TransferContextSummaryV2
 summarizeAndValidateContext eventLogCid context dso tf = do
@@ -1741,7 +1765,7 @@ data AppTransferContext = AppTransferContext
     amuletRules : ContractId AmuletRules
     openMiningRound : ContractId OpenMiningRound
     featuredAppRight : Optional (ContractId FeaturedAppRight)
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 -- Adapter for choices that need to return an `AmuletCreateSummary` but call a choice internally that no longer returns one.
 legacyAmuletCreateSummary : Party -> Party -> ContractId OpenMiningRound -> ContractId Amulet -> Update (AmuletCreateSummary (ContractId Amulet))
@@ -1778,7 +1802,7 @@ data PaymentTransferContext = PaymentTransferContext
   with
     amuletRules : ContractId AmuletRules
     context : TransferContext
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 
 -- | Contracts that need to be passed in to a Transfer so that
@@ -1789,7 +1813,7 @@ data TransferContext = TransferContext
     issuingMiningRounds : Map Round (ContractId IssuingMiningRound)
     validatorRights : Map Party (ContractId ValidatorRight) -- ^ Map from user to ValidatorRight contract.
     featuredAppRight : Optional (ContractId FeaturedAppRight) -- ^ Optional proof that the provider is a featured app provider.
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 -- | Contracts that need to be passed in to a Transfer so that
 -- we can reference them by contract id instead of by key.
@@ -1799,7 +1823,7 @@ data ExternalPartyTransferContext = ExternalPartyTransferContext
     -- no issuing mining round and validator rights, those are
     -- required for minting rewards which must go through the AmuletRules_Transfer choice.
     featuredAppRight : Optional (ContractId FeaturedAppRight) -- ^ Optional proof that the provider is a featured app provider.
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 
 -- | Helper to construct transfer context with only amulet inputs
@@ -1816,7 +1840,7 @@ data CreatedAmulet
   | ExtCreatedAmulet with
       dummyUnitField : ()
         -- ^ Extension constructor (and field) to work around the current lack of upgrading for variants in Daml 3.0
-  deriving (Show, Eq, Ord)
+  deriving (Show, Eq, Ord, Serializable)
 
 createdAmuletToHolding : CreatedAmulet -> ContractId Api.Token.HoldingV1.Holding
 createdAmuletToHolding = \case
@@ -1839,7 +1863,7 @@ data TransferInput
   | InputUnclaimedActivityRecord (ContractId UnclaimedActivityRecord)
   | InputDevelopmentFundCoupon (ContractId DevelopmentFundCoupon)
   | InputRewardCouponV2 (ContractId RewardCouponV2)
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Serializable)
 
 -- | Smart constructor for inputing validator faucet coupons into a transfer.
 mkInputValidatorFaucetCoupon : ContractId ValidatorFaucetCoupon -> TransferInput
@@ -1853,7 +1877,7 @@ data Transfer = Transfer with
     outputs : [TransferOutput]
     beneficiaries : Optional [AppRewardBeneficiary]
       -- ^ Beneficiaries between which the app reward is split.
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Serializable)
 
 -- | An individual output for a batch transfer.
 data TransferOutput = TransferOutput with
@@ -1870,7 +1894,7 @@ data TransferOutput = TransferOutput with
       -- ^ The lock to be added, if any.
     meta : Optional Metadata
       -- ^ Token standard metadata to include in the transfer event log.
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Serializable)
 
 data TransferResult
   = TransferResult
@@ -1882,7 +1906,7 @@ data TransferResult
       -- ^ Optional reference to the amulet for the change returned to the sender.
       -- Only created if there was some change to be returned after deducting the fee for returning change.
     meta : Optional Api.Token.MetadataV1.Metadata
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 data AmuletRules_BuyMemberTrafficResult = AmuletRules_BuyMemberTrafficResult with
     round : Round
@@ -1891,7 +1915,7 @@ data AmuletRules_BuyMemberTrafficResult = AmuletRules_BuyMemberTrafficResult wit
     purchasedTraffic : ContractId MemberTraffic
     senderChangeAmulet : Optional (ContractId Amulet)
     meta : Optional Metadata
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 data AmuletRules_CreateExternalPartySetupProposalResult = AmuletRules_CreateExternalPartySetupProposalResult
   with
@@ -1901,7 +1925,7 @@ data AmuletRules_CreateExternalPartySetupProposalResult = AmuletRules_CreateExte
     transferResult : TransferResult
     amuletPaid : Decimal
     meta : Optional Metadata
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 data AmuletRules_CreateTransferPreapprovalResult = AmuletRules_CreateTransferPreapprovalResult
   with
@@ -1909,7 +1933,7 @@ data AmuletRules_CreateTransferPreapprovalResult = AmuletRules_CreateTransferPre
     transferResult : TransferResult
     amuletPaid : Decimal
     meta : Optional Metadata
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 -- | Summary of input and output amounts and fees paid.
 -- This summary is intended to be used together with the `Transfer` specification
@@ -1947,7 +1971,7 @@ data TransferSummary = TransferSummary with
     inputDevelopmentFundAmount : Optional Decimal
       -- ^ Total amount of development fund coupon issuance input into this transfer.
       -- Note: Made optional as the addition of this field is checked by the upgrade checker.
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 data BalanceChange = BalanceChange with
     changeToInitialAmountAsOfRoundZero : Decimal
@@ -1955,7 +1979,7 @@ data BalanceChange = BalanceChange with
       -- a amulet created in round 3 is treated as a amulet created in round 0 with a higher initial amount.
     changeToHoldingFeesRate : Decimal
       -- ^ The change of total holding fees introduced by this balance change.
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 instance Additive BalanceChange where
   (+) l r = BalanceChange with
@@ -2019,17 +2043,17 @@ data ExternalPartySetupProposal_AcceptResult = ExternalPartySetupProposal_Accept
   with
     validatorRightCid : ContractId ValidatorRight
     transferPreapprovalCid : ContractId TransferPreapproval
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 data ExternalPartySetupProposal_RejectResult = ExternalPartySetupProposal_RejectResult
   with
     dummyArg : () -- to ensure this can be upgraded as a record
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 data ExternalPartySetupProposal_WithdrawResult = ExternalPartySetupProposal_WithdrawResult
   with
     dummyArg : () -- to ensure this can be upgraded as a record
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 
 -- Transfer Pre-approval
@@ -2186,13 +2210,13 @@ data TransferPreapproval_SendResult = TransferPreapproval_SendResult
   with
     result : TransferResult
     meta : Optional Metadata
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 data TransferPreapproval_SendV2Result = TransferPreapproval_SendV2Result
   with
     result : TransferResult
     meta : Metadata
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 data TransferPreapproval_RenewResult = TransferPreapproval_RenewResult
   with
@@ -2202,13 +2226,13 @@ data TransferPreapproval_RenewResult = TransferPreapproval_RenewResult
     provider: Party
     amuletPaid : Decimal
     meta : Optional Metadata
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 data TransferPreapproval_ExpireResult = TransferPreapproval_ExpireResult {}
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 data TransferPreapproval_CancelResult = TransferPreapproval_CancelResult
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 computeTransferPreapprovalFee : RelTime -> AmuletConfig Unit.USD -> TransferContext -> Party -> Update (Decimal, Decimal)
 computeTransferPreapprovalFee duration amuletConfig context dso = do

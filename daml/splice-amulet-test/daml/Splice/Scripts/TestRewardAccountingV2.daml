@@ -231,6 +231,7 @@ test_reward_accounting_v2_only_archive_dry_run = do
 data SetupConfig = SetupConfig with
   hideCoupon : Bool -- ^ Whether to hide alice's coupon
   useTrafficBasedAppRewards : Bool -- ^ Whether to configure traffic-based rewards for minting
+    deriving (Serializable)
 
 setupAliceWithCoupon : Bool -> Script (AmuletApp, Party, AmuletUser)
 setupAliceWithCoupon hideCoupon = setupAliceWithCoupon' $ SetupConfig with

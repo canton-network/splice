@@ -55,12 +55,12 @@ import Splice.TokenStandard.Utils hiding (require)
 data ScopedAccount = ScopedAccount with
     admin : Party
     account : V2.Account
-  deriving (Eq, Show, Ord)
+  deriving (Eq, Show, Ord, Serializable)
 
 -- | Map of holdings, keyed by admin, account, and instrument id.
 data HoldingMap = HoldingMap with
     byAdminAndAccount : Map.Map ScopedAccount (TextMap.TextMap [ContractId V2.Holding])
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 instance Monoid HoldingMap where
   mempty = HoldingMap with byAdminAndAccount = Map.empty
@@ -110,7 +110,7 @@ getHoldingsForInstrument account instrumentId (HoldingMap inputHoldingMap) =
 data ChoiceCall arg = ChoiceCall with
     cid : AnyContractId
     arg : arg
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- | A token standard action executed by a token standard wallet.
 data TokenStandardAction
@@ -136,7 +136,7 @@ data TokenStandardAction
 
   | TSA_AllocationRequest_AcceptV2 (ChoiceCall V2.AllocationRequest_Accept)
   | TSA_AllocationRequest_RejectV2 (ChoiceCall V2.AllocationRequest_Reject)
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- | The result of a token standard action.
 data TokenStandardActionResult
@@ -149,7 +149,7 @@ data TokenStandardActionResult
   | TSAR_AllocationResultV2 V2.AllocationResult
   | TSAR_AllocationRequest_AcceptV2Result V2.AllocationRequest_AcceptResult
   | TSAR_AllocationRequest_RejectV2Result V2.AllocationRequest_RejectResult
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- | The result of execution a batch of token standard actions.
 data BatchingUtility_ExecuteBatchResult = BatchingUtility_ExecuteBatchResult with
@@ -157,7 +157,7 @@ data BatchingUtility_ExecuteBatchResult = BatchingUtility_ExecuteBatchResult wit
       -- ^ Results are delivered in the same order as the actions.
     outputHoldingMap : HoldingMap
       -- ^ Map of holdings after executing the actions in th batch.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 
 -- Batching utility

@@ -37,10 +37,11 @@ import Splice.Util
 
 
 data ExecutionContext = ExecutionContext with
-  dso : Party
-  endUser : Party
-  validator : Party
-  paymentContext : PaymentTransferContext
+    dso : Party
+    endUser : Party
+    validator : Party
+    paymentContext : PaymentTransferContext
+  deriving (Serializable)
 
 -- Main function for batched execution of multiple amulet operations.
 -- Given multiple amulet operations and transfer inputs, it executes the operations sequentially while
@@ -283,7 +284,7 @@ data AmuletOperation
       providerFeaturedAppRightCid : Optional (ContractId FeaturedAppRight)
       amount : Decimal
       description : Optional Text
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- Enum of the possible outcomes of operating on a amulet through the wallet.
 data AmuletOperationOutcome
@@ -306,7 +307,7 @@ data AmuletOperationOutcome
   | COO_AcceptTransferPreapprovalProposal (ContractId TransferPreapproval)
   | COO_RenewTransferPreapproval (ContractId TransferPreapproval)
   | COO_TransferPreapprovalSend (Optional (ContractId Amulet))
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 data WalletAppInstall_ExecuteBatchResult = WalletAppInstall_ExecuteBatchResult
   with
@@ -317,77 +318,95 @@ data WalletAppInstall_ExecuteBatchResult = WalletAppInstall_ExecuteBatchResult
     optEndUserParty : Optional Party
       -- The primary party on whose wallet the batch was executed. This is useful since the logic parsing
       -- the tx log entry currently cannot resolve the payload of the WalletAppInstall to get the party from there.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 data WalletAppInstall_AppPaymentRequest_RejectResult = WalletAppInstall_AppPaymentRequest_RejectResult
   with
     terminatedAppPayment : ContractId TerminatedAppPayment
+  deriving (Serializable)
 
 data WalletAppInstall_AppPaymentRequest_ExpireResult = WalletAppInstall_AppPaymentRequest_ExpireResult
   with
     terminatedAppPayment : ContractId TerminatedAppPayment
+  deriving (Serializable)
 
 data WalletAppInstall_SubscriptionRequest_RejectResult = WalletAppInstall_SubscriptionRequest_RejectResult
   with
     terminatedSubscription : ContractId TerminatedSubscription
+  deriving (Serializable)
 
 data WalletAppInstall_SubscriptionIdleState_CancelSubscriptionResult = WalletAppInstall_SubscriptionIdleState_CancelSubscriptionResult
   with
     terminatedSubscription : ContractId TerminatedSubscription
+  deriving (Serializable)
 
 data WalletAppInstall_CreateTransferOfferResult = WalletAppInstall_CreateTransferOfferResult
   with
     transferOffer : ContractId TransferOffer
+  deriving (Serializable)
 
 data WalletAppInstall_TransferOffer_AcceptResult = WalletAppInstall_TransferOffer_AcceptResult
   with
     acceptedTransferOffer : ContractId AcceptedTransferOffer
+  deriving (Serializable)
 
 data WalletAppInstall_TransferOffer_RejectResult = WalletAppInstall_TransferOffer_RejectResult
   with
     trackingInfo : TransferOfferTrackingInfo
+  deriving (Serializable)
 
 data WalletAppInstall_TransferOffer_WithdrawResult = WalletAppInstall_TransferOffer_WithdrawResult
   with
     trackingInfo : TransferOfferTrackingInfo
+  deriving (Serializable)
 
 data WalletAppInstall_TransferOffer_ExpireResult = WalletAppInstall_TransferOffer_ExpireResult
   with
     trackingInfo : TransferOfferTrackingInfo
+  deriving (Serializable)
 
 data WalletAppInstall_AcceptedTransferOffer_AbortResult = WalletAppInstall_AcceptedTransferOffer_AbortResult
   with
     trackingInfo : TransferOfferTrackingInfo
+  deriving (Serializable)
 
 data WalletAppInstall_AcceptedTransferOffer_WithdrawResult = WalletAppInstall_AcceptedTransferOffer_WithdrawResult
   with
     trackingInfo : TransferOfferTrackingInfo
+  deriving (Serializable)
 
 data WalletAppInstall_AcceptedTransferOffer_ExpireResult = WalletAppInstall_AcceptedTransferOffer_ExpireResult
   with
     trackingInfo : TransferOfferTrackingInfo
+  deriving (Serializable)
 
 data WalletAppInstall_CreateBuyTrafficRequestResult = WalletAppInstall_CreateBuyTrafficRequestResult
   with
     buyTrafficRequest : ContractId BuyTrafficRequest
+  deriving (Serializable)
 
 data WalletAppInstall_BuyTrafficRequest_CancelResult = WalletAppInstall_BuyTrafficRequest_CancelResult
   with
     trackingInfo : BuyTrafficRequestTrackingInfo
+  deriving (Serializable)
 
 data WalletAppInstall_BuyTrafficRequest_ExpireResult = WalletAppInstall_BuyTrafficRequest_ExpireResult
   with
     trackingInfo : BuyTrafficRequestTrackingInfo
+  deriving (Serializable)
 
 data WalletAppInstall_FeaturedAppRights_CancelResult = WalletAppInstall_FeaturedAppRights_CancelResult
+  deriving (Serializable)
 
 data WalletAppInstall_FeaturedAppRights_SelfGrantResult = WalletAppInstall_FeaturedAppRights_SelfGrantResult
   with
     featuredAppRight : ContractId FeaturedAppRight
+  deriving (Serializable)
 
 data WalletAppInstall_TransferPreapprovalProposal_CreateResult = WalletAppInstall_TransferPreapprovalProposal_CreateResult
   with
     preapprovalProposalCid : ContractId TransferPreapprovalProposal
+  deriving (Serializable)
 
 template WalletAppInstall
   with

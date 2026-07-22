@@ -23,14 +23,14 @@ data AmuletDecentralizedSynchronizerConfig = AmuletDecentralizedSynchronizerConf
     activeSynchronizer : Text -- ^ The synchronizer-id of the synchronizer on which the SVs accepts transactions involving the
                         -- AmuletRules and related contracts, which must be one of the `requiredSynchronizers`.
     fees : SynchronizerFeesConfig -- ^ The fees charged for using the decentralized synchronizer. We use the same fees across all active decentralized synchronizers.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- | The limits defining the free base rate delivered by the synchronizer.
 -- It defines the base rate as allowing at most burstAmount of sequencing traffic within a window of burstWindow seconds.
 data BaseRateTrafficLimits = BaseRateTrafficLimits with
     burstAmount: Int -- ^ The total burstAmount in bytes of sequencing traffic delivered over the burstWindow
     burstWindow: RelTime -- ^ Time window within which the burstAmount must not be exceeded
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- | Synchronizer fees related configuration to be tracked on the DsoRules contract
 data SynchronizerFeesConfig = SynchronizerFeesConfig with
@@ -43,7 +43,7 @@ data SynchronizerFeesConfig = SynchronizerFeesConfig with
     -- smaller one than the cost of a write.
     minTopupAmount: Int -- ^ The minimum amount of extra traffic (in bytes) that must be bought when buying extra traffic.
     -- This ensures that the SVs can amortize the cost of executing that transaction.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 
 validAmuletDecentralizedSynchronizerConfig : AmuletDecentralizedSynchronizerConfig -> Bool
@@ -92,7 +92,7 @@ data ForMemberTraffic = ForMemberTraffic with
     memberId : Text
     synchronizerId : Text
     migrationId: Int
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 instance HasCheckedFetch MemberTraffic ForDso where
     contractGroupId MemberTraffic{..} = ForDso with ..

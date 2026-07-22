@@ -114,7 +114,7 @@ data AllocationRequestAction
       ARA_Custom with
         id : Text
           -- ^ Identifier of the action. Namespaced analogously to metadata keys.
-    deriving (Show, Ord, Eq)
+    deriving (Show, Ord, Eq, Serializable)
 
 -- | View of an `AllocationRequest`.
 data AllocationRequestView = AllocationRequestView with
@@ -154,22 +154,22 @@ data AllocationRequestView = AllocationRequestView with
       -- of action actors that could call a choice SHOULD be included.
     meta : Metadata
       -- ^ Additional metadata specific to the allocation request, used for extensibility.
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 -- | The result of the `AllocationRequest_Accept` choice.
 data AllocationRequest_AcceptResult = AllocationRequest_AcceptResult with
     meta : Metadata
       -- ^ Additional metadata specific to the result of accepting the allocation request, used for extensibility.
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 -- | The result of the `AllocationRequest_Reject` choice.
 data AllocationRequest_RejectResult = AllocationRequest_RejectResult with
     meta : Metadata
       -- ^ Additional metadata specific to the result of rejecting the allocation request, used for extensibility.
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 -- | The result of the `AllocationRequest_Withdraw` choice.
 data AllocationRequest_WithdrawResult = AllocationRequest_WithdrawResult with
     meta : Metadata
       -- ^ Additional metadata specific to the result of withdrawing the allocation request, used for extensibility.
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)

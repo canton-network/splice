@@ -35,7 +35,7 @@ data AmuletAllocation_DsoExpireResult = AmuletAllocation_DsoExpireResult
   with
     senderHoldingCids : [ContractId V1.Holding]
     meta : Metadata
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 -- | V1 amulet allocation, which was created using a V1 allocation factory and
 -- can be settled on its own using `V1.Allocation_ExecuteTransfer` or by

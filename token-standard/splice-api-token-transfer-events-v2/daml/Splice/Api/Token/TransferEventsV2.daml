@@ -18,7 +18,7 @@ data TransferSide
     -- ^ The outbound side of a transfer, i.e., the sending of assets.
   | ReceiverSide
     -- ^ The inbound direction, i.e., the receipt of assets.
-  deriving (Show, Ord, Eq)
+  deriving (Show, Ord, Eq, Serializable)
 
 -- | A side of a transfer of holdings between two parties.
 --
@@ -39,7 +39,7 @@ data TransferLegSide = TransferLegSide with
       -- ^ The instrument identifier used by the instrument admin.
     meta : Metadata
       -- ^ Additional metadata about the transfer leg, used for extensibility.
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Serializable)
 
 -- | An interface for templates that can be used to report token standard v2 events.
 --
@@ -115,8 +115,9 @@ data EventLogView = EventLogView with
       -- ^ Instrument admin reporting the change in holdings.
     meta : Metadata
       -- ^ Additional metadata about the event log, used for extensibility.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- | Result of logging a change in holdings event. Provided for extensibility
 -- in a future where interfaces are upgradeable.
 data EventLog_HoldingsChangeResult = EventLog_HoldingsChangeResult {}
+  deriving (Serializable)

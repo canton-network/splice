@@ -39,17 +39,17 @@ General approach for CometBFT integration:
 data CometBftNodeConfig = CometBftNodeConfig with
     validatorPubKey : Text
     votingPower : Int
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- | Config for a key used by the SvApp to create CometBFT network governance transactions.
 data GovernanceKeyConfig = GovernanceKeyConfig with
     pubKey : Text
-  deriving (Eq, Show, Ord)
+  deriving (Eq, Show, Ord, Serializable)
 
 -- | Config for a key used by the CometBFT Sequencer Driver to sequence messages via the CometBFT network.
 data SequencingKeyConfig = SequencingKeyConfig with
     pubKey : Text
-  deriving (Eq, Show, Ord)
+  deriving (Eq, Show, Ord, Serializable)
 
 -- | Config for all CometBFT nodes and keys under the control of a single SV node operator.
 data CometBftConfig = CometBftConfig with
@@ -57,7 +57,7 @@ data CometBftConfig = CometBftConfig with
       -- ^ A map from CometBft node-ids to their configuration.
     governanceKeys : [GovernanceKeyConfig]
     sequencingKeys : [SequencingKeyConfig]
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- | Limits on the configurations that SV node operators can choose for their CometBFT nodes and keys.
 data CometBftConfigLimits = CometBftConfigLimits with
@@ -66,7 +66,7 @@ data CometBftConfigLimits = CometBftConfigLimits with
     maxNumSequencingKeys : Int
     maxNodeIdLength : Int
     maxPubKeyLength : Int
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 
 -- default values

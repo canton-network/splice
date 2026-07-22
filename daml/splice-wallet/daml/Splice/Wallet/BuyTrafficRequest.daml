@@ -13,18 +13,21 @@ data BuyTrafficRequestTrackingInfo = BuyTrafficRequestTrackingInfo
   with
     trackingId : Text -- ^ used to deduplicate requests and query for the status
     endUserParty : Party -- ^ used in UserWalletTxLogParser's filterByParty
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 data BuyTrafficRequest_CompleteResult = BuyTrafficRequest_CompleteResult with
-  purchasedTraffic : ContractId MemberTraffic
-  trackingInfo : BuyTrafficRequestTrackingInfo
-  senderChangeAmulet : Optional (ContractId Amulet)
+    purchasedTraffic : ContractId MemberTraffic
+    trackingInfo : BuyTrafficRequestTrackingInfo
+    senderChangeAmulet : Optional (ContractId Amulet)
+  deriving (Serializable)
 
 data BuyTrafficRequest_CancelResult = BuyTrafficRequest_CancelResult with
-  trackingInfo : BuyTrafficRequestTrackingInfo
+    trackingInfo : BuyTrafficRequestTrackingInfo
+  deriving (Serializable)
 
 data BuyTrafficRequest_ExpireResult = BuyTrafficRequest_ExpireResult with
-  trackingInfo : BuyTrafficRequestTrackingInfo
+    trackingInfo : BuyTrafficRequestTrackingInfo
+  deriving (Serializable)
 
 -- | A request by an end-user to the wallet's automation to buy traffic
 -- for a sequencer member

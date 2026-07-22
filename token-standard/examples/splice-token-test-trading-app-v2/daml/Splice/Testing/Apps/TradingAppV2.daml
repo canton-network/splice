@@ -69,14 +69,14 @@ data AllocationWithContextV1 = AllocationWithContextV1 with
     extraArgs : ExtraArgs
     senderAgreementCid : ContractId TradeSettlementAgreement
     receiverAgreementCid : ContractId TradeSettlementAgreement
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 data MissingAllocation = MissingAllocation with
     authorizerAgreementCid : Optional (ContractId TradeSettlementAgreement)
       -- ^ None for missing allocations of the venue itself.
     factoryCid : ContractId V2.AllocationFactory
     choiceArg : V2.AllocationFactory_Allocate
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- | A batch of allocations for the same admin together with the extra arguments required to settle them.
 data SettlementBatch
@@ -94,7 +94,7 @@ data SettlementBatch
        --     which do not create receipt allocations on their own
       factoryCid : ContractId V2.SettlementFactory
       extraArgs : ExtraArgs
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 
 -- | Leg of a trade.
@@ -103,7 +103,7 @@ data TradeLeg = TradeLeg with
       -- ^ Admin party of the instrument being transferred.
     leg : V2.TransferLeg
       -- ^ The transfer details.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 splitLegsBy : Ord k => (leg -> k) -> [leg] -> Map.Map k [leg]
 splitLegsBy f legs = Map.fromListWithR (<>) [ (f leg, [leg]) | leg <- legs ]
@@ -276,11 +276,13 @@ data OTCTrade_SettleResult = OTCTrade_SettleResult with
     -- ^ Results for V1-only admins
   resultsByAdminV2 : Map.Map Party V2.SettlementFactory_SettleBatchResult
     -- ^ Result for admins that support V2
+    deriving (Serializable)
 
 data OTCTrade_CancelResult = OTCTrade_CancelResult with
   resultsV1 : TextMap.TextMap V1.Allocation_CancelResult
     -- ^ Results for V1 allocation cancellations keyed by transferLegId
   resultsV2 : [(V2.Account, V2.AllocationResult)]
+    deriving (Serializable)
 
 mkOtcTradeSettlementInfoV2 : ContractId OTCTrade -> OTCTrade -> V2.SettlementInfo
 mkOtcTradeSettlementInfoV2 otcTradeCid otcTrade = V2.SettlementInfo with
