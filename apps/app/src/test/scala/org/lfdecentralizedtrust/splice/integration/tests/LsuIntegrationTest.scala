@@ -32,7 +32,7 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions
 import org.lfdecentralizedtrust.splice.http.v0.definitions.TransactionHistoryRequest
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
-  IntegrationTest,
+  IntegrationTestWithIsolatedEnvironment,
   SpliceTestConsoleEnvironment,
 }
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.DomainSequencers
@@ -56,7 +56,7 @@ import scala.jdk.OptionConverters.RichOptional
 
 @org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceDsoGovernance_0_1_24
 class LsuIntegrationTest
-    extends IntegrationTest
+    extends IntegrationTestWithIsolatedEnvironment
     with ExternallySignedPartyTestUtil
     with ProcessTestUtil
     with SvTestUtil
@@ -83,10 +83,7 @@ class LsuIntegrationTest
     super.beforeAll()
     SynchronizerUpgradeUtil.migrationDumpDir.delete()
   }
-  // always set the successor PV to 35
-  // thus with the daily run with PV34 we will run a PV34 -> PV35 LSU
-  // otherwise we will run a PV35 -> PV35 LSU
-  val successorPv = ProtocolVersion.v35
+  private val successorPv = ProtocolVersion.v35
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
