@@ -47,10 +47,13 @@ class HttpSvAdminHandler(
       for {
         decentralizedSynchronizer <- dsoStore.getDsoRules().map(_.domain)
         sequencerId <- synchronizerNodeService.sequencerAdminConnection().flatMap(_.getSequencerId)
-        _ <- participantAdminConnection
-          .removeSequencerSuccessor(
-            decentralizedSynchronizer,
-            sequencerId,
+        _ <- synchronizerNodeService
+          .sequencerAdminConnection()
+          .flatMap(
+            _.removeSequencerSuccessor(
+              decentralizedSynchronizer,
+              sequencerId,
+            )
           )
         _ <- participantAdminConnection
           .removeLsuAnnouncement(decentralizedSynchronizer)
