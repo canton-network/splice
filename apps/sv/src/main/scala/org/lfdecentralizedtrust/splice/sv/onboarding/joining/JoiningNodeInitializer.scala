@@ -193,11 +193,42 @@ class JoiningNodeInitializer(
         .getPhysicalSynchronizerId(config.domains.global.alias)
       decentralizedSynchronizerId = psid.logical
       dsoPartyHosting = newDsoPartyHosting(dsoPartyId)
+
       dsoPartyIsAuthorized <- dsoPartyHosting.isDsoPartyAuthorizedOn(
         decentralizedSynchronizerId,
         registeredGlobalSync,
         participantId,
       )
+
+      svParty <- SetupUtil.setupSvParty(
+        initConnection,
+        config,
+        participantAdminConnection,
+      )
+
+      storeKey = SvStore.Key(svParty, dsoPartyId)
+
+      _ <- joiningConfig match {
+        case Some(SvOnboardingConfig.JoinWithKey(name, _, publicKey, privateKey))
+            if !dsoPartyIsAuthorized =>
+          SvUtil.keyPairMatches(publicKey, privateKey) match {
+            case Right(privateKey_) =>
+              svConnection.flatMap { case (_, c) =>
+                requestOnboarding(
+                  c,
+                  name,
+                  participantId,
+                  publicKey,
+                  privateKey_,
+                  svParty,
+                  dsoPartyId,
+                )
+              }
+            case Left(reason) => Future.failed(sys.error(s"Failed parsing provided keys: $reason"))
+          }
+        case _ => Future.unit
+      }
+
       _ <-
         // do not reconnect if we host the party, as we can be in some LSU stage and the participant cannot reconnect if the new sync is not functional
         if (!dsoPartyIsAuthorized) {
@@ -207,12 +238,7 @@ class JoiningNodeInitializer(
             tolerateUninitializedStore = registeredGlobalSync.exists(_.config.manualConnect),
           )
         } else Future.unit
-      svParty <- SetupUtil.setupSvParty(
-        initConnection,
-        config,
-        participantAdminConnection,
-      )
-      storeKey = SvStore.Key(svParty, dsoPartyId)
+
       // We need to vet early so the packages are uploaded when we try to use template
       // filters in the ACS queries in the store.
       _ <- joiningConfig.traverse_ { _ =>
@@ -796,6 +822,8 @@ class JoiningNodeInitializer(
                 participantId,
                 publicKey,
                 privateKey_,
+                svParty,
+                dsoParty,
               )
               _ <- addConfirmedSvToDso()
             } yield ()
@@ -893,13 +921,6 @@ class JoiningNodeInitializer(
                   case None =>
                     for {
                       _ <- svStore.domains.waitForDomainConnection(config.domains.global.alias)
-                      _ <- requestOnboarding(
-                        svConnection,
-                        name,
-                        participantId,
-                        publicKey,
-                        privateKey_,
-                      )
                       // Wait on the SV store because the DSO party is not yet onboarded.
                       _ <- waitForSvOnboardingConfirmedInSvStore()
                     } yield ()
@@ -972,36 +993,6 @@ class JoiningNodeInitializer(
       )
     }
 
-    private def requestOnboarding(
-        svConnection: SvConnection,
-        name: String,
-        participantId: ParticipantId,
-        publicKey: String,
-        privateKey: ECPrivateKey,
-    ): Future[Unit] = {
-      SvOnboardingToken(name, publicKey, svParty, participantId, dsoParty).signAndEncode(
-        privateKey
-      ) match {
-        case Right(token) =>
-          logger.info(s"Requesting to be onboarded via the sponsor SV")
-          for {
-            _ <- retryProvider.retry(
-              RetryFor.WaitingOnInitDependency,
-              "request_onboarding",
-              "request onboarding",
-              svConnection.startSvOnboarding(token),
-              logger,
-            )
-          } yield ()
-        case Left(error) =>
-          Future.failed(
-            Status.INTERNAL
-              .withDescription(s"Could not create onboarding token: $error")
-              .asRuntimeException()
-          )
-      }
-    }
-
     private def startHostingDsoPartyInParticipant(): Future[Unit] = {
       dsoPartyHosting
         // TODO(DACH-NY/canton-network-node#5364): consider inlining the relevant parts from DsoPartyHosting
@@ -1015,6 +1006,38 @@ class JoiningNodeInitializer(
           _.getOrElse(
             sys.error(s"Failed to host DSO party on participant $participantId")
           )
+        )
+    }
+  }
+
+  private def requestOnboarding(
+      svConnection: SvConnection,
+      name: String,
+      participantId: ParticipantId,
+      publicKey: String,
+      privateKey: ECPrivateKey,
+      svParty: PartyId,
+      dsoParty: PartyId,
+  ): Future[Unit] = {
+    SvOnboardingToken(name, publicKey, svParty, participantId, dsoParty).signAndEncode(
+      privateKey
+    ) match {
+      case Right(token) =>
+        logger.info(s"Requesting to be onboarded via the sponsor SV")
+        for {
+          _ <- retryProvider.retry(
+            RetryFor.WaitingOnInitDependency,
+            "request_onboarding",
+            "request onboarding",
+            svConnection.startSvOnboarding(token),
+            logger,
+          )
+        } yield ()
+      case Left(error) =>
+        Future.failed(
+          Status.INTERNAL
+            .withDescription(s"Could not create onboarding token: $error")
+            .asRuntimeException()
         )
     }
   }
