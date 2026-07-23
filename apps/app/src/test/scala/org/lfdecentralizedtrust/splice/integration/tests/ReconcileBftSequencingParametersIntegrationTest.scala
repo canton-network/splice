@@ -79,10 +79,10 @@ class SvReconcileBftSequencingParametersIntegrationTest
       ]
       sv1Backend.stop()
       actAndCheck(
-        "Restart with modified bft sequencing parameters unset",
+        "Restart with modified bft sequencing parameters",
         sv1LocalBackend.startSync(),
       )(
-        "sequencing parameters are unset",
+        "sequencing parameters are modified",
         _ => {
           val parameters = sv1Backend.participantClient.topology.sequencing_parameters
             .list(decentralizedSynchronizerId)
