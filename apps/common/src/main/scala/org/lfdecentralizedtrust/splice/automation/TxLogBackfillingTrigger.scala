@@ -4,7 +4,6 @@
 package org.lfdecentralizedtrust.splice.automation
 
 import com.daml.metrics.api.MetricsContext
-import com.digitalasset.canton.lifecycle.AsyncOrSyncCloseable
 import org.lfdecentralizedtrust.splice.store.{
   HistoryBackfilling,
   HistoryMetrics,
