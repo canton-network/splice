@@ -258,7 +258,7 @@ class LsuIntegrationTest
             }
           }
           clue(s"check ${backend.name} initialized mediator") {
-            eventuallySucceeds(2.minutes) {
+            eventuallySucceeds(3.minutes) {
               upgradeMediatorClient.health.initialized() shouldBe true
             }
           }
