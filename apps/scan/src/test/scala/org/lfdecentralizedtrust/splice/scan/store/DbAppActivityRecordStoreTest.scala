@@ -427,6 +427,47 @@ class DbAppActivityRecordStoreTest
         startedAt2 shouldBe Some(secondTs.toMicros)
       }
     }
+
+    "defer non-firstSV meta row creation until traffic summaries are available" in {
+      for {
+        (appStore, verdictStore) <- newStores(isFirstSv = false)
+        baseTs = CantonTimestamp.now()
+        secondTs = baseTs.plusSeconds(10)
+
+        // First batch: no traffic summaries — meta row should NOT be created
+        _ <- verdictStore.insertVerdictsWithAppActivityRecords(
+          NonEmptyList.of(mkVerdict(verdictStore, "update-bootstrap", baseTs) -> noViews),
+          Seq.empty,
+          lastArchivedRoundO = Some(5L),
+          hasTrafficSummaries = false,
+        )
+        meta1 <- appStore.lookupActivityRecordMeta(1, 0)
+        startedAt1 <- appStore.startedIngestingAt
+        earliest1 <- appStore.earliestRoundWithCompleteAppActivity()
+
+        // Second batch: traffic summaries arrive — meta row created
+        _ <- verdictStore.insertVerdictsWithAppActivityRecords(
+          NonEmptyList.of(mkVerdict(verdictStore, "update-with-summaries", secondTs) -> noViews),
+          Seq.empty,
+          lastArchivedRoundO = Some(5L),
+          hasTrafficSummaries = true,
+        )
+        meta2 <- appStore.lookupActivityRecordMeta(1, 0)
+        startedAt2 <- appStore.startedIngestingAt
+      } yield {
+        // No meta row after first batch
+        meta1 shouldBe None
+        startedAt1 shouldBe None
+        earliest1 shouldBe None
+
+        // Meta row created on second batch with proper values
+        meta2 shouldBe defined
+        meta2.value.earliestIngestedRound shouldBe 5L
+        meta2.value.lastArchivedRound shouldBe Some(5L)
+        meta2.value.startedIngestingAt shouldBe Some(secondTs.toMicros)
+        startedAt2 shouldBe Some(secondTs.toMicros)
+      }
+    }
   }
 
   "earliestRoundWithCompleteAppActivity" should {

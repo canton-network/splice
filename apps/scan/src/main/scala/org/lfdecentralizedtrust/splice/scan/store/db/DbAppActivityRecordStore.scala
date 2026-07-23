@@ -326,13 +326,14 @@ class DbAppActivityRecordStore(
     //   - Always -1 on firstSV (present since genesis, round 0 is complete)
     //   - From activity records when present
     //   - From lastArchivedRound when no featured apps produced records
+    //     but traffic summaries are available
     val earliestRound = if (isFirstSv) {
       Some(-1L)
     } else {
       items
         .map(_.roundNumber)
         .minOption
-        .orElse(lastArchivedRoundO)
+        .orElse(if (hasTrafficSummaries) lastArchivedRoundO else None)
     }
 
     // lastArchived: the highest round archived as of this verdict batch.
