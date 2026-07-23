@@ -147,7 +147,7 @@ class SvOnboardingViaNonFoundingSvIntegrationTest
 //              ),
               LocalSynchronizerNode.toEndpoint(
                 sv2Backend.config.localSynchronizerNodes.current.sequencer.internalApi
-              ),
+              )
             )
             sv2Backend.participantClient.synchronizers.is_connected(
               decentralizedSynchronizerAlias
