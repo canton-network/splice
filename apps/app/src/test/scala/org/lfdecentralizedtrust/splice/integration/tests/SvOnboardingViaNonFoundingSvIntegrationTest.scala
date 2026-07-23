@@ -141,9 +141,10 @@ class SvOnboardingViaNonFoundingSvIntegrationTest
                 }
               }
             endpoints.toSet shouldBe Set(
-              LocalSynchronizerNode.toEndpoint(
-                sv1Backend.config.localSynchronizerNodes.current.sequencer.internalApi
-              ),
+              // SV BFT sequencer connections are disabled
+//              LocalSynchronizerNode.toEndpoint(
+//                sv1Backend.config.localSynchronizerNodes.current.sequencer.internalApi
+//              ),
               LocalSynchronizerNode.toEndpoint(
                 sv2Backend.config.localSynchronizerNodes.current.sequencer.internalApi
               ),
