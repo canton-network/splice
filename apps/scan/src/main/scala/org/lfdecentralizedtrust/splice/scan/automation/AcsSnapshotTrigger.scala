@@ -3,7 +3,6 @@
 
 package org.lfdecentralizedtrust.splice.scan.automation
 
-import com.daml.metrics.api.MetricsContext
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.TracedLogger
 import org.lfdecentralizedtrust.splice.automation.TriggerContext
@@ -27,6 +26,7 @@ class AcsSnapshotTrigger(
     store: AcsSnapshotStore,
     updateHistory: UpdateHistory,
     storageConfig: ScanStorageConfig,
+    metrics: HistoryMetrics,
     override protected val context: TriggerContext,
 )(implicit
     ec: ExecutionContext,
@@ -37,9 +37,7 @@ class AcsSnapshotTrigger(
   override val snapshotTable: IncrementalAcsSnapshotTable =
     AcsSnapshotStore.IncrementalAcsSnapshotTable.Next
 
-  override val snapshotMetrics: AcsSnapshotsMetrics = new HistoryMetrics(context.metricsFactory)(
-    MetricsContext.Empty
-  ).AcsSnapshots
+  override val snapshotMetrics: AcsSnapshotsMetrics = metrics.AcsSnapshots
 
   override def retrieveTasks()(implicit
       tc: TraceContext
