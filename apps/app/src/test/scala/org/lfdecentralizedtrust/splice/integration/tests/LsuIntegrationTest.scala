@@ -362,7 +362,7 @@ class LsuIntegrationTest
       )
 
       clue("All sequencers are registered") {
-        eventually() {
+        eventually(timeUntilSuccess = 1.minute) {
           inside(sv1ScanBackend.listDsoSequencers()) {
             case Seq(DomainSequencers(synchronizerId, sequencers)) =>
               synchronizerId shouldBe decentralizedSynchronizerId
