@@ -1413,16 +1413,10 @@ object BuildCommon {
       )
       .enablePlugins(DamlPlugin)
       .settings(
-        // TODO (SC) sharedCantonCommunitySettings,
+        sharedCantonSettings,
         Compile / PB.targets := Seq(
           scalapb.gen(flatPackage = false) -> (Compile / sourceManaged).value / "protobuf"
         ),
-        /* TODO (SC) Compile / bufLintCheck := (Compile / bufLintCheck)
-          .dependsOn(
-            // these proto files are loaded by buf.work.yaml
-            `canton-google-common-protos-scala` / PB.unpackDependencies
-          )
-          .value, */
         libraryDependencies ++= {
           import CantonDependencies._
           Seq(
