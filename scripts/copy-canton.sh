@@ -10,6 +10,10 @@ if [ "$#" -ne 1 ]; then
     exit 1
 fi
 
+# TODO (#6544) delete canton/community/ledger/ledger-api-core and add this
+#   --exclude '*/community/ledger/ledger-api-core'
+# as it is no longer even built in this repo
+
 rsync -av --delete --exclude version.sbt --exclude community-build.sbt --exclude deployment --exclude project --exclude scripts --exclude .idea \
     --exclude=.github --exclude=.git --exclude=.gitmodules --exclude 'LICENSE*.txt' --exclude README.md --exclude demo --exclude '*/test/daml' \
     --exclude /daml --exclude daml-common-staging --exclude '*/ledger-common-dars' --exclude '*/daml/CantonExamples' \
