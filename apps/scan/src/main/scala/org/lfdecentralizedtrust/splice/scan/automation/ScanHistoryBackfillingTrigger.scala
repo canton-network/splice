@@ -54,6 +54,7 @@ class ScanHistoryBackfillingTrigger(
     importUpdateBackfillingEnabled: Boolean,
     svParty: PartyId,
     upgradesConfig: UpgradesConfig,
+    metrics: HistoryMetrics,
     override protected val context: TriggerContext,
 )(implicit
     override val ec: ExecutionContextExecutor,
@@ -65,11 +66,7 @@ class ScanHistoryBackfillingTrigger(
 
   private val currentMigrationId = updateHistory.domainMigrationId
 
-  private val historyMetrics = new HistoryMetrics(context.metricsFactory)(
-    MetricsContext(
-      "current_migration_id" -> currentMigrationId.toString
-    )
-  )
+  private val historyMetrics = metrics
 
   /** A cursor for iterating over the beginning of the update history in findHistoryStart,
     *  see [[org.lfdecentralizedtrust.splice.updateHistory.getUpdates()]].

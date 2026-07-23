@@ -3,7 +3,6 @@
 
 package org.lfdecentralizedtrust.splice.scan.automation
 
-import com.daml.metrics.api.MetricsContext
 import org.lfdecentralizedtrust.splice.automation.{
   PollingParallelTaskExecutionTrigger,
   TaskOutcome,
@@ -23,6 +22,7 @@ import scala.concurrent.{ExecutionContext, Future}
 class DeleteCorruptAcsSnapshotTrigger(
     store: AcsSnapshotStore,
     updateHistory: UpdateHistory,
+    metrics: HistoryMetrics,
     protected val context: TriggerContext,
 )(implicit
     ec: ExecutionContext,
@@ -31,7 +31,7 @@ class DeleteCorruptAcsSnapshotTrigger(
     // we always return 1 task, so PollingParallelTaskExecutionTrigger in effect does nothing in parallel
 ) extends PollingParallelTaskExecutionTrigger[DeleteCorruptAcsSnapshotTrigger.Task] {
 
-  private val historyMetrics = new HistoryMetrics(context.metricsFactory)(MetricsContext.Empty)
+  private val historyMetrics = metrics
 
   override def retrieveTasks()(implicit
       tc: TraceContext
