@@ -7,3 +7,7 @@
 
 .. release-notes:: Upcoming
 
+  - Scan app
+
+    - Added a ``maxAllocations`` limit (default 100) to the ``getSettlementFactory`` endpoint to prevent unbounded database queries.
+
