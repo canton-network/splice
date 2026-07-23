@@ -33,7 +33,7 @@ trait LsuTopologyAdminConnection {
   this: TopologyAdminConnection =>
 
   def lookupSequencerSuccessors(
-      synchronizerId: SynchronizerId,
+      synchronizerId: PhysicalSynchronizerId,
       sequencerId: SequencerId,
       ops: Option[TopologyChangeOp],
   )(implicit
@@ -50,12 +50,12 @@ trait LsuTopologyAdminConnection {
         protocolVersion = None,
       ),
       sequencerId.filterString,
-      filterSuccessorPhysicalSynchronizerId = "",
+      filterSuccessorPhysicalSynchronizerId = synchronizerId.toProtoPrimitive,
     )
   ).map(_.headOption.map(r => TopologyResult(r.context, r.item)))
 
   def ensureSequencerSuccessor(
-      synchronizerId: PhysicalSynchronizerId,
+      successorSynchronizerId: PhysicalSynchronizerId,
       sequencerId: SequencerId,
       connection: GrpcConnection,
   )(implicit
@@ -63,21 +63,21 @@ trait LsuTopologyAdminConnection {
       ec: ExecutionContext,
   ): Future[TopologyResult[LsuSequencerConnectionSuccessor]] = {
     ensureTopologyMappingO(
-      synchronizerId.logical,
+      successorSynchronizerId.logical,
       s"sequencer successor for $sequencerId with connection $connection",
       _ =>
         EitherT
-          .liftF(lookupSequencerSuccessors(synchronizerId.logical, sequencerId, None))
+          .liftF(lookupSequencerSuccessors(successorSynchronizerId, sequencerId, None))
           .subflatMap {
             case Some(successor)
-                if successor.mapping.connection == connection && successor.mapping.successorPsid == synchronizerId =>
+                if successor.mapping.connection == connection && successor.mapping.successorPsid == successorSynchronizerId =>
               Right(successor)
             case Some(existing) => Left(existing.some)
             case None => Left(None)
           },
       { (_: Option[TopologyMapping]) =>
         Right(
-          LsuSequencerConnectionSuccessor(sequencerId, synchronizerId, connection)
+          LsuSequencerConnectionSuccessor(sequencerId, successorSynchronizerId, connection)
         )
       },
       retryFor = RetryFor.Automation,

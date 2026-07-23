@@ -212,7 +212,7 @@ class LsuTrigger(
             sequencerId <- currentSynchronizerNode.sequencerAdminConnection.getSequencerId
             hasNoSuccessor <- currentSynchronizerNode.sequencerAdminConnection
               .lookupSequencerSuccessors(
-                currentPsid.logical,
+                announcement.successorSynchronizerId,
                 sequencerId,
                 Some(TopologyChangeOp.Replace),
               )
