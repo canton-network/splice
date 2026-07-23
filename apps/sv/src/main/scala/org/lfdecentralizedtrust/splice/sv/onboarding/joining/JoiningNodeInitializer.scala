@@ -224,7 +224,8 @@ class JoiningNodeInitializer(
                   dsoPartyId,
                 )
               }
-            case Left(reason) => Future.failed(sys.error(s"Failed parsing provided keys: $reason"))
+            case Left(reason) =>
+              Future.failed(new RuntimeException(s"Failed parsing provided keys: $reason"))
           }
         case _ => Future.unit
       }
