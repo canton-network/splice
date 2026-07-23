@@ -33,8 +33,9 @@ trait LsuTopologyAdminConnection {
   this: TopologyAdminConnection =>
 
   def lookupSequencerSuccessors(
-      synchronizerId: PhysicalSynchronizerId,
+      synchronizerId: SynchronizerId,
       sequencerId: SequencerId,
+      successor: Option[PhysicalSynchronizerId],
       ops: Option[TopologyChangeOp],
   )(implicit
       tc: TraceContext,
@@ -50,7 +51,7 @@ trait LsuTopologyAdminConnection {
         protocolVersion = None,
       ),
       sequencerId.filterString,
-      filterSuccessorPhysicalSynchronizerId = synchronizerId.toProtoPrimitive,
+      filterSuccessorPhysicalSynchronizerId = successor.map(_.toProtoPrimitive).getOrElse(""),
     )
   ).map(_.headOption.map(r => TopologyResult(r.context, r.item)))
 
@@ -67,7 +68,9 @@ trait LsuTopologyAdminConnection {
       s"sequencer successor for $sequencerId with connection $connection",
       _ =>
         EitherT
-          .liftF(lookupSequencerSuccessors(successorSynchronizerId, sequencerId, None))
+          .liftF(
+            lookupSequencerSuccessors(successorSynchronizerId.logical, sequencerId, None, None)
+          )
           .subflatMap {
             case Some(successor)
                 if successor.mapping.connection == connection && successor.mapping.successorPsid == successorSynchronizerId =>
