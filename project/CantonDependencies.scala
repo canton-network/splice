@@ -155,6 +155,8 @@ object CantonDependencies {
   lazy val scopt = "com.github.scopt" %% "scopt" % "4.0.0"
 
   lazy val pekko_actor_typed = "org.apache.pekko" %% "pekko-actor-typed" % pekko_version
+  lazy val pekko_actor_testkit_typed =
+    "org.apache.pekko" %% "pekko-actor-testkit-typed" % pekko_version
   lazy val pekko_stream = "org.apache.pekko" %% "pekko-stream" % pekko_version
   lazy val pekko_stream_testkit = "org.apache.pekko" %% "pekko-stream-testkit" % pekko_version
   lazy val pekko_slf4j = "org.apache.pekko" %% "pekko-slf4j" % pekko_version

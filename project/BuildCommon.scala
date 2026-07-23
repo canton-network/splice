@@ -1440,6 +1440,7 @@ object BuildCommon {
             // Scope not only to test on purpose as we use the in-memory implementation
             // in prod code as well
             pekko_projection_testkit,
+            pekko_actor_testkit_typed,
             pekko_slf4j % "compile->compile;test->test",
             pureconfig,
             pureconfig_generic,
