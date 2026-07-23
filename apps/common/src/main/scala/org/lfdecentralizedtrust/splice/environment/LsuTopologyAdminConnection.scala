@@ -42,7 +42,7 @@ trait LsuTopologyAdminConnection {
   ): Future[Option[TopologyResult[LsuSequencerConnectionSuccessor]]] = runCmd(
     TopologyAdminCommands.Read.ListLsuSequencerConnectionSuccessor(
       BaseQuery(
-        TopologyStoreId.Synchronizer(synchronizerId),
+        TopologyStoreId.Synchronizer(synchronizerId.logical),
         proposals = false,
         timeQuery = TimeQuery.HeadState,
         ops = ops,
