@@ -311,6 +311,29 @@ class LsuIntegrationTest
           ) shouldBe empty
       }
     }
+
+    checkSerial1Sequencers()
+  }
+
+  def checkSerial1Sequencers()(implicit env: SpliceTestConsoleEnvironment) = {
+    clue("All sequencers are registered") {
+      eventually(timeUntilSuccess = 1.minute) {
+        inside(sv1ScanBackend.listDsoSequencers()) {
+          case Seq(DomainSequencers(synchronizerId, sequencers)) =>
+            synchronizerId shouldBe decentralizedSynchronizerId
+            sequencers should have size 12
+            forExactly(4, sequencers) {
+              _.serial.value shouldBe 0
+            }
+            forExactly(4, sequencers) {
+              _.serial.value shouldBe 1
+            }
+            forExactly(4, sequencers) {
+              _.serial should be(empty)
+            }
+        }
+      }
+    }
   }
 
   "upgrade synchronizer to new physical synchronizer without downtime" in { implicit env =>
@@ -361,24 +384,9 @@ class LsuIntegrationTest
         },
       )
 
-      clue("All sequencers are registered") {
-        eventually(timeUntilSuccess = 1.minute) {
-          inside(sv1ScanBackend.listDsoSequencers()) {
-            case Seq(DomainSequencers(synchronizerId, sequencers)) =>
-              synchronizerId shouldBe decentralizedSynchronizerId
-              sequencers should have size 8
-              sequencers.foreach { sequencer =>
-                sequencer.serial match {
-                  case Some(serial) =>
-                    serial shouldBe 0
-                    sequencer.migrationId shouldBe -1
-                  case None =>
-                    sequencer.migrationId shouldBe 0
-                }
-              }
-          }
-        }
-      }
+      // The serial 1 sequencers are still registered at this point as we only unregister them when the successors give us back a response
+      // and they are still uninitialized here.
+      checkSerial1Sequencers()
 
       def onboardUserAndTapAmulet(
           validatorBackend: ValidatorAppBackendReference,
@@ -649,7 +657,7 @@ class LsuIntegrationTest
           inside(sv1ScanBackend.listDsoSequencers()) {
             case Seq(DomainSequencers(synchronizerId, sequencers)) =>
               synchronizerId shouldBe decentralizedSynchronizerId
-              sequencers should have size 11
+              sequencers should have size 12
               sequencers.groupBy(_.svName).foreach { case (sv, sequencers) =>
                 clue(s"check sequencers for $sv") {
                   forExactly(1, sequencers) { sequencer =>
@@ -661,6 +669,13 @@ class LsuIntegrationTest
                       sequencer.serial.value shouldBe newSynchronizerSerial.value.toLong
                       sequencer.migrationId shouldBe -1
                     }
+                  else {
+                    // sv4 still reports the old serial until it upgrades
+                    forExactly(1, sequencers) { sequencer =>
+                      sequencer.serial.value shouldBe 1
+                      sequencer.migrationId shouldBe -1
+                    }
+                  }
                   forExactly(1, sequencers) { sequencer =>
                     sequencer.serial should be(empty)
                     sequencer.migrationId shouldBe 0
