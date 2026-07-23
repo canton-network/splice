@@ -291,13 +291,6 @@ class LsuIntegrationTest
         }
       }
 
-      clue("Sequencer successors have been removed from topology state") {
-        eventually() {
-          sv1Backend.participantClientWithAdminToken.topology.lsu.sequencer_successors
-            .list(store = Some(Synchronizer(decentralizedSynchronizerId))) shouldBe empty
-        }
-      }
-
       clue("Removal transaction exists in topology history") {
         val removals = sv1Backend.participantClientWithAdminToken.topology.lsu.announcement
           .list(

@@ -58,7 +58,6 @@ import org.lfdecentralizedtrust.splice.sv.automation.singlesv.scan.AggregatingSc
 import org.lfdecentralizedtrust.splice.sv.config.{SequencerPruningConfig, SvAppBackendConfig}
 import org.lfdecentralizedtrust.splice.sv.lsu.{
   LsuAnnouncementTrigger,
-  LsuCancellationTrigger,
   LsuSequencingTestTrigger,
   LsuTransferTrafficTrigger,
   LsuTrigger,
@@ -444,13 +443,6 @@ class SvDsoAutomationService(
               throw new IllegalArgumentException("Domain migration dump path must be set for LSU")
             ),
             config.bftSequencerConnection,
-          )
-        )
-        registerTrigger(
-          new LsuCancellationTrigger(
-            triggerContext,
-            synchronizerNodeReconciler,
-            synchronizerNodeService.nodes,
           )
         )
         registerTrigger(

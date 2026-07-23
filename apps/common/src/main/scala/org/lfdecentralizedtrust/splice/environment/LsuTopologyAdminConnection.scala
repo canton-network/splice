@@ -84,22 +84,6 @@ trait LsuTopologyAdminConnection {
     )
   }
 
-  def removeSequencerSuccessor(
-      synchronizerId: SynchronizerId,
-      sequencerId: SequencerId,
-  )(implicit tc: TraceContext, ec: ExecutionContext): Future[Unit] = {
-    ensureTopologyMappingRemoved(
-      s"Remove SequencerSuccessor for $synchronizerId and sequencer $sequencerId",
-      synchronizerId,
-      lookupSequencerSuccessors(
-        synchronizerId,
-        sequencerId,
-        Some(TopologyChangeOp.Replace),
-      ),
-      proposal = true,
-    )
-  }
-
   def lookupSynchronizerLsuAnnouncement(
       synchronizerId: SynchronizerId,
       timeQuery: TimeQuery,
