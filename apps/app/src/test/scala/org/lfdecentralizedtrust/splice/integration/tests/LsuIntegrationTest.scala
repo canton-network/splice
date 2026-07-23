@@ -314,140 +314,7 @@ class LsuIntegrationTest
   }
 
   "upgrade synchronizer to new physical synchronizer without downtime" in { implicit env =>
-    val allNodes = Seq[AppBackendReference](
-      sv1ScanBackend,
-      sv2ScanBackend,
-      sv3ScanBackend,
-      sv4ScanBackend,
-      sv1Backend,
-      sv1LocalBackend,
-      sv1NoLegacyLocalBackend,
-      sv2Backend,
-      sv3Backend,
-      sv4Backend,
-      sv1ValidatorBackend,
-      sv2ValidatorBackend,
-      sv3ValidatorBackend,
-      sv4ValidatorBackend,
-    )
-    // restart to clear any caches
-    allNodes.par.foreach(_.stop())
-    initDso(includeLocal = false)
-    startAllSync(aliceValidatorBackend, splitwellValidatorBackend)
-    actAndCheck("Create some transaction history", sv1WalletClient.tap(1337))(
-      "Scan transaction history is recorded and wallet balance is updated",
-      _ => {
-        // buffer to account for domain fee payments
-        assertInRange(
-          sv1WalletClient.balance().unlockedQty,
-          (walletUsdToAmulet(1000), walletUsdToAmulet(2000)),
-        )
-        countTapsFromScan(sv1ScanBackend, walletUsdToAmulet(1337)) shouldBe 1
-      },
-    )
-
-    clue("All sequencers are registered") {
-      eventually() {
-        inside(sv1ScanBackend.listDsoSequencers()) {
-          case Seq(DomainSequencers(synchronizerId, sequencers)) =>
-            synchronizerId shouldBe decentralizedSynchronizerId
-            sequencers should have size 8
-            sequencers.foreach { sequencer =>
-              sequencer.serial match {
-                case Some(serial) =>
-                  serial shouldBe 0
-                  sequencer.migrationId shouldBe -1
-                case None =>
-                  sequencer.migrationId shouldBe 0
-              }
-            }
-        }
-      }
-    }
-
-    def onboardUserAndTapAmulet(
-        validatorBackend: ValidatorAppBackendReference,
-        walletClient: WalletAppClientReference,
-        tapAmount: BigDecimal = 50.0,
-        expectedAmulets: Range = 50 to 50,
-    ) = {
-      val walletUserParty = onboardWalletUser(walletClient, validatorBackend)
-      eventuallySucceeds() {
-        walletClient.tap(tapAmount)
-      }
-      clue(s"${validatorBackend.name} has tapped a amulet") {
-        checkWallet(
-          walletUserParty,
-          walletClient,
-          Seq((walletUsdToAmulet(expectedAmulets.start), walletUsdToAmulet(expectedAmulets.end))),
-        )
-      }
-      walletUserParty
-    }
-
-    def createExternalParty(
-        validatorBackend: ValidatorAppBackendReference,
-        walletClient: WalletAppClientReference,
-    ) = {
-      val onboarding @ OnboardingResult(externalParty, _, _) =
-        onboardExternalParty(validatorBackend)
-      walletClient.tap(50.0)
-      createTransferPreapprovalEnsuringItExists(walletClient, validatorBackend)
-      createAndAcceptExternalPartySetupProposal(validatorBackend, onboarding)
-      validatorBackend
-        .getExternalPartyBalance(externalParty)
-        .totalUnlockedCoin shouldBe "0.0000000000"
-      // can still fail with no preapproval depending on what scan subset is used
-      eventuallySucceeds() {
-        walletClient.transferPreapprovalSend(externalParty, 40.0, UUID.randomUUID.toString)
-      }
-      eventually() {
-        validatorBackend
-          .getExternalPartyBalance(externalParty)
-          .totalUnlockedCoin shouldBe "40.0000000000"
-      }
-      onboarding
-    }
-
-    onboardUserAndTapAmulet(aliceValidatorBackend, aliceValidatorWalletClient)
-
-    // account for the cancellation
-    val newSynchronizerSerial = decentralizedSynchronizerPSId.serial + NonNegativeInt.two
-    val successorPsid = decentralizedSynchronizerPSId.copy(
-      serial = newSynchronizerSerial,
-      protocolVersion = successorPv,
-    )
-    // Upload after starting validator which connects to global
-    // synchronizers as upload_dar_unless_exists vets on all
-    // connected synchronizers.
-    aliceValidatorBackend.participantClient.upload_dar_unless_exists(splitwellDarPath)
-    val externalPartyOnboarding = clue("Create external party and transfer 40 amulet to it") {
-      createExternalParty(aliceValidatorBackend, aliceValidatorWalletClient)
-    }
-
-    val bobValidatorWalletLocal = wc(
-      "bobValidatorWalletLocal"
-    )
-    clue("Start bob validator local, onboard and tap before upgrade") {
-      runBobValidatorWithStandaloneParticipant("before-upgrade")(
-        onboardUserAndTapAmulet(
-          bobValidatorLocal,
-          bobValidatorWalletLocal,
-        )
-      )
-    }
-
-    val lateJoiningNode = sv4Nodes
-    lateJoiningNode.par.foreach(_.stop())
-    val topologyFreezeTime = CantonTimestamp.now()
-    // We need to give enough time for the new Canton instance to startup
-    // and finish sequencer initialization so we can then publish the sequencer announcement before the upgrade time.
-    val upgradeTime = CantonTimestamp.now().plusSeconds(150)
-    clue(s"Schedule logical synchronizer upgrade at $upgradeTime") {
-      scheduleLsu(topologyFreezeTime, upgradeTime, newSynchronizerSerial.value.toLong)
-    }
-    val allBackends = Seq(sv1Backend, sv2Backend, sv3Backend, sv4Backend)
-    val initialSvNodesDoingTheLsu = Seq(sv1Backend, sv2Backend, sv3Backend)
+    // start the nodes early so that the sv app can remove the existing successor physical synchronizer state
     withCantonSvNodes(
       (
         None,
@@ -462,6 +329,140 @@ class LsuIntegrationTest
       ProcessTestUtil.javaToolOptionsKey -> "-Xms8g -Xmx10g"
     ) {
 
+      val allNodes = Seq[AppBackendReference](
+        sv1ScanBackend,
+        sv2ScanBackend,
+        sv3ScanBackend,
+        sv4ScanBackend,
+        sv1Backend,
+        sv1LocalBackend,
+        sv1NoLegacyLocalBackend,
+        sv2Backend,
+        sv3Backend,
+        sv4Backend,
+        sv1ValidatorBackend,
+        sv2ValidatorBackend,
+        sv3ValidatorBackend,
+        sv4ValidatorBackend,
+      )
+      // restart to clear any caches
+      allNodes.par.foreach(_.stop())
+      initDso(includeLocal = false)
+      startAllSync(aliceValidatorBackend, splitwellValidatorBackend)
+      actAndCheck("Create some transaction history", sv1WalletClient.tap(1337))(
+        "Scan transaction history is recorded and wallet balance is updated",
+        _ => {
+          // buffer to account for domain fee payments
+          assertInRange(
+            sv1WalletClient.balance().unlockedQty,
+            (walletUsdToAmulet(1000), walletUsdToAmulet(2000)),
+          )
+          countTapsFromScan(sv1ScanBackend, walletUsdToAmulet(1337)) shouldBe 1
+        },
+      )
+
+      clue("All sequencers are registered") {
+        eventually() {
+          inside(sv1ScanBackend.listDsoSequencers()) {
+            case Seq(DomainSequencers(synchronizerId, sequencers)) =>
+              synchronizerId shouldBe decentralizedSynchronizerId
+              sequencers should have size 8
+              sequencers.foreach { sequencer =>
+                sequencer.serial match {
+                  case Some(serial) =>
+                    serial shouldBe 0
+                    sequencer.migrationId shouldBe -1
+                  case None =>
+                    sequencer.migrationId shouldBe 0
+                }
+              }
+          }
+        }
+      }
+
+      def onboardUserAndTapAmulet(
+          validatorBackend: ValidatorAppBackendReference,
+          walletClient: WalletAppClientReference,
+          tapAmount: BigDecimal = 50.0,
+          expectedAmulets: Range = 50 to 50,
+      ) = {
+        val walletUserParty = onboardWalletUser(walletClient, validatorBackend)
+        eventuallySucceeds() {
+          walletClient.tap(tapAmount)
+        }
+        clue(s"${validatorBackend.name} has tapped a amulet") {
+          checkWallet(
+            walletUserParty,
+            walletClient,
+            Seq((walletUsdToAmulet(expectedAmulets.start), walletUsdToAmulet(expectedAmulets.end))),
+          )
+        }
+        walletUserParty
+      }
+
+      def createExternalParty(
+          validatorBackend: ValidatorAppBackendReference,
+          walletClient: WalletAppClientReference,
+      ) = {
+        val onboarding @ OnboardingResult(externalParty, _, _) =
+          onboardExternalParty(validatorBackend)
+        walletClient.tap(50.0)
+        createTransferPreapprovalEnsuringItExists(walletClient, validatorBackend)
+        createAndAcceptExternalPartySetupProposal(validatorBackend, onboarding)
+        validatorBackend
+          .getExternalPartyBalance(externalParty)
+          .totalUnlockedCoin shouldBe "0.0000000000"
+        // can still fail with no preapproval depending on what scan subset is used
+        eventuallySucceeds() {
+          walletClient.transferPreapprovalSend(externalParty, 40.0, UUID.randomUUID.toString)
+        }
+        eventually() {
+          validatorBackend
+            .getExternalPartyBalance(externalParty)
+            .totalUnlockedCoin shouldBe "40.0000000000"
+        }
+        onboarding
+      }
+
+      onboardUserAndTapAmulet(aliceValidatorBackend, aliceValidatorWalletClient)
+
+      // account for the cancellation
+      val newSynchronizerSerial = decentralizedSynchronizerPSId.serial + NonNegativeInt.two
+      val successorPsid = decentralizedSynchronizerPSId.copy(
+        serial = newSynchronizerSerial,
+        protocolVersion = successorPv,
+      )
+      // Upload after starting validator which connects to global
+      // synchronizers as upload_dar_unless_exists vets on all
+      // connected synchronizers.
+      aliceValidatorBackend.participantClient.upload_dar_unless_exists(splitwellDarPath)
+      val externalPartyOnboarding = clue("Create external party and transfer 40 amulet to it") {
+        createExternalParty(aliceValidatorBackend, aliceValidatorWalletClient)
+      }
+
+      val bobValidatorWalletLocal = wc(
+        "bobValidatorWalletLocal"
+      )
+      clue("Start bob validator local, onboard and tap before upgrade") {
+        runBobValidatorWithStandaloneParticipant("before-upgrade")(
+          onboardUserAndTapAmulet(
+            bobValidatorLocal,
+            bobValidatorWalletLocal,
+          )
+        )
+      }
+
+      val lateJoiningNode = sv4Nodes
+      lateJoiningNode.par.foreach(_.stop())
+      val topologyFreezeTime = CantonTimestamp.now()
+      // We need to give enough time for the new Canton instance to startup
+      // and finish sequencer initialization so we can then publish the sequencer announcement before the upgrade time.
+      val upgradeTime = CantonTimestamp.now().plusSeconds(150)
+      clue(s"Schedule logical synchronizer upgrade at $upgradeTime") {
+        scheduleLsu(topologyFreezeTime, upgradeTime, newSynchronizerSerial.value.toLong)
+      }
+      val allBackends = Seq(sv1Backend, sv2Backend, sv3Backend, sv4Backend)
+      val initialSvNodesDoingTheLsu = Seq(sv1Backend, sv2Backend, sv3Backend)
       clue(
         "Pause traffic transfer trigger on sv2 to simulate a participant that is connected to a non initialized sequencer past upgrade tiem"
       ) {
