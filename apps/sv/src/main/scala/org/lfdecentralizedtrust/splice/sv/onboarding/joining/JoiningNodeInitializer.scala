@@ -364,12 +364,11 @@ class JoiningNodeInitializer(
               "Starting onboarding with DSO party migration."
           )
           for {
-            (joiningConfig, svConnection) <- svConnection
+            (joiningConfig, _) <- svConnection
             dsoAutomation <- withSvStore
               .startOnboardingWithDsoPartyMigration(
                 initConnection,
                 dsoStore,
-                svConnection,
                 joiningConfig,
                 packageVersionSupport,
                 decentralizedSynchronizerId,
@@ -905,7 +904,6 @@ class JoiningNodeInitializer(
     def startOnboardingWithDsoPartyMigration(
         initConnection: BaseLedgerConnection,
         dsoStore: SvDsoStore,
-        svConnection: SvConnection,
         joiningConfig: SvOnboardingConfig.JoinWithKey,
         packageVersionSupport: PackageVersionSupport,
         synchronizerId: SynchronizerId,
