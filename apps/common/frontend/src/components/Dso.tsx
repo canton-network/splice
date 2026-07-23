@@ -118,8 +118,6 @@ const TabPanel = (props: TabPanelProps) => {
 function getCometBftDebugData(
   cometBftNodeDebugQuery: UseQueryResult<CometBftNodeDumpOrErrorResponse>
 ) {
-  // isPending, not isLoading: a paused query (e.g. offline during retry backoff)
-  // has isLoading false while data is still undefined.
   if (cometBftNodeDebugQuery.isPending) {
     return <Loading />;
   }
