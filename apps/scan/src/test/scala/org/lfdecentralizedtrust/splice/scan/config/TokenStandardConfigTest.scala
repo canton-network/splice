@@ -37,6 +37,27 @@ class TokenStandardConfigTest extends AnyWordSpec with BaseTest {
         config.validateSettleBatch(settleBatch)
       }
 
+      "reject settle batches with too many allocations" in {
+        val config =
+          TokenStandardConfig.SettlementConfig(maxLegs = 10, maxParties = 10, maxAllocations = 1)
+
+        val ex = the[StatusRuntimeException] thrownBy {
+          config.validateSettleBatch(
+            mkSettleBatch(
+              transferLegs = Seq.empty,
+              allocations = Seq(
+                mkFinalizedAllocation("alloc-1"),
+                mkFinalizedAllocation("alloc-2"),
+              ),
+            )
+          )
+        }
+
+        ex.getStatus.getCode shouldBe Status.Code.INVALID_ARGUMENT
+        ex.getStatus.getDescription shouldBe
+          "Too many allocations in the settle batch: 2. Maximum allowed: 1"
+      }
+
       "reject settle batches with too many transfer legs" in {
         val config = TokenStandardConfig.SettlementConfig(maxLegs = 1, maxParties = 10)
 
@@ -112,12 +133,13 @@ class TokenStandardConfigTest extends AnyWordSpec with BaseTest {
   }
 
   private def mkSettleBatch(
-      transferLegs: Seq[allocationv2.TransferLeg]
+      transferLegs: Seq[allocationv2.TransferLeg],
+      allocations: Seq[allocationv2.FinalizedAllocation] = Seq.empty,
   ): allocationv2.SettlementFactory_SettleBatch =
     new allocationv2.SettlementFactory_SettleBatch(
       mkSettlementInfo(),
       transferLegs.asJava,
-      java.util.List.of(),
+      allocations.asJava,
       java.util.List.of("venue"),
       emptyExtraArgs,
     )
@@ -153,6 +175,13 @@ class TokenStandardConfigTest extends AnyWordSpec with BaseTest {
       java.util.List.of("authorizer"),
     )
   }
+
+  private def mkFinalizedAllocation(cid: String): allocationv2.FinalizedAllocation =
+    new allocationv2.FinalizedAllocation(
+      new allocationv2.Allocation.ContractId(cid),
+      java.util.List.of(),
+      java.util.Optional.empty(),
+    )
 
   private def mkTransferLeg(
       transferLegId: String,
