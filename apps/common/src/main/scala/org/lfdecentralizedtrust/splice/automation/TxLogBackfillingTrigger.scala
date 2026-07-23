@@ -36,6 +36,10 @@ class TxLogBackfillingTrigger[TXE](
 
   private def party: PartyId = updateHistory.updateStreamParty
 
+  override protected def extraMetricLabels: Seq[(String, String)] = Seq(
+    "party" -> party.toProtoPrimitive
+  )
+
   private val historyMetrics = metrics
 
   private val backfilling = new TxLogBackfilling(
