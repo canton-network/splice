@@ -35,7 +35,6 @@ import com.google.protobuf.field_mask.FieldMask
 import io.grpc.{Status, StatusRuntimeException}
 import org.apache.pekko.NotUsed
 import org.apache.pekko.actor.ActorSystem
-import org.apache.pekko.pattern.CircuitBreakerOpenException
 import org.apache.pekko.stream.scaladsl.{Flow, Keep, RestartSource, Sink, Source}
 import org.apache.pekko.stream.{KillSwitch, KillSwitches, RestartSettings}
 import org.lfdecentralizedtrust.splice.environment.ledger.api.{
@@ -52,6 +51,7 @@ import org.lfdecentralizedtrust.splice.util.{
   ContractWithState,
   DisclosedContracts,
   SpliceCircuitBreaker,
+  SpliceCircuitBreakerOpenException,
 }
 import shapeless.<:!<
 
@@ -990,12 +990,12 @@ class SpliceLedgerConnection(
                     preferredPackageIds = preferredPackageIds,
                   )
                 )
-                .recover { case ex: CircuitBreakerOpenException =>
-                  // Expose a bit more info and turn it into our standard exceptions
+                .recover { case ex: SpliceCircuitBreakerOpenException =>
                   throw Status.ABORTED
                     .withDescription(
                       s"Command submission aborted by circuit breaker due to too many successive failures, next attempt in ${ex.remainingDuration.toSeconds}s"
                     )
+                    .withCause(ex.getCause)
                     .asRuntimeException
                 }
             )(getOffsetAndResult)

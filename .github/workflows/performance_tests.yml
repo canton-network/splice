@@ -35,8 +35,7 @@ jobs:
         uses: ./.github/actions/tests/common_test_setup
         with:
           cache_version: 8
-          test_name: oss
-          target: 'oss'
+          test_name: ingestion_performance_tests
 
       # Authenticate to GCP for read access to GCS
       - name: Authenticate to GCP (mainnet-history-dumps)
@@ -139,8 +138,7 @@ jobs:
         uses: ./.github/actions/tests/common_test_setup
         with:
           cache_version: 8
-          test_name: oss
-          target: 'oss'
+          test_name: read_performance_tests
 
       # Authenticate to GCP for read access to GCS
       - name: Authenticate to GCP (mainnet-history-dumps)

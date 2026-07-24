@@ -21,11 +21,14 @@ trait IgnoredAmuletVersionGuard {
 
   protected def completeWithIgnoredAmuletVersionCheck(
       vettedVersion: String,
-      expiredOwners: Set[PartyId],
+      stakeholders: Set[PartyId],
+      dsoParty: PartyId,
       enableUnresponsivePartiesAutoIgnore: Boolean,
   )(
       fallback: => Future[TaskOutcome]
   )(implicit ec: ExecutionContext): Future[TaskOutcome] = {
+    // ensure we do not ignore the DSO party itself, even if it is unresponsive
+    val expiredOwners = stakeholders - dsoParty
     if (
       svConfig.allIgnoredAmuletVersions.contains(vettedVersion) &&
       svConfig.parameters.enabledFeatures.ignorePartyIdWithIgnoredAmulet

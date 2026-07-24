@@ -31,6 +31,7 @@ import org.openqa.selenium.support.ui.Select
 import org.slf4j.event.Level
 
 import scala.jdk.CollectionConverters.*
+import scala.jdk.OptionConverters.*
 import java.util.Optional
 
 class SvFrontendIntegrationTest
@@ -1421,6 +1422,7 @@ class SvFrontendIntegrationTest
     "NEW UI: Grant and Revoke Featured App Right" in { implicit env =>
       val providerParty = sv3Backend.getDsoInfo().svParty
       val providerPartyId = providerParty.toProtoPrimitive
+      val activityWeight = BigDecimal("2.5")
 
       // First, create a Grant proposal for the provider.
       val grantProposalContractId = assertCreateProposal(
@@ -1428,6 +1430,7 @@ class SvFrontendIntegrationTest
         "grant-featured-app",
       ) { implicit webDriver =>
         fillOutTextField("grant-featured-app-idValue", providerPartyId)
+        fillOutTextField("grant-featured-app-activityWeight", activityWeight.toString)
       }
 
       clue("vote the grant request to execution before creating revoke request") {
@@ -1463,7 +1466,11 @@ class SvFrontendIntegrationTest
         }
 
         eventually() {
-          sv1ScanBackend.lookupFeaturedAppRight(providerParty) shouldBe a[Some[?]]
+          val featuredAppRight = sv1ScanBackend.lookupFeaturedAppRight(providerParty)
+          featuredAppRight shouldBe a[Some[?]]
+          featuredAppRight.value.payload.activityWeight.toScala.map(
+            BigDecimal(_)
+          ) shouldBe Some(activityWeight)
         }
       }
 

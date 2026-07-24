@@ -28,6 +28,7 @@ export const SvSequencerConfigSchema = z
     additionalJvmOptions: z.string().optional(),
     cloudSql: CloudSqlWithOverrideConfigSchema,
     resources: K8sResourceSchema,
+    enableAntiAffinity: z.boolean().default(true),
   })
   .strict();
 export type SvSequencerConfig = z.infer<typeof SvSequencerConfigSchema>;

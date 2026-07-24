@@ -34,7 +34,7 @@ describe('SV user can', () => {
     const button = screen.getByRole('button', { name: 'Log In' });
     await user.click(button);
 
-    expect(await screen.findAllByDisplayValue(svPartyId)).not.toBe([]);
+    expect(await screen.findAllByDisplayValue(svPartyId)).not.toHaveLength(0);
   });
 });
 
@@ -94,7 +94,7 @@ describe('Set DSO Config Rules Form', () => {
     expect(submitButton).toBeInTheDocument();
 
     await user.click(submitButton);
-    expect(submitButton.getAttribute('disabled')).toBeDefined();
+    expect(submitButton.getAttribute('disabled')).not.toBeNull();
     expect(async () => await user.click(submitButton)).rejects.toThrowError(
       /Unable to perform pointer interaction/
     );

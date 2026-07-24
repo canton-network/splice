@@ -297,7 +297,10 @@ const VoteRow: React.FC<VoteRowProps> = React.memo(props => {
           </Typography>
         )}
       </TableCell>
-      <TableCell data-testid={`${uniqueId}-row-contract-id`}>
+      <TableCell
+        data-testid={`${uniqueId}-row-contract-id`}
+        sx={{ minWidth: 0, overflow: 'visible' }}
+      >
         <CopyableIdentifier
           value={contractId}
           size="small"

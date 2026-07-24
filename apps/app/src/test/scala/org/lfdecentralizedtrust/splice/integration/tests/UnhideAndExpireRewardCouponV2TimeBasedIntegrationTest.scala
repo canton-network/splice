@@ -28,12 +28,14 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   IntegrationTestWithIsolatedEnvironment,
   SpliceTestConsoleEnvironment,
 }
-import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.ExpireRewardCouponV2Trigger
+import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
+  ExpireRewardCouponV2Trigger,
+  UnhideRewardCouponV2Trigger,
+}
 import org.lfdecentralizedtrust.splice.sv.config.InitialRewardConfig
 import org.lfdecentralizedtrust.splice.util.{
   ChoiceContextWithDisclosures,
   TimeTestUtil,
-  TriggerTestUtil,
   UploadablePackage,
   WalletTestUtil,
 }
@@ -54,26 +56,36 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
     extends IntegrationTestWithIsolatedEnvironment
     with HasExecutionContext
     with WalletTestUtil
-    with TriggerTestUtil
     with TimeTestUtil {
 
-  private val v2AmuletVersion = DarResources.amulet_0_1_19.metadata.version
+  // Version where V2 was introduced, or the current minimum initialization version if higher
+  private val minV2AmuletVersion =
+    Ordering[PackageVersion].max(
+      DarResources.amulet.minimumInitialization.metadata.version,
+      DarResources.amulet_0_1_19.metadata.version,
+    )
 
-  private val previousAmuletPackageId =
-    DarResources.amulet.others
-      .filter(_.metadata.version < v2AmuletVersion)
-      .maxBy(_.metadata.version)
-      .packageId
+  private val minV2AmuletPackageId =
+    DarResources.amulet.getPackageIdWithVersion(minV2AmuletVersion.toString).value
+
+  private val latestAmuletDar: DarResource = DarResources.amulet.latest
 
   private val v2CapableAmuletPackageIds: Seq[String] =
     DarResources.amulet.all
-      .filter(_.metadata.version >= v2AmuletVersion)
+      .filter(_.metadata.version >= minV2AmuletVersion)
       .map(_.packageId)
       .distinct
 
-  // Set of packages alice must not vet to have wrong vetting state for v2 coupons
-  private val v2CapableDarsUnvettedOnAlice: Seq[DarResource] = {
-    val v2CapableAmuletIds = v2CapableAmuletPackageIds.toSet
+  private val amuletVersionsAboveOldestV2: Seq[String] =
+    DarResources.amulet.all
+      .filter(_.metadata.version > minV2AmuletVersion)
+      .map(_.packageId)
+      .distinct
+
+  // Only the latest is unvetted, as this would still cause
+  // ProcessRewardsTrigger to create hidden coupons
+  private val darsUnvettedOnAliceAtStart: Seq[DarResource] = {
+    val latestAmuletIds = Set(latestAmuletDar.packageId)
     Seq(
       DarResources.amulet,
       DarResources.amuletNameService,
@@ -82,8 +94,8 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
       DarResources.walletPayments,
     ).flatMap(_.all)
       .filter(d =>
-        v2CapableAmuletIds.contains(d.packageId) ||
-          d.dependencyPackageIds.exists(v2CapableAmuletIds.contains)
+        latestAmuletIds.contains(d.packageId) ||
+          d.dependencyPackageIds.exists(latestAmuletIds.contains)
       )
       .distinctBy(d => (d.metadata.name, d.metadata.version))
   }
@@ -99,7 +111,7 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
             (aliceValidator -> config
               .validatorApps(aliceValidator)
               .copy(
-                additionalPackagesToUnvet = v2CapableDarsUnvettedOnAlice
+                additionalPackagesToUnvet = darsUnvettedOnAliceAtStart
                   .groupBy(_.metadata.name)
                   .map { case (name, resources) =>
                     name -> resources.map(_.metadata.version).toSet
@@ -122,6 +134,11 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
         )(config)
       )
       .addConfigTransform((_, config) =>
+        updateAutomationConfig(ConfigurableApp.Sv)(
+          _.withPausedTrigger[UnhideRewardCouponV2Trigger]
+        )(config)
+      )
+      .addConfigTransform((_, config) =>
         ConfigTransforms.updateAllSvAppConfigs_(svConfig =>
           svConfig.copy(
             packageVettingCache = svConfig.packageVettingCache.copy(
@@ -135,7 +152,7 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
   "Unhide and expire of RewardCouponV2" in { implicit env =>
     val aliceParticipantId =
       aliceValidatorBackend.appState.participantAdminConnection.getParticipantId().futureValue
-    assertAliceVettedBelowV2(aliceParticipantId)
+    assertAliceVettedBelowLatest(aliceParticipantId)
 
     val (aliceParty, bobParty) = onboardAliceAndBobWithFeaturedRights()
 
@@ -216,10 +233,120 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
 
       clue("UnhideRewardCouponV2Trigger unhides Alice's coupons once she is re-vetted") {
         eventually() {
+          sv1Backend.dsoDelegateBasedAutomation
+            .trigger[UnhideRewardCouponV2Trigger]
+            .runOnce()
+            .futureValue
           val coupons = aliceCoupons
           coupons should not be empty
           coupons.filterNot(_.payload.providerIsObserver) shouldBe empty
         }
+      }
+    }
+
+    // Scenario for #6372, both providers have V2 capable versions vetted, but they lack a common vetted version.
+    clue(
+      "ProcessRewardsTrigger handles a batch where providers have jointly-incompatible vetting states"
+    ) {
+      val bobParticipantId =
+        bobValidatorBackend.appState.participantAdminConnection.getParticipantId().futureValue
+
+      // Alice unvets minV2AmuletVersion; Bob keeps only minV2AmuletVersion, nothing after it.
+      actAndCheck(
+        s"Unvet $minV2AmuletPackageId on Alice and $amuletVersionsAboveOldestV2 on Bob", {
+          aliceValidatorBackend.participantClient.topology.vetted_packages.propose_delta(
+            aliceParticipantId,
+            removes = Seq(PackageId.assertFromString(minV2AmuletPackageId)),
+            force = ForceFlags(ForceFlag.AllowUnvettedDependencies),
+            store = TopologyStoreId.Synchronizer(decentralizedSynchronizerId),
+          )
+          bobValidatorBackend.participantClient.topology.vetted_packages.propose_delta(
+            bobParticipantId,
+            removes = amuletVersionsAboveOldestV2.map(PackageId.assertFromString),
+            force = ForceFlags(ForceFlag.AllowUnvettedDependencies),
+            store = TopologyStoreId.Synchronizer(decentralizedSynchronizerId),
+          )
+        },
+      )(
+        "sv1's participant observes Alice no longer has minV2AmuletVersion vetted, and Bob's vetting is capped at minV2AmuletVersion",
+        _ => {
+          vettedPackagesOnSv1View(aliceParticipantId) should not contain
+            minV2AmuletPackageId
+          vettedPackagesOnSv1View(bobParticipantId)
+            .intersect(amuletVersionsAboveOldestV2) shouldBe empty
+
+          val aliceVettedAboveMin =
+            vettedPackagesOnSv1View(aliceParticipantId).intersect(amuletVersionsAboveOldestV2)
+          val bobVettedAboveMin =
+            vettedPackagesOnSv1View(bobParticipantId).intersect(amuletVersionsAboveOldestV2)
+          aliceVettedAboveMin.intersect(bobVettedAboveMin) shouldBe empty
+        },
+      )
+
+      val (round, _) = actAndCheck(
+        "Generate activity", {
+          doTransfer()
+          val round = oldestOpenRound
+          advanceRoundsToNextRoundOpening
+          round
+        },
+      )(
+        "ProcessRewardsTrigger issues coupons for the round",
+        round => {
+          val newAliceCoupons = aliceCoupons.filter(_.payload.round.number == round)
+          val newBobCoupons = bobUnassignedCoupons.filter(_.payload.round.number == round)
+          newAliceCoupons should not be empty
+          newAliceCoupons.foreach(_.payload.providerIsObserver shouldBe true)
+          newBobCoupons should not be empty
+          newBobCoupons.foreach(_.payload.providerIsObserver shouldBe false)
+        },
+      )
+
+      clue("UnhideRewardCouponV2Trigger can unhide Bob's coupon before he is fully re-vetted") {
+        eventually() {
+          sv1Backend.dsoDelegateBasedAutomation
+            .trigger[UnhideRewardCouponV2Trigger]
+            .runOnce()
+            .futureValue
+          val coupons = bobUnassignedCoupons.filter(_.payload.round.number == round)
+          coupons should not be empty
+          coupons.filterNot(_.payload.providerIsObserver) shouldBe empty
+        }
+      }
+
+      clue("Restore Alice's and Bob's full vetting") {
+        actAndCheck(
+          s"Re-vet the minV2AmuletVersion package on Alice and $amuletVersionsAboveOldestV2 on Bob", {
+            aliceValidatorBackend.participantClient.topology.vetted_packages.propose_delta(
+              aliceParticipantId,
+              adds = Seq(
+                VettedPackage(
+                  PackageId.assertFromString(minV2AmuletPackageId),
+                  None,
+                  None,
+                )
+              ),
+              store = TopologyStoreId.Synchronizer(decentralizedSynchronizerId),
+            )
+            bobValidatorBackend.participantClient.topology.vetted_packages.propose_delta(
+              bobParticipantId,
+              adds = amuletVersionsAboveOldestV2.map(id =>
+                VettedPackage(PackageId.assertFromString(id), None, None)
+              ),
+              store = TopologyStoreId.Synchronizer(decentralizedSynchronizerId),
+            )
+          },
+        )(
+          "sv1's participant observes Alice and Bob are fully vetted again",
+          _ => {
+            v2CapableAmuletPackageIds.toSet.subsetOf(
+              vettedPackagesOnSv1View(aliceParticipantId).toSet
+            ) shouldBe true
+            v2CapableAmuletPackageIds.toSet.subsetOf(
+              vettedPackagesOnSv1View(bobParticipantId).toSet
+            ) shouldBe true
+          },
+        )
       }
     }
 
@@ -344,22 +471,27 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
     }
   }
 
-  private def aliceVettedPackagesOnSv1View(
-      aliceParticipantId: ParticipantId
+  private def vettedPackagesOnSv1View(
+      participantId: ParticipantId
   )(implicit env: SpliceTestConsoleEnvironment): Seq[String] =
     sv1ValidatorBackend.appState.participantAdminConnection
-      .listVettedPackages(aliceParticipantId, decentralizedSynchronizerId, AuthorizedState)
+      .listVettedPackages(participantId, decentralizedSynchronizerId, AuthorizedState)
       .futureValue
       .flatMap(_.mapping.packages.map(_.packageId))
 
-  private def assertAliceVettedBelowV2(
+  private def assertAliceVettedBelowLatest(
       aliceParticipantId: ParticipantId
   )(implicit env: SpliceTestConsoleEnvironment): Unit =
-    clue("Alice's validator vets the highest amulet below the V2 but none at/above it") {
+    clue("Alice's validator vets the second-latest amulet version but not the latest") {
       eventually() {
-        val vetted = aliceVettedPackagesOnSv1View(aliceParticipantId)
-        vetted should contain(previousAmuletPackageId)
-        vetted.intersect(v2CapableAmuletPackageIds) shouldBe empty
+        val vetted = vettedPackagesOnSv1View(aliceParticipantId)
+        vetted should contain(
+          DarResources.amulet.others
+            .filter(_.metadata.version < latestAmuletDar.metadata.version)
+            .maxBy(_.metadata.version)
+            .packageId
+        )
+        vetted should not contain latestAmuletDar.packageId
       }
     }
 
@@ -402,18 +534,18 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
         val aliceAdminConnection = aliceValidatorBackend.appState.participantAdminConnection
         aliceAdminConnection
           .uploadDarFiles(
-            v2CapableDarsUnvettedOnAlice.map(UploadablePackage.fromResource),
+            darsUnvettedOnAliceAtStart.map(UploadablePackage.fromResource),
             RetryFor.Automation,
           )
           .futureValue
         aliceAdminConnection
-          .vetDars(decentralizedSynchronizerId, v2CapableDarsUnvettedOnAlice, None, None)
+          .vetDars(decentralizedSynchronizerId, darsUnvettedOnAliceAtStart, None, None)
           .futureValue
       },
     )(
       "sv1's participant observes Alice has the correct vetting state for RewardAccountingV2",
       _ =>
-        aliceVettedPackagesOnSv1View(aliceParticipantId) should contain(
+        vettedPackagesOnSv1View(aliceParticipantId) should contain(
           DarResources.amulet.latest.packageId
         ),
     )
@@ -432,7 +564,7 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
     )(
       "sv1's participant observes Alice is in the wrong vetting state",
       _ =>
-        aliceVettedPackagesOnSv1View(aliceParticipantId)
+        vettedPackagesOnSv1View(aliceParticipantId)
           .intersect(v2CapableAmuletPackageIds) shouldBe empty,
     )
 
@@ -454,9 +586,9 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
       "sv1's participant observes Alice has the correct vetting state again",
       _ => {
         v2CapableAmuletPackageIds.toSet
-          .subsetOf(aliceVettedPackagesOnSv1View(aliceParticipantId).toSet) shouldBe true
+          .subsetOf(vettedPackagesOnSv1View(aliceParticipantId).toSet) shouldBe true
         aliceLedgerApiAmuletVersionOnSv1View(aliceParty).exists(
-          _ >= v2AmuletVersion
+          _ >= minV2AmuletVersion
         ) shouldBe true
       },
     )
@@ -486,6 +618,11 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
       case Some(_) =>
         sv1Backend.metrics.get(name, attributes).select[MetricValue.LongPoint].value.value
     }
+  }
+
+  private def oldestOpenRound(implicit env: SpliceTestConsoleEnvironment): Long = {
+    val (openRounds, _) = sv1ScanBackend.getOpenAndIssuingMiningRounds()
+    openRounds.map(_.contract.payload.round.number.toLong).min
   }
 
   private def assertOldestOpenRound(

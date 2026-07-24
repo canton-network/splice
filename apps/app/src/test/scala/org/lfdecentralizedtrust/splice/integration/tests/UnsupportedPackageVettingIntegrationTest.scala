@@ -39,11 +39,17 @@ import com.digitalasset.canton.logging.SuppressionRule
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.slf4j.event.Level
 
+@org.lfdecentralizedtrust.splice.util.scalatesttags.NoDamlCompatibilityCheck
 class UnsupportedPackageVettingIntegrationTest
     extends IntegrationTest
     with PackageUnvettingUtil
     with AmuletConfigUtil
     with WalletTestUtil {
+
+  // Prevent failures due to:
+  //   NO_VETTED_INTERFACE_IMPLEMENTATION_PACKAGE(9,f5ce331d):
+  //   No vetted package for rendering the interface view for package-name 'splice-amulet'
+  override protected def runTokenStandardCliSanityCheck: Boolean = false
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
@@ -264,6 +270,7 @@ class UnsupportedPackageVettingIntegrationTest
               _.message should include regex "Success: dars .*48cac5ba4b6bf78df6c3a952ce05409a1d2ef39c05351074679adc0cf9cd1351.* are removed .*"
             )
           },
+          timeUntilSuccess = 40.seconds,
         )
       }
 

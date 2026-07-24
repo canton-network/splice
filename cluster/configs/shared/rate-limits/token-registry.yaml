@@ -2,120 +2,120 @@ rateLimits:
   /registry/allocations/v1:
     name: registry-allocations
     type: limited
-    maxTokens: 200
-    tokensPerFill: 200
+    maxTokens: 720
+    tokensPerFill: 720
     fillInterval: 60s
     perIpLimits:
-      maxTokens: 30
-      tokensPerFill: 30
+      maxTokens: 120
+      tokensPerFill: 120
       fillInterval: 60s
   /registry/metadata/v1/info:
     name: registry-metadata-info
     type: limited
-    maxTokens: 200
-    tokensPerFill: 200
+    maxTokens: 720
+    tokensPerFill: 720
     fillInterval: 60s
     perIpLimits:
-      maxTokens: 30
-      tokensPerFill: 30
+      maxTokens: 120
+      tokensPerFill: 120
       fillInterval: 60s
   /registry/metadata/v1/instruments:
     name: registry-metadata-instruments
     type: limited
-    maxTokens: 200
-    tokensPerFill: 200
+    maxTokens: 720
+    tokensPerFill: 720
     fillInterval: 60s
     perIpLimits:
-      maxTokens: 30
-      tokensPerFill: 30
+      maxTokens: 120
+      tokensPerFill: 120
       fillInterval: 60s
   /registry/allocation-instruction/v1/allocation-factory:
     name: registry-allocation-factory
     type: limited
-    maxTokens: 200
-    tokensPerFill: 200
+    maxTokens: 720
+    tokensPerFill: 720
     fillInterval: 60s
     perIpLimits:
-      maxTokens: 30
-      tokensPerFill: 30
+      maxTokens: 120
+      tokensPerFill: 120
       fillInterval: 60s
   /registry/transfer-instruction/v1:
     name: registry-transfer-instruction
     type: limited
-    maxTokens: 200
-    tokensPerFill: 200
+    maxTokens: 720
+    tokensPerFill: 720
     fillInterval: 60s
     perIpLimits:
-      maxTokens: 30
-      tokensPerFill: 30
+      maxTokens: 120
+      tokensPerFill: 120
       fillInterval: 60s
   /registry/transfer-instruction/v1/transfer-factory:
     name: registry-transfer-factory
     type: limited
-    maxTokens: 500
-    tokensPerFill: 500 # Higher limit: transfer-factory generates the most registry traffic
+    maxTokens: 730
+    tokensPerFill: 730
     fillInterval: 60s
     perIpLimits:
-      maxTokens: 50
-      tokensPerFill: 50
+      maxTokens: 120
+      tokensPerFill: 120
       fillInterval: 60s
   /registry/allocation/v2/settlement-factory:
     name: registry-settlement-factory-v2
     type: limited
-    maxTokens: 200
-    tokensPerFill: 200
+    maxTokens: 720
+    tokensPerFill: 720
     fillInterval: 60s
     perIpLimits:
-      maxTokens: 30
-      tokensPerFill: 30
+      maxTokens: 120
+      tokensPerFill: 120
       fillInterval: 60s
   /registry/allocations/v2:
     name: registry-allocations-v2
     type: limited
-    maxTokens: 200
-    tokensPerFill: 200
+    maxTokens: 720
+    tokensPerFill: 720
     fillInterval: 60s
     perIpLimits:
-      maxTokens: 30
-      tokensPerFill: 30
+      maxTokens: 120
+      tokensPerFill: 120
       fillInterval: 60s
   /registry/allocation-instruction/v2/allocation-factory:
     name: registry-allocation-factory-v2
     type: limited
-    maxTokens: 200
-    tokensPerFill: 200
+    maxTokens: 720
+    tokensPerFill: 720
     fillInterval: 60s
     perIpLimits:
-      maxTokens: 30
-      tokensPerFill: 30
+      maxTokens: 120
+      tokensPerFill: 120
       fillInterval: 60s
   /registry/allocation-instruction/v2:
     name: registry-allocation-instruction-v2
     type: limited
-    maxTokens: 200
-    tokensPerFill: 200
+    maxTokens: 720
+    tokensPerFill: 720
     fillInterval: 60s
     perIpLimits:
-      maxTokens: 30
-      tokensPerFill: 30
+      maxTokens: 120
+      tokensPerFill: 120
       fillInterval: 60s
   /registry/transfer-instruction/v2/transfer-factory:
     name: registry-transfer-factory-v2
     type: limited
-    maxTokens: 500
-    tokensPerFill: 500
+    maxTokens: 720
+    tokensPerFill: 720
     fillInterval: 60s
     perIpLimits:
-      maxTokens: 50
-      tokensPerFill: 50
+      maxTokens: 120
+      tokensPerFill: 120
       fillInterval: 60s
   /registry/transfer-instruction/v2:
     name: registry-transfer-instruction-v2
     type: limited
-    maxTokens: 200
-    tokensPerFill: 200
+    maxTokens: 720
+    tokensPerFill: 720
     fillInterval: 60s
     perIpLimits:
-      maxTokens: 30
-      tokensPerFill: 30
+      maxTokens: 120
+      tokensPerFill: 120
       fillInterval: 60s

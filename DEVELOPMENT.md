@@ -36,49 +36,6 @@
    direnv: error /home/moritz/daml-projects/canton-amulet/.envrc is blocked. Run `direnv allow` to approve its content
    ```
 1. Run `direnv allow`. You should see a bunch of output including `direnv: using nix`.
-1. (Optional) Configure artifactory credentials
-   A few tests rely on Enterprise canton features. To be able to run those locally, you will require access to
-   Digital Asset's enterprise artifactory. If you need to run those, please contact the Maintainers of this repo,
-   per MAINTAINERS.md.
-   Once you have access to artifactory, you can generate an artifactory Identity Token [here](https://digitalasset.jfrog.io/ui/admin/artifactory/user_profile).
-   Your username is shown at the top of the page (under "User profile: XX").
-   1. Add the following to `/etc/nix/netrc` (you might need to create that directory as root):
-      ```
-      machine digitalasset.jfrog.io
-      login yourartifactoryusername
-      password yourartifactoryidentitytoken
-      ```
-   1. In addition, add your artifactory user and password to `.envrc.private` file like so:
-      ```
-      export ARTIFACTORY_USER="yourartifactoryusername"
-      export ARTIFACTORY_PASSWORD="yourartifactoryidentitytoken"
-      ```
-   Once added, reload direnv by typing `direnv reload` in your terminal.
-1. (Optional) Configure artifactory credentials - troubleshooting
-   If you defined Artifactory access, and are getting an authorization exception, like the following:
-   ```
-   direnv: using nix
-   error: unable to download 'https://digitalasset.jfrog.io/artifactory/canton-enterprise/canton-enterprise-2.7.0-snapshot.20230614.10547.0.v03419b62.tar.gz': HTTP error 401 ('Unauthorized')
-   ```
-   1. Check that your access token is valid by running the following sample command:
-      ```
-      curl -vvv -L -u<yourartifactoryusername>:<yourartifactoryidentitytoken> "https://digitalasset.jfrog.io/artifactory/canton-enterprise/canton-enterprise-2.7.0-snapshot.20230614.10547.0.v03419b62.tar.gz" -o canton-enterprise-2.7.0-snapshot.20230614.10547.0.v03419b62.tar.gz
-      ```
-      If the download fails, check that your access token matches what is set in [Artifactory](https://digitalasset.jfrog.io/ui/admin/artifactory/user_profile).
-      Also, check you have visability via the UI [here](https://digitalasset.jfrog.io/ui/repos/tree/General/canton-enterprise).
-      If you don't have visibility via the UI then check with the repo Maintainers.
-   1. If the artifact successfully downloaded, check the access rights of the file `/etc/nix/netrc`.
-      If the access rights are more restrictive than `-rw-rw-r--`, update them:
-      ```
-      chmod 664 /etc/nix/netrc
-      ```
-      Note - `sudo` may be required to run the above command.
-   1. Switch to the Splice repo directory.
-   1. If the authorization exception isn't resolved, investigate further with additional logging
-      by running the following command at the root of the repo:
-      ```
-      nix develop --debug --verbose path:nix
-
      **Important:** start your IDE and other development tools from a console that
      has this `direnv` loaded; and thus has the proper version of all the
      project dependencies on its `PATH`.
@@ -144,7 +101,7 @@ and upload them to the dev GHCR registry. In order to do so, you will need to fo
 
 There are a number of environment variables managed with `direnv` that
 are used to contain private information. This includes credentials to
-a range of external services, including Auth0 and Artifactory. To keep
+a range of external services, such as Auth0. To keep
 this private information private, they are stored in a specific file
 in the root of the project repository: `.envrc.private`. This file is
 listed in `.gitignore` to prevent accidental commit to the repository.
@@ -154,12 +111,6 @@ also checking to verify that the environment definitions expected to
 be present in `.envrc.private` are in fact present. Missing
 definitions will cause a warning to be reported when `.envrc` is
 executed.
-
-A list of expected environment definitions is as follows:
-
-* Artifactory credentials
-   * `ARTIFACTORY_USER`: your username at digitalasset.jfrog.io (can be seen in the top-right corner after logging in with Google SSO)
-   * `ARTIFACTORY_PASSWORD`: Your identity token at digitalasset.jfrog.io (can be obtained by generating an identity token in your user profile)
 
 If you are a Splice Contributor (see CONTRIBUTOR.md) and wish to push Docker images and
 deploy to test clusters from your local machine, you will need also the following:

@@ -145,16 +145,29 @@ monitoring:
     muteTimeIntervals:
       - name: sv1-mute
         objectMatchers:
-          - [ 'namespace', '=', 'sv1' ]
-        startTime: '04:00'
-        endTime: '07:00'
-        weekdays:
-          - saturday:sunday
+          - [ 'namespace', '=', 'sv1-test' ]
+        timeWindows:
+          - times:
+              - startTime: '18:00'
+                endTime: '24:00'
+            weekdays:
+              - wednesday
       - name: sv-runbook-mute
         objectMatchers:
-          - [ 'namespace', '=', 'sv' ]
-        startTime: '06:00'
-        endTime: '10:00'
+          - [ 'namespace', '=', 'sv-test' ]
+        timeWindows:
+          - times:
+              - startTime: '18:00'
+                endTime: '24:00'
+            weekdays:
+              - wednesday
+          - times:
+              - startTime: '00:00'
+                endTime: '06:00'
+              - startTime: '12:00'
+                endTime: '13:00'
+            weekdays:
+              - thursday
 operatorDeployment:
   reference:
     gitReference: refs/heads/main

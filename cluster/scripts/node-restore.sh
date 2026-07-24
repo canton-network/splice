@@ -16,6 +16,8 @@ function component_to_deployments() {
   local -r namespace=$3
   if [[ "$component" == "sequencer" ]]; then
     echo "global-domain-$migration_id-sequencer"
+  elif [[ "$component" == "cantonBft" ]]; then
+    echo "global-domain-$migration_id-sequencer"
   elif [[ "$component" == "mediator" ]]; then
     echo "global-domain-$migration_id-mediator"
   elif [[ "$component" == "participant" && "$namespace" == sv* ]]; then
@@ -421,45 +423,74 @@ function main() {
   local -r migration_id=$2
   local -r run_id=$3
 
+  local config
+  config=$(get_resolved_config)
+
+  # Determine whether the BFT sequencer is enabled for the migration being restored.
+  # When it is, CometBFT is not used and there is nothing to restore for it.
+  local bft_sequencer_enabled
+  bft_sequencer_enabled=$(echo "$config" | yq "
+    ([.synchronizerMigration.active, .synchronizerMigration.upgrade, .synchronizerMigration.legacy]
+      + (.synchronizerMigration.archived // [])
+      + (.synchronizerMigration.additionalLegacy // []))
+    | map(select(.id == $migration_id))
+    | .[0].sequencer.enableBftSequencer // false")
+
+  local bft_db_enabled
+  bft_db_enabled=$(canton_bft_db_enabled "$migration_id" "$config")
+
+  local -a components=()
+  for component in "${@:4}"; do
+    if [ "$component" == "cometbft" ] && [ "$bft_sequencer_enabled" == "true" ]; then
+      _info "BFT sequencer is enabled for migration $migration_id, skipping CometBFT restore"
+      continue
+    fi
+    if [ "$component" == "cantonBft" ] && [ "$bft_db_enabled" != "true" ]; then
+      _info "Dedicated CantonBFT sequencer DB is not enabled for migration $migration_id, skipping CantonBFT restore"
+      continue
+    fi
+    components+=("$component")
+  done
+
   if [[ "$run_id" == *","* ]]; then
     _info " ** Validate backup ids ** "
     local map_keys
     map_keys=$(echo "$run_id" | tr ',' '\n' | cut -d: -f1 | sort)
     local req_components
-    req_components=$(printf '%s\n' "${@:4}" | sort)
+    req_components=$(printf '%s\n' "${components[@]}" | sort)
     if [ "$map_keys" != "$req_components" ]; then
-      _error "Backup map keys ($map_keys) do not match requested components (${*:4})"
+      _error "Backup map keys ($map_keys) do not match requested components (${components[*]})"
     fi
   fi
 
-  for component in "${@:4}"; do
+  for component in "${components[@]}"; do
     component_to_deployments "$component" "$migration_id" "$namespace"
   done
 
   _info " ** Scaling down ** "
-  for component in "${@:4}"; do
+  for component in "${components[@]}"; do
     down "$namespace" "$component" "$migration_id"
   done
 
-  for component in "${@:4}"; do
+  for component in "${components[@]}"; do
     wait_down "$namespace" "$component" "$migration_id"
   done
 
   _info " ** Restoring ** "
-  for component in "${@:4}"; do
+  for component in "${components[@]}"; do
     local component_run_id
     component_run_id=$(get_component_run_id "$run_id" "$component")
     restore_component "$namespace" "$component" "$migration_id" "$component_run_id" "$restore_cluster"
   done
 
   _info " ** Waiting for all restore operations to finish ** "
-  for component in "${@:4}"; do
+  for component in "${components[@]}"; do
     wait_restore_component "$namespace" "$component"
   done
 
 
   _info " ** Scaling up ** "
-  for component in "${@:4}"; do
+  for component in "${components[@]}"; do
     up "$namespace" "$component" "$migration_id"
   done
 

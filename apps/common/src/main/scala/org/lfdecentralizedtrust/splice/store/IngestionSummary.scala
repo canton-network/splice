@@ -21,7 +21,7 @@ import scala.collection.mutable
 final case class IngestionSummary(
     offset: Option[Long],
     synchronizerIdToRecordTime: Map[SynchronizerId, CantonTimestamp],
-    newAcsSize: Int,
+    acsSizeDiff: Int,
     ingestedCreatedEvents: Vector[CreatedEvent],
     numFilteredCreatedEvents: Int,
     ingestedArchivedEvents: Vector[ExercisedEvent],
@@ -43,7 +43,7 @@ private[store] object IngestionSummary {
   private val Empty: IngestionSummary = IngestionSummary(
     offset = None,
     synchronizerIdToRecordTime = Map.empty,
-    newAcsSize = 0,
+    acsSizeDiff = 0,
     ingestedCreatedEvents = Vector.empty,
     updatedContractStates = Vector.empty,
     numFilteredCreatedEvents = 0,
@@ -69,7 +69,7 @@ private[store] object IngestionSummary {
     prettyNode(
       "", // intentionally left empty, as that worked better in the log messages above
       paramIfDefined("offset", _.offset),
-      param("newAcsSize", _.newAcsSize),
+      param("acsSizeDiff", _.acsSizeDiff),
       param("synchronizerIdToRecordTime", _.synchronizerIdToRecordTime),
       paramIfNonEmpty("ingestedCreatedEvents", _.ingestedCreatedEvents),
       paramIfNonZero("numFilteredCreatedEvents", _.numFilteredCreatedEvents),
@@ -122,12 +122,16 @@ case class MutableIngestionSummary(
   def toIngestionSummary(
       synchronizerIdToRecordTime: Map[SynchronizerId, CantonTimestamp],
       offset: Long,
-      newAcsSize: Int,
+      acsSizeDiff: Int,
       metrics: StoreMetrics,
   ): IngestionSummary = {
     // We update the metrics in here as it's the easiest way
     // to not miss any place that might need updating.
-    metrics.acsSize.updateValue(newAcsSize.toLong)
+    if (acsSizeDiff > 0) {
+      metrics.acsSizeIncrease.mark(acsSizeDiff.toLong)(MetricsContext.Empty)
+    } else if (acsSizeDiff < 0) {
+      metrics.acsSizeDecrease.mark(-acsSizeDiff.toLong)(MetricsContext.Empty)
+    }
     metrics.ingestedTxLogEntries.mark(ingestedTxLogEntries.size.toLong)(MetricsContext.Empty)
     metrics.eventCount.inc(this.ingestedCreatedEvents.length.toLong)(
       MetricsContext("event_type" -> "created")
@@ -144,7 +148,7 @@ case class MutableIngestionSummary(
     IngestionSummary(
       offset = Some(offset),
       synchronizerIdToRecordTime = synchronizerIdToRecordTime,
-      newAcsSize = newAcsSize,
+      acsSizeDiff = acsSizeDiff,
       ingestedCreatedEvents = this.ingestedCreatedEvents.toVector,
       numFilteredCreatedEvents = this.numFilteredCreatedEvents,
       ingestedArchivedEvents = this.ingestedArchivedEvents.toVector,

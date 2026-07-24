@@ -32,7 +32,7 @@ describe('SV user can', () => {
     const button = screen.getByRole('button', { name: 'Log In' });
     user.click(button);
 
-    expect(await screen.findAllByDisplayValue(svPartyId)).not.toBe([]);
+    expect(await screen.findAllByDisplayValue(svPartyId)).not.toHaveLength(0);
   });
 });
 
@@ -103,7 +103,7 @@ describe('Set Amulet Config Rules Form', () => {
       expect(submitButton).toBeInTheDocument();
 
       await user.click(submitButton);
-      expect(submitButton.getAttribute('disabled')).toBeDefined();
+      expect(submitButton.getAttribute('disabled')).not.toBeNull();
       await expect(async () => await user.click(submitButton)).rejects.toThrowError(
         /Unable to perform pointer interaction/
       );
