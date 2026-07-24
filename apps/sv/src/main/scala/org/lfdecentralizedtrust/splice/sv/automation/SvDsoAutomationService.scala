@@ -485,6 +485,15 @@ class SvDsoAutomationService(
 
   def registerPostUnlimitedTrafficTriggers(): Unit = {
     registerTrigger(
+      new delegatebased.SvOnboardingObserverTrigger(
+        triggerContext,
+        dsoStore,
+        connection(SpliceLedgerConnectionPriority.Medium),
+        participantAdminConnection,
+      )
+    )
+
+    registerTrigger(
       new SummarizingMiningRoundTrigger(
         triggerContext,
         dsoStore,
@@ -772,5 +781,6 @@ object SvDsoAutomationService extends AutomationServiceCompanion {
       aTrigger[LsuTransferTrafficTrigger],
       aTrigger[LsuSequencingTestTrigger],
       aTrigger[ReconcileSequencingParametersTrigger],
+      aTrigger[delegatebased.SvOnboardingObserverTrigger],
     )
 }

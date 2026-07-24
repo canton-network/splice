@@ -2221,6 +2221,7 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
       "reason",
       dsoParty.toProtoPrimitive,
       expiry,
+      Optional.of(java.lang.Boolean.FALSE),
     )
 
     contract(
