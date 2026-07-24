@@ -498,6 +498,7 @@ class SvApp(
         timeouts,
         loggerFactory,
         amuletAppParameters.upgradesConfig,
+        participantAdminConnection,
       )
 
       adminHandler = new HttpSvAdminHandler(
