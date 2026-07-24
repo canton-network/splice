@@ -183,6 +183,8 @@ class JoiningNodeInitializer(
         participantAdminConnection,
       )
 
+      // requestOnboarding is sent early enough to create ParticipantSynchronizerPermission
+
       _ <- joiningConfig match {
         case Some(SvOnboardingConfig.JoinWithKey(name, _, publicKey, privateKey)) =>
           SvUtil.keyPairMatches(publicKey, privateKey) match {
