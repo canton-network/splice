@@ -1,11 +1,13 @@
 module Splice.AggregateLock where
 
+import Splice.Amulet.TokenApiUtils
 import Splice.Api.Token.AllocationV2 as V2
 import Splice.Api.Token.MetadataV1
 import Splice.TokenStandard.Utils.Internal.Conversions (decodeTime)
 import Splice.Types (ForDso(..))
 import Splice.Util
 
+import DA.Either
 import DA.Optional
 import DA.Text
 import qualified DA.List as L
@@ -36,7 +38,7 @@ isValidVestingLockedDestination dso alloc =
 type ControllerSets = [[Party]]
 
 partiesFromText : Text -> Optional [Party]
-partiesFromText = mapA partyFromText . splitOn ","
+partiesFromText = eitherToOptional . parseCommaSeparated "Parties" partyFromText
 
 controllerSetFromMeta : Text -> Optional ControllerSets
 controllerSetFromMeta = mapA partiesFromText . splitOn ";"
@@ -63,7 +65,8 @@ validateVestingSchedule VestingSchedule_SV now meta =
     start = decodeTime $ fromSomeNote "start must exist" (TM.lookup "cip-105/vestingLock.startDate" meta.values)
     end = decodeTime $ fromSomeNote "end must exist" (TM.lookup "cip-105/vestingLock.endDate" meta.values)
   in
-    now < start && end `subTime` start == days 365 + hours 6
+    -- CIP-0105 states the SV vesting period be 365.25 days
+    now <= start && end `subTime` start == days 365 + hours 6
 validateVestingSchedule VestingSchedule_Immediate _ _ = True
 
 -- TODO: Potentially make return type, it's own data type?
@@ -174,8 +177,7 @@ template AggregateLock
                     ]
                   nextIterationFunding = Some $ TM.singleton instrumentId amount
               ]
-    -- Choice temporarily lives here and it will be moved, testing/draft purposes atm
-    -- Note: this whole choice is WIP
+    -- Note: Choice temporarily lives here and it will be moved, testing/draft purposes atm
     nonconsuming choice VestingLock_Withdraw : AllocationResult
       with
         factoryCid : ContractId SettlementFactory
@@ -196,13 +198,13 @@ template AggregateLock
           let GovernanceLockedControllers{..} = governanceLockedControllersFromMeta vestingLock.meta ownerParty
           require "Unlock controller must be one of the options" $ any (\conj -> all (`elem` authorizers) conj) unlockControllerSets
 
-          let mNextIterationFunding = case vestingLock.allocation.nextIterationFunding of
-                None -> None
-                Some nextIterationFundingTM ->
-                  TM.lookup instrumentId nextIterationFundingTM
-          require ("VestingLock's nextIterationFunding should have remaining funds to withdraw for instrumentId " <> show instrumentId)
-            $ isSome mNextIterationFunding
-          let nextIterationFundingAmount = fromSome mNextIterationFunding
+          let mNextIterationFunding = do
+                fundingMap <- vestingLock.allocation.nextIterationFunding
+                TM.lookup instrumentId fundingMap
+
+          nextIterationFundingAmount <- case mNextIterationFunding of
+            None -> abort ("VestingLock's nextIterationFunding should have remaining funds to withdraw for instrumentId " <> show instrumentId)
+            Some amount -> pure amount
 
           let (availableWithdrawAmount, remainingVestingAmount) : (Decimal, Decimal) =
                 calculateAvailableWithdrawAmount now vestingLock nextIterationFundingAmount
@@ -260,9 +262,7 @@ template AggregateLock
                   nextIterationFunding = nextIterationFunding
               ]
 
-          -- We should have one result from settleBatch
-          require "VestingUnlock_Withdraw should result in one allocation result. " $
-            L.length batchResults.allocationSettleResults == 1
-          let [allocationResult] = batchResults.allocationSettleResults
-
-          pure allocationResult
+          -- We should have one result from settleBatch         
+          case batchResults.allocationSettleResults of
+            [allocationResult] -> pure allocationResult
+            _ -> abort "VestingUnlock_Withdraw should result in one allocation result. "

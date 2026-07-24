@@ -84,7 +84,7 @@ testAggregateLockHappyPath = do
  
   now <- getTime
   let initialAmountToUnlock = 365.25
-  AllocationInstructionResult { output = AllocationInstructionResult_Completed vestingInput } <- lockForVesting initialAmountToUnlock (addRelTime now $ minutes 5) env bob aggLock
+  AllocationInstructionResult { output = AllocationInstructionResult_Completed vestingInput } <- lockForVesting initialAmountToUnlock now env bob aggLock
 
   -- use getSettlementFactory to get the extraArgs and disclosures to call AggregateLock_Unlock
   enriched <- getSettlementFactory registriesEnv.amuletV2 $ SettlementFactory_SettleBatch with
@@ -108,7 +108,6 @@ testAggregateLockHappyPath = do
 
   allocations <- query @AmuletAllocationV2 bob
 
-  debug allocations
 
   assert $ length allocations == 2
 
@@ -133,16 +132,13 @@ testAggregateLockHappyPath = do
     authorizers = [ bob ]
     vestingLockCid = toInterfaceContractId vestingLockAllocationCid
     extraArgs = enriched.arg.extraArgs
-  debug vestingAllocResult
 
   let holdingCids = fromSome $ TM.lookup env.instrId.id tmHoldingCids
   holdings <- queryInterface @Holding bob
   -- The holdings would include both locked/unlocked, so we filter
   let [(_, (Some unlockedHolding))] = filter (\(hcid, (Some h)) -> isNone h.lock && hcid `elem` holdingCids) holdings
-  debug unlockedHolding
 
-  let tolerance = 0.01
-  assert $ (abs $ unlockedHolding.amount - 10.0) < tolerance
+  assertEq unlockedHolding.amount 10.0000000105
 
   -- Let's try to withdraw the rest (now we should be past endDate)
   passTime (days 365)
@@ -153,7 +149,6 @@ testAggregateLockHappyPath = do
     vestingLockCid = fromSome $ vestingAllocResult.nextIterationAllocationCid
     extraArgs = enriched.arg.extraArgs
 
-  debug vestingAllocResult'
   -- We should have no more remaining amount vesting, once the full period has passed
   assertEq None $ vestingAllocResult'.nextIterationAllocationCid
 
@@ -161,6 +156,5 @@ testAggregateLockHappyPath = do
   holdings' <- queryInterface @Holding bob
   -- The holdings would include both locked/unlocked, so we filter
   let [(_, (Some unlockedHolding'))] = filter (\(hcid, (Some h)) -> isNone h.lock && hcid `elem` holdingCids') holdings'
-  debug unlockedHolding'
 
   assertEq initialAmountToUnlock $ unlockedHolding.amount + unlockedHolding'.amount
