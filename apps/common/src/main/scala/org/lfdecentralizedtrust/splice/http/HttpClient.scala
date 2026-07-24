@@ -60,17 +60,27 @@ object HttpClient {
       }
   }
 
-  private val validContentTypes: Set[MediaType] = Set(
-    MediaTypes.`application/json`,
-    MediaTypes.`application/octet-stream`,
-    MediaTypes.`text/plain`,
-  )
+  private object ResponseErrorByContentType {
+    private val validContentTypes: Set[MediaType] = Set(
+      MediaTypes.`application/json`,
+      MediaTypes.`application/octet-stream`,
+      MediaTypes.`text/plain`,
+    )
+
+    def unapply(resp: HttpResponse): Boolean =
+      resp.entity.contentType match {
+        // Responses with `NoContentType` are always considered valid
+        case ContentTypes.NoContentType => false
+        // Otherwise a response is valid if its content type is contained in `validContentTypes`
+        case contentType => !validContentTypes.contains(contentType.mediaType)
+      }
+  }
 
   private def httpFnErrors(
       nonErrorStatusCode: Set[StatusCode]
   ): PartialFunction[HttpResponse, Unit] = {
     case ResponseErrorByStatus(code) if !nonErrorStatusCode.contains(code) =>
-    case resp if !validContentTypes.contains(resp.entity.contentType.mediaType) =>
+    case ResponseErrorByContentType() =>
   }
 
   def createHttpFn(
