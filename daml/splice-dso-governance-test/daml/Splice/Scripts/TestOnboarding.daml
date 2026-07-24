@@ -163,7 +163,7 @@ testSvOnboarding = do
   svXVisibleContracts <- query @SvOnboardingConfirmed svX
   assert (null svXVisibleContracts)
 
-  -- an existing SV flips the observer flag on behalf of the DSO
+  -- an existing_SV flips the observer flag
   submit (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_MakeSvOnboardingConfirmedObserver with
     svOnboardingConfirmedCid
     sv = sv2
