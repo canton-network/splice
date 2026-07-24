@@ -2063,6 +2063,16 @@ def mergeStrategy(oldStrategy: String => MergeStrategy): String => MergeStrategy
       MergeStrategy.first
     case PathList("com", "google", _*) => MergeStrategy.first
     case PathList("io", "grpc", _*) => MergeStrategy.first
+    // slick-fork
+    case PathList("slick", "jdbc", "canton", _*) => MergeStrategy.first
+    case PathList("slick", "util", name)
+        if name.startsWith("QueryCostTracker") || name.startsWith("AsyncExecutorWith") =>
+      MergeStrategy.first
+    // community-base
+    case PathList("com", "daml", "nonempty", name) if name.startsWith("NonEmptyUtil") =>
+      MergeStrategy.first
+    // Multiple dependencies ship this GraalVM metadata with differing content.
+    case PathList("META-INF", "native-image", "reflect-config.json") => MergeStrategy.first
     // Copy-pasta from Canton (DACH-NY/canton#31788): Remove this merge strategy once zipkin exporter is removed
     case PathList("okhttp3", _ @_*) => MergeStrategy.first
     // this file comes in multiple flavors, from io.get-coursier:interface and from org.scala-lang.modules:scala-collection-compat. Since the content differs it is resolve this explicitly with this MergeStrategy.
