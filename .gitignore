@@ -22,8 +22,8 @@ _build/
 **/metals.sbt
 **/.scala-build/*
 
-daml-ide-mono/daml/
-daml-ide-mono/.vscode/
+daml/daml-ide-mono/daml/
+daml/daml-ide-mono/.vscode/
 .vscode/*
 !.vscode/settings.json
 # Make sure test files are checkedin
