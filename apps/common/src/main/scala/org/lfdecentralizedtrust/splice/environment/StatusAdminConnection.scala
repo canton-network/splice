@@ -15,14 +15,18 @@ trait StatusAdminConnection {
   type Status <: NodeStatus.Status
   protected def getStatusRequest: GrpcAdminCommand[?, ?, NodeStatus[Status]]
 
-  def getStatus(implicit traceContext: TraceContext): Future[NodeStatus[Status]] =
+  def getStatus(implicit traceContext: TraceContext): Future[NodeStatus[Status]] = {
     retryProvider.retryForClientCalls(
       "status",
       "Get node status",
-      runCmd(
-        getStatusRequest
-      ),
+      getStatusWithoutRetries,
       logger,
     )
+  }
 
+  def getStatusWithoutRetries(implicit traceContext: TraceContext): Future[NodeStatus[Status]] = {
+    runCmd(
+      getStatusRequest
+    )
+  }
 }
