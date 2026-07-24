@@ -177,10 +177,17 @@ class JoiningNodeInitializer(
     for {
       dsoPartyId <- getDsoPartyId(initConnection)
 
-      svParty <- SetupUtil.setupSvParty(
-        initConnection,
-        config,
-        participantAdminConnection,
+      hint = config.svPartyHint.getOrElse(
+        joiningConfig
+          .map(_.name)
+          .getOrElse(
+            sys.error("Cannot setup SV party without either party hint or an onboarding config")
+          )
+      )
+
+      svParty = PartyId(
+        com.digitalasset.canton.topology.UniqueIdentifier
+          .tryCreate(hint, participantId.uid.namespace)
       )
 
       // requestOnboarding is sent early enough to create ParticipantSynchronizerPermission
@@ -231,6 +238,12 @@ class JoiningNodeInitializer(
             tolerateUninitializedStore = registeredGlobalSync.exists(_.config.manualConnect),
           )
         } else Future.unit
+
+      _ <- SetupUtil.setupSvParty(
+        initConnection,
+        config,
+        participantAdminConnection,
+      )
 
       storeKey = SvStore.Key(svParty, dsoPartyId)
       // We need to vet early so the packages are uploaded when we try to use template

@@ -5,12 +5,10 @@ package org.lfdecentralizedtrust.splice.sv.admin.http
 
 import cats.data.{EitherT, OptionT}
 import cats.syntax.applicative.*
-import cats.syntax.option.*
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.topology.*
-import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.canton.topology.transaction.SequencerSynchronizerState
 import com.digitalasset.canton.tracing.{Spanning, TraceContext}
 import com.google.protobuf.ByteString
@@ -53,7 +51,6 @@ class HttpSvPublicHandler(
     isDevNet: Boolean,
     config: SvAppBackendConfig,
     clock: Clock,
-    participantAdminConnection: ParticipantAdminConnection,
     synchronizerNodeService: SynchronizerNodeService[LocalSynchronizerNode],
     retryProvider: RetryProvider,
     dsoPartyMigration: DsoPartyMigration,
@@ -177,14 +174,6 @@ class HttpSvPublicHandler(
           )
         case Right(token) =>
           for {
-            dsoRules <- dsoStore.getDsoRules()
-            isCandidatePartyHostedOnParticipant <- participantAdminConnection
-              .listPartyToParticipant(
-                TopologyStoreId.Synchronizer(dsoRules.domain).some,
-                filterParty = token.candidateParty.filterString,
-                filterParticipant = token.candidateParticipantId.toProtoPrimitive,
-              )
-              .map(_.nonEmpty)
             res <-
               if (!SvApp.validateSvNamespace(token.candidateParty, token.candidateParticipantId)) {
                 Future.failed(
@@ -192,15 +181,7 @@ class HttpSvPublicHandler(
                     s"Party ${token.candidateParty} does not have the same namespace than its participant ${token.candidateParticipantId}."
                   )
                 )
-              } else if (!isCandidatePartyHostedOnParticipant)
-                // Conflict instead of not authorized because this can happen if our participant just has not yet caught up
-                // and the client can just retry on that.
-                Future.failed(
-                  HttpErrorHandler.conflict(
-                    s"Candidate party ${token.candidateParty} is not authorized by participant ${token.candidateParticipantId}"
-                  )
-                )
-              else
+              } else
                 SvApp
                   .isApprovedSvIdentity(
                     token.candidateName,

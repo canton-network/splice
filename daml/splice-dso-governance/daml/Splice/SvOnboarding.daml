@@ -27,7 +27,6 @@ template SvOnboardingRequest with
     expiresAt : Time                -- ^ When this contract can be archived even if the onboarding did not succeed.
   where
     signatory dso
-    observer candidateParty
 
     -- Archive if we are past the `expiresAt`.
     choice SvOnboardingRequest_Expire : SvOnboardingRequest_ExpireResult

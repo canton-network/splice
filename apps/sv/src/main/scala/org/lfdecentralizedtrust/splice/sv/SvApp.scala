@@ -471,7 +471,6 @@ class SvApp(
         isDevNet,
         config,
         clock,
-        participantAdminConnection,
         synchronizerNodeService,
         retryProvider,
         new DsoPartyMigration(
