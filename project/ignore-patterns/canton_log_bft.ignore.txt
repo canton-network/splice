@@ -1,2 +1,4 @@
 # Expected warning until https://github.com/DACH-NY/canton/pull/31166 lands
 discarding expired batches
+# Silence warning for stuck ordering layer in tests. Likely comes from onboarding new SVs while we don't have enough SVs to reach thresholds without the new one.
+Waiting for new topology after epoch completion for.*seconds without receiving it from the output module
