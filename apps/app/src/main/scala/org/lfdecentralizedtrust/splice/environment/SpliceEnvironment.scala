@@ -39,11 +39,11 @@ class SpliceEnvironment(
   logger.info(s"SpliceEnvironment with config = {\n${config.dumpString}\n}")
 
   lazy val metrics = {
-    import com.daml.metrics.api.MetricName
     val histograms = SpliceHistograms(
-      MetricName("cn"),
       dbStorageHistograms,
-    )(histogramInventory)
+      signingHistograms,
+      decryptionHistograms,
+    )
     SpliceMetricsFactory(
       metricsRegistry,
       histograms,

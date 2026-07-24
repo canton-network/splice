@@ -145,12 +145,12 @@ trait ExternallySignedPartyTestUtil extends TestCommon {
   private[this] val histogramInventory = new HistogramInventory()
   private[this] implicit val metricsContext: MetricsContext = new MetricsContext(Map.empty)
 
-  private[this] lazy val signingMetrics = new SigningMetrics(
+  private[this] val signingMetrics = new SigningMetrics(
     new SigningHistograms(MetricName("splice-test"))(histogramInventory),
     noOpMetricsFactory,
   )(metricsContext)
 
-  private[this] lazy val decryptionMetrics = new DecryptionMetrics(
+  private[this] val decryptionMetrics = new DecryptionMetrics(
     new DecryptionHistograms(MetricName("splice-test"))(histogramInventory),
     noOpMetricsFactory,
   )(metricsContext)

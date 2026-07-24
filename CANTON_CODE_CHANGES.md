@@ -64,6 +64,7 @@ to know which and/or what changes we'll need to upstream before the switch.
 * Changed `metrics.filterByNodeAndAttribute` in `InstanceReference ` to filter by `node_name` instead of `node` to match the Splice metrics
 * Split `CommandFailure` into `InteractiveCommandFailure` and `CommandFailureWithDetails`.
 * `Cli.logLastErrors` default changed from `true` to `false`.
+* In `Environment`, declare Splice metric histograms so they exist before `HistogramInventory#registered` is called.
 * Added better logging of setup and cleanup failures in `DbTest`.
 * Removed `HasTrailingNoneUtils`, `HasCycleUtils`, `UseLedgerApiTestTool` and all their dependants (tests).
 * Worked around `BaseIntegrationTest.assertThrowsAndLogsCommandFailures` only supporting Canton's `EnvironmentDefinition` (and thus not Splice's).
