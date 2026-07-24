@@ -206,7 +206,6 @@ object BuildCommon {
       Global / concurrentRestrictions += Tags.limit(damlTestTag, 4),
       // copied from the Canton OSS repo
       Global / excludeLintKeys += Compile / damlBuildOrder,
-      Global / excludeLintKeys += `canton-blake2b` / autoAPIMappings,
       Global / excludeLintKeys += `canton-community-app` / autoAPIMappings,
       Global / excludeLintKeys += `canton-community-app` / Compile / damlDarLfVersion,
       Global / excludeLintKeys += `canton-community-common` / autoAPIMappings,
@@ -780,7 +779,6 @@ object BuildCommon {
       .apply("canton-community-common", file("canton/community/common"))
       .enablePlugins(DamlPlugin)
       .dependsOn(
-        `canton-blake2b`,
         `canton-pekko-fork` % "compile->compile;test->test",
         `canton-community-base`,
         `canton-wartremover-extension` % "compile->compile;test->test",
@@ -806,6 +804,7 @@ object BuildCommon {
           daml_lf_engine,
           daml_lf_transaction, // needed for importing java classes
           daml_nonempty_cats,
+          canton_blake2b,
           canton_magnolify_addon,
           logback_classic,
           logback_core,
@@ -999,22 +998,6 @@ object BuildCommon {
         //      addProtobufFilesToHeaderCheck(Compile),
         //      addFilesToHeaderCheck("*.daml", "daml", Compile),
         //      JvmRulesPlugin.damlRepoHeaderSettings,
-      )
-  }
-
-  lazy val `canton-blake2b` = {
-    import CantonDependencies._
-    sbt.Project
-      .apply("canton-blake2b", file("canton/community/lib/Blake2b"))
-      .disablePlugins(ScalafmtPlugin, WartRemover)
-      .settings(
-        sharedCantonSettings,
-        removeTestSources,
-        sharedSettings,
-        libraryDependencies ++= Seq(
-          bouncycastle_bcprov_jdk15on,
-          bouncycastle_bcpkix_jdk15on,
-        ),
       )
   }
 

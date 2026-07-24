@@ -25,7 +25,6 @@ lazy val `canton-community-participant` = BuildCommon.`canton-community-particip
 lazy val `canton-community-admin-api` = BuildCommon.`canton-community-admin-api`
 lazy val `canton-community-integration-testing` = BuildCommon.`canton-community-integration-testing`
 lazy val `canton-community-testing` = BuildCommon.`canton-community-testing`
-lazy val `canton-blake2b` = BuildCommon.`canton-blake2b`
 lazy val `canton-slick-fork` = BuildCommon.`canton-slick-fork`
 lazy val `canton-wartremover-extension` = BuildCommon.`canton-wartremover-extension`
 lazy val `canton-wartremover-annotations` = BuildCommon.`canton-wartremover-annotations`
@@ -138,7 +137,6 @@ lazy val root: Project = (project in file("."))
     `canton-community-common`,
     `canton-community-integration-testing`,
     `canton-community-testing`,
-    `canton-blake2b`,
     `canton-slick-fork`,
     `canton-wartremover-extension`,
     `canton-community-app`,

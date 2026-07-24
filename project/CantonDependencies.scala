@@ -106,6 +106,7 @@ object CantonDependencies {
   lazy val canton_traffic_enforcement_api =
     "com.daml" %% "traffic-enforcement-api" % canton_library_version
 
+  lazy val canton_blake2b = "com.daml" %% "blake2b" % canton_library_version
   lazy val canton_magnolify_addon = "com.daml" %% "magnolify-addon" % canton_library_version
   lazy val canton_transcode_json = "com.daml" % "transcode-codec-json_3" % canton_library_version
   lazy val canton_transcode_proto_scala =
