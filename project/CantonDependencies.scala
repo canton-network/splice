@@ -106,6 +106,7 @@ object CantonDependencies {
   lazy val canton_traffic_enforcement_api =
     "com.daml" %% "traffic-enforcement-api" % canton_library_version
 
+  lazy val canton_magnolify_addon = "com.daml" %% "magnolify-addon" % canton_library_version
   lazy val canton_transcode_json = "com.daml" % "transcode-codec-json_3" % canton_library_version
   lazy val canton_transcode_proto_scala =
     "com.daml" % "transcode-codec-proto-scala_3" % canton_library_version
@@ -128,6 +129,8 @@ object CantonDependencies {
   lazy val daml_nonempty_cats = "com.daml" %% "nonempty-cats" % canton_library_version
   lazy val daml_tracing = "com.daml" %% "observability-tracing" % canton_library_version
   lazy val daml_executors = "com.daml" %% "executors" % canton_library_version
+  lazy val daml_jwt = "com.daml" %% "daml-jwt" % canton_library_version
+  lazy val daml_tls = "com.daml" %% "daml-tls" % canton_library_version
   lazy val daml_ports = "com.daml" %% "ports" % canton_library_version
   lazy val daml_ledger_resources = "com.daml" %% "ledger-resources" % canton_library_version
   lazy val daml_ledger_api_value_scalapb =

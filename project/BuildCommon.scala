@@ -385,7 +385,6 @@ object BuildCommon {
       .apply("canton-util-external", file("canton/base/util-external"))
       .dependsOn(
         `canton-pekko-fork`,
-        `canton-magnolify-addon`,
         `canton-wartremover-extension` % "compile->compile;test->test",
         // Canton depends on the Daml code via a git submodule and the two
         // projects below. We instead depend on the artifacts released
@@ -399,6 +398,7 @@ object BuildCommon {
           aws_kms,
           aws_sts,
           better_files,
+          canton_magnolify_addon,
           gcp_kms,
           canton_observability_metrics,
           daml_tracing,
@@ -451,51 +451,12 @@ object BuildCommon {
       )
   }
 
-  lazy val `canton-daml-tls` = {
-    import CantonDependencies._
-    sbt.Project
-      .apply("canton-daml-tls", file("canton/base/daml-tls"))
-      .dependsOn(
-        `canton-wartremover-extension` % "compile->compile;test->test",
-        `canton-util-observability`,
-        `canton-util-external`,
-      )
-      .settings(
-        sharedCantonSettings,
-        libraryDependencies ++= Seq(
-          scopt,
-          grpc_netty_shaded,
-          apache_commons_io % "test",
-        ),
-      )
-  }
-
   lazy val `canton-daml-adjustable-clock` = {
     import CantonDependencies._
     sbt.Project
       .apply("canton-daml-adjustable-clock", file("canton/base/adjustable-clock"))
       .settings(
         sharedCantonSettings
-      )
-  }
-
-  lazy val `canton-daml-jwt` = {
-    import CantonDependencies._
-    sbt.Project
-      .apply("canton-daml-jwt", file("canton/base/daml-jwt"))
-      .disablePlugins(WartRemover)
-      .settings(
-        sharedSettings,
-        libraryDependencies ++= Seq(
-          auth0_java,
-          auth0_jwks,
-          scalatest % Test,
-          scalaz_core,
-          slf4j_api,
-          circe_core,
-          circe_generic,
-          circe_parser,
-        ),
       )
   }
 
@@ -635,8 +596,6 @@ object BuildCommon {
       .dependsOn(
         `canton-slick-fork`,
         `canton-util-external`,
-        `canton-daml-jwt`,
-        `canton-daml-tls`,
         `canton-ledger-common`,
         `canton-community-admin-api`,
         `canton-kms-driver-api`,
@@ -662,6 +621,8 @@ object BuildCommon {
           circe_core,
           circe_generic,
           daml_executors,
+          daml_jwt,
+          daml_tls,
           flyway.excludeAll(ExclusionRule("org.apache.logging.log4j")),
           flyway_postgresql,
           grpc_services,
@@ -821,7 +782,6 @@ object BuildCommon {
       .dependsOn(
         `canton-blake2b`,
         `canton-pekko-fork` % "compile->compile;test->test",
-        `canton-magnolify-addon`,
         `canton-community-base`,
         `canton-wartremover-extension` % "compile->compile;test->test",
         `canton-util-external` % "compile->compile;test->test",
@@ -846,6 +806,7 @@ object BuildCommon {
           daml_lf_engine,
           daml_lf_transaction, // needed for importing java classes
           daml_nonempty_cats,
+          canton_magnolify_addon,
           logback_classic,
           logback_core,
           scala_logging,
@@ -1128,26 +1089,6 @@ object BuildCommon {
       )
   }
 
-  lazy val `canton-magnolify-addon` = {
-    import CantonDependencies._
-    sbt.Project
-      .apply("canton-magnloify-addon", file("canton/community/lib/magnolify"))
-      .settings(
-        sharedSettings,
-        libraryDependencies ++= Seq(
-          cats,
-          daml_nonempty,
-          magnolia,
-          magnolify_scalacheck,
-          magnolify_shared % Test,
-          scala_reflect,
-          scalacheck,
-          scalatest % Test,
-        ),
-      )
-
-  }
-
   lazy val `canton-scalatest-addon` = {
     import CantonDependencies._
     sbt.Project
@@ -1167,7 +1108,6 @@ object BuildCommon {
       .disablePlugins(WartRemover, ScalafmtPlugin)
       .dependsOn(
         `canton-util-external`,
-        `canton-daml-jwt`,
         `canton-util-observability`,
       )
       .settings(
@@ -1188,6 +1128,7 @@ object BuildCommon {
           daml_lf_archive_reader,
           CantonDependencies.canton_java_bindings,
           CantonDependencies.canton_ledger_api_scala,
+          daml_jwt,
           daml_tracing,
           apache_commons_codec,
           apache_commons_io,
