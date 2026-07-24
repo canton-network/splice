@@ -6,7 +6,6 @@ import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   ConfigurableApp,
   updateAutomationConfig,
 }
-import org.lfdecentralizedtrust.splice.http.v0.definitions.TransactionHistoryRequest
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   IntegrationTest,
@@ -221,38 +220,7 @@ class SvTimeBasedRewardCouponIntegrationTest
         )
       }
 
-      clue("The claims appear in the scan history") {
-        eventually() {
-          val txs = sv1ScanBackend
-            .listTransactions(
-              None,
-              TransactionHistoryRequest.SortOrder.Desc,
-              Limit.DefaultMaxPageSize,
-            )
-            .flatMap(_.transfer)
-            .filter(tf =>
-              tf.sender.inputSvRewardAmount.nonEmpty &&
-                Seq(sv1Party.toProtoPrimitive, aliceValidatorParty.toProtoPrimitive)
-                  .contains(tf.sender.party)
-            )
-            .map(tf => tf.sender.party -> tf.sender.inputSvRewardAmount.value)
-            .toMap
-          BigDecimal(txs(sv1Party.toProtoPrimitive)) should beWithin(
-            // The expected SV reward calculated here does not match exactly the reward calculated in daml,
-            // presumably because of rounding differences in the reward calculation.
-            BigDecimal(eachSvGetInRound0) - 0.001,
-            BigDecimal(eachSvGetInRound0) + 0.001,
-          )
-          BigDecimal(txs(aliceValidatorParty.toProtoPrimitive)) should beWithin(
-            // The expected SV reward calculated here does not match exactly the reward calculated in daml,
-            // presumably because of rounding differences in the reward calculation.
-            BigDecimal(expectedAliceAmount) - 0.001,
-            BigDecimal(expectedAliceAmount) + 0.001,
-          )
-        }
-      }
-
-      clue("The claims appear in the wallet history") {
+      clue("The claims appear in the SV wallet history") {
         eventually() {
           val txs = withoutDevNetTopups(
             sv1WalletClient

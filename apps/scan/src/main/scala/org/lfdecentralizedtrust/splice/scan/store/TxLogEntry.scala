@@ -5,18 +5,15 @@ package org.lfdecentralizedtrust.splice.scan.store
 
 import org.lfdecentralizedtrust.splice.codegen.java.splice
 import org.lfdecentralizedtrust.splice.store.StoreErrors
-import org.lfdecentralizedtrust.splice.util.Codec
 
 import scala.collection.immutable
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 import java.time.Instant
 import org.lfdecentralizedtrust.splice.http.v0.definitions as httpDef
-import org.lfdecentralizedtrust.splice.http.v0.definitions.TransactionHistoryResponseItem.TransactionType as HttpTransactionType
 import com.digitalasset.canton.config.CantonRequireTypes.String3
 import com.digitalasset.canton.topology.PartyId
 
-import java.time.ZoneOffset
 import scala.math.BigDecimal.RoundingMode
 
 trait TxLogEntry extends Product with Serializable {
@@ -117,130 +114,6 @@ object TxLogEntry extends StoreErrors {
       val Sent = "sent"
       val Failed = "failed"
     }
-
-    private def toResponse(data: SenderAmount) = httpDef.SenderAmount(
-      party = data.party.toProtoPrimitive,
-      inputAmuletAmount = Some(Codec.encode(data.inputAmuletAmount)),
-      inputAppRewardAmount = Some(Codec.encode(data.inputAppRewardAmount)),
-      inputValidatorRewardAmount = Some(Codec.encode(data.inputValidatorRewardAmount)),
-      inputSvRewardAmount = Some(Codec.encode(data.inputSvRewardAmount.getOrElse(BigDecimal(0)))),
-      inputValidatorFaucetAmount = data.inputValidatorFaucetAmount.map(fa => Codec.encode(fa)),
-      senderChangeAmount = Codec.encode(data.senderChangeAmount),
-      senderChangeFee = Codec.encode(data.senderChangeFee),
-      senderFee = Codec.encode(data.senderFee),
-      holdingFees = Codec.encode(data.holdingFees),
-    )
-
-    private def toResponse(data: ReceiverAmount) = httpDef.ReceiverAmount(
-      party = data.party.toProtoPrimitive,
-      amount = Codec.encode(data.amount),
-      receiverFee = Codec.encode(data.receiverFee),
-    )
-
-    private def toResponse(data: BalanceChange) = httpDef.BalanceChange(
-      party = data.party.toProtoPrimitive,
-      changeToInitialAmountAsOfRoundZero = Codec.encode(data.changeToInitialAmountAsOfRoundZero),
-      changeToHoldingFeesRate = Codec.encode(data.changeToHoldingFeesRate),
-    )
-
-    private def toTransferResponseItem(entry: TransferTxLogEntry) =
-      httpDef.TransactionHistoryResponseItem(
-        transactionType = HttpTransactionType.Transfer,
-        eventId = entry.eventId,
-        offset = Some(entry.offset),
-        domainId = entry.domainId.toProtoPrimitive,
-        date = java.time.OffsetDateTime
-          .ofInstant(entry.date.getOrElse(throw txMissingField()), ZoneOffset.UTC),
-        transfer = Some(
-          httpDef.Transfer(
-            sender = toResponse(entry.sender.getOrElse(throw txMissingField())),
-            receivers = entry.receivers.map(toResponse).toVector,
-            balanceChanges = entry.balanceChanges.map(toResponse).toVector,
-            description = Some(entry.description).filter(_.nonEmpty),
-            transferInstructionReceiver =
-              Some(entry.transferInstructionReceiver).filter(_.nonEmpty),
-            transferInstructionAmount = entry.transferInstructionAmount.map(Codec.encode(_)),
-            transferInstructionCid = Some(entry.transferInstructionCid).filter(_.nonEmpty),
-            transferKind = entry.transferKind match {
-              case TransferKind.Unrecognized(_) => None
-              case TransferKind.TRANSFER_KIND_OTHER => None
-              case TransferKind.TRANSFER_KIND_CREATE_TRANSFER_INSTRUCTION =>
-                Some(httpDef.Transfer.TransferKind.members.CreateTransferInstruction)
-              case TransferKind.TRANSFER_KIND_TRANSFER_INSTRUCTION_ACCEPT =>
-                Some(httpDef.Transfer.TransferKind.members.TransferInstructionAccept)
-              case TransferKind.TRANSFER_KIND_PREAPPROVAL_SEND =>
-                Some(httpDef.Transfer.TransferKind.members.PreapprovalSend)
-            },
-          )
-        ),
-        round = Some(entry.round),
-      )
-
-    private def toTapResponseItem(entry: TapTxLogEntry) = httpDef.TransactionHistoryResponseItem(
-      transactionType = HttpTransactionType.DevnetTap,
-      eventId = entry.eventId,
-      offset = Some(entry.offset),
-      domainId = entry.domainId.toProtoPrimitive,
-      date = java.time.OffsetDateTime
-        .ofInstant(entry.date.getOrElse(throw txMissingField()), ZoneOffset.UTC),
-      tap = Some(
-        httpDef.AmuletAmount(
-          amuletOwner = entry.amuletOwner.toProtoPrimitive,
-          amuletAmount = Codec.encode(entry.amuletAmount),
-        )
-      ),
-      round = Some(entry.round),
-    )
-
-    private def toMintResponseItem(entry: MintTxLogEntry) = httpDef.TransactionHistoryResponseItem(
-      transactionType = HttpTransactionType.Mint,
-      eventId = entry.eventId,
-      offset = Some(entry.offset),
-      domainId = entry.domainId.toProtoPrimitive,
-      date = java.time.OffsetDateTime
-        .ofInstant(entry.date.getOrElse(throw txMissingField()), ZoneOffset.UTC),
-      mint = Some(
-        httpDef.AmuletAmount(
-          amuletOwner = entry.amuletOwner.toProtoPrimitive,
-          amuletAmount = Codec.encode(entry.amuletAmount),
-        )
-      ),
-    )
-
-    private def toAbortTransferInstructionResponseItem(entry: AbortTransferInstructionTxLogEntry) =
-      httpDef.TransactionHistoryResponseItem(
-        transactionType = HttpTransactionType.AbortTransferInstruction,
-        eventId = entry.eventId,
-        offset = Some(entry.offset),
-        domainId = entry.domainId.toProtoPrimitive,
-        date = java.time.OffsetDateTime
-          .ofInstant(entry.date.getOrElse(throw txMissingField()), ZoneOffset.UTC),
-        abortTransferInstruction = Some(
-          httpDef.AbortTransferInstruction(
-            abortKind = entry.transferAbortKind match {
-              case TransferAbortKind.Unrecognized(_) =>
-                sys.error(s"Unexpected transfer abort kind: ${entry.transferAbortKind}")
-              case TransferAbortKind.TRANSFER_ABORT_KIND_RESERVED =>
-                sys.error(s"Unexpected transfer abort kind: ${entry.transferAbortKind}")
-              case TransferAbortKind.TRANSFER_ABORT_KIND_REJECT =>
-                httpDef.AbortTransferInstruction.AbortKind.members.Reject
-              case TransferAbortKind.TRANSFER_ABORT_KIND_WITHDRAW =>
-                httpDef.AbortTransferInstruction.AbortKind.members.Withdraw
-            },
-            transferInstructionCid = entry.transferInstructionCid,
-          )
-        ),
-      )
-
-    def toResponseItem(entry: TransactionTxLogEntry): httpDef.TransactionHistoryResponseItem =
-      entry match {
-        case entry: TransferTxLogEntry => toTransferResponseItem(entry)
-        case entry: TapTxLogEntry => toTapResponseItem(entry)
-        case entry: MintTxLogEntry => toMintResponseItem(entry)
-        case entry: AbortTransferInstructionTxLogEntry =>
-          toAbortTransferInstructionResponseItem(entry)
-        case _ => throw txLogIsOfWrongType(entry.getClass.getSimpleName)
-      }
 
     def toResponse(
         status: TransferCommandTxLogEntry.Status
