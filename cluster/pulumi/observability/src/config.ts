@@ -33,6 +33,26 @@ const NatPortUsageConfigSchema = z.object({
 
 export type NatPortUsageConfig = z.infer<typeof NatPortUsageConfigSchema>;
 
+const MuteTimeWindowSchema = z.object({
+  times: z.array(
+    z.object({
+      startTime: z.string(), // UTC
+      endTime: z.string(), // UTC
+    })
+  ),
+  weekdays: z.array(z.string()).optional(), // e.g. ['monday', 'tuesday:friday']
+});
+export type MuteTimeWindow = z.infer<typeof MuteTimeWindowSchema>;
+
+const MuteTimeIntervalSchema = z.array(
+  z.object({
+    name: z.string(),
+    objectMatchers: z.array(z.tuple([z.string(), z.string(), z.string()])),
+    timeWindows: z.array(MuteTimeWindowSchema),
+  })
+);
+export type MuteTimeInterval = z.infer<typeof MuteTimeIntervalSchema>[number];
+
 const MonitoringConfigSchema = z
   .object({
     enableGrafanaServiceAccountToken: z.boolean(),
@@ -150,17 +170,7 @@ const MonitoringConfigSchema = z
       }),
       logAlerts: z.object({}).catchall(z.string()).default({}),
       loggedSecretsFilter: z.string().optional(),
-      muteTimeIntervals: z
-        .array(
-          z.object({
-            name: z.string(),
-            objectMatchers: z.array(z.tuple([z.string(), z.string(), z.string()])),
-            startTime: z.string(), // UTC
-            endTime: z.string(), // UTC
-            weekdays: z.array(z.string()).optional(), // e.g. ['monday', 'tuesday:friday']
-          })
-        )
-        .default([]),
+      muteTimeIntervals: MuteTimeIntervalSchema.default([]),
     }),
   })
   .strict();

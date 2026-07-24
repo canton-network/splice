@@ -816,13 +816,14 @@ function createGrafanaAlerting(namespace: Input<string>) {
                   muteTimes: monitoringConfig.alerting.muteTimeIntervals.map(interval => ({
                     orgId: 1,
                     name: interval.name,
-                    time_intervals: [
-                      {
-                        times: [{ start_time: interval.startTime, end_time: interval.endTime }],
-                        ...(interval.weekdays ? { weekdays: interval.weekdays } : {}),
-                        location: 'UTC',
-                      },
-                    ],
+                    time_intervals: interval.timeWindows.map(window => ({
+                      times: window.times.map(t => ({
+                        start_time: t.startTime,
+                        end_time: t.endTime,
+                      })),
+                      ...(window.weekdays ? { weekdays: window.weekdays } : {}),
+                      location: 'UTC',
+                    })),
                   })),
                 }),
               }

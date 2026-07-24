@@ -14,6 +14,7 @@ object TokenStandardConfig {
   final case class SettlementConfig(
       maxLegs: Int = 100,
       maxParties: Int = 100,
+      maxAllocations: Int = 100,
   ) {
     def validateSettleBatch(settleBatch: allocationv2.SettlementFactory_SettleBatch): Unit = {
       val numTransferLegs = settleBatch.transferLegs.size()
@@ -24,6 +25,9 @@ object TokenStandardConfig {
         .distinct
         .size
       validateNumParties(numParties)
+
+      val numAllocations = settleBatch.allocations.size()
+      validateNumAllocations(numAllocations)
     }
 
     def validateAllocate(allocate: allocationinstructionv2.AllocationFactory_Allocate): Unit = {
@@ -52,6 +56,15 @@ object TokenStandardConfig {
         throw io.grpc.Status.INVALID_ARGUMENT
           .withDescription(
             s"Too many parties in the settle batch: $numParties. Maximum allowed: $maxParties"
+          )
+          .asRuntimeException()
+      }
+    }
+    private def validateNumAllocations(numAllocations: Int) = {
+      if (numAllocations > maxAllocations) {
+        throw io.grpc.Status.INVALID_ARGUMENT
+          .withDescription(
+            s"Too many allocations in the settle batch: $numAllocations. Maximum allowed: $maxAllocations"
           )
           .asRuntimeException()
       }
