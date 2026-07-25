@@ -225,6 +225,7 @@ class JoiningNodeInitializer(
           )
       )
 
+      // we want to invoke sendOnboardingRequest if the participant is not initialized at all.
       _ <- if (isBootstrapping) sendOnboardingRequest(svParty, dsoPartyId) else Future.unit
 
       psid <- participantAdminConnection
@@ -238,6 +239,8 @@ class JoiningNodeInitializer(
       )
 
       _ <-
+        // even if the participant is initialized, if it doesn't host DSO, we still need to send sendOnboardingRequest
+        // however, when dsoPartyIsAuthorized, then we avoid sending sendOnboardingRequest, to account for cases where sponser is down.
         if (!isBootstrapping && !dsoPartyIsAuthorized) sendOnboardingRequest(svParty, dsoPartyId)
         else Future.unit
       _ <-
