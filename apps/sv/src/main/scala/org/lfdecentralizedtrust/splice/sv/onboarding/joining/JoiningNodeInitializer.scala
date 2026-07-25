@@ -174,25 +174,9 @@ class JoiningNodeInitializer(
         ),
       )
     )
-    for {
-      dsoPartyId <- getDsoPartyId(initConnection)
 
-      hint = config.svPartyHint.getOrElse(
-        joiningConfig
-          .map(_.name)
-          .getOrElse(
-            sys.error("Cannot setup SV party without either party hint or an onboarding config")
-          )
-      )
-
-      svParty = PartyId(
-        com.digitalasset.canton.topology.UniqueIdentifier
-          .tryCreate(hint, participantId.uid.namespace)
-      )
-
-      // requestOnboarding is sent early enough to create ParticipantSynchronizerPermission
-
-      _ <- joiningConfig match {
+    def sendOnboardingRequest(svParty: PartyId, dsoPartyId: PartyId): Future[Unit] =
+      joiningConfig match {
         case Some(SvOnboardingConfig.JoinWithKey(name, _, publicKey, privateKey)) =>
           SvUtil.keyPairMatches(publicKey, privateKey) match {
             case Right(privateKey_) =>
@@ -213,12 +197,35 @@ class JoiningNodeInitializer(
         case _ => Future.unit
       }
 
+    for {
+      dsoPartyId <- getDsoPartyId(initConnection)
+
       registeredGlobalSync <- domainConfigO.traverse(
         participantAdminConnection.ensureSynchronizerRegisteredWithManualConnect(
           _,
           RetryFor.WaitingOnInitDependency,
         )
       )
+
+      isBootstrapping = registeredGlobalSync.forall(_.psid.toOption.isEmpty)
+
+      svParty = PartyId(
+        com.digitalasset.canton.topology.UniqueIdentifier
+          .tryCreate(
+            config.svPartyHint.getOrElse(
+              joiningConfig
+                .map(_.name)
+                .getOrElse(
+                  sys.error(
+                    "Cannot setup SV party without either party hint or an onboarding config"
+                  )
+                )
+            ),
+            participantId.uid.namespace,
+          )
+      )
+
+      _ <- if (isBootstrapping) sendOnboardingRequest(svParty, dsoPartyId) else Future.unit
 
       psid <- participantAdminConnection
         .getPhysicalSynchronizerId(config.domains.global.alias)
@@ -229,6 +236,10 @@ class JoiningNodeInitializer(
         registeredGlobalSync,
         participantId,
       )
+
+      _ <-
+        if (!isBootstrapping && !dsoPartyIsAuthorized) sendOnboardingRequest(svParty, dsoPartyId)
+        else Future.unit
       _ <-
         // do not reconnect if we host the party, as we can be in some LSU stage and the participant cannot reconnect if the new sync is not functional
         if (!dsoPartyIsAuthorized) {
