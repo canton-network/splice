@@ -831,39 +831,46 @@ class HttpSvPublicHandler(
             logger.info("An SV onboarding contract for this token already exists.")
             Future.successful(Right(()))
           case QueryResult(offset, None) =>
-            EitherT
-              .fromEither[Future](
-                SvApp.validateCandidateSv(
-                  candidateParty,
-                  candidateName,
-                  dsoRules,
-                )
+            if (SvApp.isSvParty(candidateParty, dsoRules)) {
+              logger.info(
+                s"Candidate $candidateParty is already an SV. Treating onboarding request as successful."
               )
-              .leftMap(_.getDescription)
-              .semiflatMap { _ =>
-                val cmd = dsoRules.exercise(
-                  _.exerciseDsoRules_StartSvOnboarding(
+              Future.successful(Right(()))
+            } else {
+              EitherT
+                .fromEither[Future](
+                  SvApp.validateCandidateSv(
+                    candidateParty,
                     candidateName,
-                    candidateParty.toProtoPrimitive,
-                    candidateParticipantId.toProtoPrimitive,
-                    token,
-                    svParty.toProtoPrimitive,
+                    dsoRules,
                   )
                 )
-                dsoStoreWithIngestion
-                  .connection(SpliceLedgerConnectionPriority.Low)
-                  .submit(actAs = Seq(svParty), readAs = Seq(dsoParty), cmd)
-                  .withDedup(
-                    commandId = SpliceLedgerConnection.CommandId(
-                      "org.lfdecentralizedtrust.splice.sv.startSvOnboarding",
-                      Seq(svParty),
-                      s"$token",
-                    ),
-                    deduplicationOffset = offset,
+                .leftMap(_.getDescription)
+                .semiflatMap { _ =>
+                  val cmd = dsoRules.exercise(
+                    _.exerciseDsoRules_StartSvOnboarding(
+                      candidateName,
+                      candidateParty.toProtoPrimitive,
+                      candidateParticipantId.toProtoPrimitive,
+                      token,
+                      svParty.toProtoPrimitive,
+                    )
                   )
-                  .yieldUnit()
-              }
-              .value
+                  dsoStoreWithIngestion
+                    .connection(SpliceLedgerConnectionPriority.Low)
+                    .submit(actAs = Seq(svParty), readAs = Seq(dsoParty), cmd)
+                    .withDedup(
+                      commandId = SpliceLedgerConnection.CommandId(
+                        "org.lfdecentralizedtrust.splice.sv.startSvOnboarding",
+                        Seq(svParty),
+                        s"$token",
+                      ),
+                      deduplicationOffset = offset,
+                    )
+                    .yieldUnit()
+                }
+                .value
+            }
         }
       } yield outcome
     }
