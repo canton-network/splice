@@ -96,7 +96,7 @@ class SvDsoPartyManagementIntegrationTest extends SvIntegrationTestBase with Wal
             ).signAndEncode(SvUtil.parsePrivateKey(privateKey).value).value
           ),
           _.errorMessage should include(
-            s"Candidate party ${unAuthorizedParty} is not authorized by participant "
+            s"Could not approve SV Identity because of reason: no matching approved SV identity found"
           ),
         )
       }
