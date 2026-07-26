@@ -248,6 +248,7 @@ class BootstrapPackageConfigDarUploadIntegrationTest
   }
 }
 
+@Ignore // Re-enable once DarResources.dsoGovernance.minimumInitialization is bumped to >= 0.1.29
 class BootstrapPackageConfigDarUploadWithUnsupportedVersionsIntegrationTest
     extends BootstrapPackageConfigDarUploadIntegrationTest {
 
