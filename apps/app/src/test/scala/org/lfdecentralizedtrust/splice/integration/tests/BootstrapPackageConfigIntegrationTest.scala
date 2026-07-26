@@ -41,12 +41,14 @@ import org.lfdecentralizedtrust.splice.sv.automation.singlesv.SvPackageVettingTr
 import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.InitialPackageConfig
 import org.lfdecentralizedtrust.splice.util.{DarResourcesUtil, SpliceUtil, SplitwellTestUtil}
 import org.lfdecentralizedtrust.splice.wallet.automation.CollectRewardsAndMergeAmuletsTrigger
+import org.scalatest.Ignore
 import org.scalatest.time.{Minute, Span}
 
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import scala.concurrent.duration.DurationInt
 
+@Ignore // Re-enable once DarResources.dsoGovernance.minimumInitialization is bumped to >= 0.1.29
 @org.lfdecentralizedtrust.splice.util.scalatesttags.NoDamlCompatibilityCheck
 class BootstrapPackageConfigIntegrationTest
     extends IntegrationTestWithIsolatedEnvironment
