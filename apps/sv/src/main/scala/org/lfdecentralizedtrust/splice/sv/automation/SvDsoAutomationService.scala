@@ -282,6 +282,14 @@ class SvDsoAutomationService(
   // Triggers that require namespace permissions and the existence of the DsoRules and AmuletRules contracts
   def registerPostOnboardingTriggers(): Unit = {
     registerTrigger(
+      new delegatebased.SvOnboardingObserverTrigger(
+        triggerContext,
+        dsoStore,
+        connection(SpliceLedgerConnectionPriority.Medium),
+        participantAdminConnection,
+      )
+    )
+    registerTrigger(
       new SvOnboardingRequestTrigger(
         triggerContext,
         dsoStore,
@@ -772,5 +780,6 @@ object SvDsoAutomationService extends AutomationServiceCompanion {
       aTrigger[LsuTransferTrafficTrigger],
       aTrigger[LsuSequencingTestTrigger],
       aTrigger[ReconcileSequencingParametersTrigger],
+      aTrigger[delegatebased.SvOnboardingObserverTrigger],
     )
 }
