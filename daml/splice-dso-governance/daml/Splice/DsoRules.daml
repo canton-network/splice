@@ -233,6 +233,9 @@ data DsoRules_ConfirmSvOnboardingResult = DsoRules_ConfirmSvOnboardingResult wit
 data DsoRules_ExpireSvOnboardingConfirmedResult = DsoRules_ExpireSvOnboardingConfirmedResult with
     newDsoRules : ContractId DsoRules
 
+data DsoRules_MakeSvOnboardingConfirmedObserverResult = DsoRules_MakeSvOnboardingConfirmedObserverResult with
+    svOnboardingConfirmed : ContractId SvOnboardingConfirmed
+
 data DsoRules_Amulet_ExpireTransferInstructionsResult = DsoRules_Amulet_ExpireTransferInstructionsResult
   with
     result : AmuletRules_Amulet_ExpireTransferInstructionsResult
@@ -1154,7 +1157,19 @@ template DsoRules with
           reason
           dso
           expiresAt
+          svPartyIsObserver = Some False
         return DsoRules_ConfirmSvOnboardingResult with ..
+
+    nonconsuming choice DsoRules_MakeSvOnboardingConfirmedObserver : DsoRules_MakeSvOnboardingConfirmedObserverResult
+      with
+        svOnboardingConfirmedCid : ContractId SvOnboardingConfirmed
+        sv : Party
+      controller sv
+      do
+        _ <- getAndValidateSvParty this (Some sv)
+        res <- exercise svOnboardingConfirmedCid SvOnboardingConfirmed_MakeObserver
+        return DsoRules_MakeSvOnboardingConfirmedObserverResult with
+          svOnboardingConfirmed = res.newSvOnboardingConfirmed
 
     choice DsoRules_ExpireSvOnboardingConfirmed : DsoRules_ExpireSvOnboardingConfirmedResult
       with
