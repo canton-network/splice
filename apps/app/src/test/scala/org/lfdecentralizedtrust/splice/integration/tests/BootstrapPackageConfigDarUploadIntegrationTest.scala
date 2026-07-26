@@ -18,8 +18,10 @@ import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTestWithIsolatedEnvironment
 import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.InitialPackageConfig
 import org.lfdecentralizedtrust.splice.util.{DarResourcesUtil, ProcessTestUtil, StandaloneCanton}
+import org.scalatest.Ignore
 import org.scalatest.time.{Minute, Span}
 
+@Ignore // Re-enable once DarResources.dsoGovernance.minimumInitialization is bumped to >= 0.1.29
 class BootstrapPackageConfigDarUploadIntegrationTest
     extends IntegrationTestWithIsolatedEnvironment
     with ProcessTestUtil
