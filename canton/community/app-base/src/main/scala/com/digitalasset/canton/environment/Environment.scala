@@ -29,9 +29,7 @@ import com.digitalasset.canton.metrics.MetricsConfig.JvmMetrics
 import com.digitalasset.canton.metrics.{
   CantonHistograms,
   DbStorageHistograms,
-  DecryptionHistograms,
   MetricsRegistry,
-  SigningHistograms,
 }
 import com.digitalasset.canton.networking.grpc.CantonGrpcUtil
 import com.digitalasset.canton.participant.*
@@ -126,8 +124,6 @@ abstract class Environment[Config <: SharedCantonConfig[Config]](
   val dbStorageHistograms = new DbStorageHistograms(
     MetricName("cn")
   )(histogramInventory)
-  val signingHistograms = new SigningHistograms(MetricName("cn"))(histogramInventory)
-  val decryptionHistograms = new DecryptionHistograms(MetricName("cn"))(histogramInventory)
   private val baseFilter = new MetricsInfoFilter(
     config.monitoring.metrics.globalFilters,
     config.monitoring.metrics.qualifiers.toSet,

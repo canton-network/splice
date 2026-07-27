@@ -41,8 +41,6 @@ class SpliceEnvironment(
   lazy val metrics = {
     val histograms = SpliceHistograms(
       dbStorageHistograms,
-      signingHistograms,
-      decryptionHistograms,
     )
     SpliceMetricsFactory(
       metricsRegistry,

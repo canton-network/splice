@@ -3,14 +3,8 @@
 
 package org.lfdecentralizedtrust.splice.metrics
 
-import com.digitalasset.canton.metrics.{
-  DecryptionHistograms,
-  SigningHistograms,
-  DbStorageHistograms,
-}
+import com.digitalasset.canton.metrics.DbStorageHistograms
 
 final case class SpliceHistograms(
     dbStorageHistograms: DbStorageHistograms,
-    signingHistograms: SigningHistograms,
-    decryptionHistograms: DecryptionHistograms,
 )
