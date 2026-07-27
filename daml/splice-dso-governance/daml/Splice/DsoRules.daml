@@ -1106,7 +1106,15 @@ template DsoRules with
         require "Sponsor is an SV" (sponsor `Map.member` svs)
         now <- getTime
         let expiresAt = now `addRelTime` config.svOnboardingRequestTimeout
-        onboardingRequest <- create SvOnboardingRequest with ..
+        onboardingRequest <- create SvOnboardingRequest with
+          candidateName
+          candidateParty
+          candidateParticipantId
+          token
+          sponsor
+          dso
+          expiresAt
+          candidatePartyIsObserver  = Some False
         return DsoRules_StartSvOnboardingResult with ..
 
     nonconsuming choice DsoRules_ExpireSvOnboardingRequest : DsoRules_ExpireSvOnboardingRequestResult
@@ -1167,6 +1175,7 @@ template DsoRules with
       controller sv
       do
         _ <- getAndValidateSvParty this (Some sv)
+        void $ fetchChecked (ForDso with dso) svOnboardingConfirmedCid
         res <- exercise svOnboardingConfirmedCid SvOnboardingConfirmed_MakeObserver
         return DsoRules_MakeSvOnboardingConfirmedObserverResult with
           svOnboardingConfirmed = res.newSvOnboardingConfirmed

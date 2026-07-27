@@ -466,12 +466,6 @@ class SV1Initializer(
             NonNegativeFiniteDuration.fromConfig(config.preparationTimeRecordTimeTolerance),
           mediatorDeduplicationTimeout =
             NonNegativeFiniteDuration.fromConfig(config.mediatorDeduplicationTimeout),
-//          onboardingRestriction = if (config.permissionedSynchronizer) {
-//            logger.debug("Using RestrictedOpen onboarding restriction for the synchronizer")
-//            RestrictedOpen
-//          } else {
-//            UnrestrictedOpen
-//          },
           onboardingRestriction = UnrestrictedOpen,
         )
         for {
@@ -489,27 +483,6 @@ class SV1Initializer(
                   NonEmpty.mk(Set, participantId.uid.namespace),
                   threshold = PositiveInt.one,
                 )
-//              sv1PermissionTx <-
-//                if (config.permissionedSynchronizer) {
-//                  logger.debug(
-//                    "Proposing ParticipantSynchronizerPermission topology transaction for the SV1"
-//                  )
-//                  participantAdminConnection
-//                    .proposeMapping(
-//                      TopologyStoreId.Authorized,
-//                      transaction.ParticipantSynchronizerPermission(
-//                        synchronizerId,
-//                        participantId,
-//                        ParticipantPermission.Submission,
-//                        None,
-//                        None,
-//                      ),
-//                      serial = PositiveInt.one,
-//                      isProposal = false,
-//                    )
-//                    .map(Some(_))
-//                } else Future.successful(None)
-//                Future.successful(None)
               (
                 identityTransactions,
                 synchronizerParametersState,
@@ -551,7 +524,6 @@ class SV1Initializer(
                   synchronizerParametersState,
                   sequencerState,
                   mediatorState,
-//                ) ++ sv1PermissionTx.toList ++ identityTransactions).sorted
                 ) ++ identityTransactions).sorted
                   .mapFilter(_.selectOp[TopologyChangeOp.Replace])
                   .map(signed =>
@@ -792,8 +764,6 @@ object SV1Initializer {
           case Code.OwnerToKeyMapping => 2
           case Code.DecentralizedNamespaceDefinition => 3
           case _ => 4
-//          case Code.ParticipantSynchronizerPermission => 4
-//          case _ => 5
         }
       }
 

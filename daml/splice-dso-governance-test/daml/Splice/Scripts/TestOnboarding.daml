@@ -132,6 +132,7 @@ testSvOnboarding = do
     sponsor = sv2
     dso
     expiresAt = svOnboardingRequest.expiresAt
+    candidatePartyIsObserver  = Some False
 
   -- svX collects three confirmations which is enough to onboard him
   [(dsoRulesCid, _)] <- query @DsoRules dso

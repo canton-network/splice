@@ -19,15 +19,17 @@ data SvOnboardingConfirmed_MakeObserverResult = SvOnboardingConfirmed_MakeObserv
 -- The existence of this contract triggers SV automation that creates confirmation contracts for
 -- the candidate if the token is a valid `SvOnboardingToken` and matches an `ApprovedSvIdentity`.
 template SvOnboardingRequest with
-    candidateName : Text            -- ^ Human-readable name of the SV candidate. Must match the one in `ApprovedSvIdentity`!
-    candidateParty : Party          -- ^ PartyId of the candidate SV party.
-    candidateParticipantId : Text   -- ^ ParticipantId of the candidate SV.
-    token : Text                    -- ^ An encoded and signed `SvOnboardingToken` that confirms the candidate's identity.
-    sponsor : Party                 -- ^ The established SV node that created this contract.
+    candidateName : Text                        -- ^ Human-readable name of the SV candidate. Must match the one in `ApprovedSvIdentity`!
+    candidateParty : Party                      -- ^ PartyId of the candidate SV party.
+    candidateParticipantId : Text               -- ^ ParticipantId of the candidate SV.
+    token : Text                                -- ^ An encoded and signed `SvOnboardingToken` that confirms the candidate's identity.
+    sponsor : Party                             -- ^ The established SV node that created this contract.
     dso: Party
-    expiresAt : Time                -- ^ When this contract can be archived even if the onboarding did not succeed.
+    expiresAt : Time                            -- ^ When this contract can be archived even if the onboarding did not succeed.
+    candidatePartyIsObserver : Optional Bool    -- ^ Controls whether the candidateParty can see this contract yet.
   where
     signatory dso
+    observer if (fromOptional False candidatePartyIsObserver) then [candidateParty] else []
 
     -- Archive if we are past the `expiresAt`.
     choice SvOnboardingRequest_Expire : SvOnboardingRequest_ExpireResult
