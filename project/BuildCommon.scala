@@ -383,8 +383,7 @@ object BuildCommon {
     sbt.Project
       .apply("canton-util-external", file("canton/base/util-external"))
       .dependsOn(
-        `canton-pekko-fork`,
-        `canton-wartremover-extension` % "compile->compile;test->test",
+        `canton-wartremover-extension` % "compile->compile;test->test"
         // Canton depends on the Daml code via a git submodule and the two
         // projects below. We instead depend on the artifacts released
         // from the Daml repo listed in libraryDependencies below.
@@ -758,7 +757,6 @@ object BuildCommon {
       .apply("canton-community-common", file("canton/community/common"))
       .enablePlugins(DamlPlugin)
       .dependsOn(
-        `canton-pekko-fork` % "compile->compile;test->test",
         `canton-community-base`,
         `canton-wartremover-extension` % "compile->compile;test->test",
         `canton-util-external` % "compile->compile;test->test",
@@ -1028,28 +1026,6 @@ object BuildCommon {
     sbt.Project
       .apply("canton-wartremover-annotations", file("canton/community/lib/wartremover-annotations"))
       .settings(sharedSettings)
-
-  // https://github.com/DACH-NY/canton/issues/10617: remove when no longer needed
-  lazy val `canton-pekko-fork` = {
-    import CantonDependencies._
-    sbt.Project
-      .apply("canton-pekko-fork", file("canton/community/lib/pekko"))
-      .disablePlugins(ScalafixPlugin, ScalafmtPlugin, WartRemover)
-      .settings(
-        sharedCantonSettings,
-        sharedSettings,
-        libraryDependencies ++= Seq(
-          pekko_stream,
-          pekko_stream_testkit % Test,
-          pekko_slf4j,
-          scalatest % Test,
-        ),
-        // commented out from Canton OS repo as settings don't apply to us (yet)
-        //      // Exclude to apply our license header to any Scala files
-        //      headerSources / excludeFilter := "*.scala",
-        //      coverageEnabled := false,
-      )
-  }
 
   lazy val `canton-scalatest-addon` = {
     import CantonDependencies._

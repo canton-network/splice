@@ -30,7 +30,6 @@ lazy val `canton-wartremover-extension` = BuildCommon.`canton-wartremover-extens
 lazy val `canton-wartremover-annotations` = BuildCommon.`canton-wartremover-annotations`
 lazy val `canton-util-external` = BuildCommon.`canton-util-external`
 lazy val `canton-util-observability` = BuildCommon.`canton-util-observability`
-lazy val `canton-pekko-fork` = BuildCommon.`canton-pekko-fork`
 lazy val `canton-scalatest-addon` = BuildCommon.`canton-scalatest-addon`
 lazy val `canton-ledger-common` = BuildCommon.`canton-ledger-common`
 lazy val `canton-ledger-api-value` = BuildCommon.`canton-ledger-api-value`
@@ -2042,9 +2041,6 @@ def mergeStrategy(oldStrategy: String => MergeStrategy): String => MergeStrategy
           "plugins",
           "Log4j2Plugins.dat",
         ) =>
-      MergeStrategy.first
-    case (PathList("org", "apache", "pekko", "stream", "scaladsl", broadcasthub, _*))
-        if broadcasthub.startsWith("BroadcastHub") =>
       MergeStrategy.first
     case "META-INF/versions/9/module-info.class" => MergeStrategy.discard
     case path if path.contains("module-info.class") => MergeStrategy.discard
