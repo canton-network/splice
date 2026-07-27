@@ -203,6 +203,7 @@ class LsuIntegrationTest
       .withSvBftSequencerConnectionDisabled()
       .withAmuletPrice(walletAmuletPrice)
       .withManualStart
+      .withTransferCommandSupport
 
   override def walletAmuletPrice: java.math.BigDecimal = SpliceUtil.damlDecimal(1.0)
 
