@@ -36,7 +36,7 @@ class InvalidResponseContentTest
       endpoint: CommonAdminClient => EitherT[Future, Either[Throwable, HttpResponse], A],
       resp: ResponseEntity,
   )(
-      expectation: Either[Either[Throwable, HttpResponse], A] => Assertion,
+      expectation: Either[Either[Throwable, HttpResponse], A] => Assertion
   ): Assertion = {
     implicit val httpClient: HttpClient = new HttpClient {
       val requestParameters = HttpClient.HttpRequestParameters(NonNegativeDuration(Duration.Zero))
@@ -51,7 +51,6 @@ class InvalidResponseContentTest
     val client = CommonAdminClient.httpClient(HttpClient.createHttpFn("", ""), "http://localhost")
     expectation(endpoint(client).value.futureValue)
   }
-
 
   "CommonAdminClient.getVersion" should {
     "include the response body in the error when the content type is invalid" in {
@@ -71,7 +70,7 @@ class InvalidResponseContentTest
             "1.2.3",
             OffsetDateTime.of(2026, 7, 23, 0, 0, 0, 0, ZoneOffset.UTC),
           ).asJson.noSpaces,
-        )
+        ),
       ) {
         case Right(_: GetVersionResponse.OK) => succeed
         case other => fail(s"expected GetVersionResponse.OK, got: $other")
