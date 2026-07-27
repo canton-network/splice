@@ -60,22 +60,31 @@ json_object_values_fromjson() {
 }
 
 grpc_health() {
-  local insecure=false max_time
+  local max_time
+  local insecure=false
+  local connect_only=false
 
   local args=()
   while [[ $# -gt 0 ]]; do
     case "$1" in
       -m|--max-time)  max_time=$2; shift 2 ;;
       -k|--insecure)  insecure=true; shift ;;
+      --connect-only) connect_only=true; shift ;;
       *)              args+=("$1"); shift ;;
     esac
   done
 
   [[ ${#args[@]} -eq 1 ]] ||
-    { echo "Usage: grpc_health [-m|--max-time SECONDS] [-k|--insecure] [http://|https://]HOST:PORT" >&2; return 1; }
+    { echo "Usage: grpc_health [-m|--max-time SECONDS] [-k|--insecure] [--connect-only] [http://|https://]HOST:PORT" >&2; return 1; }
 
   local url=${args[0]}
-  local curl_opts=()
+
+  local curl_opts=(
+    --silent
+    -X POST
+    -H 'Content-Type: application/grpc'
+    -H 'TE: trailers'
+  )
 
   [[ -n ${max_time-} ]] && curl_opts+=(--max-time "$max_time")
   "$insecure" && curl_opts+=(-k)
@@ -86,17 +95,37 @@ grpc_health() {
     curl_opts+=(--http2-prior-knowledge)
   fi
 
-  local out; out=$(
-    set -o pipefail
-    printf '\0\0\0\0\0' |
-      curl -fs "${curl_opts[@]}" \
-        -X POST -H 'Content-Type: application/grpc' \
-        --data-binary @- "$url/grpc.health.v1.Health/Check" |
-      xxd -p
-  ) || { echo "error: request failed" >&2; return 1; }
+  if "$connect_only"; then
+    local http_code; http_code=$(
+      curl --fail "${curl_opts[@]}" \
+        --write-out '%{http_code}' \
+        "$url"
+    ) || { echo "error: connection failed" >&2; return 1; }
 
-  [[ "$out" == 00000000020801 ]] && { echo SERVING; return 0; }
-  echo "error: not serving" >&2; return 1
+    if [[ "$http_code" == 200 ]]; then
+      echo "Connection successful"
+      return 0
+    else
+      echo "error: connection failed with HTTP code $http_code" >&2
+      return 1
+    fi
+  else
+    local out; out=$(
+      set -o pipefail
+      printf '\0\0\0\0\0' |
+        curl --fail "${curl_opts[@]}" \
+          --data-binary @- "$url/grpc.health.v1.Health/Check" |
+        xxd -p
+    ) || { echo "error: request failed" >&2; return 1; }
+
+    if [[ "$out" == 00000000020801 ]]; then
+      echo SERVING
+      return 0
+    else
+      echo "error: not serving" >&2
+      return 1
+    fi
+  fi
 }
 
 grpc_health_code() {
