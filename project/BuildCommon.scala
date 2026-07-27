@@ -377,15 +377,6 @@ object BuildCommon {
     headerResources / excludeFilter := "*",
   ) ++ sharedProtocSettings ++ Headers.NoHeaderSettings
 
-  lazy val `canton-daml-adjustable-clock` = {
-    import CantonDependencies._
-    sbt.Project
-      .apply("canton-daml-adjustable-clock", file("canton/base/adjustable-clock"))
-      .settings(
-        sharedCantonSettings
-      )
-  }
-
   lazy val `canton-util-observability` = {
     import CantonDependencies._
     sbt.Project

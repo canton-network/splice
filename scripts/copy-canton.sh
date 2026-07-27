@@ -16,6 +16,7 @@ rsync -av --delete --exclude version.sbt --exclude community-build.sbt --exclude
     --exclude '*/wartremove/test/*' --exclude "*/ledger-api-bench-tool" \
     --exclude '.ci' --exclude '.circleci' --exclude '.hooks' --exclude 'contributing' --exclude 'docker' \
     --exclude 'docs-open' --exclude 'nix' --exclude 'performance' --exclude 'dashboards' --exclude 'release' \
+    --exclude 'base/adjustable-clock' \
     --exclude 'base/contextualized-logging' --exclude 'base/crypto' \
     --exclude 'base/daml-jwt' --exclude 'base/daml-tls' \
     --exclude 'base/errors' --exclude 'base/util-external' \

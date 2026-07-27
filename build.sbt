@@ -33,7 +33,6 @@ lazy val `canton-scalatest-addon` = BuildCommon.`canton-scalatest-addon`
 lazy val `canton-ledger-common` = BuildCommon.`canton-ledger-common`
 lazy val `canton-ledger-api-value` = BuildCommon.`canton-ledger-api-value`
 lazy val `canton-ledger-json-api` = BuildCommon.`canton-ledger-json-api`
-lazy val `canton-daml-adjustable-clock` = BuildCommon.`canton-daml-adjustable-clock`
 lazy val `canton-sequencer-driver-api` = BuildCommon.`canton-sequencer-driver-api`
 lazy val `canton-kms-driver-api` = BuildCommon.`canton-kms-driver-api`
 lazy val `canton-community-reference-driver` = BuildCommon.`canton-community-reference-driver`
