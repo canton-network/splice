@@ -14,6 +14,7 @@ import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerC
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
+import com.digitalasset.canton.util.MonadUtil
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
 
@@ -41,10 +42,10 @@ class SvOnboardingObserverTrigger(
     for {
       confirmations <- store.listSvOnboardingConfirmed()
       unobserved = confirmations.filter(co =>
-        !co.payload.svPartyIsObserver.toScala.exists(_.booleanValue())
+        co.payload.svPartyIsObserver.toScala.contains(java.lang.Boolean.FALSE)
       )
 
-      readyTasks <- Future.sequence(unobserved.map { c =>
+      readyTasks <- MonadUtil.sequentialTraverse(unobserved) { c =>
         val partyId = PartyId.tryFromProtoPrimitive(c.payload.svParty)
         for {
           support <- svTaskContext.packageVersionSupport.supportsPermissionedSynchronizer(
@@ -55,7 +56,7 @@ class SvOnboardingObserverTrigger(
           if (support.supported) Some(Task(c.contractId, partyId, support.packageIds))
           else None
         }
-      })
+      }
     } yield readyTasks.flatten
   }
 

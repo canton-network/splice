@@ -29,7 +29,7 @@ template SvOnboardingRequest with
     candidatePartyIsObserver : Optional Bool    -- ^ Controls whether the candidateParty can see this contract yet.
   where
     signatory dso
-    observer if (fromOptional False candidatePartyIsObserver) then [candidateParty] else []
+    observer if (fromOptional True candidatePartyIsObserver) then [candidateParty] else []
 
     -- Archive if we are past the `expiresAt`.
     choice SvOnboardingRequest_Expire : SvOnboardingRequest_ExpireResult
@@ -53,7 +53,7 @@ template SvOnboardingConfirmed with
     svPartyIsObserver : Optional Bool    -- ^ Controls whether the joining SV can see this contract yet.
   where
     signatory dso
-    observer if (fromOptional False svPartyIsObserver) then [svParty] else []
+    observer if (fromOptional True svPartyIsObserver) then [svParty] else []
 
     -- Archive if we are past the `expiresAt`.
     choice SvOnboardingConfirmed_Expire : SvOnboardingConfirmed_ExpireResult
@@ -66,7 +66,7 @@ template SvOnboardingConfirmed with
     choice SvOnboardingConfirmed_MakeObserver : SvOnboardingConfirmed_MakeObserverResult
       controller dso
       do
-        require "Party is already an observer" (not (fromOptional False svPartyIsObserver))
+        require "Party is already an observer" (not (fromOptional True svPartyIsObserver))
         newSvOnboardingConfirmed <- create this with svPartyIsObserver = Some True
         pure SvOnboardingConfirmed_MakeObserverResult with ..
 
