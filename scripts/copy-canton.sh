@@ -18,6 +18,7 @@ rsync -av --delete --exclude version.sbt --exclude community-build.sbt --exclude
     --exclude 'docs-open' --exclude 'nix' --exclude 'performance' --exclude 'dashboards' --exclude 'release' \
     --exclude 'base/contextualized-logging' --exclude 'base/crypto' \
     --exclude 'base/daml-jwt' --exclude 'base/daml-tls' \
+    --exclude '*/community/lib/Blake2b' \
     --exclude 'community/bindings-java' --exclude "*/community/transcode" \
     --exclude '*/community/ledger-api-scala' --exclude "*/ledger-api-proto" \
     --exclude '*/canton-community-app/test/scala/*/integration/tests' \
