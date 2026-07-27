@@ -18,7 +18,7 @@ rsync -av --delete --exclude version.sbt --exclude community-build.sbt --exclude
     --exclude 'docs-open' --exclude 'nix' --exclude 'performance' --exclude 'dashboards' --exclude 'release' \
     --exclude 'base/contextualized-logging' --exclude 'base/crypto' \
     --exclude 'base/daml-jwt' --exclude 'base/daml-tls' \
-    --exclude 'base/errors' \
+    --exclude 'base/errors' --exclude 'base/util-external' \
     --exclude '*/community/lib/Blake2b' \
     --exclude '*/community/lib/google-common-protos-scala' \
     --exclude '*/community/lib/magnolify' \
