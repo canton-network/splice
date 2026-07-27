@@ -158,11 +158,6 @@ object ScanTxLogParser {
     def appended(other: State): State = State(
       entries = entries.appendedAll(other.entries)
     )
-    def hasTransfer: Boolean =
-      entries.exists {
-        case _: TransferTxLogEntry => true
-        case _ => false
-      }
   }
 
   private object State {
