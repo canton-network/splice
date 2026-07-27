@@ -286,35 +286,52 @@ run_parallel() {
   printf "%s" "$result" | jq -es 'add | values' || echo '{}'
 }
 
+# Fetches the list of scans from the Scan API and returns a JSON object with
+# svNames as keys and public URLs as values.
+get_scan_urls() {
+  local scan_info; scan_info=$(
+    "${CURL_CMD[@]}" "$SCAN_URL/api/scan/v0/scans" || echo '{}'
+  )
+
+  local scan_urls; scan_urls=$(
+    local result; result=$(
+      echo "$scan_info" |
+        jq -e '.scans[]?.scans | map({ (.svName): .publicUrl }) | add | values'
+    ) && echo "$result" || echo '{}'
+  )
+
+  echo "$scan_urls"
+}
+
 # Tries to reach the scan and checks the age of the last open and issuing
 # rounds. Returns a JSON object with svNames as keys and 0 (reachable and
 # rounds within threshold), 1 (reachable but rounds not within threshold) or 2
 # (not reachable) as values.
 scan_get_status_rounds() {
-  local scan_url=$SCAN_URL
-  local scans_info_url="$scan_url/api/scan/v0/scans"
-
-  local scan_info; scan_info=$("${CURL_CMD[@]}" "$scans_info_url" || echo '{}')
+  local scan_urls; scan_urls=$(get_scan_urls)
 
   local scan_cmds_rounds; scan_cmds_rounds=$(
     local result; result=$(
-      echo "$scan_info" |
-        jq -e \
-          --argjson cmd "$CURL_CMD_JSON" \
-          '
-            .scans[]?.scans
-            | map(
-                {
-                  (.svName):
-                    $cmd +
-                    ["--compressed"] +
-                    ["--json", ({"cached_open_mining_round_contract_ids": [], "cached_issuing_round_contract_ids": []} | tojson)] +
-                    [.publicUrl + "/api/scan/v0/open-and-issuing-mining-rounds"]
-                }
-              )
-            | add
-            | values
-          '
+      jq -ne \
+        --argjson cmd "$CURL_CMD_JSON" \
+        --argjson scan_urls "$scan_urls" \
+        '
+          $scan_urls
+          | to_entries
+          | map(
+              .key as $svName |
+              .value as $scanUrl |
+              {
+                ($svName):
+                  $cmd +
+                  ["--compressed"] +
+                  ["--json", ({"cached_open_mining_round_contract_ids": [], "cached_issuing_round_contract_ids": []} | tojson)] +
+                  [$scanUrl + "/api/scan/v0/open-and-issuing-mining-rounds"]
+              }
+            )
+          | add
+          | values
+        '
     ) && echo "$result" || echo '{}'
   )
 
@@ -385,17 +402,7 @@ scan_try_fetch_event() {
 }
 
 scan_get_status_events() {
-  local scan_url=$SCAN_URL
-  local scans_info_url="$scan_url/api/scan/v0/scans"
-
-  local scan_info; scan_info=$("${CURL_CMD[@]}" "$scans_info_url" || echo '{}')
-
-  local scan_urls; scan_urls=$(
-    local result; result=$(
-      echo "$scan_info" |
-        jq -e '.scans[]?.scans | map({ (.svName): .publicUrl }) | add | values'
-    ) && echo "$result" || echo '{}'
-  )
+  local scan_urls; scan_urls=$(get_scan_urls)
 
   local scan_cmds_events; scan_cmds_events=$(
     local result; result=$(
