@@ -1087,6 +1087,53 @@ object BuildCommon {
       )
   }
 
+  lazy val `daml-lf-transaction-test-lib` = project
+    .in(file("canton/community/daml-lf/transaction-test-lib"))
+    .disablePlugins(
+      WartRemover
+    )
+    .settings(
+      sharedCantonSettings,
+      Compile / unmanagedSources / includeFilter :=
+        "*ValueGenerators.scala" || "TransactionBuilder.scala" || "NodeIdTransactionBuilder.scala" || "TestIdFactory.scala",
+      libraryDependencies ++= {
+        import CantonDependencies._
+        Seq(
+          daml_lf_api_type_signature,
+          daml_lf_data,
+          daml_lf_language,
+          daml_lf_transaction,
+          scalacheck,
+          scala_logging,
+          scalatestScalacheck,
+          scalatest,
+          scalaz_core,
+          scalaz_scalacheck_binding,
+          shapeless,
+        )
+      },
+    )
+    .dependsOn(
+      `daml-lf-data-scalacheck`
+    )
+
+  lazy val `daml-lf-data-scalacheck` = project
+    .in(file("canton/community/daml-lf/data-scalacheck"))
+    .disablePlugins(WartRemover)
+    .settings(
+      sharedCantonSettings,
+      libraryDependencies ++= {
+        import CantonDependencies._
+        Seq(
+          daml_lf_data,
+          scalacheck,
+        )
+      },
+      Test / scalacOptions ++= Seq(
+        "-Wconf:msg=match may not be exhaustive:s"
+      ),
+    )
+
   lazy val `canton-sequencer-driver-api` = {
     import CantonDependencies._
     sbt.Project
