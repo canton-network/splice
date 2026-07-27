@@ -30,7 +30,6 @@ lazy val `canton-wartremover-extension` = BuildCommon.`canton-wartremover-extens
 lazy val `canton-wartremover-annotations` = BuildCommon.`canton-wartremover-annotations`
 lazy val `canton-util-observability` = BuildCommon.`canton-util-observability`
 lazy val `canton-scalatest-addon` = BuildCommon.`canton-scalatest-addon`
-lazy val `canton-ledger-common` = BuildCommon.`canton-ledger-common`
 lazy val `canton-ledger-api-value` = BuildCommon.`canton-ledger-api-value`
 lazy val `canton-ledger-json-api` = BuildCommon.`canton-ledger-json-api`
 lazy val `canton-sequencer-driver-api` = BuildCommon.`canton-sequencer-driver-api`
@@ -138,7 +137,6 @@ lazy val root: Project = (project in file("."))
     `canton-community-app-base`,
     `canton-community-synchronizer`,
     `canton-community-participant`,
-    `canton-ledger-common`,
     `canton-ledger-api-value`,
     `canton-observability-metrics-testing`,
     pulumi,

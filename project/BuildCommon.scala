@@ -512,7 +512,6 @@ object BuildCommon {
       .enablePlugins(BuildInfoPlugin)
       .dependsOn(
         `canton-slick-fork`,
-        `canton-ledger-common`,
         `canton-community-admin-api`,
         `canton-kms-driver-api`,
         `canton-scalatest-addon` % "compile->test",
@@ -559,6 +558,7 @@ object BuildCommon {
           CantonDependencies.opentelemetry_instrumentation_hikari,
           CantonDependencies.canton_java_bindings,
         ),
+        libraryDependencies ++= canton_ledger_common_deps,
         Compile / PB.targets := Seq(
           scalapb.gen(flatPackage = true) -> (Compile / sourceManaged).value / "protobuf"
         ),
@@ -702,7 +702,6 @@ object BuildCommon {
         `canton-community-base`,
         `canton-wartremover-extension` % "compile->compile;test->test",
         `canton-community-testing` % "test",
-        `canton-ledger-common` % "compile->compile;test->test",
       )
       .settings(
         removeTestSources,
@@ -983,69 +982,35 @@ object BuildCommon {
       )
   }
 
-  lazy val `canton-ledger-common` = {
+  private[this] lazy val canton_ledger_common_deps = {
     import CantonDependencies._
-    sbt.Project
-      .apply("canton-ledger-common", file("canton/community/ledger/ledger-common"))
-      .disablePlugins(WartRemover, ScalafmtPlugin)
-      .dependsOn(
-        `canton-util-observability`
-      )
-      .settings(
-        removeTestSources,
-        sharedCantonSettings,
-        disableTests,
-        sharedSettings,
-        scalacOptions += "-Wconf:src=src_managed/.*:silent",
-        Compile / PB.targets := Seq(
-          PB.gens.java -> (Compile / sourceManaged).value / "protobuf",
-          scalapb.gen(flatPackage = false) -> (Compile / sourceManaged).value / "protobuf",
-        ),
-        // commented out from Canton OS repo as settings don't apply to us (yet)
-        //      addProtobufFilesToHeaderCheck(Compile),
-        libraryDependencies ++= Seq(
-          canton_contextualized_logging,
-          canton_util_external,
-          daml_lf_engine,
-          daml_lf_archive_reader,
-          CantonDependencies.canton_java_bindings,
-          CantonDependencies.canton_ledger_api_scala,
-          daml_jwt,
-          daml_tracing,
-          apache_commons_codec,
-          apache_commons_io,
-          daml_ledger_resources,
-          daml_timer_utils,
-          daml_rs_grpc_pekko,
-          opentelemetry_api,
-          pekko_stream,
-          slf4j_api,
-          grpc_api,
-          reflections,
-          grpc_netty_shaded,
-          caffeine,
-          scalapb_runtime,
-          scalapb_runtime_grpc,
-          scopt,
-          awaitility % Test,
-          logback_classic % Test,
-          scalatest % Test,
-          mockito_scala % Test,
-          scalatestMockito % Test,
-          pekko_stream_testkit % Test,
-          scalacheck % Test,
-          opentelemetry_sdk_testing % Test,
-          scalatestScalacheck % Test,
-          daml_lf_data,
-          daml_lf_transaction,
-          daml_ports % Test,
-        ),
-        Test / fork := true,
-        Test / testForkedParallel := true,
-        // commented out from Canton OS repo as settings don't apply to us (yet)
-        //      coverageEnabled := false,
-        //      JvmRulesPlugin.damlRepoHeaderSettings,
-      )
+    Seq(
+      canton_contextualized_logging,
+      canton_util_external,
+      daml_lf_engine,
+      daml_lf_archive_reader,
+      CantonDependencies.canton_java_bindings,
+      CantonDependencies.canton_ledger_api_scala,
+      daml_jwt,
+      daml_tracing,
+      apache_commons_codec,
+      apache_commons_io,
+      daml_ledger_resources,
+      daml_timer_utils,
+      daml_rs_grpc_pekko,
+      opentelemetry_api,
+      pekko_stream,
+      slf4j_api,
+      grpc_api,
+      reflections,
+      grpc_netty_shaded,
+      caffeine,
+      scalapb_runtime,
+      scalapb_runtime_grpc,
+      scopt,
+      daml_lf_data,
+      daml_lf_transaction,
+    )
   }
 
   // this project exists solely for the purpose of extracting value.proto
@@ -1076,7 +1041,6 @@ object BuildCommon {
       .apply("canton-ledger-json-api", file("canton/community/ledger/ledger-json-api"))
       .dependsOn(
         `canton-util-observability`,
-        `canton-ledger-common` % "test->test",
         `canton-community-testing` % Test,
       )
       .disablePlugins(
