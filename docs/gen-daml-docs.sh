@@ -47,6 +47,7 @@ DAML_PROJECT_FILES="\
     -not -ipath '*splitwell*' \
     -not -ipath '*app-manager*' \
     -not -ipath '*dummy-holding*' \
+    -not -ipath '*daml-ide-mono*' \
     -print)"
 DAML_PROJECT_FILES=$(printf "%s\n" "$DAML_PROJECT_FILES" | grep -vf <(printf "%s\n" "${NON_COMPILED_DAML_PROJECTS[@]}" | xargs -n1 basename))
 
