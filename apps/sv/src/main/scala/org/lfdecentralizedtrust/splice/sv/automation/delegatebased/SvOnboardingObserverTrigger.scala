@@ -10,39 +10,35 @@ import org.lfdecentralizedtrust.splice.automation.{
   TriggerContext,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.svonboarding.SvOnboardingConfirmed
-import org.lfdecentralizedtrust.splice.environment.{
-  ParticipantAdminConnection,
-  SpliceLedgerConnection,
-}
-import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
+import org.lfdecentralizedtrust.splice.environment.ParticipantAdminConnection
+import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.canton.topology.store.TimeQuery
 import com.digitalasset.canton.topology.transaction.{TopologyMapping, VettedPackages}
 import com.digitalasset.canton.tracing.TraceContext
-import com.digitalasset.canton.util.DelayUtil
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.OptionConverters.*
-import scala.util.Random
-import java.util.concurrent.TimeUnit
-import scala.concurrent.duration.FiniteDuration
 
 class SvOnboardingObserverTrigger(
     override protected val context: TriggerContext,
-    store: SvDsoStore,
-    private val connection: SpliceLedgerConnection,
+    override protected val svTaskContext: SvTaskBasedTrigger.Context,
     participantAdminConnection: ParticipantAdminConnection,
 )(implicit
     override val ec: ExecutionContext,
     mat: Materializer,
     override val tracer: Tracer,
-) extends PollingParallelTaskExecutionTrigger[SvOnboardingObserverTrigger.Task] {
+) extends PollingParallelTaskExecutionTrigger[SvOnboardingObserverTrigger.Task]
+    with SvTaskBasedTrigger[SvOnboardingObserverTrigger.Task] {
 
   import SvOnboardingObserverTrigger.Task
+
+  private val store = svTaskContext.dsoStore
+  private val connection = svTaskContext.connection(SpliceLedgerConnectionPriority.Medium)
 
   override protected def retrieveTasks()(implicit
       tc: TraceContext
@@ -56,7 +52,7 @@ class SvOnboardingObserverTrigger(
     }
   }
 
-  override protected def completeTask(task: Task)(implicit
+  override protected def completeTaskAsDsoDelegate(task: Task, svParty: String)(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = {
     for {
@@ -98,45 +94,26 @@ class SvOnboardingObserverTrigger(
               }
 
               if (hasVetted) {
-                // Apply a random backoff up to 10 seconds to prevent all SVs from submitting simultaneously
-                val delayMillis = Random.nextLong(10000L)
-                DelayUtil
-                  .delayIfNotClosing(
-                    "sv-onboarding-observer-delay",
-                    FiniteDuration(delayMillis, TimeUnit.MILLISECONDS),
-                    this,
+                val cmd = dsoRules.exercise(
+                  _.exerciseDsoRules_MakeSvOnboardingConfirmedObserver(
+                    task.contractId,
+                    store.key.svParty.toProtoPrimitive,
                   )
-                  .onShutdown(())
-                  .flatMap { _ =>
-                    isStaleTask(task).flatMap { isStale =>
-                      if (isStale) {
-                        Future.successful(
-                          TaskSuccess(s"Task for ${task.partyId} became stale during backoff")
-                        )
-                      } else {
-                        val cmd = dsoRules.exercise(
-                          _.exerciseDsoRules_MakeSvOnboardingConfirmedObserver(
-                            task.contractId,
-                            store.key.svParty.toProtoPrimitive,
-                          )
-                        )
+                )
 
-                        connection
-                          .submit(
-                            actAs = Seq(store.key.svParty),
-                            readAs = Seq(store.key.dsoParty),
-                            update = cmd,
-                          )
-                          .noDedup
-                          .yieldUnit()
-                          .map(_ =>
-                            TaskSuccess(
-                              s"Made ${task.partyId} an observer of its onboarding confirmation"
-                            )
-                          )
-                      }
-                    }
-                  }
+                connection
+                  .submit(
+                    actAs = Seq(store.key.svParty),
+                    readAs = Seq(store.key.dsoParty),
+                    update = cmd,
+                  )
+                  .noDedup
+                  .yieldUnit()
+                  .map(_ =>
+                    TaskSuccess(
+                      s"Made ${task.partyId} an observer of its onboarding confirmation"
+                    )
+                  )
               } else {
                 Future.successful(
                   TaskSuccess(
