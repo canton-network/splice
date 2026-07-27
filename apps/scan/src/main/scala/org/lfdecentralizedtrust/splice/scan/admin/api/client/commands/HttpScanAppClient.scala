@@ -843,7 +843,7 @@ object HttpScanAppClient {
       P2PEndpoint.fromEndpointConfig(
         P2PEndpointConfig(
           uri.authority.host.address(),
-          RequireTypes.Port(uri.effectivePort),
+          RequireTypes.Port.tryCreate(uri.effectivePort),
           Option.when(uri.scheme == "https")(
             TlsClientConfig(
               None,
