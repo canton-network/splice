@@ -87,7 +87,7 @@ testOnboardValidator = do
   now <- getTime
 
   -- after advancing time we can report active again, report active also ensures sponsor = validator
-  validatorLicenseCid <- submit dso $ 
+  validatorLicenseCid <- submit dso $
     archiveCmd validatorLicenseCid *>
     createCmd validatorLicense
       with
@@ -132,6 +132,7 @@ testSvOnboarding = do
     sponsor = sv2
     dso
     expiresAt = svOnboardingRequest.expiresAt
+    candidatePartyIsObserver  = Some False
 
   -- svX collects three confirmations which is enough to onboard him
   [(dsoRulesCid, _)] <- query @DsoRules dso
@@ -157,6 +158,24 @@ testSvOnboarding = do
     svRewardWeight = 19
     dso
     expiresAt = svOnboardingConfirmed.expiresAt
+    svPartyIsObserver = Some False
+
+  -- svX should NOT be able to see the contract yet
+  svXVisibleContracts <- query @SvOnboardingConfirmed svX
+  assert (null svXVisibleContracts)
+
+  -- an existing_SV flips the observer flag
+  submit (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_MakeSvOnboardingConfirmedObserver with
+    svOnboardingConfirmedCid
+    sv = sv2
+
+  -- check that the flag is flipped in the new contract
+  [(svOnboardingConfirmedCid, svOnboardingConfirmed)] <- query @SvOnboardingConfirmed dso
+  svOnboardingConfirmed.svPartyIsObserver === Some True
+
+  -- svX should NOW be able to see it
+  svXVisibleContracts <- query @SvOnboardingConfirmed svX
+  length svXVisibleContracts === 1
 
   -- once svX becomes able to read as DSO party (e.g., after party migration to svX's participant)...
   [(dsoRulesCid, _)] <- query @DsoRules dso
