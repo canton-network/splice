@@ -293,7 +293,7 @@ class DbAppActivityRecordStore(
       (sql"""
         insert into #${Tables.appActivityRecords}(
           history_id, verdict_row_id, round_number, app_provider_parties, app_activity_weights
-        ) values """ ++ values).asUpdate
+        ) values """ ++ values ++ sql" ON CONFLICT DO NOTHING").asUpdate
     }
   }
 
@@ -416,6 +416,7 @@ class DbAppActivityRecordStore(
              earliest_ingested_round, last_archived_round)
           values ($historyId, $codeVersion, $userVersion, $startedIngestingAt,
                   $earliestIngestedRound, $lastArchivedRound)
+          ON CONFLICT DO NOTHING
     """.asUpdate
 
   private def updateLastArchivedRoundDBIO(round: Long) =

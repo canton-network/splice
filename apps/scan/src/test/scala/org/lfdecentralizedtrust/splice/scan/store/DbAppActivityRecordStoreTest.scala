@@ -1025,7 +1025,7 @@ class DbAppActivityRecordStoreTest
     val n = storeCounter.getAndIncrement()
     val participantId = mkParticipantId(s"activity-test-$n")
     val updateHistory = new UpdateHistory(
-      storage.underlying,
+      storage,
       migrationId,
       s"app_activity_test_$n",
       participantId,
@@ -1038,7 +1038,7 @@ class DbAppActivityRecordStoreTest
     )
     updateHistory.ingestionSink.initialize().map { _ =>
       val store = new DbAppActivityRecordStore(
-        storage.underlying,
+        storage,
         updateHistory,
         versions,
         isFirstSv,
@@ -1054,7 +1054,7 @@ class DbAppActivityRecordStoreTest
   private def newStores(): Future[(DbAppActivityRecordStore, DbScanVerdictStore)] = {
     val participantId = mkParticipantId("activity-test")
     val updateHistory = new UpdateHistory(
-      storage.underlying,
+      storage,
       migrationId,
       "app_activity_combined_test",
       participantId,
