@@ -1165,6 +1165,43 @@ lazy val `splitwell-test-daml` =
       Compile / damlEnableJavaCodegen := false,
     )
 
+lazy val `lf-value-json` =
+  project
+    .in(file("canton-fork/lf-value-json"))
+    .dependsOn(`canton-ledger-json-api`, `daml-lf-transaction-test-lib`)
+    .settings(
+      scalacOptions += "-Xsource-features:infer-override",
+      libraryDependencies ++= {
+        import CantonDependencies._
+        Seq(
+          CantonDependencies.canton_ledger_api_core,
+          // CantonDependencies.canton_transcode_json,
+          // CantonDependencies.canton_transcode_proto_scala,
+          // CantonDependencies.canton_transcode_daml_lf,
+          circe_generic_extras,
+          pekko_http,
+          pekko_http_core,
+          daml_lf_api_type_signature,
+          protostuff_parser,
+          // tapir_json_circe,
+          // tapir_pekko_http_server,
+          // tapir_openapi_docs,
+          // tapir_asyncapi_docs,
+          // sttp_apiscpec_openapi_circe_yaml,
+          // sttp_apiscpec_asyncapi_circe_yaml,
+          // pekko_stream_testkit % Test,
+          scalatest % Test,
+          scalacheck % Test,
+          scalaz_scalacheck % Test,
+          scalatestScalacheck % Test,
+          sourcecode % Runtime, // resolve 2.13 v 3 conflict
+          // ujson_circe,
+          // upickle,
+          // fastparse % Runtime, // transcode dependency
+        )
+      },
+    )
+
 lazy val `apps-common` =
   project
     .in(file("apps/common"))
