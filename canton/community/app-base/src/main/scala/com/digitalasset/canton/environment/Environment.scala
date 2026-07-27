@@ -26,11 +26,7 @@ import com.digitalasset.canton.environment.Environment.*
 import com.digitalasset.canton.lifecycle.LifeCycle
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.metrics.MetricsConfig.JvmMetrics
-import com.digitalasset.canton.metrics.{
-  CantonHistograms,
-  DbStorageHistograms,
-  MetricsRegistry,
-}
+import com.digitalasset.canton.metrics.{CantonHistograms, DbStorageHistograms, MetricsRegistry}
 import com.digitalasset.canton.networking.grpc.CantonGrpcUtil
 import com.digitalasset.canton.participant.*
 import com.digitalasset.canton.participant.config.ParticipantNodeConfig

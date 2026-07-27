@@ -39,11 +39,11 @@ class SpliceEnvironment(
   logger.info(s"SpliceEnvironment with config = {\n${config.dumpString}\n}")
 
   lazy val metrics = SpliceMetricsFactory(
-      metricsRegistry,
-      dbStorageHistograms,
-      loggerFactory,
-      config.parameters.timeouts.processing,
-    )
+    metricsRegistry,
+    dbStorageHistograms,
+    loggerFactory,
+    config.parameters.timeouts.processing,
+  )
 
   protected def createValidator(
       name: String,
