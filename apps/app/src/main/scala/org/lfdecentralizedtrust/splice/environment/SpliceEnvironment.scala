@@ -12,7 +12,7 @@ import com.digitalasset.canton.participant.ParticipantNodeBootstrapFactoryImpl
 import com.digitalasset.canton.synchronizer.mediator.MediatorNodeBootstrapFactoryImpl
 import com.digitalasset.canton.synchronizer.sequencer.SequencerNodeBootstrapFactoryImpl
 import org.lfdecentralizedtrust.splice.config.SpliceConfig
-import org.lfdecentralizedtrust.splice.metrics.{SpliceMetricsFactory, SpliceHistograms}
+import org.lfdecentralizedtrust.splice.metrics.SpliceMetricsFactory
 import org.lfdecentralizedtrust.splice.scan.ScanAppBootstrap
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppBackendConfig
 import org.lfdecentralizedtrust.splice.splitwell.SplitwellAppBootstrap
@@ -39,12 +39,9 @@ class SpliceEnvironment(
   logger.info(s"SpliceEnvironment with config = {\n${config.dumpString}\n}")
 
   lazy val metrics = {
-    val histograms = SpliceHistograms(
-      dbStorageHistograms,
-    )
     SpliceMetricsFactory(
       metricsRegistry,
-      histograms,
+      dbStorageHistograms,
       loggerFactory,
       config.parameters.timeouts.processing,
     )

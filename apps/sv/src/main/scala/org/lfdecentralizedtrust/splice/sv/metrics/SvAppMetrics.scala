@@ -6,7 +6,7 @@ package org.lfdecentralizedtrust.splice.sv.metrics
 import com.daml.metrics.api.MetricHandle.LabeledMetricsFactory
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import org.lfdecentralizedtrust.splice.BaseSpliceMetrics
-import org.lfdecentralizedtrust.splice.metrics.SpliceHistograms
+import com.digitalasset.canton.metrics.DbStorageHistograms
 
 /** Modelled after [[com.digitalasset.canton.synchronizer.metrics.DomainMetrics]].
   *
@@ -14,6 +14,6 @@ import org.lfdecentralizedtrust.splice.metrics.SpliceHistograms
   */
 class SvAppMetrics(
     metricsFactory: LabeledMetricsFactory,
-    histograms: SpliceHistograms,
+    histograms: DbStorageHistograms,
     loggerFactory: NamedLoggerFactory,
 ) extends BaseSpliceMetrics("sv", metricsFactory, histograms, loggerFactory) {}

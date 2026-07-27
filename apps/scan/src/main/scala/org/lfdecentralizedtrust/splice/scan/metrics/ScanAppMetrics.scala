@@ -7,7 +7,7 @@ import com.daml.metrics.api.MetricHandle.LabeledMetricsFactory
 import com.digitalasset.canton.config.ProcessingTimeout
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import org.lfdecentralizedtrust.splice.BaseSpliceMetrics
-import org.lfdecentralizedtrust.splice.metrics.SpliceHistograms
+import com.digitalasset.canton.metrics.DbStorageHistograms
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanStoreMetrics
 
 /** Modelled after [[com.digitalasset.canton.synchronizer.metrics.DomainMetrics]].
@@ -16,7 +16,7 @@ import org.lfdecentralizedtrust.splice.scan.store.db.DbScanStoreMetrics
   */
 class ScanAppMetrics(
     metricsFactory: LabeledMetricsFactory,
-    histograms: SpliceHistograms,
+    histograms: DbStorageHistograms,
     loggerFactory: NamedLoggerFactory,
     timeouts: ProcessingTimeout,
 ) extends BaseSpliceMetrics("scan", metricsFactory, histograms, loggerFactory) {
