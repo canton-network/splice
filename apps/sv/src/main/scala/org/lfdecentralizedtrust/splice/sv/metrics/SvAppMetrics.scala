@@ -14,6 +14,6 @@ import com.digitalasset.canton.metrics.DbStorageHistograms
   */
 class SvAppMetrics(
     metricsFactory: LabeledMetricsFactory,
-    histograms: DbStorageHistograms,
+    storageHistograms: DbStorageHistograms,
     loggerFactory: NamedLoggerFactory,
-) extends BaseSpliceMetrics("sv", metricsFactory, histograms, loggerFactory) {}
+) extends BaseSpliceMetrics("sv", metricsFactory, storageHistograms, loggerFactory) {}

@@ -16,7 +16,7 @@ import scala.collection.concurrent.TrieMap
 
 case class SpliceMetricsFactory(
     metricsFactoryProvider: MetricsFactoryProvider,
-    histograms: DbStorageHistograms,
+    storageHistograms: DbStorageHistograms,
     loggerFactory: NamedLoggerFactory,
     timeouts: ProcessingTimeout,
 ) {
@@ -32,7 +32,7 @@ case class SpliceMetricsFactory(
         val metricsContext = MetricsContext("node_name" -> name, "node_type" -> "validator")
         new ValidatorAppMetrics(
           metricsFactoryProvider.generateMetricsFactory(metricsContext),
-          histograms,
+          storageHistograms,
           loggerFactory,
         )
       },
@@ -45,7 +45,7 @@ case class SpliceMetricsFactory(
         val metricsContext = MetricsContext("node_name" -> name, "node_type" -> "sv")
         new SvAppMetrics(
           metricsFactoryProvider.generateMetricsFactory(metricsContext),
-          histograms,
+          storageHistograms,
           loggerFactory,
         )
       },
@@ -58,7 +58,7 @@ case class SpliceMetricsFactory(
         val metricsContext = MetricsContext("node_name" -> name, "node_type" -> "scan")
         new ScanAppMetrics(
           metricsFactoryProvider.generateMetricsFactory(metricsContext),
-          histograms,
+          storageHistograms,
           loggerFactory,
           timeouts,
         )
@@ -72,7 +72,7 @@ case class SpliceMetricsFactory(
         val metricsContext = MetricsContext("node_name" -> name, "node_type" -> "splitwell")
         new SplitwellAppMetrics(
           metricsFactoryProvider.generateMetricsFactory(metricsContext),
-          histograms,
+          storageHistograms,
           loggerFactory,
         )
       },
