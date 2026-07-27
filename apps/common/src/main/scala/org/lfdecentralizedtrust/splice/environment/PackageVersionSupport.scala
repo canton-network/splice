@@ -39,6 +39,18 @@ trait PackageVersionSupport extends NamedLogging {
     )
   }
 
+  def supportsPermissionedSynchronizer(parties: Seq[PartyId], now: CantonTimestamp)(implicit
+      tc: TraceContext
+  ): Future[FeatureSupport] = {
+    isDarSupported(
+      parties,
+      PackageIdResolver.Package.SpliceDsoGovernance,
+      now,
+      DarResources.dsoGovernance,
+      DarResources.dsoGovernance_0_1_29,
+    )
+  }
+
   // TODO(#1825): remove unused flag
   def supportsTokenStandard(parties: Seq[PartyId], now: CantonTimestamp)(implicit
       tc: TraceContext

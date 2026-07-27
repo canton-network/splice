@@ -12,7 +12,7 @@ import org.lfdecentralizedtrust.splice.automation.AutomationServiceCompanion.{
   aTrigger,
 }
 import org.lfdecentralizedtrust.splice.automation.{AutomationService, AutomationServiceCompanion}
-import org.lfdecentralizedtrust.splice.environment.{ParticipantAdminConnection, RetryProvider}
+import org.lfdecentralizedtrust.splice.environment.{RetryProvider}
 import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.{BftScanConnection, ScanConnection}
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.*
@@ -31,7 +31,6 @@ class DsoDelegateBasedAutomationService(
     getPeerBftScanConnection: () => Future[BftScanConnection],
     retryProvider: RetryProvider,
     override protected val loggerFactory: NamedLoggerFactory,
-    participantAdminConnection: ParticipantAdminConnection,
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
@@ -56,7 +55,6 @@ class DsoDelegateBasedAutomationService(
       new SvOnboardingObserverTrigger(
         triggerContext,
         svTaskContext,
-        participantAdminConnection,
       )
     )
     registerTrigger(new AdvanceOpenMiningRoundTrigger(triggerContext, svTaskContext))

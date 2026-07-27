@@ -10,13 +10,9 @@ import org.lfdecentralizedtrust.splice.automation.{
   TriggerContext,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.svonboarding.SvOnboardingConfirmed
-import org.lfdecentralizedtrust.splice.environment.ParticipantAdminConnection
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.topology.PartyId
-import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
-import com.digitalasset.canton.topology.store.TimeQuery
-import com.digitalasset.canton.topology.transaction.{TopologyMapping, VettedPackages}
 import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
@@ -27,7 +23,6 @@ import scala.jdk.OptionConverters.*
 class SvOnboardingObserverTrigger(
     override protected val context: TriggerContext,
     override protected val svTaskContext: SvTaskBasedTrigger.Context,
-    participantAdminConnection: ParticipantAdminConnection,
 )(implicit
     override val ec: ExecutionContext,
     mat: Materializer,
@@ -45,11 +40,23 @@ class SvOnboardingObserverTrigger(
   ): Future[Seq[Task]] = {
     for {
       confirmations <- store.listSvOnboardingConfirmed()
-    } yield {
-      confirmations
-        .filter(co => !co.payload.svPartyIsObserver.toScala.exists(_.booleanValue()))
-        .map(c => Task(c.contractId, PartyId.tryFromProtoPrimitive(c.payload.svParty)))
-    }
+      unobserved = confirmations.filter(co =>
+        !co.payload.svPartyIsObserver.toScala.exists(_.booleanValue())
+      )
+
+      readyTasks <- Future.sequence(unobserved.map { c =>
+        val partyId = PartyId.tryFromProtoPrimitive(c.payload.svParty)
+        for {
+          support <- svTaskContext.packageVersionSupport.supportsPermissionedSynchronizer(
+            Seq(partyId),
+            context.clock.now,
+          )
+        } yield {
+          if (support.supported) Some(Task(c.contractId, partyId, support.packageIds))
+          else None
+        }
+      })
+    } yield readyTasks.flatten
   }
 
   override protected def completeTaskAsDsoDelegate(task: Task, svParty: String)(implicit
@@ -58,72 +65,24 @@ class SvOnboardingObserverTrigger(
     for {
       dsoRules <- store.getDsoRules()
 
-      partyToParticipantMappings <- participantAdminConnection.listPartyToParticipant(
-        store = Some(TopologyStoreId.Synchronizer(dsoRules.domain)),
-        filterParty = task.partyId.filterString,
+      cmd = dsoRules.exercise(
+        _.exerciseDsoRules_MakeSvOnboardingConfirmedObserver(
+          task.contractId,
+          svParty,
+        )
       )
 
-      participantIdO = partyToParticipantMappings.headOption.flatMap(
-        _.mapping.participants.headOption.map(_.participantId)
-      )
+      _ <- connection
+        .submit(
+          actAs = Seq(store.key.svParty),
+          readAs = Seq(store.key.dsoParty),
+          update = cmd,
+        )
+        .withPreferredPackage(task.preferredPackageIds)
+        .noDedup
+        .yieldUnit()
 
-      outcome <- participantIdO match {
-        case None =>
-          Future.successful(
-            TaskSuccess(s"Participant mapping for ${task.partyId} not yet found, skipping")
-          )
-
-        case Some(participantId) =>
-          // query for VettedPackages
-          participantAdminConnection
-            .listAllTransactions(
-              store = TopologyStoreId.Synchronizer(dsoRules.domain),
-              timeQuery = TimeQuery.HeadState,
-              includeMappings = Set(TopologyMapping.Code.VettedPackages),
-            )
-            .flatMap { txs =>
-              val governancePackageId =
-                SvOnboardingConfirmed.TEMPLATE_ID_WITH_PACKAGE_ID.getPackageId
-
-              val hasVetted = txs.exists { tx =>
-                tx.mapping match {
-                  case vp: VettedPackages if vp.participantId == participantId =>
-                    vp.packages.exists(_.packageId == governancePackageId)
-                  case _ => false
-                }
-              }
-
-              if (hasVetted) {
-                val cmd = dsoRules.exercise(
-                  _.exerciseDsoRules_MakeSvOnboardingConfirmedObserver(
-                    task.contractId,
-                    store.key.svParty.toProtoPrimitive,
-                  )
-                )
-
-                connection
-                  .submit(
-                    actAs = Seq(store.key.svParty),
-                    readAs = Seq(store.key.dsoParty),
-                    update = cmd,
-                  )
-                  .noDedup
-                  .yieldUnit()
-                  .map(_ =>
-                    TaskSuccess(
-                      s"Made ${task.partyId} an observer of its onboarding confirmation"
-                    )
-                  )
-              } else {
-                Future.successful(
-                  TaskSuccess(
-                    s"Participant $participantId has not vetted governance package yet, waiting"
-                  )
-                )
-              }
-            }
-      }
-    } yield outcome
+    } yield TaskSuccess(s"Made ${task.partyId} an observer of its onboarding confirmation")
   }
 
   override protected def isStaleTask(task: Task)(implicit
@@ -131,10 +90,7 @@ class SvOnboardingObserverTrigger(
   ): Future[Boolean] = {
     store.multiDomainAcsStore
       .lookupContractById(SvOnboardingConfirmed.COMPANION)(task.contractId)
-      .map {
-        case None => true
-        case Some(c) => c.payload.svPartyIsObserver.toScala.exists(_.booleanValue())
-      }
+      .map(_.isEmpty)
   }
 }
 
@@ -142,11 +98,13 @@ object SvOnboardingObserverTrigger {
   final case class Task(
       contractId: SvOnboardingConfirmed.ContractId,
       partyId: PartyId,
+      preferredPackageIds: Seq[String],
   ) extends PrettyPrinting {
     override def pretty: Pretty[this.type] =
       prettyOfClass(
         param("contractId", _.contractId.contractId.unquoted),
         param("partyId", _.partyId),
+        param("preferredPackageIds", _.preferredPackageIds.map(_.singleQuoted)),
       )
   }
 }

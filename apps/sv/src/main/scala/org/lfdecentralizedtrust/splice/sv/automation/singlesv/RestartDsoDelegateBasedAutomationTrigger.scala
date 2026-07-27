@@ -14,7 +14,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice
 import org.lfdecentralizedtrust.splice.environment.{
   PackageVersionSupport,
   PackageVettingLookupService,
-  ParticipantAdminConnection,
   RetryProvider,
   SpliceLedgerConnection,
 }
@@ -50,7 +49,6 @@ class RestartDsoDelegateBasedAutomationTrigger(
     packageVettingService: PackageVettingLookupService,
     getOwnScanConnection: () => Future[ScanConnection],
     getPeerBftScanConnection: () => Future[BftScanConnection],
-    participantAdminConnection: ParticipantAdminConnection,
 )(implicit
     override val ec: ExecutionContextExecutor,
     mat: Materializer,
@@ -166,7 +164,6 @@ class RestartDsoDelegateBasedAutomationTrigger(
          getPeerBftScanConnection,
          retryProvider,
          loggerFactory,
-         participantAdminConnection,
        )
 
        epochStateVar = Some(

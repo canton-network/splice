@@ -264,7 +264,6 @@ class SvDsoAutomationService(
       packageVettingService,
       () => getOrCreateOwnScanConnection(),
       () => getOrCreatePeerScanConnection(),
-      participantAdminConnection,
     )
 
   // required for triggers that must run in sim time as well
