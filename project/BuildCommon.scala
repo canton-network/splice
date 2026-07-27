@@ -377,57 +377,6 @@ object BuildCommon {
     headerResources / excludeFilter := "*",
   ) ++ sharedProtocSettings ++ Headers.NoHeaderSettings
 
-  // Project for utilities that are also used outside of the Canton repo
-  lazy val `canton-util-external` = {
-    import CantonDependencies._
-    sbt.Project
-      .apply("canton-util-external", file("canton/base/util-external"))
-      .dependsOn(
-        `canton-wartremover-extension` % "compile->compile;test->test"
-        // Canton depends on the Daml code via a git submodule and the two
-        // projects below. We instead depend on the artifacts released
-        // from the Daml repo listed in libraryDependencies below.
-        // `daml-copy-common`,
-        // `daml-copy-testing` % "test->test",
-      )
-      .settings(
-        sharedCantonSettings,
-        libraryDependencies ++= Seq(
-          aws_kms,
-          aws_sts,
-          better_files,
-          canton_magnolify_addon,
-          gcp_kms,
-          canton_observability_metrics,
-          daml_tracing,
-          daml_executors,
-          daml_lf_data,
-          daml_nonempty_cats,
-          logback_classic,
-          logback_core,
-          scala_logging,
-          scala_collection_contrib,
-          scalatest % Test,
-          mockito_scala % Test,
-          scalatestMockito % Test,
-          cats,
-          jul_to_slf4j % Test,
-          log4j_core,
-          log4j_api,
-          monocle_macro, // Include it here, even if unused, so that it can be used everywhere
-          pureconfig, // Only dependencies may be needed, but it is simplest to include it like this
-          opentelemetry_api,
-          opentelemetry_sdk,
-          opentelemetry_sdk_autoconfigure,
-          opentelemetry_instrumentation_grpc,
-          opentelemetry_zipkin,
-        ),
-        dependencyOverrides ++= Seq(log4j_core, log4j_api),
-        // commented out from Canton OS repo as settings don't apply to us (yet)
-        // JvmRulesPlugin.damlRepoHeaderSettings,
-      )
-  }
-
   lazy val `canton-daml-adjustable-clock` = {
     import CantonDependencies._
     sbt.Project
@@ -442,8 +391,7 @@ object BuildCommon {
     sbt.Project
       .apply("canton-util-observability", file("canton/community/util-observability"))
       .dependsOn(
-        `canton-util-external`,
-        `canton-wartremover-extension` % "compile->compile;test->test",
+        `canton-wartremover-extension` % "compile->compile;test->test"
       )
       .settings(
         sharedCantonSettings,
@@ -455,6 +403,7 @@ object BuildCommon {
           canton_base_errors,
           canton_observability_metrics,
           canton_contextualized_logging,
+          canton_util_external,
           daml_lf_data,
           daml_nonempty_cats,
           daml_tracing,
@@ -572,7 +521,6 @@ object BuildCommon {
       .enablePlugins(BuildInfoPlugin)
       .dependsOn(
         `canton-slick-fork`,
-        `canton-util-external`,
         `canton-ledger-common`,
         `canton-community-admin-api`,
         `canton-kms-driver-api`,
@@ -590,9 +538,11 @@ object BuildCommon {
         // JvmRulesPlugin.damlRepoHeaderSettings,
         libraryDependencies ++= Seq(
           apache_commons_compress,
+          aws_kms,
           better_files,
           bouncycastle_bcpkix_jdk15on,
           bouncycastle_bcprov_jdk15on,
+          canton_util_external,
           cats,
           chimney,
           circe_core,
@@ -602,6 +552,7 @@ object BuildCommon {
           daml_tls,
           flyway.excludeAll(ExclusionRule("org.apache.logging.log4j")),
           flyway_postgresql,
+          gcp_kms,
           grpc_services,
           postgres,
           pprint,
@@ -759,7 +710,6 @@ object BuildCommon {
       .dependsOn(
         `canton-community-base`,
         `canton-wartremover-extension` % "compile->compile;test->test",
-        `canton-util-external` % "compile->compile;test->test",
         `canton-community-testing` % "test",
         `canton-ledger-common` % "compile->compile;test->test",
       )
@@ -782,6 +732,7 @@ object BuildCommon {
           daml_lf_transaction, // needed for importing java classes
           daml_nonempty_cats,
           canton_blake2b,
+          canton_util_external,
           canton_magnolify_addon,
           logback_classic,
           logback_core,
@@ -884,11 +835,13 @@ object BuildCommon {
     import CantonDependencies._
     sbt.Project
       .apply("canton-community-admin-api", file("canton/community/admin-api"))
-      .dependsOn(`canton-util-external`)
       .settings(
         sharedCantonSettings,
         libraryDependencies ++= Seq(
-          scalapb_runtime // not sufficient to include only through the `common` dependency - race conditions ensue
+          canton_util_external,
+          grpc_api,
+          scalapb_runtime, // not sufficient to include only through the `common` dependency - race conditions ensue
+          scalapb_runtime_grpc,
         ),
         Compile / PB.targets := Seq(
           scalapb.gen(flatPackage = true) -> (Compile / sourceManaged).value / "protobuf"
@@ -1045,8 +998,7 @@ object BuildCommon {
       .apply("canton-ledger-common", file("canton/community/ledger/ledger-common"))
       .disablePlugins(WartRemover, ScalafmtPlugin)
       .dependsOn(
-        `canton-util-external`,
-        `canton-util-observability`,
+        `canton-util-observability`
       )
       .settings(
         removeTestSources,
@@ -1062,6 +1014,7 @@ object BuildCommon {
         //      addProtobufFilesToHeaderCheck(Compile),
         libraryDependencies ++= Seq(
           canton_contextualized_logging,
+          canton_util_external,
           daml_lf_engine,
           daml_lf_archive_reader,
           CantonDependencies.canton_java_bindings,
@@ -1201,12 +1154,12 @@ object BuildCommon {
     sbt.Project
       .apply("canton-sequencer-driver-api", file("canton/community/sequencer-driver"))
       .dependsOn(
-        `canton-util-external`,
-        `canton-util-observability`,
+        `canton-util-observability`
       )
       .settings(
         sharedCantonSettings,
         libraryDependencies ++= Seq(
+          canton_util_external,
           logback_classic,
           logback_core,
           scala_logging,
@@ -1282,15 +1235,14 @@ object BuildCommon {
         file("canton/community/reference-sequencer-driver/"),
       )
       .dependsOn(
-        `canton-util-external`,
         `canton-community-common` % "compile->compile;test->test",
         `canton-sequencer-driver-api` % "compile->compile;test->test",
         `canton-community-testing` % Test,
       )
-      .dependsOn(`canton-util-external`)
       .settings(
         sharedCantonSettings,
         dependencyOverrides ++= Seq(log4j_core, log4j_api),
+        libraryDependencies ++= Seq(canton_util_external),
         Compile / PB.targets := Seq(
           scalapb.gen(flatPackage = true) -> (Compile / sourceManaged).value / "protobuf"
         ),

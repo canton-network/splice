@@ -28,7 +28,6 @@ lazy val `canton-community-testing` = BuildCommon.`canton-community-testing`
 lazy val `canton-slick-fork` = BuildCommon.`canton-slick-fork`
 lazy val `canton-wartremover-extension` = BuildCommon.`canton-wartremover-extension`
 lazy val `canton-wartremover-annotations` = BuildCommon.`canton-wartremover-annotations`
-lazy val `canton-util-external` = BuildCommon.`canton-util-external`
 lazy val `canton-util-observability` = BuildCommon.`canton-util-observability`
 lazy val `canton-scalatest-addon` = BuildCommon.`canton-scalatest-addon`
 lazy val `canton-ledger-common` = BuildCommon.`canton-ledger-common`
@@ -2328,7 +2327,6 @@ lazy val `apps-dar-resources-generator` =
   project
     .in(file("apps/dar-resources-generator"))
     .dependsOn(
-      `canton-util-external`,
       // We include all DARs here to make sure they are available as resources.
       `splice-amulet-daml`,
       `splice-amulet-name-service-daml`,
@@ -2363,6 +2361,7 @@ lazy val `apps-dar-resources-generator` =
       Headers.ApacheDAHeaderSettings,
       libraryDependencies ++= Seq(
         Dependencies.better_files,
+        CantonDependencies.canton_util_external,
         CantonDependencies.daml_lf_archive_reader,
         CantonDependencies.cats,
       ),
