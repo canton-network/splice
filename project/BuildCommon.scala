@@ -429,27 +429,6 @@ object BuildCommon {
       )
   }
 
-  lazy val `canton-base-errors` = {
-    import CantonDependencies._
-    sbt.Project
-      .apply("canton-base-errors", file("canton/base/errors"))
-      .dependsOn(
-        `canton-google-common-protos-scala`,
-        `canton-wartremover-extension` % "compile->compile;test->test",
-      )
-      .settings(
-        sharedCantonSettings,
-        libraryDependencies ++= Seq(
-          slf4j_api,
-          grpc_api,
-          reflections,
-          scalatest % Test,
-          scalacheck % Test,
-          scalatestScalacheck % Test,
-        ),
-      )
-  }
-
   lazy val `canton-daml-adjustable-clock` = {
     import CantonDependencies._
     sbt.Project
@@ -464,7 +443,6 @@ object BuildCommon {
     sbt.Project
       .apply("canton-util-observability", file("canton/community/util-observability"))
       .dependsOn(
-        `canton-base-errors` % "compile->compile;test->test",
         `canton-util-external`,
         `canton-wartremover-extension` % "compile->compile;test->test",
       )
@@ -475,6 +453,7 @@ object BuildCommon {
         libraryDependencies ++= Seq(
           daml_grpc_utils,
           better_files,
+          canton_base_errors,
           canton_observability_metrics,
           canton_contextualized_logging,
           daml_lf_data,
@@ -1146,57 +1125,6 @@ object BuildCommon {
         // commented out from Canton OS repo as settings don't apply to us (yet)
         //      coverageEnabled := false,
         //      JvmRulesPlugin.damlRepoHeaderSettings,
-      )
-  }
-
-  // this project builds scala protobuf versions that include
-  // java conversions of a few google standard items
-  // the google protobuf files are extracted from the provided jar files
-  lazy val `canton-google-common-protos-scala` = {
-    import CantonDependencies._
-    sbt.Project
-      .apply(
-        "canton-google-common-protos-scala",
-        file("canton/community/lib/google-common-protos-scala"),
-      )
-      .disablePlugins(
-        ScalafixPlugin,
-        ScalafmtPlugin,
-        WartRemover,
-      )
-      .settings(
-        sharedCantonSettings,
-        scalacOptions --= removeCompileFlagsForDaml,
-        sharedSettings,
-        // we restrict the compilation to a few files that we actually need, skipping the large majority ...
-        excludeFilter := HiddenFileFilter || "scalapb.proto",
-        PB.generate / includeFilter := "status.proto" || "code.proto" || "error_details.proto" || "health.proto",
-        dependencyOverrides ++= Seq(),
-        // compile proto files that we've extracted here
-        Compile / PB.protoSources += (target.value / "protobuf_external"),
-        Compile / PB.targets := Seq(
-          // with java conversions but no java classes!
-          scalapb.gen(
-            javaConversions = true,
-            flatPackage = false, // consistent with upstream daml
-          ) -> (Compile / sourceManaged).value
-        ),
-        libraryDependencies ++= Seq(
-          scalapb_runtime,
-          scalapb_runtime_grpc,
-          // the grpc services is necessary so we can build the
-          // scala version of the health services, without
-          // building the java protoc (to avoid duplicate symbols
-          // during assembly)
-          grpc_services,
-          // extract the protobuf to target/protobuf_external
-          // however, we'll only be including the ones in the includeFilter
-          grpc_services % "protobuf",
-          google_common_protos % "protobuf",
-          google_common_protos,
-          google_protobuf_java,
-          google_protobuf_java_util,
-        ),
       )
   }
 
