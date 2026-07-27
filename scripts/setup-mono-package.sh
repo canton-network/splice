@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+
+# Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 # Populate daml/daml-ide-mono/daml/ with per-file symlinks into every
 # workspace Daml package's source tree. daml/daml-ide-mono/daml.yaml is
 # checked in and static - this script only regenerates the source tree
