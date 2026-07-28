@@ -24,6 +24,7 @@ rsync -av --delete --exclude version.sbt --exclude community-build.sbt --exclude
     --exclude '*/community/lib/google-common-protos-scala' \
     --exclude '*/community/lib/magnolify' \
     --exclude 'community/bindings-java' --exclude "*/community/transcode" \
+    --exclude '*/community/kms-driver-api' \
     --exclude '*/community/ledger-api-scala' --exclude "*/ledger-api-proto" \
     --exclude '*/canton-community-app/test/scala/*/integration/tests' \
     --exclude '*/community/ledger/ledger-api-core' \

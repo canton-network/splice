@@ -513,7 +513,6 @@ object BuildCommon {
       .dependsOn(
         `canton-slick-fork`,
         `canton-community-admin-api`,
-        `canton-kms-driver-api`,
         `canton-scalatest-addon` % "compile->test",
         // Canton depends on the Daml code via a git submodule and the two
         // projects below. We instead depend on the artifacts released
@@ -532,6 +531,7 @@ object BuildCommon {
           better_files,
           bouncycastle_bcpkix_jdk15on,
           bouncycastle_bcprov_jdk15on,
+          canton_kms_driver_api,
           canton_util_external,
           cats,
           chimney,
@@ -1203,20 +1203,6 @@ object BuildCommon {
         ),
       )
   }
-
-  lazy val `canton-kms-driver-api` = project
-    .in(file("canton/community/kms-driver-api"))
-    .settings(
-      sharedCantonSettings,
-      libraryDependencies ++= {
-        import CantonDependencies.*
-        Seq(
-          pureconfig,
-          slf4j_api,
-          opentelemetry_api,
-        )
-      },
-    )
 
   import defs._
 
