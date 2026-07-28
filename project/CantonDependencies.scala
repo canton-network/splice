@@ -192,10 +192,6 @@ object CantonDependencies {
   lazy val scalatest_shouldmatchers =
     "org.scalatest" %% "scalatest-shouldmatchers" % scalatest_version
   lazy val scalaz_core = "org.scalaz" %% "scalaz-core" % scalaz_version
-  lazy val scalaz_scalacheck_binding = {
-    val scalacheckMajor = scalacheck_version.replaceAll(raw"^(\d\.\d\d).*", "$1")
-    "org.scalaz" %% "scalaz-scalacheck-binding" % s"${scalaz_version}-scalacheck-${scalacheckMajor}"
-  }
   lazy val scalatestScalacheck =
     "org.scalatestplus" %% "scalacheck-1-18" % (scalatest_version + ".0")
   lazy val mockito_scala = "org.mockito" %% "mockito-scala" % mockito_scala_version

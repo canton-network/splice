@@ -1108,7 +1108,7 @@ object BuildCommon {
           scalatestScalacheck,
           scalatest,
           scalaz_core,
-          scalaz_scalacheck_binding,
+          scalaz_scalacheck,
           shapeless,
         )
       },
