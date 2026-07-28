@@ -147,7 +147,7 @@ aggregateLockUnlock newEmptyAllocation a aCid arg = do
 
     let dso = alloc.allocation.admin
 
-    ownerParty <- whenNone alloc.allocation.authorizer.owner $
+    ownerParty <- whenNone alloc.allocation.authorizer.owner $ -- Mostly to safely get ownerParty
       assertFail "The requirement 'governance locked allocations must be owned by basic accounts' was not met"
 
     let GovernanceLockedControllers{..} = governanceLockedControllersFromMeta alloc.meta ownerParty
@@ -162,6 +162,9 @@ aggregateLockUnlock newEmptyAllocation a aCid arg = do
     let alternateAmount = TM.lookup "cip-105/withdraw-amount" arg.extraArgs.meta.values >>= parseDecimal
         amount = fromOptional currentLockedAmount alternateAmount
         newLockedAmount = currentLockedAmount - amount
+        newLockedNextIterationFunding
+          | newLockedAmount == 0.0 = None
+          | otherwise = Some $ TM.singleton instrumentId newLockedAmount
 
     -- Not easy to call directly into amulet_allocationFactoryV2_allocateImpl or the like here as that would make a circular dependency.
     withdrawTo <- newEmptyAllocation a now $ Metadata $ TM.fromList
@@ -170,7 +173,6 @@ aggregateLockUnlock newEmptyAllocation a aCid arg = do
           , ("cip-105/vestingLock.endDate", encodeTime $ endTime)
           ]
 
-    -- settlementFactoryV2_settleBatchDefaultImpl does not use it's third argument, so we pass undefined rather than require a contract ID for ExternalPartyAmuletRules.
     settleBatchResult <- settlementFactoryV2_settleBatchDefaultImplNoSelf (\_ _ -> pure arg.extraArgs) dso $ SettlementFactory_SettleBatch with
       settlement = alloc.settlement
       actors = [ dso ]
@@ -196,7 +198,7 @@ aggregateLockUnlock newEmptyAllocation a aCid arg = do
                 instrumentId
                 meta = emptyMetadata
               ]
-            nextIterationFunding = Some $ TM.singleton instrumentId newLockedAmount
+            nextIterationFunding = newLockedNextIterationFunding
         , FinalizedAllocation with
             allocationCid = withdrawTo
             extraTransferLegSides =
@@ -215,7 +217,6 @@ aggregateLockUnlock newEmptyAllocation a aCid arg = do
     getEndTimeFromVestingSchedule VestingSchedule_SV now = addRelTime now $ days 365 + hours 6
     getEndTimeFromVestingSchedule VestingSchedule_Immediate now = now
 
--- vestingLockWithdraw : V2.AllocationView -> ContractId V2.Allocation -> Allocation_Withdraw -> Update V2.AllocationResult
 vestingLockWithdraw : (HasToInterface a V2.Allocation) => a -> ContractId a -> Allocation_Withdraw -> Update V2.AllocationResult
 vestingLockWithdraw a aCid arg = do
     let vestingLock = view $ toInterface @V2.Allocation a
@@ -226,15 +227,11 @@ vestingLockWithdraw a aCid arg = do
     require "There must be an initialAmount set for the vestingLock"
       $ TM.member "cip-105/vestingLock.initialAmount" vestingLock.allocation.meta.values
 
-    ownerParty <- whenNone vestingLock.allocation.authorizer.owner $
+    ownerParty <- whenNone vestingLock.allocation.authorizer.owner $ -- Mostly to safely get ownerParty
       assertFail "The requirement 'governance locked allocations must be owned by basic accounts' was not met"
     let GovernanceLockedControllers{..} = governanceLockedControllersFromMeta vestingLock.meta ownerParty
 
     checkControllerSet arg.actors withdrawControllerSets
-
-    -- TODO: Potentially do case statement with nextIterationFunding optionals
-    require "There are remaining funds to withdraw"
-      $ isSome vestingLock.allocation.nextIterationFunding
 
     (instrumentId, nextIterationFunding) <- case TM.toList <$> vestingLock.allocation.nextIterationFunding of
         Some [a] -> pure a

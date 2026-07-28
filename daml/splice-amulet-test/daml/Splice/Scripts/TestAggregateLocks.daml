@@ -85,8 +85,10 @@ testAggregateLockTotals = do
   env@TestEnv{..} <- setupTest
   let dso = env.instrId.admin
 
+  AmuletRegistryV2.tapFaucet registriesEnv.amuletV2 alice 1200.0
   AmuletRegistryV2.tapFaucet registriesEnv.amuletV2 bob 1800.0
 
+  _ <- lockForAggregate env 300.0 "alice-supervalidator" alice
   _ <- lockForAggregate env 400.0 "alice-supervalidator" bob
   _ <- lockForAggregate env 600.0 "alice-supervalidator" bob
   _ <- lockForAggregate env 300.0 "charlie-supervalidator" bob
@@ -100,7 +102,7 @@ testAggregateLockTotals = do
         )
       totals = M.fromListWithR (+) $ benefitOfAmount <$> aggregateLocks
 
-  assertEq (Some 1000.0) (Some "alice-supervalidator" `M.lookup` totals)
+  assertEq (Some 1300.0) (Some "alice-supervalidator" `M.lookup` totals)
   assertEq (Some 300.0) (Some "charlie-supervalidator" `M.lookup` totals)
 
 -- | Withdrawing an aggregate-lock allocation moves the locked funds into a
@@ -121,17 +123,53 @@ testAggregateLockUnlockCreatesVestingLock = do
 
   liveAllocs <- fmap (fromSome . snd) . filter (isSome . snd) <$>
     queryInterface @V2.Allocation bob
+  length liveAllocs === 1
+
+  let aggregates = filter (isValidAggregateLockedAllocation dso) liveAllocs
+      vestings = filter (isValidVestingLockedDestination dso) liveAllocs
+
+  length aggregates === 0
+  length vestings === 1
+
+  let [vesting] = vestings
+  fromOptional 0.0 (vesting.allocation.nextIterationFunding >>= TM.lookup instrId.id) === 1000.0
+
+  -- The vesting destination records its start/end dates.
+  assertMsg "vesting destination must record startDate" $
+    TM.member "cip-105/vestingLock.startDate" vesting.allocation.meta.values
+  assertMsg "vesting destination must record endDate" $
+    TM.member "cip-105/vestingLock.endDate" vesting.allocation.meta.values
+
+-- | Partially withdrawing an aggregate-lock allocation moves only that amount
+-- of the locked funds into a fresh vesting-lock destination for the same owner.
+testAggregateLockPartialWithdraw : Script ()
+testAggregateLockPartialWithdraw = do
+  env@TestEnv{..} <- setupTest
+  let dso = env.instrId.admin
+      newRegistries = withAggregateWithdrawContext env registries
+
+  AmuletRegistryV2.tapFaucet registriesEnv.amuletV2 bob 1800.0
+
+  AllocationInstructionResult { output = AllocationInstructionResult_Completed locked } <-
+    lockForAggregate env 1000.0 "alice-supervalidator" bob
+  Some lockedView <- queryInterfaceContractId bob locked
+
+  _ <- WalletClientV2.withdrawAllocationV2Meta newRegistries bob (locked, lockedView) $ Metadata $ TM.singleton "cip-105/withdraw-amount" "500.0"
+
+  liveAllocs <- fmap (fromSome . snd) . filter (isSome . snd) <$>
+    queryInterface @V2.Allocation bob
   length liveAllocs === 2
 
   let aggregates = filter (isValidAggregateLockedAllocation dso) liveAllocs
       vestings = filter (isValidVestingLockedDestination dso) liveAllocs
+
   length aggregates === 1
   length vestings === 1
 
   let [aggregate] = aggregates
       [vesting] = vestings
-  fromOptional 0.0 (aggregate.allocation.nextIterationFunding >>= TM.lookup instrId.id) === 0.0
-  fromOptional 0.0 (vesting.allocation.nextIterationFunding >>= TM.lookup instrId.id) === 1000.0
+  fromOptional 0.0 (aggregate.allocation.nextIterationFunding >>= TM.lookup instrId.id) === 500.0
+  fromOptional 0.0 (vesting.allocation.nextIterationFunding >>= TM.lookup instrId.id) === 500.0
 
   -- Metadata carried over correctly: same owner and DSO on both sides.
   aggregate.allocation.authorizer === vesting.allocation.authorizer
@@ -189,6 +227,35 @@ testVestingLockWithdraw = do
       amount1 + amount2 === initialAmount
     other ->
       fail $ "expected AllocationResult_Settled with a next-iteration allocation, got: " <> show other
+
+testVestingLockTotalWithdraw : Script ()
+testVestingLockTotalWithdraw = do
+  env@TestEnv{..} <- setupTest
+  let newRegistries = withAggregateWithdrawContext env registries
+      initialAmount = 365.25 -- one unit per day of the 365 day + 6 hour vesting period
+
+  AmuletRegistryV2.tapFaucet registriesEnv.amuletV2 bob 1800.0
+
+  vestStart <- getTime
+  AllocationInstructionResult { output = AllocationInstructionResult_Completed vestingLockCid } <-
+    lockForVesting initialAmount vestStart env bob
+  Some vestingLockView <- queryInterfaceContractId bob vestingLockCid
+
+  -- Withdrawing immediately fails: nothing has vested yet.
+  vestingLockView.allocation.admin `submitMustFailWithdraw` (vestingLockCid, vestingLockView) $ newRegistries
+
+  -- After some time passes a proportional amount can be withdrawn.
+  passTime (days 366)
+  vestingResult1 <- WalletClientV2.extractAllocationResult <$>
+    WalletClientV2.withdrawAllocationV2 newRegistries bob (vestingLockCid, vestingLockView)
+
+  let holdingCids1 = fromSome $ TM.lookup instrId.id vestingResult1.authorizerHoldingCids
+  amount1 <- unlockedAmountOf bob holdingCids1
+  amount1 === 365.25
+
+  liveAllocs <- fmap (fromSome . snd) . filter (isSome . snd) <$>
+    queryInterface @V2.Allocation bob
+  length liveAllocs === 0
 
 -- | Attempt an @Allocation_Withdraw@ that should fail; asserts the submit
 -- fails and does not leak the underlying error.
