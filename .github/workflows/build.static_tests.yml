@@ -43,6 +43,9 @@ jobs:
             CURRENT_VERSION=$(jq -r '.version' nix/canton-sources.json)
             echo "Validating Docker digests for Canton version: $CURRENT_VERSION"
 
+            # TODO(#6581) to be removed
+            export CONTAINERS_REGISTRIES_CONF=$(mktemp)
+
             function set_value() {
               local key="$1"
               local value="$2"
