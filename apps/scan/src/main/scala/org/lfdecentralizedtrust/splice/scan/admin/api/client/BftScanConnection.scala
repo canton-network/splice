@@ -1863,9 +1863,12 @@ object BftScanConnection {
             disableBackgroundRefresh = true,
           )
 
-          // Use the temporary connection to get a consensus on the full list of scans
-          allScans <- Bft.getScansInDsoRules(tempBftConnection).andThen { case _ =>
-            tempBftConnection.close()
+          // Use the temporary connection to get a consensus on the full list of scans.
+          // Future.delegate turns a synchronous throw into a failed future, so the
+          // andThen cleanup always runs.
+          allScans <- Future.delegate(Bft.getScansInDsoRules(tempBftConnection)).andThen {
+            case _ =>
+              tempBftConnection.close()
           }
 
           trustedScans = allScans.filter(scan => ts.svNames.toList.contains(scan.svName))
@@ -1921,23 +1924,29 @@ object BftScanConnection {
             connectionMetrics,
           )
 
-          _ <- retryProvider.waitUntil(
-            RetryFor.WaitingOnInitDependency,
-            "refresh_initial_scan_list",
-            "Scan list is refreshed.",
-            scanList
-              .refresh(bftConnection)
-              .recoverWith { case NonFatal(ex) =>
-                Future.failed(
-                  Status.UNAVAILABLE
-                    .withDescription("Failed to refresh scan list on init")
-                    .withCause(ex)
-                    .asException()
-                )
-              }
-              .map(_ => ()),
-            loggerFactory.getTracedLogger(classOf[BftScanConnection]),
-          )
+          _ <- retryProvider
+            .waitUntil(
+              RetryFor.WaitingOnInitDependency,
+              "refresh_initial_scan_list",
+              "Scan list is refreshed.",
+              scanList
+                .refresh(bftConnection)
+                .recoverWith { case NonFatal(ex) =>
+                  Future.failed(
+                    Status.UNAVAILABLE
+                      .withDescription("Failed to refresh scan list on init")
+                      .withCause(ex)
+                      .asException()
+                  )
+                }
+                .map(_ => ()),
+              loggerFactory.getTracedLogger(classOf[BftScanConnection]),
+            )
+            .recoverWith { case NonFatal(ex) =>
+              // do not leak the scan connections when initialization ultimately fails
+              bftConnection.close()
+              Future.failed(ex)
+            }
         } yield bftConnection
 
       case bft @ BftScanClientConfig.Bft(_, _, _, _) =>
@@ -1972,24 +1981,30 @@ object BftScanConnection {
             else { _ => Future.unit },
             connectionMetrics,
           )
-          _ <- retryProvider.waitUntil(
-            RetryFor.WaitingOnInitDependency,
-            "refresh_initial_scan_list",
-            "Scan list is refreshed.",
-            bftConnection.scanList
-              .asInstanceOf[AllDsoScansBft]
-              .refresh(bftConnection)
-              .recoverWith { case NonFatal(ex) =>
-                Future.failed(
-                  Status.UNAVAILABLE
-                    .withDescription("Failed to refresh scan list on init")
-                    .withCause(ex)
-                    .asException()
-                )
-              }
-              .map(_ => ()),
-            loggerFactory.getTracedLogger(classOf[BftScanConnection]),
-          )
+          _ <- retryProvider
+            .waitUntil(
+              RetryFor.WaitingOnInitDependency,
+              "refresh_initial_scan_list",
+              "Scan list is refreshed.",
+              bftConnection.scanList
+                .asInstanceOf[AllDsoScansBft]
+                .refresh(bftConnection)
+                .recoverWith { case NonFatal(ex) =>
+                  Future.failed(
+                    Status.UNAVAILABLE
+                      .withDescription("Failed to refresh scan list on init")
+                      .withCause(ex)
+                      .asException()
+                  )
+                }
+                .map(_ => ()),
+              loggerFactory.getTracedLogger(classOf[BftScanConnection]),
+            )
+            .recoverWith { case NonFatal(ex) =>
+              // do not leak the seed scan connections when initialization ultimately fails
+              bftConnection.close()
+              Future.failed(ex)
+            }
         } yield bftConnection
     }
   }
