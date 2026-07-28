@@ -351,7 +351,7 @@ function buildRewardConfigChanges(
       newValue: after?.dryRunVersion || '',
       options: [{ value: '', label: 'None (disabled)' }, ...rewardVersionOptions],
       description:
-        'Which reward scheme to dry-run in parallel without minting. Leave empty to disable.',
+        'Which reward scheme to run in dry-run mode. Leave empty to disable.',
     },
     {
       fieldName: 'rewardConfigBatchSize',
