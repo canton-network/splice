@@ -27,7 +27,7 @@ import Splice.Round
 import Splice.Types
 import Splice.ValidatorLicense
 import Splice.Wallet.Subscriptions
-import Splice.DecentralizedSynchronizer (MemberTraffic)
+import Splice.DecentralizedSynchronizer (MemberTraffic, initialMemberTraffic)
 
 import qualified Splice.CometBft as CometBft
 import Splice.Ans
@@ -1166,6 +1166,12 @@ template DsoRules with
           dso
           expiresAt
           svPartyIsObserver = Some False
+
+        let activeSynchronizer = config.decentralizedSynchronizer.activeSynchronizerId
+        let migrationId = optional 0 (.migrationId) config.nextScheduledSynchronizerUpgrade
+
+        let traffic = initialMemberTraffic dso newParticipantId activeSynchronizer migrationId
+        create traffic
         return DsoRules_ConfirmSvOnboardingResult with ..
 
     nonconsuming choice DsoRules_MakeSvOnboardingConfirmedObserver : DsoRules_MakeSvOnboardingConfirmedObserverResult

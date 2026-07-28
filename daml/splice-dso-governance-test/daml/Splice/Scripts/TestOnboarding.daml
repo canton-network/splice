@@ -14,6 +14,7 @@ import DA.List
 import Splice.ValidatorLicense
 
 import Splice.CometBft
+import Splice.DecentralizedSynchronizer (MemberTraffic, initialMemberTraffic)
 import Splice.DsoRules
 import Splice.DSO.DecentralizedSynchronizer
 import Splice.SvOnboarding
@@ -159,6 +160,14 @@ testSvOnboarding = do
     dso
     expiresAt = svOnboardingConfirmed.expiresAt
     svPartyIsObserver = Some False
+
+  [(_, dsoRules)] <- query @DsoRules dso
+  memberTraffics <- query @MemberTraffic dso
+  let [(_, newMemberTraffic)] = filter (\(_, mt) -> mt.memberId == "svX-participant-id") memberTraffics
+  let expectedSynchronizerId = dsoRules.config.decentralizedSynchronizer.activeSynchronizerId
+  let expectedMigrationId = optional 0 (.migrationId) dsoRules.config.nextScheduledSynchronizerUpgrade
+
+  newMemberTraffic === initialMemberTraffic dso "svX-participant-id" expectedSynchronizerId expectedMigrationId
 
   -- svX should NOT be able to see the contract yet
   svXVisibleContracts <- query @SvOnboardingConfirmed svX
