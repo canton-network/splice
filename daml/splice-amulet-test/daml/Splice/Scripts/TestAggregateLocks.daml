@@ -1,4 +1,5 @@
 {-# LANGUAGE ApplicativeDo #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Splice.Scripts.TestAggregateLocks where
 
 import DA.Time
@@ -10,6 +11,7 @@ import Splice.Expiry
 import Splice.Scripts.Util
 import Splice.TokenStandard.Utils qualified as TSU
 import Splice.Api.Token.AllocationV2 qualified as V2
+import Splice.Api.Token.HoldingV2 qualified as V2
 import Splice.Testing.TokenStandard.RegistryApiV2
 import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
 import Splice.Testing.Registries.AmuletRegistryV2
@@ -28,20 +30,34 @@ import DA.Functor
 import DA.Foldable (mapA_, sequence_)
 import DA.List (head)
 import qualified DA.TextMap as TM
+import qualified DA.Map as M
 
 import Splice.Scripts.TokenStandard.TestAmuletTokenStandardTestEnv
 import Splice.Testing.Registries.AmuletRegistryV2 qualified as AmuletRegistryV2
 import Splice.TokenStandard.Utils.Internal.Conversions (encodeTime)
 
+newtype AmuletRegistryExtraWithdrawContext = AmuletRegistryExtraWithdrawContext { unExtra : AmuletRegistry }
 
-lockForGovernance : TestEnv -> TM.TextMap Decimal -> Metadata -> Party -> ContractId AggregateLock -> Script AllocationInstructionResult
-lockForGovernance (TestEnv {..}) amounts meta party aggCid = do
-    WalletClientV2.allocateV2 registries bob lockSettlementInfo lockAllocation
+instance RegistryApi AmuletRegistryExtraWithdrawContext where
+  getTransferFactory = getTransferFactory . unExtra
+  getAllocationFactory = getAllocationFactory . unExtra
+  getSettlementFactory = getSettlementFactory . unExtra
+  getAllocation_WithdrawContext = getAllocation_WithdrawContext . unExtra
+  getAllocation_CancelContext = getAllocation_CancelContext . unExtra
+  getAllocationInstruction_WithdrawContext = getAllocationInstruction_WithdrawContext . unExtra
+  getAllocationInstruction_AcceptContext = getAllocationInstruction_AcceptContext . unExtra
+  getTransferInstruction_AcceptContext = getTransferInstruction_AcceptContext . unExtra
+  getTransferInstruction_RejectContext = getTransferInstruction_RejectContext . unExtra
+  getTransferInstruction_WithdrawContext = getTransferInstruction_WithdrawContext . unExtra
+
+lockForGovernance : TestEnv -> TM.TextMap Decimal -> Metadata -> Party -> Script AllocationInstructionResult
+lockForGovernance (TestEnv {..}) amounts meta party = do
+    WalletClientV2.allocateV2 registries party lockSettlementInfo lockAllocation
   where
     lockSettlementInfo = V2.SettlementInfo with
       executors = [ instrId.admin ]
       id = "AggregateLock"
-      cid = Some $ coerceContractId aggCid
+      cid = None -- Some $ coerceContractId aggCid
       meta = emptyMetadata
     lockAllocation = V2.AllocationSpecification with
       admin = instrId.admin
@@ -49,14 +65,17 @@ lockForGovernance (TestEnv {..}) amounts meta party aggCid = do
       transferLegSides = []
       committed = True
       nextIterationFunding = Some $ amounts -- TM.fromList [(instrId.id, amount)]
-      settlementDeadline = Some maxBound
+      settlementDeadline = Some maxComparableTime
       meta
 
-lockForAggregate : TestEnv -> Decimal -> Party -> ContractId AggregateLock -> Script AllocationInstructionResult
-lockForAggregate te amount = lockForGovernance te (TM.fromList [(te.instrId.id, amount)]) $ Metadata $ TM.fromList
-  [ ("cip-105/type", "aggregateLock") ]
+lockForAggregate : TestEnv -> Decimal -> Text -> Party -> Script AllocationInstructionResult
+lockForAggregate te amount lockName = lockForGovernance te (TM.fromList [(te.instrId.id, amount)]) $ Metadata $ TM.fromList
+  [ ("cip-105/type", "aggregateLock")
+  , ("cip-105/for-benefit-of", lockName)
+  , ("cip-105/vestingSchedule", "SV")
+  ]
 
-lockForVesting : Decimal -> Time -> TestEnv -> Party -> ContractId AggregateLock -> Script AllocationInstructionResult
+lockForVesting : Decimal -> Time -> TestEnv -> Party -> Script AllocationInstructionResult
 lockForVesting initialAmount now te = lockForGovernance te TM.empty $ Metadata $ TM.fromList
   [ ("cip-105/type", "vestingLock")
   , ("cip-105/vestingLock.startDate", encodeTime now)
@@ -69,18 +88,52 @@ testAggregateLockHappyPath = do
   env@TestEnv{..} <- setupTest
   let dso = env.instrId.admin
 
+  let 
+    addAggregateWithdrawContext : Script OpenApiChoiceContext -> Script OpenApiChoiceContext
+    addAggregateWithdrawContext a = do
+      baseCtxt <- a
+      extraContext <- getExternalPartyConfigStateContext registriesEnv.amuletV2
+      pure $ baseCtxt <> extraContext
+    updateApi api = api { ggetAllocation_WithdrawContext = \a -> addAggregateWithdrawContext . api.ggetAllocation_WithdrawContext a }
+    newRegistries = flip fmap registries $ \reg ->
+      reg { v2Api = fmap updateApi reg.v2Api }
+
   AmuletRegistryV2.tapFaucet registriesEnv.amuletV2 bob 1800.0
   
-  aggLock <- submit (actAs dso) $ createCmd AggregateLock with
+  {-
+  aggLock <- submit (actAs [alice, dso]) $ createCmd AggregateLock with
     dso
     instrumentId = env.instrId.id
     vestingSchedule = VestingSchedule_SV
-  Some aggLockDisclosure <- queryDisclosure dso aggLock
+  -- Some aggLockDisclosure <- queryDisclosure dso aggLock
+  -}
 
   -- Lock some funds for the aggregate
-  AllocationInstructionResult { output = AllocationInstructionResult_Completed locked } <- lockForAggregate env 1000.0 bob aggLock
+  AllocationInstructionResult { output = AllocationInstructionResult_Completed locked } <- lockForAggregate env 1000.0 "alice-supervalidator" bob
 
-  -- Check total for the aggregate; needs to be implemented.
+  Some lockedView <- queryInterfaceContractId bob locked
+
+  allocs <- queryInterface @V2.Allocation dso
+  let filtered = filter (isValidAggregateLockedAllocation dso) $ fromSome . snd <$> allocs
+      toKeyAndAmount alloc = ("cip-105/for-benefit-of" `TM.lookup` alloc.allocation.meta.values, fromOptional 0.0 $ alloc.allocation.nextIterationFunding >>= TM.lookup env.instrId.id)
+      totals = M.fromListWith (+) $ toKeyAndAmount <$> filtered
+
+  assertEq (Some 1000.0) (Some "alice-supervalidator" `M.lookup` totals)
+  
+  WalletClientV2.withdrawAllocationV2 newRegistries bob (locked, lockedView)
+
+  let bobAcct = V2.Account with
+        owner = Some bob
+        provider = Some dso
+        id = ""
+
+  allocs <- WalletClientV2.listAllocationsV2 bobAcct bob
+
+  -- unlockResult <- WalletClientV2.withdrawAllocationV2 newRegistries bob $ head allocs
+  
+  pure ()
+
+  {-
  
   now <- getTime
   let initialAmountToUnlock = 365.25
@@ -112,6 +165,7 @@ testAggregateLockHappyPath = do
   assert $ length allocations == 2
 
   -- Need to check other than via inspection that the two allocations actually exist with correct values.
+  -}
 
   -- TODO: Temporary, bad to do this
   let vestingLockAllocationCid = head [cid | (cid, a) <- allocations, TM.member "cip-105/vestingLock.initialAmount" a.allocation.meta.values]

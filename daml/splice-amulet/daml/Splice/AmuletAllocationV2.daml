@@ -23,6 +23,7 @@ import Splice.Api.Token.HoldingV2 qualified as V2
 import Splice.Api.Token.AllocationV2 qualified as V2
 import Splice.TokenStandard.Utils hiding (require)
 
+import Splice.AggregateLock
 import Splice.Amulet
 import Splice.AmuletConfig (TransferConfigV2, getTokenStandardMaxTTL)
 import Splice.AmuletRules
@@ -76,6 +77,8 @@ template AmuletAllocationV2
       allocation_cancelExtraObservers _arg = observer this
       allocation_withdrawExtraObservers _arg = observer this
 
+      allocation_withdrawImpl self arg | isGovernanceLocked this =
+        governanceLockedWithdrawImpl emptyCloneWithMeta this (fromInterfaceContractId self) arg
       allocation_withdrawImpl self arg@(V2.Allocation_Withdraw{..}) = do
         archiveAndCheckActors self arg.actors [[accountPrincipal allocation.admin allocation.authorizer]]
         ensureWithdrawIsAllowed allocation
@@ -230,14 +233,22 @@ computeAllocationExpiryInternal transferConfig oldExpiresAt settlementDeadline =
       | maxTime `subTime` oldExpiresAt <= maxTTL = maxTime
       | otherwise = oldExpiresAt `addRelTime` maxTTL
 
--- FIXME: the exception to allow Some maxBound is for infinite-duration governance locks, and should probably be limited more explicitly to only those cases.
+-- FIXME: the exception to allow Some maxTime is for infinite-duration governance locks, and should probably be limited more explicitly to only those cases.
 computeAllocationExpiry : TransferConfigV2 Amulet -> Time -> Optional Time -> Update Time
-computeAllocationExpiry transferConfig oldExpiresAt settlementDeadline | settlementDeadline == Some maxBound = pure maxBound
+computeAllocationExpiry transferConfig oldExpiresAt settlementDeadline | settlementDeadline == Some maxComparableTime = pure maxComparableTime
 computeAllocationExpiry transferConfig oldExpiresAt settlementDeadline = do
   let expiresAt = computeAllocationExpiryInternal transferConfig oldExpiresAt settlementDeadline
   assertWithinDeadline "allocation.expiresAt" expiresAt
   pure expiresAt
 
+isGovernanceLocked alloc = TextMap.member "cip-105/type" alloc.allocation.meta.values
+
+emptyCloneWithMeta : AmuletAllocationV2 -> Time -> Metadata -> Update (ContractId V2.Allocation)
+emptyCloneWithMeta src now meta = toInterfaceContractId <$> create src with
+  lockedAmulet = None
+  createdAt = now
+  allocation = src.allocation with
+    meta
 
 -- instances
 ------------

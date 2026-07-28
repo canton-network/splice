@@ -2,17 +2,23 @@ module Splice.AggregateLock where
 
 import Splice.Amulet.TokenApiUtils
 import Splice.Api.Token.AllocationV2 as V2
+import qualified Splice.Api.Token.AllocationInstructionV2 as V2
 import Splice.Api.Token.MetadataV1
-import Splice.TokenStandard.Utils.Internal.Conversions (decodeTime)
 import Splice.Types (ForDso(..))
+import Splice.TokenStandard.Utils (fromAnyContractId, maxTime)
+import Splice.TokenStandard.Utils.Internal.Allocations (settlementFactoryV2_settleBatchDefaultImplNoSelf)
+import Splice.TokenStandard.Utils.Internal.Conversions (decodeTime, encodeTime)
 import Splice.Util
 
 import DA.Either
 import DA.Optional
 import DA.Text
-import qualified DA.List as L
+import DA.List
 import qualified DA.TextMap as TM
 import DA.Time
+
+maxComparableTime : Time
+maxComparableTime = addRelTime maxTime $ microseconds (-1)
 
 isValidAggregateLockedAllocation : Party -> V2.AllocationView -> Bool
 isValidAggregateLockedAllocation dso alloc =
@@ -20,7 +26,7 @@ isValidAggregateLockedAllocation dso alloc =
       , alloc.allocation.committed
       , null alloc.allocation.transferLegSides
       , TM.lookup "cip-105/type" alloc.allocation.meta.values == Some "aggregateLock"
-      , alloc.expiresAt == Some maxBound
+      , alloc.expiresAt == Some maxComparableTime
       ]
 
 isValidVestingLockedDestination : Party -> V2.AllocationView -> Bool
@@ -29,7 +35,7 @@ isValidVestingLockedDestination dso alloc =
       , alloc.allocation.committed
       , null alloc.allocation.transferLegSides
       , TM.lookup "cip-105/type" alloc.allocation.meta.values == Some "vestingLock"
-      , alloc.expiresAt == Some maxBound
+      , alloc.expiresAt == Some maxTime
       , TM.member "cip-105/vestingLock.startDate" metaValues
       , TM.member "cip-105/vestingLock.endDate" metaValues
       ]
@@ -46,13 +52,36 @@ controllerSetFromMeta = mapA partiesFromText . splitOn ";"
 data GovernanceLockedControllers = GovernanceLockedControllers with
   unlockControllerSets : ControllerSets
   substituteControllerSets : ControllerSets
+  withdrawControllerSets : ControllerSets
 
 governanceLockedControllersFromMeta : Metadata -> Party -> GovernanceLockedControllers
 governanceLockedControllersFromMeta meta acctParty = GovernanceLockedControllers with
     unlockControllerSets = controllerSetFromMetaMap "cip-105/unlockControllerSets"
     substituteControllerSets = controllerSetFromMetaMap "cip-105/substituteControllerSets"
+    withdrawControllerSets = controllerSetFromMetaMap "cip-105/withdrawControllerSets"
   where
     controllerSetFromMetaMap key = fromOptional [[acctParty]] $ controllerSetFromMeta =<< key `TM.lookup` meta.values
+
+checkControllerSet : [Party] -> ControllerSets -> Update ()
+checkControllerSet parties set = 
+    require "Controllers must be one of the listed options" $ any (\conj -> all (`elem` parties) conj && all (`elem` conj) parties) set
+
+governanceLockedWithdrawImpl
+  : HasToInterface a V2.Allocation
+  => (a -> Time -> Metadata -> Update (ContractId V2.Allocation))
+  -> a
+  -> ContractId a
+  -> V2.Allocation_Withdraw
+  -> Update V2.AllocationResult
+governanceLockedWithdrawImpl newEmptyAllocation a acid arg@(V2.Allocation_Withdraw{..}) =
+    case TM.lookup "cip-105/type" allocView.allocation.meta.values of
+      Some "aggregateLock" -> do
+        aggregateLockUnlock newEmptyAllocation a acid arg
+      Some "vestingLock" ->
+        vestingLockWithdraw a acid arg
+      _ -> assertFail "Invalid cip-105/type field."
+ where
+   allocView = view $ toInterface @V2.Allocation a
 
 data VestingSchedule
   = VestingSchedule_SV
@@ -96,173 +125,188 @@ calculateAvailableWithdrawAmount currentDateTime alloc nextIterationFundAmount =
 -- vesting to be in a separate dar from amulet only needed for SVs and
 -- interested observers.
 
-template AggregateLock
+{-template AggregateLock
   with
     dso: Party
     instrumentId : Text
     vestingSchedule : VestingSchedule
   where
     signatory dso
-    nonconsuming choice AggregateLock_Unlock : SettlementFactory_SettleBatchResult
-      with
-        factoryCid : ContractId SettlementFactory
-        lockedCid : ContractId Allocation
-        withdrawToCid : ContractId Allocation
-        authorizers : [ Party ]
-        amount : Decimal
-        extraArgs : ExtraArgs
-      where
-        controller authorizers
-        do
-          locked <- view <$> fetchCheckedInterface (ForDso with dso) lockedCid
-          withdrawTo <- view <$> fetchCheckedInterface (ForDso with dso) withdrawToCid
-          ownerParty <- whenNone locked.allocation.authorizer.owner $
-            assertFail "The requirement 'governance locked allocations must be owned by basic accounts' was not met"
-          let GovernanceLockedControllers{..} = governanceLockedControllersFromMeta locked.meta ownerParty
-          require "Unlock controller must be one of the options" $ any (\conj -> all (`elem` authorizers) conj) unlockControllerSets
-          require "Not allowed to unlock to a different party than locked the funds" $ locked.allocation.authorizer == withdrawTo.allocation.authorizer
-          require "Must be a valid governance-locked allocation" $ isValidAggregateLockedAllocation dso locked
-          require "Must be a valid empty vesting unlock allocation" $ isValidVestingLockedDestination dso withdrawTo
-          require "Must have amounts reserved within the next settlement iteration" $ isSome locked.allocation.nextIterationFunding
-          now <- getTime
-          require "Vesting allocation must have a correct schedule configuration" $ validateVestingSchedule vestingSchedule now withdrawTo.allocation.meta
-          let
-            info = SettlementInfo with
-              executors = [ dso ]
-              id = "AggregateLock"
-              cid = Some $ coerceContractId self
-              meta = emptyMetadata
-            transferLegId = "unlock"
+-}
 
-          currentLockedAmount <- whenNone (locked.allocation.nextIterationFunding >>= TM.lookup instrumentId) $
-            assertFail "The requirement 'Must have amounts reserved within the next settlement iteration' was not met"
-          let newLockedAmount = currentLockedAmount - amount
+aggregateLockUnlock : (HasToInterface a V2.Allocation) => (a -> Time -> Metadata -> Update (ContractId V2.Allocation)) -> a -> ContractId a -> Allocation_Withdraw -> Update V2.AllocationResult
+aggregateLockUnlock newEmptyAllocation a aCid arg = do
+    let alloc = view $ toInterface @V2.Allocation a
+        allocCid = toInterfaceContractId @V2.Allocation aCid
+    
+    (instrumentId, currentLockedAmount) <- case TM.toList <$> alloc.allocation.nextIterationFunding of
+        Some [a] -> pure a
+        _ -> assertFail "The requirement 'Must reserve a single amount of a single token' was not met"
 
-          exercise factoryCid $ SettlementFactory_SettleBatch with
-            settlement = info
-            actors = [ dso ]
-            extraArgs
-            transferLegs =
-              [ TransferLeg with
+    vestingSchedule <- decodeVestingSchedule arg.extraArgs.meta alloc.allocation.meta
+
+    let dso = alloc.allocation.admin
+
+    ownerParty <- whenNone alloc.allocation.authorizer.owner $
+      assertFail "The requirement 'governance locked allocations must be owned by basic accounts' was not met"
+
+    let GovernanceLockedControllers{..} = governanceLockedControllersFromMeta alloc.meta ownerParty
+    checkControllerSet arg.actors unlockControllerSets
+    
+    require "Must be a valid governance-locked allocation" $ isValidAggregateLockedAllocation dso alloc
+
+    now <- getTime
+    let endTime = getEndTimeFromVestingSchedule vestingSchedule now
+        transferLegId = "unlock"
+  
+    let alternateAmount = TM.lookup "cip-105/withdraw-amount" arg.extraArgs.meta.values >>= parseDecimal
+        amount = fromOptional currentLockedAmount alternateAmount
+        newLockedAmount = currentLockedAmount - amount
+  
+    -- Not easy to call directly into amulet_allocationFactoryV2_allocateImpl or the like here as that would make a circular dependency.
+    withdrawTo <- newEmptyAllocation a now $ Metadata $ TM.fromList
+          [ ("cip-105/type", "vestingLock")
+          , ("cip-105/vestingLock.startDate", encodeTime $ now)
+          , ("cip-105/vestingLock.endDate", encodeTime $ endTime)
+          ]
+  
+    -- settlementFactoryV2_settleBatchDefaultImpl does not use it's third argument, so we pass undefined rather than require a contract ID for ExternalPartyAmuletRules.
+    settleBatchResult <- settlementFactoryV2_settleBatchDefaultImplNoSelf (\_ _ -> pure arg.extraArgs) dso $ SettlementFactory_SettleBatch with
+      settlement = alloc.settlement
+      actors = [ dso ]
+      extraArgs = arg.extraArgs
+      transferLegs =
+        [ TransferLeg with
+            transferLegId
+            sender = alloc.allocation.authorizer
+            receiver = alloc.allocation.authorizer
+            amount
+            instrumentId
+            meta = emptyMetadata
+        ]
+      allocations =
+        [ FinalizedAllocation with
+            allocationCid = allocCid
+            extraTransferLegSides =
+              [ TransferLegSide with
+                transferLegId
+                side = SenderSide
+                otherside = alloc.allocation.authorizer
+                amount
+                instrumentId
+                meta = emptyMetadata
+              ]
+            nextIterationFunding = Some $ TM.singleton instrumentId newLockedAmount
+        , FinalizedAllocation with
+            allocationCid = withdrawTo
+            extraTransferLegSides =
+              [ TransferLegSide with
+                transferLegId
+                side = ReceiverSide
+                otherside = alloc.allocation.authorizer
+                amount
+                instrumentId
+                meta = emptyMetadata
+              ]
+            nextIterationFunding = Some $ TM.singleton instrumentId amount
+        ]
+    pure $ head settleBatchResult.allocationSettleResults
+  where
+    getEndTimeFromVestingSchedule VestingSchedule_SV now = addRelTime now $ days 365 + hours 6
+    getEndTimeFromVestingSchedule VestingSchedule_Immediate now = now
+
+-- vestingLockWithdraw : V2.AllocationView -> ContractId V2.Allocation -> Allocation_Withdraw -> Update V2.AllocationResult
+vestingLockWithdraw : (HasToInterface a V2.Allocation) => a -> ContractId a -> Allocation_Withdraw -> Update V2.AllocationResult
+vestingLockWithdraw a aCid arg = do
+    let vestingLock = view $ toInterface @V2.Allocation a
+        vestingLockCid = toInterfaceContractId @V2.Allocation aCid
+    now <- getTime
+    
+    require "Must be a valid vesting unlock allocation" $ isValidVestingLockedDestination dso vestingLock
+    require "There must be an initialAmount set for the vestingLock"
+      $ TM.member "cip-105/vestingLock.initialAmount" vestingLock.allocation.meta.values
+
+    ownerParty <- whenNone vestingLock.allocation.authorizer.owner $
+      assertFail "The requirement 'governance locked allocations must be owned by basic accounts' was not met"
+    let GovernanceLockedControllers{..} = governanceLockedControllersFromMeta vestingLock.meta ownerParty
+
+    checkControllerSet arg.actors withdrawControllerSets
+
+    -- TODO: Potentially do case statement with nextIterationFunding optionals
+    require "There are remaining funds to withdraw"
+      $ isSome vestingLock.allocation.nextIterationFunding
+
+    (instrumentId, nextIterationFunding) <- case TM.toList <$> vestingLock.allocation.nextIterationFunding of
+        Some [a] -> pure a
+        _ -> assertFail "The requirement 'Must reserve a single amount of a single token' was not met"
+    require "There must be an initialAmount set for the vestingLock"
+      $ TM.member "cip-105/vestingLock.initialAmount" vestingLock.allocation.meta.values
+
+    let (availableWithdrawAmount, remainingVestingAmount) : (Decimal, Decimal) =
+          calculateAvailableWithdrawAmount now vestingLock nextIterationFunding
+
+    require ("Current eligible withdraw amount for vesting lock is not greater than 0.0. "
+             <> "currentEligibleWithdrawableAmount came back = '"
+             <> show availableWithdrawAmount
+             <> "'."
+             )
+           $ availableWithdrawAmount > 0.0
+
+    let
+      info = SettlementInfo with
+        executors = [ vestingLock.allocation.admin ]
+        id = "VestingLock_Withdraw"
+        cid = Some $ coerceContractId vestingLockCid
+        meta = emptyMetadata
+      transferLegId = "withdraw"
+      nextIterationFunding
+        | remainingVestingAmount <= 0.0 = None
+        | otherwise = Some $ TM.singleton instrumentId remainingVestingAmount
+
+    settleResult <- settlementFactoryV2_settleBatchDefaultImplNoSelf (\_ _ -> pure arg.extraArgs) vestingLock.allocation.admin $ SettlementFactory_SettleBatch with
+      settlement = info
+      actors = [ vestingLock.allocation.admin ]
+      extraArgs = ExtraArgs emptyChoiceContext emptyMetadata
+      transferLegs =
+        [ TransferLeg with
+            transferLegId
+            sender = vestingLock.allocation.authorizer
+            receiver = vestingLock.allocation.authorizer
+            amount = availableWithdrawAmount
+            instrumentId
+            meta = emptyMetadata
+        ]
+      allocations =
+        [ FinalizedAllocation with
+            allocationCid = vestingLockCid
+            extraTransferLegSides =
+              [ TransferLegSide with
                   transferLegId
-                  sender = locked.allocation.authorizer
-                  receiver = withdrawTo.allocation.authorizer
-                  amount
+                  side = SenderSide
+                  otherside = vestingLock.allocation.authorizer
+                  amount = remainingVestingAmount
                   instrumentId
                   meta = emptyMetadata
-              ]
-            allocations =
-              [ FinalizedAllocation with
-                  allocationCid = lockedCid
-                  extraTransferLegSides =
-                    [ TransferLegSide with
-                      transferLegId
-                      side = SenderSide
-                      otherside = withdrawTo.allocation.authorizer
-                      amount
-                      instrumentId
-                      meta = emptyMetadata
-                    ]
-                  nextIterationFunding = Some $ TM.singleton instrumentId newLockedAmount
-              , FinalizedAllocation with
-                  allocationCid = withdrawToCid
-                  extraTransferLegSides =
-                    [ TransferLegSide with
-                      transferLegId
-                      side = ReceiverSide
-                      otherside = locked.allocation.authorizer
-                      amount
-                      instrumentId
-                      meta = emptyMetadata
-                    ]
-                  nextIterationFunding = Some $ TM.singleton instrumentId amount
-              ]
-    -- Note: Choice temporarily lives here and it will be moved, testing/draft purposes atm
-    nonconsuming choice VestingLock_Withdraw : AllocationResult
-      with
-        factoryCid : ContractId SettlementFactory
-        authorizers : [Party]
-        vestingLockCid : ContractId Allocation
-        extraArgs : ExtraArgs
-      where
-        controller authorizers
-        do
-          vestingLock <- view <$> fetchCheckedInterface (ForDso with dso) vestingLockCid
-          now <- getTime
-          ownerParty <- whenNone vestingLock.allocation.authorizer.owner $
-            assertFail "The requirement 'governance locked allocations must be owned by basic accounts' was not met"
-
-          require "Must be a valid vesting unlock allocation" $ isValidVestingLockedDestination dso vestingLock
-          require "There must be an initialAmount set for the vestingLock"
-            $ TM.member "cip-105/vestingLock.initialAmount" vestingLock.allocation.meta.values
-          let GovernanceLockedControllers{..} = governanceLockedControllersFromMeta vestingLock.meta ownerParty
-          require "Unlock controller must be one of the options" $ any (\conj -> all (`elem` authorizers) conj) unlockControllerSets
-
-          let mNextIterationFunding = do
-                fundingMap <- vestingLock.allocation.nextIterationFunding
-                TM.lookup instrumentId fundingMap
-
-          nextIterationFundingAmount <- case mNextIterationFunding of
-            None -> abort ("VestingLock's nextIterationFunding should have remaining funds to withdraw for instrumentId " <> show instrumentId)
-            Some amount -> pure amount
-
-          let (availableWithdrawAmount, remainingVestingAmount) : (Decimal, Decimal) =
-                calculateAvailableWithdrawAmount now vestingLock nextIterationFundingAmount
-
-          require ("Current eligible withdraw amount for vesting lock should be greater than 0.0. "
-                  <> "currentEligibleWithdrawableAmount came back = '"
-                  <> show availableWithdrawAmount
-                  <> "'."
-                  )
-            $ availableWithdrawAmount > 0.0
-
-          let
-            info = SettlementInfo with
-              executors = [ dso ]
-              id = "AggregateLock"
-              cid = Some $ coerceContractId self
-              meta = emptyMetadata
-            transferLegId = "withdraw"
-            nextIterationFunding
-              | remainingVestingAmount <= 0.0 = None
-              | otherwise = Some $ TM.singleton instrumentId remainingVestingAmount
-
-          batchResults <- exercise factoryCid $ SettlementFactory_SettleBatch with
-            settlement = info
-            actors = [ dso ]
-            extraArgs
-            transferLegs =
-              [ TransferLeg with
+              , TransferLegSide with
                   transferLegId
-                  sender = vestingLock.allocation.authorizer
-                  receiver = vestingLock.allocation.authorizer
+                  side = ReceiverSide
+                  otherside = vestingLock.allocation.authorizer
                   amount = availableWithdrawAmount
                   instrumentId
                   meta = emptyMetadata
               ]
-            allocations =
-              [ FinalizedAllocation with
-                  allocationCid = vestingLockCid
-                  extraTransferLegSides =
-                    [ TransferLegSide with
-                      transferLegId
-                      side = SenderSide
-                      otherside = vestingLock.allocation.authorizer
-                      amount = availableWithdrawAmount
-                      instrumentId
-                      meta = emptyMetadata
-                    , TransferLegSide with
-                      transferLegId
-                      side = ReceiverSide
-                      otherside = vestingLock.allocation.authorizer
-                      amount = availableWithdrawAmount
-                      instrumentId
-                      meta = emptyMetadata
-                    ]
-                  nextIterationFunding = nextIterationFunding
-              ]
+            nextIterationFunding
+        ]
 
-          -- We should have one result from settleBatch         
-          case batchResults.allocationSettleResults of
-            [allocationResult] -> pure allocationResult
-            _ -> abort "VestingUnlock_Withdraw should result in one allocation result. "
+    -- We should have one result from settleBatch         
+    case batchResults.allocationSettleResults of
+      [allocationResult] -> pure allocationResult
+      _ -> abort "VestingUnlock_Withdraw should result in one allocation result. "
+
+-- Takes the choice metadata as well to enable override to allow quick unlock
+decodeVestingSchedule : Metadata -> Metadata -> Update VestingSchedule
+decodeVestingSchedule _withdrawMeta lockMeta = do
+  case TM.lookup "cip-105/vestingSchedule" lockMeta.values of
+    Some "SV" -> pure VestingSchedule_SV
+    _ -> assertFail "Must have a valid vesting schedule"
+
