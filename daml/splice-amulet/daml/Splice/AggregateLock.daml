@@ -35,7 +35,7 @@ isValidVestingLockedDestination dso alloc =
       , alloc.allocation.committed
       , null alloc.allocation.transferLegSides
       , TM.lookup "cip-105/type" alloc.allocation.meta.values == Some "vestingLock"
-      , alloc.expiresAt == Some maxTime
+      , alloc.expiresAt == Some maxComparableTime
       , TM.member "cip-105/vestingLock.startDate" metaValues
       , TM.member "cip-105/vestingLock.endDate" metaValues
       ]
@@ -138,7 +138,7 @@ aggregateLockUnlock : (HasToInterface a V2.Allocation) => (a -> Time -> Metadata
 aggregateLockUnlock newEmptyAllocation a aCid arg = do
     let alloc = view $ toInterface @V2.Allocation a
         allocCid = toInterfaceContractId @V2.Allocation aCid
-    
+
     (instrumentId, currentLockedAmount) <- case TM.toList <$> alloc.allocation.nextIterationFunding of
         Some [a] -> pure a
         _ -> assertFail "The requirement 'Must reserve a single amount of a single token' was not met"
@@ -152,24 +152,24 @@ aggregateLockUnlock newEmptyAllocation a aCid arg = do
 
     let GovernanceLockedControllers{..} = governanceLockedControllersFromMeta alloc.meta ownerParty
     checkControllerSet arg.actors unlockControllerSets
-    
+
     require "Must be a valid governance-locked allocation" $ isValidAggregateLockedAllocation dso alloc
 
     now <- getTime
     let endTime = getEndTimeFromVestingSchedule vestingSchedule now
         transferLegId = "unlock"
-  
+
     let alternateAmount = TM.lookup "cip-105/withdraw-amount" arg.extraArgs.meta.values >>= parseDecimal
         amount = fromOptional currentLockedAmount alternateAmount
         newLockedAmount = currentLockedAmount - amount
-  
+
     -- Not easy to call directly into amulet_allocationFactoryV2_allocateImpl or the like here as that would make a circular dependency.
     withdrawTo <- newEmptyAllocation a now $ Metadata $ TM.fromList
           [ ("cip-105/type", "vestingLock")
           , ("cip-105/vestingLock.startDate", encodeTime $ now)
           , ("cip-105/vestingLock.endDate", encodeTime $ endTime)
           ]
-  
+
     -- settlementFactoryV2_settleBatchDefaultImpl does not use it's third argument, so we pass undefined rather than require a contract ID for ExternalPartyAmuletRules.
     settleBatchResult <- settlementFactoryV2_settleBatchDefaultImplNoSelf (\_ _ -> pure arg.extraArgs) dso $ SettlementFactory_SettleBatch with
       settlement = alloc.settlement
@@ -221,8 +221,8 @@ vestingLockWithdraw a aCid arg = do
     let vestingLock = view $ toInterface @V2.Allocation a
         vestingLockCid = toInterfaceContractId @V2.Allocation aCid
     now <- getTime
-    
-    require "Must be a valid vesting unlock allocation" $ isValidVestingLockedDestination dso vestingLock
+
+    require "Must be a valid vesting unlock allocation" $ isValidVestingLockedDestination vestingLock.allocation.admin vestingLock
     require "There must be an initialAmount set for the vestingLock"
       $ TM.member "cip-105/vestingLock.initialAmount" vestingLock.allocation.meta.values
 
@@ -298,8 +298,8 @@ vestingLockWithdraw a aCid arg = do
             nextIterationFunding
         ]
 
-    -- We should have one result from settleBatch         
-    case batchResults.allocationSettleResults of
+    -- We should have one result from settleBatch
+    case settleResult.allocationSettleResults of
       [allocationResult] -> pure allocationResult
       _ -> abort "VestingUnlock_Withdraw should result in one allocation result. "
 
