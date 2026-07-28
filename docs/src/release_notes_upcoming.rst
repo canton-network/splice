@@ -7,6 +7,12 @@
 
 .. release-notes:: Upcoming
 
+    - PostgreSQL 18
+
+        - Splice now officially supports PostgreSQL 18.
+          ⚠️ Note that that PostgreSQL 14, which was the default until now, will reach End of Life on November 12, 2026.
+          You should upgrade before that date.
+
     - Scan app
 
         - Remove deprecated ``/transactions`` endpoint.
