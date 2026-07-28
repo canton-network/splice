@@ -4,7 +4,9 @@
 package com.digitalasset.canton.integration
 
 import com.daml.ledger.javaapi.data.Event
+import com.digitalasset.canton.config.SharedCantonConfig
 import com.digitalasset.canton.console.{BufferedProcessLogger, CommandFailure, ParticipantReference}
+import com.digitalasset.canton.environment.Environment
 import com.digitalasset.canton.logging.LogEntry
 import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.{
@@ -13,8 +15,6 @@ import com.digitalasset.canton.{
   TestPredicateFiltersFixtureAnyWordSpec,
   config,
 }
-import com.digitalasset.canton.config.SharedCantonConfig
-import com.digitalasset.canton.environment.Environment
 import org.scalactic.source
 import org.scalactic.source.Position
 import org.scalatest.wordspec.FixtureAnyWordSpec
@@ -61,7 +61,7 @@ trait BaseIntegrationTest[C <: SharedCantonConfig[C], E <: Environment[C]]
     with RepeatableTestSuiteTest
     with PartyTopologyUtils
     with TestPredicateFiltersFixtureAnyWordSpec {
-  this: EnvironmentSetup[C, E] =>
+  self: EnvironmentSetup[C, E] =>
 
   type FixtureParam = BaseTestConsoleEnvironment[C, E]
 

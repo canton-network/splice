@@ -360,7 +360,7 @@ trait SynchronizerRegistryHelpers extends FlagCloseable with NamedLogging with H
       traceContext: TraceContext,
   ): EitherT[FutureUnlessShutdown, SynchronizerRegistryError, Unit] =
     synchronizeWithClosing("check-for-synchronizer-topology-initialization")(
-      EitherT.right[SynchronizerRegistryError](connectivityStatusStore.isTopologyInitialized)
+      EitherT.right[SynchronizerRegistryError](connectivityStatusStore.isTopologyInitialized())
     ).flatMap {
       case true =>
         EitherT.right[SynchronizerRegistryError](FutureUnlessShutdown.unit)
@@ -386,7 +386,7 @@ trait SynchronizerRegistryHelpers extends FlagCloseable with NamedLogging with H
   )(implicit
       loggingContext: ErrorLoggingContext
   ): Either[SynchronizerIdMismatch.Error, Unit] =
-    config.synchronizerId match {
+    config.psid match {
       case None => Either.unit
       case Some(configuredSynchronizerId) =>
         Either.cond(
@@ -521,24 +521,17 @@ object SynchronizerRegistryHelpers {
       predecessorSyncStateO
         .traverse_ { case (predecessor, predecessorSyncState) =>
           for {
-            isTopologyInitialized <- persistentState.connectivityStatusStore.isTopologyInitialized
+            isTopologyInitialized <- persistentState.connectivityStatusStore.isTopologyInitialized()
 
             shouldCopyTopology = !isTopologyInitialized && !predecessor.isLateUpgrade
             _ <-
               if (shouldCopyTopology) {
-                loggingContext.info(
-                  s"LSU to ${persistentState.psid.suffix}: About to copy topology"
-                )
-
                 for {
                   _ <- persistentState.topologyStore
                     .copyFromPredecessorSynchronizerStore(
                       predecessorSyncState.topologyStore
                     )
 
-                  _ = loggingContext.info(
-                    s"LSU to ${persistentState.psid.suffix}: Done copying topology"
-                  )
                   _ <- persistentState.connectivityStatusStore.setTopologyInitialized()
                 } yield ()
               } else {

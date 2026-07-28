@@ -276,7 +276,7 @@ export class InStackCometBftDecentralizedSynchronizerNode
       version,
       svConfig.logging?.cantonLogLevel,
       svConfig.logging?.cantonStdoutLogLevel,
-      svConfig.logging?.apiRequestLogLevel,
+      svConfig.logging?.cantonApiRequestLogLevel ?? svConfig.logging?.apiRequestLogLevel,
       svConfig.logging?.cantonAsync,
       imagePullServiceAccountName,
       opts
@@ -324,7 +324,7 @@ export class InStackCantonBftDecentralizedSynchronizerNode extends InStackDecent
       version,
       svConfig.logging?.cantonLogLevel,
       svConfig.logging?.cantonStdoutLogLevel,
-      svConfig.logging?.apiRequestLogLevel,
+      svConfig.logging?.cantonApiRequestLogLevel ?? svConfig.logging?.apiRequestLogLevel,
       svConfig.logging?.cantonAsync,
       imagePullServiceAccountName,
       opts

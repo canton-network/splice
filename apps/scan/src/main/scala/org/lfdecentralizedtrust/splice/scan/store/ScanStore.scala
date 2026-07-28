@@ -30,8 +30,6 @@ import org.lfdecentralizedtrust.splice.store.{
   ExternalPartyConfigStateStore,
   MiningRoundsStore,
   MultiDomainAcsStore,
-  PageLimit,
-  SortOrder,
   TxLogAppStore,
   UpdateHistory,
   VotesStore,
@@ -214,14 +212,6 @@ trait ScanStore
       splice.externalpartyamuletrules.TransferCommandCounter,
     ]]
   ]
-
-  def listTransactions(
-      pageEndEventId: Option[String],
-      sortOrder: SortOrder,
-      limit: PageLimit,
-  )(implicit
-      tc: TraceContext
-  ): Future[Seq[TxLogEntry.TransactionTxLogEntry]]
 
   def lookupLatestTransferCommandEvents(
       sender: PartyId,

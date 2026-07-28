@@ -60,9 +60,7 @@ import org.lfdecentralizedtrust.splice.store.{
   DbVotesTxLogStoreQueryBuilder,
   Limit,
   VoteResultsFilters,
-  PageLimit,
   ResultsPage,
-  SortOrder,
   TxLogStore,
   UpdateHistory,
 }
@@ -79,7 +77,6 @@ import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.store.UpdateHistoryQueries.UpdateHistoryQueries
 import org.lfdecentralizedtrust.splice.store.db.AcsQueries.AcsStoreId
 import org.lfdecentralizedtrust.splice.store.db.TxLogQueries.TxLogStoreId
-import slick.jdbc.canton.SQLActionBuilder
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
@@ -390,63 +387,6 @@ class DbScanStore(
         )
     } yield contractWithStateFromRow(TransferCommandCounter.COMPANION)(row)).value
   }
-
-  override def listTransactions(
-      pageEndEventId: Option[String],
-      sortOrder: SortOrder,
-      limit: PageLimit,
-  )(implicit
-      tc: TraceContext
-  ): Future[Seq[TxLogEntry.TransactionTxLogEntry]] =
-    waitUntilAcsIngested {
-      val entryTypeCondition: SQLActionBuilder = inClause(
-        "entry_type",
-        List(
-          EntryType.TransferTxLogEntry,
-          EntryType.TapTxLogEntry,
-          EntryType.MintTxLogEntry,
-          EntryType.AbortTransferInstructionTxLogEntry,
-        ),
-      )
-      // Literal sort order since Postgres complains when trying to bind it to a parameter
-      val (compareEntryNumber, orderLimit) = sortOrder match {
-        case SortOrder.Ascending =>
-          (sql" > ", sql""" order by entry_number asc limit ${sqlLimit(limit)};""")
-        case SortOrder.Descending =>
-          (sql" < ", sql""" order by entry_number desc limit ${sqlLimit(limit)};""")
-      }
-
-      // TODO (#960): don't use the event id for pagination, use the entry number
-      for {
-        rows <- storage.query(
-          pageEndEventId.fold(
-            selectFromTxLogTable(
-              txLogTableName,
-              txLogStoreId,
-              where = entryTypeCondition,
-              orderLimit = orderLimit,
-            )
-          )(pageEndEventId =>
-            selectFromTxLogTable(
-              txLogTableName,
-              txLogStoreId,
-              where = (entryTypeCondition ++ sql" and entry_number " ++ compareEntryNumber ++
-                sql"""(
-                  select entry_number
-                  from scan_txlog_store
-                  where store_id = $txLogStoreId
-                  and event_id = ${lengthLimited(pageEndEventId)}
-                  and """ ++ entryTypeCondition ++ sql"""
-              )""").toActionBuilder,
-              orderLimit = orderLimit,
-            )
-          ),
-          "listTransactions",
-        )
-        entries = rows.map(txLogEntryFromRow[TxLogEntry.TransactionTxLogEntry](txLogConfig))
-      } yield entries
-
-    }
 
   override def lookupFeaturedAppRight(
       providerPartyId: PartyId

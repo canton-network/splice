@@ -7,7 +7,7 @@ import sbt.*
 object CantonDependencies {
   // Slightly changed compared to Canton OSS repo to avoid the need for a meta sbt project
   val version: String = "3.5.0-snapshot.20260401.14638.0.v9a1531c5"
-  val canton_library_version = "3.5.3"
+  val canton_library_version = "3.5.7-snapshot.20260630.19042.0.vc85c6a30"
   val daml_language_versions = Seq("2.1")
   val daml_libraries_version = version
   // Defined in `../nix/dpm-sdk-sources.json`, as the compiler version is also used by
@@ -26,6 +26,8 @@ object CantonDependencies {
   lazy val anorm = "org.playframework.anorm" %% "anorm" % "2.7.0"
   lazy val apispec_version = "0.11.7"
   lazy val pekko_version = "1.2.1"
+  lazy val pekko_projection_version = "1.1.0"
+  lazy val pekko_persistence_version = "1.2.1"
   lazy val pekko_http_version = "1.2.0"
   lazy val auth0_java = "com.auth0" % "java-jwt" % "4.2.1"
   lazy val auth0_jwks = "com.auth0" % "jwks-rsa" % "0.21.2"
@@ -52,6 +54,8 @@ object CantonDependencies {
   lazy val reflections = "org.reflections" % "reflections" % "0.10.2"
   lazy val pureconfig = "com.github.pureconfig" %% "pureconfig" % pureconfig_version
   lazy val pureconfig_cats = "com.github.pureconfig" %% "pureconfig-cats" % pureconfig_version
+  lazy val pureconfig_generic =
+    "com.github.pureconfig" %% "pureconfig-generic" % pureconfig_version // TODO(SC) exclude ("com.chuusai", s"shapeless_$scala_version_short")
 
   lazy val scala_collection_contrib =
     "org.scala-lang.modules" %% "scala-collection-contrib" % "0.2.2"
@@ -93,12 +97,17 @@ object CantonDependencies {
     "com.daml" %% "daml-grpc-utils" % canton_library_version
 
   lazy val canton_java_bindings = "com.daml" % "bindings-java" % canton_library_version
+  lazy val canton_ledger_api_core = "com.daml" %% "ledger-api-core" % canton_library_version
   lazy val canton_ledger_api_scala = "com.daml" %% "ledger-api-scala" % canton_library_version
   lazy val canton_observability_metrics =
     "com.daml" %% "observability-metrics" % canton_library_version
   lazy val canton_contextualized_logging =
     "com.daml" %% "contextualized-logging" % canton_library_version
+  lazy val canton_traffic_enforcement_api =
+    "com.daml" %% "traffic-enforcement-api" % canton_library_version
 
+  lazy val canton_blake2b = "com.daml" %% "blake2b" % canton_library_version
+  lazy val canton_magnolify_addon = "com.daml" %% "magnolify-addon" % canton_library_version
   lazy val canton_transcode_json = "com.daml" % "transcode-codec-json_3" % canton_library_version
   lazy val canton_transcode_proto_scala =
     "com.daml" % "transcode-codec-proto-scala_3" % canton_library_version
@@ -121,6 +130,8 @@ object CantonDependencies {
   lazy val daml_nonempty_cats = "com.daml" %% "nonempty-cats" % canton_library_version
   lazy val daml_tracing = "com.daml" %% "observability-tracing" % canton_library_version
   lazy val daml_executors = "com.daml" %% "executors" % canton_library_version
+  lazy val daml_jwt = "com.daml" %% "daml-jwt" % canton_library_version
+  lazy val daml_tls = "com.daml" %% "daml-tls" % canton_library_version
   lazy val daml_ports = "com.daml" %% "ports" % canton_library_version
   lazy val daml_ledger_resources = "com.daml" %% "ledger-resources" % canton_library_version
   lazy val daml_ledger_api_value_scalapb =
@@ -148,12 +159,27 @@ object CantonDependencies {
   lazy val scopt = "com.github.scopt" %% "scopt" % "4.0.0"
 
   lazy val pekko_actor_typed = "org.apache.pekko" %% "pekko-actor-typed" % pekko_version
+  lazy val pekko_actor_testkit_typed =
+    "org.apache.pekko" %% "pekko-actor-testkit-typed" % pekko_version
   lazy val pekko_stream = "org.apache.pekko" %% "pekko-stream" % pekko_version
   lazy val pekko_stream_testkit = "org.apache.pekko" %% "pekko-stream-testkit" % pekko_version
   lazy val pekko_slf4j = "org.apache.pekko" %% "pekko-slf4j" % pekko_version
   lazy val pekko_http = "org.apache.pekko" %% "pekko-http" % pekko_http_version
   lazy val pekko_http_core = "org.apache.pekko" %% "pekko-http-core" % pekko_http_version
   lazy val pekko_http_testkit = "org.apache.pekko" %% "pekko-http-testkit" % pekko_http_version
+
+  lazy val pekko_projection_core =
+    "org.apache.pekko" %% "pekko-projection-core" % pekko_projection_version
+  lazy val pekko_projection_jdbc =
+    "org.apache.pekko" %% "pekko-projection-jdbc" % pekko_projection_version
+  lazy val pekko_projection_slick =
+    "org.apache.pekko" %% "pekko-projection-slick" % pekko_projection_version
+  lazy val pekko_projection_testkit =
+    "org.apache.pekko" %% "pekko-projection-testkit" % pekko_projection_version
+  lazy val pekko_persistence =
+    "org.apache.pekko" %% "pekko-persistence" % pekko_persistence_version
+  lazy val pekko_persistence_query =
+    "org.apache.pekko" %% "pekko-persistence-query" % pekko_persistence_version
 
   lazy val scala_logging = "com.typesafe.scala-logging" %% "scala-logging" % "3.9.5"
   lazy val scalacheck = "org.scalacheck" %% "scalacheck" % scalacheck_version

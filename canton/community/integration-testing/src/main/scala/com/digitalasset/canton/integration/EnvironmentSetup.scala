@@ -156,7 +156,7 @@ sealed trait EnvironmentSetup[C <: SharedCantonConfig[C], E <: Environment[C]]
         }
 
       try {
-        val testEnvironment: BaseTestConsoleEnvironment[C, E] = step("Creating test console") {
+        val testEnvironment = step("Creating test console") {
           envDef.createTestConsole(environmentFixture, loggerFactory)
         }
 
@@ -272,11 +272,10 @@ sealed trait EnvironmentSetup[C <: SharedCantonConfig[C], E <: Environment[C]]
       testName = testName,
     )
 
-  protected def createEnvironment(testName: Option[String]): BaseTestConsoleEnvironment[C, E] = {
-    ConcurrentEnvironmentLimiter.create(getClass.getName, numPermits) {
+  protected def createEnvironment(testName: Option[String]): BaseTestConsoleEnvironment[C, E] =
+    ConcurrentEnvironmentLimiter.create(getClass.getName, numPermits)(
       manualCreateEnvironment(testName = testName)
-    }
-  }
+    )
 
   protected def manualDestroyEnvironment(environment: BaseTestConsoleEnvironment[C, E]): Unit = {
     val config = environment.actualConfig
