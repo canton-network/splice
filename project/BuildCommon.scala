@@ -941,7 +941,7 @@ object BuildCommon {
     import CantonDependencies._
     sbt.Project
       .apply("canton-wartremover-extension", file("canton/community/lib/wartremover"))
-      .dependsOn(`canton-wartremover-annotations`, `canton-slick-fork`)
+      .dependsOn(`canton-slick-fork`)
       .settings(
         Test / scalacOptions ++= Seq(
           "-Wconf:msg=synchronized not selected from this instance:silent"
@@ -949,6 +949,7 @@ object BuildCommon {
         disableTests,
         sharedSettings,
         libraryDependencies ++= Seq(
+          canton_wartremover_annotations,
           cats,
           grpc_stub,
           mockito_scala % Test,
@@ -964,11 +965,6 @@ object BuildCommon {
         //      coverageEnabled := false,
       )
   }
-
-  lazy val `canton-wartremover-annotations` =
-    sbt.Project
-      .apply("canton-wartremover-annotations", file("canton/community/lib/wartremover-annotations"))
-      .settings(sharedSettings)
 
   lazy val `canton-scalatest-addon` = {
     import CantonDependencies._

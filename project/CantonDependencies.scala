@@ -108,6 +108,8 @@ object CantonDependencies {
   lazy val canton_traffic_enforcement_api =
     "com.daml" %% "traffic-enforcement-api" % canton_library_version
   lazy val canton_util_external = "com.daml" %% "util-external" % canton_library_version
+  lazy val canton_wartremover_annotations =
+    "com.daml" %% "wartremover-annotations" % canton_library_version
 
   lazy val canton_blake2b = "com.daml" %% "blake2b" % canton_library_version
   lazy val canton_magnolify_addon = "com.daml" %% "magnolify-addon" % canton_library_version

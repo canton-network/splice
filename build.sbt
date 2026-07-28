@@ -27,7 +27,6 @@ lazy val `canton-community-integration-testing` = BuildCommon.`canton-community-
 lazy val `canton-community-testing` = BuildCommon.`canton-community-testing`
 lazy val `canton-slick-fork` = BuildCommon.`canton-slick-fork`
 lazy val `canton-wartremover-extension` = BuildCommon.`canton-wartremover-extension`
-lazy val `canton-wartremover-annotations` = BuildCommon.`canton-wartremover-annotations`
 lazy val `canton-util-observability` = BuildCommon.`canton-util-observability`
 lazy val `canton-scalatest-addon` = BuildCommon.`canton-scalatest-addon`
 lazy val `canton-ledger-api-value` = BuildCommon.`canton-ledger-api-value`
