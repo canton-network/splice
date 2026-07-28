@@ -28,5 +28,5 @@
 
     - SV UI
 
-        - Reward configuration scheme fields in the governance config form now
-          render as drop-downs with descriptive labels (CIP-104)
+        - During the creation of ``AmuletRules_SetConfig`` proposal, for the ``rewardConfig``
+          config field form improve the field descriptions and use drop-downs.
