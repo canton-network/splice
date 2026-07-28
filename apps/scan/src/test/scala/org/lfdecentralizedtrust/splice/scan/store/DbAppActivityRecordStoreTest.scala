@@ -169,6 +169,7 @@ class DbAppActivityRecordStoreTest
         _ <- verdictStore.insertVerdictsWithAppActivityRecords(
           NonEmptyList.of(verdict1 -> noViews, verdict2 -> noViews),
           appActivityRecords,
+          hasTrafficSummaries = true,
           lastArchivedRoundO = Some(9L),
         )
 
@@ -209,6 +210,7 @@ class DbAppActivityRecordStoreTest
         _ <- verdictStore.insertVerdictsWithAppActivityRecords(
           NonEmptyList.of(mkVerdict(verdictStore, "update-mono-1", baseTs) -> noViews),
           Seq(baseTs -> mkRecord(0L, 10L, Seq("app1::provider"), Seq(100L))),
+          hasTrafficSummaries = true,
           lastArchivedRoundO = Some(9L),
         )
         // A later batch without activity records still advances the round
@@ -217,6 +219,7 @@ class DbAppActivityRecordStoreTest
             mkVerdict(verdictStore, "update-mono-2", baseTs.plusSeconds(1L)) -> noViews
           ),
           Seq.empty,
+          hasTrafficSummaries = true,
           lastArchivedRoundO = Some(10L),
         )
         meta <- appStore.lookupActivityRecordMeta(1, 0)
@@ -233,6 +236,7 @@ class DbAppActivityRecordStoreTest
         _ <- verdictStore.insertVerdictsWithAppActivityRecords(
           NonEmptyList.of(mkVerdict(verdictStore, "update-no-meta", baseTs) -> noViews),
           Seq.empty,
+          hasTrafficSummaries = true,
           lastArchivedRoundO = Some(7L),
         )
         meta <- appStore.lookupActivityRecordMeta(1, 0)
@@ -242,6 +246,27 @@ class DbAppActivityRecordStoreTest
         meta shouldBe defined
         meta.value.earliestIngestedRound shouldBe 7L
         meta.value.lastArchivedRound shouldBe Some(7L)
+      }
+    }
+
+    "Does not create meta row when traffic summaries are absent" in {
+      for {
+        (appStore, verdictStore) <- newStores()
+        baseTs = CantonTimestamp.now()
+
+        _ <- verdictStore.insertVerdictsWithAppActivityRecords(
+          NonEmptyList.of(mkVerdict(verdictStore, "update-no-meta", baseTs) -> noViews),
+          Seq.empty,
+          hasTrafficSummaries = false,
+          lastArchivedRoundO = Some(7L),
+        )
+        v <- verdictStore.getVerdictByUpdateId("update-no-meta")
+        countAfter <- countRecords()
+        meta <- appStore.lookupActivityRecordMeta(1, 0)
+      } yield {
+        v shouldBe defined
+        countAfter shouldBe 0L
+        meta shouldBe None
       }
     }
 
@@ -255,6 +280,7 @@ class DbAppActivityRecordStoreTest
         _ <- verdictStore.insertVerdictsWithAppActivityRecords(
           NonEmptyList.of(verdict -> noViews),
           Seq.empty,
+          hasTrafficSummaries = true,
         )
 
         v <- verdictStore.getVerdictByUpdateId("update-no-activity")
@@ -289,6 +315,7 @@ class DbAppActivityRecordStoreTest
         _ <- verdictStore.insertVerdictsWithAppActivityRecords(
           NonEmptyList.of(verdict1 -> noViews, verdict2 -> noViews, verdict3 -> noViews),
           appActivityRecords,
+          hasTrafficSummaries = true,
         )
 
         v1 <- verdictStore.getVerdictByUpdateId("update-with-1")
@@ -335,6 +362,7 @@ class DbAppActivityRecordStoreTest
         _ <- verdictStore.insertVerdictsWithAppActivityRecords(
           NonEmptyList.of(verdict -> noViews),
           appActivityRecords,
+          hasTrafficSummaries = true,
         )
 
         v <- verdictStore.getVerdictByUpdateId("update-mismatch")

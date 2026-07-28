@@ -300,13 +300,15 @@ class DbAppActivityRecordStore(
   /** Insert activity records and ensure the meta row exists.
     * Creates the meta row when enough information is available to
     * determine which rounds have complete activity, even when no
-    * activity records exist (e.g., no featured app providers).
+    * activity records exist (e.g., no featured app providers),
+    * but only if traffic-summaries could be obtained for this batch.
     * On a fresh firstSV with no archived rounds, bootstraps round 0
     * as complete.
     */
   def insertAppActivityRecordsDBIO(
       items: Seq[AppActivityRecordT],
       firstRecordTimeMicros: Long,
+      hasTrafficSummaries: Boolean,
       lastArchivedRoundO: Option[Long] = None,
   )(implicit tc: TraceContext): DBIO[Unit] = {
     val insertRecords =
@@ -337,10 +339,11 @@ class DbAppActivityRecordStore(
     for {
       _ <- insertRecords
       ensureResult <- earliestRound match {
-        case Some(earliest) =>
+        case Some(earliest) if hasTrafficSummaries =>
           ensureMetaDBIO((firstRecordTimeMicros, earliest), lastArchived)
-        case None =>
-          // No archived rounds and not firstSV — skip meta creation.
+        case _ =>
+          // Either no archived rounds and not firstSV, or this batch
+          // doesn't have traffic summaries yet — skip meta creation.
           // A later verdict batch will create it.
           DBIO.successful(Resume: MetaCheckResult)
       }

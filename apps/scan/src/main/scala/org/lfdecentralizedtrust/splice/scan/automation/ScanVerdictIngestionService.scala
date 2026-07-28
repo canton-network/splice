@@ -266,7 +266,8 @@ class ScanVerdictIngestionService(
           _ <- store.insertVerdictsWithAppActivityRecords(
             items,
             appActivityRecords,
-            lastArchivedRoundO,
+            hasTrafficSummaries = summaryByTime.nonEmpty,
+            lastArchivedRoundO = lastArchivedRoundO,
           )
         } yield {
           val lastRecordTime = verdicts.lastOption
