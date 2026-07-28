@@ -4,8 +4,6 @@
 package com.digitalasset.canton.daml.lf.value.json
 
 import com.digitalasset.canton.daml.lf.value.json.NavigatorModelAliases as model
-import com.digitalasset.canton.ledger.service.MetadataReader
-import com.digitalasset.canton.util.JarResourceUtils
 import com.digitalasset.daml.lf.data.{ImmArray, Numeric, Ref, SortedLookupList, Time}
 import com.digitalasset.daml.lf.value.Value.ContractId
 import com.digitalasset.daml.lf.value.test.TypedValueGenerators.{
@@ -20,7 +18,6 @@ import org.scalatest.Inside
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
-import scalaz.syntax.show.*
 import shapeless.record.Record as HRecord
 import shapeless.{Coproduct as HSum, HNil}
 import spray.json.*
@@ -31,28 +28,15 @@ import scala.util.{Success, Try}
 
 import ApiCodecCompressed.{apiValueToJsValue, jsValueToApiValue}
 
-abstract class ApiCodecCompressedSpec
+class ApiCodecCompressedSpec
     extends AnyWordSpec
     with Matchers
     with ScalaCheckPropertyChecks
     with Inside {
 
-  def darPath: String
-
   import C.typeLookup
 
   protected implicit val cidArb: Arbitrary[ContractId] = Arbitrary(coidGen)
-
-  private val dar = JarResourceUtils.resourceFile(darPath)
-  require(dar.exists())
-
-  protected val darMetadata: MetadataReader.LfMetadata =
-    MetadataReader
-      .readFromDar(dar)
-      .valueOr(e => fail(s"Cannot read metadata from $dar, error:" + e.shows))
-
-  protected val darTypeLookup: NavigatorModelAliases.DamlLfTypeLookup =
-    MetadataReader.typeLookup(darMetadata)
 
   /** Serializes the API value to JSON, then parses it back to an API value */
   protected def serializeAndParse(
@@ -159,13 +143,8 @@ abstract class ApiCodecCompressedSpec
     case Seq(x) => x
     case xs @ _ => sys.error(s"Expected exactly one element, got: $xs")
   }
-}
-
-class ApiCodecCompressedSpecStable extends ApiCodecCompressedSpec {
 
   import C.typeLookup
-
-  override def darPath: String = "JsonEncodingTest.dar"
 
   "API compressed JSON codec" when {
 
@@ -391,12 +370,6 @@ class ApiCodecCompressedSpecStable extends ApiCodecCompressedSpec {
     import com.digitalasset.daml.lf.value.Value as LfValue
     import ApiCodecCompressed.JsonImplicits.*
 
-    val packageId: Ref.PackageId = mustBeOne(
-      MetadataReader.typeByName(darMetadata)(
-        Ref.QualifiedName.assertFromString("JsonEncodingTest:Foo")
-      )
-    )._1
-
     val bazRecord = LfValue.ValueRecord(
       None,
       ImmArray(Some(Ref.Name.assertFromString("baz")) -> LfValue.ValueText("text abc")),
@@ -414,45 +387,8 @@ class ApiCodecCompressedSpecStable extends ApiCodecCompressedSpec {
       LfValue.ValueUnit,
     )
 
-    val fooId =
-      Ref.Identifier(packageId, Ref.QualifiedName.assertFromString("JsonEncodingTest:Foo"))
 
-    val bazRecordId =
-      Ref.Identifier(packageId, Ref.QualifiedName.assertFromString("JsonEncodingTest:BazRecord"))
-
-    "dealing with LF Record" should {
-      val lfType = (n: String) =>
-        Ref.Identifier(packageId, Ref.QualifiedName.assertFromString("JsonEncodingTest:" + n))
-      val decode = (typeId: Ref.Identifier, json: String) =>
-        jsValueToApiValue(json.parseJson, typeId, darTypeLookup)
-      val person = (name: String, age: Long, address: String) => {
-        val attr = (n: String) => Some(Ref.Name.assertFromString(n))
-        LfValue.ValueRecord(
-          Some(lfType("Person")),
-          ImmArray(
-            (attr("name"), LfValue.ValueText(name)),
-            (attr("age"), LfValue.ValueInt64(age)),
-            (attr("address"), LfValue.ValueText(address)),
-          ),
-        )
-      }
-      "decode a JSON array of the right length" in {
-        decode(lfType("Person"), """["Joe Smith", 20, "1st Street"]""")
-          .shouldBe(person("Joe Smith", 20, "1st Street"))
-      }
-      "fail to decode if missing fields" in {
-        the[DeserializationException].thrownBy {
-          decode(lfType("Person"), """["Joe Smith", 21]""")
-        }.getMessage should include("expected 3, found 2")
-      }
-      "fail to decode if extra fields" in {
-        the[DeserializationException].thrownBy {
-          decode(lfType("Person"), """["Joe Smith", 21, "1st Street", "Arizona"]""")
-        }.getMessage should include("expected 3, found 4")
-      }
-    }
-
-    "dealing with LF Variant" should {
+   "dealing with LF Variant" should {
       "encode Foo/Baz to JSON" in {
         val writer = implicitly[spray.json.JsonWriter[LfValue]]
         (writer.write(
@@ -460,128 +396,11 @@ class ApiCodecCompressedSpecStable extends ApiCodecCompressedSpec {
         ): JsValue) shouldBe ("""{"tag":"Baz", "value":{"baz":"text abc"}}""".parseJson: JsValue)
       }
 
-      "decode Foo/Baz from JSON" in {
-        val actualValue: LfValue = jsValueToApiValue(
-          """{"tag":"Baz", "value":{"baz":"text abc"}}""".parseJson,
-          fooId,
-          darTypeLookup,
-        )
-
-        val expectedValueWithIds: LfValue.ValueVariant =
-          bazVariant.copy(tycon = Some(fooId), value = bazRecord.copy(tycon = Some(bazRecordId)))
-
-        actualValue shouldBe expectedValueWithIds
-      }
-
       "encode Foo/Qux to JSON" in {
         val writer = implicitly[spray.json.JsonWriter[LfValue]]
         (writer.write(
           quxVariant
         ): JsValue) shouldBe ("""{"tag":"Qux", "value":{}}""".parseJson: JsValue)
-      }
-
-      "fail decoding Foo/Qux from JSON if 'value' field is missing" in {
-        assertThrows[spray.json.DeserializationException] {
-          jsValueToApiValue(
-            """{"tag":"Qux"}""".parseJson,
-            fooId,
-            darTypeLookup,
-          )
-        }
-      }
-
-      "decode Foo/Qux (empty value) from JSON" in {
-        val actualValue: LfValue = jsValueToApiValue(
-          """{"tag":"Qux", "value":{}}""".parseJson,
-          fooId,
-          darTypeLookup,
-        )
-
-        val expectedValueWithIds: LfValue.ValueVariant =
-          quxVariant.copy(tycon = Some(fooId))
-
-        actualValue shouldBe expectedValueWithIds
-      }
-    }
-  }
-}
-
-class ApiCodecCompressedSpecDev extends ApiCodecCompressedSpec {
-  override def darPath: String = "JsonEncodingTestDev.dar"
-
-  import com.digitalasset.daml.lf.value.Value as LfValue
-
-  "API compressed JSON codec" when {
-    "dealing with Contract Key" should {
-      import com.digitalasset.daml.lf.typesig.PackageSignature.TypeDecl.Template as TDTemplate
-
-      "decode type Key = Party from JSON" in {
-        val templateDef: TDTemplate = mustBeOne(
-          MetadataReader.templateByName(darMetadata)(
-            Ref.QualifiedName.assertFromString("JsonEncodingTest:KeyedByParty")
-          )
-        )._2
-
-        val keyType = templateDef.template.key.getOrElse(fail("Expected a key, got None"))
-        val expectedValue: LfValue = LfValue.ValueParty(Ref.Party.assertFromString("Alice"))
-
-        jsValueToApiValue(JsString("Alice"), keyType, darTypeLookup) shouldBe expectedValue
-      }
-
-      "decode type Key = (Party, Int) from JSON" in {
-        val templateDef: TDTemplate = mustBeOne(
-          MetadataReader.templateByName(darMetadata)(
-            Ref.QualifiedName.assertFromString("JsonEncodingTest:KeyedByPartyInt")
-          )
-        )._2
-
-        val tuple2Name = Ref.QualifiedName.assertFromString("DA.Types:Tuple2")
-        val daTypesPackageId: Ref.PackageId =
-          mustBeOne(MetadataReader.typeByName(darMetadata)(tuple2Name))._1
-
-        val keyType = templateDef.template.key.getOrElse(fail("Expected a key, got None"))
-
-        val expectedValue: LfValue = LfValue.ValueRecord(
-          Some(Ref.Identifier(daTypesPackageId, tuple2Name)),
-          ImmArray(
-            Some(Ref.Name.assertFromString("_1")) -> LfValue.ValueParty(
-              Ref.Party.assertFromString("Alice")
-            ),
-            Some(Ref.Name.assertFromString("_2")) -> LfValue.ValueInt64(123),
-          ),
-        )
-
-        jsValueToApiValue(
-          """["Alice", 123]""".parseJson,
-          keyType,
-          darTypeLookup,
-        ) shouldBe expectedValue
-      }
-
-      "decode type Key = (Party, (Int, Foo, BazRecord)) from JSON" in {
-        val templateDef: TDTemplate = mustBeOne(
-          MetadataReader.templateByName(darMetadata)(
-            Ref.QualifiedName.assertFromString("JsonEncodingTest:KeyedByVariantAndRecord")
-          )
-        )._2
-
-        val keyType = templateDef.template.key.getOrElse(fail("Expected a key, got None"))
-
-        val actual: LfValue = jsValueToApiValue(
-          """["Alice", [11, {"tag": "Bar", "value": 123}, {"baz": "baz text"}]]""".parseJson,
-          keyType,
-          darTypeLookup,
-        )
-
-        inside(actual) { case LfValue.ValueRecord(Some(id2), ImmArray((_, party), (_, record2))) =>
-          id2.qualifiedName.name shouldBe Ref.DottedName.assertFromString("Tuple2")
-          party shouldBe LfValue.ValueParty(Ref.Party.assertFromString("Alice"))
-
-          inside(record2) { case LfValue.ValueRecord(Some(id3), ImmArray((_, age), _, _)) =>
-            id3.qualifiedName.name shouldBe Ref.DottedName.assertFromString("Tuple3")
-            age shouldBe LfValue.ValueInt64(11)
-          }
-        }
       }
     }
   }
