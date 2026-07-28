@@ -21,7 +21,12 @@
           vote request is open, matching what the ledger allows. This makes it possible to reject a
           proposal whose action fails to execute and which would otherwise remain in flight
           indefinitely.
-          
+
         - Network banner now always shows. The network name is derived from the scan node's public URL:
           MainNet/TestNet/DevNet/ScratchNet from the cluster subdomain, LocalNet for localhost, and a
           capitalized fallback otherwise (Unknown Network when no scan URL is available).
+
+    - SV UI
+
+        - Reward configuration scheme fields in the governance config form now
+          render as drop-downs with descriptive labels (CIP-104)
