@@ -37,6 +37,7 @@ import io.opentelemetry.api.trace.Tracer
 
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.{blocking, ExecutionContext, Future}
+import scala.util.control.NonFatal
 
 /** Manages all services comprising an end-user wallets. */
 class UserWalletManager(
@@ -185,8 +186,8 @@ class UserWalletManager(
           show"Detected race between adding wallet for party ${endUserParty} and shutdown: closing wallet."
         )(TraceContext.empty)
         userRetryProviderAndWalletService.foreach { case (userRetryProvider, walletService) =>
-          userRetryProvider.close()
-          walletService.close()
+          try userRetryProvider.close()
+          finally walletService.close()
         }
         UnlessShutdown.AbortedDueToShutdown
       } else {
@@ -213,29 +214,36 @@ class UserWalletManager(
         retryProvider.futureSupervisor,
         retryProvider.metricsFactory,
       )
-    val walletService = new UserWalletService(
-      ledgerClient,
-      key,
-      this,
-      automationConfig,
-      clock,
-      domainTimeSync,
-      treasuryConfig,
-      storage,
-      userRetryProvider,
-      userLoggerFactory,
-      scanConnection,
-      packageVersionSupport,
-      migrationId,
-      participantId,
-      Option.when(endUserParty == store.walletKey.validatorParty)(validatorTopupConfig),
-      // TODO(DACH-NY/canton-network-node#12554): make it easier to configure the sweep functionality and guard better against operator errors (typos, etc.)
-      walletSweep.get(endUserParty.toProtoPrimitive),
-      autoAcceptTransfers.get(endUserParty.toProtoPrimitive),
-      rewardSharingConfigByParty.getOrElse(endUserParty.toProtoPrimitive, RewardSharingConfig()),
-      dedupDuration,
-      params,
-    )
+    val walletService =
+      try {
+        new UserWalletService(
+          ledgerClient,
+          key,
+          this,
+          automationConfig,
+          clock,
+          domainTimeSync,
+          treasuryConfig,
+          storage,
+          userRetryProvider,
+          userLoggerFactory,
+          scanConnection,
+          packageVersionSupport,
+          migrationId,
+          participantId,
+          Option.when(endUserParty == store.walletKey.validatorParty)(validatorTopupConfig),
+          // TODO(DACH-NY/canton-network-node#12554): make it easier to configure the sweep functionality and guard better against operator errors (typos, etc.)
+          walletSweep.get(endUserParty.toProtoPrimitive),
+          autoAcceptTransfers.get(endUserParty.toProtoPrimitive),
+          rewardSharingConfigByParty.getOrElse(endUserParty.toProtoPrimitive, RewardSharingConfig()),
+          dedupDuration,
+          params,
+        )
+      } catch {
+        case NonFatal(e) =>
+          userRetryProvider.close()
+          throw e
+      }
     (userRetryProvider, walletService)
   }
 
@@ -246,8 +254,8 @@ class UserWalletManager(
           .withDescription(show"No wallet service found for user party ${userParty}")
           .asRuntimeException()
       case Some((userRetryProvider, walletService)) =>
-        userRetryProvider.close()
-        walletService.close()
+        try userRetryProvider.close()
+        finally walletService.close()
     }
   }
 
