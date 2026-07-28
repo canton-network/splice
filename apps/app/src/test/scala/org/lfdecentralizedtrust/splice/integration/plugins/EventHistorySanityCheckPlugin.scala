@@ -16,6 +16,7 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.UpdateHistoryReassign
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
 import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.should.Matchers
+import org.scalatest.time.{Millis, Seconds, Span}
 import org.scalatest.{Inspectors, LoneElement}
 
 import scala.annotation.tailrec
@@ -34,7 +35,13 @@ class EventHistorySanityCheckPlugin(
   ): Unit = {
     val initializedScans = environment.scans.local.filter(_.is_initialized)
     if (initializedScans.nonEmpty) {
-      compareEventHistories(initializedScans)
+      // Scans may still be ingesting the final updates (e.g. an SV onboarding) when the
+      // environment is torn down, so retry instead of failing on a partial history.
+      eventually(compareEventHistories(initializedScans))(
+        PatienceConfig(timeout = Span(20, Seconds), interval = Span(500, Millis)),
+        implicitly[org.scalatest.enablers.Retrying[Unit]],
+        implicitly[org.scalactic.source.Position],
+      )
     }
   }
 
