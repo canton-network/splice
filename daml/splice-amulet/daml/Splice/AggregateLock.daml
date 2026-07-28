@@ -253,18 +253,13 @@ vestingLockWithdraw a aCid arg = do
            $ availableWithdrawAmount > 0.0
 
     let
-      info = SettlementInfo with
-        executors = [ vestingLock.allocation.admin ]
-        id = "VestingLock_Withdraw"
-        cid = Some $ coerceContractId vestingLockCid
-        meta = emptyMetadata
       transferLegId = "withdraw"
       nextIterationFunding
         | remainingVestingAmount <= 0.0 = None
         | otherwise = Some $ TM.singleton instrumentId remainingVestingAmount
 
     settleResult <- settlementFactoryV2_settleBatchDefaultImplNoSelf (\_ _ -> pure arg.extraArgs) vestingLock.allocation.admin $ SettlementFactory_SettleBatch with
-      settlement = info
+      settlement = vestingLock.settlement
       actors = [ vestingLock.allocation.admin ]
       extraArgs = ExtraArgs emptyChoiceContext emptyMetadata
       transferLegs =
@@ -284,7 +279,7 @@ vestingLockWithdraw a aCid arg = do
                   transferLegId
                   side = SenderSide
                   otherside = vestingLock.allocation.authorizer
-                  amount = remainingVestingAmount
+                  amount = availableWithdrawAmount
                   instrumentId
                   meta = emptyMetadata
               , TransferLegSide with

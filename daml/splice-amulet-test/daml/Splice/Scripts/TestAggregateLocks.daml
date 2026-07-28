@@ -21,7 +21,6 @@ import Splice.Testing.Registries.AmuletRegistryV2 qualified as AmuletRegistryV2
 import Splice.Testing.TokenStandard.MultiRegistry qualified as MultiRegistry
 import Splice.Testing.TokenStandard.RegistryApiV2
 import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
-import Splice.Util.Token.Wallet.BatchingUtilityV2 qualified as BatchingUtilityV2
 import Splice.Testing.Utils
 import Splice.TokenStandard.Utils qualified as TSU
 import Splice.TokenStandard.Utils.Internal.Conversions (encodeTime)
@@ -168,7 +167,7 @@ testVestingLockWithdraw = do
 
   -- After some time passes a proportional amount can be withdrawn.
   passTime (days 10)
-  vestingResult1 <- extractAllocationResult <$>
+  vestingResult1 <- WalletClientV2.extractAllocationResult <$>
     WalletClientV2.withdrawAllocationV2 newRegistries bob (vestingLockCid, vestingLockView)
 
   let holdingCids1 = fromSome $ TM.lookup instrId.id vestingResult1.authorizerHoldingCids
@@ -182,7 +181,7 @@ testVestingLockWithdraw = do
       -- After the full period has elapsed the remainder becomes withdrawable.
       passTime (days 365)
       Some nextView <- queryInterfaceContractId bob nextCid
-      vestingResult2 <- extractAllocationResult <$>
+      vestingResult2 <- WalletClientV2.extractAllocationResult <$>
         WalletClientV2.withdrawAllocationV2 newRegistries bob (nextCid, nextView)
 
       let holdingCids2 = fromSome $ TM.lookup instrId.id vestingResult2.authorizerHoldingCids
@@ -210,12 +209,6 @@ submitMustFailWithdraw admin (allocCid, _allocView) registries = do
         context = context.choiceContext
         meta = emptyMetadata
 
--- | Extract the underlying @AllocationResult@ from a wallet-client batch result.
-extractAllocationResult : BatchingUtilityV2.TokenStandardActionResult -> V2.AllocationResult
-extractAllocationResult (BatchingUtilityV2.TSAR_AllocationResultV2 r) = r
-extractAllocationResult other =
-  error $ "expected TSAR_AllocationResultV2, got: " <> show other
-
 -- | Sum the amounts of the given (unlocked) holding contracts owned by @p@.
 unlockedAmountOf : Party -> [ContractId V2.Holding] -> Script Decimal
 unlockedAmountOf p wantedCids = do
@@ -227,9 +220,3 @@ unlockedAmountOf p wantedCids = do
         , isNone h.lock
         ]
   pure $ sum (fmap (.amount) matching)
-
-testAggregateLockHappyPath : Script ()
-testAggregateLockHappyPath = do
-  testAggregateLockTotals
-  testAggregateLockUnlockCreatesVestingLock
-  testVestingLockWithdraw

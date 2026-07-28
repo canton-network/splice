@@ -73,6 +73,7 @@ module Splice.Testing.TokenStandard.WalletClientV2
 
     -- ** Allocations
     extractNextIterationAllocationCid,
+    extractAllocationResult,
 
     mkAllocationFactory_AllocateV2,
     mkAllocationInstruction_AcceptV2,
@@ -468,6 +469,12 @@ withdrawAllocationV2
 withdrawAllocationV2 registries actor alloc = do
   batch <- mkAllocation_WithdrawV2 registries actor alloc
   executeSingletonTSABatch registries actor batch
+
+-- | Extract the underlying @AllocationResult@ from a wallet-client batch result.
+extractAllocationResult : BatchingUtilityV2.TokenStandardActionResult -> V2.AllocationResult
+extractAllocationResult (BatchingUtilityV2.TSAR_AllocationResultV2 r) = r
+extractAllocationResult other =
+  error $ "expected TSAR_AllocationResultV2, got: " <> show other
 
 -- | Simulate a V2 wallet withdrawing an allocation from a V1 app.
 withdrawAllocationV1
