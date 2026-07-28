@@ -309,6 +309,7 @@ class DbAppActivityRecordStore(
       items: Seq[AppActivityRecordT],
       firstRecordTimeMicros: Long,
       hasTrafficSummaries: Boolean,
+      firstActiveRoundO: Option[Long] = None,
       lastArchivedRoundO: Option[Long] = None,
   )(implicit tc: TraceContext): DBIO[Unit] = {
     val insertRecords =
@@ -318,15 +319,9 @@ class DbAppActivityRecordStore(
           logger.info(s"Inserted ${items.size} app activity records.")
         }
 
-    // earliestRound: the lowest round covered by this ingestion batch.
-    //   - From activity records when present
-    //   - From lastArchivedRound when no featured apps produced records
-    //   - From bootstrap (-1) on a fresh firstSV with no archived rounds
-    val earliestRound = items
-      .map(_.roundNumber)
-      .minOption
-      .orElse(lastArchivedRoundO)
-      .orElse(if (isFirstSv) Some(-1L) else None)
+    // earliestRound: the oldest round open at the earliest record_time of this batch.
+    // or (-1) on firstSV, as it is expected to have complete data for the first round.
+    val earliestRound = if (isFirstSv) Some(-1L) else firstActiveRoundO
 
     // lastArchived: the highest round archived as of this verdict batch.
     //   - From the caller when available

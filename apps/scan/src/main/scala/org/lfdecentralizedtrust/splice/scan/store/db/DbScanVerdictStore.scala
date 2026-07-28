@@ -480,6 +480,8 @@ class DbScanVerdictStore(
     * @param items verdicts with transaction view constructors
     * @param appActivityRecords activity records with placeholder verdictRowIds
     * @param hasTrafficSummaries whether traffic summaries were fetched for this batch
+    * @param firstActiveRoundO the OpenMiningRound round active at the earliest
+    *                          record time of the batch
     * @param lastArchivedRoundO the highest archived OpenMiningRound round as of the
     *                           max record time of the batch
     */
@@ -487,6 +489,7 @@ class DbScanVerdictStore(
       items: NonEmptyList[(VerdictT, Long => Seq[TransactionViewT])],
       appActivityRecords: Seq[(CantonTimestamp, AppActivityRecordT)],
       hasTrafficSummaries: Boolean,
+      firstActiveRoundO: Option[Long] = None,
       lastArchivedRoundO: Option[Long] = None,
   )(implicit tc: TraceContext): Future[Unit] = {
     import profile.api.jdbcActionExtensionMethods
@@ -501,6 +504,7 @@ class DbScanVerdictStore(
         resolvedAppActivityRecords,
         items.head._1.recordTime.toMicros,
         hasTrafficSummaries,
+        firstActiveRoundO,
         lastArchivedRoundO,
       )
     } yield ()
@@ -549,6 +553,7 @@ class DbScanVerdictStore(
       items: Seq[AppActivityRecordT],
       firstRecordTimeMicros: Long,
       hasTrafficSummaries: Boolean,
+      firstActiveRoundO: Option[Long],
       lastArchivedRoundO: Option[Long],
   )(implicit tc: TraceContext): DBIO[Unit] =
     appActivityRecordStoreO match {
@@ -558,6 +563,7 @@ class DbScanVerdictStore(
           items,
           firstRecordTimeMicros,
           hasTrafficSummaries,
+          firstActiveRoundO,
           lastArchivedRoundO,
         )
     }

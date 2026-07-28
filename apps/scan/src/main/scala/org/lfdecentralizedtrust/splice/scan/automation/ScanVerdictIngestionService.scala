@@ -243,30 +243,37 @@ class ScanVerdictIngestionService(
           // Compute app activity records (before DB transaction).
           // Records have verdictRowId = DUMMY_VERDICT_ROW_ID
           // the store resolves actual row_ids during insertion.
-          (appActivityRecords, lastArchivedRoundO) <- appActivityComputationO match {
-            case Some(appActivityComputation) =>
-              for {
-                records <- appActivityComputation.computeActivities(summariesWithVerdicts).map {
-                  _.flatMap { case (summary, _, recordO) =>
-                    recordO.map(summary.sequencingTime -> _)
+          (appActivityRecords, firstActiveRoundO, lastArchivedRoundO) <-
+            appActivityComputationO match {
+              case Some(appActivityComputation) =>
+                val recordTimes =
+                  verdicts.map(v => CantonTimestamp.tryFromProtoTimestamp(v.getRecordTime))
+                for {
+                  records <- appActivityComputation.computeActivities(summariesWithVerdicts).map {
+                    _.flatMap { case (summary, _, recordO) =>
+                      recordO.map(summary.sequencingTime -> _)
+                    }
                   }
-                }
-                lastArchivedRoundO <- verdicts
-                  .map(v => CantonTimestamp.tryFromProtoTimestamp(v.getRecordTime))
-                  .maxOption match {
-                  case Some(maxRecordTime) =>
-                    appActivityComputation.lookupLatestArchivedOpenMiningRound(maxRecordTime)
-                  case None => Future.successful(None)
-                }
-              } yield (records, lastArchivedRoundO)
-            case None => Future.successful((Seq.empty, None))
-          }
+                  firstActiveRoundO <- recordTimes.minOption match {
+                    case Some(minRecordTime) =>
+                      appActivityComputation.lookupActiveOpenMiningRound(minRecordTime)
+                    case None => Future.successful(None)
+                  }
+                  lastArchivedRoundO <- recordTimes.maxOption match {
+                    case Some(maxRecordTime) =>
+                      appActivityComputation.lookupLatestArchivedOpenMiningRound(maxRecordTime)
+                    case None => Future.successful(None)
+                  }
+                } yield (records, firstActiveRoundO, lastArchivedRoundO)
+              case None => Future.successful((Seq.empty, None, None))
+            }
 
           _ <- ensureVerdictsHaveTrafficSummaries(verdicts, summaryByTime)
           _ <- store.insertVerdictsWithAppActivityRecords(
             items,
             appActivityRecords,
             hasTrafficSummaries = summaryByTime.nonEmpty,
+            firstActiveRoundO = firstActiveRoundO,
             lastArchivedRoundO = lastArchivedRoundO,
           )
         } yield {

@@ -170,6 +170,7 @@ class DbAppActivityRecordStoreTest
           NonEmptyList.of(verdict1 -> noViews, verdict2 -> noViews),
           appActivityRecords,
           hasTrafficSummaries = true,
+          firstActiveRoundO = Some(10L),
           lastArchivedRoundO = Some(9L),
         )
 
@@ -211,6 +212,7 @@ class DbAppActivityRecordStoreTest
           NonEmptyList.of(mkVerdict(verdictStore, "update-mono-1", baseTs) -> noViews),
           Seq(baseTs -> mkRecord(0L, 10L, Seq("app1::provider"), Seq(100L))),
           hasTrafficSummaries = true,
+          firstActiveRoundO = Some(10L),
           lastArchivedRoundO = Some(9L),
         )
         // A later batch without activity records still advances the round
@@ -220,10 +222,12 @@ class DbAppActivityRecordStoreTest
           ),
           Seq.empty,
           hasTrafficSummaries = true,
+          firstActiveRoundO = Some(11L),
           lastArchivedRoundO = Some(10L),
         )
         meta <- appStore.lookupActivityRecordMeta(1, 0)
       } yield {
+        meta.value.earliestIngestedRound shouldBe 10L
         meta.value.lastArchivedRound shouldBe Some(10L)
       }
     }
@@ -237,15 +241,16 @@ class DbAppActivityRecordStoreTest
           NonEmptyList.of(mkVerdict(verdictStore, "update-no-meta", baseTs) -> noViews),
           Seq.empty,
           hasTrafficSummaries = true,
-          lastArchivedRoundO = Some(7L),
+          firstActiveRoundO = Some(7L),
+          lastArchivedRoundO = None,
         )
         meta <- appStore.lookupActivityRecordMeta(1, 0)
       } yield {
-        // Meta row is created with earliestRound = lastArchivedRound
-        // because verdict ingestion is active even without activity records
+        // Meta row is created using the firstActiveRoundO
+        // even though there are no activity records
         meta shouldBe defined
         meta.value.earliestIngestedRound shouldBe 7L
-        meta.value.lastArchivedRound shouldBe Some(7L)
+        meta.value.lastArchivedRound shouldBe None
       }
     }
 
@@ -270,29 +275,29 @@ class DbAppActivityRecordStoreTest
       }
     }
 
-    "insert verdicts without activity records when appActivityRecords is empty" in {
+    "insert verdicts without activity records, when reward reference store does not have data asOf" in {
       for {
         (appStore, verdictStore) <- newStores()
         baseTs = CantonTimestamp.now()
 
         verdict = mkVerdict(verdictStore, "update-no-activity", baseTs)
 
+        // firstActiveRoundO is None, as reward reference store began ingestion after baseTx
         _ <- verdictStore.insertVerdictsWithAppActivityRecords(
           NonEmptyList.of(verdict -> noViews),
           Seq.empty,
           hasTrafficSummaries = true,
+          firstActiveRoundO = None,
+          lastArchivedRoundO = None,
         )
 
         v <- verdictStore.getVerdictByUpdateId("update-no-activity")
         countAfter <- countRecords()
-        // No meta row should be created when there are no activity records
         meta <- appStore.lookupActivityRecordMeta(1, 0)
       } yield {
         v shouldBe defined
         countAfter shouldBe 0L
-        // Non-firstSV with no lastArchivedRound: meta row is not created
-        // because it would have last_archived_round = NULL, making no
-        // rounds complete.
+        // Non-firstSV with no firstActiveRoundO: meta row is not created
         meta shouldBe None
       }
     }
