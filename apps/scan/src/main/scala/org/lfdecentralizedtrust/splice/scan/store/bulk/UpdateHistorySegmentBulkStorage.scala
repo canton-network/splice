@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.scan.store.bulk
 
+import cats.data.NonEmptyList
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.tracing.TraceContext
 import org.apache.pekko.NotUsed
@@ -10,7 +11,6 @@ import org.apache.pekko.stream.scaladsl.{Flow, Source}
 import org.lfdecentralizedtrust.splice.scan.config.{BulkStorageConfig, ScanStorageConfig}
 import org.apache.pekko.util.ByteString
 import org.apache.pekko.pattern.after
-import org.lfdecentralizedtrust.splice.http.v0.definitions
 import org.lfdecentralizedtrust.splice.scan.admin.http.{ScanHttpEncodings, ScanJsonSupport}
 import org.lfdecentralizedtrust.splice.store.{
   HistoryMetrics,
@@ -56,14 +56,11 @@ class UpdateHistorySegmentBulkStorage(
 )(implicit tc: TraceContext, ec: ExecutionContext)
     extends NamedLogging {
 
-  case class UpdatesChunk(
-      updateBytes: ByteString,
-      numUpdates: Int,
-  )
-
   private def getUpdatesChunk(
       afterTs: TimestampWithMigrationId
-  )(implicit actorSystem: ActorSystem): Future[Option[(TimestampWithMigrationId, UpdatesChunk)]] = {
+  )(implicit
+      actorSystem: ActorSystem
+  ): Future[Option[(TimestampWithMigrationId, Seq[TreeUpdateWithMigrationId])]] = {
     for {
       updates <- updateHistory.getUpdatesWithoutImportUpdates(
         Some((afterTs.migrationId, afterTs.timestamp)),
@@ -85,7 +82,6 @@ class UpdateHistorySegmentBulkStorage(
               s"Adding ${updatesInSegment.length} updates, between record time ${updatesInSegment.headOption
                   .map(_.update.update.recordTime)} and ${updatesInSegment.lastOption.map(_.update.update.recordTime)}"
             )
-            val updatesBytes: ByteString = encodeUpdates(updatesInSegment)
             val last = updatesInSegment.lastOption.getOrElse(
               throw new RuntimeException("Unexpected failure")
             )
@@ -93,7 +89,7 @@ class UpdateHistorySegmentBulkStorage(
               Some(
                 (
                   TimestampWithMigrationId(last.update.update.recordTime, last.migrationId),
-                  UpdatesChunk(updatesBytes, updatesInSegment.length),
+                  updatesInSegment,
                 )
               )
             )
@@ -113,7 +109,7 @@ class UpdateHistorySegmentBulkStorage(
             appConfig.updatesPollingInterval.underlying,
             actorSystem.scheduler,
           ) {
-            Future.successful(Some((afterTs, UpdatesChunk(ByteString.empty, 0))))
+            Future.successful(Some((afterTs, Nil)))
           }
         }
     } yield {
@@ -121,11 +117,14 @@ class UpdateHistorySegmentBulkStorage(
     }
   }
 
-  private def encodeUpdates(updates: Seq[TreeUpdateWithMigrationId]) = {
-    val encoded = updates.map(update =>
+  private def encodeUpdates(
+      updates: NonEmptyList[TreeUpdateWithMigrationId],
+      encoding: ScanStorageConfig.Encoding,
+  ): ByteString = {
+    val encoded = updates.toList.map(update =>
       ScanHttpEncodings.encodeUpdateV2(
         update,
-        definitions.DamlValueEncoding.CompactJson,
+        encoding.damlValueEncoding,
         ScanHttpEncodings.V1,
       )
     )
@@ -139,8 +138,7 @@ class UpdateHistorySegmentBulkStorage(
       .mkString("\n") + "\n"
     val updatesBytes = ByteString(updatesStr.getBytes(StandardCharsets.UTF_8))
     logger.debug(
-      s"Read and encoded ${encoded.length} updates from DB, to a bytestring of size ${updatesBytes.length} bytes. Timestamps are ${updates.headOption
-          .map(_.update.update.recordTime)} to ${updates.lastOption.map(_.update.update.recordTime)}"
+      s"Read and encoded ${encoded.length} updates from DB, to a bytestring of size ${updatesBytes.length} bytes, with encoding ${encoding.key}. Timestamps are ${updates.head.update.update.recordTime} to ${updates.last.update.update.recordTime}"
     )
     updatesBytes
   }
@@ -150,30 +148,35 @@ class UpdateHistorySegmentBulkStorage(
   ): Source[Seq[String], NotUsed] = {
     Source
       .unfoldAsync(segment.fromTimestamp)(ts => getUpdatesChunk(ts))
-      .map(chunk => {
-        historyMetrics.BulkStorage.incUpdatesCount(chunk.numUpdates)
-        chunk.updateBytes
+      .map(updates => {
+        historyMetrics.BulkStorage.incUpdatesCount(updates.length)
+        updates
       })
       .via(
-        // We use lazyFlow, so that in the case where no updates are emitted, we don't instantiate the S3ZstdObjects at all,
-        // since it assumes that it gets at least one chunk to write.
-        Flow.lazyFlow(() =>
-          S3ZstdObjects(
-            storageConfig,
-            appConfig,
-            s3Connection,
-            { objIdx =>
-              s"${storageConfig.getSegmentFolder(segment.fromTimestamp.timestamp, Some(segment.toTimestamp.timestamp))}/updates_$objIdx.zstd"
-            },
-            loggerFactory,
-          )
+        MultiEncodingBulkStorageFlow(
+          (updates, encoding) =>
+            NonEmptyList.fromFoldable(updates).fold(ByteString.empty)(encodeUpdates(_, encoding)),
+          encoding =>
+            // We use lazyFlow, so that in the case where no updates are emitted, we don't instantiate the S3ZstdObjects at all,
+            // since it assumes that it gets at least one chunk to write.
+            Flow.lazyFlow(() =>
+              S3ZstdObjects(
+                storageConfig,
+                appConfig,
+                s3Connection,
+                objIdx =>
+                  s"${storageConfig.getSegmentFolder(segment.fromTimestamp.timestamp, Some(segment.toTimestamp.timestamp))}/${encoding
+                      .storageKey("updates", objIdx)}",
+                loggerFactory,
+              )
+            ),
+          encoding => historyMetrics.BulkStorage.incUpdateObjects(encoding.key),
         )
       )
       .orElse(Source.lazySource { () =>
         logger.warn(s"No updates found in segment ${segment.fromTimestamp}-${segment.toTimestamp}")
         Source.empty
       })
-      .wireTap(_ => historyMetrics.BulkStorage.incUpdateObjects())
       .fold(Seq.empty[String])(_ :+ _)
   }
 }
