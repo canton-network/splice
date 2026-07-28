@@ -51,14 +51,12 @@ class DsoDelegateBasedAutomationService(
   )
 
   def start(): Unit = {
-    if (config.permissionedSynchronizer) {
-      registerTrigger(
-        new SvOnboardingObserverTrigger(
-          triggerContext,
-          svTaskContext,
-        )
+    registerTrigger(
+      new SvOnboardingObserverTrigger(
+        triggerContext,
+        svTaskContext,
       )
-    }
+    )
     registerTrigger(new AdvanceOpenMiningRoundTrigger(triggerContext, svTaskContext))
     registerTrigger(new UpdateExternalPartyConfigStateTrigger(triggerContext, svTaskContext))
     registerTrigger(new CompletedSvOnboardingTrigger(triggerContext, svTaskContext))
