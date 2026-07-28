@@ -337,8 +337,9 @@ class DbAppActivityRecordStore(
         case Some(earliest) if hasTrafficSummaries =>
           ensureMetaDBIO((firstRecordTimeMicros, earliest), lastArchived)
         case _ =>
-          // Either no archived rounds and not firstSV, or this batch
-          // doesn't have traffic summaries yet — skip meta creation.
+          // Either we have no rounds info and this is not firstSV,
+          // or we have not started obtaining the traffic summaries yet
+          // — skip meta creation.
           // A later verdict batch will create it.
           DBIO.successful(Resume: MetaCheckResult)
       }
