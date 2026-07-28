@@ -275,6 +275,38 @@ class DbAppActivityRecordStoreTest
       }
     }
 
+    "on a fresh firstSV, does not create meta row when traffic summaries are absent" in {
+      for {
+        (appStore, verdictStore) <- newStores(isFirstSv = true)
+        baseTs = CantonTimestamp.now()
+
+        _ <- verdictStore.insertVerdictsWithAppActivityRecords(
+          NonEmptyList.of(mkVerdict(verdictStore, "update-firstsv-2", baseTs) -> noViews),
+          Seq.empty,
+          hasTrafficSummaries = false,
+        )
+        // Even on firstSV, missing traffic summaries defer meta creation
+        // to a later batch.
+        metaBefore <- appStore.lookupActivityRecordMeta(1, 0)
+
+        // A later batch with traffic summaries creates the meta row.
+        _ <- verdictStore.insertVerdictsWithAppActivityRecords(
+          NonEmptyList.of(
+            mkVerdict(verdictStore, "update-firstsv-3", baseTs.plusSeconds(1L)) -> noViews
+          ),
+          Seq.empty,
+          hasTrafficSummaries = true,
+        )
+        metaAfter <- appStore.lookupActivityRecordMeta(1, 0)
+      } yield {
+        metaBefore shouldBe None
+
+        metaAfter shouldBe defined
+        metaAfter.value.earliestIngestedRound shouldBe -1L
+        metaAfter.value.lastArchivedRound shouldBe Some(0L)
+      }
+    }
+
     "insert verdicts without activity records, when reward reference store does not have data asOf" in {
       for {
         (appStore, verdictStore) <- newStores()
@@ -1084,7 +1116,9 @@ class DbAppActivityRecordStoreTest
   /** Creates both an app activity record store and a verdict store backed by
     * the same UpdateHistory, for testing insertVerdictsWithAppActivityRecords.
     */
-  private def newStores(): Future[(DbAppActivityRecordStore, DbScanVerdictStore)] = {
+  private def newStores(
+      isFirstSv: Boolean = false
+  ): Future[(DbAppActivityRecordStore, DbScanVerdictStore)] = {
     val participantId = mkParticipantId("activity-test")
     val updateHistory = new UpdateHistory(
       storage.underlying,
@@ -1103,7 +1137,7 @@ class DbAppActivityRecordStoreTest
         storage.underlying,
         updateHistory,
         DbAppActivityRecordStore.IngestionVersions(1, 0),
-        isFirstSv = false,
+        isFirstSv,
         loggerFactory,
       )
       val verdictStore = new DbScanVerdictStore(
