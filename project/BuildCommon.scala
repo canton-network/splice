@@ -513,7 +513,6 @@ object BuildCommon {
       .dependsOn(
         `canton-slick-fork`,
         `canton-community-admin-api`,
-        `canton-scalatest-addon` % "compile->test",
         // Canton depends on the Daml code via a git submodule and the two
         // projects below. We instead depend on the artifacts released
         // from the Daml repo listed in libraryDependencies below.
@@ -963,18 +962,6 @@ object BuildCommon {
         //      // Exclude to apply our license header to any Scala files
         //      headerSources / excludeFilter := "*.scala",
         //      coverageEnabled := false,
-      )
-  }
-
-  lazy val `canton-scalatest-addon` = {
-    import CantonDependencies._
-    sbt.Project
-      .apply("canton-scalatest-addon", file("canton/community/lib/scalatest"))
-      .settings(
-        sharedSettings,
-        libraryDependencies += scalatest,
-        // Exclude to apply our license header to any Scala files
-        headerSources / excludeFilter := "*.scala",
       )
   }
 

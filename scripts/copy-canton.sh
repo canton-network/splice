@@ -23,6 +23,7 @@ rsync -av --delete --exclude version.sbt --exclude community-build.sbt --exclude
     --exclude '*/community/lib/Blake2b' \
     --exclude '*/community/lib/google-common-protos-scala' \
     --exclude '*/community/lib/magnolify' \
+    --exclude '*/community/lib/scalatest' \
     --exclude '*/community/lib/wartremover-annotations' \
     --exclude 'community/bindings-java' --exclude "*/community/transcode" \
     --exclude '*/community/kms-driver-api' \

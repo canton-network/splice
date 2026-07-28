@@ -189,6 +189,8 @@ object CantonDependencies {
   lazy val scala_logging = "com.typesafe.scala-logging" %% "scala-logging" % "3.9.5"
   lazy val scalacheck = "org.scalacheck" %% "scalacheck" % scalacheck_version
   lazy val scalatest = "org.scalatest" %% "scalatest" % scalatest_version
+  lazy val scalatest_shouldmatchers =
+    "org.scalatest" %% "scalatest-shouldmatchers" % scalatest_version
   lazy val scalaz_core = "org.scalaz" %% "scalaz-core" % scalaz_version
   lazy val scalatestScalacheck =
     "org.scalatestplus" %% "scalacheck-1-18" % (scalatest_version + ".0")
