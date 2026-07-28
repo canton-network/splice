@@ -14,3 +14,8 @@
           This aligns with standard idempotency-key semantics: a second request with a previously
           accepted command id receives a 200 response with the same result as the first.
           Concurrent duplicates, where no submission has completed yet, are still rejected.
+
+    - SV UI
+
+        - Reward configuration scheme fields in the governance config form now
+          render as drop-downs with descriptive labels (CIP-104)
