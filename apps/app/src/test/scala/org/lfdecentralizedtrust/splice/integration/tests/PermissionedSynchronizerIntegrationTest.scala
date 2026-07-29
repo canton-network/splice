@@ -52,14 +52,17 @@ class PermissionedSynchronizerIntegrationTest
         aliceValidatorBackend,
       )
 
+      val sv1WalletUserParty = onboardWalletUser(sv1WalletClient, sv1ValidatorBackend)
       sv1WalletClient.tap(10000)
 
       targetValidators.foreach { targetApp =>
         clue(s"SV1 buys MemberTraffic for ${targetApp.participantClient.name}") {
-          buyMemberTrafficFor(
-            payerApp = sv1ValidatorBackend,
-            targetMember = targetApp.participantClient.id,
+          createBuyTrafficRequest(
+            validatorApp = sv1ValidatorBackend,
+            buyer = sv1WalletUserParty,
+            memberId = targetApp.participantClient.id.toProtoPrimitive,
             trafficAmount = trafficAmount,
+            trackingId = s"traffic-for-${targetApp.participantClient.name}",
           )
         }
       }
