@@ -27,7 +27,7 @@ import {
 import { FormLayout } from './FormLayout';
 import { ProposalSummary } from '../governance/ProposalSummary';
 import { useStore } from '@tanstack/react-form';
-import { THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
+import { DEFAULT_APP_ACTIVITY_WEIGHT, THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
 import { EffectiveDateField } from '../form-components/EffectiveDateField';
 import { ProposalSubmissionError } from '../form-components/ProposalSubmissionError';
 
@@ -101,7 +101,7 @@ export const UpdateFeaturedAppForm: React.FC = () => {
 
   const partyId = useStore(form.store, state => state.values.partyId);
   const rightCid = useStore(form.store, state => state.values.rightCid);
-  const currentWeight = picker.currentWeights[rightCid] ?? 'None';
+  const currentWeight = picker.currentWeights[rightCid] ?? DEFAULT_APP_ACTIVITY_WEIGHT;
 
   const providerHasNoRights =
     picker.providerSearched && picker.rightOptions.length === 0 && !validatePartyId(partyId);

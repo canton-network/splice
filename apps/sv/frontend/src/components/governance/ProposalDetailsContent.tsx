@@ -34,6 +34,7 @@ import { CreateUnallocatedUnclaimedActivityRecordSection } from './proposal-deta
 import { CopyableIdentifier, CopyableUrl, MemberIdentifier, VoteStats } from '../beta';
 import { useQuery } from '@tanstack/react-query';
 import { useSvAdminClient } from '../../contexts/SvAdminServiceContext';
+import { DEFAULT_APP_ACTIVITY_WEIGHT } from '../../utils/constants';
 
 dayjs.extend(relativeTime);
 
@@ -689,7 +690,7 @@ const UpdateFeatureAppSection = ({
         | undefined;
       return {
         provider: payload?.provider ?? null,
-        currentWeight: payload?.activityWeight ?? '',
+        currentWeight: contract ? (payload?.activityWeight ?? DEFAULT_APP_ACTIVITY_WEIGHT) : '',
       };
     },
   });

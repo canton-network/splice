@@ -8,6 +8,7 @@ import {
   validateRevokeFeaturedAppRight,
 } from '../components/forms/formValidators';
 import { useSvAdminClient } from '../contexts/SvAdminServiceContext';
+import { DEFAULT_APP_ACTIVITY_WEIGHT } from '../utils/constants';
 
 interface FeatureAppRightPicker {
   rightOptions: Option[];
@@ -37,7 +38,7 @@ export const useFeaturedAppRightPicker = (
       const weights = Object.fromEntries(
         response.featured_app_rights.map(c => {
           const aw = (c.payload as { activityWeight?: string | null }).activityWeight;
-          return [c.contract_id, aw ?? 'None'];
+          return [c.contract_id, aw ?? DEFAULT_APP_ACTIVITY_WEIGHT];
         })
       );
       setRightOptions(options);
