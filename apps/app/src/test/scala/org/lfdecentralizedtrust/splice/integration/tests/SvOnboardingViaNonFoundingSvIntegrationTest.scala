@@ -26,6 +26,8 @@ class SvOnboardingViaNonFoundingSvIntegrationTest
     with SvTestUtil
     with StandaloneCanton {
 
+  // sv1 is stopped mid-test, so neither history check is meaningful here.
+  override protected def runUpdateHistorySanityCheck: Boolean = false
   override protected def runEventHistorySanityCheck: Boolean = false
 
   override def dbsSuffix: String = "non_sv1_svs"
