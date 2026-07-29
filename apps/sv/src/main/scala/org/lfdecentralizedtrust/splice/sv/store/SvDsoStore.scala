@@ -858,6 +858,7 @@ trait SvDsoStore
           svOnboarding.payload.candidateParticipantId,
           weight,
           svOnboarding.payload.token,
+          java.util.Optional.of(domainMigrationId),
         )
       )
     )

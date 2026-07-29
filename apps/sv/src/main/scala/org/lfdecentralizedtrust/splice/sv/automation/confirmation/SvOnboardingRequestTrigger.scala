@@ -59,6 +59,7 @@ class SvOnboardingRequestTrigger(
       weightBps: Long,
       candidateParticipantId: String,
       reason: String,
+      migrationId: Long,
   ): ActionRequiringConfirmation = {
     new ARC_DsoRules(
       new SRARC_ConfirmSvOnboarding(
@@ -68,6 +69,7 @@ class SvOnboardingRequestTrigger(
           candidateParticipantId,
           weightBps,
           reason,
+          java.util.Optional.of(migrationId),
         )
       )
     )
@@ -125,6 +127,7 @@ class SvOnboardingRequestTrigger(
                 svOnboarding.payload.candidateParticipantId,
                 svOnboarding.payload.token,
                 dsoRules,
+                dsoStore.domainMigrationId,
               )
           }
         }
@@ -171,8 +174,10 @@ class SvOnboardingRequestTrigger(
       participantId: String,
       reason: String,
       dsoRules: AssignedContract[DsoRules.ContractId, DsoRules],
+      migrationId: Long,
   )(implicit tc: TraceContext): Future[TaskOutcome] = {
-    val action = dsoRulesConfirmSvOnboardingAction(party, name, weightBps, participantId, reason)
+    val action =
+      dsoRulesConfirmSvOnboardingAction(party, name, weightBps, participantId, reason, migrationId)
     for {
       queryResult <- dsoStore.lookupConfirmationByActionWithOffset(svParty, action)
       cmd = dsoRules.exercise(

@@ -27,7 +27,7 @@ import Splice.Round
 import Splice.Types
 import Splice.ValidatorLicense
 import Splice.Wallet.Subscriptions
-import Splice.DecentralizedSynchronizer (MemberTraffic, initialMemberTraffic)
+import Splice.DecentralizedSynchronizer (MemberTraffic(..))
 
 import qualified Splice.CometBft as CometBft
 import Splice.Ans
@@ -1148,6 +1148,7 @@ template DsoRules with
         newParticipantId : Text
         newSvRewardWeight : Int
         reason : Text
+        migrationId : Optional Int
       controller dso
       do
         ensureNeverOperatedNode newSvParty this
@@ -1168,10 +1169,16 @@ template DsoRules with
           svPartyIsObserver = Some False
 
         let activeSynchronizer = config.decentralizedSynchronizer.activeSynchronizerId
-        let migrationId = optional 0 (.migrationId) config.nextScheduledSynchronizerUpgrade
-
-        let traffic = initialMemberTraffic dso newParticipantId activeSynchronizer migrationId
-        create traffic
+        let actualMigrationId = fromOptional 0 migrationId
+        _ <- create (MemberTraffic with
+          dso
+          memberId = newParticipantId
+          synchronizerId = activeSynchronizer
+          migrationId = actualMigrationId
+          totalPurchased = 1000000000000
+          numPurchases = 1
+          amuletSpent = 0.0
+          usdSpent = 0.0)
         return DsoRules_ConfirmSvOnboardingResult with ..
 
     nonconsuming choice DsoRules_MakeSvOnboardingConfirmedObserver : DsoRules_MakeSvOnboardingConfirmedObserverResult
