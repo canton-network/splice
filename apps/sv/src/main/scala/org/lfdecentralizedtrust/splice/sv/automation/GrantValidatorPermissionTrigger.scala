@@ -18,6 +18,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.decentralizedsynchron
 import org.lfdecentralizedtrust.splice.environment.{ParticipantAdminConnection, RetryFor}
 import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
 import org.lfdecentralizedtrust.splice.util.AssignedContract
+import com.digitalasset.canton.topology.Member
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -25,6 +26,7 @@ class GrantValidatorPermissionTrigger(
     override protected val context: TriggerContext,
     store: SvDsoStore,
     participantAdminConnection: ParticipantAdminConnection,
+    minMemberTrafficToOnboardValidator: Long,
 )(implicit
     override val ec: ExecutionContext,
     mat: Materializer,
@@ -44,19 +46,44 @@ class GrantValidatorPermissionTrigger(
       ]
   )(implicit tc: TraceContext): Future[TaskOutcome] = {
     val payload = task.payload
-    val synchronizerId =
-      com.digitalasset.canton.topology.SynchronizerId.tryFromString(payload.synchronizerId)
-    val participantId = ParticipantId.tryFromProtoPrimitive(payload.memberId)
 
-    for {
-      _ <-
-        participantAdminConnection.ensureParticipantSynchronizerPermission(
-          synchronizerId = synchronizerId,
-          participantId = participantId,
-          permission = Submission,
-          retryFor = RetryFor.Automation,
-        )
+    Member
+      .fromProtoPrimitive_(payload.memberId)
+      .fold(
+        err => {
+          Future.successful(TaskSuccess(s"Skipping MemberTraffic with invalid memberId: $err"))
+        },
+        memberId => {
+          val synchronizerId =
+            com.digitalasset.canton.topology.SynchronizerId.tryFromString(payload.synchronizerId)
+          val participantId = ParticipantId.tryFromProtoPrimitive(payload.memberId)
 
-    } yield TaskSuccess(s"Processed MemberTraffic for participant $participantId")
+          for {
+            totalPurchasedTraffic <- store.getTotalPurchasedMemberTraffic(memberId, synchronizerId)
+
+            _ <-
+              if (totalPurchasedTraffic >= minMemberTrafficToOnboardValidator) {
+                participantAdminConnection.ensureParticipantSynchronizerPermission(
+                  synchronizerId = synchronizerId,
+                  participantId = participantId,
+                  permission = Submission,
+                  retryFor = RetryFor.Automation,
+                )
+              } else {
+                Future.unit
+              }
+          } yield {
+            if (totalPurchasedTraffic >= minMemberTrafficToOnboardValidator) {
+              TaskSuccess(
+                s"Granted Submission permission for participant $participantId (Total Purchased: $totalPurchasedTraffic >= Threshold: $minMemberTrafficToOnboardValidator)"
+              )
+            } else {
+              TaskSuccess(
+                s"Skipped Submission permission for participant $participantId (Total Purchased: $totalPurchasedTraffic < Threshold: $minMemberTrafficToOnboardValidator)"
+              )
+            }
+          }
+        },
+      )
   }
 }
