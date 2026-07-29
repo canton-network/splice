@@ -342,7 +342,7 @@ function buildRewardConfigChanges(
       currentValue: before?.mintingVersion || '',
       newValue: after?.mintingVersion || '',
       options: rewardVersionOptions,
-      description: 'Which reward scheme to use for minting',
+      description: 'Which reward scheme to use in production.',
     },
     {
       fieldName: 'rewardConfigDryRunVersion',
