@@ -50,7 +50,7 @@ describe('Update Featured App Form', () => {
     fireEvent.blur(partyIdInput);
 
     await waitFor(() => {
-      expect(screen.queryByText('Loading app rights...')).not.toBeInTheDocument();
+      expect(screen.queryByText('Loading featured app rights...')).not.toBeInTheDocument();
     });
 
     const rightCidDropdown = screen.getByTestId('update-featured-app-rightCid-dropdown');

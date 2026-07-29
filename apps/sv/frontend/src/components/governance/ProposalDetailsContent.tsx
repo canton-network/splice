@@ -680,7 +680,7 @@ const UpdateFeatureAppSection = ({
 }: UpdateFeatureAppSectionProps) => {
   const svAdminClient = useSvAdminClient();
   const providerQuery = useQuery({
-    queryKey: ['featuredAppRightProvider', rightContractId],
+    queryKey: ['featuredAppRightProviderAndWeight', rightContractId],
     queryFn: async () => {
       const response = await svAdminClient.lookupFeaturedAppRightByContractId(rightContractId);
       const contract = response.featured_app_right;
