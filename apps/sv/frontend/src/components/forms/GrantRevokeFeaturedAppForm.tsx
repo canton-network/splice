@@ -262,7 +262,9 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
                       title={providerFieldTitle}
                       id={`${testIdPrefix}-partyId`}
                       scrollableIdentifier
-                      subtitle={field.state.meta.isValidating ? 'Loading featured app rights...' : undefined}
+                      subtitle={
+                        field.state.meta.isValidating ? 'Loading featured app rights...' : undefined
+                      }
                       onChange={() => {
                         picker.resetOptions();
                       }}
