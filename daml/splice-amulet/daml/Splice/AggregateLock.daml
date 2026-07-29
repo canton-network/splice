@@ -23,6 +23,7 @@ maxComparableTime = addRelTime maxTime $ microseconds (-1)
 isValidAggregateLockedAllocation : Party -> V2.AllocationView -> Bool
 isValidAggregateLockedAllocation dso alloc =
   and [ alloc.allocation.admin == dso
+      , alloc.settlement.executors == [dso]
       , alloc.allocation.committed
       , null alloc.allocation.transferLegSides
       , TM.lookup "cip-105/type" alloc.allocation.meta.values == Some "aggregateLock"
@@ -32,6 +33,7 @@ isValidAggregateLockedAllocation dso alloc =
 isValidVestingLockedDestination : Party -> V2.AllocationView -> Bool
 isValidVestingLockedDestination dso alloc =
   and [ alloc.allocation.admin == dso
+      , alloc.settlement.executors == [dso]
       , alloc.allocation.committed
       , null alloc.allocation.transferLegSides
       , TM.lookup "cip-105/type" alloc.allocation.meta.values == Some "vestingLock"
