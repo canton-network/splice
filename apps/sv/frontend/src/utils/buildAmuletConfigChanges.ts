@@ -372,7 +372,7 @@ function buildRewardConfigChanges(
       label: 'Reward config: App reward coupon threshold ($)',
       currentValue: before?.appRewardCouponThreshold || '',
       newValue: after?.appRewardCouponThreshold || '',
-      description: 'Minimum reward amount in USD below which no coupon is created (default: $0.50)',
+      description: 'Minimum reward amount in USD below which no RewardCouponV2 is created (default: $0.50)',
     },
   ] as ConfigChange[];
 }
