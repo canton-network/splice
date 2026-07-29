@@ -191,7 +191,7 @@ trait ParticipantAdminSynchronizerConnection {
         retryFor,
         "synchronizer_registered",
         s"participant registered ${config.synchronizerAlias} with config $config",
-        lookupRegisteredSynchronizer(config.synchronizerAlias, config.synchronizerId).map {
+        lookupRegisteredSynchronizer(config.synchronizerAlias, config.psid).map {
           case Some(_) if !overwriteExistingConnection => Right(())
           // We don't set the sequencer id when connecting but Canton returns it so we ignore it in the comparison here.
           case Some(existingConfig)
@@ -210,7 +210,7 @@ trait ParticipantAdminSynchronizerConnection {
             case Some(_) =>
               modifySynchronizerConnectionConfigAndReconnect(
                 config.synchronizerAlias,
-                config.synchronizerId,
+                config.psid,
                 reconnectOnSynchronizerConfigurationChange,
                 _ => Some(config),
               )
@@ -317,12 +317,12 @@ trait ParticipantAdminSynchronizerConnection {
               case Some(config) =>
                 if (
                   registeredSynchronizer.psid.toOption
-                    .exists(oldPsid => config.synchronizerId.exists(psid => psid != oldPsid))
+                    .exists(oldPsid => config.psid.exists(psid => psid != oldPsid))
                 ) {
                   Future.failed(
                     Status.INVALID_ARGUMENT
                       .withDescription(
-                        s"New config physical synchronizer id ${config.synchronizerId} cannot be different from the old one ${registeredSynchronizer.psid} for synchronizer $synchronizer"
+                        s"New config physical synchronizer id ${config.psid} cannot be different from the old one ${registeredSynchronizer.psid} for synchronizer $synchronizer"
                       )
                       .asRuntimeException()
                   )
@@ -333,7 +333,7 @@ trait ParticipantAdminSynchronizerConnection {
                   for {
                     _ <- setSynchronizerConnectionConfig(
                       config,
-                      registeredSynchronizer.psid.toOption.orElse(config.synchronizerId),
+                      registeredSynchronizer.psid.toOption.orElse(config.psid),
                     )
                   } yield true
                 }
@@ -361,7 +361,7 @@ trait ParticipantAdminSynchronizerConnection {
         if (isSynchronizerRegistered) {
           modifySynchronizerConnectionConfig(
             config.synchronizerAlias,
-            config.synchronizerId,
+            config.psid,
             f,
           )
         } else {
@@ -398,7 +398,7 @@ trait ParticipantAdminSynchronizerConnection {
       f: SynchronizerConnectionConfig => Option[SynchronizerConnectionConfig],
       retryFor: RetryFor,
   )(implicit traceContext: TraceContext): Future[Unit] = {
-    require(config.synchronizerId.isDefined, "psid must be set")
+    require(config.psid.isDefined, "psid must be set")
     for {
       configModified <- modifyOrRegisterSynchronizerConnectionConfig(
         config,

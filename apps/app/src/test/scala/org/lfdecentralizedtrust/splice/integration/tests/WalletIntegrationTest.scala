@@ -34,6 +34,8 @@ import com.digitalasset.canton.discard.Implicits.DiscardOps
 import org.apache.pekko.http.scaladsl.Http
 import org.apache.pekko.http.scaladsl.model.{HttpRequest, HttpResponse, StatusCodes}
 import org.apache.pekko.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken}
+import org.scalatest.concurrent.PatienceConfiguration
+import org.scalatest.time.{Seconds, Span}
 import org.slf4j.event.Level
 
 import java.time.Duration
@@ -225,9 +227,12 @@ class WalletIntegrationTest
 
           val tapsAfter = Range(0, 3).map(_ => Future(Try(aliceWalletClient.tap(10))))
 
-          // Wait for all futures to complete
-          val successfulTaps = (tapsBefore ++ tapsAfter).map(_.futureValue).count(_.isSuccess)
-          if (failedAcceptF.futureValue.isSuccess)
+          // Wait for all futures to complete. The stale accept forces the treasury to filter
+          // and retry batches, so under load this can exceed the default patience.
+          val patience = PatienceConfiguration.Timeout(Span(60, Seconds))
+          val successfulTaps =
+            (tapsBefore ++ tapsAfter).map(_.futureValue(patience)).count(_.isSuccess)
+          if (failedAcceptF.futureValue(patience).isSuccess)
             fail("The AcceptTransferOffer action unexpectedly succeeded")
 
           successfulTaps should be(

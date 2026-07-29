@@ -220,7 +220,7 @@ export const UpdateSvRewardWeightForm: React.FC = _ => {
                 onChange: ({ value }) => validateUrl(value),
               }}
             >
-              {field => <field.TextField title="URL" id="update-sv-reward-weight-url" />}
+              {field => <field.TextField title="SUPPORTING URL" id="update-sv-reward-weight-url" />}
             </form.AppField>
           </>
         )}

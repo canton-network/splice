@@ -6,7 +6,7 @@ package org.lfdecentralizedtrust.splice.environment
 import cats.data.EitherT
 import cats.implicits.catsSyntaxOptionId
 import com.digitalasset.canton.admin.api.client.commands.TopologyAdminCommands
-import com.digitalasset.canton.config.RequireTypes.{NonNegativeInt, PositiveInt}
+import com.digitalasset.canton.config.RequireTypes.NonNegativeInt
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.topology.{PhysicalSynchronizerId, SequencerId, SynchronizerId}
 import com.digitalasset.canton.topology.admin.grpc.{BaseQuery, TopologyStoreId}
@@ -32,74 +32,58 @@ import scala.concurrent.{ExecutionContext, Future}
 trait LsuTopologyAdminConnection {
   this: TopologyAdminConnection =>
 
-  def lookupSequencerSuccessors(synchronizerId: SynchronizerId, sequencerId: SequencerId)(implicit
+  def lookupSequencerSuccessors(
+      synchronizerId: SynchronizerId,
+      sequencerId: SequencerId,
+      successor: Option[PhysicalSynchronizerId],
+      ops: Option[TopologyChangeOp],
+  )(implicit
       tc: TraceContext,
       ec: ExecutionContext,
   ): Future[Option[TopologyResult[LsuSequencerConnectionSuccessor]]] = runCmd(
     TopologyAdminCommands.Read.ListLsuSequencerConnectionSuccessor(
       BaseQuery(
-        TopologyStoreId.Synchronizer(synchronizerId),
+        TopologyStoreId.Synchronizer(synchronizerId.logical),
         proposals = false,
         timeQuery = TimeQuery.HeadState,
-        ops = Some(TopologyChangeOp.Replace),
+        ops = ops,
         filterSigningKey = "",
         protocolVersion = None,
       ),
       sequencerId.filterString,
-      filterSuccessorPhysicalSynchronizerId = "",
+      filterSuccessorPhysicalSynchronizerId = successor.map(_.toProtoPrimitive).getOrElse(""),
     )
   ).map(_.headOption.map(r => TopologyResult(r.context, r.item)))
 
   def ensureSequencerSuccessor(
-      synchronizerId: PhysicalSynchronizerId,
+      successorSynchronizerId: PhysicalSynchronizerId,
       sequencerId: SequencerId,
       connection: GrpcConnection,
   )(implicit
       tc: TraceContext,
       ec: ExecutionContext,
   ): Future[TopologyResult[LsuSequencerConnectionSuccessor]] = {
-    retryProvider.ensureThat(
-      RetryFor.Automation,
-      s"sequencer_successor_$sequencerId",
-      s"sequencer successor for $sequencerId is published with connection $connection",
-      lookupSequencerSuccessors(synchronizerId.logical, sequencerId).map { result =>
-        result.filter(_.mapping.connection == connection).toRight(result)
+    ensureTopologyMappingO(
+      successorSynchronizerId.logical,
+      s"sequencer successor for $sequencerId with connection $connection",
+      _ =>
+        EitherT
+          .liftF(
+            lookupSequencerSuccessors(successorSynchronizerId.logical, sequencerId, None, None)
+          )
+          .subflatMap {
+            case Some(successor)
+                if successor.mapping.connection == connection && successor.mapping.successorPsid == successorSynchronizerId =>
+              Right(successor)
+            case Some(existing) => Left(existing.some)
+            case None => Left(None)
+          },
+      { (_: Option[TopologyMapping]) =>
+        Right(
+          LsuSequencerConnectionSuccessor(sequencerId, successorSynchronizerId, connection)
+        )
       },
-      (previous: Option[TopologyResult[LsuSequencerConnectionSuccessor]]) => {
-        logger.info(s"Adding sequencer $sequencerId successor with connection $connection")
-        (previous match {
-          case Some(successor) =>
-            proposeMapping(
-              synchronizerId.logical,
-              successor.mapping.copy(connection = connection),
-              successor.base.serial + PositiveInt.one,
-              isProposal = false,
-            )
-          case None =>
-            proposeMapping(
-              synchronizerId.logical,
-              LsuSequencerConnectionSuccessor(sequencerId, synchronizerId, connection),
-              PositiveInt.one,
-              isProposal = false,
-            )
-        }).map(_ => ())
-      },
-      logger,
-    )
-  }
-
-  def removeSequencerSuccessor(
-      synchronizerId: SynchronizerId,
-      sequencerId: SequencerId,
-  )(implicit tc: TraceContext, ec: ExecutionContext): Future[Unit] = {
-    ensureTopologyMappingRemoved(
-      s"Remove SequencerSuccessor for $synchronizerId and sequencer $sequencerId",
-      synchronizerId,
-      lookupSequencerSuccessors(
-        synchronizerId,
-        sequencerId,
-      ),
-      proposal = true,
+      retryFor = RetryFor.Automation,
     )
   }
 

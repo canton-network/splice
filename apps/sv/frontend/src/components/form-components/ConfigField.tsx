@@ -8,6 +8,7 @@ import relativeTime from 'dayjs/plugin/relativeTime';
 import { useFieldContext } from '../../hooks/formContext';
 import type { ConfigChange, PendingConfigFieldInfo } from '../../utils/types';
 import { nextScheduledSynchronizerUpgradeFormat } from '@canton-network/splice-common-frontend-utils';
+import { configFieldFieldSx, configFieldInputSx } from '../../themes/fieldStyles';
 
 dayjs.extend(relativeTime);
 
@@ -55,12 +56,16 @@ export const ConfigField: React.FC<ConfigFieldProps> = props => {
 
   const textFieldProps = {
     variant: 'outlined' as const,
-    size: 'small' as const,
     color: field.state.meta.isDefaultValue ? ('primary' as const) : ('secondary' as const),
     focused: !field.state.meta.isDefaultValue,
     autoComplete: 'off' as const,
+    sx: configFieldFieldSx,
+    slotProps: {
+      input: {
+        sx: configFieldInputSx,
+      },
+    },
     inputProps: {
-      sx: { textAlign: 'right' },
       'data-testid': `config-field-${configChange.fieldName}`,
     },
     disabled: isDisabled,
@@ -89,7 +94,7 @@ export const ConfigField: React.FC<ConfigFieldProps> = props => {
           </Typography>
         </Box>
 
-        <Box sx={{ width: 250 }}>
+        <Box sx={{ width: 238, maxWidth: '100%' }}>
           <MuiTextField
             {...textFieldProps}
             // We choose empty string to represent fields that could be undefined because their values have not been set.

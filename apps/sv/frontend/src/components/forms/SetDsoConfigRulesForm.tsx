@@ -304,7 +304,7 @@ export const SetDsoConfigRulesForm: () => JSX.Element = () => {
               onChange: ({ value }) => validateUrl(value),
             }}
           >
-            {field => <field.TextField title="URL" id="set-dso-config-rules-url" />}
+            {field => <field.TextField title="SUPPORTING URL" id="set-dso-config-rules-url" />}
           </form.AppField>
         </>
       )}

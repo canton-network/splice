@@ -3,7 +3,7 @@
 
 package com.digitalasset.canton.integration
 
-import com.digitalasset.canton.environment.{CommunityEnvironmentFactory, CantonEnvironmentFactory}
+import com.digitalasset.canton.environment.{CantonEnvironmentFactory, CommunityEnvironmentFactory}
 
 trait CommunityIntegrationTest extends CantonBaseIntegrationTest {
   this: CantonEnvironmentSetup =>

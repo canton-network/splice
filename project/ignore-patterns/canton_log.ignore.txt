@@ -97,6 +97,9 @@ Response message for request.*timed out.*c.d.c.p.p.TransactionProcessor:particip
 # Transient WARN triggered by a shutdown of the sync connection while the participant is sending confirmation responses.
 Failed to send responses: RequestFailed\(No connection available\).*c.d.c.p.p.TransactionProcessor:participant=
 
+# Transient WARN triggered by a shutdown of the sync connection while the participant is submitting a transaction; the submitter retries.
+Failed to submit transaction due to Error\(RequestFailed\(No connection available\)\).*c.d.c.p.p.TransactionProcessor:participant=
+
 # TODO(#936): remove these ignores if possible
 The operation 'insert block' has failed with an exception
 Now retrying operation 'insert block'

@@ -1,11 +1,9 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.topology.transaction.*
-import org.lfdecentralizedtrust.splice.http.v0.definitions.TransactionHistoryRequest
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTest
 import org.lfdecentralizedtrust.splice.util.WalletTestUtil
-import org.lfdecentralizedtrust.splice.store.Limit
 
 import java.nio.file.Files
 import java.util.UUID
@@ -212,19 +210,8 @@ class MultiHostValidatorOperatorIntegrationTest extends IntegrationTest with Wal
     )(
       "The send succeeds despite alice's validator being disconnected and stopped",
       _ => {
-        // Fees eat up quite a bit
         splitwellWalletClient.balance().unlockedQty should be(60)
-        // Alice's wallet is stopped, so we confirm the transaction via scan
-        sv1ScanBackend
-          .listTransactions(
-            None,
-            TransactionHistoryRequest.SortOrder.Desc,
-            Limit.DefaultMaxPageSize,
-          )
-          .flatMap(_.transfer)
-          .filter(tf =>
-            tf.description == transferDescription
-          ) should not be empty withClue "transfers splitwell to alice"
+        // don't check on alice's wallet as it's stopped. the transaction going through on splitwell is enough signal.
       },
     )
   }

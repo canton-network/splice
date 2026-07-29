@@ -9,6 +9,12 @@ import {
   PROPOSAL_SUMMARY_SUBTITLE,
   PROPOSAL_SUMMARY_TITLE,
 } from '../../utils/constants';
+import {
+  fieldDescriptionSx,
+  fieldSectionSx,
+  fieldSectionTitleSx,
+  proposalSummaryFieldSx,
+} from '../../themes/fieldStyles';
 
 export interface ProposalSummaryFieldProps {
   id: string;
@@ -27,11 +33,17 @@ export const ProposalSummaryField: React.FC<ProposalSummaryFieldProps> = props =
   const currentLength = field.state.value.length;
 
   return (
-    <Box>
-      <Typography variant="h6" gutterBottom>
+    <Box sx={fieldSectionSx}>
+      <Typography sx={fieldSectionTitleSx}>
         {title || PROPOSAL_SUMMARY_TITLE}
         {optional && (
-          <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 1 }}>
+          <Typography
+            component="span"
+            fontSize={12}
+            lineHeight="22px"
+            color="text.light"
+            sx={{ ml: 1 }}
+          >
             optional
           </Typography>
         )}
@@ -39,32 +51,32 @@ export const ProposalSummaryField: React.FC<ProposalSummaryFieldProps> = props =
       <MuiTextField
         fullWidth
         multiline
-        rows={5}
         variant="outlined"
         autoComplete="off"
+        sx={proposalSummaryFieldSx}
+        id={id}
         value={field.state.value}
         onBlur={field.handleBlur}
         onChange={e => field.handleChange(e.target.value)}
         error={!field.state.meta.isValid}
         helperText={field.state.meta.errors?.[0]}
         inputProps={{ 'data-testid': id, maxLength }}
-        id={id}
       />
       <Box
         sx={{
           display: 'flex',
           justifyContent: 'space-between',
-          alignItems: 'center',
-          mt: 1,
+          alignItems: 'flex-start',
           gap: 2,
         }}
       >
-        <Typography variant="body2" data-testid={`${id}-subtitle`}>
+        <Typography sx={fieldDescriptionSx} data-testid={`${id}-subtitle`}>
           {subtitle || PROPOSAL_SUMMARY_SUBTITLE}
         </Typography>
         <Typography
-          variant="body2"
-          color={'text.secondary'}
+          fontSize={12}
+          lineHeight="22px"
+          color="text.secondary"
           data-testid={`${id}-character-counter`}
           sx={{ flexShrink: 0 }}
         >

@@ -420,7 +420,11 @@ class GrpcSynchronizerConnectivityService(
       storedConnectionConfig <-
         EitherT
           .fromEither[FutureUnlessShutdown](
-            sync.getSynchronizerConnectionConfigForAlias(alias, onlyActive = true)
+            sync.getSynchronizerConnectionConfigForAlias(
+              alias,
+              onlyActive = true,
+              operation = "get synchronizer id",
+            )
           )
           .leftMap(_ => SyncServiceUnknownSynchronizer.Error(alias))
 

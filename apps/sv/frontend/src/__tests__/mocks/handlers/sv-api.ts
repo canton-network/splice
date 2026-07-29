@@ -273,7 +273,7 @@ export const buildSvMock = (svUrl: string): HttpHandler[] => [
               {
                 template_id: 'featured-app-right-template-id',
                 contract_id: 'rightCid123',
-                payload: {},
+                payload: { activityWeight: '1.0' },
                 created_event_blob: '',
                 created_at: '2026-02-26T13:00:00.000000Z',
               },
@@ -293,7 +293,7 @@ export const buildSvMock = (svUrl: string): HttpHandler[] => [
         ? {
             template_id: 'featured-app-right-template-id',
             contract_id: 'rightCid123',
-            payload: { provider: 'a-party-id::1014912492' },
+            payload: { provider: 'a-party-id::1014912492', activityWeight: '1.0' },
             created_event_blob: '',
             created_at: '2026-02-26T13:00:00.000000Z',
           }

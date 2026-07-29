@@ -26,6 +26,33 @@ const GcpQuotasConfigSchema = z.object({
     }),
 });
 
+const NatPortUsageConfigSchema = z.object({
+  thresholdPercent: z.number().min(0).max(100),
+  droppedSentPacketsThreshold: z.number().min(0),
+});
+
+export type NatPortUsageConfig = z.infer<typeof NatPortUsageConfigSchema>;
+
+const MuteTimeWindowSchema = z.object({
+  times: z.array(
+    z.object({
+      startTime: z.string(), // UTC
+      endTime: z.string(), // UTC
+    })
+  ),
+  weekdays: z.array(z.string()).optional(), // e.g. ['monday', 'tuesday:friday']
+});
+export type MuteTimeWindow = z.infer<typeof MuteTimeWindowSchema>;
+
+const MuteTimeIntervalSchema = z.array(
+  z.object({
+    name: z.string(),
+    objectMatchers: z.array(z.tuple([z.string(), z.string(), z.string()])),
+    timeWindows: z.array(MuteTimeWindowSchema),
+  })
+);
+export type MuteTimeInterval = z.infer<typeof MuteTimeIntervalSchema>[number];
+
 const MonitoringConfigSchema = z
   .object({
     enableGrafanaServiceAccountToken: z.boolean(),
@@ -129,11 +156,12 @@ const MonitoringConfigSchema = z
           tolerance: z.number(),
         }),
         gcpQuotas: GcpQuotasConfigSchema,
-        natPortUsage: z
-          .object({
-            thresholdPercent: z.number().min(0).max(100),
-          })
-          .default({ thresholdPercent: 80 }),
+        natPortUsage: NatPortUsageConfigSchema.default({
+          thresholdPercent: 80,
+          // `default 30` because every once in a while (likely due to dynamic port allocation),
+          // a few packets (less than 1/s) get dropped and getting alerted on it every time can be very noisy.
+          droppedSentPacketsThreshold: 30,
+        }),
         trafficBasedRewards: z.object({
           featuredAppRightsLimit: z.number(),
           verdictIngestionBatchSizeThreshold: z.number(),
@@ -142,17 +170,7 @@ const MonitoringConfigSchema = z
       }),
       logAlerts: z.object({}).catchall(z.string()).default({}),
       loggedSecretsFilter: z.string().optional(),
-      muteTimeIntervals: z
-        .array(
-          z.object({
-            name: z.string(),
-            objectMatchers: z.array(z.tuple([z.string(), z.string(), z.string()])),
-            startTime: z.string(), // UTC
-            endTime: z.string(), // UTC
-            weekdays: z.array(z.string()).optional(), // e.g. ['monday', 'tuesday:friday']
-          })
-        )
-        .default([]),
+      muteTimeIntervals: MuteTimeIntervalSchema.default([]),
     }),
   })
   .strict();
@@ -160,12 +178,6 @@ const MonitoringConfigSchema = z
 export const monitoringConfig = MonitoringConfigSchema.parse(clusterSubConfig('monitoring'));
 
 export type GcpQuotaAlertsConfig = z.infer<typeof GcpQuotasConfigSchema>;
-
-const NatPortUsageConfigSchema = z.object({
-  thresholdPercent: z.number().min(0).max(100),
-});
-
-export type NatPortUsageConfig = z.infer<typeof NatPortUsageConfigSchema>;
 
 const PrometheusConfigSchema = z.object({
   prometheus: z.object({

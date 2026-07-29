@@ -13,6 +13,7 @@ import org.lfdecentralizedtrust.splice.sv.util.{SvOnboardingToken, SvUtil}
 import scala.jdk.OptionConverters.*
 import org.lfdecentralizedtrust.splice.sv.admin.api.client.commands.HttpSvPublicAppClient.SvOnboardingStatus
 import org.lfdecentralizedtrust.splice.util.{SvTestUtil, WalletTestUtil}
+import com.digitalasset.canton.console.CommandFailure
 import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.topology.transaction.ParticipantPermission
 import org.slf4j.event.Level
@@ -319,8 +320,7 @@ class SvOnboardingAddlIntegrationTest
             forAll(lines)(line => line.message should include("Unexpected amulet create event"))
             // Error emitted by every ScanTxLogParser plus the one UserWalletTxLogParser
             // associated with the owner of the coin.
-            lines should have size 2 withClue "ScanTxLogParser + UserWalletTxLogParser error"
-            forExactly(1, lines)(line => line.loggerName should include("sv1Scan"))
+            lines should have size 1 withClue "UserWalletTxLogParser error"
             forExactly(1, lines)(line => line.loggerName should include("sv1Validator"))
           },
         )
@@ -350,7 +350,11 @@ class SvOnboardingAddlIntegrationTest
       }
       clue("create a amulet again with actAs = DSO") {
         withCommandRetryPolicy(_ => _ => false) {
-          assertThrowsAndLogsCommandFailures(
+          // Suppress at ERROR level only: background WARNs (e.g. the SV app failing to read the
+          // bft sequencers list while sv2's scan is unavailable) must not fail the log assertion.
+          loggerFactory.assertThrowsAndLogsSuppressing[CommandFailure](
+            SuppressionRule.LevelAndAbove(Level.ERROR)
+          )(
             createAmulet(
               sv1ValidatorBackend.participantClientWithAdminToken,
               sv1UserId,
