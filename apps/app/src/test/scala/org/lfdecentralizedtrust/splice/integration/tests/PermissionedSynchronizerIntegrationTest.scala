@@ -46,10 +46,7 @@ class PermissionedSynchronizerIntegrationTest
       )
 
       val targetValidators = Seq(
-        sv2ValidatorBackend,
-        sv3ValidatorBackend,
-        sv4ValidatorBackend,
-        aliceValidatorBackend,
+        aliceValidatorBackend
       )
 
       val sv1WalletUserParty = onboardWalletUser(sv1WalletClient, sv1ValidatorBackend)
@@ -67,8 +64,15 @@ class PermissionedSynchronizerIntegrationTest
         }
       }
 
+      val allValidators = Seq(
+        sv2ValidatorBackend,
+        sv3ValidatorBackend,
+        sv4ValidatorBackend,
+        aliceValidatorBackend,
+      )
+
       clue("Verify all target validators are granted ParticipantSynchronizer") {
-        targetValidators.foreach { targetApp =>
+        allValidators.foreach { targetApp =>
           eventually() {
             val permissions =
               sv1Backend.participantClientWithAdminToken.topology.participant_synchronizer_permissions
