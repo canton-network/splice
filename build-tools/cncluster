@@ -1543,10 +1543,11 @@ function subcmd_unlock_force() {
 
 ###
 
-subcommand_whitelist[run_workflow]='Lock the cluster and trigger the deploy_basic workflow in DACH-NY/canton-network-internal.'
+subcommand_whitelist[run_workflow]='Lock the cluster and trigger a workflow in DACH-NY/canton-network-internal.'
 
 function subcmd_run_workflow() {
-    local cluster="${GCP_CLUSTER_NAME}"
+    local cluster="$(basename "$PWD")"
+    local workflow=""
     local splice_git_ref=""
 
     while [[ $# -gt 0 ]]; do
@@ -1558,8 +1559,16 @@ function subcmd_run_workflow() {
                 cluster="$2"
                 shift 2
                 ;;
+            --workflow)
+                if [ -z "${2-}" ]; then
+                    _error "Missing value for --workflow"
+                fi
+                workflow="$2"
+                shift 2
+                ;;
             -h|--help)
-                echo "Usage: $SCRIPTNAME run_workflow [--cluster <cluster>] <splice_git_ref>"
+                echo "Usage: $SCRIPTNAME run_workflow [--cluster <cluster>] --workflow <workflow_name> <splice_git_ref>"
+                echo "  --cluster defaults to the name of the current directory if not specified."
                 exit 0
                 ;;
             -*)
@@ -1576,8 +1585,12 @@ function subcmd_run_workflow() {
         esac
     done
 
+    if [ -z "$workflow" ]; then
+        _error "Usage: $SCRIPTNAME run_workflow [--cluster <cluster>] --workflow <workflow_name> <splice_git_ref>"
+    fi
+
     if [ -z "$splice_git_ref" ]; then
-        _error "Usage: $SCRIPTNAME run_workflow [--cluster <cluster>] <splice_git_ref>"
+        _error "Usage: $SCRIPTNAME run_workflow [--cluster <cluster>] --workflow <workflow_name> <splice_git_ref>"
     fi
 
     if ! command -v gh >/dev/null 2>&1; then
@@ -1587,8 +1600,8 @@ function subcmd_run_workflow() {
     _cluster_must_exist
     subcmd_lock
 
-    _info "Triggering deploy_basic on main for cluster ${cluster} with splice_git_ref=${splice_git_ref}"
-    gh workflow run deploy_basic.yml \
+    _info "Triggering ${workflow} on main for cluster ${cluster} with splice_git_ref=${splice_git_ref}"
+    gh workflow run "${workflow}.yml" \
         --repo DACH-NY/canton-network-internal \
         --ref main \
         --field cluster="${cluster}" \
