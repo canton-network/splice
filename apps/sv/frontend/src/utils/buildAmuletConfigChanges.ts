@@ -338,7 +338,7 @@ function buildRewardConfigChanges(
   return [
     {
       fieldName: 'rewardConfigMintingVersion',
-      label: 'Reward config: Minting scheme',
+      label: 'Reward config: reward scheme',
       currentValue: before?.mintingVersion || '',
       newValue: after?.mintingVersion || '',
       options: rewardVersionOptions,
