@@ -34,6 +34,7 @@ import { CreateUnallocatedUnclaimedActivityRecordSection } from './proposal-deta
 import { CopyableIdentifier, CopyableUrl, MemberIdentifier, VoteStats } from '../beta';
 import { useQuery } from '@tanstack/react-query';
 import { useSvAdminClient } from '../../contexts/SvAdminServiceContext';
+import { DEFAULT_APP_ACTIVITY_WEIGHT } from '../../utils/constants';
 
 dayjs.extend(relativeTime);
 
@@ -226,6 +227,14 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
 
           {proposalDetails.action === 'SRARC_RevokeFeaturedAppRight' && (
             <UnfeatureAppSection rightContractId={proposalDetails.proposal.rightContractId} />
+          )}
+
+          {proposalDetails.action === 'SRARC_UpdateFeaturedAppRight' && (
+            <UpdateFeatureAppSection
+              rightContractId={proposalDetails.proposal.rightContractId}
+              newActivityWeight={proposalDetails.proposal.newActivityWeight}
+              reason={proposalDetails.proposal.reason}
+            />
           )}
 
           {proposalDetails.action === 'SRARC_UpdateSvRewardWeight' && (
@@ -654,6 +663,87 @@ const UnfeatureAppSection = ({ rightContractId }: UnfeatureAppSectionProps) => {
           />
         }
         labelId="proposal-details-unfeature-app-label"
+      />
+    </Box>
+  );
+};
+
+interface UpdateFeatureAppSectionProps {
+  rightContractId: string;
+  newActivityWeight: string;
+  reason: string;
+}
+
+const UpdateFeatureAppSection = ({
+  rightContractId,
+  newActivityWeight,
+  reason,
+}: UpdateFeatureAppSectionProps) => {
+  const svAdminClient = useSvAdminClient();
+  const providerQuery = useQuery({
+    queryKey: ['featuredAppRightProviderAndWeight', rightContractId],
+    queryFn: async () => {
+      const response = await svAdminClient.lookupFeaturedAppRightByContractId(rightContractId);
+      const contract = response.featured_app_right;
+      const payload = contract?.payload as
+        | { provider?: string; activityWeight?: string | null }
+        | undefined;
+      return {
+        provider: payload?.provider ?? null,
+        currentWeight: contract ? (payload?.activityWeight ?? DEFAULT_APP_ACTIVITY_WEIGHT) : '',
+      };
+    },
+  });
+  return (
+    <Box
+      id="proposal-details-update-feature-app-section"
+      data-testid="proposal-details-update-feature-app-section"
+      sx={{ display: 'contents' }}
+    >
+      {providerQuery?.data?.provider && (
+        <DetailItem
+          label="Provider Party ID"
+          value={
+            <CopyableIdentifier
+              value={providerQuery.data?.provider}
+              size="large"
+              data-testid="proposal-details-update-feature-value"
+            />
+          }
+          labelId="proposal-details-update-feature-label"
+        />
+      )}
+      <DetailItem
+        label="Featured Application Contract ID"
+        value={
+          <CopyableIdentifier
+            value={rightContractId}
+            size="large"
+            data-testid="proposal-details-update-feature-app-value"
+          />
+        }
+        labelId="proposal-details-update-feature-app-label"
+      />
+      <DetailItem
+        label="Proposed Changes"
+        value={
+          <ConfigValuesChanges
+            changes={[
+              {
+                label: 'Activity Weight',
+                fieldName: 'newActivityWeight',
+                currentValue: providerQuery.data?.currentWeight ?? '',
+                newValue: newActivityWeight,
+              },
+            ]}
+          />
+        }
+      />
+      <DetailItem
+        label="Reason"
+        value={reason}
+        labelId="proposal-details-update-feature-reason-label"
+        valueId="proposal-details-update-feature-reason-value"
       />
     </Box>
   );

@@ -12,6 +12,8 @@ export const urlSchema = z.string().refine(url => isValidUrl(url), {
 
 export const summarySchema = z.string().min(1, { message: 'Summary is required' });
 
+export const reasonSchema = z.string().min(1, { message: 'Reason is required' });
+
 export const svSelectionSchema = z.string().min(1, { message: 'SV is required' });
 
 const getExpirationSchema = (errMessage: string) => {
@@ -66,6 +68,18 @@ export const rewardAmountSchema = z
     { message: 'Amount can have at most 10 decimal places' }
   );
 
+export const requiredActivityWeightSchema = z
+  .string()
+  .min(1, { message: 'Weight is required' })
+  .regex(/^\d+(\.\d+)?$/, { message: 'Weight must be a valid non-negative number' })
+  .refine(
+    v => {
+      const i = v.indexOf('.');
+      return i === -1 || v.length - i - 1 <= 10;
+    },
+    { message: 'Weight can have at most 10 decimal places' }
+  );
+
 export const activityWeightSchema = z
   .string()
   .refine(v => v === '' || /^\d+(\.\d+)?$/.test(v), {
@@ -91,6 +105,11 @@ export const validateRewardAmount = (value: string): string | false => {
 
 export const validateActivityWeight = (value: string): string | false => {
   const result = activityWeightSchema.safeParse(value);
+  return result.success ? false : result.error.issues[0].message;
+};
+
+export const validateRequiredActivityWeight = (value: string): string | false => {
+  const result = requiredActivityWeightSchema.safeParse(value);
   return result.success ? false : result.error.issues[0].message;
 };
 
@@ -163,6 +182,11 @@ export const validateMintBeforeAndEffectiveDate = (value: {
 
 export const validateSummary = (value: string): string | false => {
   const result = summarySchema.safeParse(value);
+  return result.success ? false : result.error.issues[0].message;
+};
+
+export const validateReason = (value: string): string | false => {
+  const result = reasonSchema.safeParse(value);
   return result.success ? false : result.error.issues[0].message;
 };
 

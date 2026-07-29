@@ -134,7 +134,7 @@ abstract class SvAppReference(
   @Help.Summary("Cancel a running logical synchronizer upgrade by removing its LSU announcement")
   def cancelLogicalSynchronizerUpgrade(): Unit =
     consoleEnvironment.run {
-      httpCommand(HttpSvAdminAppClient.CancelLogicalSynchronizerUpgrade())
+      httpCommand(HttpSvOperatorAppClient.CancelLogicalSynchronizerUpgrade())
     }
 
   @Help.Summary("Get identities of all domain node components")

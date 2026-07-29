@@ -18,6 +18,7 @@ import com.digitalasset.canton.config.{
   CryptoConfig,
   SessionEncryptionKeyCacheConfig,
 }
+import com.digitalasset.canton.console.commands.GlobalSecretKeyAdministration
 import com.digitalasset.canton.console.{
   ConsoleEnvironment,
   ConsoleEnvironmentTestHelpers,
@@ -25,10 +26,10 @@ import com.digitalasset.canton.console.{
   InstanceReference,
   LocalInstanceReference,
 }
-import com.digitalasset.canton.console.commands.GlobalSecretKeyAdministration
 import com.digitalasset.canton.crypto.Crypto
 import com.digitalasset.canton.integration.bootstrap.InitializedSynchronizer
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
+import com.digitalasset.canton.metrics.CommonMockMetrics
 import com.digitalasset.canton.replica.ReplicaManager
 import com.digitalasset.canton.resource.MemoryStorage
 import com.digitalasset.canton.tracing.{NoReportingTracerProvider, TraceContext}
@@ -69,6 +70,7 @@ trait TestEnvironment[+C]
       testedReleaseProtocolVersion,
       FutureSupervisor.Noop,
       environment.clock,
+      CommonMockMetrics.cryptoMetrics,
       executionContext,
       environmentTimeouts,
       BatchingConfig(),

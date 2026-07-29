@@ -199,7 +199,13 @@ class BftOrderingSequencerAdminServiceTest extends AsyncWordSpec with BftSequenc
       val resultPromise = Promise[Consensus.Admin.GetOrderingTopologyResponse]()
       resultPromise.success(
         Consensus.Admin
-          .GetOrderingTopologyResponse(EpochNumber.First, Set.empty, SequencingParameters.Default)
+          .GetOrderingTopologyResponse(
+            EpochNumber.First,
+            Set.empty,
+            Seq.empty,
+            Seq.empty,
+            SequencingParameters.Default,
+          )
       )
       val bftOrderingSequencerAdminService =
         new BftOrderingSequencerAdminService(

@@ -78,10 +78,8 @@ abstract class SequencerBftPeerReconciler(
             configuredPeers <- sequencerAdminConnection
               .listConfiguredPeerEndpoints()
             peersToAdd = dsoSequencerEndpoints
-              .filterNot(endpoint => configuredPeers.exists(_.id == endpoint.id))
-            peersWithNoDsoRulesEndpoint = configuredPeers
-              .filterNot(peer => dsoSequencerEndpoints.exists(_.id == peer.id))
-            peersToRemove <- computePeersToRemove(
+              .filterNot(endpoint => configuredPeers.map(_._1).exists(_.id == endpoint.id))
+            peersToRemove = computePeersToRemove(
               configuredPeers,
               dsoSequencersWithEndpoint,
             )
@@ -100,43 +98,38 @@ abstract class SequencerBftPeerReconciler(
   }
 
   private def computePeersToRemove(
-      configuredPeers: Seq[P2PEndpoint],
+      configuredPeers: Seq[(P2PEndpoint, Option[SequencerId])],
       dsoSequencersWithEndpoint: Seq[(SequencerId, Option[P2PEndpoint])],
-  )(implicit tc: TraceContext, ec: ExecutionContext): Future[Seq[P2PEndpoint]] = {
-    sequencerAdminConnection.listCurrentPeerEndpoints().map { networkStatus =>
-      val configuredPeersWithSequencerId = configuredPeers.map { peer =>
-        peer -> networkStatus.collectFirst {
-          case (Some(sequencerId), Some(endpoint)) if endpoint == peer.id => sequencerId
-        }
-      }
-      val peersWithWrongSequencerId = configuredPeersWithSequencerId.filter {
-        case (peer, Some(sequencerId)) =>
-          !dsoSequencersWithEndpoint.exists({ case (dsoSequencerId, _) =>
-            sequencerId == dsoSequencerId
-          })
-        case _ => false
-      }
-      val peersWithChangedEndpoint = configuredPeersWithSequencerId.filter {
-        case (peer, Some(sequencerId)) =>
-          dsoSequencersWithEndpoint.exists({ case (dsoSequencerId, endpoint) =>
-            sequencerId == dsoSequencerId && endpoint.exists(_.id != peer.id)
-          })
-        case _ => false
-      }
-      // we only remove connections for which we don't have a sequencer id when we have been able to query all scans to get connections. otherwise a temporary scan issue could result in us removing the peer.
-      val unknownPeers =
-        if (dsoSequencersWithEndpoint.forall { case (_, endpoint) => endpoint.isDefined }) {
-          configuredPeers.filter(peer =>
-            !dsoSequencersWithEndpoint.exists { case (_, endpoint) =>
-              endpoint.exists(_.id == peer.id)
-            }
-          )
-        } else Seq.empty
-
-      (peersWithWrongSequencerId.map(_._1) ++ peersWithChangedEndpoint.map(
-        _._1
-      ) ++ unknownPeers).distinct
+  ): Seq[P2PEndpoint] = {
+    val peersWithWrongSequencerId = configuredPeers.filter {
+      case (_, Some(sequencerId)) =>
+        !dsoSequencersWithEndpoint.exists({ case (dsoSequencerId, _) =>
+          sequencerId == dsoSequencerId
+        })
+      case _ => false
     }
+    val peersWithChangedEndpoint = configuredPeers.filter {
+      case (peer, Some(sequencerId)) =>
+        dsoSequencersWithEndpoint.exists({ case (dsoSequencerId, endpoint) =>
+          sequencerId == dsoSequencerId && endpoint.exists(_.id != peer.id)
+        })
+      case _ => false
+    }
+    // we only remove connections for which we don't have a sequencer id when we have been able to query all scans to get connections. otherwise a temporary scan issue could result in us removing the peer.
+    val unknownPeers =
+      if (dsoSequencersWithEndpoint.forall { case (_, endpoint) => endpoint.isDefined }) {
+        configuredPeers.filter(peer =>
+          !dsoSequencersWithEndpoint.exists { case (_, endpoint) =>
+            endpoint.exists(_.id == peer._1.id)
+          }
+        )
+      } else Seq.empty
+
+    (peersWithWrongSequencerId ++ peersWithChangedEndpoint ++ unknownPeers)
+      .map(
+        _._1
+      )
+      .distinct
   }
 
   private def getAllBftSequencers()(implicit ec: ExecutionContext, tc: TraceContext) = {
@@ -157,6 +150,6 @@ object SequencerBftPeerReconciler {
   case class BftPeerDifference(
       toAdd: Seq[P2PEndpoint],
       toRemove: Seq[P2PEndpoint.Id],
-      currentPeers: Seq[P2PEndpoint],
+      currentPeers: Seq[(P2PEndpoint, Option[SequencerId])],
   )
 }

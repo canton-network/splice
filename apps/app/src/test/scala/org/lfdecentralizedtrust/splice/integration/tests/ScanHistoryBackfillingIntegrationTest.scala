@@ -1,6 +1,9 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.daml.ledger.javaapi.data.Transaction
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.*
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.*
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.*
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   ConfigurableApp,
@@ -20,7 +23,11 @@ import org.lfdecentralizedtrust.splice.scan.automation.{
   DeleteCorruptAcsSnapshotTrigger,
   ScanHistoryBackfillingTrigger,
 }
-import org.lfdecentralizedtrust.splice.store.{PageLimit, TreeUpdateWithMigrationId}
+import org.lfdecentralizedtrust.splice.store.{
+  PageLimit,
+  TreeUpdateWithMigrationId,
+  VoteResultsFilters,
+}
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.AdvanceOpenMiningRoundTrigger
 import org.lfdecentralizedtrust.splice.util.{EventId, UpdateHistoryTestUtil, WalletTestUtil}
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
@@ -29,12 +36,12 @@ import com.digitalasset.canton.data.CantonTimestamp
 import scala.math.BigDecimal.javaBigDecimal2bigDecimal
 import com.digitalasset.canton.{HasActorSystem, HasExecutionContext}
 import org.lfdecentralizedtrust.splice.automation.TxLogBackfillingTrigger
-import org.lfdecentralizedtrust.splice.http.v0.definitions.TransactionHistoryRequest.SortOrder
 import org.lfdecentralizedtrust.splice.scan.store.TxLogEntry
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.TxLogBackfillingState
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingState
 import org.scalactic.source.Position
 
+import java.util.Optional
 import scala.annotation.nowarn
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
@@ -126,6 +133,39 @@ class ScanHistoryBackfillingIntegrationTest
       _ => {
         // Amulet merging and round advancement are both paused
         aliceWalletClient.list().amulets should have length 4
+      },
+    )
+
+    // we create votes as they produce txlog entries that can be backfilled
+    actAndCheck(
+      "Create vote", {
+        val action: ActionRequiringConfirmation =
+          new ARC_DsoRules(
+            new SRARC_SetConfig(
+              new DsoRules_SetConfig(
+                sv1Backend
+                  .getDsoInfo()
+                  .dsoRules
+                  .payload
+                  .config,
+                Optional.empty(),
+              )
+            )
+          )
+
+        sv1Backend.createVoteRequest(
+          sv1Backend.getDsoInfo().svParty.toProtoPrimitive,
+          action,
+          "url",
+          "description",
+          sv1Backend.getDsoInfo().dsoRules.payload.config.voteRequestTimeout,
+          None,
+        )
+      },
+    )(
+      "Vote has been executed",
+      _ => {
+        sv1ScanBackend.listVoteRequestResults(VoteResultsFilters(), 100)._1 should have size (1)
       },
     )
 
@@ -466,18 +506,9 @@ class ScanHistoryBackfillingIntegrationTest
         .loneElement shouldBe a[TxLogBackfillingTrigger.InitializeBackfillingTask]
     }
 
-    clue("TxLog based historical queries differ") {
-      val sv1Transactions =
-        sv1ScanBackend.listTransactions(None, SortOrder.Asc, 1000).map(shortDebugDescription)
-      val sv2Transactions =
-        sv2ScanBackend.listTransactions(None, SortOrder.Asc, 1000).map(shortDebugDescription)
-
-      // We tapped 4 times before SV2 joined, and once after
-      sv1Transactions.size should be >= 5 withClue "SV1 txns"
-      sv2Transactions.size should be >= 1 withClue "SV2 txns"
-      sv1Transactions.size should be > sv2Transactions.size withClue "SV1 txns"
-      sv1Transactions should contain allElementsOf sv2Transactions withClue "sv1 transactions"
-      sv2Transactions should not contain sv1Transactions.headOption.value withClue "sv2 transactions"
+    clue("TxLog based vote result result differ") {
+      sv1ScanBackend.listVoteRequestResults(VoteResultsFilters(), 100)._1 should have size (1)
+      sv2ScanBackend.listVoteRequestResults(VoteResultsFilters(), 100)._1 should be(empty)
     }
 
     actAndCheck(
@@ -524,14 +555,13 @@ class ScanHistoryBackfillingIntegrationTest
       },
     )
 
-    clue("TxLog based historical queries return same results") {
-      val sv1Transactions =
-        sv1ScanBackend.listTransactions(None, SortOrder.Asc, 1000).map(shortDebugDescription)
-      val sv2Transactions =
-        sv2ScanBackend.listTransactions(None, SortOrder.Asc, 1000).map(shortDebugDescription)
-
-      // TODO(#666): switch to theSameElementsInOrderAs once the endpoint sorts by record time instead of row id.
-      sv1Transactions should contain theSameElementsAs sv2Transactions withClue "SV1/2 txns"
+    clue("TxLog based vote result queries return same results") {
+      // Not quite sure why we need the eventually given that we sync on backfilling completing but without that sv2ScanBackend can still return an empty list.
+      eventually() {
+        sv1ScanBackend.listVoteRequestResults(VoteResultsFilters(), 100)._1 shouldBe sv2ScanBackend
+          .listVoteRequestResults(VoteResultsFilters(), 100)
+          ._1
+      }
     }
 
   }

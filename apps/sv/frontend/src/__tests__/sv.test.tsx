@@ -209,7 +209,7 @@ describe('An SetConfig request', () => {
     );
 
     const button = screen.getByRole('button', { name: 'Send Request to Super Validators' });
-    expect(button.getAttribute('disabled')).toBeDefined();
+    expect(button.getAttribute('disabled')).not.toBeNull();
   });
 
   test('displays a warning when an SV tries to modify an AmuletRules field already changed by another request', async () => {
@@ -240,7 +240,7 @@ describe('An SetConfig request', () => {
         'You are therefore not allowed to modify the fields: transferConfig.createFee.fee'
     );
     const button = screen.getByTestId('create-voterequest-submit-button');
-    expect(button.getAttribute('disabled')).toBeDefined();
+    expect(button.getAttribute('disabled')).not.toBeNull();
   });
 
   test('disables the Proceed button in the confirmation dialog if a conflict arises after request creation', async () => {
@@ -281,7 +281,10 @@ describe('An SetConfig request', () => {
     );
 
     const button = screen.getByRole('button', { name: 'Proceed' });
-    expect(button.getAttribute('disabled')).toBeDefined();
+    // the conflict is only detected once the vote requests query re-polls (1s interval)
+    await waitFor(() => expect(button.getAttribute('disabled')).not.toBeNull(), {
+      timeout: 5000,
+    });
   });
 });
 
@@ -315,8 +318,8 @@ describe('An AddFutureAmuletConfigSchedule request', () => {
     expect(await screen.findByDisplayValue('validator::15')).toBeDefined();
 
     // secrets
-    expect(await screen.queryByText('encoded_secret')).toBeDefined();
-    expect(await screen.queryByText('candidate_secret')).toBeNull();
+    expect(screen.queryByText('encoded_secret')).not.toBeNull();
+    expect(screen.queryByText('candidate_secret')).toBeNull();
   });
 });
 

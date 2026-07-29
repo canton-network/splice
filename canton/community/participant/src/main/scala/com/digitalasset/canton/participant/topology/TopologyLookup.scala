@@ -95,12 +95,11 @@ final class TopologyLookup(
         EitherT.pure[FutureUnlessShutdown, ParticipantTopologyManagerError](psid)
     }
 
-    snapshot <- topologyClientFor(psid).biflatMap(
-      _ => offlineTopologyClient(psid).map(_.approximateTimestamp),
+    snapshot <- topologyClientO(psid).fold(offlineTopologyClient(psid).map(_.approximateTimestamp))(
       topologyClient =>
         EitherT.rightT[FutureUnlessShutdown, ParticipantTopologyManagerError](
           topologyClient.approximateTimestamp
-        ),
+        )
     )
   } yield snapshot
 
@@ -148,10 +147,9 @@ final class TopologyLookup(
         case psid: PhysicalSynchronizerId =>
           EitherT.pure[FutureUnlessShutdown, ParticipantTopologyManagerError](psid)
       }
-      client <- topologyClientFor(psid).biflatMap(
-        _ => offlineTopologyClient(psid),
-        topologyClient =>
-          EitherT.pure[FutureUnlessShutdown, ParticipantTopologyManagerError](topologyClient),
+
+      client <- topologyClientO(psid).fold(offlineTopologyClient(psid))(
+        EitherT.pure[FutureUnlessShutdown, ParticipantTopologyManagerError](_)
       )
     } yield client
 
@@ -207,23 +205,5 @@ final class TopologyLookup(
       ParticipantTopologyManagerError.IdentityManagerParentError(
         TopologyManagerError.TopologyStoreUnknown.Failure(SynchronizerStore(psid))
       )
-    )
-
-  /** Returns the topology manager for the given psid. Fails if the node is not connected to the
-    * synchronizer.
-    */
-  private def topologyClientFor(psid: PhysicalSynchronizerId)(implicit
-      traceContext: TraceContext,
-      ec: ExecutionContext,
-  ): EitherT[
-    FutureUnlessShutdown,
-    ParticipantTopologyManagerError,
-    SynchronizerTopologyClient,
-  ] =
-    EitherT.fromOption[FutureUnlessShutdown](
-      topologyClientO(psid),
-      ParticipantTopologyManagerError.IdentityManagerParentError(
-        TopologyManagerError.TopologyStoreUnknown.Failure(SynchronizerStore(psid))
-      ),
     )
 }

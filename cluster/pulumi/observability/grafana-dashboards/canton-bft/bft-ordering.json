@@ -18,7 +18,7 @@
   "description": "",
   "editable": true,
   "fiscalYearStartMonth": 0,
-  "graphTooltip": 0,
+  "graphTooltip": 1,
   "id": 8,
   "links": [],
   "liveNow": false,
@@ -1225,6 +1225,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
+      "description": "Wall-clock duration between the instant a request is received by the CantonBFT orderer and the instant the fully assembled ordered block metadata is stored, just before the request is pushed to the post-ordering stages. Its meaningfulness requires wall-clock synchronization, as not all ordered requests are received and timestamped on this node.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1572,7 +1573,7 @@
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{namespace}}.{{node}}",
+          "legendFormat": "{{namespace}}.{{node}} ({{mode}})",
           "refId": "A"
         }
       ],
@@ -1812,7 +1813,7 @@
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{namespace}}.{{node}}",
+          "legendFormat": "{{namespace}}.{{node}} ({{mode}})",
           "refId": "A"
         }
       ],
@@ -3812,7 +3813,7 @@
       "type": "timeseries"
     }
   ],
-  "refresh": "5s",
+  "refresh": "30s",
   "schemaVersion": 38,
   "style": "dark",
   "tags": [

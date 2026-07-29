@@ -36,8 +36,6 @@ import com.digitalasset.canton.version.{ProtocolVersion, ReleaseVersion}
 import monocle.macros.syntax.lens.*
 import org.scalatest.concurrent.PatienceConfiguration
 
-import scala.concurrent.duration.DurationInt
-
 trait MultiVersionLedgerApiConformanceBase extends LedgerApiConformanceBase {
 
   protected def testedReleases: List[TestedRelease]
@@ -96,7 +94,7 @@ trait MultiVersionLedgerApiConformanceBase extends LedgerApiConformanceBase {
           "ExplicitDisclosureIT:EDDuplicates",
         )
       else Seq.empty
-    LedgerApiConformanceBase.excludedTests ++ perReleaseExclusions
+    perReleaseExclusions ++ LedgerApiConformanceBase.excludedTests(testedProtocolVersion)
   }
 
 }
@@ -169,7 +167,7 @@ trait ProtocolContinuityConformanceTestSynchronizer extends ProtocolContinuityCo
   testedReleases.foreach { case TestedRelease(release, protocolVersions) =>
     lazy val binDir = ReleaseUtils
       .retrieve(release)
-      .futureValue(timeout = PatienceConfiguration.Timeout(2.minutes))
+      .futureValue(PatienceConfiguration.Timeout(ReleaseUtils.DefaultReleaseDownloadTimeout))
     lazy val pv = protocolVersions.max1
 
     s"run conformance tests of shard $shard with release $release and protocol $pv" in {
@@ -245,7 +243,7 @@ trait ProtocolContinuityConformanceTestParticipant extends ProtocolContinuityCon
   testedReleases.foreach { case TestedRelease(release, protocolVersions) =>
     lazy val binDir = ReleaseUtils
       .retrieve(release)
-      .futureValue(timeout = PatienceConfiguration.Timeout(2.minutes))
+      .futureValue(PatienceConfiguration.Timeout(ReleaseUtils.DefaultReleaseDownloadTimeout))
     lazy val pv = protocolVersions.max1
 
     s"run conformance tests of shard $shard with release $release and protocol $pv" in {
@@ -316,7 +314,7 @@ trait ProtocolContinuityConformanceTestPing extends ProtocolContinuityConformanc
   testedReleases.foreach { case TestedRelease(release, protocolVersions) =>
     lazy val binDir = ReleaseUtils
       .retrieve(release)
-      .futureValue(timeout = PatienceConfiguration.Timeout(2.minutes))
+      .futureValue(PatienceConfiguration.Timeout(ReleaseUtils.DefaultReleaseDownloadTimeout))
     lazy val pv = protocolVersions.max1
 
     s"ping between current-branch participant and release $release participant (pv=$pv)" in {
@@ -436,11 +434,11 @@ private[continuity] object ProtocolContinuityConformanceTest {
         s"$base.ledger-api.topology-aware-package-selection.max-passes-default",
         s"$base.ledger-api.topology-aware-package-selection.max-passes-limit",
         s"$base.ledger-api.update-service",
-        s"$base.parameters.alpha-multi-synchronizer-support",
         s"$base.parameters.caching.bft-ordering-batch-cache",
         s"$base.parameters.caching.sequencer-catchup-payload-cache",
         s"$base.parameters.commit-after-failed-activeness-check",
         s"$base.parameters.commitment-use-db-snapshot-for-participant-lookup",
+        s"$base.parameters.enable-all-ledger-api-reassignments",
         s"$base.parameters.validate-legacy-contracts-v-11",
         s"$base.parameters.ledger-api-server.indexer.achs-config",
         s"$base.parameters.ledger-api-server.indexer.postgres-data-source",
@@ -452,6 +450,8 @@ private[continuity] object ProtocolContinuityConformanceTest {
         s"$base.sequencer-client.channel-max-inbound-message-size",
         s"$base.sequencer-client.keep-alive-client.idle-timeout",
         s"$base.sequencer-client.keep-alive-client.keep-alive-without-calls",
+        s"$base.parameters.connect-to-synchronizers-on-startup",
+        s"$base.traffic-enforcement",
       )
     }
     val perMediator = {
@@ -464,6 +464,7 @@ private[continuity] object ProtocolContinuityConformanceTest {
         s"$base.crypto.session-signing-keys",
         s"$base.parameters.caching.bft-ordering-batch-cache",
         s"$base.parameters.caching.sequencer-catchup-payload-cache",
+        s"$base.parameters.delayed-verdict-sender",
         s"$base.sequencer-client.amplify-on-max-sequencing-time-too-far",
         s"$base.sequencer-client.channel-flow-control-window",
         s"$base.sequencer-client.channel-max-inbound-message-size",
@@ -488,6 +489,8 @@ private[continuity] object ProtocolContinuityConformanceTest {
         s"$base.parameters.unsafe-sequencer-channel-support",
         // Once we remove PV34, we can remove this exception
         s"$base.parameters.disable-release-version-handshake-check",
+        s"$base.parameters.enable-prevalidation",
+        s"$base.parameters.enable-reject-delivered-aggregations-on-pv-35",
         s"$base.public-api.max-concurrent-calls-per-connection",
         s"$base.sequencer-client.amplify-on-max-sequencing-time-too-far",
         s"$base.sequencer-client.channel-flow-control-window",

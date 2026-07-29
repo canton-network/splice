@@ -544,7 +544,7 @@ class SequencerAdminConnection(
     getSequencerId
 
   override def isNodeInitialized()(implicit traceContext: TraceContext): Future[Boolean] = {
-    getStatus.map {
+    getStatusWithoutRetries.map {
       case NodeStatus.Failure(_) => false
       case NodeStatus.NotInitialized(_, _, _) => false
       case NodeStatus.Success(_) => true

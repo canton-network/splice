@@ -49,6 +49,14 @@ class AppActivityComputation(
   )(implicit tc: TraceContext): Future[Option[Long]] =
     rewardsReferenceStore.lookupLatestArchivedOpenMiningRound(asOf)
 
+  /** The OpenMiningRound round number active at asOf, if the round data has been ingested. */
+  def lookupActiveOpenMiningRound(
+      asOf: CantonTimestamp
+  )(implicit tc: TraceContext): Future[Option[Long]] =
+    rewardsReferenceStore
+      .lookupActiveOpenMiningRounds(Seq(asOf))
+      .map(_.get(asOf).map { case (roundNumber, _) => roundNumber })
+
   /** Compute app activity records for a batch of verdicts.
     *
     * Records are returned with verdictRowId = DUMMY_VERDICT_ROW_ID as a placeholder.
@@ -125,8 +133,12 @@ class AppActivityComputation(
                 }
               case None =>
                 // Skip activity record computation as we don't have the necessary round data ingested.
-                // This can happen for freshly onboarded SVs, but is not
-                // expected to happen once the first activity record has been computed.
+                // This can happen for freshly onboarded SVs if the reward
+                // reference store does not have the data for any of the
+                // sequencingTime(s) in this batch.
+                // OTOH this cannot happen after ingestion starts because
+                // lookupActiveOpenMiningRounds blocks until the reference store
+                // has caught up to all the sequencingTime(s) in this batch.
                 logger.debug(
                   s"No round data found for sequencingTime=${summary.sequencingTime}, skipping activity record computation"
                 )

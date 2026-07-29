@@ -57,7 +57,6 @@ import scala.concurrent.Future
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 import scala.math.BigDecimal.javaBigDecimal2bigDecimal
-import scala.reflect.ClassTag
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.IngestionSink.IngestionStart.{
   InitializeAcsAtLatestOffset,
@@ -328,144 +327,6 @@ abstract class ScanStoreTest
           store
             .lookupEntryByParty(userParty(2), CantonTimestamp.assertFromInstant(now))
             .futureValue should be(Some(ContractWithState(aContract, Assigned(dummyDomain))))
-        }
-      }
-    }
-
-    "listTransactions" should {
-      "return the most recent txs in pages" in {
-        val limit = 10
-        val nrTransfers = 20
-        val round = 1L
-        val now = java.time.Instant.EPOCH
-        val zero = BigDecimal(0)
-        val fakeOffset = "0"
-        val txs: List[TransferTxLogEntry] = (1 to nrTransfers).map { i =>
-          TransferTxLogEntry(
-            offset = fakeOffset,
-            eventId = s"$i",
-            domainId = dummyDomain,
-            date = Some(now),
-            sender = Some(
-              SenderAmount(
-                user1,
-                BigDecimal(i),
-                zero,
-                zero,
-                zero,
-                zero,
-                zero,
-                zero,
-                Some(zero),
-                None,
-              )
-            ),
-            balanceChanges = Seq(),
-            receivers = Seq(ReceiverAmount(user2, BigDecimal(i), zero)),
-            round = round,
-          )
-        }.toList
-        def stripEventIdAndOffset(tx: TransferTxLogEntry) =
-          tx.copy(eventId = "", offset = fakeOffset)
-        val expectedFirstPage = txs.reverse.take(limit).toList
-        val expectedSecondPage = txs.reverse.drop(limit).take(limit).toList
-
-        def transferFromTransaction(
-            store: ScanStore,
-            amuletRulesContract: Contract[
-              splice.amuletrules.AmuletRules.ContractId,
-              splice.amuletrules.AmuletRules,
-            ],
-            tx: TransferTxLogEntry,
-        ) = {
-          val sender = tx.sender.getOrElse(throw txMissingField())
-          val senderParty = sender.party
-          val senderAmount = sender.inputAmuletAmount
-          val receiverParty = tx.receivers(0).party
-          val receiverAmount = tx.receivers(0).amount
-          dummyDomain
-            .exercise(
-              contract = amuletRulesContract,
-              interfaceId = Some(splice.amuletrules.AmuletRules.TEMPLATE_ID_WITH_PACKAGE_ID),
-              choiceName = Transfer.choice.name,
-              choiceArgument = mkAmuletRules_Transfer(
-                mkTransferInputOutput(
-                  senderParty,
-                  senderParty,
-                  List(mkInputAmulet()),
-                  List(mkTransferOutput(receiverParty, receiverAmount)),
-                )
-              ),
-              exerciseResult = mkTransferResultRecord(
-                round = round,
-                inputAppRewardAmount = sender.inputAppRewardAmount.toDouble,
-                inputAmuletAmount = senderAmount.toDouble,
-                inputValidatorRewardAmount = sender.inputValidatorRewardAmount.toDouble,
-                inputSvRewardAmount = sender.inputSvRewardAmount.fold(0.0)(_.toDouble),
-                balanceChanges = Map(),
-                amuletPrice = 1.0,
-              ),
-            )(
-              store.multiDomainAcsStore
-            )
-            .map(_ => ())
-        }
-
-        for {
-          store <- mkStore()
-          amuletRulesContract = amuletRules()
-          _ <- txs.foldLeft(Future.successful(())) { (f, tx) =>
-            f.flatMap { _ =>
-              transferFromTransaction(
-                store,
-                amuletRulesContract,
-                tx,
-              )
-            }
-          }
-        } yield {
-          val firstPageDescending = store
-            .listByType[TransferTxLogEntry](None, SortOrder.Descending, limit)
-            .futureValue
-            .toList
-
-          firstPageDescending
-            .map(stripEventIdAndOffset) should be(
-            expectedFirstPage
-              .map(stripEventIdAndOffset)
-          )
-          val nextPageDescending = store
-            .listByType[TransferTxLogEntry](
-              Some(firstPageDescending.last.eventId),
-              SortOrder.Descending,
-              limit,
-            )
-            .futureValue
-            .toList
-
-          nextPageDescending
-            .map(stripEventIdAndOffset) should be(
-            expectedSecondPage
-              .map(stripEventIdAndOffset)
-          )
-
-          val firstPageAscending = store
-            .listByType[TransferTxLogEntry](None, SortOrder.Ascending, limit)
-            .futureValue
-            .toList
-
-          firstPageAscending should be(nextPageDescending.reverse)
-
-          val nextPageAscending = store
-            .listByType[TransferTxLogEntry](
-              Some(firstPageAscending.last.eventId),
-              SortOrder.Ascending,
-              limit,
-            )
-            .futureValue
-            .toList
-
-          nextPageAscending should be(firstPageDescending.reverse)
         }
       }
     }
@@ -1401,20 +1262,6 @@ abstract class ScanStoreTest
   ): Future[UpdateHistory]
 
   private lazy val user1 = userParty(1)
-  private lazy val user2 = userParty(2)
-
-  implicit class ScanStoreExt(store: ScanStore) {
-    @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
-    def listByType[T](beginAfterEventId: Option[String], sortOrder: SortOrder, limit: Int)(implicit
-        tag: ClassTag[T]
-    ): Future[Seq[T]] = {
-      store
-        .listTransactions(beginAfterEventId, sortOrder, PageLimit.tryCreate(limit))
-        .map(_.collect {
-          case c if tag.runtimeClass.isInstance(c) => c.asInstanceOf[T]
-        }.toSeq)
-    }
-  }
 }
 trait AmuletTransferUtil { self: StoreTestBase =>
   def mkInputAmulet() = {

@@ -31,7 +31,7 @@ class RecoverExternalPartyIntegrationTest
     with WalletTestUtil {
 
   override def environmentDefinition: EnvironmentDefinition =
-    EnvironmentDefinition.simpleTopology1Sv(this.getClass.getSimpleName)
+    EnvironmentDefinition.simpleTopology1Sv(this.getClass.getSimpleName).withTransferCommandSupport
 
   override protected lazy val sanityChecksIgnoredRootCreates = Seq(
     ValidatorRewardCoupon.TEMPLATE_ID_WITH_PACKAGE_ID

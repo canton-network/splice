@@ -3,9 +3,7 @@ package org.lfdecentralizedtrust.splice.integration.tests
 import com.digitalasset.canton.concurrent.Threading
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.config.RequireTypes.NonNegativeInt
-import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.discard.Implicits.DiscardOps
-import com.digitalasset.canton.topology.PartyId
 import org.apache.pekko.http.scaladsl.Http
 import org.apache.pekko.http.scaladsl.client.RequestBuilding.{Get, Post}
 import org.apache.pekko.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes}
@@ -18,10 +16,6 @@ import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   updateAutomationConfig,
   ConfigurableApp,
-}
-import org.lfdecentralizedtrust.splice.http.v0.definitions.{
-  TransactionHistoryRequest,
-  TransactionHistoryResponseItem,
 }
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
@@ -166,107 +160,6 @@ class ScanIntegrationTest
     spliceInstanceNames.nameServiceNameAcronym should be("ANS")
   }
 
-  "list transaction pages in ascending and descending order" in { implicit env =>
-    val aliceWalletUser = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
-    def tapsForAlice = (t: TransactionHistoryResponseItem) =>
-      t.tap.exists { tap =>
-        PartyId.tryFromProtoPrimitive(tap.amuletOwner) == aliceWalletUser
-      }
-
-    val nrTaps = 10
-    val amuletAmounts = (1 to nrTaps).map(walletUsdToAmulet(_))
-    val pageSize = nrTaps / 2
-    // filtering for Alice to avoid interference by the top up taps
-    def collectAllTapPagesForAlice(sortOrder: TransactionHistoryRequest.SortOrder) = {
-      LazyList
-        .iterate(sv1ScanBackend.listTransactions(None, sortOrder, pageSize)) { page =>
-          sv1ScanBackend.listTransactions(page.lastOption.map(_.eventId), sortOrder, pageSize)
-        }
-        .takeWhile(_.nonEmpty)
-        .foldLeft(Seq.empty[TransactionHistoryResponseItem])(_ ++ _)
-        .filter(tapsForAlice)
-    }
-
-    def toAmuletAmounts(page: Seq[TransactionHistoryResponseItem]) =
-      page.flatMap(_.tap.map(t => BigDecimal(t.amuletAmount)))
-
-    actAndCheck(
-      "Tap amulets for Alice", {
-        (1 to nrTaps).foreach { i =>
-          aliceWalletClient.tap(BigDecimal(i))
-        }
-      },
-    )(
-      "Amulets should appear in Alice's wallet",
-      _ => {
-        aliceWalletClient.list().amulets should have length nrTaps.toLong
-      },
-    )
-
-    eventually() {
-      val latestRound =
-        sv1ScanBackend.getLatestOpenMiningRound(CantonTimestamp.now()).contract.payload.round.number
-      val asc = TransactionHistoryRequest.SortOrder.Asc
-      val desc = TransactionHistoryRequest.SortOrder.Desc
-      val allPagesAsc = collectAllTapPagesForAlice(asc)
-      val allPagesDesc = collectAllTapPagesForAlice(desc)
-      allPagesAsc.map(_.round) should contain only Some(
-        latestRound
-      ) withClue "alice tap pages' rounds"
-
-      val tapsFirstPageAscending = allPagesAsc.take(pageSize)
-
-      toAmuletAmounts(tapsFirstPageAscending) should be(
-        amuletAmounts.take(pageSize)
-      )
-
-      val firstPageEndEventId = tapsFirstPageAscending.last.eventId
-      val tapsSecondPageAscending = allPagesAsc.slice(pageSize, pageSize + pageSize)
-      sv1ScanBackend
-        .listTransactions(
-          Some(firstPageEndEventId),
-          TransactionHistoryRequest.SortOrder.Asc,
-          pageSize.toInt,
-        )
-        .filter(tapsForAlice)
-
-      toAmuletAmounts(tapsSecondPageAscending) should be(
-        amuletAmounts.slice(pageSize, pageSize + pageSize)
-      )
-
-      sv1ScanBackend
-        .listTransactions(
-          Some(tapsSecondPageAscending.last.eventId),
-          asc,
-          pageSize.toInt,
-        )
-        .filter(tapsForAlice) should be(empty)
-
-      val tapsFirstPageDescending = allPagesDesc.take(pageSize)
-      toAmuletAmounts(tapsFirstPageDescending) should be(
-        amuletAmounts.reverse.take(pageSize)
-      )
-
-      val tapsSecondPageDescending =
-        allPagesDesc.slice(pageSize, pageSize + pageSize)
-
-      sv1ScanBackend
-        .listTransactions(
-          Some(tapsSecondPageDescending.last.eventId),
-          TransactionHistoryRequest.SortOrder.Desc,
-          pageSize.toInt,
-        )
-        .filter(tapsForAlice) should be(empty)
-
-      toAmuletAmounts(tapsSecondPageDescending) should be(
-        amuletAmounts.reverse.slice(pageSize, pageSize + pageSize)
-      )
-      toAmuletAmounts(
-        tapsFirstPageAscending ++ tapsSecondPageAscending
-      ) should be(toAmuletAmounts((tapsFirstPageDescending ++ tapsSecondPageDescending).reverse))
-    }
-  }
-
   "getUpdateHistory should return 400 for invalid after timestamp" in { implicit env =>
     import env.{actorSystem, executionContext}
     registerHttpConnectionPoolsCleanup(env)
@@ -300,10 +193,14 @@ class ScanIntegrationTest
     bftSequencers should have size 2
     val expectedSequencerId =
       sv1Backend.appState.localSynchronizerNodes.current.sequencerAdminConnection.getSequencerId.futureValue
-    val currentSequencer = bftSequencers.find(_.url == "http://testUrl:8081").value
-    currentSequencer.id shouldBe expectedSequencerId
-    val legacySequencer = bftSequencers.find(_.url == "http://legacyUrl:8082").value
-    legacySequencer.id shouldBe expectedSequencerId
+    forExactly(1, bftSequencers) { sequencer =>
+      sequencer.url shouldBe "http://testurl:8081"
+      sequencer.id shouldBe expectedSequencerId
+    }
+    forExactly(1, bftSequencers) { sequencer =>
+      sequencer.url shouldBe "http://legacyurl:8082"
+      sequencer.id shouldBe expectedSequencerId
+    }
   }
 
   "respect rate limit" in { implicit env =>
