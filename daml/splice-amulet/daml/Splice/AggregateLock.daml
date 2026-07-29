@@ -120,22 +120,6 @@ calculateAvailableWithdrawAmount currentDateTime alloc nextIterationFundAmount =
     withdrawnAmount = initialAmount - nextIterationFundAmount
 
 
--- | The intention is to treat the overall aggregate lock for a SV as if it is
--- "the settlement" for the allocations locked to it, and use iterated
--- settlement to execute updates on the committed allocations as needed.
--- This approach would permit most of the specific governance locking and
--- vesting to be in a separate dar from amulet only needed for SVs and
--- interested observers.
-
-{-template AggregateLock
-  with
-    dso: Party
-    instrumentId : Text
-    vestingSchedule : VestingSchedule
-  where
-    signatory dso
--}
-
 aggregateLockUnlock : (HasToInterface a V2.Allocation) => (a -> Time -> Metadata -> Update (ContractId V2.Allocation)) -> a -> ContractId a -> Allocation_Withdraw -> Update V2.AllocationResult
 aggregateLockUnlock newEmptyAllocation a aCid arg = do
     let alloc = view $ toInterface @V2.Allocation a
