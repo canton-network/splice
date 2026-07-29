@@ -15,6 +15,7 @@ import qualified DA.Map as Map
 import qualified DA.Set as Set
 import qualified DA.Text as T
 import DA.Time
+import DA.Optional (fromSomeNote)
 
 import Splice.Amulet
 import Splice.Amulet.RewardAccountingV2 qualified as RewardAccountingV2
@@ -1169,7 +1170,7 @@ template DsoRules with
           svPartyIsObserver = Some False
 
         let activeSynchronizer = config.decentralizedSynchronizer.activeSynchronizerId
-        let actualMigrationId = fromOptional 0 migrationId
+        let actualMigrationId = fromSomeNote "migrationId must be provided for SV onboarding" migrationId
         _ <- create (MemberTraffic with
           dso
           memberId = newParticipantId
