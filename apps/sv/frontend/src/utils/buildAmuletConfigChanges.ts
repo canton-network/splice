@@ -346,7 +346,7 @@ function buildRewardConfigChanges(
     },
     {
       fieldName: 'rewardConfigDryRunVersion',
-      label: 'Reward config: Dry-run minting scheme',
+      label: 'Reward config: Dry-run reward scheme',
       currentValue: before?.dryRunVersion || '',
       newValue: after?.dryRunVersion || '',
       options: [{ value: '', label: 'None (disabled)' }, ...rewardVersionOptions],
