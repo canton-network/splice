@@ -468,7 +468,7 @@ class SV1Initializer(
           mediatorDeduplicationTimeout =
             NonNegativeFiniteDuration.fromConfig(config.mediatorDeduplicationTimeout),
           onboardingRestriction = if (config.permissionedSynchronizer) {
-            logger.debug("Using RestrictedOpen onboarding restriction for the synchronizer")
+            logger.info("Using RestrictedOpen onboarding restriction for the synchronizer")
             RestrictedOpen
           } else {
             UnrestrictedOpen

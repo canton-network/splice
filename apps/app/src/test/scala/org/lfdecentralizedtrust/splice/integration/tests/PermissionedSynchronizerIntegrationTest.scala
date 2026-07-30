@@ -32,21 +32,7 @@ class PermissionedSynchronizerIntegrationTest
       .withManualStart
 
   "Onboard network in RestrictedOpen mode" in { implicit env =>
-    initDsoWithSv1Only()
-
-    val followerSvs = Seq(
-      (sv2ValidatorBackend, sv2Backend, sv2ScanBackend),
-      (sv3ValidatorBackend, sv3Backend, sv3ScanBackend),
-      (sv4ValidatorBackend, sv4Backend, sv4ScanBackend),
-    )
-
-    for ((validator, sv, scan) <- followerSvs) {
-
-      clue("Starting SV" + validator.participantClient.id) {
-        startAllSync(sv, scan, validator)
-      }
-
-    }
+    initDso()
 
     val trafficAmount = Math.max(
       sv1ScanBackend
@@ -84,7 +70,7 @@ class PermissionedSynchronizerIntegrationTest
       aliceValidatorBackend,
     )
 
-    clue("Verify all target validators are granted ParticipantSynchronizerPermission") {
+    clue("Verify all participants are granted ParticipantSynchronizerPermission") {
       allValidators.foreach { targetApp =>
         eventually() {
           val permissions =
