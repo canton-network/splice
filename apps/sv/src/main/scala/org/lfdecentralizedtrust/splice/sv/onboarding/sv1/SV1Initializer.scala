@@ -779,7 +779,7 @@ class SV1Initializer(
 
 object SV1Initializer {
 
-  /** Participant must broadcast in a certain order for the bootstrap to be functional: refer the ordering as https://github.com/digital-asset/canton/blob/eaa9e7a4bf48793acb35aba270b85a970afe6006/community/base/src/main/scala/com/digitalasset/canton/topology/store/TopologyStore.scala#L773
+  /** Participant must broadcast in a certain order for the bootstrap to be functional: refer https://github.com/digital-asset/canton/blob/eaa9e7a4bf48793acb35aba270b85a970afe6006/community/base/src/main/scala/com/digitalasset/canton/topology/store/TopologyStore.scala#L773
     */
   implicit val bootstrapTransactionOrdering
       : Ordering[SignedTopologyTransaction[TopologyChangeOp, TopologyMapping]] =
