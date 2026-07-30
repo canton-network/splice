@@ -494,7 +494,7 @@ cantonbft_get_status_reachability() {
       run_parallel "$get_cantonbfts_info_cmds" |
         json_object_values_fromjson || echo '{}'
     } |
-    jq '{ bftSequencers: [.[] | .bftSequencers[]] }'
+    jq '{ bftSequencers: map(.bftSequencers[]?) }'
   )
 
   local cantonbfts_info_for_serial; cantonbfts_info_for_serial=$(
