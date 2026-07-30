@@ -171,7 +171,7 @@ class PartyToParticipantDeclarative(
       Map[PhysicalSynchronizerId, PartyHostingState],
     ],
     onboarding: Boolean,
-)(implicit executionContext: ExecutionContext, env: TestEnvironment)
+)(implicit executionContext: ExecutionContext, env: TestEnvironment[?])
     extends PartyToParticipantDeclarativeCommon[Party] {
 
   override protected def partyReference: (PartyToParticipant, HashingSchemeVersion) => Party =
@@ -417,7 +417,7 @@ object PartyToParticipantDeclarative {
       ],
       forceFlags: ForceFlags = ForceFlags.none,
       onboarding: Boolean = false, // participants added in target topology are marked as onboarding
-  )(implicit executionContext: ExecutionContext, env: TestEnvironment): Unit = {
+  )(implicit executionContext: ExecutionContext, env: CantonTestEnvironment): Unit = {
     val participantReference = participants.headOption.getOrElse(
       fail("No participant set in PartyToParticipantDeclarative")
     )
@@ -466,7 +466,7 @@ object PartyToParticipantDeclarative {
       threshold: PositiveInt,
       hosting: Set[(ParticipantId, ParticipantPermission)],
       forceFlags: ForceFlags = ForceFlags.none,
-  )(implicit executionContext: ExecutionContext, env: TestEnvironment): Unit =
+  )(implicit executionContext: ExecutionContext, env: CantonTestEnvironment): Unit =
     apply(participants, Set(synchronizerId))(
       Map(party.partyId -> owningParticipant),
       Map(party -> Map(synchronizerId -> (threshold, hosting))),
@@ -496,7 +496,7 @@ class PartiesAllocator(
 )(
     newParties: Seq[(String, ParticipantId)],
     val targetTopology: Map[String, Map[PhysicalSynchronizerId, PartyHostingState]],
-)(implicit executionContext: ExecutionContext, env: TestEnvironment)
+)(implicit executionContext: ExecutionContext, env: TestEnvironment[?])
     extends PartyToParticipantDeclarativeCommon[String] {
 
   override def externalParties: Set[ExternalParty] = Set.empty
@@ -631,7 +631,7 @@ object PartiesAllocator {
       ],
   )(implicit
       executionContext: ExecutionContext,
-      env: TestEnvironment,
+      env: TestEnvironment[?],
       partyKind: PartyKind,
   ): Seq[Party] =
     new PartiesAllocator(participants)(

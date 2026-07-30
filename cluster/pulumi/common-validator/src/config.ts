@@ -90,7 +90,11 @@ export const ValidatorNodeConfigSchema = z.object({
   logging: z
     .object({
       level: LogLevelSchema.optional(),
+      // Log level for the Splice apps' HTTP request logging (org.lfdecentralizedtrust.splice.admin.api)
       apiRequestLogLevel: LogLevelSchema.optional(),
+      // Log level for the Canton nodes' Ledger-API audit logging (com.digitalasset.canton.logging.audit)
+      // Falls back to `apiRequestLogLevel` when not specified
+      cantonApiRequestLogLevel: LogLevelSchema.optional(),
       async: z.boolean().optional(),
     })
     .default({}),

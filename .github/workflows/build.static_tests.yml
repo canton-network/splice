@@ -31,7 +31,7 @@ jobs:
       - name: Setup Nix
         uses: ./.github/actions/tests/common_test_setup
         with:
-          cache_version: 8
+          cache_version: 9
           test_name: canton_consistency
           target: 'static_tests'
 
@@ -42,6 +42,9 @@ jobs:
           cmd: |
             CURRENT_VERSION=$(jq -r '.version' nix/canton-sources.json)
             echo "Validating Docker digests for Canton version: $CURRENT_VERSION"
+
+            # TODO(#6581) to be removed
+            export CONTAINERS_REGISTRIES_CONF=$(mktemp)
 
             function set_value() {
               local key="$1"
@@ -84,7 +87,7 @@ jobs:
         id: setup
         uses: ./.github/actions/tests/common_test_setup
         with:
-          cache_version: 8
+          cache_version: 9
           test_name: static_tests
           target: 'static_tests'
 

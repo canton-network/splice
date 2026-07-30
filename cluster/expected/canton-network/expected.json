@@ -1772,10 +1772,6 @@
           "name": "synchronizer-identities",
           "type": "unlimited"
         },
-        "/api/scan/v0/transactions": {
-          "name": "transactions",
-          "type": "unlimited"
-        },
         "/api/scan/v0/transfer-command": {
           "name": "transfer-command-status",
           "type": "unlimited"
@@ -2153,10 +2149,6 @@
         },
         "/api/scan/v0/synchronizer-identities": {
           "name": "synchronizer-identities",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/transactions": {
-          "name": "transactions",
           "type": "unlimited"
         },
         "/api/scan/v0/transfer-command": {

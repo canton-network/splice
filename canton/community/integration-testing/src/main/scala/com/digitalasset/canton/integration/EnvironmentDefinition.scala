@@ -26,7 +26,7 @@ import com.digitalasset.canton.console.{
   InstanceReference,
   TestConsoleOutput,
 }
-import com.digitalasset.canton.environment.CantonNode
+import com.digitalasset.canton.environment.{CantonEnvironment, CantonNode}
 import com.digitalasset.canton.integration.bootstrap.{
   NetworkBootstrapper,
   NetworkTopologyDescription,
@@ -42,7 +42,6 @@ import com.digitalasset.canton.{BaseTest, SynchronizerAlias}
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import monocle.macros.syntax.lens.*
-import com.digitalasset.canton.environment.CantonEnvironment
 
 /** Definition of how a environment should be configured and setup.
   * @param baseConfig

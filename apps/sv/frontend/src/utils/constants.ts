@@ -6,3 +6,4 @@ export const PROPOSAL_SUMMARY_SUBTITLE = 'For CIP votes, consider copying the CI
 export const DEFAULT_PROPOSAL_SUMMARY_MAX_LENGTH = 1024;
 export const THRESHOLD_DEADLINE_SUBTITLE =
   'Proposal remains open only if ⅔ of nodes place a vote before this date-time';
+export const DEFAULT_APP_ACTIVITY_WEIGHT = '1.0';
