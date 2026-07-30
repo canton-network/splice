@@ -1866,9 +1866,8 @@ object BftScanConnection {
           // Use the temporary connection to get a consensus on the full list of scans.
           // Future.delegate turns a synchronous throw into a failed future, so the
           // andThen cleanup always runs.
-          allScans <- Future.delegate(Bft.getScansInDsoRules(tempBftConnection)).andThen {
-            case _ =>
-              tempBftConnection.close()
+          allScans <- Future.delegate(Bft.getScansInDsoRules(tempBftConnection)).andThen { case _ =>
+            tempBftConnection.close()
           }
 
           trustedScans = allScans.filter(scan => ts.svNames.toList.contains(scan.svName))
