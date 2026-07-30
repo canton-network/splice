@@ -293,7 +293,7 @@ class SpliceConfigTest extends AsyncWordSpec with BaseTest {
       sharingConfigOf(loaded) shouldBe a[RewardSharingConfig.BuiltIn]
     }
 
-    "accept type = external, ignoring beneficiaries" in {
+    "reject type = external, with beneficiaries" in {
       val overwrite = ConfigFactory.parseString(
         """
           |canton.validator-apps.aliceValidator.reward-sharing-config-by-party = {
@@ -305,8 +305,7 @@ class SpliceConfigTest extends AsyncWordSpec with BaseTest {
           """.stripMargin
       )
       val validConfig = CantonConfig.mergeConfigs(config, Seq(overwrite))
-      val loaded = SpliceConfig.loadAndValidate(validConfig).value
-      sharingConfigOf(loaded) shouldBe RewardSharingConfig.External()
+      SpliceConfig.loadAndValidate(validConfig) shouldBe a[Left[?, ?]]
     }
 
     "reject an invalid type value" in {

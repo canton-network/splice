@@ -69,7 +69,7 @@ import com.typesafe.config.{Config, ConfigRenderOptions}
 import com.typesafe.config.ConfigException.UnresolvedSubstitution
 import org.slf4j.{Logger, LoggerFactory}
 import pureconfig.configurable.{genericMapReader, genericMapWriter}
-import pureconfig.generic.{CoproductHint, FieldCoproductHint}
+import pureconfig.generic.{CoproductHint, FieldCoproductHint, ProductHint}
 import pureconfig.{ConfigCursor, ConfigReader, ConfigWriter}
 import pureconfig.error.{CannotConvert, FailureReason}
 import pureconfig.module.cats.{nonEmptyListReader, nonEmptyListWriter}
@@ -716,6 +716,8 @@ object SpliceConfig {
 
     implicit val rewardSharingBuiltInReader: ConfigReader[RewardSharingConfig.BuiltIn] =
       deriveReader[RewardSharingConfig.BuiltIn]
+    implicit val rewardSharingExternalHint: ProductHint[RewardSharingConfig.External] =
+      ProductHint[RewardSharingConfig.External](allowUnknownKeys = false)
     implicit val rewardSharingExternalReader: ConfigReader[RewardSharingConfig.External] =
       deriveReader[RewardSharingConfig.External]
     implicit val rewardSharingConfigReader: ConfigReader[RewardSharingConfig] =
