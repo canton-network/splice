@@ -69,8 +69,8 @@ import com.typesafe.config.{Config, ConfigRenderOptions}
 import com.typesafe.config.ConfigException.UnresolvedSubstitution
 import org.slf4j.{Logger, LoggerFactory}
 import pureconfig.configurable.{genericMapReader, genericMapWriter}
-import pureconfig.generic.FieldCoproductHint
-import pureconfig.{ConfigReader, ConfigWriter}
+import pureconfig.generic.{CoproductHint, FieldCoproductHint}
+import pureconfig.{ConfigCursor, ConfigReader, ConfigWriter}
 import pureconfig.error.{CannotConvert, FailureReason}
 import pureconfig.module.cats.{nonEmptyListReader, nonEmptyListWriter}
 import io.circe.parser.*
@@ -697,7 +697,22 @@ object SpliceConfig {
       deriveReader[AppRewardBeneficiaryConfig]
 
     implicit val rewardSharingConfigHint: FieldCoproductHint[RewardSharingConfig] =
-      new FieldCoproductHint[RewardSharingConfig]("type")
+      new FieldCoproductHint[RewardSharingConfig]("type") {
+        override def from(
+            cursor: ConfigCursor,
+            options: Seq[String],
+        ): ConfigReader.Result[CoproductHint.Action] = {
+          cursor.asObjectCursor.flatMap { objCur =>
+            if (objCur.atKeyOrUndefined("type").isUndefined) {
+              options
+                .find(fieldValue(_) == "built-in")
+                .fold(super.from(cursor, options))(opt => Right(CoproductHint.Use(objCur, opt)))
+            } else {
+              super.from(cursor, options)
+            }
+          }
+        }
+      }
 
     implicit val rewardSharingBuiltInReader: ConfigReader[RewardSharingConfig.BuiltIn] =
       deriveReader[RewardSharingConfig.BuiltIn]

@@ -322,5 +322,21 @@ class SpliceConfigTest extends AsyncWordSpec with BaseTest {
       val buggyConfig = CantonConfig.mergeConfigs(config, Seq(overwrite))
       SpliceConfig.loadAndValidate(buggyConfig) shouldBe a[Left[?, ?]]
     }
+
+    "default to built-in when type is omitted (legacy config shape)" in {
+      val overwrite = ConfigFactory.parseString(
+        """
+          |canton.validator-apps.aliceValidator.reward-sharing-config-by-party = {
+          |  "alice::1220abc" = {
+          |    beneficiaries = [{ beneficiary = "bob::1220", percentage = 0.4 }]
+          |    min-ttl-after-sharing = 30h
+          |  }
+          |}
+      """.stripMargin
+      )
+      val loaded =
+        SpliceConfig.loadAndValidate(CantonConfig.mergeConfigs(config, Seq(overwrite))).value
+      sharingConfigOf(loaded) shouldBe a[RewardSharingConfig.BuiltIn]
+    }
   }
 }
