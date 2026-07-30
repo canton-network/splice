@@ -1667,7 +1667,7 @@ class DbSvDsoStore(
           "getTotalPurchasedMemberTraffic",
         )
         .value
-    } yield sum.map(s => s.min(BigDecimal(Long.MaxValue)).toLong).getOrElse(0L)
+    } yield Option(sum.orNull).map(s => s.min(BigDecimal(Long.MaxValue)).toLong).getOrElse(0L)
   }
 
   override def lookupVoteRequest(
