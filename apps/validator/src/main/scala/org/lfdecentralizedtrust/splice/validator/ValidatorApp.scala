@@ -464,7 +464,10 @@ class ValidatorApp(
               "ValidatorLicense not found, onboarding is configured. Requesting onboarding with configured secret"
             )
             for {
-              _ <- waitForTopologyPermission(scanConnection, synchronizerId, participantId)
+              _ <-
+                if (config.permissionedSynchronizer) {
+                  waitForTopologyPermission(scanConnection, synchronizerId, participantId)
+                } else { Future.unit }
               _ <- requestOnboarding(oc.svClient.adminApi, validatorParty, oc.secret)
               _ <- waitForValidatorLicense(store)
             } yield ()
