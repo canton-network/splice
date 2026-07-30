@@ -5,6 +5,9 @@
 
 set -euo pipefail
 
+set -E
+trap 'echo "ERROR: On line $LINENO in function \"${FUNCNAME[0]}\". Exit code is $?." >&2' ERR
+
 SV_METRICS_URL="${SV_METRICS_URL:-http://sv-app:10013/metrics}"
 SCAN_URL="${SCAN_URL:-http://scan-app:5012}"
 
