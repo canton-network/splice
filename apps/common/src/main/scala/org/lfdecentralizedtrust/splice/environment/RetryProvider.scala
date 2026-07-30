@@ -600,9 +600,18 @@ object RetryProvider {
               case _ => false
             }
 
+            val isDuplicateCommand = errorDetails.exists {
+              case detail: ErrorDetails.ErrorInfoDetail =>
+                (detail.errorCodeId: String) == "DUPLICATE_COMMAND"
+              case _ => false
+            }
+
             errorCategory match {
               // Pruning errors fall under FAILED_PRECONDITION which we usually retry but there is no chance to recover from it so we instead treat it as a fatal error.
               case _ if isPruningError => fatalError
+              // DUPLICATE_COMMAND: accepted duplicates are recovered centrally in SpliceLedgerConnection;
+              // rejected ones can never succeed within the dedup window — don't retry either.
+              case _ if isDuplicateCommand => fatalError
               case Some(cat) if cat.retryable.nonEmpty || extraRetryableCategories.contains(cat) =>
                 //  don't log the stack traces of transient gRPC exceptions to make the logs less noisy.
                 val msg =

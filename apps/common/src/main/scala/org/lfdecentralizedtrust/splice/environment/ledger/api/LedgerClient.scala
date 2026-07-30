@@ -27,6 +27,7 @@ import com.daml.ledger.javaapi.data.{
   CreateUserResponse,
   ListUserRightsResponse,
   OffsetCheckpoint,
+  Transaction,
   User,
 }
 import com.daml.ledger.javaapi.data.codegen.ContractId
@@ -222,6 +223,34 @@ private[environment] class LedgerClient(
         .mapConcat(GetTreeUpdatesResponse.fromProto)
     )
   }
+
+  private[environment] def getTransactionByOffset(
+      offset: Long,
+      actAs: Seq[String],
+  )(implicit tc: TraceContext): Future[Transaction] = {
+    import lapi.update_service.GetUpdateResponse.Update as U
+    val updateFormat = LedgerClient.ledgerEffectsUpdateFormat(actAs)
+    for {
+      stub <- withCredentialsAndTraceContext(updateServiceStub)
+      response <- stub.getUpdateByOffset(
+        lapi.update_service
+          .GetUpdateByOffsetRequest(offset = offset, updateFormat = Some(updateFormat))
+      )
+    } yield response.update match {
+      case U.Transaction(tree) => LedgerClient.lapiTreeToJavaTree(tree)
+      case other =>
+        throw GrpcStatus.INTERNAL
+          .withDescription(s"Expected transaction at offset $offset but got $other")
+          .asRuntimeException()
+    }
+  }
+
+  private[environment] def recoverFromDuplicateCommand[W](
+      waitFor: SubmitAndWaitFor[W],
+      completionOffset: Long,
+      actAs: Seq[String],
+  )(implicit tc: TraceContext): Future[W] =
+    waitFor.recoverFromDuplicate(completionOffset, getTransactionByOffset(_, actAs))
 
   def submitAndWait[Z](
       synchronizerId: String,
@@ -806,6 +835,10 @@ object LedgerClient {
     private[LedgerClient] type RawResponse
     private[LedgerClient] val stubSubmit: StubSubmit[RawResponse]
     private[LedgerClient] val mapResponse: RawResponse => Z
+    private[LedgerClient] def recoverFromDuplicate(
+        completionOffset: Long,
+        fetchTransaction: Long => Future[Transaction],
+    ): Future[Z]
   }
 
   private[environment] object SubmitAndWaitFor {
@@ -823,7 +856,7 @@ object LedgerClient {
             )
             .map(r => command_service.SubmitAndWaitResponse.toJavaProto(r))(ec)
         }
-      )
+      )((offset, _) => Future.successful(offset))
 
     val TransactionTree: SubmitAndWaitFor[jdata.Transaction] =
       impl((response: CSOC.SubmitAndWaitForTransactionResponse) =>
@@ -836,7 +869,7 @@ object LedgerClient {
             )
             .map(r => command_service.SubmitAndWaitForTransactionResponse.toJavaProto(r))(ec)
         }
-      }
+      }((offset, fetch) => fetch(offset))
 
     private type StubSubmit[R] = (
         CommandServiceGrpc.CommandServiceStub,
@@ -846,16 +879,52 @@ object LedgerClient {
 
     private[this] def impl[R, Z](mapResponse0: R => Z)(
         stubSubmit0: StubSubmit[R]
+    )(
+        recover0: (Long, Long => Future[jdata.Transaction]) => Future[Z]
     ): SubmitAndWaitFor[Z] = new SubmitAndWaitFor[Z] {
       type RawResponse = R
       override val stubSubmit = stubSubmit0
       override val mapResponse = mapResponse0
+      override def recoverFromDuplicate(
+          completionOffset: Long,
+          fetchTransaction: Long => Future[jdata.Transaction],
+      ): Future[Z] = recover0(completionOffset, fetchTransaction)
     }
   }
 
   final case class GetTreeUpdatesResponse(
       updateOrCheckpoint: TreeUpdateOrOffsetCheckpoint
   )
+  private def wildcardFilter(party: String) =
+    party -> transaction_filter.Filters(
+      Seq(
+        transaction_filter.CumulativeFilter(
+          transaction_filter.CumulativeFilter.IdentifierFilter
+            .WildcardFilter(transaction_filter.WildcardFilter(false))
+        )
+      )
+    )
+
+  private[environment] def ledgerEffectsUpdateFormat(
+      actAs: Seq[String]
+  ): transaction_filter.UpdateFormat =
+    transaction_filter.UpdateFormat(
+      includeTransactions = Some(
+        transaction_filter.TransactionFormat(
+          eventFormat = Some(
+            transaction_filter.EventFormat(
+              filtersByParty = actAs.map(wildcardFilter).toMap,
+              filtersForAnyParty = None,
+              verbose = false,
+            )
+          ),
+          transactionShape = transaction_filter.TransactionShape.TRANSACTION_SHAPE_LEDGER_EFFECTS,
+        )
+      ),
+      includeReassignments = None,
+      includeTopologyEvents = None,
+    )
+
   def lapiTreeToJavaTree(
       tree: lapi.transaction.Transaction
   ): com.daml.ledger.javaapi.data.Transaction = {

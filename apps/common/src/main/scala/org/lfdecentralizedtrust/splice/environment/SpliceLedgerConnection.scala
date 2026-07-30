@@ -12,7 +12,8 @@ import com.daml.ledger.javaapi.data.codegen.{ContractId, Created, Exercised, Has
 import com.daml.ledger.javaapi.data.{Command, CreatedEvent, ExercisedEvent, Transaction, User}
 import com.digitalasset.base.error.ErrorResource
 import com.digitalasset.base.error.utils.ErrorDetails
-import com.digitalasset.base.error.utils.ErrorDetails.ResourceInfoDetail
+import com.digitalasset.base.error.utils.ErrorDetails.{ErrorInfoDetail, ResourceInfoDetail}
+import io.grpc.protobuf.{StatusProto as GrpcStatusProto}
 import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.admin.api.client.data.parties.PartyDetails
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
@@ -777,6 +778,23 @@ class SpliceLedgerConnection(
     callCallbacksOnCompletion(result)(x => (None, x))
   }
 
+  // Returns Some(completionOffset) when the exception is DUPLICATE_COMMAND with accepted=true,
+  // allowing callers to fetch the already-completed transaction instead of failing.
+  private def parseDuplicateCommandAccepted(ex: StatusRuntimeException): Option[Long] = {
+    val statusProto = GrpcStatusProto.fromThrowable(ex)
+    if (statusProto == null) None
+    else
+      ErrorDetails
+        .from(statusProto)
+        .collectFirst {
+          case ErrorInfoDetail(errorCodeId, metadata)
+              if errorCodeId == "DUPLICATE_COMMAND" &&
+                metadata.get("accepted").contains("true") =>
+            metadata.get("completion_offset").flatMap(co => Try(co.toLong).toOption)
+        }
+        .flatten
+  }
+
   private def verifyEnoughExtraTrafficRemains(
       synchronizerId: SynchronizerId,
       commandPriority: CommandPriority,
@@ -997,6 +1015,20 @@ class SpliceLedgerConnection(
                     )
                     .withCause(ex.getCause)
                     .asRuntimeException
+                }
+                .recoverWith {
+                  case ex: StatusRuntimeException
+                      if ex.getStatus.getCode == Status.Code.ALREADY_EXISTS =>
+                    parseDuplicateCommandAccepted(ex) match {
+                      case Some(completionOffset) =>
+                        client.recoverFromDuplicateCommand(
+                          waitFor,
+                          completionOffset,
+                          actAs.map(_.toProtoPrimitive),
+                        )
+                      case None =>
+                        Future.failed(ex)
+                    }
                 }
             )(getOffsetAndResult)
 
