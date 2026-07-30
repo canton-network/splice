@@ -20,7 +20,7 @@ import com.digitalasset.canton.lifecycle.CloseContext
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.participant.synchronizer.SynchronizerConnectionConfig
 import com.digitalasset.canton.protocol.DynamicSynchronizerParameters
-import com.digitalasset.canton.protocol.OnboardingRestriction.{UnrestrictedOpen}
+import com.digitalasset.canton.protocol.OnboardingRestriction.{RestrictedOpen, UnrestrictedOpen}
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.sequencing.{SequencerConnections, TrafficControlParameters}
 import com.digitalasset.canton.time.{
@@ -36,6 +36,7 @@ import com.digitalasset.canton.topology.store.{
   StoredTopologyTransaction,
   StoredTopologyTransactions,
 }
+import com.digitalasset.canton.topology.transaction.ParticipantPermission.Submission
 import com.digitalasset.canton.topology.transaction.{
   DecentralizedNamespaceDefinition,
   SignedTopologyTransaction,
@@ -466,7 +467,12 @@ class SV1Initializer(
             NonNegativeFiniteDuration.fromConfig(config.preparationTimeRecordTimeTolerance),
           mediatorDeduplicationTimeout =
             NonNegativeFiniteDuration.fromConfig(config.mediatorDeduplicationTimeout),
-          onboardingRestriction = UnrestrictedOpen,
+          onboardingRestriction = if (config.permissionedSynchronizer) {
+            logger.info("Using RestrictedOpen onboarding restriction for the synchronizer")
+            RestrictedOpen
+          } else {
+            UnrestrictedOpen
+          },
         )
         for {
           physicalSynchronizerId <- retryProvider.ensureThatO(
@@ -483,6 +489,26 @@ class SV1Initializer(
                   NonEmpty.mk(Set, participantId.uid.namespace),
                   threshold = PositiveInt.one,
                 )
+              sv1PermissionTx <-
+                if (config.permissionedSynchronizer) {
+                  logger.debug(
+                    "Proposing ParticipantSynchronizerPermission topology transaction for self"
+                  )
+                  participantAdminConnection
+                    .proposeMapping(
+                      TopologyStoreId.Authorized,
+                      transaction.ParticipantSynchronizerPermission(
+                        synchronizerId,
+                        participantId,
+                        Submission,
+                        None,
+                        None,
+                      ),
+                      serial = PositiveInt.one,
+                      isProposal = false,
+                    )
+                    .map(Some(_))
+                } else Future.successful(None)
               (
                 identityTransactions,
                 synchronizerParametersState,
@@ -524,7 +550,7 @@ class SV1Initializer(
                   synchronizerParametersState,
                   sequencerState,
                   mediatorState,
-                ) ++ identityTransactions).sorted
+                ) ++ sv1PermissionTx.toList ++ identityTransactions).sorted
                   .mapFilter(_.selectOp[TopologyChangeOp.Replace])
                   .map(signed =>
                     StoredTopologyTransaction(
@@ -753,7 +779,7 @@ class SV1Initializer(
 
 object SV1Initializer {
 
-  /** Same ordering as https://github.com/DACH-NY/canton/blob/2fc1a37d815623cb68dcb4b75bc33a498065990e/enterprise/app-base/src/main/scala/com/digitalasset/canton/console/EnterpriseConsoleMacros.scala#L160
+  /** Participant must broadcast in a certain order for the bootstrap to be functional: refer the ordering as https://github.com/digital-asset/canton/blob/eaa9e7a4bf48793acb35aba270b85a970afe6006/community/base/src/main/scala/com/digitalasset/canton/topology/store/TopologyStore.scala#L773
     */
   implicit val bootstrapTransactionOrdering
       : Ordering[SignedTopologyTransaction[TopologyChangeOp, TopologyMapping]] =
@@ -763,7 +789,8 @@ object SV1Initializer {
           case Code.NamespaceDelegation => 1
           case Code.OwnerToKeyMapping => 2
           case Code.DecentralizedNamespaceDefinition => 3
-          case _ => 4
+          case Code.ParticipantSynchronizerPermission => 4
+          case _ => 5
         }
       }
 
