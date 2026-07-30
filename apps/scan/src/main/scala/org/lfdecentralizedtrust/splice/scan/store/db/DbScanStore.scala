@@ -598,7 +598,10 @@ class DbScanStore(
           "getTotalPurchasedMemberTraffic",
         )
         .value
-    } yield Option(sum.orNull).map(s => s.min(BigDecimal(Long.MaxValue)).toLong).getOrElse(0L)
+    } yield sum
+      .flatMap(s => Option(s))
+      .map(s => s.min(BigDecimal(Long.MaxValue)).toLong)
+      .getOrElse(0L)
   }
 
   def lookupSvNodeState(svPartyId: PartyId)(implicit
