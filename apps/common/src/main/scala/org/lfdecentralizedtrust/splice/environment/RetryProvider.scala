@@ -472,6 +472,7 @@ final class RetryProvider(
             "operation" -> operationId
           ),
           this,
+          retryConfig.duplicateCommandIsFatal,
         ),
       )
     }
@@ -516,6 +517,7 @@ object RetryProvider {
       metricsFactory: LabeledMetricsFactory,
       additionalMetricsLabels: Map[String, String],
       flagCloseable: FlagCloseable,
+      duplicateCommandIsFatal: Boolean,
   ) extends ExceptionRetryPolicy {
     // Additional categories that are not marked as retryable but we
     // can safely retry since we know there are other apps or
@@ -609,9 +611,9 @@ object RetryProvider {
             errorCategory match {
               // Pruning errors fall under FAILED_PRECONDITION which we usually retry but there is no chance to recover from it so we instead treat it as a fatal error.
               case _ if isPruningError => fatalError
-              // DUPLICATE_COMMAND: accepted duplicates are recovered centrally in SpliceLedgerConnection;
-              // rejected ones can never succeed within the dedup window — don't retry either.
-              case _ if isDuplicateCommand => fatalError
+              // Accepted duplicates are recovered centrally in SpliceLedgerConnection; a rejected
+              // one can never succeed within the dedup window, so client calls give up here.
+              case _ if isDuplicateCommand && duplicateCommandIsFatal => fatalError
               case Some(cat) if cat.retryable.nonEmpty || extraRetryableCategories.contains(cat) =>
                 //  don't log the stack traces of transient gRPC exceptions to make the logs less noisy.
                 val msg =
@@ -812,6 +814,7 @@ object RetryProvider {
         metricsFactory: LabeledMetricsFactory,
         additionalMetricsLabels: Map[String, String],
         flagCloseable: FlagCloseable,
+        duplicateCommandIsFatal: Boolean,
     ): ExceptionRetryPolicy
   }
 
@@ -824,6 +827,7 @@ object RetryProvider {
             metricsFactory: LabeledMetricsFactory,
             additionalMetricsLabels: Map[String, String],
             flagCloseable: FlagCloseable,
+            duplicateCommandIsFatal: Boolean,
         ) = a(operationName)
       }
 
@@ -834,6 +838,7 @@ object RetryProvider {
           metricsFactory: LabeledMetricsFactory,
           additionalMetricsLabels: Map[String, String],
           flagCloseable: FlagCloseable,
+          duplicateCommandIsFatal: Boolean,
       ): RetryableError = RetryProvider.RetryableError(
         operationName,
         additionalCodes,
@@ -844,6 +849,7 @@ object RetryProvider {
         metricsFactory,
         additionalMetricsLabels,
         flagCloseable,
+        duplicateCommandIsFatal,
       )
     }
 
@@ -855,6 +861,7 @@ object RetryProvider {
             metricsFactory: LabeledMetricsFactory,
             additionalMetricsLabels: Map[String, String],
             flagCloseable: FlagCloseable,
+            duplicateCommandIsFatal: Boolean,
         ): RetryableError = RetryProvider.RetryableError(
           operationName,
           Seq.empty,
@@ -865,6 +872,7 @@ object RetryProvider {
           metricsFactory,
           additionalMetricsLabels,
           flagCloseable,
+          duplicateCommandIsFatal,
         )
       }
   }
