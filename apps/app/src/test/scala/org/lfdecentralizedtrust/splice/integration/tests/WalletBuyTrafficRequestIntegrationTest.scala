@@ -274,11 +274,6 @@ class WalletBuyTrafficRequestIntegrationTest
       onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
       aliceWalletClient.tap(100.0)
 
-      // All 10 concurrent calls share the same tracking id. Recovering an accepted duplicate
-      // needs a completed submission to read back, which concurrent submissions do not have:
-      // the losers are rejected with SUBMISSION_ALREADY_IN_FLIGHT rather than DUPLICATE_COMMAND,
-      // so only one call succeeds. Duplicates of an already-completed submission are covered by
-      // the sequential dedup tests instead.
       val successes = loggerFactory.assertLoggedWarningsAndErrorsSeq(
         {
           MonadUtil
@@ -312,6 +307,12 @@ class WalletBuyTrafficRequestIntegrationTest
             ))
           ),
       )
+      // All 10 calls share the same tracking id, but the dedup recovery does not apply here:
+      // reading back an accepted duplicate needs a completed submission, which concurrent
+      // submissions do not have. So one call wins and the other 9 are rejected, mostly with
+      // SUBMISSION_ALREADY_IN_FLIGHT from the participant and some with 429 from the rate
+      // limiter. Duplicates of an already-completed submission are covered by the sequential
+      // dedup tests.
       successes shouldBe 1
     }
   }
