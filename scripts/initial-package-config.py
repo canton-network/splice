@@ -48,9 +48,13 @@ def main():
         text=True,
     )
     if process.returncode != 0:
-        print("Failed to read dars.lock file")
-        print(process.stdout)
-        print(process.stderr)
+        print(
+            f"Failed to read daml/dars.lock from refs/remotes/origin/release-line-{version}",
+            file=sys.stderr,
+        )
+        print(process.stdout, file=sys.stderr)
+        print(process.stderr, file=sys.stderr)
+        sys.exit(1)
     base_dar_lock = parse_dar_lock(process.stdout)
     base_versions = {
         k: max(vs, key=semver.Version.parse) for k, vs in base_dar_lock.items()
