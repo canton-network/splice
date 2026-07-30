@@ -140,7 +140,7 @@ class ReconcileSequencerLimitWithMemberTrafficTrigger(
           totalPurchasedTraffic <- store.getTotalPurchasedMemberTraffic(memberId, synchronizerId)
 
           safeLimit =
-            if (Long.MaxValue < trafficLimitOffset + totalPurchasedTraffic) Long.MaxValue
+            if (Long.MaxValue - totalPurchasedTraffic < trafficLimitOffset) Long.MaxValue
             else trafficLimitOffset + totalPurchasedTraffic
 
           newExtraTrafficLimit = NonNegativeLong
