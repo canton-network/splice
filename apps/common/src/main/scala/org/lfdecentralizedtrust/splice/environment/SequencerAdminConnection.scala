@@ -331,7 +331,7 @@ class SequencerAdminConnection(
       // a throw before the onComplete callback is registered would leak the channel
       case NonFatal(e) =>
         channel.close()
-        throw e
+        Future.failed(e)
     }
   }
 
