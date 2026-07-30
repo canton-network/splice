@@ -55,16 +55,18 @@ testVoteRequestAcceptanceWithoutEffectivity = do
     reason = Reason with url = ""; body = "they are great!"
     targetEffectiveAt = None
     voteRequestTimeout = Some (days 7) -- give everybody 7 days to vote
+    rightOwnerCid = None
   let requestCid1 = result.voteRequest
-
+  
   -- sv2 rejects initially
   requestCid <- castVote app sv2 requestCid1 False
-
+  
   -- there are two votes, which is not enough to consider the vote definitive and grant the app right
   submitMustFail (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
     requestCid
     amuletRulesCid = None
     sv = Some sv1
+    rightOwnerCids = None
 
   -- a day passes and sv2 updates their vote
   passTime (days 1)
@@ -79,6 +81,7 @@ testVoteRequestAcceptanceWithoutEffectivity = do
     requestCid
     amuletRulesCid = None
     sv = Some sv1
+    rightOwnerCids = None
 
   -- sv3 accepts too
   requestCid <- castVote app sv3 requestCid True
@@ -88,6 +91,7 @@ testVoteRequestAcceptanceWithoutEffectivity = do
     requestCid
     amuletRulesCid = None
     sv = Some sv1
+    rightOwnerCids = None
 
   [(rightCid, right)] <- query @FeaturedAppRight provider
   right === FeaturedAppRight with dso; provider; activityWeight = Some 11.0
@@ -130,6 +134,7 @@ testVoteRequestAcceptanceWithEffectivity = do
     reason = Reason with url = ""; body = "they are great!"
     targetEffectiveAt = Some (effectiveTime) -- the right will be granted in 8 days
     voteRequestTimeout = Some (days 7) -- give everybody 7 days to vote with the possibility to change their vote
+    rightOwnerCid = None
   let requestCid1 = result.voteRequest
 
   -- sv2 accepts
@@ -140,6 +145,7 @@ testVoteRequestAcceptanceWithEffectivity = do
     requestCid
     amuletRulesCid = None
     sv = Some sv1
+    rightOwnerCids = None
 
   -- the voteRequest trackingCid is set to the initial requestCid
   Some voteRequest <- queryContractId dso requestCid
@@ -154,6 +160,7 @@ testVoteRequestAcceptanceWithEffectivity = do
     requestCid
     amuletRulesCid = None
     sv = Some sv1
+    rightOwnerCids = None
 
   -- sv4 rejects
   requestCid <- castVote app sv4 requestCid False
@@ -166,6 +173,7 @@ testVoteRequestAcceptanceWithEffectivity = do
     requestCid
     amuletRulesCid = None
     sv = Some sv1
+    rightOwnerCids = None
 
   -- sv4 can change its vote past the expiration date
   requestCid <- castVote app sv4 requestCid True
@@ -178,6 +186,7 @@ testVoteRequestAcceptanceWithEffectivity = do
     requestCid
     amuletRulesCid = None
     sv = Some sv1
+    rightOwnerCids = None
 
   now <- getTime
   result.completedAt === now
@@ -227,7 +236,7 @@ testVoteRequestAcceptanceWithEffectivity = do
 
 testVoteRequestRejectionWithoutEffectivity : Script ()
 testVoteRequestRejectionWithoutEffectivity = do
-  (_app, dso, (sv1, sv2, _sv3, sv4)) <- initMainNet
+  (app, dso, (sv1, sv2, _sv3, sv4)) <- initMainNet
 
   [(dsoRulesCid, _)] <- query @DsoRules dso
 
@@ -245,14 +254,15 @@ testVoteRequestRejectionWithoutEffectivity = do
     reason = Reason with url = ""; body = "they are great!"
     targetEffectiveAt = None
     voteRequestTimeout = Some (days 7) -- give everybody 7 days to vote
+    rightOwnerCid = None
   let requestCid = result.voteRequest
 
   -- majority rejects the request
-  requestCid <- castVote _app sv2 requestCid False
-  requestCid <- castVote _app sv4 requestCid False
+  requestCid <- castVote app sv2 requestCid False
+  requestCid <- castVote app sv4 requestCid False
   -- sv1 changes their opinion and votes again after the cooldown of 1 minute
   passTime (minutes 1)
-  requestCid <- castVote _app sv1 requestCid False
+  requestCid <- castVote app sv1 requestCid False
 
   -- the request is directly rejected
   now <- getTime
@@ -260,6 +270,7 @@ testVoteRequestRejectionWithoutEffectivity = do
     requestCid
     amuletRulesCid = None
     sv = Some sv1
+    rightOwnerCids = None
 
   result.completedAt === now
   result.offboardedVoters === []
@@ -291,6 +302,7 @@ testVoteRequestRejectionWithEffectivityBeforeExpiration = do
     reason = Reason with url = ""; body = "they are great!"
     targetEffectiveAt = Some (effectiveTime)
     voteRequestTimeout = Some (days 3) -- give everybody 3 days to vote
+    rightOwnerCid = None
   let requestCid = result.voteRequest
 
   -- majority rejects the request
@@ -306,6 +318,7 @@ testVoteRequestRejectionWithEffectivityBeforeExpiration = do
     requestCid
     amuletRulesCid = None
     sv = Some sv1
+    rightOwnerCids = None
 
   result.completedAt === now
   result.offboardedVoters === []
@@ -337,6 +350,7 @@ testVoteRequestRejectionWithEffectivityAfterExpiration = do
     reason = Reason with url = ""; body = "they are great!"
     targetEffectiveAt = Some (addRelTime now (days 1))
     voteRequestTimeout = Some (days 2)
+    rightOwnerCid = None
 
   -- sv1 initiates the granting of the featured app right for the provider
   result <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
@@ -348,6 +362,7 @@ testVoteRequestRejectionWithEffectivityAfterExpiration = do
     reason = Reason with url = ""; body = "they are great!"
     targetEffectiveAt = Some (effectiveTime)
     voteRequestTimeout = Some (days 3) -- give everybody 3 days to vote
+    rightOwnerCid = None
   let requestCid = result.voteRequest
 
   -- a majority accepts the request before the expiration data
@@ -359,6 +374,7 @@ testVoteRequestRejectionWithEffectivityAfterExpiration = do
     requestCid
     amuletRulesCid = None
     sv = Some sv1
+    rightOwnerCids = None
 
   -- the expiration date has passed
   passTime (days 3)
@@ -373,6 +389,7 @@ testVoteRequestRejectionWithEffectivityAfterExpiration = do
     requestCid
     amuletRulesCid = None
     sv = Some sv1
+    rightOwnerCids = None
 
   now <- getTime
 
@@ -399,6 +416,7 @@ testRacingSvRemoval = do
     reason = Reason with url = ""; body = "they are not good for us!"
     targetEffectiveAt = None
     voteRequestTimeout = Some (days 7) -- give everybody 7 days to vote
+    rightOwnerCid = None
 
   result2 <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
     requester = sv1
@@ -408,6 +426,7 @@ testRacingSvRemoval = do
     reason = Reason with url = ""; body = "they are not good for us!"
     targetEffectiveAt = None
     voteRequestTimeout = Some (days 7) -- give everybody 7 days to vote
+    rightOwnerCid = None
 
   -- sv2 counters and wants to remove sv1
   result3 <- submit (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
@@ -418,6 +437,7 @@ testRacingSvRemoval = do
     reason = Reason with url = ""; body = "they are not good for us!"
     targetEffectiveAt = None
     voteRequestTimeout = Some (days 7) -- give everybody 7 days to vote
+    rightOwnerCid = None
 
   -- sv1 is not really happy with sv2, and issues a third removal request with an effective date set in 8 days.
   now <- getTime
@@ -431,6 +451,7 @@ testRacingSvRemoval = do
     reason = Reason with url = ""; body = "they are not good for us!"
     targetEffectiveAt = Some (effectiveTime)
     voteRequestTimeout = Some (days 2) -- give everybody 2 days to vote
+    rightOwnerCid = None
 
   let (req1, req2, req3, req4) = (result1.voteRequest, result2.voteRequest, result3.voteRequest, result4.voteRequest)
 
@@ -447,6 +468,7 @@ testRacingSvRemoval = do
         accept = True
         reason = Reason with url = ""; body = "OK, let them go"
         optCastAt = None
+      rightOwnerCid = None
     result2 <- submit (actAs sv2 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
       requestCid = result1.voteRequest
       vote = Vote with
@@ -454,6 +476,7 @@ testRacingSvRemoval = do
         accept = True
         reason = Reason with url = ""; body = "OK, let them go"
         optCastAt = None
+      rightOwnerCid = None
     result3 <- submit (actAs sv3 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
       requestCid = result2.voteRequest
       vote = Vote with
@@ -461,6 +484,7 @@ testRacingSvRemoval = do
         accept = True
         reason = Reason with url = ""; body = "OK, let them go"
         optCastAt = None
+      rightOwnerCid = None
     result4 <- submit (actAs sv4 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
       requestCid = result3.voteRequest
       vote = Vote with
@@ -468,6 +492,7 @@ testRacingSvRemoval = do
         accept = True
         reason = Reason with url = ""; body = "OK, let them go"
         optCastAt = None
+      rightOwnerCid = None
     pure result4.voteRequest
 
   -- sv1 attempts to immediatly accept the request to remove sv2
@@ -476,6 +501,7 @@ testRacingSvRemoval = do
     requestCid = req1
     amuletRulesCid = None
     sv = Some sv1
+    rightOwnerCids = None
 
   result.completedAt === now
   result.offboardedVoters === []
@@ -489,6 +515,7 @@ testRacingSvRemoval = do
       requestCid = req2
       amuletRulesCid = None
       sv = Some sv1
+      rightOwnerCids = None
 
   -- sv3 refuses and sv4 accepts request 4 with effectivity 8 days before the expiration.
   req4 <- castVote app sv3 req4 False
@@ -504,6 +531,7 @@ testRacingSvRemoval = do
     requestCid = req4
     amuletRulesCid = None
     sv = Some sv1
+    rightOwnerCids = None
 
   now <- getTime
   result.completedAt === now
@@ -517,6 +545,7 @@ testRacingSvRemoval = do
     requestCid = req3
     amuletRulesCid = None
     sv = Some sv1
+    rightOwnerCids = None
 
   result.completedAt === now
   result.offboardedVoters === ["sv2"]
@@ -537,6 +566,7 @@ testRacingSvRemoval = do
     reason = Reason with url = ""; body = "they are not good for us!"
     targetEffectiveAt = None
     voteRequestTimeout = Some (seconds 1) -- attempt to not give sv4 enough time to vote
+    rightOwnerCid = None
   let req4 = result4.voteRequest
 
   -- early closing is not possible, as the outcome of the vote is not determined, and we thus leave
@@ -545,6 +575,7 @@ testRacingSvRemoval = do
     requestCid = req4
     amuletRulesCid = None
     sv = Some sv3
+    rightOwnerCids = None
 
   -- after enough time has passed the closing works
   passTime (seconds 1)
@@ -552,6 +583,7 @@ testRacingSvRemoval = do
     requestCid = req4
     amuletRulesCid = None
     sv = Some sv3
+    rightOwnerCids = None
 
   -- however sv4 is still here, as at least `numSvs / 2 + 1` svs need to accept the offboarding
   result.outcome === VRO_Expired
@@ -565,6 +597,7 @@ testRacingSvRemoval = do
     reason = Reason with url = ""; body = "they want to leave!"
     targetEffectiveAt = None
     voteRequestTimeout = Some (days 1)
+    rightOwnerCid = None
 
   castResult <- submit (actAs sv4 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
     requestCid = result5.voteRequest
@@ -573,6 +606,7 @@ testRacingSvRemoval = do
       accept = True
       reason = Reason with url = ""; body = "yes, let me go please!"
       optCastAt = None
+    rightOwnerCid = None
   let req5 = castResult.voteRequest
 
   -- and actually early closing is possible, as everybody has voted and the outcome is definite
@@ -581,6 +615,7 @@ testRacingSvRemoval = do
     requestCid = req5
     amuletRulesCid = None
     sv = Some sv3
+    rightOwnerCids = None
 
   result.outcome === VRO_Accepted with effectiveAt = now
 
@@ -649,6 +684,7 @@ testDsoRulesConfigChange = do
     reason = Reason with url = ""; body = "they are not good for us!"
     targetEffectiveAt = None
     voteRequestTimeout = Some (days 2)
+    rightOwnerCid = None
 
   result2 <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
     requester = sv1
@@ -659,6 +695,7 @@ testDsoRulesConfigChange = do
     reason = Reason with url = ""; body = "they are not good for us!"
     targetEffectiveAt = None
     voteRequestTimeout = Some (days 2)
+    rightOwnerCid = None
 
   let (req1, req2) = (result1.voteRequest, result2.voteRequest)
 
@@ -670,6 +707,7 @@ testDsoRulesConfigChange = do
     requestCid = req1
     amuletRulesCid = None
     sv = Some sv1
+    rightOwnerCids = None
 
   result.completedAt === now
   result.offboardedVoters === []
@@ -687,6 +725,7 @@ testDsoRulesConfigChange = do
     requestCid = req2
     amuletRulesCid = None
     sv = Some sv1
+    rightOwnerCids = None
 
   result.completedAt === now
   result.offboardedVoters === []
@@ -703,7 +742,6 @@ testDsoRulesConfigChange = do
 testAmuletRulesTickDurationChange : Script ()
 testAmuletRulesTickDurationChange = do
   (app, dso, (sv1, sv2, sv3, _)) <- initMainNet
-
   [(dsoRulesCid, _)] <- query @DsoRules dso
 
   [(_, amuletRules)] <- query @AmuletRules dso
@@ -722,6 +760,7 @@ testAmuletRulesTickDurationChange = do
     reason = Reason with url = ""; body = "they are not good for us!"
     targetEffectiveAt = None
     voteRequestTimeout = Some (days 2)
+    rightOwnerCid = None
 
   now <- getTime
   -- vote on change
@@ -733,6 +772,7 @@ testAmuletRulesTickDurationChange = do
     requestCid = request
     amuletRulesCid = Some amuletRulesCid
     sv = Some sv1
+    rightOwnerCids = None
 
   result.completedAt === now
   result.offboardedVoters === []
@@ -826,6 +866,7 @@ testAmuletRulesConfigChange = do
     reason = Reason with url = ""; body = "they are not good for us!"
     targetEffectiveAt = None
     voteRequestTimeout = Some (days 2)
+    rightOwnerCid = None
 
   result2 <- submit (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_RequestVote with
     requester = sv1
@@ -836,6 +877,7 @@ testAmuletRulesConfigChange = do
     reason = Reason with url = ""; body = "they are not good for us!"
     targetEffectiveAt = None
     voteRequestTimeout = Some (days 2)
+    rightOwnerCid = None
 
   let (req1, req2) = (result1.voteRequest, result2.voteRequest)
 
@@ -846,7 +888,7 @@ testAmuletRulesConfigChange = do
     requestCid = req1
     amuletRulesCid = Some amuletRulesCid
     sv = Some sv1
-
+    rightOwnerCids = None
   result.completedAt === now
   result.offboardedVoters === []
   result.abstainingSvs === ["sv4"]
@@ -863,6 +905,7 @@ testAmuletRulesConfigChange = do
     requestCid = req2
     amuletRulesCid = Some amuletRulesCid
     sv = Some sv1
+    rightOwnerCids = None
 
   result.completedAt === now
   result.offboardedVoters === []
@@ -932,7 +975,7 @@ testOffboardSvAndAmuletPriceVotes = do
 -- | vote request contract is archived if it has expired
 testVoteRequestExpireWithoutEffectivity : Script ()
 testVoteRequestExpireWithoutEffectivity = do
-  (_, dso, (sv1, _, _, _)) <- initMainNet
+  (_app, dso, (sv1, _, _, _)) <- initMainNet
   provider <- allocateParty "provider"
 
   [(dsoRulesCid, _)] <- query @DsoRules dso
@@ -945,12 +988,14 @@ testVoteRequestExpireWithoutEffectivity = do
     reason = Reason with url = ""; body = "they are great!"
     targetEffectiveAt = None
     voteRequestTimeout = None
+    rightOwnerCid = None
 
   -- attempt to close the vote request before its voting period
   submitMustFail (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
     requestCid = requestResult.voteRequest
     amuletRulesCid = None
     sv = Some sv1
+    rightOwnerCids = None
 
   passTime(days 7)
   now <- getTime
@@ -960,6 +1005,7 @@ testVoteRequestExpireWithoutEffectivity = do
     requestCid = requestResult.voteRequest
     amuletRulesCid = None
     sv = Some sv1
+    rightOwnerCids = None
 
   -- only sv1 voted to accept as they created the request
   result.completedAt === now
@@ -972,7 +1018,7 @@ testVoteRequestExpireWithoutEffectivity = do
 
 testVoteRequestExpireWithEffectivity : Script ()
 testVoteRequestExpireWithEffectivity = do
-  (_, dso, (sv1, _, _, _)) <- initMainNet
+  (_app, dso, (sv1, _, _, _)) <- initMainNet
   provider <- allocateParty "provider"
 
   now <- getTime
@@ -988,12 +1034,14 @@ testVoteRequestExpireWithEffectivity = do
     reason = Reason with url = ""; body = "they are great!"
     targetEffectiveAt = Some (effectiveTime)
     voteRequestTimeout = None
+    rightOwnerCid = None
 
   -- attempt to close the vote request before its voting period
   submitMustFail (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CloseVoteRequest with
     requestCid = requestResult.voteRequest
     amuletRulesCid = None
     sv = Some sv1
+    rightOwnerCids = None
 
   passTime(days 7)
   now <- getTime
@@ -1003,6 +1051,7 @@ testVoteRequestExpireWithEffectivity = do
     requestCid = requestResult.voteRequest
     amuletRulesCid = None
     sv = Some sv1
+    rightOwnerCids = None
 
   -- only sv1 voted to accept as they created the request
   result.completedAt === now
@@ -1083,7 +1132,7 @@ testAmuletPriceVoting = do
 
 testVoteCastingCooldown : Script ()
 testVoteCastingCooldown  = do
-  (_, dso, (sv1, sv2, _sv3, _sv4)) <- initMainNet
+  (_app, dso, (sv1, sv2, _sv3, _sv4)) <- initMainNet
 
   [(dsoRulesCid, _)] <- query @DsoRules dso
 
@@ -1096,6 +1145,7 @@ testVoteCastingCooldown  = do
     reason = Reason with url = ""; body = "they are not good for us!"
     targetEffectiveAt = None
     voteRequestTimeout = Some (days 7) -- give everybody 7 days to vote
+    rightOwnerCid = None
   let requestCid = result.voteRequest
 
   -- SV2 can immediately cast a vote
@@ -1106,6 +1156,7 @@ testVoteCastingCooldown  = do
       accept = False
       reason = Reason with url = ""; body = "noooo, let me stay on please!"
       optCastAt = None
+    rightOwnerCid = None
   let requestCid = result.voteRequest
 
   -- The second vote SV2 fails though
@@ -1116,6 +1167,7 @@ testVoteCastingCooldown  = do
           accept = False
           reason = Reason with url = ""; body = "a better rebuttal"
           optCastAt = None
+        rightOwnerCid = None
 
   -- And that same holds for SV1, as it voted as part of creating the request.
   _ <- submitMustFail (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_CastVote with
@@ -1125,7 +1177,7 @@ testVoteCastingCooldown  = do
           accept = True
           reason = Reason with url = ""; body = "a better reason"
           optCastAt = None
-
+        rightOwnerCid = None
   -- let the vote cooldown pass, so they can update their votes
   passTime (minutes 1)
 
@@ -1137,6 +1189,7 @@ testVoteCastingCooldown  = do
           accept = False
           reason = Reason with url = ""; body = "a better rebuttal"
           optCastAt = None
+        rightOwnerCid = None
   let requestCid = result.voteRequest
 
   -- And that same holds for SV1, as it voted as part of creating the request.
@@ -1147,5 +1200,6 @@ testVoteCastingCooldown  = do
           accept = True
           reason = Reason with url = ""; body = "a better reason"
           optCastAt = None
+        rightOwnerCid = None
 
   pure ()
