@@ -485,6 +485,7 @@ class SvApp(
         ),
         loggerFactory,
         initialRound,
+        packageVersionSupport,
       )
 
       operatorHandler = new HttpSvOperatorHandler(

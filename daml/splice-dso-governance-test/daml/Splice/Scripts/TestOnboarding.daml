@@ -14,6 +14,7 @@ import DA.List
 import Splice.ValidatorLicense
 
 import Splice.CometBft
+import Splice.DecentralizedSynchronizer (MemberTraffic(..))
 import Splice.DsoRules
 import Splice.DSO.DecentralizedSynchronizer
 import Splice.SvOnboarding
@@ -146,6 +147,7 @@ testSvOnboarding = do
           newParticipantId = "svX-participant-id"
           reason = "because"
           newSvRewardWeight = 19 -- we use 19 as a dummy reward weight for testing
+          migrationId = Some 0
   executeAllConfirmedActions app
 
   -- svX is now a confirmed SV
@@ -159,6 +161,21 @@ testSvOnboarding = do
     dso
     expiresAt = svOnboardingConfirmed.expiresAt
     svPartyIsObserver = Some False
+
+  [(_, dsoRules)] <- query @DsoRules dso
+  memberTraffics <- query @MemberTraffic dso
+  let [(_, newMemberTraffic)] = filter (\(_, mt) -> mt.memberId == "svX-participant-id") memberTraffics
+  let expectedSynchronizerId = dsoRules.config.decentralizedSynchronizer.activeSynchronizerId
+
+  newMemberTraffic === MemberTraffic with
+    dso
+    memberId = "svX-participant-id"
+    synchronizerId = expectedSynchronizerId
+    migrationId = 0
+    totalPurchased = maxBound : Int
+    numPurchases = 1
+    amuletSpent = 0.0
+    usdSpent = 0.0
 
   -- svX should NOT be able to see the contract yet
   svXVisibleContracts <- query @SvOnboardingConfirmed svX
@@ -373,6 +390,7 @@ testSvOnboardingConfirmedExpiry = do
           newParticipantId = "svX-participant-id"
           newSvRewardWeight = 19
           reason = "because"
+          migrationId = Some 0
 
   executeAllConfirmedActions app
 
@@ -478,6 +496,7 @@ testSvReonboarding = do
           newParticipantId = "sv4New-participant-id"
           reason = "because the sv4 owner still has the right to operate a node"
           newSvRewardWeight = 19 -- we use 19 as a dummy reward weight for testing
+          migrationId = Some 0
   executeAllConfirmedActions app
   [(svOnboardingConfirmedCid, _)] <- query @SvOnboardingConfirmed dso
 

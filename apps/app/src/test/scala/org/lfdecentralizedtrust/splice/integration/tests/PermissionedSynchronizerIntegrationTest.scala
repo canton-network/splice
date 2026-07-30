@@ -31,58 +31,72 @@ class PermissionedSynchronizerIntegrationTest
       )
       .withManualStart
 
-  "Ensure Automatic ParticipantSynchronizerPermission Generation using MemberTraffic Trigger" in {
-    implicit env =>
-      initDso()
+  "Onboard network in RestrictedOpen mode" in { implicit env =>
+    initDso()
 
-      val trafficAmount = Math.max(
-        sv1ScanBackend
-          .getAmuletConfigAsOf(env.environment.clock.now)
-          .decentralizedSynchronizer
-          .fees
-          .minTopupAmount
-          .toLong,
-        1_000_000L,
-      )
+    val trafficAmount = Math.max(
+      sv1ScanBackend
+        .getAmuletConfigAsOf(env.environment.clock.now)
+        .decentralizedSynchronizer
+        .fees
+        .minTopupAmount
+        .toLong,
+      1_000_000L,
+    )
 
-      val targetValidators = Seq(
-        sv2ValidatorBackend,
-        sv3ValidatorBackend,
-        sv4ValidatorBackend,
-        aliceValidatorBackend,
-      )
+    val targetValidators = Seq(
+      aliceValidatorBackend
+    )
 
-      val sv1WalletUserParty = onboardWalletUser(sv1WalletClient, sv1ValidatorBackend)
-      sv1WalletClient.tap(10000)
+    val sv1WalletUserParty = onboardWalletUser(sv1WalletClient, sv1ValidatorBackend)
+    sv1WalletClient.tap(10000)
 
-      targetValidators.foreach { targetApp =>
-        clue(s"SV1 buys MemberTraffic for ${targetApp.participantClient.name}") {
-          createBuyTrafficRequest(
-            validatorApp = sv1ValidatorBackend,
-            buyer = sv1WalletUserParty,
-            memberId = targetApp.participantClient.id.toProtoPrimitive,
-            trafficAmount = trafficAmount,
-            trackingId = s"traffic-for-${targetApp.participantClient.name}",
-          )
-        }
+    targetValidators.foreach { targetApp =>
+      clue(s"SV1 buys MemberTraffic for ${targetApp.participantClient.name}") {
+        createBuyTrafficRequest(
+          validatorApp = sv1ValidatorBackend,
+          buyer = sv1WalletUserParty,
+          memberId = targetApp.participantClient.id.toProtoPrimitive,
+          trafficAmount = trafficAmount,
+          trackingId = s"traffic-for-${targetApp.participantClient.name}",
+        )
       }
+    }
 
-      clue("Verify all target validators are granted ParticipantSynchronizer") {
-        targetValidators.foreach { targetApp =>
-          eventually() {
-            val permissions =
-              sv1Backend.participantClientWithAdminToken.topology.participant_synchronizer_permissions
-                .list(
-                  store = TopologyStoreId.Synchronizer(decentralizedSynchronizerId),
-                  filterUid = targetApp.participantClient.id.filterString,
-                )
+    val allValidators = Seq(
+      sv2ValidatorBackend,
+      sv3ValidatorBackend,
+      sv4ValidatorBackend,
+      aliceValidatorBackend,
+    )
 
-            withClue(s"${targetApp.participantClient.name} should have submission permission: ") {
-              permissions.map(_.item.permission) should contain(ParticipantPermission.Submission)
-            }
+    clue("Verify all participants are granted ParticipantSynchronizerPermission") {
+      allValidators.foreach { targetApp =>
+        eventually() {
+          val permissions =
+            sv1Backend.participantClientWithAdminToken.topology.participant_synchronizer_permissions
+              .list(
+                store = TopologyStoreId.Synchronizer(decentralizedSynchronizerId),
+                filterUid = targetApp.participantClient.id.filterString,
+              )
+
+          withClue(s"${targetApp.participantClient.name} should have submission permission: ") {
+            permissions.map(_.item.permission) should contain(ParticipantPermission.Submission)
           }
         }
       }
+    }
+
+    actAndCheck(
+      "Start Alice validator in permissioned mode",
+      aliceValidatorBackend.startSync(),
+    )(
+      "Onboard Alice test user",
+      _ => {
+        aliceValidatorBackend.onboardUser("TestUser")
+      },
+    )
+
   }
 
 }

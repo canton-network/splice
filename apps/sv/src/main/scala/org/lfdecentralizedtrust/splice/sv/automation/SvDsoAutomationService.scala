@@ -298,6 +298,7 @@ class SvDsoAutomationService(
         svStore,
         config,
         connection(SpliceLedgerConnectionPriority.High),
+        packageVersionSupport,
       )
     )
     // Register optional BFT triggers

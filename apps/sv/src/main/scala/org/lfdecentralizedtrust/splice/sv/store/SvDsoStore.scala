@@ -844,6 +844,7 @@ trait SvDsoStore
   def listSvOnboardingConfirmations(
       svOnboarding: Contract[so.SvOnboardingRequest.ContractId, so.SvOnboardingRequest],
       weight: Long,
+      migrationIdOpt: java.util.Optional[java.lang.Long],
       limit: Limit = defaultLimit,
   )(implicit
       tc: TraceContext
@@ -858,6 +859,7 @@ trait SvDsoStore
           svOnboarding.payload.candidateParticipantId,
           weight,
           svOnboarding.payload.token,
+          migrationIdOpt,
         )
       )
     )
