@@ -275,7 +275,12 @@ trait ParticipantAdminSynchronizerConnection {
           // If nothing matches the given psid, fall back to an active synchronizer with the alias.
           if (matchingPsid.nonEmpty) matchingPsid else activeSynchronizers
         case None =>
-          activeSynchronizers
+          // A logical synchronizer upgrade flips the previous generation to LSU_SOURCE before its
+          // successor becomes ACTIVE, so there is a window in which the alias is registered but no
+          // generation is active. Reporting the alias as unregistered there makes callers such as
+          // ensureSynchronizerRegisteredWithManualConnect fail, so fall back to whatever
+          // generations are registered under the alias.
+          if (activeSynchronizers.nonEmpty) activeSynchronizers else withMatchingAlias
       }
     }
 
