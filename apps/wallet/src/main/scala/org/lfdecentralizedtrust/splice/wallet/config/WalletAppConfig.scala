@@ -56,7 +56,10 @@ final case class AppRewardBeneficiaryConfig(
 )
 
 /** How traffic-based app reward coupons are shared with beneficiaries. */
-sealed trait RewardSharingConfig
+sealed trait RewardSharingConfig {
+  def mintUnassignedCoupons: Boolean
+  def automateRewardSharing: Boolean
+}
 
 object RewardSharingConfig {
 
@@ -65,7 +68,10 @@ object RewardSharingConfig {
   /** Off-node automation owns beneficiary assignment: the node holds unassigned coupons back
     * and leaves them untouched rather than assigning or minting them itself.
     */
-  case class External() extends RewardSharingConfig
+  case class External() extends RewardSharingConfig {
+    override def mintUnassignedCoupons: Boolean = false
+    override def automateRewardSharing: Boolean = false
+  }
 
   /** The node performs beneficiary assignment and minting itself.
     * @param minTtlAfterSharing minimum remaining coupon TTL before sharing is triggered;
@@ -91,5 +97,9 @@ object RewardSharingConfig {
 
     def allDamlBeneficiaries(provider: PartyId): Seq[(PartyId, java.math.BigDecimal)] =
       allBeneficiaries(provider).map(b => (b.beneficiary, SpliceUtil.damlDecimal(b.percentage)))
+
+    override def mintUnassignedCoupons: Boolean = beneficiaries.isEmpty
+
+    override def automateRewardSharing: Boolean = beneficiaries.nonEmpty
   }
 }

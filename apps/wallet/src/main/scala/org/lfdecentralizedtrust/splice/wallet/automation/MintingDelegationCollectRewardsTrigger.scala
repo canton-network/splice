@@ -151,6 +151,20 @@ class MintingDelegationCollectRewardsTrigger(
     }
   }
 
+  // Handling of unassigned V2 coupons (no beneficiary yet) depends on the sharing mode:
+  //   - No sharing (no beneficiaries, not external): mint them directly to ourselves.
+  //   - InternalSharing (beneficiaries set): hold them back, assign to the configured
+  //     beneficiaries first, then mint; already-assigned coupons mint directly.
+  //   - ExternalSharing: hold them back and leave them untouched, so the
+  //     off-node automation owns their assignment; only already-assigned coupons mint here.
+  private val mode: SharingMode =
+    rewardSharingConfig match {
+      case RewardSharingConfig.External() => ExternalSharing
+      case builtIn: RewardSharingConfig.BuiltIn if builtIn.automateRewardSharing =>
+        InternalSharing(builtIn)
+      case _: RewardSharingConfig.BuiltIn => NoSharing
+    }
+
   private def performMintIfNeeded(
       mintInputs: MintInputs,
       couponsData: CouponsData,
@@ -164,20 +178,6 @@ class MintingDelegationCollectRewardsTrigger(
     val amuletsToMerge = selectAmuletsToMerge(amulets, mintInputs.delegation)
     val shouldMergeAmulets = amuletsToMerge.nonEmpty
 
-    // Handling of unassigned V2 coupons (no beneficiary yet) depends on the sharing mode:
-    //   - No sharing (no beneficiaries, not external): mint them directly to ourselves.
-    //   - InternalSharing (beneficiaries set): hold them back, assign to the configured
-    //     beneficiaries first, then mint; already-assigned coupons mint directly.
-    //   - ExternalSharing: hold them back and leave them untouched, so the
-    //     off-node automation owns their assignment; only already-assigned coupons mint here.
-    val mode: SharingMode =
-      rewardSharingConfig match {
-        case RewardSharingConfig.External() => ExternalSharing
-        case builtIn: RewardSharingConfig.BuiltIn if builtIn.beneficiaries.nonEmpty =>
-          InternalSharing(builtIn)
-        case _: RewardSharingConfig.BuiltIn => NoSharing
-      }
-
     val (unassignedV2, mintableV2) = mode match {
       case NoSharing => (Seq.empty, filteredCouponsData.rewardCouponsV2)
       case InternalSharing(_) | ExternalSharing =>
@@ -188,18 +188,19 @@ class MintingDelegationCollectRewardsTrigger(
     val submission = buildMintSubmissionData(mintInputs, couponsToMint, amuletsToMerge)
     // Share when the TTL threshold is reached, or batch sharing with
     // amulet merging to reduce traffic costs by combining both in one transaction.
+    val hasSomethingToMint = couponsToMint.hasRewards || shouldMergeAmulets
     mode match {
-      case InternalSharing(config)
-          if unassignedV2.nonEmpty && (shouldShareNow(
-            unassignedV2,
-            config,
-          ) || shouldMergeAmulets) =>
-        performAssignAndMint(submission, unassignedV2.toList, config)
-      case _ if couponsToMint.hasRewards || shouldMergeAmulets =>
-        performMint(submission)
-      case _ =>
-        // Nothing to do: no rewards to mint, coupons to assign, or amulets to merge
-        Future.successful(false)
+      case InternalSharing(config) =>
+        val shouldAssignAndMint = unassignedV2.nonEmpty && (shouldShareNow(
+          unassignedV2,
+          config,
+        ) || shouldMergeAmulets)
+        if (shouldAssignAndMint) performAssignAndMint(submission, unassignedV2.toList, config)
+        else if (hasSomethingToMint) performMint(submission)
+        else Future.successful(false)
+      case NoSharing | ExternalSharing =>
+        if (hasSomethingToMint) performMint(submission)
+        else Future.successful(false)
     }
   }
 
