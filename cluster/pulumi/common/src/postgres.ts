@@ -8,12 +8,7 @@ import * as _ from 'lodash';
 import { Resource } from '@pulumi/pulumi';
 
 import { CnChartVersion } from './artifacts';
-import {
-  clusterSmallDisk,
-  CloudSqlConfig,
-  config,
-  SplicePostgresHelmMigrationConfig,
-} from './config';
+import { clusterSmallDisk, CloudSqlConfig, config, SplicePostgresConfig } from './config';
 import { spliceConfig } from './config/config';
 import { GcpProject } from './config/gcpConfig';
 import {
@@ -24,8 +19,7 @@ import {
 } from './helm';
 import { installPostgresPasswordSecret } from './secrets';
 import { standardStorageClassName } from './storage/storageClass';
-import { createVolumeSnapshot } from './storage/volumeSnapshot';
-import { ChartValues, CLUSTER_BASENAME, ExactNamespace, GCP_ZONE } from './utils';
+import { CLUSTER_BASENAME, ExactNamespace, GCP_ZONE } from './utils';
 
 const project = gcp.organizations.getProjectOutput({});
 
@@ -390,8 +384,8 @@ export class LegacyHelmSplicePostgres extends pulumi.ComponentResource implement
   constructor(
     xns: ExactNamespace,
     instanceName: string,
-    passwordSecret: k8s.core.v1.Secret,
-    values?: ChartValues,
+    getOrInstallPassword: (parent: Resource) => k8s.core.v1.Secret,
+    values?: LegacyChartValues,
     overrideDbSizeFromValues?: boolean,
     disableProtection?: boolean,
     version?: CnChartVersion,
@@ -409,6 +403,7 @@ export class LegacyHelmSplicePostgres extends pulumi.ComponentResource implement
     this.address = pulumi.output(
       `${this.instanceName}.${this.namespace.logicalName}.svc.cluster.local`
     );
+    const passwordSecret = getOrInstallPassword(this);
     this.secretName = passwordSecret.metadata.name;
 
     // an initial database named cantonnet is created automatically (configured in the Helm chart).
@@ -477,6 +472,18 @@ export interface PostgresMigrationSource {
   userName?: string;
 }
 
+type LegacyChartValues = Partial<{
+  resources: k8s.types.input.core.v1.ResourceRequirements;
+  db: Partial<{
+    volumeSize: string;
+    maxConnections: number;
+    volumeStorageClass: string;
+    pvcTemplateName: string;
+    maxWalSize: string;
+    dataSource: any;
+  }>;
+}>;
+
 export class SplicePostgres extends pulumi.ComponentResource implements Postgres {
   instanceName: string;
   namespace: ExactNamespace;
@@ -488,9 +495,9 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
   constructor(
     xns: ExactNamespace,
     instanceName: string,
-    secretName: string,
-    splicePostgresHelmMigrationConfig: SplicePostgresHelmMigrationConfig,
-    values?: ChartValues,
+    installPassword: (parent: Resource) => k8s.core.v1.Secret,
+    splicePostgresHelmMigrationConfig: SplicePostgresConfig,
+    values?: LegacyChartValues,
     overrideDbSizeFromValues?: boolean,
     disableProtection?: boolean,
     version?: CnChartVersion,
@@ -506,21 +513,15 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
       dependsOn,
     });
 
-    // Password keeps the same historical name to avoid re-creating it unnecessarily
-    const password = generatePassword(`${xns.logicalName}-${instanceName}-passwd`, {
-      parent: this,
-      // same name, no parent, because multi-validators were creating their own without a parent
-      aliases: [{ parent: undefined, name: `${xns.logicalName}-${instanceName}-passwd` }],
-    }).result;
-    const passwordSecret = installPostgresPasswordSecret(xns, password, secretName);
+    const passwordSecret = installPassword(this);
     this.secretName = passwordSecret.metadata.name;
 
     let migrationSource: PostgresMigrationSource | undefined = undefined;
-    if (splicePostgresHelmMigrationConfig.importDataFromSplicePostgresHelmChart) {
+    if (splicePostgresHelmMigrationConfig.deployment == 'migrate') {
       new LegacyHelmSplicePostgres(
         xns,
         instanceName,
-        passwordSecret,
+        () => passwordSecret, // reuse the same secret
         values,
         overrideDbSizeFromValues,
         disableProtection,
@@ -551,9 +552,6 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
       : smallDiskSize || '2800Gi';
     const pvcTemplateName = 'pg-data-hd';
     const volumeStorageClass = standardStorageClassName;
-    // Plain PVC name in the same namespace (not a PV name and not namespaced as ns/name).
-    const existingClaimName: string | undefined = values?.db?.existingClaimName;
-    const mainDataVolumeName = existingClaimName ? 'pg-data-existing' : pvcTemplateName;
     const maxConnections: number = values?.db?.maxConnections ?? 300;
     const maxWalSize: string = values?.db?.maxWalSize ?? '2GB';
     const imageName: string = splicePostgresHelmMigrationConfig.postgresImage;
@@ -561,7 +559,6 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
       { limits: { memory: '12Gi' }, requests: { cpu: '0.5', memory: '1Gi' } },
       values?.resources || {}
     );
-    const extraArgs: string[] = values?.extraArgs || [];
     const affinityAndTolerations = useInfraAffinityAndTolerations
       ? infraAffinityAndTolerations
       : appsAffinityAndTolerations;
@@ -653,7 +650,7 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
         ],
         volumeMounts: [
           // Mount PGDATA read-only – we only inspect it to decide whether to dump
-          { name: mainDataVolumeName, mountPath: '/var/lib/postgresql/data', readOnly: true },
+          { name: pvcTemplateName, mountPath: '/var/lib/postgresql/data', readOnly: true },
           { name: 'initdb-scripts', mountPath: '/initdb' },
         ],
       });
@@ -718,7 +715,6 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
                     `max_connections=${maxConnections}`,
                     '-c',
                     `max_wal_size=${maxWalSize}`,
-                    ...extraArgs,
                   ],
                   env: [
                     {
@@ -744,7 +740,7 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
                   ports: [{ containerPort: 5432, name: 'postgresdb', protocol: 'TCP' }],
                   resources,
                   volumeMounts: [
-                    { mountPath: '/var/lib/postgresql/data', name: mainDataVolumeName },
+                    { mountPath: '/var/lib/postgresql/data', name: pvcTemplateName },
                     ...migrationVolumeMounts,
                   ],
                 },
@@ -752,39 +748,27 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
               restartPolicy: 'Always',
               affinity: affinityAndTolerations.affinity,
               tolerations: affinityAndTolerations.tolerations,
-              ...(existingClaimName || migrationVolumes.length > 0
+              ...(migrationVolumes.length > 0
                 ? {
-                    volumes: [
-                      ...(existingClaimName
-                        ? [
-                            {
-                              name: mainDataVolumeName,
-                              persistentVolumeClaim: { claimName: existingClaimName },
-                            },
-                          ]
-                        : []),
-                      ...migrationVolumes,
-                    ],
+                    volumes: migrationVolumes,
                   }
                 : {}),
             },
           },
-          ...(existingClaimName
-            ? {}
-            : {
-                volumeClaimTemplates: [
-                  {
-                    metadata: { name: pvcTemplateName },
-                    spec: {
-                      accessModes: ['ReadWriteOnce'],
-                      resources: { requests: { storage: volumeSize } },
-                      storageClassName: volumeStorageClass,
-                      volumeMode: 'Filesystem',
-                      ...(values?.db?.dataSource ? { dataSource: values.db.dataSource } : {}),
-                    },
-                  },
-                ],
-              }),
+          ...{
+            volumeClaimTemplates: [
+              {
+                metadata: { name: pvcTemplateName },
+                spec: {
+                  accessModes: ['ReadWriteOnce'],
+                  resources: { requests: { storage: volumeSize } },
+                  storageClassName: volumeStorageClass,
+                  volumeMode: 'Filesystem',
+                  ...(values?.db?.dataSource ? { dataSource: values.db.dataSource } : {}),
+                },
+              },
+            ],
+          },
         },
       },
       {
@@ -841,12 +825,6 @@ type SplicePostgresInstallOptions = {
   existingInstanceName?: string;
   existingSecretName?: string;
   retainDbResourcesOnDelete?: boolean;
-  databaseVersion?: string;
-  /**
-   * Keep the legacy `splice-postgres` Helm release declared and import data
-   * from it into the new helm-less deployment via init-container dump/restore.
-   */
-  importDataFromSplicePostgresHelmChart?: boolean;
 };
 
 export async function installPostgres(
@@ -855,43 +833,72 @@ export async function installPostgres(
   alias: string,
   version: CnChartVersion,
   cloudSqlConfig: CloudSqlConfig,
-  splicePostgresHelmMigrationConfig: SplicePostgresHelmMigrationConfig,
+  splicePostgresHelmMigrationConfig: SplicePostgresConfig,
   uniqueSecretName = false,
   opts: SplicePostgresInstallOptions = {}
 ): Promise<Postgres> {
   const o = { isActive: true, ...opts };
   const secretName = uniqueSecretName ? instanceName + '-secrets' : 'postgres-secrets';
-  return cloudSqlConfig.enabled
-    ? await CloudPostgres.install(
-        `${xns.logicalName}-${instanceName}`,
-        {
-          active: o.isActive,
-          alias,
-          cloudSqlConfig,
-          disableProtection: o.disableProtection,
-          existingInstanceName: o.existingInstanceName,
-          existingSecretName: o.existingSecretName,
-          instanceName,
-          logicalDecoding: o.logicalDecoding,
-          migrationId: o.migrationId,
-          namespace: xns,
-          secretName,
-          userName: o.userName,
-          retainDbResourcesOnDelete: o.retainDbResourcesOnDelete,
-        },
-        {
-          aliases: [{ name: `${xns.logicalName}-${alias}` }],
-        }
-      )
-    : new SplicePostgres(
-        xns,
+  if (cloudSqlConfig.enabled) {
+    return await CloudPostgres.install(
+      `${xns.logicalName}-${instanceName}`,
+      {
+        active: o.isActive,
+        alias,
+        cloudSqlConfig,
+        disableProtection: o.disableProtection,
+        existingInstanceName: o.existingInstanceName,
+        existingSecretName: o.existingSecretName,
         instanceName,
+        logicalDecoding: o.logicalDecoding,
+        migrationId: o.migrationId,
+        namespace: xns,
         secretName,
-        splicePostgresHelmMigrationConfig,
-        undefined,
-        undefined,
-        o.disableProtection,
-        version,
-        false
-      );
+        userName: o.userName,
+        retainDbResourcesOnDelete: o.retainDbResourcesOnDelete,
+      },
+      {
+        aliases: [{ name: `${xns.logicalName}-${alias}` }],
+      }
+    );
+  } else if (splicePostgresHelmMigrationConfig.deployment == 'legacy-helm-chart') {
+    return new LegacyHelmSplicePostgres(
+      xns,
+      instanceName,
+      parent => installPasswordWithParent(parent, xns, instanceName, secretName),
+      undefined,
+      undefined,
+      o.disableProtection,
+      version,
+      false
+    );
+  } else {
+    // If deployment == 'legacy-helm-chart', will create the LegacyHelmSplicePostgres
+    return new SplicePostgres(
+      xns,
+      instanceName,
+      parent => installPasswordWithParent(parent, xns, instanceName, secretName),
+      splicePostgresHelmMigrationConfig,
+      undefined,
+      undefined,
+      o.disableProtection,
+      version,
+      false
+    );
+  }
+}
+
+export function installPasswordWithParent(
+  parent: Resource,
+  xns: ExactNamespace,
+  instanceName: string,
+  secretName: string
+): k8s.core.v1.Secret {
+  // Password keeps the same historical name to avoid re-creating it unnecessarily
+  const password = generatePassword(`${xns.logicalName}-${instanceName}-passwd`, {
+    parent,
+    // same name, no parent, because multi-validators were creating their own without a parent
+    aliases: [{ parent: undefined, name: `${xns.logicalName}-${instanceName}-passwd` }],
+  }).result;
+  return installPostgresPasswordSecret(xns, password, secretName);
 }

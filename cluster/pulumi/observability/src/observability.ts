@@ -29,7 +29,10 @@ import {
   standardSvConfigsBasic,
 } from '@canton-network/splice-pulumi-common-sv/src/svConfigsBasic';
 import { SweepConfig } from '@canton-network/splice-pulumi-common-validator';
-import { SplicePostgres } from '@canton-network/splice-pulumi-common/src/postgres';
+import {
+  installPasswordWithParent,
+  SplicePostgres,
+} from '@canton-network/splice-pulumi-common/src/postgres';
 import { infraStack } from '@canton-network/splice-pulumi-common/src/stackReferences';
 import { local } from '@pulumi/command';
 import { getSecretVersionOutput } from '@pulumi/gcp/secretmanager/getSecretVersion';
@@ -47,7 +50,7 @@ import {
   slackToken,
   supportTeamEmail,
 } from './alertings';
-import { monitoringConfig, prometheusConfig } from './config';
+import { monitoringConfig, postgresConfig, prometheusConfig } from './config';
 import { createGrafanaDashboards } from './grafana-dashboards';
 
 function istioVirtualService(
@@ -1185,11 +1188,12 @@ function grafanaKeysFromSecret(): pulumi.Output<GrafanaKeys> {
 }
 
 function installPostgres(namespace: ExactNamespace): SplicePostgres {
+  const instanceName = 'grafana-postgres';
   return new SplicePostgres(
     namespace,
-    'grafana-postgres',
-    'grafana-postgres-secret',
-    { postgresImage: 'postgres:18', importDataFromSplicePostgresHelmChart: true },
+    instanceName,
+    parent => installPasswordWithParent(parent, namespace, instanceName, 'grafana-postgres-secret'),
+    postgresConfig,
     { db: { volumeSize: '20Gi' } }, // A tiny pvc should be enough for grafana
     true, // overrideDbSizeFromValues
     true, // disableProtection

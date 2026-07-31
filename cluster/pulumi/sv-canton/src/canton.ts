@@ -83,7 +83,7 @@ export async function installCantonComponents(
       `mediator-pg`,
       version,
       physicalSynchronizerConfig.mediator.cloudSql,
-      physicalSynchronizerConfig.mediator.splicePostgresHelmMigration,
+      physicalSynchronizerConfig.mediator.splicePostgres,
       true,
       {
         isActive: migrationStillRunning,
@@ -99,7 +99,7 @@ export async function installCantonComponents(
       `sequencer-pg`,
       version,
       physicalSynchronizerConfig.sequencer.cloudSql,
-      physicalSynchronizerConfig.sequencer.splicePostgresHelmMigration,
+      physicalSynchronizerConfig.sequencer.splicePostgres,
       true,
       { isActive: migrationStillRunning, migrationId, disableProtection }
     ));
@@ -111,7 +111,7 @@ export async function installCantonComponents(
           `sequencer-bft-pg`,
           version,
           physicalSynchronizerConfig.sequencer.cloudSql,
-          physicalSynchronizerConfig.sequencer.splicePostgresHelmMigration,
+          physicalSynchronizerConfig.sequencer.splicePostgres,
           true,
           { isActive: migrationStillRunning, migrationId, disableProtection }
         )

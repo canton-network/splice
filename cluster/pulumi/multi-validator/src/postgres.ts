@@ -8,7 +8,10 @@ import {
   spliceConfig,
   standardStorageClassName,
 } from '@canton-network/splice-pulumi-common';
-import { SplicePostgres } from '@canton-network/splice-pulumi-common/src/postgres';
+import {
+  installPasswordWithParent,
+  SplicePostgres,
+} from '@canton-network/splice-pulumi-common/src/postgres';
 
 import { multiValidatorConfig } from './config';
 
@@ -27,8 +30,8 @@ export function installPostgres(
   return new SplicePostgres(
     xns,
     name,
-    secretName,
-    spliceConfig.pulumiProjectConfig.splicePostgresHelmMigrationConfig,
+    parent => installPasswordWithParent(parent, xns, name, secretName),
+    config.postgres,
     {
       db: {
         volumeSize: config.postgresPvcSize,

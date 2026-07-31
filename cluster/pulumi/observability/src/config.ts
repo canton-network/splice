@@ -1,6 +1,10 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { clusterSubConfig } from '@canton-network/splice-pulumi-common';
+import {
+  clusterSubConfig,
+  SplicePostgresConfig,
+  SplicePostgresSchema,
+} from '@canton-network/splice-pulumi-common';
 import { z } from 'zod';
 
 const quotaMetricNameSchema = z
@@ -189,3 +193,13 @@ const PrometheusConfigSchema = z.object({
 });
 
 export const prometheusConfig = PrometheusConfigSchema.parse(clusterSubConfig('infra')).prometheus;
+
+// Observability needs to be migrated
+const defaultObservabilityPostgresConfig: SplicePostgresConfig = {
+  postgresImage: 'postgres:18',
+  deployment: 'legacy-helm-chart',
+};
+export const postgresConfig = SplicePostgresSchema.parse({
+  ...defaultObservabilityPostgresConfig,
+  ...(clusterSubConfig('postgres') as object),
+});

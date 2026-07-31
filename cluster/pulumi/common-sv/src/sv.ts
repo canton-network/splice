@@ -36,7 +36,7 @@ import {
   persistentHeapDumpsPvc,
   sanitizedForPostgres,
   spliceInstanceNames,
-  SplicePostgresHelmMigrationConfig,
+  SplicePostgresConfig,
   svCometBftGovernanceKeyFromSecret,
   svCometBftGovernanceKeySecret,
   SvIdKey,

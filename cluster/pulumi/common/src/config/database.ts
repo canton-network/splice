@@ -25,10 +25,21 @@ export const CloudSqlConfigSchema = z.object({
 });
 export type CloudSqlConfig = z.infer<typeof CloudSqlConfigSchema>;
 
-export const SplicePostgresHelmMigrationSchema = z
-  .object({
-    postgresImage: z.string(),
-    importDataFromSplicePostgresHelmChart: z.boolean(),
-  })
-  .default({ postgresImage: 'postgres:18', importDataFromSplicePostgresHelmChart: true });
-export type SplicePostgresHelmMigrationConfig = z.infer<typeof SplicePostgresHelmMigrationSchema>;
+// Deployment strategy:
+// - If no migration is necessary, just default docker-image will deploy the latest version
+// - If you want to migrate data, you need to, in this order:
+//   1) deployment = 'legacy-helm-chart' (this is the original state, which uses pg14, unconfigurable)
+//   2) When the time to migrate comes, scale down all pods that use the database and set deployment = 'migrate'
+//   3) Once the migration is complete (i.e., the DB pod is up and running and apps can connect to it), set deployment = 'docker-image'
+// Once everything has been migrated we can drop this, as everything will be using docker-image.
+const SplicePostgresDeploymentSchema = z.union([
+  z.literal('legacy-helm-chart'),
+  z.literal('migrate'),
+  z.literal('docker-image'),
+]);
+export const SplicePostgresSchema = z.object({
+  postgresImage: z.string(),
+  deployment: SplicePostgresDeploymentSchema,
+});
+
+export type SplicePostgresConfig = z.infer<typeof SplicePostgresSchema>;

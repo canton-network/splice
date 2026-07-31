@@ -45,7 +45,10 @@ import {
 } from '@canton-network/splice-pulumi-common';
 import { installLoopback } from '@canton-network/splice-pulumi-common-sv';
 import { installParticipant } from '@canton-network/splice-pulumi-common-validator';
-import { SplicePostgres } from '@canton-network/splice-pulumi-common/src/postgres';
+import {
+  installPasswordWithParent,
+  SplicePostgres,
+} from '@canton-network/splice-pulumi-common/src/postgres';
 
 import { installPartyAllocator } from './partyAllocator';
 import { validatorConfig, validatorName } from './validatorConfig';
@@ -168,11 +171,14 @@ async function installValidator(
         db: { ...postgresValuesFromFile.db, volumeSize: validatorConfig.postgresPvcSize },
       }
     : postgresValuesFromFile;
+  const postgresInstanceName = 'postgres';
   const postgres = new SplicePostgres(
     xns,
-    'postgres',
-    'postgres-secrets',
-    { importDataFromSplicePostgresHelmChart: false, postgresImage: 'postgres:18' },
+    postgresInstanceName,
+    parent => installPasswordWithParent(parent, xns, postgresInstanceName, 'postgres-secrets'),
+    // No need to support legacy chart
+    // TODO: configurable image?
+    { deployment: 'docker-image', postgresImage: 'postgres:18' },
     postgresValues,
     true,
     supportsValidatorRunbookReset,
