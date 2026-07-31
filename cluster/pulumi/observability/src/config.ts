@@ -57,9 +57,14 @@ const MuteTimeIntervalSchema = z.array(
 );
 export type MuteTimeInterval = z.infer<typeof MuteTimeIntervalSchema>[number];
 
+// Observability needs to be migrated
+const defaultObservabilityPostgresConfig: SplicePostgresConfig = {
+  deployment: 'legacy-helm-chart',
+};
 const MonitoringConfigSchema = z
   .object({
     enableGrafanaServiceAccountToken: z.boolean(),
+    grafanaPostgres: SplicePostgresSchema.default({ deployment: 'legacy-helm-chart' }),
     alerting: z.object({
       enableNoDataAlerts: z.boolean(),
       alerts: z.object({
@@ -193,12 +198,3 @@ const PrometheusConfigSchema = z.object({
 });
 
 export const prometheusConfig = PrometheusConfigSchema.parse(clusterSubConfig('infra')).prometheus;
-
-// Observability needs to be migrated
-const defaultObservabilityPostgresConfig: SplicePostgresConfig = {
-  deployment: 'legacy-helm-chart',
-};
-export const postgresConfig = SplicePostgresSchema.parse({
-  ...defaultObservabilityPostgresConfig,
-  ...(clusterSubConfig('postgres') as object),
-});

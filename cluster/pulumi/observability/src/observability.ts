@@ -47,7 +47,7 @@ import {
   slackToken,
   supportTeamEmail,
 } from './alertings';
-import { monitoringConfig, postgresConfig, prometheusConfig } from './config';
+import { monitoringConfig, prometheusConfig } from './config';
 import { createGrafanaDashboards } from './grafana-dashboards';
 
 function istioVirtualService(
@@ -1190,7 +1190,7 @@ function installPostgres(namespace: ExactNamespace): Postgres {
     namespace,
     instanceName,
     'grafana-postgres-secret',
-    postgresConfig,
+    monitoringConfig.grafanaPostgres,
     undefined, // chart version
     { disableProtection: true },
     { db: { volumeSize: '20Gi' } }, // A tiny pvc should be enough for grafana
