@@ -180,11 +180,6 @@ class WalletRewardsTimeBasedIntegrationTest
         .pause()
         .futureValue
 
-      splitwellValidatorBackend.validatorAutomation
-        .trigger[ReceiveFaucetCouponTrigger]
-        .pause()
-        .futureValue
-
       val bobRewardTrigger = bobValidatorBackend
         .userWalletAutomation(bobValidatorWalletClient.config.ledgerApiUser)
         .futureValue

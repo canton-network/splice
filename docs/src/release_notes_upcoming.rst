@@ -22,6 +22,6 @@
     - Validator App
 
         - Added a sharing-automation option to each party's reward-sharing config.
-           When set to external, an off-node automation owns reward-coupon beneficiary assignment:
-           the validator neither mints unassigned reward coupons nor runs built-in sharing for that party.
-           Defaults to built-in, preserving existing behavior.
+          When set to external, an off-node automation owns reward-coupon beneficiary assignment:
+          the validator neither mints unassigned reward coupons nor runs built-in sharing for that party.
+          Defaults to built-in, preserving existing behavior.
