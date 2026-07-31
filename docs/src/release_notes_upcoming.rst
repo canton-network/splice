@@ -26,6 +26,12 @@
           MainNet/TestNet/DevNet/ScratchNet from the cluster subdomain, LocalNet for localhost, and a
           capitalized fallback otherwise (Unknown Network when no scan URL is available).
 
+        - ``AmuletAllocation`` ingestion by ``SvDsoStore`` now honour the earlier
+          ``expiresAt`` deadline instead of the coarser settlement deadline, so
+          locked amulet is released sooner. This only affects newly ingested
+          contracts; contracts already in the SV store keep their previous expiry
+          unless reingestion is forced via a store version bump.
+
     - SV UI
 
         - During the creation of ``AmuletRules_SetConfig`` proposal, for the ``rewardConfig``
