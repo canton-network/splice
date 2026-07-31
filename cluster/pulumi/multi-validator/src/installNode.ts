@@ -21,6 +21,8 @@ export async function installNode(): Promise<void> {
   for (let i = 0; i < numInstances; i++) {
     const postgres = installPostgres(namespace, `postgres-${i}`, imagePullDeps);
     const postgresConf = {
+      // being just the init container it doesn't matter too much so as long as it has psql
+      initImageName: 'postgres:18',
       host: postgres.address,
       port: '5432',
       schema: 'cantonnet',

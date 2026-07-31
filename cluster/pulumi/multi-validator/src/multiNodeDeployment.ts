@@ -18,6 +18,7 @@ import { EnvironmentVariable, multiValidatorConfig } from './config';
 export interface BaseMultiNodeArgs {
   namespace: k8s.core.v1.Namespace;
   postgres: {
+    initImageName: string;
     host: pulumi.Output<string>;
     schema: string;
     port: string;
@@ -140,7 +141,7 @@ export class MultiNodeDeployment extends pulumi.ComponentResource {
               initContainers: [
                 {
                   name: 'pg-init',
-                  image: 'postgres:18',
+                  image: args.postgres.initImageName,
                   env: [
                     {
                       name: 'PGPASSWORD',
