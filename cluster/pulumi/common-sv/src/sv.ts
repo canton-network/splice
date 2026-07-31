@@ -359,7 +359,7 @@ export async function installSvNode(
         'postgres',
         config.version,
         spliceConfig.pulumiProjectConfig.cloudSql,
-        spliceConfig.pulumiProjectConfig.splicePostgresHelmMigrationConfig,
+        spliceConfig.pulumiProjectConfig.defaultSplicePostgresConfig,
         false,
         {
           logicalDecoding: !!baseConfig.scanApp?.bigQuery,
@@ -374,7 +374,7 @@ export async function installSvNode(
       `cn-apps-pg`,
       config.version,
       svConfig.appsPg?.cloudSql ?? spliceConfig.pulumiProjectConfig.cloudSql,
-      spliceConfig.pulumiProjectConfig.splicePostgresHelmMigrationConfig,
+      spliceConfig.pulumiProjectConfig.defaultSplicePostgresConfig,
       true,
       {
         logicalDecoding: !!baseConfig.scanApp?.bigQuery,

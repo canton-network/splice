@@ -61,7 +61,7 @@ async function installParticipantPostgres({
     'participant-pg',
     version,
     participant?.cloudSql ?? spliceConfig.pulumiProjectConfig.cloudSql,
-    spliceConfig.pulumiProjectConfig.splicePostgresHelmMigrationConfig,
+    spliceConfig.pulumiProjectConfig.defaultSplicePostgresConfig,
     true,
     {
       disableProtection,

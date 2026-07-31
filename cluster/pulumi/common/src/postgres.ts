@@ -8,7 +8,14 @@ import * as _ from 'lodash';
 import { Resource } from '@pulumi/pulumi';
 
 import { CnChartVersion } from './artifacts';
-import { clusterSmallDisk, CloudSqlConfig, config, SplicePostgresConfig } from './config';
+import {
+  clusterSmallDisk,
+  CloudSqlConfig,
+  config,
+  SplicePostgresConfig,
+  SplicePostgresMigrateConfig,
+  SplicePostgresDockerImageConfig,
+} from './config';
 import { spliceConfig } from './config/config';
 import { GcpProject } from './config/gcpConfig';
 import {
@@ -496,7 +503,9 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
     xns: ExactNamespace,
     instanceName: string,
     installPassword: (parent: Resource) => k8s.core.v1.Secret,
-    splicePostgresHelmMigrationConfig: SplicePostgresConfig,
+    splicePostgresHelmMigrationConfig:
+      | SplicePostgresMigrateConfig
+      | SplicePostgresDockerImageConfig,
     values?: LegacyChartValues,
     overrideDbSizeFromValues?: boolean,
     disableProtection?: boolean,
@@ -873,12 +882,14 @@ export async function installPostgres(
       false
     );
   } else {
-    // If deployment == 'legacy-helm-chart', will create the LegacyHelmSplicePostgres
+    // If deployment == 'migrate', it will also create the LegacyHelmSplicePostgres
     return new SplicePostgres(
       xns,
       instanceName,
       parent => installPasswordWithParent(parent, xns, instanceName, secretName),
-      splicePostgresHelmMigrationConfig,
+      splicePostgresHelmMigrationConfig as
+        | SplicePostgresMigrateConfig
+        | SplicePostgresDockerImageConfig,
       undefined,
       undefined,
       o.disableProtection,

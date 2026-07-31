@@ -60,7 +60,7 @@ export async function installValidator1(
         'postgres',
         activeVersion,
         spliceConfig.pulumiProjectConfig.cloudSql,
-        spliceConfig.pulumiProjectConfig.splicePostgresHelmMigrationConfig,
+        spliceConfig.pulumiProjectConfig.defaultSplicePostgresConfig,
         false
       )
     : undefined;
@@ -73,7 +73,7 @@ export async function installValidator1(
       `validator-pg`,
       activeVersion,
       spliceConfig.pulumiProjectConfig.cloudSql,
-      spliceConfig.pulumiProjectConfig.splicePostgresHelmMigrationConfig,
+      spliceConfig.pulumiProjectConfig.defaultSplicePostgresConfig,
       true
     ));
   const validatorDbName = `validator1`;

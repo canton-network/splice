@@ -196,7 +196,6 @@ export const prometheusConfig = PrometheusConfigSchema.parse(clusterSubConfig('i
 
 // Observability needs to be migrated
 const defaultObservabilityPostgresConfig: SplicePostgresConfig = {
-  postgresImage: 'postgres:18',
   deployment: 'legacy-helm-chart',
 };
 export const postgresConfig = SplicePostgresSchema.parse({

@@ -19,7 +19,6 @@ export const MultiValidatorConfigSchema = z.object({
       postgresPvcSize: z.string().optional(),
       // Multi-validator needs to be migrated
       postgres: SplicePostgresSchema.default({
-        postgresImage: 'postgres:18',
         deployment: 'legacy-helm-chart',
       }),
       requiresOnboardingSecret: z.boolean().default(false),
