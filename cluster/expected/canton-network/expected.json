@@ -1907,6 +1907,16 @@
           "perIpLimits": {
             "fillInterval": "60s",
             "maxTokens": 120,
+            "overrides": {
+              "test": {
+                "fillInterval": "60s",
+                "ips": [
+                  "192.68.78.50"
+                ],
+                "maxTokens": 250,
+                "tokensPerFill": 250
+              }
+            },
             "tokensPerFill": 120
           },
           "tokensPerFill": 720,
@@ -2286,6 +2296,16 @@
           "perIpLimits": {
             "fillInterval": "60s",
             "maxTokens": 120,
+            "overrides": {
+              "test": {
+                "fillInterval": "60s",
+                "ips": [
+                  "192.68.78.50"
+                ],
+                "maxTokens": 250,
+                "tokensPerFill": 250
+              }
+            },
             "tokensPerFill": 120
           },
           "tokensPerFill": 720,
@@ -3516,6 +3536,23 @@
                           "fill_interval": "60s",
                           "max_tokens": 720,
                           "tokens_per_fill": 720
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-metadata-info"
+                          },
+                          {
+                            "key": "client_ip",
+                            "value": "192.68.78.50"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 250,
+                          "tokens_per_fill": 250
                         }
                       },
                       {
@@ -5659,6 +5696,23 @@
                           "fill_interval": "60s",
                           "max_tokens": 720,
                           "tokens_per_fill": 720
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-metadata-info"
+                          },
+                          {
+                            "key": "client_ip",
+                            "value": "192.68.78.50"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 250,
+                          "tokens_per_fill": 250
                         }
                       },
                       {
