@@ -105,7 +105,7 @@ class WalletRewardsTimeBasedIntegrationTest
       val bobValidatorParty = bobValidatorBackend.getValidatorPartyId()
       val splitwellValidatorParty = splitwellValidatorBackend.getValidatorPartyId()
 
-      clue("alice (built in) has sharing trigger; splitwell (external) does not") {
+      clue("alice (built in) has sharing trigger; splitwell (external sharing automation) does not") {
         val aliceAutomation = aliceValidatorBackend
           .userWalletAutomation(aliceValidatorWalletClient.config.ledgerApiUser)
           .futureValue
