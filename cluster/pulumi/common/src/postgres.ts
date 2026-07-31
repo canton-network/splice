@@ -490,7 +490,7 @@ type LegacyChartValues = Partial<{
     volumeStorageClass: string;
     pvcTemplateName: string;
     maxWalSize: string;
-    dataSource: any;
+    dataSource: unknown;
   }>;
 }>;
 
@@ -896,7 +896,7 @@ export function installSplicePostgres(
   overrideDbSizeFromValues?: boolean,
   useInfraAffinityAndTolerations: boolean = false,
   resourceOpts?: SpliceCustomResourceOptions
-) {
+): Postgres {
   if (splicePostgresHelmMigrationConfig.deployment == 'legacy-helm-chart') {
     return new LegacyHelmSplicePostgres(
       xns,
