@@ -881,6 +881,7 @@ class SpliceLedgerConnection(
       priority: CommandPriority,
       deadline: Option[NonNegativeFiniteDuration] = None,
       preferredPackageIds: Seq[String] = Seq.empty,
+      recoverAcceptedDuplicates: Boolean = false,
   ) {
     private type DedupNotSpecifiedYet = CmdId =:= Any
     private type SynchronizerIdRequired = DomId <:< SynchronizerId
@@ -891,6 +892,7 @@ class SpliceLedgerConnection(
         disclosedContracts: DisclosedContracts = this.disclosedContracts,
         deadline: Option[NonNegativeFiniteDuration] = this.deadline,
         preferredPackageIds: Seq[String] = this.preferredPackageIds,
+        recoverAcceptedDuplicates: Boolean = this.recoverAcceptedDuplicates,
     ): submit[C, CmdId0, DomId0] =
       new submit(
         actAs,
@@ -902,7 +904,17 @@ class SpliceLedgerConnection(
         priority,
         deadline,
         preferredPackageIds,
+        recoverAcceptedDuplicates,
       )
+
+    /** Read an already-accepted duplicate back from the ledger and return its result, rather
+      * than failing the submission.
+      *
+      * For client calls, which cannot do anything useful with the failure. Automation leaves
+      * this off: a trigger needs the error so that its own retry re-runs the staleness check.
+      */
+    def recoveringAcceptedDuplicates(enabled: Boolean = true): submit[C, CmdId, DomId] =
+      copy(recoverAcceptedDuplicates = enabled)
 
     def withDedup(commandId: CommandId, deduplicationOffset: Long)(implicit
         cid: DedupNotSpecifiedYet
@@ -1018,7 +1030,8 @@ class SpliceLedgerConnection(
                 }
                 .recoverWith {
                   case ex: StatusRuntimeException
-                      if ex.getStatus.getCode == Status.Code.ALREADY_EXISTS =>
+                      if recoverAcceptedDuplicates &&
+                        ex.getStatus.getCode == Status.Code.ALREADY_EXISTS =>
                     parseDuplicateCommandAccepted(ex) match {
                       case Some(completionOffset) =>
                         client.recoverFromDuplicateCommand(
