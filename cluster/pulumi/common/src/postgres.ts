@@ -490,7 +490,7 @@ type LegacyChartValues = Partial<{
     volumeStorageClass: string;
     pvcTemplateName: string;
     maxWalSize: string;
-    dataSource: unknown;
+    dataSource: pulumi.Input<k8s.types.input.core.v1.TypedLocalObjectReference>;
   }>;
 }>;
 
