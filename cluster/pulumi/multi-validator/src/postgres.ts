@@ -3,6 +3,7 @@
 import * as pulumi from '@pulumi/pulumi';
 import {
   activeVersion,
+  appsAffinityAndTolerations,
   CnInput,
   ExactNamespace,
   spliceConfig,
@@ -39,6 +40,7 @@ export function installPostgres(
         pvcTemplateName: 'pg-data-hd',
       },
       resources: config.resources?.postgres,
+      appsAffinityAndTolerations,
     },
     true, // overrideDbSizeFromValues
     false, // useInfraAffinityAndTolerations

@@ -4830,6 +4830,38 @@
             }
           }
         },
+        "appsAffinityAndTolerations": {
+          "affinity": {
+            "nodeAffinity": {
+              "requiredDuringSchedulingIgnoredDuringExecution": {
+                "nodeSelectorTerms": [
+                  {
+                    "matchExpressions": [
+                      {
+                        "key": "cn_apps",
+                        "operator": "Exists"
+                      },
+                      {
+                        "key": "cn_apps",
+                        "operator": "In",
+                        "values": [
+                          "hyperdisk"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "cn_apps",
+              "operator": "Exists"
+            }
+          ]
+        },
         "cluster": {
           "dnsName": "mock.global.canton.network.digitalasset.com",
           "fixedTokens": false,
@@ -4921,6 +4953,38 @@
               ]
             }
           }
+        },
+        "appsAffinityAndTolerations": {
+          "affinity": {
+            "nodeAffinity": {
+              "requiredDuringSchedulingIgnoredDuringExecution": {
+                "nodeSelectorTerms": [
+                  {
+                    "matchExpressions": [
+                      {
+                        "key": "cn_apps",
+                        "operator": "Exists"
+                      },
+                      {
+                        "key": "cn_apps",
+                        "operator": "In",
+                        "values": [
+                          "hyperdisk"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "cn_apps",
+              "operator": "Exists"
+            }
+          ]
         },
         "cluster": {
           "dnsName": "mock.global.canton.network.digitalasset.com",
@@ -5014,6 +5078,38 @@
             }
           }
         },
+        "appsAffinityAndTolerations": {
+          "affinity": {
+            "nodeAffinity": {
+              "requiredDuringSchedulingIgnoredDuringExecution": {
+                "nodeSelectorTerms": [
+                  {
+                    "matchExpressions": [
+                      {
+                        "key": "cn_apps",
+                        "operator": "Exists"
+                      },
+                      {
+                        "key": "cn_apps",
+                        "operator": "In",
+                        "values": [
+                          "hyperdisk"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "cn_apps",
+              "operator": "Exists"
+            }
+          ]
+        },
         "cluster": {
           "dnsName": "mock.global.canton.network.digitalasset.com",
           "fixedTokens": false,
@@ -5106,6 +5202,38 @@
             }
           }
         },
+        "appsAffinityAndTolerations": {
+          "affinity": {
+            "nodeAffinity": {
+              "requiredDuringSchedulingIgnoredDuringExecution": {
+                "nodeSelectorTerms": [
+                  {
+                    "matchExpressions": [
+                      {
+                        "key": "cn_apps",
+                        "operator": "Exists"
+                      },
+                      {
+                        "key": "cn_apps",
+                        "operator": "In",
+                        "values": [
+                          "hyperdisk"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "cn_apps",
+              "operator": "Exists"
+            }
+          ]
+        },
         "cluster": {
           "dnsName": "mock.global.canton.network.digitalasset.com",
           "fixedTokens": false,
@@ -5197,6 +5325,38 @@
               ]
             }
           }
+        },
+        "appsAffinityAndTolerations": {
+          "affinity": {
+            "nodeAffinity": {
+              "requiredDuringSchedulingIgnoredDuringExecution": {
+                "nodeSelectorTerms": [
+                  {
+                    "matchExpressions": [
+                      {
+                        "key": "cn_apps",
+                        "operator": "Exists"
+                      },
+                      {
+                        "key": "cn_apps",
+                        "operator": "In",
+                        "values": [
+                          "hyperdisk"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "tolerations": [
+            {
+              "effect": "NoSchedule",
+              "key": "cn_apps",
+              "operator": "Exists"
+            }
+          ]
         },
         "cluster": {
           "dnsName": "mock.global.canton.network.digitalasset.com",

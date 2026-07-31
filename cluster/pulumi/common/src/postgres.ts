@@ -497,6 +497,7 @@ type LegacyChartValues = Partial<{
     maxWalSize: string;
     dataSource: pulumi.Input<k8s.types.input.core.v1.TypedLocalObjectReference>;
   }>;
+  appsAffinityAndTolerations: unknown;
 }>;
 
 export class SplicePostgres extends pulumi.ComponentResource implements Postgres {
