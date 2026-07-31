@@ -555,6 +555,7 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
         val future = now.plusSeconds(3600)
         val amount = new java.math.BigDecimal("10.0").setScale(10)
 
+        // Expires on `settleBefore`
         val expiredCid = amuletAllocation(
           sender = userParty(1),
           receiver = userParty(3),
@@ -563,6 +564,19 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
           requestedAt = past.minusSeconds(3600),
           allocateBefore = past.minusSeconds(1800),
           settleBefore = past,
+        )
+
+        // Early-expired: settlement deadline is still in the future, but the
+        // `expiresAt` is in the past.
+        val earlyExpiredCid = amuletAllocation(
+          sender = userParty(1),
+          receiver = userParty(3),
+          executor = userParty(4),
+          amount = amount,
+          requestedAt = past.minusSeconds(3600),
+          allocateBefore = past.minusSeconds(1800),
+          settleBefore = future,
+          expiresAt = Some(past),
         )
 
         val activeCid = amuletAllocation(
@@ -575,7 +589,28 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
           settleBefore = future,
         )
 
+        val activeWithExiresAtCid = amuletAllocation(
+          sender = userParty(1),
+          receiver = userParty(2),
+          executor = userParty(4),
+          amount = amount,
+          requestedAt = now,
+          allocateBefore = now.plusSeconds(1800),
+          settleBefore = future,
+          expiresAt = Some(now.plusSeconds(1800))
+        )
+
         val ignoredCid = amuletAllocation(
+          sender = userParty(2),
+          receiver = userParty(1),
+          executor = userParty(4),
+          amount = amount,
+          requestedAt = past.minusSeconds(3600),
+          allocateBefore = past.minusSeconds(1800),
+          settleBefore = past,
+        )
+
+        val ignoredEarlyExpiredCid = amuletAllocation(
           sender = userParty(2),
           receiver = userParty(1),
           executor = userParty(4),
@@ -588,7 +623,10 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
         for {
           store <- mkStore()
           _ <- dummyDomain.create(dsoRules())(store.multiDomainAcsStore)
-          _ <- MonadUtil.sequentialTraverse(Seq(expiredCid, activeCid, ignoredCid))(
+          _ <- MonadUtil.sequentialTraverse(
+            Seq(expiredCid, earlyExpiredCid,
+              activeCid, activeWithExiresAtCid,
+              ignoredCid, ignoredEarlyExpiredCid))(
             dummyDomain.create(_)(store.multiDomainAcsStore)
           )
 
@@ -614,18 +652,27 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
         } yield {
           val allContracts = resultAll.map(_.contract)
           allContracts should contain(expiredCid)
+          allContracts should contain(earlyExpiredCid)
           allContracts should contain(ignoredCid)
+          allContracts should contain(ignoredEarlyExpiredCid)
           allContracts should not contain activeCid
+          allContracts should not contain activeWithExiresAtCid
 
           val filteredContracts = resultFiltered.map(_.contract)
           filteredContracts should contain(expiredCid)
+          filteredContracts should contain(earlyExpiredCid)
           filteredContracts should not contain ignoredCid
+          filteredContracts should not contain ignoredEarlyExpiredCid
           filteredContracts should not contain activeCid
+          filteredContracts should not contain activeWithExiresAtCid
 
           val filteredTwoPartiesContracts = resultFilteredTwoParties.map(_.contract)
           filteredTwoPartiesContracts should not contain expiredCid
+          filteredTwoPartiesContracts should not contain earlyExpiredCid
           filteredTwoPartiesContracts should not contain ignoredCid
+          filteredTwoPartiesContracts should not contain ignoredEarlyExpiredCid
           filteredTwoPartiesContracts should not contain activeCid
+          filteredTwoPartiesContracts should not contain activeWithExiresAtCid
         }
       }
     }
