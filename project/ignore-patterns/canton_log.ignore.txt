@@ -211,3 +211,11 @@ LOCAL_VERDICT_FAILED_MODEL_CONFORMANCE_CHECK.*Rejected transaction due to a fail
 
 # TODO(DACH-NY/cn-test-failures#9136) remove once Canton fixes this race condition from not storing packages in dependency order
 INTERNAL/Missing package-id.*in package metadata view
+
+# TODO(DACH-NY/cn-test-failures#9445) remove once Canton stops failing the whole
+# GetConnectedSynchronizers call when one synchronizer is mid-reconnect.
+# SynchronizerRegistryHelpers calls cryptoApiProvider.removeAndClose(psid) and then
+# ips.add(topologyClient); in between, the synchronizer is still in readySynchronizers but has no
+# topology client, and CantonSyncService.getConnectedSynchronizers turns that into a thrown exception
+# for the entire request rather than omitting the one synchronizer.
+INTERNAL/Failed retrieving SynchronizerTopologyClient for synchronizer
