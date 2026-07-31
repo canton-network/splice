@@ -66,7 +66,9 @@ object RewardSharingConfig {
 
   val DefaultBatchSize: Int = 100
 
-  /** Beneficiary assignment for RewardCouponV2 contracts is managed by a process external to the validator app: the validator app must thus leave unassigned coupons untouched rather than assigning or minting them itself.
+  /** Beneficiary assignment for RewardCouponV2 contracts is managed by a process
+    * external to the validator app: the validator app must thus leave unassigned
+    * coupons untouched rather than assigning or minting them itself.
     */
   case class External(
       batchSize: Int = DefaultBatchSize
