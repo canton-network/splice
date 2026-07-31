@@ -8,12 +8,7 @@ import {
   spliceConfig,
   standardStorageClassName,
 } from '@canton-network/splice-pulumi-common';
-import {
-  installPasswordWithParent,
-  SplicePostgres,
-  installPostgres as commonInstallPostgres,
-  installSplicePostgres,
-} from '@canton-network/splice-pulumi-common/src/postgres';
+import { installSplicePostgres, Postgres } from '@canton-network/splice-pulumi-common/src/postgres';
 
 import { multiValidatorConfig } from './config';
 
@@ -21,7 +16,7 @@ export function installPostgres(
   xns: ExactNamespace,
   name: string,
   dependsOn: CnInput<pulumi.Resource>[]
-): SplicePostgres {
+): Postgres {
   const secretName = `${name}-secret`;
 
   if (!multiValidatorConfig) {
