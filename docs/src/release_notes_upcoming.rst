@@ -7,3 +7,10 @@
 
 .. release-notes:: Upcoming
 
+    - SV app
+
+        - The governance UI no longer stops an SV from casting or changing its vote once a
+          proposal's target effective time has passed. Votes are now accepted for as long as the
+          vote request is open, matching what the ledger allows. This makes it possible to reject a
+          proposal whose action fails to execute and which would otherwise remain in flight
+          indefinitely.
