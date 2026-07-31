@@ -177,8 +177,10 @@ async function installValidator(
     postgresInstanceName,
     parent => installPasswordWithParent(parent, xns, postgresInstanceName, 'postgres-secrets'),
     // No need to support legacy chart
-    // TODO: configurable image?
-    { deployment: 'docker-image', postgresImage: 'postgres:18' },
+    {
+      deployment: 'docker-image',
+      postgresImage: postgresValuesFromFile.db.postgresImage || 'postgres:18',
+    },
     postgresValues,
     true,
     supportsValidatorRunbookReset,
