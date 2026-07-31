@@ -33,17 +33,17 @@ export type CloudSqlConfig = z.infer<typeof CloudSqlConfigSchema>;
 //   3) Once the migration is complete (i.e., the DB pod is up and running and apps can connect to it), set deployment = 'docker-image'
 // Once everything has been migrated we can drop this, as everything will be using docker-image.
 export const SplicePostgresMigrateSchema = z.object({
-  deployment: 'migrate',
+  deployment: z.literal('migrate'),
   postgresImage: z.string(),
 });
 export type SplicePostgresMigrateConfig = z.infer<typeof SplicePostgresMigrateSchema>;
 export const SplicePostgresDockerImageSchema = z.object({
-  deployment: 'docker-image',
+  deployment: z.literal('docker-image'),
   postgresImage: z.string(),
 });
 export type SplicePostgresDockerImageConfig = z.infer<typeof SplicePostgresDockerImageSchema>;
 export const SplicePostgresSchema = z.union([
-  z.object({ deployment: 'legacy-helm-chart' }),
+  z.object({ deployment: z.literal('legacy-helm-chart') }),
   SplicePostgresMigrateSchema,
   SplicePostgresDockerImageSchema,
 ]);

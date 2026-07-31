@@ -29,11 +29,7 @@ import {
   standardSvConfigsBasic,
 } from '@canton-network/splice-pulumi-common-sv/src/svConfigsBasic';
 import { SweepConfig } from '@canton-network/splice-pulumi-common-validator';
-import {
-  installPasswordWithParent,
-  installSplicePostgres,
-  SplicePostgres,
-} from '@canton-network/splice-pulumi-common/src/postgres';
+import { installSplicePostgres, Postgres } from '@canton-network/splice-pulumi-common/src/postgres';
 import { infraStack } from '@canton-network/splice-pulumi-common/src/stackReferences';
 import { local } from '@pulumi/command';
 import { getSecretVersionOutput } from '@pulumi/gcp/secretmanager/getSecretVersion';
@@ -551,7 +547,7 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
   );
   createGrafanaAlerting(namespaceName);
   if (monitoringConfig.enableGrafanaServiceAccountToken) {
-    createGrafanaServiceAccount(namespaceName, adminPassword, [prometheusStack, postgres.pg]);
+    createGrafanaServiceAccount(namespaceName, adminPassword, [prometheusStack, postgres.database]);
   }
   createGrafanaEnvoyFilter(namespaceName, [prometheusStack]);
 
@@ -1188,7 +1184,7 @@ function grafanaKeysFromSecret(): pulumi.Output<GrafanaKeys> {
   });
 }
 
-function installPostgres(namespace: ExactNamespace): SplicePostgres {
+function installPostgres(namespace: ExactNamespace): Postgres {
   const instanceName = 'grafana-postgres';
   return installSplicePostgres(
     namespace,

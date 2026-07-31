@@ -63,6 +63,7 @@ export interface Postgres extends pulumi.Resource {
   readonly databaseId?: pulumi.Output<string>;
 
   readonly userName: string;
+  readonly database: Resource;
 
   addUser(userName: string): PostgresUser;
 }
@@ -80,6 +81,7 @@ export class CloudPostgres
   user!: gcp.sql.User;
   userName!: string;
   zone!: string;
+  database!: Resource;
 
   private name!: string;
   private args!: CloudPostgresResolvedArgs;
@@ -198,7 +200,7 @@ export class CloudPostgres
         ? await gcp.sql.getDatabase({ instance: existingInstanceName, name: 'cantonnet' })
         : undefined;
 
-    new gcp.sql.Database(
+    const database = new gcp.sql.Database(
       `${namespace.logicalName}-db-${instanceName}-cantonnet`,
       {
         instance: databaseInstance.name,
@@ -225,6 +227,7 @@ export class CloudPostgres
     this.user = defaultUser.sqlUser;
     this.userName = defaultUser.userName;
     this.zone = zone;
+    this.database = database;
 
     return {
       address: this.address,
@@ -388,6 +391,7 @@ export class LegacyHelmSplicePostgres extends pulumi.ComponentResource implement
   pg: Resource;
   secretName: pulumi.Output<string>;
   userName: string;
+  database: Resource;
 
   constructor(
     xns: ExactNamespace,
@@ -450,6 +454,7 @@ export class LegacyHelmSplicePostgres extends pulumi.ComponentResource implement
       useInfraAffinityAndTolerations ? infraAffinityAndTolerations : appsAffinityAndTolerations
     );
     this.pg = pg;
+    this.database = pg;
 
     this.registerOutputs({
       address: pg.id.apply(() => `${instanceName}.${xns.logicalName}.svc.cluster.local`),
@@ -501,6 +506,7 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
   pg: Resource;
   secretName: pulumi.Output<string>;
   userName: string;
+  database: Resource;
 
   constructor(
     xns: ExactNamespace,
@@ -809,6 +815,7 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
     );
 
     this.pg = statefulSet;
+    this.database = statefulSet;
 
     this.registerOutputs({
       address: statefulSet.id.apply(
