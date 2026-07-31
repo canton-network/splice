@@ -34,10 +34,11 @@ import scala.concurrent.duration.DurationInt
   * that the sharing trigger correctly assigns beneficiaries with the right
   * amounts (batching multiple coupons), that the minting trigger does not
   * re-assign unshared coupons, and that balances reflect the minted rewards.
-  * The test also verifies external mode: a party configured External gets no
-  * built-in sharing trigger, and its unassigned reward coupons are left
-  * untouched (neither shared nor collected). This confirms that built-in and
-  * external modes co-exist in one environment without interfering.
+  * The test also verifies external sharing mode: a party configured with the
+  * External reward-sharing config gets no built-in sharing trigger, and its
+  * unassigned reward coupons are left untouched (neither shared nor collected).
+  * This confirms that built-in and external sharing modes co-exist in one
+  * environment without interfering.
   */
 @org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_19
 class WalletRewardsTimeBasedIntegrationTest
@@ -105,7 +106,9 @@ class WalletRewardsTimeBasedIntegrationTest
       val bobValidatorParty = bobValidatorBackend.getValidatorPartyId()
       val splitwellValidatorParty = splitwellValidatorBackend.getValidatorPartyId()
 
-      clue("alice (built in) has sharing trigger; splitwell (external sharing automation) does not") {
+      clue(
+        "alice (built in) has sharing trigger; splitwell (external sharing automation) does not"
+      ) {
         val aliceAutomation = aliceValidatorBackend
           .userWalletAutomation(aliceValidatorWalletClient.config.ledgerApiUser)
           .futureValue
@@ -263,7 +266,7 @@ class WalletRewardsTimeBasedIntegrationTest
           }
         }
 
-        clue("splitwell's external coupon is neither shared nor collected") {
+        clue("splitwell's external-sharing-mode coupon is neither shared nor collected") {
           val splitwellWallet = splitwellValidatorBackend.appState.walletManager
             .valueOrFail("WalletManager is expected to be defined")
             .lookupEndUserPartyWallet(splitwellValidatorParty)
@@ -278,7 +281,7 @@ class WalletRewardsTimeBasedIntegrationTest
               "the single unassigned coupon must still be present"
 
             coupons.filter(_.payload.beneficiary.isPresent) shouldBe
-              empty withClue "external mode must not assign beneficiaries"
+              empty withClue "external sharing mode must not assign beneficiaries"
 
             BigDecimal(coupons.head.payload.amount) shouldBe splitwellV2Amount
           }
