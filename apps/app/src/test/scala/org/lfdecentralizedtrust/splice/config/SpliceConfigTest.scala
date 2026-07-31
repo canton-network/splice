@@ -261,19 +261,20 @@ class SpliceConfigTest extends AsyncWordSpec with BaseTest {
         .flatMap(_.rewardSharingConfigByParty.get("alice::1220abc"))
         .loneElement
 
-    "accept type = external with no beneficiaries" in {
+    "accept type = external with no beneficiaries and custom batch size" in {
       val overwrite = ConfigFactory.parseString(
         """
           |canton.validator-apps.aliceValidator.reward-sharing-config-by-party = {
           |  "alice::1220abc" = {
           |    type = "external"
+          |    batch-size = 500
           |  }
           |}
           """.stripMargin
       )
       val validConfig = CantonConfig.mergeConfigs(config, Seq(overwrite))
       val loaded = SpliceConfig.loadAndValidate(validConfig).value
-      sharingConfigOf(loaded) shouldBe RewardSharingConfig.External()
+      sharingConfigOf(loaded) shouldBe RewardSharingConfig.External(batchSize = 500)
     }
 
     "accept explicit type = built-in with beneficiaries" in {

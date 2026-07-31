@@ -159,7 +159,7 @@ class MintingDelegationCollectRewardsTrigger(
   //     off-node automation owns their assignment; only already-assigned coupons mint here.
   private val mode: SharingMode =
     rewardSharingConfig match {
-      case RewardSharingConfig.External() => ExternalSharing
+      case RewardSharingConfig.External(_) => ExternalSharing
       case builtIn: RewardSharingConfig.BuiltIn if builtIn.automateRewardSharing =>
         InternalSharing(builtIn)
       case _: RewardSharingConfig.BuiltIn => NoSharing
@@ -358,10 +358,7 @@ class MintingDelegationCollectRewardsTrigger(
       rewardCouponsV2 <- store.listRewardCouponsV2(
         includeUnassigned = true,
         includeAssigned = true,
-        limit = HardLimit.tryCreate(rewardSharingConfig match {
-          case builtIn: RewardSharingConfig.BuiltIn => builtIn.batchSize
-          case RewardSharingConfig.External() => RewardSharingConfig.DefaultBatchSize
-        }),
+        limit = HardLimit.tryCreate(rewardSharingConfig.batchSize),
       )
       unclaimedActivityRecords <- store.listUnclaimedActivityRecords()
       developmentFundCoupons <- store.listDevelopmentFundCoupons()

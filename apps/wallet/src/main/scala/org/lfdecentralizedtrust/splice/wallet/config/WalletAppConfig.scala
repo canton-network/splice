@@ -59,6 +59,7 @@ final case class AppRewardBeneficiaryConfig(
 sealed trait RewardSharingConfig {
   def mintUnassignedCoupons: Boolean
   def automateRewardSharing: Boolean
+  def batchSize: Int
 }
 
 object RewardSharingConfig {
@@ -68,7 +69,9 @@ object RewardSharingConfig {
   /** Off-node automation owns beneficiary assignment: the node holds unassigned coupons back
     * and leaves them untouched rather than assigning or minting them itself.
     */
-  case class External() extends RewardSharingConfig {
+  case class External(
+      batchSize: Int = DefaultBatchSize
+  ) extends RewardSharingConfig {
     override def mintUnassignedCoupons: Boolean = false
     override def automateRewardSharing: Boolean = false
   }

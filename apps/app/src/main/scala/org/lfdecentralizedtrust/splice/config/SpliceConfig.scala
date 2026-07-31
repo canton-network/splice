@@ -853,7 +853,7 @@ object SpliceConfig {
             case (Left(err), _) => Left(err)
             case (Right(()), (party, sharingConfig)) =>
               sharingConfig match {
-                case RewardSharingConfig.External() => Right(())
+                case RewardSharingConfig.External(_) => Right(())
                 case builtIn: RewardSharingConfig.BuiltIn =>
                   for {
                     _ <- Either.cond(
