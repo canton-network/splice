@@ -235,7 +235,8 @@ class UserWalletManager(
           // TODO(DACH-NY/canton-network-node#12554): make it easier to configure the sweep functionality and guard better against operator errors (typos, etc.)
           walletSweep.get(endUserParty.toProtoPrimitive),
           autoAcceptTransfers.get(endUserParty.toProtoPrimitive),
-          rewardSharingConfigByParty.getOrElse(endUserParty.toProtoPrimitive, RewardSharingConfig()),
+          rewardSharingConfigByParty
+            .getOrElse(endUserParty.toProtoPrimitive, RewardSharingConfig()),
           dedupDuration,
           params,
         )

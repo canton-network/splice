@@ -177,7 +177,10 @@ class ExternalPartyWalletManager(
           params,
           scanConnection,
           packageVersionSupport,
-          rewardSharingConfigByParty.getOrElse(externalParty.toProtoPrimitive, RewardSharingConfig()),
+          rewardSharingConfigByParty.getOrElse(
+            externalParty.toProtoPrimitive,
+            RewardSharingConfig(),
+          ),
         )
       } catch {
         case NonFatal(e) =>
