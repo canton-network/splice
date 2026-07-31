@@ -179,8 +179,9 @@ trait BftOrderingSimulationTest extends AnyFlatSpec with BftSequencerBaseTest {
                 new SimulationAvailabilityStore(),
                 simulationEpochStore,
                 epochStoreReader = simulationEpochStore,
-                new SimulationOutputMetadataStore(fail(_)),
+                new SimulationOutputMetadataStore(endpointToTestBftNodeId(endpoint), fail(_)),
                 new SimulationBftOrdererPruningSchedulerStore(),
+                None,
               )
             },
             initializeImmediately = true,
@@ -216,8 +217,9 @@ trait BftOrderingSimulationTest extends AnyFlatSpec with BftSequencerBaseTest {
                   new SimulationAvailabilityStore(),
                   simulationEpochStore,
                   epochStoreReader = simulationEpochStore,
-                  new SimulationOutputMetadataStore(fail(_)),
+                  new SimulationOutputMetadataStore(endpointToTestBftNodeId(endpoint), fail(_)),
                   new SimulationBftOrdererPruningSchedulerStore(),
+                  None,
                 )
               }
               endpointToTestBftNodeId(endpoint) -> SimulationTestNodeData(
@@ -362,7 +364,7 @@ trait BftOrderingSimulationTest extends AnyFlatSpec with BftSequencerBaseTest {
                    |
                    |  override def generateSettings: SimulationTestSettings = SimulationTestSettings(
                    |    numberOfInitialNodes = $numberOfInitialNodes,
-                   |    segmentLength = PositiveLong.tryCreate(${simulationTestSettings.segmentLength}),
+                   |    segmentLength = SegmentLength(PositiveLong.tryCreate(${simulationTestSettings.segmentLength.length.value})),
                    |    stages = NonEmpty(
                    |      Seq,
                    |      ${stages

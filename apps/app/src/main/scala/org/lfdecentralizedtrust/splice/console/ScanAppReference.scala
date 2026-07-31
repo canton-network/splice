@@ -382,20 +382,6 @@ abstract class ScanAppReference(
       httpCommand(HttpScanAppClient.GetRewardAccountingBatch(roundNumber, batchHash))
     }
 
-  import org.lfdecentralizedtrust.splice.http.v0.definitions.TransactionHistoryResponseItem
-  import org.lfdecentralizedtrust.splice.http.v0.definitions.TransactionHistoryRequest.SortOrder
-
-  def listTransactions(
-      pageEndEventId: Option[String],
-      sortOrder: SortOrder,
-      pageSize: Int,
-  ): Seq[TransactionHistoryResponseItem] =
-    consoleEnvironment.run {
-      httpCommand(
-        HttpScanAppClient.ListTransactions(pageEndEventId, sortOrder, pageSize)
-      )
-    }
-
   def getAcsSnapshot(party: PartyId, recordTime: Option[Instant]): ByteString =
     consoleEnvironment.run {
       httpCommand(

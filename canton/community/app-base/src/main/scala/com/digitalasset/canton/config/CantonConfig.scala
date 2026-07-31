@@ -70,6 +70,8 @@ import com.digitalasset.canton.platform.config.{
   InteractiveSubmissionServiceConfig,
   StateServiceConfig,
   TopologyAwarePackageSelectionConfig,
+  TrafficEnforcementConfig,
+  TrafficEnforcementServerConfig,
   UpdateServiceConfig,
 }
 import com.digitalasset.canton.pureconfigutils.SharedConfigReaders.catchConvertError
@@ -84,6 +86,7 @@ import com.digitalasset.canton.synchronizer.block.{SequencerDriver, SequencerDri
 import com.digitalasset.canton.synchronizer.config.{DeclarativeSequencerConfig, PublicServerConfig}
 import com.digitalasset.canton.synchronizer.mediator.{
   DeduplicationStoreConfig,
+  DelayedVerdictSenderConfig,
   MediatorConfig,
   MediatorNodeConfig,
   MediatorNodeParameterConfig,
@@ -99,6 +102,7 @@ import com.digitalasset.canton.synchronizer.sequencer.SequencerConfig.{
 import com.digitalasset.canton.synchronizer.sequencer.block.DriverBlockSequencerFactory
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.bindings.canton.sequencing.BftSequencerFactory
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.BftBlockOrdererConfig
+import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.BftBlockOrdererConfig.SequencerCoreSubscriptionConfig
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.topology.BlacklistLeaderSelectionPolicyConfig
 import com.digitalasset.canton.synchronizer.sequencer.config.{
   AsyncWriterConfig,
@@ -381,13 +385,10 @@ final case class CantonFeatures(
     enableRepairCommands: Boolean = false,
 ) {
   def featureFlags: Set[FeatureFlag] =
-    (Seq(FeatureFlag.Stable) ++ (if (enableTestingCommands) Seq(FeatureFlag.Testing)
-                                 else Seq()) ++ (if (enablePreviewCommands) Seq(FeatureFlag.Preview)
-                                                 else Seq()) ++ (if (enableRepairCommands)
-                                                                   Seq(
-                                                                     FeatureFlag.Repair
-                                                                   )
-                                                                 else Seq())).toSet
+    (Seq(FeatureFlag.Stable)
+      ++ (if (enableTestingCommands) Seq(FeatureFlag.Testing) else Seq())
+      ++ (if (enablePreviewCommands) Seq(FeatureFlag.Preview) else Seq())
+      ++ (if (enableRepairCommands) Seq(FeatureFlag.Repair) else Seq())).toSet
 }
 
 /** The commonality between [[CantonConfig]] and `SpliceConfig` in the Splice repo, so that either
@@ -498,7 +499,7 @@ trait SharedCantonConfig[Self] extends ConfigDefaults[Option[DefaultPorts], Self
         commitmentUseDbSnapshotForParticipantLookup =
           participantParameters.commitmentUseDbSnapshotForParticipantLookup,
         autoSyncProtocolFeatureFlags = participantParameters.autoSyncProtocolFeatureFlags,
-        alphaMultiSynchronizerSupport = participantParameters.alphaMultiSynchronizerSupport,
+        enableAllLedgerApiReassignments = participantParameters.enableAllLedgerApiReassignments,
         commitAfterFailedActivenessCheck = participantParameters.commitAfterFailedActivenessCheck,
         validateLegacyContractsV11 = participantParameters.validateLegacyContractsV11,
       )
@@ -533,11 +534,14 @@ trait SharedCantonConfig[Self] extends ConfigDefaults[Option[DefaultPorts], Self
             .map(DisasterRecoverySequencingTimeUpperBound(_)),
         delayRequestsBeforeLsuTrafficInit =
           sequencerNodeConfig.parameters.delayRequestsBeforeLsuTrafficInit,
+        enableRejectDeliveredAggregationsOnPv35 =
+          sequencerNodeConfig.parameters.enableRejectDeliveredAggregationsOnPv35,
         disableSubmissionChecksForTesting =
           sequencerNodeConfig.parameters.disableSubmissionChecksForTesting,
         disableReleaseVersionHandshakeCheck =
           sequencerNodeConfig.parameters.disableReleaseVersionHandshakeCheck,
         lsuConfig = sequencerNodeConfig.parameters.lsu,
+        enablePrevalidation = sequencerNodeConfig.parameters.enablePrevalidation,
       )
 
     }
@@ -553,6 +557,7 @@ trait SharedCantonConfig[Self] extends ConfigDefaults[Option[DefaultPorts], Self
       MediatorNodeParameters(
         general = CantonNodeParameterConverter.general(this, mediatorNodeConfig),
         protocol = CantonNodeParameterConverter.protocol(this, mediatorNodeConfig.parameters),
+        delayedVerdictSender = mediatorNodeConfig.parameters.delayedVerdictSender,
       )
     }
 
@@ -640,9 +645,8 @@ final case class CantonConfig(
   /** run a validation on the current config and return possible warning messages */
   private def validate(
       ensurePortsSet: Boolean
-  ): Validated[NonEmpty[Seq[String]], Unit] = {
+  ): Validated[NonEmpty[Seq[String]], Unit] =
     ConfigValidations.validate(this, ensurePortsSet = ensurePortsSet)
-  }
 
   /** Produces a message in the structure
     * "da:admin-api=1,public-api=2;participant1:admin-api=3,ledger-api=4". Helpful for diagnosing
@@ -699,7 +703,7 @@ final case class CantonConfig(
       .modify(mapWithDefaults)
   }
 
-  def mergeDynamicChanges(newConfig: CantonConfig): CantonConfig = {
+  override def mergeDynamicChanges(newConfig: CantonConfig): CantonConfig = {
     def merge[T](cur: Map[InstanceName, T], newConfig: Map[InstanceName, T], merger: (T, T) => T) =
       cur.map { case (name, config) =>
         (name, newConfig.get(name).map(merger(config, _)).getOrElse(config))
@@ -1247,6 +1251,9 @@ object CantonConfig {
     lazy implicit val bftBlockOrdererLeaderSelectionPolicyConfigReader
         : ConfigReader[BlacklistLeaderSelectionPolicyConfig] =
       deriveReader[BlacklistLeaderSelectionPolicyConfig]
+    lazy implicit val bftBlockOrdererSequencerCoreSubscriptionConfigReader
+        : ConfigReader[SequencerCoreSubscriptionConfig] =
+      deriveReader[SequencerCoreSubscriptionConfig]
     lazy implicit val bftBlockOrdererConfigReader: ConfigReader[BftBlockOrdererConfig] =
       deriveReader[BftBlockOrdererConfig]
     lazy implicit val sequencerConfigBftSequencerReader
@@ -1336,16 +1343,35 @@ object CantonConfig {
 
     lazy implicit final val remoteSequencerConfigReader: ConfigReader[RemoteSequencerConfig] =
       deriveReader[RemoteSequencerConfig]
+
     lazy implicit final val mediatorNodeParameterConfigReader
-        : ConfigReader[MediatorNodeParameterConfig] =
+        : ConfigReader[MediatorNodeParameterConfig] = {
+      implicit val verdictSenderReaderConfig: ConfigReader[DelayedVerdictSenderConfig] = {
+        import NonNegativeNumeric.*
+        deriveReader[DelayedVerdictSenderConfig]
+      }
       deriveReader[MediatorNodeParameterConfig]
+    }
 
     lazy implicit final val mediatorConfigReader: ConfigReader[MediatorConfig] = {
       implicit val mediatorPruningConfigReader: ConfigReader[MediatorPruningConfig] =
         deriveReader[MediatorPruningConfig]
       implicit val deduplicationStoreConfigReader: ConfigReader[DeduplicationStoreConfig] =
         deriveReader[DeduplicationStoreConfig]
-      deriveReader[MediatorConfig]
+
+      implicit val deprecatedFields: DeprecatedFieldsFor[MediatorConfig] =
+        new DeprecatedFieldsFor[MediatorConfig] {
+
+          override def deprecatePath: List[DeprecatedConfigPath[?]] =
+            List(
+              DeprecatedConfigPath[Boolean](
+                "asynchronous-processing",
+                since = "3.5.1",
+              )
+            )
+        }
+
+      deriveReader[MediatorConfig].applyDeprecations
     }
     lazy implicit final val remoteMediatorConfigReader: ConfigReader[RemoteMediatorConfig] =
       deriveReader[RemoteMediatorConfig]
@@ -1513,6 +1539,11 @@ object CantonConfig {
               since = "3.5.0",
               to = Seq("alpha-online-party-replication-support"),
             ),
+            DeprecatedConfigUtils.MovedConfigPath(
+              "alpha-multi-synchronizer-support",
+              since = "3.5.4",
+              to = Seq("enable-all-ledger-api-reassignments"),
+            ),
           )
 
           override def deprecatePath: List[DeprecatedConfigPath[?]] = List(
@@ -1569,7 +1600,20 @@ object CantonConfig {
       implicit val reassignmentsReader: ConfigReader[ReassignmentsConfig] =
         deriveReader[ReassignmentsConfig]
       implicit val purgeReader: ConfigReader[PurgeConfig] = deriveReader[PurgeConfig]
-      implicit val lsuReader: ConfigReader[LsuConfig] = deriveReader[LsuConfig]
+      implicit val lsuHandshakeReader: ConfigReader[LsuHandshake] = deriveReader[LsuHandshake]
+
+      implicit val deprecatedFieldsLsuConfig: DeprecatedFieldsFor[LsuConfig] =
+        new DeprecatedFieldsFor[LsuConfig] {
+          override def movedFields: List[DeprecatedConfigUtils.MovedConfigPath] = List(
+            DeprecatedConfigUtils.MovedConfigPath(
+              "handshake-retry",
+              since = "3.5.1",
+              to = Seq("handshake.retry"),
+            )
+          )
+        }
+
+      implicit val lsuReader: ConfigReader[LsuConfig] = deriveReader[LsuConfig].applyDeprecations
       deriveReader[ParticipantNodeParameterConfig].applyDeprecations
     }
     lazy implicit final val timeTrackerConfigReader: ConfigReader[SynchronizerTimeTrackerConfig] = {
@@ -1659,6 +1703,21 @@ object CantonConfig {
       import DeclarativeSequencerConfig.Readers.*
       deriveReader[SequencerNodeConfig]
     }
+
+    lazy implicit val trafficEnforcementProjectionConfigReader
+        : ConfigReader[TrafficEnforcementServerConfig.ProjectionConfig] =
+      deriveReader[TrafficEnforcementServerConfig.ProjectionConfig]
+
+    lazy implicit val trafficEnforcementConfigInternalReader
+        : ConfigReader[TrafficEnforcementServerConfig.Internal] =
+      deriveReader[TrafficEnforcementServerConfig.Internal]
+
+    lazy implicit val TrafficEnforcementServerConfigReader
+        : ConfigReader[TrafficEnforcementServerConfig] =
+      deriveReader[TrafficEnforcementServerConfig]
+
+    lazy implicit val trafficEnforcementConfigReader: ConfigReader[TrafficEnforcementConfig] =
+      deriveReader[TrafficEnforcementConfig]
   }
 
   private implicit def cantonConfigReader(implicit
@@ -2077,6 +2136,9 @@ object CantonConfig {
     lazy implicit val bftBlockOrdererLeaderSelectionPolicyConfigWriter
         : ConfigWriter[BlacklistLeaderSelectionPolicyConfig] =
       deriveWriter[BlacklistLeaderSelectionPolicyConfig]
+    lazy implicit val bftBlockOrdererSequencerCoreSubscriptionConfigWriter
+        : ConfigWriter[SequencerCoreSubscriptionConfig] =
+      deriveWriter[SequencerCoreSubscriptionConfig]
     lazy implicit val bftBlockOrdererConfigWriter: ConfigWriter[BftBlockOrdererConfig] =
       deriveWriter[BftBlockOrdererConfig]
 
@@ -2157,8 +2219,11 @@ object CantonConfig {
       deriveWriter[MediatorConfig]
     }
     lazy implicit final val mediatorNodeParameterConfigWriter
-        : ConfigWriter[MediatorNodeParameterConfig] =
+        : ConfigWriter[MediatorNodeParameterConfig] = {
+      implicit val verdictSenderConfigWriter: ConfigWriter[DelayedVerdictSenderConfig] =
+        deriveWriter[DelayedVerdictSenderConfig]
       deriveWriter[MediatorNodeParameterConfig]
+    }
     lazy implicit final val remoteMediatorConfigWriter: ConfigWriter[RemoteMediatorConfig] =
       deriveWriter[RemoteMediatorConfig]
 
@@ -2295,6 +2360,7 @@ object CantonConfig {
       implicit val reassignmentsConfigWriter: ConfigWriter[ReassignmentsConfig] =
         deriveWriter[ReassignmentsConfig]
       implicit val purgeWriter: ConfigWriter[PurgeConfig] = deriveWriter[PurgeConfig]
+      implicit val lsuHandshakeWriter: ConfigWriter[LsuHandshake] = deriveWriter[LsuHandshake]
       implicit val lsuWriter: ConfigWriter[LsuConfig] = deriveWriter[LsuConfig]
       deriveWriter[ParticipantNodeParameterConfig]
     }
@@ -2369,6 +2435,21 @@ object CantonConfig {
       import DeclarativeSequencerConfig.Writers.*
       deriveWriter[SequencerNodeConfig]
     }
+
+    lazy implicit val trafficEnforcementProjectionConfigWriter
+        : ConfigWriter[TrafficEnforcementServerConfig.ProjectionConfig] =
+      deriveWriter[TrafficEnforcementServerConfig.ProjectionConfig]
+
+    lazy implicit val trafficEnforcementConfigInternalWriter
+        : ConfigWriter[TrafficEnforcementServerConfig.Internal] =
+      deriveWriter[TrafficEnforcementServerConfig.Internal]
+
+    lazy implicit val trafficEnforcementServerConfigWriter
+        : ConfigWriter[TrafficEnforcementServerConfig] =
+      deriveWriter[TrafficEnforcementServerConfig]
+
+    lazy implicit val trafficEnforcementConfigWriter: ConfigWriter[TrafficEnforcementConfig] =
+      deriveWriter[TrafficEnforcementConfig]
   }
 
   private def makeWriter(confidential: Boolean): ConfigWriter[CantonConfig] = {

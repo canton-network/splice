@@ -37,21 +37,6 @@ class HttpSvAdminHandler(
   protected val workflowId: String = this.getClass.getSimpleName
   private val dsoStore = dsoStoreWithIngestion.store
 
-  override def cancelLogicalSynchronizerUpgrade(
-      respond: r0.CancelLogicalSynchronizerUpgradeResponse.type
-  )()(
-      extracted: AdminUserRequest
-  ): Future[r0.CancelLogicalSynchronizerUpgradeResponse] = {
-    implicit val AdminUserRequest(traceContext) = extracted
-    withSpan(s"$workflowId.cancelLogicalSynchronizerUpgrade") { _ => _ =>
-      for {
-        decentralizedSynchronizer <- dsoStore.getDsoRules().map(_.domain)
-        _ <- participantAdminConnection
-          .removeLsuAnnouncement(decentralizedSynchronizer)
-      } yield r0.CancelLogicalSynchronizerUpgradeResponseOK
-    }
-  }
-
   override def getSynchronizerNodeIdentitiesDump(
       respond: r0.GetSynchronizerNodeIdentitiesDumpResponse.type
   )()(

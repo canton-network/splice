@@ -878,7 +878,7 @@ object HttpScanAppClient {
       P2PEndpoint.fromEndpointConfig(
         P2PEndpointConfig(
           uri.authority.host.address(),
-          RequireTypes.Port(uri.effectivePort),
+          RequireTypes.Port.tryCreate(uri.effectivePort),
           Option.when(uri.scheme == "https")(
             TlsClientConfig(
               None,
@@ -928,33 +928,6 @@ object HttpScanAppClient {
   )
 
   final case class DsoScan(publicUrl: Uri, svName: String)
-
-  case class ListTransactions(
-      pageEndEventId: Option[String],
-      sortOrder: definitions.TransactionHistoryRequest.SortOrder,
-      pageSize: Int,
-  ) extends InternalBaseCommand[http.ListTransactionHistoryResponse, Seq[
-        definitions.TransactionHistoryResponseItem
-      ]] {
-    override def submitRequest(
-        client: http.ScanClient,
-        headers: List[HttpHeader],
-    ): EitherT[Future, Either[
-      Throwable,
-      HttpResponse,
-    ], http.ListTransactionHistoryResponse] = {
-      client.listTransactionHistory(
-        definitions
-          .TransactionHistoryRequest(pageEndEventId, Some(sortOrder), pageSize.toLong),
-        headers,
-      )
-    }
-
-    override def handleOk()(implicit decoder: TemplateJsonDecoder) = {
-      case http.ListTransactionHistoryResponse.OK(response) =>
-        Right(response.transactions)
-    }
-  }
 
   case class GetAcsSnapshot(
       party: PartyId,

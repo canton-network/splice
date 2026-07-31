@@ -9,6 +9,12 @@ import {
 } from '@mui/material';
 import { useFieldContext } from '../../hooks/formContext';
 import { scrollableTextFieldSx } from '../beta/identifierStyles';
+import {
+  fieldDescriptionSx,
+  fieldSectionSx,
+  fieldSectionTitleSx,
+  singleLineFieldSx,
+} from '../../themes/fieldStyles';
 
 export interface TextFieldProps {
   id: string;
@@ -32,8 +38,8 @@ export const TextField: React.FC<TextFieldProps> = props => {
   } = props;
   const field = useFieldContext<string>();
   return (
-    <Box>
-      <Typography variant="h6" id={`${id}-title`} data-testid={`${id}-title`} gutterBottom>
+    <Box sx={fieldSectionSx}>
+      <Typography sx={fieldSectionTitleSx} id={`${id}-title`} data-testid={`${id}-title`}>
         {title}
       </Typography>
 
@@ -48,7 +54,12 @@ export const TextField: React.FC<TextFieldProps> = props => {
         }}
         error={!field.state.meta.isValid}
         helperText={
-          <Typography variant="caption" id={`${id}-error`} data-testid={`${id}-error`}>
+          <Typography
+            component="span"
+            sx={fieldDescriptionSx}
+            id={`${id}-error`}
+            data-testid={`${id}-error`}
+          >
             {field.state.meta.errors?.[0]}
           </Typography>
         }
@@ -58,11 +69,20 @@ export const TextField: React.FC<TextFieldProps> = props => {
         }}
         inputProps={{ 'data-testid': id }}
         id={id}
-        sx={scrollableIdentifier ? scrollableTextFieldSx : undefined}
+        sx={
+          scrollableIdentifier
+            ? theme => ({
+                ...(typeof singleLineFieldSx === 'function'
+                  ? singleLineFieldSx(theme)
+                  : singleLineFieldSx),
+                ...scrollableTextFieldSx,
+              })
+            : singleLineFieldSx
+        }
         {...muiTextFieldProps}
       />
       {subtitle && (
-        <Typography variant="body2" color="text.secondary" data-testid={`${id}-subtitle`} mt={1}>
+        <Typography sx={fieldDescriptionSx} data-testid={`${id}-subtitle`}>
           {subtitle}
         </Typography>
       )}

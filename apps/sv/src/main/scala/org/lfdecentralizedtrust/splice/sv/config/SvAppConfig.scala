@@ -463,7 +463,13 @@ case class SvAppBackendConfig(
         pbftViewChangeTimeout = PositiveFiniteDuration.ofSeconds(5),
         segmentLength = SequencingParameters.DefaultSegmentLength.length,
         blacklistLeaderSelectionPolicyConfig =
-          SequencingParameters.DefaultLeaderSelectionPolicyConfig,
+          SequencingParameters.DefaultLeaderSelectionPolicyConfig.copy(
+            howLongToBlacklist =
+              BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.Exponential(
+                initialValue = 1L,
+                maximumEpochBlacklisted = Some(250L),
+              )
+          ),
       )
     ),
     // Set to false to disable the DB-level exclusive lock that prevents two SV instances

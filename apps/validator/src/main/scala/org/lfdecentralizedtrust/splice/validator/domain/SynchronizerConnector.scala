@@ -190,7 +190,7 @@ class SynchronizerConnector(
     SynchronizerConnectionConfig(
       alias,
       sequencerConnections,
-      synchronizerId = psid,
+      psid = psid,
       timeTracker = SynchronizerTimeTrackerConfig(
         minObservationDuration = config.timeTrackerMinObservationDuration,
         observationLatency = config.timeTrackerObservationLatency,

@@ -182,7 +182,7 @@ export const UpdateSvRewardWeightForm: React.FC = _ => {
             >
               {field => (
                 <field.DateField
-                  title="Threshold Deadline"
+                  title="Quorum Threshold Deadline"
                   description={THRESHOLD_DEADLINE_SUBTITLE}
                   id="update-sv-reward-weight-expiry-date"
                 />
@@ -220,7 +220,7 @@ export const UpdateSvRewardWeightForm: React.FC = _ => {
                 onChange: ({ value }) => validateUrl(value),
               }}
             >
-              {field => <field.TextField title="URL" id="update-sv-reward-weight-url" />}
+              {field => <field.TextField title="SUPPORTING URL" id="update-sv-reward-weight-url" />}
             </form.AppField>
           </>
         )}

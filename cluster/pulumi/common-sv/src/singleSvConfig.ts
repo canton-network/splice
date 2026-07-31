@@ -167,7 +167,11 @@ const SingleSvConfigSchema = z
         appsAsync: z.boolean().default(false),
         cantonLogLevel: LogLevelSchema,
         cantonStdoutLogLevel: LogLevelSchema.optional(),
+        // Log level for the Splice apps' HTTP request logging (org.lfdecentralizedtrust.splice.admin.api)
         apiRequestLogLevel: LogLevelSchema.optional(),
+        // Log level for the Canton nodes' Ledger-API audit logging (com.digitalasset.canton.logging.audit)
+        // Falls back to `apiRequestLogLevel` when not specified
+        cantonApiRequestLogLevel: LogLevelSchema.optional(),
         cantonAsync: z.boolean().default(false),
         cometbftLogLevel: CometbftLogLevelSchema.optional(),
         cometbftExtraLogLevelFlags: z.string().optional(),

@@ -103,6 +103,7 @@ class ExternalPartySetupProposalIntegrationTest
             NonNegativeFiniteDuration.ofMillis(500)
           )(config),
       )
+      .withTransferCommandSupport
 
   }
 

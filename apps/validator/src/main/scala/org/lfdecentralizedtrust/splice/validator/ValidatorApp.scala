@@ -829,6 +829,7 @@ class ValidatorApp(
         config.parameters.enabledFeatures,
         config.additionalPackagesToUnvet,
         config.domains.global.alias,
+        config.enableDeprecatedTransferCommandSupport,
         loggerFactory,
         packageVersionSupport,
       )

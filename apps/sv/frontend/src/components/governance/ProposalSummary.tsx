@@ -49,6 +49,14 @@ type ProposalSummaryProps = BaseProposalSummaryProps &
         amount: string;
         expiresAt: string;
       }
+    | {
+        formType: 'update-right-weight';
+        providerPartyId: string;
+        rightCid: string;
+        currentActivityWeight: string;
+        newActivityWeight: string;
+        reason: string;
+      }
   );
 
 export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
@@ -69,7 +77,7 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
 
         <ProposalField
           id="expiryDate"
-          title="Threshold Deadline"
+          title="Quorum Threshold Deadline"
           subtitle={THRESHOLD_DEADLINE_SUBTITLE}
           value={expiryDate}
         />
@@ -137,6 +145,38 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
               value={props.revokeRight}
               scrollableIdentifier
             />
+          </>
+        )}
+
+        {formType === 'update-right-weight' && (
+          <>
+            <ProposalField
+              id="updateProviderPartyId"
+              title="Provider Party ID"
+              value={props.providerPartyId}
+            />
+            <ProposalField
+              id="updateRight"
+              title="Featured Application Contract ID"
+              value={props.rightCid}
+            />
+            <ProposalField
+              id="updateActivityWeight"
+              title="Proposed Changes"
+              value={
+                <ConfigValuesChanges
+                  changes={[
+                    {
+                      label: 'Activity Weight',
+                      fieldName: 'newActivityWeight',
+                      currentValue: props.currentActivityWeight,
+                      newValue: props.newActivityWeight,
+                    },
+                  ]}
+                />
+              }
+            />
+            <ProposalField id="updateReason" title="Reason" value={props.reason} />
           </>
         )}
 

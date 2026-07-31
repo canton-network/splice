@@ -1388,10 +1388,10 @@ class WalletTxLogIntegrationTest
         logs =>
           inside(logs) {
             case logLines if logLines.nonEmpty =>
-              logLines
-                .filter(_.errorMessage contains ("RuntimeException"))
-                .foreach(_.errorMessage should include("Unexpected amulet create event"))
-              logLines should have size (env.scans.local.size.toLong + 1) // + 1 for UserWalletTxLog
+              forExactly(1, logLines) { line =>
+                line.errorMessage should include("Unexpected amulet create event")
+                line.loggerName should include("DbMultiDomainAcsStore")
+              }
           },
       )
 
@@ -1407,10 +1407,10 @@ class WalletTxLogIntegrationTest
         logs =>
           inside(logs) {
             case logLines if logLines.nonEmpty =>
-              logLines
-                .filter(_.errorMessage contains ("RuntimeException"))
-                .foreach(_.errorMessage should include("Unexpected amulet archive event"))
-              logLines should have size (env.scans.local.size.toLong + 1) // + 1 for UserWalletTxLog
+              forExactly(1, logLines) { line =>
+                line.errorMessage should include("Unexpected amulet archive event")
+                line.loggerName should include("DbMultiDomainAcsStore")
+              }
           },
       )
 

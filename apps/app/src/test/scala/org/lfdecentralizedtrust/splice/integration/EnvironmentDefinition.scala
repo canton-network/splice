@@ -217,7 +217,7 @@ case class EnvironmentDefinition(
             }
             if (
               existing.item.featureFlags
-                .contains(ParticipantTopologyFeatureFlag.EnableAlphaMultiSynchronizer)
+                .contains(ParticipantTopologyFeatureFlag.EnableMultiSynchronizer)
             ) {
               logger.info(
                 s"Participant ${validator.participantClient.id} already has multi synchronizer feature flag enabled for ${sync.synchronizerId}"
@@ -230,7 +230,7 @@ case class EnvironmentDefinition(
                 validator.participantClient.id,
                 sync.synchronizerId,
                 featureFlags = Seq(
-                  ParticipantTopologyFeatureFlag.EnableAlphaMultiSynchronizer
+                  ParticipantTopologyFeatureFlag.EnableMultiSynchronizer
                 ),
               )
             }
@@ -503,6 +503,13 @@ case class EnvironmentDefinition(
         )
       )
   }
+
+  def withTransferCommandSupport: EnvironmentDefinition =
+    this.addConfigTransform((_, conf) =>
+      ConfigTransforms.updateAllValidatorAppConfigs_(
+        _.copy(enableDeprecatedTransferCommandSupport = true)
+      )(conf)
+    )
 
   def clearConfigTransforms(): EnvironmentDefinition =
     copy(configTransformsWithContext = _ => Seq())
