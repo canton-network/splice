@@ -11,6 +11,8 @@ import {
 import {
   installPasswordWithParent,
   SplicePostgres,
+  installPostgres as commonInstallPostgres,
+  installSplicePostgres,
 } from '@canton-network/splice-pulumi-common/src/postgres';
 
 import { multiValidatorConfig } from './config';
@@ -27,11 +29,13 @@ export function installPostgres(
   }
   const config = multiValidatorConfig!;
 
-  return new SplicePostgres(
+  return installSplicePostgres(
     xns,
     name,
-    parent => installPasswordWithParent(parent, xns, name, secretName),
+    secretName,
     config.postgres,
+    activeVersion,
+    {},
     {
       db: {
         volumeSize: config.postgresPvcSize,
@@ -41,10 +45,16 @@ export function installPostgres(
       },
       resources: config.resources?.postgres,
     },
-    true,
-    !spliceConfig.pulumiProjectConfig.cloudSql.protected,
-    activeVersion,
-    false,
-    dependsOn
+    true, // overrideDbSizeFromValues
+    false, // useInfraAffinityAndTolerations
+    {
+      dependsOn,
+      ...(spliceConfig.pulumiProjectConfig.replacePostgresStatefulSetOnChanges
+        ? {
+            replaceOnChanges: ['*'],
+            deleteBeforeReplace: true,
+          }
+        : {}),
+    }
   );
 }

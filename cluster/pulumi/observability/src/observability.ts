@@ -31,6 +31,7 @@ import {
 import { SweepConfig } from '@canton-network/splice-pulumi-common-validator';
 import {
   installPasswordWithParent,
+  installSplicePostgres,
   SplicePostgres,
 } from '@canton-network/splice-pulumi-common/src/postgres';
 import { infraStack } from '@canton-network/splice-pulumi-common/src/stackReferences';
@@ -1189,15 +1190,15 @@ function grafanaKeysFromSecret(): pulumi.Output<GrafanaKeys> {
 
 function installPostgres(namespace: ExactNamespace): SplicePostgres {
   const instanceName = 'grafana-postgres';
-  return new SplicePostgres(
+  return installSplicePostgres(
     namespace,
     instanceName,
-    parent => installPasswordWithParent(parent, namespace, instanceName, 'grafana-postgres-secret'),
+    'grafana-postgres-secret',
     postgresConfig,
+    undefined, // chart version
+    { disableProtection: true },
     { db: { volumeSize: '20Gi' } }, // A tiny pvc should be enough for grafana
     true, // overrideDbSizeFromValues
-    true, // disableProtection
-    undefined, // chart version
     true // useInfraAffinityAndTolerations
   );
 }

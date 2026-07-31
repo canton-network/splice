@@ -23,6 +23,7 @@ import {
   CnInput,
   infraAffinityAndTolerations,
   installSpliceHelmChart,
+  SpliceCustomResourceOptions,
 } from './helm';
 import { installPostgresPasswordSecret } from './secrets';
 import { standardStorageClassName } from './storage/storageClass';
@@ -396,10 +397,12 @@ export class LegacyHelmSplicePostgres extends pulumi.ComponentResource implement
     overrideDbSizeFromValues?: boolean,
     disableProtection?: boolean,
     version?: CnChartVersion,
-    useInfraAffinityAndTolerations: boolean = false
+    useInfraAffinityAndTolerations: boolean = false,
+    resourceOpts?: SpliceCustomResourceOptions
   ) {
     const logicalName = xns.logicalName + '-' + instanceName;
     super('canton:network:postgres', logicalName, [], {
+      ...resourceOpts,
       protect: disableProtection ? false : spliceConfig.pulumiProjectConfig.cloudSql.protected,
       aliases: [],
     });
@@ -511,15 +514,15 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
     disableProtection?: boolean,
     version?: CnChartVersion,
     useInfraAffinityAndTolerations: boolean = false,
-    dependsOn: CnInput<pulumi.Resource>[] = []
+    resourceOpts?: SpliceCustomResourceOptions
   ) {
     // Avoiding collisions with the name in LegacyHelmSplicePostgres
     const deployedInstanceName = `${instanceName}-helmless`;
     const logicalName = xns.logicalName + '-' + deployedInstanceName;
     super('canton:network:postgres', logicalName, [], {
+      ...resourceOpts,
       protect: disableProtection ? false : spliceConfig.pulumiProjectConfig.cloudSql.protected,
       aliases: [],
-      dependsOn,
     });
 
     const passwordSecret = installPassword(this);
@@ -870,16 +873,41 @@ export async function installPostgres(
         aliases: [{ name: `${xns.logicalName}-${alias}` }],
       }
     );
-  } else if (splicePostgresHelmMigrationConfig.deployment == 'legacy-helm-chart') {
+  } else {
+    return installSplicePostgres(
+      xns,
+      instanceName,
+      secretName,
+      splicePostgresHelmMigrationConfig,
+      version,
+      opts
+    );
+  }
+}
+
+export function installSplicePostgres(
+  xns: ExactNamespace,
+  instanceName: string,
+  secretName: string,
+  splicePostgresHelmMigrationConfig: SplicePostgresConfig,
+  version?: CnChartVersion,
+  opts: SplicePostgresInstallOptions = {},
+  chartValues?: LegacyChartValues,
+  overrideDbSizeFromValues?: boolean,
+  useInfraAffinityAndTolerations: boolean = false,
+  resourceOpts?: SpliceCustomResourceOptions
+) {
+  if (splicePostgresHelmMigrationConfig.deployment == 'legacy-helm-chart') {
     return new LegacyHelmSplicePostgres(
       xns,
       instanceName,
       parent => installPasswordWithParent(parent, xns, instanceName, secretName),
-      undefined,
-      undefined,
-      o.disableProtection,
+      chartValues,
+      overrideDbSizeFromValues,
+      opts.disableProtection,
       version,
-      false
+      useInfraAffinityAndTolerations,
+      resourceOpts
     );
   } else {
     // If deployment == 'migrate', it will also create the LegacyHelmSplicePostgres
@@ -890,11 +918,12 @@ export async function installPostgres(
       splicePostgresHelmMigrationConfig as
         | SplicePostgresMigrateConfig
         | SplicePostgresDockerImageConfig,
-      undefined,
-      undefined,
-      o.disableProtection,
+      chartValues,
+      overrideDbSizeFromValues,
+      opts.disableProtection,
       version,
-      false
+      useInfraAffinityAndTolerations,
+      resourceOpts
     );
   }
 }
