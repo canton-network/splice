@@ -48,7 +48,6 @@ export async function installPostgres(
       values,
       undefined,
       supportsSvRunbookReset
-      // importDataFromSplicePostgresHelmChart doesn't matter, let runbooks reset or use CloudSQL
     );
   }
 }
