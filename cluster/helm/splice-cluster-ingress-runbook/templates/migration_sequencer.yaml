@@ -19,6 +19,7 @@ spec:
   http:
     - match:
         - port: 443
+        - port: 80
       route:
         - destination:
             port:
@@ -38,6 +39,7 @@ spec:
   http:
     - match:
         - port: 443
+        - port: 80
       route:
         - destination:
             port:

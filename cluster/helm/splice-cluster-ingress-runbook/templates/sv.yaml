@@ -19,6 +19,9 @@ spec:
         - port: 443
           uri:
             prefix: "/api/sv/"
+        - port: 80
+          uri:
+            prefix: "/api/sv/"
       route:
         - destination:
             port:
@@ -26,6 +29,7 @@ spec:
             host: sv-app.{{ (.Values.cluster).svNamespace }}.svc.cluster.local
     - match:
         - port: 443
+        - port: 80
       route:
         - destination:
             port:
@@ -52,6 +56,12 @@ spec:
         - port: 443
           uri:
             prefix: "/registry/"
+        - port: 80
+          uri:
+            prefix: "/api/scan/"
+        - port: 80
+          uri:
+            prefix: "/registry/"
       route:
         - destination:
             port:
@@ -59,6 +69,7 @@ spec:
             host: scan-app.{{ (.Values.cluster).svNamespace }}.svc.cluster.local
     - match:
         - port: 443
+        - port: 80
       route:
         - destination:
             port:
