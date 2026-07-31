@@ -57,6 +57,9 @@ message PeerEndpoint {
     PlainTextPeerEndpoint plain_text = 3;
     TlsPeerEndpoint tls = 4;
   }
+  // Ignored when storing an endpoint, but returned when listing configured endpoints:
+  //  if the peer authenticated as a sequencer over this endpoint, this field will contain its sequencer ID.
+  optional string sequencer_id = 5;
 }
 
 message PeerEndpointId {
@@ -166,6 +169,10 @@ message GetOrderingTopologyResponse {
     com.digitalasset.canton.synchronizer.sequencing.sequencer.bftordering.v30.DynamicSequencingParametersPayload dynamic_sequencing_parameters_payload = 3;
     com.digitalasset.canton.synchronizer.sequencing.sequencer.bftordering.v31.DynamicSequencingParametersPayload dynamic_sequencing_parameters_payload31 = 4;
   }
+  // The sequencer IDs of the BFT ordering nodes in the network that are consensus leaders.
+  repeated string leader_sequencer_ids = 5;
+  // The sequencer IDs of the BFT ordering nodes in the network that are blacklisted.
+  repeated string blacklisted_sequencer_ids = 6;
 }
 
 message SetPerformanceMetricsEnabledRequest {

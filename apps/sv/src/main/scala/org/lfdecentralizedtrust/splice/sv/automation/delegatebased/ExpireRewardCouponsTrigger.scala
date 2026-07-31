@@ -20,7 +20,6 @@ import org.lfdecentralizedtrust.splice.sv.store.{ExpiredRewardCouponsBatch, Igno
 import org.lfdecentralizedtrust.splice.util.{AssignedContract, Contract}
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
-import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.ShowUtil.*
 import com.digitalasset.canton.util.MonadUtil
@@ -28,6 +27,7 @@ import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.store.PageLimit
+import org.lfdecentralizedtrust.splice.codegen.java.splice
 
 import java.util.Optional
 import scala.concurrent.{ExecutionContext, Future}
@@ -35,7 +35,12 @@ import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 import scala.util.Random
 import ExpireRewardCouponsTrigger.Task
+import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.{
+  ValidatorFaucetCoupon,
+  ValidatorLivenessActivityRecord,
+}
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
+import org.lfdecentralizedtrust.splice.sv.util.ContractStakeholders
 
 class ExpireRewardCouponsTrigger(
     override protected val context: TriggerContext,
@@ -89,33 +94,27 @@ class ExpireRewardCouponsTrigger(
         SpliceAmulet,
         batch.validatorCoupons,
         svTaskContext.delegatelessAutomationExpiredRewardCouponBatchSize,
-      )(c => Seq(c.payload.dso, c.payload.user).map(PartyId.tryFromProtoPrimitive(_)))
+      )(c => ValidatorCoupons.getStakeholders(c.payload))
       appCoupons <- svTaskContext.vettingLookupService.splitBatch(
         SpliceAmulet,
         batch.appCoupons,
         svTaskContext.delegatelessAutomationExpiredRewardCouponBatchSize,
-      )(c =>
-        (Seq(c.payload.dso, c.payload.provider) ++ c.payload.beneficiary.toScala.toList)
-          .map(PartyId.tryFromProtoPrimitive(_))
-      )
+      )(c => AppRewardCoupons.getStakeholders(c.payload))
       svRewardCoupons <- svTaskContext.vettingLookupService.splitBatch(
         SpliceAmulet,
         batch.svRewardCoupons,
         svTaskContext.delegatelessAutomationExpiredRewardCouponBatchSize,
-      )(c =>
-        Seq(c.payload.dso, c.payload.sv, c.payload.beneficiary)
-          .map(PartyId.tryFromProtoPrimitive(_))
-      )
+      )(c => SvRewardCoupons.getStakeholders(c.payload))
       validatorFaucets <- svTaskContext.vettingLookupService.splitBatch(
         SpliceAmulet,
         batch.validatorFaucets,
         svTaskContext.delegatelessAutomationExpiredRewardCouponBatchSize,
-      )(c => Seq(c.payload.dso, c.payload.validator).map(PartyId.tryFromProtoPrimitive(_)))
+      )(c => ValidatorFaucetCoupons.getStakeholders(c.payload))
       validatorLivenessActivityRecords <- svTaskContext.vettingLookupService.splitBatch(
         SpliceAmulet,
         batch.validatorLivenessActivityRecords,
         svTaskContext.delegatelessAutomationExpiredRewardCouponBatchSize,
-      )(c => Seq(c.payload.dso, c.payload.validator).map(PartyId.tryFromProtoPrimitive(_)))
+      )(c => ValidatorLivenessActivityRecords.getStakeholders(c.payload))
     } yield {
       val emptyBatch = ExpiredRewardCouponsBatch(
         closedRoundCid = batch.closedRoundCid,
@@ -157,18 +156,17 @@ class ExpireRewardCouponsTrigger(
   override def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = {
-    val informees =
-      (task.batch.validatorCoupons.map(_.payload.user) ++ task.batch.appCoupons.flatMap(c =>
-        Seq(c.payload.provider) ++ c.payload.beneficiary.toScala
-      ) ++
-        task.batch.svRewardCoupons.map(_.payload.beneficiary) ++ task.batch.validatorFaucets.map(
-          _.payload.validator
-        ) ++ task.batch.validatorLivenessActivityRecords.map(_.payload.validator))
-        .map(PartyId.tryFromProtoPrimitive(_))
-        .toSet
+    val informees = ValidatorCoupons.getInformeesFromContracts(task.batch.validatorCoupons) ++
+      AppRewardCoupons.getInformeesFromContracts(task.batch.appCoupons) ++
+      SvRewardCoupons.getInformeesFromContracts(task.batch.svRewardCoupons) ++
+      ValidatorFaucetCoupons.getInformeesFromContracts(task.batch.validatorFaucets) ++
+      ValidatorLivenessActivityRecords.getInformeesFromContracts(
+        task.batch.validatorLivenessActivityRecords
+      )
     completeWithIgnoredAmuletVersionCheck(
       task.vettedAmuletVersion.toString,
       informees,
+      store.dsoPartyId,
       enableUnresponsivePartiesAutoIgnore = true,
     )(completeExpiryTaskAsDsoDelegate(task, controller))
   }
@@ -317,4 +315,36 @@ object ExpireRewardCouponsTrigger {
         param("batch", _.batch),
       )
   }
+}
+
+object ValidatorCoupons extends ContractStakeholders[splice.amulet.ValidatorRewardCoupon] {
+  override def informees(payload: splice.amulet.ValidatorRewardCoupon): Seq[String] = Seq(
+    payload.user
+  )
+  override def dso(payload: splice.amulet.ValidatorRewardCoupon): String = payload.dso
+}
+
+object AppRewardCoupons extends ContractStakeholders[splice.amulet.AppRewardCoupon] {
+  override def informees(payload: splice.amulet.AppRewardCoupon): Seq[String] =
+    Seq(payload.provider) ++ payload.beneficiary.toScala.toList
+  override def dso(payload: splice.amulet.AppRewardCoupon): String = payload.dso
+}
+
+object SvRewardCoupons extends ContractStakeholders[splice.amulet.SvRewardCoupon] {
+  override def informees(payload: splice.amulet.SvRewardCoupon): Seq[String] =
+    Seq(payload.sv, payload.beneficiary)
+  override def dso(payload: splice.amulet.SvRewardCoupon): String = payload.dso
+}
+
+object ValidatorFaucetCoupons extends ContractStakeholders[ValidatorFaucetCoupon] {
+  override def informees(payload: ValidatorFaucetCoupon): Seq[String] = Seq(payload.validator)
+  override def dso(payload: ValidatorFaucetCoupon): String = payload.dso
+}
+
+object ValidatorLivenessActivityRecords
+    extends ContractStakeholders[ValidatorLivenessActivityRecord] {
+  override def informees(payload: ValidatorLivenessActivityRecord): Seq[String] = Seq(
+    payload.validator
+  )
+  override def dso(payload: ValidatorLivenessActivityRecord): String = payload.dso
 }

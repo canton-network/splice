@@ -176,7 +176,7 @@ paths:
   /v0/admin/synchronizer/lsu/cancel:
     post:
       tags: [sv]
-      x-jvm-package: sv_admin
+      x-jvm-package: sv_operator
       operationId: "cancelLogicalSynchronizerUpgrade"
       responses:
         "200":

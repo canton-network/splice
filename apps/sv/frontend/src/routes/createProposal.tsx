@@ -14,6 +14,7 @@ import { useDsoInfos } from '../contexts/SvContext';
 import { createProposalActions } from '../utils/governance';
 import type { SupportedActionTag } from '../utils/types';
 import { Box } from '@mui/material';
+import { UpdateFeaturedAppForm } from '../components/forms/UpdateFeaturedAppForm';
 
 const ProposalForm: React.FC<{ action: SupportedActionTag }> = ({ action }) => {
   const dsoInfosQuery = useDsoInfos();
@@ -35,6 +36,8 @@ const ProposalForm: React.FC<{ action: SupportedActionTag }> = ({ action }) => {
       return <SetDsoConfigRulesForm />;
     case 'CRARC_SetConfig':
       return <SetAmuletConfigRulesForm />;
+    case 'SRARC_UpdateFeaturedAppRight':
+      return <UpdateFeaturedAppForm />;
   }
 };
 

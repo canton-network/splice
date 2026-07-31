@@ -57,7 +57,7 @@ spec:
         image: {{ .Values.imageRepo }}/{{ .Values.mediator.imageName}}:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).canton_mediator) }}
         env:
         - name: JAVA_TOOL_OPTIONS
-          value: "{{ .Values.defaultJvmOptions }} {{ .Values.additionalJvmOptions }} -Dlogback.configurationFile=/app/logback/logback.xml"
+          value: "{{ .Values.defaultJvmOptions }} {{ .Values.mediator.additionalJvmOptions }} -Dlogback.configurationFile=/app/logback/logback.xml"
         - name: CANTON_DOMAIN_POSTGRES_SERVER
           value: {{ .Values.mediator.persistence.host }}
         - name: CANTON_DOMAIN_POSTGRES_PORT

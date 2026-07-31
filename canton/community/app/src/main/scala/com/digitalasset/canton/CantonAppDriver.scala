@@ -63,7 +63,8 @@ abstract class CantonAppDriver extends App with NamedLogging with NoTracing {
       Console.out.println(s"$name: $version")
     }
 
-  protected def logAppVersion(): Unit = logger.info(s"Starting Canton version ${BuildInfo.version}")
+  protected def logAppVersion(): Unit =
+    logger.info(s"Starting Canton version ${BuildInfo.version}")
 
   // BE CAREFUL: Set the environment variables before you touch anything related to
   // logback as otherwise, the logback configuration will be read without these

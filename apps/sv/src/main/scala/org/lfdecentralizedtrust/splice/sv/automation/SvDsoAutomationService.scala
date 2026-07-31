@@ -428,7 +428,7 @@ class SvDsoAutomationService(
     synchronizerNodeService.nodes.successor.foreach(registerTriggersForSynchronizers)
   }
 
-  def registerLsuTriggers() = {
+  def registerLsuTriggers(): Unit = {
     synchronizerNodeService.nodes.successor match {
       case Some(successorSynchronizerNode) =>
         registerTrigger(

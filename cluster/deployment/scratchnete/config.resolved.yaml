@@ -49,7 +49,7 @@ monitoring:
     alerts:
       acsCommitments:
         checkpointDelay:
-          seconds: 1200
+          seconds: 2400
         completedDelay:
           seconds: 3600
         computeDuration:
@@ -325,9 +325,6 @@ sv:
           type: 'unlimited'
         /api/scan/v0/synchronizer-identities:
           name: 'synchronizer-identities'
-          type: 'unlimited'
-        /api/scan/v0/transactions:
-          name: 'transactions'
           type: 'unlimited'
         /api/scan/v0/transfer-command:
           name: 'transfer-command-status'

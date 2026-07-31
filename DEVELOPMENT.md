@@ -19,6 +19,7 @@
 - [Troubleshooting](#troubleshooting)
   - [Nix Issues on MacOS](#nix-issues-on-macos)
   - [NPM Lock file issues](#npm-lock-file-issues)
+- [Staging Branches for Minor Releases](#staging-branches-for-minor-releases)
 
 # Setting up Your Development Environment
 
@@ -473,3 +474,20 @@ Caused by: java.lang.NullPointerException: Cannot invoke "jdk.internal.platform.
         at java.base/jdk.internal.platform.cgroupv2.CgroupV2Subsystem.getInstance(CgroupV2Subsystem.java:80)
 ```
 in start-canton.sh, try adding: `export ADDITIONAL_JAVA_TOOLS_OPTIONS="-XX:-UseContainerSupport"` to .envrc.private
+
+## Staging Branches for Minor Releases
+
+Daml changes, breaking API changes and new Canton protocol versions
+must only be included in new minor releases. To manage changes that
+are ready but cannot be merged to main until the next minor version,
+create a ``staging-X.Y.0`` branch for the next minor release based off
+main and merge changes for that release into that. You likely want to
+regularly merge main into that to avoid it going too far out of sync.
+
+Note: This is intended for changes that are complete and could be
+released not for incomplete changes that then may need to get backed
+out again before the release in case we do not manage to finish them
+completely.
+
+Once the time is reached where the minor should be the next weekly
+release, merge the staging branch back into main.

@@ -297,6 +297,13 @@ function main() {
   elif [ "$1" == "sv" ]; then
     _info "Backing up SV node $namespace"
 
+    local bft_enabled
+    bft_enabled=$(canton_bft_db_enabled "$migration_id" "$config")
+    if [ "$bft_enabled" == "true" ]; then
+      backup_component "$namespace" "cantonBft" "$requested_component" "$migration_id"
+      wait_for_backup "$namespace" "cantonBft" "$requested_component" "$migration_id"
+    fi
+
     backup_component "$namespace" "cn-apps" "$requested_component" "$migration_id"
     backup_component "$namespace" "mediator" "$requested_component" "$migration_id"
     backup_component "$namespace" "sequencer" "$requested_component" "$migration_id"

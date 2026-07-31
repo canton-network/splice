@@ -141,6 +141,7 @@ export const CreateUnallocatedUnclaimedActivityRecordForm: React.FC = _ => {
                 <field.TextField
                   title="Beneficiary"
                   id="create-unallocated-unclaimed-activity-record-beneficiary"
+                  scrollableIdentifier
                 />
               )}
             </form.AppField>
@@ -184,7 +185,7 @@ export const CreateUnallocatedUnclaimedActivityRecordForm: React.FC = _ => {
             >
               {field => (
                 <field.DateField
-                  title="Threshold Deadline"
+                  title="Quorum Threshold Deadline"
                   description={THRESHOLD_DEADLINE_SUBTITLE}
                   id="create-unallocated-unclaimed-activity-record-expiry-date"
                 />
@@ -226,7 +227,7 @@ export const CreateUnallocatedUnclaimedActivityRecordForm: React.FC = _ => {
             >
               {field => (
                 <field.TextField
-                  title="URL"
+                  title="SUPPORTING URL"
                   id="create-unallocated-unclaimed-activity-record-url"
                 />
               )}

@@ -236,7 +236,7 @@ object TopologyMapping {
 
   }
 
-  // Small wrapper to not have to work with a tuple3 (Set[Namespace], Set[Uid], Set[Fingerprint])
+  // Small wrapper to not have to work with a 2-tuple (Set[Namespace], Set[Fingerprint])
   final case class ReferencedAuthorizations(
       namespaces: Set[Namespace] = Set.empty,
       extraKeys: Set[Fingerprint] = Set.empty,
@@ -1169,14 +1169,14 @@ object SynchronizerTrustCertificate extends TopologyMappingCompanion {
     /** When this feature flag is enabled, the participant will allow to reassign contracts between
       * synchronizers. This feature is in alpha and should not be used in production.
       */
-    val EnableAlphaMultiSynchronizer: ParticipantTopologyFeatureFlag =
+    val EnableMultiSynchronizer: ParticipantTopologyFeatureFlag =
       ParticipantTopologyFeatureFlag(
-        v30.Enums.ParticipantFeatureFlag.PARTICIPANT_FEATURE_FLAG_ENABLE_ALPHA_MULTI_SYNCHRONIZER.value
-      )(Some("EnableAlphaMultiSynchronizer"))
+        v30.Enums.ParticipantFeatureFlag.PARTICIPANT_FEATURE_FLAG_ENABLE_MULTI_SYNCHRONIZER.value
+      )(Some("EnableMultiSynchronizer"))
 
     val knownTopologyFeatureFlags: Seq[ParticipantTopologyFeatureFlag] = Seq(
       ExternalSigningLocalContractsInSubview,
-      EnableAlphaMultiSynchronizer,
+      EnableMultiSynchronizer,
     )
 
     def fromProtoV30(
