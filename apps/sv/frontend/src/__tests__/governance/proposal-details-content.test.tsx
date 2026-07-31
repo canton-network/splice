@@ -1242,3 +1242,127 @@ describe('Proposal Details > Votes & Voting', () => {
     expect(rejectButton).not.toBeDisabled();
   });
 });
+
+describe('Open vote request whose effectivity has passed', () => {
+  const pastEffectivity = {
+    requester: 'sv1',
+    requesterIsYou: true,
+    votingThresholdDeadline: '2024-01-01 13:00',
+    voteTakesEffect: '2024-01-02 13:00',
+    status: 'In Progress',
+  } as ProposalVotingInformation;
+
+  test('shows the vote form to an SV that has not voted', () => {
+    const votes: ProposalVote[] = [
+      { sv: 'sv1', isYou: true, vote: 'no-vote' },
+      { sv: 'sv3', vote: 'accepted', reason: { url: 'https://example.com', body: 'Reason' } },
+    ];
+
+    render(
+      <Wrapper>
+        <ProposalDetailsContent
+          currentSvPartyId="sv1"
+          contractId={voteRequest.contractId}
+          proposalDetails={voteRequest.proposalDetails}
+          votingInformation={pastEffectivity}
+          votes={votes}
+        />
+      </Wrapper>
+    );
+
+    const votingForm = screen.getByTestId('your-vote-form');
+    expect(votingForm).toBeInTheDocument();
+    expect(within(votingForm).getByTestId('your-vote-accept')).toBeInTheDocument();
+    expect(within(votingForm).getByTestId('your-vote-reject')).toBeInTheDocument();
+  });
+
+  test('shows the change-vote control to an SV that has already voted', async () => {
+    const user = userEvent.setup();
+    const votes: ProposalVote[] = [
+      {
+        sv: 'sv1',
+        isYou: true,
+        vote: 'accepted',
+        reason: { url: 'https://example.com', body: 'Reason' },
+      },
+      { sv: 'sv3', vote: 'accepted', reason: { url: 'https://example.com', body: 'Reason' } },
+    ];
+
+    render(
+      <Wrapper>
+        <ProposalDetailsContent
+          currentSvPartyId="sv1"
+          contractId={voteRequest.contractId}
+          proposalDetails={voteRequest.proposalDetails}
+          votingInformation={pastEffectivity}
+          votes={votes}
+        />
+      </Wrapper>
+    );
+
+    // An SV that has voted sees the Edit control rather than the form, until it starts editing.
+    expect(screen.queryByTestId('your-vote-form')).not.toBeInTheDocument();
+
+    const editButton = screen.getByTestId('your-vote-edit-button');
+    expect(editButton).toBeInTheDocument();
+
+    await user.click(editButton);
+
+    const votingForm = screen.getByTestId('your-vote-form');
+    expect(votingForm).toBeInTheDocument();
+    expect(within(votingForm).getByTestId('your-vote-reject')).toBeInTheDocument();
+  });
+
+  test('shows SVs that have not voted as awaiting a response', () => {
+    const votes: ProposalVote[] = [
+      {
+        sv: 'sv1',
+        isYou: true,
+        vote: 'accepted',
+        reason: { url: 'https://example.com', body: 'Reason' },
+      },
+      { sv: 'sv3', vote: 'no-vote' },
+    ];
+
+    render(
+      <Wrapper>
+        <ProposalDetailsContent
+          currentSvPartyId="sv1"
+          contractId={voteRequest.contractId}
+          proposalDetails={voteRequest.proposalDetails}
+          votingInformation={pastEffectivity}
+          votes={votes}
+        />
+      </Wrapper>
+    );
+
+    const noVoteTab = screen.getByTestId('no-vote-votes-tab');
+    expect(noVoteTab.textContent).toMatch(/Awaiting Response/);
+    expect(noVoteTab.textContent).not.toMatch(/Did not Vote/);
+
+    const statuses = screen
+      .getAllByTestId('proposal-details-vote-status-value')
+      .map(s => s.textContent);
+    expect(statuses).toContain('Awaiting Response');
+    expect(statuses).not.toContain('No Vote');
+  });
+});
+
+describe('Closed proposal', () => {
+  test('does not show the vote form or the change-vote control', () => {
+    render(
+      <Wrapper>
+        <ProposalDetailsContent
+          currentSvPartyId={voteResult.votingInformation.requester}
+          contractId={voteResult.contractId}
+          proposalDetails={voteResult.proposalDetails}
+          votingInformation={voteResult.votingInformation}
+          votes={voteResult.votes}
+        />
+      </Wrapper>
+    );
+
+    expect(screen.queryByTestId('your-vote-form')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('your-vote-edit-button')).not.toBeInTheDocument();
+  });
+});

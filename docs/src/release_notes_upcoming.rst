@@ -16,3 +16,8 @@
           By upgrading to this version, SVs agree to change this parameter to 2 minutes (unless they override the new SV app config value).
           The change takes effect once a sufficient number of SVs have upgraded.
 
+        - The governance UI no longer stops an SV from casting or changing its vote once a
+          proposal's target effective time has passed. Votes are now accepted for as long as the
+          vote request is open, matching what the ledger allows. This makes it possible to reject a
+          proposal whose action fails to execute and which would otherwise remain in flight
+          indefinitely.
