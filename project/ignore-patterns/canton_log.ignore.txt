@@ -211,3 +211,7 @@ LOCAL_VERDICT_FAILED_MODEL_CONFORMANCE_CHECK.*Rejected transaction due to a fail
 
 # TODO(DACH-NY/cn-test-failures#9136) remove once Canton fixes this race condition from not storing packages in dependency order
 INTERNAL/Missing package-id.*in package metadata view
+
+# TODO(DACH-NY/cn-test-failures#9445) remove once Canton stops failing the whole
+# GetConnectedSynchronizers call for one synchronizer that is mid-reconnect.
+INTERNAL/Failed retrieving SynchronizerTopologyClient for synchronizer
