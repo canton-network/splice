@@ -1468,6 +1468,13 @@ object SvDsoStore {
           validator = Some(PartyId.tryFromProtoPrimitive(contract.payload.validator)),
         )
       },
+      mkFilter(vl.ValidatorLicenseRequest.COMPANION)(req => req.payload.dso == dso) { contract =>
+        DsoAcsStoreRowData(
+          contract,
+          contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
+          validator = Some(PartyId.tryFromProtoPrimitive(contract.payload.validator)),
+        )
+      },
       mkFilter(splice.decentralizedsynchronizer.MemberTraffic.COMPANION)(vt =>
         vt.payload.dso == dso && vt.payload.migrationId == domainMigrationId
       ) { contract =>
