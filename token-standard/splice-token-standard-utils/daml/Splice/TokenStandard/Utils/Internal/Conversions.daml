@@ -27,6 +27,8 @@ module Splice.TokenStandard.Utils.Internal.Conversions (
   partiesToMeta,
   dropMeta,
   validateNoMeta,
+  encodeTime,
+  decodeTime,
 
   -- * Transfer utils
   reasonMetaKey,
