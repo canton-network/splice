@@ -290,6 +290,14 @@ class SvDsoAutomationService(
           config.minMemberTrafficToOnboardValidator,
         )
       )
+      registerTrigger(
+        new ValidatorLicenseRequestTrigger(
+          triggerContext,
+          dsoStore,
+          participantAdminConnection,
+          connection(SpliceLedgerConnectionPriority.High),
+        )
+      )
     }
     registerTrigger(
       new SvOnboardingRequestTrigger(
@@ -784,5 +792,6 @@ object SvDsoAutomationService extends AutomationServiceCompanion {
       aTrigger[LsuSequencingTestTrigger],
       aTrigger[ReconcileSequencingParametersTrigger],
       aTrigger[GrantValidatorPermissionTrigger],
+      aTrigger[ValidatorLicenseRequestTrigger],
     )
 }
