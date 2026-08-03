@@ -586,7 +586,7 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
       : appsAffinityAndTolerations;
 
     // Optional init container that migrates data from a pre-existing postgres instance.
-    // It runs pg_dumpall against the source and writes migration.sql into a dedicated
+    // It runs pg_dumpall against the source and writes migration.dump into a dedicated
     // migration PVC that the main container mounts at /docker-entrypoint-initdb.d.
     const initContainers: k8s.types.input.core.v1.Container[] = [];
     // Extra volumeMounts added to the main postgres container
@@ -612,8 +612,17 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
         '  -p "$SOURCE_PORT" \\',
         '  -U "$SOURCE_USER" \\',
         '  --no-role-passwords \\',
-        '  -f /migration/migration.sql',
-        'echo "Migration dump ready at /migration/migration.sql"',
+        '  -f /migration/migration.dump',
+        "cat > /migration/00-restore.sh << 'RESTORE_EOF'",
+        '#!/bin/bash',
+        'set -euo pipefail',
+        '[ -f /docker-entrypoint-initdb.d/migration.dump ] || exit 0',
+        'echo "Restoring all databases from migration.dump ..."',
+        'psql --username "$POSTGRES_USER" --dbname postgres -f /docker-entrypoint-initdb.d/migration.dump',
+        'echo "Restore complete."',
+        'RESTORE_EOF',
+        'chmod +x /migration/00-restore.sh',
+        'echo "Migration dump ready at /migration/migration.dump"',
       ].join('\n');
 
       // Mount migration PVC into /docker-entrypoint-initdb.d so postgres restores it on first init.
