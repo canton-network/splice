@@ -137,23 +137,35 @@ function installNatVm(postgres: CloudPostgres): gcp.compute.Instance {
 export DB_ADDR=${postgres.address}
 export DB_PORT=${dbPort}
 
+# Enable the VM to receive packets whose destinations do
+# not match any running process local to the VM
 echo 1 > /proc/sys/net/ipv4/ip_forward
 
+# Ask the Metadata server for the IP address of the VM nic0
+# network interface:
 md_url_prefix="http://169.254.169.254/computeMetadata/v1/instance"
 vm_nic_ip="$(curl -H "Metadata-Flavor: Google" $md_url_prefix/network-interfaces/0/ip)"
 
+# Clear any existing iptables NAT table entries (all chains):
 iptables -t nat -F
 
+# Create a NAT table entry in the prerouting chain, matching
+# any packets with destination database port, changing the destination
+# IP address of the packet to the SQL instance IP address:
 iptables -t nat -A PREROUTING \\
      -p tcp --dport $DB_PORT \\
      -j DNAT \\
      --to-destination $DB_ADDR
 
+# Create a NAT table entry in the postrouting chain, matching
+# any packets with destination database port, changing the source IP
+# address of the packet to the NAT VM's primary internal IPv4 address:
 iptables -t nat -A POSTROUTING \\
      -p tcp --dport $DB_PORT \\
      -j SNAT \\
      --to-source $vm_nic_ip
 
+# Save iptables configuration:
 iptables-save
 `;
 
@@ -181,6 +193,7 @@ iptables-save
     },
   });
 }
+
 
 function installDatastreamIamRoles(): pulumi.Resource[] {
   const currentProject = gcp.organizations.getProjectOutput({});
@@ -324,9 +337,8 @@ function installDatastream_stag_prod(
       },
     },
     { 
-      dependsOn: [postgres, source, destination, bigQueryDataset, pubRepSlots],
-      replaceOnChanges: ["destinationConfig"],
-      deleteBeforeReplace: true
+      dependsOn: [postgres, source, destination, bigQueryDataset, pubRepSlots]
+      
     }
   );
 }
@@ -534,7 +546,7 @@ function installPostgresConnectionProfile(
   replicatorPassword: PostgresPassword
 ): gcp.datastream.ConnectionProfile {
   const profileName = `${postgres.namespace.logicalName}-scan-update-history-cxn`;
-
+ // TODO (#454) may have to await scan migration or pub/rep slots command
   return new gcp.datastream.ConnectionProfile(
     profileName,
     {
@@ -542,7 +554,7 @@ function installPostgresConnectionProfile(
       displayName: profileName,
       location: cloudsdkComputeRegion(),
       postgresqlProfile: {
-        hostname: natVm.networkInterfaces[0].networkIp,
+        hostname: natVm.networkInterfaces[0].networkIp,// NAT's private IP
         port: dbPort,
         username: replicatorUserName,
         password: replicatorPassword.contents,
@@ -665,6 +677,10 @@ function createPublicationAndReplicationSlots(
   const schemaName = dbName;
   const scriptPath = commandScriptPath('cluster/pulumi/canton-network/bigquery-cloudsql.sh');
 
+  /**
+  * Note: Uses `projectId` instead of project `name` to prevent script execution 
+ * failures if the GCP project display name contains spaces or capital letters.
+ */
   const projectId = gcp.organizations
     .getProjectOutput({})
     .apply(proj => proj.projectId);
@@ -680,7 +696,7 @@ function createPublicationAndReplicationSlots(
   // ---------------------------------------------------------------------------
 
   const baseArgs = [
-    pulumi.interpolate`--private-network-project="${projectId}"`,
+    pulumi.interpolate`--private-network-project="${projectId}"`, // Use `projectId` instead of `name` to ensure a valid GCP project identifier for CLI flags
     pulumi.interpolate`--compute-region="${cloudsdkComputeRegion()}"`,
     pulumi.interpolate`--service-account-email="${postgres.databaseInstance.serviceAccountEmailAddress}"`,
     pulumi.interpolate`--schema-name="${schemaName}"`,
