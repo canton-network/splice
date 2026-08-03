@@ -368,6 +368,7 @@ class ScanApp(
         )
         automation.registerRewardsReferenceStoreIngestion(rewardsStore)
         automation.registerRewardComputationTrigger(rewardsStore)
+        automation.registerPruneRewardAccountingTrigger(rewardsStore, scanVerdictStore)
         rewardsStore
       }
       verdictAutomation = new ScanVerdictAutomationService(

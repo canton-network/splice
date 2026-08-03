@@ -88,6 +88,16 @@ object DbScanAppRewardsStore {
       batchesCreatedCount: Long,
   )
 
+  /** Row counts deleted per table by `deleteRewardAccountingDataForRound`. */
+  final case class RewardAccountingPruneSummary(
+      activityPartyTotals: Long,
+      activityRoundTotals: Long,
+      rewardPartyTotals: Long,
+      rewardRoundTotals: Long,
+      batchHashes: Long,
+      rootHashes: Long,
+  )
+
   /** A SHA-256 hash stored as raw bytes, avoiding unnecessary Array[Byte] ↔
     * ByteString conversions at the DB boundary. Conversion to hex strings
     * for the HTTP layer is done via `toHex` / `fromHex`.
@@ -1019,6 +1029,49 @@ class DbScanAppRewardsStore(
               where history_id = $historyId and round_number = $roundNumber
             )
     """.asUpdate
+
+  /** Deletes all reward-accounting data for a single round across all six
+    * tables, in a single transaction.
+    */
+  def deleteRewardAccountingDataForRound(
+      roundNumber: Long
+  )(implicit tc: TraceContext): Future[DbScanAppRewardsStore.RewardAccountingPruneSummary] = {
+    import profile.api.jdbcActionExtensionMethods
+
+    runUpdate(
+      (for {
+        batchHashes <-
+          sql"""delete from #${Tables.appRewardBatchHashes}
+                where history_id = $historyId and round_number = $roundNumber""".asUpdate
+        rootHashes <-
+          sql"""delete from #${Tables.appRewardRootHashes}
+                where history_id = $historyId and round_number = $roundNumber""".asUpdate
+        rewardPartyTotals <-
+          sql"""delete from #${Tables.appRewardPartyTotals}
+                where history_id = $historyId and round_number = $roundNumber""".asUpdate
+        rewardRoundTotals <-
+          sql"""delete from #${Tables.appRewardRoundTotals}
+                where history_id = $historyId and round_number = $roundNumber""".asUpdate
+        activityPartyTotals <-
+          sql"""delete from #${Tables.appActivityPartyTotals}
+                where history_id = $historyId and round_number = $roundNumber""".asUpdate
+        activityRoundTotals <-
+          sql"""delete from #${Tables.appActivityRoundTotals}
+                where history_id = $historyId and round_number = $roundNumber""".asUpdate
+      } yield DbScanAppRewardsStore.RewardAccountingPruneSummary(
+        activityPartyTotals = activityPartyTotals.toLong,
+        activityRoundTotals = activityRoundTotals.toLong,
+        rewardPartyTotals = rewardPartyTotals.toLong,
+        rewardRoundTotals = rewardRoundTotals.toLong,
+        batchHashes = batchHashes.toLong,
+        rootHashes = rootHashes.toLong,
+      )).map { summary =>
+        logger.debug(s"Pruned reward accounting data for round $roundNumber: $summary")
+        summary
+      }.transactionally,
+      "appRewards.deleteRewardAccountingDataForRound",
+    )
+  }
 
   // -- Private helpers -------------------------------------------------------
 

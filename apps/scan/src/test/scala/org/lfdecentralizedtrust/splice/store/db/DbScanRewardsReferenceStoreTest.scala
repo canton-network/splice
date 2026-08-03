@@ -419,6 +419,199 @@ class DbScanRewardsReferenceStoreTest
       }
     }
 
+    "lookupArchivedAtForOpenMiningRound returns the archival record_time for a round" in {
+      val store = mkStore()
+      val omr3 = openMiningRound(dsoParty, round = 3, amuletPrice = 1.0)
+        .copy(createdAt = ts(100).toInstant)
+      val omr4 = openMiningRound(dsoParty, round = 4, amuletPrice = 1.5)
+        .copy(createdAt = ts(200).toInstant)
+      val omr5 = openMiningRound(dsoParty, round = 5, amuletPrice = 2.0)
+        .copy(createdAt = ts(300).toInstant)
+      val cr3 = calculateRewardsV2(dsoParty, round = 3)
+        .copy(createdAt = ts(350).toInstant)
+      for {
+        _ <- initWithAcs()(store.multiDomainAcsStore)
+        _ <- sync1.create(omr3, recordTime = ts(100).toInstant)(store.multiDomainAcsStore)
+        _ <- sync1.create(omr4, recordTime = ts(200).toInstant)(store.multiDomainAcsStore)
+        _ <- sync1.create(omr5, recordTime = ts(300).toInstant)(store.multiDomainAcsStore)
+        _ <- sync1.archive(omr3, recordTime = ts(350).toInstant)(store.multiDomainAcsStore)
+        _ <- sync1.create(cr3, recordTime = ts(350).toInstant)(store.multiDomainAcsStore)
+        _ <- sync1.archive(omr4, recordTime = ts(450).toInstant)(store.multiDomainAcsStore)
+
+        archivedAt3 <- store.lookupArchivedAtForOpenMiningRound(3)
+        archivedAt4 <- store.lookupArchivedAtForOpenMiningRound(4)
+        archivedAt5 <- store.lookupArchivedAtForOpenMiningRound(5)
+        archivedAt9 <- store.lookupArchivedAtForOpenMiningRound(9)
+      } yield {
+        archivedAt3 shouldBe Some(ts(350))
+        archivedAt4 shouldBe Some(ts(450))
+        archivedAt5 shouldBe None
+        // Round doesn't exist
+        archivedAt9 shouldBe None
+      }
+    }
+
+    "pruneArchivedDataForRound deletes all archived rows with archived_at at or before the round archival time" in {
+      val store = mkStore()
+      val omr3 = openMiningRound(dsoParty, round = 3, amuletPrice = 1.0)
+        .copy(createdAt = ts(50).toInstant)
+      val cr3 = calculateRewardsV2(dsoParty, round = 3)
+        .copy(createdAt = ts(50).toInstant)
+      val far1 = featuredAppRight(userParty(1))
+        .copy(createdAt = ts(50).toInstant)
+      val far2 = featuredAppRight(userParty(2))
+        .copy(createdAt = ts(50).toInstant)
+      val omr4 = openMiningRound(dsoParty, round = 4, amuletPrice = 1.5)
+        .copy(createdAt = ts(200).toInstant)
+      for {
+        _ <- initWithAcs()(store.multiDomainAcsStore)
+        _ <- sync1.create(omr3, recordTime = ts(50).toInstant)(store.multiDomainAcsStore)
+        _ <- sync1.create(cr3, recordTime = ts(50).toInstant)(store.multiDomainAcsStore)
+        _ <- sync1.create(far1, recordTime = ts(50).toInstant)(store.multiDomainAcsStore)
+        _ <- sync1.create(far2, recordTime = ts(50).toInstant)(store.multiDomainAcsStore)
+        _ <- sync1.create(omr4, recordTime = ts(200).toInstant)(store.multiDomainAcsStore)
+
+        _ <- sync1.archive(far1, recordTime = ts(340).toInstant)(store.multiDomainAcsStore)
+        _ <- sync1.archive(omr3, recordTime = ts(350).toInstant)(store.multiDomainAcsStore)
+        _ <- sync1.archive(far1, recordTime = ts(360).toInstant)(store.multiDomainAcsStore)
+        _ <- sync1.archive(cr3, recordTime = ts(380).toInstant)(store.multiDomainAcsStore)
+
+        lowestPrunableBeforePrune <- store.lookupLowestPrunableArchivedRewardRound()
+
+        deletedCount <- store.pruneArchivedDataForRound(roundNumber = 3)
+
+        lowestPrunableAfterPrune <- store.lookupLowestPrunableArchivedRewardRound()
+
+        afterPruneRound3 <- store.lookupOpenMiningRoundByNumber(3)
+        farAfterPrune <- store.lookupFeaturedAppPartiesAsOf(ts(300))
+        afterPruneRound4 <- store.lookupOpenMiningRoundByNumber(4)
+      } yield {
+        deletedCount shouldBe 2L
+        lowestPrunableBeforePrune shouldBe Some(3L)
+        lowestPrunableAfterPrune shouldBe None
+        afterPruneRound3 shouldBe None
+        farAfterPrune.keySet should not contain userParty(1).toProtoPrimitive
+        farAfterPrune.keySet should contain(userParty(2).toProtoPrimitive)
+        afterPruneRound4 shouldBe defined
+      }
+    }
+
+    "pruneArchivedDataForRound fails when the round has not been observed as archived" in {
+      val store = mkStore()
+      for {
+        _ <- initWithAcs()(store.multiDomainAcsStore)
+        result <- store.pruneArchivedDataForRound(roundNumber = 2).failed
+      } yield {
+        result shouldBe an[IllegalStateException]
+      }
+    }
+
+    "lookupLowestPrunableArchivedRewardRound returns the lowest archived round processed completely" in {
+      val store = mkStore()
+      val omr4 = openMiningRound(dsoParty, round = 4, amuletPrice = 1.0)
+        .copy(createdAt = ts(100).toInstant)
+      val cr3 = calculateRewardsV2(dsoParty, round = 3)
+        .copy(createdAt = ts(200).toInstant)
+      val pr5 = processRewardsV2(dsoParty, round = 5)
+        .copy(createdAt = ts(300).toInstant)
+      // Archiving this must not affect the result even though it archives earliest.
+      val far1 = featuredAppRight(userParty(1))
+        .copy(createdAt = ts(100).toInstant)
+      for {
+        _ <- initWithAcs()(store.multiDomainAcsStore)
+
+        beforeAnyArchival <- store.lookupLowestPrunableArchivedRewardRound()
+        _ = beforeAnyArchival shouldBe None
+
+        _ <- sync1.create(far1, recordTime = ts(100).toInstant)(store.multiDomainAcsStore)
+        _ <- sync1.create(omr4, recordTime = ts(100).toInstant)(store.multiDomainAcsStore)
+        _ <- sync1.create(cr3, recordTime = ts(200).toInstant)(store.multiDomainAcsStore)
+        _ <- sync1.create(pr5, recordTime = ts(300).toInstant)(store.multiDomainAcsStore)
+
+        _ <- sync1.archive(far1, recordTime = ts(150).toInstant)(store.multiDomainAcsStore)
+        onlyRoundlessArchived <- store.lookupLowestPrunableArchivedRewardRound()
+        _ = onlyRoundlessArchived shouldBe None
+
+        _ <- sync1.archive(omr4, recordTime = ts(400).toInstant)(store.multiDomainAcsStore)
+        onlyOmr4Archived <- store.lookupLowestPrunableArchivedRewardRound()
+        _ = onlyOmr4Archived shouldBe None
+
+        _ <- sync1.archive(cr3, recordTime = ts(410).toInstant)(store.multiDomainAcsStore)
+
+        // Round 3's OpenMiningRound was never ingested, so round 3 itself is
+        // not a candidate; round 4 is the lowest round with an archived
+        // OpenMiningRound with no active reward contract at or below it.
+        cr3AndOmr4Archived <- store.lookupLowestPrunableArchivedRewardRound()
+        _ = cr3AndOmr4Archived shouldBe Some(4L)
+
+        _ <- sync1.archive(pr5, recordTime = ts(420).toInstant)(store.multiDomainAcsStore)
+
+        // All of 3, 4, and 5 are archived
+        allThreeArchived <- store.lookupLowestPrunableArchivedRewardRound()
+        _ = allThreeArchived shouldBe Some(4L)
+      } yield succeed
+    }
+
+    "lookupLowestPrunableArchivedRewardRound excludes a round when a lower round still has an active CalculateRewardsV2" in {
+      val store = mkStore()
+      val omr3 = openMiningRound(dsoParty, round = 3, amuletPrice = 1.0)
+        .copy(createdAt = ts(50).toInstant)
+      val cr3 = calculateRewardsV2(dsoParty, round = 3)
+        .copy(createdAt = ts(60).toInstant)
+      val omr4 = openMiningRound(dsoParty, round = 4, amuletPrice = 1.0)
+        .copy(createdAt = ts(100).toInstant)
+      val cr4 = calculateRewardsV2(dsoParty, round = 4)
+        .copy(createdAt = ts(110).toInstant)
+      for {
+        _ <- initWithAcs()(store.multiDomainAcsStore)
+
+        _ <- sync1.create(omr3, recordTime = ts(50).toInstant)(store.multiDomainAcsStore)
+        _ <- sync1.create(cr3, recordTime = ts(60).toInstant)(store.multiDomainAcsStore)
+        _ <- sync1.create(omr4, recordTime = ts(100).toInstant)(store.multiDomainAcsStore)
+        _ <- sync1.create(cr4, recordTime = ts(110).toInstant)(store.multiDomainAcsStore)
+
+        _ <- sync1.archive(omr3, recordTime = ts(200).toInstant)(store.multiDomainAcsStore)
+        _ <- sync1.archive(omr4, recordTime = ts(210).toInstant)(store.multiDomainAcsStore)
+        _ <- sync1.archive(cr4, recordTime = ts(220).toInstant)(store.multiDomainAcsStore)
+        whileCr3StillActive <- store.lookupLowestPrunableArchivedRewardRound()
+        _ = whileCr3StillActive shouldBe None
+
+        _ <- sync1.archive(cr3, recordTime = ts(230).toInstant)(store.multiDomainAcsStore)
+        afterCr3Archived <- store.lookupLowestPrunableArchivedRewardRound()
+        _ = afterCr3Archived shouldBe Some(3L)
+      } yield succeed
+    }
+
+    "lookupLowestPrunableArchivedRewardRound excludes a round when a lower round still has an active ProcessRewardsV2" in {
+      val store = mkStore()
+      val omr3 = openMiningRound(dsoParty, round = 3, amuletPrice = 1.0)
+        .copy(createdAt = ts(50).toInstant)
+      val pr3 = processRewardsV2(dsoParty, round = 3)
+        .copy(createdAt = ts(60).toInstant)
+      val omr4 = openMiningRound(dsoParty, round = 4, amuletPrice = 1.0)
+        .copy(createdAt = ts(100).toInstant)
+      val cr4 = calculateRewardsV2(dsoParty, round = 4)
+        .copy(createdAt = ts(110).toInstant)
+      for {
+        _ <- initWithAcs()(store.multiDomainAcsStore)
+
+        _ <- sync1.create(omr3, recordTime = ts(50).toInstant)(store.multiDomainAcsStore)
+        _ <- sync1.create(pr3, recordTime = ts(60).toInstant)(store.multiDomainAcsStore)
+        _ <- sync1.create(omr4, recordTime = ts(100).toInstant)(store.multiDomainAcsStore)
+        _ <- sync1.create(cr4, recordTime = ts(110).toInstant)(store.multiDomainAcsStore)
+
+        _ <- sync1.archive(omr3, recordTime = ts(200).toInstant)(store.multiDomainAcsStore)
+        _ <- sync1.archive(omr4, recordTime = ts(210).toInstant)(store.multiDomainAcsStore)
+        _ <- sync1.archive(cr4, recordTime = ts(220).toInstant)(store.multiDomainAcsStore)
+        whilePr3StillActive <- store.lookupLowestPrunableArchivedRewardRound()
+        _ = whilePr3StillActive shouldBe None
+
+        _ <- sync1.archive(pr3, recordTime = ts(230).toInstant)(store.multiDomainAcsStore)
+        afterPr3Archived <- store.lookupLowestPrunableArchivedRewardRound()
+        _ = afterPr3Archived shouldBe Some(3L)
+      } yield succeed
+    }
+
     "lookupActiveOpenMiningRounds" in {
       val store = mkStore()
       // Timeline (ingestion start = 250, earliest archived_at):

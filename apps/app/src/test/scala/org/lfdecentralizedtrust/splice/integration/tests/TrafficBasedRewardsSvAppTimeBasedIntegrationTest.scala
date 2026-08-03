@@ -42,6 +42,7 @@ import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
   ProcessRewardsTrigger,
 }
 import org.lfdecentralizedtrust.splice.scan.automation.RewardComputationTrigger
+import org.lfdecentralizedtrust.splice.scan.store.ScanRewardsReferenceStore
 import org.lfdecentralizedtrust.splice.sv.config.InitialRewardConfig
 import org.lfdecentralizedtrust.splice.util.{
   AmuletConfigSchedule,
@@ -63,6 +64,8 @@ import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInt
 // - BFT read in all three SV app's reward processing triggers
 //
 // - Reporting of mismatches in 'Confirmation' of root-hash
+//
+// - Pruning of reward processing data
 @org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_19
 class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
     extends IntegrationTestWithIsolatedEnvironment
@@ -350,6 +353,8 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
       confirmBftRead(bobParty)
 
       confirmMismatchingRootHashIsFlagged(bobParty)
+
+      advanceRoundsAndConfirmAllPriorRoundsPruned()
   }
 
   private def metricValue(
@@ -683,6 +688,95 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
         }
       },
     )
+  }
+
+  private def advanceRoundsAndConfirmAllPriorRoundsPruned()(implicit
+      env: SpliceTestConsoleEnvironment
+  ): Unit = {
+    val sv1Db = sv1ScanBackend.appState.storage match {
+      case db: DbStorage => db
+      case _ => fail("Expected DbStorage")
+    }
+    val sv2Db = sv2ScanBackend.appState.storage match {
+      case db: DbStorage => db
+      case _ => fail("Expected DbStorage")
+    }
+    val sv1HistoryId = sv1ScanBackend.appState.eventStore.updateHistory.historyId
+    val sv2HistoryId = sv2ScanBackend.appState.eventStore.updateHistory.historyId
+    val sv1RewardsRefStore = sv1ScanBackend.appState.rewardsReferenceStore
+    val sv2RewardsRefStore = sv2ScanBackend.appState.rewardsReferenceStore
+
+    def hasUnprunedRewardAccountingDataBelow(
+        db: DbStorage,
+        historyId: Long,
+        upperExclusive: Long,
+    ): Boolean = {
+      implicit val closeContext: CloseContext = CloseContext(db)
+      db
+        .querySingle(
+          sql"""select
+                  exists(select 1 from app_activity_party_totals
+                         where history_id = $historyId and round_number < $upperExclusive)
+                  or exists(select 1 from app_activity_round_totals
+                         where history_id = $historyId and round_number < $upperExclusive)
+                  or exists(select 1 from app_reward_party_totals
+                         where history_id = $historyId and round_number < $upperExclusive)
+                  or exists(select 1 from app_reward_round_totals
+                         where history_id = $historyId and round_number < $upperExclusive)
+                  or exists(select 1 from app_reward_batch_hashes
+                         where history_id = $historyId and round_number < $upperExclusive)
+                  or exists(select 1 from app_reward_root_hashes
+                         where history_id = $historyId and round_number < $upperExclusive)
+             """.as[Boolean].headOption,
+          "test.hasUnprunedRewardAccountingDataBelow",
+        )
+        .value
+        .futureValueUS
+        .value
+    }
+
+    def hasUnprunedArchiveDataForRound(
+        store: ScanRewardsReferenceStore,
+        roundNumber: Long,
+    ): Boolean =
+      store.lookupArchivedAtForOpenMiningRound(roundNumber).futureValue.isDefined
+
+    def confirmFullyPruned(
+        db: DbStorage,
+        historyId: Long,
+        store: ScanRewardsReferenceStore,
+        upperExclusive: Long,
+    ): Unit = {
+      eventually() {
+        hasUnprunedRewardAccountingDataBelow(db, historyId, upperExclusive) shouldBe false
+      }
+      eventually() {
+        hasUnprunedArchiveDataForRound(store, upperExclusive - 1) shouldBe false
+      }
+    }
+
+    // Simulate SV2 scan ingestion lag and confirm that pruning does not happen
+    // until the ingestion has caught up.
+    val newLowestOpen = pauseScanVerdictIngestionWithin(sv2ScanBackend) {
+      advanceRoundsToNextRoundOpening
+      val newLowestOpen = oldestOpenRound
+
+      clue(s"sv1 prunes rounds below $newLowestOpen") {
+        confirmFullyPruned(sv1Db, sv1HistoryId, sv1RewardsRefStore, newLowestOpen)
+      }
+
+      clue(
+        s"sv2 does not prune rounds below $newLowestOpen while its verdict ingestion is paused"
+      ) {
+        hasUnprunedArchiveDataForRound(sv2RewardsRefStore, newLowestOpen - 1) shouldBe true
+      }
+
+      newLowestOpen
+    }
+
+    clue(s"sv2 eventually prunes data once verdict ingestion resumes") {
+      confirmFullyPruned(sv2Db, sv2HistoryId, sv2RewardsRefStore, newLowestOpen)
+    }
   }
 
   private def doTransfer(
