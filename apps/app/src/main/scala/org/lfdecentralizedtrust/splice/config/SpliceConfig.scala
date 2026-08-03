@@ -852,35 +852,35 @@ object SpliceConfig {
           ) {
             case (Left(err), _) => Left(err)
             case (Right(()), (party, sharingConfig)) =>
-              sharingConfig match {
-                case RewardSharingConfig.External(_) => Right(())
-                case builtIn: RewardSharingConfig.BuiltIn =>
-                  for {
-                    _ <- Either.cond(
-                      builtIn.beneficiaries.forall(b =>
-                        b.percentage > 0 && b.percentage <= BigDecimal(1.0)
-                      ),
-                      (),
-                      ConfigValidationFailed(
-                        s"Reward sharing percentages for $party must be in (0.0, 1.0]"
-                      ),
-                    )
-                    _ <- Either.cond(
-                      builtIn.beneficiaries.map(_.percentage).sum <= BigDecimal(1.0),
-                      (),
-                      ConfigValidationFailed(
-                        s"Reward sharing percentages for $party must sum to at most 1.0"
-                      ),
-                    )
-                    _ <- Either.cond(
-                      builtIn.batchSize > 0,
-                      (),
-                      ConfigValidationFailed(
-                        s"Reward sharing batchSize for $party must be positive"
-                      ),
-                    )
-                  } yield ()
-              }
+              for {
+                _ <- Either.cond(
+                  sharingConfig.batchSize > 0,
+                  (),
+                  ConfigValidationFailed(s"Reward sharing batchSize for $party must be positive"),
+                )
+                _ <- sharingConfig match {
+                  case RewardSharingConfig.External(_) => Right(())
+                  case builtIn: RewardSharingConfig.BuiltIn =>
+                    for {
+                      _ <- Either.cond(
+                        builtIn.beneficiaries.forall(b =>
+                          b.percentage > 0 && b.percentage <= BigDecimal(1.0)
+                        ),
+                        (),
+                        ConfigValidationFailed(
+                          s"Reward sharing percentages for $party must be in (0.0, 1.0]"
+                        ),
+                      )
+                      _ <- Either.cond(
+                        builtIn.beneficiaries.map(_.percentage).sum <= BigDecimal(1.0),
+                        (),
+                        ConfigValidationFailed(
+                          s"Reward sharing percentages for $party must sum to at most 1.0"
+                        ),
+                      )
+                    } yield ()
+                }
+              } yield ()
           }
         } yield conf
       }
