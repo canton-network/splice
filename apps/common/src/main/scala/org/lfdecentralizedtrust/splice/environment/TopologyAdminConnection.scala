@@ -8,7 +8,6 @@ import cats.implicits.catsSyntaxOptionId
 import cats.syntax.applicative.*
 import cats.syntax.either.*
 import com.daml.nonempty.NonEmpty
-import com.digitalasset.canton.admin.api.client.commands.GrpcAdminCommand.DefaultBoundedTimeout
 import com.digitalasset.canton.admin.api.client.commands.{
   GrpcAdminCommand,
   SynchronizerTimeCommands,
