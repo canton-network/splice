@@ -4318,7 +4318,7 @@
       }
     },
     "name": "sv-1-sv-canton-migration-10",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-1-sv-canton-migration-10::k8s-imgpull-sv-1-sv-canton-migration-10_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-1-sv-canton-migration-10::undefined_id",
     "type": "kubernetes:core/v1:ServiceAccountPatch"
   },
   {
@@ -4360,7 +4360,7 @@
       }
     },
     "name": "sv-1-sv-canton-migration-5",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-1-sv-canton-migration-5::k8s-imgpull-sv-1-sv-canton-migration-5_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-1-sv-canton-migration-5::undefined_id",
     "type": "kubernetes:core/v1:ServiceAccountPatch"
   },
   {
@@ -4402,7 +4402,7 @@
       }
     },
     "name": "sv-1-sv-canton-migration-6",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-1-sv-canton-migration-6::k8s-imgpull-sv-1-sv-canton-migration-6_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-1-sv-canton-migration-6::undefined_id",
     "type": "kubernetes:core/v1:ServiceAccountPatch"
   },
   {
@@ -4444,7 +4444,7 @@
       }
     },
     "name": "sv-1-sv-canton-migration-7",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-1-sv-canton-migration-7::k8s-imgpull-sv-1-sv-canton-migration-7_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-1-sv-canton-migration-7::undefined_id",
     "type": "kubernetes:core/v1:ServiceAccountPatch"
   },
   {
@@ -4486,7 +4486,7 @@
       }
     },
     "name": "sv-1-sv-canton-migration-8",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-1-sv-canton-migration-8::k8s-imgpull-sv-1-sv-canton-migration-8_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-1-sv-canton-migration-8::undefined_id",
     "type": "kubernetes:core/v1:ServiceAccountPatch"
   },
   {
@@ -4528,7 +4528,7 @@
       }
     },
     "name": "sv-1-sv-canton-migration-9",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-1-sv-canton-migration-9::k8s-imgpull-sv-1-sv-canton-migration-9_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-1-sv-canton-migration-9::undefined_id",
     "type": "kubernetes:core/v1:ServiceAccountPatch"
   },
   {
@@ -7914,7 +7914,7 @@
       }
     },
     "name": "sv-da-1-sv-canton-migration-10",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-da-1-sv-canton-migration-10::k8s-imgpull-sv-da-1-sv-canton-migration-10_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-da-1-sv-canton-migration-10::undefined_id",
     "type": "kubernetes:core/v1:ServiceAccountPatch"
   },
   {
@@ -7956,7 +7956,7 @@
       }
     },
     "name": "sv-da-1-sv-canton-migration-5",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-da-1-sv-canton-migration-5::k8s-imgpull-sv-da-1-sv-canton-migration-5_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-da-1-sv-canton-migration-5::undefined_id",
     "type": "kubernetes:core/v1:ServiceAccountPatch"
   },
   {
@@ -7998,7 +7998,7 @@
       }
     },
     "name": "sv-da-1-sv-canton-migration-6",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-da-1-sv-canton-migration-6::k8s-imgpull-sv-da-1-sv-canton-migration-6_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-da-1-sv-canton-migration-6::undefined_id",
     "type": "kubernetes:core/v1:ServiceAccountPatch"
   },
   {
@@ -8040,7 +8040,7 @@
       }
     },
     "name": "sv-da-1-sv-canton-migration-7",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-da-1-sv-canton-migration-7::k8s-imgpull-sv-da-1-sv-canton-migration-7_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-da-1-sv-canton-migration-7::undefined_id",
     "type": "kubernetes:core/v1:ServiceAccountPatch"
   },
   {
@@ -8082,7 +8082,7 @@
       }
     },
     "name": "sv-da-1-sv-canton-migration-8",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-da-1-sv-canton-migration-8::k8s-imgpull-sv-da-1-sv-canton-migration-8_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-da-1-sv-canton-migration-8::undefined_id",
     "type": "kubernetes:core/v1:ServiceAccountPatch"
   },
   {
@@ -8124,7 +8124,7 @@
       }
     },
     "name": "sv-da-1-sv-canton-migration-9",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-da-1-sv-canton-migration-9::k8s-imgpull-sv-da-1-sv-canton-migration-9_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-da-1-sv-canton-migration-9::undefined_id",
     "type": "kubernetes:core/v1:ServiceAccountPatch"
   },
   {
@@ -10810,7 +10810,7 @@
       }
     },
     "name": "sv-sv-canton-migration-10",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-sv-canton-migration-10::k8s-imgpull-sv-sv-canton-migration-10_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-sv-canton-migration-10::undefined_id",
     "type": "kubernetes:core/v1:ServiceAccountPatch"
   },
   {
@@ -10852,7 +10852,7 @@
       }
     },
     "name": "sv-sv-canton-migration-5",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-sv-canton-migration-5::k8s-imgpull-sv-sv-canton-migration-5_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-sv-canton-migration-5::undefined_id",
     "type": "kubernetes:core/v1:ServiceAccountPatch"
   },
   {
@@ -10894,7 +10894,7 @@
       }
     },
     "name": "sv-sv-canton-migration-6",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-sv-canton-migration-6::k8s-imgpull-sv-sv-canton-migration-6_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-sv-canton-migration-6::undefined_id",
     "type": "kubernetes:core/v1:ServiceAccountPatch"
   },
   {
@@ -10936,7 +10936,7 @@
       }
     },
     "name": "sv-sv-canton-migration-7",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-sv-canton-migration-7::k8s-imgpull-sv-sv-canton-migration-7_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-sv-canton-migration-7::undefined_id",
     "type": "kubernetes:core/v1:ServiceAccountPatch"
   },
   {
@@ -10978,7 +10978,7 @@
       }
     },
     "name": "sv-sv-canton-migration-8",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-sv-canton-migration-8::k8s-imgpull-sv-sv-canton-migration-8_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-sv-canton-migration-8::undefined_id",
     "type": "kubernetes:core/v1:ServiceAccountPatch"
   },
   {
@@ -11020,7 +11020,7 @@
       }
     },
     "name": "sv-sv-canton-migration-9",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-sv-canton-migration-9::k8s-imgpull-sv-sv-canton-migration-9_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-sv-canton-migration-9::undefined_id",
     "type": "kubernetes:core/v1:ServiceAccountPatch"
   },
   {

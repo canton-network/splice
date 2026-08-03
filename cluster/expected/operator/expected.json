@@ -485,7 +485,7 @@
       }
     },
     "name": "operator-default",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-operator-default::k8s-imgpull-operator-default_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-operator-default::undefined_id",
     "type": "kubernetes:core/v1:ServiceAccountPatch"
   },
   {
