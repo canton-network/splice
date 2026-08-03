@@ -604,7 +604,7 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
       // (which IS executed by the entrypoint) calls psql manually, giving us full
       // control over error handling.
       const migrationScript = [
-        'set -eu',
+        'set -eou pipefail',
         'if [ -n "$(ls -A "$PGDATA" 2>/dev/null)" ]; then',
         '  echo "PGDATA already contains data, skipping migration."',
         '  exit 0',
