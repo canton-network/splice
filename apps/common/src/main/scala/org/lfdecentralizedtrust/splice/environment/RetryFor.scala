@@ -8,12 +8,17 @@ import scala.concurrent.duration.*
 
 /** The intended use of a retry, expressed in terms like number of retries and
   * backoff.  Use a definition in the companion rather than constructing ''ad hoc''.
+  *
+  * `duplicateCommandIsFatal` gives up on DUPLICATE_COMMAND instead of retrying. It is set
+  * for client calls, where a duplicate cannot resolve within the deduplication window, and
+  * left off for automation, which retries and then finds its task stale.
   */
 final case class RetryFor private (
     maxRetries: Int,
     initialDelay: FiniteDuration,
     maxDelay: Duration,
     resetRetriesAfter: Option[FiniteDuration],
+    duplicateCommandIsFatal: Boolean = false,
 )
 
 object RetryFor {
@@ -67,6 +72,7 @@ object RetryFor {
     initialDelay = 100.millis,
     maxDelay = 1.seconds,
     resetRetriesAfter = None,
+    duplicateCommandIsFatal = true,
   )
 
   /** A retry intended for client calls during the init phase, timing out slower compared to the regular client calls to allow for more contention that happens during initialization. */
@@ -75,5 +81,6 @@ object RetryFor {
     initialDelay = 100.millis,
     maxDelay = 3.seconds,
     resetRetriesAfter = None,
+    duplicateCommandIsFatal = true,
   )
 }

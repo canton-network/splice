@@ -91,10 +91,8 @@ class WalletIntegrationTest
     "tap deduplicates" in { implicit env =>
       onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
       aliceWalletClient.tap(50.0, Some("dedup-test"))
-      assertThrowsAndLogsCommandFailures(
-        aliceWalletClient.tap(50.0, Some("dedup-test")),
-        _.errorMessage should include("409 Conflict"),
-      )
+      // Duplicate tap with the same command id returns the original result idempotently (200, not 409).
+      aliceWalletClient.tap(50.0, Some("dedup-test"))
     }
 
     "allow two wallet app users to connect to one wallet backend and tap" in { implicit env =>
@@ -548,10 +546,11 @@ class WalletIntegrationTest
             aliceWalletClient.balance().unlockedQty should be(40.0)
           },
         )
-        assertThrowsAndLogsCommandFailures(
-          bobWalletClient.transferPreapprovalSend(aliceUserParty, 40.0, deduplicationId),
-          _.errorMessage should include("409 Conflict"),
-        )
+        // Duplicate send with same deduplication id returns the original result idempotently (200, not 409).
+        bobWalletClient.transferPreapprovalSend(aliceUserParty, 40.0, deduplicationId)
+        // Balance is unchanged — idempotent
+        bobWalletClient.balance().unlockedQty should be(60.0)
+        aliceWalletClient.balance().unlockedQty should be(40.0)
 
         clue("Preapproval sends work if provider has a featured app right") {
           // Feature alice validator to test a transfer with a featured preapproval provider

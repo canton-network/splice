@@ -464,6 +464,7 @@ class HttpValidatorAdminHandler(
                             BaseLedgerConnection.sanitizeUserIdToPartyString(body.userPartyId),
                           ),
                           DedupOffset(implicitly[Ordering[Long]].min(offsetESP, offsetTP)),
+                          recoverAcceptedDuplicates = true,
                         )
                       ),
                     )

@@ -19,7 +19,7 @@ import org.lfdecentralizedtrust.splice.wallet.config.{
 import org.lfdecentralizedtrust.splice.wallet.store.UserWalletStore
 import org.lfdecentralizedtrust.splice.wallet.treasury.TreasuryService
 import org.lfdecentralizedtrust.splice.wallet.util.ValidatorTopupConfig
-import com.digitalasset.canton.lifecycle.{CloseContext, FlagCloseable}
+import com.digitalasset.canton.lifecycle.{CloseContext, FlagCloseable, LifeCycle}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.time.Clock
@@ -30,6 +30,7 @@ import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 
 import scala.concurrent.ExecutionContext
+import scala.util.control.NonFatal
 
 /** A service managing the treasury, automation, and store for an end-user's wallet. */
 class UserWalletService(
@@ -78,47 +79,62 @@ class UserWalletService(
       params.defaultLimit,
     )
 
-  val treasury: TreasuryService = new TreasuryService(
-    // The treasury gets its own connection, and is required to manage waiting for the store on its own.
-    ledgerClient.connection(
-      this.getClass.getSimpleName,
-      loggerFactory,
-      SpliceCircuitBreaker(
-        "treasury",
-        params.circuitBreakers.mediumPriority,
+  val treasury: TreasuryService =
+    try {
+      new TreasuryService(
+        // The treasury gets its own connection, and is required to manage waiting for the store on its own.
+        ledgerClient.connection(
+          this.getClass.getSimpleName,
+          loggerFactory,
+          SpliceCircuitBreaker(
+            "treasury",
+            params.circuitBreakers.mediumPriority,
+            clock,
+            store.dsoPartyId,
+            loggerFactory,
+          ),
+        ),
+        treasuryConfig,
         clock,
-        store.dsoPartyId,
+        store,
+        walletManager,
+        retryProvider,
+        scanConnection,
+        mintUnassignedRewardCouponsV2 = rewardSharingConfig.beneficiaries.isEmpty,
         loggerFactory,
-      ),
-    ),
-    treasuryConfig,
-    clock,
-    store,
-    walletManager,
-    retryProvider,
-    scanConnection,
-    mintUnassignedRewardCouponsV2 = rewardSharingConfig.beneficiaries.isEmpty,
-    loggerFactory,
-  )
+      )
+    } catch {
+      // a failed construction never reaches onClosed, so close the store here
+      case NonFatal(e) =>
+        store.close()
+        throw e
+    }
 
-  val automation = new UserWalletAutomationService(
-    store,
-    treasury,
-    ledgerClient,
-    automationConfig,
-    clock,
-    domainTimeSync,
-    scanConnection,
-    retryProvider,
-    packageVersionSupport,
-    loggerFactory,
-    validatorTopupConfigO,
-    walletSweep,
-    autoAcceptTransfers,
-    rewardSharingConfig,
-    dedupDuration,
-    params,
-  )
+  val automation =
+    try {
+      new UserWalletAutomationService(
+        store,
+        treasury,
+        ledgerClient,
+        automationConfig,
+        clock,
+        domainTimeSync,
+        scanConnection,
+        retryProvider,
+        packageVersionSupport,
+        loggerFactory,
+        validatorTopupConfigO,
+        walletSweep,
+        autoAcceptTransfers,
+        rewardSharingConfig,
+        dedupDuration,
+        params,
+      )
+    } catch {
+      case NonFatal(e) =>
+        LifeCycle.close(treasury, store)(logger)
+        throw e
+    }
 
   /** The connection to use when submitting commands based on reads from the WalletStore.
     * The submission will wait for the store to ingest the effect of the command before completing the future.
@@ -132,9 +148,8 @@ class UserWalletService(
     // Close treasury early, that will result in it no longer accepting new requests
     // but in-flight requests can complete. If we close the automation first,
     // a task can get stuck forever waiting for store ingestion to complete.
-    treasury.close()
-    automation.close()
-    store.close()
+    // LifeCycle.close closes all of them in order even if one of them fails.
+    LifeCycle.close(treasury, automation, store)(logger)
     super.onClosed()
   }
 }
