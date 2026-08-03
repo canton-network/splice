@@ -33,6 +33,7 @@ import org.lfdecentralizedtrust.splice.admin.api.TraceContextDirectives.withTrac
 import org.lfdecentralizedtrust.splice.admin.http.{AdminRoutes, HttpErrorHandler}
 import org.lfdecentralizedtrust.splice.auth.*
 import org.lfdecentralizedtrust.splice.automation.DomainTimeAutomationService
+import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.ValidatorLicenseRequest
 import org.lfdecentralizedtrust.splice.config.{NetworkAppClientConfig, SharedSpliceAppParameters}
 import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.environment.ledger.api.DedupDuration
@@ -452,6 +453,8 @@ class ValidatorApp(
       scanConnection: BftScanConnection,
       synchronizerId: SynchronizerId,
       participantId: ParticipantId,
+      ledgerConnection: SpliceLedgerConnection,
+      dedupDuration: DedupDuration,
   )(implicit traceContext: TraceContext): Future[Unit] = {
     store.lookupValidatorLicenseWithOffset().flatMap {
       case QueryResult(_, Some(_)) =>
@@ -460,17 +463,30 @@ class ValidatorApp(
       case _ =>
         onboardingConfig match {
           case Some(oc) =>
-            logger.info(
-              "ValidatorLicense not found, onboarding is configured. Requesting onboarding with configured secret"
-            )
-            for {
-              _ <-
-                if (config.permissionedSynchronizer) {
-                  waitForTopologyPermission(scanConnection, synchronizerId, participantId)
-                } else { Future.unit }
-              _ <- requestOnboarding(oc.svClient.adminApi, validatorParty, oc.secret)
-              _ <- waitForValidatorLicense(store)
-            } yield ()
+            if (config.permissionedSynchronizer) {
+              logger.info(
+                "ValidatorLicense not found, permissioned synchronizer is enabled. Submitting ValidatorLicenseRequest to the ledger."
+              )
+              for {
+                _ <- waitForTopologyPermission(scanConnection, synchronizerId, participantId)
+                _ <- submitValidatorLicenceRequest(
+                  validatorParty,
+                  store.key.dsoParty,
+                  ledgerConnection,
+                  dedupDuration,
+                  synchronizerId,
+                )
+                _ <- waitForValidatorLicense(store)
+              } yield ()
+            } else {
+              logger.info(
+                "ValidatorLicense not found, onboarding is configured. Requesting onboarding with configured secret"
+              )
+              for {
+                _ <- requestOnboarding(oc.svClient.adminApi, validatorParty, oc.secret)
+                _ <- waitForValidatorLicense(store)
+              } yield ()
+            }
           case None =>
             logger.info(
               "ValidatorLicense not found, onboarding is not configured. Wait for the ValidatorLicense"
@@ -515,6 +531,42 @@ class ValidatorApp(
               .asRuntimeException()
           )
       },
+      logger,
+    )
+  }
+  private def submitValidatorLicenceRequest(
+      validatorParty: PartyId,
+      dsoParty: PartyId,
+      connection: SpliceLedgerConnection,
+      dedupDuration: DedupDuration,
+      synchronizerId: SynchronizerId,
+  )(implicit traceContext: TraceContext) = {
+    import scala.jdk.OptionConverters.*
+    retryProvider.retry(
+      RetryFor.WaitingOnInitDependency,
+      "submit_validator_license_request",
+      "Submit ValidatorLicenseRequest",
+      connection
+        .submit(
+          actAs = Seq(validatorParty),
+          readAs = Seq.empty,
+          update = new ValidatorLicenseRequest(
+            validatorParty.toProtoPrimitive,
+            dsoParty.toProtoPrimitive,
+            scala.Some("0.1.0").toJava,
+            scala.Some(config.contactPoint).toJava,
+            clock.now.plus(java.time.Duration.ofDays(7)).toInstant,
+          ).create(),
+        )
+        .withSynchronizerId(synchronizerId)
+        .withDedup(
+          commandId = SpliceLedgerConnection.CommandId(
+            "org.lfdecentralizedtrust.splice.validator.createValidatorLicenseRequest",
+            Seq(validatorParty),
+          ),
+          deduplicationConfig = dedupDuration,
+        )
+        .yieldUnit(),
       logger,
     )
   }
@@ -877,6 +929,8 @@ class ValidatorApp(
           scanConnection,
           synchronizerId,
           participantId,
+          automation.connection(SpliceLedgerConnectionPriority.High),
+          dedupDuration,
         )
       }
 
