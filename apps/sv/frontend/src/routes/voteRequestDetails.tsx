@@ -111,13 +111,23 @@ export const VoteRequestDetails: React.FC = () => {
       previousRewardWeight !== undefined ? formatBasisPoints(previousRewardWeight) : '';
   }
 
+  // For closed votes the outcome carries the actual effective time. Old vote
+  // requests (created before targetEffectiveAt existed) decode with
+  // targetEffectiveAt = None, so the request alone can't tell "effective at
+  // threshold" apart from "effective at expiry".
+  const voteTakesEffect = hasVoteRequest
+    ? request.targetEffectiveAt
+      ? dayjs(request.targetEffectiveAt).format(dateTimeFormatISO)
+      : 'Threshold'
+    : voteResult?.outcome.tag === 'VRO_Accepted'
+      ? dayjs(voteResult.outcome.value.effectiveAt).format(dateTimeFormatISO)
+      : dayjs(voteResult?.completedAt).format(dateTimeFormatISO);
+
   const votingInformation: ProposalVotingInformation = {
     requester: request.requester,
     requesterIsYou: request.requester === svPartyId,
     votingThresholdDeadline: dayjs(request.voteBefore).format(dateTimeFormatISO),
-    voteTakesEffect: request.targetEffectiveAt
-      ? dayjs(request.targetEffectiveAt).format(dateTimeFormatISO)
-      : 'Threshold',
+    voteTakesEffect,
     status: hasVoteRequest ? 'In Progress' : getVoteResultStatus(voteResult?.outcome),
   };
 

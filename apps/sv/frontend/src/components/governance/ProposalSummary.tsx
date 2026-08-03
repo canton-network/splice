@@ -77,7 +77,7 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
 
         <ProposalField
           id="expiryDate"
-          title="Threshold Deadline"
+          title="Quorum Threshold Deadline"
           subtitle={THRESHOLD_DEADLINE_SUBTITLE}
           value={expiryDate}
         />

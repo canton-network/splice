@@ -27,6 +27,7 @@ import org.lfdecentralizedtrust.splice.wallet.store.{ExternalPartyWalletStore, W
 
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.{blocking, ExecutionContext}
+import scala.util.control.NonFatal
 
 /** Manages all services comprising an external party wallets. */
 class ExternalPartyWalletManager(
@@ -134,8 +135,8 @@ class ExternalPartyWalletManager(
         )(TraceContext.empty)
         externalPartyRetryProviderAndWalletService.foreach {
           case (externalPartyRetryProvider, walletService) =>
-            externalPartyRetryProvider.close()
-            walletService.close()
+            try externalPartyRetryProvider.close()
+            finally walletService.close()
         }
         UnlessShutdown.AbortedDueToShutdown
       } else {
@@ -160,22 +161,32 @@ class ExternalPartyWalletManager(
         retryProvider.futureSupervisor,
         retryProvider.metricsFactory,
       )
-    val walletService = new ExternalPartyWalletService(
-      ledgerClient,
-      key,
-      automationConfig,
-      clock,
-      domainTimeSync,
-      storage,
-      externalPartyRetryProvider,
-      partyLoggerFactory,
-      migrationId,
-      participantId,
-      params,
-      scanConnection,
-      packageVersionSupport,
-      rewardSharingConfigByParty.getOrElse(externalParty.toProtoPrimitive, RewardSharingConfig()),
-    )
+    val walletService =
+      try {
+        new ExternalPartyWalletService(
+          ledgerClient,
+          key,
+          automationConfig,
+          clock,
+          domainTimeSync,
+          storage,
+          externalPartyRetryProvider,
+          partyLoggerFactory,
+          migrationId,
+          participantId,
+          params,
+          scanConnection,
+          packageVersionSupport,
+          rewardSharingConfigByParty.getOrElse(
+            externalParty.toProtoPrimitive,
+            RewardSharingConfig(),
+          ),
+        )
+      } catch {
+        case NonFatal(e) =>
+          externalPartyRetryProvider.close()
+          throw e
+      }
     (externalPartyRetryProvider, walletService)
   }
 
