@@ -322,19 +322,12 @@ function installDatastreamToNatVmFirewallRule(
 // TODO (DACH-NY/canton-network-internal#342) if we disable default egress rule, we need another firewall
 // rule for Nat VM -> Postgres
 
-function installReplicatorPassword(
-  namespace: ExactNamespace,
-  databaseInstance: gcp.sql.DatabaseInstance
-): PostgresPassword {
+function installReplicatorPassword(namespace: ExactNamespace): PostgresPassword {
   const secretName = `${namespace.logicalName}-${replicatorUserName}-passwd`;
-  const instanceNamePrefix = databaseInstance.name.apply(name =>
-    name.substring(0, name.lastIndexOf('-'))
-  );
-  const password = generatePassword(`${instanceNamePrefix}-${replicatorUserName}-passwd`, {
+  const password = generatePassword(`cn-apps-pg-${replicatorUserName}-passwd`, {
     aliases: [
       {
         parent: getLegacyParentUrn(namespace),
-        name: `cn-apps-pg-${replicatorUserName}-passwd`,
       },
     ],
     protect: spliceConfig.pulumiProjectConfig.cloudSql.protected,
@@ -425,7 +418,7 @@ export async function configureScanBigQuery(
         return [await getScanDb(scanReference.databaseInstanceNamePrefix, zone), undefined];
     }
   })();
-  const passwordSecret = installReplicatorPassword(namespace, databaseInstance);
+  const passwordSecret = installReplicatorPassword(namespace);
   const pubRepSlots = createPublicationAndReplicationSlots(
     namespace,
     databaseInstance,

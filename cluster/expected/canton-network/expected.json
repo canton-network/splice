@@ -3,18 +3,6 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "length": 16,
-      "overrideSpecial": "_%@",
-      "special": true
-    },
-    "name": "Calling [toString] on an [Output<T>] is not supported.\n\nTo get the value of an Output<T> as an Output<string> consider either:\n1: o.apply(v => `prefix${v}suffix`)\n2: pulumi.interpolate `prefix${v}suffix`\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\n\nOr use ESLint with https://github.com/pulumi/eslint-plugin-pulumi to warn or\nerror lint on using Output<T> in template literals.\nThis function may throw in a future version of @pulumi/pulumi.-bqdatastream-passwd",
-    "provider": "",
-    "type": "random:index/randomPassword:RandomPassword"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
       "apiVersion": "v1",
       "data": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
@@ -32,6 +20,18 @@
     "name": "cn-app-sv-1-sv-1-bqdatastream-passwd",
     "provider": "",
     "type": "kubernetes:core/v1:Secret"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "length": 16,
+      "overrideSpecial": "_%@",
+      "special": true
+    },
+    "name": "cn-apps-pg-bqdatastream-passwd",
+    "provider": "",
+    "type": "random:index/randomPassword:RandomPassword"
   },
   {
     "custom": true,
