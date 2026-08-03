@@ -28,30 +28,23 @@ import {
   CLUSTER_BASENAME,
   commandScriptPath,
 } from '@canton-network/splice-pulumi-common/src/utils';
+import { ScanBigQueryConfig } from './singleSvConfig';
 
 // ============================================================================
-// ENVIRONMENT & PIPELINE CONFIGURATION
-// Reads dynamic flags directly using the shared `config` instance
+// PIPELINE CONFIGURATION & TYPES
 // ============================================================================
-
-const enableLegacyDatastream = config.envFlag('ENABLE_LEGACY_DATASTREAM', true);
-const enableStagProdDatastream = config.envFlag('ENABLE_STAG_PROD_DATASTREAM', true);
 
 const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
-const rawExpiration = config.optionalEnv('PROD_TABLE_EXPIRATION_MS');
-const prodTableExpirationMs = rawExpiration ? Number(rawExpiration) : THREE_DAYS_MS;
 
-const legacyDesiredState: 'RUNNING' | 'PAUSED' = enableLegacyDatastream ? 'RUNNING' : 'PAUSED';
-const stagProdDesiredState: 'RUNNING' | 'PAUSED' = enableStagProdDatastream ? 'RUNNING' : 'PAUSED';
-
-// ============================================================================
-// PIPELINE & DATABASE CONSTANTS
-// ============================================================================
-
-interface ScanBigQueryConfig {
-  dataset: string;
-  prefix: string;
-}
+// export interface ScanBigQueryConfig {
+//   dataset: string;
+//   prefix: string;
+//   enableLegacyDatastream?: boolean;
+//   enableStagProdDatastream?: boolean;
+//   legacyDesiredState?: 'RUNNING' | 'PAUSED';
+//   stagProdDesiredState?: 'RUNNING' | 'PAUSED';
+//   prodTableExpirationMs?: number;
+// }
 
 interface PostgresPassword {
   contents: pulumi.Output<string>;
@@ -61,11 +54,13 @@ interface PostgresPassword {
 const dbPort = 5432;
 const replicatorUserName = 'bqdatastream';
 
-// Stream 1 (Legacy) CDC Replication Configuration - MATCHES ACTIVE PRODUCTION EXACTLY
+// Remove legacy datastream configuration once migration to stag-prod pipeline is verified.
+// issue: https://github.com/canton-network/splice/issues/6656
 const replicationSlotName = 'update_history_datastream_r_slot';
 const publicationName = 'update_history_datastream_pub';
 
-// Stream 2 (Stag-Prod) CDC Replication Configuration - NEW PIPELINE
+
+// Stream 2 (Stag-Prod) CDC Replication Configuration
 const replicationSlotNameStagProd = 'update_history_datastream_stag_prod_r_slot';
 const publicationNameStagProd = 'update_history_datastream_stag_prod_pub';
 
@@ -74,11 +69,11 @@ const flywayMigrationToWaitFor = 'V068__app_activity_record_meta.sql';
 // ============================================================================
 // SINGLE SOURCE OF TRUTH: REPLICATED TABLE CONFIGURATION
 // ============================================================================
-
+// what tables from Scan to replicate to BigQuery
 interface ReplicatedTableConfig {
   primaryKey: string;
   datePartitionColumn: string;
-  timeType: 'micros' | 'datastream_metadata' | 'partition_time';
+  timeType: 'micros' | 'datastream_metadata';
 }
 
 const replicatedTables: Record<string, ReplicatedTableConfig> = {
@@ -126,7 +121,7 @@ function scanAppDatabaseName(postgres: Postgres) {
 function pickDatastreamPeeringCidr(): string {
   const baseCidr = config.requireEnv('GCP_MASTER_IPV4_CIDR');
   const baseSubnet = ip.cidrSubnet(baseCidr);
-
+  // assert GCP_MASTER_IPV4_CIDR is a /28 CIDR
   if (baseSubnet.subnetMaskLength !== 28) {
     throw new Error(`Expected a /28 CIDR, but got ${baseCidr}`);
   }
@@ -136,6 +131,7 @@ function pickDatastreamPeeringCidr(): string {
 
 function installNatVm(postgres: CloudPostgres): gcp.compute.Instance {
   const vmName = `${postgres.namespace.logicalName}-nat-vm`;
+  // from https://cloud.google.com/datastream/docs/private-connectivity#set-up-reverse-proxy
   const startupScript = pulumi.interpolate`#! /bin/bash
 
 export DB_ADDR=${postgres.address}
@@ -172,7 +168,7 @@ iptables-save
     networkInterfaces: [
       {
         network: 'default',
-        accessConfigs: [{}],
+        accessConfigs: [{}], // ephemeral external IP
       },
     ],
     metadata: {
@@ -215,7 +211,7 @@ function installDatastream(
   destination: gcp.datastream.ConnectionProfile,
   bigQueryDataset: gcp.bigquery.Dataset,
   pubRepSlots: pulumi.Resource,
-  iamPermissions: pulumi.Resource[] = []
+  desiredState: 'RUNNING' | 'PAUSED'
 ): gcp.datastream.Stream {
   const streamName = `${postgres.namespace.logicalName}-scan-update-history`;
   const schemaName = scanAppDatabaseName(postgres);
@@ -225,7 +221,7 @@ function installDatastream(
       location: cloudsdkComputeRegion(),
       streamId: streamName,
       displayName: streamName,
-      desiredState: legacyDesiredState,
+      desiredState: desiredState,
       sourceConfig: {
         postgresqlSourceConfig: {
           includeObjects: {
@@ -246,6 +242,8 @@ function installDatastream(
           singleTargetDataset: {
             datasetId: pulumi.interpolate`projects/${bigQueryDataset.project}/datasets/${bigQueryDataset.datasetId}`,
           },
+          // editing dataFreshness does not alter existing BQ tables, see its
+          // docstring or https://github.com/canton-network/splice/issues/2011
           dataFreshness: clusterProdLike ? '14400s' : '0s',
         },
         destinationConnectionProfile: destination.name,
@@ -253,6 +251,7 @@ function installDatastream(
       backfillAll: {},
       labels: {
         cluster: CLUSTER_BASENAME,
+        datastream_id: 'legacy',
       },
     },
     { dependsOn: [postgres, source, destination, bigQueryDataset, pubRepSlots] }
@@ -265,7 +264,7 @@ function installDatastream_stag_prod(
   destination: gcp.datastream.ConnectionProfile,
   bigQueryDataset: gcp.bigquery.Dataset,
   pubRepSlots: pulumi.Resource,
-  iamPermissions: pulumi.Resource[] = []
+  desiredState: 'RUNNING' | 'PAUSED'
 ): gcp.datastream.Stream {
   const streamName = `${postgres.namespace.logicalName}-scan-stag-production-datastream`;
   const schemaName = scanAppDatabaseName(postgres);
@@ -275,7 +274,7 @@ function installDatastream_stag_prod(
       location: cloudsdkComputeRegion(),
       streamId: streamName,
       displayName: streamName,
-      desiredState: stagProdDesiredState,
+      desiredState: desiredState,
       sourceConfig: {
         postgresqlSourceConfig: {
           includeObjects: {
@@ -321,6 +320,7 @@ function installDatastream_stag_prod(
       })),
       labels: {
         cluster: CLUSTER_BASENAME,
+        datastream_id: 'stag_prod',
       },
     },
     { 
@@ -335,17 +335,35 @@ function installDatastream_stag_prod(
 // BIGQUERY DATASET CREATION
 // ============================================================================
 
+
 function installBigqueryDataset(scanBigQuery: ScanBigQueryConfig): gcp.bigquery.Dataset {
   return new gcp.bigquery.Dataset(scanBigQuery.dataset, {
     datasetId: scanBigQuery.dataset,
     friendlyName: `${scanBigQuery.dataset} Dataset`,
     location: cloudsdkComputeRegion(),
-    deleteContentsOnDestroy: true,
+    deleteContentsOnDestroy: true, //retaining old value
+    // TODO (DACH-NY/canton-network-internal#343) reduce time travel window from 7-day default to 2 days if
+    // it makes a cost difference
     labels: {
       cluster: CLUSTER_BASENAME,
+      datastream_id: 'legacy',
     },
   });
 }
+/* TODO (DACH-NY/canton-network-internal#341) remove this comment when enabled on all relevant clusters
+If you see an error like this
+  gcp:datastream:ConnectionProfile (sv-4-scan-bq-cxn):
+    error: 1 error occurred:
+      * Error creating ConnectionProfile: googleapi: Error 403: Datastream API has not been used in project da-cn-scratchnet before or it is disabled. Enable it by visiting https://console.developers.google.com/apis/api/datastream.googleapis.com/overview?project=da-cn-scratchnet then retry. If you enabled this API recently, wait a few minutes for the action to propagate to our systems and retry.
+
+or the same for
+
+  gcp:datastream:PrivateConnection (sv-4-scan-update-history-datastream-vpc)
+
+you have to manually enable the API as described for that cluster.
+- done for da-cn-scratchnet
+- done for da-cn-ci-2
+ */
 
 function installBigqueryStagingDataset(scanBigQuery: ScanBigQueryConfig): gcp.bigquery.Dataset {
   return new gcp.bigquery.Dataset(`${scanBigQuery.dataset}-staging`, {
@@ -353,18 +371,23 @@ function installBigqueryStagingDataset(scanBigQuery: ScanBigQueryConfig): gcp.bi
     friendlyName: `${scanBigQuery.dataset} Staging Dataset`,
     location: cloudsdkComputeRegion(),
     deleteContentsOnDestroy: true,
+    defaultTableExpirationMs: THREE_DAYS_MS,
     labels: {
       cluster: CLUSTER_BASENAME,
+      datastream_id: 'stag_prod',
     },
   });
 }
 
-function installBigqueryProdDataset(scanBigQuery: ScanBigQueryConfig): gcp.bigquery.Dataset {
+function installBigqueryProdDataset(
+  scanBigQuery: ScanBigQueryConfig,
+  prodTableExpirationMs: number
+): gcp.bigquery.Dataset {
   return new gcp.bigquery.Dataset(`${scanBigQuery.dataset}-prod`, {
     datasetId: `${scanBigQuery.dataset}_prod`,
     friendlyName: `${scanBigQuery.dataset} Production Dataset`,
     location: cloudsdkComputeRegion(),
-    deleteContentsOnDestroy: false,
+    deleteContentsOnDestroy: true,
     defaultTableExpirationMs: prodTableExpirationMs,
     labels: {
       cluster: CLUSTER_BASENAME,
@@ -403,7 +426,8 @@ function installHourlyScheduledQueries(
     } else if (tableConfig.timeType === 'datastream_metadata') {
       recordTimestampExpr = `TIMESTAMP_MILLIS(staging.datastream_metadata.source_timestamp)`;
     } else {
-      recordTimestampExpr = `staging._PARTITIONTIME`;
+      const unreachable: never = tableConfig.timeType;
+      throw new Error(`impossible time config: ${unreachable}`);
     }
 
     const recordDateExpr = `CAST(${recordTimestampExpr} AS DATE)`;
@@ -420,6 +444,7 @@ function installHourlyScheduledQueries(
 
       return rawSqlTemplate
         .replaceAll('{{tableName}}', tableName)
+        .replaceAll('{{schemaName}}', schemaName)
         .replaceAll('{{primaryKeyExpr}}', primaryKeyExpr)
         .replaceAll('{{recordTimestampExpr}}', recordTimestampExpr)
         .replaceAll('{{recordDateExpr}}', recordDateExpr)
@@ -439,8 +464,8 @@ function installHourlyScheduledQueries(
       definitionBody: procedureBody,
     });
 
-    new gcp.bigquery.DataTransferConfig(`${tableName}-hourly-append-v12`, {
-      displayName: `${tableName} Hourly Append Loop Dynamic Watermark v12`,
+    new gcp.bigquery.DataTransferConfig(`${tableName}-hourly-append`, {
+      displayName: `${tableName} Hourly Append Loop Dynamic Watermark`,
       location: cloudsdkComputeRegion(),
       serviceAccountName: pulumi.interpolate`bigquery@${projectId}.iam.gserviceaccount.com`,
       dataSourceId: 'scheduled_query',
@@ -450,8 +475,7 @@ function installHourlyScheduledQueries(
         query: pulumi.interpolate`CALL \`${projectId}.${prodDataset.datasetId}.${routineId}\`();`,
       },
     }, { 
-      dependsOn: [transferServiceAgentPermission, appendRoutine], 
-      deleteBeforeReplace: true 
+      dependsOn: [transferServiceAgentPermission, appendRoutine],
     });
   });
 }
@@ -582,7 +606,8 @@ function installDatastreamToNatVmFirewallRule(
 // ============================================================================
 // POSTGRESQL AUTHENTICATION & REPLICATION SLOT PROVISIONING
 // ============================================================================
-
+// TODO (DACH-NY/canton-network-internal#342) if we disable default egress rule, we need another firewall
+// rule for Nat VM -> Postgres
 function installReplicatorPassword(postgres: CloudPostgres): PostgresPassword {
   const secretName = `${postgres.namespace.logicalName}-${replicatorUserName}-passwd`;
   const password = generatePassword(`${postgres.instanceName}-${replicatorUserName}-passwd`, {
@@ -617,96 +642,146 @@ function createPostgresReplicatorUser(
   );
 }
 
+/*
+For the SQL below to apply, the user/operator applying the pulumi
+needs the 'Cloud SQL Editor' IAM role in the relevant GCP project
+ */
+
 function createPublicationAndReplicationSlots(
   postgres: CloudPostgres,
   replicatorUser: gcp.sql.User,
-  scan: InstalledHelmChart
-): { slot1?: pulumi.Resource; slot2?: pulumi.Resource } {
+  scan: InstalledHelmChart,
+  enableLegacy: boolean,
+  enableStagProd: boolean
+): {
+  slot1?: pulumi.Resource;
+  slot2?: pulumi.Resource;
+} {
+  // ---------------------------------------------------------------------------
+  // 1. Shared Environment & Project Setup
+  // ---------------------------------------------------------------------------
+
   const dbName = scanAppDatabaseName(postgres);
   const schemaName = dbName;
   const scriptPath = commandScriptPath('cluster/pulumi/canton-network/bigquery-cloudsql.sh');
 
+  const projectId = gcp.organizations
+    .getProjectOutput({})
+    .apply(proj => proj.projectId);
+
+  const commonDependencies = [
+    scan,
+    postgres.databaseInstance,
+    replicatorUser,
+  ];
+
+  // ---------------------------------------------------------------------------
+  // 2. Shared Base CLI Arguments
+  // ---------------------------------------------------------------------------
+
+  const baseArgs = [
+    pulumi.interpolate`--private-network-project="${projectId}"`,
+    pulumi.interpolate`--compute-region="${cloudsdkComputeRegion()}"`,
+    pulumi.interpolate`--service-account-email="${postgres.databaseInstance.serviceAccountEmailAddress}"`,
+    pulumi.interpolate`--schema-name="${schemaName}"`,
+    pulumi.interpolate`--tables-to-replicate-joined="${tablesToReplicate.join(', ')}"`,
+    pulumi.interpolate`--postgres-user-name="${postgres.user.name}"`,
+    pulumi.interpolate`--replicator-user-name="${replicatorUserName}"`,
+    pulumi.interpolate`--postgres-instance-name="${postgres.databaseInstance.name}"`,
+    pulumi.interpolate`--scan-app-database-name="${dbName}"`,
+    pulumi.interpolate`--flyway-migration-to-wait-for="${flywayMigrationToWaitFor}"`,
+  ];
+
+  // Join base arguments with shell line continuation (` \\\n  `)
+  const baseArgsString = pulumi
+    .all(baseArgs)
+    .apply(args => args.join(' \\\n  '));
+
+  // ---------------------------------------------------------------------------
+  // 3. Legacy Datastream Slot (Slot 1)
+  // ---------------------------------------------------------------------------
+
   let slot1: command.local.Command | undefined;
-  if (enableLegacyDatastream) {
-    const scriptArgsSlot1 = pulumi.interpolate`\\
-      --private-network-project="${gcp.organizations.getProjectOutput({}).apply(proj => proj.name)}" \\
-      --compute-region="${cloudsdkComputeRegion()}" \\
-      --service-account-email="${postgres.databaseInstance.serviceAccountEmailAddress}" \\
-      --schema-name="${schemaName}" \\
-      --tables-to-replicate-joined="${tablesToReplicate.join(', ')}" \\
-      --postgres-user-name="${postgres.user.name}" \\
-      --publication-name="${publicationName}" \\
-      --replication-slot-name="${replicationSlotName}" \\
-      --replicator-user-name="${replicatorUserName}" \\
-      --postgres-instance-name="${postgres.databaseInstance.name}" \\
-      --scan-app-database-name="${dbName}" \\
-      --flyway-migration-to-wait-for="${flywayMigrationToWaitFor}" \\
-      `;
+
+  if (enableLegacy) {
+    const scriptArgsSlot1 = pulumi.interpolate`
+${baseArgsString} \\
+  --publication-name="${publicationName}" \\
+  --replication-slot-name="${replicationSlotName}"
+`.apply(s => s.trim());
 
     slot1 = new command.local.Command(
       `${postgres.namespace.logicalName}-${replicatorUserName}-pub-replicate-slots`,
       {
-        create: pulumi.interpolate`'${scriptPath}' create-pub-rep-slot ${scriptArgsSlot1}`,
-        delete: pulumi.interpolate`'${scriptPath}' delete-pub-rep-slot ${scriptArgsSlot1}`,
+        create: pulumi.interpolate`'${scriptPath}' create-pub-rep-slot \\\n  ${scriptArgsSlot1}`,
+        delete: pulumi.interpolate`'${scriptPath}' delete-pub-rep-slot \\\n  ${scriptArgsSlot1}`,
       },
       {
         deletedWith: postgres.databaseInstance,
-        dependsOn: [scan, postgres.databaseInstance, replicatorUser],
-        deleteBeforeReplace: true,
-      } 
-    );
-  }
-
-  let slot2: command.local.Command | undefined;
-  if (enableStagProdDatastream) {
-    const projectId = gcp.organizations.getProjectOutput({}).apply(proj => proj.projectId);
-    const baseArgs = [
-      pulumi.interpolate`--private-network-project="${projectId}"`,
-      pulumi.interpolate`--compute-region="${cloudsdkComputeRegion()}"`,
-      pulumi.interpolate`--service-account-email="${postgres.databaseInstance.serviceAccountEmailAddress}"`,
-      pulumi.interpolate`--schema-name="${schemaName}"`,
-      pulumi.interpolate`--tables-to-replicate-joined="${tablesToReplicate.join(', ')}"`,
-      pulumi.interpolate`--postgres-user-name="${postgres.user.name}"`,
-      pulumi.interpolate`--replicator-user-name="${replicatorUserName}"`,
-      pulumi.interpolate`--postgres-instance-name="${postgres.databaseInstance.name}"`,
-      pulumi.interpolate`--scan-app-database-name="${dbName}"`,
-      pulumi.interpolate`--flyway-migration-to-wait-for="${flywayMigrationToWaitFor}"`,
-    ];
-    const baseArgsString = pulumi.all(baseArgs).apply(args => args.join(' '));
-    const scriptArgsSlot2 = pulumi.interpolate`${baseArgsString} --publication-name="${publicationNameStagProd}" --replication-slot-name="${replicationSlotNameStagProd}"`;
-    
-    const slot2Dependencies: pulumi.Resource[] = [scan, postgres.databaseInstance, replicatorUser];
-    if (slot1) {
-      slot2Dependencies.push(slot1);
-    }
-
-    slot2 = new command.local.Command(
-      `${postgres.namespace.logicalName}-${replicatorUserName}-pub-replicate-slot-2`,
-      {
-        create: pulumi.interpolate`'${scriptPath}' create-pub-rep-slot ${scriptArgsSlot2}`,
-        delete: pulumi.interpolate`'${scriptPath}' delete-pub-rep-slot ${scriptArgsSlot2}`,
-      },
-      {
-        deletedWith: postgres.databaseInstance,
-        dependsOn: slot2Dependencies,
+        dependsOn: commonDependencies,
+        deleteBeforeReplace: true, // was a part of the original script, keeping it as is
       }
     );
   }
 
-  return { slot1, slot2 };
-}
+  // ---------------------------------------------------------------------------
+  // 4. Stag-Prod Datastream Slot (Slot 2)
+  // ---------------------------------------------------------------------------
 
+  let slot2: command.local.Command | undefined;
+
+  if (enableStagProd) {
+    const scriptArgsSlot2 = pulumi.interpolate`
+${baseArgsString} \\
+  --publication-name="${publicationNameStagProd}" \\
+  --replication-slot-name="${replicationSlotNameStagProd}"
+`.apply(s => s.trim());
+
+    slot2 = new command.local.Command(
+      `${postgres.namespace.logicalName}-${replicatorUserName}-pub-replicate-slot-2`,
+      {
+        create: pulumi.interpolate`'${scriptPath}' create-pub-rep-slot \\\n  ${scriptArgsSlot2}`,
+        delete: pulumi.interpolate`'${scriptPath}' delete-pub-rep-slot \\\n  ${scriptArgsSlot2}`,
+      },
+      {
+        deletedWith: postgres.databaseInstance,
+        dependsOn: commonDependencies,
+        deleteBeforeReplace: true,
+      }
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // 5. Return Created Slots
+  // ---------------------------------------------------------------------------
+
+  return {
+    slot1,
+    slot2,
+  };
+}
 // ============================================================================
 // MAIN ENTRYPOINT
 // ============================================================================
-
 export function configureScanBigQuery(
   postgres: CloudPostgres,
   scanBigQuery: ScanBigQueryConfig,
   scan: InstalledHelmChart
 ): void {
+  // Destructure all config properties at function entry with fallback defaults
+  // we can change this to enableLegacyDatastream to false or PAUSED once we verify the stag-prod pipeline is working correctly and we want to disable the legacy pipeline
+  const {
+    enableLegacyDatastream = true,
+    enableStagProdDatastream = true,
+    prodTableExpirationMs = THREE_DAYS_MS,
+    legacyDesiredState = 'RUNNING',
+    stagProdDesiredState = 'RUNNING',
+  } = scanBigQuery;
+
   if (!enableLegacyDatastream && !enableStagProdDatastream) {
-    return;
+    throw new Error(
+      'configureScanBigQuery was called, but both legacy and stag-prod Datastreams are disabled.'
+    );
   }
 
   const datastreamIamRoles = installDatastreamIamRoles();
@@ -715,7 +790,9 @@ export function configureScanBigQuery(
   const slots = createPublicationAndReplicationSlots(
     postgres,
     createPostgresReplicatorUser(postgres, passwordSecret),
-    scan
+    scan,
+    enableLegacyDatastream,
+    enableStagProdDatastream
   );
 
   const natVm = installNatVm(postgres);
@@ -744,13 +821,13 @@ export function configureScanBigQuery(
       legacyDestinationProfile, 
       legacyDataset, 
       slots.slot1,
-      datastreamIamRoles
+      legacyDesiredState
     );
   }
 
   if (enableStagProdDatastream && slots.slot2) {
     const stagingDataset = installBigqueryStagingDataset(scanBigQuery);
-    const prodDataset = installBigqueryProdDataset(scanBigQuery);
+    const prodDataset = installBigqueryProdDataset(scanBigQuery, prodTableExpirationMs);
     const stagingDestinationProfile = installBigqueryStagingConnectionProfile(
       postgres,
       stagingDataset,
@@ -763,11 +840,9 @@ export function configureScanBigQuery(
       stagingDestinationProfile, 
       stagingDataset, 
       slots.slot2,
-      datastreamIamRoles
+      stagProdDesiredState
     );
 
     installHourlyScheduledQueries(postgres, stagingDataset, prodDataset);
   }
-
-  return;
 }
