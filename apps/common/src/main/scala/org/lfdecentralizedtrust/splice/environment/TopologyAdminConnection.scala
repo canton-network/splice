@@ -660,8 +660,7 @@ abstract class TopologyAdminConnection(
         filterNamespace = filterNamespace,
         excludeMappings = excludeMappings.map(_.code),
         observer = observer,
-      ),
-      timeoutOverride = Some(DefaultBoundedTimeout),
+      )
     )(traceContext).discard
     observer.resultBytes
   }

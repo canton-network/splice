@@ -246,7 +246,7 @@ private[environment] class LedgerClient(
     import lapi.update_service.GetUpdateResponse.Update as U
     val updateFormat = LedgerClient.ledgerEffectsUpdateFormat(actAs)
     for {
-      stub <- withCredentialsAndTraceContext(updateServiceStub)
+      stub <- withGrpcContext(updateServiceStub)
       response <- stub.getUpdateByOffset(
         lapi.update_service
           .GetUpdateByOffsetRequest(offset = offset, updateFormat = Some(updateFormat))
