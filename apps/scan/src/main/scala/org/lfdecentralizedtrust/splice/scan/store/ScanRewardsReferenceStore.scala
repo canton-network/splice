@@ -99,6 +99,30 @@ trait ScanRewardsReferenceStore extends AppStore {
       tc: TraceContext
   ): Future[Seq[Contract[CalculateRewardsV2.ContractId, CalculateRewardsV2]]]
 
+  def lookupArchivedAtForOpenMiningRound(
+      roundNumber: Long
+  )(implicit tc: TraceContext): Future[Option[CantonTimestamp]]
+
+  /** The lowest round number that may be safe to prune
+    * The criterion is based on the prescence of `OpenMiningRound`,
+    *  `CalculateRewardsV2`, or `ProcessRewardsV2` for a round in the active table.
+    * If all of these contracts for a round are archived then the reward processing is done.
+    * In addition we also check that none of these three contracts are active for any lower round.
+    */
+  def lookupLowestPrunableArchivedRewardRound()(implicit tc: TraceContext): Future[Option[Long]]
+
+  /** Deletes all rows from the archive table with `archived_at <=` the record_time at
+    * which round's `OpenMiningRound` contract was archived.
+    *
+    * Here we don't have a lower bound on the `archived_at`, so this API should
+    * be used with care, preferably ensuring that the deletion happens one round at a time.
+    *
+    * Returns number of rows deleted.
+    */
+  def pruneArchivedDataForRound(
+      roundNumber: Long
+  )(implicit tc: TraceContext): Future[Long]
+
   /** List active CalculateRewardsV2 contracts for the given round.
     */
   def listActiveCalculateRewardsV2ForRound(roundNumber: Long)(implicit

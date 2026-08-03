@@ -27,7 +27,7 @@ import org.lfdecentralizedtrust.splice.scan.store.{
   ScanStore,
 }
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
-import org.lfdecentralizedtrust.splice.scan.store.db.DbScanAppRewardsStore
+import org.lfdecentralizedtrust.splice.scan.store.db.{DbScanAppRewardsStore, DbScanVerdictStore}
 import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.resource.DbStorage
@@ -84,6 +84,20 @@ class ScanAutomationService(
         appRewardsStore,
         appActivityStore,
         rewardsReferenceStore,
+        updateHistory,
+        triggerContext,
+      )
+    )
+
+  def registerPruneRewardAccountingTrigger(
+      rewardsReferenceStore: ScanRewardsReferenceStore,
+      verdictStore: DbScanVerdictStore,
+  ): Unit =
+    registerTrigger(
+      new PruneRewardAccountingTrigger(
+        appRewardsStore,
+        rewardsReferenceStore,
+        verdictStore,
         updateHistory,
         triggerContext,
       )
