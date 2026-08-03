@@ -553,8 +553,8 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
         host: `${instanceName}.${xns.logicalName}.svc.cluster.local`,
         port: 5432,
         userName: 'cnadmin',
-        pvcName: 'pg-migration-data-hd',
         pvcSize: splicePostgresHelmMigrationConfig.migrationVolumeSize,
+        pvcName: 'migration-data',
       };
     }
 
@@ -591,10 +591,27 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
     const initContainers: k8s.types.input.core.v1.Container[] = [];
     // Extra volumeMounts added to the main postgres container
     const migrationVolumeMounts: k8s.types.input.core.v1.VolumeMount[] = [];
+    const migrationVolumes: k8s.types.input.core.v1.Volume[] = [];
 
     if (migrationSource) {
       const srcPort = String(migrationSource.port ?? 5432);
       const srcUser = migrationSource.userName ?? postgresUser;
+      const migrationPvc = new k8s.core.v1.PersistentVolumeClaim(
+        `${logicalName}-migration-pvc`,
+        {
+          metadata: {
+            name: `${deployedInstanceName}-migration-pvc`,
+            namespace: xns.logicalName,
+          },
+          spec: {
+            accessModes: ['ReadWriteOnce'],
+            resources: { requests: { storage: migrationSource.pvcSize ?? volumeSize } },
+            storageClassName: volumeStorageClass,
+            volumeMode: 'Filesystem',
+          },
+        },
+        { parent: this, dependsOn: [xns.ns] }
+      );
 
       // Shell script executed by the init container.
       // Only runs when PGDATA is empty (first-ever pod start). The generated SQL
@@ -626,6 +643,10 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
       ].join('\n');
 
       // Mount migration PVC into /docker-entrypoint-initdb.d so postgres restores it on first init.
+      migrationVolumes.push({
+        name: migrationSource.pvcName,
+        persistentVolumeClaim: { claimName: migrationPvc.metadata.name },
+      });
       migrationVolumeMounts.push({
         name: migrationSource.pvcName,
         mountPath: '/docker-entrypoint-initdb.d',
@@ -760,6 +781,7 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
               restartPolicy: 'Always',
               affinity: affinityAndTolerations.affinity,
               tolerations: affinityAndTolerations.tolerations,
+              ...(migrationVolumes.length > 0 ? { volumes: migrationVolumes } : {}),
             },
           },
           volumeClaimTemplates: [
@@ -773,19 +795,6 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
                 ...(values?.db?.dataSource ? { dataSource: values.db.dataSource } : {}),
               },
             },
-            ...(migrationSource
-              ? [
-                  {
-                    metadata: { name: migrationSource.pvcName },
-                    spec: {
-                      accessModes: ['ReadWriteOnce'],
-                      resources: { requests: { storage: migrationSource.pvcSize } },
-                      storageClassName: volumeStorageClass,
-                      volumeMode: 'Filesystem',
-                    },
-                  },
-                ]
-              : []),
           ],
         },
       },
