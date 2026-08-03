@@ -34,6 +34,7 @@ export type CloudSqlConfig = z.infer<typeof CloudSqlConfigSchema>;
 // Once everything has been migrated we can drop this, as everything will be using docker-image.
 export const SplicePostgresMigrateSchema = z.object({
   deployment: z.literal('migrate'),
+  migrationVolumeSize: z.string(),
   postgresImage: z.string(),
 });
 export type SplicePostgresMigrateConfig = z.infer<typeof SplicePostgresMigrateSchema>;

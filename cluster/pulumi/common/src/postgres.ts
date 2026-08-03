@@ -476,15 +476,16 @@ export class LegacyHelmSplicePostgres extends pulumi.ComponentResource implement
  * freshly-created StatefulSet volume.
  *
  * The migration runs once, inside an init container, only when PGDATA is
- * empty (i.e. on the very first pod start against a blank PVC). It uses
- * `pg_dump` to produce a SQL dump from the source instance, which the
- * official postgres image then restores automatically via its
- * `/docker-entrypoint-initdb.d` mechanism before the main process starts.
+ * empty (i.e. on the very first pod start against a blank PVC). It dumps
+ * all databases into a dedicated migration PVC that is mounted into
+ * `/docker-entrypoint-initdb.d` for one-time restore during postgres init.
  */
 export interface PostgresMigrationSource {
   host: string;
   port?: number;
   userName?: string;
+  pvcSize: string;
+  pvcName: string;
 }
 
 type LegacyChartValues = Partial<{
@@ -552,6 +553,8 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
         host: `${instanceName}.${xns.logicalName}.svc.cluster.local`,
         port: 5432,
         userName: 'cnadmin',
+        pvcName: 'pg-migration-data-hd',
+        pvcSize: splicePostgresHelmMigrationConfig.migrationVolumeSize,
       };
     }
 
@@ -583,10 +586,9 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
       : appsAffinityAndTolerations;
 
     // Optional init container that migrates data from a pre-existing postgres instance.
-    // It runs pg_dump against the source and deposits the dump + a restore script into
-    // an emptyDir volume that the main container picks up via /docker-entrypoint-initdb.d.
+    // It runs pg_dumpall against the source and writes migration.sql into a dedicated
+    // migration PVC that the main container mounts at /docker-entrypoint-initdb.d.
     const initContainers: k8s.types.input.core.v1.Container[] = [];
-    const migrationVolumes: k8s.types.input.core.v1.Volume[] = [];
     // Extra volumeMounts added to the main postgres container
     const migrationVolumeMounts: k8s.types.input.core.v1.VolumeMount[] = [];
 
@@ -595,14 +597,9 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
       const srcUser = migrationSource.userName ?? postgresUser;
 
       // Shell script executed by the init container.
-      // Only runs the dump when PGDATA is completely empty (first-ever pod start
-      // against a blank PVC).  On subsequent restarts PGDATA already has data, so
-      // the script exits immediately, keeping pod startup fast.
-      //
-      // The dump is stored as `migration.dump` (non-.sql extension) so that the
-      // postgres entrypoint does NOT auto-execute it.  Instead, `00-restore.sh`
-      // (which IS executed by the entrypoint) calls psql manually, giving us full
-      // control over error handling.
+      // Only runs when PGDATA is empty (first-ever pod start). The generated SQL
+      // file is persisted on a dedicated migration PVC and then consumed by the
+      // postgres entrypoint from /docker-entrypoint-initdb.d.
       const migrationScript = [
         'set -eou pipefail',
         'if [ -n "$(ls -A "$PGDATA" 2>/dev/null)" ]; then',
@@ -615,26 +612,13 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
         '  -p "$SOURCE_PORT" \\',
         '  -U "$SOURCE_USER" \\',
         '  --no-role-passwords \\',
-        '  -f /initdb/migration.sql',
-        // Write the restore script using a single-quoted heredoc so that
-        // $POSTGRES_USER / $POSTGRES_DB are NOT expanded now – they are
-        // expanded later by the postgres entrypoint when it runs the script.
-        "cat > /initdb/00-restore.sh << 'RESTORE_EOF'",
-        '#!/bin/sh',
-        'set -e',
-        '[ -f /docker-entrypoint-initdb.d/migration.sql ] || exit 0',
-        'echo "Restoring all databases from migration.sql ..."',
-        'psql --username "$POSTGRES_USER" --dbname postgres -f /docker-entrypoint-initdb.d/migration.sql',
-        'echo "Restore complete."',
-        'RESTORE_EOF',
-        'chmod +x /initdb/00-restore.sh',
-        'echo "Migration dump ready."',
+        '  -f /migration/migration.sql',
+        'echo "Migration dump ready at /migration/migration.sql"',
       ].join('\n');
 
-      migrationVolumes.push({ name: 'initdb-scripts', emptyDir: {} });
-      // Mount into the main container so postgres runs the restore script on first init
+      // Mount migration PVC into /docker-entrypoint-initdb.d so postgres restores it on first init.
       migrationVolumeMounts.push({
-        name: 'initdb-scripts',
+        name: migrationSource.pvcName,
         mountPath: '/docker-entrypoint-initdb.d',
       });
 
@@ -650,7 +634,7 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
           privileged: false,
           capabilities: { drop: ['ALL'] },
         },
-        command: ['sh', '-c'],
+        command: ['bash', '-c'],
         args: [migrationScript],
         env: [
           { name: 'PGDATA', value: '/var/lib/postgresql/data/pgdata' },
@@ -670,7 +654,7 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
         volumeMounts: [
           // Mount PGDATA read-only – we only inspect it to decide whether to dump
           { name: pvcTemplateName, mountPath: '/var/lib/postgresql/data', readOnly: true },
-          { name: 'initdb-scripts', mountPath: '/initdb' },
+          { name: migrationSource.pvcName, mountPath: '/migration' },
         ],
       });
     }
@@ -767,27 +751,33 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
               restartPolicy: 'Always',
               affinity: affinityAndTolerations.affinity,
               tolerations: affinityAndTolerations.tolerations,
-              ...(migrationVolumes.length > 0
-                ? {
-                    volumes: migrationVolumes,
-                  }
-                : {}),
             },
           },
-          ...{
-            volumeClaimTemplates: [
-              {
-                metadata: { name: pvcTemplateName },
-                spec: {
-                  accessModes: ['ReadWriteOnce'],
-                  resources: { requests: { storage: volumeSize } },
-                  storageClassName: volumeStorageClass,
-                  volumeMode: 'Filesystem',
-                  ...(values?.db?.dataSource ? { dataSource: values.db.dataSource } : {}),
-                },
+          volumeClaimTemplates: [
+            {
+              metadata: { name: pvcTemplateName },
+              spec: {
+                accessModes: ['ReadWriteOnce'],
+                resources: { requests: { storage: volumeSize } },
+                storageClassName: volumeStorageClass,
+                volumeMode: 'Filesystem',
+                ...(values?.db?.dataSource ? { dataSource: values.db.dataSource } : {}),
               },
-            ],
-          },
+            },
+            ...(migrationSource
+              ? [
+                  {
+                    metadata: { name: migrationSource.pvcName },
+                    spec: {
+                      accessModes: ['ReadWriteOnce'],
+                      resources: { requests: { storage: migrationSource.pvcSize } },
+                      storageClassName: volumeStorageClass,
+                      volumeMode: 'Filesystem',
+                    },
+                  },
+                ]
+              : []),
+          ],
         },
       },
       {
