@@ -109,7 +109,12 @@ export const UpdateFeaturedAppForm: React.FC = () => {
 
   return (
     <>
-      <FormLayout form={form} id={`${idPrefix}-form`}>
+      <FormLayout
+        form={form}
+        id={`${idPrefix}-form`}
+        actionName={form.state.values.action}
+        isReviewStep={showConfirmation}
+      >
         {showConfirmation ? (
           <ProposalSummary
             actionName={form.state.values.action}

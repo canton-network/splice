@@ -15,6 +15,7 @@ import { server, svUrl } from '../../setup/setup';
 import { http, HttpResponse } from 'msw';
 import {
   CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE,
+  CREATE_PROPOSAL_LABEL_PROVIDER_PARTY_ID,
   PROPOSAL_REVIEW_TITLE,
   PROPOSAL_SUMMARY_SUBTITLE,
 } from '../../../utils/constants';
@@ -73,7 +74,7 @@ describe('Grant Featured App Form', () => {
 
     const providerInput = screen.getByTestId('grant-featured-app-idValue-title');
     expect(providerInput).toBeInTheDocument();
-    expect(providerInput.textContent).toBe('Provider Party ID');
+    expect(providerInput.textContent).toBe(CREATE_PROPOSAL_LABEL_PROVIDER_PARTY_ID);
 
     expect(screen.getByText('Review Proposal')).toBeInTheDocument();
   });
@@ -415,7 +416,7 @@ describe('Revoke Featured App Form', () => {
 
     const partyIdTitle = screen.getByTestId('revoke-featured-app-partyId-title');
     expect(partyIdTitle).toBeInTheDocument();
-    expect(partyIdTitle.textContent).toBe('Provider Party ID');
+    expect(partyIdTitle.textContent).toBe(CREATE_PROPOSAL_LABEL_PROVIDER_PARTY_ID);
 
     const rightCidDropdown = screen.getByTestId('revoke-featured-app-rightCid-dropdown');
     expect(rightCidDropdown).toBeInTheDocument();
