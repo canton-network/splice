@@ -306,7 +306,7 @@ private[environment] class LedgerClient(
       )
       .build()
     for {
-      stubWithCredsAndTraceContext <- withGrpcContext(commandServiceStub)
+      stubWithCredsAndTraceContext <- withGrpcContext(commandServiceStub, Some(timeouts.unbounded))
       stub = deadline
         .map(duration =>
           stubWithCredsAndTraceContext
