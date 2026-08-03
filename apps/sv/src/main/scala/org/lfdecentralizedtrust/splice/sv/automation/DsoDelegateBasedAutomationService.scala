@@ -65,6 +65,7 @@ class DsoDelegateBasedAutomationService(
         new ExecuteConfirmedActionTrigger(
           triggerContext,
           svTaskContext,
+          config,
         )
       )
     }
