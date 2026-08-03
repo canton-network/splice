@@ -12,14 +12,16 @@ import {
 import { clusterProdLike, config } from '@canton-network/splice-pulumi-common/src/config';
 import { spliceConfig } from '@canton-network/splice-pulumi-common/src/config/config';
 import {
-  Postgres,
-  CloudPostgres,
+  defaultUserName,
   generatePassword,
+  getCloudSdkZone,
   privateNetworkId,
 } from '@canton-network/splice-pulumi-common/src/postgres';
 import {
   ExactNamespace,
   CLUSTER_BASENAME,
+  GCP_PROJECT,
+  GCP_REGION,
   commandScriptPath,
 } from '@canton-network/splice-pulumi-common/src/utils';
 
@@ -63,12 +65,16 @@ function pickDatastreamPeeringCidr(): string {
   return ip.fromLong(ip.toLong(baseSubnet.networkAddress) + baseSubnet.length) + '/29';
 }
 
-function installNatVm(postgres: CloudPostgres): gcp.compute.Instance {
-  const vmName = `${postgres.namespace.logicalName}-nat-vm`;
+function installNatVm(
+  namespace: ExactNamespace,
+  zone: string,
+  databaseInstance: gcp.sql.DatabaseInstance
+): gcp.compute.Instance {
+  const vmName = `${namespace.logicalName}-nat-vm`;
   // from https://cloud.google.com/datastream/docs/private-connectivity#set-up-reverse-proxy
   const startupScript = pulumi.interpolate`#! /bin/bash
 
-export DB_ADDR=${postgres.address}
+export DB_ADDR=${databaseInstance.privateIpAddress}
 export DB_PORT=${dbPort}
 
 # Enable the VM to receive packets whose destinations do
@@ -105,7 +111,7 @@ iptables-save
 
   return new gcp.compute.Instance(vmName, {
     machineType: 'e2-micro',
-    zone: postgres.zone,
+    zone,
     bootDisk: {
       initializeParams: {
         image: 'debian-cloud/debian-12',
@@ -129,14 +135,15 @@ iptables-save
 }
 
 function installDatastream(
-  postgres: CloudPostgres,
+  namespace: ExactNamespace,
+  databaseInstance: gcp.sql.DatabaseInstance,
   source: gcp.datastream.ConnectionProfile,
   destination: gcp.datastream.ConnectionProfile,
   bigQueryDataset: gcp.bigquery.Dataset,
   pubRepSlots: pulumi.Resource
 ): gcp.datastream.Stream {
-  const streamName = `${postgres.namespace.logicalName}-scan-update-history`;
-  const schemaName = scanAppDatabaseName(postgres);
+  const streamName = `${namespace.logicalName}-scan-update-history`;
+  const schemaName = scanAppDatabaseName(namespace);
   return new gcp.datastream.Stream(
     streamName,
     {
@@ -175,7 +182,7 @@ function installDatastream(
         cluster: CLUSTER_BASENAME,
       },
     },
-    { dependsOn: [postgres, source, destination, bigQueryDataset, pubRepSlots] }
+    { dependsOn: [databaseInstance, source, destination, bigQueryDataset, pubRepSlots] }
   );
 }
 
@@ -209,11 +216,11 @@ you have to manually enable the API as described for that cluster.
  */
 
 function installBigqueryConnectionProfile(
-  postgres: CloudPostgres,
+  namespace: ExactNamespace,
   bigQuery: gcp.bigquery.Dataset,
   pcc: gcp.datastream.PrivateConnection
 ): gcp.datastream.ConnectionProfile {
-  const profileName = `${postgres.namespace.logicalName}-scan-bq-cxn`;
+  const profileName = `${namespace.logicalName}-scan-bq-cxn`;
   return new gcp.datastream.ConnectionProfile(
     profileName,
     {
@@ -229,18 +236,19 @@ function installBigqueryConnectionProfile(
   );
 }
 
-function scanAppDatabaseName(postgres: Postgres) {
-  return `scan_${postgres.namespace.logicalName.replace(/-/g, '_')}`;
+function scanAppDatabaseName(namespace: ExactNamespace): string {
+  return `scan_${namespace.logicalName.replace(/-/g, '_')}`;
 }
 
 function installPostgresConnectionProfile(
-  postgres: CloudPostgres,
-  scan: InstalledHelmChart,
+  namespace: ExactNamespace,
+  databaseInstance: gcp.sql.DatabaseInstance,
+  scan: InstalledHelmChart | undefined,
   natVm: gcp.compute.Instance,
   connection: gcp.datastream.PrivateConnection,
   replicatorPassword: PostgresPassword
 ): gcp.datastream.ConnectionProfile {
-  const profileName = `${postgres.namespace.logicalName}-scan-update-history-cxn`;
+  const profileName = `${namespace.logicalName}-scan-update-history-cxn`;
 
   // TODO (#454) may have to await scan migration or pub/rep slots command
   return new gcp.datastream.ConnectionProfile(
@@ -254,7 +262,7 @@ function installPostgresConnectionProfile(
         port: dbPort,
         username: replicatorUserName,
         password: replicatorPassword.contents,
-        database: scanAppDatabaseName(postgres),
+        database: scanAppDatabaseName(namespace),
       },
       privateConnectivity: {
         privateConnection: connection.name,
@@ -263,14 +271,14 @@ function installPostgresConnectionProfile(
         cluster: CLUSTER_BASENAME,
       },
     },
-    { dependsOn: [natVm, connection, postgres.databaseInstance, scan] }
+    { dependsOn: [natVm, connection, databaseInstance, ...(scan !== undefined ? [scan] : [])] }
   );
 }
 
 function installPrivateConnectivityConfiguration(
-  postgres: CloudPostgres
+  namespace: ExactNamespace
 ): gcp.datastream.PrivateConnection {
-  const privateConnectionName = `${postgres.namespace.logicalName}-scan-update-history-datastream-vpc`;
+  const privateConnectionName = `${namespace.logicalName}-scan-update-history-datastream-vpc`;
   return new gcp.datastream.PrivateConnection(
     privateConnectionName,
     {
@@ -314,36 +322,50 @@ function installDatastreamToNatVmFirewallRule(
 // TODO (DACH-NY/canton-network-internal#342) if we disable default egress rule, we need another firewall
 // rule for Nat VM -> Postgres
 
-function installReplicatorPassword(postgres: CloudPostgres): PostgresPassword {
-  const secretName = `${postgres.namespace.logicalName}-${replicatorUserName}-passwd`;
-  const password = generatePassword(`${postgres.instanceName}-${replicatorUserName}-passwd`, {
-    parent: postgres,
+function installReplicatorPassword(
+  namespace: ExactNamespace,
+  databaseInstance: gcp.sql.DatabaseInstance
+): PostgresPassword {
+  const secretName = `${namespace.logicalName}-${replicatorUserName}-passwd`;
+  const instanceNamePrefix = databaseInstance.name.apply(name =>
+    name.substring(0, name.lastIndexOf('-'))
+  );
+  const password = generatePassword(`${instanceNamePrefix}-${replicatorUserName}-passwd`, {
+    aliases: [
+      {
+        parent: getLegacyParentUrn(namespace),
+        name: `cn-apps-pg-${replicatorUserName}-passwd`,
+      },
+    ],
     protect: spliceConfig.pulumiProjectConfig.cloudSql.protected,
   }).result;
   return {
     contents: password,
-    secret: installPostgresPasswordSecret(postgres.namespace, password, secretName),
+    secret: installPostgresPasswordSecret(namespace, password, secretName),
   };
 }
 
 function createPostgresReplicatorUser(
-  postgres: CloudPostgres,
+  namespace: ExactNamespace,
+  databaseInstance: gcp.sql.DatabaseInstance,
   password: PostgresPassword
 ): gcp.sql.User {
-  const name = `${postgres.namespace.logicalName}-user-${replicatorUserName}`;
+  const name = `${namespace.logicalName}-user-${replicatorUserName}`;
   return new gcp.sql.User(
     name,
     {
-      instance: postgres.databaseInstance.name,
+      instance: databaseInstance.name,
       name: replicatorUserName,
       password: password.contents,
     },
     {
-      parent: postgres,
-      deletedWith: postgres.databaseInstance,
-      retainOnDelete: true,
+      aliases: [
+        {
+          parent: getLegacyParentUrn(namespace),
+        },
+      ],
       protect: spliceConfig.pulumiProjectConfig.cloudSql.protected,
-      dependsOn: [postgres.databaseInstance, password.secret],
+      dependsOn: [password.secret],
     }
   );
 }
@@ -354,66 +376,122 @@ needs the 'Cloud SQL Editor' IAM role in the relevant GCP project
  */
 
 function createPublicationAndReplicationSlots(
-  postgres: CloudPostgres,
+  namespace: ExactNamespace,
+  databaseInstance: gcp.sql.DatabaseInstance,
   replicatorUser: gcp.sql.User,
-  scan: InstalledHelmChart
+  scan: InstalledHelmChart | undefined
 ) {
-  const dbName = scanAppDatabaseName(postgres);
+  const dbName = scanAppDatabaseName(namespace);
   const schemaName = dbName;
   const path = commandScriptPath('cluster/pulumi/canton-network/bigquery-cloudsql.sh');
   const scriptArgs = pulumi.interpolate`\\
       --private-network-project="${gcp.organizations.getProjectOutput({}).apply(proj => proj.name)}" \\
       --compute-region="${cloudsdkComputeRegion()}" \\
-      --service-account-email="${postgres.databaseInstance.serviceAccountEmailAddress}" \\
+      --service-account-email="${databaseInstance.serviceAccountEmailAddress}" \\
       --schema-name="${schemaName}" \\
       --tables-to-replicate-joined="${tablesToReplicate.join(', ')}" \\
-      --postgres-user-name="${postgres.user.name}" \\
+      --postgres-user-name="${defaultUserName}" \\
       --publication-name="${publicationName}" \\
       --replication-slot-name="${replicationSlotName}" \\
       --replicator-user-name="${replicatorUserName}" \\
-      --postgres-instance-name="${postgres.databaseInstance.name}" \\
-      --scan-app-database-name="${scanAppDatabaseName(postgres)}" \\
+      --postgres-instance-name="${databaseInstance.name}" \\
+      --scan-app-database-name="${scanAppDatabaseName(namespace)}" \\
       --flyway-migration-to-wait-for="${flywayMigrationToWaitFor}" \\
       `;
   return new command.local.Command(
-    `${postgres.namespace.logicalName}-${replicatorUserName}-pub-replicate-slots`,
+    `${namespace.logicalName}-${replicatorUserName}-pub-replicate-slots`,
     {
       create: pulumi.interpolate`'${path}' create-pub-rep-slot ${scriptArgs}`,
       delete: pulumi.interpolate`'${path}' delete-pub-rep-slot ${scriptArgs}`,
     },
     {
-      deletedWith: postgres.databaseInstance,
-      dependsOn: [scan, postgres.databaseInstance, replicatorUser],
+      dependsOn: [databaseInstance, replicatorUser, ...(scan !== undefined ? [scan] : [])],
       deleteBeforeReplace: true,
     }
   );
 }
 
-export function configureScanBigQuery(
-  postgres: CloudPostgres,
-  scanBigQuery: ScanBigQueryConfig,
-  scan: InstalledHelmChart
-): void {
-  const passwordSecret = installReplicatorPassword(postgres);
+export async function configureScanBigQuery(
+  namespace: ExactNamespace,
+  scanReference: ScanReference,
+  scanBigQuery: ScanBigQueryConfig
+): Promise<ScanBigQuery> {
+  const zone = getCloudSdkZone();
+  const [databaseInstance, scanChart] = await (async () => {
+    switch (scanReference.type) {
+      case 'local':
+        return [scanReference.databaseInstance, scanReference.chart];
+      case 'external':
+        return [await getScanDb(scanReference.databaseInstanceNamePrefix, zone), undefined];
+    }
+  })();
+  const passwordSecret = installReplicatorPassword(namespace, databaseInstance);
   const pubRepSlots = createPublicationAndReplicationSlots(
-    postgres,
-    createPostgresReplicatorUser(postgres, passwordSecret),
-    scan
+    namespace,
+    databaseInstance,
+    createPostgresReplicatorUser(namespace, databaseInstance, passwordSecret),
+    scanChart
   );
 
-  const natVm = installNatVm(postgres);
+  const natVm = installNatVm(namespace, zone, databaseInstance);
   const dataset = installBigqueryDataset(scanBigQuery);
-  const pcc = installPrivateConnectivityConfiguration(postgres);
-  const destinationProfile = installBigqueryConnectionProfile(postgres, dataset, pcc);
+  const pcc = installPrivateConnectivityConfiguration(namespace);
+  const destinationProfile = installBigqueryConnectionProfile(namespace, dataset, pcc);
   const sourceProfile = installPostgresConnectionProfile(
-    postgres,
-    scan,
+    namespace,
+    databaseInstance,
+    scanChart,
     natVm,
     pcc,
     passwordSecret
   );
-  installDatastreamToNatVmFirewallRule(postgres.namespace, pcc, natVm);
-  installDatastream(postgres, sourceProfile, destinationProfile, dataset, pubRepSlots);
+  installDatastreamToNatVmFirewallRule(namespace, pcc, natVm);
+  installDatastream(
+    namespace,
+    databaseInstance,
+    sourceProfile,
+    destinationProfile,
+    dataset,
+    pubRepSlots
+  );
 
-  return;
+  return {
+    datasetId: dataset.id,
+  };
+}
+
+type ScanReference =
+  | {
+      type: 'local';
+      databaseInstance: gcp.sql.DatabaseInstance;
+      chart: InstalledHelmChart;
+    }
+  | {
+      type: 'external';
+      databaseInstanceNamePrefix: string;
+    };
+
+export type ScanBigQuery = {
+  datasetId: pulumi.Output<string>;
+};
+
+async function getScanDb(
+  instanceNamePrefix: string,
+  zone: string
+): Promise<gcp.sql.DatabaseInstance> {
+  const result = await gcp.sql.getDatabaseInstances({
+    project: GCP_PROJECT,
+    region: GCP_REGION,
+    zone,
+  });
+  const instanceName =
+    result.instances.find(instance => instance.name.startsWith(instanceNamePrefix))?.name ??
+    (() => {
+      throw new Error();
+    })();
+  return gcp.sql.DatabaseInstance.get(instanceNamePrefix, instanceName);
+}
+
+function getLegacyParentUrn(namespace: ExactNamespace): pulumi.URN {
+  return `urn:pulumi:canton-network.${CLUSTER_BASENAME}::canton-network::canton:cloud:postgres::${namespace.logicalName}-cn-apps-pg`;
 }

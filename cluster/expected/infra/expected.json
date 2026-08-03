@@ -12,7 +12,7 @@
       ]
     },
     "name": "LedgerApiScopessv1",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::dev_id",
     "type": "auth0:index/resourceServerScopes:ResourceServerScopes"
   },
   {
@@ -28,7 +28,7 @@
       ]
     },
     "name": "LedgerApiScopessvda1",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::dev_id",
     "type": "auth0:index/resourceServerScopes:ResourceServerScopes"
   },
   {
@@ -41,7 +41,7 @@
       "tokenLifetime": 86400
     },
     "name": "LedgerApisv1",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::dev_id",
     "type": "auth0:index/resourceServer:ResourceServer"
   },
   {
@@ -54,7 +54,7 @@
       "tokenLifetime": 86400
     },
     "name": "LedgerApisvda1",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::dev_id",
     "type": "auth0:index/resourceServer:ResourceServer"
   },
   {
@@ -62,10 +62,10 @@
     "id": "",
     "inputs": {
       "authenticationMethod": "none",
-      "clientId": "Splitwell UI (Pulumi managed, test-stack)_id"
+      "clientId": "SplitwellUiApp_id"
     },
     "name": "SplitwellUiAppCredentials",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::dev_id",
     "type": "auth0:index/clientCredentials:ClientCredentials"
   },
   {
@@ -125,7 +125,7 @@
       ]
     },
     "name": "SplitwellUiApp",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::dev_id",
     "type": "auth0:index/client:Client"
   },
   {
@@ -138,7 +138,7 @@
       "tokenLifetime": 86400
     },
     "name": "SvAppApisv1",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::dev_id",
     "type": "auth0:index/resourceServer:ResourceServer"
   },
   {
@@ -151,7 +151,7 @@
       "tokenLifetime": 86400
     },
     "name": "SvAppApisvda1",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::dev_id",
     "type": "auth0:index/resourceServer:ResourceServer"
   },
   {
@@ -159,10 +159,10 @@
     "id": "",
     "inputs": {
       "authenticationMethod": "none",
-      "clientId": "ANS UI (Pulumi managed, test-stack)_id"
+      "clientId": "SvCnsUi_id"
     },
     "name": "SvCnsUiCredentials",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::sv::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::sv::sv_id",
     "type": "auth0:index/clientCredentials:ClientCredentials"
   },
   {
@@ -206,7 +206,7 @@
       ]
     },
     "name": "SvCnsUi",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::sv::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::sv::sv_id",
     "type": "auth0:index/client:Client"
   },
   {
@@ -214,10 +214,10 @@
     "id": "",
     "inputs": {
       "authenticationMethod": "none",
-      "clientId": "SV UI (Pulumi managed, test-stack)_id"
+      "clientId": "SvSvUi_id"
     },
     "name": "SvSvUiCredentials",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::sv::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::sv::sv_id",
     "type": "auth0:index/clientCredentials:ClientCredentials"
   },
   {
@@ -261,7 +261,7 @@
       ]
     },
     "name": "SvSvUi",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::sv::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::sv::sv_id",
     "type": "auth0:index/client:Client"
   },
   {
@@ -269,10 +269,10 @@
     "id": "",
     "inputs": {
       "authenticationMethod": "none",
-      "clientId": "Wallet UI (Pulumi managed, test-stack)_id"
+      "clientId": "SvWalletUi_id"
     },
     "name": "SvWalletUiCredentials",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::sv::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::sv::sv_id",
     "type": "auth0:index/clientCredentials:ClientCredentials"
   },
   {
@@ -316,7 +316,7 @@
       ]
     },
     "name": "SvWalletUi",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::sv::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::sv::sv_id",
     "type": "auth0:index/client:Client"
   },
   {
@@ -329,7 +329,7 @@
       "tokenLifetime": 86400
     },
     "name": "ValidatorAppApisv1",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::dev_id",
     "type": "auth0:index/resourceServer:ResourceServer"
   },
   {
@@ -342,7 +342,7 @@
       "tokenLifetime": 86400
     },
     "name": "ValidatorAppApisvda1",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::dev_id",
     "type": "auth0:index/resourceServer:ResourceServer"
   },
   {
@@ -2806,11 +2806,11 @@
     "id": "",
     "inputs": {
       "audience": "https://sv.sv-1.test-stack.canton.network/api",
-      "clientId": "SV1 SV Backend (Pulumi managed, test-stack)_id",
+      "clientId": "sv1SvBackendApp_id",
       "scopes": []
     },
     "name": "sv1SvBackendAppAppGrant",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::dev_id",
     "type": "auth0:index/clientGrant:ClientGrant"
   },
   {
@@ -2818,13 +2818,13 @@
     "id": "",
     "inputs": {
       "audience": "https://ledger_api.sv-1.test-stack.canton.network",
-      "clientId": "SV1 SV Backend (Pulumi managed, test-stack)_id",
+      "clientId": "sv1SvBackendApp_id",
       "scopes": [
         "daml_ledger_api"
       ]
     },
     "name": "sv1SvBackendAppLedgerGrant",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::dev_id",
     "type": "auth0:index/clientGrant:ClientGrant"
   },
   {
@@ -2832,13 +2832,13 @@
     "id": "",
     "inputs": {
       "audience": "https://canton.network.global",
-      "clientId": "SV1 SV Backend (Pulumi managed, test-stack)_id",
+      "clientId": "sv1SvBackendApp_id",
       "scopes": [
         "daml_ledger_api"
       ]
     },
     "name": "sv1SvBackendAppLegacyGrant",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::dev_id",
     "type": "auth0:index/clientGrant:ClientGrant"
   },
   {
@@ -2850,7 +2850,7 @@
       "name": "SV1 SV Backend (Pulumi managed, test-stack)"
     },
     "name": "sv1SvBackendApp",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::dev_id",
     "type": "auth0:index/client:Client"
   },
   {
@@ -2858,10 +2858,10 @@
     "id": "",
     "inputs": {
       "authenticationMethod": "none",
-      "clientId": "SV1 UI (Pulumi managed, test-stack)_id"
+      "clientId": "sv1UiApp_id"
     },
     "name": "sv1UiAppCredentials",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::dev_id",
     "type": "auth0:index/clientCredentials:ClientCredentials"
   },
   {
@@ -2921,7 +2921,7 @@
       ]
     },
     "name": "sv1UiApp",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::dev_id",
     "type": "auth0:index/client:Client"
   },
   {
@@ -2929,11 +2929,11 @@
     "id": "",
     "inputs": {
       "audience": "https://validator.sv-1.test-stack.canton.network/api",
-      "clientId": "SV1 Validator Backend (Pulumi managed, test-stack)_id",
+      "clientId": "sv1ValidatorBackendApp_id",
       "scopes": []
     },
     "name": "sv1ValidatorBackendAppAppGrant",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::dev_id",
     "type": "auth0:index/clientGrant:ClientGrant"
   },
   {
@@ -2941,13 +2941,13 @@
     "id": "",
     "inputs": {
       "audience": "https://ledger_api.sv-1.test-stack.canton.network",
-      "clientId": "SV1 Validator Backend (Pulumi managed, test-stack)_id",
+      "clientId": "sv1ValidatorBackendApp_id",
       "scopes": [
         "daml_ledger_api"
       ]
     },
     "name": "sv1ValidatorBackendAppLedgerGrant",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::dev_id",
     "type": "auth0:index/clientGrant:ClientGrant"
   },
   {
@@ -2955,13 +2955,13 @@
     "id": "",
     "inputs": {
       "audience": "https://canton.network.global",
-      "clientId": "SV1 Validator Backend (Pulumi managed, test-stack)_id",
+      "clientId": "sv1ValidatorBackendApp_id",
       "scopes": [
         "daml_ledger_api"
       ]
     },
     "name": "sv1ValidatorBackendAppLegacyGrant",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::dev_id",
     "type": "auth0:index/clientGrant:ClientGrant"
   },
   {
@@ -2973,7 +2973,7 @@
       "name": "SV1 Validator Backend (Pulumi managed, test-stack)"
     },
     "name": "sv1ValidatorBackendApp",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::dev_id",
     "type": "auth0:index/client:Client"
   },
   {
@@ -2981,11 +2981,11 @@
     "id": "",
     "inputs": {
       "audience": "https://sv.sv-da-1.test-stack.canton.network/api",
-      "clientId": "SVDA1 SV Backend (Pulumi managed, test-stack)_id",
+      "clientId": "svda1SvBackendApp_id",
       "scopes": []
     },
     "name": "svda1SvBackendAppAppGrant",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::dev_id",
     "type": "auth0:index/clientGrant:ClientGrant"
   },
   {
@@ -2993,13 +2993,13 @@
     "id": "",
     "inputs": {
       "audience": "https://ledger_api.sv-da-1.test-stack.canton.network",
-      "clientId": "SVDA1 SV Backend (Pulumi managed, test-stack)_id",
+      "clientId": "svda1SvBackendApp_id",
       "scopes": [
         "daml_ledger_api"
       ]
     },
     "name": "svda1SvBackendAppLedgerGrant",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::dev_id",
     "type": "auth0:index/clientGrant:ClientGrant"
   },
   {
@@ -3007,13 +3007,13 @@
     "id": "",
     "inputs": {
       "audience": "https://canton.network.global",
-      "clientId": "SVDA1 SV Backend (Pulumi managed, test-stack)_id",
+      "clientId": "svda1SvBackendApp_id",
       "scopes": [
         "daml_ledger_api"
       ]
     },
     "name": "svda1SvBackendAppLegacyGrant",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::dev_id",
     "type": "auth0:index/clientGrant:ClientGrant"
   },
   {
@@ -3025,7 +3025,7 @@
       "name": "SVDA1 SV Backend (Pulumi managed, test-stack)"
     },
     "name": "svda1SvBackendApp",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::dev_id",
     "type": "auth0:index/client:Client"
   },
   {
@@ -3033,10 +3033,10 @@
     "id": "",
     "inputs": {
       "authenticationMethod": "none",
-      "clientId": "SVDA1 UI (Pulumi managed, test-stack)_id"
+      "clientId": "svda1UiApp_id"
     },
     "name": "svda1UiAppCredentials",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::dev_id",
     "type": "auth0:index/clientCredentials:ClientCredentials"
   },
   {
@@ -3096,7 +3096,7 @@
       ]
     },
     "name": "svda1UiApp",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::dev_id",
     "type": "auth0:index/client:Client"
   },
   {
@@ -3104,11 +3104,11 @@
     "id": "",
     "inputs": {
       "audience": "https://validator.sv-da-1.test-stack.canton.network/api",
-      "clientId": "SVDA1 Validator Backend (Pulumi managed, test-stack)_id",
+      "clientId": "svda1ValidatorBackendApp_id",
       "scopes": []
     },
     "name": "svda1ValidatorBackendAppAppGrant",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::dev_id",
     "type": "auth0:index/clientGrant:ClientGrant"
   },
   {
@@ -3116,13 +3116,13 @@
     "id": "",
     "inputs": {
       "audience": "https://ledger_api.sv-da-1.test-stack.canton.network",
-      "clientId": "SVDA1 Validator Backend (Pulumi managed, test-stack)_id",
+      "clientId": "svda1ValidatorBackendApp_id",
       "scopes": [
         "daml_ledger_api"
       ]
     },
     "name": "svda1ValidatorBackendAppLedgerGrant",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::dev_id",
     "type": "auth0:index/clientGrant:ClientGrant"
   },
   {
@@ -3130,13 +3130,13 @@
     "id": "",
     "inputs": {
       "audience": "https://canton.network.global",
-      "clientId": "SVDA1 Validator Backend (Pulumi managed, test-stack)_id",
+      "clientId": "svda1ValidatorBackendApp_id",
       "scopes": [
         "daml_ledger_api"
       ]
     },
     "name": "svda1ValidatorBackendAppLegacyGrant",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::dev_id",
     "type": "auth0:index/clientGrant:ClientGrant"
   },
   {
@@ -3148,7 +3148,7 @@
       "name": "SVDA1 Validator Backend (Pulumi managed, test-stack)"
     },
     "name": "svda1ValidatorBackendApp",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::dev_id",
     "type": "auth0:index/client:Client"
   },
   {
@@ -3176,10 +3176,10 @@
     "id": "",
     "inputs": {
       "authenticationMethod": "none",
-      "clientId": "Validator1 UI (Pulumi managed, test-stack)_id"
+      "clientId": "validator1UiApp_id"
     },
     "name": "validator1UiAppCredentials",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::dev_id",
     "type": "auth0:index/clientCredentials:ClientCredentials"
   },
   {
@@ -3239,7 +3239,7 @@
       ]
     },
     "name": "validator1UiApp",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::dev::dev_id",
     "type": "auth0:index/client:Client"
   },
   {
@@ -3247,10 +3247,10 @@
     "id": "",
     "inputs": {
       "authenticationMethod": "none",
-      "clientId": "ANS UI (Pulumi managed, test-stack)_id"
+      "clientId": "validatorCnsUi_id"
     },
     "name": "validatorCnsUiCredentials",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::validator::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::validator::validator_id",
     "type": "auth0:index/clientCredentials:ClientCredentials"
   },
   {
@@ -3302,7 +3302,7 @@
       ]
     },
     "name": "validatorCnsUi",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::validator::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::validator::validator_id",
     "type": "auth0:index/client:Client"
   },
   {
@@ -3310,10 +3310,10 @@
     "id": "",
     "inputs": {
       "authenticationMethod": "none",
-      "clientId": "Wallet UI (Pulumi managed, test-stack)_id"
+      "clientId": "validatorWalletUi_id"
     },
     "name": "validatorWalletUiCredentials",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::validator::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::validator::validator_id",
     "type": "auth0:index/clientCredentials:ClientCredentials"
   },
   {
@@ -3365,7 +3365,7 @@
       ]
     },
     "name": "validatorWalletUi",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::validator::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:auth0::validator::validator_id",
     "type": "auth0:index/client:Client"
   },
   {

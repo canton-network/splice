@@ -207,7 +207,7 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "secret": "undefined_id",
+      "secret": "grafana-keys-secret_id",
       "secretData": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
         "value": "{\"adminUser\": \"grafana-keys-admin-user\"\n                , \"adminPassword\": \"grafana-keys-admin-password\"}"
@@ -274,7 +274,7 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "secret": "undefined_id",
+      "secret": "sv-id-secret_id",
       "secretData": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
         "value": "{\"publicKey\": \"sv-id-public-key\", \"privateKey\": \"sv-id-private-key\"}"
@@ -309,7 +309,7 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "secret": "undefined_id",
+      "secret": "sv1-cometbft-keys-secret_id",
       "secretData": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
         "value": "{\"nodePrivateKey\": \"sv1-cometbft-keys-node-private-key\", \"validatorPrivateKey\": \"sv1-cometbft-keys-validator-private-key\"\n                , \"validatorPublicKey\": \"sv1-cometbft-keys-validator-public-key\"}"
@@ -344,7 +344,7 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "secret": "undefined_id",
+      "secret": "sv10-cometbft-keys-secret_id",
       "secretData": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
         "value": "{\"nodePrivateKey\": \"sv10-cometbft-keys-node-private-key\", \"validatorPrivateKey\": \"sv10-cometbft-keys-validator-private-key\"\n                , \"validatorPublicKey\": \"sv10-cometbft-keys-validator-public-key\"}"
@@ -379,7 +379,7 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "secret": "undefined_id",
+      "secret": "sv11-cometbft-keys-secret_id",
       "secretData": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
         "value": "{\"nodePrivateKey\": \"sv11-cometbft-keys-node-private-key\", \"validatorPrivateKey\": \"sv11-cometbft-keys-validator-private-key\"\n                , \"validatorPublicKey\": \"sv11-cometbft-keys-validator-public-key\"}"
@@ -414,7 +414,7 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "secret": "undefined_id",
+      "secret": "sv12-cometbft-keys-secret_id",
       "secretData": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
         "value": "{\"nodePrivateKey\": \"sv12-cometbft-keys-node-private-key\", \"validatorPrivateKey\": \"sv12-cometbft-keys-validator-private-key\"\n                , \"validatorPublicKey\": \"sv12-cometbft-keys-validator-public-key\"}"
@@ -449,7 +449,7 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "secret": "undefined_id",
+      "secret": "sv13-cometbft-keys-secret_id",
       "secretData": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
         "value": "{\"nodePrivateKey\": \"sv13-cometbft-keys-node-private-key\", \"validatorPrivateKey\": \"sv13-cometbft-keys-validator-private-key\"\n                , \"validatorPublicKey\": \"sv13-cometbft-keys-validator-public-key\"}"
@@ -484,7 +484,7 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "secret": "undefined_id",
+      "secret": "sv14-cometbft-keys-secret_id",
       "secretData": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
         "value": "{\"nodePrivateKey\": \"sv14-cometbft-keys-node-private-key\", \"validatorPrivateKey\": \"sv14-cometbft-keys-validator-private-key\"\n                , \"validatorPublicKey\": \"sv14-cometbft-keys-validator-public-key\"}"
@@ -519,7 +519,7 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "secret": "undefined_id",
+      "secret": "sv15-cometbft-keys-secret_id",
       "secretData": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
         "value": "{\"nodePrivateKey\": \"sv15-cometbft-keys-node-private-key\", \"validatorPrivateKey\": \"sv15-cometbft-keys-validator-private-key\"\n                , \"validatorPublicKey\": \"sv15-cometbft-keys-validator-public-key\"}"
@@ -554,7 +554,7 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "secret": "undefined_id",
+      "secret": "sv16-cometbft-keys-secret_id",
       "secretData": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
         "value": "{\"nodePrivateKey\": \"sv16-cometbft-keys-node-private-key\", \"validatorPrivateKey\": \"sv16-cometbft-keys-validator-private-key\"\n                , \"validatorPublicKey\": \"sv16-cometbft-keys-validator-public-key\"}"
@@ -589,7 +589,7 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "secret": "undefined_id",
+      "secret": "sv2-cometbft-keys-secret_id",
       "secretData": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
         "value": "{\"nodePrivateKey\": \"sv2-cometbft-keys-node-private-key\", \"validatorPrivateKey\": \"sv2-cometbft-keys-validator-private-key\"\n                , \"validatorPublicKey\": \"sv2-cometbft-keys-validator-public-key\"}"
@@ -624,7 +624,7 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "secret": "undefined_id",
+      "secret": "sv2-id-secret_id",
       "secretData": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
         "value": "{\"publicKey\": \"sv2-id-public-key\", \"privateKey\": \"sv2-id-private-key\"}"
@@ -659,7 +659,7 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "secret": "undefined_id",
+      "secret": "sv3-cometbft-keys-secret_id",
       "secretData": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
         "value": "{\"nodePrivateKey\": \"sv3-cometbft-keys-node-private-key\", \"validatorPrivateKey\": \"sv3-cometbft-keys-validator-private-key\"\n                , \"validatorPublicKey\": \"sv3-cometbft-keys-validator-public-key\"}"
@@ -694,7 +694,7 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "secret": "undefined_id",
+      "secret": "sv3-id-secret_id",
       "secretData": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
         "value": "{\"publicKey\": \"sv3-id-public-key\", \"privateKey\": \"sv3-id-private-key\"}"
@@ -729,7 +729,7 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "secret": "undefined_id",
+      "secret": "sv4-cometbft-keys-secret_id",
       "secretData": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
         "value": "{\"nodePrivateKey\": \"sv4-cometbft-keys-node-private-key\", \"validatorPrivateKey\": \"sv4-cometbft-keys-validator-private-key\"\n                , \"validatorPublicKey\": \"sv4-cometbft-keys-validator-public-key\"}"
@@ -764,7 +764,7 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "secret": "undefined_id",
+      "secret": "sv4-id-secret_id",
       "secretData": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
         "value": "{\"publicKey\": \"sv4-id-public-key\", \"privateKey\": \"sv4-id-private-key\"}"
@@ -799,7 +799,7 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "secret": "undefined_id",
+      "secret": "sv5-cometbft-keys-secret_id",
       "secretData": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
         "value": "{\"nodePrivateKey\": \"sv5-cometbft-keys-node-private-key\", \"validatorPrivateKey\": \"sv5-cometbft-keys-validator-private-key\"\n                , \"validatorPublicKey\": \"sv5-cometbft-keys-validator-public-key\"}"
@@ -834,7 +834,7 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "secret": "undefined_id",
+      "secret": "sv6-cometbft-keys-secret_id",
       "secretData": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
         "value": "{\"nodePrivateKey\": \"sv6-cometbft-keys-node-private-key\", \"validatorPrivateKey\": \"sv6-cometbft-keys-validator-private-key\"\n                , \"validatorPublicKey\": \"sv6-cometbft-keys-validator-public-key\"}"
@@ -869,7 +869,7 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "secret": "undefined_id",
+      "secret": "sv7-cometbft-keys-secret_id",
       "secretData": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
         "value": "{\"nodePrivateKey\": \"sv7-cometbft-keys-node-private-key\", \"validatorPrivateKey\": \"sv7-cometbft-keys-validator-private-key\"\n                , \"validatorPublicKey\": \"sv7-cometbft-keys-validator-public-key\"}"
@@ -904,7 +904,7 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "secret": "undefined_id",
+      "secret": "sv8-cometbft-keys-secret_id",
       "secretData": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
         "value": "{\"nodePrivateKey\": \"sv8-cometbft-keys-node-private-key\", \"validatorPrivateKey\": \"sv8-cometbft-keys-validator-private-key\"\n                , \"validatorPublicKey\": \"sv8-cometbft-keys-validator-public-key\"}"
@@ -939,7 +939,7 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "secret": "undefined_id",
+      "secret": "sv9-cometbft-keys-secret_id",
       "secretData": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
         "value": "{\"nodePrivateKey\": \"sv9-cometbft-keys-node-private-key\", \"validatorPrivateKey\": \"sv9-cometbft-keys-validator-private-key\"\n                , \"validatorPublicKey\": \"sv9-cometbft-keys-validator-public-key\"}"

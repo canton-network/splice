@@ -4751,7 +4751,7 @@
       }
     },
     "name": "multi-validator-default",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-multi-validator-default::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-multi-validator-default::k8s-imgpull-multi-validator-default_id",
     "type": "kubernetes:core/v1:ServiceAccountPatch"
   },
   {

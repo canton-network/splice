@@ -16,7 +16,7 @@
       }
     },
     "name": "cluster-ingress-default",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-cluster-ingress-default::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-cluster-ingress-default::k8s-imgpull-cluster-ingress-default_id",
     "type": "kubernetes:core/v1:ServiceAccountPatch"
   },
   {
@@ -1570,6 +1570,7 @@
     "custom": true,
     "id": "",
     "inputs": {
+      "instance": "",
       "name": "cantonnet"
     },
     "name": "sv-db-apps-pg-cantonnet",
@@ -1593,7 +1594,7 @@
       }
     },
     "name": "sv-default",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-default::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-default::k8s-imgpull-sv-default_id",
     "type": "kubernetes:core/v1:ServiceAccountPatch"
   },
   {
@@ -2717,6 +2718,7 @@
     "custom": true,
     "id": "",
     "inputs": {
+      "instance": "",
       "name": "cnadmin",
       "password": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",

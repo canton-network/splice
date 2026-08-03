@@ -15,7 +15,12 @@ import {
   svConfigs,
   svRunbookConfig,
 } from '@canton-network/splice-pulumi-common-sv';
-import { installSvNodeStandalone } from '@canton-network/splice-pulumi-common-sv/src/sv';
+import {
+  installSvNodeStandalone,
+  MigrationArgs,
+  SvsMigrationOutput,
+} from '@canton-network/splice-pulumi-common-sv/src/sv';
+import { StackReferences } from '@canton-network/splice-pulumi-common/src/stackReferences';
 
 import { installParticipant } from './participant';
 
@@ -30,8 +35,16 @@ export async function installNode(sv: string, auth0Client: Auth0Client): Promise
   const auth0Config = auth0Client.getCfg();
   const ledgerApiUserSecret = installLedgerApiUserSecret(auth0Client, xns, 'sv', 'sv');
   const ledgerApiUserSecretSource = auth0UserNameEnvVarSource('sv', true);
-  if (splitSvDeploymentEnabled && staticConfig.nodeName !== svRunbookConfig.nodeName) {
-    await installSvNodeStandalone(xns, staticConfig, config, auth0Client);
+  const migrateToSplitSvDeployment =
+    spliceConfig.configuration.synchronizerMigration.migrateToSplitSvDeployment;
+  if (
+    (splitSvDeploymentEnabled || migrateToSplitSvDeployment) &&
+    staticConfig.nodeName !== svRunbookConfig.nodeName
+  ) {
+    const migrationArgs = migrateToSplitSvDeployment
+      ? await getMigrationArgsForSv(staticConfig.nodeName)
+      : undefined;
+    await installSvNodeStandalone(xns, staticConfig, config, auth0Client, [], migrationArgs);
   }
   await installParticipant(
     {
@@ -57,4 +70,18 @@ function findStaticConfigOrFail(sv: string): StaticSvConfig {
   } else {
     return svConfig;
   }
+}
+
+async function getMigrationArgsForSv(nodeName: string): Promise<MigrationArgs> {
+  const svs = (await StackReferences.cantonNetwork.requireOutputValue('svs')) as SvsMigrationOutput;
+  const sv =
+    svs.find(sv => sv.nodeName === nodeName) ??
+    (() => {
+      throw new Error(`No migration output found for SV: ${nodeName}`);
+    })();
+  return {
+    action: 'import',
+    databaseInstanceName: sv.databaseInstanceName,
+    databaseSecretName: sv.databaseSecretName,
+  };
 }

@@ -412,6 +412,7 @@
     "custom": true,
     "id": "",
     "inputs": {
+      "instance": "",
       "name": "cnadmin",
       "password": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
@@ -426,6 +427,7 @@
     "custom": true,
     "id": "",
     "inputs": {
+      "instance": "",
       "name": "cnadmin",
       "password": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
@@ -506,6 +508,7 @@
     "custom": true,
     "id": "",
     "inputs": {
+      "instance": "",
       "name": "cantonnet"
     },
     "name": "validator1-db-participant-pg-cantonnet",
@@ -516,6 +519,7 @@
     "custom": true,
     "id": "",
     "inputs": {
+      "instance": "",
       "name": "cantonnet"
     },
     "name": "validator1-db-validator-pg-cantonnet",
@@ -539,7 +543,7 @@
       }
     },
     "name": "validator1-default",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-validator1-default::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-validator1-default::k8s-imgpull-validator1-default_id",
     "type": "kubernetes:core/v1:ServiceAccountPatch"
   },
   {

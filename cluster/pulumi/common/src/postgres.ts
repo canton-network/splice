@@ -98,13 +98,7 @@ export class CloudPostgres
       defaultUserName,
       retainDbResourcesOnDelete = false,
     } = args;
-    const zoneFromEnv = config.optionalEnv('DB_CLOUDSDK_COMPUTE_ZONE') || GCP_ZONE;
-    if (!zoneFromEnv) {
-      throw new Error(
-        'GCP_ZONE is not set in the environment, and DB_CLOUDSDK_COMPUTE_ZONE is also not set. One of these must be set to specify the zone for the Cloud SQL instance.'
-      );
-    }
-    const zone = zoneFromEnv;
+    const zone = getCloudSdkZone();
 
     const databaseInstanceImportOpts =
       existingInstanceName !== undefined
@@ -313,7 +307,7 @@ export class CloudPostgres
       active: args.active ?? true,
       deletionProtection: (args.disableProtection ?? false) ? false : args.cloudSqlConfig.protected,
       logicalDecoding: args.logicalDecoding ?? false,
-      defaultUserName: args.userName ?? 'cnadmin',
+      defaultUserName: args.userName ?? defaultUserName,
       retainDbResourcesOnDelete: args.retainDbResourcesOnDelete ?? false,
     };
     super('canton:cloud:postgres', name, resolvedArgs, opts);
@@ -512,3 +506,15 @@ export async function installPostgres(
         version
       );
 }
+
+export function getCloudSdkZone(): string {
+  const zoneFromEnv = config.optionalEnv('DB_CLOUDSDK_COMPUTE_ZONE') || GCP_ZONE;
+  if (!zoneFromEnv) {
+    throw new Error(
+      'CLOUDSDK_COMPUTE_ZONE is not set in the environment, and DB_CLOUDSDK_COMPUTE_ZONE is also not set. One of these must be set to specify the zone for the Cloud SQL instance.'
+    );
+  }
+  return zoneFromEnv;
+}
+
+export const defaultUserName = 'cnadmin';
