@@ -26,3 +26,15 @@
           by a process external to the validator app: the validator leaves unassigned
           coupons untouched rather than assigning or minting them itself.
           Defaults to built-in, preserving existing behavior.
+
+          See the reward-sharing documentation for details:
+          https://docs.canton.network/global-synchronizer/splice-fundamentals/reward-sharing#reward-sharing
+
+          Example enabling external sharing automation for a party::
+
+              canton.validator-apps.<validator>.reward-sharing-config-by-party = {
+                "<party-id>" = {
+                  type = "external"
+                  batch-size = 200
+                }
+              }
