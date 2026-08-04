@@ -74,10 +74,8 @@ function backup_pvc_postgres() {
 
   _info "** Backup up pvc-based postgres $description **"
 
-  # Since we only have one replica, it's always 0.
-  replica_index="0"
   local pvc_name
-  pvc_name="pg-data-hd-$instance-$replica_index"
+  pvc_name=$(get_postgres_pvc_name "$namespace" "$instance")
   backup_pvc "$description" "$namespace" "$pvc_name" "$migration_id"
 }
 
