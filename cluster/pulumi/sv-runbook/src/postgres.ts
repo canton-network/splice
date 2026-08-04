@@ -51,8 +51,8 @@ export async function installPostgres(
         postgresImage: valuesFromFile.db.postgresImage || 'postgres:18',
       },
       values,
-      undefined,
-      supportsSvRunbookReset
+      undefined, // overrideDbSizeFromValues
+      supportsSvRunbookReset // disableProtection
     );
   }
 }
