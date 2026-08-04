@@ -46,6 +46,21 @@ sv:
                 maxTokens: 250
                 tokensPerFill: 250
                 fillInterval: 60s
+          # Example: give a CIDR range a shared higher limit.
+          # This uses Envoy's remote_ip descriptor, which matches the connection's
+          # remote IP address (not the x-forwarded-for header).
+          # Note that this will only work for requests from within the cluster.
+          perCidrLimits:
+            maxTokens: 500
+            tokensPerFill: 500
+            fillInterval: 60s
+            overrides:
+              validator-net:
+                cidrs:
+                  - 192.68.78.0/24
+                maxTokens: 1000
+                tokensPerFill: 1000
+                fillInterval: 60s
 splitwell:
   maxDarVersion: '0.1.8'
   participantPruningSchedule:

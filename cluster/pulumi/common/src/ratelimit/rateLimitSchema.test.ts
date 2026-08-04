@@ -126,3 +126,77 @@ test('RateLimitSchema rejects empty override ips array', () => {
   };
   expect(() => RateLimitSchema.parse(config)).toThrow();
 });
+
+test('RateLimitSchema accepts perCidrLimits with overrides', () => {
+  const config = {
+    ...validConfig,
+    rateLimits: {
+      '/registry/metadata/v1/info': {
+        ...validConfig.rateLimits['/registry/metadata/v1/info'],
+        perCidrLimits: {
+          maxTokens: 1000,
+          tokensPerFill: 1000,
+          fillInterval: '60s',
+          overrides: {
+            office: {
+              cidrs: ['192.68.78.0/24'],
+              maxTokens: 5000,
+              tokensPerFill: 5000,
+              fillInterval: '60s',
+            },
+          },
+        },
+      },
+    },
+  };
+  expect(() => RateLimitSchema.parse(config)).not.toThrow();
+});
+
+test('RateLimitSchema rejects perCidrLimits override without cidrs', () => {
+  const config = {
+    ...validConfig,
+    rateLimits: {
+      '/registry/metadata/v1/info': {
+        ...validConfig.rateLimits['/registry/metadata/v1/info'],
+        perCidrLimits: {
+          maxTokens: 1000,
+          tokensPerFill: 1000,
+          fillInterval: '60s',
+          overrides: {
+            empty: {
+              maxTokens: 5000,
+              tokensPerFill: 5000,
+              fillInterval: '60s',
+            },
+          },
+        },
+      },
+    },
+  };
+  expect(() => RateLimitSchema.parse(config)).toThrow();
+});
+
+test('RateLimitSchema rejects invalid cidrs in perCidrLimits', () => {
+  const config = {
+    ...validConfig,
+    rateLimits: {
+      '/registry/metadata/v1/info': {
+        ...validConfig.rateLimits['/registry/metadata/v1/info'],
+        perCidrLimits: {
+          maxTokens: 1000,
+          tokensPerFill: 1000,
+          fillInterval: '60s',
+          overrides: {
+            bad: {
+              cidrs: ['192.68.78.0/99'],
+              maxTokens: 5000,
+              tokensPerFill: 5000,
+              fillInterval: '60s',
+            },
+          },
+        },
+      },
+    },
+  };
+  expect(() => RateLimitSchema.parse(config)).toThrow();
+});

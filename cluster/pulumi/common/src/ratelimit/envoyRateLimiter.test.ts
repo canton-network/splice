@@ -5,6 +5,7 @@ import { expect, jest, test } from '@jest/globals';
 import {
   buildRateLimitActions,
   buildRateLimitDescriptors,
+  validateCidrLimits,
   validateIpLimits,
 } from './envoyRateLimiter';
 
@@ -248,6 +249,148 @@ test('validateIpLimits accepts unique IPs across named overrides', () => {
           },
           'multi-validators': {
             ips: ['192.68.78.51', '192.68.78.52'],
+            maxTokens: 250,
+            tokensPerFill: 250,
+            fillInterval: '60s',
+          },
+        },
+      },
+    })
+  ).not.toThrow();
+});
+
+test('buildRateLimitDescriptors emits per-CIDR override and fallback descriptors', () => {
+  const descriptors = buildRateLimitDescriptors({
+    '/registry/metadata/v1/info': {
+      name: 'registry-metadata-info',
+      type: 'limited',
+      ...baseLimits,
+      perCidrLimits: {
+        maxTokens: 500,
+        tokensPerFill: 500,
+        fillInterval: '60s',
+        overrides: {
+          office: {
+            cidrs: ['192.68.78.0/24'],
+            maxTokens: 1000,
+            tokensPerFill: 1000,
+            fillInterval: '60s',
+          },
+        },
+      },
+    },
+  });
+
+  expect(descriptors).toHaveLength(3);
+  expect(descriptors[0]).toEqual(
+    expect.objectContaining({
+      entries: [{ key: 'header_match', value: 'registry-metadata-info' }],
+    })
+  );
+  expect(descriptors[1]).toEqual({
+    entries: [
+      { key: 'header_match', value: 'registry-metadata-info' },
+      { key: 'remote_ip', value: '192.68.78.0/24' },
+    ],
+    token_bucket: {
+      max_tokens: 1000,
+      tokens_per_fill: 1000,
+      fill_interval: '60s',
+    },
+  });
+  expect(descriptors[2]).toEqual({
+    entries: [{ key: 'header_match', value: 'registry-metadata-info' }, { key: 'remote_ip' }],
+    token_bucket: {
+      max_tokens: 500,
+      tokens_per_fill: 500,
+      fill_interval: '60s',
+    },
+  });
+});
+
+test('buildRateLimitActions emits per-CIDR remote_ip action', () => {
+  const actions = buildRateLimitActions({
+    '/registry/metadata/v1/info': {
+      name: 'registry-metadata-info',
+      type: 'limited',
+      ...baseLimits,
+      perCidrLimits: {
+        maxTokens: 500,
+        tokensPerFill: 500,
+        fillInterval: '60s',
+      },
+    },
+  });
+
+  expect(actions).toHaveLength(2);
+  expect(actions[1]).toEqual({
+    actions: [
+      {
+        header_value_match: {
+          descriptor_value: 'registry-metadata-info',
+          expect_match: true,
+          headers: [
+            {
+              name: ':path',
+              string_match: {
+                prefix: '/registry/metadata/v1/info',
+                ignore_case: true,
+              },
+            },
+          ],
+        },
+      },
+      {
+        remote_ip: {},
+      },
+    ],
+  });
+});
+
+test('validateCidrLimits throws on overlapping CIDRs', () => {
+  expect(() =>
+    validateCidrLimits('/registry/metadata/v1/info', {
+      name: 'registry-metadata-info',
+      type: 'limited',
+      ...baseLimits,
+      perCidrLimits: {
+        ...perIpLimits,
+        overrides: {
+          'group-a': {
+            cidrs: ['192.68.78.0/24'],
+            maxTokens: 250,
+            tokensPerFill: 250,
+            fillInterval: '60s',
+          },
+          'group-b': {
+            cidrs: ['192.68.78.128/25'],
+            maxTokens: 250,
+            tokensPerFill: 250,
+            fillInterval: '60s',
+          },
+        },
+      },
+    })
+  ).toThrow("192.68.78.0/24 (in override 'group-a') and 192.68.78.128/25 (in override 'group-b')");
+});
+
+test('validateCidrLimits accepts non-overlapping CIDRs', () => {
+  expect(() =>
+    validateCidrLimits('/registry/metadata/v1/info', {
+      name: 'registry-metadata-info',
+      type: 'limited',
+      ...baseLimits,
+      perCidrLimits: {
+        ...perIpLimits,
+        overrides: {
+          'group-a': {
+            cidrs: ['192.68.78.0/25'],
+            maxTokens: 250,
+            tokensPerFill: 250,
+            fillInterval: '60s',
+          },
+          'group-b': {
+            cidrs: ['192.68.78.128/25'],
             maxTokens: 250,
             tokensPerFill: 250,
             fillInterval: '60s',

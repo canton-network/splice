@@ -1904,6 +1904,21 @@
           "fillInterval": "60s",
           "maxTokens": 720,
           "name": "registry-metadata-info",
+          "perCidrLimits": {
+            "fillInterval": "60s",
+            "maxTokens": 500,
+            "overrides": {
+              "validator-net": {
+                "cidrs": [
+                  "192.68.78.0/24"
+                ],
+                "fillInterval": "60s",
+                "maxTokens": 1000,
+                "tokensPerFill": 1000
+              }
+            },
+            "tokensPerFill": 500
+          },
           "perIpLimits": {
             "fillInterval": "60s",
             "maxTokens": 120,
@@ -2293,6 +2308,21 @@
           "fillInterval": "60s",
           "maxTokens": 720,
           "name": "registry-metadata-info",
+          "perCidrLimits": {
+            "fillInterval": "60s",
+            "maxTokens": 500,
+            "overrides": {
+              "validator-net": {
+                "cidrs": [
+                  "192.68.78.0/24"
+                ],
+                "fillInterval": "60s",
+                "maxTokens": 1000,
+                "tokensPerFill": 1000
+              }
+            },
+            "tokensPerFill": 500
+          },
           "perIpLimits": {
             "fillInterval": "60s",
             "maxTokens": 120,
@@ -3025,6 +3055,28 @@
                       "actions": [
                         {
                           "header_value_match": {
+                            "descriptor_value": "registry-metadata-info",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/metadata/v1/info"
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "remote_ip": {}
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
                             "descriptor_value": "registry-metadata-instruments",
                             "expect_match": true,
                             "headers": [
@@ -3569,6 +3621,39 @@
                           "fill_interval": "60s",
                           "max_tokens": 120,
                           "tokens_per_fill": 120
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-metadata-info"
+                          },
+                          {
+                            "key": "remote_ip",
+                            "value": "192.68.78.0/24"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 1000,
+                          "tokens_per_fill": 1000
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-metadata-info"
+                          },
+                          {
+                            "key": "remote_ip"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 500,
+                          "tokens_per_fill": 500
                         }
                       },
                       {
@@ -5185,6 +5270,28 @@
                       "actions": [
                         {
                           "header_value_match": {
+                            "descriptor_value": "registry-metadata-info",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/metadata/v1/info"
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "remote_ip": {}
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
                             "descriptor_value": "registry-metadata-instruments",
                             "expect_match": true,
                             "headers": [
@@ -5729,6 +5836,39 @@
                           "fill_interval": "60s",
                           "max_tokens": 120,
                           "tokens_per_fill": 120
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-metadata-info"
+                          },
+                          {
+                            "key": "remote_ip",
+                            "value": "192.68.78.0/24"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 1000,
+                          "tokens_per_fill": 1000
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-metadata-info"
+                          },
+                          {
+                            "key": "remote_ip"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 500,
+                          "tokens_per_fill": 500
                         }
                       },
                       {
