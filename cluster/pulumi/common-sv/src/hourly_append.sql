@@ -92,8 +92,7 @@ BEGIN
 
     UPDATE {{watermarksTable}}
     SET last_watermark_time = UNIX_MICROS(max_closed_timestamp)
-    WHERE table_name = '{{tableName}}'
-    AND last_watermark_time < max_closed_timestamp;
+    WHERE table_name = '{{tableName}}';
 
   END IF;
 END;
