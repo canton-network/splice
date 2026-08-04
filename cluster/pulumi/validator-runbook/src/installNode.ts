@@ -255,6 +255,7 @@ async function installValidator(
     persistence: {
       ...validatorValuesFromYamlFiles.persistence,
       postgresName: postgres.instanceName,
+      host: postgres.address,
     },
     pvc: {
       volumeStorageClass: standardStorageClassName,
