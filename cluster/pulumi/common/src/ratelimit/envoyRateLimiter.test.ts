@@ -290,7 +290,7 @@ test('buildRateLimitDescriptors emits per-CIDR override and fallback descriptors
   expect(descriptors[1]).toEqual({
     entries: [
       { key: 'header_match', value: 'registry-metadata-info' },
-      { key: 'remote_ip', value: '192.68.78.0/24' },
+      { key: 'remote_address_match', value: '192.68.78.0/24' },
     ],
     token_bucket: {
       max_tokens: 1000,
@@ -299,7 +299,10 @@ test('buildRateLimitDescriptors emits per-CIDR override and fallback descriptors
     },
   });
   expect(descriptors[2]).toEqual({
-    entries: [{ key: 'header_match', value: 'registry-metadata-info' }, { key: 'remote_ip' }],
+    entries: [
+      { key: 'header_match', value: 'registry-metadata-info' },
+      { key: 'remote_address_match', value: 'per-cidr-default' },
+    ],
     token_bucket: {
       max_tokens: 500,
       tokens_per_fill: 500,
@@ -308,7 +311,7 @@ test('buildRateLimitDescriptors emits per-CIDR override and fallback descriptors
   });
 });
 
-test('buildRateLimitActions emits per-CIDR remote_ip action', () => {
+test('buildRateLimitActions emits per-CIDR remote_address_match actions', () => {
   const actions = buildRateLimitActions({
     '/registry/metadata/v1/info': {
       name: 'registry-metadata-info',
@@ -318,11 +321,19 @@ test('buildRateLimitActions emits per-CIDR remote_ip action', () => {
         maxTokens: 500,
         tokensPerFill: 500,
         fillInterval: '60s',
+        overrides: {
+          office: {
+            cidrs: ['192.68.78.0/24'],
+            maxTokens: 1000,
+            tokensPerFill: 1000,
+            fillInterval: '60s',
+          },
+        },
       },
     },
   });
 
-  expect(actions).toHaveLength(2);
+  expect(actions).toHaveLength(3);
   expect(actions[1]).toEqual({
     actions: [
       {
@@ -341,7 +352,50 @@ test('buildRateLimitActions emits per-CIDR remote_ip action', () => {
         },
       },
       {
-        remote_ip: {},
+        remote_address_match: {
+          descriptor_value: '192.68.78.0/24',
+          address_matcher: {
+            cidr_ranges: [
+              {
+                address_prefix: '192.68.78.0',
+                prefix_len: { value: 24 },
+              },
+            ],
+          },
+        },
+      },
+    ],
+  });
+  expect(actions[2]).toEqual({
+    actions: [
+      {
+        header_value_match: {
+          descriptor_value: 'registry-metadata-info',
+          expect_match: true,
+          headers: [
+            {
+              name: ':path',
+              string_match: {
+                prefix: '/registry/metadata/v1/info',
+                ignore_case: true,
+              },
+            },
+          ],
+        },
+      },
+      {
+        remote_address_match: {
+          descriptor_value: 'per-cidr-default',
+          address_matcher: {
+            cidr_ranges: [
+              {
+                address_prefix: '192.68.78.0',
+                prefix_len: { value: 24 },
+              },
+            ],
+            invert_match: true,
+          },
+        },
       },
     ],
   });

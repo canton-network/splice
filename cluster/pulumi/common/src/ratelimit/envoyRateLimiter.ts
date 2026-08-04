@@ -53,9 +53,22 @@ type LocalLimit<L> = {
 // migration away from always specifying that.
 const clientIpEntryKey = 'client_ip';
 
-// Envoy native descriptor key for CIDR-based rate limiting. This uses the
-// connection's remote IP address (not the x-forwarded-for header).
-const remoteIpEntryKey = 'remote_ip';
+// Envoy native descriptor key for CIDR-based rate limiting using
+// remote_address_match. The action checks the connection's remote address
+// against configured CIDR ranges and produces this descriptor entry.
+const remoteAddressMatchKey = 'remote_address_match';
+const remoteAddressMatchDefaultValue = 'per-cidr-default';
+
+function cidrToEnvoyCidrRange(cidr: string): {
+  address_prefix: string;
+  prefix_len: { value: number };
+} {
+  const [network, prefixStr] = cidr.split('/');
+  return {
+    address_prefix: network,
+    prefix_len: { value: parseInt(prefixStr, 10) },
+  };
+}
 
 function ipToLong(ip: string): number {
   return ip.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0) >>> 0;
@@ -295,13 +308,46 @@ export function buildRateLimitActions(effectiveRateLimits: LocalLimits<MatchedLi
       });
     }
 
-    // Action 3: generate the per-CIDR action if perCidrLimits exists
+    // Action 3: generate the per-CIDR actions if perCidrLimits exists.
+    // Each override CIDR gets its own action so it can use a distinct token bucket.
+    // A final catch-all action matches any IP not covered by an override and uses the
+    // generic per-CIDR token bucket.
     if (rateLimit.perCidrLimits) {
+      const overrideCidrRanges: { address_prefix: string; prefix_len: { value: number } }[] = [];
+
+      Object.entries(rateLimit.perCidrLimits.overrides || {}).forEach(([, override]) => {
+        override.cidrs.forEach(cidr => {
+          overrideCidrRanges.push(cidrToEnvoyCidrRange(cidr));
+          actions.push({
+            actions: [
+              baseAction,
+              {
+                remote_address_match: {
+                  descriptor_value: cidr,
+                  address_matcher: {
+                    cidr_ranges: [cidrToEnvoyCidrRange(cidr)],
+                  },
+                },
+              },
+            ],
+          });
+        });
+      });
+
+      // Catch-all action for the generic per-CIDR bucket. invert_match ensures that IPs
+      // already covered by an override CIDR produce a different descriptor and therefore
+      // consume only the override bucket, not the generic one.
       actions.push({
         actions: [
           baseAction,
           {
-            remote_ip: {},
+            remote_address_match: {
+              descriptor_value: remoteAddressMatchDefaultValue,
+              address_matcher: {
+                cidr_ranges: overrideCidrRanges,
+                invert_match: true,
+              },
+            },
           },
         ],
       });
@@ -366,7 +412,7 @@ export function buildRateLimitDescriptors(
           descs.push({
             entries: [
               { key: 'header_match', value: rateLimit.name },
-              { key: remoteIpEntryKey, value: cidr },
+              { key: remoteAddressMatchKey, value: cidr },
             ],
             token_bucket: {
               max_tokens: override.maxTokens,
@@ -379,7 +425,10 @@ export function buildRateLimitDescriptors(
 
       // Generic per-CIDR fallback
       descs.push({
-        entries: [{ key: 'header_match', value: rateLimit.name }, { key: remoteIpEntryKey }],
+        entries: [
+          { key: 'header_match', value: rateLimit.name },
+          { key: remoteAddressMatchKey, value: remoteAddressMatchDefaultValue },
+        ],
         token_bucket: {
           max_tokens: rateLimit.perCidrLimits.maxTokens,
           tokens_per_fill: rateLimit.perCidrLimits.tokensPerFill,
