@@ -1842,7 +1842,54 @@
                           }
                         },
                         {
-                          "remote_ip": {}
+                          "remote_address_match": {
+                            "address_matcher": {
+                              "cidr_ranges": [
+                                {
+                                  "address_prefix": "192.68.78.0",
+                                  "prefix_len": {
+                                    "value": 24
+                                  }
+                                }
+                              ]
+                            },
+                            "descriptor_value": "192.68.78.0/24"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-metadata-info",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/metadata/v1/info"
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "remote_address_match": {
+                            "address_matcher": {
+                              "cidr_ranges": [
+                                {
+                                  "address_prefix": "192.68.78.0",
+                                  "prefix_len": {
+                                    "value": 24
+                                  }
+                                }
+                              ],
+                              "invert_match": true
+                            },
+                            "descriptor_value": "per-cidr-default"
+                          }
                         }
                       ]
                     },
@@ -2403,7 +2450,7 @@
                             "value": "registry-metadata-info"
                           },
                           {
-                            "key": "remote_ip",
+                            "key": "remote_address_match",
                             "value": "192.68.78.0/24"
                           }
                         ],
@@ -2420,7 +2467,8 @@
                             "value": "registry-metadata-info"
                           },
                           {
-                            "key": "remote_ip"
+                            "key": "remote_address_match",
+                            "value": "per-cidr-default"
                           }
                         ],
                         "token_bucket": {
