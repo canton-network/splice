@@ -254,7 +254,7 @@ async function installValidator(
     ...(participantBootstrapDumpSecret ? { nodeIdentifier: newParticipantIdentifier } : {}),
     persistence: {
       ...validatorValuesFromYamlFiles.persistence,
-      postgresName: 'postgres',
+      postgresName: postgres.instanceName,
     },
     pvc: {
       volumeStorageClass: standardStorageClassName,

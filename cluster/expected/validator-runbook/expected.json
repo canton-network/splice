@@ -915,7 +915,7 @@
           },
           "persistence": {
             "host": "postgres",
-            "postgresName": "postgres",
+            "postgresName": "postgres-helmless",
             "secretName": "postgres-secrets"
           },
           "pvc": {
