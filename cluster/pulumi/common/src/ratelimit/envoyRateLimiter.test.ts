@@ -428,6 +428,33 @@ test('validateCidrLimits throws on overlapping CIDRs', () => {
   ).toThrow("192.68.78.0/24 (in override 'group-a') and 192.68.78.128/25 (in override 'group-b')");
 });
 
+test('validateCidrLimits throws when one CIDR is fully contained within another', () => {
+  expect(() =>
+    validateCidrLimits('/registry/metadata/v1/info', {
+      name: 'registry-metadata-info',
+      type: 'limited',
+      ...baseLimits,
+      perCidrLimits: {
+        ...perIpLimits,
+        overrides: {
+          'group-a': {
+            cidrs: ['192.68.78.0/24'],
+            maxTokens: 250,
+            tokensPerFill: 250,
+            fillInterval: '60s',
+          },
+          'group-b': {
+            cidrs: ['192.68.78.0/25'],
+            maxTokens: 250,
+            tokensPerFill: 250,
+            fillInterval: '60s',
+          },
+        },
+      },
+    })
+  ).toThrow("192.68.78.0/24 (in override 'group-a') and 192.68.78.0/25 (in override 'group-b')");
+});
+
 test('validateCidrLimits accepts non-overlapping CIDRs', () => {
   expect(() =>
     validateCidrLimits('/registry/metadata/v1/info', {
