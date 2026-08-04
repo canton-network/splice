@@ -45,6 +45,11 @@ export async function installPostgres(
       xns,
       name,
       parent => installPasswordWithParent(parent, xns, name, secretName),
+      // No need to support legacy chart
+      {
+        deployment: 'docker-image',
+        postgresImage: valuesFromFile.db.postgresImage || 'postgres:18',
+      },
       values,
       undefined,
       supportsSvRunbookReset
