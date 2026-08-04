@@ -1,7 +1,6 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.concurrent.Threading
-import com.digitalasset.canton.console.CommandFailure
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.{HasActorSystem, HasExecutionContext}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv2.transferinstructionresult_output.TransferInstructionResult_Completed
@@ -381,25 +380,28 @@ class TokenStandardV2TransferIntegrationTest
         trackingId,
       )
 
-      assertThrows[CommandFailure](
-        loggerFactory.assertLogs(
-          aliceWalletClient.createTokenStandardTransferV2(
-            bobUserParty,
-            10,
-            "not ok, resubmitted same trackingId so should be rejected",
-            expiration,
-            trackingId,
-          ),
-          _.errorMessage should include("Command submission already exists"),
-        )
-      )
+      val createdCid = created.output match {
+        case members.TransferInstructionPending(value) => value.transferInstructionCid
+        case x => fail(s"Expected pending transfer, got $x")
+      }
 
+      // Resubmitting the same trackingId is deduplicated idempotently: the accepted duplicate is
+      // recovered centrally and returns the original result instead of failing.
+      val resubmitted = aliceWalletClient.createTokenStandardTransferV2(
+        bobUserParty,
+        10,
+        "resubmitted with the same trackingId",
+        expiration,
+        trackingId,
+      )
+      inside(resubmitted.output) { case members.TransferInstructionPending(value) =>
+        value.transferInstructionCid shouldBe createdCid
+      }
+
+      // Still exactly one transfer instruction, i.e. no duplicate was created.
       eventually() {
         inside(aliceWalletClient.listTokenStandardTransfers()) { case Seq(t) =>
-          t.contractId.contractId should be(created.output match {
-            case members.TransferInstructionPending(value) => value.transferInstructionCid
-            case x => fail(s"Expected pending transfer, got $x")
-          })
+          t.contractId.contractId should be(createdCid)
         }
       }
     }

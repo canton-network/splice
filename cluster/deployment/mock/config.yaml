@@ -9,6 +9,10 @@ validator1:
     cron: "0 /10 * * * ?" # Run every 10min
     maxDuration: "5m"
     retention: "30d"
+  validatorApp:
+    additionalEnvVars:
+      - name: ADDITIONAL_CONFIG_VALIDATOR1_DUMMY_NAME
+        value: ADDITIONAL_CONFIG_VALIDATOR1_DUMMY_NAME
 multiValidator:
   postgresPvcSize: '100Gi'
   # Dummy values for testing
@@ -30,6 +34,18 @@ multiValidator:
 sv:
   synchronizer:
     skipInitialization: true
+  scan:
+    externalRateLimits:
+      rateLimits:
+        /registry/metadata/v1/info:
+          perIpLimits:
+            overrides:
+              test:
+                ips:
+                  - 192.68.78.50
+                maxTokens: 250
+                tokensPerFill: 250
+                fillInterval: 60s
 splitwell:
   maxDarVersion: '0.1.8'
   participantPruningSchedule:
@@ -84,8 +100,8 @@ synchronizerMigration:
   active:
     id: 9
     version: 0.3.20
-    cometbft:
-      volumeSize: "42Gi"
+    sequencer:
+      enableBftSequencer: true
     releaseReference:
       gitReference: "refs/heads/release-line-0.3.20"
       repoUrl: https://github.com/canton-network/splice
@@ -141,16 +157,29 @@ monitoring:
     muteTimeIntervals:
       - name: sv1-mute
         objectMatchers:
-          - [ 'namespace', '=', 'sv1' ]
-        startTime: '04:00'
-        endTime: '07:00'
-        weekdays:
-          - saturday:sunday
+          - [ 'namespace', '=', 'sv1-test' ]
+        timeWindows:
+          - times:
+              - startTime: '18:00'
+                endTime: '24:00'
+            weekdays:
+              - wednesday
       - name: sv-runbook-mute
         objectMatchers:
-          - [ 'namespace', '=', 'sv' ]
-        startTime: '06:00'
-        endTime: '10:00'
+          - [ 'namespace', '=', 'sv-test' ]
+        timeWindows:
+          - times:
+              - startTime: '18:00'
+                endTime: '24:00'
+            weekdays:
+              - wednesday
+          - times:
+              - startTime: '00:00'
+                endTime: '06:00'
+              - startTime: '12:00'
+                endTime: '13:00'
+            weekdays:
+              - thursday
 operatorDeployment:
   reference:
     gitReference: refs/heads/main
@@ -243,6 +272,10 @@ svs:
       cantonLogLevel: INFO
       apiRequestLogLevel: DEBUG
 infra:
+  ipWhitelisting:
+    extraWhitelistedIngress:
+      - 1.2.3.4/32
+      - 2.3.4.5/32
   extraCustomResources:
     deny-onboard-prepare-endpoint:
       apiVersion: security.istio.io/v1
@@ -283,11 +316,20 @@ infra:
 cluster:
   nodePools:
     apps:
-      nodeType: n2-standard-16
-    hyperdiskApps:
-      nodeType: c4-standard-16
+      nodeType: n4d-standard-16
       minNodes: 0
       maxNodes: 1
+      zones: '*'
+    additionalApps:
+    - nodeType: n4-standard-16
+      minNodes: 0
+      maxNodes: 1
+      zones: '*'
+    additionalInfra:
+    - nodeType: n4-standard-8
+      minNodes: 1
+      maxNodes: 3
+      zones: '*'
 gha:
   githubRepo: "https://github.com/canton-network/splice"
   runnerVersion: "0.5.10"

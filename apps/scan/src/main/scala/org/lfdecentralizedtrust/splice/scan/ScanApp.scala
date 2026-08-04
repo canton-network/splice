@@ -93,6 +93,7 @@ import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingRequiremen
 import org.lfdecentralizedtrust.splice.util.HasHealth
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
+import cats.implicits.*
 
 import org.apache.pekko.stream.Materializer
 
@@ -171,7 +172,7 @@ class ScanApp(
         config.synchronizerNodes.successor.toList ++
         config.synchronizerNodes.legacy.toList
       all.flatMap { syncConfig =>
-        syncConfig.bftSequencerConfig.map { bftConfig =>
+        syncConfig.cantonBft.map { bftConfig =>
           new SequencerAdminConnection(
             syncConfig.sequencer,
             amuletAppParameters.loggingConfig.api,
@@ -252,11 +253,12 @@ class ScanApp(
         participantAdminConnection,
         config.globalSynchronizerAlias,
         config.parameters.spliceCachingConfigs.physicalSynchronizerExpiration,
+        retryProvider,
         loggerFactory,
       )
       kvStore <- ScanKeyValueStore(dsoParty, participantId, storage, loggerFactory)
       kvProvider = new ScanKeyValueProvider(kvStore, loggerFactory)
-      bulkStorage = config.bulkStorage.s3.map(_ =>
+      bulkStorage = (config.bulkStorage.staging, config.bulkStorage.committed).tupled.map(_ =>
         BulkStorage(
           scanStorageConfigV1,
           config.bulkStorage,
@@ -418,7 +420,8 @@ class ScanApp(
         config.rollForwardLsu,
       )
       scanStreamHandler = new HttpScanStreamHandler(
-        config.bulkStorage.s3.map(S3BucketConnection(_, loggerFactory))
+        // TODO(#5884): consider whether this should be going through bulkStorageReader instead of directly to the bucket.
+        config.bulkStorage.committed.map(S3BucketConnection(_, loggerFactory))
       )
       contractFetcher = ChoiceContextContractFetcher.createStoreWithLedgerFallback(
         config.parameters.contractFetchLedgerFallbackConfig,
@@ -630,20 +633,27 @@ object ScanApp {
       storage.isActive
 
     override def close(): Unit = {
-      LifeCycle.close(bftSequencersAdminConnections*)(logger)
-      LifeCycle.close(cleanups*)(logger)
-      bulkStorage.foreach(LifeCycle.close(_)(logger))
-      LifeCycle.close(
-        automation,
-        verdictAutomation,
-        store,
-        storage,
-        synchronizerNodes.current,
-        participantAdminConnection,
-      )(logger)
-      synchronizerNodes.successor.foreach(
-        LifeCycle.close(_)(logger)
-      )
+      // Close everything in one LifeCycle.close call: it closes every instance left to right
+      // even when some of them fail, whereas separate calls stop at the first failing call.
+      val instances: Seq[AutoCloseable] =
+        bftSequencersAdminConnections ++
+          cleanups ++
+          bulkStorage.toList ++
+          Seq(
+            automation,
+            verdictAutomation,
+            store,
+          ) ++
+          rewardsReferenceStoreO.toList ++
+          Seq(
+            storage,
+            synchronizerNodes.current,
+            participantAdminConnection,
+          ) ++
+          synchronizerNodes.successor.toList ++
+          synchronizerNodes.legacy.toList ++
+          synchronizerNodes.additionalLegacy
+      LifeCycle.close(instances*)(logger)
     }
   }
 }

@@ -28,7 +28,7 @@ trait BaseScanAppConfig {}
 final case class ScanSynchronizerConfig(
     sequencer: FullClientConfig,
     mediator: FullClientConfig,
-    bftSequencerConfig: Option[BftSequencerConfig],
+    cantonBft: Option[CantonBftPeerConfig],
 )
 
 final case class MediatorVerdictIngestionConfig(
@@ -41,9 +41,12 @@ final case class BulkStorageConfig(
     snapshotPollingInterval: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(30),
     // When more updates are not yet available, how long to wait for more.
     updatesPollingInterval: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(30),
+    // When BFT was not reached on objects, how long to wait before retrying.
+    bftRetryInterval: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(30),
     // The maximum parallelization for uploading multiple parts of the same object
     maxParallelPartUploads: Int = 4,
-    s3: Option[S3Config] = None,
+    staging: Option[S3Config] = None,
+    committed: Option[S3Config] = None,
 )
 
 /** @param miningRoundsCacheTimeToLiveOverride Intended only for testing!

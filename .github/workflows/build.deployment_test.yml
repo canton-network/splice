@@ -25,10 +25,9 @@ jobs:
       - name: Setup
         uses: ./.github/actions/tests/common_test_setup
         with:
-          cache_version: 8
+          cache_version: 9
           test_name: deployment_test
           with_sbt: false
-          target: 'oss'
 
       - name: Helm tests
         uses: ./.github/actions/nix/run_bash_command_in_nix

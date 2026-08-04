@@ -34,7 +34,12 @@ import org.lfdecentralizedtrust.splice.http.{
 }
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.ScanConnection
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
-import org.lfdecentralizedtrust.splice.store.{ActiveVotesStore, AppStore, AppStoreWithIngestion}
+import org.lfdecentralizedtrust.splice.store.{
+  ActiveVotesStore,
+  AppStore,
+  AppStoreWithIngestion,
+  VoteResultsFilters,
+}
 import org.lfdecentralizedtrust.splice.sv.cometbft.CometBftClient
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvSvStore}
@@ -57,6 +62,7 @@ class HttpSvOperatorHandler(
     override protected val timeouts: ProcessingTimeout,
     protected val loggerFactory: NamedLoggerFactory,
     upgradesConfig: UpgradesConfig,
+    participantAdminConnection: ParticipantAdminConnection,
 )(implicit
     ec: ExecutionContextExecutor,
     protected val tracer: Tracer,
@@ -131,11 +137,13 @@ class HttpSvOperatorHandler(
       for {
         scanConnection <- scanConnectionF
         (voteResults, nextPageToken) <- scanConnection.listVoteRequestResults(
-          body.actionName,
-          body.accepted,
-          body.requester,
-          body.effectiveFrom,
-          body.effectiveTo,
+          VoteResultsFilters(
+            body.actionName,
+            body.accepted,
+            requester = body.requester,
+            effectiveFrom = body.effectiveFrom,
+            effectiveTo = body.effectiveTo,
+          ),
           body.limit.intValue,
           body.pageToken,
         )
@@ -157,6 +165,34 @@ class HttpSvOperatorHandler(
               .toVector,
             nextPageToken,
           )
+        )
+      }
+    }
+  }
+
+  override def countVoteRequestResults(
+      respond: r0.CountVoteRequestResultsResponse.type
+  )(
+      body: definitions.CountVoteResultsRequest
+  )(
+      extracted: ActAsKnownUserRequest
+  ): Future[r0.CountVoteRequestResultsResponse] = {
+    implicit val ActAsKnownUserRequest(traceContext) = extracted
+    withSpan(s"$workflowId.countVoteRequestResults") { _ => _ =>
+      for {
+        scanConnection <- scanConnectionF
+        count <- scanConnection.countVoteRequestResults(
+          VoteResultsFilters(
+            body.actionName,
+            body.accepted,
+            requester = body.requester,
+            effectiveFrom = body.effectiveFrom,
+            effectiveTo = body.effectiveTo,
+          )
+        )
+      } yield {
+        r0.CountVoteRequestResultsResponse.OK(
+          definitions.CountVoteResultsResponse(count)
         )
       }
     }
@@ -559,6 +595,21 @@ class HttpSvOperatorHandler(
             )
           )
       }
+    }
+  }
+
+  override def cancelLogicalSynchronizerUpgrade(
+      respond: r0.CancelLogicalSynchronizerUpgradeResponse.type
+  )()(
+      extracted: ActAsKnownUserRequest
+  ): Future[r0.CancelLogicalSynchronizerUpgradeResponse] = {
+    implicit val ActAsKnownUserRequest(traceContext) = extracted
+    withSpan(s"$workflowId.cancelLogicalSynchronizerUpgrade") { _ => _ =>
+      for {
+        decentralizedSynchronizer <- dsoStore.getDsoRules().map(_.domain)
+        _ <- participantAdminConnection
+          .removeLsuAnnouncement(decentralizedSynchronizer)
+      } yield r0.CancelLogicalSynchronizerUpgradeResponseOK
     }
   }
 

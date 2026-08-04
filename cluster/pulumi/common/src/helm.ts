@@ -9,7 +9,6 @@ import path from 'path';
 import { CnChartVersion } from './artifacts';
 import { config, imagePullPolicy } from './config';
 import { spliceConfig } from './config/config';
-import { hyperdiskSupportConfig } from './config/hyperdiskSupportConfig';
 import { activeVersion } from './domainMigration';
 import { SplicePlaceholderResource } from './pulumiUtilResources';
 import {
@@ -225,44 +224,36 @@ function versionStringWithPossibleOverride(
   }
 }
 
-export const appsAffinityAndTolerations = getAppsAffinityAndTolerations(
-  hyperdiskSupportConfig.hyperdiskSupport.enabled
-);
-
-export const nonHyperdiskAppsAffinityAndTolerations = getAppsAffinityAndTolerations(false);
-
-function getAppsAffinityAndTolerations(hyperdiskSupport: boolean) {
-  return {
-    affinity: {
-      nodeAffinity: {
-        requiredDuringSchedulingIgnoredDuringExecution: {
-          nodeSelectorTerms: [
-            {
-              matchExpressions: [
-                {
-                  key: 'cn_apps',
-                  operator: 'Exists',
-                },
-                {
-                  key: 'cn_apps',
-                  operator: hyperdiskSupport ? 'In' : 'NotIn',
-                  values: ['hyperdisk'],
-                },
-              ],
-            },
-          ],
-        },
+export const appsAffinityAndTolerations = {
+  affinity: {
+    nodeAffinity: {
+      requiredDuringSchedulingIgnoredDuringExecution: {
+        nodeSelectorTerms: [
+          {
+            matchExpressions: [
+              {
+                key: 'cn_apps',
+                operator: 'Exists',
+              },
+              {
+                key: 'cn_apps',
+                operator: 'In',
+                values: ['hyperdisk'],
+              },
+            ],
+          },
+        ],
       },
     },
-    tolerations: [
-      {
-        key: 'cn_apps',
-        operator: 'Exists',
-        effect: 'NoSchedule',
-      },
-    ],
-  };
-}
+  },
+  tolerations: [
+    {
+      key: 'cn_apps',
+      operator: 'Exists',
+      effect: 'NoSchedule',
+    },
+  ],
+};
 
 export const infraAffinityAndTolerations = {
   affinity: {

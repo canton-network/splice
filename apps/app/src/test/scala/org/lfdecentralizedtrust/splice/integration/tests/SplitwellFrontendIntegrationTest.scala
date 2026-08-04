@@ -31,10 +31,6 @@ class SplitwellFrontendIntegrationTest
     EnvironmentDefinition
       .simpleTopology1Sv(this.getClass.getSimpleName)
       .withAdditionalSetup(implicit env => {
-        EnvironmentDefinition
-          .simpleTopology1Sv(this.getClass.getSimpleName)
-          .setup(env)
-
         aliceValidatorBackend.participantClient.upload_dar_unless_exists(splitwellDarPath)
         bobValidatorBackend.participantClient.upload_dar_unless_exists(splitwellDarPath)
       })

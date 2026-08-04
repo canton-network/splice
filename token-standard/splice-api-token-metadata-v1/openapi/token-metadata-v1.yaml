@@ -170,13 +170,28 @@ components:
         showAccountInputFields:
           description: |
             Informs wallets whether the instrument supports non-basic accounts
-            and the wallet should thus show input fields for the account
+            and the wallet should thus show input fields for both the account
             provider and the account id in input forms for transfers and allocations.
 
             Note that wallets should always show non-null account providers and
             account ids when displaying transfers and allocations.
+
+            This property is deprecated in favor of the more fine-grained
+            `accountInputFieldsToShow` property.
           type: boolean
           default: false
+          deprecated: true
+        accountInputFieldsToShow:
+          description: |
+            Fine-grained control for account input field display in wallets.
+
+            If set, then wallets should only display the specified input
+            field(s) in transfer and allocation input forms
+            *independently* of the `showAccountInputFields` property.
+
+            Note that wallets should always show non-null account providers and
+            account ids when displaying transfers and allocations.
+          $ref: "#/components/schemas/AccountInputFieldsToShow"
       required:
         [
           "id",
@@ -230,3 +245,19 @@ components:
             Timestamp (exclusive) until which the instrument is paused, if known.
           type: string
           format: date-time
+
+    AccountInputFieldsToShow:
+      description: |
+        Which account input field(s) wallets should show in forms.
+      type: array
+      items:
+        $ref: "#/components/schemas/AccountInputFieldToShow"
+      uniqueItems: true
+
+    AccountInputFieldToShow:
+      description: |
+        Which single account input field wallets should show in forms.
+      type: string
+      enum:
+        - provider
+        - accountId

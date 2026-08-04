@@ -99,3 +99,63 @@ tests:
     asserts:
       - notExists:
           path: spec.template.spec.volumes
+
+
+  - it: "omits security contexts by default"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - notExists:
+          path: spec.template.spec.securityContext
+      - notExists:
+          path: spec.template.spec.containers[0].securityContext
+      - notExists:
+          path: spec.template.spec.initContainers[0].securityContext
+      - notExists:
+          path: spec.template.spec.initContainers[1].securityContext
+
+  - it: "allows overriding security contexts via values"
+    set:
+      securityContexts:
+        pod:
+          runAsNonRoot: true
+          seccompProfile:
+            type: Localhost
+            localhostProfile: profiles/hardened.json
+        containers:
+          domain:
+            runAsUser: 5000
+            allowPrivilegeEscalation: true
+          persistence:
+            runAsUser: 6000
+            privileged: true
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext
+          value:
+            runAsNonRoot: true
+            seccompProfile:
+              type: Localhost
+              localhostProfile: profiles/hardened.json
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.runAsUser
+          value: 5000
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: true
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.runAsUser
+          value: 6000
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.privileged
+          value: true
+      - equal:
+          path: spec.template.spec.initContainers[1].securityContext.runAsUser
+          value: 6000
+      - equal:
+          path: spec.template.spec.initContainers[1].securityContext.privileged
+          value: true

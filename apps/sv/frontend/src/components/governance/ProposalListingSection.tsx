@@ -31,6 +31,7 @@ interface ProposalListingSectionProps {
   data: ProposalListingData[];
   noDataMessage: string;
   uniqueId: string;
+  badgeCount?: number;
   showThresholdDeadline?: boolean;
   showVoteStats?: boolean;
   showStatus?: boolean;
@@ -77,6 +78,7 @@ export const ProposalListingSection: React.FC<ProposalListingSectionProps> = pro
     data,
     noDataMessage,
     uniqueId,
+    badgeCount,
     showThresholdDeadline,
     showVoteStats,
     showStatus,
@@ -105,7 +107,11 @@ export const ProposalListingSection: React.FC<ProposalListingSectionProps> = pro
 
   return (
     <Box ref={sectionRef} sx={{ mb: 6 }} data-testid={`${uniqueId}-section`}>
-      <PageSectionHeader title={sectionTitle} data-testid={`${uniqueId}-section`} />
+      <PageSectionHeader
+        title={sectionTitle}
+        badgeCount={badgeCount}
+        data-testid={`${uniqueId}-section`}
+      />
 
       {sortedData.length === 0 && !hasNextPage ? (
         <InfoBox info={noDataMessage} data-testid={`${uniqueId}-section-info`} />
@@ -291,7 +297,10 @@ const VoteRow: React.FC<VoteRowProps> = React.memo(props => {
           </Typography>
         )}
       </TableCell>
-      <TableCell data-testid={`${uniqueId}-row-contract-id`}>
+      <TableCell
+        data-testid={`${uniqueId}-row-contract-id`}
+        sx={{ minWidth: 0, overflow: 'visible' }}
+      >
         <CopyableIdentifier
           value={contractId}
           size="small"

@@ -1,5 +1,6 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+import { isIP } from 'net';
 import { z } from 'zod';
 
 export const BucketRateLimitSchema = z.object({
@@ -8,9 +9,21 @@ export const BucketRateLimitSchema = z.object({
   fillInterval: z.string(),
 });
 
+const Ipv4AddressSchema = z.string().refine(ip => isIP(ip) === 4, {
+  message: 'Expected IPv4 address',
+});
+
+const OverrideSchema = BucketRateLimitSchema.extend({
+  ips: z.array(Ipv4AddressSchema).min(1),
+});
+
+export const PerIpLimitsSchema = BucketRateLimitSchema.extend({
+  overrides: z.record(z.string().min(1), OverrideSchema).optional(),
+});
+
 const BucketMatchedRateLimitSchema = BucketRateLimitSchema.extend({
   type: z.literal('limited'),
-  clientIp: z.boolean(),
+  perIpLimits: PerIpLimitsSchema.optional(),
 });
 
 export const BannedSchema = z.object({

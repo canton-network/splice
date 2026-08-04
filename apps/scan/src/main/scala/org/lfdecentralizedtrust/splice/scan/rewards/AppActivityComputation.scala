@@ -7,9 +7,12 @@ import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.mediator.admin.v30
 import com.digitalasset.canton.tracing.TraceContext
+import com.digitalasset.daml.lf.data.Numeric
+import com.digitalasset.daml.lf.data.{assertRight as damlRight}
 import org.lfdecentralizedtrust.splice.scan.store.ScanRewardsReferenceStore
 import org.lfdecentralizedtrust.splice.scan.store.db.{DbAppActivityRecordStore, DbScanVerdictStore}
 
+import java.math.RoundingMode
 import scala.collection.immutable.SortedMap
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -18,6 +21,8 @@ import scala.concurrent.{ExecutionContext, Future}
   */
 object AppActivityComputation {
   val MaxTrafficCostBytes: Long = 100L * 1024 * 1024 // 100 MB
+
+  private val scale: Numeric.Scale = Numeric.Scale.assertFromInt(10)
 
   /** Bump this when the functional behavior of the app activity computation changes.
     * WARNING: this MUST be bumped with utmost care to avoid the loss of
@@ -43,6 +48,14 @@ class AppActivityComputation(
       asOf: CantonTimestamp
   )(implicit tc: TraceContext): Future[Option[Long]] =
     rewardsReferenceStore.lookupLatestArchivedOpenMiningRound(asOf)
+
+  /** The OpenMiningRound round number active at asOf, if the round data has been ingested. */
+  def lookupActiveOpenMiningRound(
+      asOf: CantonTimestamp
+  )(implicit tc: TraceContext): Future[Option[Long]] =
+    rewardsReferenceStore
+      .lookupActiveOpenMiningRounds(Seq(asOf))
+      .map(_.get(asOf).map { case (roundNumber, _) => roundNumber })
 
   /** Compute app activity records for a batch of verdicts.
     *
@@ -93,7 +106,9 @@ class AppActivityComputation(
             roundInfoByTime.get(summary.sequencingTime) match {
               case Some((roundNumber, roundOpensAt)) =>
                 for {
-                  providers <- rewardsReferenceStore.lookupFeaturedAppPartiesAsOf(roundOpensAt)
+                  featuredAppWeights <- rewardsReferenceStore.lookupFeaturedAppPartiesAsOf(
+                    roundOpensAt
+                  )
                   svParticipantIds <- rewardsReferenceStore.lookupSvParticipantIdsAsOf(
                     roundOpensAt
                   )
@@ -112,14 +127,18 @@ class AppActivityComputation(
                     (
                       summary,
                       verdict,
-                      computeForSingleVerdict(summary, verdict, roundNumber, providers),
+                      computeForSingleVerdict(summary, verdict, roundNumber, featuredAppWeights),
                     )
                   }
                 }
               case None =>
                 // Skip activity record computation as we don't have the necessary round data ingested.
-                // This can happen for freshly onboarded SVs, but is not
-                // expected to happen once the first activity record has been computed.
+                // This can happen for freshly onboarded SVs if the reward
+                // reference store does not have the data for any of the
+                // sequencingTime(s) in this batch.
+                // OTOH this cannot happen after ingestion starts because
+                // lookupActiveOpenMiningRounds blocks until the reference store
+                // has caught up to all the sequencingTime(s) in this batch.
                 logger.debug(
                   s"No round data found for sequencingTime=${summary.sequencingTime}, skipping activity record computation"
                 )
@@ -134,13 +153,13 @@ class AppActivityComputation(
       summary: DbScanVerdictStore.TrafficSummaryT,
       verdict: v30.Verdict,
       roundNumber: Long,
-      featuredAppProviders: Set[String],
+      featuredAppWeights: Map[String, BigDecimal],
   ): Option[DbAppActivityRecordStore.AppActivityRecordT] = {
     val envelopesWithFeaturedAppConfirmers =
       summary.envelopeTrafficSummarys.flatMap { envelope =>
         val envelopeConfirmers =
           computeEnvelopeConfirmers(envelope, verdict.getTransactionViews.views)
-        val featuredAppConfirmers = envelopeConfirmers.intersect(featuredAppProviders)
+        val featuredAppConfirmers = envelopeConfirmers.intersect(featuredAppWeights.keySet)
         Option.when(featuredAppConfirmers.nonEmpty)((envelope, featuredAppConfirmers))
       }
 
@@ -149,11 +168,26 @@ class AppActivityComputation(
 
     if (totalFeaturedAppEnvelopesTraffic == 0L) None
     else {
-      val aggregatedWeights = computeAggregatedWeights(
+      val aggregatedBurn = computeAggregatedBurn(
         envelopesWithFeaturedAppConfirmers,
         summary.totalTrafficCost,
         totalFeaturedAppEnvelopesTraffic,
       )
+
+      val aggregatedWeights = SortedMap.from(aggregatedBurn.map { case (party, burn) =>
+        val weight =
+          featuredAppWeights.getOrElse(
+            party,
+            throw new IllegalStateException(
+              s"No featured app weight found for party=$party"
+            ),
+          )
+        val weightNumeric = Numeric.assertFromBigDecimal(AppActivityComputation.scale, weight)
+        val burnNumeric = damlRight(Numeric.fromLong(AppActivityComputation.scale, burn))
+        val product =
+          damlRight(Numeric.multiply(AppActivityComputation.scale, burnNumeric, weightNumeric))
+        party -> product.setScale(0, RoundingMode.FLOOR).longValueExact()
+      })
 
       Some(
         DbAppActivityRecordStore.AppActivityRecordT(
@@ -177,7 +211,7 @@ class AppActivityComputation(
   /** Here it is important to accumulate per-app numerators and then
     * divide by totalFeaturedAppEnvelopesTraffic once at the end to reduce rounding error.
     */
-  private def computeAggregatedWeights(
+  private def computeAggregatedBurn(
       envelopesWithFeaturedAppConfirmers: Seq[(DbScanVerdictStore.EnvelopeT, Set[String])],
       totalConfirmationRequestTraffic: Long,
       totalFeaturedAppEnvelopesTraffic: Long,

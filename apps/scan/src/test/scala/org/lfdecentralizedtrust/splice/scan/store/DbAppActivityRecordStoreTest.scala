@@ -169,6 +169,8 @@ class DbAppActivityRecordStoreTest
         _ <- verdictStore.insertVerdictsWithAppActivityRecords(
           NonEmptyList.of(verdict1 -> noViews, verdict2 -> noViews),
           appActivityRecords,
+          hasTrafficSummaries = true,
+          firstActiveRoundO = Some(10L),
           lastArchivedRoundO = Some(9L),
         )
 
@@ -209,6 +211,8 @@ class DbAppActivityRecordStoreTest
         _ <- verdictStore.insertVerdictsWithAppActivityRecords(
           NonEmptyList.of(mkVerdict(verdictStore, "update-mono-1", baseTs) -> noViews),
           Seq(baseTs -> mkRecord(0L, 10L, Seq("app1::provider"), Seq(100L))),
+          hasTrafficSummaries = true,
+          firstActiveRoundO = Some(10L),
           lastArchivedRoundO = Some(9L),
         )
         // A later batch without activity records still advances the round
@@ -217,10 +221,13 @@ class DbAppActivityRecordStoreTest
             mkVerdict(verdictStore, "update-mono-2", baseTs.plusSeconds(1L)) -> noViews
           ),
           Seq.empty,
+          hasTrafficSummaries = true,
+          firstActiveRoundO = Some(11L),
           lastArchivedRoundO = Some(10L),
         )
         meta <- appStore.lookupActivityRecordMeta(1, 0)
       } yield {
+        meta.value.earliestIngestedRound shouldBe 10L
         meta.value.lastArchivedRound shouldBe Some(10L)
       }
     }
@@ -233,40 +240,96 @@ class DbAppActivityRecordStoreTest
         _ <- verdictStore.insertVerdictsWithAppActivityRecords(
           NonEmptyList.of(mkVerdict(verdictStore, "update-no-meta", baseTs) -> noViews),
           Seq.empty,
-          lastArchivedRoundO = Some(7L),
+          hasTrafficSummaries = true,
+          firstActiveRoundO = Some(7L),
+          lastArchivedRoundO = None,
         )
         meta <- appStore.lookupActivityRecordMeta(1, 0)
       } yield {
-        // Meta row is created with earliestRound = lastArchivedRound
-        // because verdict ingestion is active even without activity records
+        // Meta row is created using the firstActiveRoundO
+        // even though there are no activity records
         meta shouldBe defined
         meta.value.earliestIngestedRound shouldBe 7L
-        meta.value.lastArchivedRound shouldBe Some(7L)
+        meta.value.lastArchivedRound shouldBe None
       }
     }
 
-    "insert verdicts without activity records when appActivityRecords is empty" in {
+    "Does not create meta row when traffic summaries are absent" in {
+      for {
+        (appStore, verdictStore) <- newStores()
+        baseTs = CantonTimestamp.now()
+
+        _ <- verdictStore.insertVerdictsWithAppActivityRecords(
+          NonEmptyList.of(mkVerdict(verdictStore, "update-no-meta", baseTs) -> noViews),
+          Seq.empty,
+          hasTrafficSummaries = false,
+          lastArchivedRoundO = Some(7L),
+        )
+        v <- verdictStore.getVerdictByUpdateId("update-no-meta")
+        countAfter <- countRecords()
+        meta <- appStore.lookupActivityRecordMeta(1, 0)
+      } yield {
+        v shouldBe defined
+        countAfter shouldBe 0L
+        meta shouldBe None
+      }
+    }
+
+    "on a fresh firstSV, does not create meta row when traffic summaries are absent" in {
+      for {
+        (appStore, verdictStore) <- newStores(isFirstSv = true)
+        baseTs = CantonTimestamp.now()
+
+        _ <- verdictStore.insertVerdictsWithAppActivityRecords(
+          NonEmptyList.of(mkVerdict(verdictStore, "update-firstsv-2", baseTs) -> noViews),
+          Seq.empty,
+          hasTrafficSummaries = false,
+        )
+        // Even on firstSV, missing traffic summaries defer meta creation
+        // to a later batch.
+        metaBefore <- appStore.lookupActivityRecordMeta(1, 0)
+
+        // A later batch with traffic summaries creates the meta row.
+        _ <- verdictStore.insertVerdictsWithAppActivityRecords(
+          NonEmptyList.of(
+            mkVerdict(verdictStore, "update-firstsv-3", baseTs.plusSeconds(1L)) -> noViews
+          ),
+          Seq.empty,
+          hasTrafficSummaries = true,
+        )
+        metaAfter <- appStore.lookupActivityRecordMeta(1, 0)
+      } yield {
+        metaBefore shouldBe None
+
+        metaAfter shouldBe defined
+        metaAfter.value.earliestIngestedRound shouldBe -1L
+        metaAfter.value.lastArchivedRound shouldBe Some(0L)
+      }
+    }
+
+    "insert verdicts without activity records, when reward reference store does not have data asOf" in {
       for {
         (appStore, verdictStore) <- newStores()
         baseTs = CantonTimestamp.now()
 
         verdict = mkVerdict(verdictStore, "update-no-activity", baseTs)
 
+        // firstActiveRoundO is None, as reward reference store began ingestion after baseTx
         _ <- verdictStore.insertVerdictsWithAppActivityRecords(
           NonEmptyList.of(verdict -> noViews),
           Seq.empty,
+          hasTrafficSummaries = true,
+          firstActiveRoundO = None,
+          lastArchivedRoundO = None,
         )
 
         v <- verdictStore.getVerdictByUpdateId("update-no-activity")
         countAfter <- countRecords()
-        // No meta row should be created when there are no activity records
         meta <- appStore.lookupActivityRecordMeta(1, 0)
       } yield {
         v shouldBe defined
         countAfter shouldBe 0L
-        // Non-firstSV with no lastArchivedRound: meta row is not created
-        // because it would have last_archived_round = NULL, making no
-        // rounds complete.
+        // Non-firstSV with no firstActiveRoundO: meta row is not created
         meta shouldBe None
       }
     }
@@ -289,6 +352,7 @@ class DbAppActivityRecordStoreTest
         _ <- verdictStore.insertVerdictsWithAppActivityRecords(
           NonEmptyList.of(verdict1 -> noViews, verdict2 -> noViews, verdict3 -> noViews),
           appActivityRecords,
+          hasTrafficSummaries = true,
         )
 
         v1 <- verdictStore.getVerdictByUpdateId("update-with-1")
@@ -335,6 +399,7 @@ class DbAppActivityRecordStoreTest
         _ <- verdictStore.insertVerdictsWithAppActivityRecords(
           NonEmptyList.of(verdict -> noViews),
           appActivityRecords,
+          hasTrafficSummaries = true,
         )
 
         v <- verdictStore.getVerdictByUpdateId("update-mismatch")
@@ -778,7 +843,12 @@ class DbAppActivityRecordStoreTest
       for {
         (store, _) <- newStore()
         _ <- store.insertActivityRecordMetaForTesting(2, 0, 1000000L, 10L, None)
-        result <- runEnsureMeta(store, (2000000L, 20L))
+        result <- loggerFactory.assertLogs(
+          runEnsureMeta(store, (2000000L, 20L)),
+          _.errorMessage should include(
+            "App activity ingestion version downgrade detected"
+          ),
+        )
         meta <- store.lookupActivityRecordMeta(2, 0)
       } yield {
         result shouldBe DowngradeDetected(1, 0, 2, 0)
@@ -1000,7 +1070,7 @@ class DbAppActivityRecordStoreTest
   ): Future[MetaCheckResult] =
     futureUnlessShutdownToFuture(
       storage.underlying.queryAndUpdate(
-        store.ensureMetaDBIO(ingestionStart, lastArchivedRoundO),
+        store.ensureMetaDBIO(ingestionStart, lastArchivedRoundO, exitOnDowngrade = false),
         "test.ensureMeta",
       )(implicitly, implicitly, _ => false)
     )
@@ -1020,7 +1090,7 @@ class DbAppActivityRecordStoreTest
     val n = storeCounter.getAndIncrement()
     val participantId = mkParticipantId(s"activity-test-$n")
     val updateHistory = new UpdateHistory(
-      storage.underlying,
+      storage,
       migrationId,
       s"app_activity_test_$n",
       participantId,
@@ -1033,7 +1103,7 @@ class DbAppActivityRecordStoreTest
     )
     updateHistory.ingestionSink.initialize().map { _ =>
       val store = new DbAppActivityRecordStore(
-        storage.underlying,
+        storage,
         updateHistory,
         versions,
         isFirstSv,
@@ -1046,10 +1116,12 @@ class DbAppActivityRecordStoreTest
   /** Creates both an app activity record store and a verdict store backed by
     * the same UpdateHistory, for testing insertVerdictsWithAppActivityRecords.
     */
-  private def newStores(): Future[(DbAppActivityRecordStore, DbScanVerdictStore)] = {
+  private def newStores(
+      isFirstSv: Boolean = false
+  ): Future[(DbAppActivityRecordStore, DbScanVerdictStore)] = {
     val participantId = mkParticipantId("activity-test")
     val updateHistory = new UpdateHistory(
-      storage.underlying,
+      storage,
       migrationId,
       "app_activity_combined_test",
       participantId,
@@ -1065,7 +1137,7 @@ class DbAppActivityRecordStoreTest
         storage.underlying,
         updateHistory,
         DbAppActivityRecordStore.IngestionVersions(1, 0),
-        isFirstSv = false,
+        isFirstSv,
         loggerFactory,
       )
       val verdictStore = new DbScanVerdictStore(

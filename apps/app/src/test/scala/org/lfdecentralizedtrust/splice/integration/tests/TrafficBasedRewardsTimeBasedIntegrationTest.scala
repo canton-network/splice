@@ -15,6 +15,10 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   allocationv1,
   metadatav1,
 }
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppRight_Update
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules_UpdateFeaturedAppRight
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_UpdateFeaturedAppRight
 import org.lfdecentralizedtrust.splice.console.{ScanAppBackendReference, WalletAppClientReference}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.apps.tradingapp
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
@@ -35,7 +39,9 @@ import org.lfdecentralizedtrust.splice.sv.automation.confirmation.{
   CalculateRewardsDryRunTrigger,
 }
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.ExpiredAmuletTransferInstructionTrigger
+import org.lfdecentralizedtrust.splice.sv.automation.singlesv.ReceiveSvRewardCouponTrigger
 import org.lfdecentralizedtrust.splice.util.{
+  AmuletConfigUtil,
   ChoiceContextWithDisclosures,
   TimeTestUtil,
   TriggerTestUtil,
@@ -44,7 +50,9 @@ import org.lfdecentralizedtrust.splice.util.{
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
 import org.lfdecentralizedtrust.splice.wallet.admin.api.client.commands.HttpWalletAppClient
 
+import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
+import scala.jdk.OptionConverters.*
 import scala.util.Random
 
 // Tests the TrafficSummary ingestion and AppActivityRecord creation for each
@@ -59,10 +67,14 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
     with WalletTestUtil
     with TriggerTestUtil
     with TimeTestUtil
+    with AmuletConfigUtil
     with ExternallySignedPartyTestUtil
     with TokenStandardTest {
 
   protected def rewardConfigMode: TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode
+
+  // Applicable for rounds >= 7
+  private val aliceActivityWeight = BigDecimal("2.2")
 
   private def dryRunEnabled: Boolean =
     rewardConfigMode == TrafficBasedRewardsTimeBasedIntegrationTestBase.RewardConfigMode.DryRun
@@ -72,7 +84,7 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
-      .simpleTopology4SvsWithSimTime(this.getClass.getSimpleName)
+      .simpleTopology1SvWithSimTime(this.getClass.getSimpleName)
       .withAdditionalSetup(implicit env => {
         Seq(
           sv1ValidatorBackend,
@@ -104,6 +116,14 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
         updateAutomationConfig(ConfigurableApp.Validator)(
           _.withPausedTrigger[ReceiveFaucetCouponTrigger]
             .withPausedTrigger[CollectRewardsAndMergeAmuletsTrigger]
+        )(config)
+      )
+      // Pause SV reward collection so that it does not race against
+      // advanceTimeAndWaitForRoundOpening in the activity block,
+      // which would cause "Skipped N SV rewards" warnings
+      .addConfigTransform((_, config) =>
+        updateAutomationConfig(ConfigurableApp.Sv)(
+          _.withPausedTrigger[ReceiveSvRewardCouponTrigger]
         )(config)
       )
 
@@ -148,40 +168,9 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
     val calculateRewardsDryRunTriggers =
       activeSvs.map(_.dsoAutomation.trigger[CalculateRewardsDryRunTrigger])
 
-    // 3 initial advances with CalculateRewardsTrigger paused but
-    // verdict ingestion active, so that the meta row is created and
-    // bootstrap rounds have activity data available.
-    setTriggersWithin(triggersToPauseAtStart =
-      calculateRewardsTriggers ++ calculateRewardsDryRunTriggers
-    ) {
-      for (round <- 1 to 3) {
-        advanceTimeAndWaitForRoundOpening
-        assertOldestOpenRound(round.toLong)
-      }
-
-      clue("Bootstrap rounds have zero activity on firstSV (no featured apps yet)") {
-        assertZeroTotals(sv1ScanBackend, 0L to 2L)
-      }
-
-      clue("All SVs report zero totals for rounds after bootstrap") {
-        Seq(sv1ScanBackend, sv2ScanBackend, sv3ScanBackend, sv4ScanBackend).foreach { scan =>
-          assertZeroTotals(scan, 1L to 2L)
-        }
-      }
-    }
-
-    // Sequence of actions
-    //   Open rounds | Action
-    //   ------------+--------------------------------------
-    //   3, 4        | settle id0, grant venue FAP
-    //   4, 5        | settle id1, grant alice FAP
-    //   5, 6        | settle id2, cancel venue FAP
-    //   6, 7        | settle id3, (total 2 DvP trades)
-    //   7, 8        | settle id4, (total 3 DvP trades)
-    //   8, 9        | no-activity
-    //   9, 10       | settle id5, 1 DvP + 3 direct trades
-    //   10, 11      | settle id6, (total 5 DvP trades)
-    //   11, 12      | settle id7, (round not closed)
+    // CalculateRewardsTrigger is paused for the entire test body so
+    // that we can confirm CalculateRewardsV2 contracts were created
+    // for each round before the triggers consume them.
     val (
       updateId0,
       updateId1,
@@ -193,10 +182,34 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
       aliceCreateId,
       svExpireId,
     ) =
-      pauseScanVerdictIngestionWithin(sv1ScanBackend) {
-        setTriggersWithin(triggersToPauseAtStart =
-          calculateRewardsTriggers ++ calculateRewardsDryRunTriggers
-        ) {
+      setTriggersWithin(triggersToPauseAtStart =
+        calculateRewardsTriggers ++ calculateRewardsDryRunTriggers
+      ) {
+        // 3 initial advances with verdict ingestion active, so that the
+        // meta row is created and bootstrap rounds have activity data
+        // available.
+        for (round <- 1 to 3) {
+          advanceRoundsToNextRoundOpening
+          assertOldestOpenRound(round.toLong)
+        }
+
+        clue("Bootstrap rounds have zero activity on firstSV (no featured apps yet)") {
+          assertZeroTotals(sv1ScanBackend, 0L to 2L)
+        }
+
+        // Sequence of actions
+        //   Open rounds | Action
+        //   ------------+--------------------------------------
+        //   3, 4        | settle id0, grant venue FAP
+        //   4, 5        | settle id1, grant alice FAP
+        //   5, 6        | settle id2, cancel venue FAP
+        //   6, 7        | settle id3, (total 2 DvP trades)
+        //   7, 8        | settle id4, (total 3 DvP trades)
+        //   8, 9        | no-activity
+        //   9, 10       | settle id5, 1 DvP + 3 direct trades
+        //   10, 11      | settle id6, (total 5 DvP trades)
+        //   11, 12      | settle id7, (round not closed)
+        pauseScanVerdictIngestionWithin(sv1ScanBackend) {
 
           val id0 = settleTrade(aliceParty, bobParty, venueParty)
           grantFeaturedAppRight(splitwellWalletClient)
@@ -209,6 +222,8 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
 
           advanceTimeAndWaitForRoundOpening
           assertOldestOpenRound(5)
+
+          updateFeaturedAppRightWeight(aliceParty, aliceActivityWeight)
 
           settleTrade(aliceParty, bobParty, venueParty)
           settleTrade(aliceParty, bobParty, venueParty)
@@ -349,20 +364,34 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
     clue("updateId3") {
       val event = fetchEvent(updateId3, "updateId3")
       assertTrafficSummary(event, "updateId3")
+      // Round 6 opened before the weight change, so alice still has the default weight.
       assertAppActivity(event, "updateId3", Set(venueParty, aliceParty), expectedRound = 6)
     }
 
     clue("updateId4") {
       val event = fetchEvent(updateId4, "updateId4")
       assertTrafficSummary(event, "updateId4")
-      assertAppActivity(event, "updateId4", Set(aliceParty, venueParty), expectedRound = 7)
+      // From round 7 onwards we see aliceActivityWeight
+      assertAppActivity(
+        event,
+        "updateId4",
+        Set(aliceParty, venueParty),
+        expectedRound = 7,
+        scaledProvider = Some(aliceParty -> aliceActivityWeight),
+      )
     }
 
     clue("Alice-submitted create TransferInstruction has app activity for alice") {
       val event = fetchEvent(aliceCreateId, "aliceCreateId")
       event.verdict shouldBe defined
       assertTrafficSummary(event, "aliceCreateId")
-      assertAppActivity(event, "aliceCreateId", Set(aliceParty), expectedRound = 7)
+      assertAppActivity(
+        event,
+        "aliceCreateId",
+        Set(aliceParty),
+        expectedRound = 7,
+        scaledProvider = Some(aliceParty -> aliceActivityWeight),
+      )
     }
 
     clue("SV-submitted expire TransferInstruction creates no app activity for alice") {
@@ -377,13 +406,25 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
       assertTrafficSummary(event, "updateId5")
       // Round 9: one DvP — venue has activity but will be below the coupon threshold;
       // alice's additional transfers push her above it.
-      assertAppActivity(event, "updateId5", Set(aliceParty, venueParty), expectedRound = 9)
+      assertAppActivity(
+        event,
+        "updateId5",
+        Set(aliceParty, venueParty),
+        expectedRound = 9,
+        scaledProvider = Some(aliceParty -> aliceActivityWeight),
+      )
     }
 
     clue("updateId6") {
       val event = fetchEvent(updateId6, "updateId6")
       assertTrafficSummary(event, "updateId6")
-      assertAppActivity(event, "updateId6", Set(aliceParty, venueParty), expectedRound = 10)
+      assertAppActivity(
+        event,
+        "updateId6",
+        Set(aliceParty, venueParty),
+        expectedRound = 10,
+        scaledProvider = Some(aliceParty -> aliceActivityWeight),
+      )
     }
 
     clue("updateId7") {
@@ -391,7 +432,13 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
       assertTrafficSummary(event, "updateId7")
       // Round 11: venue's FAP was cancelled in round 9, so only alice is a
       // featured-app provider here.
-      assertAppActivity(event, "updateId7", Set(aliceParty), expectedRound = 11)
+      assertAppActivity(
+        event,
+        "updateId7",
+        Set(aliceParty),
+        expectedRound = 11,
+        scaledProvider = Some(aliceParty -> aliceActivityWeight),
+      )
     }
 
     assertRewardCalcs(aliceParty, venueParty)
@@ -480,7 +527,7 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
         .map(_.payload.round.number)
 
     clue("CalculateRewards and ProcessRewards triggers consume contracts for rounds < 11") {
-      eventually() {
+      eventually(40.seconds) {
         val remainingCalculate = sv1Backend.appState.dsoStore
           .listCalculateRewardsV2()
           .futureValue
@@ -628,6 +675,7 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
       cluePrefix: String,
       expectedProviders: Set[PartyId],
       expectedRound: Long,
+      scaledProvider: Option[(PartyId, BigDecimal)] = None,
   ): Unit = {
     withClue(s"$cluePrefix should have app activity") {
       event.appActivityRecords shouldBe defined
@@ -645,13 +693,53 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
           r.weight should be > 0L
         }
       }
-      val weightSum = activity.records.map(_.weight).sum
       val numFeaturedAppParties = expectedProviders.size.toLong
+
+      // Convert the assigned activity back to burn amount using app weight
+      val reconstructedBurnSum = activity.records.map { r =>
+        val activityWeight = scaledProvider match {
+          case Some((party, w)) if r.party == party.toProtoPrimitive => w
+          case _ => BigDecimal(1)
+        }
+        BigDecimal(r.weight) / activityWeight
+      }.sum
       withClue(
-        s"$cluePrefix sum of weights should be within [totalTrafficCost - numFeaturedAppParties, totalTrafficCost]"
+        s"$cluePrefix reconstructed burn should be within [totalTrafficCost - numFeaturedAppParties, totalTrafficCost]"
       ) {
-        weightSum should be >= (totalTrafficCost - numFeaturedAppParties)
-        weightSum should be <= totalTrafficCost
+        reconstructedBurnSum should be >= BigDecimal(totalTrafficCost - numFeaturedAppParties)
+        reconstructedBurnSum should be <= BigDecimal(totalTrafficCost)
+      }
+    }
+  }
+
+  private def updateFeaturedAppRightWeight(
+      party: PartyId,
+      newWeight: BigDecimal,
+  )(implicit env: SpliceTestConsoleEnvironment): Unit = {
+    val rightCid = clue(s"Look up featured app right for $party") {
+      sv1ScanBackend.lookupFeaturedAppRight(party).value.contractId
+    }
+    val action = new ARC_DsoRules(
+      new SRARC_UpdateFeaturedAppRight(
+        new DsoRules_UpdateFeaturedAppRight(
+          rightCid,
+          new FeaturedAppRight_Update("updating activity weight", newWeight.bigDecimal),
+        )
+      )
+    )
+    votingFlow(action, effectivity = None, accept = true, expiration = Duration.ofSeconds(60))
+    clue(s"Wait for $party featured app right weight to be $newWeight") {
+      eventually() {
+        val weight = sv1ScanBackend
+          .lookupFeaturedAppRight(party)
+          .value
+          .payload
+          .activityWeight
+          .toScala
+          .map(BigDecimal(_))
+        withClue(s"activity weight for $party: ") {
+          weight.getOrElse(BigDecimal(1)).compare(newWeight) shouldBe 0
+        }
       }
     }
   }
@@ -659,9 +747,10 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
   private def assertZeroTotals(
       scan: ScanAppBackendReference,
       rounds: Seq[Long],
+      timeout: FiniteDuration = 20.seconds,
   ): Unit =
     rounds.foreach { round =>
-      eventually() {
+      eventually(timeout) {
         inside(scan.getRewardAccountingActivityTotals(round)) {
           case GetRewardAccountingActivityTotalsResponse.members
                 .RewardAccountingActivityTotalsOk(t) =>

@@ -69,6 +69,7 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   AcsRequest,
   BatchListVotesByVoteRequestsRequest,
   DamlValueEncoding,
+  CountVoteResultsRequest,
   ErrorResponse,
   EventHistoryRequest,
   HoldingsStateRequest,
@@ -87,7 +88,7 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
 import org.lfdecentralizedtrust.splice.http.v0.scan.ScanResource
 import org.lfdecentralizedtrust.splice.scan.ScanSynchronizerNode
 import org.lfdecentralizedtrust.splice.scan.admin.http.ScanHttpEncodings.updateV1ToUpdateV2
-import org.lfdecentralizedtrust.splice.scan.config.{BftSequencerConfig, ScanRollForwardLsuConfig}
+import org.lfdecentralizedtrust.splice.scan.config.{CantonBftPeerConfig, ScanRollForwardLsuConfig}
 import org.lfdecentralizedtrust.splice.scan.dso.DsoAnsResolver
 import org.lfdecentralizedtrust.splice.scan.store.{
   AcsSnapshotStore,
@@ -106,7 +107,7 @@ import org.lfdecentralizedtrust.splice.store.{
   AppStore,
   AppStoreWithIngestion,
   PageLimit,
-  SortOrder,
+  VoteResultsFilters,
   VotesStore,
 }
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChecksum
@@ -158,7 +159,7 @@ class HttpScanHandler(
     clock: Clock,
     protected val loggerFactory: NamedLoggerFactory,
     protected val packageVersionSupport: PackageVersionSupport,
-    bftSequencers: Seq[(SequencerAdminConnection, BftSequencerConfig)],
+    bftSequencers: Seq[(SequencerAdminConnection, CantonBftPeerConfig)],
     initialRound: String,
     externalTransactionHashThresholdTime: Option[Instant] = None,
     updateHistoryMaxPageSize: Int,
@@ -689,33 +690,6 @@ class HttpScanHandler(
           }
         )
       }
-    }
-  }
-
-  override def listTransactionHistory(
-      respond: v0.ScanResource.ListTransactionHistoryResponse.type
-  )(
-      request: definitions.TransactionHistoryRequest
-  )(extracted: TraceContext): Future[v0.ScanResource.ListTransactionHistoryResponse] = {
-    implicit val tc = extracted
-    withSpan(s"$workflowId.listTransactions") { _ => _ =>
-      val pageEndEventId =
-        if (request.pageEndEventId.exists(_.isEmpty)) None else request.pageEndEventId
-      val sortOrder = request.sortOrder
-        .fold[SortOrder](SortOrder.Ascending) {
-          case definitions.TransactionHistoryRequest.SortOrder.members.Asc => SortOrder.Ascending
-          case definitions.TransactionHistoryRequest.SortOrder.members.Desc => SortOrder.Descending
-        }
-
-      for {
-        txs <- store.listTransactions(
-          pageEndEventId,
-          sortOrder,
-          PageLimit.tryCreate(request.pageSize.intValue()),
-        )
-      } yield definitions.TransactionHistoryResponse(
-        txs.map(TxLogEntry.Http.toResponseItem).toVector
-      )
     }
   }
 
@@ -2118,11 +2092,13 @@ class HttpScanHandler(
       val after = body.pageToken.map(_.longValue)
       for {
         page <- votesStore.listVoteRequestResults(
-          body.actionName,
-          body.accepted,
-          body.requester,
-          body.effectiveFrom,
-          body.effectiveTo,
+          VoteResultsFilters(
+            body.actionName,
+            body.accepted,
+            requester = body.requester,
+            effectiveFrom = body.effectiveFrom,
+            effectiveTo = body.effectiveTo,
+          ),
           limit,
           after,
         )
@@ -2146,6 +2122,29 @@ class HttpScanHandler(
           )
         )
       }
+    }
+  }
+
+  override def countVoteRequestResults(
+      respond: ScanResource.CountVoteRequestResultsResponse.type
+  )(
+      body: CountVoteResultsRequest
+  )(extracted: TraceContext): Future[ScanResource.CountVoteRequestResultsResponse] = {
+    implicit val tc: TraceContext = extracted
+    withSpan(s"$workflowId.countVoteRequestResults") { _ => _ =>
+      for {
+        count <- votesStore.countVoteRequestResults(
+          VoteResultsFilters(
+            body.actionName,
+            body.accepted,
+            requester = body.requester,
+            effectiveFrom = body.effectiveFrom,
+            effectiveTo = body.effectiveTo,
+          )
+        )
+      } yield ScanResource.CountVoteRequestResultsResponse.OK(
+        definitions.CountVoteResultsResponse(count)
+      )
     }
   }
 
@@ -2367,7 +2366,7 @@ class HttpScanHandler(
           case _ =>
             Future.failed(
               HttpErrorHandler.internalServerError(
-                s"Party ${party} is hosted on multiple participants, which is not currently supported"
+                s"Party ${party} is hosted on multiple participants, which is not supported in this version of the API. Please use the /v1 version instead."
               )
             )
         }
@@ -2499,7 +2498,7 @@ class HttpScanHandler(
                         val entry = definitions.SynchronizerBftSequencer(
                           psid.serial.unwrap.toLong,
                           id.toProtoPrimitive,
-                          bftSequencer.p2pUrl,
+                          bftSequencer.p2pUrl.toString,
                         )
                         initializedBftSequencersCache.put(idx, entry).discard
                         Some(entry)
@@ -2572,7 +2571,7 @@ class HttpScanHandler(
         )
       ) { case (bulkStorage, publicUrl) =>
         val recordTimeTs = Codec.tryDecode(Codec.OffsetDateTime)(atOrBeforeRecordTime)
-        bulkStorage.getAcsSnapshotAtOrBefore(recordTimeTs).map {
+        bulkStorage.getCommittedObjectsForAcsSnapshotAtOrBefore(recordTimeTs).map {
           case AcsSnapshotObjects(ts, objects) =>
             ScanResource.ListBulkAcsSnapshotObjectsResponse.OK(
               definitions.ListBulkAcsSnapshotObjectsResponse(
@@ -2604,7 +2603,7 @@ class HttpScanHandler(
         val afterTs = Codec.tryDecode(Codec.OffsetDateTime)(body.startRecordTime)
         val upToTs = Codec.tryDecode(Codec.OffsetDateTime)(body.endRecordTime)
         bulkStorage
-          .getUpdatesBetweenDates(
+          .getCommittedUpdatesBetweenDates(
             afterTs,
             upToTs,
             PageLimit.tryCreate(body.pageSize),

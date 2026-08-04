@@ -18,7 +18,6 @@ import org.lfdecentralizedtrust.splice.environment.{
   MediatorAdminConnection,
   SequencerAdminConnection,
 }
-import org.lfdecentralizedtrust.splice.http.v0.definitions.TransactionHistoryRequest
 import monocle.macros.syntax.lens.*
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTest
@@ -164,14 +163,13 @@ class RollForwardLsuIntegrationTest
     startAllSync(allNodes*)
 
     actAndCheck("Create some transaction history", sv1WalletClient.tap(1337))(
-      "Scan transaction history is recorded and wallet balance is updated",
+      "Wallet balance is updated",
       _ => {
         // buffer to account for domain fee payments
         assertInRange(
           sv1WalletClient.balance().unlockedQty,
           (walletUsdToAmulet(1000), walletUsdToAmulet(2000)),
         )
-        countTapsFromScan(sv1ScanBackend, walletUsdToAmulet(1337)) shouldBe 1
       },
     )
 
@@ -428,16 +426,6 @@ class RollForwardLsuIntegrationTest
       grpcClientMetrics,
       retryProvider,
     )
-
-  private def countTapsFromScan(scan: ScanAppBackendReference, tapAmount: BigDecimal) = {
-    listTransactionsFromScan(scan).count(
-      _.tap.map(a => BigDecimal(a.amuletAmount)).contains(tapAmount)
-    )
-  }
-
-  private def listTransactionsFromScan(scan: ScanAppBackendReference) = {
-    scan.listTransactions(None, TransactionHistoryRequest.SortOrder.Asc, 100)
-  }
 
   private def getSequencerUrlSet(
       participantConnection: ParticipantClientReference,

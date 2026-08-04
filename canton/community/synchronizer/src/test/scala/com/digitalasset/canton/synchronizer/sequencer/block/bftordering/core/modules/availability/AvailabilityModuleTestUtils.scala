@@ -10,6 +10,7 @@ import com.digitalasset.canton.synchronizer.metrics.SequencerMetrics
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.BftBlockOrdererConfig
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.integration.canton.crypto.CryptoProvider
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.availability.AvailabilityModule.quorum
+import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.availability.data.AvailabilityStore.BatchIdAndEpochNumber
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.availability.data.memory.GenericInMemoryAvailabilityStore
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.modules.{
   BaseIgnoringUnitTestEnv,
@@ -32,6 +33,7 @@ import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framewor
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.ordering.{
   OrderedBlock,
   OrderedBlockForOutput,
+  OrderingMode,
 }
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.topology.OrderingTopology.NodeTopologyInfo
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.topology.{
@@ -105,6 +107,7 @@ private[availability] trait AvailabilityModuleTestUtils { self: BftSequencerBase
     anEpochNumber,
   )
   protected val ABatchId = BatchId.from(ABatch)
+  protected val ABatchTuple = BatchIdAndEpochNumber(ABatchId, anEpochNumber)
   protected val ANonEmptyBatchId = BatchId.from(ANonEmptyBatch)
   protected val ABatchIdWithInvalidTags = BatchId.from(ABatchWithInvalidTags)
   protected val OrderingTopologyNode0 = OrderingTopology.forTesting(Set(Node0))
@@ -133,7 +136,7 @@ private[availability] trait AvailabilityModuleTestUtils { self: BftSequencerBase
     ),
     ViewNumber.First,
     isLastInEpoch = false, // Irrelevant for availability
-    mode = OrderedBlockForOutput.Mode.FromConsensus,
+    orderingMode = OrderingMode.Consensus,
     originalLeader = Node0,
   )
   protected val AnotherOrderedBlockForOutput = OrderedBlockForOutput(
@@ -147,7 +150,7 @@ private[availability] trait AvailabilityModuleTestUtils { self: BftSequencerBase
     ),
     ViewNumber.First,
     isLastInEpoch = false, // Irrelevant for availability
-    mode = OrderedBlockForOutput.Mode.FromConsensus,
+    orderingMode = OrderingMode.Consensus,
     originalLeader = Node0,
   )
   protected val ACompleteBlock = CompleteBlockData(
@@ -349,7 +352,7 @@ private[availability] trait AvailabilityModuleTestUtils { self: BftSequencerBase
       remainingNodesToTry = Seq(Node1),
       numberOfAttempts = 1,
       jitterStream = jitterStream,
-      mode = OrderedBlockForOutput.Mode.FromConsensus,
+      orderingMode = OrderingMode.Consensus,
     )
   protected val AMissingBatchStatusNode1And2AcksWithNode2ToTry =
     AMissingBatchStatusNode1And2AcksWithNode1ToTry
@@ -363,7 +366,7 @@ private[availability] trait AvailabilityModuleTestUtils { self: BftSequencerBase
     ABatchId -> AMissingBatchStatusNode1And2AcksWithNode1ToTry
   protected val AMissingBatchStatusFromStateTransferWithNoAttemptsLeft =
     AMissingBatchStatusNode1And2AcksWithNoAttemptsLeft
-      .copy(mode = OrderedBlockForOutput.Mode.FromStateTransfer)
+      .copy(orderingMode = OrderingMode.StateTransfer)
   protected val ANextToBeProvidedToConsensus =
     NextToBeProvidedToConsensus(
       BlockNumber.First,

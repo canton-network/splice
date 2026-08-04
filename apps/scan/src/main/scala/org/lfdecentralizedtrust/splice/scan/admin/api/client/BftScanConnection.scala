@@ -62,7 +62,7 @@ import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAp
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.DsoScan
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
 import org.lfdecentralizedtrust.splice.scan.store.ScanStore
-import org.lfdecentralizedtrust.splice.store.DsoRulesStore
+import org.lfdecentralizedtrust.splice.store.{DsoRulesStore, VoteResultsFilters}
 import org.lfdecentralizedtrust.splice.store.HistoryBackfilling.SourceMigrationInfo
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryResponse
 import org.lfdecentralizedtrust.splice.util.{
@@ -486,11 +486,7 @@ class BftScanConnection(
     bftCall(_.lookupTransferPreapprovalByParty(receiver), "lookupTransferPreapprovalByParty")
 
   override def listVoteRequestResults(
-      actionName: Option[String],
-      accepted: Option[Boolean],
-      requester: Option[String],
-      effectiveFrom: Option[String],
-      effectiveTo: Option[String],
+      filters: VoteResultsFilters,
       limit: Int,
       pageToken: Option[BigInt] = None,
   )(implicit
@@ -498,15 +494,21 @@ class BftScanConnection(
       tc: TraceContext,
   ): Future[(Seq[DsoRules_CloseVoteRequestResult], Option[BigInt])] = bftCall(
     _.listVoteRequestResults(
-      actionName,
-      accepted,
-      requester,
-      effectiveFrom,
-      effectiveTo,
+      filters,
       limit,
       pageToken,
     ),
     "listVoteRequestResults",
+  )
+
+  override def countVoteRequestResults(
+      filters: VoteResultsFilters
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[Long] = bftCall(
+    _.countVoteRequestResults(filters),
+    "countVoteRequestResults",
   )
 
   override def getPreviousSvRewardWeight(svParty: String, effectiveBefore: Option[String])(implicit
@@ -1861,8 +1863,10 @@ object BftScanConnection {
             disableBackgroundRefresh = true,
           )
 
-          // Use the temporary connection to get a consensus on the full list of scans
-          allScans <- Bft.getScansInDsoRules(tempBftConnection).andThen { case _ =>
+          // Use the temporary connection to get a consensus on the full list of scans.
+          // Future.delegate turns a synchronous throw into a failed future, so the
+          // andThen cleanup always runs.
+          allScans <- Future.delegate(Bft.getScansInDsoRules(tempBftConnection)).andThen { case _ =>
             tempBftConnection.close()
           }
 
@@ -1919,23 +1923,29 @@ object BftScanConnection {
             connectionMetrics,
           )
 
-          _ <- retryProvider.waitUntil(
-            RetryFor.WaitingOnInitDependency,
-            "refresh_initial_scan_list",
-            "Scan list is refreshed.",
-            scanList
-              .refresh(bftConnection)
-              .recoverWith { case NonFatal(ex) =>
-                Future.failed(
-                  Status.UNAVAILABLE
-                    .withDescription("Failed to refresh scan list on init")
-                    .withCause(ex)
-                    .asException()
-                )
-              }
-              .map(_ => ()),
-            loggerFactory.getTracedLogger(classOf[BftScanConnection]),
-          )
+          _ <- retryProvider
+            .waitUntil(
+              RetryFor.WaitingOnInitDependency,
+              "refresh_initial_scan_list",
+              "Scan list is refreshed.",
+              scanList
+                .refresh(bftConnection)
+                .recoverWith { case NonFatal(ex) =>
+                  Future.failed(
+                    Status.UNAVAILABLE
+                      .withDescription("Failed to refresh scan list on init")
+                      .withCause(ex)
+                      .asException()
+                  )
+                }
+                .map(_ => ()),
+              loggerFactory.getTracedLogger(classOf[BftScanConnection]),
+            )
+            .recoverWith { case NonFatal(ex) =>
+              // do not leak the scan connections when initialization ultimately fails
+              bftConnection.close()
+              Future.failed(ex)
+            }
         } yield bftConnection
 
       case bft @ BftScanClientConfig.Bft(_, _, _, _) =>
@@ -1970,24 +1980,30 @@ object BftScanConnection {
             else { _ => Future.unit },
             connectionMetrics,
           )
-          _ <- retryProvider.waitUntil(
-            RetryFor.WaitingOnInitDependency,
-            "refresh_initial_scan_list",
-            "Scan list is refreshed.",
-            bftConnection.scanList
-              .asInstanceOf[AllDsoScansBft]
-              .refresh(bftConnection)
-              .recoverWith { case NonFatal(ex) =>
-                Future.failed(
-                  Status.UNAVAILABLE
-                    .withDescription("Failed to refresh scan list on init")
-                    .withCause(ex)
-                    .asException()
-                )
-              }
-              .map(_ => ()),
-            loggerFactory.getTracedLogger(classOf[BftScanConnection]),
-          )
+          _ <- retryProvider
+            .waitUntil(
+              RetryFor.WaitingOnInitDependency,
+              "refresh_initial_scan_list",
+              "Scan list is refreshed.",
+              bftConnection.scanList
+                .asInstanceOf[AllDsoScansBft]
+                .refresh(bftConnection)
+                .recoverWith { case NonFatal(ex) =>
+                  Future.failed(
+                    Status.UNAVAILABLE
+                      .withDescription("Failed to refresh scan list on init")
+                      .withCause(ex)
+                      .asException()
+                  )
+                }
+                .map(_ => ()),
+              loggerFactory.getTracedLogger(classOf[BftScanConnection]),
+            )
+            .recoverWith { case NonFatal(ex) =>
+              // do not leak the seed scan connections when initialization ultimately fails
+              bftConnection.close()
+              Future.failed(ex)
+            }
         } yield bftConnection
     }
   }

@@ -34,7 +34,7 @@ abstract class BatchedMultiDomainExpiredContractTrigger[
     companion: C,
     vettingLookupService: PackageVettingLookupService,
     pkg: PackageIdResolver.Package,
-    stakeholders: T => Seq[PartyId],
+    getStakeholders: T => Seq[PartyId],
 )(implicit
     ec: ExecutionContext,
     mat: Materializer,
@@ -58,10 +58,14 @@ abstract class BatchedMultiDomainExpiredContractTrigger[
         PackageIdResolver.Package.SpliceAmulet,
         expiredContracts,
         batchSize,
-      )(c => stakeholders(c.payload))
+      )(c => getStakeholders(c.payload))
       .map {
         _.toSeq.flatMap {
-          case (Some(version), contractBatches) => contractBatches.map(Batch(pkg, version, _))
+          case (Some(version), contractBatches) =>
+            contractBatches.map { contracts =>
+              val stakeholders = contracts.flatMap(c => getStakeholders(c.payload)).toSet
+              Batch(pkg, version, contracts, stakeholders)
+            }
           case (None, contracts) =>
             logger.warn(
               show"No vetted $pkg version for ${contracts.flatten.map { _.contractId.contractId }}"
@@ -92,6 +96,7 @@ object BatchedMultiDomainExpiredContractTrigger {
       expiredContracts: Seq[
         AssignedContract[TCid, T]
       ],
+      stakeholders: Set[PartyId],
   ) extends PrettyPrinting {
     override def pretty: Pretty[this.type] =
       prettyOfClass(
@@ -99,6 +104,7 @@ object BatchedMultiDomainExpiredContractTrigger {
         param("vettedVersion", _.vettedVersion),
         param("numExpiredContracts", _.expiredContracts.size),
         param("expiredContractCids", _.expiredContracts.map(_.contractId.contractId.unquoted)),
+        param("stakeholders", _.stakeholders),
       )
   }
 

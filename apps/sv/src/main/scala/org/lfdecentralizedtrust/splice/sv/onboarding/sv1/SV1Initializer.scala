@@ -180,7 +180,7 @@ class SV1Initializer(
             sequencerConnectionPoolDelays =
               config.participantClient.sequencerConnectionPoolDelays.toInternal,
           ),
-          synchronizerId = Some(psid),
+          psid = Some(psid),
           timeTracker = SynchronizerTimeTrackerConfig(
             minObservationDuration = config.timeTrackerMinObservationDuration,
             observationLatency = config.timeTrackerObservationLatency,
@@ -299,6 +299,7 @@ class SV1Initializer(
         for {
           dsoPartyIsAuthorized <- dsoPartyHosting.isDsoPartyAuthorizedOn(
             decentralizedSynchronizer,
+            None,
             participantId,
           )
         } yield {

@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "securityContexts": {
+      "type": "object",
+      "properties": {
+        "pod": {
+          "type": "object"
+        },
+        "containers": {
+          "type": "object",
+          "properties": {
+            "mediator": {
+              "type": "object"
+            },
+            "sequencer": {
+              "type": "object"
+            },
+            "persistence": {
+              "type": "object"
+            }
+          },
+          "required": ["mediator", "sequencer", "persistence"]
+        }
+      },
+      "required": ["pod", "containers"]
+    }
+  }
+}

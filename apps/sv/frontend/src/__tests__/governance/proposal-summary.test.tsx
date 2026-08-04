@@ -38,7 +38,7 @@ describe('Review Proposal Component', () => {
     expect(screen.getByTestId('summary-title').textContent).toBe('Summary');
     expect(screen.getByTestId('summary-field').textContent).toBe(summary);
 
-    expect(screen.getByTestId('expiryDate-title').textContent).toBe('Threshold Deadline');
+    expect(screen.getByTestId('expiryDate-title').textContent).toBe('Quorum Threshold Deadline');
     expect(screen.getByTestId('expiryDate-field').textContent).toBe(expiryDate);
 
     expect(screen.getByTestId('effectiveDate-title').textContent).toBe('Effective Date');
@@ -102,7 +102,7 @@ describe('Review Proposal Component', () => {
     expect(screen.getByTestId('summary-title').textContent).toBe('Summary');
     expect(screen.getByTestId('summary-field').textContent).toBe(summary);
 
-    expect(screen.getByTestId('expiryDate-title').textContent).toBe('Threshold Deadline');
+    expect(screen.getByTestId('expiryDate-title').textContent).toBe('Quorum Threshold Deadline');
     expect(screen.getByTestId('expiryDate-field').textContent).toBe(expiryDate);
 
     expect(screen.getByTestId('effectiveDate-title').textContent).toBe('Effective Date');
@@ -116,6 +116,7 @@ describe('Review Proposal Component', () => {
   test('should render review proposal component for feature application', () => {
     const actionName = 'Feature Application';
     const provider = 'Digital-Asset-Eng-2';
+    const activityWeight = '2.5';
 
     render(
       <ProposalSummary
@@ -126,6 +127,7 @@ describe('Review Proposal Component', () => {
         effectiveDate={effectiveDate}
         formType="grant-right"
         grantRight={provider}
+        activityWeight={activityWeight}
         onEdit={() => {}}
         onSubmit={() => {}}
       />
@@ -140,7 +142,7 @@ describe('Review Proposal Component', () => {
     expect(screen.getByTestId('summary-title').textContent).toBe('Summary');
     expect(screen.getByTestId('summary-field').textContent).toBe(summary);
 
-    expect(screen.getByTestId('expiryDate-title').textContent).toBe('Threshold Deadline');
+    expect(screen.getByTestId('expiryDate-title').textContent).toBe('Quorum Threshold Deadline');
     expect(screen.getByTestId('expiryDate-field').textContent).toBe(expiryDate);
 
     expect(screen.getByTestId('effectiveDate-title').textContent).toBe('Effective Date');
@@ -148,6 +150,11 @@ describe('Review Proposal Component', () => {
 
     expect(screen.getByTestId('grantRight-title').textContent).toBe('Provider Party ID');
     expect(screen.getByTestId('grantRight-field').textContent).toBe(provider);
+
+    expect(screen.getByTestId('grantRightActivityWeight-title').textContent).toBe(
+      'Activity Weight'
+    );
+    expect(screen.getByTestId('grantRightActivityWeight-field').textContent).toBe(activityWeight);
   });
 
   test('should render review proposal component for unfeature application', () => {
@@ -179,7 +186,7 @@ describe('Review Proposal Component', () => {
     expect(screen.getByTestId('summary-title').textContent).toBe('Summary');
     expect(screen.getByTestId('summary-field').textContent).toBe(summary);
 
-    expect(screen.getByTestId('expiryDate-title').textContent).toBe('Threshold Deadline');
+    expect(screen.getByTestId('expiryDate-title').textContent).toBe('Quorum Threshold Deadline');
     expect(screen.getByTestId('expiryDate-field').textContent).toBe(expiryDate);
 
     expect(screen.getByTestId('effectiveDate-title').textContent).toBe('Effective Date');
@@ -192,6 +199,64 @@ describe('Review Proposal Component', () => {
       'Featured Application Contract ID'
     );
     expect(screen.getByTestId('revokeRight-field').textContent).toBe(contractId);
+  });
+
+  test('should render review proposal component for update feature application', () => {
+    const actionName = 'Update Featured Application';
+    const providerPartyId = 'a-party-id::1014912492';
+    const rightCid = 'bcde123456';
+    const currentActivityWeight = '1.0';
+    const newActivityWeight = '2.5';
+    const reason = 'boosting rewards';
+
+    render(
+      <ProposalSummary
+        actionName={actionName}
+        url={url}
+        summary={summary}
+        expiryDate={expiryDate}
+        effectiveDate={effectiveDate}
+        formType="update-right-weight"
+        providerPartyId={providerPartyId}
+        rightCid={rightCid}
+        currentActivityWeight={currentActivityWeight}
+        newActivityWeight={newActivityWeight}
+        reason={reason}
+        onEdit={() => {}}
+        onSubmit={() => {}}
+      />
+    );
+
+    expect(screen.getByTestId('action-title').textContent).toBe('Action');
+    expect(screen.getByTestId('action-field').textContent).toBe(actionName);
+
+    expect(screen.getByTestId('url-title').textContent).toBe('URL');
+    expect(screen.getByTestId('url-field').textContent).toBe(url);
+
+    expect(screen.getByTestId('summary-title').textContent).toBe('Summary');
+    expect(screen.getByTestId('summary-field').textContent).toBe(summary);
+
+    expect(screen.getByTestId('expiryDate-title').textContent).toBe('Quorum Threshold Deadline');
+    expect(screen.getByTestId('expiryDate-field').textContent).toBe(expiryDate);
+
+    expect(screen.getByTestId('effectiveDate-title').textContent).toBe('Effective Date');
+    expect(screen.getByTestId('effectiveDate-field').textContent).toBe(effectiveDate);
+
+    expect(screen.getByTestId('updateProviderPartyId-title').textContent).toBe('Provider Party ID');
+    expect(screen.getByTestId('updateProviderPartyId-field').textContent).toBe(providerPartyId);
+
+    expect(screen.getByTestId('updateRight-title').textContent).toBe(
+      'Featured Application Contract ID'
+    );
+    expect(screen.getByTestId('updateRight-field').textContent).toBe(rightCid);
+
+    expect(screen.getByTestId('config-change-current-value').textContent).toBe(
+      currentActivityWeight
+    );
+    expect(screen.getByTestId('config-change-new-value').textContent).toBe(newActivityWeight);
+
+    expect(screen.getByTestId('updateReason-title').textContent).toBe('Reason');
+    expect(screen.getByTestId('updateReason-field').textContent).toBe(reason);
   });
 
   test('should render review proposal component for dso rules config', () => {
@@ -237,7 +302,7 @@ describe('Review Proposal Component', () => {
     expect(screen.getByTestId('summary-title').textContent).toBe('Summary');
     expect(screen.getByTestId('summary-field').textContent).toBe(summary);
 
-    expect(screen.getByTestId('expiryDate-title').textContent).toBe('Threshold Deadline');
+    expect(screen.getByTestId('expiryDate-title').textContent).toBe('Quorum Threshold Deadline');
     expect(screen.getByTestId('expiryDate-field').textContent).toBe(expiryDate);
 
     expect(screen.getByTestId('effectiveDate-title').textContent).toBe('Effective Date');
@@ -309,7 +374,7 @@ describe('Review Proposal Component', () => {
     expect(screen.getByTestId('summary-title').textContent).toBe('Summary');
     expect(screen.getByTestId('summary-field').textContent).toBe(summary);
 
-    expect(screen.getByTestId('expiryDate-title').textContent).toBe('Threshold Deadline');
+    expect(screen.getByTestId('expiryDate-title').textContent).toBe('Quorum Threshold Deadline');
     expect(screen.getByTestId('expiryDate-field').textContent).toBe(expiryDate);
 
     expect(screen.getByTestId('effectiveDate-title').textContent).toBe('Effective Date');

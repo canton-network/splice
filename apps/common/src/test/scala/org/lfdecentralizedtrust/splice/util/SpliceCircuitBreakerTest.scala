@@ -9,7 +9,6 @@ import com.digitalasset.canton.time.SimClock
 import com.digitalasset.canton.topology.PartyId
 import io.grpc.StatusRuntimeException
 import org.apache.pekko.actor.Scheduler
-import org.apache.pekko.pattern.CircuitBreakerOpenException
 import org.lfdecentralizedtrust.splice.config.CircuitBreakerConfig
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.time.{Millis, Seconds, Span}
@@ -70,8 +69,83 @@ class SpliceCircuitBreakerTest
 
       val future3 = cb.withCircuitBreaker(Future.successful("should not reach here"))
       whenReady(future3.failed) { ex =>
-        ex shouldBe a[CircuitBreakerOpenException]
+        ex shouldBe a[SpliceCircuitBreakerOpenException]
         cb.isOpen shouldBe true
+      }
+    }
+
+    "attach the last failure as the cause of the CircuitBreakerOpenException" in {
+      val cb = createCircuitBreaker()
+
+      val lastFailure = new RuntimeException("root cause failure")
+
+      val future1 = cb.withCircuitBreaker(Future.failed(new RuntimeException("test failure 1")))
+      whenReady(future1.failed) { ex =>
+        ex shouldBe a[RuntimeException]
+        cb.isClosed shouldBe true
+      }
+      loggerFactory.suppressWarnings {
+        val future2 = cb.withCircuitBreaker(Future.failed(lastFailure))
+        whenReady(future2.failed) { ex =>
+          ex shouldBe a[RuntimeException]
+          cb.isOpen shouldBe true
+        }
+      }
+
+      val future3 = cb.withCircuitBreaker(Future.successful("should not reach here"))
+      whenReady(future3.failed) { ex =>
+        ex shouldBe a[SpliceCircuitBreakerOpenException]
+        ex.getCause shouldBe lastFailure
+        ex.getCause.getMessage shouldBe "root cause failure"
+      }
+
+      eventually() {
+        cb.isHalfOpen shouldBe true
+      }
+
+      val newFailure = new RuntimeException("new root cause failure")
+      loggerFactory.suppressWarnings {
+        val future4 = cb.withCircuitBreaker(Future.failed(newFailure))
+        whenReady(future4.failed) { ex =>
+          ex shouldBe newFailure
+          cb.isOpen shouldBe true
+        }
+      }
+      val future5 = cb.withCircuitBreaker(Future.successful("should not reach here"))
+      whenReady(future5.failed) { ex =>
+        ex shouldBe a[SpliceCircuitBreakerOpenException]
+        ex.getCause shouldBe newFailure
+        ex.getCause.getMessage shouldBe "new root cause failure"
+      }
+
+      eventually() {
+        cb.isHalfOpen shouldBe true
+      }
+      val successFuture = cb.withCircuitBreaker(Future.successful("success"))
+      whenReady(successFuture) { result =>
+        result shouldBe "success"
+        cb.isClosed shouldBe true
+      }
+
+      val thirdFailure = new RuntimeException("third root cause failure")
+      val future6 = cb.withCircuitBreaker(Future.failed(new RuntimeException("test failure 3")))
+      whenReady(future6.failed) { ex =>
+        ex shouldBe a[RuntimeException]
+        cb.isClosed shouldBe true
+      }
+      loggerFactory.suppressWarnings {
+        val future7 = cb.withCircuitBreaker(Future.failed(thirdFailure))
+        whenReady(future7.failed) { ex =>
+          ex shouldBe thirdFailure
+          cb.isOpen shouldBe true
+        }
+      }
+
+      val future8 = cb.withCircuitBreaker(Future.successful("should not reach here"))
+      whenReady(future8.failed) { ex =>
+        ex shouldBe a[SpliceCircuitBreakerOpenException]
+        ex.getCause shouldBe thirdFailure
+        ex.getCause.getMessage shouldBe "third root cause failure"
       }
     }
 
@@ -159,7 +233,7 @@ class SpliceCircuitBreakerTest
 
       val future4 = cb.withCircuitBreaker(Future.successful("should not reach here"))
       whenReady(future4.failed) { ex =>
-        ex shouldBe a[CircuitBreakerOpenException]
+        ex shouldBe a[SpliceCircuitBreakerOpenException]
         cb.isOpen shouldBe true
       }
     }

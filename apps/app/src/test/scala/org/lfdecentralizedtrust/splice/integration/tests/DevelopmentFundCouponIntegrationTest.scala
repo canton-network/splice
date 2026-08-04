@@ -31,6 +31,7 @@ import org.lfdecentralizedtrust.splice.wallet.store.{
 }
 
 import java.time.Duration
+import scala.concurrent.duration.DurationInt
 
 @org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceDsoGovernance_0_1_21
 class DevelopmentFundCouponIntegrationTest
@@ -507,7 +508,11 @@ class DevelopmentFundCouponIntegrationTest
       clue(
         "The coupon is expired"
       ) {
-        eventually() {
+        // The expiry trigger cannot act before expiresAt (5s after allocation) plus the
+        // clockSkewAutomationDelay grace period (5s), so 10s of this budget are always
+        // consumed before the DsoRules_ExpireDevelopmentFundCoupon submission can even
+        // start; leave enough headroom for slow sequencing on loaded CI runners.
+        eventually(30.seconds) {
           aliceValidatorWalletClient
             .listActiveDevelopmentFundCoupons() shouldBe empty withClue "alice coupons"
         }

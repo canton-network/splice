@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "securityContexts": {
+      "type": ["object", "null"],
+      "properties": {
+        "pod": {
+          "type": ["object", "null"]
+        },
+        "containers": {
+          "type": ["object", "null"],
+          "properties": {
+            "loadTester": {
+              "type": ["object", "null"]
+            }
+          },
+          "required": ["loadTester"]
+        }
+      },
+      "required": ["pod", "containers"]
+    }
+  }
+}

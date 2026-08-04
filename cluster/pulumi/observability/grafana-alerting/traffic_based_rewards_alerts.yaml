@@ -79,7 +79,7 @@ groups:
             datasourceUid: prometheus
             model:
               editorMode: code
-              expr: max by (dryRun)(max_over_time(splice_scan_reward_computation_calculate_rewards_v2_active_contracts[5m]))
+              expr: max by (dryRun)(max_over_time(splice_calculate_rewards_v2_active_contracts[5m]))
               instant: true
               intervalMs: 1000
               legendFormat: __auto
@@ -110,16 +110,16 @@ groups:
               maxDataPoints: 43200
               refId: C
               type: threshold
-        dashboardUid: "00000039"
-        panelId: 74
+        dashboardUid: "cnx7gsn"
+        panelId: 33
         noDataState: OK
         execErrState: Alerting
         for: 1m
         annotations:
           __dashboardUid__: cnx7gsn
-          __panelId__: 32
+          __panelId__: 33
           description: |
-            At least one of our scan instances observed more than one active CalculateRewardsV2 contract
+            At least one of our sv app instances observed more than one active CalculateRewardsV2 contract
             for dryRun={{ $labels.dryRun }}.
 
             CalculateRewardsV2 contracts are created when a round is closed, and represent a request
@@ -137,5 +137,144 @@ groups:
               Look for missing SVs or SVs that are voting for a different root hash.
           severity: critical
           summary: Too many active CalculateRewardsV2 contracts for dryRun={{ $labels.dryRun }}.
+        labels: {}
+        isPaused: false
+      - uid: o4v0a20pvxhd2
+        title: Number of active ProcessRewardsV2 contracts
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              editorMode: code
+              expr: min by (dryRun)(min_over_time((splice_process_rewards_v2_active_contracts != -1)[15m:]))
+              instant: true
+              intervalMs: 1000
+              legendFormat: __auto
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: []
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        dashboardUid: "cnx7gsn"
+        panelId: 34
+        noDataState: OK
+        execErrState: Alerting
+        for: 1m
+        annotations:
+          __dashboardUid__: cnx7gsn
+          __panelId__: 34
+          description: |
+            None our sv app instances observed the number of active ProcessRewardsV2 contracts recently
+            reaching zero for dryRun={{ $labels.dryRun }}.
+
+            ProcessRewardsV2 contracts are nodes of the reward data merkle tree.
+            They are converted first into more ProcessRewardsV2 contracts and then finally into RewardCouponV2 contracts
+            by the delegate based ProcessRewardsTrigger.
+
+            If these contracts don't all disappear within 10min (when the next round starts), it means the creation of
+            minting allowances probably can't keep up and is falling behind.
+
+            Suggested actions:
+            - Investigate the status of traffic-based app rewards automation.
+              Look at the "Traffic-based app rewards (CIP-104)" dashboard in Grafana, in particular the
+              "Creating minting allowances" section.
+            - Filter logs for "ProcessRewards.*Trigger".
+              Check why the trigger is not processing the ProcessRewardsV2 contracts.
+          severity: critical
+          summary: ProcessRewardsV2 contracts are not being archived in time for dryRun={{ $labels.dryRun }}.
+        labels: {}
+        isPaused: false
+      - uid: 3pcvfr7j92x7o
+        title: Average verdict ingestion batch size over the last 10min
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              editorMode: code
+              expr: (histogram_sum(sum by(namespace)(rate(splice_scan_verdict_ingestion_batch_size[10m])))/histogram_count(sum by(namespace)(rate(splice_scan_verdict_ingestion_batch_size[10m]))))
+              instant: true
+              intervalMs: 1000
+              legendFormat: __auto
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 40
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: []
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        dashboardUid: "cnx7gsn"
+        panelId: 19
+        noDataState: OK
+        execErrState: Alerting
+        for: $VERDICT_INGESTION_BATCH_SIZE_PENDING_PERIOD_MINUTESm
+        annotations:
+          __dashboardUid__: cnx7gsn
+          __panelId__: 19
+          description: |
+            The average verdict ingestion batch size has been above $VERDICT_INGESTION_BATCH_SIZE_THRESHOLD
+            for more than for $VERDICT_INGESTION_BATCH_SIZE_PENDING_PERIOD_MINUTES minutes for namespace {{ $labels.namespace }}.
+
+            The default maximum batch size is 50, a high average batch size may indicate that ingestion can't keep up.
+
+            Suggested actions:
+            - If this node is known to be catching up, ignore or silence the alert.
+            - Investigate the status of traffic-based app rewards automation.
+              Look at the "Traffic-based app rewards (CIP-104)" dashboard in Grafana, in particular the
+              "Ingest verdicts and activity records" section.
+            - Filter logs for "ScanVerdictIngestionService".
+            - If you find that this alert produces too many false positives, adjust the "verdictIngestionBatchSizeThreshold"
+              in the cluster config.
+          severity: warning
+          summary: Average verdict ingestion batch size is above $VERDICT_INGESTION_BATCH_SIZE_THRESHOLD for namespace {{ $labels.namespace }}.
         labels: {}
         isPaused: false

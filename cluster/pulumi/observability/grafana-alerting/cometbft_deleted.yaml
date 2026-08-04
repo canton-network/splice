@@ -1,0 +1,17 @@
+apiVersion: 1
+deleteRules:
+  - orgId: 1
+    # Cometbft Consensus
+    uid: fa4b8a18-e4be-4d19-a5af-90c7326fd935
+  - orgId: 1
+    # Cometbft Height Not Advancing
+    uid: a3b47fca-0982-491b-80bb-0c70f04dcd8b
+  - orgId: 1
+    # Cometbft Not Voting
+    uid: a3f23df0-40d5-41d1-8b4b-03aa8c62c030
+  - orgId: 1
+    # Reached Expected Maximum CometBFT Block Rate
+    uid: adl2npxte6u4gd
+  - orgId: 1
+    # CometBFT is not pruning old blocks
+    uid: ddlrp7f1f8l4wf

@@ -133,6 +133,10 @@ Circuit breaker .* tripped after .* failures.*(Command|Splice)CircuitBreakerTest
 # This is more likely in test code where we run multiple apps against the same database, all trying to create the same index.
 Index .* should be created and is invalid, dropping it
 
+# TODO(#4738) - remove this
+processTaskWithRetry failed with an unknown exception, not retrying.*SqlIndexInitializationTrigger.*PSQLException: ERROR: tuple concurrently updated
+Skipping processing of.*due to unexpected failure.*SqlIndexInitializationTrigger.*PSQLException: ERROR: tuple concurrently updated
+
 # Injected errors in s3Mock
 Simulated S3 error
 
@@ -147,6 +151,9 @@ Timeout 10 seconds expired, but readers are still active. Shutting down forcibly
 # SV-4 is the late-joining SV in this test. Ignoring here as otherwise we would need to suppress logs during the whole
 # SV-4 initialization.
 Not publishing sequencer successor as we are past upgrade time.*LsuNodeInitializer:LsuIntegrationTest.*SV=sv4
+Skipping processing of.*TOPOLOGY_INVALID_SYNCHRONIZER.*ReconcileSequencingParametersTrigger:LsuIntegrationTest
+The operation 'update sequencing parameters' failed with a non-retryable error.*TOPOLOGY_INVALID_SYNCHRONIZER.*ParticipantAdminConnection:LsuIntegrationTest
+The operation 'processTaskWithRetry' failed with a non-retryable error.*TOPOLOGY_INVALID_SYNCHRONIZER.*ReconcileSequencingParametersTrigger:LsuIntegrationTest
 
 # Roll forward tests
 Failed to connect to scan of FAILED Seed URL.*RollForwardLsu.*IntegrationTest
@@ -162,3 +169,10 @@ Ryuk has been disabled
 
 # Calls to this have retries; if the retries were not enough, we'll get a louder error.
 api/sv/v0/onboard/validator \(POST\) resulted in a timeout
+
+# In BaseStorePerformanceTest, we run migrations in an unforked sbt JVM, so Flyway
+# finds the sbt test jar (apps-app_*-tests.jar). But, Flyway cannot open it,
+# so it skips it with this WARN. It contains no migrations, so this is harmless and unrelated to DB migrations.
+# The same warning is emitted by both the FlywayExecutor and the ClassPathScanner loggers.
+# a single pattern matching the message (the unloadable sbt tests jar) covers both.
+Skipping unloadable jar file: file:.*-tests\.jar

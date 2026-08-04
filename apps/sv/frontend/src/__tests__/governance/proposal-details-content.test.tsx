@@ -13,6 +13,7 @@ import {
   ProposalVote,
   ProposalVotingInformation,
   UnclaimedActivityRecordProposal,
+  UpdateFeatureAppProposal,
   UpdateSvRewardWeightProposal,
 } from '../../utils/types';
 import userEvent from '@testing-library/user-event';
@@ -285,6 +286,94 @@ describe('Proposal Details Content', () => {
     expect(rightContractIdValue.textContent).toMatch(/rightContractId/);
   });
 
+  test('should render update featured app proposal details', async () => {
+    const updateFeaturedAppDetails = {
+      actionName: 'Update Featured Application',
+      action: 'SRARC_UpdateFeaturedAppRight',
+      proposal: {
+        rightContractId: 'rightCid123',
+        newActivityWeight: '2.5',
+        reason: 'boosting rewards',
+      } as UpdateFeatureAppProposal,
+    } as ProposalDetails;
+
+    render(
+      <Wrapper>
+        <ProposalDetailsContent
+          currentSvPartyId={voteRequest.votingInformation.requester}
+          contractId={voteRequest.contractId}
+          proposalDetails={updateFeaturedAppDetails}
+          votingInformation={voteRequest.votingInformation}
+          votes={voteRequest.votes}
+        />
+      </Wrapper>
+    );
+
+    const action = screen.getByTestId('proposal-details-action-value');
+    expect(action.textContent).toMatch('Update Featured Application');
+
+    const updateFeaturedAppSection = screen.getByTestId(
+      'proposal-details-update-feature-app-section'
+    );
+    expect(updateFeaturedAppSection).toBeInTheDocument();
+
+    const updateFeaturedAppLabel = screen.getByTestId('proposal-details-update-feature-app-label');
+    expect(updateFeaturedAppLabel.textContent).toMatch('Featured Application Contract ID');
+
+    const updateFeaturedAppValue = screen.getByTestId('proposal-details-update-feature-app-value');
+    expect(updateFeaturedAppValue.textContent).toMatch('rightCid123');
+
+    await waitFor(() => {
+      const currentFeaturedAppWeight = screen.getByTestId('config-change-current-value');
+      expect(currentFeaturedAppWeight.textContent).toMatch('1.0');
+    });
+
+    const newFeaturedAppWeight = screen.getByTestId('config-change-new-value');
+    expect(newFeaturedAppWeight.textContent).toMatch('2.5');
+
+    const updateFeaturedReasonLabel = screen.getByTestId(
+      'proposal-details-update-feature-reason-label'
+    );
+    expect(updateFeaturedReasonLabel.textContent).toMatch('Reason');
+
+    const updateFeaturedReasonValue = screen.getByTestId(
+      'proposal-details-update-feature-reason-value'
+    );
+    expect(updateFeaturedReasonValue.textContent).toMatch('boosting rewards');
+  });
+
+  test('should show only new weight when featured app right is not found', async () => {
+    const updateFeaturedAppDetails = {
+      actionName: 'Update Featured Application',
+      action: 'SRARC_UpdateFeaturedAppRight',
+      proposal: {
+        rightContractId: 'archivedRightCid', // <- not 'rightCid123', so the mock returns not-found
+        newActivityWeight: '2.5',
+        reason: 'boosting rewards',
+      } as UpdateFeatureAppProposal,
+    } as ProposalDetails;
+
+    render(
+      <Wrapper>
+        <ProposalDetailsContent
+          currentSvPartyId={voteRequest.votingInformation.requester}
+          contractId={voteRequest.contractId}
+          proposalDetails={updateFeaturedAppDetails}
+          votingInformation={voteRequest.votingInformation}
+          votes={voteRequest.votes}
+        />
+      </Wrapper>
+    );
+
+    // new value still shows
+    await waitFor(() => {
+      const newFeaturedAppWeight = screen.getByTestId('config-change-new-value');
+      expect(newFeaturedAppWeight.textContent).toMatch('2.5');
+    });
+    // ...but there's no current-value box (contract archived → currentWeight '')
+    expect(screen.queryByTestId('config-change-current-value')).toBeNull();
+  });
+
   test('should render update sv reward weight proposal details', () => {
     const svToUpdate = 'sv2';
     const updateSvRewardWeightDetails = {
@@ -417,7 +506,11 @@ describe('Proposal Details Content', () => {
     const maxNumInputsNewValue = within(changes[1]).getByTestId('config-change-new-value');
     expect(maxNumInputsNewValue.textContent).toBe('4');
 
-    expect(screen.getByTestId('json-diffs-details')).toBeInTheDocument();
+    const jsonDiffsToggle = screen.getByTestId('json-diff-toggle');
+    expect(jsonDiffsToggle).toHaveTextContent('Show JSON');
+    expect(jsonDiffsToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('JSON')).not.toBeInTheDocument();
+    expect(screen.getByTestId('json-diffs-details')).not.toBeVisible();
   });
 
   test('should render dso rules config changes', () => {
@@ -498,7 +591,11 @@ describe('Proposal Details Content', () => {
     );
     expect(dsoNumUnclaimedRewardsThresholdNewValue.textContent).toBe('20');
 
-    expect(screen.getByTestId('json-diffs-details')).toBeInTheDocument();
+    const jsonDiffsToggle = screen.getByTestId('json-diff-toggle');
+    expect(jsonDiffsToggle).toHaveTextContent('Show JSON');
+    expect(jsonDiffsToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('JSON')).not.toBeInTheDocument();
+    expect(screen.getByTestId('json-diffs-details')).not.toBeVisible();
   });
 });
 
@@ -901,8 +998,10 @@ describe('Proposal Details > Votes & Voting', () => {
     // This is because awaiting the button click makes it very difficult for the test runner to see the loading state
     user.click(acceptButton);
 
-    await waitFor(async () => {
-      expect(acceptButton.getAttribute('disabled')).toBeDefined();
+    // once submission starts, the vote buttons are unmounted (replaced by the
+    // "Submitting..." state and then the submission message)
+    await waitFor(() => {
+      expect(acceptButton).not.toBeInTheDocument();
     });
 
     const submissionMessage = await screen.findByTestId('submission-message');
@@ -964,8 +1063,10 @@ describe('Proposal Details > Votes & Voting', () => {
     // This is because awaiting the button click makes it very difficult for the test runner to see the loading state
     user.click(acceptButton);
 
-    await waitFor(async () => {
-      expect(acceptButton.getAttribute('disabled')).toBeDefined();
+    // once submission starts, the vote buttons are unmounted (replaced by the
+    // "Submitting..." state and then the submission message)
+    await waitFor(() => {
+      expect(acceptButton).not.toBeInTheDocument();
     });
 
     const submissionMessage = await screen.findByTestId('submission-message');

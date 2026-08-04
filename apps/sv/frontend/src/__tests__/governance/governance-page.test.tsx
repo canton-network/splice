@@ -1,11 +1,14 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, test } from 'vitest';
 import { SvConfigProvider } from '../../utils';
 import userEvent from '@testing-library/user-event';
+import dayjs from 'dayjs';
+import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import App from '../../App';
 import { navigateToGovernancePage } from '../helpers';
+import { voteResultsAmuletRules, voteResultsDsoRules } from '../mocks/constants';
 
 type UserEvent = ReturnType<typeof userEvent.setup>;
 
@@ -93,6 +96,71 @@ describe('Governance Page', () => {
     expect(voteRequests.length).toBe(5);
 
     expect(true).toBe(true);
+  });
+
+  test('should display total vote history count in the section badge', async () => {
+    const user = userEvent.setup();
+
+    render(<GovernanceWithConfig />);
+
+    await navigateToGovernancePage(user);
+
+    const expectedCount = voteResultsAmuletRules.dso_rules_vote_results
+      .concat(voteResultsDsoRules.dso_rules_vote_results)
+      .filter(
+        r => r.outcome.tag !== 'VRO_Accepted' || new Date(r.outcome.value.effectiveAt) < new Date()
+      ).length;
+
+    const badge = await screen.findByTestId('vote-history-section-badge-count');
+    await waitFor(() => expect(badge).toHaveTextContent(`${expectedCount}`));
+  });
+
+  test('should display inflight votes count in the section badge', async () => {
+    const user = userEvent.setup();
+
+    render(<GovernanceWithConfig />);
+
+    await navigateToGovernancePage(user);
+
+    const badge = screen.getByTestId('inflight-proposals-section-badge-count');
+    expect(badge).toHaveTextContent('');
+  });
+
+  test('vote history details show the actual effective time for closed votes without targetEffectiveAt', async () => {
+    const user = userEvent.setup();
+
+    await login(user);
+
+    await navigateToGovernancePage(user);
+
+    // The first DsoRules vote result simulates an old-model accepted vote:
+    // no targetEffectiveAt on the request, actual effective time on the outcome.
+    const closedVote = voteResultsDsoRules.dso_rules_vote_results[0];
+    const effectiveAt =
+      closedVote.outcome.tag === 'VRO_Accepted' ? closedVote.outcome.value.effectiveAt : undefined;
+    const expectedEffectiveAt = dayjs(effectiveAt).format(dateTimeFormatISO);
+
+    const rows = screen.getAllByTestId('vote-history-row');
+    const targetRow = rows.find(
+      row =>
+        within(row).getByTestId('vote-history-row-vote-takes-effect').textContent ===
+        expectedEffectiveAt
+    );
+    expect(targetRow).toBeDefined();
+
+    await user.click(within(targetRow!).getByTestId('vote-history-row-action-name'));
+
+    const votingInformation = await screen.findByTestId('proposal-details-voting-information');
+
+    const voteTakesEffectDuration = within(votingInformation).getByTestId(
+      'proposal-details-vote-takes-effect-duration'
+    );
+    expect(voteTakesEffectDuration.textContent?.trim()).not.toBe('Threshold');
+
+    const voteTakesEffectIso = within(votingInformation).getByTestId(
+      'proposal-details-vote-takes-effect-value'
+    );
+    expect(voteTakesEffectIso).toHaveTextContent(expectedEffectiveAt);
   });
 
   test('click on Details link to see Proposal Details (Action Required)', async () => {

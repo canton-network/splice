@@ -78,7 +78,9 @@ export async function installParticipant(
     {
       ...participantValuesWithSpecifiedAud,
       logLevel: validatorConfig.logging?.level,
-      apiRequestLogLevel: validatorConfig.logging?.apiRequestLogLevel,
+      apiRequestLogLevel:
+        validatorConfig.logging?.cantonApiRequestLogLevel ??
+        validatorConfig.logging?.apiRequestLogLevel,
       logAsyncFlush: validatorConfig.logging?.async,
       persistence: {
         databaseName: pgName,

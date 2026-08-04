@@ -34,6 +34,7 @@ import { CreateUnallocatedUnclaimedActivityRecordSection } from './proposal-deta
 import { CopyableIdentifier, CopyableUrl, MemberIdentifier, VoteStats } from '../beta';
 import { useQuery } from '@tanstack/react-query';
 import { useSvAdminClient } from '../../contexts/SvAdminServiceContext';
+import { DEFAULT_APP_ACTIVITY_WEIGHT } from '../../utils/constants';
 
 dayjs.extend(relativeTime);
 
@@ -218,11 +219,22 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
           )}
 
           {proposalDetails.action === 'SRARC_GrantFeaturedAppRight' && (
-            <FeatureAppSection provider={proposalDetails.proposal.provider} />
+            <FeatureAppSection
+              provider={proposalDetails.proposal.provider}
+              activityWeight={proposalDetails.proposal.activityWeight}
+            />
           )}
 
           {proposalDetails.action === 'SRARC_RevokeFeaturedAppRight' && (
             <UnfeatureAppSection rightContractId={proposalDetails.proposal.rightContractId} />
+          )}
+
+          {proposalDetails.action === 'SRARC_UpdateFeaturedAppRight' && (
+            <UpdateFeatureAppSection
+              rightContractId={proposalDetails.proposal.rightContractId}
+              newActivityWeight={proposalDetails.proposal.newActivityWeight}
+              reason={proposalDetails.proposal.reason}
+            />
           )}
 
           {proposalDetails.action === 'SRARC_UpdateSvRewardWeight' && (
@@ -247,7 +259,7 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
                 label="Proposed Changes"
                 value={<ConfigValuesChanges changes={proposalDetails.proposal.configChanges} />}
               />
-              <JsonDiffAccordion>
+              <JsonDiffAccordion variant="review">
                 {amuletConfigToCompareWith ? (
                   <PrettyJsonDiff
                     changes={{
@@ -268,7 +280,7 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
                 label="Proposed Changes"
                 value={<ConfigValuesChanges changes={proposalDetails.proposal.configChanges} />}
               />
-              <JsonDiffAccordion>
+              <JsonDiffAccordion variant="review">
                 {dsoConfigToCompareWith?.[1] ? (
                   <PrettyJsonDiff
                     changes={{
@@ -316,7 +328,7 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
           />
 
           <DetailItem
-            label="Threshold Deadline"
+            label="Quorum Threshold Deadline"
             value={
               <Stack gap={3}>
                 <Box data-testid="proposal-details-voting-closes-duration">
@@ -436,7 +448,7 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
               key={editFormKey}
               voteRequestContractId={contractId}
               currentSvPartyId={currentSvPartyId}
-              onSubmissionComplete={() => setVoteSubmitted(true)}
+              onSubmissionStart={() => setVoteSubmitted(true)}
               votes={votes}
             />
           </VoteSection>
@@ -507,8 +519,8 @@ const VoteItem: React.FC<VoteItemProps> = ({
       }}
       data-testid="proposal-details-vote"
     >
-      <Box sx={{ flexGrow: 1 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+      <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
           <MemberIdentifier
             partyId={voter}
             size="large"
@@ -576,9 +588,10 @@ const OffboardMemberSection = ({ memberPartyId }: OffboardMemberSectionProps) =>
 
 interface FeatureAppSectionProps {
   provider: string;
+  activityWeight: string;
 }
 
-const FeatureAppSection = ({ provider }: FeatureAppSectionProps) => {
+const FeatureAppSection = ({ provider, activityWeight }: FeatureAppSectionProps) => {
   return (
     <Box
       id="proposal-details-feature-app-section"
@@ -595,6 +608,12 @@ const FeatureAppSection = ({ provider }: FeatureAppSectionProps) => {
           />
         }
         labelId="proposal-details-feature-app-label"
+      />
+      <DetailItem
+        label="Activity Weight"
+        value={activityWeight}
+        labelId="proposal-details-feature-app-activity-weight-label"
+        valueId="proposal-details-feature-app-activity-weight-value"
       />
     </Box>
   );
@@ -644,6 +663,87 @@ const UnfeatureAppSection = ({ rightContractId }: UnfeatureAppSectionProps) => {
           />
         }
         labelId="proposal-details-unfeature-app-label"
+      />
+    </Box>
+  );
+};
+
+interface UpdateFeatureAppSectionProps {
+  rightContractId: string;
+  newActivityWeight: string;
+  reason: string;
+}
+
+const UpdateFeatureAppSection = ({
+  rightContractId,
+  newActivityWeight,
+  reason,
+}: UpdateFeatureAppSectionProps) => {
+  const svAdminClient = useSvAdminClient();
+  const providerQuery = useQuery({
+    queryKey: ['featuredAppRightProviderAndWeight', rightContractId],
+    queryFn: async () => {
+      const response = await svAdminClient.lookupFeaturedAppRightByContractId(rightContractId);
+      const contract = response.featured_app_right;
+      const payload = contract?.payload as
+        | { provider?: string; activityWeight?: string | null }
+        | undefined;
+      return {
+        provider: payload?.provider ?? null,
+        currentWeight: contract ? (payload?.activityWeight ?? DEFAULT_APP_ACTIVITY_WEIGHT) : '',
+      };
+    },
+  });
+  return (
+    <Box
+      id="proposal-details-update-feature-app-section"
+      data-testid="proposal-details-update-feature-app-section"
+      sx={{ display: 'contents' }}
+    >
+      {providerQuery?.data?.provider && (
+        <DetailItem
+          label="Provider Party ID"
+          value={
+            <CopyableIdentifier
+              value={providerQuery.data?.provider}
+              size="large"
+              data-testid="proposal-details-update-feature-value"
+            />
+          }
+          labelId="proposal-details-update-feature-label"
+        />
+      )}
+      <DetailItem
+        label="Featured Application Contract ID"
+        value={
+          <CopyableIdentifier
+            value={rightContractId}
+            size="large"
+            data-testid="proposal-details-update-feature-app-value"
+          />
+        }
+        labelId="proposal-details-update-feature-app-label"
+      />
+      <DetailItem
+        label="Proposed Changes"
+        value={
+          <ConfigValuesChanges
+            changes={[
+              {
+                label: 'Activity Weight',
+                fieldName: 'newActivityWeight',
+                currentValue: providerQuery.data?.currentWeight ?? '',
+                newValue: newActivityWeight,
+              },
+            ]}
+          />
+        }
+      />
+      <DetailItem
+        label="Reason"
+        value={reason}
+        labelId="proposal-details-update-feature-reason-label"
+        valueId="proposal-details-update-feature-reason-value"
       />
     </Box>
   );

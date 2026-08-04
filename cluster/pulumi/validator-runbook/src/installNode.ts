@@ -69,7 +69,7 @@ export async function installNode(auth0Client: Auth0Client): Promise<void> {
   console.error(
     validatorVersion.type === 'local'
       ? 'Using locally built charts by default'
-      : `Using charts from the artifactory by default, version ${validatorVersion.version}`
+      : `Using charts from the ghcr by default, version ${validatorVersion.version}`
   );
 
   const xns = exactNamespace(validatorConfig.namespace, true);

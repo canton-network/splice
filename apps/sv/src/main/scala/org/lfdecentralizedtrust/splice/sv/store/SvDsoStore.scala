@@ -54,6 +54,7 @@ import com.digitalasset.canton.util.ShowUtil.*
 import io.grpc.Status
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 
+import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.OptionConverters.*
 
@@ -598,6 +599,25 @@ trait SvDsoStore
     splice.amulet.RewardCouponV2.ContractId,
     splice.amulet.RewardCouponV2,
   ]]]
+
+  /** Returns the histogram for the remaining age (i.e., difference between now and the
+    * contract creation time) of all active RewardCouponV2 contracts.
+    *
+    * @param t1 The upper bound of the first age bucket (exclusive).
+    * @param t2 The upper bound of the second age bucket (exclusive).
+    * @param t3 The upper bound of the third age bucket (exclusive).
+    * @param now The current timestamp to use for calculating the remaining age of the contracts.
+    * @param limit The maximum number of contracts to consider for the histogram.
+    */
+  def getRewardCouponsV2AgeHistogram(
+      t1: FiniteDuration,
+      t2: FiniteDuration,
+      t3: FiniteDuration,
+      now: CantonTimestamp,
+      limit: Limit,
+  )(implicit
+      tc: TraceContext
+  ): Future[(Long, Long, Long, Long)]
 
   /** Returns the dry-run `CalculateRewardsV2` and `ProcessRewardsV2` contracts whose
     * round number is in the given set.

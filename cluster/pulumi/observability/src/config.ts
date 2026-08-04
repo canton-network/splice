@@ -26,6 +26,33 @@ const GcpQuotasConfigSchema = z.object({
     }),
 });
 
+const NatPortUsageConfigSchema = z.object({
+  thresholdPercent: z.number().min(0).max(100),
+  droppedSentPacketsThreshold: z.number().min(0),
+});
+
+export type NatPortUsageConfig = z.infer<typeof NatPortUsageConfigSchema>;
+
+const MuteTimeWindowSchema = z.object({
+  times: z.array(
+    z.object({
+      startTime: z.string(), // UTC
+      endTime: z.string(), // UTC
+    })
+  ),
+  weekdays: z.array(z.string()).optional(), // e.g. ['monday', 'tuesday:friday']
+});
+export type MuteTimeWindow = z.infer<typeof MuteTimeWindowSchema>;
+
+const MuteTimeIntervalSchema = z.array(
+  z.object({
+    name: z.string(),
+    objectMatchers: z.array(z.tuple([z.string(), z.string(), z.string()])),
+    timeWindows: z.array(MuteTimeWindowSchema),
+  })
+);
+export type MuteTimeInterval = z.infer<typeof MuteTimeIntervalSchema>[number];
+
 const MonitoringConfigSchema = z
   .object({
     enableGrafanaServiceAccountToken: z.boolean(),
@@ -104,13 +131,16 @@ const MonitoringConfigSchema = z
           rejectionRateThreshold: z.number(),
           circuitBreakerStateThreshold: z.number(),
         }),
+        cantonBft: z.object({
+          // Alert if the number of ingress requests queued in the BFT ordering
+          // layer exceeds this threshold.
+          mempoolMaxSizeThreshold: z.number(),
+        }),
         scanConnectionDisagreement: z.object({
           // Fraction (0-1) of BFT consensus comparisons on a scan connection that may
-          // disagree with the consensus result before the warning alert fires.
-          disagreementRateThreshold: z.number(),
-          // Number of successful (2xx) responses that disagree with BFT consensus that
-          // may occur before the critical alert fires.
-          successfulDisagreementThreshold: z.number(),
+          // return a response (successful or failed) disagreeing with the consensus
+          // result before the success/failure alerts fire.
+          alertThreshold: z.number(),
           // Requests (by their `request` label) to exclude from the scan connection
           // disagreement alerts. Matched as a regex against the `request` label.
           excludedRequests: z.array(z.string()).default([]),
@@ -118,28 +148,29 @@ const MonitoringConfigSchema = z
           // connection disagreement alerts. Matched as a regex against the
           // `scan_connection` label.
           excludedConnections: z.array(z.string()).default([]),
+          // Http status code (by their `http_status` label) to exclude from the disagreement alerts.
+          // Matched as a regex against the `http_status` label.
+          excludedHttpStatusCodes: z.array(z.string()).default([]),
         }),
         walletSweep: z.object({
           tolerance: z.number(),
         }),
         gcpQuotas: GcpQuotasConfigSchema,
+        natPortUsage: NatPortUsageConfigSchema.default({
+          thresholdPercent: 80,
+          // `default 30` because every once in a while (likely due to dynamic port allocation),
+          // a few packets (less than 1/s) get dropped and getting alerted on it every time can be very noisy.
+          droppedSentPacketsThreshold: 30,
+        }),
         trafficBasedRewards: z.object({
           featuredAppRightsLimit: z.number(),
+          verdictIngestionBatchSizeThreshold: z.number(),
+          verdictIngestionBatchSizePendingPeriodMinutes: z.number(),
         }),
       }),
       logAlerts: z.object({}).catchall(z.string()).default({}),
       loggedSecretsFilter: z.string().optional(),
-      muteTimeIntervals: z
-        .array(
-          z.object({
-            name: z.string(),
-            objectMatchers: z.array(z.tuple([z.string(), z.string(), z.string()])),
-            startTime: z.string(), // UTC
-            endTime: z.string(), // UTC
-            weekdays: z.array(z.string()).optional(), // e.g. ['monday', 'tuesday:friday']
-          })
-        )
-        .default([]),
+      muteTimeIntervals: MuteTimeIntervalSchema.default([]),
     }),
   })
   .strict();

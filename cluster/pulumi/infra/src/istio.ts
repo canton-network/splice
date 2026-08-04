@@ -759,6 +759,40 @@ function configurePublicInfo(ingressNs: k8s.core.v1.Namespace): k8s.apiextension
     : [];
 }
 
+function configurePublicTokenRegistry(
+  ingressNs: k8s.core.v1.Namespace
+): k8s.apiextensions.CustomResource[] {
+  return [
+    new k8s.apiextensions.CustomResource('allow-public-token-registry', {
+      apiVersion: istioApiVersion,
+      kind: 'AuthorizationPolicy',
+      metadata: {
+        name: 'allow-public-token-registry',
+        namespace: ingressNs.metadata.name,
+      },
+      spec: {
+        selector: {
+          matchLabels: {
+            app: 'istio-ingress',
+          },
+        },
+        action: 'ALLOW',
+        rules: [
+          {
+            to: [
+              {
+                operation: {
+                  paths: ['/registry/*'],
+                },
+              },
+            ],
+          },
+        ],
+      },
+    }),
+  ];
+}
+
 function configureSequencerHighPerformanceGrpcDestinationRules(
   ingressNs: k8s.core.v1.Namespace
 ): Array<k8s.apiextensions.CustomResource> {
@@ -932,6 +966,11 @@ export function configureIstio(
   const gateways = configureGateway(ingressNs, gwSvc, cometBftSvc, expectGKEL7Gateway);
   const docsAndReleases = configureDocsAndReleases(true, gateways);
   const publicInfo = configurePublicInfo(ingressNs.ns);
+
+  const publicTokenRegistry = infraConfig.istio.enablePublicTokenRegistry
+    ? configurePublicTokenRegistry(ingressNs.ns)
+    : [];
+
   const sequencerHighPerformanceGrpcRules = configureSequencerHighPerformanceGrpcDestinationRules(
     ingressNs.ns
   );
@@ -941,6 +980,7 @@ export function configureIstio(
       ...gateways,
       ...docsAndReleases,
       ...publicInfo,
+      ...publicTokenRegistry,
       ...sequencerHighPerformanceGrpcRules,
       ...[sequencerFlowControl],
     ],

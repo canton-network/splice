@@ -59,9 +59,8 @@ import org.lfdecentralizedtrust.splice.store.{
   DbVotesAcsStoreQueryBuilder,
   DbVotesTxLogStoreQueryBuilder,
   Limit,
-  PageLimit,
+  VoteResultsFilters,
   ResultsPage,
-  SortOrder,
   TxLogStore,
   UpdateHistory,
 }
@@ -78,7 +77,6 @@ import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.store.UpdateHistoryQueries.UpdateHistoryQueries
 import org.lfdecentralizedtrust.splice.store.db.AcsQueries.AcsStoreId
 import org.lfdecentralizedtrust.splice.store.db.TxLogQueries.TxLogStoreId
-import slick.jdbc.canton.SQLActionBuilder
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
@@ -390,63 +388,6 @@ class DbScanStore(
     } yield contractWithStateFromRow(TransferCommandCounter.COMPANION)(row)).value
   }
 
-  override def listTransactions(
-      pageEndEventId: Option[String],
-      sortOrder: SortOrder,
-      limit: PageLimit,
-  )(implicit
-      tc: TraceContext
-  ): Future[Seq[TxLogEntry.TransactionTxLogEntry]] =
-    waitUntilAcsIngested {
-      val entryTypeCondition: SQLActionBuilder = inClause(
-        "entry_type",
-        List(
-          EntryType.TransferTxLogEntry,
-          EntryType.TapTxLogEntry,
-          EntryType.MintTxLogEntry,
-          EntryType.AbortTransferInstructionTxLogEntry,
-        ),
-      )
-      // Literal sort order since Postgres complains when trying to bind it to a parameter
-      val (compareEntryNumber, orderLimit) = sortOrder match {
-        case SortOrder.Ascending =>
-          (sql" > ", sql""" order by entry_number asc limit ${sqlLimit(limit)};""")
-        case SortOrder.Descending =>
-          (sql" < ", sql""" order by entry_number desc limit ${sqlLimit(limit)};""")
-      }
-
-      // TODO (#960): don't use the event id for pagination, use the entry number
-      for {
-        rows <- storage.query(
-          pageEndEventId.fold(
-            selectFromTxLogTable(
-              txLogTableName,
-              txLogStoreId,
-              where = entryTypeCondition,
-              orderLimit = orderLimit,
-            )
-          )(pageEndEventId =>
-            selectFromTxLogTable(
-              txLogTableName,
-              txLogStoreId,
-              where = (entryTypeCondition ++ sql" and entry_number " ++ compareEntryNumber ++
-                sql"""(
-                  select entry_number
-                  from scan_txlog_store
-                  where store_id = $txLogStoreId
-                  and event_id = ${lengthLimited(pageEndEventId)}
-                  and """ ++ entryTypeCondition ++ sql"""
-              )""").toActionBuilder,
-              orderLimit = orderLimit,
-            )
-          ),
-          "listTransactions",
-        )
-        entries = rows.map(txLogEntryFromRow[TxLogEntry.TransactionTxLogEntry](txLogConfig))
-      } yield entries
-
-    }
-
   override def lookupFeaturedAppRight(
       providerPartyId: PartyId
   )(implicit
@@ -633,11 +574,7 @@ class DbScanStore(
   }
 
   override def listVoteRequestResults(
-      actionName: Option[String],
-      accepted: Option[Boolean],
-      requester: Option[String],
-      effectiveFrom: Option[String],
-      effectiveTo: Option[String],
+      filters: VoteResultsFilters,
       limit: Limit,
       after: Option[Long] = None,
   )(implicit tc: TraceContext): Future[ResultsPage[DsoRules_CloseVoteRequestResult]] = {
@@ -648,11 +585,7 @@ class DbScanStore(
       actionNameColumnName = "vote_action_name",
       acceptedColumnName = "vote_accepted",
       requesterNameColumnName = "vote_requester_name",
-      actionName = actionName,
-      accepted = accepted,
-      requester = requester,
-      effectiveFrom = effectiveFrom,
-      effectiveTo = effectiveTo,
+      filters = filters,
       limit = limit,
       after = after,
     )
@@ -666,6 +599,23 @@ class DbScanStore(
         .map(_.result.getOrElse(throw txMissingField()))
       afterToken = limited.lastOption.map(_.entryNumber)
     } yield ResultsPage(recentVoteResults, afterToken)
+  }
+
+  override def countVoteRequestResults(
+      filters: VoteResultsFilters
+  )(implicit tc: TraceContext): Future[Long] = {
+    val query = countVoteRequestResultsQuery(
+      txLogTableName = ScanTables.txLogTableName,
+      txLogStoreId = txLogStoreId,
+      dbType = EntryType.VoteRequestTxLogEntry,
+      actionNameColumnName = "vote_action_name",
+      acceptedColumnName = "vote_accepted",
+      requesterNameColumnName = "vote_requester_name",
+      filters = filters,
+    )
+    storage
+      .query(query, "countVoteRequestResults")
+      .map(_.headOption.getOrElse(0L))
   }
 
   override def lookupLatestSvRewardWeightChange(

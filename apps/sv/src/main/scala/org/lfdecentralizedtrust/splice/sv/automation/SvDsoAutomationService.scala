@@ -41,7 +41,7 @@ import org.lfdecentralizedtrust.splice.scan.admin.api.client.{
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
 import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
-import org.lfdecentralizedtrust.splice.sv.{BftSequencerConfig, LocalSynchronizerNode}
+import org.lfdecentralizedtrust.splice.sv.{CantonBftSequencerConfig, LocalSynchronizerNode}
 import org.lfdecentralizedtrust.splice.sv.automation.SvDsoAutomationService.{
   LocalSequencerClientConfig,
   LocalSequencerClientContext,
@@ -380,7 +380,7 @@ class SvDsoAutomationService(
       new ReconcileSequencingParametersTrigger(
         triggerContext,
         participantAdminConnection,
-        config.bftSequencingParameters,
+        config.cantonBftSequencingParameters,
         config.domains.global.alias,
       )
     )
@@ -403,7 +403,7 @@ class SvDsoAutomationService(
     )
     def registerTriggersForSynchronizers(node: LocalSynchronizerNode): Unit = {
       node.sequencerConfig match {
-        case BftSequencerConfig() =>
+        case CantonBftSequencerConfig() =>
           registerTrigger(
             new SvBftSequencerPeerOffboardingTrigger(
               triggerContext,
@@ -428,7 +428,7 @@ class SvDsoAutomationService(
     synchronizerNodeService.nodes.successor.foreach(registerTriggersForSynchronizers)
   }
 
-  def registerLsuTriggers() = {
+  def registerLsuTriggers(): Unit = {
     synchronizerNodeService.nodes.successor match {
       case Some(successorSynchronizerNode) =>
         registerTrigger(

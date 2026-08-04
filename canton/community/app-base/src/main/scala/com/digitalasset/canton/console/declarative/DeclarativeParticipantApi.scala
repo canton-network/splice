@@ -190,8 +190,7 @@ class DeclarativeParticipantApi(
       val mapping = SynchronizerTrustCertificate(
         participantId,
         synchronizerId,
-        featureFlags =
-          (ParticipantTopologyFeatureFlag.EnableAlphaMultiSynchronizer +: oldFeatureFlags),
+        featureFlags = (ParticipantTopologyFeatureFlag.EnableMultiSynchronizer +: oldFeatureFlags),
       )
       queryAdminApi(
         TopologyAdminCommands.Write.Propose(
@@ -212,7 +211,7 @@ class DeclarativeParticipantApi(
               current <- fetchSynchronizerTrustCertificate(sid.synchronizerId)
               currentFeatureFlags = current.headOption.map(_.item.featureFlags).getOrElse(Seq.empty)
               shouldUpdate = !currentFeatureFlags.contains(
-                ParticipantTopologyFeatureFlag.EnableAlphaMultiSynchronizer
+                ParticipantTopologyFeatureFlag.EnableMultiSynchronizer
               )
               done <-
                 if (shouldUpdate) {

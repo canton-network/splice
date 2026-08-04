@@ -28,6 +28,7 @@ import type {
   SupportedActionTag,
   UnclaimedActivityRecordProposal,
   UnfeatureAppProposal,
+  UpdateFeatureAppProposal,
   UpdateSvRewardWeightProposal,
   YourVoteStatus,
 } from '../utils/types';
@@ -46,6 +47,7 @@ export const actionTagToTitle = (amuletName: string): Record<SupportedActionTag,
   SRARC_CreateUnallocatedUnclaimedActivityRecord: 'Create Unclaimed Activity Record',
   SRARC_SetConfig: 'Set Decentralized Synchronizer Operations (DSO) Rules Configuration',
   SRARC_UpdateSvRewardWeight: 'Update Super Validator Reward Weight',
+  SRARC_UpdateFeaturedAppRight: 'Update Featured Application',
 });
 
 export const createProposalActions: {
@@ -55,6 +57,7 @@ export const createProposalActions: {
   { name: 'Offboard Member', value: 'SRARC_OffboardSv' },
   { name: 'Feature Application', value: 'SRARC_GrantFeaturedAppRight' },
   { name: 'Unfeature Application', value: 'SRARC_RevokeFeaturedAppRight' },
+  { name: 'Update Featured Application', value: 'SRARC_UpdateFeaturedAppRight' },
   {
     name: 'Set Decentralized Synchronizer Operations (DSO) Rules Configuration',
     value: 'SRARC_SetConfig',
@@ -134,9 +137,18 @@ export function buildProposal(action: ActionRequiringConfirmation, dsoInfo?: Dso
           dsoAction.value.expiresAt
         );
       case 'SRARC_GrantFeaturedAppRight':
-        return createGrantFeatureAppProposal(dsoAction.value.provider);
+        return createGrantFeatureAppProposal(
+          dsoAction.value.provider,
+          dsoAction.value.activityWeight ?? ''
+        );
       case 'SRARC_RevokeFeaturedAppRight':
         return createRevokeFeatureAppProposal(dsoAction.value.rightCid);
+      case 'SRARC_UpdateFeaturedAppRight':
+        return createUpdateFeatureAppProposal(
+          dsoAction.value.rightCid,
+          dsoAction.value.update.newActivityWeight,
+          dsoAction.value.update.reason
+        );
       case 'SRARC_SetConfig':
         return createDsoRulesConfigProposal(dsoAction.value.baseConfig, dsoAction.value.newConfig);
     }
@@ -156,10 +168,22 @@ function createOffboardMemberProposal(memberToOffboard: string): OffBoardMemberP
   return { memberToOffboard };
 }
 
-function createGrantFeatureAppProposal(provider: string): FeatureAppProposal {
+function createGrantFeatureAppProposal(
+  provider: string,
+  activityWeight: string
+): FeatureAppProposal {
   return {
     provider: provider,
+    activityWeight: activityWeight,
   };
+}
+
+function createUpdateFeatureAppProposal(
+  rightContractId: string,
+  newActivityWeight: string,
+  reason: string
+): UpdateFeatureAppProposal {
+  return { rightContractId, newActivityWeight, reason };
 }
 
 function createRevokeFeatureAppProposal(rightContractId: string): UnfeatureAppProposal {
@@ -272,6 +296,10 @@ export function formatBasisPoints(value: string): string {
 export function getSvRewardWeight(svs: [string, SvInfo][], svPartyId: string): string {
   const svInfo = svs.find(sv => sv[0] === svPartyId);
   return svInfo ? svInfo[1].svRewardWeight : '';
+}
+
+export function activityWeightToOptional(weight: string): string | null {
+  return weight.trim() === '' ? null : weight;
 }
 
 export function buildPendingConfigFields(
