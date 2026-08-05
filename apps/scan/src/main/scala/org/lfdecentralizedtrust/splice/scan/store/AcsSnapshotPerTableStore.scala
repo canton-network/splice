@@ -213,12 +213,16 @@ class AcsSnapshotPerTableStore(
 
     val statement = for {
       - <- createSnapshotFromPrevious(snapshotToSave.targetRecordTime, nextSnapshotTargetRecordTime)
-      // now that we know the snapshot won't be modified anymore, we can create the necessary indexes
-      // TODO: drop the contract_id index
+      _ <- AcsSnapshotPerTableStore.ACSTableDDL.createContractIdIndex(nextSnapshotTargetRecordTime)
       // TODO: configure vacuum?
+      // TODO: create index concurrently?
+      // now that we know the snapshot won't be modified anymore:
+      // We can create an index faster than before the inserts
       _ <- AcsSnapshotPerTableStore.ACSTableDDL.createStakeholderFilterIndex(
         snapshotToSave.targetRecordTime
       )
+      // We can drop the index that helps with contract id deletions
+      _ <- AcsSnapshotPerTableStore.ACSTableDDL.dropContractIdIndex(snapshotToSave.targetRecordTime)
     } yield Option(0) // TODO: define
 
     // TODO: what about idempotency?
@@ -386,7 +390,24 @@ object AcsSnapshotPerTableStore {
           """
     }
 
-    // TODO: we need an index over contract_id for the deletes
+    /** This index only exists to support deletion of `WHERE contract_id = ?`,
+      * which happens when we process a consuming=true ExerciseEvent.
+      *
+      * This index can be dropped after the snapshot is saved, as deletes will no longer happen.
+      */
+    def createContractIdIndex(snapshotRecordTime: CantonTimestamp) = {
+      val filterTableName = acsSnapshotFilterTableName(snapshotRecordTime)
+      sqlu"""
+       create index #${filterTableName}_cid on #$filterTableName (contract_id);
+          """
+    }
+
+    def dropContractIdIndex(snapshotRecordTime: CantonTimestamp) = {
+      val filterTableName = acsSnapshotFilterTableName(snapshotRecordTime)
+      sqlu"""
+       drop index #${filterTableName}_cid on #$filterTableName (contract_id);
+          """
+    }
 
     def createStakeholderFilterIndex(snapshotRecordTime: CantonTimestamp) = {
       val filterTableName = acsSnapshotFilterTableName(snapshotRecordTime)
