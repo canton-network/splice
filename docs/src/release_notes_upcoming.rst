@@ -14,3 +14,8 @@
           This aligns with standard idempotency-key semantics: a second request with a previously
           accepted command id receives a 200 response with the same result as the first.
           Concurrent duplicates, where no submission has completed yet, are still rejected.
+
+    - SV UI
+
+        - During the creation of ``AmuletRules_SetConfig`` proposal, for the ``rewardConfig``
+          config field form improve the field descriptions and use drop-downs.

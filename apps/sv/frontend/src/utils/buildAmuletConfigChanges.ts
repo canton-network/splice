@@ -320,6 +320,17 @@ function buildIssuanceCurveChanges(
   return [...initialValues, ...futureValues];
 }
 
+const rewardVersionOptions = [
+  {
+    value: 'RewardVersion_FeaturedAppMarkers',
+    label: 'Featured App Markers (pre CIP-104)',
+  },
+  {
+    value: 'RewardVersion_TrafficBasedAppRewards',
+    label: 'Traffic-Based App Rewards (CIP-104)',
+  },
+];
+
 function buildRewardConfigChanges(
   before: RewardConfig | null | undefined,
   after: RewardConfig | null | undefined
@@ -327,33 +338,41 @@ function buildRewardConfigChanges(
   return [
     {
       fieldName: 'rewardConfigMintingVersion',
-      label: 'Reward config: Minting version',
+      label: 'Reward config: reward scheme',
       currentValue: before?.mintingVersion || '',
       newValue: after?.mintingVersion || '',
+      options: rewardVersionOptions,
+      description: 'Which reward scheme to use in production.',
     },
     {
       fieldName: 'rewardConfigDryRunVersion',
-      label: 'Reward config: Dry-run version',
+      label: 'Reward config: Dry-run reward scheme',
       currentValue: before?.dryRunVersion || '',
       newValue: after?.dryRunVersion || '',
+      options: [{ value: '', label: 'None (disabled)' }, ...rewardVersionOptions],
+      description:
+        'Which reward scheme to run in dry-run mode. Select "None (disabled)" to turn it off.',
     },
     {
       fieldName: 'rewardConfigBatchSize',
-      label: 'Reward config: Batch size',
+      label: 'Reward config: Merkle tree batch size',
       currentValue: before?.batchSize || '',
       newValue: after?.batchSize || '',
+      description: 'Batch size for building the Merkle tree over minting allowances (default: 100)',
     },
     {
       fieldName: 'rewardConfigRewardCouponTimeToLive',
       label: 'Reward config: Reward coupon time to live (microseconds)',
       currentValue: before?.rewardCouponTimeToLive.microseconds || '',
       newValue: after?.rewardCouponTimeToLive.microseconds || '',
+      description: 'Time-to-live for RewardCouponV2 contracts (default: 36 hours)',
     },
     {
       fieldName: 'rewardConfigAppRewardCouponThreshold',
       label: 'Reward config: App reward coupon threshold ($)',
       currentValue: before?.appRewardCouponThreshold || '',
       newValue: after?.appRewardCouponThreshold || '',
+      description: 'Minimum reward amount in USD below which no RewardCouponV2 is created (default: $0.50)',
     },
   ] as ConfigChange[];
 }
