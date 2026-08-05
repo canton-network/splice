@@ -1192,7 +1192,7 @@ class AcsSnapshotStoreTest
           _ <- ingestCreate(updateHistory, c3, timestamp1)
 
           snapshotRecordTime = timestamp1.minusSeconds(1L)
-          _ <- store.initializeIncrementalSnapshotFromImportUpdates(
+          _ <- store.initializeSnapshotFromImportUpdates(
             AcsSnapshotStore.IncrementalAcsSnapshotTable.Next,
             snapshotRecordTime,
             timestamp2,
@@ -1252,7 +1252,7 @@ class AcsSnapshotStoreTest
           } yield ())
 
           _ <- clueF(s"Snapshot A: start from import updates at T0")(
-            storeM1.initializeIncrementalSnapshotFromImportUpdates(
+            storeM1.initializeSnapshotFromImportUpdates(
               AcsSnapshotStore.IncrementalAcsSnapshotTable.Next,
               recordTime = timestamp1,
               targetRecordTime = timestamp1.plusSeconds(9L),
@@ -1363,7 +1363,7 @@ class AcsSnapshotStoreTest
 
           _ <- ingestCreate(updateHistory, amuletRules(), CantonTimestamp.MinValue)
 
-          _ <- store.initializeIncrementalSnapshotFromImportUpdates(
+          _ <- store.initializeSnapshotFromImportUpdates(
             AcsSnapshotStore.IncrementalAcsSnapshotTable.Next,
             timestamp2,
             timestamp3,

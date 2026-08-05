@@ -39,14 +39,60 @@ import slick.jdbc.{GetResult, JdbcProfile}
 import java.util.concurrent.Semaphore
 import scala.concurrent.{ExecutionContext, Future}
 
-class AcsSnapshotStore(
+trait AcsSnapshotStore {
+  def currentMigrationId: Long
+
+  def initializeSnapshot(
+      table: IncrementalAcsSnapshotTable,
+      initializeFromT: AcsSnapshot,
+      targetRecordTime: CantonTimestamp,
+  )(implicit tc: TraceContext): Future[Unit]
+
+  def initializeSnapshotFromImportUpdates(
+      table: IncrementalAcsSnapshotTable,
+      recordTime: CantonTimestamp,
+      targetRecordTime: CantonTimestamp,
+      migrationId: Long,
+  )(implicit tc: TraceContext): Future[Unit]
+
+  def updateSnapshot(
+      table: IncrementalAcsSnapshotTable,
+      snapshot: IncrementalAcsSnapshot,
+      targetRecordTime: CantonTimestamp,
+  )(implicit tc: TraceContext): Future[Unit]
+
+  def saveSnapshot(
+      table: IncrementalAcsSnapshotTable,
+      snapshot: IncrementalAcsSnapshot,
+      nextSnapshotTargetRecordTime: CantonTimestamp,
+  )(implicit tc: TraceContext): Future[Option[Int]]
+
+  def deleteSnapshot(
+      table: IncrementalAcsSnapshotTable,
+      snapshot: IncrementalAcsSnapshot,
+  )(implicit tc: TraceContext): Future[Unit]
+
+  // TODO: this is more like "get progress" from latest snapshot or sth like that
+  // suggestion: getSnapshotInProgress
+  def getIncrementalSnapshot(
+      table: IncrementalAcsSnapshotTable
+  )(implicit tc: TraceContext): Future[Option[IncrementalAcsSnapshot]]
+
+  def lookupSnapshotAtOrBefore(
+      migrationId: Long,
+      before: CantonTimestamp,
+  )(implicit tc: TraceContext): Future[Option[AcsSnapshot]]
+}
+
+class LegacyAcsSnapshotStore(
     storage: DbStorage,
     val updateHistory: UpdateHistory,
     dsoParty: PartyId,
     val currentMigrationId: Long,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit ec: ExecutionContext, closeContext: CloseContext)
-    extends AcsJdbcTypes
+    extends AcsSnapshotStore
+    with AcsJdbcTypes
     with AcsQueries
     with LimitHelpers
     with NamedLogging {
@@ -124,8 +170,8 @@ class AcsSnapshotStore(
       val previousSnapshotDataFilter = lastSnapshot match {
         case Some(LegacyAcsSnapshot(_, _, _, firstRowId, lastRowId, _, _)) =>
           sql"where snapshot.row_id >= $firstRowId and snapshot.row_id <= $lastRowId"
-        case Some(_: PerTableAcsSnapshot) =>
-          throw io.grpc.Status.UNIMPLEMENTED.withDescription("TODO #6264").asRuntimeException()
+        case Some(perTable: PerTableAcsSnapshot) =>
+          throw perTableAcsSnapshotsWereEnabledError(perTable)
         case None =>
           sql"where false"
       }
@@ -241,6 +287,13 @@ class AcsSnapshotStore(
       }
     } yield result).transactionally
 
+  private def perTableAcsSnapshotsWereEnabledError(perTable: PerTableAcsSnapshot) =
+    io.grpc.Status.FAILED_PRECONDITION
+      .withDescription(
+        "LegacyAcsSnapshotStore found a PerTableAcsSnapshot. This is unsupported. Did you accidentally disable per-table ACS snapshots after having enabled them?"
+      )
+      .asRuntimeException()
+
   def deleteSnapshot(
       snapshot: AcsSnapshot
   )(implicit
@@ -252,8 +305,8 @@ class AcsSnapshotStore(
           sqlu"""delete from acs_snapshot where snapshot_record_time = ${snapshot.snapshotRecordTime}""",
           sqlu"""delete from acs_snapshot_data where row_id between ${snapshot.firstRowId} and ${snapshot.lastRowId}""",
         )
-      case _: PerTableAcsSnapshot =>
-        throw io.grpc.Status.UNIMPLEMENTED.withDescription("TODO #6263").asRuntimeException()
+      case perTable: PerTableAcsSnapshot =>
+        throw perTableAcsSnapshotsWereEnabledError(perTable)
     }
     storage.update(statement.transactionally, "deleteSnapshot")
   }
@@ -288,9 +341,9 @@ class AcsSnapshotStore(
         )
       snapshot <- (snapshotTrait match {
         case snapshot: LegacyAcsSnapshot => Future.successful(snapshot)
-        case _: PerTableAcsSnapshot =>
+        case perTable: PerTableAcsSnapshot =>
           Future.failed(
-            io.grpc.Status.UNIMPLEMENTED.withDescription("TODO #6264").asRuntimeException()
+            perTableAcsSnapshotsWereEnabledError(perTable)
           )
       })
       begin <- after match {
@@ -513,15 +566,15 @@ class AcsSnapshotStore(
     * @param targetRecordTime  The record time at which the incremental snapshot should be finished and copied back
     *                          to a historical snapshot.
     */
-  def initializeIncrementalSnapshot(
+  def initializeSnapshot(
       table: IncrementalAcsSnapshotTable,
       initializeFromT: AcsSnapshot,
       targetRecordTime: CantonTimestamp,
   )(implicit tc: TraceContext): Future[Unit] = {
     val initializeFrom = initializeFromT match {
       case legacy: LegacyAcsSnapshot => legacy
-      case _: PerTableAcsSnapshot =>
-        throw io.grpc.Status.UNIMPLEMENTED.withDescription("TODO #6263").asRuntimeException()
+      case perTable: PerTableAcsSnapshot =>
+        throw perTableAcsSnapshotsWereEnabledError(perTable)
     }
     assert(targetRecordTime.isAfter(initializeFrom.snapshotRecordTime))
     val statement = for {
@@ -584,7 +637,7 @@ class AcsSnapshotStore(
     *                          to a historical snapshot.
     * @param migrationId       The migration id of the snapshot.
     */
-  def initializeIncrementalSnapshotFromImportUpdates(
+  def initializeSnapshotFromImportUpdates(
       table: IncrementalAcsSnapshotTable,
       recordTime: CantonTimestamp,
       targetRecordTime: CantonTimestamp,
@@ -645,7 +698,7 @@ class AcsSnapshotStore(
     * @param nextSnapshotTargetRecordTime The record time at which the next incremental snapshot
     *   should be finished and copied back to a historical snapshot.
     */
-  def saveIncrementalSnapshot(
+  def saveSnapshot(
       table: IncrementalAcsSnapshotTable,
       snapshot: IncrementalAcsSnapshot,
       nextSnapshotTargetRecordTime: CantonTimestamp,
@@ -743,7 +796,7 @@ class AcsSnapshotStore(
     * @param snapshot          The incremental snapshot to update.
     * @param targetRecordTime  The record time to update the snapshot to.
     */
-  def updateIncrementalSnapshot(
+  def updateSnapshot(
       table: IncrementalAcsSnapshotTable,
       snapshot: IncrementalAcsSnapshot,
       targetRecordTime: CantonTimestamp,
@@ -799,7 +852,7 @@ class AcsSnapshotStore(
     storage.queryAndUpdate(statement.transactionally, "updateIncrementalSnapshot")
   }
 
-  def deleteIncrementalSnapshot(
+  def deleteSnapshot(
       table: IncrementalAcsSnapshotTable,
       snapshot: IncrementalAcsSnapshot,
   )(implicit tc: TraceContext): Future[Unit] = {
@@ -841,7 +894,7 @@ object AcsSnapshotStore {
   final case class IncrementalAcsSnapshot(
       snapshotId: Long,
       historyId: Long,
-      tableName: String,
+      private[AcsSnapshotStore] val tableName: String,
       recordTime: CantonTimestamp,
       migrationId: Long,
       targetRecordTime: CantonTimestamp,

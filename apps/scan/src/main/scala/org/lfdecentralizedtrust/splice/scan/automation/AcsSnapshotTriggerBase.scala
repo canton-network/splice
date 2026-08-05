@@ -58,7 +58,7 @@ abstract class AcsSnapshotTriggerBase(
   ): Future[TaskOutcome] = (task match {
     case AcsSnapshotTriggerBase.InitializeIncrementalSnapshotTask(from, nextAt) =>
       store
-        .initializeIncrementalSnapshot(
+        .initializeSnapshot(
           table = snapshotTable,
           initializeFromT = from,
           targetRecordTime = nextAt,
@@ -70,7 +70,7 @@ abstract class AcsSnapshotTriggerBase(
           nextAt,
         ) =>
       store
-        .initializeIncrementalSnapshotFromImportUpdates(
+        .initializeSnapshotFromImportUpdates(
           table = snapshotTable,
           recordTime = recordTime,
           targetRecordTime = nextAt,
@@ -86,7 +86,7 @@ abstract class AcsSnapshotTriggerBase(
         .future(
           snapshotMetrics.latencyUpdate,
           store
-            .updateIncrementalSnapshot(
+            .updateSnapshot(
               table = snapshotTable,
               snapshot = snapshot,
               targetRecordTime = updateUntil,
@@ -101,7 +101,7 @@ abstract class AcsSnapshotTriggerBase(
         .future(
           snapshotMetrics.latencySave,
           store
-            .saveIncrementalSnapshot(
+            .saveSnapshot(
               table = snapshotTable,
               snapshot = snapshot,
               nextSnapshotTargetRecordTime = nextAt,
@@ -117,7 +117,7 @@ abstract class AcsSnapshotTriggerBase(
         })
     case AcsSnapshotTriggerBase.DeleteIncrementalSnapshotTask(snapshot) =>
       store
-        .deleteIncrementalSnapshot(
+        .deleteSnapshot(
           table = snapshotTable,
           snapshot = snapshot,
         )
@@ -255,7 +255,7 @@ object AcsSnapshotTriggerBase {
                   logger,
                 )
               case None =>
-                // No full snapshot exists either, initialize an incremental snapshot from import updates
+                // No fuinitializeSnapshotll snapshot exists either, initialize an incremental snapshot from import updates
                 retrieveTaskFromImportUpdates(
                   migrationId,
                   getMinRecordTime,
