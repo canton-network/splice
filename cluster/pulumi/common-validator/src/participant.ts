@@ -110,6 +110,12 @@ export async function installParticipant(
       dependsOn: (customOptions?.dependsOn || [])
         .concat([participantPostgres])
         .concat(kmsDependencies),
+      deleteBeforeReplace: true,
+      aliases: [
+        {
+          name: `${xns.logicalName}-participant-${DecentralizedSynchronizerUpgradeConfig.frozenMigrationId}`,
+        },
+      ],
     }
   );
   return {
