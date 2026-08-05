@@ -88,6 +88,7 @@ class DbSvDsoStore(
     ingestionConfig: IngestionConfig,
     acsStoreDescriptorUserVersion: Option[Long] = None,
     override val defaultLimit: Limit,
+    override val config: Option[org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig],
 )(implicit
     override protected val ec: ExecutionContext,
     override protected val templateJsonDecoder: TemplateJsonDecoder,
@@ -1663,11 +1664,14 @@ class DbSvDsoStore(
             )}
                 and member_traffic_member = ${lengthLimited(memberId.toProtoPrimitive)}
                 and member_traffic_domain = $synchronizerId
-             """.as[Long].headOption,
+             """.as[BigDecimal].headOption,
           "getTotalPurchasedMemberTraffic",
         )
         .value
-    } yield sum.getOrElse(0L)
+    } yield sum
+      .flatMap(s => Option(s))
+      .map(s => s.min(BigDecimal(Long.MaxValue)).toLong)
+      .getOrElse(0L)
   }
 
   override def lookupVoteRequest(

@@ -59,6 +59,7 @@ class HttpSvPublicHandler(
     dsoPartyMigration: DsoPartyMigration,
     protected val loggerFactory: NamedLoggerFactory,
     initialRound: String,
+    packageVersionSupport: PackageVersionSupport,
 )(implicit
     ec: ExecutionContext,
     protected val tracer: Tracer,
@@ -192,7 +193,7 @@ class HttpSvPublicHandler(
                     s"Party ${token.candidateParty} does not have the same namespace than its participant ${token.candidateParticipantId}."
                   )
                 )
-              } else if (!isCandidatePartyHostedOnParticipant)
+              } else if (!isCandidatePartyHostedOnParticipant && !config.permissionedSynchronizer)
                 // Conflict instead of not authorized because this can happen if our participant just has not yet caught up
                 // and the client can just retry on that.
                 Future.failed(
@@ -753,9 +754,23 @@ class HttpSvPublicHandler(
           .asRuntimeException()
       )
     for {
-      confirmations <- OptionT.liftF(
-        dsoStore.listSvOnboardingConfirmations(svOnboardingRequest, weight)
+      featureSupport <- OptionT.liftF(
+        packageVersionSupport.supportsPermissionedSynchronizer(
+          Seq(dsoParty),
+          clock.now,
+        )
       )
+      migrationIdOpt =
+        if (featureSupport.supported) {
+          java.util.Optional.of(java.lang.Long.valueOf(dsoStore.domainMigrationId))
+        } else {
+          java.util.Optional.empty[java.lang.Long]()
+        }
+
+      confirmations <- OptionT.liftF(
+        dsoStore.listSvOnboardingConfirmations(svOnboardingRequest, weight, migrationIdOpt)
+      )
+
       confirmedBy = confirmations
         .map(c =>
           dsoRules.payload.svs.asScala.get(c.payload.confirmer) match {

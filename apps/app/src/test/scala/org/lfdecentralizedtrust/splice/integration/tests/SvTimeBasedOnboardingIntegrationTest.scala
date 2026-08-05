@@ -107,6 +107,7 @@ class SvTimeBasedOnboardingIntegrationTest
                     "PAR::sv::1220f3e2",
                     SvUtil.DefaultSV1Weight,
                     "create new `SvOnboardingConfirmed` contract",
+                    java.util.Optional.of(sv1ScanBackend.getMigrationId()),
                   )
                 )
               ),

@@ -15,6 +15,7 @@ import qualified DA.Map as Map
 import qualified DA.Set as Set
 import qualified DA.Text as T
 import DA.Time
+import DA.Optional (fromSomeNote)
 
 import Splice.Amulet
 import Splice.Amulet.RewardAccountingV2 qualified as RewardAccountingV2
@@ -27,7 +28,7 @@ import Splice.Round
 import Splice.Types
 import Splice.ValidatorLicense
 import Splice.Wallet.Subscriptions
-import Splice.DecentralizedSynchronizer (MemberTraffic)
+import Splice.DecentralizedSynchronizer (MemberTraffic(..))
 
 import qualified Splice.CometBft as CometBft
 import Splice.Ans
@@ -121,6 +122,10 @@ data DsoRules_ActionRequiringConfirmation
     -- ^ Create BootstrapExternalPartyConfigStateInstruction
   | SRARC_UpdateFeaturedAppRight DsoRules_UpdateFeaturedAppRight
     -- ^ Update a specific featured app right.
+  | SRARC_GrantValidatorLicense DsoRules_GrantValidatorLicense
+      -- ^ Voted action to grant a validator license.
+  | SRARC_RejectValidatorLicense DsoRules_RejectValidatorLicense
+      -- ^ Voted action to reject a validator license request.
   deriving (Eq, Show)
 
 data AnsEntryContext_ActionRequiringConfirmation
@@ -214,6 +219,13 @@ data DsoRules_RevokeFeaturedAppRightResult = DsoRules_RevokeFeaturedAppRightResu
 data DsoRules_UpdateFeaturedAppRightResult = DsoRules_UpdateFeaturedAppRightResult with
     result : FeaturedAppRight_UpdateResult
 
+data DsoRules_GrantValidatorLicenseResult = DsoRules_GrantValidatorLicenseResult with
+    validatorLicense : ContractId ValidatorLicense
+
+data DsoRules_RejectValidatorLicenseResult = DsoRules_RejectValidatorLicenseResult {}
+
+data DsoRules_ExpireValidatorLicenseRequestResult = DsoRules_ExpireValidatorLicenseRequestResult
+
 data DsoRules_OnboardValidatorResult = DsoRules_OnboardValidatorResult with
     validatorLicense : ContractId ValidatorLicense
 
@@ -232,6 +244,9 @@ data DsoRules_ConfirmSvOnboardingResult = DsoRules_ConfirmSvOnboardingResult wit
 
 data DsoRules_ExpireSvOnboardingConfirmedResult = DsoRules_ExpireSvOnboardingConfirmedResult with
     newDsoRules : ContractId DsoRules
+
+data DsoRules_MakeSvOnboardingConfirmedObserverResult = DsoRules_MakeSvOnboardingConfirmedObserverResult with
+    svOnboardingConfirmed : ContractId SvOnboardingConfirmed
 
 data DsoRules_Amulet_ExpireTransferInstructionsResult = DsoRules_Amulet_ExpireTransferInstructionsResult
   with
@@ -1046,6 +1061,41 @@ template DsoRules with
 
     -- Validator onboarding
     -----------------------
+    nonconsuming choice DsoRules_ExpireValidatorLicenseRequest : DsoRules_ExpireValidatorLicenseRequestResult
+      with
+        validatorLicenseRequestCid: ContractId ValidatorLicenseRequest
+        sv : Optional Party
+      controller sv
+      do
+        _ <- getAndValidateSvParty this sv
+        exercise validatorLicenseRequestCid ValidatorLicenseRequest_Expire
+        return DsoRules_ExpireValidatorLicenseRequestResult
+
+    nonconsuming choice DsoRules_GrantValidatorLicense : DsoRules_GrantValidatorLicenseResult
+      with
+        validatorLicenseRequestCid : ContractId ValidatorLicenseRequest
+      controller dso
+      do
+        request <- fetchChecked (ForDso with dso) validatorLicenseRequestCid
+        exercise validatorLicenseRequestCid ValidatorLicenseRequest_Accept
+        now <- getTime
+        validatorLicense <- create ValidatorLicense with
+          dso
+          sponsor = request.validator
+          validator = request.validator
+          faucetState = None
+          metadata = fmap (\version -> ValidatorLicenseMetadata with version; contactPoint = fromOptional "" request.contactPoint; lastUpdatedAt = now) request.version
+          lastActiveAt = Some now
+        return DsoRules_GrantValidatorLicenseResult with ..
+
+    nonconsuming choice DsoRules_RejectValidatorLicense : DsoRules_RejectValidatorLicenseResult
+      with
+        validatorLicenseRequestCid : ContractId ValidatorLicenseRequest
+      controller dso
+      do
+        _ <- fetchChecked (ForDso with dso) validatorLicenseRequestCid
+        exercise validatorLicenseRequestCid ValidatorLicenseRequest_Reject
+        return DsoRules_RejectValidatorLicenseResult {}
 
     nonconsuming choice DsoRules_OnboardValidator : DsoRules_OnboardValidatorResult
       with
@@ -1103,7 +1153,15 @@ template DsoRules with
         require "Sponsor is an SV" (sponsor `Map.member` svs)
         now <- getTime
         let expiresAt = now `addRelTime` config.svOnboardingRequestTimeout
-        onboardingRequest <- create SvOnboardingRequest with ..
+        onboardingRequest <- create SvOnboardingRequest with
+          candidateName
+          candidateParty
+          candidateParticipantId
+          token
+          sponsor
+          dso
+          expiresAt
+          candidatePartyIsObserver  = Some False
         return DsoRules_StartSvOnboardingResult with ..
 
     nonconsuming choice DsoRules_ExpireSvOnboardingRequest : DsoRules_ExpireSvOnboardingRequestResult
@@ -1137,6 +1195,7 @@ template DsoRules with
         newParticipantId : Text
         newSvRewardWeight : Int
         reason : Text
+        migrationId : Optional Int
       controller dso
       do
         ensureNeverOperatedNode newSvParty this
@@ -1154,7 +1213,32 @@ template DsoRules with
           reason
           dso
           expiresAt
+          svPartyIsObserver = Some False
+
+        let activeSynchronizer = config.decentralizedSynchronizer.activeSynchronizerId
+        let actualMigrationId = fromSomeNote "migrationId must be provided for SV onboarding" migrationId
+        _ <- create (MemberTraffic with
+          dso
+          memberId = newParticipantId
+          synchronizerId = activeSynchronizer
+          migrationId = actualMigrationId
+          totalPurchased = maxBound : Int
+          numPurchases = 1
+          amuletSpent = 0.0
+          usdSpent = 0.0)
         return DsoRules_ConfirmSvOnboardingResult with ..
+
+    nonconsuming choice DsoRules_MakeSvOnboardingConfirmedObserver : DsoRules_MakeSvOnboardingConfirmedObserverResult
+      with
+        svOnboardingConfirmedCid : ContractId SvOnboardingConfirmed
+        sv : Party
+      controller sv
+      do
+        _ <- getAndValidateSvParty this (Some sv)
+        void $ fetchChecked (ForDso with dso) svOnboardingConfirmedCid
+        res <- exercise svOnboardingConfirmedCid SvOnboardingConfirmed_MakeObserver
+        return DsoRules_MakeSvOnboardingConfirmedObserverResult with
+          svOnboardingConfirmed = res.newSvOnboardingConfirmed
 
     choice DsoRules_ExpireSvOnboardingConfirmed : DsoRules_ExpireSvOnboardingConfirmedResult
       with
@@ -1817,6 +1901,8 @@ executeActionRequiringConfirmation dso dsoRulesCid amuletRulesCid act = case act
       SRARC_CreateTransferCommandCounter choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_CreateUnallocatedUnclaimedActivityRecord choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_CreateBootstrapExternalPartyConfigStateInstruction choiceArg -> void $ exercise dsoRulesCid choiceArg
+      SRARC_GrantValidatorLicense choiceArg -> void $ exercise dsoRulesCid choiceArg
+      SRARC_RejectValidatorLicense choiceArg -> void $ exercise dsoRulesCid choiceArg
   ARC_AnsEntryContext with .. -> do
     void $ fetchChecked (ForDso with dso) ansEntryContextCid
     case ansEntryContextAction of

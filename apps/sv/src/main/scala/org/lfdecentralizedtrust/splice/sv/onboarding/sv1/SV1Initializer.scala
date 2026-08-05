@@ -36,9 +36,9 @@ import com.digitalasset.canton.topology.store.{
   StoredTopologyTransaction,
   StoredTopologyTransactions,
 }
+import com.digitalasset.canton.topology.transaction.ParticipantPermission.Submission
 import com.digitalasset.canton.topology.transaction.{
   DecentralizedNamespaceDefinition,
-  ParticipantPermission,
   SignedTopologyTransaction,
   TopologyChangeOp,
   TopologyMapping,
@@ -468,7 +468,7 @@ class SV1Initializer(
           mediatorDeduplicationTimeout =
             NonNegativeFiniteDuration.fromConfig(config.mediatorDeduplicationTimeout),
           onboardingRestriction = if (config.permissionedSynchronizer) {
-            logger.debug("Using RestrictedOpen onboarding restriction for the synchronizer")
+            logger.info("Using RestrictedOpen onboarding restriction for the synchronizer")
             RestrictedOpen
           } else {
             UnrestrictedOpen
@@ -492,7 +492,7 @@ class SV1Initializer(
               sv1PermissionTx <-
                 if (config.permissionedSynchronizer) {
                   logger.debug(
-                    "Proposing ParticipantSynchronizerPermission topology transaction for the SV1"
+                    "Proposing ParticipantSynchronizerPermission topology transaction for self"
                   )
                   participantAdminConnection
                     .proposeMapping(
@@ -500,7 +500,7 @@ class SV1Initializer(
                       transaction.ParticipantSynchronizerPermission(
                         synchronizerId,
                         participantId,
-                        ParticipantPermission.Submission,
+                        Submission,
                         None,
                         None,
                       ),
@@ -779,7 +779,7 @@ class SV1Initializer(
 
 object SV1Initializer {
 
-  /** Same ordering as https://github.com/DACH-NY/canton/blob/2fc1a37d815623cb68dcb4b75bc33a498065990e/enterprise/app-base/src/main/scala/com/digitalasset/canton/console/EnterpriseConsoleMacros.scala#L160
+  /** Participant must broadcast in a certain order for the bootstrap to be functional: refer https://github.com/digital-asset/canton/blob/eaa9e7a4bf48793acb35aba270b85a970afe6006/community/base/src/main/scala/com/digitalasset/canton/topology/store/TopologyStore.scala#L773
     */
   implicit val bootstrapTransactionOrdering
       : Ordering[SignedTopologyTransaction[TopologyChangeOp, TopologyMapping]] =
