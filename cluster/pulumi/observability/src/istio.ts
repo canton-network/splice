@@ -36,11 +36,15 @@ export function istioMonitoring(
         {
           port: 'http-envoy-prom',
           path: '/stats/prometheus',
-          // keep only istio metrics, drop envoy metrics
           metricRelabelings: [
             {
               sourceLabels: ['__name__'],
-              regex: '(istio_.*|envoy_http_local_rate_limit_.*)',
+              regex:
+                '(istio_.*' +
+                '|envoy_.*http_local_rate_limit_.*' +
+                '|envoy_server_(memory_.*|uptime|live|state|total_connections|days_until_first_cert_expiring)' +
+                '|envoy_cluster_upstream_rq_(pending_overflow|retry.*|timeout)' +
+                '|envoy_cluster_upstream_cx_connect_fail)',
               action: 'keep',
             },
             // drop instance label, we have the pod name
