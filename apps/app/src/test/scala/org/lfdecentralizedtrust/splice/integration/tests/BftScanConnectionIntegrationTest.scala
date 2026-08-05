@@ -90,9 +90,7 @@ class BftScanConnectionIntegrationTest
         ) or
           include("Encountered 4 consecutive transient failures") or include(
             "Failed to connect to scan of FAILED Seed URL #0 (http://localhost:5112)."
-          ) or include(
-            "Failed to read bft sequencers list from scan http://localhost:5112"
-          ))
+          )
       ),
     )
 
