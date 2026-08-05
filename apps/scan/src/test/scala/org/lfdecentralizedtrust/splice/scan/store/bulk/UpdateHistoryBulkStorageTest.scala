@@ -57,7 +57,8 @@ class UpdateHistoryBulkStorageTest
     zstdCompressionLevel = 3,
   )
   val appConfig = BulkStorageConfig(
-    updatesPollingInterval = NonNegativeFiniteDuration.ofSeconds(5)
+    updatesPollingInterval = NonNegativeFiniteDuration.ofSeconds(5),
+    bftCheckEnabled = false, // bft checks are tested elsewhere
   )
 
   "UpdateHistoryBulkStorage" should {

@@ -894,6 +894,18 @@ abstract class ScanAppReference(
       )
     }
 
+  @Help.Summary(
+    "Get checksums for a list of bulk storage objects (using both staging and committed objects)"
+  )
+  def getBulkObjectChecksums(
+      objectKeys: Seq[String]
+  ): definitions.GetBulkObjectChecksumsResponse =
+    consoleEnvironment.run {
+      httpCommand(
+        HttpScanAppClient.GetBulkObjectChecksums(objectKeys)
+      )
+    }
+
   @Help.Summary("Download a bulk storage object")
   def bulkStorageDownload(objectKey: String, output: OutputStream)(implicit
       ec: ExecutionContext,

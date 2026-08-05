@@ -4,15 +4,24 @@
 package org.lfdecentralizedtrust.splice.scan.store.bulk
 
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
+import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.tracing.TraceContext
 import org.apache.pekko.NotUsed
 import org.apache.pekko.actor.ActorSystem
-import org.apache.pekko.stream.scaladsl.{Flow, Sink, Source}
+import org.apache.pekko.http.scaladsl.model.StatusCodes
+import org.apache.pekko.stream.scaladsl.{Flow, Source}
+import org.lfdecentralizedtrust.splice.admin.http.HttpErrorWithHttpCode
+import org.lfdecentralizedtrust.splice.config.{AutomationConfig, UpgradesConfig}
+import org.lfdecentralizedtrust.splice.environment.{RetryProvider, SpliceLedgerClient}
+import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.scan.config.BulkStorageConfig
+import org.lfdecentralizedtrust.splice.scan.store.ScanStore
+import org.lfdecentralizedtrust.splice.scan.util.HasPeerBftScanConnection
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChecksum
+import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContextExecutor, Future}
 
 // TODO(#5884): review parallelism here. We use parallelism = 1 all over, but unsure whether that's actually necessary.
 
@@ -21,19 +30,75 @@ class BulkStorageCommitFromStaging[T](
     committedS3Connection: S3BucketConnection,
     getObjects: T => Future[Seq[ObjectKeyAndChecksum]],
     appConfig: BulkStorageConfig,
+    store: ScanStore,
+    svName: String,
+    ledgerClient: SpliceLedgerClient,
+    automationConfig: AutomationConfig,
+    upgradesConfig: UpgradesConfig,
+    clock: Clock,
+    retryProvider: RetryProvider,
     override val loggerFactory: NamedLoggerFactory,
 )(implicit
     tc: TraceContext,
-    ec: ExecutionContext,
+    ec: ExecutionContextExecutor,
     actorSystem: ActorSystem,
-) extends NamedLogging {
+    httpClient: HttpClient,
+    templateJsonDecoder: TemplateJsonDecoder,
+) extends HasPeerBftScanConnection
+    with NamedLogging {
   private def checkBftForObjects(
       objects: Seq[ObjectKeyAndChecksum]
   ): Future[Boolean] = {
     logger.debug(
       s"Checking BFT agreement for objects: ${objects.map(_.key).mkString(", ")}"
     )
-    Future.successful(true)
+    if (appConfig.bftCheckEnabled) {
+      for {
+        connection <- getOrCreateScanConnection(
+          store,
+          svName,
+          ledgerClient,
+          automationConfig,
+          upgradesConfig,
+          clock: Clock,
+          retryProvider,
+          loggerFactory,
+        )
+        bft <- connection.getBulkObjectChecksums(objects.map(_.key)).map(Some(_)).recoverWith {
+          case ex @ HttpErrorWithHttpCode(code, _) =>
+            if (code == StatusCodes.BadGateway) {
+              Future.successful(None)
+            } else {
+              throw ex
+            }
+        }
+      } yield {
+        bft match {
+          case Some(bftChecksums) =>
+            val consensusChecksums = bftChecksums.checksums.filter(_.value.isDefined)
+            logger.debug(
+              s"Consensus achieved on ${consensusChecksums.length} out of ${objects.length} objects"
+            )
+            val consensus =
+              bftChecksums.checksums.filter(_.value.isDefined).map(_.value) == objects.map(oc =>
+                Some(oc.checksum)
+              )
+            if (consensusChecksums.length == objects.length && !consensus) {
+              logger.error(
+                s"All objects are known to the BFT peers, but the checksums do not match. This indicates an error in the actual data generated for bulk storage. Expected: ${objects
+                    .map(_.checksum)
+                    .mkString(", ")}, got: ${consensusChecksums.mkString(", ")}"
+              )
+            }
+            consensus
+          case None =>
+            false
+        }
+      }
+    } else {
+      logger.trace("BFT check is disabled, skipping BFT agreement check")
+      Future.successful(true)
+    }
   }
   // TODO(#5884): implement the BFT check
 
@@ -42,7 +107,7 @@ class BulkStorageCommitFromStaging[T](
     (T, Seq[ObjectKeyAndChecksum]),
     NotUsed,
   ] = {
-    Flow[(T, Seq[ObjectKeyAndChecksum])].mapAsync(parallelism = 1) { case (t, obj) =>
+    Flow[(T, Seq[ObjectKeyAndChecksum])].flatMapConcat { case (t, obj) =>
       Source
         .repeat(obj)
         .mapAsync(parallelism = 1)(obj => checkBftForObjects(obj).map(result => (obj, result)))
@@ -60,8 +125,7 @@ class BulkStorageCommitFromStaging[T](
             Source.single((obj, false)).delay(appConfig.bftRetryInterval.underlying)
         }
         .takeWhile({ case (_, bftReached) => !bftReached }, inclusive = true)
-        .runWith(Sink.last)
-        .map { case (obj, _) => (t, obj) }
+        .collect { case (o, true) => (t, o) }
     }
   }
 
@@ -136,17 +200,33 @@ object BulkStorageCommitFromStaging {
       committedS3Connection: S3BucketConnection,
       getStagingObjects: T => Future[Seq[ObjectKeyAndChecksum]],
       appConfig: BulkStorageConfig,
+      store: ScanStore,
+      svName: String,
+      ledgerClient: SpliceLedgerClient,
+      automationConfig: AutomationConfig,
+      upgradesConfig: UpgradesConfig,
+      clock: Clock,
+      retryProvider: RetryProvider,
       loggerFactory: NamedLoggerFactory,
   )(implicit
       tc: TraceContext,
-      ec: ExecutionContext,
+      ec: ExecutionContextExecutor,
       actorSystem: ActorSystem,
+      httpClient: HttpClient,
+      templateJsonDecoder: TemplateJsonDecoder,
   ): Flow[T, T, NotUsed] = {
     new BulkStorageCommitFromStaging[T](
       stagingS3Connection,
       committedS3Connection,
       getStagingObjects,
       appConfig,
+      store,
+      svName,
+      ledgerClient,
+      automationConfig,
+      upgradesConfig,
+      clock,
+      retryProvider,
       loggerFactory,
     ).getFlow
   }
