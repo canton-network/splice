@@ -9,9 +9,20 @@ import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.topology.transaction.ParticipantPermission
 import com.digitalasset.daml.lf.data.Ref.{PackageName, PackageVersion}
+import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   AppRewardCoupon,
   FeaturedAppActivityMarker,
+}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.TransferPreapproval
+import org.lfdecentralizedtrust.splice.codegen.java.splice.ans.{AnsEntry, AnsEntryContext}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.payment.{PaymentAmount, Unit}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.subscriptions.{
+  Subscription,
+  SubscriptionData,
+  SubscriptionIdleState,
+  SubscriptionPayData,
+  SubscriptionRequest,
 }
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
@@ -28,12 +39,16 @@ import org.lfdecentralizedtrust.splice.store.db.DbMultiDomainAcsStore
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
   AdvanceOpenMiningRoundTrigger,
   ExpireRewardCouponsTrigger,
+  ExpireTransferPreapprovalsTrigger,
   ExpiredAmuletTrigger,
+  ExpiredAnsEntryTrigger,
+  ExpiredAnsSubscriptionTrigger,
   ExpiredLockedAmuletTrigger,
   FeaturedAppActivityMarkerTrigger,
   UpdateExternalPartyConfigStateTrigger,
 }
 import org.lfdecentralizedtrust.splice.util.*
+import org.lfdecentralizedtrust.splice.wallet.automation.SubscriptionReadyForPaymentTrigger
 import org.slf4j.event.Level
 
 import scala.concurrent.duration.*
@@ -92,11 +107,15 @@ abstract class AmuletExpiryWithOldPackageIntegrationTestBase
             .withPausedTrigger[UpdateExternalPartyConfigStateTrigger]
             .withPausedTrigger[ExpireRewardCouponsTrigger]
             .withPausedTrigger[FeaturedAppActivityMarkerTrigger]
+            .withPausedTrigger[ExpireTransferPreapprovalsTrigger]
+            .withPausedTrigger[ExpiredAnsEntryTrigger]
+            .withPausedTrigger[ExpiredAnsSubscriptionTrigger]
         )(c)
       )
       .addConfigTransforms((_, c) =>
         updateAutomationConfig(ConfigurableApp.Validator)(
           _.copy(enableAutomaticRewardsCollectionAndAmuletMerging = false)
+            .withPausedTrigger[SubscriptionReadyForPaymentTrigger]
         )(c)
       )
       .addConfigTransforms((_, c) =>
@@ -109,6 +128,9 @@ abstract class AmuletExpiryWithOldPackageIntegrationTestBase
           _.copy(ignoredAmuletVersions = ignoredAmuletVersions)
         )(c)
       )
+
+  def dummyContractId(n: Int, suffix: String = "00"): String =
+    "00" + s"0$n" * 32 + suffix
 
   def setupAliceWithDustAmulets()(implicit env: SpliceTestConsoleEnvironment): PartyId = {
     val synchronizerId = decentralizedSynchronizerId
@@ -242,7 +264,7 @@ class AmuletBasedExpiryWithIgnoredPackageIntegrationTest
     DarResources.amulet_0_1_15.metadata.version.toString
   )
 
-  "Triggers expiring amulet, locked amulet, and reward coupons and featured app markers skip parties when their preferred amulet package version is marked as ignored" in {
+  "Triggers expiring amulet, locked amulet, reward coupons, transfer pre-approvals, ans entry, ans subscription and featured app markers skip parties when their preferred amulet package version is marked as ignored" in {
     implicit env =>
       val aliceParty: PartyId = setupAliceWithDustAmulets()
       advanceRoundsByOneTickViaAutomation()
@@ -250,34 +272,100 @@ class AmuletBasedExpiryWithIgnoredPackageIntegrationTest
 
       val (openRounds, _) = sv1ScanBackend.getOpenAndIssuingMiningRounds()
       val currentRound = openRounds.toList.headOption.value.payload.round
+      val now = env.environment.clock.now.toInstant
+      val subscriptionReference = new SubscriptionRequest.ContractId(dummyContractId(1, "ab"))
+      val ledgerApi = sv1Backend.participantClientWithAdminToken.ledger_api_extensions.commands
 
-      sv1Backend.participantClientWithAdminToken.ledger_api_extensions.commands
-        .submitWithResult(
-          userId = sv1Backend.config.ledgerApiUser,
-          actAs = Seq(dsoParty),
-          readAs = Seq.empty,
-          update = new AppRewardCoupon(
-            dsoParty.toProtoPrimitive,
-            aliceParty.toProtoPrimitive,
-            false,
-            BigDecimal(10.0).bigDecimal,
-            currentRound,
-            java.util.Optional.empty(),
-          ).create,
-        )
+      ledgerApi.submitWithResult(
+        userId = sv1Backend.config.ledgerApiUser,
+        actAs = Seq(dsoParty),
+        readAs = Seq.empty,
+        update = new AppRewardCoupon(
+          dsoParty.toProtoPrimitive,
+          aliceParty.toProtoPrimitive,
+          false,
+          BigDecimal(10.0).bigDecimal,
+          currentRound,
+          java.util.Optional.empty(),
+        ).create,
+      )
 
-      sv1Backend.participantClientWithAdminToken.ledger_api_extensions.commands
-        .submitWithResult(
-          userId = sv1Backend.config.ledgerApiUser,
-          actAs = Seq(dsoParty),
-          readAs = Seq.empty,
-          update = new FeaturedAppActivityMarker(
-            dsoParty.toProtoPrimitive,
-            aliceParty.toProtoPrimitive,
-            aliceParty.toProtoPrimitive,
-            BigDecimal(1.0).bigDecimal,
-          ).create,
-        )
+      ledgerApi.submitWithResult(
+        userId = sv1Backend.config.ledgerApiUser,
+        actAs = Seq(dsoParty),
+        readAs = Seq.empty,
+        update = new FeaturedAppActivityMarker(
+          dsoParty.toProtoPrimitive,
+          aliceParty.toProtoPrimitive,
+          aliceParty.toProtoPrimitive,
+          BigDecimal(1.0).bigDecimal,
+        ).create,
+      )
+
+      ledgerApi.submitWithResult(
+        userId = sv1Backend.config.ledgerApiUser,
+        actAs = Seq(dsoParty, aliceParty),
+        readAs = Seq.empty,
+        update = new TransferPreapproval(
+          dsoParty.toProtoPrimitive,
+          aliceParty.toProtoPrimitive,
+          aliceParty.toProtoPrimitive,
+          now.minus(Duration.ofHours(1)), // validFrom
+          now.minus(Duration.ofHours(1)), // lastRenewedAt
+          now.minus(Duration.ofSeconds(1)), // expiresAt -> already expired
+        ).create,
+      )
+
+      ledgerApi.submitWithResult(
+        userId = sv1Backend.config.ledgerApiUser,
+        actAs = Seq(dsoParty, aliceParty),
+        readAs = Seq.empty,
+        update = new AnsEntry(
+          aliceParty.toProtoPrimitive, // user
+          dsoParty.toProtoPrimitive, // dso
+          "alice.unverified.ans",
+          "", // url
+          "expired ans entry", // description
+          now.minus(Duration.ofSeconds(1)), // expiresAt -> already expired
+        ).create,
+      )
+
+      ledgerApi.submitWithResult(
+        userId = sv1Backend.config.ledgerApiUser,
+        actAs = Seq(dsoParty, aliceParty),
+        readAs = Seq.empty,
+        update = new AnsEntryContext(
+          dsoParty.toProtoPrimitive,
+          aliceParty.toProtoPrimitive,
+          "alice.unverified.ans",
+          "",
+          "expired ans entry",
+          subscriptionReference,
+        ).create,
+      )
+
+      ledgerApi.submitWithResult(
+        userId = sv1Backend.config.ledgerApiUser,
+        actAs = Seq(dsoParty, aliceParty),
+        readAs = Seq.empty,
+        update = new SubscriptionIdleState(
+          new Subscription.ContractId(dummyContractId(1, "aa")),
+          new SubscriptionData(
+            aliceParty.toProtoPrimitive, // sender
+            dsoParty.toProtoPrimitive, // receiver
+            dsoParty.toProtoPrimitive, // provider
+            dsoParty.toProtoPrimitive, // dso
+            "expired ans entry",
+          ),
+          new SubscriptionPayData(
+            new PaymentAmount(BigDecimal(1.0).bigDecimal, Unit.AMULETUNIT),
+            new RelTime(1_000_000_000L),
+            new RelTime(1_000_000L),
+          ),
+          now.minus(Duration.ofSeconds(1)), // nextPaymentDueAt -> overdue
+          subscriptionReference,
+        ).create,
+      )
 
       actAndCheck(timeUntilSuccess = 60.seconds)(
         "Advance 4 rounds and resume expiry triggers", {
@@ -289,6 +377,9 @@ class AmuletBasedExpiryWithIgnoredPackageIntegrationTest
             sv.dsoDelegateBasedAutomation.trigger[ExpiredLockedAmuletTrigger].resume()
             sv.dsoDelegateBasedAutomation.trigger[ExpireRewardCouponsTrigger].resume()
             sv.dsoDelegateBasedAutomation.trigger[FeaturedAppActivityMarkerTrigger].resume()
+            sv.dsoDelegateBasedAutomation.trigger[ExpireTransferPreapprovalsTrigger].resume()
+            sv.dsoDelegateBasedAutomation.trigger[ExpiredAnsEntryTrigger].resume()
+            sv.dsoDelegateBasedAutomation.trigger[ExpiredAnsSubscriptionTrigger].resume()
           }
         },
       )(
@@ -311,6 +402,21 @@ class AmuletBasedExpiryWithIgnoredPackageIntegrationTest
               dsoParty,
               co => co.data.provider == aliceParty.toProtoPrimitive,
             ) should have size 1L withClue "featured app activity marker should remain"
+          sv1Backend.participantClientWithAdminToken.ledger_api_extensions.acs
+            .filterJava(TransferPreapproval.COMPANION)(
+              dsoParty,
+              co => co.data.receiver == aliceParty.toProtoPrimitive,
+            ) should have size 1L withClue "expired transfer preapproval should remain"
+          sv1Backend.participantClientWithAdminToken.ledger_api_extensions.acs
+            .filterJava(AnsEntry.COMPANION)(
+              dsoParty,
+              co => co.data.user == aliceParty.toProtoPrimitive,
+            ) should have size 1L withClue "expired ans entry should remain"
+          sv1Backend.participantClientWithAdminToken.ledger_api_extensions.acs
+            .filterJava(SubscriptionIdleState.COMPANION)(
+              dsoParty,
+              co => co.data.subscriptionData.sender == aliceParty.toProtoPrimitive,
+            ) should have size 1L withClue "overdue ans subscription should remain"
         },
       )
   }

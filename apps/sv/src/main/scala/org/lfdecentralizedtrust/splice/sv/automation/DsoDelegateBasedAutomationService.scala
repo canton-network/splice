@@ -125,9 +125,30 @@ class DsoDelegateBasedAutomationService(
     )
 
     registerTrigger(new AnsSubscriptionRenewalPaymentTrigger(triggerContext, svTaskContext))
-    registerTrigger(new ExpiredAnsEntryTrigger(triggerContext, svTaskContext))
-    registerTrigger(new ExpireTransferPreapprovalsTrigger(triggerContext, svTaskContext))
-    registerTrigger(new ExpiredAnsSubscriptionTrigger(triggerContext, svTaskContext))
+    registerTrigger(
+      new ExpiredAnsEntryTrigger(
+        triggerContext,
+        svTaskContext,
+        config,
+        expiredAmuletIgnoredPartiesStore,
+      )
+    )
+    registerTrigger(
+      new ExpireTransferPreapprovalsTrigger(
+        triggerContext,
+        svTaskContext,
+        config,
+        expiredAmuletIgnoredPartiesStore,
+      )
+    )
+    registerTrigger(
+      new ExpiredAnsSubscriptionTrigger(
+        triggerContext,
+        svTaskContext,
+        config,
+        expiredAmuletIgnoredPartiesStore,
+      )
+    )
     registerTrigger(new TerminatedSubscriptionTrigger(triggerContext, svTaskContext))
     registerTrigger(new MergeSvRewardStateContractsTrigger(triggerContext, svTaskContext))
 
