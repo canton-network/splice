@@ -266,6 +266,12 @@ class ExecuteConfirmedActionTrigger(
                 grantAction.dsoRules_GrantValidatorLicenseValue.validatorLicenseRequestCid
               )
               .map(_.isEmpty)
+          case rejectAction: SRARC_RejectValidatorLicense if config.permissionedSynchronizer =>
+            store.multiDomainAcsStore
+              .lookupContractById(ValidatorLicenseRequest.COMPANION)(
+                rejectAction.dsoRules_RejectValidatorLicenseValue.validatorLicenseRequestCid
+              )
+              .map(_.isEmpty)
           case action =>
             throw new UnsupportedOperationException(
               show"DsoRules $action is not yet supported"

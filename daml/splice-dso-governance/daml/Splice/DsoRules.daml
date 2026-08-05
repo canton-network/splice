@@ -124,6 +124,8 @@ data DsoRules_ActionRequiringConfirmation
     -- ^ Update a specific featured app right.
   | SRARC_GrantValidatorLicense DsoRules_GrantValidatorLicense
       -- ^ Voted action to grant a validator license.
+  | SRARC_RejectValidatorLicense DsoRules_RejectValidatorLicense
+      -- ^ Voted action to reject a validator license request.
   deriving (Eq, Show)
 
 data AnsEntryContext_ActionRequiringConfirmation
@@ -219,6 +221,8 @@ data DsoRules_UpdateFeaturedAppRightResult = DsoRules_UpdateFeaturedAppRightResu
 
 data DsoRules_GrantValidatorLicenseResult = DsoRules_GrantValidatorLicenseResult with
     validatorLicense : ContractId ValidatorLicense
+
+data DsoRules_RejectValidatorLicenseResult = DsoRules_RejectValidatorLicenseResult {}
 
 data DsoRules_ExpireValidatorLicenseRequestResult = DsoRules_ExpireValidatorLicenseRequestResult
 
@@ -1084,6 +1088,15 @@ template DsoRules with
           lastActiveAt = Some now
         return DsoRules_GrantValidatorLicenseResult with ..
 
+    nonconsuming choice DsoRules_RejectValidatorLicense : DsoRules_RejectValidatorLicenseResult
+      with
+        validatorLicenseRequestCid : ContractId ValidatorLicenseRequest
+      controller dso
+      do
+        _ <- fetchChecked (ForDso with dso) validatorLicenseRequestCid
+        exercise validatorLicenseRequestCid ValidatorLicenseRequest_Reject
+        return DsoRules_RejectValidatorLicenseResult {}
+
     nonconsuming choice DsoRules_OnboardValidator : DsoRules_OnboardValidatorResult
       with
         sponsor : Party
@@ -1889,6 +1902,7 @@ executeActionRequiringConfirmation dso dsoRulesCid amuletRulesCid act = case act
       SRARC_CreateUnallocatedUnclaimedActivityRecord choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_CreateBootstrapExternalPartyConfigStateInstruction choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_GrantValidatorLicense choiceArg -> void $ exercise dsoRulesCid choiceArg
+      SRARC_RejectValidatorLicense choiceArg -> void $ exercise dsoRulesCid choiceArg
   ARC_AnsEntryContext with .. -> do
     void $ fetchChecked (ForDso with dso) ansEntryContextCid
     case ansEntryContextAction of

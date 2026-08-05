@@ -15,6 +15,7 @@ import Splice.Util
 
 data ValidatorLicenseRequest_ExpireResult = ValidatorLicenseRequest_ExpireResult {}
 data ValidatorLicenseRequest_AcceptResult = ValidatorLicenseRequest_AcceptResult {}
+data ValidatorLicenseRequest_RejectResult = ValidatorLicenseRequest_RejectResult {}
 
 data FaucetState = FaucetState with
     firstReceivedFor : Round -- ^ The first round for which a coupon was received.
@@ -242,6 +243,11 @@ template ValidatorLicenseRequest with
       controller dso
       do
         return ValidatorLicenseRequest_AcceptResult {}
+
+    choice ValidatorLicenseRequest_Reject : ValidatorLicenseRequest_RejectResult
+      controller dso
+      do
+        return ValidatorLicenseRequest_RejectResult {}
 
     choice ValidatorLicenseRequest_Expire : ValidatorLicenseRequest_ExpireResult
       controller dso

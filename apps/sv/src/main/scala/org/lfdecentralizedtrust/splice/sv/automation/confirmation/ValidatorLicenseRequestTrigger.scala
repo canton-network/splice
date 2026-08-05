@@ -3,7 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.sv.automation.confirmation
 
-import com.digitalasset.canton.topology.{PartyId}
+import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
@@ -14,10 +14,14 @@ import org.lfdecentralizedtrust.splice.automation.{
   TriggerContext,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_GrantValidatorLicense
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.{
+  SRARC_GrantValidatorLicense,
+  SRARC_RejectValidatorLicense,
+}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   DsoRules,
   DsoRules_GrantValidatorLicense,
+  DsoRules_RejectValidatorLicense,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.ValidatorLicenseRequest
 import org.lfdecentralizedtrust.splice.environment.SpliceLedgerConnection
@@ -68,37 +72,42 @@ class ValidatorLicenseRequestTrigger(
       dsoRules: AssignedContract[DsoRules.ContractId, DsoRules],
   )(implicit tc: TraceContext): Future[TaskOutcome] = {
 
-    val action = new ARC_DsoRules(
-      new SRARC_GrantValidatorLicense(
-        new DsoRules_GrantValidatorLicense(reqCid)
-      )
-    )
-
     for {
-      confirmationResult <- dsoStore.lookupConfirmationByActionWithOffset(svParty, action)
       licenseResult <- dsoStore.lookupValidatorLicenseWithOffset(validatorParty)
 
-      cmd = dsoRules.exercise(
-        _.exerciseDsoRules_ConfirmAction(
-          svParty.toProtoPrimitive,
-          action,
-        )
-      )
-      outcome <- (confirmationResult.value, licenseResult.value) match {
-        case (_, Some(_)) =>
-          Future.successful(
-            TaskSuccess(
-              s"Skipping as a ValidatorLicense already exists for $validatorParty"
+      action = licenseResult.value match {
+        case Some(_) =>
+          new ARC_DsoRules(
+            new SRARC_RejectValidatorLicense(
+              new DsoRules_RejectValidatorLicense(reqCid)
             )
           )
-        case (Some(_), _) =>
-          Future.successful(
-            TaskSuccess(
-              s"Skipping as confirmation from $svParty is already created for granting validator license to $validatorParty"
+        case None =>
+          new ARC_DsoRules(
+            new SRARC_GrantValidatorLicense(
+              new DsoRules_GrantValidatorLicense(reqCid)
             )
           )
-        case (None, None) =>
-          val minOffset = Seq(licenseResult.offset).foldLeft(confirmationResult.offset)(math.min)
+      }
+
+      confirmationResult <- dsoStore.lookupConfirmationByActionWithOffset(svParty, action)
+
+      outcome <- confirmationResult.value match {
+        case Some(_) =>
+          Future.successful(
+            TaskSuccess(
+              s"Skipping as confirmation from $svParty is already created for action on $validatorParty"
+            )
+          )
+        case None =>
+          val minOffset = math.min(licenseResult.offset, confirmationResult.offset)
+          val cmd = dsoRules.exercise(
+            _.exerciseDsoRules_ConfirmAction(
+              svParty.toProtoPrimitive,
+              action,
+            )
+          )
+
           connection
             .submit(
               actAs = Seq(svParty),
@@ -107,16 +116,16 @@ class ValidatorLicenseRequestTrigger(
             )
             .withDedup(
               commandId = SpliceLedgerConnection.CommandId(
-                "org.lfdecentralizedtrust.splice.sv.confirmGrantValidatorLicense",
+                "org.lfdecentralizedtrust.splice.sv.confirmValidatorLicenseRequest",
                 Seq(svParty, dsoParty),
-                validatorParty.toProtoPrimitive,
+                reqCid.contractId,
               ),
               deduplicationConfig = DedupOffset(minOffset),
             )
             .yieldResult()
             .map { _ =>
               TaskSuccess(
-                s"Created confirmation for granting validator license to $validatorParty"
+                s"Created confirmation for action on ValidatorLicenseRequest for $validatorParty"
               )
             }
       }
