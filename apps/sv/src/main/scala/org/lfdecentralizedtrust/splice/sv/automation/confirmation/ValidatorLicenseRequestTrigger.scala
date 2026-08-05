@@ -3,8 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.sv.automation.confirmation
 
-import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
-import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
+import com.digitalasset.canton.topology.{PartyId}
 import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
@@ -21,10 +20,8 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   DsoRules_GrantValidatorLicense,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.ValidatorLicenseRequest
-import org.lfdecentralizedtrust.splice.environment.ParticipantAdminConnection
 import org.lfdecentralizedtrust.splice.environment.SpliceLedgerConnection
 import org.lfdecentralizedtrust.splice.environment.ledger.api.DedupOffset
-import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.QueryResult
 import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
 import org.lfdecentralizedtrust.splice.util.AssignedContract
 
@@ -33,7 +30,6 @@ import scala.concurrent.{ExecutionContext, Future}
 class ValidatorLicenseRequestTrigger(
     override protected val context: TriggerContext,
     dsoStore: SvDsoStore,
-    participantAdminConnection: ParticipantAdminConnection,
     connection: SpliceLedgerConnection,
 )(implicit
     ec: ExecutionContext,
@@ -61,49 +57,8 @@ class ValidatorLicenseRequestTrigger(
 
     for {
       dsoRules <- dsoStore.getDsoRules()
-      synchronizerId = SynchronizerId.tryFromString(
-        dsoRules.payload.config.decentralizedSynchronizer.activeSynchronizerId
-      )
-
-      partyToParticipant <- participantAdminConnection.listPartyToParticipant(
-        store = Some(TopologyStoreId.Synchronizer(synchronizerId)),
-        filterParty = validatorParty.filterString,
-      )
-
-      outcome <- partyToParticipant.headOption.flatMap(_.mapping.participantIds.headOption) match {
-        case None =>
-          Future.successful(
-            TaskSuccess(
-              s"Skipping as participant ID for $validatorParty is not yet known to local topology"
-            )
-          )
-        case Some(participantId) =>
-          participantAdminConnection
-            .listParticipantSynchronizerPermission(synchronizerId, participantId.filterString)
-            .flatMap { permissions =>
-              permissions.headOption.map(_.mapping) match {
-                case None =>
-                  Future.successful(
-                    TaskSuccess(
-                      s"Skipping as participant $participantId does not have ParticipantSynchronizerPermission"
-                    )
-                  )
-                case Some(permission) =>
-                  val isLoginAfterPassed =
-                    permission.loginAfter.forall(loginAfter => context.clock.now >= loginAfter)
-
-                  if (isLoginAfterPassed) {
-                    confirm(reqCid, validatorParty, dsoRules)
-                  } else {
-                    Future.successful(
-                      TaskSuccess(
-                        s"Skipping as participant $participantId has permission but loginAfter barrier is not yet passed"
-                      )
-                    )
-                  }
-              }
-            }
-      }
+      // Note: Receiving a ValidatorLicenseRequest implies that the corresponding PartyToParticipant mapping and the ParticipantSynchronizerPermission is already available in the Participant, so we avoid checking them again here.
+      outcome <- confirm(reqCid, validatorParty, dsoRules)
     } yield outcome
   }
 
@@ -120,21 +75,30 @@ class ValidatorLicenseRequestTrigger(
     )
 
     for {
-      queryResult <- dsoStore.lookupConfirmationByActionWithOffset(svParty, action)
+      confirmationResult <- dsoStore.lookupConfirmationByActionWithOffset(svParty, action)
+      licenseResult <- dsoStore.lookupValidatorLicenseWithOffset(validatorParty)
+
       cmd = dsoRules.exercise(
         _.exerciseDsoRules_ConfirmAction(
           svParty.toProtoPrimitive,
           action,
         )
       )
-      outcome <- queryResult match {
-        case QueryResult(_, Some(_)) =>
+      outcome <- (confirmationResult.value, licenseResult.value) match {
+        case (_, Some(_)) =>
+          Future.successful(
+            TaskSuccess(
+              s"Skipping as a ValidatorLicense already exists for $validatorParty"
+            )
+          )
+        case (Some(_), _) =>
           Future.successful(
             TaskSuccess(
               s"Skipping as confirmation from $svParty is already created for granting validator license to $validatorParty"
             )
           )
-        case QueryResult(offset, None) =>
+        case (None, None) =>
+          val minOffset = Seq(licenseResult.offset).foldLeft(confirmationResult.offset)(math.min)
           connection
             .submit(
               actAs = Seq(svParty),
@@ -147,7 +111,7 @@ class ValidatorLicenseRequestTrigger(
                 Seq(svParty, dsoParty),
                 validatorParty.toProtoPrimitive,
               ),
-              deduplicationConfig = DedupOffset(offset),
+              deduplicationConfig = DedupOffset(minOffset),
             )
             .yieldResult()
             .map { _ =>

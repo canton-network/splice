@@ -294,7 +294,6 @@ class SvDsoAutomationService(
         new ValidatorLicenseRequestTrigger(
           triggerContext,
           dsoStore,
-          participantAdminConnection,
           connection(SpliceLedgerConnectionPriority.High),
         )
       )
