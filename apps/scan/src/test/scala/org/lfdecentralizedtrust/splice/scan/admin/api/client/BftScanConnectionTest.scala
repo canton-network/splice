@@ -225,6 +225,7 @@ class BftScanConnectionTest
       connectionBuilder: Uri => Future[SingleScanConnection] = _ =>
         Future.failed(new RuntimeException("Shouldn't be refreshing!")),
       initialFailedConnections: Map[Uri, Throwable] = Map.empty,
+      initialRound: Option[Long] = None,
   ) = {
     new BftScanConnection(
       mock[SpliceLedgerClient],
@@ -242,6 +243,7 @@ class BftScanConnectionTest
       clock,
       retryProvider,
       loggerFactory,
+      initialRound = initialRound,
     )
   }
   val notFoundFailure = new BaseAppConnection.UnexpectedHttpJsonResponse(
@@ -1346,6 +1348,47 @@ class BftScanConnectionTest
         )
         .map(_ => succeed)
     }
+
+    "uses randomSingleCall for the initial round" in {
+      val round = 42L
+      val connections = getMockedConnections(n = 4)
+      makeMockReturnRootHashOk(connections(0), round, "aabb")
+      makeMockReturnRootHashCannotProvide(connections(1), round)
+      makeMockReturnRootHashCannotProvide(connections(2), round)
+      makeMockReturnRootHashCannotProvide(connections(3), round)
+      val bft = getBft(connections, initialRound = Some(round))
+
+      def attempt(remaining: Int): Future[GetRewardAccountingRootHashResponse] =
+        bft.getRewardAccountingRootHash(round).flatMap {
+          case ok: GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk =>
+            Future.successful(ok)
+          case _ if remaining > 1 => attempt(remaining - 1)
+          case other => Future.successful(other)
+        }
+
+      for {
+        resp <- attempt(100)
+      } yield inside(resp) {
+        case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok) =>
+          ok.rootHash should be("aabb")
+      }
+    }
+
+    "uses default BFT for non-initial rounds even when initialRound is set" in {
+      val round = 43L
+      val connections = getMockedConnections(n = 4)
+      connections.zipWithIndex.foreach { case (c, i) =>
+        makeMockReturnRootHashOk(c, round, s"hash$i")
+      }
+      val bft = getBft(connections, initialRound = Some(42L))
+
+      for {
+        resp <- bft.getRewardAccountingRootHash(round)
+      } yield inside(resp) {
+        case _: GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashUndetermined =>
+          succeed
+      }
+    }
   }
 
   "BftScanConnection.getRewardAccountingActivityTotals" should {
@@ -1469,6 +1512,48 @@ class BftScanConnectionTest
             ) should be(true),
         )
         .map(_ => succeed)
+    }
+
+    "uses randomSingleCall for the initial round" in {
+      val round = 42L
+      val connections = getMockedConnections(n = 4)
+      makeMockReturnActivityTotalsOk(connections(0), round, 100L, 10L, 5L)
+      makeMockReturnActivityTotalsCannotProvide(connections(1), round)
+      makeMockReturnActivityTotalsCannotProvide(connections(2), round)
+      makeMockReturnActivityTotalsCannotProvide(connections(3), round)
+      val bft = getBft(connections, initialRound = Some(round))
+
+      def attempt(remaining: Int): Future[GetRewardAccountingActivityTotalsResponse] =
+        bft.getRewardAccountingActivityTotals(round).flatMap {
+          case ok: GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsOk =>
+            Future.successful(ok)
+          case _ if remaining > 1 => attempt(remaining - 1)
+          case other => Future.successful(other)
+        }
+
+      for {
+        resp <- attempt(100)
+      } yield inside(resp) {
+        case GetRewardAccountingActivityTotalsResponse.members
+              .RewardAccountingActivityTotalsOk(ok) =>
+          ok.totalAppActivityWeight should be(100L)
+      }
+    }
+
+    "uses default BFT for non-initial rounds even when initialRound is set" in {
+      val round = 43L
+      val connections = getMockedConnections(n = 4)
+      connections.zipWithIndex.foreach { case (c, i) =>
+        makeMockReturnActivityTotalsOk(c, round, 100L + i, 10L + i, 5L + i)
+      }
+      val bft = getBft(connections, initialRound = Some(42L))
+
+      for {
+        resp <- bft.getRewardAccountingActivityTotals(round)
+      } yield inside(resp) {
+        case _: GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsUndetermined =>
+          succeed
+      }
     }
   }
 

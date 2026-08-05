@@ -188,21 +188,29 @@ class SvDsoAutomationService(
           case Some(future) =>
             future
           case None =>
-            val future = BftScanConnection
-              .peerScanConnection(
-                () =>
-                  BftScanConnection.Bft.getPeerScansFromDsoRules(
-                    dsoStore,
-                    dsoStore.key.svParty,
-                  )(tc, ec),
-                ledgerClient,
-                ScanAppClientConfig.DefaultScansRefreshInterval,
-                ScanAppClientConfig.DefaultAmuletRulesCacheTimeToLive,
-                upgradesConfig,
-                clock,
-                retryProvider,
-                loggerFactory,
-              )(ec, tc, mat, httpClient, templateJsonDecoder)
+            val future = for {
+              initialRound <- connection(SpliceLedgerConnectionPriority.Low)
+                .lookupUserMetadata(
+                  config.ledgerApiUser,
+                  BaseLedgerConnection.INITIAL_ROUND_USER_METADATA_KEY,
+                )
+              bft <- BftScanConnection
+                .peerScanConnection(
+                  () =>
+                    BftScanConnection.Bft.getPeerScansFromDsoRules(
+                      dsoStore,
+                      dsoStore.key.svParty,
+                    )(tc, ec),
+                  ledgerClient,
+                  ScanAppClientConfig.DefaultScansRefreshInterval,
+                  ScanAppClientConfig.DefaultAmuletRulesCacheTimeToLive,
+                  upgradesConfig,
+                  clock,
+                  retryProvider,
+                  loggerFactory,
+                  initialRound = initialRound.map(_.toLong),
+                )(ec, tc, mat, httpClient, templateJsonDecoder)
+            } yield bft
             peerScanConnectionF = Some(future)
             future
         }
