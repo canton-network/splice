@@ -641,6 +641,31 @@ testValidatorLicenseRequest = do
   metadata.contactPoint === "v1@example.com"
 
   -- duplicate request creation
+
+  req5Cid <- submit v1 $ createCmd ValidatorLicenseRequest with
+    validator = v1
+    dso = dso
+    version = Some "1.0.0"
+    contactPoint = Some "v1@example.com"
+    expiresAt = requestExpiresAt
+
+  forA_ [sv1, sv2, sv3] $ \sv ->
+    submit (actAs sv <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_ConfirmAction with
+      confirmer = sv
+      action = ARC_DsoRules with
+        dsoAction = SRARC_RejectValidatorLicense $ DsoRules_RejectValidatorLicense req5Cid
+
+  executeAllConfirmedActions app
+
+  -- The duplicate request should have been rejected and archived
+  reqs5 <- queryFilter @ValidatorLicenseRequest dso (\r -> r.validator == v1)
+  assert (null reqs5)
+
+  -- The validator should still only have 1 license
+  licensesAfterDuplicate <- queryFilter @ValidatorLicense dso (\l -> l.validator == v1)
+  length licensesAfterDuplicate === 1
+
+  -- duplicate request creation
   req2Cid <- submit v1 $ createCmd ValidatorLicenseRequest with
     validator = v1
     dso = dso
