@@ -54,7 +54,7 @@ import org.lfdecentralizedtrust.splice.store.db.AcsQueries.{
   SelectFromAcsTableWithStateResult,
 }
 import org.lfdecentralizedtrust.splice.store.db.AcsTables.ContractStateRowData
-import org.lfdecentralizedtrust.splice.store.db.AsUpdateReturning.SQLActionBuilderAsUpdateReturning
+import AsUpdateReturning.*
 import com.daml.nonempty.NonEmpty
 import com.digitalasset.canton.data.CantonTimestamp
 import com.daml.metrics.api.MetricHandle.LabeledMetricsFactory
