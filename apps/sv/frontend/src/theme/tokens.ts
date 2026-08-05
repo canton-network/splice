@@ -28,12 +28,6 @@ export const NAV_PILL_PX = '10px';
 /** Figma content max width (nav row is full width; content uses this) */
 export const CONTENT_MAX_WIDTH = 1583;
 
-/**
- * Temporary top padding while NetworkBanner is omitted (matches old 50px banner height).
- * Remove when the banner is restored (e.g. with #6087).
- */
-export const HEADER_PT = '50px';
-
 /** Figma Dev Mode — 64px space below nav row, present on every page */
 export const HEADER_PB = 8;
 
