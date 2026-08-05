@@ -14,3 +14,7 @@
           This aligns with standard idempotency-key semantics: a second request with a previously
           accepted command id receives a 200 response with the same result as the first.
           Concurrent duplicates, where no submission has completed yet, are still rejected.
+
+    - CantonBft
+
+         - Increase the default segment length by 4x to reduce performance impact from epoch switches.
