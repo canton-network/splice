@@ -67,10 +67,84 @@ const sortProposals = (
     .toSorted((a, b) => getEffectiveDate(a).diff(getEffectiveDate(b)));
 };
 
-const getColumnsCount = (...shown: (boolean | undefined)[]) => 4 + shown.filter(Boolean).length;
+const getColumnsCount = (...shown: (boolean | undefined)[]) => 5 + shown.filter(Boolean).length;
 
 const getGridTemplate = (columnsCount: number) =>
   `minmax(0, 1fr) minmax(0, 0.7fr) ${'1fr '.repeat(columnsCount - 2).trim()}`;
+
+const governanceTableHeadCellSx = {
+  py: '10px',
+  px: '16px',
+  fontSize: 12,
+  fontWeight: 600,
+  textTransform: 'uppercase' as const,
+  color: 'colors.neutral.80',
+  borderBottom: 'none',
+  display: 'flex',
+  alignItems: 'center',
+};
+
+const governanceTableBodyCellSx = {
+  py: '15px',
+  px: '16px',
+  borderBottom: 'none',
+  display: 'flex',
+  alignItems: 'center',
+  alignSelf: 'stretch',
+  minWidth: 0,
+};
+
+interface SubmittedByCellProps {
+  requester: string;
+  uniqueId: string;
+}
+
+const identifierCellSx = {
+  ...governanceTableBodyCellSx,
+  overflow: 'visible',
+};
+
+const SubmittedByCell: React.FC<SubmittedByCellProps> = ({ requester, uniqueId }) => (
+  <TableCell sx={identifierCellSx} data-testid={`${uniqueId}-row-submitted-by`}>
+    <CopyableIdentifier
+      value={requester}
+      size="small"
+      data-testid={`${uniqueId}-row-submitted-by-identifier`}
+    />
+  </TableCell>
+);
+
+interface TableHeaderProps {
+  showThresholdDeadline?: boolean;
+  showStatus?: boolean;
+  showVoteStats?: boolean;
+}
+
+const TableHeader: React.FC<TableHeaderProps> = ({
+  showThresholdDeadline,
+  showStatus,
+  showVoteStats,
+}) => (
+  <>
+    <TableCell sx={governanceTableHeadCellSx}>PROPOSAL TYPE</TableCell>
+    <TableCell sx={governanceTableHeadCellSx}>VOTE PROPOSAL CONTRACT ID</TableCell>
+    {showThresholdDeadline ? (
+      <>
+        <TableCell sx={governanceTableHeadCellSx}>THRESHOLD DEADLINE</TableCell>
+        <TableCell sx={governanceTableHeadCellSx}>SUBMITTED BY</TableCell>
+        <TableCell sx={governanceTableHeadCellSx}>EFFECTIVE AT</TableCell>
+      </>
+    ) : (
+      <>
+        <TableCell sx={governanceTableHeadCellSx}>EFFECTIVE AT</TableCell>
+        <TableCell sx={governanceTableHeadCellSx}>SUBMITTED BY</TableCell>
+        {showStatus && <TableCell sx={governanceTableHeadCellSx}>STATUS</TableCell>}
+      </>
+    )}
+    {showVoteStats && <TableCell sx={governanceTableHeadCellSx}>VOTES</TableCell>}
+    <TableCell sx={governanceTableHeadCellSx}>YOUR VOTE</TableCell>
+  </>
+);
 
 export const ProposalListingSection: React.FC<ProposalListingSectionProps> = props => {
   const {
@@ -121,13 +195,11 @@ export const ProposalListingSection: React.FC<ProposalListingSectionProps> = pro
             <Table>
               <TableHead>
                 <TableRow sx={{ display: 'grid', gridTemplateColumns: gridTemplate }}>
-                  <TableCell>ACTION</TableCell>
-                  <TableCell>VOTE PROPOSAL CONTRACT ID</TableCell>
-                  {showThresholdDeadline && <TableCell>THRESHOLD DEADLINE</TableCell>}
-                  <TableCell>EFFECTIVE AT</TableCell>
-                  {showStatus && <TableCell>STATUS</TableCell>}
-                  {showVoteStats && <TableCell>VOTES</TableCell>}
-                  <TableCell>YOUR VOTE</TableCell>
+                  <TableHeader
+                    showThresholdDeadline={showThresholdDeadline}
+                    showStatus={showStatus}
+                    showVoteStats={showVoteStats}
+                  />
                 </TableRow>
               </TableHead>
               <TableBody sx={{ display: 'contents' }}>
@@ -137,6 +209,7 @@ export const ProposalListingSection: React.FC<ProposalListingSectionProps> = pro
                     actionName={vote.actionName}
                     description={vote.description}
                     contractId={vote.contractId}
+                    requester={vote.requester}
                     uniqueId={uniqueId}
                     votingThresholdDeadline={vote.votingThresholdDeadline}
                     voteTakesEffect={vote.voteTakesEffect}
@@ -226,6 +299,7 @@ interface VoteRowProps {
   actionName: string;
   description?: string;
   contractId: ContractId<VoteRequest>;
+  requester: string;
   status: ProposalListingStatus;
   uniqueId: string;
   voteStats: Record<YourVoteStatus, number>;
@@ -243,6 +317,7 @@ const VoteRow: React.FC<VoteRowProps> = React.memo(props => {
     actionName,
     description,
     contractId,
+    requester,
     status,
     uniqueId,
     voteStats,
@@ -272,10 +347,24 @@ const VoteRow: React.FC<VoteRowProps> = React.memo(props => {
       }}
       data-testid={`${uniqueId}-row`}
     >
-      <TableCell data-testid={`${uniqueId}-row-action-name`} sx={{ overflow: 'hidden' }}>
+      <TableCell
+        data-testid={`${uniqueId}-row-action-name`}
+        sx={{
+          ...governanceTableBodyCellSx,
+          flexDirection: 'column',
+          alignItems: 'flex-start',
+          justifyContent: 'center',
+          overflow: 'hidden',
+        }}
+      >
         <Typography
           {...tableBodyTypography}
-          sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+          sx={{
+            width: '100%',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
         >
           {actionName}
         </Typography>
@@ -283,6 +372,7 @@ const VoteRow: React.FC<VoteRowProps> = React.memo(props => {
           <Typography
             data-testid={`${uniqueId}-row-description`}
             sx={{
+              width: '100%',
               fontSize: 12,
               color: 'text.secondary',
               display: '-webkit-box',
@@ -290,39 +380,54 @@ const VoteRow: React.FC<VoteRowProps> = React.memo(props => {
               WebkitBoxOrient: 'vertical',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
-              lineHeight: 1.4,
+              lineHeight: '20px',
             }}
           >
             {description}
           </Typography>
         )}
       </TableCell>
-      <TableCell
-        data-testid={`${uniqueId}-row-contract-id`}
-        sx={{ minWidth: 0, overflow: 'visible' }}
-      >
+      <TableCell sx={identifierCellSx} data-testid={`${uniqueId}-row-contract-id`}>
         <CopyableIdentifier
           value={contractId}
           size="small"
           data-testid={`${uniqueId}-row-contract-id-value`}
         />
       </TableCell>
-      {showThresholdDeadline && (
-        <TableCell data-testid={`${uniqueId}-row-voting-threshold-deadline`}>
-          <TableBodyTypography>{votingThresholdDeadline}</TableBodyTypography>
-        </TableCell>
-      )}
-      <TableCell data-testid={`${uniqueId}-row-vote-takes-effect`}>
-        <TableBodyTypography>{voteTakesEffect}</TableBodyTypography>
-      </TableCell>
-
-      {showStatus && (
-        <TableCell data-testid={`${uniqueId}-row-status`}>
-          <TableBodyTypography>{status}</TableBodyTypography>
-        </TableCell>
+      {showThresholdDeadline ? (
+        <>
+          <TableCell
+            sx={governanceTableBodyCellSx}
+            data-testid={`${uniqueId}-row-voting-threshold-deadline`}
+          >
+            <TableBodyTypography>{votingThresholdDeadline}</TableBodyTypography>
+          </TableCell>
+          <SubmittedByCell requester={requester} uniqueId={uniqueId} />
+          <TableCell
+            sx={governanceTableBodyCellSx}
+            data-testid={`${uniqueId}-row-vote-takes-effect`}
+          >
+            <TableBodyTypography>{voteTakesEffect}</TableBodyTypography>
+          </TableCell>
+        </>
+      ) : (
+        <>
+          <TableCell
+            sx={governanceTableBodyCellSx}
+            data-testid={`${uniqueId}-row-vote-takes-effect`}
+          >
+            <TableBodyTypography>{voteTakesEffect}</TableBodyTypography>
+          </TableCell>
+          <SubmittedByCell requester={requester} uniqueId={uniqueId} />
+          {showStatus && (
+            <TableCell sx={governanceTableBodyCellSx} data-testid={`${uniqueId}-row-status`}>
+              <TableBodyTypography>{status}</TableBodyTypography>
+            </TableCell>
+          )}
+        </>
       )}
       {showVoteStats && (
-        <TableCell data-testid={`${uniqueId}-row-all-votes`}>
+        <TableCell sx={governanceTableBodyCellSx} data-testid={`${uniqueId}-row-all-votes`}>
           <AllVotes
             acceptedVotes={voteStats['accepted']}
             rejectedVotes={voteStats['rejected']}
@@ -330,7 +435,7 @@ const VoteRow: React.FC<VoteRowProps> = React.memo(props => {
           />
         </TableCell>
       )}
-      <TableCell data-testid={`${uniqueId}-row-your-vote`}>
+      <TableCell sx={governanceTableBodyCellSx} data-testid={`${uniqueId}-row-your-vote`}>
         <VoteStats
           vote={yourVote}
           typography={tableBodyTypography}

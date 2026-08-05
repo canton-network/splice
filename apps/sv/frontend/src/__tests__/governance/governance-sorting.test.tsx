@@ -11,6 +11,7 @@ import {
 } from '../../components/governance/ActionRequiredSection';
 import { ProposalListingSection } from '../../components/governance/ProposalListingSection';
 import { ProposalListingData } from '../../utils/types';
+import { svPartyId } from '../mocks/constants';
 
 describe('Governance Page Sorting', () => {
   describe('Action Required Section', () => {
@@ -22,7 +23,7 @@ describe('Governance Page Sorting', () => {
           contractId: 'c' as ContractId<VoteRequest>,
           votingCloses: '2025-01-25 12:00',
           createdAt: '2025-01-10 12:00',
-          requester: 'sv1',
+          requester: svPartyId,
         },
         {
           actionName: 'Action A - Earliest',
@@ -30,7 +31,7 @@ describe('Governance Page Sorting', () => {
           contractId: 'a' as ContractId<VoteRequest>,
           votingCloses: '2025-01-15 10:00',
           createdAt: '2025-01-10 12:00',
-          requester: 'sv1',
+          requester: svPartyId,
         },
         {
           actionName: 'Action B - Middle',
@@ -38,7 +39,7 @@ describe('Governance Page Sorting', () => {
           contractId: 'b' as ContractId<VoteRequest>,
           votingCloses: '2025-01-15 18:00',
           createdAt: '2025-01-10 12:00',
-          requester: 'sv1',
+          requester: svPartyId,
         },
       ];
 
@@ -69,6 +70,7 @@ describe('Governance Page Sorting', () => {
       yourVote: 'accepted',
       status: 'In Progress',
       acceptanceThreshold: BigInt(11),
+      requester: svPartyId,
     };
 
     test('should sort with Threshold items first (by votes desc, then deadline asc), then dated items by effective date asc', () => {
@@ -153,6 +155,7 @@ describe('Governance Page Sorting', () => {
       status: 'Implemented',
       voteStats: { accepted: 8, rejected: 2, 'no-vote': 1 },
       acceptanceThreshold: BigInt(11),
+      requester: svPartyId,
     };
 
     test('renders in backend order without client re-sorting', () => {
