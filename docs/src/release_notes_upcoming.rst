@@ -14,3 +14,9 @@
           This aligns with standard idempotency-key semantics: a second request with a previously
           accepted command id receives a 200 response with the same result as the first.
           Concurrent duplicates, where no submission has completed yet, are still rejected.
+
+    - SV app
+
+        - Network banner now always shows. The network name is derived from the scan node's public URL:
+          MainNet/TestNet/DevNet/ScratchNet from the cluster subdomain, LocalNet for localhost, and a
+          capitalized fallback otherwise (Unknown Network when no scan URL is available).
