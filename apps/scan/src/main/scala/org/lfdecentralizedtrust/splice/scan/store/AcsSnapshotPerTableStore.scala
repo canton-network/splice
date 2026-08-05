@@ -21,17 +21,13 @@ import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInt
 import scala.concurrent.{ExecutionContext, Future}
 
 class AcsSnapshotPerTableStore(
-    storage: DbStorage,
+    protected val storage: DbStorage,
     val updateHistory: UpdateHistory,
-    dsoParty: PartyId,
+    protected val dsoParty: PartyId,
     val currentMigrationId: Long,
     override protected val loggerFactory: NamedLoggerFactory,
-)(implicit ec: ExecutionContext, closeContext: CloseContext)
-    extends AcsSnapshotStore
-    with AcsJdbcTypes
-    with AcsQueries
-    with LimitHelpers
-    with NamedLogging {
+)(implicit protected val ec: ExecutionContext, protected val closeContext: CloseContext)
+    extends CommonAcsSnapshotStore {
   import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnlessShutdownToFuture
 
   override val profile: JdbcProfile = storage.profile.jdbc
@@ -42,7 +38,7 @@ class AcsSnapshotPerTableStore(
       row: DbStorage.RowsAltered[A]
   ): DbStorage.RowsAltered[Option[A]] = _.exists(row(_))
 
-  private def historyId = updateHistory.historyId
+  protected def historyId = updateHistory.historyId
 
   override def initializeSnapshot(
       initializeFrom: AcsSnapshot,
@@ -285,52 +281,6 @@ class AcsSnapshotPerTableStore(
     Future.failed(io.grpc.Status.UNIMPLEMENTED.withDescription("TODO").asRuntimeException())
   }
 
-  override def lookupSnapshotAtOrBefore(migrationId: Long, before: CantonTimestamp)(implicit
-      tc: TraceContext
-  ): Future[Option[AcsSnapshot]] = {
-    // TODO: This is verbatim from AcsSnapshotStore
-    storage
-      .querySingle(
-        sql"""select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance, data_table_name
-            from acs_snapshot
-            where snapshot_record_time <= $before
-              and migration_id = $migrationId
-              and history_id = $historyId
-            order by snapshot_record_time desc
-            limit 1""".as[AcsSnapshot].headOption,
-        "lookupSnapshotBefore",
-      )
-      .value
-  }
-
-  def lookupSnapshotAfter(
-      migrationId: Long,
-      after: CantonTimestamp,
-  )(implicit tc: TraceContext): Future[Option[AcsSnapshot]] = {
-    // TODO: This is verbatim from AcsSnapshotStore
-    val select =
-      sql"select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance, data_table_name "
-    val orderLimit = sql" order by snapshot_record_time asc limit 1 "
-    val sameMig = select ++ sql""" from acs_snapshot
-            where snapshot_record_time > $after
-              and migration_id = $migrationId
-              and history_id = $historyId """ ++ orderLimit
-    val largerMig = select ++ sql""" from acs_snapshot
-            where migration_id > $migrationId
-              and history_id = $historyId """ ++ orderLimit
-
-    val query =
-      sql"select * from ((" ++ sameMig ++ sql") union all (" ++ largerMig ++ sql")) all_queries order by snapshot_record_time asc limit 1"
-
-    storage
-      .querySingle(
-        query.toActionBuilder.as[AcsSnapshot].headOption,
-        "lookupSnapshotAfter",
-      )
-      .value
-
-  }
-
   override def queryAcsSnapshot(
       migrationId: Long,
       snapshot: CantonTimestamp,
@@ -339,7 +289,29 @@ class AcsSnapshotPerTableStore(
       partyIds: Seq[PartyId],
       templates: Seq[PackageQualifiedName],
   )(implicit tc: TraceContext): Future[QueryAcsSnapshotResult] = {
-    Future.failed(io.grpc.Status.UNIMPLEMENTED.withDescription("TODO").asRuntimeException())
+    for {
+      snapshotKind <- getSnapshotAt(snapshot, migrationId)
+      result <- snapshotKind match {
+        case snapshot: LegacyAcsSnapshot =>
+          queryLegacyTable(snapshot, after, limit, partyIds, templates)
+        case perTable: PerTableAcsSnapshot =>
+          querySnapshotTable(perTable, after, limit, partyIds, templates)
+      }
+    } yield result
+  }
+
+  private def querySnapshotTable(
+      snapshot: PerTableAcsSnapshot,
+      after: Option[Long],
+      limit: Limit,
+      partyIds: Seq[PartyId],
+      templates: Seq[PackageQualifiedName],
+  )(implicit tc: TraceContext): Future[QueryAcsSnapshotResult] = {
+    // TODO: this doesn't work with `after: Long`
+    val query =
+      sql"""
+        select
+         """
   }
 }
 

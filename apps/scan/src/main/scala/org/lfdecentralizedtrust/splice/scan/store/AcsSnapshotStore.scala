@@ -38,6 +38,7 @@ import slick.jdbc.{GetResult, JdbcProfile}
 
 import java.util.concurrent.Semaphore
 import scala.concurrent.{ExecutionContext, Future}
+import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnlessShutdownToFuture
 
 trait AcsSnapshotStore {
   def currentMigrationId: Long
@@ -165,34 +166,25 @@ trait AcsSnapshotStore {
   }
 }
 
-class LegacyAcsSnapshotStore(
-    val table: IncrementalAcsSnapshotTable,
-    storage: DbStorage,
-    val updateHistory: UpdateHistory,
-    dsoParty: PartyId,
-    val currentMigrationId: Long,
-    override protected val loggerFactory: NamedLoggerFactory,
-)(implicit ec: ExecutionContext, closeContext: CloseContext)
+/** These are methods for which the implementation is the same for all ACSSnapshotStores.
+  * Once we remove the Legacy one, we can move all of the code here into AcsSnapshotPerTableStore.
+  */
+trait CommonAcsSnapshotStore
     extends AcsSnapshotStore
-    with AcsJdbcTypes
     with AcsQueries
+    with AcsJdbcTypes
     with LimitHelpers
     with NamedLogging {
-  import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnlessShutdownToFuture
 
-  override val profile: JdbcProfile = storage.profile.jdbc
-  import profile.api.jdbcActionExtensionMethods
+  protected val storage: DbStorage
+  protected val dsoParty: PartyId
+  protected def historyId: Long
+  protected implicit val ec: ExecutionContext
+  protected implicit val closeContext: CloseContext
 
-  private implicit def rowsAlteredByIdempotencyCheck[A](implicit
-      row: DbStorage.RowsAltered[A]
-  ): DbStorage.RowsAltered[Option[A]] = _.exists(row(_))
-
-  private def historyId = updateHistory.historyId
-
-  def lookupSnapshotAtOrBefore(
-      migrationId: Long,
-      before: CantonTimestamp,
-  )(implicit tc: TraceContext): Future[Option[AcsSnapshot]] = {
+  override def lookupSnapshotAtOrBefore(migrationId: Long, before: CantonTimestamp)(implicit
+      tc: TraceContext
+  ): Future[Option[AcsSnapshot]] = {
     storage
       .querySingle(
         sql"""select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance, data_table_name
@@ -211,7 +203,6 @@ class LegacyAcsSnapshotStore(
       migrationId: Long,
       after: CantonTimestamp,
   )(implicit tc: TraceContext): Future[Option[AcsSnapshot]] = {
-
     val select =
       sql"select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance, data_table_name "
     val orderLimit = sql" order by snapshot_record_time asc limit 1 "
@@ -232,8 +223,147 @@ class LegacyAcsSnapshotStore(
         "lookupSnapshotAfter",
       )
       .value
-
   }
+
+  def getSnapshotAt(
+      snapshotRecordTime: CantonTimestamp,
+      migrationId: Long,
+  )(implicit tc: TraceContext): Future[AcsSnapshot] = {
+    storage
+      .querySingle(
+        sql"""select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance, data_table_name
+            from acs_snapshot
+            where snapshot_record_time = $snapshotRecordTime
+              and migration_id = $migrationId
+              and history_id = $historyId
+            limit 1""".as[AcsSnapshot].headOption,
+        "getSnapshotAt",
+      )
+      .getOrElseF(
+        FutureUnlessShutdown.failed(
+          io.grpc.Status.NOT_FOUND
+            .withDescription(
+              s"Failed to find ACS snapshot for migration id $migrationId at $snapshotRecordTime"
+            )
+            .asRuntimeException()
+        )
+      )
+  }
+
+  protected def queryLegacyTable(
+      snapshot: LegacyAcsSnapshot,
+      after: Option[Long],
+      limit: Limit,
+      partyIds: Seq[PartyId],
+      templates: Seq[PackageQualifiedName],
+  )(implicit tc: TraceContext): Future[QueryAcsSnapshotResult] = {
+    for {
+      begin <- after match {
+        case Some(value) if value < snapshot.firstRowId || value > snapshot.lastRowId =>
+          Future.failed(
+            io.grpc.Status.INVALID_ARGUMENT
+              .withDescription(
+                s"Invalid after token, outside of snapshot range (${snapshot.firstRowId} to ${snapshot.lastRowId})."
+              )
+              .asRuntimeException()
+          )
+        case Some(value) => Future.successful(value + 1)
+        case None => Future.successful(snapshot.firstRowId)
+      }
+      end = snapshot.lastRowId
+      events <- storage
+        .query(
+          (sql"""
+               with snapshot as (
+                  select create_id, max(row_id) as row_id
+                  from acs_snapshot_data
+                  where row_id between $begin and $end
+               """ ++ partyIdsFilter(partyIds) ++ templatesFilter(templates) ++ sql"""
+                  group by create_id
+                  order by row_id asc
+                  -- this CTE already will contain all snapshot rows (filtered by party id and template, if necessary).
+                  -- They just need to be joined with u_h_creates.
+                  -- Applying the limit later yields a worse query plan, where it requires fetching all snapshots first.
+                  -- See #1685
+                  limit ${sqlLimit(limit)}
+               )
+               select
+                 snapshot.row_id,
+                 update_row_id,
+                 event_id,
+                 contract_id,
+                 created_at,
+                 template_id_package_id,
+                 template_id_module_name,
+                 template_id_entity_name,
+                 package_name,
+                 create_arguments,
+                 signatories,
+                 observers,
+                 contract_key,
+                 record_time
+              from snapshot
+              join update_history_creates creates on creates.row_id = snapshot.create_id
+              order by snapshot.row_id
+            """).toActionBuilder
+            .as[(Long, SelectFromCreateEvents)],
+          "queryAcsSnapshot.getCreatedEvents",
+        )
+    } yield {
+      val eventsInPage =
+        applyLimitOrFail("queryAcsSnapshot", limit, events.map(_._2.toCreatedEvent))
+      val afterToken = if (eventsInPage.size == limit.limit) events.lastOption.map(_._1) else None
+      QueryAcsSnapshotResult(
+        migrationId = snapshot.migrationId,
+        snapshotRecordTime = snapshot.snapshotRecordTime,
+        createdEventsInPage = eventsInPage,
+        afterToken = afterToken,
+      )
+    }
+  }
+
+  private def partyIdsFilter(partyIds: Seq[String]) = partyIds match {
+    case Nil =>
+      // This expression is always true (scan only processes data where the DSO is stakeholder).
+      // It is included to make sure the query plan uses the right index (acs_snapshot_data_all_filters)
+      sql"and stakeholder = ${dsoParty}"
+    case partyIds =>
+      (sql" and " ++ inClause("stakeholder", partyIds)).toActionBuilder
+  }
+
+  private def templatesFilter(templates: Seq[PackageQualifiedName]) = templates match {
+    case Nil => sql""
+    case _ =>
+      (sql" and " ++ inClause(
+        "template_id",
+        templates.map(t =>
+          lengthLimited(
+            s"${t.packageName}:${t.qualifiedName.moduleName}:${t.qualifiedName.entityName}"
+          )
+        ),
+      )).toActionBuilder
+  }
+
+}
+
+class LegacyAcsSnapshotStore(
+    val table: IncrementalAcsSnapshotTable,
+    protected val storage: DbStorage,
+    val updateHistory: UpdateHistory,
+    protected val dsoParty: PartyId,
+    val currentMigrationId: Long,
+    override protected val loggerFactory: NamedLoggerFactory,
+)(implicit protected val ec: ExecutionContext, protected val closeContext: CloseContext)
+    extends CommonAcsSnapshotStore {
+
+  override val profile: JdbcProfile = storage.profile.jdbc
+  import profile.api.jdbcActionExtensionMethods
+
+  private implicit def rowsAlteredByIdempotencyCheck[A](implicit
+      row: DbStorage.RowsAltered[A]
+  ): DbStorage.RowsAltered[Option[A]] = _.exists(row(_))
+
+  protected def historyId = updateHistory.historyId
 
   def insertNewSnapshot(
       lastSnapshot: Option[AcsSnapshot],
@@ -402,114 +532,16 @@ class LegacyAcsSnapshotStore(
       templates: Seq[PackageQualifiedName],
   )(implicit tc: TraceContext): Future[QueryAcsSnapshotResult] = {
     for {
-      snapshotTrait <- storage
-        .querySingle(
-          sql"""select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance, data_table_name
-            from acs_snapshot
-            where snapshot_record_time = $snapshot
-              and migration_id = $migrationId
-              and history_id = $historyId
-            limit 1""".as[AcsSnapshot].headOption,
-          "queryAcsSnapshot.getSnapshot",
-        )
-        .getOrElseF(
-          FutureUnlessShutdown.failed(
-            io.grpc.Status.NOT_FOUND
-              .withDescription(
-                s"Failed to find ACS snapshot for migration id $migrationId at $snapshot"
-              )
-              .asRuntimeException()
-          )
-        )
-      snapshot <- (snapshotTrait match {
+      snapshotKind <- getSnapshotAt(snapshot, migrationId)
+      snapshot <- snapshotKind match {
         case snapshot: LegacyAcsSnapshot => Future.successful(snapshot)
         case perTable: PerTableAcsSnapshot =>
           Future.failed(
             perTableAcsSnapshotsWereEnabledError(perTable)
           )
-      })
-      begin <- after match {
-        case Some(value) if value < snapshot.firstRowId || value > snapshot.lastRowId =>
-          Future.failed(
-            io.grpc.Status.INVALID_ARGUMENT
-              .withDescription(
-                s"Invalid after token, outside of snapshot range (${snapshot.firstRowId} to ${snapshot.lastRowId})."
-              )
-              .asRuntimeException()
-          )
-        case Some(value) => Future.successful(value + 1)
-        case None => Future.successful(snapshot.firstRowId)
       }
-      end = snapshot.lastRowId
-      partyIdsFilter = partyIds match {
-        case Nil =>
-          // This expression is always true (scan only processes data where the DSO is stakeholder).
-          // It is included to make sure the query plan uses the right index (acs_snapshot_data_all_filters)
-          sql"and stakeholder = ${dsoParty}"
-        case partyIds =>
-          (sql" and " ++ inClause("stakeholder", partyIds)).toActionBuilder
-      }
-      templatesFilter = templates match {
-        case Nil => sql""
-        case _ =>
-          (sql" and " ++ inClause(
-            "template_id",
-            templates.map(t =>
-              lengthLimited(
-                s"${t.packageName}:${t.qualifiedName.moduleName}:${t.qualifiedName.entityName}"
-              )
-            ),
-          )).toActionBuilder
-      }
-      events <- storage
-        .query(
-          (sql"""
-               with snapshot as (
-                  select create_id, max(row_id) as row_id
-                  from acs_snapshot_data
-                  where row_id between $begin and $end
-               """ ++ partyIdsFilter ++ templatesFilter ++ sql"""
-                  group by create_id
-                  order by row_id asc
-                  -- this CTE already will contain all snapshot rows (filtered by party id and template, if necessary).
-                  -- They just need to be joined with u_h_creates.
-                  -- Applying the limit later yields a worse query plan, where it requires fetching all snapshots first.
-                  -- See #1685
-                  limit ${sqlLimit(limit)}
-               )
-               select
-                 snapshot.row_id,
-                 update_row_id,
-                 event_id,
-                 contract_id,
-                 created_at,
-                 template_id_package_id,
-                 template_id_module_name,
-                 template_id_entity_name,
-                 package_name,
-                 create_arguments,
-                 signatories,
-                 observers,
-                 contract_key,
-                 record_time
-              from snapshot
-              join update_history_creates creates on creates.row_id = snapshot.create_id
-              order by snapshot.row_id
-            """).toActionBuilder
-            .as[(Long, SelectFromCreateEvents)],
-          "queryAcsSnapshot.getCreatedEvents",
-        )
-    } yield {
-      val eventsInPage =
-        applyLimitOrFail("queryAcsSnapshot", limit, events.map(_._2.toCreatedEvent))
-      val afterToken = if (eventsInPage.size == limit.limit) events.lastOption.map(_._1) else None
-      QueryAcsSnapshotResult(
-        migrationId = migrationId,
-        snapshotRecordTime = snapshot.snapshotRecordTime,
-        createdEventsInPage = eventsInPage,
-        afterToken = afterToken,
-      )
-    }
+      result <- queryLegacyTable(snapshot, after, limit, partyIds, templates)
+    } yield result
   }
 
   private def getIncrementalSnapshotAction = {
