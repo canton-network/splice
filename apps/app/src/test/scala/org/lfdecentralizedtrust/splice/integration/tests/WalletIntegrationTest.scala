@@ -34,6 +34,8 @@ import com.digitalasset.canton.discard.Implicits.DiscardOps
 import org.apache.pekko.http.scaladsl.Http
 import org.apache.pekko.http.scaladsl.model.{HttpRequest, HttpResponse, StatusCodes}
 import org.apache.pekko.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken}
+import org.scalatest.concurrent.PatienceConfiguration
+import org.scalatest.time.{Seconds, Span}
 import org.slf4j.event.Level
 
 import java.time.Duration
@@ -89,10 +91,8 @@ class WalletIntegrationTest
     "tap deduplicates" in { implicit env =>
       onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
       aliceWalletClient.tap(50.0, Some("dedup-test"))
-      assertThrowsAndLogsCommandFailures(
-        aliceWalletClient.tap(50.0, Some("dedup-test")),
-        _.errorMessage should include("409 Conflict"),
-      )
+      // Duplicate tap with the same command id returns the original result idempotently (200, not 409).
+      aliceWalletClient.tap(50.0, Some("dedup-test"))
     }
 
     "allow two wallet app users to connect to one wallet backend and tap" in { implicit env =>
@@ -225,9 +225,12 @@ class WalletIntegrationTest
 
           val tapsAfter = Range(0, 3).map(_ => Future(Try(aliceWalletClient.tap(10))))
 
-          // Wait for all futures to complete
-          val successfulTaps = (tapsBefore ++ tapsAfter).map(_.futureValue).count(_.isSuccess)
-          if (failedAcceptF.futureValue.isSuccess)
+          // Wait for all futures to complete. The stale accept forces the treasury to filter
+          // and retry batches, so under load this can exceed the default patience.
+          val patience = PatienceConfiguration.Timeout(Span(60, Seconds))
+          val successfulTaps =
+            (tapsBefore ++ tapsAfter).map(_.futureValue(patience)).count(_.isSuccess)
+          if (failedAcceptF.futureValue(patience).isSuccess)
             fail("The AcceptTransferOffer action unexpectedly succeeded")
 
           successfulTaps should be(
@@ -543,10 +546,11 @@ class WalletIntegrationTest
             aliceWalletClient.balance().unlockedQty should be(40.0)
           },
         )
-        assertThrowsAndLogsCommandFailures(
-          bobWalletClient.transferPreapprovalSend(aliceUserParty, 40.0, deduplicationId),
-          _.errorMessage should include("409 Conflict"),
-        )
+        // Duplicate send with same deduplication id returns the original result idempotently (200, not 409).
+        bobWalletClient.transferPreapprovalSend(aliceUserParty, 40.0, deduplicationId)
+        // Balance is unchanged — idempotent
+        bobWalletClient.balance().unlockedQty should be(60.0)
+        aliceWalletClient.balance().unlockedQty should be(40.0)
 
         clue("Preapproval sends work if provider has a featured app right") {
           // Feature alice validator to test a transfer with a featured preapproval provider

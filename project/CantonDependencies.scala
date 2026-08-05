@@ -97,14 +97,19 @@ object CantonDependencies {
     "com.daml" %% "daml-grpc-utils" % canton_library_version
 
   lazy val canton_java_bindings = "com.daml" % "bindings-java" % canton_library_version
+  lazy val canton_kms_driver_api = "com.daml" %% "kms-driver-api" % canton_library_version
   lazy val canton_ledger_api_core = "com.daml" %% "ledger-api-core" % canton_library_version
   lazy val canton_ledger_api_scala = "com.daml" %% "ledger-api-scala" % canton_library_version
+  lazy val canton_base_errors = "com.daml" %% "base-errors" % canton_library_version
   lazy val canton_observability_metrics =
     "com.daml" %% "observability-metrics" % canton_library_version
   lazy val canton_contextualized_logging =
     "com.daml" %% "contextualized-logging" % canton_library_version
   lazy val canton_traffic_enforcement_api =
     "com.daml" %% "traffic-enforcement-api" % canton_library_version
+  lazy val canton_util_external = "com.daml" %% "util-external" % canton_library_version
+  lazy val canton_wartremover_annotations =
+    "com.daml" %% "wartremover-annotations" % canton_library_version
 
   lazy val canton_blake2b = "com.daml" %% "blake2b" % canton_library_version
   lazy val canton_magnolify_addon = "com.daml" %% "magnolify-addon" % canton_library_version
@@ -184,6 +189,8 @@ object CantonDependencies {
   lazy val scala_logging = "com.typesafe.scala-logging" %% "scala-logging" % "3.9.5"
   lazy val scalacheck = "org.scalacheck" %% "scalacheck" % scalacheck_version
   lazy val scalatest = "org.scalatest" %% "scalatest" % scalatest_version
+  lazy val scalatest_shouldmatchers =
+    "org.scalatest" %% "scalatest-shouldmatchers" % scalatest_version
   lazy val scalaz_core = "org.scalaz" %% "scalaz-core" % scalaz_version
   lazy val scalatestScalacheck =
     "org.scalatestplus" %% "scalacheck-1-18" % (scalatest_version + ".0")

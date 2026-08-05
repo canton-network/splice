@@ -137,7 +137,7 @@ export const OffboardSvForm: React.FC = _ => {
             >
               {field => (
                 <field.DateField
-                  title="Threshold Deadline"
+                  title="Quorum Threshold Deadline"
                   description={THRESHOLD_DEADLINE_SUBTITLE}
                   id="offboard-sv-expiry-date"
                 />
@@ -175,7 +175,7 @@ export const OffboardSvForm: React.FC = _ => {
                 onChange: ({ value }) => validateUrl(value),
               }}
             >
-              {field => <field.TextField title="URL" id="offboard-sv-url" />}
+              {field => <field.TextField title="SUPPORTING URL" id="offboard-sv-url" />}
             </form.AppField>
           </>
         )}

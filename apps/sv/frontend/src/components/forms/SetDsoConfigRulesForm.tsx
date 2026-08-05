@@ -266,7 +266,7 @@ export const SetDsoConfigRulesForm: () => JSX.Element = () => {
           >
             {field => (
               <field.DateField
-                title="Threshold Deadline"
+                title="Quorum Threshold Deadline"
                 description={THRESHOLD_DEADLINE_SUBTITLE}
                 id="set-dso-config-rules-expiry-date"
               />
@@ -304,7 +304,7 @@ export const SetDsoConfigRulesForm: () => JSX.Element = () => {
               onChange: ({ value }) => validateUrl(value),
             }}
           >
-            {field => <field.TextField title="URL" id="set-dso-config-rules-url" />}
+            {field => <field.TextField title="SUPPORTING URL" id="set-dso-config-rules-url" />}
           </form.AppField>
         </>
       )}

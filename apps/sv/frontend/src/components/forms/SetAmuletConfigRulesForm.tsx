@@ -250,7 +250,7 @@ export const SetAmuletConfigRulesForm: () => JSX.Element = () => {
           >
             {field => (
               <field.DateField
-                title="Threshold Deadline"
+                title="Quorum Threshold Deadline"
                 description={THRESHOLD_DEADLINE_SUBTITLE}
                 id="set-amulet-config-rules-expiry-date"
               />
@@ -288,7 +288,7 @@ export const SetAmuletConfigRulesForm: () => JSX.Element = () => {
               onChange: ({ value }) => validateUrl(value),
             }}
           >
-            {field => <field.TextField title="URL" id="set-amulet-config-rules-url" />}
+            {field => <field.TextField title="SUPPORTING URL" id="set-amulet-config-rules-url" />}
           </form.AppField>
         </>
       )}

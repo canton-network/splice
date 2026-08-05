@@ -406,6 +406,21 @@ tests:
           path: spec.template.spec.serviceAccountName
           value: "custom-domain-sa"
 
+  - it: "applies sequencer-specific JVM options"
+    set:
+      sequencer.additionalJvmOptions: "-Dsequencer.option=true"
+      mediator.additionalJvmOptions: "-Dmediator.option=true"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='sequencer')].env[?(@.name=='JAVA_TOOL_OPTIONS')].value
+          pattern: '-Dsequencer\.option=true'
+      - notMatchRegex:
+          path: spec.template.spec.containers[?(@.name=='sequencer')].env[?(@.name=='JAVA_TOOL_OPTIONS')].value
+          pattern: '-Dmediator\.option=true'
+
   - it: "sets default security contexts for pods and containers"
     set:
       sequencer:

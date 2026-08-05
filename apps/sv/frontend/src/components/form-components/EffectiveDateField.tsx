@@ -10,6 +10,7 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { EffectivityType } from '../../utils/types';
 import React, { useMemo } from 'react';
 import { RadioSelector } from './RadioSelector';
+import { datePickerFieldSx } from '../../themes/fieldStyles';
 
 const effectiveAtDisplayFormat = 'YYYY-MM-DD HH:mm';
 
@@ -106,46 +107,10 @@ export const EffectiveDateField: React.FC<EffectiveDateFieldProps> = props => {
                       error: !field.state.meta.isValid,
                       helperText: field.state.meta.errors?.[0],
                       onBlur: field.handleBlur,
+                      sx: datePickerFieldSx,
                       inputProps: {
                         'data-testid': `${id}-field`,
                       },
-                      sx: theme => ({
-                        width: '100%',
-                        '& .MuiOutlinedInput-root': {
-                          backgroundColor: '#363636',
-                          borderRadius: '4px',
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          alignSelf: 'stretch',
-                          flexWrap: 'nowrap',
-                          padding: '13px 16px',
-                          overflow: 'hidden',
-                          minHeight: 'unset',
-                          '& fieldset': {
-                            border: 'none',
-                            borderRadius: '4px',
-                          },
-                        },
-                        '& .MuiOutlinedInput-input': {
-                          ...theme.typography.body2,
-                          flex: 1,
-                          minWidth: 0,
-                          padding: 0,
-                          lineHeight: '22px',
-                          color: theme.palette.text.light,
-                          backgroundColor: 'transparent',
-                          borderRadius: 0,
-                          WebkitBoxShadow: 'none',
-                        },
-                        '& .MuiInputAdornment-root': {
-                          flexShrink: 0,
-                          marginLeft: theme.spacing(1.25),
-                        },
-                        '& .MuiFormHelperText-root': {
-                          mx: 0,
-                        },
-                      }),
                     },
                   }}
                 />

@@ -5,6 +5,9 @@
 
 set -euo pipefail
 
+set -E
+trap 'echo "ERROR: On line $LINENO in function \"${FUNCNAME[0]}\". Exit code is $?." >&2' ERR
+
 SV_METRICS_URL="${SV_METRICS_URL:-http://sv-app:10013/metrics}"
 SCAN_URL="${SCAN_URL:-http://scan-app:5012}"
 
@@ -27,8 +30,11 @@ if [[ $TLS_SKIP_VERIFY == true ]]; then
   GRPC_HEALTH_CMD+=(--insecure)
 fi
 
+GRPC_HEALTH_CONN_CMD=("${GRPC_HEALTH_CMD[@]}" --connect-only)
+
 CURL_CMD_JSON=$(jq -nc --args '$ARGS.positional' -- "${CURL_CMD[@]}")
 GRPC_HEALTH_CMD_JSON=$(jq -nc --args '$ARGS.positional' -- "${GRPC_HEALTH_CMD[@]}")
+GRPC_HEALTH_CONN_CMD_JSON=$(jq -nc --args '$ARGS.positional' -- "${GRPC_HEALTH_CONN_CMD[@]}")
 
 prom2json() {
   P2J_VERSION="1.5.0"
@@ -286,35 +292,52 @@ run_parallel() {
   printf "%s" "$result" | jq -es 'add | values' || echo '{}'
 }
 
+# Fetches the list of scans from the Scan API and returns a JSON object with
+# svNames as keys and public URLs as values.
+get_scan_urls() {
+  local scan_info; scan_info=$(
+    "${CURL_CMD[@]}" "$SCAN_URL/api/scan/v0/scans" || echo '{}'
+  )
+
+  local scan_urls; scan_urls=$(
+    local result; result=$(
+      echo "$scan_info" |
+        jq -e '.scans[]?.scans | map({ (.svName): .publicUrl }) | add | values'
+    ) && echo "$result" || echo '{}'
+  )
+
+  echo "$scan_urls"
+}
+
 # Tries to reach the scan and checks the age of the last open and issuing
 # rounds. Returns a JSON object with svNames as keys and 0 (reachable and
 # rounds within threshold), 1 (reachable but rounds not within threshold) or 2
 # (not reachable) as values.
 scan_get_status_rounds() {
-  local scan_url=$SCAN_URL
-  local scans_info_url="$scan_url/api/scan/v0/scans"
-
-  local scan_info; scan_info=$("${CURL_CMD[@]}" "$scans_info_url" || echo '{}')
+  local scan_urls; scan_urls=$(get_scan_urls)
 
   local scan_cmds_rounds; scan_cmds_rounds=$(
     local result; result=$(
-      echo "$scan_info" |
-        jq -e \
-          --argjson cmd "$CURL_CMD_JSON" \
-          '
-            .scans[]?.scans
-            | map(
-                {
-                  (.svName):
-                    $cmd +
-                    ["--compressed"] +
-                    ["--json", ({"cached_open_mining_round_contract_ids": [], "cached_issuing_round_contract_ids": []} | tojson)] +
-                    [.publicUrl + "/api/scan/v0/open-and-issuing-mining-rounds"]
-                }
-              )
-            | add
-            | values
-          '
+      jq -ne \
+        --argjson cmd "$CURL_CMD_JSON" \
+        --argjson scan_urls "$scan_urls" \
+        '
+          $scan_urls
+          | to_entries
+          | map(
+              .key as $svName |
+              .value as $scanUrl |
+              {
+                ($svName):
+                  $cmd +
+                  ["--compressed"] +
+                  ["--json", ({"cached_open_mining_round_contract_ids": [], "cached_issuing_round_contract_ids": []} | tojson)] +
+                  [$scanUrl + "/api/scan/v0/open-and-issuing-mining-rounds"]
+              }
+            )
+          | add
+          | values
+        '
     ) && echo "$result" || echo '{}'
   )
 
@@ -385,17 +408,7 @@ scan_try_fetch_event() {
 }
 
 scan_get_status_events() {
-  local scan_url=$SCAN_URL
-  local scans_info_url="$scan_url/api/scan/v0/scans"
-
-  local scan_info; scan_info=$("${CURL_CMD[@]}" "$scans_info_url" || echo '{}')
-
-  local scan_urls; scan_urls=$(
-    local result; result=$(
-      echo "$scan_info" |
-        jq -e '.scans[]?.scans | map({ (.svName): .publicUrl }) | add | values'
-    ) && echo "$result" || echo '{}'
-  )
+  local scan_urls; scan_urls=$(get_scan_urls)
 
   local scan_cmds_events; scan_cmds_events=$(
     local result; result=$(
@@ -449,6 +462,71 @@ sequencer_get_status_reachability() {
   )
 
   echo "$sequencer_status"
+}
+
+# Tries to reach the cantonbft. Returns a JSON object with svNames as keys and
+# 0 (reachable) or 2 (otherwise) as values.
+cantonbft_get_status_reachability() {
+  local scan_urls; scan_urls=$(get_scan_urls)
+
+  local get_cantonbfts_info_cmds; get_cantonbfts_info_cmds=$(
+    local result; result=$(
+      jq -ne \
+        --argjson cmd "$CURL_CMD_JSON" \
+        --argjson scan_urls "$scan_urls" \
+        '
+          $scan_urls | to_entries
+          | map(
+              .key as $svName |
+              .value as $scanUrl |
+              {
+                ($svName): $cmd + [$scanUrl + "/api/scan/v0/sv-bft-sequencers"]
+              }
+            )
+          | add
+          | values
+        '
+    ) && echo "$result" || echo '{}'
+  )
+
+  local cantonbfts_info; cantonbfts_info=$(
+    {
+      run_parallel "$get_cantonbfts_info_cmds" |
+        json_object_values_fromjson || echo '{}'
+    } |
+    jq '{ bftSequencers: map(.bftSequencers[]?) }'
+  )
+
+  local cantonbfts_info_for_serial; cantonbfts_info_for_serial=$(
+    echo "$cantonbfts_info" |
+      jq --argjson serial "$SERIAL_ID" '[.bftSequencers[]? | select(.serialId == $serial)]'
+  )
+
+  local cantonbfts_cmds; cantonbfts_cmds=$(
+    local result; result=$(
+      echo "$cantonbfts_info_for_serial" |
+        jq -e \
+          --argjson cmd "$GRPC_HEALTH_CONN_CMD_JSON" \
+          '
+            .
+            | map(
+                (.id | split("::")[1]) as $svName |
+                {
+                  ($svName): $cmd + [.p2pUrl]
+                }
+              )
+            | add
+            | values
+          '
+    ) && echo "$result" || echo '{}'
+  )
+
+  local cantonbft_status; cantonbft_status=$(
+    run_parallel "$cantonbfts_cmds" |
+      json_object_values_fromjson || echo '{}'
+  )
+
+  echo "$cantonbft_status"
 }
 
 update_serial_id() {
@@ -526,6 +604,9 @@ main() {
   local sequencer_status_reachability; sequencer_status_reachability=$(sequencer_get_status_reachability)
   local sequencer_status; sequencer_status=$(echo "$sequencer_status_lag" "$sequencer_status_reachability" | combine_status)
 
+  # Get CantonBFT status
+  local cantonbft_status; cantonbft_status=$(cantonbft_get_status_reachability)
+
   jq -Sn \
     --argjson sv "$sv_status" \
     --argjson sv_threshold "$SV_THRESHOLD" \
@@ -536,6 +617,7 @@ main() {
     --argjson scan_threshold_events "$SCAN_THRESHOLD_EVENTS" \
     --argjson sequencer "$sequencer_status" \
     --argjson sequencer_threshold "$SEQUENCER_THRESHOLD" \
+    --argjson cantonbft "$cantonbft_status" \
     '
       {
         status: {
@@ -543,6 +625,7 @@ main() {
           mediator:  {nodes: $mediator,  description: "Last acknowledgment within \($mediator_threshold) seconds"},
           scan:      {nodes: $scan,      description: "Reachable, last open and issuing rounds are within \($scan_threshold_rounds) seconds and recent events are within \($scan_threshold_events) seconds"},
           sequencer: {nodes: $sequencer, description: "Reachable, last acknowledgment within \($sequencer_threshold) seconds"},
+          cantonbft: {nodes: $cantonbft, description: "Reachable"},
         },
         generatedAt: (now | todate),
       }

@@ -150,6 +150,9 @@ abstract class InStackDecentralizedSynchronizerNode
               : []
             ).concat(physicalSynchronizerConfig.sequencer.additionalEnvVars),
             resources: physicalSynchronizerConfig.sequencer.resources,
+            additionalJvmOptions: getAdditionalJvmOptions(
+              physicalSynchronizerConfig.sequencer.additionalJvmOptions
+            ),
           },
           mediator: {
             ...decentralizedSynchronizerValues.mediator,
@@ -162,6 +165,9 @@ abstract class InStackDecentralizedSynchronizerNode
             },
             additionalEnvVars: physicalSynchronizerConfig.mediator.additionalEnvVars,
             resources: physicalSynchronizerConfig.mediator.resources,
+            additionalJvmOptions: getAdditionalJvmOptions(
+              physicalSynchronizerConfig.mediator.additionalJvmOptions
+            ),
           },
           enablePostgresMetrics: true,
           metrics: {
@@ -171,10 +177,6 @@ abstract class InStackDecentralizedSynchronizerNode
             },
           },
           livenessProbeInitialDelaySeconds: domainLivenessProbeInitialDelaySeconds,
-          // TODO(#5805): These are used both for sequencer and mediator while the mediator config is ignored.
-          additionalJvmOptions: getAdditionalJvmOptions(
-            physicalSynchronizerConfig.sequencer.additionalJvmOptions
-          ),
           pvc: persistentHeapDumpsPvc(),
           serviceAccountName: imagePullServiceAccountName,
           enableAntiAffinity: physicalSynchronizerConfig.sequencer.enableAntiAffinity,

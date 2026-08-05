@@ -27,22 +27,15 @@ lazy val `canton-community-integration-testing` = BuildCommon.`canton-community-
 lazy val `canton-community-testing` = BuildCommon.`canton-community-testing`
 lazy val `canton-slick-fork` = BuildCommon.`canton-slick-fork`
 lazy val `canton-wartremover-extension` = BuildCommon.`canton-wartremover-extension`
-lazy val `canton-wartremover-annotations` = BuildCommon.`canton-wartremover-annotations`
-lazy val `canton-util-external` = BuildCommon.`canton-util-external`
 lazy val `canton-util-observability` = BuildCommon.`canton-util-observability`
-lazy val `canton-pekko-fork` = BuildCommon.`canton-pekko-fork`
-lazy val `canton-scalatest-addon` = BuildCommon.`canton-scalatest-addon`
-lazy val `canton-ledger-common` = BuildCommon.`canton-ledger-common`
 lazy val `canton-ledger-api-value` = BuildCommon.`canton-ledger-api-value`
 lazy val `canton-ledger-json-api` = BuildCommon.`canton-ledger-json-api`
-lazy val `canton-daml-adjustable-clock` = BuildCommon.`canton-daml-adjustable-clock`
-lazy val `canton-base-errors` = BuildCommon.`canton-base-errors`
-lazy val `canton-google-common-protos-scala` = BuildCommon.`canton-google-common-protos-scala`
 lazy val `canton-sequencer-driver-api` = BuildCommon.`canton-sequencer-driver-api`
-lazy val `canton-kms-driver-api` = BuildCommon.`canton-kms-driver-api`
 lazy val `canton-community-reference-driver` = BuildCommon.`canton-community-reference-driver`
 lazy val `canton-observability-metrics-testing` = BuildCommon.`canton-observability-metrics-testing`
 lazy val `canton-traffic-enforcement-component` = BuildCommon.`canton-traffic-enforcement-component`
+lazy val `daml-lf-transaction-test-lib` = BuildCommon.`daml-lf-transaction-test-lib`
+lazy val `daml-lf-data-scalacheck` = BuildCommon.`daml-lf-data-scalacheck`
 
 lazy val `splice-wartremover-extension` = Wartremover.`splice-wartremover-extension`
 
@@ -143,9 +136,7 @@ lazy val root: Project = (project in file("."))
     `canton-community-app-base`,
     `canton-community-synchronizer`,
     `canton-community-participant`,
-    `canton-ledger-common`,
     `canton-ledger-api-value`,
-    `canton-google-common-protos-scala`,
     `canton-observability-metrics-testing`,
     pulumi,
     `load-tester`,
@@ -1176,6 +1167,29 @@ lazy val `splitwell-test-daml` =
       Compile / damlEnableJavaCodegen := false,
     )
 
+lazy val `lf-value-json` =
+  project
+    .in(file("canton-fork/lf-value-json"))
+    .dependsOn(
+      `canton-ledger-json-api`,
+      `daml-lf-transaction-test-lib`,
+    )
+    .settings(
+      scalacOptions += "-Xsource-features:infer-override",
+      libraryDependencies ++= {
+        import CantonDependencies._
+        Seq(
+          CantonDependencies.canton_ledger_api_core,
+          daml_lf_api_type_signature,
+          scalatest % Test,
+          scalacheck % Test,
+          scalaz_scalacheck % Test,
+          scalatestScalacheck % Test,
+        )
+      },
+      CantonDependencies.excludeTranscodeConflictingDependencies,
+    )
+
 lazy val `apps-common` =
   project
     .in(file("apps/common"))
@@ -1183,6 +1197,7 @@ lazy val `apps-common` =
       `canton-community-common`,
       `canton-community-app` % "compile->compile;test->test",
       `canton-community-testing` % "test->test",
+      `lf-value-json`,
       `splice-wartremover-extension` % "compile->compile;test->test",
       // We include all DARs here to make sure they are available as resources.
       `splice-amulet-daml`,
@@ -2046,9 +2061,6 @@ def mergeStrategy(oldStrategy: String => MergeStrategy): String => MergeStrategy
           "Log4j2Plugins.dat",
         ) =>
       MergeStrategy.first
-    case (PathList("org", "apache", "pekko", "stream", "scaladsl", broadcasthub, _*))
-        if broadcasthub.startsWith("BroadcastHub") =>
-      MergeStrategy.first
     case "META-INF/versions/9/module-info.class" => MergeStrategy.discard
     case path if path.contains("module-info.class") => MergeStrategy.discard
     case PathList("org", "jline", _ @_*) => MergeStrategy.first
@@ -2335,7 +2347,6 @@ lazy val `apps-dar-resources-generator` =
   project
     .in(file("apps/dar-resources-generator"))
     .dependsOn(
-      `canton-util-external`,
       // We include all DARs here to make sure they are available as resources.
       `splice-amulet-daml`,
       `splice-amulet-name-service-daml`,
@@ -2370,6 +2381,7 @@ lazy val `apps-dar-resources-generator` =
       Headers.ApacheDAHeaderSettings,
       libraryDependencies ++= Seq(
         Dependencies.better_files,
+        CantonDependencies.canton_util_external,
         CantonDependencies.daml_lf_archive_reader,
         CantonDependencies.cats,
       ),
@@ -2396,6 +2408,7 @@ lazy val `apps-app`: Project =
       // scalatestplus-selenium is lagging behind, it depends on selenium 4.12,
       // but that's fine as it's compatible with selenium 4.44 that we end up using
       libraryDependencies += "org.scalatestplus" %% "selenium-4-12" % "3.2.17.0" % "test",
+      libraryDependencies += CantonDependencies.scalatest_shouldmatchers,
       libraryDependencies += "org.seleniumhq.selenium" % "selenium-java" % "4.44.0" % "test",
       libraryDependencies += "eu.rekawek.toxiproxy" % "toxiproxy-java" % "2.1.4" % "test",
       libraryDependencies += auth0,

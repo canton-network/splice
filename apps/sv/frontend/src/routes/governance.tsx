@@ -23,6 +23,7 @@ import {
   computeVoteStats,
   computeYourVote,
   getVoteResultStatus,
+  getRequesterPartyId,
 } from '../utils/governance';
 import { SupportedActionTag, ProposalListingData } from '../utils/types';
 import { Link as RouterLink } from 'react-router';
@@ -57,6 +58,7 @@ export const Governance: React.FC = () => {
 
   const svPartyId = dsoInfosQuery.data?.svPartyId;
   const votingThreshold = dsoInfosQuery.data?.votingThreshold;
+  const svs = dsoInfosQuery.data?.dsoRules.payload.svs;
   const alreadyVotedRequestIds: Set<ContractId<VoteRequest>> = useMemo(() => {
     return svPartyId && votesQuery.data
       ? new Set(votesQuery.data.filter(v => v.voter === svPartyId).map(v => v.requestCid))
@@ -81,7 +83,7 @@ export const Governance: React.FC = () => {
         const votes = vr.request.votes.entriesArray().map(e => e[1]);
 
         return {
-          contractId: vr.request.trackingCid,
+          contractId: (vr.request.trackingCid ?? '') as ContractId<VoteRequest>,
           actionName:
             actionTagToTitle(amuletName)[getAction(vr.request.action) as SupportedActionTag],
           description: vr.request.reason.body,
@@ -94,9 +96,10 @@ export const Governance: React.FC = () => {
           status: getVoteResultStatus(vr.outcome),
           voteStats: computeVoteStats(votes),
           acceptanceThreshold: votingThreshold,
+          requester: getRequesterPartyId(vr.request.requester, svs),
         } as ProposalListingData;
       });
-  }, [voteResultsInfiniteQuery.data?.pages, amuletName, svPartyId, votingThreshold]);
+  }, [voteResultsInfiniteQuery.data?.pages, amuletName, svPartyId, votingThreshold, svs]);
 
   if (
     dsoInfosQuery.isPending ||
@@ -128,8 +131,7 @@ export const Governance: React.FC = () => {
         description: vr.payload.reason.body,
         votingCloses: dayjs(vr.payload.voteBefore).format(dateTimeFormatISO),
         createdAt: dayjs(vr.createdAt).format(dateTimeFormatISO),
-        requester: vr.payload.requester,
-        isYou: vr.payload.requester === svPartyId,
+        requester: getRequesterPartyId(vr.payload.requester, svs),
       } as ActionRequiredData;
     });
 
@@ -152,6 +154,7 @@ export const Governance: React.FC = () => {
         status: 'In Progress',
         voteStats: computeVoteStats(votes),
         acceptanceThreshold: dsoInfosQuery.data.votingThreshold,
+        requester: getRequesterPartyId(v.payload.requester, svs),
       } as ProposalListingData;
     });
 
