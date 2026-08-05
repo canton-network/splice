@@ -15,6 +15,8 @@
           accepted command id receives a 200 response with the same result as the first.
           Concurrent duplicates, where no submission has completed yet, are still rejected.
 
+        - ``TransferPreapprovalProposal`` s are now accepted if there is an existing one but it has expired.
+
     - CantonBft
 
          - Increase the default segment length by 4x to reduce performance impact from epoch switches.
