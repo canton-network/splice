@@ -5,11 +5,10 @@ package org.lfdecentralizedtrust.splice.scan.automation
 
 import com.daml.metrics.api.MetricsContext
 import org.lfdecentralizedtrust.splice.automation.TriggerContext
-import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore
+import org.lfdecentralizedtrust.splice.scan.store.{AcsSnapshotStore, LegacyAcsSnapshotStore}
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{
   AcsSnapshot,
   IncrementalAcsSnapshot,
-  IncrementalAcsSnapshotTable,
 }
 import org.lfdecentralizedtrust.splice.store.{HistoryMetrics, UpdateHistory}
 import com.digitalasset.canton.data.CantonTimestamp
@@ -25,7 +24,7 @@ import org.lfdecentralizedtrust.splice.store.HistoryMetrics.AcsSnapshotsMetrics
 import scala.concurrent.{ExecutionContext, Future}
 
 class AcsSnapshotBackfillingTrigger(
-    store: AcsSnapshotStore,
+    store: LegacyAcsSnapshotStore,
     updateHistory: UpdateHistory,
     storageConfig: ScanStorageConfig,
     override protected val context: TriggerContext,
@@ -35,8 +34,10 @@ class AcsSnapshotBackfillingTrigger(
     mat: Materializer,
 ) extends AcsSnapshotTriggerBase(store, updateHistory, context) {
 
-  override val snapshotTable: IncrementalAcsSnapshotTable =
-    AcsSnapshotStore.IncrementalAcsSnapshotTable.Backfill
+  assert(
+    store.table == AcsSnapshotStore.IncrementalAcsSnapshotTable.Backfill,
+    "AcsSnapshotBackfillingTrigger must use the backfilling table.",
+  )
 
   override val snapshotMetrics: AcsSnapshotsMetrics = new HistoryMetrics(context.metricsFactory)(
     MetricsContext.Empty

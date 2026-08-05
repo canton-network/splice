@@ -43,48 +43,130 @@ trait AcsSnapshotStore {
   def currentMigrationId: Long
 
   def initializeSnapshot(
-      table: IncrementalAcsSnapshotTable,
       initializeFromT: AcsSnapshot,
       targetRecordTime: CantonTimestamp,
   )(implicit tc: TraceContext): Future[Unit]
 
   def initializeSnapshotFromImportUpdates(
-      table: IncrementalAcsSnapshotTable,
       recordTime: CantonTimestamp,
       targetRecordTime: CantonTimestamp,
       migrationId: Long,
   )(implicit tc: TraceContext): Future[Unit]
 
   def updateSnapshot(
-      table: IncrementalAcsSnapshotTable,
       snapshot: IncrementalAcsSnapshot,
       targetRecordTime: CantonTimestamp,
   )(implicit tc: TraceContext): Future[Unit]
 
   def saveSnapshot(
-      table: IncrementalAcsSnapshotTable,
       snapshot: IncrementalAcsSnapshot,
       nextSnapshotTargetRecordTime: CantonTimestamp,
   )(implicit tc: TraceContext): Future[Option[Int]]
 
   def deleteSnapshot(
-      table: IncrementalAcsSnapshotTable,
-      snapshot: IncrementalAcsSnapshot,
+      snapshot: IncrementalAcsSnapshot
   )(implicit tc: TraceContext): Future[Unit]
+
+  def deleteSnapshot(
+      snapshot: AcsSnapshot
+  )(implicit
+      tc: TraceContext
+  ): Future[Unit]
 
   // TODO: this is more like "get progress" from latest snapshot or sth like that
   // suggestion: getSnapshotInProgress
-  def getIncrementalSnapshot(
-      table: IncrementalAcsSnapshotTable
-  )(implicit tc: TraceContext): Future[Option[IncrementalAcsSnapshot]]
+  def getIncrementalSnapshot()(implicit tc: TraceContext): Future[Option[IncrementalAcsSnapshot]]
+
+  def lookupSnapshotAfter(
+      migrationId: Long,
+      after: CantonTimestamp,
+  )(implicit tc: TraceContext): Future[Option[AcsSnapshot]]
 
   def lookupSnapshotAtOrBefore(
       migrationId: Long,
       before: CantonTimestamp,
   )(implicit tc: TraceContext): Future[Option[AcsSnapshot]]
+
+  def queryAcsSnapshot(
+      migrationId: Long,
+      snapshot: CantonTimestamp,
+      after: Option[Long],
+      limit: Limit,
+      partyIds: Seq[PartyId],
+      templates: Seq[PackageQualifiedName],
+  )(implicit tc: TraceContext): Future[QueryAcsSnapshotResult]
+
+  def getHoldingsState(
+      migrationId: Long,
+      snapshot: CantonTimestamp,
+      after: Option[Long],
+      limit: Limit,
+      partyIds: NonEmptyVector[PartyId],
+  )(implicit ec: ExecutionContext, tc: TraceContext): Future[QueryAcsSnapshotResult] = {
+    this
+      .queryAcsSnapshot(
+        migrationId,
+        snapshot,
+        after,
+        limit,
+        partyIds.toVector,
+        AcsSnapshotStore.holdingsTemplates,
+      )
+      .map { result =>
+        val partyIdsSet = partyIds.toVector.toSet
+        QueryAcsSnapshotResult(
+          result.migrationId,
+          result.snapshotRecordTime,
+          result.createdEventsInPage
+            .filter { createdEvent =>
+              AcsSnapshotStore
+                .decodeHoldingContract(createdEvent.event)
+                .fold(
+                  locked =>
+                    partyIdsSet
+                      .contains(PartyId.tryFromProtoPrimitive(locked.payload.amulet.owner)),
+                  amulet =>
+                    partyIdsSet.contains(PartyId.tryFromProtoPrimitive(amulet.payload.owner)),
+                )
+            },
+          result.afterToken,
+        )
+      }
+  }
+
+  def getHoldingsSummary(
+      migrationId: Long,
+      recordTime: CantonTimestamp,
+      partyIds: NonEmptyVector[PartyId],
+      asOfRound: Long,
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[AcsSnapshotStore.HoldingsSummaryResult] = {
+    this
+      .getHoldingsState(
+        migrationId,
+        recordTime,
+        None,
+        // if the limit is exceeded by the results from the DB, an exception will be thrown
+        HardLimit.tryCreate(Limit.DefaultMaxPageSize),
+        partyIds,
+      )
+      .map { result =>
+        val contracts = result.createdEventsInPage
+          .map(event => AcsSnapshotStore.decodeHoldingContract(event.event))
+        contracts.foldLeft(
+          AcsSnapshotStore.HoldingsSummaryResult(migrationId, recordTime, asOfRound, Map.empty)
+        ) {
+          case (acc, Right(amulet)) => acc.addAmulet(amulet.payload)
+          case (acc, Left(lockedAmulet)) => acc.addLockedAmulet(lockedAmulet.payload)
+        }
+      }
+  }
 }
 
 class LegacyAcsSnapshotStore(
+    val table: IncrementalAcsSnapshotTable,
     storage: DbStorage,
     val updateHistory: UpdateHistory,
     dsoParty: PartyId,
@@ -162,7 +244,7 @@ class LegacyAcsSnapshotStore(
   ): Future[Int] = {
     Future {
       scala.concurrent.blocking {
-        AcsSnapshotStore.PreventConcurrentSnapshotsSemaphore.acquire()
+        LegacyAcsSnapshotStore.PreventConcurrentSnapshotsSemaphore.acquire()
       }
     }.flatMap { _ =>
       val from = lastSnapshot.map(_.snapshotRecordTime).getOrElse(CantonTimestamp.MinValue)
@@ -248,7 +330,7 @@ class LegacyAcsSnapshotStore(
              """).toActionBuilder.asUpdate
       storage.queryAndUpdate(withExclusiveSnapshotDataLock(statement), "insertNewSnapshot")
     }.andThen { _ =>
-      AcsSnapshotStore.PreventConcurrentSnapshotsSemaphore.release()
+      LegacyAcsSnapshotStore.PreventConcurrentSnapshotsSemaphore.release()
     }
   }
 
@@ -290,7 +372,7 @@ class LegacyAcsSnapshotStore(
   private def perTableAcsSnapshotsWereEnabledError(perTable: PerTableAcsSnapshot) =
     io.grpc.Status.FAILED_PRECONDITION
       .withDescription(
-        "LegacyAcsSnapshotStore found a PerTableAcsSnapshot. This is unsupported. Did you accidentally disable per-table ACS snapshots after having enabled them?"
+        s"LegacyAcsSnapshotStore found a PerTableAcsSnapshot: $perTable. This is unsupported. Did you accidentally disable per-table ACS snapshots after having enabled them?"
       )
       .asRuntimeException()
 
@@ -430,74 +512,7 @@ class LegacyAcsSnapshotStore(
     }
   }
 
-  def getHoldingsState(
-      migrationId: Long,
-      snapshot: CantonTimestamp,
-      after: Option[Long],
-      limit: Limit,
-      partyIds: NonEmptyVector[PartyId],
-  )(implicit tc: TraceContext): Future[QueryAcsSnapshotResult] = {
-    this
-      .queryAcsSnapshot(
-        migrationId,
-        snapshot,
-        after,
-        limit,
-        partyIds.toVector,
-        AcsSnapshotStore.holdingsTemplates,
-      )
-      .map { result =>
-        val partyIdsSet = partyIds.toVector.toSet
-        QueryAcsSnapshotResult(
-          result.migrationId,
-          result.snapshotRecordTime,
-          result.createdEventsInPage
-            .filter { createdEvent =>
-              AcsSnapshotStore
-                .decodeHoldingContract(createdEvent.event)
-                .fold(
-                  locked =>
-                    partyIdsSet
-                      .contains(PartyId.tryFromProtoPrimitive(locked.payload.amulet.owner)),
-                  amulet =>
-                    partyIdsSet.contains(PartyId.tryFromProtoPrimitive(amulet.payload.owner)),
-                )
-            },
-          result.afterToken,
-        )
-      }
-  }
-
-  def getHoldingsSummary(
-      migrationId: Long,
-      recordTime: CantonTimestamp,
-      partyIds: NonEmptyVector[PartyId],
-      asOfRound: Long,
-  )(implicit tc: TraceContext): Future[AcsSnapshotStore.HoldingsSummaryResult] = {
-    this
-      .getHoldingsState(
-        migrationId,
-        recordTime,
-        None,
-        // if the limit is exceeded by the results from the DB, an exception will be thrown
-        HardLimit.tryCreate(Limit.DefaultMaxPageSize),
-        partyIds,
-      )
-      .map { result =>
-        val contracts = result.createdEventsInPage
-          .map(event => AcsSnapshotStore.decodeHoldingContract(event.event))
-        contracts.foldLeft(
-          AcsSnapshotStore.HoldingsSummaryResult(migrationId, recordTime, asOfRound, Map.empty)
-        ) {
-          case (acc, Right(amulet)) => acc.addAmulet(amulet.payload)
-          case (acc, Left(lockedAmulet)) => acc.addLockedAmulet(lockedAmulet.payload)
-        }
-      }
-  }
-
-  private def getIncrementalSnapshotAction(
-      table: IncrementalAcsSnapshotTable
-  ) = {
+  private def getIncrementalSnapshotAction = {
     sql"""
       select
         snapshot_id,
@@ -518,11 +533,10 @@ class LegacyAcsSnapshotStore(
     *              MUST be a compile time constant, as it is included directly in the SQL statement.
     */
   def getIncrementalSnapshot(
-      table: IncrementalAcsSnapshotTable
   )(implicit tc: TraceContext): Future[Option[IncrementalAcsSnapshot]] = {
     storage
       .querySingle(
-        getIncrementalSnapshotAction(table),
+        getIncrementalSnapshotAction,
         "getIncrementalSnapshot",
       )
       .value
@@ -537,14 +551,13 @@ class LegacyAcsSnapshotStore(
     * an action has already been applied.
     */
   private def withIncrementalSnapshotIdempotencyCheck[R, E <: Effect](
-      table: IncrementalAcsSnapshotTable,
       action: DBIOAction[R, NoStream, E],
       expectedState: Option[IncrementalAcsSnapshot],
   )(implicit
       tc: TraceContext
   ): DBIOAction[Option[R], NoStream, Effect.Transactional & Effect.Read & E] = {
     (for {
-      actualState <- getIncrementalSnapshotAction(table)
+      actualState <- getIncrementalSnapshotAction
       result <-
         if (actualState == expectedState) {
           action.map(Option.apply)
@@ -567,7 +580,6 @@ class LegacyAcsSnapshotStore(
     *                          to a historical snapshot.
     */
   def initializeSnapshot(
-      table: IncrementalAcsSnapshotTable,
       initializeFromT: AcsSnapshot,
       targetRecordTime: CantonTimestamp,
   )(implicit tc: TraceContext): Future[Unit] = {
@@ -621,7 +633,7 @@ class LegacyAcsSnapshotStore(
 
     storage
       .queryAndUpdate(
-        withIncrementalSnapshotIdempotencyCheck(table, statement, None),
+        withIncrementalSnapshotIdempotencyCheck(statement, None),
         "initializeIncrementalSnapshot",
       )
       .map(_ => ())
@@ -638,7 +650,6 @@ class LegacyAcsSnapshotStore(
     * @param migrationId       The migration id of the snapshot.
     */
   def initializeSnapshotFromImportUpdates(
-      table: IncrementalAcsSnapshotTable,
       recordTime: CantonTimestamp,
       targetRecordTime: CantonTimestamp,
       migrationId: Long,
@@ -684,7 +695,7 @@ class LegacyAcsSnapshotStore(
 
     storage
       .queryAndUpdate(
-        withIncrementalSnapshotIdempotencyCheck(table, statement, None),
+        withIncrementalSnapshotIdempotencyCheck(statement, None),
         "initializeIncrementalSnapshotFromImportUpdates",
       )
       .map(_ => ())
@@ -699,7 +710,6 @@ class LegacyAcsSnapshotStore(
     *   should be finished and copied back to a historical snapshot.
     */
   def saveSnapshot(
-      table: IncrementalAcsSnapshotTable,
       snapshot: IncrementalAcsSnapshot,
       nextSnapshotTargetRecordTime: CantonTimestamp,
   )(implicit tc: TraceContext): Future[Option[Int]] = {
@@ -780,7 +790,6 @@ class LegacyAcsSnapshotStore(
     storage.queryAndUpdate(
       withExclusiveSnapshotDataLock(
         withIncrementalSnapshotIdempotencyCheck(
-          table,
           statement,
           Some(snapshot),
         )
@@ -797,7 +806,6 @@ class LegacyAcsSnapshotStore(
     * @param targetRecordTime  The record time to update the snapshot to.
     */
   def updateSnapshot(
-      table: IncrementalAcsSnapshotTable,
       snapshot: IncrementalAcsSnapshot,
       targetRecordTime: CantonTimestamp,
   )(implicit tc: TraceContext): Future[Unit] = {
@@ -853,8 +861,7 @@ class LegacyAcsSnapshotStore(
   }
 
   def deleteSnapshot(
-      table: IncrementalAcsSnapshotTable,
-      snapshot: IncrementalAcsSnapshot,
+      snapshot: IncrementalAcsSnapshot
   )(implicit tc: TraceContext): Future[Unit] = {
     assert(snapshot.tableName == table.tableName)
     assert(snapshot.historyId == historyId)
@@ -864,7 +871,7 @@ class LegacyAcsSnapshotStore(
     } yield ()
     storage
       .queryAndUpdate(
-        withIncrementalSnapshotIdempotencyCheck(table, statement, Some(snapshot)),
+        withIncrementalSnapshotIdempotencyCheck(statement, Some(snapshot)),
         "deleteIncrementalSnapshot",
       )
       .map(_ => ())
@@ -888,13 +895,10 @@ object AcsSnapshotStore {
     }
   }
 
-  // Only relevant for tests, in production this is already guaranteed.
-  private val PreventConcurrentSnapshotsSemaphore = new Semaphore(1)
-
   final case class IncrementalAcsSnapshot(
       snapshotId: Long,
       historyId: Long,
-      private[AcsSnapshotStore] val tableName: String,
+      tableName: String,
       recordTime: CantonTimestamp,
       migrationId: Long,
       targetRecordTime: CantonTimestamp,
@@ -1055,9 +1059,9 @@ object AcsSnapshotStore {
       afterToken: Option[Long],
   )
 
-  private val amuletQualifiedName =
+  val amuletQualifiedName =
     PackageQualifiedName.fromJavaCodegenCompanion(Amulet.COMPANION)
-  private val lockedAmuletQualifiedName =
+  val lockedAmuletQualifiedName =
     PackageQualifiedName.fromJavaCodegenCompanion(LockedAmulet.COMPANION)
   private val holdingsTemplates = Vector(amuletQualifiedName, lockedAmuletQualifiedName)
 
@@ -1113,8 +1117,33 @@ object AcsSnapshotStore {
       updateHistory: UpdateHistory,
       dsoParty: PartyId,
       migrationId: Long,
+      perSnapshotTablesEnabled: Boolean,
+      legacyIncrementalTable: IncrementalAcsSnapshotTable,
       loggerFactory: NamedLoggerFactory,
-  )(implicit ec: ExecutionContext, closeContext: CloseContext): AcsSnapshotStore =
-    new AcsSnapshotStore(storage, updateHistory, dsoParty, migrationId, loggerFactory)
+  )(implicit ec: ExecutionContext, closeContext: CloseContext): AcsSnapshotStore = {
+    if (perSnapshotTablesEnabled) {
+      if (legacyIncrementalTable == IncrementalAcsSnapshotTable.Backfill) {
+        throw new IllegalArgumentException(
+          "Legacy incremental snapshot table 'Backfill' is not supported when per-snapshot tables are enabled."
+        )
+      } else {
+        new AcsSnapshotPerTableStore(storage, updateHistory, dsoParty, migrationId, loggerFactory)
+      }
+    } else {
+      new LegacyAcsSnapshotStore(
+        legacyIncrementalTable,
+        storage,
+        updateHistory,
+        dsoParty,
+        migrationId,
+        loggerFactory,
+      )
+    }
+  }
 
+}
+
+object LegacyAcsSnapshotStore {
+  // Only relevant for tests, in production this is already guaranteed.
+  private val PreventConcurrentSnapshotsSemaphore = new Semaphore(1)
 }

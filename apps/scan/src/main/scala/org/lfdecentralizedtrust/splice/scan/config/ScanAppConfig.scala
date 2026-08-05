@@ -49,6 +49,11 @@ final case class BulkStorageConfig(
     committed: Option[S3Config] = None,
 )
 
+final case class AcsSnapshotsConfig(
+    enableForcedAcsSnapshots: Boolean = false,
+    perSnapshotTablesEnabled: Boolean = false,
+)
+
 /** @param miningRoundsCacheTimeToLiveOverride Intended only for testing!
   *                                            By default depends on the `tickDuration` of rounds. This setting overrides that.
   */
@@ -68,7 +73,7 @@ case class ScanAppBackendConfig(
     // and the per-round minting allowance from the CC whitepaper.
     rewardMintingAllowanceTolerance: BigDecimal = BigDecimal(0.1),
     miningRoundsCacheTimeToLiveOverride: Option[NonNegativeFiniteDuration] = None,
-    enableForcedAcsSnapshots: Boolean = false,
+    acsSnapshotsConfig: AcsSnapshotsConfig = AcsSnapshotsConfig(),
     // The migration id is normally read from the DB (the highest known migration id in the
     // update history). It only needs to be resolved from a sponsor to bootstrap a node that does
     // not yet have any migration id in its DB (e.g. a freshly joining scan). In that case, the

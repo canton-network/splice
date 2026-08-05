@@ -11,7 +11,6 @@ import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{
   AcsSnapshot,
   IncrementalAcsSnapshot,
-  IncrementalAcsSnapshotTable,
 }
 import org.lfdecentralizedtrust.splice.store.{HistoryMetrics, UpdateHistory}
 import com.digitalasset.canton.tracing.TraceContext
@@ -33,9 +32,6 @@ class AcsSnapshotTrigger(
     tracer: Tracer,
     mat: Materializer,
 ) extends AcsSnapshotTriggerBase(store, updateHistory, context) {
-
-  override val snapshotTable: IncrementalAcsSnapshotTable =
-    AcsSnapshotStore.IncrementalAcsSnapshotTable.Next
 
   override val snapshotMetrics: AcsSnapshotsMetrics = new HistoryMetrics(context.metricsFactory)(
     MetricsContext.Empty

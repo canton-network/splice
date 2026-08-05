@@ -23,6 +23,7 @@ import org.lfdecentralizedtrust.splice.store.{DomainTimeSynchronization, UpdateH
 import org.lfdecentralizedtrust.splice.scan.store.{
   AcsSnapshotStore,
   AppActivityStore,
+  LegacyAcsSnapshotStore,
   ScanRewardsReferenceStore,
   ScanStore,
 }
@@ -51,6 +52,7 @@ class ScanAutomationService(
     appActivityStoreO: Option[AppActivityStore],
     storage: DbStorage,
     snapshotStore: AcsSnapshotStore,
+    backfillingAcsSnapshotStore: LegacyAcsSnapshotStore,
     svParty: PartyId,
     svName: String,
     upgradesConfig: UpgradesConfig,
@@ -139,7 +141,7 @@ class ScanAutomationService(
   if (config.updateHistoryBackfillEnabled && config.updateHistoryBackfillImportUpdatesEnabled) {
     registerTrigger(
       new AcsSnapshotBackfillingTrigger(
-        snapshotStore,
+        backfillingAcsSnapshotStore,
         updateHistory,
         scanStorageConfigV1,
         triggerContext,

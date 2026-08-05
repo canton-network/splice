@@ -15,7 +15,6 @@ import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{
   AcsSnapshot,
   IncrementalAcsSnapshot,
-  IncrementalAcsSnapshotTable,
 }
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.TracedLogger
@@ -41,8 +40,6 @@ abstract class AcsSnapshotTriggerBase(
     // we always return 1 task, so PollingParallelTaskExecutionTrigger in effect does nothing in parallel
 ) extends PollingParallelTaskExecutionTrigger[AcsSnapshotTriggerBase.Task] {
 
-  protected val snapshotTable: IncrementalAcsSnapshotTable
-
   protected def snapshotMetrics: AcsSnapshotsMetrics
 
   // The time interval to process per trigger invocation.
@@ -59,7 +56,6 @@ abstract class AcsSnapshotTriggerBase(
     case AcsSnapshotTriggerBase.InitializeIncrementalSnapshotTask(from, nextAt) =>
       store
         .initializeSnapshot(
-          table = snapshotTable,
           initializeFromT = from,
           targetRecordTime = nextAt,
         )
@@ -71,7 +67,6 @@ abstract class AcsSnapshotTriggerBase(
         ) =>
       store
         .initializeSnapshotFromImportUpdates(
-          table = snapshotTable,
           recordTime = recordTime,
           targetRecordTime = nextAt,
           migrationId = migration,
@@ -87,7 +82,6 @@ abstract class AcsSnapshotTriggerBase(
           snapshotMetrics.latencyUpdate,
           store
             .updateSnapshot(
-              table = snapshotTable,
               snapshot = snapshot,
               targetRecordTime = updateUntil,
             ),
@@ -102,7 +96,6 @@ abstract class AcsSnapshotTriggerBase(
           snapshotMetrics.latencySave,
           store
             .saveSnapshot(
-              table = snapshotTable,
               snapshot = snapshot,
               nextSnapshotTargetRecordTime = nextAt,
             ),
@@ -118,8 +111,7 @@ abstract class AcsSnapshotTriggerBase(
     case AcsSnapshotTriggerBase.DeleteIncrementalSnapshotTask(snapshot) =>
       store
         .deleteSnapshot(
-          table = snapshotTable,
-          snapshot = snapshot,
+          snapshot = snapshot
         )
         .map(_ => TaskSuccess(s"Deleted incremental snapshot"))
   }).transform {
@@ -140,7 +132,7 @@ abstract class AcsSnapshotTriggerBase(
   override final def isStaleTask(task: AcsSnapshotTriggerBase.Task)(implicit
       tc: TraceContext
   ): Future[Boolean] = for {
-    currentSnapshot <- store.getIncrementalSnapshot(snapshotTable)
+    currentSnapshot <- store.getIncrementalSnapshot()
   } yield task match {
     case AcsSnapshotTriggerBase.UpdateIncrementalSnapshotTask(snapshot, _) =>
       !currentSnapshot.contains(snapshot)
@@ -189,7 +181,7 @@ abstract class AcsSnapshotTriggerBase(
   protected def getIncrementalSnapshot()(implicit
       tc: TraceContext
   ): Future[Option[IncrementalAcsSnapshot]] = {
-    store.getIncrementalSnapshot(snapshotTable)
+    store.getIncrementalSnapshot()
   }
 }
 

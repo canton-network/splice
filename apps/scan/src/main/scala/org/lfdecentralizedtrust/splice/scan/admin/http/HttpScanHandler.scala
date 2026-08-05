@@ -68,8 +68,8 @@ import org.lfdecentralizedtrust.splice.http.v0.{definitions, scan as v0}
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   AcsRequest,
   BatchListVotesByVoteRequestsRequest,
-  DamlValueEncoding,
   CountVoteResultsRequest,
+  DamlValueEncoding,
   ErrorResponse,
   EventHistoryRequest,
   HoldingsStateRequest,
@@ -93,6 +93,7 @@ import org.lfdecentralizedtrust.splice.scan.dso.DsoAnsResolver
 import org.lfdecentralizedtrust.splice.scan.store.{
   AcsSnapshotStore,
   AppActivityStore,
+  LegacyAcsSnapshotStore,
   ScanEventStore,
   ScanStore,
   TxLogEntry,
@@ -1477,11 +1478,20 @@ class HttpScanHandler(
               // - this will only be used in tests
               // - wall clock tests must take manual snapshots anyway, because they can't wait
               // - simtime tests will advanceTime(N.hours)
-              snapshotStore.insertNewSnapshot(
-                lastSnapshot,
-                snapshotStore.currentMigrationId,
-                snapshotTime,
-              )
+              snapshotStore match {
+                case store: LegacyAcsSnapshotStore =>
+                  store.insertNewSnapshot(
+                    lastSnapshot,
+                    snapshotStore.currentMigrationId,
+                    snapshotTime,
+                  )
+                case _ =>
+                  Future.failed(
+                    io.grpc.Status.UNIMPLEMENTED
+                      .withDescription("It's unclear if this even makes sense anymore.")
+                      .asRuntimeException()
+                  )
+              }
             }
         } yield ScanResource.ForceAcsSnapshotNowResponse.OK(
           definitions.ForceAcsSnapshotResponse(

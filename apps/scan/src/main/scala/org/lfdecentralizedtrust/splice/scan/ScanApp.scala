@@ -70,6 +70,7 @@ import org.lfdecentralizedtrust.splice.scan.metrics.ScanAppMetrics
 import org.lfdecentralizedtrust.splice.scan.sequencer.SequencerTrafficClient
 import org.lfdecentralizedtrust.splice.scan.store.{
   AcsSnapshotStore,
+  LegacyAcsSnapshotStore,
   ScanEventStore,
   ScanKeyValueProvider,
   ScanKeyValueStore,
@@ -94,8 +95,8 @@ import org.lfdecentralizedtrust.splice.util.HasHealth
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import cats.implicits.*
-
 import org.apache.pekko.stream.Materializer
+import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.IncrementalAcsSnapshotTable
 
 /** Class representing a Scan app instance.
   *
@@ -238,6 +239,16 @@ class ScanApp(
         updateHistory,
         dsoParty,
         domainMigrationId,
+        config.acsSnapshotsConfig.perSnapshotTablesEnabled,
+        IncrementalAcsSnapshotTable.Next,
+        loggerFactory,
+      )
+      backfillingAcsSnapshotStore = new LegacyAcsSnapshotStore(
+        IncrementalAcsSnapshotTable.Backfill,
+        storage,
+        updateHistory,
+        dsoParty,
+        domainMigrationId,
         loggerFactory,
       )
       syncNodes = LocalSynchronizerNodes(
@@ -323,6 +334,7 @@ class ScanApp(
         appActivityRecordStoreO,
         storage,
         acsSnapshotStore,
+        backfillingAcsSnapshotStore,
         serviceUserPrimaryParty,
         svName,
         amuletAppParameters.upgradesConfig,
@@ -407,7 +419,7 @@ class ScanApp(
         bulkStorage.map(_.reader),
         dsoAnsResolver,
         config.miningRoundsCacheTimeToLiveOverride,
-        config.enableForcedAcsSnapshots,
+        config.acsSnapshotsConfig.enableForcedAcsSnapshots,
         config.serveAppActivityRecordsAndTraffic,
         clock,
         loggerFactory,

@@ -3,30 +3,21 @@
 
 package org.lfdecentralizedtrust.splice.scan.store
 
-import cats.data.NonEmptyVector
-import com.daml.ledger.javaapi.data.CreatedEvent
 import com.digitalasset.canton.data.CantonTimestamp
-import com.digitalasset.canton.lifecycle.{CloseContext, FutureUnlessShutdown}
-import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
+import com.digitalasset.canton.lifecycle.CloseContext
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.resource.DbStorage.Implicits.BuilderChain.toSQLActionBuilderChain
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{Amulet, LockedAmulet}
-import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.QueryParts.*
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.*
-import org.lfdecentralizedtrust.splice.store.UpdateHistory.SelectFromCreateEvents
-import org.lfdecentralizedtrust.splice.store.db.{AcsJdbcTypes, AcsQueries, AdvisoryLockIds}
-import org.lfdecentralizedtrust.splice.store.events.SpliceCreatedEvent
-import org.lfdecentralizedtrust.splice.store.{HardLimit, Limit, LimitHelpers, UpdateHistory}
-import org.lfdecentralizedtrust.splice.util.{Contract, HoldingsSummary, PackageQualifiedName}
-import slick.dbio.{DBIO, DBIOAction, Effect, NoStream}
+import org.lfdecentralizedtrust.splice.store.db.{AcsJdbcTypes, AcsQueries}
+import org.lfdecentralizedtrust.splice.store.{Limit, LimitHelpers, UpdateHistory}
+import org.lfdecentralizedtrust.splice.util.PackageQualifiedName
+import slick.dbio.DBIO
+import slick.jdbc.JdbcProfile
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
-import slick.jdbc.canton.SQLActionBuilder
-import slick.jdbc.{GetResult, JdbcProfile}
 
-import java.util.concurrent.Semaphore
 import scala.concurrent.{ExecutionContext, Future}
 
 class AcsSnapshotPerTableStore(
@@ -54,7 +45,6 @@ class AcsSnapshotPerTableStore(
   private def historyId = updateHistory.historyId
 
   override def initializeSnapshot(
-      _table: IncrementalAcsSnapshotTable,
       initializeFrom: AcsSnapshot,
       targetRecordTime: CantonTimestamp,
   )(implicit tc: TraceContext): Future[Unit] = {
@@ -102,7 +92,6 @@ class AcsSnapshotPerTableStore(
   }
 
   override def initializeSnapshotFromImportUpdates(
-      _table: IncrementalAcsSnapshotTable,
       recordTime: CantonTimestamp,
       targetRecordTime: CantonTimestamp,
       migrationId: Long,
@@ -137,7 +126,6 @@ class AcsSnapshotPerTableStore(
   }
 
   override def updateSnapshot(
-      _table: IncrementalAcsSnapshotTable,
       snapshot: IncrementalAcsSnapshot,
       targetRecordTime: CantonTimestamp,
   )(implicit tc: TraceContext): Future[Unit] = {
@@ -212,7 +200,6 @@ class AcsSnapshotPerTableStore(
   }
 
   override def saveSnapshot(
-      _table: IncrementalAcsSnapshotTable,
       snapshotToSave: IncrementalAcsSnapshot,
       nextSnapshotTargetRecordTime: CantonTimestamp,
   )(implicit tc: TraceContext): Future[Option[Int]] = {
@@ -232,7 +219,7 @@ class AcsSnapshotPerTableStore(
       _ <- AcsSnapshotPerTableStore.ACSTableDDL.createStakeholderFilterIndex(
         snapshotToSave.targetRecordTime
       )
-    } yield Some(0) // TODO: define
+    } yield Option(0) // TODO: define
 
     // TODO: what about idempotency?
     storage.queryAndUpdate(statement.transactionally, "initializeSnapshotFromImportUpdates")
@@ -260,15 +247,24 @@ class AcsSnapshotPerTableStore(
   }
 
   override def deleteSnapshot(
-      _table: IncrementalAcsSnapshotTable,
-      snapshot: IncrementalAcsSnapshot,
+      snapshot: IncrementalAcsSnapshot
   )(implicit
       tc: TraceContext
   ): Future[Unit] = {
+    deleteSnapshot(snapshot.targetRecordTime)
+  }
+
+  override def deleteSnapshot(snapshot: AcsSnapshot)(implicit tc: TraceContext): Future[Unit] = {
+    deleteSnapshot(snapshot.snapshotRecordTime)
+  }
+
+  private def deleteSnapshot(
+      snapshotRecordTime: CantonTimestamp
+  )(implicit tc: TraceContext): Future[Unit] = {
     val dataTableName =
-      AcsSnapshotPerTableStore.ACSTableDDL.acsSnapshotCreatesTableName(snapshot.targetRecordTime)
+      AcsSnapshotPerTableStore.ACSTableDDL.acsSnapshotCreatesTableName(snapshotRecordTime)
     val filterTableName =
-      AcsSnapshotPerTableStore.ACSTableDDL.acsSnapshotFilterTableName(snapshot.targetRecordTime)
+      AcsSnapshotPerTableStore.ACSTableDDL.acsSnapshotFilterTableName(snapshotRecordTime)
 
     val statement = for {
       _ <- sqlu"drop table if exists #$dataTableName"
@@ -279,16 +275,16 @@ class AcsSnapshotPerTableStore(
   }
 
   // TODO: at what point do we give them the new progress?
-  override def getIncrementalSnapshot(_table: IncrementalAcsSnapshotTable)(implicit
+  override def getIncrementalSnapshot()(implicit
       tc: TraceContext
   ): Future[Option[IncrementalAcsSnapshot]] = {
-    ???
+    Future.failed(io.grpc.Status.UNIMPLEMENTED.withDescription("TODO").asRuntimeException())
   }
 
   override def lookupSnapshotAtOrBefore(migrationId: Long, before: CantonTimestamp)(implicit
       tc: TraceContext
   ): Future[Option[AcsSnapshot]] = {
-    // This is verbatim from AcsSnapshotStore
+    // TODO: This is verbatim from AcsSnapshotStore
     storage
       .querySingle(
         sql"""select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance, data_table_name
@@ -301,6 +297,45 @@ class AcsSnapshotPerTableStore(
         "lookupSnapshotBefore",
       )
       .value
+  }
+
+  def lookupSnapshotAfter(
+      migrationId: Long,
+      after: CantonTimestamp,
+  )(implicit tc: TraceContext): Future[Option[AcsSnapshot]] = {
+    // TODO: This is verbatim from AcsSnapshotStore
+    val select =
+      sql"select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance, data_table_name "
+    val orderLimit = sql" order by snapshot_record_time asc limit 1 "
+    val sameMig = select ++ sql""" from acs_snapshot
+            where snapshot_record_time > $after
+              and migration_id = $migrationId
+              and history_id = $historyId """ ++ orderLimit
+    val largerMig = select ++ sql""" from acs_snapshot
+            where migration_id > $migrationId
+              and history_id = $historyId """ ++ orderLimit
+
+    val query =
+      sql"select * from ((" ++ sameMig ++ sql") union all (" ++ largerMig ++ sql")) all_queries order by snapshot_record_time asc limit 1"
+
+    storage
+      .querySingle(
+        query.toActionBuilder.as[AcsSnapshot].headOption,
+        "lookupSnapshotAfter",
+      )
+      .value
+
+  }
+
+  override def queryAcsSnapshot(
+      migrationId: Long,
+      snapshot: CantonTimestamp,
+      after: Option[Long],
+      limit: Limit,
+      partyIds: Seq[PartyId],
+      templates: Seq[PackageQualifiedName],
+  )(implicit tc: TraceContext): Future[QueryAcsSnapshotResult] = {
+    Future.failed(io.grpc.Status.UNIMPLEMENTED.withDescription("TODO").asRuntimeException())
   }
 }
 
