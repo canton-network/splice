@@ -40,7 +40,7 @@ export function istioMonitoring(
           metricRelabelings: [
             {
               sourceLabels: ['__name__'],
-              regex: 'istio_.*',
+              regex: '(istio_.*|envoy_http_local_rate_limit_.*)',
               action: 'keep',
             },
             // drop instance label, we have the pod name

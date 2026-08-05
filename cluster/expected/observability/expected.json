@@ -580,7 +580,7 @@
             "metricRelabelings": [
               {
                 "action": "keep",
-                "regex": "istio_.*",
+                "regex": "(istio_.*|envoy_http_local_rate_limit_.*)",
                 "sourceLabels": [
                   "__name__"
                 ]
