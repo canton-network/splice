@@ -39,7 +39,11 @@ class UpdateHistorySanityCheckPlugin(
     with LoneElement {
 
   override def beforeEnvironmentCreated(config: SpliceConfig): SpliceConfig = {
-    updateAllScanAppConfigs_(config => config.copy(enableForcedAcsSnapshots = true))(
+    updateAllScanAppConfigs_(config =>
+      config.copy(acsSnapshotsConfig =
+        config.acsSnapshotsConfig.copy(enableForcedAcsSnapshots = true)
+      )
+    )(
       super.beforeEnvironmentCreated(config)
     )
   }

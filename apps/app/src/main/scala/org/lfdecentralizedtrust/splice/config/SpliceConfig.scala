@@ -12,6 +12,7 @@ import org.lfdecentralizedtrust.splice.environment.{DarResources, PackageVetting
 import org.lfdecentralizedtrust.splice.http.UrlValidator
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection.BftScanClientConfig
 import org.lfdecentralizedtrust.splice.scan.config.{
+  AcsSnapshotsConfig,
   BulkStorageConfig,
   CantonBftPeerConfig,
   MediatorVerdictIngestionConfig,
@@ -31,7 +32,7 @@ import org.lfdecentralizedtrust.splice.splitwell.config.{
   SplitwellSynchronizerConfig,
 }
 import org.lfdecentralizedtrust.splice.sv.config.*
-import org.lfdecentralizedtrust.splice.sv.{SvAppClientConfig}
+import org.lfdecentralizedtrust.splice.sv.SvAppClientConfig
 import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.FoundDso
 import org.lfdecentralizedtrust.splice.util.{Codec, SpliceRateLimitConfig}
 import org.lfdecentralizedtrust.splice.validator.config.*
@@ -480,6 +481,8 @@ object SpliceConfig {
       deriveReader[TokenStandardConfig.SettlementConfig]
     implicit val bulkStorageConfigReader: ConfigReader[BulkStorageConfig] =
       deriveReader[BulkStorageConfig]
+    implicit val acsSnapshotsConfigReader: ConfigReader[AcsSnapshotsConfig] =
+      deriveReader[AcsSnapshotsConfig]
     implicit val S3ConfigReader: ConfigReader[S3Config] =
       deriveReader[S3Config]
     implicit val cacheConfigReader: ConfigReader[SpliceCacheConfig] =
@@ -992,6 +995,8 @@ object SpliceConfig {
       deriveWriter[TokenStandardConfig.SettlementConfig]
     implicit val BulkStorageConfigWriter: ConfigWriter[BulkStorageConfig] =
       deriveWriter[BulkStorageConfig]
+    implicit val acsSnapshotsConfigWriter: ConfigWriter[AcsSnapshotsConfig] =
+      deriveWriter[AcsSnapshotsConfig]
     implicit val S3ConfigWriter: ConfigWriter[S3Config] =
       confidentialWriter[S3Config](S3Config.hideConfidential)
     implicit val cacheConfigWriter: ConfigWriter[SpliceCacheConfig] =
