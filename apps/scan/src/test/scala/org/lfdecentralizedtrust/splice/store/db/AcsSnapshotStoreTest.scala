@@ -1352,7 +1352,7 @@ class AcsSnapshotStoreTest
           incrementalSnapshotBefore <- store.getIncrementalSnapshot()
 
           _ <- store.deleteSnapshot(
-            incrementalSnapshotBefore.value,
+            incrementalSnapshotBefore.value
           )
 
           incrementalSnapshotAfter <- store.getIncrementalSnapshot()
