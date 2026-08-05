@@ -36,9 +36,8 @@ class DbScanAppRewardsStoreTest
 
   private val migrationId = 0L
 
-  "DbScanAppRewardsStore" should {
-
-    "insert and read back app_activity_party_totals" in {
+  "insert and read back" should {
+    "app_activity_party_totals" in {
       for {
         (store, historyId) <- newStore()
         row = AppActivityPartyTotalT(
@@ -56,7 +55,7 @@ class DbScanAppRewardsStoreTest
       }
     }
 
-    "insert and read back app_activity_round_totals" in {
+    "app_activity_round_totals" in {
       for {
         (store, historyId) <- newStore()
         row = AppActivityRoundTotalT(
@@ -73,7 +72,7 @@ class DbScanAppRewardsStoreTest
       }
     }
 
-    "insert and read back app_reward_party_totals" in {
+    "app_reward_party_totals" in {
       for {
         (store, historyId) <- newStore()
         activityRow = AppActivityPartyTotalT(
@@ -145,7 +144,7 @@ class DbScanAppRewardsStoreTest
       }
     }
 
-    "insert and read back app_reward_round_totals" in {
+    "app_reward_round_totals" in {
       for {
         (store, historyId) <- newStore()
         row = AppRewardRoundTotalT(
@@ -163,7 +162,7 @@ class DbScanAppRewardsStoreTest
       }
     }
 
-    "insert and read back app_reward_batch_hashes" in {
+    "app_reward_batch_hashes" in {
       for {
         (store, historyId) <- newStore()
         hash = RewardHash(
@@ -185,7 +184,7 @@ class DbScanAppRewardsStoreTest
       }
     }
 
-    "insert and read back app_reward_root_hashes" in {
+    "app_reward_root_hashes" in {
       for {
         (store, historyId) <- newStore()
         hash = RewardHash(Array[Byte](0xca.toByte, 0xfe.toByte, 0xba.toByte, 0xbe.toByte))
@@ -200,8 +199,10 @@ class DbScanAppRewardsStoreTest
         loaded.value shouldBe row
       }
     }
+  }
 
-    "batch insert multiple app_activity_party_totals and spot-check" in {
+  "batch insert" should {
+    "batch multiple app_activity_party_totals and spot-check" in {
       for {
         (store, historyId) <- newStore()
         rows = (0 until 10).map { i =>
@@ -223,7 +224,7 @@ class DbScanAppRewardsStoreTest
       }
     }
 
-    "batch insert multiple app_reward_batch_hashes and spot-check" in {
+    "batch multiple app_reward_batch_hashes and spot-check" in {
       for {
         (store, historyId) <- newStore()
         rows = (0 until 5).map { i =>
@@ -245,8 +246,10 @@ class DbScanAppRewardsStoreTest
         loaded.last shouldBe rows(4)
       }
     }
+  }
 
-    "reject duplicate app_activity_party_totals on PK conflict" in {
+  "duplicate key handling" should {
+    "duplicate app_activity_party_totals on PK conflict" in {
       for {
         (store, historyId) <- newStore()
         row = AppActivityPartyTotalT(
@@ -264,7 +267,7 @@ class DbScanAppRewardsStoreTest
       }
     }
 
-    "reject duplicate app_activity_round_totals on PK conflict" in {
+    "duplicate app_activity_round_totals on PK conflict" in {
       for {
         (store, historyId) <- newStore()
         row = AppActivityRoundTotalT(
@@ -282,7 +285,7 @@ class DbScanAppRewardsStoreTest
       }
     }
 
-    "reject duplicate app_reward_root_hashes on PK conflict" in {
+    "duplicate app_reward_root_hashes on PK conflict" in {
       for {
         (store, historyId) <- newStore()
         row = AppRewardRootHashT(
