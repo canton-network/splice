@@ -28,7 +28,7 @@ import {
   CLUSTER_BASENAME,
   commandScriptPath,
 } from '@canton-network/splice-pulumi-common/src/utils';
-import { ScanBigQueryConfig } from './singleSvConfig';
+import { ScanBigQueryConfig } from './singleSvConfig';  
 
 // ============================================================================
 // PIPELINE CONFIGURATION & TYPES
