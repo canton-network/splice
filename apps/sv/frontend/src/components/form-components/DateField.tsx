@@ -7,14 +7,13 @@ import { Box, Typography } from '@mui/material';
 import { DesktopDateTimePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import dayjs, { Dayjs } from 'dayjs';
 import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
+import {
+  CREATE_PROPOSAL_FIELD_HELPER_SX,
+  CREATE_PROPOSAL_FIELD_LABEL_SX,
+} from '../../constants/createProposalLayout';
 import { useFieldContext } from '../../hooks/formContext';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
-import {
-  datePickerFieldSx,
-  fieldDescriptionSx,
-  fieldSectionSx,
-  fieldSectionTitleSx,
-} from '../../themes/fieldStyles';
+import { datePickerFieldSx } from '../../themes/fieldStyles';
 
 export interface DateFieldProps {
   title?: string;
@@ -30,10 +29,18 @@ export const DateField: React.FC<DateFieldProps> = props => {
   const dateValue = useMemo(() => dayjs(field.state.value), [field.state.value]);
 
   return (
-    <Box sx={fieldSectionSx}>
-      {title && <Typography sx={fieldSectionTitleSx}>{title}</Typography>}
+    <Box>
+      {title && (
+        <Typography component="p" sx={{ ...CREATE_PROPOSAL_FIELD_LABEL_SX, mb: 1 }}>
+          {title}
+        </Typography>
+      )}
 
-      {description && <Typography sx={fieldDescriptionSx}>{description}</Typography>}
+      {description && (
+        <Typography component="p" sx={{ ...CREATE_PROPOSAL_FIELD_HELPER_SX, mb: 1 }}>
+          {description}
+        </Typography>
+      )}
 
       <LocalizationProvider dateAdapter={AdapterDayjs}>
         <DesktopDateTimePicker

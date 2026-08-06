@@ -2,6 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Box, TextField as MuiTextField, Typography } from '@mui/material';
+import {
+  CREATE_PROPOSAL_FIELD_HELPER_SX,
+  CREATE_PROPOSAL_FIELD_LABEL_SX,
+} from '../../constants/createProposalLayout';
 import { useFieldContext } from '../../hooks/formContext';
 import { useDsoInfos } from '../../contexts/SvContext';
 import {
@@ -9,12 +13,7 @@ import {
   PROPOSAL_SUMMARY_SUBTITLE,
   PROPOSAL_SUMMARY_TITLE,
 } from '../../utils/constants';
-import {
-  fieldDescriptionSx,
-  fieldSectionSx,
-  fieldSectionTitleSx,
-  proposalSummaryFieldSx,
-} from '../../themes/fieldStyles';
+import { proposalSummaryFieldSx } from '../../themes/fieldStyles';
 
 export interface ProposalSummaryFieldProps {
   id: string;
@@ -33,17 +32,11 @@ export const ProposalSummaryField: React.FC<ProposalSummaryFieldProps> = props =
   const currentLength = field.state.value.length;
 
   return (
-    <Box sx={fieldSectionSx}>
-      <Typography sx={fieldSectionTitleSx}>
+    <Box>
+      <Typography component="p" sx={{ ...CREATE_PROPOSAL_FIELD_LABEL_SX, mb: 1 }}>
         {title || PROPOSAL_SUMMARY_TITLE}
         {optional && (
-          <Typography
-            component="span"
-            fontSize={12}
-            lineHeight="22px"
-            color="text.light"
-            sx={{ ml: 1 }}
-          >
+          <Typography component="span" sx={{ ...CREATE_PROPOSAL_FIELD_HELPER_SX, ml: 1 }}>
             optional
           </Typography>
         )}
@@ -70,15 +63,17 @@ export const ProposalSummaryField: React.FC<ProposalSummaryFieldProps> = props =
           gap: 2,
         }}
       >
-        <Typography sx={fieldDescriptionSx} data-testid={`${id}-subtitle`}>
+        <Typography
+          component="p"
+          data-testid={`${id}-subtitle`}
+          sx={CREATE_PROPOSAL_FIELD_HELPER_SX}
+        >
           {subtitle || PROPOSAL_SUMMARY_SUBTITLE}
         </Typography>
         <Typography
-          fontSize={12}
-          lineHeight="22px"
-          color="text.secondary"
+          component="p"
           data-testid={`${id}-character-counter`}
-          sx={{ flexShrink: 0 }}
+          sx={{ ...CREATE_PROPOSAL_FIELD_HELPER_SX, flexShrink: 0 }}
         >
           {currentLength}/{maxLength}
         </Typography>

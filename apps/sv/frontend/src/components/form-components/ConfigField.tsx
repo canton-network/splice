@@ -9,6 +9,10 @@ import { useFieldContext } from '../../hooks/formContext';
 import type { ConfigChange, PendingConfigFieldInfo } from '../../utils/types';
 import { nextScheduledSynchronizerUpgradeFormat } from '@canton-network/splice-common-frontend-utils';
 import { configFieldFieldSx, configFieldInputSx } from '../../themes/fieldStyles';
+import {
+  CREATE_PROPOSAL_CONFIG_INPUT_WIDTH,
+  CREATE_PROPOSAL_FIELD_BODY_SX,
+} from '../../constants/createProposalLayout';
 
 dayjs.extend(relativeTime);
 
@@ -75,28 +79,62 @@ export const ConfigField: React.FC<ConfigFieldProps> = props => {
     <>
       <Box
         sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
+          display: 'grid',
+          gridTemplateColumns: `minmax(0, 1fr) ${CREATE_PROPOSAL_CONFIG_INPUT_WIDTH}`,
+          columnGap: 2,
+          alignItems: 'start',
         }}
       >
-        <Box>
-          <Typography variant="body1" data-testid={`config-label-${configChange.fieldName}`}>
+        <Box
+          sx={{
+            minWidth: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '4px',
+            overflow: 'hidden',
+          }}
+        >
+          <Typography
+            component="p"
+            data-testid={`config-label-${configChange.fieldName}`}
+            sx={{ ...CREATE_PROPOSAL_FIELD_BODY_SX, m: 0, wordBreak: 'break-word' }}
+          >
             {configChange.label}
           </Typography>
           <Typography
-            fontFamily="'Source Code Pro', monospace"
-            color="colors.neutral.70"
-            sx={{ mt: 1 }}
+            component="p"
             data-testid={`config-field-name-${configChange.fieldName}`}
+            sx={{
+              fontFamily: "'Source Code Pro', monospace",
+              fontSize: '14px',
+              fontWeight: 400,
+              lineHeight: '22px',
+              color: '#d5d7dd',
+              m: 0,
+              wordBreak: 'break-all',
+              overflowWrap: 'anywhere',
+            }}
           >
             {configChange.fieldName}
           </Typography>
         </Box>
 
-        <Box sx={{ width: 238, maxWidth: '100%' }}>
+        <Box
+          sx={{
+            width: CREATE_PROPOSAL_CONFIG_INPUT_WIDTH,
+            maxWidth: '100%',
+            flexShrink: 0,
+            minWidth: 0,
+          }}
+        >
           <MuiTextField
             {...textFieldProps}
+            fullWidth
+            sx={{
+              '& .MuiInputBase-root': {
+                minHeight: 48,
+              },
+            }}
             // We choose empty string to represent fields that could be undefined because their values have not been set.
             value={field.state.value?.value || ''}
             onBlur={field.handleBlur}
