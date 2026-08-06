@@ -3,6 +3,7 @@ package org.lfdecentralizedtrust.splice.integration.tests
 import com.digitalasset.canton.HasExecutionContext
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
+import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.metrics.MetricValue
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.canton.topology.transaction.VettedPackage
@@ -32,7 +33,6 @@ import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
   ExpireRewardCouponV2Trigger,
   UnhideRewardCouponV2Trigger,
 }
-import org.lfdecentralizedtrust.splice.sv.config.InitialRewardConfig
 import org.lfdecentralizedtrust.splice.util.{
   ChoiceContextWithDisclosures,
   TimeTestUtil,
@@ -40,6 +40,7 @@ import org.lfdecentralizedtrust.splice.util.{
   WalletTestUtil,
 }
 import org.lfdecentralizedtrust.splice.wallet.automation.AcceptedTransferOfferTrigger
+import org.slf4j.event.Level
 
 import scala.concurrent.duration.DurationInt
 import scala.jdk.CollectionConverters.*
@@ -119,15 +120,6 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
               ))
         )
       })
-      .addConfigTransform((_, config) =>
-        ConfigTransforms.withRewardConfig(
-          InitialRewardConfig(
-            mintingVersion = "RewardVersion_TrafficBasedAppRewards",
-            dryRunVersion = None,
-            appRewardCouponThreshold = BigDecimal("0"),
-          )
-        )(config)
-      )
       .addConfigTransform((_, config) =>
         updateAutomationConfig(ConfigurableApp.Validator)(
           _.withPausedTrigger[AcceptedTransferOfferTrigger]
@@ -423,49 +415,58 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
         .toSet
       aliceObservedCoupons should not be empty
 
-      unvetV2AmuletOnAlice(aliceParticipantId)
+      loggerFactory.assertEventuallyLogsSeq(SuppressionRule.Level(Level.WARN))(
+        {
+          unvetV2AmuletOnAlice(aliceParticipantId)
 
-      val couponsBeforeAdvance = sv1Backend.appState.dsoStore
-        .listRewardCouponsV2()
-        .futureValue
-        .map(_.contractId.contractId)
-        .toSet
-
-      actAndCheck(
-        "Advance past the coupon TTL",
-        advanceTime(Duration.ofHours(37)),
-      )(
-        "ExpireRewardCouponV2Trigger ignores Alice coupons",
-        _ => {
-          sv1Backend.dsoDelegateBasedAutomation
-            .trigger[ExpireRewardCouponV2Trigger]
-            .runOnce()
-            .futureValue
-          val remaining = sv1Backend.appState.dsoStore
+          val couponsBeforeAdvance = sv1Backend.appState.dsoStore
             .listRewardCouponsV2()
             .futureValue
             .map(_.contractId.contractId)
             .toSet
-          aliceObservedCoupons.subsetOf(remaining) shouldBe true
+
+          actAndCheck(
+            "Advance past the coupon TTL",
+            advanceTime(Duration.ofHours(37)),
+          )(
+            "ExpireRewardCouponV2Trigger ignores Alice coupons",
+            _ => {
+              sv1Backend.dsoDelegateBasedAutomation
+                .trigger[ExpireRewardCouponV2Trigger]
+                .runOnce()
+                .futureValue
+              val remaining = sv1Backend.appState.dsoStore
+                .listRewardCouponsV2()
+                .futureValue
+                .map(_.contractId.contractId)
+                .toSet
+              aliceObservedCoupons.subsetOf(remaining) shouldBe true
+            },
+          )
+
+          actAndCheck(
+            "Re-vet Alice",
+            revetV2AmuletOnAlice(aliceParticipantId, aliceParty),
+          )(
+            "ExpireRewardCouponV2Trigger archives once Alice is re-vetted",
+            _ => {
+              sv1Backend.dsoDelegateBasedAutomation
+                .trigger[ExpireRewardCouponV2Trigger]
+                .runOnce()
+                .futureValue
+              val remaining = sv1Backend.appState.dsoStore
+                .listRewardCouponsV2()
+                .futureValue
+                .map(_.contractId.contractId)
+                .toSet
+              remaining.intersect(couponsBeforeAdvance) shouldBe empty
+            },
+          )
         },
-      )
-
-      actAndCheck(
-        "Re-vet Alice",
-        revetV2AmuletOnAlice(aliceParticipantId, aliceParty),
-      )(
-        "ExpireRewardCouponV2Trigger archives once Alice is re-vetted",
-        _ => {
-          sv1Backend.dsoDelegateBasedAutomation
-            .trigger[ExpireRewardCouponV2Trigger]
-            .runOnce()
-            .futureValue
-          val remaining = sv1Backend.appState.dsoStore
-            .listRewardCouponsV2()
-            .futureValue
-            .map(_.contractId.contractId)
-            .toSet
-          remaining.intersect(couponsBeforeAdvance) shouldBe empty
+        logs => {
+          forAtLeast(1, logs) { entry =>
+            entry.message should include("No vetted splice-amulet version for")
+          }
         },
       )
     }
