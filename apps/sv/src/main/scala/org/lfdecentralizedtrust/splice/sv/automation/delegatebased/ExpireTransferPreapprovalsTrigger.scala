@@ -11,13 +11,13 @@ import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
-import org.lfdecentralizedtrust.splice.sv.store.IgnoredPartiesStore
 import org.lfdecentralizedtrust.splice.sv.util.ContractStakeholders
 
 import java.util.Optional
 import scala.concurrent.{ExecutionContext, Future}
 import ExpireTransferPreapprovalsTrigger.{Task, getStakeholders}
 import org.lfdecentralizedtrust.splice.environment.PackageIdResolver
+import org.lfdecentralizedtrust.splice.store.IgnoredPartiesStore
 
 class ExpireTransferPreapprovalsTrigger(
     override protected val context: TriggerContext,
@@ -33,7 +33,7 @@ class ExpireTransferPreapprovalsTrigger(
       TransferPreapproval,
     ](
       svTaskContext.dsoStore.multiDomainAcsStore,
-      svTaskContext.dsoStore.listExpiredTransferPreapprovals,
+      svTaskContext.dsoStore.listExpiredTransferPreapprovals(Some(ignoredPartiesStore)),
       TransferPreapproval.COMPANION,
     )
     with SvTaskBasedTrigger[ScheduledTaskTrigger.ReadyTask[AssignedContract[

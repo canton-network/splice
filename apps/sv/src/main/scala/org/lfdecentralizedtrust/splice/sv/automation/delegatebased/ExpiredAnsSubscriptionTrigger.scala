@@ -17,9 +17,9 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.ans as ansCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.subscriptions as subsCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.subscriptions.SubscriptionIdleState_ExpireSubscription
 import org.lfdecentralizedtrust.splice.environment.PackageIdResolver
-import org.lfdecentralizedtrust.splice.store.PageLimit
+import org.lfdecentralizedtrust.splice.store.{IgnoredPartiesStore, PageLimit}
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
-import org.lfdecentralizedtrust.splice.sv.store.{IgnoredPartiesStore, SvDsoStore}
+import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
 import org.lfdecentralizedtrust.splice.sv.util.ContractStakeholders
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
@@ -45,7 +45,7 @@ class ExpiredAnsSubscriptionTrigger(
   override protected def listReadyTasks(now: CantonTimestamp, limit: Int)(implicit
       tc: TraceContext
   ): Future[Seq[SvDsoStore.IdleAnsSubscription]] =
-    store.listExpiredAnsSubscriptions(now, PageLimit.tryCreate(limit))
+    store.listExpiredAnsSubscriptions(now, PageLimit.tryCreate(limit), Some(ignoredPartiesStore))
 
   override protected def completeTaskAsDsoDelegate(
       task: Task,

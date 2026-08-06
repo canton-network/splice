@@ -13,12 +13,12 @@ import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.environment.PackageIdResolver
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
-import org.lfdecentralizedtrust.splice.sv.store.IgnoredPartiesStore
 import org.lfdecentralizedtrust.splice.sv.util.ContractStakeholders
 
 import java.util.Optional
 import scala.concurrent.{ExecutionContext, Future}
 import ExpiredAnsEntryTrigger.{Task, getStakeholders}
+import org.lfdecentralizedtrust.splice.store.IgnoredPartiesStore
 
 class ExpiredAnsEntryTrigger(
     override protected val context: TriggerContext,
@@ -34,7 +34,7 @@ class ExpiredAnsEntryTrigger(
       splice.ans.AnsEntry,
     ](
       svTaskContext.dsoStore.multiDomainAcsStore,
-      svTaskContext.dsoStore.listExpiredAnsEntries,
+      svTaskContext.dsoStore.listExpiredAnsEntries(Some(ignoredPartiesStore)),
       splice.ans.AnsEntry.COMPANION,
     )
     with SvTaskBasedTrigger[ScheduledTaskTrigger.ReadyTask[AssignedContract[

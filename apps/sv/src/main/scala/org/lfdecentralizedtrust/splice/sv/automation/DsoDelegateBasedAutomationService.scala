@@ -13,11 +13,10 @@ import org.lfdecentralizedtrust.splice.automation.AutomationServiceCompanion.{
 }
 import org.lfdecentralizedtrust.splice.automation.{AutomationService, AutomationServiceCompanion}
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
-import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
+import org.lfdecentralizedtrust.splice.store.{DomainTimeSynchronization, IgnoredPartiesStore}
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.{BftScanConnection, ScanConnection}
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.*
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.ExpiredAmuletAllocationTrigger
-import org.lfdecentralizedtrust.splice.sv.store.IgnoredPartiesStore
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 
 import scala.concurrent.{ExecutionContextExecutor, Future}

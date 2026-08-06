@@ -13,9 +13,9 @@ import scala.concurrent.{ExecutionContext, Future}
 import org.lfdecentralizedtrust.splice.environment.PackageIdResolver
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
-import org.lfdecentralizedtrust.splice.sv.store.IgnoredPartiesStore
 import org.lfdecentralizedtrust.splice.sv.util.ContractStakeholders
 import ExpiredAmuletTrigger.{Task, getStakeholders}
+import org.lfdecentralizedtrust.splice.store.IgnoredPartiesStore
 
 import java.util.Optional
 import scala.jdk.CollectionConverters.*
