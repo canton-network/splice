@@ -644,10 +644,7 @@ function createPostgresReplicatorUser(
   );
 }
 
-/*
-For the SQL below to apply, the user/operator applying the pulumi
-needs the 'Cloud SQL Editor' IAM role in the relevant GCP project
- */
+
 
 function createPublicationAndReplicationSlots(
   postgres: CloudPostgres,
