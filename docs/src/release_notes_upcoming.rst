@@ -39,6 +39,7 @@
               canton.validator-apps.<validator>.reward-sharing-config-by-party = {
                 "<party-id>" = {
                   type = "external"
-                  batch-size = 200
+                  # Optionally batch-size may be specified to configure the maximum number of coupons to mint in a single transaction
+                  batch-size = 80
                 }
               }
