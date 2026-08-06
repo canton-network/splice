@@ -187,25 +187,6 @@ class SequencerAdminConnection(
     )
   }
 
-  def getTopologyTransactionsSummary(store: TopologyStoreId, now: CantonTimestamp)(implicit
-      traceContext: TraceContext
-  ): Future[Map[TopologyMapping.Code, Int]] = {
-    runCmd(
-      TopologyAdminCommands.Read.ListAllV2(
-        query = BaseQuery(
-          store = store,
-          proposals = false,
-          timeQuery = Snapshot(now),
-          ops = None,
-          filterSigningKey = "",
-          protocolVersion = None,
-        ),
-        filterNamespace = "",
-        includeMappings = Seq.empty,
-      )
-    ).map(_.result.groupMapReduce(_.mapping.code)(_ => 1)(_ + _))
-  }
-
   def getOnboardingState(sequencerIdOrTimestamp: Either[SequencerId, CantonTimestamp])(implicit
       traceContext: TraceContext
   ): Future[ByteString] = {
