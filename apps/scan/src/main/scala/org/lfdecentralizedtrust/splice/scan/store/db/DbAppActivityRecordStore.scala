@@ -4,6 +4,7 @@
 package org.lfdecentralizedtrust.splice.scan.store.db
 
 import org.lfdecentralizedtrust.splice.scan.store.AppActivityStore
+import org.lfdecentralizedtrust.splice.scan.store.AppActivityStore.RoundIngestionStatus
 import org.lfdecentralizedtrust.splice.store.UpdateHistory
 import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnlessShutdownToFuture
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
@@ -171,7 +172,7 @@ class DbAppActivityRecordStore(
     * This round may not have all app activity records ingested.
     * Returns None if no app activity records have been ingested, ie meta row does not exist.
     */
-  def earliestIngestedRound()(implicit
+  private[store] def earliestIngestedRound()(implicit
       tc: TraceContext
   ): Future[Option[Long]] = {
     val codeVersion = ingestionVersions.code
@@ -186,6 +187,27 @@ class DbAppActivityRecordStore(
       "appActivity.earliestIngestedRound",
     )
   }
+
+  override def ingestionStatusForRound(roundNumber: Long)(implicit
+      tc: TraceContext
+  ): Future[RoundIngestionStatus] =
+    earliestIngestedRound().map {
+      // Meta row is present and the requested round is within-or-before
+      // our ingestion boundary but no root hash was computed for it:
+      // delegate to peers.
+      case Some(earliestIngested) if roundNumber <= earliestIngested =>
+        RoundIngestionStatus.AskElsewhere
+
+      // Meta row absent on a non-firstSV Scan — during bootstrap we
+      // have no ingestion boundary yet:
+      // delegate to peers.
+      case None if !isFirstSv => RoundIngestionStatus.AskElsewhere
+
+      // Otherwise (meta row absent on firstSV during ms-scale warm-up,
+      // OR meta row present but roundNumber > earliestIngested):
+      // the caller should retry.
+      case _ => RoundIngestionStatus.TryAgainLater
+    }
 
   /** Find the latest round with complete app activity.
     * A round is complete once the verdict ingestion has moved passed its archival.

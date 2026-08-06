@@ -7,6 +7,7 @@ import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
+import org.lfdecentralizedtrust.splice.scan.store.AppActivityStore.RoundIngestionStatus
 import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore
 import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore.*
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanVerdictStore
@@ -653,6 +654,51 @@ class DbAppActivityRecordStoreTest
         result <- store1.earliestIngestedRound()
       } yield {
         result shouldBe None
+      }
+    }
+  }
+
+  "ingestionStatusForRound" should {
+
+    "return AskElsewhere when meta row absent and isFirstSv=false" in {
+      for {
+        (store, _) <- newStore(isFirstSv = false)
+        result <- store.ingestionStatusForRound(5L)
+      } yield {
+        result shouldBe RoundIngestionStatus.AskElsewhere
+      }
+    }
+
+    "return TryAgainLater when meta row absent and isFirstSv=true" in {
+      for {
+        (store, _) <- newStore(isFirstSv = true)
+        result <- store.ingestionStatusForRound(5L)
+      } yield {
+        result shouldBe RoundIngestionStatus.TryAgainLater
+      }
+    }
+
+    "return AskElsewhere when meta row present and roundNumber <= earliestIngested" in {
+      for {
+        (store, _) <- newStore()
+        baseTs = CantonTimestamp.now()
+        _ <- store.insertActivityRecordMetaForTesting(1, 0, baseTs.toMicros, 10L, Some(11L))
+        atBoundary <- store.ingestionStatusForRound(10L)
+        below <- store.ingestionStatusForRound(5L)
+      } yield {
+        atBoundary shouldBe RoundIngestionStatus.AskElsewhere
+        below shouldBe RoundIngestionStatus.AskElsewhere
+      }
+    }
+
+    "return TryAgainLater when meta row present and roundNumber > earliestIngested" in {
+      for {
+        (store, _) <- newStore()
+        baseTs = CantonTimestamp.now()
+        _ <- store.insertActivityRecordMetaForTesting(1, 0, baseTs.toMicros, 10L, Some(11L))
+        result <- store.ingestionStatusForRound(15L)
+      } yield {
+        result shouldBe RoundIngestionStatus.TryAgainLater
       }
     }
   }
