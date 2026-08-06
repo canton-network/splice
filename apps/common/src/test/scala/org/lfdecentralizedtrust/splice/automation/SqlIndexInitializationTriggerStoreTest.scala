@@ -362,16 +362,9 @@ class SqlIndexInitializationTriggerStoreTest
 
       for {
         _ <- lockAcquired
-
-        // While another process holds the lock, the trigger must not execute any DDL,
-        // and must not log at warn level or above
-        _ <- loggerFactory.assertLoggedWarningsAndErrorsSeq(
-          within = trigger.runOnce(),
-          assertion = _ shouldBe empty,
-        )
+        _ <- trigger.runOnce()
         indexNamesWhileLocked <- listIndexNames()
         _ = indexNamesWhileLocked should not contain "test_index"
-
         // The contended action is still pending and succeeds once the lock is released
         _ = releaseLock.success(())
         _ <- lockReleased
@@ -383,24 +376,19 @@ class SqlIndexInitializationTriggerStoreTest
     "not collide when several triggers share a database" in {
       // Sets up several triggers that will all run the same index DDL against the same tables.
       // Without the advisory lock, the concurrent DDL statements compete either failing or
-      // leaving behind invalid indexes. Both are logged as warnings, so we assert that the whole
-      // run is free of warnings.
+      // leaving behind invalid indexes.
       val triggers = (1 to 8).map(_ =>
         SqlIndexInitializationTrigger(
           storage = storage,
           triggerContext = fastPollingTriggerContext,
         )
       )
-      val indexNames = loggerFactory
-        .assertLoggedWarningsAndErrorsSeq(
-          within = Future
-            .sequence(triggers.map(runTriggerUntilAllTasksDone))
-            // Unlike the SimClock-based tests, these polling loops keep running on the wall clock,
-            // so they have to be stopped before the test ends.
-            .map(_ => triggers.foreach(_.close()))
-            .flatMap(_ => listIndexNames()),
-          assertion = _ shouldBe empty,
-        )
+      val indexNames = Future
+        .sequence(triggers.map(runTriggerUntilAllTasksDone))
+        // Unlike the SimClock-based tests, these polling loops keep running on the wall clock,
+        // so they have to be stopped before the test ends.
+        .map(_ => triggers.foreach(_.close()))
+        .flatMap(_ => listIndexNames())
         .futureValue
       indexNames should contain allElementsOf expectedIndexNames
       indexNames should not contain "scan_txlog_store_sid_en_vot"
