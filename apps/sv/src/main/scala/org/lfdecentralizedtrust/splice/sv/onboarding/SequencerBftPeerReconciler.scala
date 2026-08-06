@@ -138,7 +138,8 @@ abstract class SequencerBftPeerReconciler(
         scan
           .listSvBftSequencers()
           .recover { case NonFatal(ex) =>
-            logger.warn(s"Failed to read bft sequencers list from scan ${scan.url}", ex)
+            // not a warn because short-term failures are benign and longer-term outages should be covered by other monitoring
+            logger.info(s"Failed to read bft sequencers list from scan ${scan.url}", ex)
             Seq.empty
           }
       }
