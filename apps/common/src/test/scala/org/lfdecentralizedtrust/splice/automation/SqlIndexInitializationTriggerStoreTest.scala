@@ -4,6 +4,7 @@ import com.daml.metrics.api.noop.NoOpMetricsFactory
 import org.lfdecentralizedtrust.splice.config.AutomationConfig
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.store.{StoreErrors, StoreTestBase}
+import org.lfdecentralizedtrust.splice.store.db.AdvisoryLocksTestHelper
 import com.digitalasset.canton.concurrent.{FutureSupervisor, Threading}
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.logging.SuppressionRule
@@ -34,7 +35,8 @@ class SqlIndexInitializationTriggerStoreTest
     with SplicePostgresTest
     with AcsJdbcTypes
     with AcsTables
-    with FutureHelpers {
+    with FutureHelpers
+    with AdvisoryLocksTestHelper {
 
   private val expectedIndexNames = Seq(
     "updt_hist_crea_hi_mi_ci_import_updates",
@@ -362,7 +364,7 @@ class SqlIndexInitializationTriggerStoreTest
         ),
       )
       val releaseLock = Promise[Unit]()
-      val (lockAcquired, lockReleased) = holdIndexDdlLock(releaseLock.future)
+      val (lockAcquired, lockReleased) = holdLock(AdvisoryLocks.withDdlLock, releaseLock.future)
 
       for {
         _ <- lockAcquired
@@ -377,30 +379,6 @@ class SqlIndexInitializationTriggerStoreTest
       } yield indexNamesAfter should contain("test_index")
     }
 
-  }
-
-  /** Acquires the DDL advisory lock on a separate database session and holds it until `release`
-    * completes.
-    *
-    * Returns a future that completes once the lock is held, and a future that completes once the
-    * lock has been released again.
-    */
-  private def holdIndexDdlLock(release: Future[Unit]): (Future[Unit], Future[Unit]) = {
-    val acquired = Promise[Unit]()
-    val released = storage.underlying
-      .query(
-        AdvisoryLocks.withDdlLock(
-          DBIOAction
-            .successful(())
-            .map(_ => acquired.success(()))
-            .flatMap(_ => DBIOAction.from(release))
-        ),
-        "hold DDL lock",
-      )
-      .failOnShutdown
-    // Make sure the test fails rather than hangs if the lock-holding session dies.
-    released.failed.foreach(acquired.tryFailure)
-    (acquired.future, released)
   }
 
   private def listIndexNames(): Future[Seq[String]] = {

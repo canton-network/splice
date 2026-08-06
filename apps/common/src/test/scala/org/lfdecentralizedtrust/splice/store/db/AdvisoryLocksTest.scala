@@ -7,25 +7,54 @@ import cats.Monad
 import com.digitalasset.canton.concurrent.Threading
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.resource.DbStorage
+import com.digitalasset.canton.store.db.DbTest
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.MonadUtil
 import com.digitalasset.canton.HasExecutionContext
 import org.lfdecentralizedtrust.splice.store.StoreTestBase
-import slick.dbio.DBIOAction
+import slick.dbio.{DBIOAction, Effect, NoStream}
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 
 import scala.concurrent.{Future, Promise}
+
+trait AdvisoryLocksTestHelper { _: DbTest with StoreTestBase with HasExecutionContext =>
+
+  /** Acquires a lock by calling [[withLock]] and holds it until `release` completes. Returns a
+    * future that completes once the lock is held, and a future that completes once the lock has
+    * been released.
+    */
+  final def holdLock(
+      withLock: DBIOAction[Unit, NoStream, Effect] => DBIOAction[Unit, NoStream, Effect.All],
+      release: Future[Unit],
+  ): (Future[Unit], Future[Unit]) = {
+    val acquired = Promise[Unit]()
+    val released = storage.underlying
+      .queryAndUpdate(
+        withLock(
+          DBIOAction
+            .successful(())
+            .map(_ => acquired.success(()))
+            .flatMap(_ => DBIOAction.from(release))
+        ),
+        "hold lock",
+      )
+      .failOnShutdown
+    released.failed.foreach(acquired.tryFailure)
+    (acquired.future, released)
+  }
+}
 
 class AdvisoryLocksTest
     extends StoreTestBase
     with HasExecutionContext
     with SplicePostgresTest
     with AcsJdbcTypes
-    with AcsTables {
+    with AcsTables
+    with AdvisoryLocksTestHelper {
 
   private val testIndexNames: Seq[String] = (1 to 8).map(i => s"test_index_$i")
 
-  "AdvisoryLocks" should {
+  "AdvisoryLocks.withSessionLock" should {
 
     "not collide when several concurrent DDL statements run" in {
       // Create several indexes concurrently. Without the advisory lock these would compete, either
@@ -43,7 +72,7 @@ class AdvisoryLocksTest
     "release the lock after running an action" in {
       for {
         _ <- createIndexWithDdlLock("test_index_1")
-        lockIsFree <- ddlLockIsFree()
+        lockIsFree <- lockIsFree(AdvisoryLockIds.ddlStatement)
       } yield lockIsFree shouldBe true
     }
 
@@ -57,13 +86,13 @@ class AdvisoryLocksTest
           .failOnShutdown
           .failed
         _ = failure shouldBe a[java.sql.SQLException]
-        lockIsFree <- ddlLockIsFree()
+        lockIsFree <- lockIsFree(AdvisoryLockIds.ddlStatement)
       } yield lockIsFree shouldBe true
     }
 
     "fail fast while another session holds the lock" in {
       val releaseLock = Promise[Unit]()
-      val (lockAcquired, lockReleased) = holdDdlLock(releaseLock.future)
+      val (lockAcquired, lockReleased) = holdLock(AdvisoryLocks.withDdlLock, releaseLock.future)
       for {
         _ <- lockAcquired
         failure <- storage.underlying
@@ -79,10 +108,103 @@ class AdvisoryLocksTest
         _ = releaseLock.success(())
         _ <- lockReleased
       } yield {
-        failure shouldBe AdvisoryLocks.FailedToAcquireAdvisoryLockException(
-          AdvisoryLockIds.ddlStatement
+        failure shouldBe AdvisoryLocks.FailedToAcquireLockException(
+          "session-scoped",
+          AdvisoryLockIds.ddlStatement,
         )
         indexNamesWhileLocked should not contain "test_index_1"
+      }
+    }
+  }
+
+  "AdvisoryLocks.withTransactionalLock" should {
+
+    "release the lock when the transaction ends" in {
+      for {
+        _ <- storage.underlying
+          .queryAndUpdate(
+            AdvisoryLocks.withTransactionalLock(
+              profile,
+              AdvisoryLockIds.acsSnapshotDataInsert,
+              sqlu"insert into active_parties (store_id, party, closed_round) values (1, 'committed', 1)",
+            ),
+            "insert under transactional lock",
+          )
+          .failOnShutdown
+        lockIsFree <- lockIsFree(AdvisoryLockIds.acsSnapshotDataInsert)
+        committed <- countParties("committed")
+      } yield {
+        lockIsFree shouldBe true
+        committed shouldBe 1
+      }
+    }
+
+    "roll back the action and release the lock when the action fails" in {
+      for {
+        failure <- storage.underlying
+          .queryAndUpdate(
+            AdvisoryLocks.withTransactionalLock(
+              profile,
+              AdvisoryLockIds.acsSnapshotDataInsert,
+              DBIOAction.seq(
+                sqlu"insert into active_parties (store_id, party, closed_round) values (2, 'rolled_back', 1)",
+                sqlu"insert into a_table_that_does_not_exist values (1)",
+              ),
+            ),
+            "failing action under transactional lock",
+          )
+          .failOnShutdown
+          .failed
+        _ = failure shouldBe a[java.sql.SQLException]
+        lockIsFree <- lockIsFree(AdvisoryLockIds.acsSnapshotDataInsert)
+        rolledBack <- countParties("rolled_back")
+      } yield {
+        lockIsFree shouldBe true
+        rolledBack shouldBe 0
+      }
+    }
+
+    "fail fast while another transaction holds the lock" in {
+      val releaseLock = Promise[Unit]()
+      val (lockAcquired, lockReleased) = holdLock(
+        AdvisoryLocks.withTransactionalLock(profile, AdvisoryLockIds.acsSnapshotDataInsert, _),
+        releaseLock.future,
+      )
+      for {
+        _ <- lockAcquired
+        failure <- storage.underlying
+          .queryAndUpdate(
+            AdvisoryLocks.withTransactionalLock(
+              profile,
+              AdvisoryLockIds.acsSnapshotDataInsert,
+              sqlu"insert into active_parties (store_id, party, closed_round) values (3, 'contended', 1)",
+            ),
+            "contended action under transactional lock",
+          )
+          .failOnShutdown
+          .failed
+        contendedWhileLocked <- countParties("contended")
+        _ = releaseLock.success(())
+        _ <- lockReleased
+        // The same action succeeds once the holder's transaction has ended.
+        _ <- storage.underlying
+          .queryAndUpdate(
+            AdvisoryLocks.withTransactionalLock(
+              profile,
+              AdvisoryLockIds.acsSnapshotDataInsert,
+              sqlu"insert into active_parties (store_id, party, closed_round) values (3, 'contended', 1)",
+            ),
+            "retried action under transactional lock",
+          )
+          .failOnShutdown
+        contendedAfterRelease <- countParties("contended")
+      } yield {
+        failure shouldBe AdvisoryLocks.FailedToAcquireLockException(
+          "transactional",
+          AdvisoryLockIds.acsSnapshotDataInsert,
+        )
+        contendedWhileLocked shouldBe 0
+        contendedAfterRelease shouldBe 1
       }
     }
   }
@@ -106,40 +228,21 @@ class AdvisoryLocksTest
         }
     )
 
-  /** Acquires the DDL lock on a separate database session and holds it until `release` completes.
-    *
-    * Returns a future that completes once the lock is held, and a future that completes once the
-    * lock has been released again.
+  /** Whether [[lockId]] can be acquired, i.e. nothing is holding it. Session-scoped and
+    * transactional locks share one lock space, so a session-scoped check also detects a
+    * detects a transactional holder.
     */
-  private def holdDdlLock(release: Future[Unit]): (Future[Unit], Future[Unit]) = {
-    val acquired = Promise[Unit]()
-    val released = storage.underlying
-      .query(
-        AdvisoryLocks.withDdlLock(
-          DBIOAction
-            .successful(())
-            .map(_ => acquired.success(()))
-            .flatMap(_ => DBIOAction.from(release))
-        ),
-        "hold DDL lock",
-      )
+  private def lockIsFree(lockId: Long): Future[Boolean] =
+    storage.underlying
+      .query(AdvisoryLocks.withSessionLock(lockId, DBIOAction.successful(true)), "check lock")
       .failOnShutdown
-    // Make sure the test fails rather than hangs if the lock-holding session dies.
-    released.failed.foreach(acquired.tryFailure)
-    (acquired.future, released)
-  }
+      .recover { case _: AdvisoryLocks.FailedToAcquireLockException => false }
 
-  /** Whether the DDL lock can be acquired from another session, i.e. nothing is holding it. */
-  private def ddlLockIsFree(): Future[Boolean] =
+  private def countParties(party: String): Future[Int] =
     storage.underlying
       .query(
-        (for {
-          acquired <- AdvisoryLocks.acquireSessionLock(AdvisoryLockIds.ddlStatement)
-          _ <-
-            if (acquired) AdvisoryLocks.releaseSessionLock(AdvisoryLockIds.ddlStatement)
-            else DBIOAction.successful(false)
-        } yield acquired).withPinnedSession,
-        "check DDL lock",
+        sql"select count(*) from active_parties where party = $party".as[Int].head,
+        "countParties",
       )
       .failOnShutdown
 
@@ -167,8 +270,10 @@ class AdvisoryLocksTest
 
   override protected def cleanDb(
       storage: DbStorage
-  )(implicit traceContext: TraceContext): FutureUnlessShutdown[?] =
-    MonadUtil.sequentialTraverse(testIndexNames) { indexName =>
+  )(implicit traceContext: TraceContext): FutureUnlessShutdown[?] = for {
+    _ <- resetAllAppTables(storage)
+    _ <- MonadUtil.sequentialTraverse(testIndexNames) { indexName =>
       storage.update(sqlu"drop index if exists #$indexName", s"drop index $indexName")
     }
+  } yield ()
 }

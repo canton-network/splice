@@ -147,7 +147,7 @@ class SqlIndexInitializationTrigger(
       logger.info(s"Confirmed action completed for index ${action.indexName}")
       Future.successful(TaskSuccess(s"Confirmed action completed for index ${action.indexName}"))
   }).transform {
-    case Failure(e: AdvisoryLocks.FailedToAcquireAdvisoryLockException) =>
+    case Failure(e: AdvisoryLocks.FailedToAcquireLockException) =>
       // There was a concurrent DDL statement running.
       // The action stays in `remainingActions`, so we retry it on the next poll.
       logger.info(s"Skipping $task, another DDL statement was running currently", e)
