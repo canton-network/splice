@@ -36,16 +36,6 @@ import { ScanBigQueryConfig } from './singleSvConfig';
 
 const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
 
-// export interface ScanBigQueryConfig {
-//   dataset: string;
-//   prefix: string;
-//   enableLegacyDatastream?: boolean;
-//   enableStagProdDatastream?: boolean;
-//   legacyDesiredState?: 'RUNNING' | 'PAUSED';
-//   stagProdDesiredState?: 'RUNNING' | 'PAUSED';
-//   prodTableExpirationMs?: number;
-// }
-
 interface PostgresPassword {
   contents: pulumi.Output<string>;
   secret: k8s.core.v1.Secret;
@@ -709,10 +699,7 @@ function createPublicationAndReplicationSlots(
     pulumi.interpolate`--flyway-migration-to-wait-for="${flywayMigrationToWaitFor}"`,
   ];
 
-  // Constructs full CLI command matching original deployment state:
-  // - Places publication & slot args in positions 7 & 8
-  // - Uses 6-space indentation (` \\\n      `)
-  // - Includes trailing backslash continuation (` \\\n      `)
+
   const buildScriptCommand = (
     action: string,
     slotArgs: pulumi.Input<string>[]
