@@ -24,10 +24,10 @@ object AdvisoryLocks {
       else DBIOAction.failed(FailedToAcquireLockException(lockType, lockId))
     )
 
-  private[db] def acquireSessionLock(lockId: Long): DBIOAction[Boolean, NoStream, Effect.Read] =
+  private def acquireSessionLock(lockId: Long): DBIOAction[Boolean, NoStream, Effect.Read] =
     sql"select pg_try_advisory_lock($lockId)".as[Boolean].head
 
-  private[db] def releaseSessionLock(lockId: Long): DBIOAction[Boolean, NoStream, Effect.Read] =
+  private def releaseSessionLock(lockId: Long): DBIOAction[Boolean, NoStream, Effect.Read] =
     sql"select pg_advisory_unlock($lockId)".as[Boolean].head
 
   /** Wraps the given action in a session-scoped advisory lock; useful for acquiring locks for
