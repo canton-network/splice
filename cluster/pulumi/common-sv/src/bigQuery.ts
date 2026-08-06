@@ -186,26 +186,6 @@ iptables-save
   });
 }
 
-
-function installDatastreamIamRoles(): pulumi.Resource[] {
-  const currentProject = gcp.organizations.getProjectOutput({});
-  const projectId = currentProject.apply(p => p.projectId!);
-
-  const datastreamBqDataEditor = new gcp.projects.IAMMember('datastream-bq-data-editor', {
-    project: projectId,
-    role: 'roles/bigquery.dataEditor',
-    member: currentProject.apply(p => `serviceAccount:service-${p.number}@gcp-sa-datastream.iam.gserviceaccount.com`),
-  });
-
-  const datastreamBqJobUser = new gcp.projects.IAMMember('datastream-bq-job-user', {
-    project: projectId,
-    role: 'roles/bigquery.jobUser',
-    member: currentProject.apply(p => `serviceAccount:service-${p.number}@gcp-sa-datastream.iam.gserviceaccount.com`),
-  });
-
-  return [datastreamBqDataEditor, datastreamBqJobUser];
-}
-
 // ============================================================================
 // DATASTREAM PIPELINE DEFINITIONS
 // ============================================================================
