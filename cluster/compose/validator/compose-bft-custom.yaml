@@ -1,0 +1,13 @@
+services:
+  validator:
+    environment:
+      - ADDITIONAL_CONFIG_BFT_SCAN=
+      - |
+        ADDITIONAL_CONFIG_BFT_CUSTOM=
+          canton.validator-apps.validator_backend.scan-client.type = "bft-custom"
+          canton.validator-apps.validator_backend.scan-client.seed-urls = ${BFT_CUSTOM_SEED_URLS}
+          canton.validator-apps.validator_backend.scan-client.sv-names = ${BFT_CUSTOM_SV_NAMES}
+          canton.validator-apps.validator_backend.scan-client.threshold = ${BFT_CUSTOM_THRESHOLD}
+
+          canton.validator-apps.validator_backend.domains.global.trusted-synchronizer-config.sv-names = ${BFT_CUSTOM_SV_NAMES}
+          canton.validator-apps.validator_backend.domains.global.trusted-synchronizer-config.threshold = ${BFT_CUSTOM_THRESHOLD}

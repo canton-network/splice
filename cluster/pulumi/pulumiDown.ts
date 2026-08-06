@@ -3,13 +3,13 @@
 import {
   mustInstallSplitwell,
   mustInstallValidator1,
-} from '@lfdecentralizedtrust/splice-pulumi-common-validator/src/validators';
-import { startDownOperationsForCantonStacks } from '@lfdecentralizedtrust/splice-pulumi-sv-canton/pulumiDown';
+} from '@canton-network/splice-pulumi-common-validator/src/validators';
+import { startDownOperationsForCantonStacks } from '@canton-network/splice-pulumi-sv-canton/pulumiDown';
+import { startDownOperationsForSvStacks } from '@canton-network/splice-pulumi-sv/pulumiDown';
 
 import { awaitAllOrThrowAllExceptions, Operation, PulumiAbortController, stack } from './pulumi';
 import { downOperation } from './pulumiOperations';
 import { startDownOperationsForValidatorStacks } from './validator-runbook/pulumiDown';
-import { startDownOperationsForSvStacks } from '@lfdecentralizedtrust/splice-pulumi-sv/pulumiDown';
 
 const abortController = new PulumiAbortController();
 

@@ -38,7 +38,7 @@ final case class RollForwardLsuTrigger(
     scanConnection.lookupRollForwardLsu().flatMap {
       case None => Future.successful(Seq.empty)
       case Some(rollForward) =>
-        participantAdminConnection.listConnectedDomains().flatMap { connections =>
+        participantAdminConnection.listConnectedSynchronizers().flatMap { connections =>
           connections
             .find(_.physicalSynchronizerId == rollForward.currentPhysicalSynchronizerId) match {
             case None => Future.successful(Seq.empty)
@@ -72,7 +72,7 @@ final case class RollForwardLsuTrigger(
       task: RollForwardLsu
   )(implicit tc: TraceContext): Future[Boolean] =
     for {
-      connections <- participantAdminConnection.listConnectedDomains()
+      connections <- participantAdminConnection.listConnectedSynchronizers()
     } yield connections.find(_.physicalSynchronizerId == task.currentPhysicalSynchronizerId).isEmpty
 
   private def getUsableNewSequencers(alias: SynchronizerAlias, rollForward: RollForwardLsu)(implicit
@@ -80,13 +80,13 @@ final case class RollForwardLsuTrigger(
   ): Future[Option[Seq[DsoSequencer]]] = {
     for {
       config <- participantAdminConnection
-        .lookupSynchronizerConnectionConfig(alias)
+        .lookupRegisteredSynchronizer(alias, Some(rollForward.currentPhysicalSynchronizerId))
         .map(
           _.getOrElse(
             throw Status.INTERNAL
               .withDescription(s"Failed to find connection config for ${alias}")
               .asRuntimeException
-          )
+          ).config
         )
       sequencers <- scanConnection.listDsoSequencers()
     } yield {
@@ -96,7 +96,7 @@ final case class RollForwardLsuTrigger(
             s.sequencers
           case _ => Seq.empty
         }
-        .filter(_.serial == Some(rollForward.successorPhysicalSynchronizerId.serial.unwrap.toLong))
+        .filter(_.serial.contains(rollForward.successorPhysicalSynchronizerId.serial.unwrap.toLong))
       val oldSequencers =
         config.sequencerConnections.aliasToConnection.forgetNE.values.flatMap(_.sequencerId).toSet
       val usableNewSequencers = newSequencers.filter(s => oldSequencers.contains(s.id))

@@ -5,7 +5,7 @@ import {
   DisableConditionally,
   Loading,
   useUserState,
-} from '@lfdecentralizedtrust/splice-common-frontend';
+} from '@canton-network/splice-common-frontend';
 import { useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 

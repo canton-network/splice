@@ -6,15 +6,16 @@ syntax = "proto3";
 package com.digitalasset.canton.protocol.v31;
 
 import "com/digitalasset/canton/crypto/v30/crypto.proto";
-import "com/digitalasset/canton/protocol/v30/common_stable.proto";
+import "com/digitalasset/canton/protocol/v30/common.proto";
 import "com/digitalasset/canton/protocol/v30/participant_transaction.proto";
+import "com/digitalasset/canton/protocol/v31/common_stable.proto";
 import "scalapb/scalapb.proto";
 
 // Messages sent by a participant as part of the transaction protocol
 
 // Compared to v30: ExternalAuthorization updated to v31
 message SubmitterMetadata {
-  option (scalapb.message).companion_extends = "com.digitalasset.canton.version.AlphaProtoVersion";
+  option (scalapb.message).companion_extends = "com.digitalasset.canton.version.StableProtoVersion";
 
   com.digitalasset.canton.crypto.v30.Salt salt = 1;
   repeated string act_as = 2;
@@ -33,7 +34,7 @@ message SubmitterMetadata {
 
 // Compared to v30: HashingSchemeVersion V3 enum added
 message ExternalAuthorization {
-  option (scalapb.message).companion_extends = "com.digitalasset.canton.version.AlphaProtoVersion";
+  option (scalapb.message).companion_extends = "com.digitalasset.canton.version.StableProtoVersion";
 
   // The hashing scheme version used when building the hash
   enum HashingSchemeVersion {
@@ -69,7 +70,7 @@ message ViewParticipantData {
   option (scalapb.message).companion_extends = "com.digitalasset.canton.version.StableProtoVersion";
 
   message KeyResolutionWithMaintainers {
-    v30.GlobalKey key = 1;
+    v31.GlobalKey key = 1;
     repeated string maintainers = 2;
     repeated string contract_ids = 3;
   }
@@ -81,4 +82,28 @@ message ViewParticipantData {
   repeated KeyResolutionWithMaintainers resolved_keys = 5;
   ActionDescription action_description = 6;
   v30.ViewParticipantData.RollbackContext rollback_context = 7; // optional; defaults to the empty RollbackContext if omitted.
+}
+
+// Compared to v30: Added this class
+message EncryptedMultipleViewsMessage {
+  option (scalapb.message).companion_extends = "com.digitalasset.canton.version.StableProtoVersion";
+
+  // A wrapper for a collection of view trees (serialized, uncompressed)
+  message UncompressedViewTrees {
+    repeated bytes view_trees = 1;
+  }
+
+  // Bytes containing the result of compressing the UncompressedViewTrees instance
+  bytes compressed_view_trees = 1;
+
+  repeated bytes view_hashes = 2;
+
+  // The symmetric encryption scheme used to encrypt the view tree and the session key
+  com.digitalasset.canton.crypto.v30.SymmetricKeyScheme encryption_scheme = 3;
+
+  com.digitalasset.canton.crypto.v30.Signature submitting_participant_signature = 4; // optional
+
+  repeated com.digitalasset.canton.crypto.v30.AsymmetricEncrypted session_key_lookup = 5;
+  string physical_synchronizer_id = 6;
+  v30.ViewType view_type = 7;
 }

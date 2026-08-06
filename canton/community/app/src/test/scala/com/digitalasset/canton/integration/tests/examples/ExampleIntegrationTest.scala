@@ -5,11 +5,12 @@ package com.digitalasset.canton.integration.tests.examples
 
 import better.files.*
 import com.digitalasset.canton.ConsoleScriptRunner
+import com.digitalasset.canton.config.CantonConfig
 import com.digitalasset.canton.console.BufferedProcessLogger
 import com.digitalasset.canton.discard.Implicits.DiscardOps
-import com.digitalasset.canton.environment.Environment
+import com.digitalasset.canton.environment.CantonEnvironment
 import com.digitalasset.canton.integration.{
-  BaseIntegrationTest,
+  CantonBaseIntegrationTest,
   ConfigTransform,
   EnvironmentDefinition,
   IsolatedEnvironments,
@@ -19,9 +20,23 @@ import com.digitalasset.canton.util.Mutex
 import com.digitalasset.canton.util.ShowUtil.*
 
 abstract class ExampleIntegrationTest(configPaths: File*)
-    extends BaseIntegrationTest
+    extends CantonBaseIntegrationTest
     with IsolatedEnvironments
     with HasConsoleScriptRunner {
+
+  // Validates that the config files for this example parse correctly exactly as a user would run
+  // them manually with bin/canton — without any ConfigTransforms (no automatic port injection etc.).
+  // This ensures that the example stays runnable even as configs evolve alongside the integration test.
+  override protected def beforeAll(): Unit = {
+    CantonConfig
+      .parseAndLoad(configPaths.map(_.toJava), defaultPorts = None)
+      .valueOrFail(
+        s"Config files for ${this.getClass.getSimpleName} must parse correctly without " +
+          s"ConfigTransforms: ${configPaths.map(_.name).mkString(", ")}"
+      )
+      .discard
+    super.beforeAll()
+  }
 
   protected def runAndAssertCommandSuccess(
       pb: scala.sys.process.ProcessBuilder,
@@ -58,7 +73,7 @@ abstract class ExampleIntegrationTest(configPaths: File*)
 trait HasConsoleScriptRunner { this: NamedLogging =>
   import org.scalatest.EitherValues.*
 
-  def runScript(scriptPath: File)(implicit env: Environment): Unit =
+  def runScript(scriptPath: File)(implicit env: CantonEnvironment): Unit =
     ConsoleScriptRunner.run(env, scriptPath.toJava, logger = logger).value.discard
 }
 

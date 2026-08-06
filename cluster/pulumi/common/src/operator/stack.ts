@@ -7,7 +7,7 @@ import {
   config,
   infraAffinityAndTolerations,
   isMainNet,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 import { CustomResource } from '@pulumi/kubernetes/apiextensions';
 
 import { spliceEnvConfig } from '../config/envConfig';

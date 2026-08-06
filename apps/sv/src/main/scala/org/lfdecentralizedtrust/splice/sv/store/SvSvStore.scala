@@ -11,7 +11,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.{
   validatoronboarding as vo,
 }
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.QueryResult
 import org.lfdecentralizedtrust.splice.store.{AppStore, Limit, MultiDomainAcsStore, PageLimit}
 import org.lfdecentralizedtrust.splice.sv.store.db.DbSvSvStore
@@ -89,6 +88,8 @@ trait SvSvStore extends AppStore {
       .map(_.headOption map (_.contract))
 
   def key: SvStore.Key
+
+  override def dsoPartyId = key.dsoParty
 }
 
 object SvSvStore {
@@ -97,7 +98,7 @@ object SvSvStore {
       storage: DbStorage,
       loggerFactory: NamedLoggerFactory,
       retryProvider: RetryProvider,
-      domainMigrationInfo: DomainMigrationInfo,
+      migrationId: Long,
       participantId: ParticipantId,
       ingestionConfig: IngestionConfig,
       defaultLimit: Limit,
@@ -112,7 +113,7 @@ object SvSvStore {
       storage,
       loggerFactory,
       retryProvider,
-      domainMigrationInfo,
+      migrationId,
       participantId,
       ingestionConfig,
       acsStoreDescriptorUserVersion,

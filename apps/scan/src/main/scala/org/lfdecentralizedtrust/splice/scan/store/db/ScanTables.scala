@@ -15,19 +15,10 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequir
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.TransferCommand
 import org.lfdecentralizedtrust.splice.scan.store.{
-  AbortTransferInstructionTxLogEntry,
-  AppRewardTxLogEntry,
-  BalanceChangeTxLogEntry,
   ClosedMiningRoundTxLogEntry,
   ErrorTxLogEntry,
-  ExtraTrafficPurchaseTxLogEntry,
-  MintTxLogEntry,
   OpenMiningRoundTxLogEntry,
-  SvRewardTxLogEntry,
-  TapTxLogEntry,
-  TransferTxLogEntry,
   TxLogEntry,
-  ValidatorRewardTxLogEntry,
   VoteRequestTxLogEntry,
   TransferCommandTxLogEntry,
 }
@@ -193,50 +184,6 @@ object ScanTables extends AcsTables {
               round = Some(cmr.round),
               closedRoundEffectiveAt = cmr.effectiveAt.map(CantonTimestamp.assertFromInstant),
             )
-          case are: AppRewardTxLogEntry =>
-            ScanTxLogRowData(
-              entry = are,
-              round = Some(are.round),
-              rewardAmount = Some(are.amount),
-              rewardedParty = Some(are.party),
-            )
-          case vre: ValidatorRewardTxLogEntry =>
-            ScanTxLogRowData(
-              entry = vre,
-              round = Some(vre.round),
-              rewardAmount = Some(vre.amount),
-              rewardedParty = Some(vre.party),
-            )
-          case sre: SvRewardTxLogEntry =>
-            ScanTxLogRowData(
-              entry = sre,
-              round = Some(sre.round),
-              rewardAmount = Some(sre.amount),
-              rewardedParty = Some(sre.party),
-            )
-          case etp: ExtraTrafficPurchaseTxLogEntry =>
-            ScanTxLogRowData(
-              entry = etp,
-              round = Some(etp.round),
-              extraTrafficValidator = Some(etp.validator),
-              extraTrafficPurchaseTrafficPurchase = Some(etp.trafficPurchased),
-              extraTrafficPurchaseCcSpent = Some(etp.ccSpent),
-            )
-          case rar: TransferTxLogEntry =>
-            ScanTxLogRowData(
-              entry = rar,
-              round = Some(rar.round),
-            )
-          case entry: TapTxLogEntry =>
-            ScanTxLogRowData(
-              entry = entry,
-              round = Some(entry.round),
-            )
-          case entry: MintTxLogEntry =>
-            ScanTxLogRowData(
-              entry = entry,
-              round = Some(entry.round),
-            )
           case vr: VoteRequestTxLogEntry =>
             val result = vr.result.getOrElse(throw txMissingField())
             val parsedOutcome = VoteRequestOutcome.parse(result.outcome)
@@ -268,20 +215,12 @@ object ScanTables extends AcsTables {
                 entry.nonce
               ),
             )
-          case entry: AbortTransferInstructionTxLogEntry =>
-            ScanTxLogRowData(
-              entry = entry
-            )
           case _ =>
             throw txEncodingFailed()
         }
       }
 
       record match {
-        case _: BalanceChangeTxLogEntry =>
-          // the balance changes are no longer indexed, or written, to the tx log table,
-          // See https://github.com/canton-network/splice/pull/3734
-          None
         case entry => Some(fromEntry(entry))
       }
     }

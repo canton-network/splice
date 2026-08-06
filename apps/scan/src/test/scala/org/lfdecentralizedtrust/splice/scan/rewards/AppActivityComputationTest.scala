@@ -59,6 +59,19 @@ class AppActivityComputationTest extends AnyWordSpec with BaseTest {
       result.head.appActivityWeights shouldBe Seq(100L, 100L)
     }
 
+    "scale provider burn by their activity weights" in {
+      val verdict = mkVerdict(Map(0 -> mkView(Seq("partyA", "partyB"))))
+      val summary = mkSummary(200L, Seq(mkEnvelope(200L, Seq(0))))
+
+      val result = computeWithWeights(
+        Map("partyA" -> BigDecimal(2.2), "partyB" -> BigDecimal("0.8")),
+        Seq((summary, verdict)),
+      )
+      result should have size 1
+      result.head.appProviderParties shouldBe Seq("partyA", "partyB")
+      result.head.appActivityWeights shouldBe Seq(220L, 80L)
+    }
+
     // This probably cannot happen, nevertheless we can handle it
     "handle zero traffic cost envelope" in {
       val verdict = mkVerdict(Map(0 -> mkView(Seq("partyA"))))
@@ -97,6 +110,18 @@ class AppActivityComputationTest extends AnyWordSpec with BaseTest {
       result.head.appProviderParties shouldBe Seq("alpha", "mike", "zulu")
     }
 
+    "skip activity record when verdict is submitted by an SV participant" in {
+      val verdict = mkVerdict(Map(0 -> mkView(Seq("partyA"))))
+      val summary = mkSummary(100L, Seq(mkEnvelope(100L, Seq(0))))
+
+      val result = computeWith(
+        featured = Set("partyA"),
+        input = Seq((summary, verdict)),
+        svParticipantIds = Set(defaultSubmittingParticipant),
+      )
+      result shouldBe empty
+    }
+
     "deduplicate the same party appearing in multiple quorums of one view" in {
       val viewWithDuplicateParty = v30.TransactionView(
         informees = Seq("partyA", "partyB"),
@@ -119,6 +144,7 @@ class AppActivityComputationTest extends AnyWordSpec with BaseTest {
   }
 
   private val ts = CantonTimestamp.ofEpochSecond(1000)
+  private val defaultSubmittingParticipant = "participant1"
 
   // DvP settlement example from CIP-104
   // 5 nodes, each with its own view and envelope:
@@ -174,10 +200,21 @@ class AppActivityComputationTest extends AnyWordSpec with BaseTest {
 
   private val roundOpensAt = CantonTimestamp.ofEpochSecond(0)
 
-  /** Run computation and extract just the AppActivityRecordT results. */
+  /** Run computation and extract just the AppActivityRecordT results.
+    * All featured providers use the default activity weight of 1.0.
+    */
   private def computeWith(
       featured: Set[String],
       input: Seq[(DbScanVerdictStore.TrafficSummaryT, v30.Verdict)],
+      svParticipantIds: Set[String] = Set("someSvParticipant"),
+  ): Seq[DbAppActivityRecordStore.AppActivityRecordT] =
+    computeWithWeights(featured.map(_ -> BigDecimal(1)).toMap, input, svParticipantIds)
+
+  /** Run computation with explicit per-provider activity weights. */
+  private def computeWithWeights(
+      featuredWeights: Map[String, BigDecimal],
+      input: Seq[(DbScanVerdictStore.TrafficSummaryT, v30.Verdict)],
+      svParticipantIds: Set[String] = Set("someSvParticipant"),
   ): Seq[DbAppActivityRecordStore.AppActivityRecordT] = {
     val store = mock[ScanRewardsReferenceStore]
     when(store.lookupActiveOpenMiningRounds(any[Seq[CantonTimestamp]])(any[TraceContext]))
@@ -185,7 +222,9 @@ class AppActivityComputationTest extends AnyWordSpec with BaseTest {
         Future.successful(times.map(_ -> (0L, roundOpensAt)).toMap)
       }
     when(store.lookupFeaturedAppPartiesAsOf(any[CantonTimestamp])(any[TraceContext]))
-      .thenReturn(Future.successful(featured))
+      .thenReturn(Future.successful(featuredWeights))
+    when(store.lookupSvParticipantIdsAsOf(any[CantonTimestamp])(any[TraceContext]))
+      .thenReturn(Future.successful(svParticipantIds))
     new AppActivityComputation(store, loggerFactory)(directExecutionContext)
       .computeActivities(input)(traceContext)
       .futureValue
@@ -200,7 +239,7 @@ class AppActivityComputationTest extends AnyWordSpec with BaseTest {
     val proto = ProtoTimestamp(seconds = timestamp.getEpochSecond)
     v30.Verdict(
       submittingParties = Seq("submitter"),
-      submittingParticipantUid = "participant1",
+      submittingParticipantUid = defaultSubmittingParticipant,
       verdict = verdictResult,
       recordTime = Some(proto),
       finalizationTime = Some(proto),

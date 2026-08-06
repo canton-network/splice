@@ -3,7 +3,7 @@
 
 import dayjs from 'dayjs';
 import { useAppForm } from '../../hooks/form';
-import { dateTimeFormatISO } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import { useDsoInfos } from '../../contexts/SvContext';
 import { ActionRequiringConfirmation } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
 import { FormLayout } from './FormLayout';
@@ -17,7 +17,7 @@ import {
   validateUrl,
   validateWeight,
 } from './formValidators';
-import { THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
+import { SUPPORTING_URL_LABEL, THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
 import {
   createProposalActions,
   formatBasisPoints,
@@ -135,11 +135,40 @@ export const UpdateSvRewardWeightForm: React.FC = _ => {
         ) : (
           <>
             <form.AppField name="action">
+              {field => <field.ProposalTypeField id="update-sv-reward-weight-action" />}
+            </form.AppField>
+
+            <form.AppField
+              name="sv"
+              validators={{
+                onBlur: ({ value }) => validateSvSelection(value),
+                onChange: ({ value }) => {
+                  return validateSvSelection(value);
+                },
+              }}
+            >
+              {field => (
+                <field.SelectField
+                  title="Member"
+                  options={svOptions}
+                  id="update-sv-reward-weight-member"
+                  onChange={() => form.resetField('weight')}
+                />
+              )}
+            </form.AppField>
+
+            <form.AppField
+              name="weight"
+              validators={{
+                onBlur: ({ value }) => validateWeight(value),
+                onChange: ({ value }) => validateWeight(value),
+              }}
+            >
               {field => (
                 <field.TextField
-                  title="Action"
-                  id="update-sv-reward-weight-action"
-                  muiTextFieldProps={{ disabled: true }}
+                  title="Weight"
+                  id="update-sv-reward-weight-weight"
+                  subtitle={selectedSv ? `Current Weight: ${currentWeight}` : undefined}
                 />
               )}
             </form.AppField>
@@ -153,7 +182,7 @@ export const UpdateSvRewardWeightForm: React.FC = _ => {
             >
               {field => (
                 <field.DateField
-                  title="Threshold Deadline"
+                  title="Quorum Threshold Deadline"
                   description={THRESHOLD_DEADLINE_SUBTITLE}
                   id="update-sv-reward-weight-expiry-date"
                 />
@@ -191,41 +220,8 @@ export const UpdateSvRewardWeightForm: React.FC = _ => {
                 onChange: ({ value }) => validateUrl(value),
               }}
             >
-              {field => <field.TextField title="URL" id="update-sv-reward-weight-url" />}
-            </form.AppField>
-
-            <form.AppField
-              name="sv"
-              validators={{
-                onBlur: ({ value }) => validateSvSelection(value),
-                onChange: ({ value }) => {
-                  return validateSvSelection(value);
-                },
-              }}
-            >
               {field => (
-                <field.SelectField
-                  title="Member"
-                  options={svOptions}
-                  id="update-sv-reward-weight-member"
-                  onChange={() => form.resetField('weight')}
-                />
-              )}
-            </form.AppField>
-
-            <form.AppField
-              name="weight"
-              validators={{
-                onBlur: ({ value }) => validateWeight(value),
-                onChange: ({ value }) => validateWeight(value),
-              }}
-            >
-              {field => (
-                <field.TextField
-                  title="Weight"
-                  id="update-sv-reward-weight-weight"
-                  subtitle={selectedSv ? `Current Weight: ${currentWeight}` : undefined}
-                />
+                <field.TextField title={SUPPORTING_URL_LABEL} id="update-sv-reward-weight-url" />
               )}
             </form.AppField>
           </>

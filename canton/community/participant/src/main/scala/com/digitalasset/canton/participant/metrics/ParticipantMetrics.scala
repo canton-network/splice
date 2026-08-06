@@ -11,12 +11,15 @@ import com.daml.metrics.api.MetricHandle.*
 import com.daml.metrics.api.MetricHandle.Gauge.CloseableGauge
 import com.daml.metrics.api.noop.NoOpGauge
 import com.digitalasset.canton.SynchronizerAlias
+import com.digitalasset.canton.config.RequireTypes.NonNegativeInt
 import com.digitalasset.canton.data.TaskSchedulerMetrics
+import com.digitalasset.canton.discard.Implicits.*
 import com.digitalasset.canton.environment.BaseMetrics
 import com.digitalasset.canton.http.metrics.{HttpApiHistograms, HttpApiMetrics}
 import com.digitalasset.canton.metrics.*
 import com.digitalasset.canton.metrics.ActiveRequestsMetrics.GrpcServerMetricsX
 import com.digitalasset.canton.participant.metrics.PruningMetrics as ParticipantPruningMetrics
+import com.digitalasset.canton.topology.PhysicalSynchronizerId
 
 import scala.collection.concurrent.TrieMap
 
@@ -34,6 +37,8 @@ class ParticipantHistograms(val parent: MetricName)(implicit
 
   private[metrics] val dbStorage: DbStorageHistograms =
     new DbStorageHistograms(parent)
+  private[metrics] val signing: SigningHistograms = new SigningHistograms(parent)
+  private[metrics] val decryption: DecryptionHistograms = new DecryptionHistograms(parent)
   private[metrics] val sequencerClient: SequencerClientHistograms = new SequencerClientHistograms(
     parent
   )
@@ -81,18 +86,6 @@ class ParticipantMetrics(
 
   private implicit val mc: MetricsContext = MetricsContext.Empty
 
-  // The metrics documentation generation requires all metrics to be registered in the factory.
-  // However, the following metric is registered on-demand during normal operation. Therefore,
-  // we use this environment variable approach to guard against instantiation in production; but
-  // register the metric for the documentation generation.
-  if (sys.env.contains("GENERATE_METRICS_FOR_DOCS")) {
-    new ConnectedSynchronizerMetrics(
-      SynchronizerAlias.tryCreate("synchronizer"),
-      inventory.connectedSynchronizer,
-      openTelemetryMetricsFactory,
-    )
-  }
-
   override val prefix: MetricName = inventory.prefix
 
   override val declarativeApiMetrics: DeclarativeApiMetrics =
@@ -100,8 +93,19 @@ class ParticipantMetrics(
   override def grpcMetrics: GrpcServerMetricsX = (ledgerApiServer.grpc, ledgerApiServer.requests)
   override def healthMetrics: HealthMetrics = ledgerApiServer.health
   override def storageMetrics: DbStorageMetrics = dbStorage
-  val dbStorage = new DbStorageMetrics(inventory.dbStorage, openTelemetryMetricsFactory)
-  val kmsMetrics: KmsMetrics = new KmsMetrics(prefix, openTelemetryMetricsFactory)
+
+  val dbStorage: DbStorageMetrics =
+    new DbStorageMetrics(inventory.dbStorage, openTelemetryMetricsFactory)
+
+  override def cryptoMetrics: CryptoMetrics = crypto
+
+  val crypto: CryptoMetrics =
+    new CryptoMetrics(
+      new SigningMetrics(inventory.signing, openTelemetryMetricsFactory),
+      new DecryptionMetrics(inventory.decryption, openTelemetryMetricsFactory),
+      Some(new KmsMetrics(prefix, openTelemetryMetricsFactory)),
+    )
+
   val phase: Timer = openTelemetryMetricsFactory.timer(inventory.phase.info)
 
   // Private constructor to avoid being instantiated multiple times by accident
@@ -146,12 +150,9 @@ class ParticipantMetrics(
         // by delaying the creation until the getOrElseUpdate call has finished.
         Eval.later(
           new ConnectedSynchronizerMetrics(
-            alias,
             inventory.connectedSynchronizer,
             openTelemetryMetricsFactory,
-          )(
-            mc.withExtraLabels("synchronizer" -> alias.unwrap)
-          )
+          )(mc.withExtraLabels("synchronizer" -> alias.unwrap))
         ),
       )
       .value
@@ -195,6 +196,102 @@ class ParticipantMetrics(
       maxInflightValidationRequestGaugeForDocs.info,
       () => value().getOrElse(-1),
     )
+
+  // Since gauges don't support metrics context per update, create a map with a gauge per successor psid.
+  private val lsuStatus: TrieMap[PhysicalSynchronizerId, Gauge[Int]] = TrieMap.empty
+
+  /** Update the value of the metric if the provided value is bigger than the stored value. Create
+    * the metric otherwise.
+    */
+  def setLsuStatus(
+      value: NonNegativeInt,
+      successorPsid: PhysicalSynchronizerId,
+  ): Unit =
+    lsuStatus
+      .updateWith(successorPsid) {
+        case None =>
+          Some(
+            newLsuStatus(
+              MetricsContext("successor_psid" -> successorPsid.toProtoPrimitive),
+              value = value.unwrap,
+            )
+          )
+        case Some(gauge) =>
+          gauge.updateValue(_.max(value.unwrap))
+          Some(gauge)
+      }
+      .discard
+
+  /** Update the value of the metric to zero. Create the metric otherwise.
+    */
+  def resetLsuStatus(
+      successorPsid: PhysicalSynchronizerId
+  ): Unit = {
+    val value = ParticipantMetrics.LsuStatus.NoLsu.unwrap
+
+    lsuStatus
+      .updateWith(successorPsid) {
+        case None =>
+          Some(
+            newLsuStatus(
+              MetricsContext("successor_psid" -> successorPsid.toProtoPrimitive),
+              value = value,
+            )
+          )
+        case Some(gauge) =>
+          gauge.updateValue(value)
+          Some(gauge)
+      }
+      .discard
+  }
+
+  private def newLsuStatus(mc: MetricsContext, value: Int) = openTelemetryMetricsFactory.gauge(
+    info = MetricInfo(
+      name = prefix :+ "lsu_status",
+      summary = "Tracks the state of the LSU for a specific successor",
+      qualification = MetricQualification.Debug,
+      description = """The value represents the progress of LSU from the participant point of view.
+          |0: Unset / initial
+          |1: LSU announcement received
+          |2: Threshold many sequencer successors known
+          |3: Handshake with successor done
+          |4: Topology local copy done
+          |5: LSU is done (node ready to connect to new synchronizer)
+          |""".stripMargin,
+      labelsWithDescription = Map(
+        "successor_psid" -> "The physical synchronizer id of the successor"
+      ),
+    ),
+    initial = value,
+  )(mc)
+
+  // The metrics documentation generation requires all metrics to be registered in the factory.
+  // However, the following metric is registered on-demand during normal operation. Therefore,
+  // we use this environment variable approach to guard against instantiation in production; but
+  // register the metric for the documentation generation.
+  if (sys.env.contains("GENERATE_METRICS_FOR_DOCS")) {
+    val dummyPsid = PhysicalSynchronizerId.tryFromString(
+      "da::1220c72c0cdfb591769534ae47a26ee7b2f8ea55e86380eb38499f3fae4702744fe1::34-0"
+    )
+
+    resetLsuStatus(dummyPsid)
+
+    new ConnectedSynchronizerMetrics(
+      inventory.connectedSynchronizer,
+      openTelemetryMetricsFactory,
+    )
+  }
+}
+
+object ParticipantMetrics {
+  object LsuStatus {
+    val NoLsu: NonNegativeInt = NonNegativeInt.zero // Only after a cancellation
+    val LsuAnnounced: NonNegativeInt = NonNegativeInt.one
+    val SequencerSuccessorsKnown: NonNegativeInt = NonNegativeInt.two
+    val HandshakeDone: NonNegativeInt = NonNegativeInt.three
+    val LocalCopyDone: NonNegativeInt = NonNegativeInt.tryCreate(4)
+    val LsuDone: NonNegativeInt = NonNegativeInt.tryCreate(5)
+  }
 }
 
 class ConnectedSynchronizerHistograms private[metrics] (
@@ -214,7 +311,6 @@ class ConnectedSynchronizerHistograms private[metrics] (
 }
 
 class ConnectedSynchronizerMetrics private[metrics] (
-    synchronizerAlias: SynchronizerAlias,
     histograms: ConnectedSynchronizerHistograms,
     factory: LabeledMetricsFactory,
 )(implicit metricsContext: MetricsContext) {
@@ -257,7 +353,7 @@ class ConnectedSynchronizerMetrics private[metrics] (
   }
 
   val commitments: CommitmentMetrics =
-    new CommitmentMetrics(synchronizerAlias, histograms.commitments, factory)
+    new CommitmentMetrics(histograms.commitments, factory)
 
   val transactionProcessing: TransactionProcessingMetrics =
     new TransactionProcessingMetrics(histograms.transactionProcessing, factory)

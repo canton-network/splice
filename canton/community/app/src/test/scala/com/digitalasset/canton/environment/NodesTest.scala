@@ -19,7 +19,6 @@ import com.digitalasset.canton.concurrent.{
   FutureSupervisor,
 }
 import com.digitalasset.canton.config.*
-import com.digitalasset.canton.config.RequireTypes.NonNegativeInt
 import com.digitalasset.canton.config.StartupMemoryCheckConfig.ReportingLevel
 import com.digitalasset.canton.crypto.Crypto
 import com.digitalasset.canton.discard.Implicits.DiscardOps
@@ -32,6 +31,7 @@ import com.digitalasset.canton.lifecycle.{LifeCycle, ShutdownFailedException}
 import com.digitalasset.canton.metrics.ActiveRequestsMetrics.GrpcServerMetricsX
 import com.digitalasset.canton.metrics.{
   CommonMockMetrics,
+  CryptoMetrics,
   DbStorageMetrics,
   DeclarativeApiMetrics,
   LedgerApiServerMetrics,
@@ -56,7 +56,6 @@ import com.digitalasset.canton.topology.{
 import com.digitalasset.canton.tracing.TracingConfig
 import com.digitalasset.canton.util.FutureInstances.*
 import com.digitalasset.canton.util.PekkoUtil
-import com.digitalasset.canton.version.ProtocolVersion
 import io.grpc.ServerServiceDefinition
 import io.opentelemetry.sdk.OpenTelemetrySdk
 import io.opentelemetry.sdk.trace.SdkTracerProvider
@@ -68,7 +67,7 @@ import scala.concurrent.duration.DurationInt
 import scala.concurrent.{Await, Future, Promise}
 
 class NodesTest extends FixtureAnyWordSpec with BaseTest with HasExecutionContext {
-  val clock = new SimClock(loggerFactory = loggerFactory)
+  private val clock = new SimClock(loggerFactory = loggerFactory)
   trait TestNode extends CantonNode
   case class TestNodeConfig()
       extends LocalNodeConfig
@@ -111,13 +110,13 @@ class NodesTest extends FixtureAnyWordSpec with BaseTest with HasExecutionContex
       alphaVersionSupport: Boolean = false,
       betaVersionSupport: Boolean = false,
       dontWarnOnDeprecatedPV: Boolean = false,
-      initialProtocolVersion: ProtocolVersion = testedProtocolVersion,
       exitOnFatalFailures: Boolean = true,
       watchdog: Option[WatchdogConfig] = None,
       startupMemoryCheckConfig: StartupMemoryCheckConfig = StartupMemoryCheckConfig(
         ReportingLevel.Warn
       ),
-      dispatchQueueBackpressureLimit: NonNegativeInt = NonNegativeInt.two,
+      topologyConfig: TopologyConfig = TopologyConfig(),
+      sanitizePublicErrorMessages: Boolean = false,
   ) extends CantonNodeParameters
 
   private val metricsFactory: LabeledMetricsFactory = new InMemoryMetricsFactory
@@ -128,6 +127,7 @@ class NodesTest extends FixtureAnyWordSpec with BaseTest with HasExecutionContex
         (LedgerApiServerMetrics.ForTesting.grpc, LedgerApiServerMetrics.ForTesting.requests),
       healthMetrics: HealthMetrics = LedgerApiServerMetrics.ForTesting.health,
       storageMetrics: DbStorageMetrics = CommonMockMetrics.dbStorage,
+      cryptoMetrics: CryptoMetrics = CommonMockMetrics.cryptoMetrics,
   ) extends BaseMetrics {
 
     override val declarativeApiMetrics: DeclarativeApiMetrics =

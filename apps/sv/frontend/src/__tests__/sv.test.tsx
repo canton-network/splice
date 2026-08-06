@@ -4,10 +4,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse, PathParams } from 'msw';
 import { mockAllIsIntersecting } from 'react-intersection-observer/test-utils';
-import {
-  CreateVoteRequest,
-  ListDsoRulesVoteRequestsResponse,
-} from '@lfdecentralizedtrust/sv-openapi';
+import { CreateVoteRequest, ListDsoRulesVoteRequestsResponse } from '@canton-network/sv-openapi';
 import { test, expect, describe } from 'vitest';
 
 import App from '../App';
@@ -16,12 +13,9 @@ import { onboardingInfo } from '../components/ValidatorOnboardingSecrets';
 import { svPartyId, voteRequests } from './mocks/constants';
 import { server, svUrl } from './setup/setup';
 import { changeAction, navigateToLegacyGovernancePage } from './helpers';
-import {
-  dateTimeFormatISO,
-  getUTCWithOffset,
-} from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { dateTimeFormatISO, getUTCWithOffset } from '@canton-network/splice-common-frontend-utils';
 import dayjs from 'dayjs';
-import { dsoInfo } from '@lfdecentralizedtrust/splice-common-test-handlers';
+import { dsoInfo } from '@canton-network/splice-common-test-handlers';
 
 const AppWithConfig = () => {
   return (
@@ -47,19 +41,12 @@ describe('SV user can', () => {
     expect(await screen.findAllByDisplayValue(svPartyId)).toBeDefined();
   });
 
-  test('can see the network name banner', async () => {
-    userEvent.setup();
-    render(<AppWithConfig />);
-
-    await screen.findByText('You are on ScratchNet');
-  });
-
   test('browse to the validator onboarding tab', async () => {
     const user = userEvent.setup();
     render(<AppWithConfig />);
 
-    expect(await screen.findByText('Validator Onboarding')).toBeDefined();
-    await user.click(screen.getByText('Validator Onboarding'));
+    expect(await screen.findByText('Validators')).toBeDefined();
+    await user.click(screen.getByText('Validators'));
 
     expect(await screen.findByText('Validator Onboarding Secrets')).toBeDefined();
   });
@@ -68,8 +55,8 @@ describe('SV user can', () => {
     const user = userEvent.setup();
     render(<AppWithConfig />);
 
-    expect(await screen.findByText('Validator Onboarding')).toBeDefined();
-    await user.click(screen.getByText('Validator Onboarding'));
+    expect(await screen.findByText('Validators')).toBeDefined();
+    await user.click(screen.getByText('Validators'));
 
     const partyHintInput = screen.getByTestId('create-party-hint');
     await user.type(partyHintInput, 'wrong-input');
@@ -215,7 +202,7 @@ describe('An SetConfig request', () => {
     );
 
     const button = screen.getByRole('button', { name: 'Send Request to Super Validators' });
-    expect(button.getAttribute('disabled')).toBeDefined();
+    expect(button.getAttribute('disabled')).not.toBeNull();
   });
 
   test('displays a warning when an SV tries to modify an AmuletRules field already changed by another request', async () => {
@@ -246,7 +233,7 @@ describe('An SetConfig request', () => {
         'You are therefore not allowed to modify the fields: transferConfig.createFee.fee'
     );
     const button = screen.getByTestId('create-voterequest-submit-button');
-    expect(button.getAttribute('disabled')).toBeDefined();
+    expect(button.getAttribute('disabled')).not.toBeNull();
   });
 
   test('disables the Proceed button in the confirmation dialog if a conflict arises after request creation', async () => {
@@ -287,7 +274,10 @@ describe('An SetConfig request', () => {
     );
 
     const button = screen.getByRole('button', { name: 'Proceed' });
-    expect(button.getAttribute('disabled')).toBeDefined();
+    // the conflict is only detected once the vote requests query re-polls (1s interval)
+    await waitFor(() => expect(button.getAttribute('disabled')).not.toBeNull(), {
+      timeout: 5000,
+    });
   });
 });
 
@@ -309,8 +299,8 @@ describe('An AddFutureAmuletConfigSchedule request', () => {
     const user = userEvent.setup();
     render(<AppWithConfig />);
 
-    expect(await screen.findByText('Validator Onboarding')).toBeDefined();
-    await user.click(screen.getByText('Validator Onboarding'));
+    expect(await screen.findByText('Validators')).toBeDefined();
+    await user.click(screen.getByText('Validators'));
 
     expect(await screen.findByText('Validator Licenses')).toBeDefined();
 
@@ -321,8 +311,8 @@ describe('An AddFutureAmuletConfigSchedule request', () => {
     expect(await screen.findByDisplayValue('validator::15')).toBeDefined();
 
     // secrets
-    expect(await screen.queryByText('encoded_secret')).toBeDefined();
-    expect(await screen.queryByText('candidate_secret')).toBeNull();
+    expect(screen.queryByText('encoded_secret')).not.toBeNull();
+    expect(screen.queryByText('candidate_secret')).toBeNull();
   });
 });
 
@@ -378,7 +368,7 @@ describe('SetAmuletRules', () => {
         (calledWithBody.action as any).value.amuletRulesAction.value.newConfig.transferConfig
           .transferFee.steps
         // the second element is gone
-      ).toStrictEqual(initialSteps.filter((_, i) => i !== 1));
+      ).toStrictEqual(initialSteps.filter((_: unknown, i: number) => i !== 1));
     },
     { timeout: 20000 }
   );

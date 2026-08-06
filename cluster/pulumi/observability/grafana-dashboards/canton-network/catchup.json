@@ -134,7 +134,7 @@
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "{{namespace}} migration $migration",
+          "legendFormat": "{{namespace}}-{{job}}",
           "range": true,
           "refId": "A",
           "useBackend": false
@@ -245,7 +245,7 @@
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "processing time {{namespace}} migration $migration / min",
+          "legendFormat": "processing time {{namespace}}-{{job}} / min",
           "range": true,
           "refId": "B",
           "useBackend": false
@@ -465,7 +465,7 @@
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "{{namespace}}",
+          "legendFormat": "{{namespace}}-{{job}}",
           "range": true,
           "refId": "A",
           "useBackend": false
@@ -799,7 +799,7 @@
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{namespace}}",
+          "legendFormat": "{{namespace}}-{{job}}",
           "range": true,
           "refId": "A",
           "useBackend": false
@@ -902,7 +902,7 @@
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "{{job}}",
+          "legendFormat": "{{namespace}}-{{job}}",
           "range": true,
           "refId": "A",
           "useBackend": false
@@ -1108,7 +1108,7 @@
           "fullMetaSearch": false,
           "includeNullMetadata": true,
           "instant": false,
-          "legendFormat": "{{namespace}}",
+          "legendFormat": "{{namespace}}-{{job}}",
           "range": true,
           "refId": "A",
           "useBackend": false
@@ -1316,9 +1316,11 @@
       {
         "current": {
           "text": [
+            "sv",
             "sv-1"
           ],
           "value": [
+            "sv",
             "sv-1"
           ]
         },
@@ -1363,7 +1365,7 @@
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 2,
-        "regex": "/global-domain-(?<value>\\d)-sequencer/g",
+        "regex": "/global-domain-(?<value>\\d+)-sequencer/g",
         "regexApplyTo": "value",
         "sort": 1,
         "type": "query"
@@ -1378,6 +1380,6 @@
   "timezone": "",
   "title": "Global Domain Catchup",
   "uid": "ca9df344-c699-4efe-83c2-5fb2639d96d9",
-  "version": 2,
+  "version": 1,
   "weekStart": ""
 }

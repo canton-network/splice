@@ -37,14 +37,17 @@ import com.digitalasset.canton.synchronizer.sequencing.service.GrpcSequencerAuth
 import com.digitalasset.canton.synchronizer.service.HandshakeValidator
 import com.digitalasset.canton.topology.Member
 import com.digitalasset.canton.tracing.{TraceContext, TraceContextGrpc}
+import com.digitalasset.canton.util.OptionUtil
 import com.digitalasset.canton.version.ProtocolVersion
 import io.grpc.Status
+import org.slf4j.event.Level
 
 import scala.concurrent.{ExecutionContext, Future}
 
 class GrpcSequencerAuthenticationService(
     authenticationService: MemberAuthenticationService,
     protocolVersion: ProtocolVersion,
+    disableReleaseVersionHandshakeCheck: Boolean,
     protected val loggerFactory: NamedLoggerFactory,
 )(implicit executionContext: ExecutionContext)
     extends SequencerAuthenticationService
@@ -60,12 +63,12 @@ class GrpcSequencerAuthenticationService(
       signature <- eitherT(
         ProtoConverter
           .parseRequired(Signature.fromProtoV30, "signature", request.signature)
-          .leftMap(err => Status.INVALID_ARGUMENT.withDescription(err.toString))
+          .leftMap(err => (Status.INVALID_ARGUMENT.withDescription(err.toString), true))
       )
       providedNonce <- eitherT(
         Nonce
           .fromProtoPrimitive(request.nonce)
-          .leftMap(err => Status.INVALID_ARGUMENT.withDescription(err.toString))
+          .leftMap(err => (Status.INVALID_ARGUMENT.withDescription(err.toString), true))
       )
       tokenAndExpiry <- authenticationService
         .validateSignature(member, signature, providedNonce)
@@ -76,19 +79,25 @@ class GrpcSequencerAuthenticationService(
         token = token.toProtoPrimitive,
         expiresAt = Some(expiry.toProtoTimestamp),
       )
-    }).valueOr { error =>
+    }).valueOr { case (error, isSensitive) =>
       // create error message to appropriately log this error
-      val redactedError = if (isSensitive(error)) {
-        SequencerAuthenticationFaultyOrMalicious
-          .AuthenticationFailure(request.member, error)
-          .discard
-        error.withDescription("Bad authentication request")
-      } else {
-        SequencerAuthenticationFailure
-          .AuthenticationFailure(request.member, error)
-          .discard
-        error
-      }
+      val redactedError =
+        if (isSensitive) {
+          SequencerAuthenticationFaultyOrMalicious
+            .AuthenticationFailure(
+              request.member,
+              error,
+              if (error.getCode != Status.INTERNAL.getCode) Some(Level.INFO)
+              else None,
+            )
+            .discard
+          error.withDescription("Bad authentication request")
+        } else {
+          SequencerAuthenticationFailure
+            .AuthenticationFailure(request.member, error)
+            .discard
+          error
+        }
       throw redactedError.asRuntimeException()
     }.asGrpcResponse
   }
@@ -113,69 +122,78 @@ class GrpcSequencerAuthenticationService(
         nonce.toProtoPrimitive,
         fingerprints.map(_.unwrap).toList,
       )
-    }).valueOr { error =>
-      val redactedError = if (isSensitive(error)) {
-        SequencerAuthenticationFaultyOrMalicious
-          .ChallengeFailure(
-            request.member,
-            request.memberProtocolVersions,
-            error,
-          )
-          .discard
-        error.withDescription("Bad challenge request")
-      } else {
-        SequencerAuthenticationFailure
-          .ChallengeFailure(
-            request.member,
-            request.memberProtocolVersions,
-            error,
-          )
-          .discard
-        error
-      }
+    }).valueOr { case (error, isSensitive) =>
+      val redactedError =
+        if (isSensitive) {
+          SequencerAuthenticationFaultyOrMalicious
+            .ChallengeFailure(
+              request.member,
+              request.memberProtocolVersions,
+              error,
+              if (error.getCode != Status.INTERNAL.getCode) Some(Level.INFO)
+              else None,
+            )
+            .discard
+          error.withDescription("Bad challenge request")
+        } else {
+          SequencerAuthenticationFailure
+            .ChallengeFailure(
+              request.member,
+              request.memberProtocolVersions,
+              error,
+            )
+            .discard
+          error
+        }
       throw redactedError.asRuntimeException()
     }.asGrpcResponse
   }
 
-  private def isSensitive(err: Status): Boolean =
-    err.getCode == Status.Code.INTERNAL || err.getCode == Status.Code.INVALID_ARGUMENT
-
-  private def handleAuthError(err: AuthenticationError): Status = {
-    def maliciousOrFaulty(): Status =
-      Status.INTERNAL.withDescription(err.reason)
-
+  private def handleAuthError(err: AuthenticationError): (Status, Boolean) =
     err match {
       case MemberAuthentication.MemberAccessDisabled(_) =>
-        Status.PERMISSION_DENIED.withDescription(err.reason)
+        (Status.PERMISSION_DENIED.withDescription(err.reason), false)
       case MemberAuthentication.NonMatchingSynchronizerId(_, _) =>
-        Status.FAILED_PRECONDITION.withDescription(err.reason)
-      case MemberAuthentication.NoKeysWithCorrectUsageRegistered(_, _) => maliciousOrFaulty()
-      case MemberAuthentication.FailedToSign(_, _) => maliciousOrFaulty()
-      case MemberAuthentication.MissingNonce(_) => maliciousOrFaulty()
-      case MemberAuthentication.ExpiredNonce(_, _, _, _) => maliciousOrFaulty()
-      case MemberAuthentication.InvalidSignature(_) => maliciousOrFaulty()
-      case MemberAuthentication.MissingToken(_) => maliciousOrFaulty()
-      case MemberAuthentication.TokenVerificationException(_) => maliciousOrFaulty()
-      case MemberAuthentication.AuthenticationNotSupportedForMember(_) => maliciousOrFaulty()
-      case MemberAuthentication.LogoutTokenDoesNotExist => maliciousOrFaulty()
+        (Status.INVALID_ARGUMENT.withDescription(err.reason), false)
+      case MemberAuthentication.NoKeysWithCorrectUsageRegistered(_, _) =>
+        (Status.FAILED_PRECONDITION.withDescription(err.reason), true)
+      case MemberAuthentication.FailedToSign(_, _) =>
+        (Status.INTERNAL.withDescription(err.reason), true)
+      case MemberAuthentication.MissingNonce(_) =>
+        (Status.UNAUTHENTICATED.withDescription(err.reason), true)
+      case MemberAuthentication.ExpiredNonce(_, _, _, _) =>
+        (Status.UNAUTHENTICATED.withDescription(err.reason), true)
+      case MemberAuthentication.InvalidSignature(_) =>
+        (Status.INVALID_ARGUMENT.withDescription(err.reason), true)
+      case MemberAuthentication.MissingToken(_) =>
+        (Status.INVALID_ARGUMENT.withDescription(err.reason), true)
+      case MemberAuthentication.TokenVerificationException(_) =>
+        (Status.INTERNAL.withDescription(err.reason), true)
+      case MemberAuthentication.LogoutTokenDoesNotExist =>
+        (Status.INVALID_ARGUMENT.withDescription(err.reason), true)
     }
-  }
 
   private def eitherT[A, B](value: Either[A, B]) = EitherT.fromEither[FutureUnlessShutdown](value)
 
   private def deserializeMember(
       memberPO: String
-  ): Either[Status, Member] =
+  ): Either[(Status, Boolean), Member] =
     Member
       .fromProtoPrimitive(memberPO, "member")
       .leftMap(err =>
-        Status.INVALID_ARGUMENT.withDescription(s"Failed to deserialize member: $err")
+        (Status.INVALID_ARGUMENT.withDescription(s"Failed to deserialize member: $err"), true)
       )
 
-  private def handshakeValidation(request: ChallengeRequest): Either[Status, Unit] =
+  private def handshakeValidation(request: ChallengeRequest): Either[(Status, Boolean), Unit] =
     HandshakeValidator
-      .clientIsCompatible(protocolVersion, request.memberProtocolVersions, minClientVersionP = None)
-      .leftMap(err => Status.FAILED_PRECONDITION.withDescription(err))
+      .clientIsCompatible(
+        protocolVersion,
+        request.memberProtocolVersions,
+        minClientVersionP = None,
+        clientBinaryVersion = OptionUtil.emptyStringAsNone(request.clientVersion),
+        disableReleaseVersionHandshakeCheck = disableReleaseVersionHandshakeCheck,
+      )
+      .leftMap((_, false))
 
   /** Unconditionally revoke a member's authentication tokens and disconnect it
     */
@@ -256,6 +274,7 @@ object GrpcSequencerAuthenticationService extends GrpcSequencerAuthenticationErr
         member: String,
         supportedProtocol: Seq[Int],
         response: Status,
+        override val overrideLogLevel: Option[Level] = None,
     )(implicit override val loggingContext: ErrorLoggingContext)
         extends Alarm(
           cause =
@@ -263,7 +282,11 @@ object GrpcSequencerAuthenticationService extends GrpcSequencerAuthenticationErr
         )
         with ContextualizedCantonError
 
-    final case class AuthenticationFailure(member: String, response: Status)(implicit
+    final case class AuthenticationFailure(
+        member: String,
+        response: Status,
+        override val overrideLogLevel: Option[Level] = None,
+    )(implicit
         override val loggingContext: ErrorLoggingContext
     ) extends Alarm(
           cause =

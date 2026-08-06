@@ -16,7 +16,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.{
   validatorlicense as validatorLicenseCodegen,
 }
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.{QueryResult, TemplateFilter}
 import org.lfdecentralizedtrust.splice.store.{AppStore, Limit, MultiDomainAcsStore}
 import org.lfdecentralizedtrust.splice.util.*
@@ -40,6 +39,8 @@ trait ValidatorStore extends WalletStore with AppStore {
 
   /** The key identifying the parties considered by this store. */
   val key: ValidatorStore.Key
+
+  override val dsoPartyId = key.dsoParty
 
   def domainMigrationId: Long
 
@@ -158,7 +159,7 @@ object ValidatorStore {
       storage: DbStorage,
       loggerFactory: NamedLoggerFactory,
       retryProvider: RetryProvider,
-      domainMigrationInfo: DomainMigrationInfo,
+      migrationId: Long,
       participantId: ParticipantId,
       ingestionConfig: IngestionConfig,
       defaultLimit: Limit,
@@ -173,7 +174,7 @@ object ValidatorStore {
       storage,
       loggerFactory,
       retryProvider,
-      domainMigrationInfo,
+      migrationId,
       participantId,
       ingestionConfig,
       acsStoreDescriptorUserVersion,

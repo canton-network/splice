@@ -5,6 +5,7 @@ package com.digitalasset.canton.common.sequencer.grpc
 
 import cats.data.EitherT
 import cats.syntax.either.*
+import com.digitalasset.canton.ProtoDeserializationError
 import com.digitalasset.canton.common.sequencer.SequencerConnectClient
 import com.digitalasset.canton.common.sequencer.SequencerConnectClient.{
   Error,
@@ -24,6 +25,7 @@ import com.digitalasset.canton.sequencer.api.v30.SequencerConnect
 import com.digitalasset.canton.sequencer.api.v30.SequencerConnect.GetSynchronizerParametersResponse.Parameters
 import com.digitalasset.canton.sequencer.api.v30.SequencerConnect.VerifyActiveRequest
 import com.digitalasset.canton.sequencing.GrpcSequencerConnection
+import com.digitalasset.canton.sequencing.client.SequencerConnectClientInterceptor
 import com.digitalasset.canton.sequencing.protocol.{HandshakeRequest, HandshakeResponse}
 import com.digitalasset.canton.serialization.ProtoConverter.ParsingResult
 import com.digitalasset.canton.topology.*
@@ -32,15 +34,15 @@ import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.retry
 import com.digitalasset.canton.util.retry.{AllExceptionRetryPolicy, Success}
 import com.digitalasset.canton.version.HandshakeErrors.DeprecatedProtocolVersion
-import com.digitalasset.canton.{ProtoDeserializationError, SynchronizerAlias}
 import io.grpc.ClientInterceptors
 
 import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration.DurationInt
 
 class GrpcSequencerConnectClient(
+    member: Member,
     sequencerConnection: GrpcSequencerConnection,
-    synchronizerAlias: SynchronizerAlias,
+    synchronizerIdentifier: String, // for logging purposes (can be alias or id)
     val timeouts: ProcessingTimeout,
     params: ClientChannelParams,
     protected val loggerFactory: NamedLoggerFactory,
@@ -48,6 +50,8 @@ class GrpcSequencerConnectClient(
     extends SequencerConnectClient
     with NamedLogging
     with FlagCloseable {
+
+  private val interceptor = new SequencerConnectClientInterceptor(member, loggerFactory)
 
   private val clientChannelBuilder = ClientChannelBuilder(loggerFactory)
   private val builder = {
@@ -67,7 +71,7 @@ class GrpcSequencerConnectClient(
     for {
       _ <- CantonGrpcUtil
         .checkCantonApiInfo(
-          synchronizerAlias.unwrap,
+          synchronizerIdentifier,
           CantonGrpcUtil.ApiName.SequencerPublicApi,
           builder,
           logger,
@@ -78,7 +82,7 @@ class GrpcSequencerConnectClient(
         .leftMap(err => Error.Transport(err))
       response <- CantonGrpcUtil
         .sendSingleGrpcRequest(
-          serverName = synchronizerAlias.unwrap,
+          serverName = synchronizerIdentifier,
           requestDescription = "get synchronizer id and sequencer id",
           channelBuilder = builder,
           stubFactory = v30.SequencerConnectServiceGrpc.stub,
@@ -111,7 +115,7 @@ class GrpcSequencerConnectClient(
   ): EitherT[FutureUnlessShutdown, Error, StaticSynchronizerParameters] = for {
     responseP <- CantonGrpcUtil
       .sendSingleGrpcRequest(
-        serverName = synchronizerAlias.unwrap,
+        serverName = synchronizerIdentifier,
         requestDescription = "get synchronizer parameters",
         channelBuilder = builder,
         stubFactory = v30.SequencerConnectServiceGrpc.stub,
@@ -141,10 +145,12 @@ class GrpcSequencerConnectClient(
     for {
       responseP <- CantonGrpcUtil
         .sendSingleGrpcRequest(
-          serverName = synchronizerAlias.unwrap,
+          serverName = synchronizerIdentifier,
           requestDescription = "handshake",
           channelBuilder = builder,
-          stubFactory = v30.SequencerConnectServiceGrpc.stub,
+          stubFactory = channel =>
+            v30.SequencerConnectServiceGrpc
+              .stub(ClientInterceptors.intercept(channel, interceptor)),
           timeout = timeouts.network.unwrap,
           logger = logger,
           logPolicy = CantonGrpcUtil.SilentLogPolicy,
@@ -161,19 +167,16 @@ class GrpcSequencerConnectClient(
       )
       _ = if (handshakeResponse.serverProtocolVersion.isDeprecated && !dontWarnOnDeprecatedPV)
         DeprecatedProtocolVersion.WarnSequencerClient(
-          synchronizerAlias,
+          synchronizerIdentifier,
           handshakeResponse.serverProtocolVersion,
         )
     } yield handshakeResponse
 
   override def isActive(
-      participantId: ParticipantId,
-      waitForActive: Boolean,
+      waitForActive: Boolean
   )(implicit
       traceContext: TraceContext
   ): EitherT[FutureUnlessShutdown, Error, Boolean] = {
-    val interceptor = new SequencerConnectClientInterceptor(participantId, loggerFactory)
-
     // retry in case of failure. Also if waitForActive is true, retry if response is negative
     implicit val success: Success[Either[Error, Boolean]] =
       retry.Success {
@@ -184,7 +187,7 @@ class GrpcSequencerConnectClient(
     def verifyActive(): EitherT[FutureUnlessShutdown, Error, Boolean] =
       CantonGrpcUtil
         .sendSingleGrpcRequest(
-          serverName = synchronizerAlias.unwrap,
+          serverName = synchronizerIdentifier,
           requestDescription = "verify active",
           channelBuilder = builder,
           stubFactory = channel =>
@@ -221,7 +224,7 @@ class GrpcSequencerConnectClient(
     val interceptor = new SequencerConnectClientInterceptor(member, loggerFactory)
     CantonGrpcUtil
       .sendSingleGrpcRequest(
-        serverName = synchronizerAlias.unwrap,
+        serverName = synchronizerIdentifier,
         requestDescription = "register-onboarding-topology-transactions",
         channelBuilder = builder,
         stubFactory = channel =>

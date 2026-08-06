@@ -163,56 +163,6 @@ paths:
               schema:
                 "$ref": "#/components/schemas/GetDecentralizedSynchronizerConnectionConfigResponse"
 
-  /v0/admin/domain/data-snapshot:
-    get:
-      description: |
-        Returns a snapshot of the global synchronizer data for this validator.
-        The snapshot includes a list of parties, the active contract set (ACS), and node identities.
-
-        Use this endpoint if instructed to do so by an operational manual or support.
-      tags: [ validator ]
-      x-jvm-package: validator_admin
-      operationId: "getValidatorDomainDataSnapshot"
-      security:
-        - adminAuth: []
-      parameters:
-        - in: query
-          name: timestamp
-          required: true
-          schema:
-            type: string
-          description: |
-            The timestamp as of which the dump (in particular, the ACS) is valid.
-
-            Must in the ISO-8601 format in UTC timezone, e.g.,
-            `yyyy-MM-dd'T'HH:mm:ss.SSS'Z'`.
-        - name: migration_id
-          in: query
-          required: false
-          schema:
-            type: integer
-            format: int64
-          description: |
-            The current migration id.
-        - in: query
-          name: force
-          required: false
-          schema:
-            type: boolean
-          description: |
-            If true, do not check whether the provided timestamp is clean.
-            Not recommended for production,
-            see the `ExportAcs` endpoint of the `ParticipantRepairService` participant gRPC API.
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/GetValidatorDomainDataSnapshotResponse"
-        "500":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
-
   /v0/admin/transfer-preapprovals/by-party/{receiver-party}:
     get:
       description: |

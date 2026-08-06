@@ -8,7 +8,7 @@ import com.daml.metrics.api.MetricQualification.Latency
 import com.daml.metrics.api.{MetricHandle, MetricInfo, MetricName, MetricsContext}
 import com.digitalasset.canton.config.{ApiLoggingConfig, NonNegativeDuration}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, TracedLogger}
-import com.digitalasset.canton.tracing.{TraceContext, W3CTraceContext}
+import com.digitalasset.canton.tracing.{HeaderName, TraceContext, W3CTraceContext}
 import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.http.scaladsl.{ClientTransport, ConnectionContext, Http}
 import org.apache.pekko.http.scaladsl.model.{
@@ -17,6 +17,8 @@ import org.apache.pekko.http.scaladsl.model.{
   HttpHeader,
   HttpRequest,
   HttpResponse,
+  MediaType,
+  MediaTypes,
   StatusCode,
   StatusCodes,
 }
@@ -50,6 +52,37 @@ trait HttpClient {
 }
 
 object HttpClient {
+  private object ResponseErrorByStatus {
+    def unapply(resp: HttpResponse): Option[StatusCode] =
+      resp.status match {
+        case code @ (StatusCodes.ServerError(_) | StatusCodes.ClientError(_)) => Some(code)
+        case _ => None
+      }
+  }
+
+  private object ResponseErrorByContentType {
+    private val validContentTypes: Set[MediaType] = Set(
+      MediaTypes.`application/json`,
+      MediaTypes.`application/octet-stream`,
+      MediaTypes.`text/plain`,
+    )
+
+    def unapply(resp: HttpResponse): Boolean =
+      resp.entity.contentType match {
+        // Responses with `NoContentType` are always considered valid
+        case ContentTypes.NoContentType => false
+        // Otherwise a response is valid if its content type is contained in `validContentTypes`
+        case contentType => !validContentTypes.contains(contentType.mediaType)
+      }
+  }
+
+  private def httpFnErrors(
+      nonErrorStatusCode: Set[StatusCode]
+  ): PartialFunction[HttpResponse, Unit] = {
+    case ResponseErrorByStatus(code) if !nonErrorStatusCode.contains(code) =>
+    case ResponseErrorByContentType() =>
+  }
+
   def createHttpFn(
       clientName: String,
       operationName: String,
@@ -61,10 +94,7 @@ object HttpClient {
   ): HttpRequest => Future[HttpResponse] = {
     httpClientWithErrors(
       httpClient.executeRequest(clientName, operationName),
-      {
-        case code @ (StatusCodes.ServerError(_) | StatusCodes.ClientError(_))
-            if !nonErrorStatusCode.contains(code) =>
-      },
+      httpFnErrors(nonErrorStatusCode),
     )
   }
 
@@ -91,7 +121,7 @@ object HttpClient {
 
   private def httpClientWithErrors(
       nextClient: HttpRequest => Future[HttpResponse],
-      errors: PartialFunction[StatusCode, Unit],
+      errors: PartialFunction[HttpResponse, Unit],
   )(
       req: HttpRequest
   )(implicit ec: ExecutionContext, mat: Materializer) = {
@@ -102,7 +132,7 @@ object HttpClient {
             Future.failed[HttpResponse](error)
           }
         )
-        .applyOrElse(_resp.status, (_: StatusCode) => Future.successful(_resp))
+        .applyOrElse(_resp, Future.successful(_: HttpResponse))
     }
   }
 
@@ -281,7 +311,7 @@ object HttpClient {
 
   private def traceContextFromHeaders(headers: immutable.Seq[HttpHeader]) = {
     W3CTraceContext
-      .fromHeaders(headers.map(h => h.name() -> h.value()).toMap)
+      .fromHeaders(headers.map(h => HeaderName(h.name()) -> h.value()).toMap)
       .map(_.toTraceContext)
       .getOrElse(TraceContext.empty)
   }

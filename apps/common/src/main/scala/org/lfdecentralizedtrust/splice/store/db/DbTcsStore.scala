@@ -78,6 +78,7 @@ class DbTcsStore(
   override def listAllContractsAsOf[C, TCid <: ContractId[?], T](
       companion: C,
       asOf: CantonTimestamp,
+      limit: Option[Int] = None,
   )(implicit
       companionClass: ContractCompanion[C, TCid, T],
       traceContext: TraceContext,
@@ -94,6 +95,7 @@ class DbTcsStore(
             acsStore.domainMigrationId,
             companion,
             asOf,
+            limit = limit,
           ),
           opName,
         )

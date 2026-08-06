@@ -17,12 +17,11 @@ import org.lfdecentralizedtrust.splice.util.{
   ContractWithState,
   TemplateJsonDecoder,
 }
-import org.lfdecentralizedtrust.splice.validator.migration.DomainMigrationDump
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.topology.{ParticipantId, PartyId, SynchronizerId}
 import org.apache.pekko.http.scaladsl.model.{HttpHeader, HttpResponse, StatusCodes}
 
-import java.time.{Instant, ZoneOffset}
+import java.time.ZoneOffset
 import scala.concurrent.Future
 
 object HttpValidatorAdminAppClient {
@@ -150,36 +149,6 @@ object HttpValidatorAdminAppClient {
     override def handleOk()(implicit decoder: TemplateJsonDecoder) = {
       case http.DumpParticipantIdentitiesResponse.OK(response) =>
         NodeIdentitiesDump.fromHttp(ParticipantId.tryFromProtoPrimitive, response)
-    }
-  }
-
-  case class GetValidatorDomainDataSnapshot(
-      timestamp: Instant,
-      migrationId: Option[Long],
-      force: Boolean,
-  ) extends BaseCommand[
-        http.GetValidatorDomainDataSnapshotResponse,
-        DomainMigrationDump,
-      ] {
-
-    override def submitRequest(
-        client: Client,
-        headers: List[HttpHeader],
-    ): EitherT[Future, Either[
-      Throwable,
-      HttpResponse,
-    ], http.GetValidatorDomainDataSnapshotResponse] =
-      client.getValidatorDomainDataSnapshot(
-        timestamp.toString,
-        migrationId = migrationId,
-        force = Some(force),
-        headers = headers,
-      )
-
-    override def handleOk()(implicit
-        decoder: TemplateJsonDecoder
-    ) = { case http.GetValidatorDomainDataSnapshotResponse.OK(response) =>
-      DomainMigrationDump.fromHttp(response.dataSnapshot)
     }
   }
 

@@ -3,11 +3,11 @@
 
 package org.lfdecentralizedtrust.splice.wallet.store.db
 
+import org.lfdecentralizedtrust.splice.codegen.java.splice.{amulet as amuletCodegen}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense as validatorCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.IssuingMiningRound
 import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.store.db.StoreDescriptor
 import org.lfdecentralizedtrust.splice.store.db.{
   AcsInterfaceViewRowData,
@@ -17,7 +17,7 @@ import org.lfdecentralizedtrust.splice.store.db.{
   DbTransferInputQueries,
 }
 import org.lfdecentralizedtrust.splice.store.{Limit, LimitHelpers}
-import org.lfdecentralizedtrust.splice.util.{Contract, TemplateJsonDecoder}
+import org.lfdecentralizedtrust.splice.util.{Contract, ContractWithState, TemplateJsonDecoder}
 import org.lfdecentralizedtrust.splice.wallet.store.ExternalPartyWalletStore
 import com.digitalasset.canton.lifecycle.CloseContext
 import com.digitalasset.canton.logging.NamedLoggerFactory
@@ -35,7 +35,7 @@ class DbExternalPartyWalletStore(
     storage: DbStorage,
     override protected val loggerFactory: NamedLoggerFactory,
     override protected val retryProvider: RetryProvider,
-    domainMigrationInfo: DomainMigrationInfo,
+    val domainMigrationId: Long,
     participantId: ParticipantId,
     ingestionConfig: IngestionConfig,
     override val defaultLimit: Limit,
@@ -47,6 +47,14 @@ class DbExternalPartyWalletStore(
       storage = storage,
       acsTableName = WalletTables.externalPartyAcsTableName,
       interfaceViewsTableNameOpt = None,
+      // Any change in the store descriptor will lead to previously deployed applications
+      // forgetting all persisted data once they upgrade to the new version.
+      // WARNING: Reinitializing the acs store is a very expensive operation, as it currently fetches the full
+      // unfiltered ACS from the participant, irrespective of the filter defined by `acsContractFilter`.
+      // This may lead to the entire app being unavailable or not working properly until the full ACS has been ingested.
+      // Do not modify any part of the store descriptor unless you are sure that the resulting downtime is acceptable.
+      // If you do modify it, make sure to very clearly document in the release notes that there will be planned downtime,
+      // and notify the person coordinating the deployment.
       acsStoreDescriptor = StoreDescriptor(
         version = 3,
         name = "DbExternalPartyWalletStore",
@@ -58,7 +66,7 @@ class DbExternalPartyWalletStore(
           "dsoParty" -> key.dsoParty.toProtoPrimitive,
         ),
       ),
-      domainMigrationInfo,
+      domainMigrationId,
       ingestionConfig,
     )
     with ExternalPartyWalletStore
@@ -68,9 +76,9 @@ class DbExternalPartyWalletStore(
     with LimitHelpers {
 
   import org.lfdecentralizedtrust.splice.store.db.AcsQueries.AcsStoreId
+  import multiDomainAcsStore.waitUntilAcsIngested
 
   override protected def acsStoreId: AcsStoreId = multiDomainAcsStore.acsStoreId
-  override protected def domainMigrationId: Long = domainMigrationInfo.currentMigrationId
   override protected def acsTableName: String = WalletTables.externalPartyAcsTableName
   override protected def dbStorage: DbStorage = storage
 
@@ -81,6 +89,17 @@ class DbExternalPartyWalletStore(
     org.lfdecentralizedtrust.splice.wallet.store.db.WalletTables.ExternalPartyWalletAcsStoreRowData,
     AcsInterfaceViewRowData.NoInterfacesIngested,
   ] = ExternalPartyWalletStore.contractFilter(key)
+
+  override def listRewardCouponsV2(
+      includeUnassigned: Boolean,
+      includeAssigned: Boolean,
+      limit: Limit = defaultLimit,
+  )(implicit tc: TraceContext): Future[Seq[
+    ContractWithState[amuletCodegen.RewardCouponV2.ContractId, amuletCodegen.RewardCouponV2]
+  ]] =
+    waitUntilAcsIngested {
+      queryRewardCouponsV2(includeUnassigned, includeAssigned, limit)
+    }
 
   override def listSortedLivenessActivityRecords(
       issuingRoundsMap: Map[Round, IssuingMiningRound],

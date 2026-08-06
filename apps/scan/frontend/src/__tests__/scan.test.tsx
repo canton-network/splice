@@ -3,10 +3,7 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import {
-  GetAmuletRulesResponse,
-  GetBackfillingStatusResponse,
-} from '@lfdecentralizedtrust/scan-openapi';
+import { GetAmuletRulesResponse, GetBackfillingStatusResponse } from '@canton-network/scan-openapi';
 import { test, expect } from 'vitest';
 
 import App from '../App';

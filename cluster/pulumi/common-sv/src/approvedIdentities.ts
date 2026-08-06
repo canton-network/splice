@@ -8,7 +8,7 @@ import {
   loadYamlFromFile,
   SvIdKey,
   svKeyFromSecret,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 import _ from 'lodash';
 
 import { coreSvsToDeploy, svRunbookConfig } from './svConfigs';

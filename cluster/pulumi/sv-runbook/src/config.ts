@@ -1,6 +1,6 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { configForSv, svRunbookConfig } from '@lfdecentralizedtrust/splice-pulumi-common-sv';
+import { configForSv, svRunbookConfig } from '@canton-network/splice-pulumi-common-sv';
 
 export type SvAppConfig = {
   onboardingName: string;

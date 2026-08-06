@@ -58,10 +58,11 @@ class SqlIndexInitializationTriggerStoreTest
       } yield {
         indexNames should contain allElementsOf Seq(
           "updt_hist_crea_hi_mi_ci_import_updates",
-          "round_party_totals_sid_pid_cr",
           "updt_hist_tran_hi_eth",
-          "scan_txlog_store_sid_en_vot",
+          "dso_acs_store_sid_mid_pn_tid_rbio",
+          "scan_txlog_store_sid_effat_en_vot",
         )
+        indexNames should not contain "scan_txlog_store_sid_en_vot"
       }
     }
 
@@ -195,7 +196,7 @@ class SqlIndexInitializationTriggerStoreTest
               $$$$ language plpgsql immutable;
               """,
             "create slow_function",
-          )
+          )(implicitly, implicitly, _ => false)
           .failOnShutdown
         _ <- storage.underlying
           .update(
@@ -213,7 +214,7 @@ class SqlIndexInitializationTriggerStoreTest
               )
               .asTry,
             "insert test data",
-          )
+          )(implicitly, implicitly, _ => false)
           .failOnShutdown
 
         indexNamesBefore <- listIndexNames()
@@ -320,7 +321,7 @@ class SqlIndexInitializationTriggerStoreTest
                   )
                   .asTry,
                 "insert test data",
-              )
+              )(implicitly, implicitly, _ => false)
               .failOnShutdown,
             loggerFactory.assertEventuallyLogsSeq(SuppressionRule.LevelAndAbove(Level.INFO))(
               within = {

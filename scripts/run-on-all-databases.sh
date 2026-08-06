@@ -29,7 +29,7 @@ instances=$(gcloud sql instances list --format="value(name)" --filter="labels.cl
 for instance in $instances
 do
 
-    if [[ $instance =~ ^sv-([0-9]+)-cn\-apps-.* ]]; then
+    if [[ $instance =~ ^sv-((da-)?[0-9]+)-cn\-apps-.* ]]; then
       # run on SV, scan & validator DBs
       n="${BASH_REMATCH[1]}"
       databases=(

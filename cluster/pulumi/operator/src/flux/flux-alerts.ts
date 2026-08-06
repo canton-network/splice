@@ -1,16 +1,13 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import * as k8s from '@pulumi/kubernetes';
-import {
-  CLUSTER_BASENAME,
-  clusterProdLike,
-  config,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+import { CLUSTER_BASENAME, clusterProdLike, config } from '@canton-network/splice-pulumi-common';
 
+import { fluxConfig } from '../config';
 import { namespace } from '../namespace';
 import { flux } from './flux';
 
-if (clusterProdLike) {
+if (clusterProdLike && fluxConfig.alertSlackChannel) {
   const slackToken = new k8s.core.v1.Secret('slack', {
     metadata: {
       name: 'slack',
@@ -33,7 +30,7 @@ if (clusterProdLike) {
       },
       spec: {
         type: 'slack',
-        channel: config.requireEnv('SLACK_ALERT_NOTIFICATION_CHANNEL_FULL_NAME'),
+        channel: fluxConfig.alertSlackChannel,
         address: 'https://slack.com/api/chat.postMessage',
         secretRef: { name: slackToken.metadata.name },
       },

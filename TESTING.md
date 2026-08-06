@@ -80,7 +80,7 @@ There are two types of cluster tests that can be requested on a PR:
 - A basic cluster test, which deploys a scratch cluster, and runs the test suite against it.
 - A Hard Migration test, which tests the full hard migration workflow on a scratch cluster.
 
-To request a cluster test to be run on your PR, comment on your pr `/cluster_test`, `/hdm_test` or `/lsu_test`
+To request a cluster test to be run on your PR, comment on your pr `/cluster_test`, `/upgrade_test`, `/hdm_test` or `/lsu_test`
 for a basic test, a hard-migration test or a logical synchronizer upgrade test respectively. After commenting,
 the job needs to be approved to actually run. If you're a Digital Asset employee, you can self-approve; otherwise,
 contact an existing maintainer to approve it.
@@ -240,11 +240,11 @@ If you wish to extend our testing topology please also consult [this README](/ap
 
 If you want to run the integration tests locally with the new Canton bft, canton must be started with the `-e` flag.
 This can be done by running `./start-canton.sh -we`.
-Furthermore the integration test must run with the `SPLICE_USE_BFT_SEQUENCER` environment variable set to `true`.
+Furthermore the integration test must run with the `SPLICE_USE_CANTON_BFT_SEQUENCER` environment variable set to `true`.
 Eg of test run:
 
 ```bash
- SPLICE_USE_BFT_SEQUENCER=1 sbt 'apps-app/ testOnly org.lfdecentralizedtrust.splice.integration.tests.SvDevNetReonboardingIntegrationTest'
+ SPLICE_USE_CANTON_BFT_SEQUENCER=1 sbt 'apps-app/ testOnly org.lfdecentralizedtrust.splice.integration.tests.SvDevNetReonboardingIntegrationTest'
 ```
 
 ### Testing App Behaviour Outside of Tests Without Running Bundle

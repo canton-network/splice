@@ -4,7 +4,6 @@
 package com.digitalasset.canton
 
 import com.digitalasset.canton.config.*
-import com.digitalasset.canton.config.RequireTypes.NonNegativeInt
 import com.digitalasset.canton.config.StartupMemoryCheckConfig.ReportingLevel
 import com.digitalasset.canton.environment.CantonNodeParameters
 import com.digitalasset.canton.sequencing.client.SequencerClientConfig
@@ -24,7 +23,7 @@ object MockedNodeParameters {
 
     override def enablePreviewFeatures: Boolean = ???
 
-    override def enableTestingFeatures: Boolean = ???
+    override def enableTestingFeatures: Boolean = true
 
     override def enableAdditionalConsistencyChecks: Boolean = _enableAdditionalConsistencyChecks
 
@@ -57,6 +56,8 @@ object MockedNodeParameters {
     override def startupMemoryCheckConfig: StartupMemoryCheckConfig = StartupMemoryCheckConfig(
       ReportingLevel.Warn
     )
-    override def dispatchQueueBackpressureLimit: NonNegativeInt = ???
+    override def topologyConfig: TopologyConfig = ???
+
+    override def sanitizePublicErrorMessages: Boolean = ???
   }
 }

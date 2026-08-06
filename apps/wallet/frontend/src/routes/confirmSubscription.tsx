@@ -7,8 +7,8 @@ import {
   IntervalDisplay,
   DisableConditionally,
   unitToCurrency,
-} from '@lfdecentralizedtrust/splice-common-frontend';
-import { Contract } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+} from '@canton-network/splice-common-frontend';
+import { Contract } from '@canton-network/splice-common-frontend-utils';
 import BigNumber from 'bignumber.js';
 import { useState } from 'react';
 import { useParams, useSearchParams } from 'react-router';

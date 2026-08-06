@@ -4,6 +4,7 @@
 package com.digitalasset.canton.participant.protocol
 
 import cats.data.EitherT
+import cats.implicits.toTraverseOps
 import com.daml.metrics.api.MetricsContext
 import com.digitalasset.base.error.{
   Alarm,
@@ -19,6 +20,7 @@ import com.digitalasset.canton.config.{ProcessingTimeout, TestingConfigInternal}
 import com.digitalasset.canton.crypto.*
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.data.ViewType.TransactionViewType
+import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.error.*
 import com.digitalasset.canton.error.CantonErrorGroups.ParticipantErrorGroup.TransactionErrorGroup.SubmissionErrorGroup
 import com.digitalasset.canton.ledger.error.groups.ConsistencyErrors
@@ -46,6 +48,7 @@ import com.digitalasset.canton.participant.protocol.validation.{
 import com.digitalasset.canton.participant.sync.SyncEphemeralState
 import com.digitalasset.canton.participant.util.DAMLe
 import com.digitalasset.canton.platform.apiserver.execution.CommandProgressTracker
+import com.digitalasset.canton.platform.apiserver.services.command.TrafficEnforcementBackend
 import com.digitalasset.canton.protocol.*
 import com.digitalasset.canton.protocol.WellFormedTransaction.WithoutSuffixes
 import com.digitalasset.canton.sequencing.client.{SendAsyncClientError, SequencerClient}
@@ -83,6 +86,7 @@ class TransactionProcessor(
     override val testingConfig: TestingConfigInternal,
     promiseFactory: PromiseUnlessShutdownFactory,
     participantNodeParameters: ParticipantNodeParameters,
+    trafficEnforcementBackendO: Option[TrafficEnforcementBackend],
 )(implicit val ec: ExecutionContext)
     extends ProtocolProcessor[
       TransactionProcessingSteps.SubmissionParam,
@@ -105,6 +109,8 @@ class TransactionProcessor(
           contractValidator,
           participantId,
           packageResolver,
+          ephemeral.contractStore,
+          participantNodeParameters,
           crypto.pureCrypto,
           loggerFactory,
         ),
@@ -115,8 +121,10 @@ class TransactionProcessor(
         damle.enrichTransaction,
         damle.enrichContract,
         new AuthorizationValidator(participantId),
-        new InternalConsistencyChecker(
-          loggerFactory
+        InternalConsistencyChecker(
+          participantId,
+          staticSynchronizerParameters.protocolVersion,
+          loggerFactory,
         ),
         commandProgressTracker,
         loggerFactory,
@@ -142,10 +150,25 @@ class TransactionProcessor(
       "type" -> "send-confirmation-request",
     )
 
+  override protected def validateLocalTrafficCost(
+      submissionParam: TransactionProcessingSteps.SubmissionParam
+  )(
+      trafficCost: Long,
+      traceContext: TraceContext,
+  ): FutureUnlessShutdown[Unit] =
+    trafficEnforcementBackendO
+      .traverse(
+        _.validateTraffic(
+          actAs = submissionParam.submitterInfo.actAs,
+          trafficCost = trafficCost,
+        )(traceContext)
+      )
+      .map(_.discard)
+
   def submit(
       submitterInfo: SubmitterInfo,
       transactionMeta: TransactionMeta,
-      keyResolver: LfKeyResolver,
+      keyResolver: LfGlobalKeyMapping,
       transaction: WellFormedTransaction[WithoutSuffixes],
       disclosedContracts: Map[LfContractId, ContractInstance],
       topologySnapshot: TopologySnapshot,
@@ -506,6 +529,27 @@ object TransactionProcessor {
             cause = "internal error during transaction submission",
             throwableO = Some(throwable),
           )
+    }
+
+    @Explanation(
+      """This error occurs when a transaction is submitted on behalf of a party that is currently onboarding on the participant. Onboarding parties cannot initiate ledger changes until their onboarding is complete."""
+    )
+    @Resolution(
+      """Wait for the party's onboarding to complete before submitting commands on their behalf."""
+    )
+    object PartyCurrentlyOnboarding
+        extends ErrorCode(
+          id = "PARTY_CURRENTLY_ONBOARDING",
+          ErrorCategory.InvalidGivenCurrentSystemStateOther,
+        ) {
+      final case class Rejection(parties: Seq[LfPartyId])
+          extends TransactionErrorImpl(
+            cause =
+              s"The following submitting parties are currently onboarding: ${parties.mkString(", ")}",
+            // Reported synchronously during Phase 1 validation
+            definiteAnswer = true,
+          )
+          with TransactionSubmissionError
     }
   }
 

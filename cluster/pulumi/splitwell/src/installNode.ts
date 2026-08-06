@@ -6,10 +6,10 @@ import {
   isDevNet,
   nonDevNetNonSvValidatorTopupConfig,
   nonSvValidatorTopupConfig,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
-import { readBackupConfig } from '@lfdecentralizedtrust/splice-pulumi-common-validator/src/backup';
-import { splitwellOnboarding } from '@lfdecentralizedtrust/splice-pulumi-common-validator/src/validators';
-import { SplitPostgresInstances } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/configs';
+} from '@canton-network/splice-pulumi-common';
+import { readBackupConfig } from '@canton-network/splice-pulumi-common-validator/src/backup';
+import { splitwellOnboarding } from '@canton-network/splice-pulumi-common-validator/src/validators';
+import { SplitPostgresInstances } from '@canton-network/splice-pulumi-common/src/config/configs';
 
 import { installSplitwell } from './splitwell';
 

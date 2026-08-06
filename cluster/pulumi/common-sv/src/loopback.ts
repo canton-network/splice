@@ -9,7 +9,7 @@ import {
   CLUSTER_HOSTNAME,
   DecentralizedSynchronizerUpgradeConfig,
   ExactNamespace,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 
 import { allSvsToDeploy, coreSvsToDeploy } from './svConfigs';
 import { cometBFTExternalPort } from './synchronizer/cometbftConfig';

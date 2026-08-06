@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.sv.onboarding.lsu
 
+import cats.syntax.foldable.*
 import com.digitalasset.canton.admin.api.client.data.NodeStatus
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.NamedLoggerFactory
@@ -20,10 +21,7 @@ import org.lfdecentralizedtrust.splice.environment.{
   SpliceLedgerClient,
   SynchronizerNodeService,
 }
-import org.lfdecentralizedtrust.splice.store.{
-  DomainTimeSynchronization,
-  DomainUnpausedSynchronization,
-}
+import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import org.lfdecentralizedtrust.splice.sv.automation.{SvDsoAutomationService, SvSvAutomationService}
 import org.lfdecentralizedtrust.splice.sv.config.{SvAppBackendConfig, SvOnboardingConfig}
 import org.lfdecentralizedtrust.splice.sv.lsu.{LsuNodeInitializer, LsuStateExporter}
@@ -41,7 +39,6 @@ class RollForwardLsuInitializer(
     override protected val participantAdminConnection: ParticipantAdminConnection,
     override protected val clock: Clock,
     override protected val domainTimeSync: DomainTimeSynchronization,
-    override protected val domainUnpausedSync: DomainUnpausedSynchronization,
     override protected val storage: DbStorage,
     override protected val loggerFactory: NamedLoggerFactory,
     override protected val retryProvider: RetryProvider,
@@ -90,7 +87,7 @@ class RollForwardLsuInitializer(
         "sequencer_startup",
         "New sequencer has started",
         currentNode.sequencerAdminConnection.getStatus(tc).map {
-          case NodeStatus.NotInitialized(_, _) => false
+          case NodeStatus.NotInitialized(_, _, _) => false
           case NodeStatus.Success(_) => true
           case NodeStatus.Failure(msg) =>
             throw Status.FAILED_PRECONDITION
@@ -104,7 +101,7 @@ class RollForwardLsuInitializer(
         "mediator_startup",
         "New mediator has started",
         currentNode.mediatorAdminConnection.getStatus(tc).map {
-          case NodeStatus.NotInitialized(_, _) => false
+          case NodeStatus.NotInitialized(_, _, _) => false
           case NodeStatus.Success(_) => true
           case NodeStatus.Failure(msg) =>
             throw Status.FAILED_PRECONDITION
@@ -201,6 +198,14 @@ class RollForwardLsuInitializer(
               r
             }
         }
-      result <- newJoiningNodeInitializer(None).joinDsoAndOnboardNodes()
+      result @ (_, _, _, _, store, _) <- newJoiningNodeInitializer(None).joinDsoAndOnboardNodes()
+      rulesAndState <- store.getDsoRulesWithSvNodeStates()
+      owningNodeSvName <- rulesAndState.getSvNameInDso(store.key.svParty)
+      _ <- currentNode.cometbftNode.traverse_(
+        _.rotateGenesisGovernanceKeyForSV1(owningNodeSvName)
+      )
+      _ <- currentNode.cometbftNode.traverse_(
+        _.reconcileNetworkConfig(owningNodeSvName, rulesAndState)
+      )
     } yield result
 }

@@ -3,12 +3,19 @@
 
 package com.digitalasset.canton.integration.tests.manual
 
-import com.digitalasset.canton.config.RequireTypes.{Port, PositiveInt, PositiveNumeric}
+import com.digitalasset.canton.config.ReplicationConfig
+import com.digitalasset.canton.config.RequireTypes.{
+  NonNegativeInt,
+  Port,
+  PositiveInt,
+  PositiveNumeric,
+}
 import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.integration.bootstrap.{
   NetworkBootstrapper,
   NetworkTopologyDescription,
 }
+import com.digitalasset.canton.integration.plugins.UseBftSequencer.UseStandaloneConfig
 import com.digitalasset.canton.integration.plugins.toxiproxy.UseToxiproxy.ToxiproxyConfig
 import com.digitalasset.canton.integration.plugins.toxiproxy.{
   BftSequencerPeerToPeer,
@@ -25,13 +32,13 @@ import com.digitalasset.canton.integration.{
   SharedEnvironment,
 }
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.BftBlockOrdererConfig.{
+  DefaultAvailabilityMinProposalCreationDelay,
   DefaultConsensusEmptyBlockCreationTimeout,
   DefaultMaxBatchCreationInterval,
   DefaultMaxBatchesPerProposal,
   DefaultMaxRequestsInBatch,
   DefaultMinRequestsInBatch,
 }
-import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.BftOrderingIdentifiers.EpochLength
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.performance.dabft.DaBftBindingFactory
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.performance.{
   BftBenchmarkConfig,
@@ -42,6 +49,8 @@ import com.digitalasset.canton.util.BytesUnit
 import eu.rekawek.toxiproxy
 import eu.rekawek.toxiproxy.model.ToxicDirection
 import monocle.macros.syntax.lens.*
+import pureconfig.ConfigSource
+import pureconfig.generic.auto.*
 
 import scala.concurrent.duration.{Duration, DurationInt, FiniteDuration}
 
@@ -57,8 +66,9 @@ import scala.concurrent.duration.{Duration, DurationInt, FiniteDuration}
   * -Dbft-ordering-benchmark.enable-prometheus-metrics=true \
   * -Dscala.concurrent.context.numThreads=30 \
   * -Dbft-ordering-benchmark.num-db-connections-per-node=5 \
-  * -Dbft-ordering-benchmark.request-bytes=20000 \
-  * -Dbft-ordering-benchmark.benchmark-duration=1minute \ "
+  * -Dbft-ordering-benchmark.transaction-sizes-and-weights={payloads=[{size-bytes=2000,weight=1}]} \
+  * -Dbft-ordering-benchmark.test-catchup={nodes-to-stop=[2],duration-nodes-are-down=1minutes,duration-node-need-to-startup=10seconds}\
+  * -Dbft-ordering-benchmark.benchmark-duration=1minute"
   *
   * export CI=1 # When this defined, it ensures no dockerized Postgres is being used
   *
@@ -85,11 +95,11 @@ class BftOrderingBenchmark
       .map(_.toInt)
       .getOrElse(4)
 
-  // Use a bigger epoch length by default for better performance
-  private val epochLength: EpochLength =
-    Option(System.getProperty(s"$BFTOrderingBenchmarkPrefix.epoch-length"))
-      .map(len => EpochLength(len.toLong))
-      .getOrElse(EpochLength(512L))
+  // Use a bigger segment length by default for better performance
+  private val segmentLength: Long =
+    Option(System.getProperty(s"$BFTOrderingBenchmarkPrefix.segment-length"))
+      .map(len => len.toLong)
+      .getOrElse(10L)
 
   private val consensusEmptyBlockCreationTimeout: FiniteDuration =
     Option(System.getProperty(s"$BFTOrderingBenchmarkPrefix.empty-block-timeout"))
@@ -115,6 +125,12 @@ class BftOrderingBenchmark
     Option(System.getProperty(s"$BFTOrderingBenchmarkPrefix.max-batches-per-block-proposal"))
       .map(_.toShort)
       .getOrElse(DefaultMaxBatchesPerProposal)
+
+  private val availabilityMinProposalCreationDelay: FiniteDuration =
+    Option(
+      System.getProperty(s"$BFTOrderingBenchmarkPrefix.availability-min-proposal-creation-delay")
+    ).map(Duration(_).asInstanceOf[FiniteDuration])
+      .getOrElse(DefaultAvailabilityMinProposalCreationDelay)
 
   private val batchCacheSizeMb: Option[Long] =
     Option(System.getProperty(s"$BFTOrderingBenchmarkPrefix.batch-cache-size-in-mb"))
@@ -144,7 +160,7 @@ class BftOrderingBenchmark
     PositiveInt.tryCreate(
       Option(System.getProperty(s"$BFTOrderingBenchmarkPrefix.num-db-connections-per-node"))
         .map(_.toInt)
-        .getOrElse(5)
+        .getOrElse(12)
     )
 
   /** Tracing options. Disabled by default. */
@@ -160,10 +176,26 @@ class BftOrderingBenchmark
         .getOrElse(0.5),
     )
 
-  private val requestBytes =
-    Option(System.getProperty(s"$BFTOrderingBenchmarkPrefix.request-bytes"))
-      .map(_.toInt)
-      .getOrElse(256)
+  private val transactionSizesAndWeights =
+    Option(System.getProperty(s"$BFTOrderingBenchmarkPrefix.transaction-sizes-and-weights"))
+      .map { s =>
+        val result =
+          ConfigSource
+            .string(s)
+            .load[BftBenchmarkConfig.TransactionSizesAndWeights]
+        result.left.foreach(errors =>
+          logger.error(s"Failed to parse transaction sizes and weights config: $errors")
+        )
+        result.getOrElse(throw new RuntimeException("Invalid configuration"))
+      }
+      .getOrElse(
+        BftBenchmarkConfig.TransactionSizesAndWeights(
+          BftBenchmarkConfig.TransactionSizeAndWeight(
+            sizeBytes = NonNegativeInt.tryCreate(256),
+            weight = PositiveInt.tryCreate(1),
+          ) :: Nil
+        )
+      )
 
   private val runDuration =
     Option(
@@ -198,6 +230,27 @@ class BftOrderingBenchmark
     Option(System.getProperty(s"$BFTOrderingBenchmarkPrefix.sequencer-db-latency-millis"))
       .map(_.toLong)
 
+  /** Whether DB replication (`DbMultiStorage`) is enabled. Default is [[Some(true)]]. To disable,
+    * set to [[Some(false)]]. Note that `DbMultiStorage` uses a separate connection pool, reserving
+    * roughly half of the total DB connections available in the [[num-db-connections-per-node]].
+    */
+  private val dbReplicationEnabled: Option[Boolean] =
+    Option(System.getProperty(s"$BFTOrderingBenchmarkPrefix.db-replication-enabled"))
+      .map(_.toBoolean)
+      .orElse(Some(true))
+
+  private val testCatchupConfig: BftBenchmarkConfig.TestCatchup =
+    Option(System.getProperty(s"$BFTOrderingBenchmarkPrefix.test-catchup"))
+      .map { s =>
+        val result =
+          ConfigSource
+            .string(s)
+            .load[BftBenchmarkConfig.TestCatchup]
+        result.left.foreach(errors => logger.error(s"Failed to parse testCatchup config: $errors"))
+        result.getOrElse(throw new RuntimeException("Invalid test catchup configuration"))
+      }
+      .getOrElse(BftBenchmarkConfig.TestCatchup.NoTestCatchup)
+
   registerPlugin(
     new UsePostgres(
       loggerFactory,
@@ -212,13 +265,13 @@ class BftOrderingBenchmark
       shouldOverwriteStoredEndpoints = true,
       shouldUseMemoryStorageForBftOrderer = useInMemoryStorageForBftOrderer,
       shouldBenchmarkBftSequencer = true,
-      standaloneOrderingNodes = true,
-      epochLength = epochLength,
+      standaloneOrderingNodes = Some(UseStandaloneConfig(segmentLength)),
       consensusEmptyBlockCreationTimeout = consensusEmptyBlockCreationTimeout,
       maxRequestsInBatch = maxRequestsInBatch,
       minRequestsInBatch = minRequestsInBatch,
       maxBatchCreationInterval = maxBatchCreationInterval,
       maxBatchesPerBlockProposal = maxBatchesPerBlockProposal,
+      availabilityMinProposalCreationDelay = availabilityMinProposalCreationDelay,
       dedicatedExecutionContextDivisor = dedicatedExecutionContextDivisor,
     )
   registerPlugin(bftSequencerPlugin)
@@ -250,6 +303,15 @@ class BftOrderingBenchmark
         }
       })
       .addConfigTransforms(
+        ConfigTransforms.updateAllSequencerConfigs { case (_, config) =>
+          dbReplicationEnabled.fold(config) { replicationEnabled =>
+            config
+              .focus(_.replication)
+              .replace(Some(ReplicationConfig(enabled = Some(replicationEnabled))))
+          }
+        }
+      )
+      .addConfigTransforms(
         _.focus(_.monitoring.tracing.tracer).replace(
           TracingConfig.Tracer(
             exporter =
@@ -261,6 +323,8 @@ class BftOrderingBenchmark
       )
       .withNetworkBootstrap { implicit env =>
         import env.*
+
+        logger.info(s"Actual Canton config: ${env.actualConfig.dumpString}")
 
         new NetworkBootstrapper(
           NetworkTopologyDescription(
@@ -345,36 +409,49 @@ class BftOrderingBenchmark
 
     waitUntilAllBftSequencersAuthenticateDisseminationQuorum(5.minutes)
 
-    val benchmarkTool = new BftBenchmarkTool(DaBftBindingFactory, loggerFactory)
+    val nodesToStop = env.sequencers.local.zipWithIndex
+      .filter(x => testCatchupConfig.nodesToStop.contains(x._2))
+      .map(_._1)
+
+    if (nodesToStop.nonEmpty) {
+
+      nodesToStop.foreach(_.stop())
+
+      env.actorSystem.scheduler.scheduleOnce(testCatchupConfig.durationNodesAreDown) {
+        nodesToStop.foreach(_.start())
+      }
+    }
+
+    val benchmarkTool = new BftBenchmarkTool(new DaBftBindingFactory(loggerFactory), loggerFactory)
+    val p2pEndpoints = bftSequencerPlugin.p2pEndpoints.getOrElse(fail("No P2P endpoints found"))
     val benchmarkToolConfig =
       BftBenchmarkConfig(
-        transactionBytes = requestBytes,
+        transactionSizesAndWeights = transactionSizesAndWeights.payloads,
+        testCatchup = testCatchupConfig,
         runDuration = runDuration,
         perNodeWritePeriod = perNodeWritePeriod,
         reportingInterval = reportingIntervalOpt,
-        nodes = bftSequencerPlugin.p2pEndpoints
-          .getOrElse(fail("No P2P endpoints found"))
-          .values
-          .zipWithIndex
-          .map { case (p2pConfig, idx) =>
-            val host = p2pConfig.address
-            val port = p2pConfig.port.unwrap
-            val node: BftBenchmarkConfig.Node =
-              if (idx == 0) {
-                BftBenchmarkConfig.NetworkedReadWriteNode(
-                  host = host,
-                  writePort = port,
-                  readPort = port,
-                )
-              } else {
-                BftBenchmarkConfig.NetworkedWriteOnlyNode(
-                  host = host,
-                  writePort = port,
-                )
-              }
-            node
-          }
-          .toSeq,
+        nodes = env.sequencers.local.zipWithIndex.map { case (sequencer, idx) =>
+          val name = sequencer.name
+          val p2pConfig = p2pEndpoints(name)
+
+          val host = p2pConfig.address
+          val port = p2pConfig.port.unwrap
+          val node: BftBenchmarkConfig.Node =
+            if (idx == 0) {
+              BftBenchmarkConfig.NetworkedReadWriteNode(
+                host = host,
+                writePort = port,
+                readPort = port,
+              )
+            } else {
+              BftBenchmarkConfig.NetworkedWriteOnlyNode(
+                host = host,
+                writePort = port,
+              )
+            }
+          node
+        },
       )
     benchmarkTool.run(benchmarkToolConfig).discard
   }

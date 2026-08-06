@@ -5,7 +5,7 @@ import { expect, jest, test } from '@jest/globals';
 
 import { installClusterVersion } from './clusterVersion';
 
-jest.mock('@lfdecentralizedtrust/splice-pulumi-common', () => ({
+jest.mock('@canton-network/splice-pulumi-common', () => ({
   __esModule: true,
   activeVersion: {
     type: 'remote',

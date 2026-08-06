@@ -10,7 +10,7 @@ import com.digitalasset.canton.config
 import com.digitalasset.canton.config.DeprecatedConfigUtils.DeprecatedFieldsFor
 import com.digitalasset.canton.config.RequireTypes.*
 import com.digitalasset.canton.config.{ReplicationConfig, *}
-import com.digitalasset.canton.http.JsonApiConfig
+import com.digitalasset.canton.http.{JsonApiConfig, JsonClientConfig}
 import com.digitalasset.canton.networking.grpc.CantonServerBuilder
 import com.digitalasset.canton.participant.admin.AdminWorkflowConfig
 import com.digitalasset.canton.participant.admin.party.PartyReplicationTestInterceptor
@@ -26,7 +26,10 @@ import com.digitalasset.canton.platform.config.{
   InteractiveSubmissionServiceConfig,
   PackageServiceConfig,
   PartyManagementServiceConfig,
+  StateServiceConfig,
   TopologyAwarePackageSelectionConfig,
+  TrafficEnforcementConfig,
+  UpdateServiceConfig,
   UserManagementServiceConfig,
 }
 import com.digitalasset.canton.platform.indexer.IndexerConfig
@@ -93,6 +96,7 @@ final case class ParticipantNodeConfig(
     override val monitoring: NodeMonitoringConfig = NodeMonitoringConfig(),
     override val topology: TopologyConfig = TopologyConfig(),
     alphaDynamic: DeclarativeParticipantConfig = DeclarativeParticipantConfig(),
+    trafficEnforcement: TrafficEnforcementConfig = TrafficEnforcementConfig(),
 ) extends LocalNodeConfig
     with BaseParticipantConfig
     with ConfigDefaults[Option[DefaultPorts], ParticipantNodeConfig] {
@@ -103,7 +107,11 @@ final case class ParticipantNodeConfig(
   def clientLedgerApi: ClientConfig = ledgerApi.clientConfig
 
   def toRemoteConfig: RemoteParticipantConfig =
-    RemoteParticipantConfig(adminApi.clientConfig, ledgerApi.clientConfig)
+    RemoteParticipantConfig(
+      adminApi.clientConfig,
+      ledgerApi.clientConfig,
+      ledgerJsonApi = httpLedgerApi.clientConfig,
+    )
 
   override def withDefaults(
       ports: Option[DefaultPorts]
@@ -158,12 +166,17 @@ final case class ParticipantFeaturesConfig()
   *   the configuration to connect the console to the remote admin api
   * @param ledgerApi
   *   the configuration to connect the console to the remote ledger api
+  * @param ledgerJsonApi
+  *   optional configuration to connect the console to the remote ledger JSON API; expected to be
+  *   defined when the remote participant exposes a JSON API endpoint that the console should
+  *   access, and left as None otherwise
   * @param token
   *   optional bearer token to use on the ledger-api if jwt authorization is enabled
   */
 final case class RemoteParticipantConfig(
     adminApi: FullClientConfig,
     ledgerApi: FullClientConfig,
+    ledgerJsonApi: Option[JsonClientConfig] = None,
     token: Option[String] = None,
 ) extends BaseParticipantConfig {
   override def clientAdminApi: ClientConfig = adminApi
@@ -229,8 +242,8 @@ final case class LedgerApiServerConfig(
     ),
     maxInboundMessageSize: NonNegativeInt = ServerConfig.defaultMaxInboundMessageSize,
     maxInboundMetadataSize: NonNegativeInt = ServerConfig.defaultMaxInboundMetadataSize,
-    maxConcurrentStreamsPerConnection: NonNegativeInt =
-      ServerConfig.defaultMaxConcurrentStreamsPerConnection,
+    maxConcurrentCallsPerConnection: NonNegativeInt =
+      ServerConfig.defaultMaxConcurrentCallsPerConnection,
     rateLimit: Option[RateLimitingConfig] = Some(DefaultRateLimit),
     postgresDataSource: PostgresDataSourceConfig = PostgresDataSourceConfig(),
     databaseConnectionTimeout: config.NonNegativeFiniteDuration =
@@ -240,6 +253,8 @@ final case class LedgerApiServerConfig(
     userManagementService: UserManagementServiceConfig = UserManagementServiceConfig(),
     partyManagementService: PartyManagementServiceConfig = PartyManagementServiceConfig(),
     packageService: PackageServiceConfig = PackageServiceConfig(),
+    updateService: UpdateServiceConfig = UpdateServiceConfig(),
+    stateService: StateServiceConfig = StateServiceConfig(),
     managementServiceTimeout: config.NonNegativeFiniteDuration =
       LedgerApiServerConfig.DefaultManagementServiceTimeout,
     enableCommandInspection: Boolean = true,
@@ -281,7 +296,6 @@ object LedgerApiServerConfig {
       maxUsedHeapSpacePercentage = 100,
       minFreeHeapSpaceBytes = 0,
     )
-
 }
 
 /** Optional ledger api time service configuration for demo and testing only */
@@ -317,9 +331,6 @@ object TestingTimeServiceConfig {
   * @param minimumProtocolVersion
   *   The minimum protocol version that this participant will speak when connecting to a
   *   synchronizer
-  * @param initialProtocolVersion
-  *   The initial protocol version used by the participant (default latest), e.g., used to create
-  *   the initial topology transactions.
   * @param alphaVersionSupport
   *   If set to true, will allow the participant to connect to a synchronizer with dev protocol
   *   version and will turn on unsafe Daml LF versions.
@@ -340,10 +351,8 @@ object TestingTimeServiceConfig {
   *   are logged as warning instead.
   * @param packageMetadataView
   *   Initialization parameters for the package metadata in-memory store.
-  * @param automaticallyPerformLsu
-  *   Whether the participant automatically performs a handshake with the upgraded synchronizer
-  *   after receiving enough sequencer connections, and whether the participants automatically
-  *   connects to the synchronizer after the upgrade time.
+  * @param alphaOnlinePartyReplicationSupport
+  *   Enables online party replication. DO NOT ENABLE IN PRODUCTION!
   * @param activationFrequencyForWarnAboutConsistencyChecks
   *   controls how often warning messages about
   *   [[com.digitalasset.canton.config.CantonParameters.enableAdditionalConsistencyChecks]] being
@@ -374,14 +383,25 @@ object TestingTimeServiceConfig {
   * @param autoSyncProtocolFeatureFlags
   *   When true (default), protocol feature flags will be automatically updated when the node
   *   connects to a synchronizer.
-  * @param alphaMultiSynchronizerSupport
-  *   Determines whether ACS imports use Create/Archive or Assign/Unassign events. Only enable if
-  *   your Ledger API consumers can process (un)assign events and require non-zero reassignment
-  *   counters.
-  *   - false (Default): Uses Create/Archive; resets reassignment counters to zero.
-  *   - true: Uses Assign/Unassign; preserves existing reassignment counters.
+  * @param enableAllLedgerApiReassignments
+  *   Determines whether ACS imports use Created or Assigned events. Similarly, determines whether
+  *   the repair service uses Created/Archive events or Assigned/Unassigned events for add and purge
+  *   respectively. Only enable if your Ledger API consumers can process (un)assigned events and
+  *   require non-zero reassignment counters.
+  *   - false (Default): Uses Created/Archive; resets reassignment counters to zero.
+  *   - true: Uses Assigned/Unassigned; preserves existing reassignment counters.
+  *
+  * Note: If multi-synchronizer is enabled via the EnableMultiSynchronizer flag, then Assigned and
+  * Unassigned event will be emitted when processing reassignments messages from the synchronizer
+  * regardless of the value of enableAllLedgerApiReassignments.
   * @param commitAfterFailedActivenessCheck
   *   For internal testing only. Do not enable this in production.
+  * @param validateLegacyContractsV11
+  *   Enables an extra validation for contracts with contract id version V11. Keep this enabled in
+  *   production.
+  * @param connectToSynchronizersOnStartup
+  *   If true, connects to synchronizers that have manualConnect=false on startup. Default: true.
+  *   Has impact only if manual-start is false.
   */
 final case class ParticipantNodeParameterConfig(
     adminWorkflow: AdminWorkflowConfig = AdminWorkflowConfig(),
@@ -408,8 +428,6 @@ final case class ParticipantNodeParameterConfig(
     packageMetadataView: PackageMetadataViewConfig = PackageMetadataViewConfig(),
     commandProgressTracker: CommandProgressTrackerConfig = CommandProgressTrackerConfig(),
     alphaOnlinePartyReplicationSupport: Option[AlphaOnlinePartyReplicationConfig] = None,
-    // TODO(#25344): check whether this should be removed
-    automaticallyPerformLsu: Boolean = true,
     activationFrequencyForWarnAboutConsistencyChecks: Long = 1000,
     reassignmentsConfig: ReassignmentsConfig = ReassignmentsConfig(),
     doNotAwaitOnCheckingIncomingCommitments: Boolean = false,
@@ -421,9 +439,93 @@ final case class ParticipantNodeParameterConfig(
     commitmentReduceParallelism: NonNegativeInt = NonNegativeInt.one,
     commitmentUseDbSnapshotForParticipantLookup: Boolean = false,
     autoSyncProtocolFeatureFlags: Boolean = true,
-    alphaMultiSynchronizerSupport: Boolean = false,
+    enableAllLedgerApiReassignments: Boolean = false,
     commitAfterFailedActivenessCheck: Boolean = false,
+    lsu: LsuConfig = LsuConfig(),
+    validateLegacyContractsV11: Boolean = true,
+    connectToSynchronizersOnStartup: Boolean = true,
 ) extends LocalNodeParametersConfig
+
+/** Config for LSU.
+  *
+  * @param automaticallyPerformLsu
+  *   Whether to automatically perform LSU. Default is true.
+  * @param lsuRetry
+  *   Config for the retries of the LSU operation. Retries are done aggressively.
+  *
+  * @param sequencerIdsRetrievalRetry
+  *   Config for the retries of the task that fetches the sequencer ids.
+  * @param purgeObsoleteTopology
+  *   Config for purging of the topology store of the old physical synchronizer id, after the LSU is
+  *   complete. Default: no purging.
+  */
+final case class LsuConfig(
+    // TODO(#25344): check whether this should be removed
+    automaticallyPerformLsu: Boolean = true,
+    lsuRetry: ExponentialBackoffConfig = ExponentialBackoffConfig(
+      initialDelay = config.NonNegativeFiniteDuration.ofMillis(200),
+      maxDelay = config.NonNegativeDuration.ofSeconds(5),
+      maxRetries = Int.MaxValue,
+    ),
+    handshake: LsuHandshake = LsuHandshake(),
+    sequencerIdsRetrievalRetry: ExponentialBackoffConfig = ExponentialBackoffConfig(
+      initialDelay = config.NonNegativeFiniteDuration.ofSeconds(10),
+      maxDelay = config.NonNegativeDuration.ofSeconds(30),
+      maxRetries = Int.MaxValue,
+    ),
+    purgeObsoleteTopology: Option[PurgeConfig] = None,
+)
+
+/** Config for the handshake with the successor.
+  *
+  * @param retry
+  *   Config for the retries of the handshake prior to LSU. Retries are infrequent since the
+  *   handshake runs as a non-urgent background task.
+  * @param minimumDuration
+  *   If defined: after a successful handshake, will continue to perform handshake with the
+  *   sequencers for the specified duration. Should not be too big (in the order of a few seconds).
+  * @param periodicCheck
+  *   Duration between two checks whether the wait should be interrupted. Has an impact only if the
+  *   following two conditions hold:
+  *   - minimumDuration is non-empty
+  *   - is smaller than minimumDuration
+  */
+final case class LsuHandshake(
+    retry: ExponentialBackoffConfig = ExponentialBackoffConfig(
+      initialDelay = config.NonNegativeFiniteDuration.ofMinutes(1),
+      maxDelay = config.NonNegativeDuration.ofMinutes(5),
+      maxRetries = Int.MaxValue,
+    ),
+    minimumDuration: Option[config.NonNegativeFiniteDuration] = Some(
+      config.NonNegativeFiniteDuration.ofSeconds(5)
+    ),
+    periodicCheck: config.NonNegativeFiniteDuration = config.NonNegativeFiniteDuration.ofSeconds(1),
+)
+
+/** Control incremental purges
+  *
+  * @param chunkSize
+  *   The amount of data that should be removed per purge iteration.
+  * @param cron
+  *   A cron expression, defining when the purges can take place
+  * @param maxDuration
+  *   Once triggered, the amount of time to repeatedly purge chunks, before having to wait for the
+  *   next cron-defined trigger.
+  */
+final case class PurgeConfig(
+    chunkSize: PositiveInt = PurgeConfig.DefaultChunkSize,
+    cron: String = PurgeConfig.DefaultCron,
+    maxDuration: config.PositiveFiniteDuration = PurgeConfig.DefaultMaxDuration,
+    purgeableStoresListValidity: config.NonNegativeFiniteDuration =
+      config.NonNegativeFiniteDuration.ofMinutes(1),
+)
+
+object PurgeConfig {
+  private val DefaultChunkSize: PositiveInt = PositiveInt.tryCreate(1000)
+  private val DefaultCron: String = "0 0 0 * * ?" // Daily on the stroke of midnight
+  private val DefaultMaxDuration: config.PositiveFiniteDuration =
+    config.PositiveFiniteDuration.ofMinutes(30)
+}
 
 /** Parameters for the participant node's stores
   *

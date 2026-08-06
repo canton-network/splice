@@ -6,10 +6,11 @@ import {
   ErrorBoundary,
   ErrorRouterPage,
   UserProvider,
+  retryQuery,
   theme,
   SvClientProvider,
-} from '@lfdecentralizedtrust/splice-common-frontend';
-import { replaceEqualDeep } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+} from '@canton-network/splice-common-frontend';
+import { replaceEqualDeep } from '@canton-network/splice-common-frontend-utils';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { Helmet, HelmetProvider } from 'react-helmet-async';
@@ -38,6 +39,7 @@ import { useConfigPollInterval, useSvConfig } from './utils';
 import { Governance } from './routes/governance';
 import { VoteRequestDetails } from './routes/voteRequestDetails';
 import { CreateProposal } from './routes/createProposal';
+import DelegateElection from './routes/delegateElection';
 
 const Providers: React.FC<React.PropsWithChildren> = ({ children }) => {
   const config = useSvConfig();
@@ -49,6 +51,7 @@ const Providers: React.FC<React.PropsWithChildren> = ({ children }) => {
       queries: {
         refetchInterval,
         structuralSharing: replaceEqualDeep,
+        retry: retryQuery,
       },
     },
   });
@@ -93,6 +96,7 @@ const App: React.FC = () => {
           <Route path="dso" element={<Dso />} />
           <Route path="validator-onboarding" element={<ValidatorOnboarding />} />
           <Route path="amulet-price" element={<AmuletPrice />} />
+          <Route path="delegate-election" element={<DelegateElection />} />
           <Route path="governance-old" element={<Voting />} />
           <Route path="votes" element={<Navigate to="/governance-old" replace />} />
 
@@ -109,8 +113,8 @@ const App: React.FC = () => {
     <ErrorBoundary>
       <HelmetProvider>
         <Helmet>
-          <title>Super Validator Operations</title>
-          <meta name="description" content="Super Validator Operations" />
+          <title>Supervalidator Operations</title>
+          <meta name="description" content="Supervalidator Operations" />
           <link rel="icon" href={config.spliceInstanceNames.networkFaviconUrl} />
         </Helmet>
         <RouterProvider router={router} />

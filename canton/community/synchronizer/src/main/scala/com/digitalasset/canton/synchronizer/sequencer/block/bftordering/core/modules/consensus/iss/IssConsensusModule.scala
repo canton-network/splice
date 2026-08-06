@@ -39,12 +39,14 @@ import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framewor
   CommitCertificate,
   OrderedBlock,
   OrderedBlockForOutput,
+  OrderingMode,
 }
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.snapshot.SequencerSnapshotAdditionalInfo
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.topology.{
   Membership,
   OrderingTopologyInfo,
 }
+import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.modules.Consensus.Admin.GetOrderingTopologyResponse
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.modules.Consensus.ConsensusMessage.PbftVerifiedNetworkMessage
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.modules.Consensus.NewEpochTopology
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.modules.ConsensusSegment.ConsensusMessage.PbftNetworkMessage.headerFromProto
@@ -143,6 +145,15 @@ final class IssConsensusModule[E <: Env[E]](
 
   private var consensusWaitingForEpochCompletionSince: Option[Instant] = None
   private var consensusWaitingForEpochStartSince: Option[Instant] = None
+
+  // At genesis (e.g. during LSU) we start and store epoch 0, but we aren't closing a previous epoch; in this situation,
+  //  if the node is slow to start, it's possible that we start state transfer for epoch -1 before epoch 0 is stored,
+  //  but state transfer doesn't support it, so we must wait for the message sent when an epoch is stored to be sure
+  //  we transition into catch-up state transfer at epoch 0 and not -1.
+  //  Also, we must avoid leaking epoch stored messages into the state transfer behavior in general, as
+  //  it could be already state transferring, in which case we'd be violating its internal invariants.
+  @VisibleForTesting
+  private[iss] var storingNewEpoch: Boolean = false
 
   @VisibleForTesting
   private[iss] def getActiveTopologyInfo: OrderingTopologyInfo[E] = activeTopologyInfo
@@ -243,10 +254,13 @@ final class IssConsensusModule[E <: Env[E]](
             newMembership,
             newCryptoProvider: CryptoProvider[E],
           ) =>
+        storingNewEpoch = false
+        val newEpochNumber = newEpochInfo.number
+
         // Despite being generated internally by Consensus, we delay this event (a) for uniformity with other
         // Output module events, and (b) to prevent tests from bypassing the delayed queue when sending this event
         ifInitCompleted(newEpochStored) { _ =>
-          logger.debug(s"Stored new epoch ${newEpochInfo.number}")
+          logger.debug(s"Stored new epoch $newEpochNumber")
 
           // Reset any topology remembered while waiting for the previous (completed) epoch to be stored.
           newEpochTopology = None
@@ -343,8 +357,13 @@ final class IssConsensusModule[E <: Env[E]](
 
       case Consensus.Admin.GetOrderingTopology(callback) =>
         callback(
-          epochState.epoch.info.number,
-          activeTopologyInfo.currentMembership.orderingTopology.nodes,
+          GetOrderingTopologyResponse(
+            epochState.epoch.info.number,
+            activeTopologyInfo.currentMembership.orderingTopology.nodes,
+            activeTopologyInfo.currentMembership.leaders,
+            activeTopologyInfo.currentMembership.blacklistedNodes,
+            activeTopologyInfo.currentMembership.orderingTopology.sequencingParameters,
+          )
         )
 
       case Consensus.Admin.SetPerformanceMetricsEnabled(enabled) =>
@@ -419,7 +438,11 @@ final class IssConsensusModule[E <: Env[E]](
 
         val thisNodeEpochNumber = epochState.epoch.info.number
 
-        val updatedEpoch = catchupDetector.updateLatestKnownNodeEpoch(from, epochNumber)
+        val updatedEpoch = if (from == actualSender) {
+          catchupDetector.updateLatestKnownNodeEpoch(from, epochNumber)
+        } else {
+          false
+        }
         lazy val pbftMessageType = shortType(msg.underlyingNetworkMessage.message)
 
         if (epochNumber < thisNodeEpochNumber) {
@@ -509,7 +532,7 @@ final class IssConsensusModule[E <: Env[E]](
                 commitCertificate.prePrepare.message.viewNumber,
                 blockSegment.originalLeader,
                 blockNumber == epochState.epoch.info.lastBlockNumber,
-                OrderedBlockForOutput.Mode.FromConsensus,
+                OrderingMode.Consensus,
               )
             )
           )
@@ -564,6 +587,9 @@ final class IssConsensusModule[E <: Env[E]](
 
       newEpochTopology match {
         case Some(Consensus.NewEpochTopology(newEpochNumber, newMembership, cryptoProvider)) =>
+          logger.info(
+            s"Completed epoch $completeEpochNumber, new epoch topology already available for epoch $newEpochNumber"
+          )
           emitEpochStartLatency()
           val currentEpochInfo = epochState.epoch.info
           val newEpochInfo = currentEpochInfo.next(
@@ -582,6 +608,9 @@ final class IssConsensusModule[E <: Env[E]](
             cryptoProvider,
           )
         case None =>
+          logger.info(
+            s"Completed epoch $completeEpochNumber, but no new epoch topology is available yet"
+          )
           // We don't have the new topology for the new epoch yet: wait for it to arrive from the output module.
           ()
       }
@@ -643,11 +672,16 @@ final class IssConsensusModule[E <: Env[E]](
       metrics.consensus.votes.cleanupVoteGauges(keepOnly = newMembership.orderingTopology.nodes)
       epochState.emitEpochStats(metrics, currentEpochInfo)
 
-      logger.debug(s"Storing new epoch $newEpochNumber")
+      logger.debug(s"Storing new epoch $newEpochInfo")
+      storingNewEpoch = true
       pipeToSelf(epochStore.startEpoch(newEpochInfo)) {
         case Failure(exception) => Consensus.ConsensusMessage.AsyncException(exception)
         case Success(_) =>
-          Consensus.NewEpochStored(newEpochInfo, newMembership, cryptoProvider)
+          Consensus.NewEpochStored(
+            newEpochInfo,
+            newMembership,
+            cryptoProvider,
+          )
       }
     } else {
       logger.info(
@@ -801,20 +835,29 @@ final class IssConsensusModule[E <: Env[E]](
     if (updatedEpoch && minimumEndEpochNumber.isDefined) {
       // if epochState is closed, we have probably just finished an epoch and are waiting for new topology.
       // So we should wait with state transfer until we are in the new epoch.
-      if (!epochState.isClosing) {
-        logger.debug(
+      if (epochState.isClosing) {
+        logger.info(
+          s"Not switching to catch-up state transfer because epochState is closing " +
+            s"(probably just finished an epoch), but otherwise we would have since: " +
+            s"(up to at least $minimumEndEpochNumber) while in epoch $currentEpochNumber; " +
+            s"latestCompletedEpoch is $latestCompletedEpochNumber and message epoch is $pbftMessageEpochNumber"
+        )
+        false
+      } else if (storingNewEpoch) {
+        logger.info(
+          s"Not switching to catch-up state transfer because we are storing a new epoch, " +
+            s"but otherwise we would have since: " +
+            s"(up to at least $minimumEndEpochNumber) while in epoch $currentEpochNumber; " +
+            s"latestCompletedEpoch is $latestCompletedEpochNumber and message epoch is $pbftMessageEpochNumber"
+        )
+        false
+      } else {
+        logger.info(
           s"Switching to catch-up state transfer (up to at least $minimumEndEpochNumber) while in epoch $currentEpochNumber; " +
             s"latestCompletedEpoch is $latestCompletedEpochNumber and message epoch is $pbftMessageEpochNumber"
         )
         startStateTransfer(currentEpochNumber, StateTransferType.Catchup, minimumEndEpochNumber)
         true
-      } else {
-        logger.info(
-          s"Do not switching to catch-up state transfer because epochState is closing (probably just finished an epoch), but otherwise we would have since:" +
-            s"(up to at least $minimumEndEpochNumber) while in epoch $currentEpochNumber; " +
-            s"latestCompletedEpoch is $latestCompletedEpochNumber and message epoch is $pbftMessageEpochNumber"
-        )
-        false
       }
     } else {
       false

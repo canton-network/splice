@@ -9,12 +9,15 @@ import com.digitalasset.canton.crypto.*
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.sequencer.api.v30.SequencerConnect
+import com.digitalasset.canton.synchronizer.metrics.SequencerTestMetrics
 import com.digitalasset.canton.synchronizer.sequencer.time.LsuSequencingBounds
 import com.digitalasset.canton.time.SimClock
 import com.digitalasset.canton.topology.*
 import com.digitalasset.canton.topology.client.{SynchronizerTopologyClient, TopologySnapshot}
 import com.digitalasset.canton.topology.transaction.*
 import com.digitalasset.canton.{BaseTest, HasExecutionContext}
+import io.grpc.Status.Code
+import io.grpc.StatusRuntimeException
 import org.mockito.MockitoSugar
 import org.scalatest.wordspec.AnyWordSpec
 
@@ -58,6 +61,9 @@ class GrpcSequencerConnectServiceTest
       initialTimeBound.map(ts =>
         LsuSequencingBounds.unsafeCreate(upgradeTime = ts, lowerBoundSequencingTimeExclusive = ts)
       ),
+      sanitizePublicErrorMessages = false,
+      disableReleaseVersionHandshakeCheck = false,
+      SequencerTestMetrics,
       loggerFactory,
     )(parallelExecutionContext)
 
@@ -114,9 +120,11 @@ class GrpcSequencerConnectServiceTest
 
       // Send the message to the service, it should be refused because there is
       // no memberId in the grpc context
-      val result = env.service.registerOnboardingTopologyTransactions(request).failed.futureValue
-
-      result.getMessage should (include("Unable to find member id"))
+      inside(env.service.registerOnboardingTopologyTransactions(request).failed.futureValue) {
+        case ex: StatusRuntimeException =>
+          ex.getStatus.getDescription shouldBe "Unable to find participant id in gRPC context"
+          ex.getStatus.getCode shouldBe Code.INVALID_ARGUMENT
+      }
     }
 
     // --- validateOnboardingTransactions logic  ---
@@ -126,9 +134,7 @@ class GrpcSequencerConnectServiceTest
       val tooManyTxs = (1 to (totalTxnLimit.value + 1)).map(_ => env.mockTx(env.createSTC()))
       val result = env.service
         .validateOnboardingTransactions(env.participantId, tooManyTxs, totalTxnLimit)
-        .value
-        .futureValue
-      result.left.value.getStatus.getDescription should include("Too many topology transactions")
+      result.left.value.getDescription should include("Too many topology transactions")
     }
 
     "enforce exactly one SynchronizerTrustCertificate" in {
@@ -141,11 +147,8 @@ class GrpcSequencerConnectServiceTest
           Seq(env.mockTx(env.createOTK())),
           totalTxnLimit,
         )
-        .value
-        .futureValue
         .left
         .value
-        .getStatus
         .getDescription should include("Exactly one SynchronizerTrustCertificate is required")
 
       // Test Multiple
@@ -153,11 +156,8 @@ class GrpcSequencerConnectServiceTest
         Seq(env.mockTx(env.createSTC()), env.mockTx(env.createSTC()), env.mockTx(env.createOTK()))
       env.service
         .validateOnboardingTransactions(env.participantId, multiStc, totalTxnLimit)
-        .value
-        .futureValue
         .left
         .value
-        .getStatus
         .getDescription should include("Exactly one SynchronizerTrustCertificate is required")
     }
 
@@ -166,9 +166,7 @@ class GrpcSequencerConnectServiceTest
       val txs = Seq(env.mockTx(env.createSTC()), env.mockTx(env.createOTK()))
       val result = env.service
         .validateOnboardingTransactions(env.participantId, txs, PositiveInt.tryCreate(10))
-        .value
-        .futureValue
-      result.left.value.getStatus.getDescription should include("Missing mappings")
+      result.left.value.getDescription should include("Missing mappings")
     }
 
     "enforce identity and authority constraints" in {
@@ -189,11 +187,8 @@ class GrpcSequencerConnectServiceTest
           ),
           totalTxnLimit,
         )
-        .value
-        .futureValue
         .left
         .value
-        .getStatus
         .getDescription should include("Mappings for unexpected UIDs")
 
       val wrongNs = NamespaceDelegation.tryCreate(
@@ -207,11 +202,8 @@ class GrpcSequencerConnectServiceTest
           Seq(env.mockTx(env.createSTC()), env.mockTx(env.createOTK()), env.factory.mkAdd(wrongNs)),
           totalTxnLimit,
         )
-        .value
-        .futureValue
         .left
         .value
-        .getStatus
         .getDescription should include("Mappings for unexpected namespaces")
 
       val proposal = env.factory.mkAdd(env.createSTC(), isProposal = true)
@@ -221,11 +213,8 @@ class GrpcSequencerConnectServiceTest
           Seq(proposal, env.mockTx(env.createOTK()), env.factory.mkAdd(nsDelegation)),
           totalTxnLimit,
         )
-        .value
-        .futureValue
         .left
         .value
-        .getStatus
         .getDescription should include("Unexpected proposals")
 
       val removal = env.factory.mkRemove(env.createSTC())
@@ -235,11 +224,8 @@ class GrpcSequencerConnectServiceTest
           Seq(removal, env.mockTx(env.createOTK()), env.factory.mkAdd(nsDelegation)),
           totalTxnLimit,
         )
-        .value
-        .futureValue
         .left
         .value
-        .getStatus
         .getDescription should include("Unexpected removals")
     }
 
@@ -254,10 +240,8 @@ class GrpcSequencerConnectServiceTest
           Seq(stc),
           totalTxnLimit,
         )
-        .value
-        .futureValue
 
-      missingOtkResult.left.value.getStatus.getDescription should include(
+      missingOtkResult.left.value.getDescription should include(
         "Exactly one OwnerToKeyMapping is required"
       )
 
@@ -268,10 +252,8 @@ class GrpcSequencerConnectServiceTest
           Seq(stc, env.mockTx(env.createOTK()), env.mockTx(env.createOTK())),
           totalTxnLimit,
         )
-        .value
-        .futureValue
 
-      multipleOtkResult.left.value.getStatus.getDescription should include(
+      multipleOtkResult.left.value.getDescription should include(
         "Exactly one OwnerToKeyMapping is required. Found: 2"
       )
     }
@@ -296,8 +278,6 @@ class GrpcSequencerConnectServiceTest
           txs,
           PositiveInt.tryCreate(10),
         )
-        .value
-        .futureValue
       result shouldBe Right(())
     }
   }

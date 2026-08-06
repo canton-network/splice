@@ -22,7 +22,6 @@ import org.lfdecentralizedtrust.splice.wallet.store.{
   TxLogEntry as walletLogEntry,
 }
 import com.digitalasset.canton.HasExecutionContext
-import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import org.lfdecentralizedtrust.splice.codegen.java.splice
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
@@ -31,7 +30,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv1.TransferInstruction
 import org.lfdecentralizedtrust.splice.http.v0.definitions.DamlValueEncoding.members.CompactJson
-import org.lfdecentralizedtrust.splice.http.v0.definitions.Transfer.TransferKind
 import org.lfdecentralizedtrust.splice.http.v0.definitions.TransferInstructionResultOutput.members
 import org.lfdecentralizedtrust.splice.http.v0.definitions.TreeEvent
 import org.lfdecentralizedtrust.splice.http.v0.definitions.UpdateHistoryItem
@@ -434,7 +432,7 @@ class WalletTxLogTimeBasedIntegrationTest
             bobParty,
             transferAmount, // will need the locked amulet as input
             "transfer offer description",
-            CantonTimestamp.now().plusSeconds(60),
+            env.environment.clock.now.plusSeconds(60),
             trackingId,
           )
           val offer = inside(offerResponse.output) {
@@ -531,17 +529,6 @@ class WalletTxLogTimeBasedIntegrationTest
               }
             ),
           )
-
-          inside(sv1ScanBackend.listActivity(None, 10).flatMap(_.transfer)) { case transfers =>
-            forExactly(1, transfers) { transfer =>
-              transfer.transferKind shouldBe Some(TransferKind.CreateTransferInstruction)
-              transfer.transferInstructionReceiver shouldBe Some(bobParty.toProtoPrimitive)
-              transfer.sender.party shouldBe aliceParty.toProtoPrimitive
-              BigDecimal(transfer.sender.senderChangeAmount) should be <= BigDecimal(
-                tapAmount - transferAmount
-              )
-            }
-          }
         }
     }
   }

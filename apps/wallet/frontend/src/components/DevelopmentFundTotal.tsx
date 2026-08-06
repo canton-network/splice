@@ -3,7 +3,7 @@
 import React from 'react';
 import { Alert, Card, CardContent, Stack, Typography, CircularProgress } from '@mui/material';
 import { useDevelopmentFund } from '../hooks/useDevelopmentFund';
-import { extractApiErrorMessage } from '@lfdecentralizedtrust/splice-common-frontend';
+import { extractApiErrorMessage } from '@canton-network/splice-common-frontend';
 import { useWalletConfig } from '../utils/config';
 
 const DevelopmentFundTotal: React.FC = () => {

@@ -1,5 +1,8 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
+import com.digitalasset.canton.config.NonNegativeFiniteDuration
+import monocle.macros.syntax.lens.*
+import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   AppRewardCoupon,
   ValidatorRewardCoupon,
@@ -13,6 +16,15 @@ import scala.concurrent.duration.*
 class SvExpiredRewardsCollectionTimeBasedIntegrationTest
     extends SvTimeBasedIntegrationTestBase
     with SvTestUtil {
+
+  override def environmentDefinition =
+    super.environmentDefinition.addConfigTransform((_, config) =>
+      ConfigTransforms.updateAllValidatorConfigs_(
+        // Bump lifetime above base duration to burn fees and generate validator rewards
+        _.focus(_.transferPreapproval.preapprovalLifetime)
+          .replace(NonNegativeFiniteDuration.ofDays(100))
+      )(config)
+    )
 
   "collect expired reward coupons" in { implicit env =>
     def getRewardCoupons(
@@ -79,25 +91,15 @@ class SvExpiredRewardsCollectionTimeBasedIntegrationTest
         advanceRoundsToNextRoundOpening
       }),
     )(
-      "Wait for all unclaimed coupons to be archived and the closed round to be archived",
+      "Wait for all unclaimed coupons to be archived",
       _ => {
         getRewardCoupons(round) shouldBe empty withClue s"reward coupons round $round"
-        sv1ScanBackend
-          .getClosedRounds()
-          .filter(r => r.payload.round.number == round.payload.round.number) should be(
-          empty
-        ) withClue s"ClosedRound $round"
-        val (lastRound, _) = sv1ScanBackend.getRoundOfLatestData()
         sv1WalletClient
           .listSvRewardCoupons()
-          .filter(_.payload.round.number <= lastRound) should be(
+          .filter(_.payload.round.number <= round.payload.round.number) should be(
           empty
         )
       },
     )
-
-    // it seems that without this, the round-party-totals aggregations cannot be computed for SV-2,
-    // and the scan-txlog script fails because it expects those to be there.
-    advanceRoundsToNextRoundOpening
   }
 }

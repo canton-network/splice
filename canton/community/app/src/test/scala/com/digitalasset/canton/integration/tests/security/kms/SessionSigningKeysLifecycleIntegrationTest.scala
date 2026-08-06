@@ -63,10 +63,25 @@ trait SessionSigningKeysLifecycleIntegrationTest
         ),
       )
 
+      // ensure that all participants have observed the updated synchronizer parameters
+      // before starting to record the use of session signing keys
+      eventually() {
+        participants.local.foreach { participant =>
+          val syncParameters = participant.topology.synchronizer_parameters.latest(daId)
+
+          syncParameters.confirmationResponseTimeout shouldBe shortDuration
+          syncParameters.mediatorReactionTimeout shouldBe shortDuration
+          syncParameters.ledgerTimeRecordTimeTolerance shouldBe sessionSigningKeysConfig.cutOffDuration
+        }
+      }
+
       // record initial metrics to establish a baseline, as a fallback to the long-term key
       // may have occurred during bootstrap.
       val participantKmsMetrics = Seq(participant1, participant2).map(
-        _.underlying.value.metrics.kmsMetrics.sessionSigningKeysFallback.valuesWithContext
+        _.underlying.value.metrics.cryptoMetrics.kmsMetricsO
+          .valueOrFail("no KMS metrics")
+          .sessionSigningKeysFallback
+          .valuesWithContext
       )
 
       env.nodes.local.foreach { node =>
@@ -88,7 +103,10 @@ trait SessionSigningKeysLifecycleIntegrationTest
       // we expect that no fallback has been triggered for the ping requests and that
       // session signing keys have been used and rotated successfully.
       Seq(participant1, participant2).map(
-        _.underlying.value.metrics.kmsMetrics.sessionSigningKeysFallback.valuesWithContext
+        _.underlying.value.metrics.cryptoMetrics.kmsMetricsO
+          .valueOrFail("no KMS metrics")
+          .sessionSigningKeysFallback
+          .valuesWithContext
       ) shouldBe participantKmsMetrics
     }
 }

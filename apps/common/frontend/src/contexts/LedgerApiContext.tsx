@@ -1,11 +1,11 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { useUserState } from '@lfdecentralizedtrust/splice-common-frontend';
-import { callWithLogging } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { useUserState } from '@canton-network/splice-common-frontend';
+import { callWithLogging, fireAuthExpired } from '@canton-network/splice-common-frontend-utils';
 import React, { useContext } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 
-import { DisclosedContract } from '@lfdecentralizedtrust/splice-common-frontend-utils/interfaces';
+import { DisclosedContract } from '@canton-network/splice-common-frontend-utils/interfaces';
 
 import { Choice, ContractId, Template, TemplateOrInterface } from '@daml/types';
 
@@ -87,6 +87,12 @@ export class LedgerApiClient {
     this.packageIdResolver = packageIdResolver;
   }
 
+  private checkUnauthorized(response: Response): void {
+    if (response.status === 401) {
+      fireAuthExpired();
+    }
+  }
+
   async getPrimaryParty(): Promise<string> {
     const user = await callWithLogging(
       ANS_LEDGER_NAME,
@@ -99,6 +105,7 @@ export class LedgerApiClient {
           const responseBody = await response.json();
           return responseBody.user;
         } else {
+          this.checkUnauthorized(response);
           const responseBody = await response.text();
           throw new Error(
             `getPrimaryParty: HTTP ${response.status} ${response.statusText}: ${responseBody}`
@@ -169,6 +176,7 @@ export class LedgerApiClient {
           console.debug(`${describeChoice} succeeded.`);
           return r.json();
         } else {
+          this.checkUnauthorized(r);
           const body = await r.text();
           throw new JsonApiError({
             status: r.status,

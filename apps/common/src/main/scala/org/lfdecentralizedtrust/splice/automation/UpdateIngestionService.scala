@@ -9,19 +9,24 @@ import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.NotUsed
-import org.apache.pekko.stream.Materializer
+import org.apache.pekko.stream.{Materializer, RestartSettings}
 import org.apache.pekko.stream.scaladsl.Source
 import org.lfdecentralizedtrust.splice.config.AutomationConfig
 import org.lfdecentralizedtrust.splice.environment.ledger.api.LedgerClient.GetTreeUpdatesResponse
 import org.lfdecentralizedtrust.splice.environment.{
+  PackageVersionSupport,
   RetryProvider,
-  SpliceLedgerConnection,
   ServiceWithGuaranteedShutdown,
+  SpliceLedgerConnection,
+  SpliceMetrics,
 }
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.IngestionSink.IngestionStart
 
 import scala.concurrent.{ExecutionContext, Future}
+import com.daml.metrics.InstrumentedGraph.*
+import com.daml.metrics.api.MetricHandle.{Counter, LabeledMetricsFactory}
+import com.daml.metrics.api.{MetricInfo, MetricName, MetricQualification}
 
 /** Ingestion for ACS and transfer stores.
   * We ingest them independently but we ensure that the acs store
@@ -33,14 +38,18 @@ class UpdateIngestionService(
     ingestionSink: MultiDomainAcsStore.IngestionSink,
     connection: SpliceLedgerConnection,
     config: AutomationConfig,
+    clock: Clock,
     backoffClock: Clock,
     override protected val retryProvider: RetryProvider,
+    packageVersionSupport: PackageVersionSupport,
     baseLoggerFactory: NamedLoggerFactory,
 )(implicit
     ec: ExecutionContext,
     mat: Materializer,
     tracer: Tracer,
 ) extends RetryingService(config, backoffClock, "update ingestion") {
+
+  private val metrics = new UpdateIngestionServiceMetrics(retryProvider.metricsFactory)
 
   private val filter = ingestionSink.ingestionFilter
 
@@ -113,7 +122,32 @@ class UpdateIngestionService(
       offset: Long
   )(implicit traceContext: TraceContext): Future[Unit] = {
     ingestionSink.ingestAcsStreamInBatches(
-      batchSource(connection.activeContracts(filter, offset)),
+      batchSource(
+        connection
+          .activeContracts(
+            filter,
+            offset,
+            RestartSettings(
+              config.ingestion.activeContractsMinBackoff.underlying,
+              config.ingestion.activeContractsMaxBackoff.underlying,
+              config.ingestion.activeContractsRandomFactor,
+            ),
+            clock,
+            packageVersionSupport,
+          )
+          .map { item =>
+            logger.trace(s"Received active contract ${item.contractId} from participant")
+            item
+          }
+          .buffered(
+            metrics.activeContractsBufferSize,
+            config.ingestion.activeContractsBufferSize,
+          )
+          .map { item =>
+            logger.trace(s"Emitting active contract ${item.contractId} to Store")
+            item
+          }
+      ),
       offset,
     )
   }
@@ -123,4 +157,16 @@ class UpdateIngestionService(
 
   // Kick-off the ingestion
   start()
+}
+
+class UpdateIngestionServiceMetrics(metricsFactory: LabeledMetricsFactory) {
+  val prefix: MetricName = SpliceMetrics.MetricsPrefix :+ "update-ingestion-service"
+  val activeContractsBufferSize: Counter =
+    metricsFactory.counter(
+      MetricInfo(
+        prefix :+ "active-contracts-buffer-size",
+        summary = "The buffer size for streaming ACS requests.",
+        qualification = MetricQualification.Debug,
+      )
+    )
 }

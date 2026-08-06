@@ -202,6 +202,7 @@ class ParticipantTopologyDispatcher(
               ),
               serial = None,
               signingKeys = Seq.empty,
+              namespacesToSignFor = Seq.empty,
               protocolVersion = state.staticSynchronizerParameters.protocolVersion,
               expectFullAuthorization = true,
               waitToBecomeEffective = None,
@@ -396,13 +397,7 @@ private class SynchronizerOnboardingOutbox(
         synchronizeWithClosing(functionFullName)(onlyApplicable(candidates))
       )
       _ <- EitherT.fromEither[FutureUnlessShutdown](initializedWith(applicable))
-      // Try to convert if necessary the topology transactions for the required protocol version of the synchronizer
-      convertedTxs <- synchronizeWithClosing(functionFullName) {
-        convertTransactions(applicable).leftMap[SynchronizerRegistryError](
-          SynchronizerRegistryError.TopologyConversionError.Error(_)
-        )
-      }
-    } yield convertedTxs
+    } yield applicable
 
   private def dispatch(transactions: Seq[GenericSignedTopologyTransaction])(implicit
       traceContext: TraceContext

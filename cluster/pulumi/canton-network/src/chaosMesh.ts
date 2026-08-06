@@ -8,7 +8,7 @@ import {
   GCP_PROJECT,
   HELM_MAX_HISTORY_SIZE,
   infraAffinityAndTolerations,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 import { Resource } from '@pulumi/pulumi';
 import { z } from 'zod';
 
@@ -251,7 +251,7 @@ export const installChaosMesh = ({ dependsOn }: ChaosMeshArguments): k8s.helm.v3
     `global-domain-${DecentralizedSynchronizerUpgradeConfig.active.id}-cometbft`,
     `global-domain-${DecentralizedSynchronizerUpgradeConfig.active.id}-mediator`,
     `global-domain-${DecentralizedSynchronizerUpgradeConfig.active.id}-sequencer`,
-    `participant-${DecentralizedSynchronizerUpgradeConfig.active.id}`,
+    'participant',
     'scan-app',
     'sv-app',
     'validator-app',

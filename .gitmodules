@@ -1,6 +1,3 @@
 [submodule ".github/runners/runner-container-hooks"]
 	path = .github/runners/runner-container-hooks
 	url = ../../canton-network/splice-runner-container-hooks.git
-[submodule "splice-shared-gha"]
-	path = splice-shared-gha
-	url = ../../canton-network/splice-shared-gha.git

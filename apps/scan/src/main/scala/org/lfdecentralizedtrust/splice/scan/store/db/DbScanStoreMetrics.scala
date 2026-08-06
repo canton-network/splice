@@ -4,11 +4,10 @@
 package org.lfdecentralizedtrust.splice.scan.store.db
 
 import com.daml.metrics.CacheMetrics
-import com.daml.metrics.api.{MetricInfo, MetricName, MetricsContext}
-import com.daml.metrics.api.MetricHandle.{Gauge, LabeledMetricsFactory}
-import com.daml.metrics.api.MetricQualification.Latency
+import com.daml.metrics.api.{MetricName, MetricsContext}
+import com.daml.metrics.api.MetricHandle.LabeledMetricsFactory
 import com.digitalasset.canton.config.ProcessingTimeout
-import com.digitalasset.canton.lifecycle.{FlagCloseable, LifeCycle, UnlessShutdown}
+import com.digitalasset.canton.lifecycle.{FlagCloseable, UnlessShutdown}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.tracing.TraceContext
 import org.lfdecentralizedtrust.splice.environment.SpliceMetrics
@@ -27,28 +26,6 @@ class DbScanStoreMetrics(
 
   val prefix: MetricName = SpliceMetrics.MetricsPrefix :+ "scan_store"
 
-  val earliestAggregatedRound: Gauge[Long] =
-    metricsFactory.gauge(
-      MetricInfo(
-        name = prefix :+ "earliest-aggregated-round",
-        summary = "Earliest aggregated round",
-        description = "The earliest aggregated round.",
-        qualification = Latency,
-      ),
-      -1L,
-    )(MetricsContext.Empty)
-
-  val latestAggregatedRound: Gauge[Long] =
-    metricsFactory.gauge(
-      MetricInfo(
-        name = prefix :+ "latest-aggregated-round",
-        summary = "Latest aggregated round",
-        description = "The latest aggregated round.",
-        qualification = Latency,
-      ),
-      -1L,
-    )(MetricsContext.Empty)
-
   def registerNewCacheMetrics(
       cacheName: String
   )(implicit tc: TraceContext): UnlessShutdown[CacheMetrics] =
@@ -64,14 +41,6 @@ class DbScanStoreMetrics(
   val history = new HistoryMetrics(metricsFactory)(MetricsContext.Empty)
 
   override protected def onClosed(): Unit = {
-    LifeCycle.close(
-      Seq(earliestAggregatedRound, latestAggregatedRound, history)
-        .map(cache =>
-          new AutoCloseable {
-            def close(): Unit = cache.close()
-          }
-        )*
-    )(logger)
     cacheOfMetrics.clear()
   }
 

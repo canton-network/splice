@@ -10,6 +10,7 @@ import com.digitalasset.canton.config.CantonConfig
 import com.digitalasset.canton.http.json.v2.JsUserManagementCodecs.*
 import com.digitalasset.canton.integration.EnvironmentSetupPlugin
 import com.digitalasset.canton.integration.plugins.{UseBftSequencer, UseH2}
+import com.digitalasset.canton.integration.tests.ledgerapi.SuppressionRules.AuthStartupConfigSuppressionRule
 import com.digitalasset.canton.integration.tests.ledgerapi.auth.ServiceCallContext
 import com.digitalasset.canton.integration.tests.ledgerapi.fixture.CantonFixture
 import com.digitalasset.canton.integration.tests.ledgerapi.services.TestCommands
@@ -30,6 +31,13 @@ class JsonRequestLoggingTest
     with HttpTestFuns
     with HttpServiceUserFixture.UserToken
     with ErrorsAssertions {
+
+  // TODO (i#32650): Scope-only tokens are deprecated starting Canton 3.5 and will be removed in Canton version 3.7.
+  //  This suppression shouldn't be needed anymore when we switch to audience-based tokens.
+  override def beforeAll(): Unit =
+    loggerFactory.suppress(AuthStartupConfigSuppressionRule) {
+      super.beforeAll()
+    }
 
   registerPlugin(ExpectedScopeOverrideConfig(loggerFactory))
   registerPlugin(new UseH2(loggerFactory))
@@ -69,6 +77,7 @@ class JsonRequestLoggingTest
                       isDeactivated = false,
                       metadata = None,
                       identityProviderId = "",
+                      primaryPartyAuthentication = false,
                     )
                   ),
                   rights = Nil,
@@ -83,8 +92,8 @@ class JsonRequestLoggingTest
         { logSeq =>
           val content: String =
             Pattern.quote(
-              "\nContentType: Some(application/json)\nContentLength: Some(157)\nParameters: []" +
-                s"\nBody: {\"user\":{\"id\":\"$randomUser\",\"primaryParty\":\"\",\"isDeactivated\":false,\"metadata\":null,\"identityProviderId\":\"\"},\"rights\":[]}"
+              "\nContentType: Some(application/json)\nContentLength: Some(192)\nParameters: []" +
+                s"\nBody: {\"user\":{\"id\":\"$randomUser\",\"primaryParty\":\"\",\"isDeactivated\":false,\"metadata\":null,\"identityProviderId\":\"\",\"primaryPartyAuthentication\":false},\"rights\":[]}"
             )
           val expectedLogsOrderRegexJson = Seq(
             "Request POST /v2/users by http.* auth claims",
@@ -141,25 +150,9 @@ class JsonRequestLoggingTest
     override def beforeEnvironmentCreated(config: CantonConfig): CantonConfig =
       config
         .focus(_.monitoring.logging.api)
-        .modify(_.copy(messagePayloads = true, debugInProcessRequests = true))
-  }
-
-  case class LoggingConfigPlugin(
-      enablePayloads: Boolean,
-      maxLength: Int,
-      protected val loggerFactory: NamedLoggerFactory,
-  ) extends EnvironmentSetupPlugin {
-    override def beforeEnvironmentCreated(config: CantonConfig): CantonConfig =
-      config
-        .focus(_.monitoring.logging.api)
         .modify(
-          _.copy(
-            messagePayloads = enablePayloads,
-            maxStringLength = maxLength,
-            debugInProcessRequests = true,
-          )
+          _.copy(messagePayloads = true, maxStringLength = 1024, debugInProcessRequests = true)
         )
-
   }
 
   private def toScopeContext(

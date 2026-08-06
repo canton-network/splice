@@ -44,12 +44,15 @@ object ReleaseVersionToProtocolVersions {
       ReleaseVersions.v3_2_0 -> List(v32),
       ReleaseVersions.v3_3_0 -> List(v33),
       ReleaseVersions.v3_4_0 -> List(v34),
-      ReleaseVersions.v3_5_0_snapshot -> List(v34),
+      ReleaseVersions.v3_5_0 -> List(v34, v35),
     ).map { case (release, pvs) => (release.majorMinor, NonEmptyUtil.fromUnsafe(pvs)) }
 
   val majorMinorToBetaProtocolVersions: Map[(Int, Int), NonEmpty[List[BetaProtocolVersion]]] = Map(
     ReleaseVersions.v2_9_0 -> List(v6)
   ).map { case (release, pvs) => (release.majorMinor, NonEmptyUtil.fromUnsafe(pvs)) }
+
+  def contains(releaseVersion: ReleaseVersion): Boolean =
+    majorMinorToStableProtocolVersions.contains(releaseVersion.majorMinor)
 
   def getOrElse(
       releaseVersion: ReleaseVersion,

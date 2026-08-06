@@ -46,6 +46,8 @@ class SequencerBftPeerReconcilerSpec extends AnyFlatSpec with BaseTest with HasR
   private val sequencer1Host = createP2PEndpoint("host")
   private val sequencer2Id = SequencerId(UniqueIdentifier.tryFromProtoPrimitive("seq::2"))
   private val sequencer2Host = createP2PEndpoint("host2")
+  private val sequencer3Id = SequencerId(UniqueIdentifier.tryFromProtoPrimitive("seq::3"))
+  private val sequencer3Host = createP2PEndpoint("host3")
 
   private val svDsoStoreMock = mock[SvDsoStore]
   private val sequencerAdminConnection = mock[SequencerAdminConnection]
@@ -107,7 +109,7 @@ class SequencerBftPeerReconcilerSpec extends AnyFlatSpec with BaseTest with HasR
       ),
     )
 
-    when(sequencerAdminConnection.listCurrentOutgoingPeerEndpoints())
+    when(sequencerAdminConnection.listConfiguredPeerEndpoints())
       .thenReturn(Future.successful(Seq.empty))
 
     val result = reconciler.diffDsoRulesWithTopology().futureValue.loneElement
@@ -135,12 +137,12 @@ class SequencerBftPeerReconcilerSpec extends AnyFlatSpec with BaseTest with HasR
       ),
     )
 
-    when(sequencerAdminConnection.listCurrentOutgoingPeerEndpoints())
+    when(sequencerAdminConnection.listConfiguredPeerEndpoints())
       .thenReturn(
         Future.successful(
           Seq(
-            (Some(sequencer1Id), sequencer1Host),
-            (Some(sequencer2Id), sequencer2Host),
+            configuredPeer(sequencer1Host, Some(sequencer1Id)),
+            configuredPeer(sequencer2Host, Some(sequencer2Id)),
           )
         )
       )
@@ -171,12 +173,12 @@ class SequencerBftPeerReconcilerSpec extends AnyFlatSpec with BaseTest with HasR
       ),
     )
 
-    when(sequencerAdminConnection.listCurrentOutgoingPeerEndpoints())
+    when(sequencerAdminConnection.listConfiguredPeerEndpoints())
       .thenReturn(
         Future.successful(
           Seq(
-            (Some(sequencer1Id), sequencer1Host),
-            (Some(sequencer2Id), sequencer2Host),
+            configuredPeer(sequencer1Host, Some(sequencer1Id)),
+            configuredPeer(sequencer2Host, Some(sequencer2Id)),
           )
         )
       )
@@ -185,7 +187,7 @@ class SequencerBftPeerReconcilerSpec extends AnyFlatSpec with BaseTest with HasR
     result should be(empty)
   }
 
-  it should "do nothing when scan doesn't contain the sequencer info but the dso state contains it" in {
+  it should "do nothing when scan doesn't contain the sequencer info but the dso state still contains it and the configured peer's sequencer id confirms the sequencer" in {
     withConfiguredDsoSequencers(
       Seq(
         createSequencerConfig(sequencer1Id),
@@ -201,12 +203,12 @@ class SequencerBftPeerReconcilerSpec extends AnyFlatSpec with BaseTest with HasR
       )
     )
 
-    when(sequencerAdminConnection.listCurrentOutgoingPeerEndpoints())
+    when(sequencerAdminConnection.listConfiguredPeerEndpoints())
       .thenReturn(
         Future.successful(
           Seq(
-            (Some(sequencer1Id), sequencer1Host),
-            (Some(sequencer2Id), sequencer2Host),
+            configuredPeer(sequencer1Host, Some(sequencer1Id)),
+            configuredPeer(sequencer2Host, Some(sequencer2Id)),
           )
         )
       )
@@ -232,11 +234,11 @@ class SequencerBftPeerReconcilerSpec extends AnyFlatSpec with BaseTest with HasR
       )
     )
 
-    when(sequencerAdminConnection.listCurrentOutgoingPeerEndpoints())
+    when(sequencerAdminConnection.listConfiguredPeerEndpoints())
       .thenReturn(
         Future.successful(
           Seq(
-            (Some(sequencer1Id), sequencer1Host)
+            configuredPeer(sequencer1Host, Some(sequencer1Id))
           )
         )
       )
@@ -266,11 +268,11 @@ class SequencerBftPeerReconcilerSpec extends AnyFlatSpec with BaseTest with HasR
       ),
     )
 
-    when(sequencerAdminConnection.listCurrentOutgoingPeerEndpoints())
+    when(sequencerAdminConnection.listConfiguredPeerEndpoints())
       .thenReturn(
         Future.successful(
           Seq(
-            (Some(sequencer1Id), sequencer1Host)
+            configuredPeer(sequencer1Host, Some(sequencer1Id))
           )
         )
       )
@@ -279,7 +281,7 @@ class SequencerBftPeerReconcilerSpec extends AnyFlatSpec with BaseTest with HasR
     result should be(empty)
   }
 
-  it should "keep sequencer that does not have a sequencer id in the peer info yet and is returned by scan" in {
+  it should "keep a configured peer whose endpoint is still advertised by scan" in {
     withConfiguredDsoSequencers(
       Seq(
         createSequencerConfig(sequencer1Id)
@@ -294,11 +296,11 @@ class SequencerBftPeerReconcilerSpec extends AnyFlatSpec with BaseTest with HasR
       )
     )
 
-    when(sequencerAdminConnection.listCurrentOutgoingPeerEndpoints())
+    when(sequencerAdminConnection.listConfiguredPeerEndpoints())
       .thenReturn(
         Future.successful(
           Seq(
-            (None, sequencer1Host)
+            configuredPeer(sequencer1Host, Some(sequencer1Id))
           )
         )
       )
@@ -306,27 +308,97 @@ class SequencerBftPeerReconcilerSpec extends AnyFlatSpec with BaseTest with HasR
     reconciler.diffDsoRulesWithTopology().futureValue should be(empty)
   }
 
-  it should "remove sequencer that does not have a sequencer id in the peer info yet and is not returned by scan" in {
+  it should "remove a configured peer whose sequencer id is no longer in the dso, using the configured peer's sequencer id as a fallback" in {
     withConfiguredDsoSequencers(
       Seq(
-        createSequencerConfig(sequencer1Id)
+        createSequencerConfig(sequencer1Id),
+        createSequencerConfig(sequencer2Id),
       )
     )
 
-    withScanSequencers()
+    withScanSequencers(
+      BftSequencer(
+        serialId,
+        sequencer1Id,
+        sequencer1Host.url,
+      )
+    )
 
-    when(sequencerAdminConnection.listCurrentOutgoingPeerEndpoints())
+    when(sequencerAdminConnection.listConfiguredPeerEndpoints())
       .thenReturn(
         Future.successful(
           Seq(
-            (None, sequencer1Host)
+            configuredPeer(sequencer1Host, Some(sequencer1Id)),
+            configuredPeer(sequencer3Host, Some(sequencer3Id)),
           )
         )
       )
 
     val result = reconciler.diffDsoRulesWithTopology().futureValue.loneElement
     result.toAdd should be(empty)
+    result.toRemove should contain only sequencer3Host
+  }
+
+  it should "replace a configured peer whose sequencer moved to a different endpoint, using the configured peer's sequencer id as a fallback" in {
+    withConfiguredDsoSequencers(
+      Seq(
+        createSequencerConfig(sequencer1Id),
+        createSequencerConfig(sequencer2Id),
+      )
+    )
+
+    val newSequencer1Host = createP2PEndpoint("newhost")
+
+    withScanSequencers(
+      BftSequencer(
+        serialId,
+        sequencer1Id,
+        newSequencer1Host.url,
+      )
+    )
+
+    when(sequencerAdminConnection.listConfiguredPeerEndpoints())
+      .thenReturn(
+        Future.successful(
+          Seq(
+            configuredPeer(sequencer1Host, Some(sequencer1Id))
+          )
+        )
+      )
+
+    val result = reconciler.diffDsoRulesWithTopology().futureValue.loneElement
+    result.toAdd.map(_.id) should contain only newSequencer1Host
     result.toRemove should contain only sequencer1Host
+  }
+
+  it should "keep a configured peer when it has no sequencer id and the dso endpoints are not fully known" in {
+    withConfiguredDsoSequencers(
+      Seq(
+        createSequencerConfig(sequencer1Id),
+        createSequencerConfig(sequencer2Id),
+      )
+    )
+
+    withScanSequencers(
+      BftSequencer(
+        serialId,
+        sequencer1Id,
+        sequencer1Host.url,
+      )
+    )
+
+    when(sequencerAdminConnection.listConfiguredPeerEndpoints())
+      .thenReturn(
+        Future.successful(
+          Seq(
+            configuredPeer(sequencer1Host, Some(sequencer1Id)),
+            configuredPeer(sequencer2Host),
+          )
+        )
+      )
+
+    val result = reconciler.diffDsoRulesWithTopology().futureValue
+    result should be(empty)
   }
 
   it should "do nothing if the sequencer is not initialized" in {
@@ -407,4 +479,10 @@ class SequencerBftPeerReconcilerSpec extends AnyFlatSpec with BaseTest with HasR
       transportSecurity = true,
     )
   }
+
+  private def configuredPeer(
+      host: P2PEndpoint.Id,
+      sequencerId: Option[SequencerId] = None,
+  ): (P2PEndpoint, Option[SequencerId]) =
+    BftSequencer(serialId, selfSequencerId, host.url).peerId -> sequencerId
 }

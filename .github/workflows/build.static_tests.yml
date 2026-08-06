@@ -13,15 +13,9 @@ on:
         type: boolean
         required: false
         default: false
-      oss_only:
-        type: boolean
-        required: false
-        default: false
 
 jobs:
   check_canton_consistency:
-    # Skipped for external contributors (fork PRs) due to container registry auth constraints
-    if: ${{ !inputs.oss_only }}
     runs-on: ${{ inputs.self_hosted && 'self-hosted-k8s-x-small' || 'ubuntu-24.04' }}
     timeout-minutes: 15
     container:
@@ -35,19 +29,22 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Nix
-        uses: ./splice-shared-gha/.github/actions/tests/common_test_setup
+        uses: ./.github/actions/tests/common_test_setup
         with:
-          cache_version: 8
+          cache_version: 9
           test_name: canton_consistency
           target: 'static_tests'
 
       - name: Run consistency check
-        uses: ./splice-shared-gha/.github/actions/nix/run_bash_command_in_nix
+        uses: ./.github/actions/nix/run_bash_command_in_nix
         with:
           additional_nix_args: "--keep PATH"
           cmd: |
             CURRENT_VERSION=$(jq -r '.version' nix/canton-sources.json)
             echo "Validating Docker digests for Canton version: $CURRENT_VERSION"
+
+            # TODO(#6581) to be removed
+            export CONTAINERS_REGISTRIES_CONF=$(mktemp)
 
             function set_value() {
               local key="$1"
@@ -58,7 +55,7 @@ jobs:
 
             for img in base participant mediator sequencer; do
               echo "Fetching image sha256 for canton-$img..."
-              sha=$(skopeo inspect --override-os linux --override-arch amd64 "docker://europe-docker.pkg.dev/da-images/public-all/docker/canton-$img:${CURRENT_VERSION}" --format '{{.Digest}}')
+              sha=$(skopeo inspect --no-creds --override-os linux --override-arch amd64 "docker://europe-docker.pkg.dev/da-images/public-all/docker/canton-$img:${CURRENT_VERSION}" --format '{{.Digest}}')
               set_value "canton_${img}_image_sha256" "$sha"
             done
 
@@ -88,39 +85,39 @@ jobs:
 
       - name: Setup
         id: setup
-        uses: ./splice-shared-gha/.github/actions/tests/common_test_setup
+        uses: ./.github/actions/tests/common_test_setup
         with:
-          cache_version: 8
+          cache_version: 9
           test_name: static_tests
           target: 'static_tests'
 
       - name: Check Grafana Dashboards
-        uses: ./splice-shared-gha/.github/actions/nix/run_bash_command_in_nix
+        uses: ./.github/actions/nix/run_bash_command_in_nix
         with:
           cmd: ./scripts/check-grafana-dashboards.sh
 
       - name: Check trailing whitespace
-        uses: ./splice-shared-gha/.github/actions/nix/run_bash_command_in_nix
+        uses: ./.github/actions/nix/run_bash_command_in_nix
         with:
           cmd: ./scripts/check-trailing-whitespace.sh
 
       - name: Run Daml warts check
-        uses: ./splice-shared-gha/.github/actions/nix/run_bash_command_in_nix
+        uses: ./.github/actions/nix/run_bash_command_in_nix
         with:
           cmd: ./scripts/check-daml-warts.sh
 
       - name: Run Daml return types check
-        uses: ./splice-shared-gha/.github/actions/nix/run_bash_command_in_nix
+        uses: ./.github/actions/nix/run_bash_command_in_nix
         with:
           cmd: ./scripts/check-daml-return-types.sh
 
       - name: Run Daml interface implementations check
-        uses: ./splice-shared-gha/.github/actions/nix/run_bash_command_in_nix
+        uses: ./.github/actions/nix/run_bash_command_in_nix
         with:
           cmd: ./scripts/check-daml-interface-impls.sh
 
       - name: Checking TODOs
-        uses: ./splice-shared-gha/.github/actions/nix/run_bash_command_in_nix
+        uses: ./.github/actions/nix/run_bash_command_in_nix
         if: ${{ inputs.skip_todo_check == false }}
         with:
           cmd: |
@@ -135,27 +132,27 @@ jobs:
           CIRCLE_PULL_REQUEST: ${{ github.event.pull_request.number }}
 
       - name: Lint GHA
-        uses: ./splice-shared-gha/.github/actions/nix/run_bash_command_in_nix
+        uses: ./.github/actions/nix/run_bash_command_in_nix
         with:
           cmd: ./scripts/actionlint.sh
 
       - name: Check that docker base images are pinned by digest
-        uses: ./splice-shared-gha/.github/actions/nix/run_bash_command_in_nix
+        uses: ./.github/actions/nix/run_bash_command_in_nix
         with:
           cmd: ./scripts/check-base-images.sh
 
       - name: Check that npm packages are properly namespaced
-        uses: ./splice-shared-gha/.github/actions/nix/run_bash_command_in_nix
+        uses: ./.github/actions/nix/run_bash_command_in_nix
         with:
           cmd: ./scripts/check-npm-package-names.py
 
       - name: SBT-based static checks
-        uses: ./splice-shared-gha/.github/actions/sbt/execute_sbt_command
+        uses: ./.github/actions/sbt/execute_sbt_command
         with:
           cmd: "Test/compile lint updateTestConfigForParallelRuns updateDarResources"
 
       - name: Verify no changes in SBT test files
-        uses: ./splice-shared-gha/.github/actions/nix/run_bash_command_in_nix
+        uses: ./.github/actions/nix/run_bash_command_in_nix
         with:
           cmd: git add . && git diff --staged --exit-code test*.log '**/DarResources.scala'
 
@@ -165,7 +162,7 @@ jobs:
 
       - name: Report Failures on Slack & Github
         if: failure() && (github.event_name == 'push' || github.event_name == 'schedule')
-        uses: ./splice-shared-gha/.github/actions/tests/failure_notifications
+        uses: ./.github/actions/tests/failure_notifications
         with:
           workload_identity_provider: '${{ secrets.GOOGLE_WORKLOAD_IDENTITY_PROVIDER }}'
           service_account: '${{ secrets.FAILURE_NOTIFICATIONS_INVOKER_SA }}'

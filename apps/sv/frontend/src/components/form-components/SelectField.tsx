@@ -1,6 +1,7 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+import { KeyboardArrowDown } from '@mui/icons-material';
 import {
   Box,
   FormControl,
@@ -12,6 +13,8 @@ import {
 } from '@mui/material';
 import type { FormEvent } from 'react';
 import { useFieldContext } from '../../hooks/formContext';
+import { scrollableSelectFieldSx } from '../beta/identifierStyles';
+import { fieldSectionSx, fieldSectionTitleSx, selectFieldSx } from '../../themes/fieldStyles';
 
 export type Option = { key: string; value: string };
 export interface SelectFieldProps {
@@ -20,10 +23,12 @@ export interface SelectFieldProps {
   id: string;
   onChange?: () => void;
   disabled?: boolean;
+  placeholder?: string;
+  scrollableIdentifier?: boolean;
 }
 
 export const SelectField: React.FC<SelectFieldProps> = props => {
-  const { title, options, id, disabled = false } = props;
+  const { title, options, id, disabled = false, placeholder, scrollableIdentifier = false } = props;
   const externalOnChange = props.onChange ?? (() => {});
   const field = useFieldContext<string>();
   const handleSelectValueChange = (value: string) => {
@@ -31,23 +36,51 @@ export const SelectField: React.FC<SelectFieldProps> = props => {
     externalOnChange();
   };
 
-  return (
-    <Box data-testid={`${id}-select-component`}>
-      <Typography variant="h6" gutterBottom>
-        {title}
-      </Typography>
+  const showPlaceholder = !!placeholder && !field.state.value;
+  const isError = !field.state.meta.isValid && !showPlaceholder;
 
-      <FormControl variant="outlined" error={!field.state.meta.isValid} fullWidth>
+  return (
+    <Box sx={fieldSectionSx} data-testid={`${id}-select-component`}>
+      <Typography sx={fieldSectionTitleSx}>{title}</Typography>
+
+      <FormControl
+        variant="outlined"
+        error={isError}
+        fullWidth
+        sx={{ '& .MuiFormHelperText-root': { mx: 0, mt: 1 } }}
+      >
         <Select
+          IconComponent={KeyboardArrowDown}
           value={field.state.value}
+          displayEmpty
+          renderValue={selected => {
+            if (!selected) {
+              return showPlaceholder ? (
+                <Typography component="span" color="text.secondary">
+                  {placeholder}
+                </Typography>
+              ) : (
+                ''
+              );
+            }
+            return options.find(option => option.value === selected)?.key ?? selected;
+          }}
           onChange={(e: SelectChangeEvent) => {
             handleSelectValueChange(e.target.value as string);
           }}
           onBlur={field.handleBlur}
-          error={!field.state.meta.isValid}
+          error={isError}
           disabled={disabled}
           id={`${id}-dropdown`}
           data-testid={id}
+          sx={
+            scrollableIdentifier
+              ? theme => ({
+                  ...(typeof selectFieldSx === 'function' ? selectFieldSx(theme) : selectFieldSx),
+                  ...scrollableSelectFieldSx,
+                })
+              : selectFieldSx
+          }
           inputProps={{
             'data-testid': `${id}-dropdown`,
             onChange: (e: FormEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -65,7 +98,9 @@ export const SelectField: React.FC<SelectFieldProps> = props => {
             </MenuItem>
           ))}
         </Select>
-        <FormHelperText data-testid={`${id}-error`}>{field.state.meta.errors?.[0]}</FormHelperText>
+        <FormHelperText data-testid={`${id}-error`}>
+          {isError ? field.state.meta.errors?.[0] : undefined}
+        </FormHelperText>
       </FormControl>
     </Box>
   );

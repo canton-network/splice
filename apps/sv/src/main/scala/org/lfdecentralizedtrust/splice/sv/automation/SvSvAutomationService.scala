@@ -11,15 +11,13 @@ import org.lfdecentralizedtrust.splice.automation.{
   SqlIndexInitializationTrigger,
 }
 import org.lfdecentralizedtrust.splice.environment.{
+  PackageVersionSupport,
   ParticipantAdminConnection,
   RetryProvider,
   SpliceLedgerClient,
   SynchronizerNodeService,
 }
-import org.lfdecentralizedtrust.splice.store.{
-  DomainTimeSynchronization,
-  DomainUnpausedSynchronization,
-}
+import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import org.lfdecentralizedtrust.splice.sv.automation.singlesv.ExpireValidatorOnboardingTrigger
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvSvStore}
@@ -37,7 +35,6 @@ import scala.concurrent.ExecutionContextExecutor
 class SvSvAutomationService(
     clock: Clock,
     domainTimeSync: DomainTimeSynchronization,
-    domainUnpausedSync: DomainUnpausedSynchronization,
     config: SvAppBackendConfig,
     svStore: SvSvStore,
     dsoStore: SvDsoStore,
@@ -47,6 +44,7 @@ class SvSvAutomationService(
     synchronizerNodeService: SynchronizerNodeService[LocalSynchronizerNode],
     retryProvider: RetryProvider,
     topologySnapshotConfig: Option[PeriodicBackupDumpConfig],
+    packageVersionSupport: PackageVersionSupport,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit
     ec: ExecutionContextExecutor,
@@ -58,11 +56,11 @@ class SvSvAutomationService(
       config.automation,
       clock,
       domainTimeSync,
-      domainUnpausedSync,
       svStore,
       ledgerClient,
       retryProvider,
       config.parameters,
+      packageVersionSupport,
     ) {
   override def companion: org.lfdecentralizedtrust.splice.sv.automation.SvSvAutomationService.type =
     SvSvAutomationService

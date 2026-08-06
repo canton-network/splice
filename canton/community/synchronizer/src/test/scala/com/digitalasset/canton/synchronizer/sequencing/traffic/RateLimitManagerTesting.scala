@@ -28,6 +28,7 @@ trait RateLimitManagerTesting { this: BaseTest with HasExecutionContext =>
     futureSupervisor,
     SequencerMetrics.noop("sequencer-rate-limit-manager-test"),
     timeouts,
+    lsuSequencingBounds = None,
     loggerFactory,
   )
   lazy val defaultTrafficPurchasedManager = mkTrafficPurchasedManager(trafficPurchasedStore)
@@ -51,6 +52,7 @@ trait RateLimitManagerTesting { this: BaseTest with HasExecutionContext =>
       testedProtocolVersion,
       sequencerTrafficConfig,
       eventCostCalculator = eventCostCalculator,
+      lsuSequencingBounds = None,
     )
 
   def mkRateLimiter(store: TrafficPurchasedStore) =
@@ -65,6 +67,7 @@ trait RateLimitManagerTesting { this: BaseTest with HasExecutionContext =>
       testedProtocolVersion,
       sequencerTrafficConfig,
       eventCostCalculator = new EventCostCalculator(loggerFactory),
+      lsuSequencingBounds = None,
     )
 
   def mkRateLimiter(
@@ -83,5 +86,6 @@ trait RateLimitManagerTesting { this: BaseTest with HasExecutionContext =>
       testedProtocolVersion,
       sequencerTrafficConfig,
       eventCostCalculator = eventCostCalculator,
+      lsuSequencingBounds = None,
     )
 }

@@ -12,7 +12,7 @@ import {
   ListGroupsResponse,
   ListSplitwellInstallsResponse,
   ListSplitwellRulesResponse,
-} from '@lfdecentralizedtrust/splitwell-openapi';
+} from '@canton-network/splitwell-openapi';
 
 import { Group, SplitwellRules } from '@daml.js/splitwell/lib/Splice/Splitwell';
 

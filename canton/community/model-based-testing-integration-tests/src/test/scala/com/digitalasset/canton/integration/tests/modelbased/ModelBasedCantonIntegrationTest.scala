@@ -18,14 +18,18 @@ import com.digitalasset.canton.testing.modelbased.checker.{
 import com.digitalasset.canton.testing.modelbased.generators.{ConcreteGenerators, Shrinker}
 import com.digitalasset.canton.testing.modelbased.projections.Projections
 import com.digitalasset.canton.testing.modelbased.runner.{CantonInterpreter, ReferenceInterpreter}
-import com.digitalasset.canton.testing.modelbased.solver.SymbolicSolver.KeyMode
 import com.digitalasset.canton.testing.modelbased.syntax.Pretty
+import com.digitalasset.canton.topology.PartyKind
 import com.digitalasset.canton.version.ProtocolVersion
-import com.digitalasset.daml.lf.language.LanguageVersion
 
 import scala.concurrent.duration.DurationInt
 
-final class ModelBasedCantonIntegrationTest
+// TODO(#31951): once fixed, make ModelBasedCantonIntegrationTest non-abstract and reset the timeout to 60 minutes
+final class ModelBasedCantonIntegrationTestRun1 extends ModelBasedCantonIntegrationTest
+final class ModelBasedCantonIntegrationTestRun2 extends ModelBasedCantonIntegrationTest
+final class ModelBasedCantonIntegrationTestRun3 extends ModelBasedCantonIntegrationTest
+
+abstract class ModelBasedCantonIntegrationTest
     extends CommunityIntegrationTest
     with SharedEnvironment
     with PropertyCheckerResultAssertions {
@@ -36,21 +40,30 @@ final class ModelBasedCantonIntegrationTest
     EnvironmentDefinition.P3_S1M1
       .withSetup { implicit env =>
         import env.*
+        sequencer1.topology.synchronizer_parameters
+          .propose_update(
+            daId,
+            _.update(
+              confirmationResponseTimeout = 1.minute,
+              mediatorReactionTimeout = 1.minute,
+            ),
+          )
         participants.all.synchronizers.connect_local(sequencer1, alias = daName)
       }
 
   private val numParticipants = environmentDefinition.baseConfig.participants.size
-  private val numParties = 3
+  private val externalPartyTesting = partiesKind match {
+    case PartyKind.External(_) => true
+    case PartyKind.Local => false
+  }
+  // TODO(i27461): Remove when multi-party submissions are supported
+  private val numParties = if (externalPartyTesting) 1 else 3
   private val numPackages = 1
 
   private val generators =
     new ConcreteGenerators(
-      languageVersion = LanguageVersion.v2_3,
+      contractKeys = true,
       readOnlyRollbacks = true,
-      // TODO(#30398): change to NUCK once NUCK is supported by the protocol
-      keyMode = KeyMode.UniqueContractKeys,
-      // TODO(#30398): change to true once NUCK is supported by the protocol
-      generateQueryByKey = false,
     )
 
   "The canton interpreter" should {
@@ -61,12 +74,21 @@ final class ModelBasedCantonIntegrationTest
         val cantonInterpreter = CantonInterpreter.initializeAndUpload(
           participants = participants.all.toIndexedSeq,
           synchronizerId = daId,
-          allocateParties =
-            (ps, newParties, targetTopology) => PartiesAllocator(ps)(newParties, targetTopology),
+          allocateParties = (ps, newParties, targetTopology) =>
+            PartiesAllocator(ps, enableExternalParties = true)(newParties, targetTopology),
         )
 
+        // TODO(i29530): Remove when multi-node submissions are supported
+        val numCommands = Option.when(externalPartyTesting)(1)
+
         val generator =
-          generators.validScenarioGenerator(numParties, numPackages, numParticipants)
+          generators.validScenarioGenerator(
+            numParties,
+            numPackages,
+            numParticipants,
+            numCommands = numCommands,
+            singletonCommands = externalPartyTesting,
+          )
 
         val result = PropertyChecker
           .checkProperty(
@@ -74,7 +96,9 @@ final class ModelBasedCantonIntegrationTest
             shrink = Shrinker.shrinkScenario,
             property = (scenario: Concrete.Scenario, cancelled: () => Boolean) =>
               runAndCompare(cantonInterpreter, scenario, cancelled),
-            timeout = 50.minutes,
+            // After ~30 minutes, we hit the 1000 party limit of `submit` and fail. Leaving 10 minutes of buffer to
+            // be on the safe side.
+            timeout = 20.minutes,
             // We evaluate as many samples as possible within the allotted time.
             maxSamples = Int.MaxValue,
             // scenarios of size 50 take long to generate so we generate them in parallel
@@ -99,7 +123,7 @@ object ModelBasedCantonIntegrationTest {
       cantonInterpreter: CantonInterpreter,
       scenario: Concrete.Scenario,
       cancelled: () => Boolean,
-  )(implicit loggingContext: NamedLoggingContext): Either[String, Unit] = {
+  )(implicit loggingContext: NamedLoggingContext, partyKind: PartyKind): Either[String, Unit] = {
     val referenceResult = ReferenceInterpreter(loggingContext.loggerFactory)
       .runAndProject(scenario)(loggingContext.traceContext)
     val cantonResult = cantonInterpreter.runAndProject(scenario, cancelled)

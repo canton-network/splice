@@ -19,6 +19,7 @@
 - [Troubleshooting](#troubleshooting)
   - [Nix Issues on MacOS](#nix-issues-on-macos)
   - [NPM Lock file issues](#npm-lock-file-issues)
+- [Staging Branches for Minor Releases](#staging-branches-for-minor-releases)
 
 # Setting up Your Development Environment
 
@@ -36,49 +37,6 @@
    direnv: error /home/moritz/daml-projects/canton-amulet/.envrc is blocked. Run `direnv allow` to approve its content
    ```
 1. Run `direnv allow`. You should see a bunch of output including `direnv: using nix`.
-1. (Optional) Configure artifactory credentials
-   A few tests rely on Enterprise canton features. To be able to run those locally, you will require access to
-   Digital Asset's enterprise artifactory. If you need to run those, please contact the Maintainers of this repo,
-   per MAINTAINERS.md.
-   Once you have access to artifactory, you can generate an artifactory Identity Token [here](https://digitalasset.jfrog.io/ui/admin/artifactory/user_profile).
-   Your username is shown at the top of the page (under "User profile: XX").
-   1. Add the following to `/etc/nix/netrc` (you might need to create that directory as root):
-      ```
-      machine digitalasset.jfrog.io
-      login yourartifactoryusername
-      password yourartifactoryidentitytoken
-      ```
-   1. In addition, add your artifactory user and password to `.envrc.private` file like so:
-      ```
-      export ARTIFACTORY_USER="yourartifactoryusername"
-      export ARTIFACTORY_PASSWORD="yourartifactoryidentitytoken"
-      ```
-   Once added, reload direnv by typing `direnv reload` in your terminal.
-1. (Optional) Configure artifactory credentials - troubleshooting
-   If you defined Artifactory access, and are getting an authorization exception, like the following:
-   ```
-   direnv: using nix
-   error: unable to download 'https://digitalasset.jfrog.io/artifactory/canton-enterprise/canton-enterprise-2.7.0-snapshot.20230614.10547.0.v03419b62.tar.gz': HTTP error 401 ('Unauthorized')
-   ```
-   1. Check that your access token is valid by running the following sample command:
-      ```
-      curl -vvv -L -u<yourartifactoryusername>:<yourartifactoryidentitytoken> "https://digitalasset.jfrog.io/artifactory/canton-enterprise/canton-enterprise-2.7.0-snapshot.20230614.10547.0.v03419b62.tar.gz" -o canton-enterprise-2.7.0-snapshot.20230614.10547.0.v03419b62.tar.gz
-      ```
-      If the download fails, check that your access token matches what is set in [Artifactory](https://digitalasset.jfrog.io/ui/admin/artifactory/user_profile).
-      Also, check you have visability via the UI [here](https://digitalasset.jfrog.io/ui/repos/tree/General/canton-enterprise).
-      If you don't have visibility via the UI then check with the repo Maintainers.
-   1. If the artifact successfully downloaded, check the access rights of the file `/etc/nix/netrc`.
-      If the access rights are more restrictive than `-rw-rw-r--`, update them:
-      ```
-      chmod 664 /etc/nix/netrc
-      ```
-      Note - `sudo` may be required to run the above command.
-   1. Switch to the Splice repo directory.
-   1. If the authorization exception isn't resolved, investigate further with additional logging
-      by running the following command at the root of the repo:
-      ```
-      nix develop --debug --verbose path:nix
-
      **Important:** start your IDE and other development tools from a console that
      has this `direnv` loaded; and thus has the proper version of all the
      project dependencies on its `PATH`.
@@ -144,7 +102,7 @@ and upload them to the dev GHCR registry. In order to do so, you will need to fo
 
 There are a number of environment variables managed with `direnv` that
 are used to contain private information. This includes credentials to
-a range of external services, including Auth0 and Artifactory. To keep
+a range of external services, such as Auth0. To keep
 this private information private, they are stored in a specific file
 in the root of the project repository: `.envrc.private`. This file is
 listed in `.gitignore` to prevent accidental commit to the repository.
@@ -154,12 +112,6 @@ also checking to verify that the environment definitions expected to
 be present in `.envrc.private` are in fact present. Missing
 definitions will cause a warning to be reported when `.envrc` is
 executed.
-
-A list of expected environment definitions is as follows:
-
-* Artifactory credentials
-   * `ARTIFACTORY_USER`: your username at digitalasset.jfrog.io (can be seen in the top-right corner after logging in with Google SSO)
-   * `ARTIFACTORY_PASSWORD`: Your identity token at digitalasset.jfrog.io (can be obtained by generating an identity token in your user profile)
 
 If you are a Splice Contributor (see CONTRIBUTOR.md) and wish to push Docker images and
 deploy to test clusters from your local machine, you will need also the following:
@@ -463,20 +415,24 @@ interfaces. Therefore, a released package that contains interfaces cannot
 be further developed like we do for other Daml code. Development guidelines
 are thus:
 
-1. Develop the API on a separate branch, or if it's a small one, on main is
+1. Develop the API on a separate branch, or if it's a small one, on `main` is
    ok, as long as you are certain that all your changes will land before
    the coming release. Until the code is released, you can use the standard
    daml build tooling in sbt, etc.
-1. Once a release is cut, the Daml interface is now fixed, and it should be
+2. Once a release is cut, the Daml interface is now fixed, and it should be
    excluded from compilation, so that e.g. a Daml compiler version bump would not
    introduce new Dar versions. To do so:
 
-    a. In build.sbt, exclude your package from compilation by setting `Compile / damlPrebuiltDar`
+    a. Generate the docs (`docs/gen-daml-docs.sh`) and commit the `.rst` files into
+       the `docs/` subdirectory of the package. The generated `.rst` files do not
+       include a license header, so prepend the standard `.rst` copyright header to
+       each or `headerCheck` will fail.
+
+    b. In `build.sbt`, exclude your package from compilation by setting `Compile / damlPrebuiltDar`
        to the committed dar (typically under daml/dars).
 
-    b. Commit the generated docs for your package in a `docs` subdirectory in the package directory
+    c. Add your package to NON_COMPILED_DAML_PROJECTS in `gen-daml-docs.sh`
 
-    c. Add your package to NON_COMPILED_DAML_PROJECTS in gen-daml-docs.sh
 
 # Troubleshooting
 
@@ -518,3 +474,20 @@ Caused by: java.lang.NullPointerException: Cannot invoke "jdk.internal.platform.
         at java.base/jdk.internal.platform.cgroupv2.CgroupV2Subsystem.getInstance(CgroupV2Subsystem.java:80)
 ```
 in start-canton.sh, try adding: `export ADDITIONAL_JAVA_TOOLS_OPTIONS="-XX:-UseContainerSupport"` to .envrc.private
+
+## Staging Branches for Minor Releases
+
+Daml changes, breaking API changes and new Canton protocol versions
+must only be included in new minor releases. To manage changes that
+are ready but cannot be merged to main until the next minor version,
+create a ``staging-X.Y.0`` branch for the next minor release based off
+main and merge changes for that release into that. You likely want to
+regularly merge main into that to avoid it going too far out of sync.
+
+Note: This is intended for changes that are complete and could be
+released not for incomplete changes that then may need to get backed
+out again before the release in case we do not manage to finish them
+completely.
+
+Once the time is reached where the minor should be the next weekly
+release, merge the staging branch back into main.

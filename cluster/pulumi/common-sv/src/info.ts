@@ -1,0 +1,97 @@
+// Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+import * as fs from 'fs';
+import {
+  clusterNetwork,
+  DecentralizedSynchronizerMigrationConfig,
+  ExactNamespace,
+  externalIpRangesFile,
+  installSpliceHelmChart,
+} from '@canton-network/splice-pulumi-common';
+import {
+  approvedSvIdentitiesFile,
+  getChainIdSuffix,
+} from '@canton-network/splice-pulumi-common-sv';
+import { CnChartVersion } from '@canton-network/splice-pulumi-common/src/artifacts';
+import { Resource } from '@pulumi/pulumi';
+import { createHash } from 'crypto';
+
+export function installInfo(
+  xns: ExactNamespace,
+  host: string,
+  gateway: string,
+  decentralizedSynchronizerMigrationConfig: DecentralizedSynchronizerMigrationConfig,
+  scanUrl: string,
+  scanDependency: Resource,
+  version: CnChartVersion
+): void {
+  function md5(str: string): string {
+    return createHash('md5').update(str).digest('hex');
+  }
+
+  function fileDigestMd5(file: string | undefined): string {
+    const data = file ? fs.readFileSync(file, 'utf8') : '';
+    return md5(data);
+  }
+
+  const infoValues = {
+    runtimeDetails: {
+      synchronizerSerialId: decentralizedSynchronizerMigrationConfig.active.id,
+      scanUrl: scanUrl,
+    },
+    deploymentDetails: {
+      network: clusterNetwork,
+      sv: {
+        version: CnChartVersion.stringify(decentralizedSynchronizerMigrationConfig.active.version),
+      },
+      configDigest: {
+        allowedIpRanges: {
+          type: 'md5',
+          value: fileDigestMd5(externalIpRangesFile()),
+        },
+        approvedSvIdentities: {
+          type: 'md5',
+          value: fileDigestMd5(approvedSvIdentitiesFile()),
+        },
+      },
+      synchronizer: {
+        current: {
+          chainIdSuffix: getChainIdSuffix(),
+          migrationId: decentralizedSynchronizerMigrationConfig.activeMigrationId,
+          synchronizerSerialId: decentralizedSynchronizerMigrationConfig.active.id,
+          version: CnChartVersion.stringify(
+            decentralizedSynchronizerMigrationConfig.active.version
+          ),
+        },
+        legacy: decentralizedSynchronizerMigrationConfig.legacy
+          ? {
+              chainIdSuffix: getChainIdSuffix(),
+              migrationId: decentralizedSynchronizerMigrationConfig.activeMigrationId,
+              synchronizerSerialId: decentralizedSynchronizerMigrationConfig.legacy.id,
+              version: CnChartVersion.stringify(
+                decentralizedSynchronizerMigrationConfig.legacy.version
+              ),
+            }
+          : null,
+        successor: decentralizedSynchronizerMigrationConfig.upgrade
+          ? {
+              chainIdSuffix: getChainIdSuffix(),
+              migrationId: decentralizedSynchronizerMigrationConfig.activeMigrationId,
+              synchronizerSerialId: decentralizedSynchronizerMigrationConfig.upgrade.id,
+              version: CnChartVersion.stringify(
+                decentralizedSynchronizerMigrationConfig.upgrade.version
+              ),
+            }
+          : null,
+      },
+    },
+    istioVirtualService: {
+      host: host,
+      gateway: gateway,
+    },
+  };
+
+  installSpliceHelmChart(xns, 'info', 'splice-info', infoValues, version, {
+    dependsOn: [scanDependency],
+  });
+}

@@ -32,7 +32,6 @@ import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.QueryResult
 import org.lfdecentralizedtrust.splice.util.*
 import org.lfdecentralizedtrust.splice.validator.config.ValidatorAppBackendConfig
-import org.lfdecentralizedtrust.splice.validator.migration.DomainMigrationDumpGenerator
 import org.lfdecentralizedtrust.splice.validator.store.ValidatorStore
 import org.lfdecentralizedtrust.splice.validator.util.ValidatorUtil
 import org.lfdecentralizedtrust.splice.wallet.UserWalletManager
@@ -58,7 +57,6 @@ import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.auth.AdminAuthExtractor.AdminUserRequest
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 
-import java.time.Instant
 import java.util.Base64
 import scala.annotation.nowarn
 import scala.concurrent.{ExecutionContext, Future}
@@ -89,13 +87,6 @@ class HttpValidatorAdminHandler(
 
   private val workflowId = this.getClass.getSimpleName
   private val store = storeWithIngestion.store
-  private val dumpGenerator = new DomainMigrationDumpGenerator(
-    storeWithIngestion.connection(SpliceLedgerConnectionPriority.Medium),
-    participantAdminConnection,
-    retryProvider,
-    loggerFactory,
-    config.parameters.enabledFeatures,
-  )
 
   private def requireWalletEnabled[T](handleRequest: UserWalletManager => T): T = {
     walletManagerOpt.fold(
@@ -103,6 +94,16 @@ class HttpValidatorAdminHandler(
         "Validator must be configured with enableWallet=true to serve this endpoint"
       )
     )(handleRequest)
+  }
+
+  private def requireTransferCommandSupport[T](handleRequest: => T): T = {
+    if (config.enableDeprecatedTransferCommandSupport) {
+      handleRequest
+    } else {
+      throw HttpErrorHandler.notImplemented(
+        "Transfer command support is disabled by default and will be removed in 0.8.0. You can temporarily enable in on 0.7.x by setting enable-deprecated-transfer-command-support=true in your validator config."
+      )
+    }
   }
 
   def onboardUser(
@@ -162,37 +163,6 @@ class HttpValidatorAdminHandler(
     }
   }
 
-  override def getValidatorDomainDataSnapshot(
-      respond: v0.ValidatorAdminResource.GetValidatorDomainDataSnapshotResponse.type
-  )(timestamp: String, migrationId: Option[Long], force: Option[Boolean])(
-      tuser: AdminUserRequest
-  ): Future[v0.ValidatorAdminResource.GetValidatorDomainDataSnapshotResponse] = {
-    implicit val AdminUserRequest(tracedContext) = tuser
-    withSpan(s"$workflowId.getValidatorDomainDataSnapshot") { _ => _ =>
-      for {
-        synchronizerId <- getAmuletRulesDomain()(tracedContext)
-        res <- dumpGenerator
-          .getDomainDataSnapshot(
-            Instant.parse(timestamp),
-            synchronizerId,
-            // TODO(DACH-NY/canton-network-node#9731): get migration id from scan instead of configuring here
-            migrationId getOrElse (config.domainMigrationId + 1),
-            force.getOrElse(false),
-          )
-          .map { response =>
-            v0.ValidatorAdminResource.GetValidatorDomainDataSnapshotResponse.OK(
-              definitions
-                // DR dumps don't separate output files
-                .GetValidatorDomainDataSnapshotResponse(
-                  response.toHttp(outputDirectory = None),
-                  response.migrationId,
-                )
-            )
-          }
-      } yield res
-    }
-  }
-
   override def getDecentralizedSynchronizerConnectionConfig(
       respond: v0.ValidatorAdminResource.GetDecentralizedSynchronizerConnectionConfigResponse.type
   )()(
@@ -201,9 +171,11 @@ class HttpValidatorAdminHandler(
     implicit val AdminUserRequest(tracedContext) = tuser
     withSpan(s"$workflowId.getDecentralizedSynchronizerConnectionConfig") { _ => _ =>
       for {
-        connectionConfig <- participantAdminConnection.getSynchronizerConnectionConfig(
-          config.domains.global.alias
-        )
+        connectionConfig <- participantAdminConnection
+          .getRegisteredSynchronizer(
+            config.domains.global.alias
+          )
+          .map(_.config.toInternal)
       } yield v0.ValidatorAdminResource.GetDecentralizedSynchronizerConnectionConfigResponse.OK(
         definitions.GetDecentralizedSynchronizerConnectionConfigResponse(
           definitions.SequencerConnections(
@@ -372,54 +344,25 @@ class HttpValidatorAdminHandler(
           .mapping
         val partyId = partyToParticipant.partyId
         for {
+          synchronizerId <- getAmuletRulesDomain()(tracedContext)
           _ <- participantAdminConnection.addTopologyTransactions(
-            store = TopologyStoreId.Authorized,
+            store = TopologyStoreId.Synchronizer(synchronizerId),
             txs = body.signedTopologyTxs.map(decodeSignedTopologyTx(publicKey, _)),
           )
-          // Check the authorized store first
-          _ <- participantAdminConnection
-            .listPartyToKey(
-              filterParty = Some(partyId),
-              filterStore = TopologyStoreId.Authorized,
-            )
-            .map { txs =>
-              txs.headOption.getOrElse(
-                throw Status.INVALID_ARGUMENT
-                  .withDescription(
-                    s"No PartyToKey mapping in Authorized Store for $partyId, check the Canton logs to find why the transactions got rejected"
-                  )
-                  .asRuntimeException
-              )
-            }
           // The PartyToParticipant mapping requires both the external signature from the party namespace but also one from the participant which we create here
           participantId <- participantAdminConnection.getParticipantId()
           _ <- participantAdminConnection.proposeMapping(
-            TopologyStoreId.Authorized,
+            TopologyStoreId.Synchronizer(synchronizerId),
             partyToParticipant,
             serial = PositiveInt.one,
             isProposal = true,
             change = TopologyChangeOp.Replace,
           )
-          _ <- participantAdminConnection
-            .listPartyToParticipant(
-              store = TopologyStoreId.Authorized.some,
-              filterParty = partyId.filterString,
-            )
-            .map { txs =>
-              txs.headOption.getOrElse(
-                throw Status.INVALID_ARGUMENT
-                  .withDescription(
-                    s"No PartyToParticipant state in Authorized Store for $partyId, check the Canton logs to find why the transactions got rejected"
-                  )
-                  .asRuntimeException
-              )
-            }
           // now wait for the topology transactions to be broadcast to the domain.
-          synchronizerId <- getAmuletRulesDomain()(tracedContext)
           _ <- retryProvider.retry(
             RetryFor.Automation,
             "broadcast_party_to_key_mapping",
-            "PartyToKeyMapping is visible in domain store",
+            "PartyToKeyMapping is visible in synchronizer store",
             participantAdminConnection
               .listPartyToKey(
                 filterParty = Some(partyId),
@@ -439,7 +382,7 @@ class HttpValidatorAdminHandler(
           _ <- retryProvider.retry(
             RetryFor.Automation,
             "broadcast_party_to_participant",
-            "PartyToParticipant is visible in domain store",
+            "PartyToParticipant is visible in synchronizer store",
             participantAdminConnection
               .listPartyToParticipant(
                 filterParty = partyId.filterString,
@@ -449,7 +392,7 @@ class HttpValidatorAdminHandler(
                 txs.headOption.getOrElse(
                   throw Status.FAILED_PRECONDITION
                     .withDescription(
-                      s"No PartyToParticipant mapping in domain store for $partyId"
+                      s"No PartyToParticipant mapping in synchronizer store for $partyId"
                     )
                     .asRuntimeException
                 )
@@ -521,6 +464,7 @@ class HttpValidatorAdminHandler(
                             BaseLedgerConnection.sanitizeUserIdToPartyString(body.userPartyId),
                           ),
                           DedupOffset(implicitly[Ordering[Long]].min(offsetESP, offsetTP)),
+                          recoverAcceptedDuplicates = true,
                         )
                       ),
                     )
@@ -771,89 +715,91 @@ class HttpValidatorAdminHandler(
   ): Future[v0.ValidatorAdminResource.PrepareTransferPreapprovalSendResponse] = {
     implicit val AdminUserRequest(tracedContext) = tuser
     requireWalletEnabled { _ =>
-      val senderParty = PartyId.tryFromProtoPrimitive(body.senderPartyId)
-      val receiverParty = PartyId.tryFromProtoPrimitive(body.receiverPartyId)
-      for {
-        synchronizerId <- getAmuletRulesDomain()(tracedContext)
-        // This check is just to make it fail early. The actual preapproval is fixed when the automation
-        // executes the transfer but we want the user to get feedback during the prepare step already.
-        _ <- scanConnection.lookupTransferPreapprovalByParty(receiverParty).map { preapprovalO =>
-          if (preapprovalO.isEmpty) {
-            throw Status.INVALID_ARGUMENT
-              .withDescription(s"Receiver $receiverParty does not have a TransferPreapproval")
-              .asRuntimeException
+      requireTransferCommandSupport {
+        val senderParty = PartyId.tryFromProtoPrimitive(body.senderPartyId)
+        val receiverParty = PartyId.tryFromProtoPrimitive(body.receiverPartyId)
+        for {
+          synchronizerId <- getAmuletRulesDomain()(tracedContext)
+          // This check is just to make it fail early. The actual preapproval is fixed when the automation
+          // executes the transfer but we want the user to get feedback during the prepare step already.
+          _ <- scanConnection.lookupTransferPreapprovalByParty(receiverParty).map { preapprovalO =>
+            if (preapprovalO.isEmpty) {
+              throw Status.INVALID_ARGUMENT
+                .withDescription(s"Receiver $receiverParty does not have a TransferPreapproval")
+                .asRuntimeException
+            }
           }
-        }
-        externalPartyAmuletRules <- scanConnection.getExternalPartyAmuletRules()
-        supportsDescription <- packageVersionSupport
-          .supportsDescriptionInTransferPreapprovals(
-            Seq(receiverParty, senderParty, store.key.dsoParty),
-            clock.now,
-          )
-          .map(_.supported)
-        commands = externalPartyAmuletRules.toAssignedContract
-          .getOrElse(
-            throw Status.Code.FAILED_PRECONDITION.toStatus
-              .withDescription(
-                s"ExternalPartyAmuletRules is currently inflight between synchronizers, retry until it is assigned to a synchronizer"
+          externalPartyAmuletRules <- scanConnection.getExternalPartyAmuletRules()
+          supportsDescription <- packageVersionSupport
+            .supportsDescriptionInTransferPreapprovals(
+              Seq(receiverParty, senderParty, store.key.dsoParty),
+              clock.now,
+            )
+            .map(_.supported)
+          commands = externalPartyAmuletRules.toAssignedContract
+            .getOrElse(
+              throw Status.Code.FAILED_PRECONDITION.toStatus
+                .withDescription(
+                  s"ExternalPartyAmuletRules is currently inflight between synchronizers, retry until it is assigned to a synchronizer"
+                )
+                .asRuntimeException()
+            )
+            .exercise(
+              _.exerciseExternalPartyAmuletRules_CreateTransferCommand(
+                senderParty.toProtoPrimitive,
+                receiverParty.toProtoPrimitive,
+                store.key.validatorParty.toProtoPrimitive,
+                body.amount.bigDecimal,
+                body.expiresAt.toInstant,
+                body.nonce,
+                Option.when(supportsDescription)(body.description).flatten.toJava,
+                java.util.Optional.of(store.key.dsoParty.toProtoPrimitive),
               )
-              .asRuntimeException()
-          )
-          .exercise(
-            _.exerciseExternalPartyAmuletRules_CreateTransferCommand(
-              senderParty.toProtoPrimitive,
-              receiverParty.toProtoPrimitive,
-              store.key.validatorParty.toProtoPrimitive,
-              body.amount.bigDecimal,
-              body.expiresAt.toInstant,
-              body.nonce,
-              Option.when(supportsDescription)(body.description).flatten.toJava,
-              java.util.Optional.of(store.key.dsoParty.toProtoPrimitive),
+            )
+            .update
+            .commands()
+            .asScala
+            .toSeq
+          r <- storeWithIngestion
+            .connection(SpliceLedgerConnectionPriority.Medium)
+            .prepareSubmission(
+              Some(synchronizerId),
+              Seq(senderParty),
+              Seq(senderParty),
+              commands,
+              storeWithIngestion
+                .connection(SpliceLedgerConnectionPriority.Medium)
+                .disclosedContracts(externalPartyAmuletRules),
+              body.verboseHashing.getOrElse(false),
+            )
+          transferCommandCid = r.preparedTransaction
+            .flatMap(_.transaction)
+            .toList
+            .flatMap(_.nodes)
+            .flatMap(n =>
+              n.getV1.nodeType match {
+                case interactive.transaction.v1.interactive_submission_data.Node.NodeType
+                      .Create(create) =>
+                  Seq(create.contractId)
+                case _ => Seq.empty
+              }
+            )
+            .headOption
+            .getOrElse(
+              throw Status.INTERNAL
+                .withDescription("Failed to obtain transferCommandCid from prepared transaction")
+                .asRuntimeException()
+            )
+        } yield {
+          v0.ValidatorAdminResource.PrepareTransferPreapprovalSendResponse.OK(
+            definitions.PrepareTransferPreapprovalSendResponse(
+              Base64.getEncoder.encodeToString(r.getPreparedTransaction.toByteArray),
+              HexString.toHexString(r.preparedTransactionHash),
+              transferCommandCid,
+              r.hashingDetails,
             )
           )
-          .update
-          .commands()
-          .asScala
-          .toSeq
-        r <- storeWithIngestion
-          .connection(SpliceLedgerConnectionPriority.Medium)
-          .prepareSubmission(
-            Some(synchronizerId),
-            Seq(senderParty),
-            Seq(senderParty),
-            commands,
-            storeWithIngestion
-              .connection(SpliceLedgerConnectionPriority.Medium)
-              .disclosedContracts(externalPartyAmuletRules),
-            body.verboseHashing.getOrElse(false),
-          )
-        transferCommandCid = r.preparedTransaction
-          .flatMap(_.transaction)
-          .toList
-          .flatMap(_.nodes)
-          .flatMap(n =>
-            n.getV1.nodeType match {
-              case interactive.transaction.v1.interactive_submission_data.Node.NodeType
-                    .Create(create) =>
-                Seq(create.contractId)
-              case _ => Seq.empty
-            }
-          )
-          .headOption
-          .getOrElse(
-            throw Status.INTERNAL
-              .withDescription("Failed to obtain transferCommandCid from prepared transaction")
-              .asRuntimeException()
-          )
-      } yield {
-        v0.ValidatorAdminResource.PrepareTransferPreapprovalSendResponse.OK(
-          definitions.PrepareTransferPreapprovalSendResponse(
-            Base64.getEncoder.encodeToString(r.getPreparedTransaction.toByteArray),
-            HexString.toHexString(r.preparedTransactionHash),
-            transferCommandCid,
-            r.hashingDetails,
-          )
-        )
+        }
       }
     }
   }
@@ -865,15 +811,17 @@ class HttpValidatorAdminHandler(
   ): Future[v0.ValidatorAdminResource.SubmitTransferPreapprovalSendResponse] = {
     implicit val AdminUserRequest(tracedContext) = tuser
     requireWalletEnabled { _ =>
-      for {
-        updateId <- ValidatorUtil.submitAsExternalParty(
-          storeWithIngestion.connection(SpliceLedgerConnectionPriority.Medium),
-          body.submission,
-          waitForOffset = false,
+      requireTransferCommandSupport {
+        for {
+          updateId <- ValidatorUtil.submitAsExternalParty(
+            storeWithIngestion.connection(SpliceLedgerConnectionPriority.Medium),
+            body.submission,
+            waitForOffset = false,
+          )
+        } yield v0.ValidatorAdminResource.SubmitTransferPreapprovalSendResponseOK(
+          definitions.SubmitTransferPreapprovalSendResponse(updateId)
         )
-      } yield v0.ValidatorAdminResource.SubmitTransferPreapprovalSendResponseOK(
-        definitions.SubmitTransferPreapprovalSendResponse(updateId)
-      )
+      }
     }
   }
 

@@ -7,7 +7,7 @@ import sbt.*
 object CantonDependencies {
   // Slightly changed compared to Canton OSS repo to avoid the need for a meta sbt project
   val version: String = "3.5.0-snapshot.20260401.14638.0.v9a1531c5"
-  val canton_library_version = "3.5.0-snapshot.20260407.18566.0.v64d1d1e6"
+  val canton_library_version = "3.5.7-snapshot.20260630.19042.0.vc85c6a30"
   val daml_language_versions = Seq("2.1")
   val daml_libraries_version = version
   // Defined in `../nix/dpm-sdk-sources.json`, as the compiler version is also used by
@@ -26,11 +26,13 @@ object CantonDependencies {
   lazy val anorm = "org.playframework.anorm" %% "anorm" % "2.7.0"
   lazy val apispec_version = "0.11.7"
   lazy val pekko_version = "1.2.1"
+  lazy val pekko_projection_version = "1.1.0"
+  lazy val pekko_persistence_version = "1.2.1"
   lazy val pekko_http_version = "1.2.0"
   lazy val auth0_java = "com.auth0" % "java-jwt" % "4.2.1"
   lazy val auth0_jwks = "com.auth0" % "jwks-rsa" % "0.21.2"
   lazy val awaitility = "org.awaitility" % "awaitility" % "4.2.0"
-  lazy val grpc_version = "1.77.0"
+  lazy val grpc_version = "1.81.0"
   lazy val logback_version = "1.5.3"
   lazy val slf4j_version = "2.0.6"
   lazy val log4j_version = "2.17.0"
@@ -52,6 +54,8 @@ object CantonDependencies {
   lazy val reflections = "org.reflections" % "reflections" % "0.10.2"
   lazy val pureconfig = "com.github.pureconfig" %% "pureconfig" % pureconfig_version
   lazy val pureconfig_cats = "com.github.pureconfig" %% "pureconfig-cats" % pureconfig_version
+  lazy val pureconfig_generic =
+    "com.github.pureconfig" %% "pureconfig-generic" % pureconfig_version // TODO(SC) exclude ("com.chuusai", s"shapeless_$scala_version_short")
 
   lazy val scala_collection_contrib =
     "org.scala-lang.modules" %% "scala-collection-contrib" % "0.2.2"
@@ -69,7 +73,7 @@ object CantonDependencies {
   lazy val hikaricp = "com.zaxxer" % "HikariCP" % "3.2.0"
   lazy val h2 = "com.h2database" % "h2" % "2.1.210"
   lazy val postgres = "org.postgresql" % "postgresql" % "42.7.3"
-  private val flyway_version = "10.22.0"
+  private val flyway_version = "12.0.2"
   lazy val flyway = "org.flywaydb" % "flyway-core" % flyway_version
   lazy val flyway_postgresql = "org.flywaydb" % "flyway-database-postgresql" % flyway_version
   lazy val oracle = "com.oracle.database.jdbc" % "ojdbc8" % "19.13.0.0.1"
@@ -80,19 +84,11 @@ object CantonDependencies {
   lazy val scalapb_runtime_grpc =
     "com.thesamet.scalapb" %% "scalapb-runtime-grpc" % scalapb.compiler.Version.scalapbVersion
 
-  lazy val daml_test_evidence_tag =
-    "com.daml" %% "test-evidence-tag" % canton_library_version
-  lazy val daml_test_evidence_scalatest =
-    "com.daml" %% "test-evidence-scalatest" % canton_library_version
-  lazy val daml_test_evidence_generator_scalatest =
-    "com.daml" %% "test-evidence-generator" % canton_library_version
   lazy val daml_lf_archive_reader = "com.daml" %% "daml-lf-archive" % canton_library_version
   lazy val daml_lf_data = "com.daml" %% "daml-lf-data" % canton_library_version
   lazy val daml_lf_engine = "com.daml" %% "daml-lf-engine" % canton_library_version
   lazy val daml_lf_language = "com.daml" %% "daml-lf-language" % canton_library_version
   lazy val daml_lf_transaction = "com.daml" %% "daml-lf-transaction" % canton_library_version
-  lazy val daml_lf_transaction_test_lib =
-    "com.daml" %% "daml-lf-transaction-test-lib" % canton_library_version
   lazy val daml_lf_api_type_signature =
     "com.daml" %% "daml-lf-api-type-signature" % canton_library_version
   lazy val daml_libs_scala_grpc_test_utils =
@@ -101,12 +97,23 @@ object CantonDependencies {
     "com.daml" %% "daml-grpc-utils" % canton_library_version
 
   lazy val canton_java_bindings = "com.daml" % "bindings-java" % canton_library_version
+  lazy val canton_kms_driver_api = "com.daml" %% "kms-driver-api" % canton_library_version
+  lazy val canton_ledger_api_core = "com.daml" %% "ledger-api-core" % canton_library_version
   lazy val canton_ledger_api_scala = "com.daml" %% "ledger-api-scala" % canton_library_version
+  lazy val canton_base_errors = "com.daml" %% "base-errors" % canton_library_version
   lazy val canton_observability_metrics =
     "com.daml" %% "observability-metrics" % canton_library_version
   lazy val canton_contextualized_logging =
     "com.daml" %% "contextualized-logging" % canton_library_version
+  lazy val canton_slick_fork = "com.daml" %% "slick-fork" % canton_library_version
+  lazy val canton_traffic_enforcement_api =
+    "com.daml" %% "traffic-enforcement-api" % canton_library_version
+  lazy val canton_util_external = "com.daml" %% "util-external" % canton_library_version
+  lazy val canton_wartremover_annotations =
+    "com.daml" %% "wartremover-annotations" % canton_library_version
 
+  lazy val canton_blake2b = "com.daml" %% "blake2b" % canton_library_version
+  lazy val canton_magnolify_addon = "com.daml" %% "magnolify-addon" % canton_library_version
   lazy val canton_transcode_json = "com.daml" % "transcode-codec-json_3" % canton_library_version
   lazy val canton_transcode_proto_scala =
     "com.daml" % "transcode-codec-proto-scala_3" % canton_library_version
@@ -129,6 +136,8 @@ object CantonDependencies {
   lazy val daml_nonempty_cats = "com.daml" %% "nonempty-cats" % canton_library_version
   lazy val daml_tracing = "com.daml" %% "observability-tracing" % canton_library_version
   lazy val daml_executors = "com.daml" %% "executors" % canton_library_version
+  lazy val daml_jwt = "com.daml" %% "daml-jwt" % canton_library_version
+  lazy val daml_tls = "com.daml" %% "daml-tls" % canton_library_version
   lazy val daml_ports = "com.daml" %% "ports" % canton_library_version
   lazy val daml_ledger_resources = "com.daml" %% "ledger-resources" % canton_library_version
   lazy val daml_ledger_api_value_scalapb =
@@ -139,7 +148,7 @@ object CantonDependencies {
   lazy val daml_rs_grpc_pekko = "com.daml" %% "rs-grpc-pekko" % canton_library_version
 
   lazy val daml_testing_utils =
-    "com.digitalasset.canton" %% "testing-utils" % canton_library_version
+    "com.daml" %% "testing-utils" % canton_library_version
 
   lazy val bouncycastle_bcprov_jdk15on =
     "org.bouncycastle" % "bcprov-jdk18on" % bouncy_castle_version
@@ -151,11 +160,13 @@ object CantonDependencies {
   lazy val grpc_netty_shaded = "io.grpc" % "grpc-netty-shaded" % grpc_version
   lazy val grpc_stub = "io.grpc" % "grpc-stub" % grpc_version
   lazy val grpc_services = "io.grpc" % "grpc-services" % grpc_version
-  lazy val google_common_protos = "com.google.api.grpc" % "proto-google-common-protos" % "2.41.0"
+  lazy val google_common_protos = "com.google.api.grpc" % "proto-google-common-protos" % "2.59.2"
 
   lazy val scopt = "com.github.scopt" %% "scopt" % "4.0.0"
 
   lazy val pekko_actor_typed = "org.apache.pekko" %% "pekko-actor-typed" % pekko_version
+  lazy val pekko_actor_testkit_typed =
+    "org.apache.pekko" %% "pekko-actor-testkit-typed" % pekko_version
   lazy val pekko_stream = "org.apache.pekko" %% "pekko-stream" % pekko_version
   lazy val pekko_stream_testkit = "org.apache.pekko" %% "pekko-stream-testkit" % pekko_version
   lazy val pekko_slf4j = "org.apache.pekko" %% "pekko-slf4j" % pekko_version
@@ -163,9 +174,24 @@ object CantonDependencies {
   lazy val pekko_http_core = "org.apache.pekko" %% "pekko-http-core" % pekko_http_version
   lazy val pekko_http_testkit = "org.apache.pekko" %% "pekko-http-testkit" % pekko_http_version
 
+  lazy val pekko_projection_core =
+    "org.apache.pekko" %% "pekko-projection-core" % pekko_projection_version
+  lazy val pekko_projection_jdbc =
+    "org.apache.pekko" %% "pekko-projection-jdbc" % pekko_projection_version
+  lazy val pekko_projection_slick =
+    "org.apache.pekko" %% "pekko-projection-slick" % pekko_projection_version
+  lazy val pekko_projection_testkit =
+    "org.apache.pekko" %% "pekko-projection-testkit" % pekko_projection_version
+  lazy val pekko_persistence =
+    "org.apache.pekko" %% "pekko-persistence" % pekko_persistence_version
+  lazy val pekko_persistence_query =
+    "org.apache.pekko" %% "pekko-persistence-query" % pekko_persistence_version
+
   lazy val scala_logging = "com.typesafe.scala-logging" %% "scala-logging" % "3.9.5"
   lazy val scalacheck = "org.scalacheck" %% "scalacheck" % scalacheck_version
   lazy val scalatest = "org.scalatest" %% "scalatest" % scalatest_version
+  lazy val scalatest_shouldmatchers =
+    "org.scalatest" %% "scalatest-shouldmatchers" % scalatest_version
   lazy val scalaz_core = "org.scalaz" %% "scalaz-core" % scalaz_version
   lazy val scalatestScalacheck =
     "org.scalatestplus" %% "scalacheck-1-18" % (scalatest_version + ".0")
@@ -292,7 +318,7 @@ object CantonDependencies {
 
   lazy val scalaz_scalacheck =
     "org.scalaz" %% "scalaz-scalacheck-binding" % "7.2.33-scalacheck-1.15"
-  lazy val fasterjackson_core = "com.fasterxml.jackson.core" % "jackson-core" % "2.14.3"
+  lazy val fasterjackson_core = "com.fasterxml.jackson.core" % "jackson-core" % "2.19.1"
   lazy val scalapb_json4s = "com.thesamet.scalapb" %% "scalapb-json4s" % "0.11.1"
 
   lazy val junit_jupiter_api = "org.junit.jupiter" % "junit-jupiter-api" % "5.9.2"

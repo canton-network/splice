@@ -4,7 +4,7 @@
 package com.digitalasset.canton.crypto.kms.driver.testing.v1
 
 import com.daml.nonempty.NonEmpty
-import com.digitalasset.canton.config.CachingConfigs
+import com.digitalasset.canton.config.{CachingConfigs, CryptoParallelismConfig}
 import com.digitalasset.canton.crypto.kms.driver.api.v1.{
   EncryptionAlgoSpec,
   EncryptionKeySpec,
@@ -24,6 +24,7 @@ import com.digitalasset.canton.crypto.{
   SymmetricKeyScheme,
 }
 import com.digitalasset.canton.logging.NamedLoggerFactory
+import com.digitalasset.canton.metrics.CommonMockMetrics
 import com.digitalasset.canton.{FutureHelpers, crypto}
 import com.google.protobuf.ByteString
 import io.scalaland.chimney.Transformer
@@ -73,16 +74,22 @@ object KmsDriverTestUtils extends FutureHelpers {
         )
         .valueOrFail("no supported encryption algo specs")
 
+    val cryptoMetrics = CommonMockMetrics.cryptoMetrics
+
     new JcePureCrypto(
       defaultSymmetricKeyScheme = SymmetricKeyScheme.Aes128Gcm,
-      signingAlgorithmSpecs =
-        CryptoScheme(supportedCryptoSigningAlgoSpecs.head1, supportedCryptoSigningAlgoSpecs),
-      encryptionAlgorithmSpecs =
-        CryptoScheme(supportedCryptoEncryptionAlgoSpecs.head1, supportedCryptoEncryptionAlgoSpecs),
+      signingAlgorithmSpecs = CryptoScheme
+        .tryCreate(supportedCryptoSigningAlgoSpecs.head1, supportedCryptoSigningAlgoSpecs),
+      encryptionAlgorithmSpecs = CryptoScheme
+        .tryCreate(supportedCryptoEncryptionAlgoSpecs.head1, supportedCryptoEncryptionAlgoSpecs),
       defaultHashAlgorithm = HashAlgorithm.Sha256,
       defaultPbkdfScheme = PbkdfScheme.Argon2idMode1,
       publicKeyConversionCacheConfig = CachingConfigs.defaultPublicKeyConversionCache,
       privateKeyConversionCacheTtl = None,
+      signatureVerificationParallelism =
+        CryptoParallelismConfig.defaultSignatureVerificationParallelism,
+      signingMetrics = cryptoMetrics.signingMetrics,
+      decryptionMetrics = cryptoMetrics.decryptionMetrics,
       loggerFactory = NamedLoggerFactory.root,
     )
   }

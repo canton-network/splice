@@ -43,7 +43,7 @@ class PreprocessorSpec
 
   "preprocessor" should {
     "returns correct result when resuming" in {
-      val preprocessor = preprocessing.Preprocessor.forTesting(compilerConfig, loggerFactory)
+      val preprocessor = refinement.Preprocessor.forTesting(compilerConfig, loggerFactory)
       val intermediaryResult = preprocessor
         .translateValue(
           Ast.TTyCon("Mod:WithoutKey"),
@@ -55,7 +55,7 @@ class PreprocessorSpec
     }
 
     "returns correct error when resuming" in {
-      val preprocessor = preprocessing.Preprocessor.forTesting(compilerConfig, loggerFactory)
+      val preprocessor = refinement.Preprocessor.forTesting(compilerConfig, loggerFactory)
       val intermediaryResult = preprocessor
         .translateValue(
           Ast.TTyCon("Mod:WithoutKey"),
@@ -110,7 +110,7 @@ class PreprocessorSpec
 
       val compiledPkgs = ConcurrentCompiledPackages(compilerConfig)
       compiledPkgs.addPackage(defaultPackageId, pkg)
-      val preprocessor = preprocessing.Preprocessor.forTesting(compiledPkgs, loggerFactory)
+      val preprocessor = refinement.Preprocessor.forTesting(compiledPkgs, loggerFactory)
 
       val priority = Map(pkgName -> defaultPackageId)
 
@@ -138,7 +138,7 @@ class PreprocessorSpec
       val compiledPkgs = ConcurrentCompiledPackages(compilerConfig)
       compiledPkgs.addPackage(defaultPackageId, pkg)
 
-      val preprocessor = preprocessing.Preprocessor.forTesting(compiledPkgs, loggerFactory)
+      val preprocessor = refinement.Preprocessor.forTesting(compiledPkgs, loggerFactory)
 
       forEvery(cmdsByPackageName)(cmd =>
         a[Error.Preprocessing.UnresolvedPackageName] shouldBe thrownBy(
@@ -155,7 +155,7 @@ class PreprocessorSpec
         packagePreferenceSet: Seq[String],
         expected: Result[Map[String, String]],
     ): Assertion = {
-      val preprocessor = preprocessing.Preprocessor.forTesting(compilerConfig, loggerFactory)
+      val preprocessor = refinement.Preprocessor.forTesting(compilerConfig, loggerFactory)
 
       val result: Result[Map[PackageName, PackageId]] = preprocessor.buildPackageResolution(
         packageMap = packageMap.map { case (pkgId, pkgName, pkgVersion) =>
@@ -220,7 +220,7 @@ class PreprocessorSpec
             packagePreferenceSet = Seq("pkgId1", "pkgId2", "pkgId3"),
             expected = ResultError(
               Error.Preprocessing.Internal(
-                qualifiedNameOfMember[preprocessing.Preprocessor](_.buildPackageResolution()),
+                qualifiedNameOfMember[refinement.Preprocessor](_.buildPackageResolution()),
                 errorMessage,
                 None,
               )
@@ -252,7 +252,7 @@ class PreprocessorSpec
       )
 
       "extract the keys from ExerciseByKey commands" in {
-        val preprocessor = preprocessing.Preprocessor.forTesting(compilerConfig, loggerFactory)
+        val preprocessor = refinement.Preprocessor.forTesting(compilerConfig, loggerFactory)
 
         val commands = {
           val recordFields = Value.ValueRecord(
@@ -299,34 +299,34 @@ class PreprocessorSpec
           )
         inside(resultAllPrefetch) { case ResultPrefetch(contractIds, keys, resume) =>
           contractIds shouldBe Seq(contractId)
-          keys shouldBe Seq(globalKey1, globalKey2)
-          resume() shouldBe ResultDone.Unit
+          keys shouldBe Map(globalKey1 -> 1, globalKey2 -> 1)
+          resume() shouldBe Result.Unit
         }
       }
 
       "include explicitly specified keys" in {
-        val preprocessor = preprocessing.Preprocessor.forTesting(compilerConfig, loggerFactory)
+        val preprocessor = refinement.Preprocessor.forTesting(compilerConfig, loggerFactory)
 
         val prefetch = Seq(
-          ApiContractKey(withKeyTmplRef, parties),
-          ApiContractKey(withKeyTmplRef, bobKey),
+          ApiContractKey(withKeyTmplRef, parties, 1),
+          ApiContractKey(withKeyTmplRef, bobKey, 1),
         )
 
         val Right(globalKeys) =
           preprocessor.preprocessApiContractKeys(priority, prefetch).consume(pkgs = pkgs)
-        globalKeys shouldBe Seq(globalKey1, globalKey2)
+        globalKeys shouldBe Seq((globalKey1, 1), (globalKey2, 1))
 
         val resultAllUndisclosed =
           preprocessor.prefetchContractIdsAndKeys(ImmArray.empty, globalKeys)
         inside(resultAllUndisclosed) { case ResultPrefetch(contractIds, keys, resume) =>
           contractIds shouldBe Seq.empty
-          keys shouldBe Seq(globalKey1, globalKey2)
-          resume() shouldBe ResultDone.Unit
+          keys shouldBe Map(globalKey1 -> 1, globalKey2 -> 1)
+          resume() shouldBe Result.Unit
         }
       }
 
       "extract contract IDs from commands" in {
-        val preprocessor = preprocessing.Preprocessor.forTesting(compilerConfig, loggerFactory)
+        val preprocessor = refinement.Preprocessor.forTesting(compilerConfig, loggerFactory)
 
         val moreContractIds: Seq[ContractId] = (1 to 5).map(i =>
           Value.ContractId.V1.assertBuild(
@@ -382,7 +382,7 @@ class PreprocessorSpec
           )
         inside(resultAllPrefetch) { case ResultPrefetch(contractIds, keys, resume) =>
           contractIds.toSet shouldBe ((contractId +: moreContractIds).toSet)
-          keys shouldBe Seq(
+          keys shouldBe Map(
             GlobalKey.assertBuild(
               withContractIdTmplId,
               pkgName,
@@ -392,15 +392,15 @@ class PreprocessorSpec
                 withContractIdTmplId.qualifiedName,
                 partiesSValue,
               ),
-            )
+            ) -> 1
           )
-          resume() shouldBe ResultDone.Unit
+          resume() shouldBe Result.Unit
         }
 
       }
 
       "fail on contract IDs in keys" in {
-        val preprocessor = preprocessing.Preprocessor.forTesting(compilerConfig, loggerFactory)
+        val preprocessor = refinement.Preprocessor.forTesting(compilerConfig, loggerFactory)
 
         val commands = ImmArray(
           ApiCommand.ExerciseByKey(

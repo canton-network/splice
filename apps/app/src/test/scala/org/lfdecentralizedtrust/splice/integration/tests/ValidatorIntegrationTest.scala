@@ -28,6 +28,7 @@ import org.slf4j.event.Level
 import scala.concurrent.Future
 import scala.concurrent.duration.*
 import scala.util.{Random, Try}
+import scala.jdk.CollectionConverters.*
 
 class ValidatorIntegrationTest extends IntegrationTestWithIsolatedEnvironment with WalletTestUtil {
 
@@ -672,6 +673,52 @@ class ValidatorIntegrationTest extends IntegrationTestWithIsolatedEnvironment wi
         },
       )
       aliceValidatorBackend.listUsers() should not contain testUser4
+    }
+  }
+
+  "preserve trace ID with case-insensitive traceparent header" in { implicit env =>
+    import org.apache.pekko.http.scaladsl.model.headers.RawHeader
+
+    initDsoWithSv1Only()
+    aliceValidatorBackend.startSync()
+
+    implicit val sys = env.actorSystem
+    registerHttpConnectionPoolsCleanup(env)
+
+    val traceId = "8e757892bf75f4d67b82bd7e8ddd96ce"
+    val parentId = "0561c713d931c93b"
+    val traceparentValue = s"00-$traceId-$parentId-03"
+
+    val response = Http()
+      .singleRequest(
+        Get(s"${aliceValidatorBackend.httpClientConfig.url}/api/validator/livez")
+          .withHeaders(
+            // Vendors MUST expect the header name in any case...
+            RawHeader("TraceParenT", traceparentValue)
+          )
+      )
+      .futureValue
+
+    response.status shouldBe StatusCodes.OK
+    val relevantHeaders = response.headers.filter(h => h.is("traceparent"))
+    // ...and SHOULD send the header name in lowercase.
+    relevantHeaders.loneElement shouldBe RawHeader("traceparent", traceparentValue)
+  }
+
+  "upload splice-util-token-standard-wallet by default" in { implicit env =>
+    initDsoWithSv1Only()
+    aliceValidatorBackend.startSync()
+
+    Seq(sv1ValidatorBackend, aliceValidatorBackend).foreach { validatorBackend =>
+      val party = validatorBackend.getValidatorPartyId()
+      // would throw an exception if not uploaded
+      validatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
+        .submitJava(
+          Seq(party),
+          new org.lfdecentralizedtrust.splice.codegen.java.splice.util.token.wallet.batchingutilityv2.BatchingUtility(
+            party.toProtoPrimitive
+          ).create().commands().asScala.toSeq,
+        )
     }
   }
 

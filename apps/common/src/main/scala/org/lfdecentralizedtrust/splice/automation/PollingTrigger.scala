@@ -112,6 +112,8 @@ trait PollingTrigger extends Trigger with FlagCloseableAsync {
     context.metricsFactory,
     mc.labels,
     context.retryProvider,
+    // Built outside the RetryFor typeclass, so the automation default has to be restated.
+    duplicateCommandIsFatal = false,
   )
 
   override def isHealthy: Boolean = pollingLoopRef

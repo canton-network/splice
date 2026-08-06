@@ -8,12 +8,13 @@ import {
   loadYamlFromFile,
   SPLICE_ROOT,
   supportsSvRunbookReset,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
-import { spliceConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/config';
+} from '@canton-network/splice-pulumi-common';
+import { spliceConfig } from '@canton-network/splice-pulumi-common/src/config/config';
 import {
   CloudPostgres,
+  installPasswordWithParent,
   SplicePostgres,
-} from '@lfdecentralizedtrust/splice-pulumi-common/src/postgres';
+} from '@canton-network/splice-pulumi-common/src/postgres';
 
 export async function installPostgres(
   xns: ExactNamespace,
@@ -43,11 +44,15 @@ export async function installPostgres(
     return new SplicePostgres(
       xns,
       name,
-      name,
-      secretName,
+      parent => installPasswordWithParent(parent, xns, name, secretName),
+      // No need to support legacy chart
+      {
+        deployment: 'docker-image',
+        postgresImage: valuesFromFile.db.postgresImage || 'postgres:18',
+      },
       values,
-      undefined,
-      supportsSvRunbookReset
+      undefined, // overrideDbSizeFromValues
+      supportsSvRunbookReset // disableProtection
     );
   }
 }

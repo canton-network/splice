@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import type { ActionRequiringConfirmation } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
-import { dateTimeFormatISO } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import dayjs from 'dayjs';
 import { useState } from 'react';
 import { useDsoInfos } from '../../contexts/SvContext';
 import { useAppForm } from '../../hooks/form';
 import { useProposalMutation } from '../../hooks/useProposalMutation';
-import { THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
+import { SUPPORTING_URL_LABEL, THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
 import { createProposalActions, getInitialExpiration } from '../../utils/governance';
 import type { CommonProposalFormData } from '../../utils/types';
 import { EffectiveDateField } from '../form-components/EffectiveDateField';
@@ -126,10 +126,52 @@ export const CreateUnallocatedUnclaimedActivityRecordForm: React.FC = _ => {
           <>
             <form.AppField name="action">
               {field => (
+                <field.ProposalTypeField id="create-unallocated-unclaimed-activity-record-action" />
+              )}
+            </form.AppField>
+
+            <form.AppField
+              name="beneficiary"
+              validators={{
+                onBlur: ({ value }) => validateMintedBeneficiary(value),
+                onChange: ({ value }) => validateMintedBeneficiary(value),
+              }}
+            >
+              {field => (
                 <field.TextField
-                  title="Action"
-                  id="create-unallocated-unclaimed-activity-record-action"
-                  muiTextFieldProps={{ disabled: true }}
+                  title="Beneficiary"
+                  id="create-unallocated-unclaimed-activity-record-beneficiary"
+                  scrollableIdentifier
+                />
+              )}
+            </form.AppField>
+
+            <form.AppField
+              name="amount"
+              validators={{
+                onBlur: ({ value }) => validateRewardAmount(value),
+                onChange: ({ value }) => validateRewardAmount(value),
+              }}
+            >
+              {field => (
+                <field.TextField
+                  title="Amount"
+                  id="create-unallocated-unclaimed-activity-record-amount"
+                />
+              )}
+            </form.AppField>
+
+            <form.AppField
+              name="mintBefore"
+              validators={{
+                onChange: ({ value }) => validateMintBefore(value),
+                onBlur: ({ value }) => validateMintBefore(value),
+              }}
+            >
+              {field => (
+                <field.DateField
+                  title="Must Mint Before"
+                  id="create-unallocated-unclaimed-activity-record-mint-before"
                 />
               )}
             </form.AppField>
@@ -143,7 +185,7 @@ export const CreateUnallocatedUnclaimedActivityRecordForm: React.FC = _ => {
             >
               {field => (
                 <field.DateField
-                  title="Threshold Deadline"
+                  title="Quorum Threshold Deadline"
                   description={THRESHOLD_DEADLINE_SUBTITLE}
                   id="create-unallocated-unclaimed-activity-record-expiry-date"
                 />
@@ -185,53 +227,8 @@ export const CreateUnallocatedUnclaimedActivityRecordForm: React.FC = _ => {
             >
               {field => (
                 <field.TextField
-                  title="URL"
+                  title={SUPPORTING_URL_LABEL}
                   id="create-unallocated-unclaimed-activity-record-url"
-                />
-              )}
-            </form.AppField>
-
-            <form.AppField
-              name="beneficiary"
-              validators={{
-                onBlur: ({ value }) => validateMintedBeneficiary(value),
-                onChange: ({ value }) => validateMintedBeneficiary(value),
-              }}
-            >
-              {field => (
-                <field.TextField
-                  title="Beneficiary"
-                  id="create-unallocated-unclaimed-activity-record-beneficiary"
-                />
-              )}
-            </form.AppField>
-
-            <form.AppField
-              name="amount"
-              validators={{
-                onBlur: ({ value }) => validateRewardAmount(value),
-                onChange: ({ value }) => validateRewardAmount(value),
-              }}
-            >
-              {field => (
-                <field.TextField
-                  title="Amount"
-                  id="create-unallocated-unclaimed-activity-record-amount"
-                />
-              )}
-            </form.AppField>
-
-            <form.AppField
-              name="mintBefore"
-              validators={{
-                onChange: ({ value }) => validateMintBefore(value),
-                onBlur: ({ value }) => validateMintBefore(value),
-              }}
-            >
-              {field => (
-                <field.DateField
-                  title="Must Mint Before"
-                  id="create-unallocated-unclaimed-activity-record-mint-before"
                 />
               )}
             </form.AppField>

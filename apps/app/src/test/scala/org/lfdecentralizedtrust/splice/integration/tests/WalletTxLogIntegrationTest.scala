@@ -7,7 +7,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.subscriptions 
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTest
-import org.lfdecentralizedtrust.splice.store.{Limit, PageLimit}
+import org.lfdecentralizedtrust.splice.store.Limit
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.AnsSubscriptionRenewalPaymentTrigger
 import org.lfdecentralizedtrust.splice.sv.config.InitialAnsConfig
 import org.lfdecentralizedtrust.splice.util.{
@@ -82,15 +82,25 @@ class WalletTxLogIntegrationTest
       )
       .addConfigTransform((_, config) =>
         ConfigTransforms
-          .updateAllValidatorConfigs_(
-            // set a large pre-approval duration to ensure that the fees paid are not so small
-            // as to be a rounding error in the test.
-            _.focus(_.transferPreapproval.preapprovalLifetime)
-              .replace(NonNegativeFiniteDuration.ofDays(10 * 365))
+          .updateAllValidatorConfigs((name, config) =>
+            if (name.contains("bob"))
+              // set a large pre-approval duration to ensure that the fees paid are not so small
+              // as to be a rounding error in the test.
+              config
+                .focus(_.transferPreapproval.preapprovalLifetime)
+                .replace(NonNegativeFiniteDuration.ofDays(10 * 365))
+                // set renewal duration to be same as pre-approval lifetime to ensure renewal gets
+                // triggered immediately
+                .focus(_.transferPreapproval.renewalDuration)
+                .replace(NonNegativeFiniteDuration.ofDays(10 * 365))
+            else
               // set renewal duration to be same as pre-approval lifetime to ensure renewal gets
               // triggered immediately
-              .focus(_.transferPreapproval.renewalDuration)
-              .replace(NonNegativeFiniteDuration.ofDays(10 * 365))
+              config
+                .focus(_.transferPreapproval.renewalDuration)
+                .replace(
+                  config.transferPreapproval.preapprovalLifetime
+                )
           )(config)
       )
       // Some tests use the splitwell app to generate multi-party payments
@@ -1150,89 +1160,145 @@ class WalletTxLogIntegrationTest
       )
     }
 
-    "handle external party transfer preapprovals" in { implicit env =>
-      def renewTransferPreapprovalTrigger =
-        bobValidatorBackend.validatorAutomation.trigger[RenewTransferPreapprovalTrigger]
+    "handle external party transfer preapprovals with lifetime > base duration" taggedAs (org.lfdecentralizedtrust.splice.util.Tags.SpliceAmulet_0_1_19) in {
+      implicit env =>
+        def renewTransferPreapprovalTrigger =
+          bobValidatorBackend.validatorAutomation.trigger[RenewTransferPreapprovalTrigger]
 
-      val amuletConfig = sv1ScanBackend.getAmuletConfigAsOf(env.environment.clock.now)
-      val preapprovalFeeRate = amuletConfig.transferPreapprovalFee.toScala.map(BigDecimal(_))
-      val (_, preapprovalFee) = SpliceUtil.transferPreapprovalFees(
-        bobValidatorBackend.config.transferPreapproval.preapprovalLifetime,
-        preapprovalFeeRate,
-        amuletPrice,
-      )
-      val creationTxLog: CheckTxHistoryFn = { case logEntry: TransferTxLogEntry =>
-        logEntry.subtype.value shouldBe walletLogEntry.TransferTransactionSubtype.TransferPreapprovalCreation.toProto
-        logEntry.sender.value.party shouldBe bobValidatorBackend
-          .getValidatorPartyId()
-          .toProtoPrimitive
-        logEntry.sender.value.amount should beWithin(
-          -preapprovalFee,
-          -preapprovalFee + smallAmount,
+        val amuletConfig = sv1ScanBackend.getAmuletConfigAsOf(env.environment.clock.now)
+        val preapprovalFeeRate = amuletConfig.transferPreapprovalFee.toScala.map(BigDecimal(_))
+        val (_, preapprovalFee) = SpliceUtil.transferPreapprovalFees(
+          bobValidatorBackend.config.transferPreapproval.preapprovalLifetime,
+          preapprovalFeeRate,
+          amuletPrice,
         )
-        logEntry.receivers shouldBe empty withClue "receivers"
-        logEntry.senderHoldingFees should beWithin(0, smallAmount)
-      }
-      val tapTxLog: CheckTxHistoryFn = { case logEntry: BalanceChangeTxLogEntry =>
-        logEntry.subtype.value shouldBe walletLogEntry.BalanceChangeTransactionSubtype.Tap.toProto
-      }
-      bobValidatorWalletClient.tap(30.0)
+        val creationTxLog: CheckTxHistoryFn = { case logEntry: TransferTxLogEntry =>
+          logEntry.subtype.value shouldBe walletLogEntry.TransferTransactionSubtype.TransferPreapprovalCreation.toProto
+          logEntry.sender.value.party shouldBe bobValidatorBackend
+            .getValidatorPartyId()
+            .toProtoPrimitive
+          logEntry.sender.value.amount should beWithin(
+            -preapprovalFee,
+            -preapprovalFee + smallAmount,
+          )
+          logEntry.receivers shouldBe empty withClue "receivers"
+          logEntry.senderHoldingFees should beWithin(0, smallAmount)
+        }
+        val tapTxLog: CheckTxHistoryFn = { case logEntry: BalanceChangeTxLogEntry =>
+          logEntry.subtype.value shouldBe walletLogEntry.BalanceChangeTransactionSubtype.Tap.toProto
+        }
+        bobValidatorWalletClient.tap(30.0)
 
-      val onboarding = onboardExternalParty(bobValidatorBackend)
+        val onboarding = onboardExternalParty(bobValidatorBackend)
 
-      val initialCid = setTriggersWithin(
-        triggersToPauseAtStart = Seq(renewTransferPreapprovalTrigger),
-        triggersToResumeAtStart = Seq.empty,
-      ) {
-        val extPartySetupResult =
-          createAndAcceptExternalPartySetupProposal(bobValidatorBackend, onboarding)
+        val initialCid = setTriggersWithin(
+          triggersToPauseAtStart = Seq(renewTransferPreapprovalTrigger),
+          triggersToResumeAtStart = Seq.empty,
+        ) {
+          val extPartySetupResult =
+            createAndAcceptExternalPartySetupProposal(bobValidatorBackend, onboarding)
+          checkTxHistory(
+            bobValidatorWalletClient,
+            Seq(creationTxLog, tapTxLog),
+            trafficTopups = IgnoreTopupsDevNet,
+          )
+          extPartySetupResult.transferPreapprovalCid
+        }
+
+        eventually() {
+          val preapproval =
+            bobValidatorBackend.lookupTransferPreapprovalByParty(onboarding.party).value
+          preapproval.payload.lastRenewedAt should not be preapproval.payload.validFrom
+          preapproval.contractId should not be initialCid
+        }
+        val renewTxLog: CheckTxHistoryFn = { case logEntry: TransferTxLogEntry =>
+          logEntry.subtype.value shouldBe walletLogEntry.TransferTransactionSubtype.TransferPreapprovalRenewal.toProto
+          logEntry.sender.value.party shouldBe bobValidatorBackend
+            .getValidatorPartyId()
+            .toProtoPrimitive
+          logEntry.sender.value.amount should beWithin(
+            -preapprovalFee - smallAmount,
+            -preapprovalFee,
+          )
+          logEntry.receivers shouldBe empty withClue "receivers"
+          logEntry.senderHoldingFees should beWithin(0, smallAmount)
+        }
+        val expectedTxLogEntries = Seq(renewTxLog, creationTxLog, tapTxLog)
         checkTxHistory(
           bobValidatorWalletClient,
-          Seq(creationTxLog, tapTxLog),
+          expectedTxLogEntries,
           trafficTopups = IgnoreTopupsDevNet,
         )
-        extPartySetupResult.transferPreapprovalCid
-      }
+    }
 
-      eventually() {
-        val preapproval =
-          bobValidatorBackend.lookupTransferPreapprovalByParty(onboarding.party).value
-        preapproval.payload.lastRenewedAt should not be preapproval.payload.validFrom
-        preapproval.contractId should not be initialCid
-      }
-      val renewTxLog: CheckTxHistoryFn = { case logEntry: TransferTxLogEntry =>
-        logEntry.subtype.value shouldBe walletLogEntry.TransferTransactionSubtype.TransferPreapprovalRenewal.toProto
-        logEntry.sender.value.party shouldBe bobValidatorBackend
-          .getValidatorPartyId()
-          .toProtoPrimitive
-        logEntry.sender.value.amount should beWithin(
-          -preapprovalFee - smallAmount,
-          -preapprovalFee,
-        )
-        logEntry.receivers shouldBe empty withClue "receivers"
-        logEntry.senderHoldingFees should beWithin(0, smallAmount)
-      }
-      val expectedTxLogEntries = Seq(renewTxLog, creationTxLog, tapTxLog)
-      checkTxHistory(
-        bobValidatorWalletClient,
-        expectedTxLogEntries,
-        trafficTopups = IgnoreTopupsDevNet,
-      )
+    "handle external party transfer preapprovals with lifetime <= base duration" taggedAs (org.lfdecentralizedtrust.splice.util.Tags.SpliceAmulet_0_1_19) in {
+      implicit env =>
+        def renewTransferPreapprovalTrigger =
+          aliceValidatorBackend.validatorAutomation.trigger[RenewTransferPreapprovalTrigger]
 
-      clue("Check UpdateHistory works for external parties") {
-        inside(
-          bobValidatorBackend.appState.walletManager
-            .valueOrFail("WalletManager is expected to be defined")
-            .externalPartyWalletManager
-            .lookupExternalPartyWallet(onboarding.party)
-            .valueOrFail(s"Expected ${onboarding.party} to have an external party wallet")
-            .updateHistory
-            .getAllUpdates(None, PageLimit.Max)
-            .futureValue
-        ) { history =>
-          history.size should be >= expectedTxLogEntries.size
+        val creationTxLog: CheckTxHistoryFn = { case logEntry: TransferTxLogEntry =>
+          logEntry.subtype.value shouldBe walletLogEntry.TransferTransactionSubtype.TransferPreapprovalCreation.toProto
+          logEntry.sender.value.party shouldBe aliceValidatorBackend
+            .getValidatorPartyId()
+            .toProtoPrimitive
+          logEntry.sender.value.amount shouldBe 0.0
+          logEntry.receivers shouldBe empty withClue "receivers"
         }
-      }
+        val tapTxLog: CheckTxHistoryFn = { case logEntry: BalanceChangeTxLogEntry =>
+          logEntry.subtype.value shouldBe walletLogEntry.BalanceChangeTransactionSubtype.Tap.toProto
+        }
+        aliceValidatorWalletClient.tap(30.0)
+
+        val onboarding = onboardExternalParty(aliceValidatorBackend)
+
+        val initialCid = setTriggersWithin(
+          triggersToPauseAtStart = Seq(renewTransferPreapprovalTrigger),
+          triggersToResumeAtStart = Seq.empty,
+        ) {
+          val extPartySetupResult =
+            createAndAcceptExternalPartySetupProposal(aliceValidatorBackend, onboarding)
+          checkTxHistory(
+            aliceValidatorWalletClient,
+            Seq(creationTxLog, tapTxLog),
+            trafficTopups = IgnoreTopupsDevNet,
+            ignore = {
+              case tx: TransferTxLogEntry =>
+                tx.subtype == Some(
+                  walletLogEntry.TransferTransactionSubtype.AppPaymentCollected.toProto
+                )
+              case _ => false
+            },
+          )
+          extPartySetupResult.transferPreapprovalCid
+        }
+
+        eventually() {
+          val preapproval =
+            aliceValidatorBackend.lookupTransferPreapprovalByParty(onboarding.party).value
+          preapproval.payload.lastRenewedAt should not be preapproval.payload.validFrom
+          preapproval.contractId should not be initialCid
+        }
+        val renewTxLog: CheckTxHistoryFn = { case logEntry: TransferTxLogEntry =>
+          logEntry.subtype.value shouldBe walletLogEntry.TransferTransactionSubtype.TransferPreapprovalRenewal.toProto
+          logEntry.sender.value.party shouldBe aliceValidatorBackend
+            .getValidatorPartyId()
+            .toProtoPrimitive
+          logEntry.sender.value.amount shouldBe 0.0
+          logEntry.receivers shouldBe empty withClue "receivers"
+        }
+        val expectedTxLogEntries = Seq(renewTxLog, creationTxLog, tapTxLog)
+        checkTxHistory(
+          aliceValidatorWalletClient,
+          expectedTxLogEntries,
+          trafficTopups = IgnoreTopupsDevNet,
+          ignore = {
+            case tx: TransferTxLogEntry =>
+              tx.subtype == Some(
+                walletLogEntry.TransferTransactionSubtype.AppPaymentCollected.toProto
+              )
+            case _ => false
+          },
+        )
     }
 
     "handle failed automation (app payment)" in { implicit env =>
@@ -1322,10 +1388,10 @@ class WalletTxLogIntegrationTest
         logs =>
           inside(logs) {
             case logLines if logLines.nonEmpty =>
-              logLines
-                .filter(_.errorMessage contains ("RuntimeException"))
-                .foreach(_.errorMessage should include("Unexpected amulet create event"))
-              logLines should have size (env.scans.local.size.toLong + 1) // + 1 for UserWalletTxLog
+              forExactly(1, logLines) { line =>
+                line.errorMessage should include("Unexpected amulet create event")
+                line.loggerName should include("DbMultiDomainAcsStore")
+              }
           },
       )
 
@@ -1341,10 +1407,10 @@ class WalletTxLogIntegrationTest
         logs =>
           inside(logs) {
             case logLines if logLines.nonEmpty =>
-              logLines
-                .filter(_.errorMessage contains ("RuntimeException"))
-                .foreach(_.errorMessage should include("Unexpected amulet archive event"))
-              logLines should have size (env.scans.local.size.toLong + 1) // + 1 for UserWalletTxLog
+              forExactly(1, logLines) { line =>
+                line.errorMessage should include("Unexpected amulet archive event")
+                line.loggerName should include("DbMultiDomainAcsStore")
+              }
           },
       )
 

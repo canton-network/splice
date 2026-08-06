@@ -17,16 +17,13 @@ import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   ConfigurableApp,
   updateAutomationConfig,
 }
-import org.lfdecentralizedtrust.splice.console.WalletAppClientReference
 import org.lfdecentralizedtrust.splice.http.v0.definitions
 import org.lfdecentralizedtrust.splice.http.v0.definitions.DamlValueEncoding.members.CompactJson
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTestWithIsolatedEnvironment
 import org.lfdecentralizedtrust.splice.scan.admin.http.CompactJsonScanHttpEncodings
-import org.lfdecentralizedtrust.splice.scan.automation.ScanAggregationTrigger
 import org.lfdecentralizedtrust.splice.scan.config.BulkStorageConfig
 import org.lfdecentralizedtrust.splice.scan.config.ScanStorageConfigs.scanStorageConfigV1
-import org.lfdecentralizedtrust.splice.scan.store.db.ScanAggregator
 import org.lfdecentralizedtrust.splice.store.{HasS3Mock, S3BucketConnectionForTests}
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingState
 import org.lfdecentralizedtrust.splice.util.*
@@ -49,6 +46,7 @@ class ScanTimeBasedIntegrationTest
     with HasActorSystem {
 
   val initialRound = 4815L
+  override val initialBuckets: Seq[String] = Seq("staging", "committed")
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
@@ -56,12 +54,6 @@ class ScanTimeBasedIntegrationTest
       // The wallet automation periodically merges amulets, which leads to non-deterministic balance changes.
       // We disable the automation for this suite.
       .withoutAutomaticRewardsCollectionAndAmuletMerging
-      // Start ScanAggregationTrigger in paused state, calling runOnce in tests
-      .addConfigTransforms((_, config) =>
-        updateAutomationConfig(ConfigurableApp.Scan)(
-          _.withPausedTrigger[ScanAggregationTrigger]
-        )(config)
-      )
       .addConfigTransforms((_, config) =>
         ConfigTransforms.updateAllSvAppFoundDsoConfigs_(
           _.copy(initialRound = initialRound)
@@ -77,7 +69,8 @@ class ScanTimeBasedIntegrationTest
             bulkStorage = BulkStorageConfig(
               snapshotPollingInterval = NonNegativeFiniteDuration.ofSeconds(5),
               updatesPollingInterval = NonNegativeFiniteDuration.ofSeconds(5),
-              s3 = Some(s3ConfigMock),
+              staging = Some(s3ConfigMock("staging")),
+              committed = Some(s3ConfigMock("committed")),
             ),
             publicUrl = Some(Uri("http://foo.bar.com")),
           )
@@ -179,224 +172,6 @@ class ScanTimeBasedIntegrationTest
     }
   }
 
-  "support app and validator leaderboards" in { implicit env =>
-    val (aliceUserParty, bobUserParty) = onboardAliceAndBob()
-    waitForWalletUser(aliceValidatorWalletClient)
-    waitForWalletUser(bobValidatorWalletClient)
-    val aliceValidatorParty = aliceValidatorBackend.getValidatorPartyId()
-    val bobValidatorParty = bobValidatorBackend.getValidatorPartyId()
-
-    clue("Tap to get some amulets") {
-      aliceWalletClient.tap(500.0)
-      bobWalletClient.tap(500.0)
-      aliceValidatorWalletClient.tap(100.0)
-      bobValidatorWalletClient.tap(100.0)
-    }
-    clue("No aggregate round data should be available yet")({
-      assertThrowsAndLogsCommandFailures(
-        sv1ScanBackend.getRoundOfLatestData(),
-        _.errorMessage should include("No data has been made available yet"),
-      )
-    })
-    // Note: The rewards in this test are relatively arbitrary.
-    // They used to come from CC transfers but as this changed with the removal of CC usage fees
-    // we now create them directly matching the previous values.
-    clue("Generate some generate reward coupons")({
-      createRewards(
-        appRewards = Seq((aliceValidatorParty, 6.4, false), (bobValidatorParty, 7.0, false)),
-        validatorRewards = Seq((aliceUserParty, 6.4), (bobUserParty, 7.0)),
-      )
-    })
-    clue(
-      "Advance a round and generate some more reward coupons - this time with alice's validator being featured"
-    )({
-      advanceRoundsToNextRoundOpening
-      // Note: The featured app right is not actually used
-      grantFeaturedAppRight(aliceValidatorWalletClient)
-      createRewards(
-        appRewards = Seq((aliceValidatorParty, 6.41, false), (bobValidatorParty, 7.01, false)),
-        validatorRewards = Seq((aliceUserParty, 6.41), (bobUserParty, 7.01)),
-      )
-    })
-    clue("Advance 2 ticks for the first coupons to be collectable")({
-      advanceRoundsToNextRoundOpening
-      advanceRoundsToNextRoundOpening
-    })
-    clue(
-      "Alice's and Bob's validators mint their app&validator rewards when transfering CC and create some more rewards"
-    )({
-      p2pTransfer(aliceValidatorWalletClient, bobWalletClient, bobUserParty, 10.0)
-      p2pTransfer(bobValidatorWalletClient, aliceWalletClient, aliceUserParty, 10.0)
-      createRewards(
-        appRewards = Seq((aliceValidatorParty, 6.1, false), (bobValidatorParty, 6.1, false)),
-        validatorRewards = Seq((aliceValidatorParty, 6.1), (bobValidatorParty, 6.1)),
-      )
-    })
-    clue(
-      s"Some more transfers mint more rewards in round ${firstRound + 5} (issued in round ${firstRound + 1}) and create some more rewards"
-    )({
-      advanceRoundsToNextRoundOpening
-      p2pTransfer(aliceValidatorWalletClient, bobWalletClient, bobUserParty, 10.0)
-      p2pTransfer(bobValidatorWalletClient, aliceWalletClient, aliceUserParty, 10.0)
-      createRewards(
-        appRewards = Seq((aliceValidatorParty, 6.1, false), (bobValidatorParty, 6.1, false)),
-        validatorRewards = Seq((aliceValidatorParty, 6.1), (bobValidatorParty, 6.1)),
-      )
-    })
-    val baseRoundWithLatestData = clue(
-      "Advance 1 more tick to make sure we capture at least one round change in the tx history"
-    ) {
-      advanceRoundsToNextRoundOpening
-      sv1ScanBackend.automation.trigger[ScanAggregationTrigger].runOnce().futureValue
-      sv1ScanBackend.getRoundOfLatestData()._1
-    }
-    clue("Advance one more tick to get to the next closed round") {
-      advanceRoundsToNextRoundOpening
-      val ledgerTime = getLedgerTime.toInstant
-      val expectedLastRound = baseRoundWithLatestData + 1
-      sv1ScanBackend.automation.trigger[ScanAggregationTrigger].runOnce().futureValue
-      sv1ScanBackend.getRoundOfLatestData() shouldBe (expectedLastRound, ledgerTime)
-      sv1ScanBackend.getAggregatedRounds().value shouldBe ScanAggregator.RoundRange(
-        firstRound,
-        expectedLastRound,
-      )
-    }
-    clue("Data for a later round does not yet exist")({
-      val lastAggregatedRound = sv1ScanBackend.getRoundOfLatestData()._1
-      val laterRound = lastAggregatedRound + 1
-      assertThrowsAndLogsCommandFailures(
-        sv1ScanBackend.getTopProvidersByAppRewards(
-          laterRound,
-          10,
-        ),
-        _.errorMessage should include(s"Data for round $laterRound not yet computed"),
-      )
-      assertThrowsAndLogsCommandFailures(
-        sv1ScanBackend.getTopValidatorsByValidatorRewards(laterRound, 10),
-        _.errorMessage should include(s"Data for round $laterRound not yet computed"),
-      )
-    })
-
-    def walletClientParty(walletClient: WalletAppClientReference) =
-      Codec.decode(Codec.Party)(walletClient.userStatus().party).value
-    val latestRound = baseRoundWithLatestData + 4
-    actAndCheck(
-      "Advance four more rounds, for the previous rounds to close (where rewards were collected)",
-      Range(0, 3).foreach(_ => advanceRoundsToNextRoundOpening),
-    )(
-      s"Test leaderboards for latest rounds ${latestRound}",
-      _ => {
-        val ledgerTime = getLedgerTime.toInstant
-        sv1ScanBackend.automation.trigger[ScanAggregationTrigger].runOnce().futureValue
-        sv1ScanBackend.getRoundOfLatestData() should be((latestRound, ledgerTime))
-
-        val aliceValidatorWalletClientParty =
-          walletClientParty(aliceValidatorWalletClient).toProtoPrimitive
-        val bobValidatorWalletClientParty =
-          walletClientParty(bobValidatorWalletClient).toProtoPrimitive
-
-        clue("Compare leaderboard getTopProvidersByAppRewards latestRound") {
-          sv1ScanBackend
-            .listRoundPartyTotals(firstRound, latestRound)
-            .map { rpt =>
-              // only keeps latest closed round and app rewards for that round per party
-              rpt.party -> (rpt.closedRound, BigDecimal(rpt.cumulativeAppRewards))
-            }
-            .filter { case (p, (cr, appRewards)) =>
-              appRewards > 0 && (p == aliceValidatorWalletClientParty || p == bobValidatorWalletClientParty) && cr == latestRound
-            }
-            .sortBy(_._2._2)(Ordering.BigDecimal.reverse)
-            .map(_._1) should contain theSameElementsInOrderAs (Seq(
-            bobValidatorWalletClientParty,
-            aliceValidatorWalletClientParty,
-          ))
-          sv1ScanBackend
-            .getTopProvidersByAppRewards(latestRound, 10)
-            .map(_._1.toProtoPrimitive) shouldBe (Seq(
-            bobValidatorWalletClientParty,
-            aliceValidatorWalletClientParty,
-          ))
-        }
-        clue("Compare leaderboard getTopValidatorsByValidatorRewards latestRound") {
-          sv1ScanBackend
-            .listRoundPartyTotals(firstRound, latestRound)
-            .map { rpt =>
-              // only keeps latest closed round and app rewards for that round per party
-              rpt.party -> (rpt.closedRound, BigDecimal(rpt.cumulativeValidatorRewards))
-            }
-            .filter { case (p, (cr, validatorRewards)) =>
-              validatorRewards > 0 && (p == aliceValidatorWalletClientParty || p == bobValidatorWalletClientParty) && cr == latestRound
-            }
-            .sortBy(_._2._2)(Ordering.BigDecimal.reverse)
-            .map(_._1) should contain theSameElementsInOrderAs (Seq(
-            bobValidatorWalletClientParty,
-            aliceValidatorWalletClientParty,
-          ))
-
-          sv1ScanBackend
-            .getTopValidatorsByValidatorRewards(latestRound, 10)
-            .map(_._1.toProtoPrimitive) should contain theSameElementsInOrderAs (Seq(
-            bobValidatorWalletClientParty,
-            aliceValidatorWalletClientParty,
-          ))
-        }
-      },
-    )
-  }
-
-  "Not get aggregates for incorrect ranges" in { implicit env =>
-    clue("Try to get round totals for negative rounds") {
-      val startRounds = List(-1L, 0L, -1L, 1L, -1L)
-      val endRounds = List(1L, -1L, 0L, -1L, -1L)
-      startRounds.zip(endRounds).foreach { case (start, end) =>
-        assertThrowsAndLogsCommandFailures(
-          sv1ScanBackend.listRoundTotals(start, end),
-          _.errorMessage should include(
-            s"rounds must be non-negative: start_round $start, end_round $end"
-          ),
-        )
-        assertThrowsAndLogsCommandFailures(
-          sv1ScanBackend.listRoundPartyTotals(start, end),
-          _.errorMessage should include(
-            s"rounds must be non-negative: start_round $start, end_round $end"
-          ),
-        )
-      }
-    }
-    clue("Try to get round totals for range where end is smaller than start") {
-      assertThrowsAndLogsCommandFailures(
-        sv1ScanBackend.listRoundTotals(firstRound + 10, firstRound + 9),
-        _.errorMessage should include(
-          s"end_round ${firstRound + 9} must be >= start_round ${firstRound + 10}"
-        ),
-      )
-      assertThrowsAndLogsCommandFailures(
-        sv1ScanBackend.listRoundPartyTotals(firstRound + 10, firstRound + 9),
-        _.errorMessage should include(
-          s"end_round ${firstRound + 9} must be >= start_round ${firstRound + 10}"
-        ),
-      )
-    }
-    clue("Try to get too many round totals or round party totals") {
-      assertThrowsAndLogsCommandFailures(
-        sv1ScanBackend.listRoundTotals(firstRound + 0, firstRound + 200),
-        _.errorMessage should include(s"Cannot request more than 200 rounds at a time"),
-      )
-      assertThrowsAndLogsCommandFailures(
-        sv1ScanBackend.listRoundTotals(firstRound + 1, firstRound + 201),
-        _.errorMessage should include(s"Cannot request more than 200 rounds at a time"),
-      )
-      assertThrowsAndLogsCommandFailures(
-        sv1ScanBackend.listRoundPartyTotals(firstRound + 0, firstRound + 50),
-        _.errorMessage should include(s"Cannot request more than 50 rounds at a time"),
-      )
-      assertThrowsAndLogsCommandFailures(
-        sv1ScanBackend.listRoundPartyTotals(firstRound + 1, firstRound + 51),
-        _.errorMessage should include(s"Cannot request more than 50 rounds at a time"),
-      )
-    }
-  }
-
   "return AnsRules contract and config" in { implicit env =>
     val ansRules = sv1ScanBackend.getAnsRules()
     ansRules.payload.config shouldBe defaultAnsConfig()
@@ -419,7 +194,7 @@ class ScanTimeBasedIntegrationTest
 
   "snapshotting" in { implicit env =>
     val (aliceUserParty, bobUserParty) = onboardAliceAndBob()
-    val migrationId = sv1ScanBackend.config.domainMigrationId
+    val migrationId = sv1ScanBackend.getMigrationId()
 
     clue(
       "Wait for backfilling to complete, as the ACS snapshot trigger is paused until then"
@@ -637,6 +412,10 @@ class ScanTimeBasedIntegrationTest
         migrationId,
         ownerPartyIds = Vector(aliceUserParty),
         recordTimeMatch = Some(definitions.HoldingsSummaryRequest.RecordTimeMatch.AtOrBefore),
+        // as_of_round defaults to the earliest open mining round at request time, and the
+        // advanceTime above lets the rounds advance, so pin it to the round the exact query
+        // resolved. Otherwise the holding fees derived from it differ by one round's worth.
+        asOfRound = holdingsSummary.map(_.computedAsOfRound),
       )
       holdingsSummaryAtOrBefore shouldBe holdingsSummary
 
@@ -669,7 +448,8 @@ class ScanTimeBasedIntegrationTest
     val nextMidnight = lastMidnight.plus(1, ChronoUnit.DAYS)
     val expectedAcsSnapshotKey = s"$lastMidnight~$nextMidnight/ACS_0.zstd"
 
-    val bucketConnection = new S3BucketConnectionForTests(s3ConfigMock, loggerFactory)
+    val committedBucketConnection =
+      new S3BucketConnectionForTests(s3ConfigMock("committed"), loggerFactory)
     eventually() {
 
       // wait for latest ACS snapshots to be created
@@ -684,15 +464,15 @@ class ScanTimeBasedIntegrationTest
         getSnapshotResponse.recordTime should be(lastMidnight.atOffset(java.time.ZoneOffset.UTC))
         getSnapshotResponse
       }
-      val allS3Objs = bucketConnection.listObjects.futureValue.contents().asScala
+      val committedS3Objs = committedBucketConnection.listObjects.futureValue.contents().asScala
 
       // Wait for bulk storage objects to be created
-      allS3Objs.map(_.key()) should contain(expectedAcsSnapshotKey)
+      committedS3Objs.map(_.key()) should contain(expectedAcsSnapshotKey)
 
       // Depending on how the days are split exactly (based on the exact simtime when the test was started),
       // the updates may be in one or two segments, so we only assert that there exists a segment that ends
       // at last midnight
-      allS3Objs
+      committedS3Objs
         .map(_.key())
         .filter(_.endsWith(s"~$lastMidnight/updates_0.zstd")) should not be empty
 

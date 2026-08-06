@@ -3,6 +3,10 @@
 
 package org.lfdecentralizedtrust.splice.sv.config
 
+import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.topology.{
+  BlacklistLeaderSelectionPolicyConfig,
+  SequencingParameters,
+}
 import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.admin.api.client.data.{
   SequencerConnectionPoolDelays,
@@ -14,6 +18,7 @@ import com.digitalasset.canton.config.RequireTypes.{
   NonNegativeLong,
   NonNegativeNumeric,
   PositiveInt,
+  PositiveLong,
   PositiveNumeric,
 }
 import com.digitalasset.canton.synchronizer.mediator.RemoteMediatorConfig
@@ -36,6 +41,7 @@ import org.lfdecentralizedtrust.splice.config.{
   SpliceBackendConfig,
   SpliceInstanceNamesConfig,
   SpliceParametersConfig,
+  SplicePostgresConfig,
 }
 import org.lfdecentralizedtrust.splice.environment.{
   DarResource,
@@ -114,6 +120,7 @@ object SvOnboardingConfig {
       developmentFundManager: Option[PartyId] = None,
       initialExternalPartyConfigStateTickDuration: Option[NonNegativeFiniteDuration] = None,
       optValidatorFaucetCap: Option[BigDecimal] = None,
+      initialRewardConfig: Option[InitialRewardConfig] = None,
   ) extends SvOnboardingConfig
 
   case class JoinWithKey(
@@ -237,6 +244,35 @@ object SvOnboardingConfig {
   ) extends SvOnboardingConfig
 }
 
+final case class InitialRewardConfig(
+    mintingVersion: String = "RewardVersion_FeaturedAppMarkers",
+    dryRunVersion: Option[String] = None,
+    batchSize: Long = 100,
+    rewardCouponTimeToLiveMicros: Long = 36L * 60 * 60 * 1000000, // 36 hours
+    appRewardCouponThreshold: BigDecimal = BigDecimal("0.5"),
+) {
+  def toRewardConfig: splice.amuletconfig.RewardConfig = {
+    def parseVersion(s: String): splice.amuletconfig.RewardVersion = s match {
+      case "RewardVersion_FeaturedAppMarkers" =>
+        splice.amuletconfig.RewardVersion.REWARDVERSION_FEATUREDAPPMARKERS
+      case "RewardVersion_TrafficBasedAppRewards" =>
+        splice.amuletconfig.RewardVersion.REWARDVERSION_TRAFFICBASEDAPPREWARDS
+      case other => throw new IllegalArgumentException(s"Unknown RewardVersion: $other")
+    }
+    new splice.amuletconfig.RewardConfig(
+      parseVersion(mintingVersion),
+      dryRunVersion
+        .map(parseVersion)
+        .fold(java.util.Optional.empty[splice.amuletconfig.RewardVersion]())(java.util.Optional.of),
+      batchSize,
+      new org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime(
+        rewardCouponTimeToLiveMicros
+      ),
+      appRewardCouponThreshold.bigDecimal,
+    )
+  }
+}
+
 final case class InitialAnsConfig(
     renewalDuration: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofDays(30),
     entryLifetime: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofDays(90),
@@ -293,9 +329,24 @@ final case class SvParticipantClientConfig(
       SequencerConnectionPoolDelays.default,
 ) extends BaseParticipantClientConfig(adminApi, ledgerApi)
 
+final case class BftSequencingParameters(
+    pbftViewChangeTimeout: PositiveFiniteDuration,
+    segmentLength: PositiveLong,
+    blacklistLeaderSelectionPolicyConfig: BlacklistLeaderSelectionPolicyConfig,
+) {
+  import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.topology.SequencingParameters
+  def toInternal(protocolVersion: ProtocolVersion): SequencingParameters =
+    SequencingParameters.create(
+      pbftViewChangeTimeout.toInternal,
+      SequencingParameters.SegmentLength(segmentLength),
+      blacklistLeaderSelectionPolicyConfig,
+    )(protocolVersion)
+}
+
 case class SvAppBackendConfig(
     override val adminApi: AdminServerConfig = AdminServerConfig(),
     override val storage: DbConfig,
+    postgres: SplicePostgresConfig = SplicePostgresConfig(),
     ledgerApiUser: String,
     // The SV app shares the primary party with the validator app. To discover it we query the
     // validator user. Additionally, sv1 app is expected to create that user,
@@ -318,8 +369,6 @@ case class SvAppBackendConfig(
     participantBootstrappingDump: Option[ParticipantBootstrapDumpConfig] = None,
     identitiesDump: Option[BackupDumpConfig] = None,
     domainMigrationDumpPath: Option[Path] = None,
-    // TODO(DACH-NY/canton-network-node#9731): get migration id from sponsor sv / scan instead of configuring here
-    domainMigrationId: Long = 0L,
     onLedgerStatusReportInterval: NonNegativeFiniteDuration =
       NonNegativeFiniteDuration.ofMinutes(2),
     lsuSequencingTestInterval: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(30),
@@ -344,7 +393,6 @@ case class SvAppBackendConfig(
       NonNegativeFiniteDuration.ofSeconds(10),
     // Identifier for all Canton nodes controlled by this application
     cantonIdentifierConfig: Option[SvCantonIdentifierConfig] = None,
-    legacyMigrationId: Option[Long] = None,
     // Defaults to 24h to allow for 24h between preparation and execution of an externally signed transaction
     preparationTimeRecordTimeTolerance: NonNegativeFiniteDuration =
       NonNegativeFiniteDuration.ofHours(24),
@@ -364,6 +412,11 @@ case class SvAppBackendConfig(
     delegatelessAutomationExpiredAmuletBatchSize: Int = 100,
     delegatelessAutomationExpiredAmuletTransferInstructionBatchSize: Int = 100,
     delegatelessAutomationExpiredAmuletAllocationBatchSize: Int = 100,
+    delegatelessAutomationExpiredRewardCouponV2BatchSize: Int = 100,
+    delegatelessAutomationUnhideRewardCouponV2SampleSize: Int = 100,
+    // As RewardCouponV2 have default TTL of 36h, at max 216 (36*6) should be active
+    // So try to unhide all in single batch and avoid race among SVs
+    delegatelessAutomationUnhideRewardCouponV2BatchSize: Int = 220,
     // configuration to periodically take topology snapshots
     topologySnapshotConfig: Option[PeriodicBackupDumpConfig] = None,
     bftSequencerConnection: Boolean = true,
@@ -404,7 +457,35 @@ case class SvAppBackendConfig(
     packageVettingCache: PackageVettingLookupService.CacheConfig =
       PackageVettingLookupService.CacheConfig(),
     useInternalSequencerApi: Boolean = false,
+    ignoredAmuletVersions: Set[String] = Set.empty,
+    cantonBftSequencingParameters: Option[BftSequencingParameters] = Some(
+      BftSequencingParameters(
+        pbftViewChangeTimeout = PositiveFiniteDuration.ofSeconds(5),
+        // increased from default as epoch changes are synchronization points which can slow things down.
+        segmentLength =
+          PositiveLong.tryCreate(SequencingParameters.DefaultSegmentLength.length.value * 4),
+        blacklistLeaderSelectionPolicyConfig =
+          SequencingParameters.DefaultLeaderSelectionPolicyConfig.copy(
+            howLongToBlacklist =
+              BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.Exponential(
+                initialValue = 1L,
+                // Reduced by 4 to compensate for increased segmentLength.
+                maximumEpochBlacklisted = Some(250L / 4L),
+              )
+          ),
+      )
+    ),
+    // Set to false to disable the DB-level exclusive lock that prevents two SV instances
+    // from running concurrently against the same database.  Only disable for migration scenarios
+    // where intentional overlap is required.
+    instanceLockEnabled: Boolean = true,
 ) extends SpliceBackendConfig {
+
+  def allIgnoredAmuletVersions: Set[String] =
+    ignoredAmuletVersions ++ DarResources.amulet.all
+      .map(_.metadata.version)
+      .filter(_ < DarResources.amulet.minimumInitialization.metadata.version)
+      .map(_.toString)
 
   def shouldSkipSynchronizerInitialization: Boolean =
     skipSynchronizerInitialization &&
@@ -490,8 +571,8 @@ final case class SvSequencerConfig(
     // TODO (#845): consider reading config value from participant instead of configuring here
     sequencerAvailabilityDelay: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(60),
     pruning: Option[SequencerPruningConfig] = None,
-    isBftSequencer: Boolean = false,
-    dabftPruning: Option[PruningConfig] = Some(
+    isCantonBftSequencer: Boolean = false,
+    cantonBftPruning: Option[PruningConfig] = Some(
       PruningConfig(
         cron = "0 /10 * * * ?", // Run every 10min,
         maxDuration = PositiveDurationSeconds.ofMinutes(5),
@@ -537,7 +618,7 @@ final case class SvSynchronizerNodeConfig(
     sequencer: SvSequencerConfig,
     mediator: SvMediatorConfig,
     cometBftConfig: Option[SvCometBftConfig] = None,
-    protocolVersion: ProtocolVersion = ProtocolVersion.v34,
+    protocolVersion: ProtocolVersion = ProtocolVersion.v35,
     serial: Option[NonNegativeInt],
     // We want to be able to override this for simtime tests
     topologyChangeDelayDuration: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofMillis(250),
@@ -546,7 +627,10 @@ final case class SvSynchronizerNodeConfig(
 final case class SvSynchronizerNodesConfig(
     current: SvSynchronizerNodeConfig,
     successor: Option[SvSynchronizerNodeConfig],
+    // We keep the main legacy separate as it plays a special role in things like roll-forward LSU.
     legacy: Option[SvSynchronizerNodeConfig] = None,
+    // additionalLegacy just acts as a a way to keep old synchronizers in the Daml state and therefore expose them in scan.
+    additionalLegacy: Seq[SvSynchronizerNodeConfig] = Seq.empty,
 )
 
 final case class SvCantonIdentifierConfig(

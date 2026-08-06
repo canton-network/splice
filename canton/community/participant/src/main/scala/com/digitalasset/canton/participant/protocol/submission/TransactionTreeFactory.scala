@@ -22,18 +22,18 @@ import com.digitalasset.canton.participant.protocol.submission.TransactionTreeFa
   TransactionTreeConversionError,
 }
 import com.digitalasset.canton.participant.store.ContractLookup
-import com.digitalasset.canton.protocol.*
 import com.digitalasset.canton.protocol.WellFormedTransaction.{
   WithAbsoluteSuffixes,
   WithoutSuffixes,
 }
+import com.digitalasset.canton.protocol.{GenContractInstance, *}
 import com.digitalasset.canton.sequencing.protocol.MediatorGroupRecipient
 import com.digitalasset.canton.topology.client.TopologySnapshot
 import com.digitalasset.canton.topology.{ParticipantId, PhysicalSynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.ContractHasher
 import com.digitalasset.canton.version.ProtocolVersion
-import com.digitalasset.daml.lf.transaction.{LegacyTransactionErrors, NodeId, TransactionError}
+import com.digitalasset.daml.lf.transaction.LegacyTransactionErrors
 
 import java.util.UUID
 import scala.concurrent.ExecutionContext
@@ -47,7 +47,7 @@ trait TransactionTreeFactory {
 
   /** Converts a `transaction: LfTransaction` to the corresponding transaction tree, if possible.
     *
-    * @param keyResolver
+    * @param legacyKeyResolver
     *   The key resolutions recorded while interpreting the transaction.
     * @see
     *   TransactionTreeConversionError for error cases
@@ -61,7 +61,8 @@ trait TransactionTreeFactory {
       transactionUuid: UUID,
       topologySnapshot: TopologySnapshot,
       contractOfId: ContractInstanceOfId,
-      keyResolver: LfKeyResolver,
+      // TODO(#31527): SPM always empty in 3.4, not used in 3.5 => to remove
+      legacyKeyResolver: LfGlobalKeyMapping,
       maxSequencingTime: CantonTimestamp,
       validatePackageVettings: Boolean,
   )(implicit
@@ -71,13 +72,13 @@ trait TransactionTreeFactory {
   /** Reconstructs a transaction view from a reinterpreted action description, using the supplied
     * salts.
     *
-    * @param keyResolver
-    *   The key resolutions recorded while re-interpreting the subaction.
+    * @param legacyKeyResolver
+    *   The key resolutions recorded while re-interpreting the transaction.
     * @throws java.lang.IllegalArgumentException
-    *   if `subaction` does not contain exactly one root node
+    *   if `transaction` does not contain exactly one root node
     */
   def tryReconstruct(
-      subaction: WellFormedTransaction[WithoutSuffixes],
+      transaction: WellFormedTransaction[WithoutSuffixes],
       rootPosition: ViewPosition,
       mediator: MediatorGroupRecipient,
       submittingParticipantO: Option[ParticipantId],
@@ -86,7 +87,8 @@ trait TransactionTreeFactory {
       topologySnapshot: TopologySnapshot,
       contractOfId: ContractInstanceOfId,
       rbContext: RollbackContext,
-      keyResolver: LfKeyResolver,
+      // TODO(#31527): SPM always empty in 3.4, not used in 3.5 => to remove
+      legacyKeyResolver: LfGlobalKeyMapping,
       absolutizer: ContractIdAbsolutizer,
   )(implicit traceContext: TraceContext): EitherT[
     FutureUnlessShutdown,
@@ -136,64 +138,15 @@ object TransactionTreeFactory {
 
   def contractInstanceLookup(
       contractStore: ContractLookup
-  )(implicit ex: ExecutionContext, traceContext: TraceContext): ContractInstanceOfId =
-    id =>
-      for {
-        contract <- contractStore
-          .lookup(id)
-          .toRight(ContractLookupError(id, "Unknown contract"))
-      } yield contract
+  )(implicit ex: ExecutionContext, traceContext: TraceContext): ContractInstanceOfId = { id =>
+    contractStore
+      .lookup(id)
+      .collect { case c: GenContractInstance => c: GenContractInstance }
+      .toRight(ContractLookupError(id, "Unknown contract"))
+  }
 
   /** Supertype for all errors than may arise during the conversion. */
   sealed trait TransactionTreeConversionError extends Product with Serializable with PrettyPrinting
-
-  object TransactionTreeConversionError {
-    def toConversionError(error: TransactionError): TransactionTreeConversionError =
-      error match {
-        case TransactionError.DuplicateContractId(cid) =>
-          DuplicateContractIdError(cid)
-        case TransactionError.DuplicateContractKey(key) =>
-          DuplicateContractKeyError(key)
-        case TransactionError.AlreadyConsumed(cid, nodeId) =>
-          AlreadyConsumedContractError(cid, nodeId.toString)
-        case TransactionError.InconsistentContractKey(key) =>
-          InconsistentContractKeyError(key)
-        case TransactionError.EffectfulRollback(nodeIds) =>
-          EffectfulRollbackError(nodeIds)
-      }
-  }
-
-  final case class EffectfulRollbackError(nodeIds: Set[NodeId])
-      extends TransactionTreeConversionError {
-    override protected def pretty: Pretty[EffectfulRollbackError] =
-      prettyOfClass(unnamedParam(_.nodeIds))
-  }
-
-  final case class DuplicateContractIdError(contractId: LfContractId)
-      extends TransactionTreeConversionError {
-    override protected def pretty: Pretty[DuplicateContractIdError] =
-      prettyOfClass(unnamedParam(_.contractId))
-  }
-
-  final case class DuplicateContractKeyError(key: LfGlobalKey)
-      extends TransactionTreeConversionError {
-    override protected def pretty: Pretty[DuplicateContractKeyError] =
-      prettyOfClass(unnamedParam(_.key))
-  }
-
-  final case class AlreadyConsumedContractError(contractId: LfContractId, nodeId: String)
-      extends TransactionTreeConversionError {
-    override protected def pretty: Pretty[AlreadyConsumedContractError] = prettyOfClass(
-      param("contractId", _.contractId),
-      param("nodeId", _.nodeId.unquoted),
-    )
-  }
-
-  final case class InconsistentContractKeyError(key: LfGlobalKey)
-      extends TransactionTreeConversionError {
-    override protected def pretty: Pretty[InconsistentContractKeyError] =
-      prettyOfClass(unnamedParam(_.key))
-  }
 
   /** Indicates that a contract instance could not be looked up by an instance of
     * [[ContractInstanceOfId]].
@@ -209,6 +162,14 @@ object TransactionTreeFactory {
   final case class SubmitterMetadataError(message: String) extends TransactionTreeConversionError {
     override protected def pretty: Pretty[SubmitterMetadataError] = prettyOfClass(
       unnamedParam(_.message.unquoted)
+    )
+  }
+
+  final case class RolledBackEffect(context: RollbackContext, viewPosition: ViewPosition)
+      extends TransactionTreeConversionError {
+    override protected def pretty: Pretty[RolledBackEffect] = prettyOfClass(
+      param("context", _.context),
+      param("view position", _.viewPosition),
     )
   }
 

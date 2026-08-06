@@ -1,0 +1,35 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+module Splice.Scripts.TokenStandard.UnitTest_AmuletAllocationV2 where
+
+import DA.Action
+import DA.Time
+import Daml.Script
+
+import Splice.AmuletConfig
+import Splice.AmuletAllocationV2 (computeAllocationExpiryInternal)
+
+import Splice.TokenStandard.Utils qualified as TSU
+import Splice.Testing.Registries.AmuletRegistry.Parameters (defaultTransferConfig)
+
+
+defaultTransferConfigV2 : TransferConfigV2 unit
+defaultTransferConfigV2 =
+  let TransferConfigV2 {..} = transferConfigToTransferConfigV2 defaultTransferConfig in
+  TransferConfigV2 with ..
+
+test_computeAllocationExpiry : Script ()
+test_computeAllocationExpiry = do
+  epoch <- getTime
+  let test name oldExpiresAt settlementDeadline expectedExpiresAt = do
+        let expiresAt = computeAllocationExpiryInternal defaultTransferConfigV2 oldExpiresAt settlementDeadline
+        unless (expiresAt == expectedExpiresAt) $
+          fail $ name <> ": expected expiresAt to be " <> show expectedExpiresAt <> " but got " <> show expiresAt
+
+  test "maxTime, no deadline" TSU.maxTime None TSU.maxTime
+  test "maxTime, maxTime deadline" TSU.maxTime (Some TSU.maxTime) TSU.maxTime
+  test "maxTime - 1 day, no deadline" (TSU.maxTime `addRelTime` days (-1)) None TSU.maxTime
+  test "maxTime - 1 day, epoch deadline" (TSU.maxTime `addRelTime` days (-1)) (Some epoch) epoch
+  test "epoch, no deadline" epoch None (epoch `addRelTime` days 90)
+  test "epoch, deadline (epoch + 1 second)" epoch (Some (epoch `addRelTime` seconds 1)) (epoch `addRelTime` seconds 1)

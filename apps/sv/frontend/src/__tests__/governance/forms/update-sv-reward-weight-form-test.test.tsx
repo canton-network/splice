@@ -9,7 +9,7 @@ import { SvConfigProvider } from '../../../utils';
 import App from '../../../App';
 import { svPartyId } from '../../mocks/constants';
 import { Wrapper } from '../../helpers';
-import { dateTimeFormatISO } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import dayjs from 'dayjs';
 import { server, svUrl } from '../../setup/setup';
 import { http, HttpResponse } from 'msw';
@@ -32,12 +32,12 @@ describe('SV user can', () => {
     const button = screen.getByRole('button', { name: 'Log In' });
     user.click(button);
 
-    expect(await screen.findAllByDisplayValue(svPartyId)).not.toBe([]);
+    expect(await screen.findAllByDisplayValue(svPartyId)).not.toHaveLength(0);
   });
 });
 
-describe('Update SV Reward Weight Form', () => {
-  test('should render all Update SV Reward Weight Form components', () => {
+describe('Update Super Validator Reward Weight Form', () => {
+  test('should render all Update Super Validator Reward Weight Form components', () => {
     render(
       <Wrapper>
         <UpdateSvRewardWeightForm />
@@ -45,11 +45,11 @@ describe('Update SV Reward Weight Form', () => {
     );
 
     expect(screen.getByTestId('update-sv-reward-weight-form')).toBeInTheDocument();
-    expect(screen.getByText('Action')).toBeInTheDocument();
+    expect(screen.getByText('Proposal type')).toBeInTheDocument();
 
     const actionInput = screen.getByTestId('update-sv-reward-weight-action');
     expect(actionInput).toBeInTheDocument();
-    expect(actionInput.getAttribute('value')).toBe('Update SV Reward Weight');
+    expect(actionInput.textContent).toBe('Update Super Validator Reward Weight');
 
     const summaryInput = screen.getByTestId('update-sv-reward-weight-summary');
     expect(summaryInput).toBeInTheDocument();
@@ -86,7 +86,7 @@ describe('Update SV Reward Weight Form', () => {
     expect(submitButton).toBeInTheDocument();
 
     await user.click(submitButton);
-    expect(submitButton.getAttribute('disabled')).toBeDefined();
+    expect(submitButton.getAttribute('disabled')).not.toBeNull();
     await expect(async () => await user.click(submitButton)).rejects.toThrowError(
       /Unable to perform pointer interaction/
     );
@@ -111,11 +111,8 @@ describe('Update SV Reward Weight Form', () => {
     const selectInput = screen.getByRole('combobox');
     fireEvent.mouseDown(selectInput);
 
-    await waitFor(async () => {
-      const memberToSelect = screen.getByText('Digital-Asset-Eng-2');
-      expect(memberToSelect).toBeInTheDocument();
-      await user.click(memberToSelect);
-    });
+    const memberToSelect = await screen.findByText('Digital-Asset-Eng-2');
+    await user.click(memberToSelect);
 
     const weightInput = screen.getByTestId('update-sv-reward-weight-weight');
     expect(weightInput).toBeInTheDocument();
@@ -123,7 +120,7 @@ describe('Update SV Reward Weight Form', () => {
 
     await user.click(actionInput); // using this to trigger the onBlur event which triggers the validation
 
-    expect(submitButton.getAttribute('disabled')).toBe(null);
+    expect(submitButton.getAttribute('disabled')).toBeNull();
   });
 
   test('expiry date must be in the future', async () => {
@@ -222,13 +219,10 @@ describe('Update SV Reward Weight Form', () => {
     const selectInput = screen.getByRole('combobox');
 
     const validateCurrentWeightFor = async (sv: string, weight: string) => {
-      await waitFor(async () => {
-        fireEvent.mouseDown(selectInput);
-        const memberToSelect = screen.getByText(sv);
-        expect(memberToSelect).not.toBeNull();
-        await user.click(memberToSelect);
-        expect(await screen.findByText(`Current Weight: ${weight}`)).toBeInTheDocument();
-      });
+      fireEvent.mouseDown(selectInput);
+      const memberToSelect = await screen.findByText(sv);
+      await user.click(memberToSelect);
+      expect(await screen.findByText(`Current Weight: ${weight}`)).toBeInTheDocument();
     };
 
     await validateCurrentWeightFor('Digital-Asset-2', '0_0010');
@@ -257,11 +251,8 @@ describe('Update SV Reward Weight Form', () => {
     const selectInput = screen.getByRole('combobox');
     fireEvent.mouseDown(selectInput);
 
-    await waitFor(async () => {
-      const memberToSelect = screen.getByText('Digital-Asset-Eng-2');
-      expect(memberToSelect).toBeInTheDocument();
-      await user.click(memberToSelect);
-    });
+    const memberToSelect = await screen.findByText('Digital-Asset-Eng-2');
+    await user.click(memberToSelect);
 
     expect(weightInput.getAttribute('value')).toBe('');
   });
@@ -334,11 +325,8 @@ describe('Update SV Reward Weight Form', () => {
     const selectInput = screen.getByRole('combobox');
     fireEvent.mouseDown(selectInput);
 
-    await waitFor(async () => {
-      const memberToSelect = screen.getByText('Digital-Asset-Eng-2');
-      expect(memberToSelect).toBeInTheDocument();
-      await user.click(memberToSelect);
-    });
+    const memberToSelect = await screen.findByText('Digital-Asset-Eng-2');
+    await user.click(memberToSelect);
 
     const weightInput = screen.getByTestId('update-sv-reward-weight-weight');
     expect(weightInput).toBeInTheDocument();
@@ -383,11 +371,8 @@ describe('Update SV Reward Weight Form', () => {
     const selectInput = screen.getByRole('combobox');
     fireEvent.mouseDown(selectInput);
 
-    await waitFor(async () => {
-      const memberToSelect = screen.getByText('Digital-Asset-Eng-2');
-      expect(memberToSelect).toBeInTheDocument();
-      await user.click(memberToSelect);
-    });
+    const memberToSelect = await screen.findByText('Digital-Asset-Eng-2');
+    await user.click(memberToSelect);
 
     const weightInput = screen.getByTestId('update-sv-reward-weight-weight');
     expect(weightInput.getAttribute('value')).toBe('');
@@ -438,11 +423,8 @@ describe('Update SV Reward Weight Form', () => {
     const selectInput = screen.getByRole('combobox');
     fireEvent.mouseDown(selectInput);
 
-    await waitFor(async () => {
-      const memberToSelect = screen.getByText('Digital-Asset-Eng-2');
-      expect(memberToSelect).toBeInTheDocument();
-      await user.click(memberToSelect);
-    });
+    const memberToSelect = await screen.findByText('Digital-Asset-Eng-2');
+    await user.click(memberToSelect);
 
     const weightInput = screen.getByTestId('update-sv-reward-weight-weight');
     expect(weightInput).toBeInTheDocument();
@@ -488,10 +470,8 @@ describe('Update SV Reward Weight Form', () => {
     const selectInput = screen.getByRole('combobox');
     fireEvent.mouseDown(selectInput);
 
-    await waitFor(async () => {
-      const memberToSelect = screen.getByText('Digital-Asset-Eng-2');
-      await user.click(memberToSelect);
-    });
+    const memberToSelect = await screen.findByText('Digital-Asset-Eng-2');
+    await user.click(memberToSelect);
 
     const weightInput = screen.getByTestId('update-sv-reward-weight-weight');
     await user.type(weightInput, '0_1000');

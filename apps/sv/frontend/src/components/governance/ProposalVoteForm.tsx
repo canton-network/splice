@@ -10,7 +10,7 @@ import { ContractId } from '@daml/types';
 import { VoteRequest } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
 import { ProposalVote } from '../../utils/types';
 import { Alert, Box, Button, Stack, TextField, Typography } from '@mui/material';
-import { useEffect } from 'react';
+import { VOTE_REASON_SUMMARY_LABEL, VOTE_REASON_URL_LABEL } from '../../utils/constants';
 interface CastVoteArgs {
   accepted: boolean;
   url: string;
@@ -21,11 +21,11 @@ interface ProposalVoteFormProps {
   voteRequestContractId: ContractId<VoteRequest>;
   currentSvPartyId: string;
   votes: ProposalVote[];
-  onSubmissionComplete?: () => void;
+  onSubmissionStart?: () => void;
 }
 
 export const ProposalVoteForm: React.FC<ProposalVoteFormProps> = props => {
-  const { voteRequestContractId, currentSvPartyId, votes, onSubmissionComplete } = props;
+  const { voteRequestContractId, currentSvPartyId, votes, onSubmissionStart } = props;
   const { castVote } = useSvAdminClient();
   const yourVote = votes.find(vote => vote.sv === currentSvPartyId);
 
@@ -34,13 +34,8 @@ export const ProposalVoteForm: React.FC<ProposalVoteFormProps> = props => {
     mutationFn: async ({ accepted, url, reason }) => {
       return castVote(voteRequestContractId, accepted, url, reason);
     },
+    onMutate: () => onSubmissionStart?.(),
   });
-
-  useEffect(() => {
-    if (castVoteMutation.isSuccess || castVoteMutation.isError) {
-      onSubmissionComplete?.();
-    }
-  }, [castVoteMutation.isSuccess, castVoteMutation.isError, onSubmissionComplete]);
 
   const form = useForm({
     defaultValues: {
@@ -115,7 +110,7 @@ export const ProposalVoteForm: React.FC<ProposalVoteFormProps> = props => {
                     fontSize={18}
                     lineHeight={1}
                   >
-                    Reason
+                    {VOTE_REASON_SUMMARY_LABEL}
                   </Typography>
                   <TextField
                     variant="filled"
@@ -132,7 +127,6 @@ export const ProposalVoteForm: React.FC<ProposalVoteFormProps> = props => {
                       '& .MuiFilledInput-root': {
                         borderRadius: 1,
                         paddingTop: 1,
-                        fontFamily: 'Lato',
                         '&:before, &:after': {
                           display: 'none',
                         },
@@ -168,7 +162,7 @@ export const ProposalVoteForm: React.FC<ProposalVoteFormProps> = props => {
                     fontSize={18}
                     lineHeight={1}
                   >
-                    Vote Reason URL
+                    {VOTE_REASON_URL_LABEL}
                   </Typography>
                   <TextField
                     variant="filled"
@@ -186,7 +180,6 @@ export const ProposalVoteForm: React.FC<ProposalVoteFormProps> = props => {
                     sx={{
                       '& .MuiFilledInput-root': {
                         borderRadius: 1,
-                        fontFamily: 'Lato',
                         '&:before, &:after': {
                           display: 'none',
                         },

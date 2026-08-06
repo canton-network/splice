@@ -121,6 +121,7 @@ trait DataContinuityTest
       oldEnv: TestConsoleEnvironment,
       protocolVersion: ProtocolVersion,
   )(f: TestConsoleEnvironment => Unit): Unit = {
+
     oldEnv.nodes.local.foreach(_.stop())
     val newEnv = manualCreateEnvironment(
       initialConfig = oldEnv.environment.config,
@@ -135,9 +136,9 @@ trait DataContinuityTest
       logger.info(s"About to run with protocol version $protocolVersion")
       f(newEnv)
     } finally {
-      // we need to properly destroy the environment here in order to ensure that the db is wiped.
       destroyEnvironment(newEnv)
     }
+
   }
 
   override def beforeAll(): Unit = {
@@ -378,7 +379,14 @@ trait BasicDataContinuityTestEnvironment extends CommunityIntegrationTest with S
         )
       )
       .addConfigTransforms(ConfigTransforms.setBetaSupport(testedProtocolVersion.isBeta)*)
-      .addConfigTransform(ConfigTransforms.setStartupMemoryReportLevel(Ignore))
+      .addConfigTransforms(
+        ConfigTransforms.setStartupMemoryReportLevel(Ignore),
+        // Processing an incoming commitment that covers a long period takes a long time because the period is exploded into intervals.
+        // This flag ensures that this explosion does not block record order publishing, which could cause timeouts in the tests.
+        ConfigTransforms.updateAllParticipantConfigs_(
+          _.focus(_.parameters.doNotAwaitOnCheckingIncomingCommitments).replace(true)
+        ),
+      )
       .updateTestingConfig(
         _.focus(_.participantsWithoutLapiVerification).replace(
           Set(
@@ -420,6 +428,9 @@ trait BasicDataContinuityTest extends BasicDataContinuityTestSetup {
             Seq(updateNetworkTopologyDescription(S1M1, protocolVersion)),
             dumpDirectory.localDownloadPath,
           )
+
+          // Check that the synchronizer is running with the expected protocol version
+          sequencer1.synchronizer_parameters.static.get().protocolVersion shouldBe protocolVersion
           val alice = participant1.parties.list(filterParty = "Alice").headOption.value.party
           val bob = participant1.parties.list(filterParty = "Bob").headOption.value.party
           actOnCycleData(alice)
@@ -491,6 +502,9 @@ trait BasicDataContinuityTest extends BasicDataContinuityTestSetup {
             Seq(updateNetworkTopologyDescription(S1M1, protocolVersion)),
             dumpDirectory.localDownloadPath,
           )
+          // Check that the synchronizer is running with the expected protocol version
+          sequencer1.synchronizer_parameters.static.get().protocolVersion shouldBe protocolVersion
+
           // initialize needed state - sadly unable to decouple this from implementation details of the workflow
           val p1_count = grabCounts(daName, participant1)
           val p2_count = grabCounts(daName, participant2)
@@ -600,9 +614,14 @@ trait SynchronizerChangeDataContinuityTestSetup
         // We don't need it and it is one less port to worry about
         ConfigTransforms.updateAllParticipantConfigs_(
           _.focus(_.httpLedgerApi.enabled).replace(false)
-        )
+        ),
+        ConfigTransforms.setStartupMemoryReportLevel(Ignore),
+        // Processing an incoming commitment that covers a long period takes a long time because the period is exploded into intervals.
+        // This flag ensures that this explosion does not block record order publishing, which could cause timeouts in the tests.
+        ConfigTransforms.updateAllParticipantConfigs_(
+          _.focus(_.parameters.doNotAwaitOnCheckingIncomingCommitments).replace(true)
+        ),
       )
-      .addConfigTransform(ConfigTransforms.setStartupMemoryReportLevel(Ignore))
       .updateTestingConfig(
         _.focus(_.participantsWithoutLapiVerification).replace(
           Set(
@@ -652,6 +671,8 @@ trait SynchronizerChangeDataContinuityTest extends SynchronizerChangeDataContinu
               S1M1_S1M1.map(updateNetworkTopologyDescription(_, protocolVersion)),
               dumpDirectory.localDownloadPath,
             )
+            // Check that the synchronizer is running with the expected protocol version
+            sequencer1.synchronizer_parameters.static.get().protocolVersion shouldBe protocolVersion
 
             MultiSynchronizerFeatureFlag.enable(participants, iouSynchronizerId)
             MultiSynchronizerFeatureFlag.enable(Seq(P4, P5), paintSynchronizerId)

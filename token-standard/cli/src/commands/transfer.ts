@@ -1,18 +1,18 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { ExerciseCommand } from "@lfdecentralizedtrust/canton-json-api-v2-openapi";
+import { ExerciseCommand } from "@canton-network/canton-json-api-v2-openapi";
 import dayjs from "dayjs";
 import {
   createConfiguration,
   ServerConfiguration,
   DefaultApi as TransferFactoryAPI,
-} from "@lfdecentralizedtrust/transfer-instruction-openapi";
+} from "@canton-network/transfer-instruction-openapi";
 import {
   createLedgerApiClient,
   filtersByParty,
   submitExerciseCommand,
 } from "../apis/ledger-api-utils";
-import { HoldingInterface } from "../constants";
+import { HoldingInterfaceV1 } from "../constants";
 import { CommandOptions } from "../token-standard-cli";
 
 interface TransferCommandOptions {
@@ -56,7 +56,7 @@ export async function transfer(
     const ledgerEndOffset = await ledgerClient.getV2StateLedgerEnd();
     const senderHoldings = await ledgerClient.postV2StateActiveContracts({
       filter: {
-        filtersByParty: filtersByParty(sender, [HoldingInterface], false),
+        filtersByParty: filtersByParty(sender, [HoldingInterfaceV1], false),
       },
       verbose: false,
       activeAtOffset: ledgerEndOffset.offset!,

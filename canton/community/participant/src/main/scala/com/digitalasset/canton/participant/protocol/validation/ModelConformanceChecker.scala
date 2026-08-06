@@ -10,6 +10,7 @@ import cats.syntax.alternative.*
 import cats.syntax.bifunctor.*
 import cats.syntax.parallel.*
 import com.daml.nonempty.NonEmpty
+import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.crypto.{Hash, HashOps, HmacOps, InteractiveSubmission}
 import com.digitalasset.canton.data.*
 import com.digitalasset.canton.data.ViewParticipantData.RootAction
@@ -17,15 +18,21 @@ import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
+import com.digitalasset.canton.participant.ParticipantNodeParameters
 import com.digitalasset.canton.participant.protocol.EngineController.{
   EngineAbortStatus,
   GetEngineAbortStatus,
 }
 import com.digitalasset.canton.participant.protocol.TransactionProcessingSteps.CommonData
 import com.digitalasset.canton.participant.protocol.submission.TransactionTreeFactory
-import com.digitalasset.canton.participant.protocol.submission.TransactionTreeFactory.TransactionTreeConversionError
+import com.digitalasset.canton.participant.protocol.submission.TransactionTreeFactory.{
+  ContractInstanceOfId,
+  ContractLookupError,
+  TransactionTreeConversionError,
+}
 import com.digitalasset.canton.participant.protocol.validation.ModelConformanceChecker.*
-import com.digitalasset.canton.participant.store.ExtendedContractLookup
+import com.digitalasset.canton.participant.store.{ContractLookup, ReplayContractLookup}
+import com.digitalasset.canton.participant.sync.SyncServiceError.SyncServiceAlarm
 import com.digitalasset.canton.participant.util.DAMLe
 import com.digitalasset.canton.participant.util.DAMLe.*
 import com.digitalasset.canton.platform.store.dao.events.InputContractPackages
@@ -46,10 +53,11 @@ import com.digitalasset.canton.topology.{ParticipantId, PhysicalSynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.PackageConsumer.PackageResolver
 import com.digitalasset.canton.util.collection.MapsUtil
-import com.digitalasset.canton.util.{ContractValidator, ErrorUtil, RoseTree}
-import com.digitalasset.canton.version.HashingSchemeVersion
+import com.digitalasset.canton.util.{ContractValidator, ErrorUtil, MonadUtil, RoseTree}
+import com.digitalasset.canton.version.{HashingSchemeVersion, ProtocolVersion}
 import com.digitalasset.canton.{LfPartyId, checked}
 import com.digitalasset.daml.lf.data.Ref.{CommandId, PackageId, PackageName}
+import com.digitalasset.daml.lf.value.GenValue
 
 import java.util.UUID
 import scala.concurrent.ExecutionContext
@@ -68,6 +76,9 @@ class ModelConformanceChecker(
     participantId: ParticipantId,
     contractValidator: ContractValidator,
     packageResolver: PackageResolver,
+    contractLookup: ContractLookup,
+    parallelism: PositiveInt,
+    validateLegacyContractsV11: Boolean,
     hashOps: HashOps & HmacOps,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit executionContext: ExecutionContext)
@@ -89,6 +100,9 @@ class ModelConformanceChecker(
       commonData: CommonData,
       getEngineAbortStatus: GetEngineAbortStatus,
       reInterpretedTopLevelViews: LazyAsyncReInterpretationMap,
+      // TODO(#29834): Make this a parameter of ModelConformanceChecker as an instance of this is tied to a connected synchronizer and
+      //               implicitly to protocol version
+      protocolVersion: ProtocolVersion,
   )(implicit
       traceContext: TraceContext
   ): EitherT[FutureUnlessShutdown, ErrorWithSubTransaction[ViewEffect], Result] = {
@@ -136,6 +150,7 @@ class ModelConformanceChecker(
             topologySnapshot,
             getEngineAbortStatus,
             reInterpretedTopLevelViews,
+            protocolVersion,
           ).value
 
           errorsViewsTxs <- wfTxE match {
@@ -176,13 +191,22 @@ class ModelConformanceChecker(
       (viewTree.view, effects, viewTree.viewPosition, viewTree.submitterMetadataO)
     }
 
-    val resultFE = findValidSubtransactions(rootViewsWithInfo).map { case (errors, viewsTxs) =>
+    val resultFE = for {
+      conflictingStoredContractErrors <-
+        if (validateLegacyContractsV11)
+          checkContractDataForContractIdV11(rootViewTrees.map(_._1).forgetNE)
+        else FutureUnlessShutdown.pure(Seq.empty)
+
+      errorsAndViewTxs <- findValidSubtransactions(rootViewsWithInfo)
+
+    } yield {
+      val (errors, viewsTxs) = errorsAndViewTxs
       val (_, effects, txs) = viewsTxs.unzip3
 
       val (wftxO, mergeErrorOO) = NonEmpty.from(txs).map(WellFormedTransaction.merge(_)).separate
       val mergeErrorO = mergeErrorOO.flatten.map(MergeError.apply)
 
-      NonEmpty.from(errors ++ mergeErrorO) match {
+      NonEmpty.from(errors ++ mergeErrorO ++ conflictingStoredContractErrors) match {
         case None =>
           wftxO match {
             case Some(wftx) => Right(Result(updateId, wftx))
@@ -253,13 +277,10 @@ class ModelConformanceChecker(
 
     val inputContracts = view.inputContracts.fmap(_.contract)
 
-    // TODO(#31527): SPM this will be changed once many contracts are supported
-    val keys = inputContracts.view
-      .map { case (cid, c) => (cid, c.inst.contractKeyWithMaintainers.map(_.globalKey)) }
-      .collect { case (cid, Some(key)) => (cid, key) }
-      .groupMapReduce(_._2) { case (cid, _) => Vector(cid) }(_ ++ _)
-
-    val contractAndKeyLookup = new ExtendedContractLookup(inputContracts, keys)
+    val contractAndKeyLookup = new ReplayContractLookup(
+      inputContracts,
+      view.viewParticipantData.tryUnwrap.keyResolution.fmap(_.unversioned.contracts),
+    )
 
     for {
 
@@ -300,6 +321,7 @@ class ModelConformanceChecker(
       topologySnapshot: TopologySnapshot,
       getEngineAbortStatus: GetEngineAbortStatus,
       reInterpretedTopLevelViewsET: LazyAsyncReInterpretationMap,
+      protocolVersion: ProtocolVersion,
   )(implicit
       traceContext: TraceContext
   ): EitherT[FutureUnlessShutdown, Error, WithRollbackScope[
@@ -328,7 +350,7 @@ class ModelConformanceChecker(
         ReInterpretationResult(
           lfTx,
           metadata,
-          resolverFromReinterpretation,
+          legacyKeyResolver,
           usedPackages,
           _,
         ),
@@ -336,7 +358,13 @@ class ModelConformanceChecker(
         _,
       ) = lfTxAndMetadata
 
-      _ <- checkPackageVetting(view, topologySnapshot, usedPackages, metadata.ledgerTime)
+      _ <- checkPackageVetting(
+        view,
+        topologySnapshot,
+        usedPackages,
+        metadata.ledgerTime,
+        protocolVersion,
+      )
 
       wfTx <- EitherT.fromEither[FutureUnlessShutdown](
         WellFormedTransaction
@@ -352,9 +380,15 @@ class ModelConformanceChecker(
       }
       absolutizer = new ContractIdAbsolutizer(hashOps, absolutizationData)
 
+      replayContractInstanceLookup: ContractInstanceOfId = { (id: LfContractId) =>
+        EitherT.fromEither[FutureUnlessShutdown](
+          contractAndKeyLookup.lookup(id).toRight(ContractLookupError(id, "Unknown contract"))
+        )
+      }
+
       reconstructedViewAndTx <- checked(
         transactionTreeFactory.tryReconstruct(
-          subaction = wfTx,
+          transaction = wfTx,
           rootPosition = viewPosition,
           rbContext = rbContext,
           mediator = mediator,
@@ -362,8 +396,8 @@ class ModelConformanceChecker(
           salts = salts,
           transactionUuid = transactionUuid,
           topologySnapshot = topologySnapshot,
-          contractOfId = TransactionTreeFactory.contractInstanceLookup(contractAndKeyLookup),
-          keyResolver = resolverFromReinterpretation,
+          contractOfId = replayContractInstanceLookup,
+          legacyKeyResolver = legacyKeyResolver,
           absolutizer = absolutizer,
         )
       ).leftMap(err => TransactionTreeError(err, view.viewHash))
@@ -382,8 +416,9 @@ class ModelConformanceChecker(
   private def checkPackageVetting(
       view: TransactionView,
       snapshot: TopologySnapshot,
-      packageIds: Set[PackageId],
+      usedPackages: UsedPackages,
       ledgerTime: CantonTimestamp,
+      protocolVersion: ProtocolVersion,
   )(implicit traceContext: TraceContext): EitherT[FutureUnlessShutdown, Error, Unit] = {
 
     val informees = view.viewCommonData.tryUnwrap.viewConfirmationParameters.informees
@@ -393,15 +428,84 @@ class ModelConformanceChecker(
         snapshot.activeParticipantsOfParties(informees.toSeq)
 
       informeeParticipants = informeeParticipantsByParty.values.flatten.toSet
+      // Don't check vetting of package dependencies for protocol version v35 and beyond
+      checkDependencyVetting = protocolVersion <= ProtocolVersion.v34
+      packagesForVettingChecks =
+        if (checkDependencyVetting) {
+          // Even though it's redundant with package dependency vetting checks,
+          // preserve protocol version 34 behavior of passing all used packages from reinterpretation to loadUnvettedPackagesOrDependencies
+          usedPackages.allUsedPackageIds
+        } else {
+          // For protocol version v35 and beyond, only pass the directly used packages to loadUnvettedPackagesOrDependencies
+          usedPackages.actionNodePackageIds
+        }
       unvetted <- informeeParticipants.toSeq
-        .parTraverse(p => snapshot.loadUnvettedPackagesOrDependencies(p, packageIds, ledgerTime))
-
+        .parTraverse(p =>
+          snapshot.loadUnvettedPackagesOrDependencies(
+            participantId = p,
+            packages = packagesForVettingChecks,
+            ledgerTime = ledgerTime,
+            checkDependencyVetting = checkDependencyVetting,
+          )
+        )
     } yield {
       val combined = unvetted.combineAll.unknownOrUnvetted
       Either.cond(combined.isEmpty, (), UnvettedPackages(combined))
     })
   }
 
+  private def checkContractDataForContractIdV11(
+      rootViewTrees: Seq[TransactionViewTree]
+  )(implicit traceContext: TraceContext): FutureUnlessShutdown[Seq[ConflictingStoredContract]] = {
+    // Precompute and deduplicate candidates
+    val candidates = rootViewTrees
+      .flatMap(_.view.inputContracts.toSeq)
+      .filter { case (cid, inputContract) =>
+        CantonContractIdVersion
+          .extractCantonContractIdVersion(cid)
+          // Also include cid, if the contract id version cannot be determined.
+          .forall(_.contractHashingMethod == LfHash.HashingMethod.UpgradeFriendly) &&
+        proneToHashCollision(inputContract.contract.inst.createArg)
+      }
+      .toSet
+
+    // Validate contract data of candidates against the contract store
+    MonadUtil
+      .parTraverseWithLimit(parallelism)(candidates.toSeq) { case (cid, inputContract) =>
+        (for {
+          // No batching needed, as contractLookup uses BatchAggregator internally.
+          storedInst <- contractLookup.lookupFatContract(cid)
+          if storedInst != inputContract.contract.inst
+        } yield {
+          val msg =
+            s"Contract data mismatch: The input contract in the request ($cid) does not match the version in the contract store. Rejecting request."
+          SyncServiceAlarm.Warn(msg).report()
+          ConflictingStoredContract(msg)
+        }).value
+      }
+      .map(_.flatten)
+  }
+
+  private def proneToHashCollision(value: GenValue[?]): Boolean =
+    // Note that TransactionCoder.decodeFatContractInstance enforces a depth limit, therefore naive recursion can be used here.
+    value match {
+      // Vulnerable types, see #32765
+      case GenValue.TextMap(_) => true
+      case GenValue.GenMap(_) => true
+      // Collection types, call recursively
+      case GenValue.Record(_, fields) =>
+        fields.iterator.exists { case (_, v) => proneToHashCollision(v) }
+      case GenValue.Variant(_, _, value) => proneToHashCollision(value)
+      case GenValue.List(values) => values.iterator.exists(proneToHashCollision)
+      case GenValue.Optional(value) => value.exists(proneToHashCollision)
+      // Atomic types, nothing to do
+      case _: GenValue.CidLessAtom => false
+      case GenValue.ContractId(_) => false
+      // Not supported by the vulnerable hash function
+      case GenValue.Blob(_) => false
+      case GenValue.Any(_, _) => false
+      case GenValue.TypeRep(_) => false
+    }
 }
 
 object ModelConformanceChecker {
@@ -412,18 +516,28 @@ object ModelConformanceChecker {
       contractValidator: ContractValidator,
       participantId: ParticipantId,
       packageResolver: PackageResolver,
+      contractLookup: ContractLookup,
+      participantNodeParameters: ParticipantNodeParameters,
       hashOps: HashOps & HmacOps,
       loggerFactory: NamedLoggerFactory,
-  )(implicit executionContext: ExecutionContext): ModelConformanceChecker =
+  )(implicit executionContext: ExecutionContext): ModelConformanceChecker = {
+    val aggregatorConfig = participantNodeParameters.general.batchingConfig.aggregator
+    // Parallelism is used to limit the number of tasks submitted to the EC.
+    // Choose them like this so the BatchAggregator used by ContractLookup.lookup can be fully loaded.
+    val parallelism = aggregatorConfig.maximumBatchSize * aggregatorConfig.maximumInFlight
     new ModelConformanceChecker(
       reinterpreter,
       transactionTreeFactory,
       participantId,
       contractValidator,
       packageResolver,
+      contractLookup,
+      parallelism,
+      participantNodeParameters.validateLegacyContractsV11,
       hashOps,
       loggerFactory,
     )
+  }
 
   // Type alias for a temporary caching of re-interpreted top views to be used both for authentication of externally
   // signed transaction and model conformance checker
@@ -435,7 +549,7 @@ object ModelConformanceChecker {
   type LazyAsyncReInterpretationMap = Map[ViewHash, LazyAsyncReInterpretation]
   private[protocol] final case class ConformanceReInterpretationResult(
       reInterpretationResult: ReInterpretationResult,
-      contractLookup: ExtendedContractLookup,
+      contractLookup: ReplayContractLookup,
       viewInputContracts: Map[LfContractId, GenContractInstance],
   ) {
 
@@ -633,6 +747,11 @@ object ModelConformanceChecker {
 
   final case class MergeError(cause: String) extends Error {
     override protected def pretty: Pretty[MergeError] = prettyOfParam(_.cause.unquoted)
+  }
+
+  final case class ConflictingStoredContract(cause: String) extends Error {
+    override protected def pretty: Pretty[ConflictingStoredContract] =
+      prettyOfParam(_.cause.unquoted)
   }
 
   final case class Result(

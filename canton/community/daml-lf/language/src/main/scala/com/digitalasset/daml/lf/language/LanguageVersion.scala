@@ -4,8 +4,6 @@
 package com.digitalasset.daml.lf
 package language
 
-import io.circe.{Decoder, Json}
-
 import scala.math.Ordered.orderingToOrdered
 
 final case class LanguageVersion private[lf] (
@@ -24,53 +22,11 @@ final case class LanguageVersion private[lf] (
 }
 
 object LanguageVersion extends LanguageFeaturesGenerated {
-
-  /** Decode a LanguageVersion from a JSON string produced by the sbt plugin's Circe encoding of
-    * LanguageVersionDto. Expected format: {"major":2,"minor":{"Stable":{"version":1}}}
-    * {"major":2,"minor":{"Staging":{"version":3,"revision":1}}} {"major":2,"minor":{"Dev":{}}}
-    *
-    * Unchecked because it does not verify the parsed version is a known/released version.
-    */
-  def fromDTOJson(jsonStr: String): Either[String, LanguageVersion] =
-    io.circe.parser.decode[LanguageVersion](jsonStr)(dtoDecoder).left.map(_.getMessage)
-
-  def assertFromDTOJson(jsonStr: String): LanguageVersion = data.assertRight(fromDTOJson(jsonStr))
-
-  private implicit lazy val minorDecoder: Decoder[Minor] = Decoder.instance { cursor =>
-    cursor
-      .downField("Stable")
-      .as[Json]
-      .flatMap(_.hcursor.downField("version").as[Int])
-      .map(Minor.Stable(_))
-      .orElse(
-        cursor
-          .downField("Staging")
-          .as[Json]
-          .flatMap { json =>
-            for {
-              version <- json.hcursor.downField("version").as[Int]
-              revision <- json.hcursor.downField("revision").as[Int]
-            } yield Minor.Staging(version, revision)
-          }
-      )
-      .orElse(
-        cursor.downField("Dev").as[Json].map(_ => Minor.Dev)
-      )
-  }
-
-  private lazy val dtoDecoder: Decoder[LanguageVersion] = Decoder.instance { cursor =>
-    for {
-      majorInt <- cursor.downField("major").as[Int]
-      minor <- cursor.downField("minor").as[Minor]
-    } yield {
-      val major = majorInt match {
-        case 2 => Major.V2
-        case unsupported =>
-          throw new IllegalArgumentException(s"Unsupported major version: $unsupported")
-      }
-      LanguageVersion(major, minor)
-    }
-  }
+  // TODO[#22956]: get rid of hardcoded ranges
+  lazy val allLfVersionsRange: VersionRange.Inclusive[LanguageVersion] = VersionRange(v2_1, v2_dev)
+  lazy val stableLfVersionsRange: VersionRange.Inclusive[LanguageVersion] = VersionRange(v2_1, v2_3)
+  lazy val earlyAccessLfVersionsRange: VersionRange.Inclusive[LanguageVersion] =
+    VersionRange(v2_1, v2_3)
 
   def assertFromString(s: String): LanguageVersion = data.assertRight(fromString(s))
 
@@ -118,8 +74,8 @@ object LanguageVersion extends LanguageFeaturesGenerated {
       case (_, Minor.Dev) => -1
 
       case (Minor.Staging(a, rca), Minor.Staging(b, rcb)) => (a, rca).compare((b, rcb))
-      case (Minor.Staging(_, _), Minor.Stable(_)) => 1
-      case (Minor.Stable(_), Minor.Staging(_, _)) => -1
+      case (Minor.Staging(a, _), Minor.Stable(b)) => if (a <= b) -1 else 1
+      case (Minor.Stable(a), Minor.Staging(b, _)) => if (a < b) -1 else 1
 
       case (Minor.Stable(a), Minor.Stable(b)) => a.compare(b)
     }
@@ -146,16 +102,82 @@ object LanguageVersion extends LanguageFeaturesGenerated {
 
   }
 
-  object Minor {
-    def assertFromString(s: String): Minor = data.assertRight(fromString(s))
+  sealed abstract class MinorParseFailure extends Product with Serializable {
+    def message: String
+    override def toString: String = message
+  }
 
-    def fromString(str: String): Either[String, Minor] =
-      (allLfVersions ++ allLegacyLfVersions)
-        .map(_.minor)
+  object MinorParseFailure {
+    // Staging-specific failiure (revision not found but other revisions for the same staging version exist)
+    final case class UnknownRevision(
+        stagingMinor: Int,
+        requestedRevision: Int,
+        validRevisions: Seq[Int],
+    ) extends MinorParseFailure {
+      override def message: String = {
+        val base =
+          s"unknown revision, tried to parse $stagingMinor-rc$requestedRevision, valid revisions are ${validRevisions
+              .map(r => s"$stagingMinor-rc$r")}"
+        if (requestedRevision > validRevisions.max)
+          base + ". Trying to parse a revision newer than known by the decoder. Likely cause: decoding a DAR produced by a compiler newer than the decoder"
+        else if (requestedRevision < validRevisions.min)
+          base + ". Trying to parse a revision older than known by the decoder. Likely cause: decoding a DAR produced by a compiler older than the decoder"
+        else
+          base
+      }
+    }
+
+    final case class MinorDiscontinued(input: String) extends MinorParseFailure {
+      override def message: String =
+        s"$input is not supported because it was discontinued, supported minors: ${(allLfVersions ++ allLegacyLfVersions)
+            .map(_.minor)}"
+    }
+
+    // MinorNotFound is the default/fallthrough case
+    final case class MinorNotFound(input: String) extends MinorParseFailure {
+      override def message: String =
+        s"$input is not supported, supported minors: ${(allLfVersions ++ allLegacyLfVersions).map(_.minor)}"
+    }
+  }
+
+  private val stagingPattern = """(\d+)-rc(\d+)""".r
+
+  object Minor {
+    def fromString(str: String): Either[MinorParseFailure, Minor] = {
+      val allMinors = (allLfVersions ++ allLegacyLfVersions).map(_.minor)
+      allMinors
         .find(_.pretty == str)
-        .toRight(
-          s"$str is not supported, supported minors: ${(allLfVersions ++ allLegacyLfVersions).map(_.minor)}"
-        )
+        .toRight(())
+        .left
+        .map { _ =>
+          // heuristics for detecting parse failures go here. Since parsing already failed, any logic here cannot
+          // increase the number of supported versions, but can only provide better error messages for unsupported
+          // versions.
+          // 1. try to find it in discontinued versions
+          if (discontinuedLfVersions.map(_.minor).exists(_.pretty == str))
+            MinorParseFailure.MinorDiscontinued(str)
+          else
+            // 2. see if we can find other revisions for the same staging version
+            str match {
+              case stagingPattern(nStr, mStr) =>
+                val n = nStr.toInt
+                val m = mStr.toInt
+                val validRevisions = allMinors.collect {
+                  case Minor.Staging(version, revision) if version == n => revision
+                }
+                if (validRevisions.nonEmpty)
+                  MinorParseFailure.UnknownRevision(n, m, validRevisions)
+                else
+                  MinorParseFailure.MinorNotFound(str)
+              case _ =>
+                MinorParseFailure.MinorNotFound(str)
+            }
+        }
+    }
+
+    @throws[IllegalArgumentException]
+    def assertParsingSuccessful(result: Either[MinorParseFailure, Minor]): Minor =
+      result.fold(f => throw new IllegalArgumentException(f.message), identity)
 
     final case class Stable(version: Int) extends Minor {
       override def pretty: String = version.toString

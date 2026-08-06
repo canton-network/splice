@@ -21,6 +21,7 @@ import com.digitalasset.canton.config.{
 import com.digitalasset.canton.crypto.*
 import com.digitalasset.canton.crypto.kms.Kms
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
+import com.digitalasset.canton.metrics.CommonMockMetrics
 import com.digitalasset.canton.replica.ReplicaManager
 import com.digitalasset.canton.resource.MemoryStorage
 import com.digitalasset.canton.tracing.NoReportingTracerProvider
@@ -87,6 +88,7 @@ trait KmsCryptoTest
         testedReleaseProtocolVersion,
         futureSupervisor,
         wallClock,
+        CommonMockMetrics.cryptoMetrics,
         executorService,
         timeouts,
         BatchingConfig(),
@@ -125,10 +127,12 @@ trait KmsCryptoTest
             .focus(_.encryption.algorithms.default)
             // EciesHkdfHmacSha256Aes128Cbc is not supported by either AWS or GCP KMS
             .replace(Some(EncryptionAlgorithmSpec.EciesHkdfHmacSha256Aes128Cbc))
+            .focus(_.encryption.keys.default)
+            .replace(Some(EncryptionKeySpec.EcP256))
         ).value
       } yield res.left.value should include(
-        s"The configured default scheme ${EncryptionAlgorithmSpec.EciesHkdfHmacSha256Aes128Cbc} not supported by " +
-          s"the KMS: ${supportedSchemes.supportedEncryptionAlgoSpecs.forgetNE}"
+        s"The configured default scheme ${EncryptionKeySpec.EcP256} not supported by " +
+          s"the KMS: ${supportedSchemes.supportedEncryptionKeySpecs.forgetNE}"
       )
     }
 

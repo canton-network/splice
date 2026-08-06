@@ -15,10 +15,13 @@ import com.digitalasset.canton.lifecycle.{
   PromiseUnlessShutdown,
   UnlessShutdown,
 }
-import com.digitalasset.canton.sequencing.protocol.{AggregationId, AggregationRule}
+import com.digitalasset.canton.sequencing.protocol.{
+  AggregationBySender,
+  AggregationId,
+  AggregationRule,
+}
 import com.digitalasset.canton.sequencing.traffic.TrafficConsumed
 import com.digitalasset.canton.synchronizer.block.data.{BlockInfo, SequencerBlockStore}
-import com.digitalasset.canton.synchronizer.sequencer.InFlightAggregation.AggregationBySender
 import com.digitalasset.canton.synchronizer.sequencer.{
   AggregatedSender,
   FreshInFlightAggregation,
@@ -146,8 +149,8 @@ class BlockSequencerStateAsyncWriterTest
   private lazy val fresh =
     FreshInFlightAggregation(
       CantonTimestamp.Epoch,
-      AggregationRule(
-        eligibleMembers = NonEmpty.mk(Seq, member): NonEmpty[Seq[Member]],
+      AggregationRule.testing(
+        eligibleSenders = NonEmpty.mk(Seq, member): NonEmpty[Seq[Member]],
         threshold = PositiveInt.one,
         protocolVersion = testedProtocolVersion,
       ),
@@ -282,6 +285,7 @@ class BlockSequencerStateAsyncWriterTest
       val trafficWriteP = PromiseUnlessShutdown.unsupervised[Unit]()
       val boooh = new Exception("booh")
       trafficConsumed.updateAndGet(_.copy(writeReturn = Seq(trafficWriteP.futureUS))).discard
+      writer.health.getState.isOk shouldBe true
       unwrap(for {
         _ <- syncWrite(trafficConsumed)(writer.append(Seq(tc1), Map(), EitherT.pure(())))
         _ = loggerFactory.assertLogs(
@@ -296,6 +300,7 @@ class BlockSequencerStateAsyncWriterTest
               // then the future will complete immediately.
               ret.value.isCompleted shouldBe true
               ret.failOnShutdown.value.failed.futureValue.getCause shouldBe boooh
+              writer.health.getState.isFatal shouldBe true
             }
           },
           _.errorMessage should include("Background write failed"),

@@ -12,9 +12,17 @@
 package com.digitalasset.daml.lf
 package language
 
-import com.digitalasset.daml.lf.language.LanguageVersion.Feature
+import com.digitalasset.daml.lf.language.LanguageVersion.{Feature, Major, Minor}
+
+import scala.annotation.nowarn
 
 trait LanguageFeaturesGenerated extends LanguageVersionGenerated {
+  val allStableLegacyLfVersions: List[LanguageVersion] =
+    List(6, 7, 8, 11, 12, 13, 14, 15, 17).map(i => LanguageVersion(Major.V1, Minor.Stable(i)))
+  val List(v1_6, v1_7, v1_8, v1_11, v1_12, v1_13, v1_14, v1_15, v1_17) =
+    allStableLegacyLfVersions: @nowarn("msg=match may not be exhaustive")
+  val v1_dev: LanguageVersion = LanguageVersion(Major.V1, Minor.Dev)
+  val allLegacyLfVersions: List[LanguageVersion] = allStableLegacyLfVersions.appended(v1_dev)
 
   // TODO (FEATURE): Remove this hardcoded object once V1 features are also generated
   object LegacyFeatures {
@@ -92,7 +100,7 @@ trait LanguageFeaturesGenerated extends LanguageVersionGenerated {
 
   val featureNUCK: Feature = Feature(
     name = "Non-unique contract keys",
-    versionRange = VersionRange.From(v2_3_1), // dev whilst developing, then 2.3(-rcn)
+    versionRange = VersionRange.From(v2_3),
   )
 
   val featureFetchBykey: Feature = Feature(
@@ -112,7 +120,7 @@ trait LanguageFeaturesGenerated extends LanguageVersionGenerated {
 
   val featureContractKeys: Feature = Feature(
     name = "Contract Keys",
-    versionRange = VersionRange.From(v2_3_1),
+    versionRange = VersionRange.From(v2_3),
   )
 
   val featureFlatArchive: Feature = Feature(
@@ -152,7 +160,7 @@ trait LanguageFeaturesGenerated extends LanguageVersionGenerated {
 
   val featureExtendedCryptoPrimitives: Feature = Feature(
     name = "Extended crypto primitives",
-    versionRange = VersionRange.From(v2_3_1),
+    versionRange = VersionRange.From(v2_3),
   )
 
   val allFeatures: List[Feature] = List(

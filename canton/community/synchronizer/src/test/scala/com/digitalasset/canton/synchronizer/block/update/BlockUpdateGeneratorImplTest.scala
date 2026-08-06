@@ -3,20 +3,16 @@
 
 package com.digitalasset.canton.synchronizer.block.update
 
-import com.digitalasset.canton.config.{BatchingConfig, ProcessingTimeout}
+import com.digitalasset.canton.config.ProcessingTimeout
+import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.{CloseContext, FlagCloseable, FutureUnlessShutdown}
 import com.digitalasset.canton.sequencing.protocol.ProtocolObjectTestUtils.{
   assertEnvelopeType,
   normalizeSubmissionRequest,
 }
-import com.digitalasset.canton.sequencing.protocol.{
-  AllMembersOfSynchronizer,
-  Recipients,
-  SequencersOfSynchronizer,
-}
+import com.digitalasset.canton.sequencing.protocol.{AllMembersOfSynchronizer, Recipients}
 import com.digitalasset.canton.synchronizer.HasTopologyTransactionTestFactory
-import com.digitalasset.canton.synchronizer.block.BlockEvents.TickTopology
 import com.digitalasset.canton.synchronizer.block.LedgerBlockEvent.{Acknowledgment, Send}
 import com.digitalasset.canton.synchronizer.block.RawLedgerBlock.RawBlockEvent
 import com.digitalasset.canton.synchronizer.block.update.BlockUpdateGenerator.{
@@ -33,6 +29,7 @@ import com.digitalasset.canton.synchronizer.sequencer.traffic.SequencerRateLimit
 import com.digitalasset.canton.topology.DefaultTestIdentities.{physicalSynchronizerId, sequencerId}
 import com.digitalasset.canton.topology.TestingIdentityFactory
 import com.digitalasset.canton.tracing.{TraceContext, Traced}
+import com.digitalasset.canton.util.TracedPossiblyPrevalidated
 import com.digitalasset.canton.version.ProtocolVersion
 import com.digitalasset.canton.{BaseTest, HasExecutionContext, HasExecutorService}
 import org.scalatest.Assertion
@@ -47,7 +44,7 @@ class BlockUpdateGeneratorImplTest
     with HasExecutorService
     with HasTopologyTransactionTestFactory {
 
-  implicit val closeContext: CloseContext = CloseContext(
+  implicit lazy val closeContext: CloseContext = CloseContext(
     FlagCloseable.withCloseContext(logger, ProcessingTimeout())
   )
 
@@ -89,6 +86,13 @@ class BlockUpdateGeneratorImplTest
       }
     )
 
+  private lazy val parameters = BlockProcessingParameters(
+    OrderingTimeFixMode.ValidateOnly,
+    lsuSequencingBounds = None,
+    parallelism = PositiveInt.two,
+    enablePrevalidation = true,
+  )
+
   "BlockUpdateGeneratorImpl.extractBlockEvents" should {
     "filter out events" when {
       "the sequencing time is before or at the minimum sequencing time" in {
@@ -107,21 +111,25 @@ class BlockUpdateGeneratorImplTest
             syncCryptoApiFake,
             sequencerId,
             rateLimitManagerMock,
-            OrderingTimeFixMode.ValidateOnly,
-            lsuSequencingBounds = Some(
-              LsuSequencingBounds
-                .unsafeCreate(
-                  sequencingTimeLowerBoundExclusive,
-                  sequencingTimeLowerBoundExclusive,
-                )
-            ),
             drSequencingTimeUpperBound = None,
             getAnnouncedLsu = None,
             producePostOrderingTopologyTicks = false,
+            consistencyChecks = true,
+            parameters = BlockProcessingParameters(
+              OrderingTimeFixMode.ValidateOnly,
+              lsuSequencingBounds = Some(
+                LsuSequencingBounds
+                  .unsafeCreate(
+                    sequencingTimeLowerBoundExclusive,
+                    sequencingTimeLowerBoundExclusive,
+                  )
+              ),
+              parallelism = PositiveInt.two,
+              enablePrevalidation = true,
+            ),
             SequencerTestMetrics,
-            BatchingConfig(),
-            loggerFactory,
             memberValidatorMock,
+            loggerFactory,
           )
 
         val signedSubmissionRequest = senderSignedSubmissionRequest(
@@ -229,15 +237,14 @@ class BlockUpdateGeneratorImplTest
             syncCryptoApiFake,
             sequencerId,
             rateLimitManagerMock,
-            OrderingTimeFixMode.ValidateOnly,
-            lsuSequencingBounds = None,
             drSequencingTimeUpperBound = None,
             getAnnouncedLsu = None,
             producePostOrderingTopologyTicks = false,
+            consistencyChecks = true,
+            parameters = parameters,
             SequencerTestMetrics,
-            BatchingConfig(),
-            loggerFactory,
             memberValidatorMock,
+            loggerFactory,
           )
 
         blockUpdateGenerator
@@ -247,7 +254,7 @@ class BlockUpdateGeneratorImplTest
                 1L,
                 aTimestamp.toMicros,
                 Seq.empty,
-                tickTopologyAtMicrosFromEpoch = Some(aTimestamp.toMicros -> false),
+                tickTopologyAtMicrosFromEpoch = Some(aTimestamp.toMicros),
               )
             )
           )
@@ -255,7 +262,7 @@ class BlockUpdateGeneratorImplTest
           1L,
           aTimestamp,
           Seq.empty,
-          Some(TickTopology(aTimestamp, Right(SequencersOfSynchronizer))),
+          Some(aTimestamp),
         )
 
         blockUpdateGenerator
@@ -283,15 +290,14 @@ class BlockUpdateGeneratorImplTest
               ),
             sequencerId,
             mock[SequencerRateLimitManager],
-            OrderingTimeFixMode.ValidateOnly,
-            lsuSequencingBounds = None,
             drSequencingTimeUpperBound = None,
             getAnnouncedLsu = None,
             producePostOrderingTopologyTicks = false,
+            consistencyChecks = true,
+            parameters = parameters,
             SequencerTestMetrics,
-            BatchingConfig(),
-            loggerFactory,
             mock[SequencerMemberValidator],
+            loggerFactory,
           )
 
         for {
@@ -311,46 +317,37 @@ class BlockUpdateGeneratorImplTest
             )(TraceContext.empty)
           )
 
-          chunkBlock = (addressee: Either[
-            AllMembersOfSynchronizer.type,
-            SequencersOfSynchronizer.type,
-          ]) =>
+          chunkBlock = () =>
             blockUpdateGenerator.chunkBlock(
               BlockEvents(
                 height = 1L,
                 aTimestamp,
                 events,
-                tickTopology = Some(TickTopology(topologyTickEventTimestamp, addressee)),
+                tickTopologyAtLeastAt = Some(topologyTickEventTimestamp),
               )
             )
 
-          chunks1 = chunkBlock(Right(SequencersOfSynchronizer))
-          chunks2 = chunkBlock(Left(AllMembersOfSynchronizer))
+          chunks = chunkBlock()
         } yield {
-          Table(
-            ("chunks, expected tick recipient"),
-            chunks1 -> Right(SequencersOfSynchronizer),
-            chunks2 -> Left(AllMembersOfSynchronizer),
-          ).forEvery { case (chunks, expectedTickRecipient) =>
-            chunks should matchPattern {
-              case Seq(
-                    NextChunk(
-                      1L,
-                      0,
-                      Seq(
-                        Traced(
-                          LedgerBlockEvent.Send(`sequencerAddressedEventTimestamp`, _, _, _)
-                        )
-                      ),
+          chunks should matchPattern {
+            case Seq(
+                  NextChunk(
+                    1L,
+                    0,
+                    Seq(
+                      TracedPossiblyPrevalidated(
+                        LedgerBlockEvent.Send(`sequencerAddressedEventTimestamp`, _, _, _),
+                        _,
+                      )
                     ),
-                    MaybeTopologyTickChunk(
-                      1L,
-                      `aTimestamp`,
-                      Some(TickTopology(`topologyTickEventTimestamp`, addressee)),
-                    ),
-                    EndOfBlock(1L),
-                  ) if addressee == expectedTickRecipient =>
-            }
+                  ),
+                  MaybeTopologyTickChunk(
+                    1L,
+                    `aTimestamp`,
+                    Some(`topologyTickEventTimestamp`),
+                  ),
+                  EndOfBlock(1L),
+                ) =>
           }
         }
       }.failOnShutdown
@@ -371,15 +368,14 @@ class BlockUpdateGeneratorImplTest
                 ),
               sequencerId,
               mock[SequencerRateLimitManager],
-              OrderingTimeFixMode.ValidateOnly,
-              lsuSequencingBounds = None,
               drSequencingTimeUpperBound = None,
               getAnnouncedLsu = None,
               producePostOrderingTopologyTicks = true,
+              consistencyChecks = true,
+              parameters = parameters,
               SequencerTestMetrics,
-              BatchingConfig(),
-              loggerFactory,
               mock[SequencerMemberValidator],
+              loggerFactory,
             )
 
           for {
@@ -413,8 +409,9 @@ class BlockUpdateGeneratorImplTest
                       1L,
                       0,
                       Seq(
-                        Traced(
-                          LedgerBlockEvent.Send(`sequencerAddressedEventTimestamp`, _, _, _)
+                        TracedPossiblyPrevalidated(
+                          LedgerBlockEvent.Send(`sequencerAddressedEventTimestamp`, _, _, _),
+                          _,
                         )
                       ),
                     ),
@@ -443,22 +440,21 @@ class BlockUpdateGeneratorImplTest
                 ),
               sequencerId,
               mock[SequencerRateLimitManager],
-              OrderingTimeFixMode.ValidateOnly,
-              lsuSequencingBounds = None,
               drSequencingTimeUpperBound = None,
               getAnnouncedLsu = None,
               producePostOrderingTopologyTicks = true,
+              consistencyChecks = true,
+              parameters = parameters,
               SequencerTestMetrics,
-              BatchingConfig(),
-              loggerFactory,
               mock[SequencerMemberValidator],
+              loggerFactory,
             )
 
-          val state = BlockUpdateGeneratorImpl.State(
+          val state = BlockUpdateGenerator.AccumulatedStateProcessingBlocks(
             lastBlockTs = aTimestamp.immediatePredecessor,
             lastChunkTs = aTimestamp,
             latestSequencerEventTimestamp = None,
-            inFlightAggregations = Map.empty,
+            inFlightAggregations = InFlightAggregations.empty,
             latestPendingTopologyTransactionTimestamp = None,
           )
 
@@ -492,12 +488,7 @@ class BlockUpdateGeneratorImplTest
               MaybeTopologyTickChunk(
                 1L,
                 aTimestamp,
-                Some(
-                  TickTopology(
-                    aTimestamp.immediateSuccessor.immediateSuccessor,
-                    Right(SequencersOfSynchronizer),
-                  )
-                ),
+                Some(aTimestamp.immediateSuccessor.immediateSuccessor),
               ),
             )
           } yield {

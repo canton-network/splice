@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 import { listHoldingTransactions } from "./commands/listHoldingTransactions";
 import { transfer } from "./commands/transfer";
-import { Command } from "commander";
-import { HoldingInterface, TransferInstructionInterface } from "./constants";
+import { Command, Option } from "commander";
+import { HoldingInterfaceV1, TransferInstructionInterface } from "./constants";
 import { listContractsByInterface } from "./commands/listContractsByInterface";
 import { acceptTransferInstruction } from "./commands/acceptTransferInstruction";
 
@@ -25,7 +25,7 @@ export function createProgram(): Command {
       .description("List the holdings of a party")
       .argument("partyId", "The party for which to list the holdings"),
   ).action((partyId, opts) =>
-    listContractsByInterface(HoldingInterface, partyId, opts),
+    listContractsByInterface(HoldingInterfaceV1, partyId, opts),
   );
 
   addSharedOptions(
@@ -35,6 +35,15 @@ export function createProgram(): Command {
         "List transactions where a party is involved exercising Holding contracts",
       )
       .argument("partyId", "The party for which to list the transactions")
+      .addOption(
+        new Option(
+          "--standard-version <value>",
+          "What version of Token Standard to parse as (V1/V2)",
+        )
+          .choices(["V1", "V2"])
+          .default("V1")
+          .makeOptionMandatory(true),
+      )
       .option(
         "-o --after-offset <value>",
         "Get transactions after this offset (exclusive).",

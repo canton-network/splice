@@ -27,13 +27,17 @@ import scala.collection.immutable.{Map, SortedSet}
 @SuppressWarnings(Array("org.wartremover.warts.Var"))
 abstract class GenericRunningCommitments[T: Pretty](
     initRt: RecordTime,
-    commitments: TrieMap[SortedSet[T], LtHash16],
+    initialCommitments: IterableOnce[(SortedSet[T], LtHash16)],
 )(implicit ordering: Ordering[T])
     extends HasLoggerName {
+
+  private val commitments: TrieMap[SortedSet[T], LtHash16] = TrieMap.from(initialCommitments)
 
   private val lock = new Mutex()
   @volatile private var rt: RecordTime = initRt
   private val deltaB = Map.newBuilder[SortedSet[T], LtHash16]
+  private var freshStakeholderGroupsSinceLastSnapshot: Long = 0
+  private var closed = false
 
   /** The latest (immutable) snapshot. Taking the snapshot also garbage collects empty commitments.
     */
@@ -56,10 +60,14 @@ abstract class GenericRunningCommitments[T: Pretty](
 
     {
       lock.exclusive {
+        ensureNotClosed()
         val delta = deltaB.result()
         deltaB.clear()
         val deleted = garbageCollect(delta)
         val activeDelta = (delta -- deleted).fmap(_.getByteString())
+        val freshStakeholderGroups = freshStakeholderGroupsSinceLastSnapshot
+        freshStakeholderGroupsSinceLastSnapshot = 0
+        val groupCountDelta = freshStakeholderGroups - deleted.size
         // Note that it's crucial to eagerly (via fmap, as opposed to, say mapValues) snapshot the LtHash16 values,
         // since they're mutable
         CommitmentSnapshot(
@@ -67,6 +75,7 @@ abstract class GenericRunningCommitments[T: Pretty](
           commitments.readOnlySnapshot().toMap.fmap(_.getByteString()),
           activeDelta,
           deleted,
+          groupCountDelta,
         )
       }
     }
@@ -76,11 +85,12 @@ abstract class GenericRunningCommitments[T: Pretty](
       loggingContext: NamedLoggingContext
   ): Unit =
     lock.exclusive {
+      ensureNotClosed()
       this.rt = rt
       change.activations.foreach { case (cid, stakeholdersAndReassignmentCounter) =>
         val sortedStakeholders =
           SortedSet(stakeholdersAndReassignmentCounter.stakeholders.toSeq*)
-        val h = commitments.getOrElseUpdate(sortedStakeholders, LtHash16())
+        val h = commitmentForGroup(sortedStakeholders)
         AcsCommitmentProcessor.addContractToCommitmentDigest(
           h,
           cid,
@@ -94,7 +104,7 @@ abstract class GenericRunningCommitments[T: Pretty](
       change.deactivations.foreach { case (cid, stakeholdersAndReassignmentCounter) =>
         val sortedStakeholders =
           SortedSet(stakeholdersAndReassignmentCounter.stakeholders.toSeq*)
-        val h = commitments.getOrElseUpdate(sortedStakeholders, LtHash16())
+        val h = commitmentForGroup(sortedStakeholders)
         AcsCommitmentProcessor.removeContractFromCommitmentDigest(
           h,
           cid,
@@ -107,27 +117,51 @@ abstract class GenericRunningCommitments[T: Pretty](
       }
     }
 
+  private def commitmentForGroup(group: SortedSet[T]): LtHash16 = {
+    val freshHash = LtHash16()
+    val oldHash = commitments.putIfAbsent(group, freshHash)
+    oldHash match {
+      case Some(old) => old
+      case None =>
+        freshStakeholderGroupsSinceLastSnapshot += 1
+        freshHash
+    }
+  }
+
   def watermark: RecordTime = rt
 
-  def reinitialize(snapshot: Map[SortedSet[T], CommitmentType], recordTime: RecordTime) =
+  def reinitialize(snapshot: Map[SortedSet[T], CommitmentType], recordTime: RecordTime): Unit =
     lock.exclusive {
+      ensureNotClosed()
       // delete all active
       deltaB.clear()
       commitments.clear()
       snapshot.foreach { case (stkhd, cmt) =>
         commitments += stkhd -> LtHash16.tryCreate(cmt)
-        deltaB += stkhd -> LtHash16.tryCreate(cmt)
       }
       rt = recordTime
     }
+
+  private def ensureNotClosed(): Unit =
+    if (closed) {
+      throw new IllegalStateException("RunningCommitments is closed")
+    }
+
+  def releaseMemory(): Unit = lock.exclusive {
+    deltaB.clear()
+    commitments.clear()
+    closed = true
+  }
+
+  @SuppressWarnings(Array("com.digitalasset.canton.ConcurrentMapSize"))
+  def size: Int = commitments.size
 }
 
-@SuppressWarnings(Array("org.wartremover.warts.Var"))
 class InternalizedRunningCommitments(
     initRt: RecordTime,
-    commitments: TrieMap[SortedSet[InternedPartyId], LtHash16],
+    initialCommitments: IterableOnce[(SortedSet[InternedPartyId], LtHash16)],
     stringInterning: StringInterning,
-) extends GenericRunningCommitments[InternedPartyId](initRt, commitments) {
+) extends GenericRunningCommitments[InternedPartyId](initRt, initialCommitments) {
 
   /** We also need (at least temporarily) a non-internalized version of update for
     * [[AcsCommitmentProcessor]]
@@ -159,8 +193,7 @@ class InternalizedRunningCommitments(
     )
 }
 
-@SuppressWarnings(Array("org.wartremover.warts.Var"))
 class RunningCommitments(
     initRt: RecordTime,
-    commitments: TrieMap[SortedSet[LfPartyId], LtHash16],
-) extends GenericRunningCommitments[LfPartyId](initRt, commitments) {}
+    initialCommitments: IterableOnce[(SortedSet[LfPartyId], LtHash16)],
+) extends GenericRunningCommitments[LfPartyId](initRt, initialCommitments)

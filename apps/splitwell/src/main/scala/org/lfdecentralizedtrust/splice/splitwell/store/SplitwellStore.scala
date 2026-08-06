@@ -14,7 +14,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.splitwell as splitwel
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.payment as walletCodegen
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.splitwell.config.SplitwellSynchronizerConfig
 import org.lfdecentralizedtrust.splice.splitwell.store.db.DbSplitwellStore
 import org.lfdecentralizedtrust.splice.splitwell.store.db.SplitwellTables.SplitwellAcsStoreRowData
@@ -186,11 +185,12 @@ trait SplitwellStore extends AppStore {
 object SplitwellStore {
   def apply(
       key: Key,
+      dsoParty: PartyId,
       storage: DbStorage,
       domainConfig: SplitwellSynchronizerConfig,
       loggerFactory: NamedLoggerFactory,
       retryProvider: RetryProvider,
-      domainMigrationInfo: DomainMigrationInfo,
+      migrationId: Long,
       participantId: ParticipantId,
       ingestionConfig: IngestionConfig,
       defaultLimit: Limit,
@@ -201,11 +201,12 @@ object SplitwellStore {
   ): SplitwellStore =
     new DbSplitwellStore(
       key,
+      dsoParty,
       domainConfig,
       storage,
       loggerFactory,
       retryProvider,
-      domainMigrationInfo,
+      migrationId,
       participantId,
       ingestionConfig,
       defaultLimit,

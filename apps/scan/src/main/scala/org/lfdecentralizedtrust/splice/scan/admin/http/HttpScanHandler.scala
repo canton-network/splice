@@ -13,6 +13,7 @@ import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.participant.admin.data.ActiveContract
 import com.digitalasset.canton.time.Clock
+import com.digitalasset.canton.topology.store.TimeQuery
 import com.digitalasset.canton.topology.{Member, PartyId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.{
@@ -52,7 +53,10 @@ import org.lfdecentralizedtrust.splice.environment.{
   SequencerAdminConnection,
   SynchronizerNodeService,
 }
-import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.TopologySnapshot
+import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.{
+  TopologySnapshot,
+  TopologyTransactionType,
+}
 import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.TopologyTransactionType.AuthorizedState
 import org.lfdecentralizedtrust.splice.http.{
   HttpFeatureSupportHandler,
@@ -65,6 +69,7 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   AcsRequest,
   BatchListVotesByVoteRequestsRequest,
   DamlValueEncoding,
+  CountVoteResultsRequest,
   ErrorResponse,
   EventHistoryRequest,
   HoldingsStateRequest,
@@ -73,21 +78,17 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   ListBulkUpdateHistoryObjectsRequest,
   ListVoteResultsRequest,
   MaybeCachedContractWithState,
+  PreviousSvRewardWeightRequest,
+  PreviousSvRewardWeightResponse,
   UpdateHistoryItem,
   UpdateHistoryItemV2WithHash,
   UpdateHistoryRequestV2,
   UpdateHistoryTransactionV2WithHash,
 }
-import org.lfdecentralizedtrust.splice.http.v0.definitions.TransactionHistoryResponseItem.TransactionType.members.{
-  AbortTransferInstruction,
-  DevnetTap,
-  Mint,
-  Transfer,
-}
 import org.lfdecentralizedtrust.splice.http.v0.scan.ScanResource
 import org.lfdecentralizedtrust.splice.scan.ScanSynchronizerNode
 import org.lfdecentralizedtrust.splice.scan.admin.http.ScanHttpEncodings.updateV1ToUpdateV2
-import org.lfdecentralizedtrust.splice.scan.config.{BftSequencerConfig, ScanRollForwardLsuConfig}
+import org.lfdecentralizedtrust.splice.scan.config.{CantonBftPeerConfig, ScanRollForwardLsuConfig}
 import org.lfdecentralizedtrust.splice.scan.dso.DsoAnsResolver
 import org.lfdecentralizedtrust.splice.scan.store.{
   AcsSnapshotStore,
@@ -96,30 +97,26 @@ import org.lfdecentralizedtrust.splice.scan.store.{
   ScanStore,
   TxLogEntry,
 }
-import org.lfdecentralizedtrust.splice.scan.store.bulk.{
-  AcsSnapshotBulkStorage,
-  UpdateHistoryBulkStorage,
-}
+import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorageReader
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.QueryAcsSnapshotResult
 import org.lfdecentralizedtrust.splice.scan.store.bulk.AcsSnapshotBulkStorage.AcsSnapshotObjects
 import org.lfdecentralizedtrust.splice.scan.store.bulk.UpdateHistoryBulkStorage.UpdateHistoryObjectsResponse
-import org.lfdecentralizedtrust.splice.scan.store.db.ScanAggregator.{RoundPartyTotals, RoundTotals}
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.TxLogBackfillingState
 import org.lfdecentralizedtrust.splice.store.{
   AppStore,
   AppStoreWithIngestion,
   PageLimit,
-  SortOrder,
+  VoteResultsFilters,
   VotesStore,
 }
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChecksum
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingState
 import org.lfdecentralizedtrust.splice.store.UpdateHistory
+
 import java.lang.IllegalStateException
 import scala.collection.immutable.SortedMap
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanAppRewardsStore
-import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorage
 import org.lfdecentralizedtrust.splice.util.{
   Codec,
   Contract,
@@ -154,7 +151,7 @@ class HttpScanHandler(
     appActivityStoreO: Option[AppActivityStore],
     snapshotStore: AcsSnapshotStore,
     eventStore: ScanEventStore,
-    bulkStorage: BulkStorage,
+    bulkStorage: Option[BulkStorageReader],
     dsoAnsResolver: DsoAnsResolver,
     miningRoundsCacheTimeToLiveOverride: Option[NonNegativeFiniteDuration],
     enableForcedAcsSnapshots: Boolean,
@@ -162,7 +159,7 @@ class HttpScanHandler(
     clock: Clock,
     protected val loggerFactory: NamedLoggerFactory,
     protected val packageVersionSupport: PackageVersionSupport,
-    bftSequencers: Seq[(SequencerAdminConnection, BftSequencerConfig)],
+    bftSequencers: Seq[(SequencerAdminConnection, CantonBftPeerConfig)],
     initialRound: String,
     externalTransactionHashThresholdTime: Option[Instant] = None,
     updateHistoryMaxPageSize: Int,
@@ -531,172 +528,6 @@ class HttpScanHandler(
     }
   }
 
-  def getRoundOfLatestData(
-      response: v0.ScanResource.GetRoundOfLatestDataResponse.type
-  )()(extracted: TraceContext): Future[v0.ScanResource.GetRoundOfLatestDataResponse] = {
-    implicit val tc = extracted
-    withSpan(s"$workflowId.getRoundOfLatestData") { _ => _ =>
-      store
-        .getRoundOfLatestData()
-        .map { case (round, effectiveAt) =>
-          v0.ScanResource.GetRoundOfLatestDataResponse.OK(
-            definitions
-              .GetRoundOfLatestDataResponse(round, effectiveAt.atOffset(ZoneOffset.UTC))
-          )
-        }
-        .transform(HttpErrorHandler.onGrpcNotFound("No data has been made available yet"))
-    }
-  }
-
-  def getRewardsCollected(
-      response: v0.ScanResource.GetRewardsCollectedResponse.type
-  )(
-      round: Option[Long]
-  )(extracted: TraceContext): Future[v0.ScanResource.GetRewardsCollectedResponse] = {
-    implicit val tc = extracted
-    withSpan(s"$workflowId.getRewardsCollected") { _ => _ =>
-      round
-        .fold(store.getTotalRewardsCollectedEver())(store.getRewardsCollectedInRound(_))
-        .map { case amount =>
-          v0.ScanResource.GetRewardsCollectedResponse.OK(
-            definitions
-              .GetRewardsCollectedResponse(Codec.encode(amount))
-          )
-        }
-        .transform(HttpErrorHandler.onGrpcNotFound("No data has been made available yet"))
-    }
-  }
-
-  def getTopProvidersByAppRewards(
-      response: v0.ScanResource.GetTopProvidersByAppRewardsResponse.type
-  )(
-      asOfEndOfRound: Long,
-      limit: Int,
-  )(extracted: TraceContext): Future[v0.ScanResource.GetTopProvidersByAppRewardsResponse] = {
-    implicit val tc = extracted
-    withSpan(s"$workflowId.getTopProvidersByAppRewards") { _ => _ =>
-      // TODO(DACH-NY/canton-network-internal#459): Provide an upper bound for limit
-      store
-        .getTopProvidersByAppRewards(asOfEndOfRound, limit)
-        .map(res =>
-          if (res.isEmpty) {
-            v0.ScanResource.GetTopProvidersByAppRewardsResponse.NotFound(
-              ErrorResponse(s"No top providers by app rewards found for round $asOfEndOfRound")
-            )
-          } else {
-            v0.ScanResource.GetTopProvidersByAppRewardsResponse.OK(
-              definitions
-                .GetTopProvidersByAppRewardsResponse(
-                  res
-                    .map(p => definitions.PartyAndRewards(Codec.encode(p._1), Codec.encode(p._2)))
-                    .toVector
-                )
-            )
-          }
-        )
-        .transform(
-          HttpErrorHandler.onGrpcNotFound(s"Data for round ${asOfEndOfRound} not yet computed")
-        )
-    }
-  }
-
-  def getTopValidatorsByValidatorRewards(
-      response: v0.ScanResource.GetTopValidatorsByValidatorRewardsResponse.type
-  )(
-      asOfEndOfRound: Long,
-      limit: Int,
-  )(extracted: TraceContext): Future[v0.ScanResource.GetTopValidatorsByValidatorRewardsResponse] = {
-    implicit val tc = extracted
-    withSpan(s"$workflowId.getTopValidatorsByValidatorRewards") { _ => _ =>
-      // TODO(DACH-NY/canton-network-internal#459): Provide an upper bound for limit
-      store
-        .getTopValidatorsByValidatorRewards(asOfEndOfRound, limit)
-        .map(res =>
-          if (res.isEmpty) {
-            v0.ScanResource.GetTopValidatorsByValidatorRewardsResponse.NotFound(
-              ErrorResponse(
-                s"No top validators by validator rewards found for round $asOfEndOfRound"
-              )
-            )
-          } else {
-            v0.ScanResource.GetTopValidatorsByValidatorRewardsResponse.OK(
-              definitions
-                .GetTopValidatorsByValidatorRewardsResponse(
-                  res
-                    .map(p => definitions.PartyAndRewards(Codec.encode(p._1), Codec.encode(p._2)))
-                    .toVector
-                )
-            )
-          }
-        )
-        .transform(
-          HttpErrorHandler.onGrpcNotFound(s"Data for round ${asOfEndOfRound} not yet computed")
-        )
-    }
-  }
-
-  override def getTopValidatorsByValidatorFaucets(
-      respond: v0.ScanResource.GetTopValidatorsByValidatorFaucetsResponse.type
-  )(limit: Int)(
-      extracted: TraceContext
-  ): Future[v0.ScanResource.GetTopValidatorsByValidatorFaucetsResponse] = {
-    implicit val tc = extracted
-    withSpan(s"$workflowId.getTopValidatorsByValidatorRewards") { _ => _ =>
-      store
-        .getTopValidatorLicenses(PageLimit.tryCreate(limit))
-        .map(licenses =>
-          v0.ScanResource.GetTopValidatorsByValidatorFaucetsResponse.OK(
-            definitions
-              .GetTopValidatorsByValidatorFaucetsResponse(
-                FaucetProcessor.process(licenses)
-              )
-          )
-        )
-    }
-  }
-
-  override def getTopValidatorsByPurchasedTraffic(
-      response: ScanResource.GetTopValidatorsByPurchasedTrafficResponse.type
-  )(
-      asOfEndOfRound: Long,
-      limit: Int,
-  )(extracted: TraceContext): Future[ScanResource.GetTopValidatorsByPurchasedTrafficResponse] = {
-    implicit val tc = extracted
-    withSpan(s"$workflowId.getTopValidatorsByPurchasedTraffic") { _ => _ =>
-      // TODO(DACH-NY/canton-network-internal#459): Provide an upper bound for limit
-      store
-        .getTopValidatorsByPurchasedTraffic(asOfEndOfRound, limit)
-        .map(validatorTraffic =>
-          if (validatorTraffic.isEmpty) {
-            v0.ScanResource.GetTopValidatorsByPurchasedTrafficResponse.NotFound(
-              ErrorResponse(
-                s"No top validators by purchased traffic found for round $asOfEndOfRound"
-              )
-            )
-          } else {
-            v0.ScanResource.GetTopValidatorsByPurchasedTrafficResponse.OK(
-              definitions.GetTopValidatorsByPurchasedTrafficResponse(
-                validatorTraffic
-                  .map(t =>
-                    definitions.ValidatorPurchasedTraffic(
-                      Codec.encode(t.validator),
-                      t.numPurchases,
-                      t.totalTrafficPurchased,
-                      Codec.encode(t.totalCcSpent),
-                      t.lastPurchasedInRound,
-                    )
-                  )
-                  .toVector
-              )
-            )
-          }
-        )
-        .transform(
-          HttpErrorHandler.onGrpcNotFound(s"Data for round ${asOfEndOfRound} not yet computed")
-        )
-    }
-  }
-
   override def listValidatorLicenses(
       respond: ScanResource.ListValidatorLicensesResponse.type
   )(after: Option[Long], limit: Option[Int])(
@@ -832,7 +663,7 @@ class HttpScanHandler(
         synchronizerId <- store
           .lookupAmuletRules()
           .map(_.flatMap(_.state.fold(_.some, None)))
-        connectedDomains <- participantAdminConnection.listConnectedDomains()
+        connectedDomains <- participantAdminConnection.listConnectedSynchronizers()
       } yield {
         synchronizerId.fold(
           ScanResource.GetActivePhysicalSynchronizerSerialResponse.NotFound(
@@ -859,33 +690,6 @@ class HttpScanHandler(
           }
         )
       }
-    }
-  }
-
-  override def listTransactionHistory(
-      respond: v0.ScanResource.ListTransactionHistoryResponse.type
-  )(
-      request: definitions.TransactionHistoryRequest
-  )(extracted: TraceContext): Future[v0.ScanResource.ListTransactionHistoryResponse] = {
-    implicit val tc = extracted
-    withSpan(s"$workflowId.listTransactions") { _ => _ =>
-      val pageEndEventId =
-        if (request.pageEndEventId.exists(_.isEmpty)) None else request.pageEndEventId
-      val sortOrder = request.sortOrder
-        .fold[SortOrder](SortOrder.Ascending) {
-          case definitions.TransactionHistoryRequest.SortOrder.members.Asc => SortOrder.Ascending
-          case definitions.TransactionHistoryRequest.SortOrder.members.Desc => SortOrder.Descending
-        }
-
-      for {
-        txs <- store.listTransactions(
-          pageEndEventId,
-          sortOrder,
-          PageLimit.tryCreate(request.pageSize.intValue()),
-        )
-      } yield definitions.TransactionHistoryResponse(
-        txs.map(TxLogEntry.Http.toResponseItem).toVector
-      )
     }
   }
 
@@ -1017,7 +821,7 @@ class HttpScanHandler(
     for {
       eventO <- eventStore.getEventByUpdateId(
         updateId,
-        updateHistory.domainMigrationInfo.currentMigrationId,
+        updateHistory.domainMigrationId,
       )
       result <- eventO match {
         case None =>
@@ -1105,7 +909,7 @@ class HttpScanHandler(
       for {
         events <- eventStore.getEvents(
           afterO = afterO,
-          currentMigrationId = updateHistory.domainMigrationInfo.currentMigrationId,
+          currentMigrationId = updateHistory.domainMigrationId,
           limit = PageLimit.tryCreate(pageSize, updateHistoryMaxPageSize),
         )
         verdictRowIds = events.flatMap { case (verdictWithViewsO, _) =>
@@ -1211,50 +1015,6 @@ class HttpScanHandler(
           )
         case BackfillingState.Complete => body
       }
-  }
-
-  override def listActivity(
-      respond: v0.ScanResource.ListActivityResponse.type
-  )(
-      request: definitions.ListActivityRequest
-  )(extracted: TraceContext): Future[v0.ScanResource.ListActivityResponse] = {
-    implicit val tc = extracted
-    withSpan(s"$workflowId.listActivity") { _ => _ =>
-      val beginAfterId = if (request.beginAfterId.exists(_.isEmpty)) None else request.beginAfterId
-      for {
-        transactions <- store.listTransactions(
-          beginAfterId,
-          SortOrder.Descending,
-          PageLimit.tryCreate(request.pageSize.intValue()),
-        )
-      } yield definitions.ListActivityResponse(
-        transactions.map { tx =>
-          val txItem = TxLogEntry.Http.toResponseItem(tx)
-          import definitions.ListActivityResponseItem.*
-          definitions.ListActivityResponseItem(
-            activityType = txItem.transactionType match {
-              case DevnetTap =>
-                ActivityType.DevnetTap
-              case Mint =>
-                ActivityType.Mint
-              case Transfer =>
-                ActivityType.Transfer
-              case AbortTransferInstruction =>
-                ActivityType.AbortTransferInstruction
-            },
-            eventId = txItem.eventId,
-            offset = txItem.offset,
-            domainId = txItem.domainId,
-            date = txItem.date,
-            mint = txItem.mint,
-            tap = txItem.tap,
-            transfer = txItem.transfer,
-            abortTransferInstruction = txItem.abortTransferInstruction,
-            round = txItem.round,
-          )
-        }.toVector
-      )
-    }
   }
 
   override def listAnsEntries(
@@ -2093,27 +1853,6 @@ class HttpScanHandler(
       )
   }
 
-  override def getAggregatedRounds(respond: ScanResource.GetAggregatedRoundsResponse.type)()(
-      extracted: com.digitalasset.canton.tracing.TraceContext
-  ): Future[ScanResource.GetAggregatedRoundsResponse] = {
-    implicit val tc = extracted
-    withSpan(s"$workflowId.getAggregatedRounds") { _ => _ =>
-      for {
-        range <- store.getAggregatedRounds()
-      } yield {
-        range.fold(
-          v0.ScanResource.GetAggregatedRoundsResponse.NotFound(
-            definitions.ErrorResponse("No aggregated rounds found")
-          )
-        )(range =>
-          v0.ScanResource.GetAggregatedRoundsResponse.OK(
-            definitions.GetAggregatedRoundsResponse(start = range.start, end = range.end)
-          )
-        )
-      }
-    }
-  }
-
   def getUpdateById(
       updateId: String,
       encoding: DamlValueEncoding,
@@ -2260,82 +1999,6 @@ class HttpScanHandler(
     }
   }
 
-  private def ensureValidRange[T](start: Long, end: Long, maxRounds: Int)(
-      f: => Future[T]
-  )(implicit tc: com.digitalasset.canton.tracing.TraceContext): Future[T] = {
-    require(maxRounds > 0, "maxRounds must be positive")
-    if (start < 0 || end < 0) {
-      Future.failed(
-        HttpErrorHandler.badRequest(
-          s"rounds must be non-negative: start_round $start, end_round $end"
-        )
-      )
-    } else if (end < start) {
-      Future.failed(
-        HttpErrorHandler.badRequest(s"end_round $end must be >= start_round $start")
-      )
-    } else if (end - start + 1 > maxRounds) {
-      Future.failed(
-        HttpErrorHandler.badRequest(s"Cannot request more than $maxRounds rounds at a time")
-      )
-    } else {
-      for {
-        range <- store.getAggregatedRounds()
-        res <- range.fold(
-          Future.failed(
-            HttpErrorHandler.notFound("No aggregated rounds found")
-          ): Future[T]
-        )(range =>
-          if (start < range.start || end > range.end) {
-            Future.failed(
-              HttpErrorHandler.badRequest(
-                s"Requested rounds range ${start}-${end} is outside of the available rounds range ${range.start}-${range.end}"
-              )
-            ): Future[T]
-          } else {
-            f
-          }
-        )
-      } yield res
-    }
-  }
-
-  override def listRoundTotals(
-      respond: ScanResource.ListRoundTotalsResponse.type
-  )(request: definitions.ListRoundTotalsRequest)(
-      extracted: com.digitalasset.canton.tracing.TraceContext
-  ): Future[ScanResource.ListRoundTotalsResponse] = {
-    implicit val tc = extracted
-    withSpan(s"$workflowId.listRoundTotals") { _ => _ =>
-      ensureValidRange(request.startRound, request.endRound, 200) {
-        for {
-          roundTotals <- store.getRoundTotals(request.startRound, request.endRound)
-          entries = roundTotals.map(encodeRoundTotals)
-        } yield v0.ScanResource.ListRoundTotalsResponse.OK(
-          definitions.ListRoundTotalsResponse(entries.toVector)
-        )
-      }
-    }
-  }
-
-  override def listRoundPartyTotals(
-      respond: ScanResource.ListRoundPartyTotalsResponse.type
-  )(request: definitions.ListRoundPartyTotalsRequest)(
-      extracted: com.digitalasset.canton.tracing.TraceContext
-  ): Future[ScanResource.ListRoundPartyTotalsResponse] = {
-    implicit val tc = extracted
-    withSpan(s"$workflowId.listRoundPartyTotals") { _ => _ =>
-      ensureValidRange(request.startRound, request.endRound, 50) {
-        for {
-          roundPartyTotals <- store.getRoundPartyTotals(request.startRound, request.endRound)
-          entries = roundPartyTotals.map(encodeRoundPartyTotals)
-        } yield v0.ScanResource.ListRoundPartyTotalsResponse.OK(
-          definitions.ListRoundPartyTotalsResponse(entries.toVector)
-        )
-      }
-    }
-  }
-
   override def getMigrationSchedule(
       respond: ScanResource.GetMigrationScheduleResponse.type
   )()(extracted: TraceContext): Future[ScanResource.GetMigrationScheduleResponse] = {
@@ -2359,6 +2022,19 @@ class HttpScanHandler(
             schedule
           )
         )
+    }
+  }
+
+  override def getMigrationId(
+      respond: ScanResource.GetMigrationIdResponse.type
+  )()(extracted: TraceContext): Future[ScanResource.GetMigrationIdResponse] = {
+    implicit val tc = extracted
+    withSpan(s"$workflowId.getMigrationId") { _ => _ =>
+      Future.successful(
+        ScanResource.GetMigrationIdResponse.OK(
+          definitions.GetMigrationIdResponse(updateHistory.domainMigrationId)
+        )
+      )
     }
   }
 
@@ -2416,11 +2092,13 @@ class HttpScanHandler(
       val after = body.pageToken.map(_.longValue)
       for {
         page <- votesStore.listVoteRequestResults(
-          body.actionName,
-          body.accepted,
-          body.requester,
-          body.effectiveFrom,
-          body.effectiveTo,
+          VoteResultsFilters(
+            body.actionName,
+            body.accepted,
+            requester = body.requester,
+            effectiveFrom = body.effectiveFrom,
+            effectiveTo = body.effectiveTo,
+          ),
           limit,
           after,
         )
@@ -2444,6 +2122,49 @@ class HttpScanHandler(
           )
         )
       }
+    }
+  }
+
+  override def countVoteRequestResults(
+      respond: ScanResource.CountVoteRequestResultsResponse.type
+  )(
+      body: CountVoteResultsRequest
+  )(extracted: TraceContext): Future[ScanResource.CountVoteRequestResultsResponse] = {
+    implicit val tc: TraceContext = extracted
+    withSpan(s"$workflowId.countVoteRequestResults") { _ => _ =>
+      for {
+        count <- votesStore.countVoteRequestResults(
+          VoteResultsFilters(
+            body.actionName,
+            body.accepted,
+            requester = body.requester,
+            effectiveFrom = body.effectiveFrom,
+            effectiveTo = body.effectiveTo,
+          )
+        )
+      } yield ScanResource.CountVoteRequestResultsResponse.OK(
+        definitions.CountVoteResultsResponse(count)
+      )
+    }
+  }
+
+  override def getPreviousSvRewardWeight(
+      respond: ScanResource.GetPreviousSvRewardWeightResponse.type
+  )(
+      body: PreviousSvRewardWeightRequest
+  )(extracted: TraceContext): Future[ScanResource.GetPreviousSvRewardWeightResponse] = {
+    implicit val tc: TraceContext = extracted
+    withSpan(s"$workflowId.getPreviousSvRewardWeight") { _ => _ =>
+      store
+        .lookupLatestSvRewardWeightChange(
+          PartyId.tryFromProtoPrimitive(body.svParty),
+          body.effectiveBefore,
+        )
+        .map(weight =>
+          ScanResource.GetPreviousSvRewardWeightResponse.OK(
+            PreviousSvRewardWeightResponse(rewardWeight = weight.map(_.toString))
+          )
+        )
     }
   }
 
@@ -2645,7 +2366,7 @@ class HttpScanHandler(
           case _ =>
             Future.failed(
               HttpErrorHandler.internalServerError(
-                s"Party ${party} is hosted on multiple participants, which is not currently supported"
+                s"Party ${party} is hosted on multiple participants, which is not supported in this version of the API. Please use the /v1 version instead."
               )
             )
         }
@@ -2777,7 +2498,7 @@ class HttpScanHandler(
                         val entry = definitions.SynchronizerBftSequencer(
                           psid.serial.unwrap.toLong,
                           id.toProtoPrimitive,
-                          bftSequencer.p2pUrl,
+                          bftSequencer.p2pUrl.toString,
                         )
                         initializedBftSequencersCache.put(idx, entry).discard
                         Some(entry)
@@ -2825,16 +2546,6 @@ class HttpScanHandler(
     }
   }
 
-  private def getBulkStorage(): Option[(AcsSnapshotBulkStorage, UpdateHistoryBulkStorage, Uri)] = {
-    for {
-      acs <- bulkStorage.acsSnapshotBulkStorage
-      update <- bulkStorage.updateHistoryBulkStorage
-      publicUrl <- publicUrlO
-    } yield {
-      (acs, update, publicUrl)
-    }
-  }
-
   private def encodeBulkStorageObjects(objects: Seq[ObjectKeyAndChecksum], publicUrl: Uri) =
     objects.map { case ObjectKeyAndChecksum(key, digest) =>
       val encodedKey = URLEncoder.encode(key, StandardCharsets.UTF_8)
@@ -2850,27 +2561,27 @@ class HttpScanHandler(
       atOrBeforeRecordTime: OffsetDateTime
   )(extracted: TraceContext): Future[ScanResource.ListBulkAcsSnapshotObjectsResponse] = {
     implicit val tc = extracted
+    import cats.implicits.*
     withSpan(s"$workflowId.listBulkAcsSnapshotObjects") { _ => _ =>
-      getBulkStorage() match {
-        case None =>
-          Future.failed[ScanResource.ListBulkAcsSnapshotObjectsResponse](
-            Status.UNIMPLEMENTED
-              .withDescription("Bulk storage or public URL is not configured")
-              .asRuntimeException()
-          )
-        case Some((acsSnapshotBulkStorage, _, publicUrl)) =>
-          val recordTimeTs = Codec.tryDecode(Codec.OffsetDateTime)(atOrBeforeRecordTime)
-          acsSnapshotBulkStorage.getAcsSnapshotAtOrBefore(recordTimeTs).map {
-            case AcsSnapshotObjects(ts, objects) =>
-              ScanResource.ListBulkAcsSnapshotObjectsResponse.OK(
-                definitions.ListBulkAcsSnapshotObjectsResponse(
-                  Codec.encode(ts),
-                  encodeBulkStorageObjects(objects, publicUrl),
-                )
+      (bulkStorage, publicUrlO).tupled.fold(
+        Future.failed[ScanResource.ListBulkAcsSnapshotObjectsResponse](
+          Status.UNIMPLEMENTED
+            .withDescription("Bulk storage or public URL is not configured")
+            .asRuntimeException()
+        )
+      ) { case (bulkStorage, publicUrl) =>
+        val recordTimeTs = Codec.tryDecode(Codec.OffsetDateTime)(atOrBeforeRecordTime)
+        bulkStorage.getCommittedObjectsForAcsSnapshotAtOrBefore(recordTimeTs).map {
+          case AcsSnapshotObjects(ts, objects) =>
+            ScanResource.ListBulkAcsSnapshotObjectsResponse.OK(
+              definitions.ListBulkAcsSnapshotObjectsResponse(
+                Codec.encode(ts),
+                encodeBulkStorageObjects(objects, publicUrl),
               )
-          }
-
+            )
+        }
       }
+
     }
   }
 
@@ -2880,32 +2591,32 @@ class HttpScanHandler(
       extracted: TraceContext
   ): Future[ScanResource.ListBulkUpdateHistoryObjectsResponse] = {
     implicit val tc = extracted
+    import cats.implicits.*
     withSpan(s"$workflowId.listBulkUpdateHistoryObjects") { _ => _ =>
-      getBulkStorage() match {
-        case None =>
-          Future.failed[ScanResource.ListBulkUpdateHistoryObjectsResponse](
-            Status.UNIMPLEMENTED
-              .withDescription("Bulk storage or public URL is not configured")
-              .asRuntimeException()
+      (bulkStorage, publicUrlO).tupled.fold(
+        Future.failed[ScanResource.ListBulkUpdateHistoryObjectsResponse](
+          Status.UNIMPLEMENTED
+            .withDescription("Bulk storage or public URL is not configured")
+            .asRuntimeException()
+        )
+      ) { case (bulkStorage, publicUrl) =>
+        val afterTs = Codec.tryDecode(Codec.OffsetDateTime)(body.startRecordTime)
+        val upToTs = Codec.tryDecode(Codec.OffsetDateTime)(body.endRecordTime)
+        bulkStorage
+          .getCommittedUpdatesBetweenDates(
+            afterTs,
+            upToTs,
+            PageLimit.tryCreate(body.pageSize),
+            body.nextPageToken,
           )
-        case Some((_, updateHistoryBulkStorage, publicUrl)) =>
-          val afterTs = Codec.tryDecode(Codec.OffsetDateTime)(body.startRecordTime)
-          val upToTs = Codec.tryDecode(Codec.OffsetDateTime)(body.endRecordTime)
-          updateHistoryBulkStorage
-            .getUpdatesBetweenDates(
-              afterTs,
-              upToTs,
-              PageLimit.tryCreate(body.pageSize),
-              body.nextPageToken,
-            )
-            .map { case UpdateHistoryObjectsResponse(objects, nextPageToken) =>
-              ScanResource.ListBulkUpdateHistoryObjectsResponse.OK(
-                definitions.ListBulkUpdateHistoryObjectsResponse(
-                  encodeBulkStorageObjects(objects, publicUrl),
-                  nextPageToken,
-                )
+          .map { case UpdateHistoryObjectsResponse(objects, nextPageToken) =>
+            ScanResource.ListBulkUpdateHistoryObjectsResponse.OK(
+              definitions.ListBulkUpdateHistoryObjectsResponse(
+                encodeBulkStorageObjects(objects, publicUrl),
+                nextPageToken,
               )
-            }
+            )
+          }
       }
     }
   }
@@ -2962,6 +2673,32 @@ class HttpScanHandler(
     }
   }
 
+  override def getLsu(respond: ScanResource.GetLsuResponse.type)()(
+      extracted: TraceContext
+  ): Future[ScanResource.GetLsuResponse] = {
+    implicit val tc = extracted
+    for {
+      currentSynchronizerId <- synchronizerNodeService.nodes.current.sequencerAdminConnection
+        .getPhysicalSynchronizerId()
+      maybeAnnouncement <- participantAdminConnection.lookupSynchronizerLsuAnnouncement(
+        synchronizerId = currentSynchronizerId.logical,
+        timeQuery = TimeQuery.HeadState,
+        topologyTransactionType = TopologyTransactionType.AuthorizedState,
+      )
+    } yield ScanResource.GetLsuResponse.OK(
+      definitions.GetLsuResponse(
+        maybeAnnouncement.map { announcement =>
+          definitions.Lsu(
+            topologyFreezeTime = announcement.base.validFrom.atOffset(ZoneOffset.UTC),
+            upgradeTime = announcement.mapping.upgradeTime.toInstant.atOffset(ZoneOffset.UTC),
+            successorPhysicalSynchronizerId =
+              announcement.mapping.successorSynchronizerId.toProtoPrimitive,
+          )
+        }
+      )
+    )
+  }
+
   def getRewardAccountingEarliestAvailableRound(
       respond: ScanResource.GetRewardAccountingEarliestAvailableRoundResponse.type
   )()(extracted: TraceContext): Future[
@@ -2997,32 +2734,55 @@ class HttpScanHandler(
     ScanResource.GetRewardAccountingActivityTotalsResponse
   ] = {
     implicit val tc = extracted
+    val undetermined = ScanResource.GetRewardAccountingActivityTotalsResponse.OK(
+      definitions.GetRewardAccountingActivityTotalsResponse(
+        definitions.RewardAccountingActivityTotalsUndetermined(status = "Undetermined")
+      )
+    )
+    val cannotProvide = ScanResource.GetRewardAccountingActivityTotalsResponse.OK(
+      definitions.GetRewardAccountingActivityTotalsResponse(
+        definitions.RewardAccountingActivityTotalsCannotProvide(status = "CannotProvide")
+      )
+    )
     withSpan(s"$workflowId.getRewardAccountingActivityTotals") { _ => _ =>
-      appRewardsStoreO match {
-        case None =>
-          Future.successful(
-            ScanResource.GetRewardAccountingActivityTotalsResponse.NotFound(
-              ErrorResponse("Reward accounting is not enabled on this node")
-            )
-          )
-        case Some(appRewardsStore) =>
-          appRewardsStore.getAppActivityRoundTotalByRound(roundNumber).map {
+      (appRewardsStoreO, appActivityStoreO) match {
+        case (Some(appRewardsStore), Some(appActivityStore)) =>
+          appRewardsStore.getAppActivityRoundTotalByRound(roundNumber).flatMap {
+            case Some(activityTotal) =>
+              appRewardsStore.getAppRewardRoundTotalByRound(roundNumber).map {
+                case Some(rewardTotal) =>
+                  ScanResource.GetRewardAccountingActivityTotalsResponse.OK(
+                    definitions.GetRewardAccountingActivityTotalsResponse(
+                      definitions.RewardAccountingActivityTotalsOk(
+                        status = "Ok",
+                        roundNumber = activityTotal.roundNumber,
+                        totalAppActivityWeight = activityTotal.totalRoundAppActivityWeight,
+                        activePartiesCount = activityTotal.activeAppProviderPartiesCount,
+                        activityRecordsCount = activityTotal.activityRecordsCount,
+                        totalAppRewardMintingAllowance =
+                          rewardTotal.totalAppRewardMintingAllowance.toString,
+                        totalAppRewardThresholded = rewardTotal.totalAppRewardThresholded.toString,
+                        totalAppRewardUnclaimed = rewardTotal.totalAppRewardUnclaimed.toString,
+                        rewardedAppProviderPartiesCount =
+                          rewardTotal.rewardedAppProviderPartiesCount,
+                      )
+                    )
+                  )
+                case None =>
+                  // We should never hit this, as both activity totals and round
+                  // totals are added in a single DB Tx
+                  undetermined
+              }
             case None =>
-              ScanResource.GetRewardAccountingActivityTotalsResponse.NotFound(
-                ErrorResponse(
-                  s"Activity totals not (yet) computed for round $roundNumber"
-                )
-              )
-            case Some(roundTotal) =>
-              ScanResource.GetRewardAccountingActivityTotalsResponse.OK(
-                definitions.GetRewardAccountingActivityTotalsResponse(
-                  roundNumber = roundTotal.roundNumber,
-                  totalAppActivityWeight = roundTotal.totalRoundAppActivityWeight,
-                  activePartiesCount = roundTotal.activeAppProviderPartiesCount,
-                  activityRecordsCount = roundTotal.activityRecordsCount,
-                )
-              )
+              appActivityStore.earliestIngestedRound().map {
+                case Some(earliestIngested) if roundNumber <= earliestIngested =>
+                  cannotProvide
+                case _ =>
+                  undetermined
+              }
           }
+        case _ =>
+          Future.successful(cannotProvide)
       }
     }
   }
@@ -3033,30 +2793,42 @@ class HttpScanHandler(
     ScanResource.GetRewardAccountingRootHashResponse
   ] = {
     implicit val tc = extracted
+    val undetermined = ScanResource.GetRewardAccountingRootHashResponse.OK(
+      definitions.GetRewardAccountingRootHashResponse(
+        definitions.RewardAccountingRootHashUndetermined(status = "Undetermined")
+      )
+    )
+    val cannotProvide = ScanResource.GetRewardAccountingRootHashResponse.OK(
+      definitions.GetRewardAccountingRootHashResponse(
+        definitions.RewardAccountingRootHashCannotProvide(status = "CannotProvide")
+      )
+    )
     withSpan(s"$workflowId.getRewardAccountingRootHash") { _ => _ =>
-      appRewardsStoreO match {
-        case None =>
-          Future.successful(
-            ScanResource.GetRewardAccountingRootHashResponse.NotFound(
-              ErrorResponse("Reward accounting is not enabled on this node")
-            )
-          )
-        case Some(appRewardsStore) =>
-          appRewardsStore.getAppRewardRootHashByRound(roundNumber).map {
-            case None =>
-              ScanResource.GetRewardAccountingRootHashResponse.NotFound(
-                ErrorResponse(
-                  s"Root hash not (yet) computed for round $roundNumber"
-                )
-              )
+      (appRewardsStoreO, appActivityStoreO) match {
+        case (Some(appRewardsStore), Some(appActivityStore)) =>
+          appRewardsStore.getAppRewardRootHashByRound(roundNumber).flatMap {
             case Some(rootHash) =>
-              ScanResource.GetRewardAccountingRootHashResponse.OK(
-                definitions.GetRewardAccountingRootHashResponse(
-                  roundNumber = rootHash.roundNumber,
-                  rootHash = rootHash.rootHash.toHex,
+              Future.successful(
+                ScanResource.GetRewardAccountingRootHashResponse.OK(
+                  definitions.GetRewardAccountingRootHashResponse(
+                    definitions.RewardAccountingRootHashOk(
+                      status = "Ok",
+                      roundNumber = rootHash.roundNumber,
+                      rootHash = rootHash.rootHash.toHex,
+                    )
+                  )
                 )
               )
+            case None =>
+              appActivityStore.earliestIngestedRound().map {
+                case Some(earliestIngested) if roundNumber <= earliestIngested =>
+                  cannotProvide
+                case _ =>
+                  undetermined
+              }
           }
+        case _ =>
+          Future.successful(cannotProvide)
       }
     }
   }
@@ -3124,46 +2896,4 @@ object HttpScanHandler {
   // for DsoSequencers that use the serial instead of the migration we set -1 as the migration id
   // we can't simply make it non required as it's part of the public API and it would break clients
   val NoMigrationIdSet = -1L
-
-  def encodeRoundTotals(roundTotal: RoundTotals): definitions.RoundTotals = {
-    definitions.RoundTotals(
-      closedRound = roundTotal.closedRound,
-      closedRoundEffectiveAt = java.time.OffsetDateTime
-        .ofInstant(roundTotal.closedRoundEffectiveAt.toInstant, ZoneOffset.UTC),
-      appRewards = Codec.encode(roundTotal.appRewards),
-      validatorRewards = Codec.encode(roundTotal.validatorRewards),
-      changeToInitialAmountAsOfRoundZero =
-        Codec.encode(roundTotal.changeToInitialAmountAsOfRoundZero),
-      changeToHoldingFeesRate = Codec.encode(roundTotal.changeToHoldingFeesRate),
-      cumulativeAppRewards = Codec.encode(roundTotal.cumulativeAppRewards),
-      cumulativeValidatorRewards = Codec.encode(roundTotal.cumulativeValidatorRewards),
-      cumulativeChangeToInitialAmountAsOfRoundZero =
-        Codec.encode(roundTotal.cumulativeChangeToInitialAmountAsOfRoundZero),
-      cumulativeChangeToHoldingFeesRate =
-        Codec.encode(roundTotal.cumulativeChangeToHoldingFeesRate),
-      totalAmuletBalance = Codec.encode(roundTotal.totalAmuletBalance),
-    )
-  }
-
-  def encodeRoundPartyTotals(roundPartyTotal: RoundPartyTotals): definitions.RoundPartyTotals = {
-    definitions.RoundPartyTotals(
-      closedRound = roundPartyTotal.closedRound,
-      party = roundPartyTotal.party,
-      appRewards = Codec.encode(roundPartyTotal.appRewards),
-      validatorRewards = Codec.encode(roundPartyTotal.validatorRewards),
-      trafficPurchased = roundPartyTotal.trafficPurchased,
-      trafficPurchasedCcSpent = Codec.encode(roundPartyTotal.trafficPurchasedCcSpent),
-      trafficNumPurchases = roundPartyTotal.trafficNumPurchases,
-      cumulativeAppRewards = Codec.encode(roundPartyTotal.cumulativeAppRewards),
-      cumulativeValidatorRewards = Codec.encode(roundPartyTotal.cumulativeValidatorRewards),
-      cumulativeChangeToInitialAmountAsOfRoundZero =
-        Codec.encode(roundPartyTotal.cumulativeChangeToInitialAmountAsOfRoundZero),
-      cumulativeChangeToHoldingFeesRate =
-        Codec.encode(roundPartyTotal.cumulativeChangeToHoldingFeesRate),
-      cumulativeTrafficPurchased = roundPartyTotal.cumulativeTrafficPurchased,
-      cumulativeTrafficPurchasedCcSpent =
-        Codec.encode(roundPartyTotal.cumulativeTrafficPurchasedCcSpent),
-      cumulativeTrafficNumPurchases = roundPartyTotal.cumulativeTrafficNumPurchases,
-    )
-  }
 }

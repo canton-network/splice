@@ -22,6 +22,7 @@ plugins=(
   "pulumi/auth0=3.39.0"
   "pulumi/command=1.1.3"
   "pulumi/kubernetes-cert-manager=0.2.0"
+  "pulumi/github=6.13.1"
   "pulumiverse/grafana=0.16.3"
   # old versions so that old pulumi state can be interpreted
   # each can be removed once MainNet uses a newer version

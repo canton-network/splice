@@ -194,10 +194,13 @@ class NodeInitializer(
         connection.getIdOption(),
         logger,
       )
+      status <- connection.getStatus
       _ <- nodeId.uniqueIdentifier match {
-        case Some(id) =>
-          // rotate existing OTK if needed
+        case Some(id) if status.isInitialized =>
+          logger.info(s"Node is initialized with identity $id, checking if OTK rotation is needed")
           rotateOwnerToKeyMappingNotSignedByKeys(id, nodeIdentity, synchronizerId)
+        case Some(_) =>
+          Future.unit
         case None =>
           logger.info(s"Node has no identity, generating a new one")
           initializeWithNewIdentity(identifierName, nodeIdentity)
@@ -299,8 +302,9 @@ class NodeInitializer(
         connection.getStatus.map[Either[String, Unit]] {
           case NodeStatus.Failure(msg) => Left(s"Node is in failure state: $msg")
           // the first step in the canton init process
-          case NodeStatus.NotInitialized(_, Some(WaitingForId)) => Left("Node is waiting for an ID")
-          case NodeStatus.NotInitialized(_, _) => Right(())
+          case NodeStatus.NotInitialized(_, Some(WaitingForId), _) =>
+            Left("Node is waiting for an ID")
+          case NodeStatus.NotInitialized(_, _, _) => Right(())
           case NodeStatus.Success(_) => Right(())
         },
         (_: String) => connection.initId(expectedId).map(_ => ()),

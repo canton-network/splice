@@ -12,16 +12,19 @@ import com.daml.ledger.javaapi.data.codegen.{ContractId, Created, Exercised, Has
 import com.daml.ledger.javaapi.data.{Command, CreatedEvent, ExercisedEvent, Transaction, User}
 import com.digitalasset.base.error.ErrorResource
 import com.digitalasset.base.error.utils.ErrorDetails
-import com.digitalasset.base.error.utils.ErrorDetails.ResourceInfoDetail
+import com.digitalasset.base.error.utils.ErrorDetails.{ErrorInfoDetail, ResourceInfoDetail}
+import io.grpc.protobuf.{StatusProto as GrpcStatusProto}
 import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.admin.api.client.data.parties.PartyDetails
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.data.CantonTimestamp
+import com.digitalasset.canton.error.TransactionRoutingError
 import com.digitalasset.canton.ledger.error.LedgerApiErrors
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.protocol.LocalRejectError.ConsistencyRejections.InactiveContracts
+import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.canton.topology.{Namespace, PartyId, SynchronizerId, UniqueIdentifier}
 import com.digitalasset.canton.tracing.TraceContext
@@ -31,11 +34,10 @@ import com.digitalasset.canton.util.LoggerUtil
 import com.digitalasset.daml.lf.data.Ref
 import com.google.protobuf.field_mask.FieldMask
 import io.grpc.{Status, StatusRuntimeException}
-import org.apache.pekko.actor.ActorSystem
-import org.apache.pekko.pattern.CircuitBreakerOpenException
-import org.apache.pekko.stream.scaladsl.{Flow, Keep, Sink, Source}
-import org.apache.pekko.stream.{KillSwitch, KillSwitches}
 import org.apache.pekko.NotUsed
+import org.apache.pekko.actor.ActorSystem
+import org.apache.pekko.stream.scaladsl.{Flow, Keep, RestartSource, Sink, Source}
+import org.apache.pekko.stream.{KillSwitch, KillSwitches, RestartSettings}
 import org.lfdecentralizedtrust.splice.environment.ledger.api.{
   DedupConfig,
   DedupOffset,
@@ -50,6 +52,7 @@ import org.lfdecentralizedtrust.splice.util.{
   ContractWithState,
   DisclosedContracts,
   SpliceCircuitBreaker,
+  SpliceCircuitBreakerOpenException,
 }
 import shapeless.<:!<
 
@@ -98,14 +101,32 @@ class BaseLedgerConnection(
   def activeContracts(
       eventFormat: com.daml.ledger.api.v2.transaction_filter.EventFormat,
       offset: Long,
-  )(implicit tc: TraceContext): Source[BaseLedgerConnection.ActiveContractsItem, NotUsed] = {
-    val activeContractsRequest = client.activeContracts(
-      lapi.state_service.GetActiveContractsRequest(
-        activeAtOffset = offset,
-        eventFormat = Some(eventFormat),
-        streamContinuationToken = None,
-      )
-    )
+      restartSettings: RestartSettings,
+  )(implicit
+      tc: TraceContext
+  ): Source[BaseLedgerConnection.ActiveContractsItem, NotUsed] = {
+    // The source can restart due to expired auth, so we have to restart it from where we left off
+    val lastItem = new AtomicReference(Option.empty[lapi.state_service.GetActiveContractsResponse])
+    val activeContractsRequest = {
+      RestartSource.onFailuresWithBackoff(restartSettings)(() => {
+        val restartItem = lastItem.get()
+        logger.info(
+          s"Starting active contracts stream with continuation token from last response: $restartItem"
+        )
+        client
+          .activeContracts(
+            lapi.state_service.GetActiveContractsRequest(
+              activeAtOffset = offset,
+              eventFormat = Some(eventFormat),
+              streamContinuationToken = restartItem.map(_.streamContinuationToken),
+            )
+          )
+          .map { item =>
+            lastItem.set(Some(item))
+            item
+          }
+      })
+    }
     activeContractsRequest
       .map(_.contractEntry)
       .map[Option[BaseLedgerConnection.ActiveContractsItem]] {
@@ -138,8 +159,19 @@ class BaseLedgerConnection(
   def activeContracts(
       filter: IngestionFilter,
       offset: Long,
-  )(implicit tc: TraceContext): Source[BaseLedgerConnection.ActiveContractsItem, NotUsed] =
-    activeContracts(filter.toEventFormat, offset)
+      restartSettings: RestartSettings,
+      clock: Clock,
+      packageVersionSupport: PackageVersionSupport,
+  )(implicit
+      tc: TraceContext
+  ): Source[BaseLedgerConnection.ActiveContractsItem, NotUsed] =
+    Source
+      .futureSource {
+        filter
+          .toAcsEventFormat(packageVersionSupport, clock)
+          .map(activeContracts(_, offset, restartSettings))
+      }
+      .mapMaterializedValue(_ => NotUsed)
 
   def getContract(
       contractId: ContractId[?],
@@ -649,9 +681,13 @@ class BaseLedgerConnection(
         )
         .recover {
           case ex: StatusRuntimeException
-              if ErrorDetails.matches(ex, LedgerApiErrors.NoPreferredPackagesFound) =>
+              if ErrorDetails.matches(ex, LedgerApiErrors.NoPreferredPackagesFound) ||
+                ErrorDetails.matches(
+                  ex,
+                  TransactionRoutingError.TopologyErrors.UnknownInformees,
+                ) =>
             logger.info(
-              s"No preferred packages found for packageRequirements $packageRequirements on synchronizer $synchronizerId with vetting time $vettingAsOfTime"
+              s"No preferred packages found for packageRequirements $packageRequirements on synchronizer $synchronizerId with vetting time $vettingAsOfTime: ${ex.getStatus.getDescription}"
             )
             Seq.empty
         },
@@ -742,6 +778,23 @@ class SpliceLedgerConnection(
     callCallbacksOnCompletion(result)(x => (None, x))
   }
 
+  // Returns Some(completionOffset) when the exception is DUPLICATE_COMMAND with accepted=true,
+  // allowing callers to fetch the already-completed transaction instead of failing.
+  private def parseDuplicateCommandAccepted(ex: StatusRuntimeException): Option[Long] = {
+    val statusProto = GrpcStatusProto.fromThrowable(ex)
+    if (statusProto == null) None
+    else
+      ErrorDetails
+        .from(statusProto)
+        .collectFirst {
+          case ErrorInfoDetail(errorCodeId, metadata)
+              if errorCodeId == "DUPLICATE_COMMAND" &&
+                metadata.get("accepted").contains("true") =>
+            metadata.get("completion_offset").flatMap(co => Try(co.toLong).toOption)
+        }
+        .flatten
+  }
+
   private def verifyEnoughExtraTrafficRemains(
       synchronizerId: SynchronizerId,
       commandPriority: CommandPriority,
@@ -828,6 +881,7 @@ class SpliceLedgerConnection(
       priority: CommandPriority,
       deadline: Option[NonNegativeFiniteDuration] = None,
       preferredPackageIds: Seq[String] = Seq.empty,
+      recoverAcceptedDuplicates: Boolean = false,
   ) {
     private type DedupNotSpecifiedYet = CmdId =:= Any
     private type SynchronizerIdRequired = DomId <:< SynchronizerId
@@ -838,6 +892,7 @@ class SpliceLedgerConnection(
         disclosedContracts: DisclosedContracts = this.disclosedContracts,
         deadline: Option[NonNegativeFiniteDuration] = this.deadline,
         preferredPackageIds: Seq[String] = this.preferredPackageIds,
+        recoverAcceptedDuplicates: Boolean = this.recoverAcceptedDuplicates,
     ): submit[C, CmdId0, DomId0] =
       new submit(
         actAs,
@@ -849,7 +904,17 @@ class SpliceLedgerConnection(
         priority,
         deadline,
         preferredPackageIds,
+        recoverAcceptedDuplicates,
       )
+
+    /** Read an already-accepted duplicate back from the ledger and return its result, rather
+      * than failing the submission.
+      *
+      * For client calls, which cannot do anything useful with the failure. Automation leaves
+      * this off: a trigger needs the error so that its own retry re-runs the staleness check.
+      */
+    def recoveringAcceptedDuplicates(enabled: Boolean = true): submit[C, CmdId, DomId] =
+      copy(recoverAcceptedDuplicates = enabled)
 
     def withDedup(commandId: CommandId, deduplicationOffset: Long)(implicit
         cid: DedupNotSpecifiedYet
@@ -955,13 +1020,28 @@ class SpliceLedgerConnection(
                     preferredPackageIds = preferredPackageIds,
                   )
                 )
-                .recover { case ex: CircuitBreakerOpenException =>
-                  // Expose a bit more info and turn it into our standard exceptions
+                .recover { case ex: SpliceCircuitBreakerOpenException =>
                   throw Status.ABORTED
                     .withDescription(
                       s"Command submission aborted by circuit breaker due to too many successive failures, next attempt in ${ex.remainingDuration.toSeconds}s"
                     )
+                    .withCause(ex.getCause)
                     .asRuntimeException
+                }
+                .recoverWith {
+                  case ex: StatusRuntimeException
+                      if recoverAcceptedDuplicates &&
+                        ex.getStatus.getCode == Status.Code.ALREADY_EXISTS =>
+                    parseDuplicateCommandAccepted(ex) match {
+                      case Some(completionOffset) =>
+                        client.recoverFromDuplicateCommand(
+                          waitFor,
+                          completionOffset,
+                          actAs.map(_.toProtoPrimitive),
+                        )
+                      case None =>
+                        Future.failed(ex)
+                    }
                 }
             )(getOffsetAndResult)
 
@@ -1236,17 +1316,25 @@ object BaseLedgerConnection {
     }.mkString
   }
 
-  sealed trait ActiveContractsItem
+  sealed trait ActiveContractsItem {
+    def contractId: String
+  }
   object ActiveContractsItem {
     case class ActiveContract(
         contract: org.lfdecentralizedtrust.splice.environment.ledger.api.ActiveContract
-    ) extends ActiveContractsItem
+    ) extends ActiveContractsItem {
+      override def contractId: String = contract.createdEvent.getContractId
+    }
 
     case class IncompleteUnassign(unassign: IncompleteReassignmentEvent.Unassign)
-        extends ActiveContractsItem
+        extends ActiveContractsItem {
+      override def contractId: String = unassign.createdEvent.getContractId
+    }
 
     case class IncompleteAssign(assign: IncompleteReassignmentEvent.Assign)
-        extends ActiveContractsItem
+        extends ActiveContractsItem {
+      override def contractId: String = assign.reassignmentEvent.createdEvent.getContractId
+    }
   }
 }
 

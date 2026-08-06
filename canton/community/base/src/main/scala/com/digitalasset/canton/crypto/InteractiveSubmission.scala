@@ -7,7 +7,6 @@ import cats.data.EitherT
 import cats.syntax.alternative.*
 import cats.syntax.either.*
 import com.digitalasset.canton.LfPartyId
-import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.data.LedgerTimeBoundaries
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
@@ -18,7 +17,7 @@ import com.digitalasset.canton.protocol.{LfContractId, LfHash}
 import com.digitalasset.canton.topology.client.TopologySnapshot
 import com.digitalasset.canton.topology.{PartyId, Synchronizer}
 import com.digitalasset.canton.tracing.TraceContext
-import com.digitalasset.canton.util.MonadUtil
+import com.digitalasset.canton.util.{EitherTUtil, MonadUtil}
 import com.digitalasset.canton.version.{HashingSchemeVersion, ProtocolVersion}
 import com.digitalasset.daml.lf.data.{Ref, Time}
 import com.digitalasset.daml.lf.transaction.{FatContractInstance, NodeId, VersionedTransaction}
@@ -147,6 +146,8 @@ object InteractiveSubmission {
     *   topology snapshot to use to validate signatures
     * @param actAs
     *   actAs parties that should be covered by the signatures
+    * @param protocolVersion
+    *   protocol version on which the transaction is being processed
     */
   def verifySignatures(
       hash: Hash,
@@ -155,6 +156,7 @@ object InteractiveSubmission {
       topologySnapshot: TopologySnapshot,
       actAs: Set[LfPartyId],
       logger: TracedLogger,
+      protocolVersion: ProtocolVersion,
   )(implicit
       traceContext: TraceContext,
       executionContext: ExecutionContext,
@@ -191,6 +193,7 @@ object InteractiveSubmission {
         cryptoPureApi,
         topologySnapshot,
         logger,
+        protocolVersion,
       )
     }
   }
@@ -204,57 +207,65 @@ object InteractiveSubmission {
       cryptoPureApi: CryptoPureApi,
       topologySnapshot: TopologySnapshot,
       logger: TracedLogger,
+      protocolVersion: ProtocolVersion,
   )(implicit
       traceContext: TraceContext,
       executionContext: ExecutionContext,
   ): EitherT[FutureUnlessShutdown, String, Unit] =
-    // Parallelism is hardcoded to 10 arbitrarily.
-    // This provides maximum speed for a reasonably large number of signatures already while
-    // protecting against degenerated cases with huge number of signatures
-    // TODO(i31770): Make configurable and unify with other signature verification code locations
-    MonadUtil.parTraverseWithLimit_(PositiveInt.tryCreate(10))(signatures.view.toSeq) {
-      case (party, signatures) =>
-        for {
-          signingKeysWithThreshold <- EitherT(
-            topologySnapshot
-              .signingKeysWithThreshold(party)
-              .map(
-                _.toRight(s"Could not find party signing keys for $party.")
-              )
-          )
+    MonadUtil.parTraverseWithLimit_(cryptoPureApi.signatureVerificationParallelism)(
+      signatures.view.toSeq
+    ) { case (party, signatures) =>
+      for {
+        signingKeysWithThreshold <- EitherT(
+          topologySnapshot
+            .signingKeysWithThreshold(party)
+            .map(
+              _.toRight(s"Could not find party signing keys for $party.")
+            )
+        )
 
-          (invalidSignatures, validSignatures) = signatures.map { signature =>
-            signingKeysWithThreshold.keys
-              .find(_.fingerprint == signature.authorizingLongTermKey)
-              .toRight(
-                s"Signing key ${signature.authorizingLongTermKey} is not a valid key for $party"
-              )
-              .flatMap(key =>
-                cryptoPureApi
-                  .verifySignature(hash.unwrap, key, signature, SigningKeyUsage.ProtocolOnly)
-                  .map(_ => key.fingerprint)
-                  .leftMap(_.toString)
-              )
-          }.separate
-          validSignaturesSet = validSignatures.toSet
-          _ = {
-            // Log invalid signatures at info level because it is unexpected,
-            // but doesn't mandate that we fail validation as long as there are still threshold-many valid signatures
-            // as asserted just below
-            invalidSignatures.foreach { invalidSignature =>
-              logger.info(s"Invalid signature for $party: $invalidSignature")
-            }
+        numberOfProtocolSigningKeys = signingKeysWithThreshold.keys.count(
+          _.usage.contains(SigningKeyUsage.Protocol)
+        )
+
+        _ <- EitherTUtil.condUnitET[FutureUnlessShutdown](
+          // From PV 35, one cannot submit more signatures than the number of keys registered with protocol usage
+          signatures.sizeIs <= numberOfProtocolSigningKeys || protocolVersion <= ProtocolVersion.v34,
+          s"${signatures.size} external signatures were provided, which is more than the number of registered signing keys ($numberOfProtocolSigningKeys) with protocol usage for $party",
+        )
+
+        (invalidSignatures, validSignatures) = signatures.map { signature =>
+          signingKeysWithThreshold.keys
+            .find(_.fingerprint == signature.authorizingLongTermKey)
+            .toRight(
+              s"Signing key ${signature.authorizingLongTermKey} is not a valid key for $party"
+            )
+            .flatMap(key =>
+              cryptoPureApi
+                .verifySignature(hash.unwrap, key, signature, SigningKeyUsage.ProtocolOnly)
+                .map(_ => key.fingerprint)
+                .leftMap(_.toString)
+            )
+        }.separate
+        validSignaturesSet = validSignatures.toSet
+        _ = {
+          // Log invalid signatures at info level because it is unexpected,
+          // but doesn't mandate that we fail validation as long as there are still threshold-many valid signatures
+          // as asserted just below
+          invalidSignatures.foreach { invalidSignature =>
+            logger.info(s"Invalid signature for $party: $invalidSignature")
           }
-          _ <- EitherT.cond[FutureUnlessShutdown](
-            validSignaturesSet.sizeIs >= signingKeysWithThreshold.threshold.unwrap,
-            (),
-            s"Received ${validSignaturesSet.size} valid signatures from distinct keys (${invalidSignatures.size} invalid), but expected at least ${signingKeysWithThreshold.threshold} valid for $party. " +
-              s"Transaction hash to be signed: ${hash.toHexString}. Ensure the correct transaction hash is signed with the correct key(s).",
-          )
-        } yield {
-          logger.debug(
-            s"Found ${validSignaturesSet.size} valid external signatures for $party with threshold ${signingKeysWithThreshold.threshold.unwrap}"
-          )
         }
+        _ <- EitherT.cond[FutureUnlessShutdown](
+          validSignaturesSet.sizeIs >= signingKeysWithThreshold.threshold.unwrap,
+          (),
+          s"Received ${validSignaturesSet.size} valid signatures from distinct keys (${invalidSignatures.size} invalid), but expected at least ${signingKeysWithThreshold.threshold} valid for $party. " +
+            s"Transaction hash to be signed: ${hash.toHexString}. Ensure the correct transaction hash is signed with the correct key(s).",
+        )
+      } yield {
+        logger.debug(
+          s"Found ${validSignaturesSet.size} valid external signatures for $party with threshold ${signingKeysWithThreshold.threshold.unwrap}"
+        )
+      }
     }
 }

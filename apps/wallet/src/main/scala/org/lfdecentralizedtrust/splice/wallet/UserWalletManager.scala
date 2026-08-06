@@ -13,17 +13,12 @@ import org.lfdecentralizedtrust.splice.environment.{
   SpliceLedgerClient,
 }
 import org.lfdecentralizedtrust.splice.environment.ledger.api.DedupDuration
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
-import org.lfdecentralizedtrust.splice.store.{
-  DomainTimeSynchronization,
-  DomainUnpausedSynchronization,
-  Limit,
-  LimitHelpers,
-}
+import org.lfdecentralizedtrust.splice.store.{DomainTimeSynchronization, Limit, LimitHelpers}
 import org.lfdecentralizedtrust.splice.util.{Contract, HasHealth, TemplateJsonDecoder}
 import org.lfdecentralizedtrust.splice.wallet.config.{
   AutoAcceptTransfersConfig,
+  RewardSharingConfig,
   TreasuryConfig,
   WalletSweepConfig,
 }
@@ -42,6 +37,7 @@ import io.opentelemetry.api.trace.Tracer
 
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.{blocking, ExecutionContext, Future}
+import scala.util.control.NonFatal
 
 /** Manages all services comprising an end-user wallets. */
 class UserWalletManager(
@@ -52,21 +48,19 @@ class UserWalletManager(
     automationConfig: AutomationConfig,
     private[splice] val clock: Clock,
     domainTimeSync: DomainTimeSynchronization,
-    domainUnpausedSync: DomainUnpausedSynchronization,
     treasuryConfig: TreasuryConfig,
     storage: DbStorage,
     retryProvider: RetryProvider,
     scanConnection: BftScanConnection,
     packageVersionSupport: PackageVersionSupport,
     override val loggerFactory: NamedLoggerFactory,
-    domainMigrationInfo: DomainMigrationInfo,
+    migrationId: Long,
     participantId: ParticipantId,
     validatorTopupConfig: ValidatorTopupConfig,
     walletSweep: Map[String, WalletSweepConfig],
     autoAcceptTransfers: Map[String, AutoAcceptTransfersConfig],
+    rewardSharingConfigByParty: Map[String, RewardSharingConfig],
     dedupDuration: DedupDuration,
-    txLogBackfillEnabled: Boolean,
-    txLogBackfillingBatchSize: Int,
     params: SpliceParametersConfig,
 )(implicit
     ec: ExecutionContext,
@@ -192,8 +186,8 @@ class UserWalletManager(
           show"Detected race between adding wallet for party ${endUserParty} and shutdown: closing wallet."
         )(TraceContext.empty)
         userRetryProviderAndWalletService.foreach { case (userRetryProvider, walletService) =>
-          userRetryProvider.close()
-          walletService.close()
+          try userRetryProvider.close()
+          finally walletService.close()
         }
         UnlessShutdown.AbortedDueToShutdown
       } else {
@@ -220,31 +214,37 @@ class UserWalletManager(
         retryProvider.futureSupervisor,
         retryProvider.metricsFactory,
       )
-    val walletService = new UserWalletService(
-      ledgerClient,
-      key,
-      this,
-      automationConfig,
-      clock,
-      domainTimeSync,
-      domainUnpausedSync,
-      treasuryConfig,
-      storage,
-      userRetryProvider,
-      userLoggerFactory,
-      scanConnection,
-      packageVersionSupport,
-      domainMigrationInfo,
-      participantId,
-      Option.when(endUserParty == store.walletKey.validatorParty)(validatorTopupConfig),
-      // TODO(DACH-NY/canton-network-node#12554): make it easier to configure the sweep functionality and guard better against operator errors (typos, etc.)
-      walletSweep.get(endUserParty.toProtoPrimitive),
-      autoAcceptTransfers.get(endUserParty.toProtoPrimitive),
-      dedupDuration,
-      txLogBackfillEnabled = txLogBackfillEnabled,
-      txLogBackfillingBatchSize = txLogBackfillingBatchSize,
-      params,
-    )
+    val walletService =
+      try {
+        new UserWalletService(
+          ledgerClient,
+          key,
+          this,
+          automationConfig,
+          clock,
+          domainTimeSync,
+          treasuryConfig,
+          storage,
+          userRetryProvider,
+          userLoggerFactory,
+          scanConnection,
+          packageVersionSupport,
+          migrationId,
+          participantId,
+          Option.when(endUserParty == store.walletKey.validatorParty)(validatorTopupConfig),
+          // TODO(DACH-NY/canton-network-node#12554): make it easier to configure the sweep functionality and guard better against operator errors (typos, etc.)
+          walletSweep.get(endUserParty.toProtoPrimitive),
+          autoAcceptTransfers.get(endUserParty.toProtoPrimitive),
+          rewardSharingConfigByParty
+            .getOrElse(endUserParty.toProtoPrimitive, RewardSharingConfig.BuiltIn()),
+          dedupDuration,
+          params,
+        )
+      } catch {
+        case NonFatal(e) =>
+          userRetryProvider.close()
+          throw e
+      }
     (userRetryProvider, walletService)
   }
 
@@ -255,8 +255,8 @@ class UserWalletManager(
           .withDescription(show"No wallet service found for user party ${userParty}")
           .asRuntimeException()
       case Some((userRetryProvider, walletService)) =>
-        userRetryProvider.close()
-        walletService.close()
+        try userRetryProvider.close()
+        finally walletService.close()
     }
   }
 

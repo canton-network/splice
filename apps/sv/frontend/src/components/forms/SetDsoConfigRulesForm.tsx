@@ -9,8 +9,8 @@ import {
   getDsoConfigToCompareWith,
   PrettyJsonDiff,
   useVotesHooks,
-} from '@lfdecentralizedtrust/splice-common-frontend';
-import { dateTimeFormatISO } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+} from '@canton-network/splice-common-frontend';
+import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import { Alert, Box, Typography } from '@mui/material';
 import dayjs from 'dayjs';
 import { useMemo, useState } from 'react';
@@ -20,7 +20,7 @@ import { useAppForm } from '../../hooks/form';
 import { useProposalMutation } from '../../hooks/useProposalMutation';
 import { buildDsoConfigChanges } from '../../utils/buildDsoConfigChanges';
 import { buildDsoRulesConfigFromChanges } from '../../utils/buildDsoRulesConfigFromChanges';
-import { THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
+import { SUPPORTING_URL_LABEL, THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
 import {
   buildPendingConfigFields,
   configFormDataToConfigChanges,
@@ -233,14 +233,29 @@ export const SetDsoConfigRulesForm: () => JSX.Element = () => {
           )}
 
           <form.AppField name="common.action">
-            {field => (
-              <field.TextField
-                title="Action"
-                id="set-dso-config-rules-action"
-                muiTextFieldProps={{ disabled: true }}
-              />
-            )}
+            {field => <field.ProposalTypeField id="set-dso-config-rules-action" />}
           </form.AppField>
+
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              Configuration
+            </Typography>
+
+            {dsoConfigChanges.map((change, index) => (
+              <form.AppField name={`config.${change.fieldName}`} key={index}>
+                {field => (
+                  <field.ConfigField
+                    configChange={change}
+                    key={index}
+                    pendingFieldInfo={pendingConfigFields.find(
+                      f => f.fieldName === change.fieldName
+                    )}
+                    effectiveDate={form.state.values.common.effectiveDate.effectiveDate}
+                  />
+                )}
+              </form.AppField>
+            ))}
+          </Box>
 
           <form.AppField
             name="common.expiryDate"
@@ -251,7 +266,7 @@ export const SetDsoConfigRulesForm: () => JSX.Element = () => {
           >
             {field => (
               <field.DateField
-                title="Threshold Deadline"
+                title="Quorum Threshold Deadline"
                 description={THRESHOLD_DEADLINE_SUBTITLE}
                 id="set-dso-config-rules-expiry-date"
               />
@@ -289,33 +304,14 @@ export const SetDsoConfigRulesForm: () => JSX.Element = () => {
               onChange: ({ value }) => validateUrl(value),
             }}
           >
-            {field => <field.TextField title="URL" id="set-dso-config-rules-url" />}
+            {field => (
+              <field.TextField title={SUPPORTING_URL_LABEL} id="set-dso-config-rules-url" />
+            )}
           </form.AppField>
-
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Typography variant="h6" gutterBottom>
-              Configuration
-            </Typography>
-
-            {dsoConfigChanges.map((change, index) => (
-              <form.AppField name={`config.${change.fieldName}`} key={index}>
-                {field => (
-                  <field.ConfigField
-                    configChange={change}
-                    key={index}
-                    pendingFieldInfo={pendingConfigFields.find(
-                      f => f.fieldName === change.fieldName
-                    )}
-                    effectiveDate={form.state.values.common.effectiveDate.effectiveDate}
-                  />
-                )}
-              </form.AppField>
-            ))}
-          </Box>
         </>
       )}
 
-      <JsonDiffAccordion>
+      <JsonDiffAccordion variant={showConfirmation ? 'review' : 'form'}>
         {dsoConfigToCompareWith[1] ? (
           <PrettyJsonDiff
             changes={{

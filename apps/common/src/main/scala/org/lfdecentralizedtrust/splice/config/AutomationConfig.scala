@@ -101,11 +101,7 @@ case class AutomationConfig(
       * before we consider the trigger to be in an unhealthy state.
       */
     futureCompletionGracePeriod: PositiveFiniteDuration = PositiveFiniteDuration.ofSeconds(1L),
-    ignoredExpiredRewardsPartyIds: Set[PartyId] = Set.empty,
-    ignoredExpiredAmuletPartyIds: Set[PartyId] = Set.empty,
-    ignoredFeaturedAppActivityMarkerPartyIds: Set[PartyId] = Set.empty,
-    ignoredExpiredAmuletTransferInstructionPartyIds: Set[PartyId] = Set.empty,
-    ignoredExpiredAmuletAllocationPartyIds: Set[PartyId] = Set.empty,
+    ignoredPartyIds: Set[PartyId] = Set.empty,
     ingestion: IngestionConfig = IngestionConfig(),
 ) {
   def withPausedTrigger[T <: Trigger](implicit tag: ClassTag[T]): AutomationConfig = copy(
@@ -123,4 +119,8 @@ case class IngestionConfig(
     maxEntriesPerInsert: Int = 100,
     maxDeletesPerStatement: Int = 1000,
     maxLookupsPerStatement: Int = 1000,
+    activeContractsMinBackoff: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(1),
+    activeContractsMaxBackoff: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(30),
+    activeContractsRandomFactor: Double = 0.2,
+    activeContractsBufferSize: Int = 1000,
 )

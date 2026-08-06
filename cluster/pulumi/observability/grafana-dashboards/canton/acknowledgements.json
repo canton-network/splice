@@ -448,7 +448,7 @@
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 2,
-        "regex": "/global-domain-(?<value>\\d)-sequencer/g",
+        "regex": "/global-domain-(?<value>\\d+)-sequencer/g",
         "sort": 1,
         "type": "query"
       },

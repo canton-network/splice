@@ -1,7 +1,7 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { usePrimaryParty } from '@lfdecentralizedtrust/splice-common-frontend';
-import { useGetDsoPartyId } from '@lfdecentralizedtrust/splice-common-frontend/scan-api';
+import { usePrimaryParty } from '@canton-network/splice-common-frontend';
+import { useGetDsoPartyId } from '@canton-network/splice-common-frontend/scan-api';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Container, Stack, Typography } from '@mui/material';

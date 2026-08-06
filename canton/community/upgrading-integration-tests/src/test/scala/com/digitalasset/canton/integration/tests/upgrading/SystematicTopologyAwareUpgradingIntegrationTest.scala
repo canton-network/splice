@@ -17,8 +17,11 @@ import com.daml.ledger.javaapi.data.Transaction
 import com.digitalasset.base.error.ErrorCode
 import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.console.{LocalParticipantReference, ParticipantReference}
+import com.digitalasset.canton.damltests.bar.v1.java.bar.Bar
 import com.digitalasset.canton.damltests.bar.v1.java.bar.Bar as BarV1
+import com.digitalasset.canton.damltests.bar.v1.java.ibar.IBar
 import com.digitalasset.canton.damltests.bar.v2.java.bar.Bar as BarV2
+import com.digitalasset.canton.damltests.baz.v1.java.baz.Baz
 import com.digitalasset.canton.damltests.baz.v1.java.baz.Baz as BazV1
 import com.digitalasset.canton.damltests.baz.v2.java.baz.Baz as BazV2
 import com.digitalasset.canton.damltests.foo.v1.java.foo.Foo
@@ -39,6 +42,7 @@ import com.digitalasset.canton.integration.{
   EnvironmentDefinition,
   SharedEnvironment,
 }
+import com.digitalasset.canton.ledger.error.LedgerApiErrors
 import com.digitalasset.canton.ledger.error.groups.CommandExecutionErrors.{
   Interpreter,
   PackageSelectionFailed,
@@ -253,6 +257,19 @@ class SystematicTopologyAwareUpgradingIntegrationTest
           expectedExerciseVersion = FooV4.PACKAGE_ID,
           charlieSees = Some(BarV1.PACKAGE_ID),
         )
+        test(
+          bobSees = Some(BazV1.PACKAGE_ID),
+          expectedExerciseVersion = FooV4.PACKAGE_ID,
+          charlieSees = Some(BarV1.PACKAGE_ID),
+          vettingRequirementsForPreferencesInjection = Some(
+            Map(
+              Foo.PACKAGE_NAME.toPackageName -> Set(alice),
+              Bar.PACKAGE_NAME.toPackageName -> Set(alice, charlie),
+              Baz.PACKAGE_NAME.toPackageName -> Set(alice, bob),
+            )
+          ),
+          tapsMaxPasses = Some(1),
+        )
       }
     }
 
@@ -270,6 +287,17 @@ class SystematicTopologyAwareUpgradingIntegrationTest
         test(
           bobSees = Some(BazV1.PACKAGE_ID),
           expectedExerciseVersion = FooV3.PACKAGE_ID,
+        )
+        test(
+          bobSees = Some(BazV1.PACKAGE_ID),
+          expectedExerciseVersion = FooV3.PACKAGE_ID,
+          vettingRequirementsForPreferencesInjection = Some(
+            Map(
+              Foo.PACKAGE_NAME.toPackageName -> Set(alice),
+              Baz.PACKAGE_NAME.toPackageName -> Set(alice, bob),
+            )
+          ),
+          tapsMaxPasses = Some(1),
         )
       }
     }
@@ -301,10 +329,39 @@ class SystematicTopologyAwareUpgradingIntegrationTest
             bobSees = Some(BarV1.PACKAGE_ID),
             expectedExerciseVersion = FooV2.PACKAGE_ID,
           )
+
+          // GetPreferredPackages returns Foo V3
+          // TAPS fails because Foo V3 depends on Baz V2 which is not vetted on Bob's participant
+          testError(
+            vettingRequirementsForPreferencesInjection = Some(
+              Map(
+                Foo.PACKAGE_NAME.toPackageName -> Set(alice),
+                Bar.PACKAGE_NAME.toPackageName -> Set(alice, bob),
+              )
+            ),
+            expectedErrorCode = PackageSelectionFailed,
+            expectedErrorMessage =
+              s"""|No synchronizers satisfy the topology requirements for the submitted command: Discarded synchronizers:.*
+                  |.*${env.daId}: Failed to select package-id for package-name '${Foo.PACKAGE_NAME}' appearing in a command root node due to: No vetted package candidate satisfies the package-id filter 'Commands.package_id_selection_preference'=.*foo -> ${FooV3.PACKAGE_ID.toPackageId.show}.*""".stripMargin,
+          )
+
+          // We add Baz as a requirement for Bob
+          // it fails to compute the package preferences because Bob has not vetted any Baz
+          testError(
+            vettingRequirementsForPreferencesInjection = Some(
+              Map(
+                Foo.PACKAGE_NAME.toPackageName -> Set(alice),
+                Baz.PACKAGE_NAME.toPackageName -> Set(alice, bob),
+                Bar.PACKAGE_NAME.toPackageName -> Set(alice, bob),
+              )
+            ),
+            expectedErrorCode = LedgerApiErrors.NoPreferredPackagesFound,
+            expectedErrorMessage =
+              s"Failed to compute package preferences. Reason: No synchronizer satisfies the vetting requirements. Discarded synchronizers:.*No package with package-name '${Baz.PACKAGE_NAME}' is consistently vetted by all hosting participants of party $bob.*",
+          )
       }
     }
 
-    // Negative test case
     "alice did not vet Foo V1 and bob vetted only Bar V2" should {
       "succeed using Foo V2 and Bar V2" in { implicit env =>
         SetupPackageVetting(
@@ -327,6 +384,45 @@ class SystematicTopologyAwareUpgradingIntegrationTest
           bobSees = Some(BarV2.PACKAGE_ID),
           expectedExerciseVersion = FooV2.PACKAGE_ID,
         )
+      }
+    }
+
+    "alice vetted Foo V2, Bar V1 and Bar V2 and bob vetted only Foo V1 and Bar V1" should {
+      "succeed using Foo V2 and Bar V1 - Bob should not influence the selection of Foo" in {
+        implicit env =>
+          SetupPackageVetting(
+            AllDars,
+            Map(
+              env.daId -> Map(
+                aliceParticipant -> Set(
+                  FooV2.PACKAGE_ID.toPackageId.withNoVettingBounds,
+                  BarV2.PACKAGE_ID.toPackageId.withNoVettingBounds,
+                ),
+                bobParticipant -> Set(
+                  FooV1.PACKAGE_ID.toPackageId.withNoVettingBounds,
+                  BarV1.PACKAGE_ID.toPackageId.withNoVettingBounds,
+                ),
+              )
+            ),
+          )
+          // 1st pass selects Foo V2 and Bar V2 -> Routing fails because Bob has not vetted Bar V2.
+          // 2nd pass selects Foo V2 and Bar V1 -> Success
+          test(
+            bobSees = Some(BarV1.PACKAGE_ID),
+            expectedExerciseVersion = FooV2.PACKAGE_ID,
+          )
+
+          test(
+            bobSees = Some(BarV1.PACKAGE_ID),
+            expectedExerciseVersion = FooV2.PACKAGE_ID,
+            vettingRequirementsForPreferencesInjection = Some(
+              Map(
+                Foo.PACKAGE_NAME.toPackageName -> Set(alice),
+                Bar.PACKAGE_NAME.toPackageName -> Set(alice, bob),
+              )
+            ),
+            tapsMaxPasses = Some(1),
+          )
       }
     }
 
@@ -407,6 +503,54 @@ class SystematicTopologyAwareUpgradingIntegrationTest
           bobSees = None,
           expectedExerciseVersion = FooV1.PACKAGE_ID,
         )
+        // GetPackagePreferences returns Foo V2
+        // TAPS fails because Foo V2 depends on Bar but Bar is not vetted on Bob's participant
+        testError(
+          vettingRequirementsForPreferencesInjection = Some(
+            Map(
+              Foo.PACKAGE_NAME.toPackageName -> Set(alice),
+              Baz.PACKAGE_NAME.toPackageName -> Set(bob),
+            )
+          ),
+          expectedErrorCode = PackageSelectionFailed,
+          expectedErrorMessage =
+            s"""|No synchronizers satisfy the topology requirements for the submitted command: Discarded synchronizers:.*
+                 |.*${env.daId}: Failed to select package-id for package-name '${Foo.PACKAGE_NAME}' appearing in a command root node due to: No vetted package candidate satisfies the package-id filter 'Commands.package_id_selection_preference'=.*foo -> ${FooV2.PACKAGE_ID.toPackageId.show}.*""".stripMargin,
+        )
+      }
+    }
+
+    "alice vets Foo V2/Bar V1 and bob vets Bar V1 and V2" should {
+      "succeed using Foo V2 and Bar V1" in { implicit env =>
+        SetupPackageVetting(
+          AllDars,
+          Map(
+            env.daId -> Map(
+              aliceParticipant -> Set(
+                FooV2.PACKAGE_ID.toPackageId.withNoVettingBounds
+              ),
+              bobParticipant -> Set(
+                BarV1.PACKAGE_ID.toPackageId.withNoVettingBounds,
+                BarV2.PACKAGE_ID.toPackageId.withNoVettingBounds,
+              ),
+            )
+          ),
+        )
+        test(
+          bobSees = Some(BarV1.PACKAGE_ID),
+          expectedExerciseVersion = FooV2.PACKAGE_ID,
+        )
+        test(
+          bobSees = Some(BarV1.PACKAGE_ID),
+          expectedExerciseVersion = FooV2.PACKAGE_ID,
+          vettingRequirementsForPreferencesInjection = Some(
+            Map(
+              Foo.PACKAGE_NAME.toPackageName -> Set(alice),
+              Bar.PACKAGE_NAME.toPackageName -> Set(bob),
+            )
+          ),
+          tapsMaxPasses = Some(1),
+        )
       }
     }
 
@@ -431,7 +575,6 @@ class SystematicTopologyAwareUpgradingIntegrationTest
       }
     }
 
-    // Negative test case
     "bob doesn't vet anything" should {
       "succeed using Foo V1" in { implicit env =>
         SetupPackageVetting(
@@ -457,6 +600,31 @@ class SystematicTopologyAwareUpgradingIntegrationTest
       }
     }
 
+    "Foo V3 is vetted but its dependency, IBar, is unvetted" should {
+      "succeed using Foo V3 if IBar does not appear in a transaction action node" in {
+        implicit env =>
+          SetupPackageVetting(
+            darPaths = AllDars,
+            targetTopology = Map(env.daId -> AllVettedUpToV3),
+            // IBar is a static dependency of Foo V3
+            // appearing in a choice return type that is not used in the resulting transaction
+            explicitDependencyUnvettingTopology = Map(
+              env.daId -> Map(bobParticipant -> Set(IBar.PACKAGE_ID.toPackageId))
+            ),
+          )
+          test(
+            bobSees = Some(BazV2.PACKAGE_ID),
+            expectedExerciseVersion = FooV3.PACKAGE_ID,
+            vettingRequirementsForPreferencesInjection = Some(
+              Map(
+                Foo.PACKAGE_NAME.toPackageName -> Set(alice),
+                Baz.PACKAGE_NAME.toPackageName -> Set(bob),
+              )
+            ),
+          )
+      }
+    }
+
     // Test cases involving Charlie
     "All Vetted" should {
       "succeed using Foo V4 - Baz V2 - Bar V2" in { implicit env =>
@@ -479,7 +647,7 @@ class SystematicTopologyAwareUpgradingIntegrationTest
             vettingRequirementsForPreferencesInjection = Some(
               Map(
                 Foo.PACKAGE_NAME.toPackageName -> Set(alice),
-                BazV1.PACKAGE_NAME.toPackageName -> Set(bob),
+                Baz.PACKAGE_NAME.toPackageName -> Set(bob),
               )
             ),
           )
@@ -503,12 +671,12 @@ class SystematicTopologyAwareUpgradingIntegrationTest
             expectedErrorCode = PackageSelectionFailed,
             expectedErrorMessage =
               s"""|No synchronizers satisfy the topology requirements for the submitted command: Discarded synchronizers:.*
-                  |.*$daId: Failed to select package-id for package-name '${FooV1.PACKAGE_NAME}' appearing in a command root node due to: No vetted package candidate satisfies the package-id filter 'Commands.package_id_selection_preference'=.*foo -> ${FooV3.PACKAGE_ID.toPackageId.show}.*
+                  |.*$daId: Failed to select package-id for package-name '${Foo.PACKAGE_NAME}' appearing in a command root node due to: No vetted package candidate satisfies the package-id filter 'Commands.package_id_selection_preference'=.*foo -> ${FooV3.PACKAGE_ID.toPackageId.show}.*
                   |.*Candidates:.*${FooV2.PACKAGE_ID.toPackageId.show}.*""".stripMargin,
             vettingRequirementsForPreferencesInjection = Some(
               Map(
                 Foo.PACKAGE_NAME.toPackageName -> Set(alice),
-                BarV1.PACKAGE_NAME.toPackageName -> Set(bob),
+                Bar.PACKAGE_NAME.toPackageName -> Set(bob),
               )
             ),
           )
@@ -525,8 +693,8 @@ class SystematicTopologyAwareUpgradingIntegrationTest
             vettingRequirementsForPreferencesInjection = Some(
               Map(
                 Foo.PACKAGE_NAME.toPackageName -> Set(alice),
-                BazV1.PACKAGE_NAME.toPackageName -> Set(bob),
-                BarV1.PACKAGE_NAME.toPackageName -> Set(charlie),
+                Baz.PACKAGE_NAME.toPackageName -> Set(bob),
+                Bar.PACKAGE_NAME.toPackageName -> Set(charlie),
               )
             ),
           )
@@ -563,8 +731,8 @@ class SystematicTopologyAwareUpgradingIntegrationTest
             vettingRequirementsForPreferencesInjection = Some(
               Map(
                 Foo.PACKAGE_NAME.toPackageName -> Set(alice),
-                BazV1.PACKAGE_NAME.toPackageName -> Set(bob),
-                BarV1.PACKAGE_NAME.toPackageName -> Set(charlie),
+                Baz.PACKAGE_NAME.toPackageName -> Set(bob),
+                Bar.PACKAGE_NAME.toPackageName -> Set(charlie),
               )
             ),
           )

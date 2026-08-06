@@ -20,7 +20,10 @@ import com.digitalasset.canton.protocol.{StaticSynchronizerParameters, Synchroni
 import com.digitalasset.canton.sequencing.*
 import com.digitalasset.canton.sequencing.client.ReplayAction.SequencerSends
 import com.digitalasset.canton.sequencing.client.SequencerClient.SequencerTransports
-import com.digitalasset.canton.sequencing.client.pool.SequencerConnectionPool
+import com.digitalasset.canton.sequencing.client.pool.{
+  HasAcceptableSequencers,
+  SequencerConnectionPool,
+}
 import com.digitalasset.canton.sequencing.client.transports.replay.ReplayClientImpl
 import com.digitalasset.canton.sequencing.protocol.{GetTrafficStateForMemberRequest, TrafficState}
 import com.digitalasset.canton.sequencing.traffic.{EventCostCalculator, TrafficStateController}
@@ -80,7 +83,7 @@ object SequencerClientFactory {
       exitOnFatalErrors: Boolean,
       namedLoggerFactory: NamedLoggerFactory,
   ): SequencerClientFactory =
-    new SequencerClientFactory with NamedLogging {
+    new SequencerClientFactory with NamedLogging with HasAcceptableSequencers {
       override protected def loggerFactory: NamedLoggerFactory = namedLoggerFactory
 
       override def create(
@@ -140,9 +143,16 @@ object SequencerClientFactory {
             ts: CantonTimestamp
         ): EitherT[FutureUnlessShutdown, CreateError, Option[TrafficState]] =
           for {
+            syncCrypto <- EitherT.liftF(syncCryptoApi.currentSnapshotApproximation)
+            acceptableSequencersO <- EitherT.right(getAcceptableSequencers(syncCrypto.ipsSnapshot))
             connections <- EitherT.fromEither[FutureUnlessShutdown](
               NonEmpty
-                .from(connectionPool.getOneConnectionPerSequencer("get-traffic-state"))
+                .from(
+                  connectionPool.getOneConnectionPerSequencer(
+                    "get-traffic-state",
+                    acceptableO = acceptableSequencersO,
+                  )
+                )
                 .toRight(
                   NonRetryableError(
                     s"No connection available to retrieve traffic state from synchronizer for $member"
@@ -233,18 +243,13 @@ object SequencerClientFactory {
           // Make a BFT call to all the transports to retrieve the current traffic state from the synchronizer
           // and initialize the trafficStateController with it
           trafficInitTimestampO = latestSequencedTimestampO
-            .orElse(
-              synchronizerPredecessor.map(
-                _.upgradeTime
-              )
-            )
-            // If there's no timestamp, in most cases the participant will have no traffic state as it probably is connecting
-            // to the synchronizer for the first time. However in rare cases it can happen: for example if the node
-            // was onboarded entirely by another node and traffic was purchased for it before it even connected for the first time.
-            // In that case, we fallback to clock.now() which is the next best timestamp we can use
-            // Note: Only do this for participants. Mediators are given unlimited traffic anyway, and this won't work
-            // during an LSU because mediators connect to the sequencer before upgrade time (and thus before the traffic state is transferred).
-            .orElse(Option.when(member.code == ParticipantId.Code)(clock.now))
+            .orElse(synchronizerPredecessor.map(_.upgradeTime))
+            /*
+            Mediator nodes don't expose traffic.
+            This also prevent them from connecting to the sequencer during LSU before upgrade time, which
+            is needed for the test sequencing messages.
+             */
+            .filter(_ => member.code != MediatorId.Code)
 
           _ = logger.info(
             s"Initializing traffic state at timestamp: $trafficInitTimestampO"

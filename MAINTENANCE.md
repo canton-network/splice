@@ -13,12 +13,14 @@
 
 ## Bumping Canton
 
-1. Choose the Canton version you wish to upgrade to. The currently published versions on
-   Artifactory can be found [here](https://digitalasset.jfrog.io/ui/repos/tree/General/canton-enterprise).
+1. Choose the Canton version you wish to upgrade to.
 2. Update the hashes in `nix/canton-sources.json` by running: `build-tools/bump-canton.sh <version>`
 3. In case you have also made configuration changes to Canton in `simple-topology-canton.conf`, remember
    to also make the corresponding changes for our cluster deployments. It is recommended to test any configuration
    changes on scratchnet first.
+4. Make sure to run full CI with `[ci]` for a "bump canton" PR.
+5. An upgrade cluster test will be requested automatically for PRs bumping the Canton version.
+   Feel free to skip it if you didn't make any config changes as Canton already has sufficient testing on their side.
 
 ## Bumping Daml Compiler & SDK version
 
@@ -44,7 +46,7 @@ Initial setup:
 1. Check out the [Canton **Open Source** repo](https://github.com/digital-asset/canton)
 2. Define the environment variable used in the commands below using `export PATH_TO_CANTON_OSS=<your-canton-oss-repo-path>`. This can be added to your private env vars.
 
-Current Canton commit: `c2c5d1fc2420600ca85c3a08b87ccc9efa182862`
+Current Canton commit: `2fc931e1c8c4e7743e69f966d7c1b72f2373b3ff`
 
 1. Checkout the **current Canton commit listed above** in the Canton open source repo from above, so we can diff our current fork against this checkout.
 2. Change to your checkout of the Splice repo and execute the following steps:
@@ -55,13 +57,15 @@ Current Canton commit: `c2c5d1fc2420600ca85c3a08b87ccc9efa182862`
    4. Create a commit to ease review, `git add canton/ && git commit -s -m"Undo our changes" --no-verify`
 3. Checkout the commit of the Canton OSS repo to which you have decided to upgrade in Step 1.1
    1. Learn the Daml SDK version used by Canton from `head -n15 $PATH_TO_CANTON_OSS/project/project/DamlVersions.scala`.
+   2. The OSS repo commit will mention a "Reference commit". In Splice repo run `scripts/search-canton-snapshot.py` with this hash.
 5. Execute the following steps in your Splice repo:
    1. Copy the Canton changes: `./scripts/copy-canton.sh $PATH_TO_CANTON_OSS`
    2. Create a commit to ease review, `git add canton/ && git commit -s -m"Bump Canton commit" --no-verify`
    3. Reapply our changes `git apply '--exclude=canton/community/app/src/test/resources/examples/*' --directory=canton --reject canton.patch`.
    4. Create a commit to ease review `git add canton/ && git reset '*.rej' && git commit -s -m"Reapply our changes" --no-verify`
    5. Bump the SDK/Canton versions in the following places:
-      1. The current Canton commit in this `README.md`
+      1. The current Canton OSS commit in this `README.md`
+      2. The `canton_library_version` in `CantonDependencies.scala` to the value produced by `search-canton-snapshot.py` above
    6. Create another commit, `git add -A && git reset '*.rej' && git commit -s -m"Bump Canton commit" --no-verify`
 6. Check if the `protocolVersions` in our `BuildInfoKeys` in `BuildCommon.scala` needs to be bumped.
    - One way to do this is to run `start-canton.sh -w` with an updated Canton binary, and check `ProtocolVersion.latest` in the console.
@@ -156,8 +160,3 @@ To update their versions, edit the respective Dockerfiles with the new version t
 SHA of the multi-arch manifest (docker then resolves that to the correct architecture at build time). A good source of
 official SHAs for images from docker.io is: https://github.com/docker-library/repo-info.
 To inspect a manifest locally, you can run e.g. `docker buildx imagetools inspect nginx:stable`.
-
-## Bumping splice-shared-gha
-
-In order to bump [splice-shared-gha](https://github.com/canton-network/splice-shared-gha), please run [Bump splice-shared-gha version](https://github.com/canton-network/splice/actions/workflows/bump_splice_shared_gha.yml) job and merge the PR that will
-be created by the job.

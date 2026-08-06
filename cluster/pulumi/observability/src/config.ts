@@ -1,6 +1,10 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { clusterSubConfig } from '@lfdecentralizedtrust/splice-pulumi-common';
+import {
+  clusterSubConfig,
+  SplicePostgresConfig,
+  SplicePostgresSchema,
+} from '@canton-network/splice-pulumi-common';
 import { z } from 'zod';
 
 const quotaMetricNameSchema = z
@@ -26,9 +30,41 @@ const GcpQuotasConfigSchema = z.object({
     }),
 });
 
+const NatPortUsageConfigSchema = z.object({
+  thresholdPercent: z.number().min(0).max(100),
+  droppedSentPacketsThreshold: z.number().min(0),
+});
+
+export type NatPortUsageConfig = z.infer<typeof NatPortUsageConfigSchema>;
+
+const MuteTimeWindowSchema = z.object({
+  times: z.array(
+    z.object({
+      startTime: z.string(), // UTC
+      endTime: z.string(), // UTC
+    })
+  ),
+  weekdays: z.array(z.string()).optional(), // e.g. ['monday', 'tuesday:friday']
+});
+export type MuteTimeWindow = z.infer<typeof MuteTimeWindowSchema>;
+
+const MuteTimeIntervalSchema = z.array(
+  z.object({
+    name: z.string(),
+    objectMatchers: z.array(z.tuple([z.string(), z.string(), z.string()])),
+    timeWindows: z.array(MuteTimeWindowSchema),
+  })
+);
+export type MuteTimeInterval = z.infer<typeof MuteTimeIntervalSchema>[number];
+
+// Observability needs to be migrated
+const defaultObservabilityPostgresConfig: SplicePostgresConfig = {
+  deployment: 'legacy-helm-chart',
+};
 const MonitoringConfigSchema = z
   .object({
     enableGrafanaServiceAccountToken: z.boolean(),
+    grafanaPostgres: SplicePostgresSchema.default({ deployment: 'legacy-helm-chart' }),
     alerting: z.object({
       enableNoDataAlerts: z.boolean(),
       alerts: z.object({
@@ -56,6 +92,15 @@ const MonitoringConfigSchema = z
             rate: z.number(),
             overMinutes: z.number(),
           }),
+        }),
+        dsoMissedConfirmations: z.object({
+          // Fraction (0-1) of confirmation requests (as measured by the mediator) in
+          // which the DSO party may miss its confirmation within the rolling window
+          // before the alert fires.
+          threshold: z.number(),
+          // Rolling window (in minutes) over which the DSO party missed confirmation
+          // rate is computed.
+          windowMinutes: z.number(),
         }),
         cloudSql: z.object({
           maintenance: z.boolean(),
@@ -95,27 +140,46 @@ const MonitoringConfigSchema = z
           rejectionRateThreshold: z.number(),
           circuitBreakerStateThreshold: z.number(),
         }),
+        cantonBft: z.object({
+          // Alert if the number of ingress requests queued in the BFT ordering
+          // layer exceeds this threshold.
+          mempoolMaxSizeThreshold: z.number(),
+        }),
+        scanConnectionDisagreement: z.object({
+          // Fraction (0-1) of BFT consensus comparisons on a scan connection that may
+          // return a response (successful or failed) disagreeing with the consensus
+          // result before the success/failure alerts fire.
+          alertThreshold: z.number(),
+          // Requests (by their `request` label) to exclude from the scan connection
+          // disagreement alerts. Matched as a regex against the `request` label.
+          excludedRequests: z.array(z.string()).default([]),
+          // Scan connections (by their `scan_connection` label) to exclude from the scan
+          // connection disagreement alerts. Matched as a regex against the
+          // `scan_connection` label.
+          excludedConnections: z.array(z.string()).default([]),
+          // Http status code (by their `http_status` label) to exclude from the disagreement alerts.
+          // Matched as a regex against the `http_status` label.
+          excludedHttpStatusCodes: z.array(z.string()).default([]),
+        }),
         walletSweep: z.object({
           tolerance: z.number(),
         }),
         gcpQuotas: GcpQuotasConfigSchema,
+        natPortUsage: NatPortUsageConfigSchema.default({
+          thresholdPercent: 80,
+          // `default 30` because every once in a while (likely due to dynamic port allocation),
+          // a few packets (less than 1/s) get dropped and getting alerted on it every time can be very noisy.
+          droppedSentPacketsThreshold: 30,
+        }),
         trafficBasedRewards: z.object({
           featuredAppRightsLimit: z.number(),
+          verdictIngestionBatchSizeThreshold: z.number(),
+          verdictIngestionBatchSizePendingPeriodMinutes: z.number(),
         }),
       }),
       logAlerts: z.object({}).catchall(z.string()).default({}),
       loggedSecretsFilter: z.string().optional(),
-      muteTimeIntervals: z
-        .array(
-          z.object({
-            name: z.string(),
-            objectMatchers: z.array(z.tuple([z.string(), z.string(), z.string()])),
-            startTime: z.string(), // UTC
-            endTime: z.string(), // UTC
-            weekdays: z.array(z.string()).optional(), // e.g. ['monday', 'tuesday:friday']
-          })
-        )
-        .default([]),
+      muteTimeIntervals: MuteTimeIntervalSchema.default([]),
     }),
   })
   .strict();

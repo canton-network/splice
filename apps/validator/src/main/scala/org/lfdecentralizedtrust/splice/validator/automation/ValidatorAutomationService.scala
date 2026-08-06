@@ -28,13 +28,9 @@ import org.lfdecentralizedtrust.splice.config.{
 import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.identities.NodeIdentitiesStore
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
-import org.lfdecentralizedtrust.splice.store.{
-  DomainTimeSynchronization,
-  DomainUnpausedSynchronization,
-  UpdateHistory,
-}
+import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
-import org.lfdecentralizedtrust.splice.validator.domain.DomainConnector
+import org.lfdecentralizedtrust.splice.validator.domain.SynchronizerConnector
 import org.lfdecentralizedtrust.splice.validator.lsu.RollForwardLsuTrigger
 import org.lfdecentralizedtrust.splice.validator.store.ValidatorStore
 import org.lfdecentralizedtrust.splice.wallet.UserWalletManager
@@ -59,16 +55,14 @@ class ValidatorAutomationService(
     isSvValidator: Boolean,
     clock: Clock,
     domainTimeSync: DomainTimeSynchronization,
-    domainUnpausedSync: DomainUnpausedSynchronization,
     walletManagerOpt: Option[UserWalletManager], // None when config.enableWallet=false
     store: ValidatorStore,
-    val updateHistory: UpdateHistory,
     storage: DbStorage,
     scanConnection: BftScanConnection,
     ledgerClient: SpliceLedgerClient,
     participantAdminConnection: ParticipantAdminConnection,
     participantIdentitiesStore: NodeIdentitiesStore,
-    domainConnector: DomainConnector,
+    synchronizerConnector: SynchronizerConnector,
     domainMigrationId: Long,
     retryProvider: RetryProvider,
     svValidator: Boolean,
@@ -82,7 +76,9 @@ class ValidatorAutomationService(
     enabledFeatures: EnabledFeaturesConfig,
     additionalPackagesToUnvet: Map[PackageName, Set[PackageVersion]],
     globalSynchronizerAlias: SynchronizerAlias,
+    enableDeprecatedTransferCommandSupport: Boolean,
     override protected val loggerFactory: NamedLoggerFactory,
+    packageVersionSupport: PackageVersionSupport,
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
@@ -91,17 +87,15 @@ class ValidatorAutomationService(
       automationConfig,
       clock,
       domainTimeSync,
-      domainUnpausedSync,
       store,
       ledgerClient,
       retryProvider,
       params,
+      packageVersionSupport,
     ) {
   override def companion
       : org.lfdecentralizedtrust.splice.validator.automation.ValidatorAutomationService.type =
     ValidatorAutomationService
-
-  registerUpdateHistoryIngestion(updateHistory)
 
   automationConfig.topologyMetricsPollingInterval.foreach(topologyPollingInterval =>
     registerTrigger(
@@ -149,6 +143,8 @@ class ValidatorAutomationService(
         walletManager,
         transferPreapprovalConfig,
         clock,
+        participantAdminConnection,
+        globalSynchronizerAlias,
       )
     )
 
@@ -201,15 +197,17 @@ class ValidatorAutomationService(
         )
       )
 
-    registerTrigger(
-      new TransferCommandSendTrigger(
-        triggerContext,
-        scanConnection,
-        store,
-        walletManager.externalPartyWalletManager,
-        connection(SpliceLedgerConnectionPriority.Medium),
+    if (enableDeprecatedTransferCommandSupport) {
+      registerTrigger(
+        new TransferCommandSendTrigger(
+          triggerContext,
+          scanConnection,
+          store,
+          walletManager.externalPartyWalletManager,
+          connection(SpliceLedgerConnectionPriority.Medium),
+        )
       )
-    )
+    }
   }
 
   backupDumpConfig.foreach(config =>
@@ -228,7 +226,7 @@ class ValidatorAutomationService(
         triggerContext,
         participantAdminConnection,
         scanConnection,
-        domainConnector,
+        synchronizerConnector,
         sequencerSubmissionAmplificationPatience,
         sequencerConnectionPoolDelays,
         initialSynchronizerTime,
@@ -246,6 +244,7 @@ class ValidatorAutomationService(
         maxVettingDelay,
         latestPackagesOnly,
         enabledFeatures.enableUnsupportedDarsUnvetting,
+        enabledFeatures.enableValidatorDarsUnvetting,
         additionalPackagesToUnvet,
       )
     )

@@ -1,10 +1,10 @@
 {
-  "name": "@lfdecentralizedtrust/splice-pulumi-common-sv",
+  "name": "@canton-network/splice-pulumi-common-sv",
   "version": "1.0.0",
   "main": "src/index.ts",
   "dependencies": {
-    "@lfdecentralizedtrust/splice-pulumi-common": "1.0.0",
-    "@lfdecentralizedtrust/splice-pulumi-common-validator": "1.0.0"
+    "@canton-network/splice-pulumi-common": "1.0.0",
+    "@canton-network/splice-pulumi-common-validator": "1.0.0"
   },
   "scripts": {
     "fix": "npm run format:fix && npm run lint:fix",

@@ -1,7 +1,11 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import { Optional } from '@daml/types';
-import { AmuletConfig, PackageConfig } from '@daml.js/splice-amulet/lib/Splice/AmuletConfig';
+import {
+  AmuletConfig,
+  PackageConfig,
+  RewardConfig,
+} from '@daml.js/splice-amulet/lib/Splice/AmuletConfig';
 import { Tuple2 } from '@daml.js/daml-prim-DA-Types-1.0.0/lib/DA/Types';
 import { Set as DamlSet } from '@daml.js/daml-stdlib-DA-Set-Types-1.0.0/lib/DA/Set/Types';
 import { RelTime } from '@daml.js/daml-stdlib-DA-Time-Types-1.0.0/lib/DA/Time/Types';
@@ -31,7 +35,7 @@ export function buildAmuletConfigChanges(
     {
       fieldName: 'featuredAppActivityMarkerAmount',
       label:
-        'Amount of the AppRewardCoupon contract that a FeaturedAppActivityMarker is converted to (in USD)',
+        'Amount of the AppRewardCoupon contract that a FeaturedAppActivityMarker is converted to (in $USD)',
       currentValue: before?.featuredAppActivityMarkerAmount || '',
       newValue: after?.featuredAppActivityMarkerAmount || '',
     },
@@ -74,7 +78,7 @@ export function buildAmuletConfigChanges(
     {
       fieldName: 'transferConfigExtraFeaturedAppRewardAmount',
       label:
-        'Amount of the AppRewardCoupon contract that is created per featured app transfer (in USD)',
+        'Amount of the AppRewardCoupon contract that is created per featured app transfer (in $USD)',
       currentValue: before?.transferConfig.extraFeaturedAppRewardAmount || '',
       newValue: after?.transferConfig.extraFeaturedAppRewardAmount || '',
     },
@@ -96,6 +100,12 @@ export function buildAmuletConfigChanges(
       currentValue: before?.transferConfig.maxNumLockHolders || '',
       newValue: after?.transferConfig.maxNumLockHolders || '',
     },
+    {
+      fieldName: 'transferConfigTokenStandardMaxTTL',
+      label: 'Token standard allocation and instruction max TTL (microseconds)',
+      currentValue: before?.transferConfig.tokenStandardMaxTTL?.microseconds || '',
+      newValue: after?.transferConfig.tokenStandardMaxTTL?.microseconds || '',
+    },
 
     ...buildIssuanceCurveChanges(before?.issuanceCurve, after?.issuanceCurve),
 
@@ -105,6 +115,8 @@ export function buildAmuletConfigChanges(
     ),
 
     ...buildPackageConfigChanges(before?.packageConfig, after?.packageConfig),
+
+    ...buildRewardConfigChanges(before?.rewardConfig, after?.rewardConfig),
   ] as ConfigChange[];
 
   return showAllFields ? changes : changes.filter(c => c.currentValue !== c.newValue);
@@ -308,6 +320,44 @@ function buildIssuanceCurveChanges(
   return [...initialValues, ...futureValues];
 }
 
+function buildRewardConfigChanges(
+  before: RewardConfig | null | undefined,
+  after: RewardConfig | null | undefined
+) {
+  return [
+    {
+      fieldName: 'rewardConfigMintingVersion',
+      label: 'Reward config: Minting version',
+      currentValue: before?.mintingVersion || '',
+      newValue: after?.mintingVersion || '',
+    },
+    {
+      fieldName: 'rewardConfigDryRunVersion',
+      label: 'Reward config: Dry-run version',
+      currentValue: before?.dryRunVersion || '',
+      newValue: after?.dryRunVersion || '',
+    },
+    {
+      fieldName: 'rewardConfigBatchSize',
+      label: 'Reward config: Batch size',
+      currentValue: before?.batchSize || '',
+      newValue: after?.batchSize || '',
+    },
+    {
+      fieldName: 'rewardConfigRewardCouponTimeToLive',
+      label: 'Reward config: Reward coupon time to live (microseconds)',
+      currentValue: before?.rewardCouponTimeToLive.microseconds || '',
+      newValue: after?.rewardCouponTimeToLive.microseconds || '',
+    },
+    {
+      fieldName: 'rewardConfigAppRewardCouponThreshold',
+      label: 'Reward config: App reward coupon threshold ($)',
+      currentValue: before?.appRewardCouponThreshold || '',
+      newValue: after?.appRewardCouponThreshold || '',
+    },
+  ] as ConfigChange[];
+}
+
 function buildDecentralizedSynchronizerChanges(
   before: AmuletDecentralizedSynchronizerConfig | undefined,
   after: AmuletDecentralizedSynchronizerConfig | undefined
@@ -331,7 +381,7 @@ function buildDecentralizedSynchronizerChanges(
   ].sort();
   const requiredSynchronizersChanges = allSynchronizers.map((sync, idx) => ({
     fieldName: `decentralizedSynchronizerRequiredSynchronizers${idx + 1}`,
-    label: `(unused) Decentralized synchronizer (Required synchronizer ${idx + 1})`,
+    label: `(unused) Decentralized synchronizer (required synchronizer ${idx + 1})`,
     currentValue: beforeRequiredSynchronizers.includes(sync) ? sync : '',
     newValue: afterRequiredSynchronizers.includes(sync) ? sync : '',
     disabled: true,
@@ -360,7 +410,7 @@ function buildDecentralizedSynchronizerChanges(
     },
     {
       fieldName: 'decentralizedSynchronizerFeesExtraTrafficPrice',
-      label: 'Traffic fees: Extra traffic: Price (in USD/MB)',
+      label: 'Traffic fees: Extra traffic: Price (in $USD per MB)',
       currentValue: before?.fees.extraTrafficPrice || '',
       newValue: after?.fees.extraTrafficPrice || '',
     },

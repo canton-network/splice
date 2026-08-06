@@ -1,4 +1,5 @@
 synchronizerMigration:
+  frozenMigrationId: 0
   active:
     id: 0
     version: "local"

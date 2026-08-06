@@ -24,10 +24,13 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.decentralizedsynchron
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.decentralizedsynchronizer as decentralizedsynchronizerCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   DsoRules,
+  DsoRules_UpdateSvRewardWeight,
   Reason,
   Vote,
   VoteRequest,
 }
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_UpdateSvRewardWeight
 import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.FaucetState
 import org.lfdecentralizedtrust.splice.codegen.java.splice.{
@@ -38,14 +41,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.{
 }
 import org.lfdecentralizedtrust.splice.environment.{DarResources, RetryProvider}
 import org.lfdecentralizedtrust.splice.history.*
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient
-import org.lfdecentralizedtrust.splice.scan.store.db.{
-  DbScanStore,
-  DbScanStoreMetrics,
-  ScanAggregatesReader,
-  ScanAggregator,
-}
+import org.lfdecentralizedtrust.splice.scan.store.db.{DbScanStore, DbScanStoreMetrics}
 import org.lfdecentralizedtrust.splice.scan.store.*
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.ContractState.Assigned
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingRequirement
@@ -57,11 +53,10 @@ import org.lfdecentralizedtrust.splice.util.*
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.{Collections, Optional}
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.Future
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 import scala.math.BigDecimal.javaBigDecimal2bigDecimal
-import scala.reflect.ClassTag
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.IngestionSink.IngestionStart.{
   InitializeAcsAtLatestOffset,
@@ -77,120 +72,6 @@ abstract class ScanStoreTest
     with AmuletTransferUtil {
 
   "ScanStore" should {
-    "getTotalRewardsCollectedEver" should {
-
-      "return the sum of reward amounts (ValidatorReward & AppReward)" in {
-        val validatorRewards = Seq(
-          9.5,
-          11.5,
-        )
-        val appRewards = Seq(
-          11.25,
-          9.75,
-        )
-        val closedRounds = (0 to 1).map { round =>
-          closedMiningRound(dsoParty, round = round.toLong)
-        }
-
-        for {
-          store <- mkStore()
-          _ <- MonadUtil.sequentialTraverse(appRewards.zip(validatorRewards).zipWithIndex) {
-            case ((appAmount, validatorAmount), round) =>
-              dummyDomain.exercise(
-                amuletRules(),
-                Some(splice.amuletrules.AmuletRules.TEMPLATE_ID_WITH_PACKAGE_ID),
-                Transfer.choice.name,
-                mkAmuletRulesTransfer(user1, 1.0),
-                mkTransferResultRecord(
-                  round = round.toLong,
-                  inputAppRewardAmount = appAmount,
-                  inputValidatorRewardAmount = validatorAmount,
-                  inputSvRewardAmount = 0,
-                  inputAmuletAmount = 0,
-                  balanceChanges = Map(),
-                  amuletPrice = 0.0005,
-                ),
-              )(store.multiDomainAcsStore)
-          }
-          _ = closedRounds.map(closed =>
-            dummyDomain.create(closed)(store.multiDomainAcsStore).futureValue
-          )
-          _ <- store.aggregate()
-        } yield {
-          store
-            .getTotalRewardsCollectedEver()
-            .futureValue shouldBe validatorRewards.sum + appRewards.sum
-        }
-      }
-
-    }
-
-    "getRewardsCollectedInRound" should {
-
-      "return the sum of reward amounts (ValidatorReward & AppReward) up to the round" in {
-        val validatorRewards = Seq(
-          9.5,
-          11.5,
-          33.3,
-        )
-        val appRewards = Seq(
-          11.25,
-          9.75,
-          33.3,
-        )
-        val closedRounds = (0 to 2).map { round =>
-          closedMiningRound(dsoParty, round = round.toLong)
-        }
-
-        for {
-          store <- mkStore()
-          _ <- MonadUtil.sequentialTraverse(appRewards.zipWithIndex) { case (amount, round) =>
-            dummyDomain.exercise(
-              amuletRules(),
-              Some(splice.amuletrules.AmuletRules.TEMPLATE_ID_WITH_PACKAGE_ID),
-              Transfer.choice.name,
-              mkAmuletRulesTransfer(user1, amount),
-              mkTransferResultRecord(
-                round = round.toLong,
-                inputAppRewardAmount = amount,
-                inputAmuletAmount = 0,
-                inputValidatorRewardAmount = 0,
-                inputSvRewardAmount = 0,
-                balanceChanges = Map(),
-                amuletPrice = 0.0005,
-              ),
-            )(store.multiDomainAcsStore)
-          }
-          _ <- MonadUtil.sequentialTraverse(validatorRewards.zipWithIndex) { case (amount, round) =>
-            dummyDomain.exercise(
-              amuletRules(),
-              Some(splice.amuletrules.AmuletRules.TEMPLATE_ID_WITH_PACKAGE_ID),
-              Transfer.choice.name,
-              mkAmuletRulesTransfer(user1, amount),
-              mkTransferResultRecord(
-                round = round.toLong,
-                inputAppRewardAmount = 0,
-                inputValidatorRewardAmount = amount,
-                inputSvRewardAmount = 0,
-                inputAmuletAmount = 0,
-                balanceChanges = Map(),
-                amuletPrice = 0.0005,
-              ),
-            )(store.multiDomainAcsStore)
-          }
-          _ = closedRounds.map(closed =>
-            dummyDomain.create(closed)(store.multiDomainAcsStore).futureValue
-          )
-          _ <- store.aggregate()
-        } yield {
-          store.getRewardsCollectedInRound(1).futureValue shouldBe validatorRewards(
-            1
-          ) + appRewards(1)
-        }
-      }
-
-    }
-
     "getAmuletConfigForRound" should {
 
       "return the amulet OpenMiningRoundTxLogEntry for the round" in {
@@ -212,234 +93,6 @@ abstract class ScanStoreTest
             numeric(
               wanted.payload.transferConfigUsd.createFee.fee.divide(wanted.payload.amuletPrice)
             )
-          )
-        }
-      }
-
-    }
-
-    "getRoundOfLatestData" should {
-
-      "return the latest closed round" in {
-        val closedBefore = (0 until 2).map { round =>
-          closedMiningRound(dsoParty, round = round.toLong)
-        }
-        val closed = closedMiningRound(dsoParty, round = 2)
-        for {
-          store <- mkStore()
-          closeTime = Instant.ofEpochSecond(1500)
-          _ <- MonadUtil.sequentialTraverse(closedBefore) { closed =>
-            dummyDomain.create(closed, txEffectiveAt = closeTime)(
-              store.multiDomainAcsStore
-            )
-          }
-          _ <- dummyDomain.create(closed, txEffectiveAt = closeTime)(
-            store.multiDomainAcsStore
-          )
-          _ <- store.aggregate()
-        } yield {
-          val (round, effectiveAt) = store.getRoundOfLatestData().futureValue
-          round should be(2)
-          effectiveAt should be(closeTime)
-        }
-      }
-
-      "fail if there's no closed round" in {
-        val open = openMiningRound(dsoParty, round = 2, amuletPrice = 2.0)
-        for {
-          store <- mkStore()
-          _ <- dummyDomain.create(open)(store.multiDomainAcsStore)
-        } yield {
-          val failure = store.getRoundOfLatestData().failed.futureValue
-          failure.getMessage should be(roundNotAggregated().getMessage)
-        }
-      }
-    }
-
-    // tests look the same for both getTopProvidersByAppRewards & getTopValidatorsByValidatorRewards
-    type Round = Long
-    type Limit = Int
-    type Amount = Double
-    def topProvidersTest(
-        getTopProviders: (ScanStore, Round, Limit) => Future[Seq[(PartyId, BigDecimal)]],
-        mkTransferResultForTest: (Amount, Round) => DamlRecord,
-    ) = {
-      val asOfEndOfRound = 5L
-      val providerRewardRounds = Seq(
-        // (provider, amount, round)
-        // 1
-        (userParty(1), 4.0, 1),
-        (userParty(1), 4.0, 2),
-        (userParty(1), 666.0, 200), // excluded
-        // 2
-        (userParty(2), 4.0, 1),
-        // 3
-        (userParty(3), 4.0, 1),
-        (userParty(3), 4.0, 2),
-        (userParty(3), 4.0, 3),
-        // 4
-        (userParty(4), 4.0, 10000), // excluded
-      )
-      val closed = closedMiningRound(dsoParty, round = asOfEndOfRound)
-      val closedBefore = (0 until asOfEndOfRound.toInt).map { round =>
-        closedMiningRound(dsoParty, round = round.toLong)
-      }
-      for {
-        store <- mkStore()
-        _ <- MonadUtil.sequentialTraverse(closedBefore) { closed =>
-          dummyDomain.create(closed)(store.multiDomainAcsStore)
-        }
-        _ <- dummyDomain.create(closed)(store.multiDomainAcsStore)
-        _ <- MonadUtil.sequentialTraverse(providerRewardRounds) { case (provider, amount, round) =>
-          dummyDomain.exercise(
-            amuletRules(),
-            Some(splice.amuletrules.AmuletRules.TEMPLATE_ID_WITH_PACKAGE_ID),
-            Transfer.choice.name,
-            mkAmuletRulesTransfer(provider, amount),
-            mkTransferResultForTest(
-              amount,
-              round.toLong,
-            ),
-          )(store.multiDomainAcsStore)
-        }
-        _ <- store.aggregate()
-      } yield {
-        getTopProviders(store, asOfEndOfRound, 2).futureValue shouldBe Seq(
-          userParty(3) -> BigDecimal(4.0 * 3),
-          userParty(1) -> BigDecimal(4.0 * 2),
-        )
-      }
-    }
-
-    "getTopProvidersByAppRewards" should {
-
-      "return the top `limit` providers by app rewards" in {
-        topProvidersTest(
-          (store, round, limit) => store.getTopProvidersByAppRewards(round, limit),
-          (amount, round) =>
-            mkTransferResultRecord(
-              round = round,
-              inputAppRewardAmount = amount,
-              inputAmuletAmount = 0,
-              inputValidatorRewardAmount = 0,
-              inputSvRewardAmount = 0,
-              balanceChanges = Map(),
-              amuletPrice = 0.0005,
-            ),
-        )
-      }
-    }
-
-    "getTopValidatorsByValidatorRewards" should {
-
-      "return the top `limit` providers by app rewards" in {
-        topProvidersTest(
-          (store, round, limit) => store.getTopValidatorsByValidatorRewards(round, limit),
-          (amount, round) =>
-            mkTransferResultRecord(
-              round = round,
-              inputAppRewardAmount = 0,
-              inputValidatorRewardAmount = amount,
-              inputAmuletAmount = 0,
-              inputSvRewardAmount = 0,
-              balanceChanges = Map(),
-              amuletPrice = 0.0005,
-            ),
-        )
-      }
-    }
-
-    "getTopValidatorsByPurchasedTraffic" should {
-
-      "return the top `limit` providers by purchased traffic" in {
-        val asOfEndOfRound = 5L
-        val trafficPurchaseTrees = Seq(
-          // user 1
-          amuletRulesBuyMemberTrafficTransaction(
-            provider = userParty(1),
-            memberId = mkParticipantId("user-1"),
-            round = 1,
-            extraTraffic = 4,
-            ccSpent = 2.0,
-          )(_),
-          amuletRulesBuyMemberTrafficTransaction(
-            provider = userParty(1),
-            memberId = mkParticipantId("user-1"),
-            round = 2,
-            extraTraffic = 4,
-            ccSpent = 2.0,
-          )(_),
-          amuletRulesBuyMemberTrafficTransaction(
-            provider = userParty(1),
-            memberId = mkParticipantId("user-1"),
-            round = 3,
-            extraTraffic = 4,
-            ccSpent = 2.0,
-          )(_),
-          // user 2
-          amuletRulesBuyMemberTrafficTransaction(
-            provider = userParty(2),
-            memberId = mkParticipantId("user-2"),
-            round = 1,
-            extraTraffic = 4,
-            ccSpent = 2.0,
-          )(_),
-          // user 3
-          amuletRulesBuyMemberTrafficTransaction(
-            provider = userParty(3),
-            memberId = mkParticipantId("user-3"),
-            round = 1,
-            extraTraffic = 4,
-            ccSpent = 3.0,
-          )(_),
-          amuletRulesBuyMemberTrafficTransaction(
-            provider = userParty(3),
-            memberId = mkParticipantId("user-3"),
-            round = 2,
-            extraTraffic = 4,
-            ccSpent = 3.0,
-          )(_),
-          // user 4
-          amuletRulesBuyMemberTrafficTransaction(
-            provider = userParty(4),
-            memberId = mkParticipantId("user-4"),
-            round = 1000, // excluded
-            extraTraffic = 400000,
-            ccSpent = 2222.0,
-          )(_),
-        )
-        val closedBefore = (0 until asOfEndOfRound.toInt).map { round =>
-          closedMiningRound(dsoParty, round = round.toLong)
-        }
-        val closed = closedMiningRound(dsoParty, round = asOfEndOfRound)
-        for {
-          store <- mkStore()
-          _ <- MonadUtil.sequentialTraverse(closedBefore) { closed =>
-            dummyDomain.create(closed)(store.multiDomainAcsStore)
-          }
-          _ <- dummyDomain.create(closed)(store.multiDomainAcsStore)
-          _ <- MonadUtil.sequentialTraverse(trafficPurchaseTrees)(
-            dummyDomain.ingest(_)(store.multiDomainAcsStore)
-          )
-          _ <- store.aggregate()
-        } yield {
-          store
-            .getTopValidatorsByPurchasedTraffic(asOfEndOfRound, limit = 2)
-            .futureValue shouldBe Seq(
-            HttpScanAppClient.ValidatorPurchasedTraffic(
-              validator = userParty(1),
-              numPurchases = 3,
-              totalTrafficPurchased = 4 * 3,
-              totalCcSpent = 2.0 * 3,
-              lastPurchasedInRound = 3,
-            ),
-            HttpScanAppClient.ValidatorPurchasedTraffic(
-              validator = userParty(3),
-              numPurchases = 2,
-              totalTrafficPurchased = 4 * 2,
-              totalCcSpent = 3.0 * 2,
-              lastPurchasedInRound = 2,
-            ),
           )
         }
       }
@@ -678,144 +331,6 @@ abstract class ScanStoreTest
       }
     }
 
-    "listTransactions" should {
-      "return the most recent txs in pages" in {
-        val limit = 10
-        val nrTransfers = 20
-        val round = 1L
-        val now = java.time.Instant.EPOCH
-        val zero = BigDecimal(0)
-        val fakeOffset = "0"
-        val txs: List[TransferTxLogEntry] = (1 to nrTransfers).map { i =>
-          TransferTxLogEntry(
-            offset = fakeOffset,
-            eventId = s"$i",
-            domainId = dummyDomain,
-            date = Some(now),
-            sender = Some(
-              SenderAmount(
-                user1,
-                BigDecimal(i),
-                zero,
-                zero,
-                zero,
-                zero,
-                zero,
-                zero,
-                Some(zero),
-                None,
-              )
-            ),
-            balanceChanges = Seq(),
-            receivers = Seq(ReceiverAmount(user2, BigDecimal(i), zero)),
-            round = round,
-          )
-        }.toList
-        def stripEventIdAndOffset(tx: TransferTxLogEntry) =
-          tx.copy(eventId = "", offset = fakeOffset)
-        val expectedFirstPage = txs.reverse.take(limit).toList
-        val expectedSecondPage = txs.reverse.drop(limit).take(limit).toList
-
-        def transferFromTransaction(
-            store: ScanStore,
-            amuletRulesContract: Contract[
-              splice.amuletrules.AmuletRules.ContractId,
-              splice.amuletrules.AmuletRules,
-            ],
-            tx: TransferTxLogEntry,
-        ) = {
-          val sender = tx.sender.getOrElse(throw txMissingField())
-          val senderParty = sender.party
-          val senderAmount = sender.inputAmuletAmount
-          val receiverParty = tx.receivers(0).party
-          val receiverAmount = tx.receivers(0).amount
-          dummyDomain
-            .exercise(
-              contract = amuletRulesContract,
-              interfaceId = Some(splice.amuletrules.AmuletRules.TEMPLATE_ID_WITH_PACKAGE_ID),
-              choiceName = Transfer.choice.name,
-              choiceArgument = mkAmuletRules_Transfer(
-                mkTransferInputOutput(
-                  senderParty,
-                  senderParty,
-                  List(mkInputAmulet()),
-                  List(mkTransferOutput(receiverParty, receiverAmount)),
-                )
-              ),
-              exerciseResult = mkTransferResultRecord(
-                round = round,
-                inputAppRewardAmount = sender.inputAppRewardAmount.toDouble,
-                inputAmuletAmount = senderAmount.toDouble,
-                inputValidatorRewardAmount = sender.inputValidatorRewardAmount.toDouble,
-                inputSvRewardAmount = sender.inputSvRewardAmount.fold(0.0)(_.toDouble),
-                balanceChanges = Map(),
-                amuletPrice = 1.0,
-              ),
-            )(
-              store.multiDomainAcsStore
-            )
-            .map(_ => ())
-        }
-
-        for {
-          store <- mkStore()
-          amuletRulesContract = amuletRules()
-          _ <- txs.foldLeft(Future.successful(())) { (f, tx) =>
-            f.flatMap { _ =>
-              transferFromTransaction(
-                store,
-                amuletRulesContract,
-                tx,
-              )
-            }
-          }
-        } yield {
-          val firstPageDescending = store
-            .listByType[TransferTxLogEntry](None, SortOrder.Descending, limit)
-            .futureValue
-            .toList
-
-          firstPageDescending
-            .map(stripEventIdAndOffset) should be(
-            expectedFirstPage
-              .map(stripEventIdAndOffset)
-          )
-          val nextPageDescending = store
-            .listByType[TransferTxLogEntry](
-              Some(firstPageDescending.last.eventId),
-              SortOrder.Descending,
-              limit,
-            )
-            .futureValue
-            .toList
-
-          nextPageDescending
-            .map(stripEventIdAndOffset) should be(
-            expectedSecondPage
-              .map(stripEventIdAndOffset)
-          )
-
-          val firstPageAscending = store
-            .listByType[TransferTxLogEntry](None, SortOrder.Ascending, limit)
-            .futureValue
-            .toList
-
-          firstPageAscending should be(nextPageDescending.reverse)
-
-          val nextPageAscending = store
-            .listByType[TransferTxLogEntry](
-              Some(firstPageAscending.last.eventId),
-              SortOrder.Ascending,
-              limit,
-            )
-            .futureValue
-            .toList
-
-          nextPageAscending should be(firstPageDescending.reverse)
-        }
-      }
-    }
-
     "votes" should {
 
       "listVoteRequestResults" should {
@@ -824,6 +339,234 @@ abstract class ScanStoreTest
           val store = mkStore().futureValue
           val voteRequestContracts = mkVoteRequests()
           assertListOfAllPastVoteRequestResults(voteRequestContracts, store)
+        }
+
+        "return results in effective-at order, independent of ingestion and record time" in {
+          val baseTime = Instant.now().truncatedTo(ChronoUnit.MICROS)
+          def recordTime(n: Int) = baseTime.plusSeconds(n.toLong)
+          def effectiveAt(n: Int) = baseTime.plus((5 - n).toLong, ChronoUnit.DAYS)
+          val voteRequests = (1 to 4).map { n =>
+            voteRequest(
+              requester = userParty(n),
+              votes = Seq(
+                new Vote(userParty(n).toProtoPrimitive, true, new Reason("", ""), Optional.empty())
+              ),
+            )
+          }
+          val results =
+            (1 to 4).map(n =>
+              mkVoteRequestResult(voteRequests(n - 1), effectiveAt = effectiveAt(n))
+            )
+          def closeVoteRequest(store: ScanStore, n: Int) =
+            dummyDomain.exercise(
+              contract = dsoRules(dsoParty),
+              interfaceId = Some(DsoRules.TEMPLATE_ID_WITH_PACKAGE_ID),
+              choiceName = DsoRulesCloseVoteRequest.choice.name,
+              choiceArgument = mkCloseVoteRequest(voteRequests(n - 1).contractId),
+              exerciseResult = results(n - 1).toValue,
+              recordTime = recordTime(n),
+            )(store.multiDomainAcsStore)
+          for {
+            store <- mkStore()
+            _ <- MonadUtil.sequentialTraverse(voteRequests)(
+              dummyDomain.create(_)(store.multiDomainAcsStore)
+            )
+            _ <- closeVoteRequest(store, 3)
+            _ <- closeVoteRequest(store, 4)
+            _ <- closeVoteRequest(store, 2)
+            _ <- closeVoteRequest(store, 1)
+            page1 <- store.listVoteRequestResults(
+              VoteResultsFilters(),
+              PageLimit.tryCreate(3),
+            )
+            page2 <- store.listVoteRequestResults(
+              VoteResultsFilters(),
+              PageLimit.tryCreate(3),
+              page1.nextPageToken,
+            )
+          } yield {
+            page1.resultsInPage.map(_.request.requester) shouldBe
+              Seq(1, 2, 3).map(userParty(_).toProtoPrimitive)
+            page2.resultsInPage.map(_.request.requester) shouldBe
+              Seq(4).map(userParty(_).toProtoPrimitive)
+          }
+        }
+
+        "order by coalesce(effectiveAt, completedAt) across mixed precision, tie-broken by entry_number" in {
+          val base = Instant.parse("2024-03-01T10:00:00Z")
+          val accepted = Set(1, 3, 4, 6)
+          val sortKeyAt = Map(
+            1 -> base.plusSeconds(1),
+            2 -> base.plusSeconds(2).plusMillis(500),
+            3 -> base.plusSeconds(10),
+            4 -> base.plusSeconds(10),
+            5 -> base.plusSeconds(20).plusNanos(123000),
+            6 -> base.plusSeconds(45).plusMillis(900),
+          )
+          def recordTime(n: Int) = base.plusSeconds(100L + n.toLong)
+          val voteRequests = (1 to 6).map { n =>
+            voteRequest(
+              requester = userParty(n),
+              votes = Seq(
+                new Vote(userParty(n).toProtoPrimitive, true, new Reason("", ""), Optional.empty())
+              ),
+            )
+          }
+          val results =
+            (1 to 6).map(n =>
+              if (accepted(n)) mkVoteRequestResult(voteRequests(n - 1), effectiveAt = sortKeyAt(n))
+              else mkRejectedVoteRequestResult(voteRequests(n - 1), completedAt = sortKeyAt(n))
+            )
+          def closeVoteRequest(store: ScanStore, n: Int) =
+            dummyDomain.exercise(
+              contract = dsoRules(dsoParty),
+              interfaceId = Some(DsoRules.TEMPLATE_ID_WITH_PACKAGE_ID),
+              choiceName = DsoRulesCloseVoteRequest.choice.name,
+              choiceArgument = mkCloseVoteRequest(voteRequests(n - 1).contractId),
+              exerciseResult = results(n - 1).toValue,
+              recordTime = recordTime(n),
+            )(store.multiDomainAcsStore)
+          for {
+            store <- mkStore()
+            _ <- MonadUtil.sequentialTraverse(voteRequests)(
+              dummyDomain.create(_)(store.multiDomainAcsStore)
+            )
+            _ <- closeVoteRequest(store, 3)
+            _ <- closeVoteRequest(store, 1)
+            _ <- closeVoteRequest(store, 5)
+            _ <- closeVoteRequest(store, 4)
+            _ <- closeVoteRequest(store, 2)
+            _ <- closeVoteRequest(store, 6)
+            page1 <- store.listVoteRequestResults(
+              VoteResultsFilters(),
+              PageLimit.tryCreate(3),
+            )
+            page2 <- store.listVoteRequestResults(
+              VoteResultsFilters(),
+              PageLimit.tryCreate(3),
+              page1.nextPageToken,
+            )
+          } yield {
+            page1.resultsInPage.map(_.request.requester) shouldBe
+              Seq(6, 5, 4).map(userParty(_).toProtoPrimitive)
+            page2.resultsInPage.map(_.request.requester) shouldBe
+              Seq(3, 2, 1).map(userParty(_).toProtoPrimitive)
+          }
+        }
+      }
+
+      "countVoteRequestResults" should {
+
+        "count vote results matching the filters" in {
+          val base = Instant.parse("2024-03-01T10:00:00Z")
+          val accepted = Set(1, 3, 4, 6)
+          def sortKeyAt(n: Int) = base.plusSeconds(n.toLong)
+          def recordTime(n: Int) = base.plusSeconds(100L + n.toLong)
+          val voteRequests = (1 to 6).map { n =>
+            voteRequest(
+              requester = userParty(n),
+              votes = Seq(
+                new Vote(userParty(n).toProtoPrimitive, true, new Reason("", ""), Optional.empty())
+              ),
+            )
+          }
+          val results =
+            (1 to 6).map(n =>
+              if (accepted(n)) mkVoteRequestResult(voteRequests(n - 1), effectiveAt = sortKeyAt(n))
+              else mkRejectedVoteRequestResult(voteRequests(n - 1), completedAt = sortKeyAt(n))
+            )
+          def closeVoteRequest(store: ScanStore, n: Int) =
+            dummyDomain.exercise(
+              contract = dsoRules(dsoParty),
+              interfaceId = Some(DsoRules.TEMPLATE_ID_WITH_PACKAGE_ID),
+              choiceName = DsoRulesCloseVoteRequest.choice.name,
+              choiceArgument = mkCloseVoteRequest(voteRequests(n - 1).contractId),
+              exerciseResult = results(n - 1).toValue,
+              recordTime = recordTime(n),
+            )(store.multiDomainAcsStore)
+          for {
+            store <- mkStore()
+            _ <- MonadUtil.sequentialTraverse(voteRequests)(
+              dummyDomain.create(_)(store.multiDomainAcsStore)
+            )
+            _ <- MonadUtil.sequentialTraverse(1 to 6)(closeVoteRequest(store, _))
+            total <- store.countVoteRequestResults(VoteResultsFilters())
+            acceptedCount <- store.countVoteRequestResults(
+              VoteResultsFilters(accepted = Some(true))
+            )
+            rejectedCount <- store.countVoteRequestResults(
+              VoteResultsFilters(accepted = Some(false))
+            )
+            requesterCount <- store.countVoteRequestResults(
+              VoteResultsFilters(requester = Some(userParty(1).toProtoPrimitive))
+            )
+          } yield {
+            total shouldBe 6L
+            acceptedCount shouldBe 4L
+            rejectedCount shouldBe 2L
+            requesterCount shouldBe 1L
+          }
+        }
+      }
+
+      "lookupLatestSvRewardWeightChange" should {
+
+        "return the weight of the latest accepted UpdateSvRewardWeight before the given time" in {
+          val sv = userParty(42)
+          val firstVoteAt = Instant.now().truncatedTo(ChronoUnit.MICROS)
+          val secondVoteAt = firstVoteAt.plusSeconds(10)
+          def updateWeightAction(weight: Long) = new ARC_DsoRules(
+            new SRARC_UpdateSvRewardWeight(
+              new DsoRules_UpdateSvRewardWeight(sv.toProtoPrimitive, weight)
+            )
+          )
+          val firstVote =
+            voteRequest(
+              requester = userParty(1),
+              votes = Seq.empty,
+              action = updateWeightAction(30000L),
+            )
+          val secondVote =
+            voteRequest(
+              requester = userParty(1),
+              votes = Seq.empty,
+              action = updateWeightAction(50000L),
+            )
+          for {
+            store <- mkStore()
+            noVotes <- store.lookupLatestSvRewardWeightChange(sv, None)
+            _ <- dummyDomain.create(firstVote)(store.multiDomainAcsStore)
+            _ <- dummyDomain.exercise(
+              contract = dsoRules(dsoParty),
+              interfaceId = Some(DsoRules.TEMPLATE_ID_WITH_PACKAGE_ID),
+              choiceName = DsoRulesCloseVoteRequest.choice.name,
+              mkCloseVoteRequest(firstVote.contractId),
+              mkVoteRequestResult(firstVote, effectiveAt = firstVoteAt).toValue,
+              txEffectiveAt = firstVoteAt,
+              recordTime = firstVoteAt,
+            )(store.multiDomainAcsStore)
+            _ <- dummyDomain.create(secondVote)(store.multiDomainAcsStore)
+            _ <- dummyDomain.exercise(
+              contract = dsoRules(dsoParty),
+              interfaceId = Some(DsoRules.TEMPLATE_ID_WITH_PACKAGE_ID),
+              choiceName = DsoRulesCloseVoteRequest.choice.name,
+              mkCloseVoteRequest(secondVote.contractId),
+              mkVoteRequestResult(secondVote, effectiveAt = secondVoteAt).toValue,
+              txEffectiveAt = secondVoteAt,
+              recordTime = secondVoteAt,
+            )(store.multiDomainAcsStore)
+            latest <- store.lookupLatestSvRewardWeightChange(sv, None)
+            beforeSecondVote <- store.lookupLatestSvRewardWeightChange(
+              sv,
+              Some(secondVoteAt.toString),
+            )
+            unknown <- store.lookupLatestSvRewardWeightChange(userParty(999), None)
+          } yield {
+            noVotes shouldBe None
+            latest shouldBe Some(50000L)
+            beforeSecondVote shouldBe Some(30000L)
+            unknown shouldBe None
+          }
         }
       }
 
@@ -1458,11 +1201,7 @@ abstract class ScanStoreTest
     } yield {
       store
         .listVoteRequestResults(
-          Some("AddSv"),
-          Some(true),
-          None,
-          None,
-          None,
+          VoteResultsFilters(actionName = Some("AddSv"), accepted = Some(true)),
           PageLimit.tryCreate(1),
         )
         .futureValue
@@ -1471,11 +1210,7 @@ abstract class ScanStoreTest
         .loneElement shouldBe result2
       store
         .listVoteRequestResults(
-          Some("SRARC_AddSv"),
-          Some(false),
-          None,
-          None,
-          None,
+          VoteResultsFilters(actionName = Some("SRARC_AddSv"), accepted = Some(false)),
           PageLimit.tryCreate(1),
         )
         .futureValue
@@ -1484,11 +1219,7 @@ abstract class ScanStoreTest
         .size shouldBe (0)
       store
         .listVoteRequestResults(
-          None,
-          None,
-          None,
-          None,
-          None,
+          VoteResultsFilters(),
           PageLimit.tryCreate(1),
         )
         .futureValue
@@ -1497,11 +1228,9 @@ abstract class ScanStoreTest
         .size shouldBe (1)
       store
         .listVoteRequestResults(
-          None,
-          None,
-          None,
-          Some(Instant.now().truncatedTo(ChronoUnit.MICROS).plusSeconds(3600).toString),
-          None,
+          VoteResultsFilters(effectiveFrom =
+            Some(Instant.now().truncatedTo(ChronoUnit.MICROS).plusSeconds(3600).toString)
+          ),
           PageLimit.tryCreate(1),
         )
         .futureValue
@@ -1510,11 +1239,9 @@ abstract class ScanStoreTest
         .size shouldBe (0)
       store
         .listVoteRequestResults(
-          None,
-          None,
-          None,
-          Some(Instant.now().truncatedTo(ChronoUnit.MICROS).minusSeconds(3600).toString),
-          None,
+          VoteResultsFilters(effectiveFrom =
+            Some(Instant.now().truncatedTo(ChronoUnit.MICROS).minusSeconds(3600).toString)
+          ),
           PageLimit.tryCreate(1),
         )
         .futureValue
@@ -1535,20 +1262,6 @@ abstract class ScanStoreTest
   ): Future[UpdateHistory]
 
   private lazy val user1 = userParty(1)
-  private lazy val user2 = userParty(2)
-
-  implicit class ScanStoreExt(store: ScanStore) {
-    @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
-    def listByType[T](beginAfterEventId: Option[String], sortOrder: SortOrder, limit: Int)(implicit
-        tag: ClassTag[T]
-    ): Future[Seq[T]] = {
-      store
-        .listTransactions(beginAfterEventId, sortOrder, PageLimit.tryCreate(limit))
-        .map(_.collect {
-          case c if tag.runtimeClass.isInstance(c) => c.asInstanceOf[T]
-        }.toSeq)
-    }
-  }
 }
 trait AmuletTransferUtil { self: StoreTestBase =>
   def mkInputAmulet() = {
@@ -1566,6 +1279,7 @@ trait AmuletTransferUtil { self: StoreTestBase =>
       receiver.toProtoPrimitive,
       receiverFeeRatio.bigDecimal,
       amount.bigDecimal,
+      Optional.empty(),
       Optional.empty(),
     )
 
@@ -1804,6 +1518,7 @@ trait AmuletTransferUtil { self: StoreTestBase =>
           receiver.toProtoPrimitive,
           amuletContract.payload.amount.initialAmount,
           new roundCodegen.OpenMiningRound.ContractId(openMiningRoundCid),
+          Optional.empty(),
         ).toValue,
         new AmuletRules_MintResult(
           new splice.amulet.AmuletCreateSummary[amuletCodegen.Amulet.ContractId](
@@ -1969,27 +1684,12 @@ class DbScanStoreTest
     val store = new DbScanStore(
       key = ScanStore.Key(dsoParty),
       storage,
-      // to allow aggregating from round zero without previous round aggregate
-      isFirstSv = true,
       loggerFactory,
       RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory),
-      // required to instantiate a DbScanStore, returns none not to affect this test.
-      _ =>
-        new ScanAggregatesReader() {
-          def readRoundAggregateFromDso(round: Long)(implicit
-              ec: ExecutionContext,
-              traceContext: TraceContext,
-          ): Future[Option[ScanAggregator.RoundAggregate]] = Future.successful(None)
-          def close(): Unit = ()
-        },
-      DomainMigrationInfo(
-        domainMigrationId,
-        None,
-      ),
+      domainMigrationId,
       participantId = mkParticipantId("ScanStoreTest"),
       IngestionConfig(),
       new DbScanStoreMetrics(new NoOpMetricsFactory(), loggerFactory, timeouts),
-      initialRound = 0,
       defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),
       acsStoreDescriptorUserVersion,
       txLogStoreDescriptorUserVersion,
@@ -2025,7 +1725,7 @@ class DbScanStoreTest
   ): Future[UpdateHistory] = {
     val updateHistory = new UpdateHistory(
       storage.underlying, // not under test
-      new DomainMigrationInfo(migrationId, None),
+      migrationId,
       "update_history_scan_store_test",
       mkParticipantId("whatever"),
       dsoParty,
@@ -2183,11 +1883,7 @@ class DbScanStoreTest
         // because ingestion in these store tests is simulated by directly interacting with the ingestion sink
         storeReingest
           .listVoteRequestResults(
-            Some("AddSv"),
-            Some(true),
-            None,
-            None,
-            None,
+            VoteResultsFilters(actionName = Some("AddSv"), accepted = Some(true)),
             PageLimit.tryCreate(1),
           )
           .futureValue

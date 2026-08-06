@@ -1,9 +1,9 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { clusterYamlConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/config';
+import { clusterYamlConfig } from '@canton-network/splice-pulumi-common/src/config/config';
 import { z } from 'zod';
 
-import { LogLevelSchema } from '../../common';
+import { LogLevelSchema, SplicePostgresSchema } from '../../common';
 import { K8sResourceSchema } from '../../common/src/config/configSchema';
 
 export const EnvironmentVariableSchema = z.object({
@@ -17,6 +17,10 @@ export const MultiValidatorConfigSchema = z.object({
   multiValidator: z
     .object({
       postgresPvcSize: z.string().optional(),
+      // Multi-validator needs to be migrated
+      postgres: SplicePostgresSchema.default({
+        deployment: 'legacy-helm-chart',
+      }),
       requiresOnboardingSecret: z.boolean().default(false),
       extraValidatorEnvVars: z.array(EnvironmentVariableSchema).default([]),
       extraParticipantEnvVars: z.array(EnvironmentVariableSchema).default([]),

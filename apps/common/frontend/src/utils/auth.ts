@@ -14,9 +14,7 @@ export const oidcAuthToProviderProps = (config: AuthConfig): AuthProviderProps =
     // TODO(DACH-NY/canton-network-node#16509): we don't do that for tokens that access the Ledger API server as the Ledger API server does not like the multiple audiences returned by Auth0 when also requesting the openid scope.
     const openid_scope = token_scope !== 'daml_ledger_api' ? 'openid' : null;
 
-    // We include the `offline_access` scope to tell auth0 we want refresh tokens when we first authenticate.
-    // The refresh tokens are then used to automatically retrieve new access tokens before they expire without re-authenticating.
-    const scope = [token_scope, openid_scope, 'offline_access'].filter(s => !!s).join(' ');
+    const scope = [token_scope, openid_scope].filter(s => !!s).join(' ');
 
     const extraQueryParams = { audience: token_audience };
     const redirect_uri = window.location.origin;

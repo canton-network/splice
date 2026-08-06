@@ -7,7 +7,7 @@ import cats.implicits.{catsSyntaxOptionId, showInterpolator, toTraverseOps}
 import com.digitalasset.canton.admin.api.client.data.NodeStatus
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
-import com.digitalasset.canton.topology.transaction.LsuAnnouncement
+import com.digitalasset.canton.topology.transaction.{LsuAnnouncement, TopologyChangeOp}
 import com.digitalasset.canton.topology.PhysicalSynchronizerId
 import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
@@ -109,7 +109,7 @@ class LsuTrigger(
       case NodeStatus.Failure(msg) =>
         logger.error(s"Failed to get successor $nodeName status: $msg")
         false
-      case NodeStatus.NotInitialized(_, _) => true
+      case NodeStatus.NotInitialized(_, _, _) => true
       case NodeStatus.Success(_) => false
     }
   }
@@ -192,7 +192,9 @@ class LsuTrigger(
       .listLsuAnnouncements(synchronizerId.logical)
       .map(_.filter { announcement =>
         announcement.base.validFrom
-          .isBefore(now.toInstant) && announcement.mapping.successorSynchronizerId != synchronizerId
+          .isBefore(
+            now.toInstant
+          ) && announcement.mapping.successorSynchronizerId.serial > synchronizerId.serial
       })
   }
 
@@ -209,7 +211,12 @@ class LsuTrigger(
           for {
             sequencerId <- currentSynchronizerNode.sequencerAdminConnection.getSequencerId
             hasNoSuccessor <- currentSynchronizerNode.sequencerAdminConnection
-              .lookupSequencerSuccessors(currentPsid.logical, sequencerId)
+              .lookupSequencerSuccessors(
+                announcement.successorSynchronizerId.logical,
+                sequencerId,
+                Some(announcement.successorSynchronizerId),
+                Some(TopologyChangeOp.Replace),
+              )
               .map(_.isEmpty)
             participantPsid <- participantAdminConnection
               .getPhysicalSynchronizerId(currentPsid.logical)

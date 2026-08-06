@@ -4,33 +4,35 @@ import {
   activeVersion,
   Auth0Client,
   auth0UserNameEnvVarSource,
-  DecentralizedSynchronizerUpgradeConfig,
   exactNamespace,
   imagePullSecretWithNonDefaultServiceAccount,
   installLedgerApiUserSecret,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+  spliceConfig,
+} from '@canton-network/splice-pulumi-common';
 import {
   configForSv,
-  installParticipant,
   StaticSvConfig,
   svConfigs,
   svRunbookConfig,
-} from '@lfdecentralizedtrust/splice-pulumi-common-sv';
-import { StackReferences } from '@lfdecentralizedtrust/splice-pulumi-common/src/stackReferences';
+} from '@canton-network/splice-pulumi-common-sv';
+import { installSvNodeStandalone } from '@canton-network/splice-pulumi-common-sv/src/sv';
+
+import { installParticipant } from './participant';
 
 export async function installNode(sv: string, auth0Client: Auth0Client): Promise<void> {
+  const splitSvDeploymentEnabled =
+    spliceConfig.configuration.synchronizerMigration.splitSvDeploymentEnabled;
   const staticConfig = findStaticConfigOrFail(sv);
   const config = configForSv(staticConfig.nodeName);
-  const xns = exactNamespace(staticConfig.nodeName, true, true);
+  const xns = exactNamespace(staticConfig.nodeName, true, !splitSvDeploymentEnabled);
   const serviceAccountName = 'sv';
   const imagePullDeps = imagePullSecretWithNonDefaultServiceAccount(xns, serviceAccountName);
   const auth0Config = auth0Client.getCfg();
   const ledgerApiUserSecret = installLedgerApiUserSecret(auth0Client, xns, 'sv', 'sv');
   const ledgerApiUserSecretSource = auth0UserNameEnvVarSource('sv', true);
-  const participantMigrationInfo = DecentralizedSynchronizerUpgradeConfig.active
-    .migrateParticipantsFromSvCantonToSv
-    ? await getParticipantMigrationInfo(sv)
-    : undefined;
+  if (splitSvDeploymentEnabled && staticConfig.nodeName !== svRunbookConfig.nodeName) {
+    await installSvNodeStandalone(xns, staticConfig, config, auth0Client);
+  }
   await installParticipant(
     {
       xns,
@@ -41,8 +43,6 @@ export async function installNode(sv: string, auth0Client: Auth0Client): Promise
       disableProtection: staticConfig.nodeName === svRunbookConfig.nodeName,
       participantAdminUserNameFrom: ledgerApiUserSecretSource,
       imagePullServiceAccountName: serviceAccountName,
-      migratingDatabaseInstanceName: participantMigrationInfo?.participantDatabaseId,
-      migratingDatabaseSecretName: participantMigrationInfo?.participantDatabaseSecretName,
     },
     { dependsOn: [...imagePullDeps, ledgerApiUserSecret] }
   );
@@ -57,19 +57,4 @@ function findStaticConfigOrFail(sv: string): StaticSvConfig {
   } else {
     return svConfig;
   }
-}
-
-async function getParticipantMigrationInfo(
-  sv: string
-): Promise<{ participantDatabaseId: string; participantDatabaseSecretName: string }> {
-  const svCantonRef = StackReferences.svCanton(
-    sv,
-    DecentralizedSynchronizerUpgradeConfig.active.id
-  );
-  return {
-    participantDatabaseId: await svCantonRef.requireOutputValue('participantDatabaseId'),
-    participantDatabaseSecretName: await svCantonRef.requireOutputValue(
-      'participantDatabaseSecretName'
-    ),
-  };
 }

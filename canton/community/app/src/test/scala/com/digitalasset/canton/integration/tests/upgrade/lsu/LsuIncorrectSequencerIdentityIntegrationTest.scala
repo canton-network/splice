@@ -112,18 +112,18 @@ final class LsuIncorrectSequencerIdentityIntegrationTest extends LsuBase {
           oldSynchronizerNodes.all.stop()
         },
         (
+          LogEntryOptionality.Required,
+          _.warningMessage should (include(s"Unable to perform handshake with ${fixture.newPsid}")
+            and (include(unexpectedSequencerError(sequencer1, sequencer2))
+              or include(unexpectedSequencerError(sequencer2, sequencer1)))),
+        ),
+        (
           LogEntryOptionality.OptionalMany,
           _.warningMessage should include(unexpectedSequencerError(sequencer1, sequencer2)),
         ),
         (
           LogEntryOptionality.OptionalMany,
           _.warningMessage should include(unexpectedSequencerError(sequencer2, sequencer1)),
-        ),
-        (
-          LogEntryOptionality.Required,
-          _.errorMessage should (include(s"Unable to perform handshake with ${fixture.newPsid}")
-            and (include(unexpectedSequencerError(sequencer1, sequencer2))
-              or include(unexpectedSequencerError(sequencer2, sequencer1)))),
         ),
         (
           LogEntryOptionality.Required,
@@ -134,6 +134,20 @@ final class LsuIncorrectSequencerIdentityIntegrationTest extends LsuBase {
         (
           LogEntryOptionality.OptionalMany,
           _.shouldBeCantonErrorCode(SequencerError.NotAtUpgradeTimeOrBeyond),
+        ),
+        // sequencer1 fails to contact/handshake its successor
+        (
+          LogEntryOptionality.Required,
+          _.warningMessage should include(
+            s"Error when contacting successor: expecting sequencer id to be ${sequencer1.id} but found ${sequencer2.id}"
+          ),
+        ),
+        // sequencer2 fails to contact/handshake its successor
+        (
+          LogEntryOptionality.Required,
+          _.warningMessage should include(
+            s"Error when contacting successor: expecting sequencer id to be ${sequencer2.id} but found ${sequencer1.id}"
+          ),
         ),
       )
     }
@@ -212,7 +226,7 @@ final class LsuSuccessorSequencerIsPredecessorIntegrationTest extends LsuBase {
         s"Invalid synchronizer: expected Some(${fixture.newPsid}), got ${fixture.currentPsid}"
 
       def failedHandshakeLogLine(entry: LogEntry, p: ParticipantReference): Assertion = {
-        entry.errorMessage should (include(
+        entry.warningMessage should (include(
           s"Unable to perform handshake with ${fixture.newPsid}"
         ) and include(invalidSynchronizerError))
 
@@ -287,6 +301,13 @@ final class LsuSuccessorSequencerIsPredecessorIntegrationTest extends LsuBase {
         (
           LogEntryOptionality.OptionalMany,
           _.shouldBeCantonErrorCode(SequencerError.NotAtUpgradeTimeOrBeyond),
+        ),
+        // failed contact between sequencers and their successor
+        (
+          LogEntryOptionality.OptionalMany,
+          _.warningMessage should include(
+            s"Error when contacting successor: expecting psid to be ${fixture.newPsid} but found ${fixture.currentPsid}"
+          ),
         ),
       )
     }

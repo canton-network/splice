@@ -68,7 +68,7 @@ object HttpAdminService {
       .map { n =>
         Future.successful(NodeStatus.Success(SpliceStatus.fromNodeStatus(n.status)))
       }
-      .getOrElse(Future.successful(NodeStatus.NotInitialized(active = false, None)))
+      .getOrElse(Future.successful(NodeStatus.NotInitialized(active = false, None, None)))
     private val logger = loggerFactory.getTracedLogger(this.getClass)
     private val adminHandler = new HttpAdminHandler(
       status(),

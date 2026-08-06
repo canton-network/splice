@@ -6,7 +6,6 @@ import com.daml.ledger.javaapi.data.codegen.DamlRecord
 import com.digitalasset.daml.lf.data.Time.Timestamp
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.AppRewardCoupon
 import org.lfdecentralizedtrust.splice.environment.{DarResources, RetryProvider}
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.environment.ledger.api.TreeUpdateOrOffsetCheckpoint
 import org.lfdecentralizedtrust.splice.store.StoreTestBase.testTxLogConfig
 import org.lfdecentralizedtrust.splice.store.{
@@ -49,7 +48,7 @@ class DbTcsStoreTest extends StoreTestBase with SplicePostgresTest with AcsJdbcT
       loggerFactory,
       contractFilter(synchronizerId),
       testTxLogConfig,
-      DomainMigrationInfo(0L, None),
+      0L,
       RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory),
       IngestionConfig(),
       defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),
@@ -147,8 +146,17 @@ class DbTcsStoreTest extends StoreTestBase with SplicePostgresTest with AcsJdbcT
         resultAt300 <- store.listAllContractsAsOf(
           AppRewardCoupon.COMPANION,
           CantonTimestamp.ofEpochSecond(300),
+          limit = Some(2),
         )
         _ = resultAt300.map(_.contract).toSet shouldBe Set(coupon2, coupon3)
+
+        resultAt300Limit1 <- store.listAllContractsAsOf(
+          AppRewardCoupon.COMPANION,
+          CantonTimestamp.ofEpochSecond(300),
+          limit = Some(1),
+        )
+        // The limit does not guarantee order, so we only check size
+        _ = resultAt300Limit1.size shouldBe 1
 
         resultAt400 <- store.listAllContractsAsOf(
           AppRewardCoupon.COMPANION,

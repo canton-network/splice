@@ -12,6 +12,9 @@ export class DecentralizedSynchronizerMigrationConfig {
   active: MigrationInfo;
   // if set then the canton components associated with this migration id are kept running, does not impact the CN apps
   legacy?: MigrationInfo;
+  // additional legacy synchronizers that are kept around alongside `legacy`, e.g. when more than
+  // one legacy synchronizer must be kept alive at a given point during an LSU.
+  additionalLegacy: MigrationInfo[];
   // the next migration id that we are preparing
   // this is used to prepare the canton components for the upgrade
   upgrade?: MigrationInfo;
@@ -19,36 +22,25 @@ export class DecentralizedSynchronizerMigrationConfig {
   // used to configure  the CN apps for the migration
   migratingFromActiveId?: DomainMigrationIndex;
   activeDatabaseId?: DomainMigrationIndex;
-  lsuEnabled: boolean;
-  frozenMigrationId?: number;
+  frozenMigrationId: number;
   public archived: MigrationInfo[];
 
   constructor(config: Config) {
     const synchronizerMigration = config.synchronizerMigration;
     this.active = synchronizerMigration.active;
     this.legacy = synchronizerMigration.legacy;
+    this.additionalLegacy = synchronizerMigration.additionalLegacy || [];
     this.upgrade = synchronizerMigration.upgrade;
     this.migratingFromActiveId = synchronizerMigration.active.migratingFrom;
     this.activeDatabaseId = synchronizerMigration.activeDatabaseId;
     this.archived = synchronizerMigration.archived || [];
-    this.lsuEnabled = synchronizerMigration.lsuEnabled;
     this.frozenMigrationId = synchronizerMigration.frozenMigrationId;
-    if (this.lsuEnabled && this.frozenMigrationId == undefined) {
-      throw new Error('frozen migration must be defined when LSU is enabled');
-    }
-    if (
-      (this.legacy?.sequencer.enableBftSequencer ||
-        this.active.sequencer.enableBftSequencer ||
-        this.upgrade?.sequencer.enableBftSequencer) &&
-      !this.lsuEnabled
-    ) {
-      throw new Error('LSU must be enabled when using DABFT');
-    }
   }
 
   runningMigrations(): MigrationInfo[] {
     return [this.active]
       .concat(this.legacy ? [this.legacy] : [])
+      .concat(this.additionalLegacy)
       .concat(this.upgrade ? [this.upgrade] : []);
   }
 
@@ -60,35 +52,6 @@ export class DecentralizedSynchronizerMigrationConfig {
     return this.runningMigrations().some(info => info.id == id);
   }
 
-  isRunningMigration(): boolean {
-    return this.migratingFromActiveId != undefined && this.migratingFromActiveId != this.active.id;
-  }
-
-  migratingNodeConfig(): {
-    migration: {
-      id: DomainMigrationIndex;
-      migrating: boolean;
-      legacyId?: DomainMigrationIndex;
-    };
-  } {
-    if (this.lsuEnabled) {
-      return {
-        migration: {
-          id: this.frozenMigrationId!,
-          migrating: false,
-        },
-      };
-    } else {
-      return {
-        migration: {
-          id: this.active.id,
-          migrating: this.isRunningMigration(),
-          legacyId: this.legacy?.id,
-        },
-      };
-    }
-  }
-
   get allMigrations(): MigrationInfo[] {
     return this.runningMigrations().concat(this.archived);
   }
@@ -98,7 +61,7 @@ export class DecentralizedSynchronizerMigrationConfig {
   }
 
   get activeMigrationId(): DomainMigrationIndex {
-    return this.lsuEnabled ? this.frozenMigrationId! : this.active.id;
+    return this.frozenMigrationId;
   }
 }
 

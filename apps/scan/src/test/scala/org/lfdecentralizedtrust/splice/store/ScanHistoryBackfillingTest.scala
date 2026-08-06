@@ -22,7 +22,7 @@ class ScanHistoryBackfillingTest extends UpdateHistoryTestBase {
   "ScanHistoryBackfilling" should {
     "backfill from one complete history" in {
       for {
-        testData <- setup()
+        testData <- setupTestData()
         // Backfill
 
         backfillingTerminated <- backfillAll(
@@ -93,7 +93,7 @@ class ScanHistoryBackfillingTest extends UpdateHistoryTestBase {
 
     "backfill from one incomplete history" in {
       for {
-        testData <- setup()
+        testData <- setupTestData()
 
         // Backfill part 1 - at this point, the destination history has only replicated up to record time 5
         backfillingTerminated1 <- backfillAll(
@@ -153,7 +153,7 @@ class ScanHistoryBackfillingTest extends UpdateHistoryTestBase {
       destinationHistory: UpdateHistory,
   )
 
-  private def setup(): Future[TestData] = {
+  private def setupTestData(): Future[TestData] = {
     val storeA0 = mkStore(domainMigrationId = 0, participantId = participant1)
     val storeA1 = mkStore(domainMigrationId = 1, participantId = participant1)
     val storeA2 = mkStore(domainMigrationId = 2, participantId = participant1)
@@ -267,7 +267,7 @@ class ScanHistoryBackfillingTest extends UpdateHistoryTestBase {
     val backfiller = new ScanHistoryBackfilling(
       connection = connection,
       destinationHistory = destination.destinationHistory,
-      currentMigrationId = destination.domainMigrationInfo.currentMigrationId,
+      currentMigrationId = destination.domainMigrationId,
       batchSize = 1,
       loggerFactory = loggerFactory,
     )

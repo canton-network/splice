@@ -29,9 +29,11 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.ansentrycont
   ANSRARC_CollectInitialEntryPayment,
   ANSRARC_RejectEntryInitialPayment,
 }
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.rewardaccountingv2.CalculateRewardsV2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.amuletrules_actionrequiringconfirmation.{
   CRARC_MiningRound_Archive,
   CRARC_MiningRound_StartIssuing,
+  CRARC_StartProcessingRewardsV2,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.*
 import org.lfdecentralizedtrust.splice.config.Thresholds
@@ -200,6 +202,15 @@ class ExecuteConfirmedActionTrigger(
               .lookupContractByIdOnDomain(ClosedMiningRound.COMPANION)(
                 confirmation.domain,
                 closedRoundCid,
+              )
+              .map(_.isEmpty)
+          case startProcessingAction: CRARC_StartProcessingRewardsV2 =>
+            val calculateRewardsCid =
+              startProcessingAction.amuletRules_StartProcessingRewardsV2Value.calculateRewardsCid
+            store.multiDomainAcsStore
+              .lookupContractByIdOnDomain(CalculateRewardsV2.COMPANION)(
+                confirmation.domain,
+                calculateRewardsCid,
               )
               .map(_.isEmpty)
           case action =>

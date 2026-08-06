@@ -4,7 +4,6 @@
 package com.digitalasset.canton.auth
 
 import com.daml.jwt.JwtTimestampLeeway
-import com.daml.tracing.Telemetry
 import com.digitalasset.canton.concurrent.DirectExecutionContext
 import com.digitalasset.canton.config.{
   AdminTokenConfig,
@@ -19,12 +18,12 @@ object GrpcAuthInterceptorFactory {
   def createInterceptor(
       loggerFactory: NamedLoggerFactory,
       apiLoggingConfig: ApiLoggingConfig,
-      telemetry: Telemetry,
       adminTokenDispenser: CantonAdminTokenDispenser,
       authServiceConfigs: Seq[AuthServiceConfig],
       jwtTimestampLeeway: Option[JwtTimestampLeeway],
       adminTokenConfig: AdminTokenConfig,
       jwksCacheConfig: JwksCacheConfig,
+      warnOnJwtScopeUsage: Boolean,
   ): ServerInterceptor = {
     val authServices =
       if (authServiceConfigs.isEmpty)
@@ -36,6 +35,7 @@ object GrpcAuthInterceptorFactory {
               jwksCacheConfig,
               jwtTimestampLeeway,
               loggerFactory,
+              warnOnJwtScopeUsage,
             )
           )
     val genericInterceptor = new AuthInterceptor(
@@ -48,7 +48,6 @@ object GrpcAuthInterceptorFactory {
     )
     new GrpcAuthInterceptor(
       genericInterceptor,
-      telemetry,
       loggerFactory,
       apiLoggingConfig,
       DirectExecutionContext(

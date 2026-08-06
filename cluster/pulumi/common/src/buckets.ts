@@ -3,7 +3,7 @@
 import * as gcp from '@pulumi/gcp';
 import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
-import { ExactNamespace } from '@lfdecentralizedtrust/splice-pulumi-common';
+import { ExactNamespace } from '@canton-network/splice-pulumi-common';
 
 export type GcpBucket = {
   projectId: string;

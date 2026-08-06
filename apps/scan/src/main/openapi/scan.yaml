@@ -172,6 +172,21 @@ paths:
               schema:
                 "$ref": "#/components/schemas/GetRollForwardLsuResponse"
 
+  /v0/lsu:
+    get:
+      tags: [internal, scan]
+      x-jvm-package: scan
+      operationId: "getLsu"
+      description: |
+        Retrieve information on the next logical synchronizer upgrade (LSU)
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/GetLsuResponse"
+
   /v0/active-synchronizer-serial:
     get:
       tags: [internal, scan]
@@ -1021,36 +1036,6 @@ paths:
               schema:
                 "$ref": "#/components/schemas/LookupFeaturedAppRightResponse"
 
-  /v0/top-validators-by-validator-faucets:
-    get:
-      tags: [internal, scan]
-      x-jvm-package: scan
-      operationId: "getTopValidatorsByValidatorFaucets"
-      description: |
-        Get a list of top validators by number of rounds in which they collected
-        faucets, and basis statistics on their round collection history
-      parameters:
-        - in: query
-          name: limit
-          description: |
-            Maximum number of validator records that may be returned in the
-            response
-          required: true
-          schema:
-            type: integer
-            format: int32
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/GetTopValidatorsByValidatorFaucetsResponse"
-        "400":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
-        "404":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
-
   /v0/transfer-preapprovals/by-party/{party}:
     get:
       tags: [internal, scan]
@@ -1142,6 +1127,21 @@ paths:
                 "$ref": "#/components/schemas/MigrationSchedule"
         "404":
           description: "No migration scheduled"
+
+  /v0/migrations/last:
+    get:
+      tags: [internal, scan]
+      x-jvm-package: scan
+      operationId: "getMigrationId"
+      description: |
+        Returns the last migration id that was configured for the synchronizer upgrades.
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/GetMigrationIdResponse"
 
   # TODO(DACH-NY/canton-network-internal#418) Move to SV app
   /v0/synchronizer-identities/{domain_id_prefix}:
@@ -1296,6 +1296,45 @@ paths:
               schema:
                 "$ref": "../../../../common/src/main/openapi/common-internal.yaml#/components/schemas/ListDsoRulesVoteResultsResponse"
 
+  /v0/admin/sv/voteresults/count:
+    post:
+      tags: [internal, scan]
+      x-jvm-package: scan
+      operationId: "countVoteRequestResults"
+      description: Count all vote results matching the request filters.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "../../../../common/src/main/openapi/common-internal.yaml#/components/schemas/CountVoteResultsRequest"
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                "$ref": "../../../../common/src/main/openapi/common-internal.yaml#/components/schemas/CountVoteResultsResponse"
+
+  /v0/admin/sv/previous-sv-reward-weight:
+    post:
+      tags: [internal, scan]
+      x-jvm-package: scan
+      operationId: "getPreviousSvRewardWeight"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "../../../../common/src/main/openapi/common-internal.yaml#/components/schemas/PreviousSvRewardWeightRequest"
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                "$ref": "../../../../common/src/main/openapi/common-internal.yaml#/components/schemas/PreviousSvRewardWeightResponse"
+
   /v0/backfilling/migration-info:
     post:
       tags: [internal, scan]
@@ -1384,77 +1423,6 @@ paths:
               schema:
                 "$ref": "#/components/schemas/GetAcsSnapshotResponse"
 
-  /v0/aggregated-rounds:
-    get:
-      deprecated: true
-      tags: [deprecated]
-      x-jvm-package: scan
-      operationId: "getAggregatedRounds"
-      description: "**Deprecated**. Retrieve the current earliest and latest rounds aggregated for this Scan."
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/GetAggregatedRoundsResponse"
-        "404":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
-
-  /v0/round-totals:
-    post:
-      deprecated: true
-      tags: [deprecated]
-      x-jvm-package: scan
-      operationId: "listRoundTotals"
-      description: "**Deprecated**. List Amulet statistics for up to 200 closed rounds."
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              "$ref": "#/components/schemas/ListRoundTotalsRequest"
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ListRoundTotalsResponse"
-        "400":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
-        "404":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
-        "500":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
-
-  /v0/round-party-totals:
-    post:
-      deprecated: true
-      tags: [deprecated]
-      x-jvm-package: scan
-      operationId: "listRoundPartyTotals"
-      description: "**Deprecated**. Retrieve per-party Amulet statistics for up to 50 closed rounds."
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              "$ref": "#/components/schemas/ListRoundPartyTotalsRequest"
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ListRoundPartyTotalsResponse"
-        "400":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
-        "404":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
-        "500":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
-
   /v0/amulet-config-for-round:
     get:
       deprecated: true
@@ -1479,207 +1447,6 @@ paths:
                 "$ref": "#/components/schemas/GetAmuletConfigForRoundResponse"
         "404":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
-
-  /v0/round-of-latest-data:
-    get:
-      deprecated: true
-      tags: [deprecated, scan]
-      x-jvm-package: scan
-      operationId: "getRoundOfLatestData"
-      description: |
-        **Deprecated**. Get the latest round number for which aggregated data is available and
-        the ledger effective time at which the round was closed.
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/GetRoundOfLatestDataResponse"
-        "404":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
-
-  /v0/rewards-collected:
-    get:
-      deprecated: true
-      tags: [deprecated, scan]
-      x-jvm-package: scan
-      operationId: "getRewardsCollected"
-      description: "**Deprecated**. Get the total rewards collected ever"
-      parameters:
-        - in: query
-          name: round
-          required: false
-          schema:
-            type: integer
-            format: int64
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/GetRewardsCollectedResponse"
-        "404":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
-
-  /v0/top-providers-by-app-rewards:
-    get:
-      deprecated: true
-      tags: [deprecated, scan]
-      x-jvm-package: scan
-      operationId: "getTopProvidersByAppRewards"
-      description: |
-        **Deprecated**. Get a list of top-earning app providers, and the total earned app
-        rewards for each
-      parameters:
-        - in: query
-          name: round
-          required: true
-          schema:
-            type: integer
-            format: int64
-        - in: query
-          name: limit
-          required: true
-          schema:
-            type: integer
-            format: int32
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/GetTopProvidersByAppRewardsResponse"
-        "400":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
-        "404":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
-
-  /v0/top-validators-by-validator-rewards:
-    get:
-      deprecated: true
-      tags: [deprecated, scan]
-      x-jvm-package: scan
-      operationId: "getTopValidatorsByValidatorRewards"
-      description: |
-        **Deprecated**. Get a list of top-earning validators, and the total earned validator
-        rewards for each
-      parameters:
-        - in: query
-          name: round
-          required: true
-          schema:
-            type: integer
-            format: int64
-        - in: query
-          name: limit
-          required: true
-          schema:
-            type: integer
-            format: int32
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/GetTopValidatorsByValidatorRewardsResponse"
-        "400":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
-        "404":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
-
-  /v0/top-validators-by-purchased-traffic:
-    get:
-      deprecated: true
-      tags: [deprecated, scan]
-      x-jvm-package: scan
-      operationId: "getTopValidatorsByPurchasedTraffic"
-      description: |
-        **Deprecated**. Get a list of validators and their domain fees spends, sorted by the
-        amount of extra traffic purchased
-      parameters:
-        - in: query
-          name: round
-          required: true
-          schema:
-            type: integer
-            format: int64
-        - in: query
-          name: limit
-          required: true
-          schema:
-            type: integer
-            format: int32
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/GetTopValidatorsByPurchasedTrafficResponse"
-        "400":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
-        "404":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
-
-  /v0/activities:
-    post:
-      deprecated: true
-      tags: [deprecated, scan]
-      x-jvm-package: scan
-      operationId: "listActivity"
-      description: |
-        **Deprecated**. Lists activities in descending order, paged, optionally starting after a provided event id.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              "$ref": "#/components/schemas/ListActivityRequest"
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ListActivityResponse"
-        "404":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
-        "500":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
-
-  /v0/transactions:
-    post:
-      deprecated: true
-      tags: [deprecated]
-      x-jvm-package: scan
-      operationId: "listTransactionHistory"
-      description: |
-        **Deprecated with known bugs that will not be fixed, use /v2/updates instead**.
-
-        Lists transactions, by default in ascending order, paged, from ledger begin or optionally starting after a provided event id.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              "$ref": "#/components/schemas/TransactionHistoryRequest"
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/TransactionHistoryResponse"
-        "400":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
-        "404":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
-        "500":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
 
   /v0/updates:
     post:
@@ -1859,7 +1626,7 @@ paths:
         "500":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
 
-  /v0/reward-accounting-process/rounds/earliest-available:
+  /v0/internal/reward-accounting-process/rounds/earliest-available:
     get:
       tags: [internal, scan]
       x-jvm-package: scan
@@ -1878,7 +1645,7 @@ paths:
         "404":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
 
-  /v0/reward-accounting-process/rounds/{round_number}/activity-totals:
+  /v0/internal/reward-accounting-process/rounds/{round_number}/activity-totals:
     get:
       tags: [internal, scan]
       x-jvm-package: scan
@@ -1901,10 +1668,8 @@ paths:
             application/json:
               schema:
                 "$ref": "#/components/schemas/GetRewardAccountingActivityTotalsResponse"
-        "404":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
 
-  /v0/reward-accounting-process/rounds/{round_number}/root-hash:
+  /v0/internal/reward-accounting-process/rounds/{round_number}/root-hash:
     get:
       tags: [internal, scan]
       x-jvm-package: scan
@@ -1926,10 +1691,8 @@ paths:
             application/json:
               schema:
                 "$ref": "#/components/schemas/GetRewardAccountingRootHashResponse"
-        "404":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
 
-  /v0/reward-accounting-process/rounds/{round_number}/batches/{batch_hash}:
+  /v0/internal/reward-accounting-process/rounds/{round_number}/batches/{batch_hash}:
     get:
       tags: [internal, scan]
       x-jvm-package: scan
@@ -2214,22 +1977,6 @@ components:
           type: string
         rate:
           type: string
-    GetRoundOfLatestDataResponse:
-      type: object
-      required: ["round", "effectiveAt"]
-      properties:
-        round:
-          type: integer
-          format: int64
-        effectiveAt:
-          type: string
-          format: date-time
-    GetRewardsCollectedResponse:
-      type: object
-      required: ["amount"]
-      properties:
-        amount:
-          type: string
     GetValidatorTrafficBalanceResponse:
       type: object
       required: ["remainingBalance", "totalPurchased"]
@@ -2246,49 +1993,6 @@ components:
       properties:
         approved:
           type: boolean
-    GetTopProvidersByAppRewardsResponse:
-      type: object
-      required: ["providersAndRewards"]
-      properties:
-        providersAndRewards:
-          type: array
-          items:
-            $ref: "#/components/schemas/PartyAndRewards"
-    GetTopValidatorsByValidatorRewardsResponse:
-      type: object
-      required: ["validatorsAndRewards"]
-      properties:
-        validatorsAndRewards:
-          type: array
-          items:
-            $ref: "#/components/schemas/PartyAndRewards"
-    PartyAndRewards:
-      type: object
-      required: ["provider", "rewards"]
-      properties:
-        provider:
-          type: string
-        rewards:
-          type: string
-    GetTopValidatorsByValidatorFaucetsResponse:
-      type: object
-      required: ["validatorsByReceivedFaucets"]
-      properties:
-        validatorsByReceivedFaucets:
-          description: |
-            Up to `limit` validators, sorted greatest number of rounds
-            collected first
-          type: array
-          items:
-            $ref: "#/components/schemas/ValidatorReceivedFaucets"
-    GetTopValidatorsByPurchasedTrafficResponse:
-      type: object
-      required: ["validatorsByPurchasedTraffic"]
-      properties:
-        validatorsByPurchasedTraffic:
-          type: array
-          items:
-            $ref: "#/components/schemas/ValidatorPurchasedTraffic"
     ValidatorPurchasedTraffic:
       type: object
       required:
@@ -2407,6 +2111,30 @@ components:
           type: string
         successorPhysicalSynchronizerId:
           type: string
+    GetLsuResponse:
+      type: object
+      properties:
+        lsu:
+          description: Info on the next LSU
+          "$ref": "#/components/schemas/Lsu"
+    Lsu:
+      type: object
+      required:
+        - topologyFreezeTime
+        - upgradeTime
+        - successorPhysicalSynchronizerId
+      properties:
+        topologyFreezeTime:
+          description: The time when topology freeze starts
+          type: string
+          format: date-time
+        upgradeTime:
+          description: The time at which to upgrade
+          type: string
+          format: date-time
+        successorPhysicalSynchronizerId:
+          description: The successor physical synchronizer ID
+          type: string
     GetActivePhysicalSynchronizerSerialResponse:
       type: object
       required: ["serial"]
@@ -2447,97 +2175,6 @@ components:
         svName:
           description: The sequencer's operating SV name.
           type: string
-    TransactionHistoryRequest:
-      type: object
-      required:
-        - page_size
-      properties:
-        page_end_event_id:
-          type: string
-          description: |
-            Note that all transactions carry some monotonically-increasing event_id.
-            Omit this page_end_event_id to start reading the first page, from the beginning or the end of the ledger, depending on the sort_order column.
-            A subsequent request can fill the page_end_event_id with the last event_id of the TransactionHistoryResponse to continue reading in the same sort_order.
-            The transaction with event_id == page_end_event_id will be skipped in the next response, making it possible to continuously read pages in the same sort_order.
-        sort_order:
-          description: |
-            Sort order for the transactions. For ascending order, from beginning to the end of the ledger, use "asc".
-            For descending order, from end to beginning of the ledger, use "desc".
-            "asc" is used if the sort_order is omitted.
-          type: string
-          enum:
-            - "asc"
-            - "desc"
-        page_size:
-          description: |
-            The maximum number of transactions returned for this request.
-          type: integer
-          format: int64
-    TransactionHistoryResponse:
-      type: object
-      required:
-        - transactions
-      properties:
-        transactions:
-          type: array
-          items:
-            $ref: "#/components/schemas/TransactionHistoryResponseItem"
-    TransactionHistoryResponseItem:
-      type: object
-      required:
-        - transaction_type
-        - event_id
-        - date
-        - domain_id
-      properties:
-        transaction_type:
-          description: |
-            Describes the type of activity that occurred.
-            Determines if the data for the transaction should be read
-            from the `transfer`, `mint`, or `tap` property.
-          type: string
-          enum:
-            - "transfer"
-            - "mint"
-            - "devnet_tap"
-            - "abort_transfer_instruction"
-        event_id:
-          description: |
-            The event id.
-          type: string
-        offset:
-          description: |
-            The ledger offset of the event.
-            Note that this field may not be the same across nodes, and therefore should not be compared between SVs.
-          type: string
-        date:
-          description: |
-            The effective date of the event.
-          type: string
-          format: date-time
-        domain_id:
-          description: |
-            The id of the domain through which this transaction was sequenced.
-          type: string
-        round:
-          description: |
-            The round for which this transaction was registered.
-          type: integer
-          format: int64
-        transfer:
-          description: |
-            A (batch) transfer from sender to receivers.
-          $ref: "#/components/schemas/Transfer"
-        mint:
-          description: |
-            The DSO mints amulet for the cases where the DSO rules allow for that.
-          $ref: "#/components/schemas/AmuletAmount"
-        tap:
-          description: |
-            A tap creates a Amulet, only used for development purposes, and enabled only on DevNet.
-          $ref: "#/components/schemas/AmuletAmount"
-        abort_transfer_instruction:
-          $ref: "#/components/schemas/AbortTransferInstruction"
     UpdateHistoryRequestAfter:
       type: object
       required:
@@ -3494,86 +3131,6 @@ components:
             `total_unlocked_coin` + `total_locked_coin`.
           type: string
 
-    ListActivityRequest:
-      type: object
-      required:
-        - page_size
-      properties:
-        begin_after_id:
-          type: string
-          description: |
-            Minimal event_id for returned activities.
-            Note that all activities carry some monotonically-increasing event_id. begin_after_id sets the minimum value for event_id's for the query.
-        page_size:
-          description: |
-            The maximum number of activity items returned for this request.
-          type: integer
-          format: int64
-    ListActivityResponse:
-      type: object
-      required:
-        - activities
-      properties:
-        activities:
-          type: array
-          items:
-            $ref: "#/components/schemas/ListActivityResponseItem"
-    ListActivityResponseItem:
-      type: object
-      required:
-        - activity_type
-        - event_id
-        - date
-        - domain_id
-      properties:
-        activity_type:
-          description: |
-            Describes the type of activity that occurred.
-            Determines if the data for the activity should be read
-            from the `transfer`, `mint`, or `tap` property.
-          type: string
-          enum:
-            - "transfer"
-            - "mint"
-            - "devnet_tap"
-            - "abort_transfer_instruction"
-        event_id:
-          description: |
-            The event id.
-          type: string
-        offset:
-          description: |
-            The ledger offset of the event.
-            Note that this field may not be the same across nodes, and therefore should not be compared between SVs.
-          type: string
-        date:
-          description: |
-            The effective date of the event.
-          type: string
-          format: date-time
-        domain_id:
-          description: |
-            The id of the domain through which this transaction was sequenced.
-          type: string
-        round:
-          description: |
-            The round for which this transaction was registered.
-          type: integer
-          format: int64
-        transfer:
-          description: |
-            A (batch) transfer from sender to receivers.
-          $ref: "#/components/schemas/Transfer"
-        mint:
-          description: |
-            The DSO mints amulet for the cases where the DSO rules allow for that.
-          $ref: "#/components/schemas/AmuletAmount"
-        tap:
-          description: |
-            A tap creates a Amulet, only used for development purposes, and enabled only on DevNet.
-          $ref: "#/components/schemas/AmuletAmount"
-        abort_transfer_instruction:
-          $ref: "#/components/schemas/AbortTransferInstruction"
     Transfer:
       description: |
         A transfer between one sender and possibly many receivers
@@ -3883,146 +3440,6 @@ components:
             special entries provided by the DSO.
           type: string
           format: date-time
-    GetAggregatedRoundsResponse:
-      type: object
-      required: ["start", "end"]
-      properties:
-        start:
-          type: integer
-          format: int64
-        end:
-          type: integer
-          format: int64
-    ListRoundTotalsRequest:
-      type: object
-      required:
-        - start_round
-        - end_round
-      properties:
-        start_round:
-          type: integer
-          format: int64
-        end_round:
-          type: integer
-          format: int64
-    ListRoundPartyTotalsRequest:
-      type: object
-      required:
-        - start_round
-        - end_round
-      properties:
-        start_round:
-          type: integer
-          format: int64
-        end_round:
-          type: integer
-          format: int64
-    ListRoundTotalsResponse:
-      type: object
-      required: ["entries"]
-      properties:
-        entries:
-          type: array
-          items:
-            "$ref": "#/components/schemas/RoundTotals"
-    ListRoundPartyTotalsResponse:
-      type: object
-      required: ["entries"]
-      properties:
-        entries:
-          type: array
-          items:
-            "$ref": "#/components/schemas/RoundPartyTotals"
-    RoundPartyTotals:
-      type: object
-      required:
-        - "closed_round"
-        - "party"
-        - "app_rewards"
-        - "validator_rewards"
-        - "traffic_purchased"
-        - "traffic_purchased_cc_spent"
-        - "traffic_num_purchases"
-        - "cumulative_app_rewards"
-        - "cumulative_validator_rewards"
-        - "cumulative_change_to_initial_amount_as_of_round_zero"
-        - "cumulative_change_to_holding_fees_rate"
-        - "cumulative_traffic_purchased"
-        - "cumulative_traffic_purchased_cc_spent"
-        - "cumulative_traffic_num_purchases"
-      properties:
-        closed_round:
-          type: integer
-          format: int64
-        party:
-          type: string
-        app_rewards:
-          type: string
-        validator_rewards:
-          type: string
-        traffic_purchased:
-          type: integer
-          format: int64
-        traffic_purchased_cc_spent:
-          type: string
-        traffic_num_purchases:
-          type: integer
-          format: int64
-        cumulative_app_rewards:
-          type: string
-        cumulative_validator_rewards:
-          type: string
-        cumulative_change_to_initial_amount_as_of_round_zero:
-          type: string
-        cumulative_change_to_holding_fees_rate:
-          type: string
-        cumulative_traffic_purchased:
-          type: integer
-          format: int64
-        cumulative_traffic_purchased_cc_spent:
-          type: string
-        cumulative_traffic_num_purchases:
-          type: integer
-          format: int64
-    RoundTotals:
-      type: object
-      required:
-        - "closed_round"
-        - "closed_round_effective_at"
-        - "app_rewards"
-        - "validator_rewards"
-        - "change_to_initial_amount_as_of_round_zero"
-        - "change_to_holding_fees_rate"
-        - "cumulative_app_rewards"
-        - "cumulative_validator_rewards"
-        - "cumulative_change_to_initial_amount_as_of_round_zero"
-        - "cumulative_change_to_holding_fees_rate"
-        - "total_amulet_balance"
-      properties:
-        closed_round:
-          type: integer
-          format: int64
-        closed_round_effective_at:
-          type: string
-          format: date-time
-        app_rewards:
-          type: string
-        validator_rewards:
-          type: string
-        change_to_initial_amount_as_of_round_zero:
-          type: string
-        change_to_holding_fees_rate:
-          type: string
-        cumulative_app_rewards:
-          type: string
-        cumulative_validator_rewards:
-          type: string
-        cumulative_change_to_initial_amount_as_of_round_zero:
-          type: string
-        cumulative_change_to_holding_fees_rate:
-          type: string
-        total_amulet_balance:
-          type: string
     MigrationSchedule:
       type: object
       required:
@@ -4032,6 +3449,15 @@ components:
         time:
           type: string
           format: date-time
+        migration_id:
+          type: integer
+          format: int64
+
+    GetMigrationIdResponse:
+      type: object
+      required:
+        - "migration_id"
+      properties:
         migration_id:
           type: integer
           format: int64
@@ -4379,11 +3805,9 @@ components:
         If an event pertains to a transaction that is partially private, it may also bear verdict information for the private portions.
         When both fields are present, the transaction and verdict have the same `update_id` and `record_time`.
 
-        **Experimental**: for networks where the SVs enable activity record
-        computation, a traffic summary and app activity record are present when
+        For networks where the SVs enable activity record computation,
+        a traffic summary and app activity record are present when
         a verdict is present.
-
-        This support is experimental while the preview phase of CIP-104 is running.
       properties:
         update:
           $ref: "#/components/schemas/UpdateHistoryItemV2"
@@ -4392,15 +3816,9 @@ components:
           $ref: "#/components/schemas/EventHistoryVerdict"
           nullable: true
         traffic_summary:
-          description: |
-            **EXPERIMENTAL**: This property is experimental and subject to change. Data may be incomplete or missing.
-
-            This is our current best guess for how the summaries are served, but there remains a chance that the API needs to be adjusted.
           $ref: "#/components/schemas/EventHistoryTrafficSummary"
           nullable: true
         app_activity_records:
-          description: |
-            **EXPERIMENTAL**: This property is experimental and subject to change. Data may be incomplete or missing.
           $ref: "#/components/schemas/EventHistoryAppActivityRecords"
           nullable: true
     EventHistoryVerdict:
@@ -4701,12 +4119,32 @@ components:
 
     GetRewardAccountingActivityTotalsResponse:
       type: object
+      oneOf:
+        - "$ref": "#/components/schemas/RewardAccountingActivityTotalsOk"
+        - "$ref": "#/components/schemas/RewardAccountingActivityTotalsUndetermined"
+        - "$ref": "#/components/schemas/RewardAccountingActivityTotalsCannotProvide"
+      discriminator:
+        propertyName: status
+        mapping:
+          Ok: "#/components/schemas/RewardAccountingActivityTotalsOk"
+          Undetermined: "#/components/schemas/RewardAccountingActivityTotalsUndetermined"
+          CannotProvide: "#/components/schemas/RewardAccountingActivityTotalsCannotProvide"
+
+    RewardAccountingActivityTotalsOk:
+      type: object
       required:
+        - status
         - round_number
         - total_app_activity_weight
         - active_parties_count
         - activity_records_count
+        - total_app_reward_minting_allowance
+        - total_app_reward_thresholded
+        - total_app_reward_unclaimed
+        - rewarded_app_provider_parties_count
       properties:
+        status:
+          type: string
         round_number:
           type: integer
           format: int64
@@ -4719,19 +4157,79 @@ components:
         activity_records_count:
           type: integer
           format: int64
+        total_app_reward_minting_allowance:
+          type: string
+          description: The total of all minting allowances granted to app providers in this round.
+        total_app_reward_thresholded:
+          type: string
+          description: Total amount of minting allowances that fell below the configured app reward threshold and was thus burned.
+        total_app_reward_unclaimed:
+          type: string
+          description: Total amount of app rewards which could not be attributed to app providers in this round because of limit on app rewards per activity (aka the app rewards cap).
+        rewarded_app_provider_parties_count:
+          type: integer
+          format: int64
+
+    RewardAccountingActivityTotalsUndetermined:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+
+    RewardAccountingActivityTotalsCannotProvide:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
 
     GetRewardAccountingRootHashResponse:
       type: object
+      oneOf:
+        - "$ref": "#/components/schemas/RewardAccountingRootHashOk"
+        - "$ref": "#/components/schemas/RewardAccountingRootHashUndetermined"
+        - "$ref": "#/components/schemas/RewardAccountingRootHashCannotProvide"
+      discriminator:
+        propertyName: status
+        mapping:
+          Ok: "#/components/schemas/RewardAccountingRootHashOk"
+          Undetermined: "#/components/schemas/RewardAccountingRootHashUndetermined"
+          CannotProvide: "#/components/schemas/RewardAccountingRootHashCannotProvide"
+
+    RewardAccountingRootHashOk:
+      type: object
       required:
+        - status
         - round_number
         - root_hash
       properties:
+        status:
+          type: string
         round_number:
           type: integer
           format: int64
         root_hash:
           type: string
           description: Hex-encoded root hash
+
+    RewardAccountingRootHashUndetermined:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+
+    RewardAccountingRootHashCannotProvide:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
 
     GetRewardAccountingBatchResponse:
       type: object

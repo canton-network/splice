@@ -8,7 +8,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.validatoronboarding.{
   ValidatorOnboarding,
 }
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.QueryResult
 import org.lfdecentralizedtrust.splice.store.db.StoreDescriptor
 import org.lfdecentralizedtrust.splice.store.db.{AcsQueries, AcsTables, DbAppStore}
@@ -31,7 +30,7 @@ class DbSvSvStore(
     storage: DbStorage,
     override protected val outerLoggerFactory: NamedLoggerFactory,
     override protected val retryProvider: RetryProvider,
-    domainMigrationInfo: DomainMigrationInfo,
+    val domainMigrationId: Long,
     participantId: ParticipantId,
     ingestionConfig: IngestionConfig,
     acsStoreDescriptorUserVersion: Option[Long] = None,
@@ -46,6 +45,12 @@ class DbSvSvStore(
       interfaceViewsTableNameOpt = None,
       // Any change in the store descriptor will lead to previously deployed applications
       // forgetting all persisted data once they upgrade to the new version.
+      // WARNING: Reinitializing the acs store is a very expensive operation, as it currently fetches the full
+      // unfiltered ACS from the participant, irrespective of the filter defined by `acsContractFilter`.
+      // This may lead to the entire app being unavailable or not working properly until the full ACS has been ingested.
+      // Do not modify any part of the store descriptor unless you are sure that the resulting downtime is acceptable.
+      // If you do modify it, make sure to very clearly document in the release notes that there will be planned downtime,
+      // and notify the person coordinating the deployment.
       acsStoreDescriptor = StoreDescriptor(
         version = 2,
         name = "DbSvSvStore",
@@ -57,7 +62,7 @@ class DbSvSvStore(
         ),
         userVersion = acsStoreDescriptorUserVersion,
       ),
-      domainMigrationInfo = domainMigrationInfo,
+      migrationId = domainMigrationId,
       ingestionConfig,
     )
     with SvSvStore
@@ -70,7 +75,6 @@ class DbSvSvStore(
   import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnlessShutdownToFuture
 
   private def acsStoreId: AcsStoreId = multiDomainAcsStore.acsStoreId
-  def domainMigrationId: Long = domainMigrationInfo.currentMigrationId
   override def lookupValidatorOnboardingBySecretWithOffset(
       secret: String
   )(implicit tc: TraceContext): Future[MultiDomainAcsStore.QueryResult[

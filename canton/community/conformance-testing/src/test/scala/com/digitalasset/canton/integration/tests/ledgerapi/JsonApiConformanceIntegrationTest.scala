@@ -3,13 +3,7 @@
 
 package com.digitalasset.canton.integration.tests.ledgerapi
 
-import com.daml.ledger.api.testtool.Tests
-import com.daml.ledger.api.testtool.infrastructure.{
-  JsonSupported,
-  LedgerTestCase,
-  LedgerTestSuite,
-  TestConstraints,
-}
+import com.daml.ledger.api.testtool.infrastructure.{JsonSupported, LedgerTestCase, TestConstraints}
 import com.daml.ledger.api.testtool.runner.{AvailableTests, Config, ConfiguredTests, TestRunner}
 import com.digitalasset.canton.config
 import com.digitalasset.canton.config.RequireTypes.PositiveInt
@@ -72,18 +66,11 @@ sealed trait JsonApiConformanceBase
       connectedSynchronizers = env.environment.config.sequencers.size,
     )
 
-    val availableTests = new AvailableTests {
-      override def defaultTests: Vector[LedgerTestSuite] =
-        Tests.default(timeoutScaleFactor = config.timeoutScaleFactor)
-
-      override def optionalTests: Vector[LedgerTestSuite] =
-        Tests.optional(config.tlsConfig)
-    }
+    val availableTests = AvailableTests.testsForProtocol(testedProtocolVersion)
 
     val envArgInclusion = envArgTestsInclusion.getOrElse(TestInclusions.AllIncluded)
-
     val testsToRun =
-      new ConfiguredTests(availableTests, config).defaultTests.view
+      ConfiguredTests(availableTests, config).defaultTests.view
         .flatMap(_.tests)
         .filter { testCase =>
           testCase.limitation match {
@@ -158,18 +145,14 @@ sealed trait JsonApiConformanceBase
             s"Test selection from env var $LapittRunOnlyEnvVarName: $envArgInclusions."
         )
       } else {
-        val testRunner = new TestRunner(
-          availableTests,
-          config.copy(included = testsToBeRun),
-          Tests.lfVersion,
-        )
+        val testRunner = new TestRunner(availableTests, config.copy(included = testsToBeRun))
 
         logger.debug(
           s"Running ${testsToBeRun.mkString("[", ", ", "]")} in current shard $shard/$numShards"
         )
 
-        val (resultF, _testCases) = testRunner.runInProcess(logger.underlying)
-        resultF
+        testRunner
+          .runInProcess(logger.underlying)
           .map { summaries =>
             val failures = summaries
               .collect(summary =>
@@ -200,7 +183,7 @@ sealed abstract class JsonApiConformanceIntegrationShardedTest(
   override def environmentDefinition: EnvironmentDefinition =
     EnvironmentDefinition.P3_S1M1_S1M1
       .prependConfigTransform(ConfigTransforms.enableHttpLedgerApi)
-      .addConfigTransforms(ConfigTransforms.enableUnsafeMutiSynchronizerTopologyFeatureFlag)
+      .addConfigTransforms(ConfigTransforms.enableMultiSynchronizerTopologyFeatureFlag)
       .withSetup { implicit env =>
         import env.*
         participants.all.synchronizers.connect_local(sequencer1, alias = daName)
@@ -209,11 +192,9 @@ sealed abstract class JsonApiConformanceIntegrationShardedTest(
       .withTrafficControl(TestUtils.waitForTargetTimeOnSynchronizerNode(wallClock.now, logger))
 
   protected def inclusions: TestInclusions = TestInclusions.AllIncluded
-  override protected def exclusions: Set[String] = LedgerApiConformanceBase.excludedTests.toSet ++
-    Set(
-      "HealthServiceIT", // Service not available in JSON,
-      "PartyManagementServiceIT", // updatePartyIdentityProviderIs is not available in JSON API
-      "UserManagementServiceIT", // Results in PERMISSION_DENIED (wrong _.userManagement.supported)
+  override protected def exclusions: Set[String] =
+    ExcludedTests.jsonApiExcludedTests.toSet ++ LedgerApiConformanceBase.excludedTests(
+      testedProtocolVersion
     )
 
   protected def testCaseName = "pass the Ledger API conformance tests"

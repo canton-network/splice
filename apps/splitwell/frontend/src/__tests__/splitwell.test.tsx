@@ -7,7 +7,7 @@ import {
   ListAcceptedGroupInvitesResponse,
   ListBalanceUpdatesResponse,
   ListGroupInvitesResponse,
-} from '@lfdecentralizedtrust/splitwell-openapi';
+} from '@canton-network/splitwell-openapi';
 import { test, expect, describe } from 'vitest';
 
 import App from '../App';

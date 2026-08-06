@@ -2,12 +2,9 @@ package org.lfdecentralizedtrust.splice.integration.plugins
 
 import cats.data.Chain
 import com.digitalasset.canton.ScalaFuturesWithPatience
-import com.digitalasset.canton.integration.EnvironmentSetupPlugin
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules_AddSv
-import org.lfdecentralizedtrust.splice.config.SpliceConfig
 import org.lfdecentralizedtrust.splice.console.ScanAppBackendReference
-import org.lfdecentralizedtrust.splice.environment.SpliceEnvironment
 import org.lfdecentralizedtrust.splice.http.v0.definitions.DamlValueEncoding.members.CompactJson
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   EventHistoryItem,
@@ -19,13 +16,14 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.UpdateHistoryReassign
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
 import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.should.Matchers
+import org.scalatest.time.{Millis, Seconds, Span}
 import org.scalatest.{Inspectors, LoneElement}
 
 import scala.annotation.tailrec
 
 class EventHistorySanityCheckPlugin(
     protected val loggerFactory: NamedLoggerFactory
-) extends EnvironmentSetupPlugin[SpliceConfig, SpliceEnvironment]
+) extends SpliceEnvironmentSetupPlugin
     with Matchers
     with Eventually
     with Inspectors
@@ -33,12 +31,20 @@ class EventHistorySanityCheckPlugin(
     with LoneElement {
 
   override def beforeEnvironmentDestroyed(
-      config: SpliceConfig,
-      environment: SpliceTestConsoleEnvironment,
+      environment: SpliceTestConsoleEnvironment
   ): Unit = {
     val initializedScans = environment.scans.local.filter(_.is_initialized)
     if (initializedScans.nonEmpty) {
-      compareEventHistories(initializedScans)
+      // getEventHistory only serves events up to min(update, verdict) ingestion cursor
+      // (ScanEventStore.getCurrentMigrationCap), and verdict ingestion from the mediator lags
+      // behind update ingestion. At teardown this can hide even long-ingested updates, such as
+      // the DsoRules_AddSv exercise that compareEventHistories requires to appear in the founder
+      // history, so retry: each attempt re-fetches the histories until the cursors catch up.
+      eventually(compareEventHistories(initializedScans))(
+        PatienceConfig(timeout = Span(20, Seconds), interval = Span(500, Millis)),
+        implicitly[org.scalatest.enablers.Retrying[Unit]],
+        implicitly[org.scalactic.source.Position],
+      )
     }
   }
 

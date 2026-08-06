@@ -52,6 +52,7 @@ import com.digitalasset.canton.sequencing.{
 }
 import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.topology.{
+  DefaultTestIdentities,
   Member,
   Namespace,
   ParticipantId,
@@ -221,6 +222,7 @@ trait ConnectionPoolTestHelpers {
       poolDelays: SequencerConnectionPoolDelays = SequencerConnectionPoolDelays.default,
       blockValidation: Int => Boolean = _ => false,
       metrics: SequencerConnectionPoolMetrics = CommonMockMetrics.sequencerClient.connectionPool,
+      metricsContext: MetricsContext = MetricsContext.Empty,
       namePrefix: String = "test",
   )(
       f: (
@@ -250,6 +252,7 @@ trait ConnectionPoolTestHelpers {
       testCrypto.crypto,
       Some(seedForRandomness),
       metrics = metrics,
+      metricsContext = metricsContext,
       futureSupervisor,
       testTimeouts,
       loggerFactory,
@@ -285,7 +288,7 @@ trait ConnectionPoolTestHelpers {
       sequencerSubscriptionFactory = new TestSequencerSubscriptionFactory(timeouts, loggerFactory),
       subscriptionHandlerFactory = TestSubscriptionHandlerFactory,
       metrics = CommonMockMetrics.sequencerClient.connectionPool,
-      metricsContext = MetricsContext.Empty,
+      metricsContext = connectionPool.metricsContext,
       timeouts = timeouts,
       loggerFactory = loggerFactory,
     )
@@ -347,12 +350,8 @@ protected object ConnectionPoolTestHelpers {
           .Success(SequencerConnect.HandshakeResponse.Success()),
       )
     )
-  lazy val failedHandshake: Either[Exception, SequencerConnect.HandshakeResponse] = Right(
-    SequencerConnect.HandshakeResponse(
-      testedProtocolVersion.toProtoPrimitive,
-      SequencerConnect.HandshakeResponse.Value
-        .Failure(SequencerConnect.HandshakeResponse.Failure("bad handshake")),
-    )
+  lazy val failedHandshake: Either[Exception, SequencerConnect.HandshakeResponse] = Left(
+    Status.INVALID_ARGUMENT.withDescription("bad handshake").asRuntimeException()
   )
 
   lazy val correctSynchronizerIdResponse1
@@ -453,6 +452,7 @@ protected object ConnectionPoolTestHelpers {
       crypto: Crypto,
       seedForRandomnessO: Option[Long],
       metrics: SequencerConnectionPoolMetrics,
+      metricsContext: MetricsContext,
       futureSupervisor: FutureSupervisor,
       timeouts: ProcessingTimeout,
       loggerFactory: NamedLoggerFactory,
@@ -465,6 +465,7 @@ protected object ConnectionPoolTestHelpers {
       responsesForConnection,
       validationBlocker,
       metrics,
+      metricsContext,
       futureSupervisor,
       timeouts,
       loggerFactory,
@@ -492,7 +493,7 @@ protected object ConnectionPoolTestHelpers {
           crypto,
           seedForRandomnessO,
           metrics,
-          MetricsContext.Empty,
+          metricsContext,
           futureSupervisor,
           timeouts,
           loggerFactory,
@@ -517,6 +518,7 @@ protected object ConnectionPoolTestHelpers {
       responsesForConnection: PartialFunction[Int, TestResponses],
       validationBlocker: TestValidationBlocker,
       metrics: SequencerConnectionPoolMetrics,
+      metricsContext: MetricsContext,
       futureSupervisor: FutureSupervisor,
       timeouts: ProcessingTimeout,
       loggerFactory: NamedLoggerFactory,
@@ -562,7 +564,7 @@ protected object ConnectionPoolTestHelpers {
         ClientChannelParams.ForTesting,
         stubFactory = stubFactory,
         metrics = metrics,
-        metricsContext = MetricsContext.Empty,
+        metricsContext = metricsContext,
         futureSupervisor = futureSupervisor,
         timeouts = timeouts,
         loggerFactory = loggerFactory.append("connection", config.name),
@@ -755,10 +757,12 @@ protected object ConnectionPoolTestHelpers {
     ): SequencerConnectionStub = connection match {
       case grpcConnection: GrpcConnection =>
         new GrpcSequencerConnectionStub(
+          DefaultTestIdentities.participant1,
           grpcConnection,
           testResponses.apiSvcFactory,
           testResponses.sequencerConnectSvcFactory,
           metricsContext,
+          loggerFactory,
         )
 
       case _ => throw new IllegalStateException(s"Connection type not supported: $connection")

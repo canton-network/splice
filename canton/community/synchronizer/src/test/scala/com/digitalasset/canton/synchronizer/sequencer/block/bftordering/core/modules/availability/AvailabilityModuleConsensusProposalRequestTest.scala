@@ -22,6 +22,7 @@ import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framewor
   EpochNumber,
 }
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.availability.*
+import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.availability.DisseminationStatus.TimestampedSend
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.topology.Membership
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.{
   OrderingRequestBatch,
@@ -48,6 +49,7 @@ import org.scalatest.exceptions.TestFailedException
 import org.scalatest.wordspec.AnyWordSpec
 import org.slf4j.event.Level
 
+import java.time.Instant
 import java.util.concurrent.atomic.AtomicReference
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
@@ -174,7 +176,7 @@ class AvailabilityModuleConsensusProposalRequestTest
           disseminationProtocolState.disseminationProgress.addOne(
             ABatchDisseminationProgressNode0To6WithNonQuorumVotes._1 ->
               ABatchDisseminationProgressNode0To6WithNonQuorumVotes._2
-                .copy(batchSentTo = Node1To6)
+                .copy(sentToLast = Node1To6.map(TimestampedSend(_, Instant.now)))
           )
 
           availability.receive(
@@ -215,7 +217,7 @@ class AvailabilityModuleConsensusProposalRequestTest
           disseminationProtocolState.disseminationProgress.addOne(
             ABatchDisseminationProgressNode0To6WithNonQuorumVotes._1 ->
               ABatchDisseminationProgressNode0To6WithNonQuorumVotes._2
-                .copy(batchSentTo = Node4To6)
+                .copy(sentToLast = Node4To6.map(TimestampedSend(_, Instant.now)))
           )
 
           val cryptoProvider = ProgrammableUnitTestEnv.noSignatureCryptoProvider
@@ -715,13 +717,10 @@ class AvailabilityModuleConsensusProposalRequestTest
               )
           )
           availability.receive(Availability.DelayedProposalResponse)
-          availability.getActiveMembership
+          val membership = availability.getActiveMembership
           val reviewedProgress =
             BatchReadyForOrderingNode0Vote._2
-              .changeMembership(
-                availability.getActiveMembership
-                  .copy(orderingTopology = OrderingTopologyNodes0To6)
-              )
+              .changeMembership(membership.copy(orderingTopology = OrderingTopologyNodes0To6))
               .toEither
               .leftOrFail("Batch should not be complete in new topology")
           disseminationProtocolState.disseminationInProgressView should contain only (ABatchId -> reviewedProgress
@@ -735,7 +734,9 @@ class AvailabilityModuleConsensusProposalRequestTest
           val selfSendMessages = actorContext.runPipedMessages()
           selfSendMessages should contain only
             Availability.LocalDissemination.LocalBatchesStoredSigned(
-              Seq(LocalBatchStoredSigned(Traced(ABatchId), ABatch, signature = None))
+              Seq(
+                LocalBatchStoredSigned(Traced(ABatchId), ABatch, membership, signature = None)
+              )
             )
         }
       }
@@ -832,7 +833,14 @@ class AvailabilityModuleConsensusProposalRequestTest
             val selfMessages = ctx.runPipedMessages()
             selfMessages should contain only Availability.LocalDissemination
               .LocalBatchesStoredSigned(
-                Seq(LocalBatchStoredSigned(Traced(AnotherBatchId), ABatch, signature = None))
+                Seq(
+                  LocalBatchStoredSigned(
+                    Traced(AnotherBatchId),
+                    ABatch,
+                    MembershipNodes0To3,
+                    signature = None,
+                  )
+                )
               )
           }
       }
@@ -978,7 +986,14 @@ class AvailabilityModuleConsensusProposalRequestTest
           val selfMessages = ctx.runPipedMessages()
           selfMessages should contain only Availability.LocalDissemination
             .LocalBatchesStoredSigned(
-              Seq(LocalBatchStoredSigned(Traced(AnotherBatchId), ABatch, signature = None))
+              Seq(
+                LocalBatchStoredSigned(
+                  Traced(AnotherBatchId),
+                  ABatch,
+                  newMembership,
+                  signature = None,
+                )
+              )
             )
         }
     }
@@ -1004,8 +1019,8 @@ class AvailabilityModuleConsensusProposalRequestTest
           // This ready batch will become stale in the new topology
           disseminationProtocolState.disseminationProgress.addOne(
             AnotherBatchReadyForOrdering6NodesQuorumNodes0And4To6Votes._1 ->
-              AnotherBatchReadyForOrdering6NodesQuorumNodes0And4To6Votes._2.copy(batchSentTo =
-                Set(Node1)
+              AnotherBatchReadyForOrdering6NodesQuorumNodes0And4To6Votes._2.copy(sentToLast =
+                Set(Node1).map(TimestampedSend(_, Instant.now))
               )
           )
 
@@ -1052,13 +1067,17 @@ class AvailabilityModuleConsensusProposalRequestTest
               )
           )
 
-          disseminationProtocolState.disseminationInProgressView should contain only (AnotherBatchId ->
+          val t = Instant.now
+          withFixedTimestamp(
+            t,
+            disseminationProtocolState.disseminationProgress,
+          ) should contain only (AnotherBatchId ->
             AnotherBatchReadyForOrdering6NodesQuorumNodes0And4To6Votes._2
               .changeMembership(newMembership)
               .toEither
               .leftOrFail("Progress was not regressed")
               .copy(
-                batchSentTo = Set(Node1),
+                sentToLast = Set(TimestampedSend(Node1, t)),
                 acks = AnotherBatchReadyForOrdering6NodesQuorumNodes0And4To6Votes._2.acks
                   .filterNot(a => a.from == "node0" || a.from == "node5" || a.from == "node6"),
                 // Regressions are reset by metrics emission
@@ -1087,13 +1106,22 @@ class AvailabilityModuleConsensusProposalRequestTest
             eqTo("availability-sign-local-batchId"),
           )(anyTraceContext, any[MetricsContext])
 
-          disseminationProtocolState.disseminationInProgressView should contain only (AnotherBatchId ->
+          withFixedTimestamp(
+            t,
+            disseminationProtocolState.disseminationProgress,
+          ) should contain only (AnotherBatchId ->
             AnotherBatchReadyForOrdering6NodesQuorumNodes0And4To6Votes._2
               .changeMembership(newMembership)
               .toEither
               .leftOrFail("Progress was not regressed")
               .copy(
-                batchSentTo = Set(Node1, Node2, Node3, node(5), node(6)),
+                sentToLast = Set(
+                  TimestampedSend(Node1, t),
+                  TimestampedSend(Node2, t),
+                  TimestampedSend(Node3, t),
+                  TimestampedSend(node(5), t),
+                  TimestampedSend(node(6), t),
+                ),
                 acks = AnotherBatchReadyForOrdering6NodesQuorumNodes0And4To6Votes._2.acks
                   .filterNot(a => a.from == "node5" || a.from == "node6"),
                 // Regressions are reset by metrics emission
@@ -1367,6 +1395,75 @@ class AvailabilityModuleConsensusProposalRequestTest
           )),
           count = 2,
         )
+      }
+    }
+
+  "it receives Consensus.CreateProposal (from local consensus), " +
+    "then Dissemination.LocalBatchStoredSigned (from self), " +
+    "the active membership is different from the signing one and" +
+    "it has rotated the key of the disseminator" should {
+      "update the acks and re-sign" in {
+        val disseminationProtocolState = new DisseminationProtocolState()
+        implicit val context
+            : ProgrammableUnitTestContext[Availability.Message[ProgrammableUnitTestEnv]] =
+          new ProgrammableUnitTestContext
+        val availabilityStore =
+          new FakeAvailabilityStore[ProgrammableUnitTestEnv](
+            TrieMap[BatchId, OrderingRequestBatch](ABatchId -> ABatch)
+          )
+        val availability =
+          createAndStartAvailability[ProgrammableUnitTestEnv](
+            availabilityStore = availabilityStore,
+            disseminationProtocolState = disseminationProtocolState,
+            consensus = fakeIgnoringModule,
+          )
+        val membership = availability.getActiveMembership
+        val newMembership = Membership.forTesting(
+          Node0,
+          OrderingTopologyNode0.copy(
+            nodesTopologyInfo =
+              OrderingTopologyNode0.nodesTopologyInfo.map { case (nodeId, nodeInfo) =>
+                // Change the key of node0 and node6 so that the PoA is only left with 1 valid ack < f+1 = 3
+                //  and it will be re-signed and disseminated by node0
+                nodeId ->
+                  nodeInfo.copy(keyIds =
+                    Set(BftKeyId(anotherNoSignature.authorizingLongTermKey.toProtoPrimitive))
+                  )
+              }
+          ),
+        )
+        availability.receive(
+          Availability.Consensus
+            .CreateProposal(
+              BlockNumber.First,
+              EpochNumber.First,
+              newMembership,
+              failingCryptoProvider,
+            )
+        )
+        availability.receive(
+          Availability.LocalDissemination.LocalBatchesStoredSigned(
+            Seq(
+              LocalBatchStoredSigned(
+                Traced(ABatchId),
+                ABatch,
+                membership,
+                signature = Some(Signature.noSignature),
+              )
+            )
+          )
+        )
+
+        disseminationProtocolState.disseminationProgress should contain only (ABatchId ->
+          ADisseminationProgressNode0WithNode0Vote
+            .changeMembership(newMembership)
+            .toEither
+            .leftOrFail("Progress was not updated with new membership"))
+
+        context.runPipedMessages() should contain only Availability.LocalDissemination
+          .LocalBatchesStored(
+            Seq(Traced(ABatchId) -> ABatch)
+          )
       }
     }
 }

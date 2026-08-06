@@ -6,16 +6,13 @@ package engine
 
 import cats.Applicative
 import com.digitalasset.daml.lf.crypto.Hash
-import com.digitalasset.daml.lf.data.Ref._
+import com.digitalasset.daml.lf.data.Ref.*
 import com.digitalasset.daml.lf.data.{BackStack, FrontStack, ImmArray}
 import com.digitalasset.daml.lf.engine.ResultNeedContract.Response
-import com.digitalasset.daml.lf.language.Ast._
-import com.digitalasset.daml.lf.transaction.{
-  FatContractInstance,
-  GlobalKey,
-  NeedKeyProgression,
-}
-import com.digitalasset.daml.lf.value.Value._
+import com.digitalasset.daml.lf.engine.ResultNeedKey.Response.AuthenticableFatContractInstance
+import com.digitalasset.daml.lf.language.Ast.*
+import com.digitalasset.daml.lf.transaction.{FatContractInstance, GlobalKey, NeedKeyProgression}
+import com.digitalasset.daml.lf.value.Value.*
 import scalaz.Monad
 
 import scala.annotation.tailrec
@@ -35,7 +32,7 @@ sealed trait Result[+A] extends Product with Serializable {
     case ResultNeedPackage(pkgId, resume) =>
       ResultNeedPackage(pkgId, mbPkg => resume(mbPkg).map(f))
     case ResultNeedKey(gk, limit, token, resume) =>
-      ResultNeedKey(gk, limit, token, (cids, token) => resume(cids, token).map(f))
+      ResultNeedKey(gk, limit, token, response => resume(response).map(f))
     case ResultPrefetch(contractIds, keys, resume) =>
       ResultPrefetch(contractIds, keys, () => resume().map(f))
   }
@@ -54,7 +51,7 @@ sealed trait Result[+A] extends Product with Serializable {
         gk,
         limit,
         token,
-        (mbAcoid, nextToken) => resume(mbAcoid, nextToken).flatMap(f),
+        response => resume(response).flatMap(f),
       )
     case ResultPrefetch(contractIds, keys, resume) =>
       ResultPrefetch(contractIds, keys, () => resume().flatMap(f))
@@ -63,8 +60,7 @@ sealed trait Result[+A] extends Product with Serializable {
   private[lf] def consume(
       pcs: PartialFunction[ContractId, FatContractInstance] = PartialFunction.empty,
       pkgs: PartialFunction[PackageId, Package] = PartialFunction.empty,
-      keys: PartialFunction[GlobalKey, Vector[FatContractInstance]] =
-        PartialFunction.empty,
+      keys: PartialFunction[GlobalKey, Vector[FatContractInstance]] = PartialFunction.empty,
       hashingMethod: ContractId => Hash.HashingMethod = _ => Hash.HashingMethod.TypedNormalForm,
       idValidator: (ContractId, Hash) => Boolean = (_, _) => true,
   ): Either[Error, A] = {
@@ -83,7 +79,24 @@ sealed trait Result[+A] extends Product with Serializable {
           }))
         case ResultNeedPackage(pkgId, resume) => go(resume(pkgs.lift(pkgId)))
         case ResultNeedKey(key, _, _, resume) =>
-          go(resume(keys.lift(key).getOrElse(Vector.empty), NeedKeyProgression.Finished))
+          go(
+            resume(
+              ResultNeedKey.Response(
+                keys
+                  .lift(key)
+                  .getOrElse(Vector.empty)
+                  .map(fci =>
+                    AuthenticableFatContractInstance(
+                      fci,
+                      hashingMethod(fci.contractId),
+                      hash => idValidator(fci.contractId, hash),
+                    )
+                  ),
+                NeedKeyProgression.Finished,
+              )
+            )
+          )
+
         case ResultPrefetch(_, _, result) => go(result())
       }
     go(this)
@@ -97,7 +110,8 @@ final case class ResultInterruption[A](continue: () => Result[A], abort: () => O
   */
 final case class ResultDone[A](result: A) extends Result[A]
 object ResultDone {
-  val Unit: ResultDone[Unit] = new ResultDone(())
+  private[engine] val Unit: ResultDone[Unit] = new ResultDone(())
+  private[engine] val None: ResultDone[scala.None.type] = new ResultDone(scala.None)
 }
 
 /** Indicates that the command (re)interpretation has failed.
@@ -169,9 +183,9 @@ final case class ResultNeedPackage[A](packageId: PackageId, resume: Option[Packa
     extends Result[A]
 
 /** Intermediate result indicating that contracts matching a key are required to complete the computation.
-  * To resume the computation, the caller must invoke `resume` with the following arguments:
+  * To resume the computation, the caller must invoke `resume` with a page containting the following information:
   * <ul>
-  * <li>`contracts`: a vector of fat contract instances whose key matches `key`.
+  * <li>`contracts`: a vector of authenticable fat contract instances whose key matches `key`.
   *   `limit` is a hint for the preferred page size; the caller may return more than `limit` entries
   *   and the engine will buffer the overflow internally.
   *   If no contracts match, an empty vector should be provided.</li>
@@ -189,21 +203,63 @@ final case class ResultNeedKey[A](
     key: GlobalKey,
     limit: Int,
     continuationToken: NeedKeyProgression.CanContinue,
-    resume: (Vector[FatContractInstance], NeedKeyProgression.HasStarted) => Result[A],
+    resume: ResultNeedKey.Response => Result[A],
 ) extends Result[A]
+
+object ResultNeedKey {
+
+  object Response {
+
+    /** An entry in a [[Response]] result: either an authenticable contract or an error. */
+    sealed trait ContractEntry extends Product with Serializable
+
+    /**
+      * A fat contract instance and the necessary information to authenticate it.
+      *
+      * @param contractInstance      a fat contract instance whose key matches the requested key.
+      * @param expectedHashingMethod the hashing method that the engine expects the engine to use for authenticating the
+      *                              contract instance.
+      * @param idValidator           a function that authenticates the contract given a hash of the contract instance
+      *                              computed by the engine using the `expectedHashingMethod`.
+      */
+    final case class AuthenticableFatContractInstance(
+        contractInstance: FatContractInstance,
+        expectedHashingMethod: Hash.HashingMethod,
+        idValidator: Hash => Boolean,
+    ) extends ContractEntry
+
+    /** Indicates that the contract ID uses an unsupported version. */
+    final case class UnsupportedContractIdVersion(contractId: ContractId) extends ContractEntry
+  }
+
+  /**
+    * The response to the [[ResultNeedKey]] question.
+    *
+    * @param contracts  a vector of contract entries whose key matches the requested key. Each entry is either an
+    *                   [[Response.AuthenticableFatContractInstance]] or an [[Response.UnsupportedContractIdVersion]].
+    * @param hasStarted a token indicating the progression state: [[transaction.NeedKeyProgression.Finished]] if all
+    *                   matching contracts have been returned, [[transaction.NeedKeyProgression.InProgress]] if there
+    *                   may be more results.
+    */
+  final case class Response(
+      contracts: Vector[Response.ContractEntry],
+      hasStarted: NeedKeyProgression.HasStarted,
+  )
+}
 
 /** Indicates that the interpretation will likely need to resolve the given contract keys.
   * The caller may resolve the keys in parallel to the interpretation, but does not have to.
+  * The keys map associates each key with the maximum number of contracts to prefetch for it.
   */
 final case class ResultPrefetch[A](
     contractIds: Seq[ContractId],
-    keys: Seq[GlobalKey],
+    keys: Map[GlobalKey, Int],
     resume: () => Result[A],
 ) extends Result[A]
 
 object Result {
 
-  val unit: ResultDone[Unit] = ResultDone(())
+  val Unit: ResultDone[Unit] = ResultDone.Unit
 
   // fails with ResultError if the package is not found
   private[lf] def needPackage[A](
@@ -275,8 +331,8 @@ object Result {
                 gk,
                 limit,
                 token,
-                (mbAcoid, token) =>
-                  resume(mbAcoid, token).flatMap(x =>
+                response =>
+                  resume(response).flatMap(x =>
                     Result
                       .sequence(results_)
                       .map(otherResults => (okResults :+ x) :++ otherResults)
@@ -308,7 +364,7 @@ object Result {
 
   def assert(assertion: Boolean)(err: Error): Result[Unit] =
     if (assertion)
-      ResultDone.Unit
+      Result.Unit
     else
       ResultError(err)
 

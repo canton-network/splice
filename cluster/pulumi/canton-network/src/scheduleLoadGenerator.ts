@@ -15,8 +15,8 @@ import {
   loadTesterConfig,
   CnChartVersion,
   getNamespaceConfig,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
-import { installLoopback } from '@lfdecentralizedtrust/splice-pulumi-common-sv';
+} from '@canton-network/splice-pulumi-common';
+import { installLoopback } from '@canton-network/splice-pulumi-common-sv';
 import { Resource } from '@pulumi/pulumi';
 
 export function scheduleLoadGenerator(auth0Client: Auth0Client, dependencies: Resource[]): void {

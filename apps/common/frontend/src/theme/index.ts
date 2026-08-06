@@ -1,6 +1,6 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import '@lfdecentralizedtrust/splice-common-typeface-termina/index.css';
+import '@canton-network/splice-common-typeface-termina/index.css';
 
 import { createTheme, TypographyStyle } from '@mui/material';
 
@@ -27,6 +27,7 @@ declare module '@mui/material/styles' {
   }
 
   interface Palette {
+    neutral: Palette['primary'];
     colors: {
       neutral: Record<string, string>;
       primary: Record<string, string>;
@@ -40,6 +41,7 @@ declare module '@mui/material/styles' {
   }
   // allow configuration using `createTheme`
   interface PaletteOptions {
+    neutral?: PaletteOptions['primary'];
     colors?: {
       neutral?: Record<string, string>;
       primary?: Record<string, string>;
@@ -50,6 +52,12 @@ declare module '@mui/material/styles' {
       devnet: string;
       scratchnet: string;
     };
+  }
+}
+
+declare module '@mui/material/Badge' {
+  interface BadgePropsColorOverrides {
+    neutral: true;
   }
 }
 
@@ -111,6 +119,13 @@ theme = createTheme(theme, {
     tertiary: {
       main: '#875CFF',
     },
+    neutral: theme.palette.augmentColor({
+      color: {
+        main: theme.palette.colors.neutral[25],
+        contrastText: '#E2E2E2',
+      },
+      name: 'neutral',
+    }),
     warning: {
       main: '#FD8575',
     },
@@ -142,7 +157,7 @@ theme = createTheme(theme, {
   },
 });
 
-// Based on the Major Third type scale: https://typescale.com/?size=16&scale=1.250&text=A%20Visual%20Type%20Scale&font=Lato&fontweight=400&bodyfont=body_font_default&bodyfontweight=400&lineheight=1.75&backgroundcolor=%23ffffff&fontcolor=%23000000&preview=false
+// Based on the Major Third type scale: https://typescale.com/?size=16&scale=1.250&text=A%20Visual%20Type%20Scale&font=Inter&fontweight=400&bodyfont=body_font_default&bodyfontweight=400&lineheight=1.75&backgroundcolor=%23ffffff&fontcolor=%23000000&preview=false
 const TYPE_SCALE = 1.25;
 
 theme = createTheme(theme, {

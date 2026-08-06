@@ -19,6 +19,8 @@ import com.digitalasset.canton.integration.{
   EnvironmentDefinition,
   SharedEnvironment,
 }
+import com.digitalasset.canton.logging.LogEntry
+import com.digitalasset.canton.logging.SuppressingLogger.LogEntryOptionality
 import com.digitalasset.canton.topology.SynchronizerId
 
 class SequencerOffboardingIntegrationTest
@@ -96,29 +98,50 @@ class SequencerOffboardingIntegrationTest
   "Reconnect participant2 to sequencer1" in { implicit env =>
     import env.*
 
+    // user-manual-entry-begin: SequencerOffboardingSwitchAwayParticipant
     participant2.synchronizers.disconnect(daName)
     participant2.synchronizers.modify(
       daName,
       _.copy(sequencerConnections = SequencerConnections.single(sequencer1.sequencerConnection)),
     )
     participant2.synchronizers.reconnect(daName)
+  // user-manual-entry-end: SequencerOffboardingSwitchAwayParticipant
   }
 
   "Reconnect mediator2 to sequencer1" in { implicit env =>
     import env.*
 
+    // user-manual-entry-begin: SequencerOffboardingSwitchAwayMediator
     mediator1.sequencer_connection.set(SequencerConnections.single(sequencer1.sequencerConnection))
+  // user-manual-entry-end: SequencerOffboardingSwitchAwayMediator
   }
 
   "Off-board sequencer2" in { implicit env =>
     import env.*
 
-    offboardSequencer(
-      synchronizerId,
-      sequencerToOffboard = sequencer2,
-      sequencersOnSynchronizer = NonEmpty(Seq, sequencer1),
-      synchronizerOwners = synchronizerOwners.toSet,
-      isBftOrderer = true,
+    loggerFactory.assertLogsUnorderedOptional(
+      offboardSequencer(
+        synchronizerId,
+        sequencerToOffboard = sequencer2,
+        sequencersOnSynchronizer = NonEmpty(Seq, sequencer1),
+        synchronizerOwners = synchronizerOwners.toSet,
+        isBftOrderer = true,
+      ),
+      // Ignore warnings about the reader of the off-boarded sequencer not being able to sign events
+      //  and about the subscription from the sequencer to itself being killed because of that,
+      //  as they are expected while off-boarding a sequencer node.
+      (
+        LogEntryOptionality.Optional,
+        (entry: LogEntry) => {
+          entry.warningMessage should include regex "This sequencer cannot sign the event with sequencing timestamp.*for member.*sequencer2"
+        },
+      ),
+      (
+        LogEntryOptionality.Optional,
+        (entry: LogEntry) => {
+          entry.warningMessage should include regex "Sequencer subscription for.*sequencer2.*failed"
+        },
+      ),
     )
   }
 

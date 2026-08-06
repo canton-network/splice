@@ -9,7 +9,7 @@ import {
   ViewMoreButton,
   UpdateId,
   updateIdFromEventId,
-} from '@lfdecentralizedtrust/splice-common-frontend';
+} from '@canton-network/splice-common-frontend';
 import BigNumber from 'bignumber.js';
 import formatISO from 'date-fns/formatISO';
 

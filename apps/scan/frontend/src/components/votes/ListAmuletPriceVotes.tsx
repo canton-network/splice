@@ -6,7 +6,7 @@ import {
   ErrorDisplay,
   Loading,
   PartyId,
-} from '@lfdecentralizedtrust/splice-common-frontend';
+} from '@canton-network/splice-common-frontend';
 import { useCallback } from 'react';
 
 import {

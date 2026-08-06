@@ -16,7 +16,9 @@ import org.lfdecentralizedtrust.splice.config.{
   SpliceBackendConfig,
   SpliceInstanceNamesConfig,
   SpliceParametersConfig,
+  SplicePostgresConfig,
 }
+
 import org.lfdecentralizedtrust.splice.store.Limit
 
 import java.time.Instant
@@ -26,7 +28,7 @@ trait BaseScanAppConfig {}
 final case class ScanSynchronizerConfig(
     sequencer: FullClientConfig,
     mediator: FullClientConfig,
-    bftSequencerConfig: Option[BftSequencerConfig],
+    cantonBft: Option[CantonBftPeerConfig],
 )
 
 final case class MediatorVerdictIngestionConfig(
@@ -39,9 +41,12 @@ final case class BulkStorageConfig(
     snapshotPollingInterval: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(30),
     // When more updates are not yet available, how long to wait for more.
     updatesPollingInterval: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(30),
+    // When BFT was not reached on objects, how long to wait before retrying.
+    bftRetryInterval: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(30),
     // The maximum parallelization for uploading multiple parts of the same object
     maxParallelPartUploads: Int = 4,
-    s3: Option[S3Config] = None,
+    staging: Option[S3Config] = None,
+    committed: Option[S3Config] = None,
 )
 
 /** @param miningRoundsCacheTimeToLiveOverride Intended only for testing!
@@ -50,6 +55,7 @@ final case class BulkStorageConfig(
 case class ScanAppBackendConfig(
     override val adminApi: AdminServerConfig = AdminServerConfig(),
     override val storage: DbConfig,
+    postgres: SplicePostgresConfig = SplicePostgresConfig(),
     svUser: String,
     override val participantClient: ParticipantClientConfig,
     synchronizerNodes: ScanSynchronizerNodesConfig,
@@ -58,10 +64,17 @@ case class ScanAppBackendConfig(
     enableAppActivityRecordAndTrafficIngestion: Boolean = true,
     serveAppActivityRecordsAndTraffic: Boolean = true,
     isFirstSv: Boolean = false,
+    // Max rounding error tolerated wrt actual total of minting allowances
+    // and the per-round minting allowance from the CC whitepaper.
+    rewardMintingAllowanceTolerance: BigDecimal = BigDecimal(0.1),
     miningRoundsCacheTimeToLiveOverride: Option[NonNegativeFiniteDuration] = None,
     enableForcedAcsSnapshots: Boolean = false,
-    // TODO(DACH-NY/canton-network-node#9731): get migration id from sponsor sv / scan instead of configuring here
-    domainMigrationId: Long = 0L,
+    // The migration id is normally read from the DB (the highest known migration id in the
+    // update history). It only needs to be resolved from a sponsor to bootstrap a node that does
+    // not yet have any migration id in its DB (e.g. a freshly joining scan). In that case, the
+    // migration id is fetched from the sponsor scan configured via `sponsorScanUrl`, the same way
+    // a joining SV fetches it from its sponsoring SV.
+    sponsorScanUrl: Option[NetworkAppClientConfig] = None,
     parameters: SpliceParametersConfig = SpliceParametersConfig(),
     spliceInstanceNames: SpliceInstanceNamesConfig,
     updateHistoryBackfillEnabled: Boolean = true,
@@ -73,7 +86,10 @@ case class ScanAppBackendConfig(
     cache: ScanCacheConfig = ScanCacheConfig(),
     acsStoreDescriptorUserVersion: Option[Long] = None,
     txLogStoreDescriptorUserVersion: Option[Long] = None,
+    activityIngestionUserVersion: Option[Long] = None,
     bulkStorage: BulkStorageConfig = BulkStorageConfig(),
+    tokenStandardSettlement: TokenStandardConfig.SettlementConfig =
+      TokenStandardConfig.SettlementConfig(),
     publicUrl: Option[Uri] = None,
     // The thresholdDate from which external transaction hashes are included in the updates from internal ScanAPIs.
     // TODO(#4249): use on-ledger synchronization for switching record times
@@ -81,6 +97,10 @@ case class ScanAppBackendConfig(
       ScanAppBackendConfig.DefaultExternalTransactionHashThresholdTime,
     globalSynchronizerAlias: SynchronizerAlias = SynchronizerAlias.tryCreate("global"),
     rollForwardLsu: Option[ScanRollForwardLsuConfig] = None,
+    // Set to false to disable the DB-level exclusive lock that prevents two scan instances
+    // from running concurrently against the same database.  Only disable for migration scenarios
+    // where intentional overlap is required.
+    instanceLockEnabled: Boolean = true,
 ) extends SpliceBackendConfig
     with BaseScanAppConfig // TODO(DACH-NY/canton-network-node#736): fork or generalize this trait.
     {
@@ -158,14 +178,6 @@ final case class ScanCacheConfig(
     cachedByParty: CacheConfig = CacheConfig(
       ttl = NonNegativeFiniteDuration.ofMinutes(1),
       maxSize = 2000,
-    ),
-    aggregatedRounds: CacheConfig = CacheConfig(
-      ttl = NonNegativeFiniteDuration.ofSeconds(30),
-      maxSize = 1,
-    ),
-    roundTotals: CacheConfig = CacheConfig(
-      ttl = NonNegativeFiniteDuration.ofMinutes(1),
-      maxSize = 1000,
     ),
     voteRequests: CacheConfig = CacheConfig(
       ttl = NonNegativeFiniteDuration.ofMinutes(1),

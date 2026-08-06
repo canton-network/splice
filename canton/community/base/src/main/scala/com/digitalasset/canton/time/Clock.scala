@@ -12,11 +12,15 @@ import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.error.CantonError
 import com.digitalasset.canton.error.CantonErrorGroups.ClockErrorGroup
+import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 import com.digitalasset.canton.lifecycle.UnlessShutdown.AbortedDueToShutdown
 import com.digitalasset.canton.lifecycle.{
+  CloseContext,
   FlagCloseable,
   FutureUnlessShutdown,
   LifeCycle,
+  LifeCycleRegistrationHandle,
+  RunOnClosing,
   SyncCloseable,
   UnlessShutdown,
 }
@@ -42,6 +46,7 @@ import com.digitalasset.canton.topology.admin.v30.{
 }
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.ShowUtil.*
+import com.digitalasset.canton.util.Thereafter.syntax.*
 import com.digitalasset.canton.util.retry.{AllExceptionRetryPolicy, Pause}
 import com.digitalasset.canton.util.{ErrorUtil, PriorityBlockingQueueUtil}
 import com.google.common.annotations.VisibleForTesting
@@ -52,7 +57,7 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 import java.util.concurrent.{Callable, PriorityBlockingQueue, TimeUnit}
 import scala.annotation.tailrec
 import scala.concurrent.duration.DurationInt
-import scala.concurrent.{ExecutionContextExecutor, Promise}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Promise}
 import scala.util.Try
 
 /** A clock returning the current time, but with a twist: it always returns unique timestamps. If
@@ -79,12 +84,70 @@ abstract class Clock() extends TimeProvider with AutoCloseable with NamedLogging
   }
   protected def warnIfClockRunsBackwards: Boolean = false
 
-  protected case class Queued[A](action: CantonTimestamp => A, timestamp: CantonTimestamp) {
+  /** Handle for cancelling a scheduled task. */
+  sealed trait ClockHandle[-A] {
+    def cancel(outcome: UnlessShutdown[A]): Unit
+  }
 
-    val promise: Promise[UnlessShutdown[A]] = Promise[UnlessShutdown[A]]()
+  /** Handle for cancelling a scheduled task.
+    *
+    * Contravariant in A (-A) because the type parameter only appears in contravariant position (as
+    * input to cancel()). This allows ClockHandle[Any] to be a supertype of all ClockHandle[A],
+    * enabling Dummy (which handles Any) to be used universally without casting.
+    */
+  private object ClockHandle {
+
+    /** Dummy handle for immediately-executed tasks that don't need cancellation */
+    private[Clock] case object Dummy extends ClockHandle[Any] {
+      override def cancel(outcome: UnlessShutdown[Any]): Unit = ()
+    }
+  }
+
+  protected class Queued[A](val action: CantonTimestamp => A, val timestamp: CantonTimestamp)
+      extends ClockHandle[A] {
+
+    private[Clock] val promise: Promise[UnlessShutdown[A]] = Promise[UnlessShutdown[A]]()
+
+    // State machine: false = Queued (waiting to execute), true = RunningOrDone (executing/executed/cancelled)
+    // CAS ensures exactly one of cancel() or run() succeeds in transitioning from Queued to RunningOrDone
+    private[Clock] val state = new AtomicBoolean(false)
+
+    /** Cancels this task by removing it from the queue and completing the promise.
+      *
+      * Uses CAS to ensure linearizability: if cancel() succeeds, the action is guaranteed not to
+      * have executed and will never execute. If cancel() loses the race to run(), it becomes a
+      * no-op.
+      *
+      * @param outcome
+      *   The value to complete the promise with, allowing callers to indicate why the cancellation
+      *   occurred (e.g., UnlessShutdown.AbortedDueToShutdown for shutdown, UnlessShutdown.unit for
+      *   successful/failed completion before execution)
+      * @note
+      *   Uses `PriorityBlockingQueue.remove()` which is O(n). Chosen over `ConcurrentSkipListMap`
+      *   (O(log n)) to avoid 2.5x memory overhead and lock-free implementation complexity.
+      *   Acceptable for typical queue sizes (100k-1M tasks).
+      *   https://github.com/DACH-NY/canton/pull/32019#discussion_r3079723573
+      */
+    override def cancel(outcome: UnlessShutdown[A]): Unit =
+      if (state.compareAndSet(false, true)) {
+        // Won the race: successfully transitioned from Queued to RunningOrDone
+        // Guaranteed that run() and failTasks() haven't started and won't start
+        tasks.remove(this)
+        promise.success(outcome)
+      } else {
+        // Lost the race: run() or failTasks() already transitioned to RunningOrDone
+        // Do nothing, they will/have completed the promise
+      }
 
     def run(now: CantonTimestamp): Unit =
-      promise.complete(Try(UnlessShutdown.Outcome(action(now))))
+      if (state.compareAndSet(false, true)) {
+        // Won the race: successfully transitioned from Queued to RunningOrDone
+        // Guaranteed that cancel() and failTasks() haven't succeeded and won't succeed
+        promise.complete(Try(UnlessShutdown.Outcome(action(now))))
+      } else {
+        // Lost the race: cancel() or failTasks() already transitioned to RunningOrDone
+        // Do nothing, they will/have completed the promise
+      }
 
   }
 
@@ -125,6 +188,8 @@ abstract class Clock() extends TimeProvider with AutoCloseable with NamedLogging
     }
   }
 
+  // PriorityBlockingQueue chosen over ConcurrentSkipListMap: simpler implementation, 2.5x less
+  // memory overhead, O(1) peek. Trade-off: O(n) task removal on cancellation.
   protected val tasks =
     new PriorityBlockingQueue[Queued[?]](
       PriorityBlockingQueueUtil.DefaultInitialCapacity,
@@ -141,7 +206,26 @@ abstract class Clock() extends TimeProvider with AutoCloseable with NamedLogging
       action: CantonTimestamp => A,
       delta: Duration,
   ): FutureUnlessShutdown[A] =
-    scheduleAt(action, now.add(delta))
+    scheduleAfterCancellable(action, delta)._1
+
+  /** Schedule an action to be performed after the given duration. Returns the future result and a
+    * handle for cancelling the scheduled task.
+    *
+    * If the provided `delta` is not positive the action skips queueing and is executed immediately,
+    * returning a Dummy handle.
+    *
+    * @param action
+    *   action to run after the given duration
+    * @param delta
+    *   duration to wait before running the task
+    * @return
+    *   Tuple of (future result, cancellation handle)
+    */
+  def scheduleAfterCancellable[A](
+      action: CantonTimestamp => A,
+      delta: Duration,
+  ): (FutureUnlessShutdown[A], ClockHandle[A]) =
+    scheduleAtCancellable(action, now.add(delta))
 
   /** Thread-safely schedule an action to be executed in the future actions need not execute in the
     * order of their timestamps.
@@ -160,16 +244,101 @@ abstract class Clock() extends TimeProvider with AutoCloseable with NamedLogging
   def scheduleAt[A](
       action: CantonTimestamp => A,
       timestamp: CantonTimestamp,
-  ): FutureUnlessShutdown[A] = {
-    val queued = Queued(action, timestamp)
+  ): FutureUnlessShutdown[A] =
+    scheduleAtCancellable(action, timestamp)._1
+
+  /** Schedule an action to be performed at the given timestamp. Returns the future result and a
+    * handle for cancelling the scheduled task.
+    *
+    * If the provided timestamp is before `now`, the action skips queueing and is executed
+    * immediately, returning a Dummy handle.
+    *
+    * @param action
+    *   action to run at the given timestamp (passing in the timestamp for when the task was
+    *   scheduled)
+    * @param timestamp
+    *   timestamp when to run the task
+    * @return
+    *   Tuple of (future result, cancellation handle)
+    */
+  def scheduleAtCancellable[A](
+      action: CantonTimestamp => A,
+      timestamp: CantonTimestamp,
+  ): (FutureUnlessShutdown[A], ClockHandle[A]) = {
+    val queued = new Queued(action, timestamp)
     val nowTime = now
     if (!nowTime.isBefore(timestamp)) {
       queued.run(nowTime)
+      (FutureUnlessShutdown(queued.promise.future), ClockHandle.Dummy)
     } else {
       addToQueue(queued)
+      (FutureUnlessShutdown(queued.promise.future), queued)
     }
-    FutureUnlessShutdown(queued.promise.future)
   }
+
+  /** Schedule an action to be performed at the given timestamp. If the closeContext is closed, then
+    * the task is cancelled.
+    *
+    * If the provided timestamp is before `now`, the action skips queueing and is executed
+    * immediately.
+    *
+    * @param action
+    *   action to run at the given timestamp (passing in the timestamp for when the task was
+    *   scheduled)
+    * @param taskName
+    *   name of the task
+    * @param timestamp
+    *   timestamp when to run the task
+    * @return
+    *   a future for the given task
+    */
+  def scheduleAtCancelledOnShutdown[A](
+      action: CantonTimestamp => A,
+      taskName: String,
+      timestamp: CantonTimestamp,
+  )(implicit ec: ExecutionContext, closeContext: CloseContext): FutureUnlessShutdown[A] = {
+
+    val (f, handle) = scheduleAtCancellable(action, timestamp)
+
+    val cancelTask = new RunOnClosing {
+      override def name: String = s"cancel-$taskName"
+      override def done: Boolean = f.isCompleted
+      override def run()(implicit traceContext: TraceContext): Unit =
+        handle.cancel(AbortedDueToShutdown)
+    }
+
+    // Cancel the task upon shutdown
+    val lifeCycleRegistrationHandleUS: UnlessShutdown[LifeCycleRegistrationHandle] =
+      closeContext.context.runOnClose(cancelTask)
+
+    f.thereafter { _ =>
+      // Remove the lifeCycleRegistrationHandle when the task is finished
+      lifeCycleRegistrationHandleUS.foreach(_.cancel().discard)
+    }
+  }
+
+  /** Schedule an action to be performed at the given timestamp. If the closeContext is closed, then
+    * the task is cancelled.
+    *
+    * If the provided timestamp is before `now`, the action skips queueing and is executed
+    * immediately.
+    *
+    * @param action
+    *   action to run at the given timestamp (passing in the timestamp for when the task was
+    *   scheduled)
+    * @param taskName
+    *   name of the task
+    * @param delta
+    *   duration to wait before running the task
+    * @return
+    *   a future for the given task
+    */
+  def scheduleAfterCancelledOnShutdown[A](
+      action: CantonTimestamp => A,
+      taskName: String,
+      delta: Duration,
+  )(implicit ec: ExecutionContext, closeContext: CloseContext): FutureUnlessShutdown[A] =
+    scheduleAtCancelledOnShutdown(action, taskName, now.add(delta))
 
   // flush the task queue, stopping once we hit a task in the future
   @tailrec
@@ -182,12 +351,19 @@ abstract class Clock() extends TimeProvider with AutoCloseable with NamedLogging
         // if task is present but in the future, put it back
         val currentTime = now
         if (item.timestamp > currentTime) {
+          // Always add first to avoid race where cancel() is called after poll() but before add()
           tasks.add(item)
-          // If the clock was advanced concurrently while this call was checking the task's time against now
-          // then the task will not `run` until the next call to `flush`. So if we see that the time was advanced
-          // rerun `flush()`.
-          if (now >= item.timestamp) doFlush()
-          else Some(item.timestamp)
+          // Check if cancelled between poll() and now - if so, remove it
+          if (item.state.get()) {
+            tasks.remove(item)
+            doFlush()
+          } else {
+            // If the clock was advanced concurrently while this call was checking the task's time against now
+            // then the task will not `run` until the next call to `flush`. So if we see that the time was advanced
+            // rerun `flush()`.
+            if (now >= item.timestamp) doFlush()
+            else Some(item.timestamp)
+          }
         } else {
           // otherwise execute task and iterate
           item.run(currentTime)
@@ -203,7 +379,10 @@ abstract class Clock() extends TimeProvider with AutoCloseable with NamedLogging
       Option(tasks.poll()) match {
         case None => ()
         case Some(item) =>
-          item.promise.success(AbortedDueToShutdown)
+          // Use CAS to ensure exactly one of cancel(), run(), or failTasks() completes the promise
+          if (item.state.compareAndSet(false, true)) {
+            item.promise.success(AbortedDueToShutdown)
+          }
           go()
       }
     go()
@@ -377,9 +556,8 @@ class SimClock(
 
   override def close(): Unit = {}
 
-  override protected def addToQueue(queue: Queued[?]): Unit = {
-    val _ = tasks.add(queue)
-  }
+  override protected def addToQueue(queue: Queued[?]): Unit =
+    tasks.add(queue).discard
 
   def reset(): Unit = {
     failTasks()

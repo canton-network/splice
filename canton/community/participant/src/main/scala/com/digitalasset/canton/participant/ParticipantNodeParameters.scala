@@ -11,9 +11,9 @@ import com.digitalasset.canton.participant.admin.AdminWorkflowConfig
 import com.digitalasset.canton.participant.config.*
 import com.digitalasset.canton.participant.sync.CommandProgressTrackerConfig
 import com.digitalasset.canton.sequencing.client.SequencerClientConfig
-import com.digitalasset.canton.time
 import com.digitalasset.canton.tracing.TracingConfig
 import com.digitalasset.canton.version.ProtocolVersion
+import com.digitalasset.canton.{config, time}
 import com.google.common.annotations.VisibleForTesting
 
 final case class ParticipantNodeParameters(
@@ -30,19 +30,20 @@ final case class ParticipantNodeParameters(
     enableStrictDarValidation: Boolean,
     commandProgressTracking: CommandProgressTrackerConfig,
     alphaOnlinePartyReplicationSupport: Option[AlphaOnlinePartyReplicationConfig],
-    automaticallyPerformLsu: Boolean,
+    lsuConfig: LsuConfig,
     reassignmentsConfig: ReassignmentsConfig,
     doNotAwaitOnCheckingIncomingCommitments: Boolean,
     disableOptionalTopologyChecks: Boolean,
     commitmentAsynchronousInitialization: Boolean,
-    commitmentCheckpointInterval: PositiveDurationSeconds,
+    commitmentCheckpointInterval: config.PositiveDurationSeconds,
     commitmentMismatchDebugging: Boolean,
     commitmentProcessorNrAcsChangesBehindToTriggerCatchUp: Option[PositiveInt],
     commitmentReduceParallelism: NonNegativeInt,
     commitmentUseDbSnapshotForParticipantLookup: Boolean,
     autoSyncProtocolFeatureFlags: Boolean,
-    alphaMultiSynchronizerSupport: Boolean,
+    enableAllLedgerApiReassignments: Boolean,
     commitAfterFailedActivenessCheck: Boolean,
+    validateLegacyContractsV11: Boolean,
 ) extends CantonNodeParameters
     with HasGeneralCantonNodeParameters {
   override def dontWarnOnDeprecatedPV: Boolean = protocolConfig.dontWarnOnDeprecatedPV
@@ -72,7 +73,9 @@ object ParticipantNodeParameters {
       exitOnFatalFailures = true,
       watchdog = None,
       startupMemoryCheckConfig = StartupMemoryCheckConfig(ReportingLevel.Warn),
-      dispatchQueueBackpressureLimit = NonNegativeInt.tryCreate(10),
+      topologyConfig =
+        TopologyConfig(dispatchQueueBackpressureLimit = NonNegativeInt.tryCreate(10)),
+      sanitizePublicErrorMessages = false,
     ),
     activationFrequencyForWarnAboutConsistencyChecks = 1000L,
     adminWorkflow = AdminWorkflowConfig(
@@ -93,20 +96,21 @@ object ParticipantNodeParameters {
     enableStrictDarValidation = true,
     commandProgressTracking = CommandProgressTrackerConfig(),
     alphaOnlinePartyReplicationSupport = None,
-    automaticallyPerformLsu = true,
+    lsuConfig = LsuConfig(),
     reassignmentsConfig = ReassignmentsConfig(
-      targetTimestampForwardTolerance = NonNegativeFiniteDuration.ofSeconds(30)
+      targetTimestampForwardTolerance = config.NonNegativeFiniteDuration.ofSeconds(30)
     ),
     doNotAwaitOnCheckingIncomingCommitments = false,
     disableOptionalTopologyChecks = false,
     commitmentAsynchronousInitialization = true,
-    commitmentCheckpointInterval = PositiveDurationSeconds.ofMinutes(1),
+    commitmentCheckpointInterval = config.PositiveDurationSeconds.ofMinutes(1),
     commitmentMismatchDebugging = false,
     commitmentProcessorNrAcsChangesBehindToTriggerCatchUp = None,
     commitmentReduceParallelism = NonNegativeInt.zero,
     commitmentUseDbSnapshotForParticipantLookup = false,
     autoSyncProtocolFeatureFlags = true,
-    alphaMultiSynchronizerSupport = false,
+    enableAllLedgerApiReassignments = false,
     commitAfterFailedActivenessCheck = false,
+    validateLegacyContractsV11 = true,
   )
 }

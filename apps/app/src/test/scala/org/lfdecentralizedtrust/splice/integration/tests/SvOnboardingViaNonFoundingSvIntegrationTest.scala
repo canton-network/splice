@@ -26,6 +26,8 @@ class SvOnboardingViaNonFoundingSvIntegrationTest
     with SvTestUtil
     with StandaloneCanton {
 
+  // sv1 is stopped mid-test, so neither history check is meaningful here.
+  override protected def runUpdateHistorySanityCheck: Boolean = false
   override protected def runEventHistorySanityCheck: Boolean = false
 
   override def dbsSuffix: String = "non_sv1_svs"
@@ -87,6 +89,8 @@ class SvOnboardingViaNonFoundingSvIntegrationTest
         }(configuration)
       })
       .withManualStart
+      // Prevent flakes where the topology transaction gets dropped from outbox after disconnect and we're not retrying
+      .withSvBftSequencerConnectionDisabled()
 
   "A new SV can: 1) onboard via a non-sv1 while sv1 is offboarded from the DSO and " +
     "2) bootstrap using a sequencer that is not sv1's sequencer" in { implicit env =>
@@ -139,12 +143,13 @@ class SvOnboardingViaNonFoundingSvIntegrationTest
                 }
               }
             endpoints.toSet shouldBe Set(
-              LocalSynchronizerNode.toEndpoint(
-                sv1Backend.config.localSynchronizerNodes.current.sequencer.internalApi
-              ),
+              // SV BFT sequencer connections are disabled
+//              LocalSynchronizerNode.toEndpoint(
+//                sv1Backend.config.localSynchronizerNodes.current.sequencer.internalApi
+//              ),
               LocalSynchronizerNode.toEndpoint(
                 sv2Backend.config.localSynchronizerNodes.current.sequencer.internalApi
-              ),
+              )
             )
             sv2Backend.participantClient.synchronizers.is_connected(
               decentralizedSynchronizerAlias

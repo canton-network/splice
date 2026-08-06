@@ -11,12 +11,6 @@ onboardingSecretFrom:
 # e.g. digitalAsset-finance-1
 validatorPartyHint: "YOUR_VALIDATOR_PARTY_HINT"
 
-# MIGRATION_START
-# Replace MIGRATION_ID with the migration ID of the global synchronizer.
-migration:
-  id: "MIGRATION_ID"
-#MIGRATION_END
-
 persistence:
   secretName: postgres-secrets
   host: postgres

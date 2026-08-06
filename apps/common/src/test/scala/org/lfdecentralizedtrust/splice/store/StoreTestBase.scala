@@ -34,6 +34,9 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.{
   schedule as scheduleCodegen,
   validatorlicense as validatorLicenseCodegen,
 }
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
+  rewardaccountingv2 as rewardAccountingCodegen
+}
 import org.lfdecentralizedtrust.splice.environment.{BaseLedgerConnection, DarResource, DarResources}
 import org.lfdecentralizedtrust.splice.environment.ledger.api.{
   ActiveContract,
@@ -68,7 +71,10 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.holdingv1.I
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.test.dummyholding.DummyHolding
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_AddSv
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.voterequestoutcome.VRO_Accepted
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.voterequestoutcome.{
+  VRO_Accepted,
+  VRO_Rejected,
+}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   ActionRequiringConfirmation,
   DsoRules_AddSv,
@@ -282,6 +288,8 @@ abstract class StoreTestBase
       SpliceUtil.defaultTransferConfig(10, holdingFee),
       SpliceUtil.issuanceConfig(10.0, 10.0, 10.0),
       new RelTime(1_000_000),
+      Optional.empty(), // trafficPrice
+      Optional.empty(), // rewardConfig
     )
 
     contract(
@@ -325,6 +333,25 @@ abstract class StoreTestBase
     contract(
       roundCodegen.ClosedMiningRound.TEMPLATE_ID_WITH_PACKAGE_ID,
       new roundCodegen.ClosedMiningRound.ContractId(nextCid()),
+      template,
+    )
+  }
+
+  protected def calculateRewardsV2(
+      dso: PartyId,
+      round: Long,
+      dryRun: Boolean = true,
+  ) = {
+    val template = new rewardAccountingCodegen.CalculateRewardsV2(
+      dso.toProtoPrimitive,
+      new Round(round),
+      Instant.now().truncatedTo(ChronoUnit.MICROS),
+      new RelTime(600_000_000L),
+      dryRun,
+    )
+    contract(
+      rewardAccountingCodegen.CalculateRewardsV2.TEMPLATE_ID_WITH_PACKAGE_ID,
+      new rewardAccountingCodegen.CalculateRewardsV2.ContractId(nextCid()),
       template,
     )
   }
@@ -435,6 +462,7 @@ abstract class StoreTestBase
     val template = new AmuletAllocation(
       new LockedAmulet.ContractId(nextCid()),
       allocationSpec,
+      java.util.Optional.empty(),
     )
 
     contract(
@@ -491,6 +519,29 @@ abstract class StoreTestBase
         amount,
         new Round(round),
         Optional.empty(),
+      ),
+    )
+
+  protected def rewardCouponV2(
+      round: Int,
+      provider: PartyId,
+      amount: Numeric.Numeric = numeric(1.0),
+      beneficiary: Option[PartyId] = None,
+      expiresAt: Instant = Instant.now().plusSeconds(3600),
+      providerIsObserver: Boolean = true,
+      contractId: String = nextCid(),
+  ): Contract[amuletCodegen.RewardCouponV2.ContractId, amuletCodegen.RewardCouponV2] =
+    contract(
+      identifier = amuletCodegen.RewardCouponV2.TEMPLATE_ID_WITH_PACKAGE_ID,
+      contractId = new amuletCodegen.RewardCouponV2.ContractId(contractId),
+      payload = new amuletCodegen.RewardCouponV2(
+        dsoParty.toProtoPrimitive,
+        provider.toProtoPrimitive,
+        new Round(round),
+        amount,
+        expiresAt,
+        providerIsObserver,
+        beneficiary.map(_.toProtoPrimitive).fold(Optional.empty[String]())(Optional.of),
       ),
     )
 
@@ -630,8 +681,13 @@ abstract class StoreTestBase
   protected def featuredAppRight(
       providerParty: PartyId,
       contractId: String = nextCid(),
+      activityWeight: Option[BigDecimal] = None,
   ) = {
-    val template = new FeaturedAppRight(dsoParty.toProtoPrimitive, providerParty.toProtoPrimitive)
+    val template = new FeaturedAppRight(
+      dsoParty.toProtoPrimitive,
+      providerParty.toProtoPrimitive,
+      activityWeight.map(_.bigDecimal).toJava,
+    )
     contract(
       FeaturedAppRight.TEMPLATE_ID_WITH_PACKAGE_ID,
       new FeaturedAppRight.ContractId(contractId),
@@ -682,6 +738,17 @@ abstract class StoreTestBase
     util.List.of(),
     util.List.of(),
     new VRO_Accepted(effectiveAt),
+  )
+
+  protected def mkRejectedVoteRequestResult(
+      voteRequestContract: Contract[VoteRequest.ContractId, VoteRequest],
+      completedAt: Instant,
+  ): DsoRules_CloseVoteRequestResult = new DsoRules_CloseVoteRequestResult(
+    voteRequestContract.payload,
+    completedAt,
+    util.List.of(),
+    util.List.of(),
+    new VRO_Rejected(damlUnit.getInstance()),
   )
 
   protected def mkCloseVoteRequest(

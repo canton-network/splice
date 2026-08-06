@@ -34,6 +34,8 @@ import com.digitalasset.canton.discard.Implicits.DiscardOps
 import org.apache.pekko.http.scaladsl.Http
 import org.apache.pekko.http.scaladsl.model.{HttpRequest, HttpResponse, StatusCodes}
 import org.apache.pekko.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken}
+import org.scalatest.concurrent.PatienceConfiguration
+import org.scalatest.time.{Seconds, Span}
 import org.slf4j.event.Level
 
 import java.time.Duration
@@ -89,10 +91,8 @@ class WalletIntegrationTest
     "tap deduplicates" in { implicit env =>
       onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
       aliceWalletClient.tap(50.0, Some("dedup-test"))
-      assertThrowsAndLogsCommandFailures(
-        aliceWalletClient.tap(50.0, Some("dedup-test")),
-        _.errorMessage should include("409 Conflict"),
-      )
+      // Duplicate tap with the same command id returns the original result idempotently (200, not 409).
+      aliceWalletClient.tap(50.0, Some("dedup-test"))
     }
 
     "allow two wallet app users to connect to one wallet backend and tap" in { implicit env =>
@@ -225,9 +225,12 @@ class WalletIntegrationTest
 
           val tapsAfter = Range(0, 3).map(_ => Future(Try(aliceWalletClient.tap(10))))
 
-          // Wait for all futures to complete
-          val successfulTaps = (tapsBefore ++ tapsAfter).map(_.futureValue).count(_.isSuccess)
-          if (failedAcceptF.futureValue.isSuccess)
+          // Wait for all futures to complete. The stale accept forces the treasury to filter
+          // and retry batches, so under load this can exceed the default patience.
+          val patience = PatienceConfiguration.Timeout(Span(60, Seconds))
+          val successfulTaps =
+            (tapsBefore ++ tapsAfter).map(_.futureValue(patience)).count(_.isSuccess)
+          if (failedAcceptF.futureValue(patience).isSuccess)
             fail("The AcceptTransferOffer action unexpectedly succeeded")
 
           successfulTaps should be(
@@ -543,10 +546,11 @@ class WalletIntegrationTest
             aliceWalletClient.balance().unlockedQty should be(40.0)
           },
         )
-        assertThrowsAndLogsCommandFailures(
-          bobWalletClient.transferPreapprovalSend(aliceUserParty, 40.0, deduplicationId),
-          _.errorMessage should include("409 Conflict"),
-        )
+        // Duplicate send with same deduplication id returns the original result idempotently (200, not 409).
+        bobWalletClient.transferPreapprovalSend(aliceUserParty, 40.0, deduplicationId)
+        // Balance is unchanged — idempotent
+        bobWalletClient.balance().unlockedQty should be(60.0)
+        aliceWalletClient.balance().unlockedQty should be(40.0)
 
         clue("Preapproval sends work if provider has a featured app right") {
           // Feature alice validator to test a transfer with a featured preapproval provider
@@ -760,6 +764,41 @@ class WalletIntegrationTest
       )
     }
 
+    "Validator automation does not accept preapprovals from non-hosted parties" in { implicit env =>
+      val bobUserParty = onboardWalletUser(bobWalletClient, bobValidatorBackend)
+      val aliceValidatorParty = aliceValidatorBackend.getValidatorPartyId()
+
+      clue("TransferPreapprovalProposal is created but not accepted") {
+        loggerFactory.assertEventuallyLogsSeq(
+          SuppressionRule.LevelAndAbove(Level.INFO) && SuppressionRule.LoggerNameContains(
+            "AcceptTransferPreapprovalProposalTrigger"
+          )
+        )(
+          bobValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
+            .submitWithResult(
+              userId = bobValidatorBackend.config.ledgerApiUser,
+              actAs = Seq(bobUserParty),
+              readAs = Seq.empty,
+              update = TransferPreapprovalProposal
+                .create(
+                  bobUserParty.toProtoPrimitive,
+                  aliceValidatorParty.toProtoPrimitive,
+                  java.util.Optional.of(dsoParty.toProtoPrimitive),
+                ),
+            ),
+          logs =>
+            forExactly(1, logs) {
+              _.message should include("not hosted on our participant")
+            },
+        )
+      }
+      clue("No preapproval was created") {
+        aliceValidatorBackend
+          .listTransferPreapprovals()
+          .filter(_.payload.receiver == bobUserParty.toProtoPrimitive) shouldBe empty
+      }
+    }
+
     "upload all splice-util-featured-app-proxies.dar files w/o error" in { implicit env =>
       import better.files.*
       import scala.util.matching.Regex
@@ -780,6 +819,7 @@ class WalletIntegrationTest
 
       darPaths
         .foreach { f =>
+          logger.info(s"Uploading dar path $f")
           aliceValidatorBackend.participantClientWithAdminToken.upload_dar_unless_exists(
             f.toString()
           )

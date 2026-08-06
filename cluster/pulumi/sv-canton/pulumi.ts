@@ -87,10 +87,10 @@ export function runSvCantonForSvs<T>(
         return {
           id: id,
           version: activeVersion,
-          // This doesn't actually matter, this is only used for down/refresh.
-          enableLogicalSynchronizerDeploymentMode: false,
-          migrateParticipantsFromSvCantonToSv: false,
-          sequencer: { enableBftSequencer: false },
+          sequencer: {
+            enableBftSequencer: false,
+            dedicatedBftSequencerDb: true,
+          },
         };
       })
   );

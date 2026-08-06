@@ -2,7 +2,6 @@ package org.lfdecentralizedtrust.splice.store
 
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.AppRewardCoupon
 import org.lfdecentralizedtrust.splice.environment.{DarResources, RetryProvider}
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.store.StoreTestBase.testTxLogConfig
 import org.lfdecentralizedtrust.splice.util.{Contract, ResourceTemplateDecoder, TemplateJsonDecoder}
 import com.digitalasset.canton.HasActorSystem
@@ -557,10 +556,7 @@ class TxLogBackfillingStoreTest
   ): UpdateHistory = {
     new UpdateHistory(
       storage,
-      DomainMigrationInfo(
-        migrationId,
-        None,
-      ),
+      migrationId,
       "TxLogBackfillingStoreTest",
       participantId,
       party,
@@ -596,10 +592,7 @@ class TxLogBackfillingStoreTest
       loggerFactory,
       filter,
       testTxLogConfig,
-      DomainMigrationInfo(
-        migrationId,
-        None,
-      ),
+      migrationId,
       RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory),
       IngestionConfig(),
       defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),

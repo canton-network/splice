@@ -5,33 +5,18 @@ import {
   activeVersion,
   CnInput,
   createVolumeSnapshot,
-  DecentralizedSynchronizerUpgradeConfig,
   ExactNamespace,
   InstalledHelmChart,
   installSpliceHelmChart,
   standardStorageClassName,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
-import { PartyAllocatorConfig } from '@lfdecentralizedtrust/splice-pulumi-common-validator';
-
-import { hyperdiskSupportConfig } from '../../common/src/config/hyperdiskSupportConfig';
+} from '@canton-network/splice-pulumi-common';
+import { PartyAllocatorConfig } from '@canton-network/splice-pulumi-common-validator';
 
 export function installPartyAllocator(
   xns: ExactNamespace,
   config: PartyAllocatorConfig,
   dependsOn: CnInput<pulumi.Resource>[]
 ): InstalledHelmChart {
-  const dataSource =
-    hyperdiskSupportConfig.hyperdiskSupport.enabled &&
-    hyperdiskSupportConfig.hyperdiskSupport.migrating
-      ? {
-          dataSource: createVolumeSnapshot({
-            resourceName: `party-allocator-keys-migration-snapshot`,
-            snapshotName: `party-allocator-keys-snapshot`,
-            namespace: xns.logicalName,
-            pvcName: `party-allocator-keys`,
-          }).dataSource,
-        }
-      : {};
   return installSpliceHelmChart(
     xns,
     'party-allocator',
@@ -40,7 +25,7 @@ export function installPartyAllocator(
       config: {
         token: '${SPLICE_APP_VALIDATOR_LEDGER_API_AUTH_TOKEN}',
         userId: '${SPLICE_APP_VALIDATOR_LEDGER_API_AUTH_USER_NAME}',
-        jsonLedgerApiUrl: `http://participant-${DecentralizedSynchronizerUpgradeConfig.activeMigrationId}:7575`,
+        jsonLedgerApiUrl: `http://participant:7575`,
         scanApiUrl: 'http://scan-app.sv-1:5012',
         validatorApiUrl: 'http://validator-app:5003',
         maxParties: config.maxParties,
@@ -52,10 +37,7 @@ export function installPartyAllocator(
       pvc: {
         ...(config.pvcSize ? { size: config.pvcSize } : {}),
         volumeStorageClass: standardStorageClassName,
-        name: hyperdiskSupportConfig.hyperdiskSupport.enabled
-          ? 'party-allocator-keys-hd-pvc'
-          : 'party-allocator-keys',
-        ...dataSource,
+        name: 'party-allocator-keys-hd-pvc',
       },
     },
     activeVersion,

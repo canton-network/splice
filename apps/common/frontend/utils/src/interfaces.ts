@@ -1,10 +1,10 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { Contract as OpenAPIContract } from '@lfdecentralizedtrust/scan-openapi';
+import { Contract as OpenAPIContract } from '@canton-network/scan-openapi';
 import {
   AssignedContract as OpenAPIAssignedContract,
   ContractWithState as OpenAPIContractWithState,
-} from '@lfdecentralizedtrust/splitwell-openapi';
+} from '@canton-network/splitwell-openapi';
 import { z } from 'zod';
 
 import { ContractId, ContractTypeCompanion, Serializable, Template } from '@daml/types';

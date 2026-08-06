@@ -4,7 +4,7 @@ import * as k8s from '@pulumi/kubernetes';
 import {
   infraAffinityAndTolerations,
   standardStorageClassName,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 import { Namespace } from '@pulumi/kubernetes/core/v1';
 
 export function installDockerRegistryMirror(): k8s.helm.v3.Release {

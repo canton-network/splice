@@ -77,10 +77,6 @@ package object protocol {
   type LfNodeExercises = Node.Exercise
   val LfNodeExercises: Node.Exercise.type = Node.Exercise
 
-  /** Shorthand for lookup by key nodes. */
-  type LfNodeLookupByKey = Node.LookupByKey
-  val LfNodeLookupByKey: Node.LookupByKey.type = Node.LookupByKey
-
   /** Shorthand for query by key nodes. */
   type LfNodeQueryByKey = Node.QueryByKey
   val LfNodeQueryByKey: Node.QueryByKey.type = Node.QueryByKey
@@ -124,7 +120,9 @@ package object protocol {
   val LfChoiceName: Ref.ChoiceName.type = Ref.ChoiceName
 
   type RequestProcessor[VT <: ViewType, Event] =
-    Phase37Processor[RequestAndRootHashMessage[OpenEnvelope[EncryptedViewMessage[VT]]], Event]
+    Phase37Processor[RequestAndRootHashMessage[
+      OpenEnvelope[EncryptedViewMessage[VT]]
+    ], Event]
 
   def maxSerializationVersion(
       versions: NonEmpty[Seq[LfSerializationVersion]]

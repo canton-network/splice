@@ -33,6 +33,17 @@ object DarResourcesGenerator {
     "splice-api-token-allocation-request-v1" -> "1.0.0",
     "splice-api-token-allocation-instruction-v1" -> "1.0.0",
     "splice-token-test-trading-app" -> "1.0.0",
+    "splice-api-reward-assignment-v1" -> "1.0.0",
+    "splice-api-token-holding-v2" -> "1.0.0",
+    "splice-api-token-transfer-instruction-v2" -> "1.0.0",
+    "splice-api-token-allocation-v2" -> "1.0.0",
+    "splice-api-token-allocation-request-v2" -> "1.0.0",
+    "splice-api-token-allocation-instruction-v2" -> "1.0.0",
+    "splice-token-test-trading-app" -> "1.0.0",
+    "splice-token-test-trading-app-v2" -> "1.0.0",
+    "splice-api-token-transfer-events-v2" -> "1.0.0",
+    "splice-token-standard-utils" -> "2.0.0",
+    "splice-util-token-standard-wallet" -> "1.1.0",
   )
 
   // fix the order to reduce the diff to the existing status quo
@@ -46,6 +57,17 @@ object DarResourcesGenerator {
     "splice-wallet-payments",
     "splitwell",
     "splice-validator-lifecycle",
+    "splice-api-reward-assignment-v1",
+  )
+  private val topLevelPackageOrderWithoutSplitwell: Seq[String] = Seq(
+    "splice-amulet",
+    "splice-dso-governance",
+    "splice-util-batched-markers",
+    "splice-wallet",
+    "splice-amulet-name-service",
+    "splice-wallet-payments",
+    "splice-validator-lifecycle",
+    "splice-api-reward-assignment-v1",
   )
   private val tokenStandardProductionPackageOrder: Seq[String] = Seq(
     "splice-api-token-metadata-v1",
@@ -54,8 +76,17 @@ object DarResourcesGenerator {
     "splice-api-token-allocation-v1",
     "splice-api-token-allocation-request-v1",
     "splice-api-token-allocation-instruction-v1",
+    "splice-api-token-holding-v2",
+    "splice-api-token-transfer-instruction-v2",
+    "splice-api-token-allocation-v2",
+    "splice-api-token-allocation-request-v2",
+    "splice-api-token-allocation-instruction-v2",
+    "splice-api-token-transfer-events-v2",
+    "splice-token-standard-utils",
+    "splice-util-token-standard-wallet",
   )
   private val tokenStandardTestPackage: String = "splice-token-test-trading-app"
+  private val tokenStandardTestPackageV2: String = "splice-token-test-trading-app-v2"
 
   final case class DarEntry(
       path: String,
@@ -126,14 +157,15 @@ object DarResourcesGenerator {
         indent(2, renderPackage(name, dars, grouped))
       } ++
       renderPackageResources() ++
+      renderCorePackageResources() ++
       Seq(
         """|  lazy val pkgIdToDarResource: Map[String, DarResource] =
-           |    packageResources.view.flatMap(_.all).map(resource => resource.packageId -> resource).toMap
+           |    corePackageResources.view.flatMap(_.all).map(resource => resource.packageId -> resource).toMap
            |
            |  // We don't index the map by PackageMetadata because that type contains some additional
            |  // fields that don't matter.
            |  lazy val pkgMetadataToDarResource: Map[(PackageName, PackageVersion), DarResource] =
-           |    packageResources.view
+           |    corePackageResources.view
            |      .flatMap(_.all)
            |      .map(resource => (resource.metadata.name, resource.metadata.version) -> resource)
            |      .toMap
@@ -156,6 +188,19 @@ object DarResourcesGenerator {
         "",
       )
 
+  private def renderCorePackageResources(): Seq[String] =
+    Seq(
+      "  lazy val corePackageResources: Seq[PackageResource] =",
+      "  TokenStandard.allPackageResources ++ Seq(",
+    ) ++
+      topLevelPackageOrderWithoutSplitwell.sorted.map(name =>
+        s"    DarResources.${camel(name)},"
+      ) ++
+      Seq(
+        "  )",
+        "",
+      )
+
   private def renderTokenStandard(grouped: Map[String, Seq[DarEntry]]): Seq[String] = {
     val production = tokenStandardProductionPackageOrder.flatMap(name =>
       renderPackage(name, grouped.getOrElse(name, Nil), grouped)
@@ -165,12 +210,17 @@ object DarResourcesGenerator {
       grouped.getOrElse(tokenStandardTestPackage, Nil),
       grouped,
     )
+    val testV2 = renderPackage(
+      tokenStandardTestPackageV2,
+      grouped.getOrElse(tokenStandardTestPackageV2, Nil),
+      grouped,
+    )
 
     Seq("object TokenStandard {") ++
-      indent(2, production ++ test) ++
+      indent(2, production ++ test ++ testV2) ++
       Seq(
         s"  val allProductionPackageResources = Seq(${tokenStandardProductionPackageOrder.map(camel).mkString(", ")})",
-        s"  val allPackageResources = allProductionPackageResources :+ ${camel(tokenStandardTestPackage)}",
+        s"  val allPackageResources = allProductionPackageResources :+ ${camel(tokenStandardTestPackage)} :+ ${camel(tokenStandardTestPackageV2)}",
         "}",
       )
   }

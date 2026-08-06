@@ -3,7 +3,7 @@
 import * as gcp from '@pulumi/gcp';
 import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
-import { CLUSTER_BASENAME, ExactNamespace } from '@lfdecentralizedtrust/splice-pulumi-common';
+import { CLUSTER_BASENAME, ExactNamespace } from '@canton-network/splice-pulumi-common';
 
 import { CloudArmorPolicy } from './cloudArmor';
 

@@ -1,6 +1,6 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { clusterSubConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/config';
+import { clusterSubConfig } from '@canton-network/splice-pulumi-common/src/config/config';
 import { z } from 'zod';
 
 const GkeNodePoolConfigSchema = z.object({
@@ -8,12 +8,14 @@ const GkeNodePoolConfigSchema = z.object({
   maxNodes: z.number(),
   nodeType: z.string(),
   bootDiskSizeGb: z.number().optional(),
+  zones: z.literal('*').or(z.array(z.string())).optional(),
 });
 const GkeClusterConfigSchema = z.object({
   nodePools: z.object({
     infra: GkeNodePoolConfigSchema,
+    additionalInfra: z.array(GkeNodePoolConfigSchema).default([]),
     apps: GkeNodePoolConfigSchema,
-    hyperdiskApps: GkeNodePoolConfigSchema.optional(),
+    additionalApps: z.array(GkeNodePoolConfigSchema).default([]),
   }),
 });
 

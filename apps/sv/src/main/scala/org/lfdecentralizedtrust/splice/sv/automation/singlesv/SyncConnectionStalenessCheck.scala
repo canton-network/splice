@@ -13,5 +13,5 @@ trait SyncConnectionStalenessCheck {
   def participantAdminConnection: ParticipantAdminConnection
 
   def isNotConnectedToSync()(implicit tc: TraceContext, ec: ExecutionContext): Future[Boolean] =
-    participantAdminConnection.listConnectedDomains().map(_.isEmpty)
+    participantAdminConnection.listConnectedSynchronizers().map(_.isEmpty)
 }

@@ -20,7 +20,10 @@ import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framewor
   BatchId,
   ProofOfAvailability,
 }
-import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.ordering.OrderedBlockForOutput
+import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.ordering.{
+  OrderedBlockForOutput,
+  OrderingMode,
+}
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.topology.Membership
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.{
   MessageFrom,
@@ -82,6 +85,7 @@ object Availability {
     final case class LocalBatchStoredSigned(
         batchId: Traced[BatchId],
         batch: OrderingRequestBatch,
+        signingMembership: Membership,
         // None if this message is just used to trigger further dissemination
         signature: Option[Signature],
     )
@@ -282,10 +286,11 @@ object Availability {
 
     final case class FetchBatchDataFromNodes(
         proofOfAvailability: ProofOfAvailability,
-        mode: OrderedBlockForOutput.Mode,
+        orderingMode: OrderingMode,
     ) extends LocalOutputFetch
 
-    final case class FetchRemoteBatchDataTimeout(batchId: BatchId) extends LocalOutputFetch
+    final case class FetchRemoteBatchDataTimeout(batchId: BatchId, epochNumber: EpochNumber)
+        extends LocalOutputFetch
 
     final case class AttemptedBatchDataLoadForNode(
         batchId: BatchId,
@@ -298,6 +303,7 @@ object Availability {
   object RemoteOutputFetch {
     final case class FetchRemoteBatchData private (
         batchId: BatchId,
+        epochNumber: EpochNumber,
         from: BftNodeId,
     )(
         override val representativeProtocolVersion: RepresentativeProtocolVersion[
@@ -312,7 +318,7 @@ object Availability {
       protected override def toProtoV30: v30.AvailabilityMessage =
         v30.AvailabilityMessage(
           v30.AvailabilityMessage.Message.BatchRequest(
-            v30.BatchRequest(batchId.hash.getCryptographicEvidence)
+            v30.BatchRequest(batchId.hash.getCryptographicEvidence, epochNumber)
           )
         )
 
@@ -355,16 +361,22 @@ object Availability {
         for {
           id <- BatchId.fromProto(value.batchId)
           rpv <- protocolVersionRepresentativeFor(SupportedVersions.ProtoData)
-        } yield Availability.RemoteOutputFetch.FetchRemoteBatchData(id, from)(
+          epochNumber = EpochNumber(value.epochNumber)
+        } yield Availability.RemoteOutputFetch.FetchRemoteBatchData(
+          id,
+          epochNumber,
+          from,
+        )(
           rpv,
           deserializedFrom = Some(bytes),
         )
 
       def create(
           batchId: BatchId,
+          epochNumber: EpochNumber,
           from: BftNodeId,
       )(implicit synchronizerProtocolVersion: ProtocolVersion): FetchRemoteBatchData =
-        FetchRemoteBatchData(batchId, from)(
+        FetchRemoteBatchData(batchId, epochNumber, from)(
           protocolVersionRepresentativeFor(synchronizerProtocolVersion),
           deserializedFrom = None,
         )
@@ -463,6 +475,7 @@ object Availability {
 
     final case class UpdateTopologyDuringStateTransfer[E <: Env[E]](
         currentMembership: Membership,
+        currentEpochNumber: EpochNumber,
         currentCryptoProvider: CryptoProvider[E],
     ) extends Consensus[E]
 

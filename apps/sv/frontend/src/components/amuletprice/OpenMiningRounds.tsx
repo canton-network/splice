@@ -5,7 +5,7 @@ import {
   DateDisplay,
   Loading,
   SvClientProvider,
-} from '@lfdecentralizedtrust/splice-common-frontend';
+} from '@canton-network/splice-common-frontend';
 import BigNumber from 'bignumber.js';
 import React from 'react';
 

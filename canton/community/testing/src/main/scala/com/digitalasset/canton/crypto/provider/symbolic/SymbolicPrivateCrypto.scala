@@ -12,6 +12,7 @@ import com.digitalasset.canton.crypto.store.CryptoPrivateStoreExtended
 import com.digitalasset.canton.health.ComponentHealthState
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
+import com.digitalasset.canton.metrics.{CommonMockMetrics, DecryptionMetrics, SigningMetrics}
 import com.digitalasset.canton.tracing.TraceContext
 import com.google.common.annotations.VisibleForTesting
 import com.google.protobuf.ByteString
@@ -40,14 +41,18 @@ class SymbolicPrivateCrypto(
 
   // NOTE: These schemes are not really used by Symbolic crypto
   override def signingSchemes: SigningCryptoSchemes =
-    SigningCryptoSchemes(
-      CryptoScheme(SigningKeySpec.EcCurve25519, NonEmpty.mk(Set, SigningKeySpec.EcCurve25519)),
-      CryptoScheme(SigningAlgorithmSpec.Ed25519, NonEmpty.mk(Set, SigningAlgorithmSpec.Ed25519)),
+    SigningCryptoSchemes.tryCreate(
+      CryptoScheme
+        .tryCreate(SigningKeySpec.EcCurve25519, NonEmpty.mk(Set, SigningKeySpec.EcCurve25519)),
+      CryptoScheme.tryCreate(
+        SigningAlgorithmSpec.Ed25519,
+        NonEmpty.mk(Set, SigningAlgorithmSpec.Ed25519),
+      ),
     )
   override def encryptionSchemes: EncryptionCryptoSchemes =
-    EncryptionCryptoSchemes(
-      CryptoScheme(EncryptionKeySpec.EcP256, NonEmpty.mk(Set, EncryptionKeySpec.EcP256)),
-      CryptoScheme(
+    EncryptionCryptoSchemes.tryCreate(
+      CryptoScheme.tryCreate(EncryptionKeySpec.EcP256, NonEmpty.mk(Set, EncryptionKeySpec.EcP256)),
+      CryptoScheme.tryCreate(
         EncryptionAlgorithmSpec.EciesHkdfHmacSha256Aes128Cbc,
         NonEmpty.mk(Set, EncryptionAlgorithmSpec.EciesHkdfHmacSha256Aes128Cbc),
       ),
@@ -105,4 +110,9 @@ class SymbolicPrivateCrypto(
   override def name: String = "symbolic-private-crypto"
 
   override protected def initialHealthState: ComponentHealthState = ComponentHealthState.Ok()
+
+  private val cryptoMetrics = CommonMockMetrics.cryptoMetrics
+
+  override def signingMetrics: SigningMetrics = cryptoMetrics.signingMetrics
+  override def decryptionMetrics: DecryptionMetrics = cryptoMetrics.decryptionMetrics
 }

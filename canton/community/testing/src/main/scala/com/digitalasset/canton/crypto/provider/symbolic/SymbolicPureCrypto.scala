@@ -5,8 +5,15 @@ package com.digitalasset.canton.crypto.provider.symbolic
 
 import cats.syntax.either.*
 import com.daml.nonempty.NonEmpty
-import com.digitalasset.canton.config.RequireTypes.NonNegativeInt
+import com.digitalasset.canton.config.CryptoParallelismConfig
+import com.digitalasset.canton.config.RequireTypes.{NonNegativeInt, PositiveInt}
 import com.digitalasset.canton.crypto.*
+import com.digitalasset.canton.metrics.{
+  CommonMockMetrics,
+  CryptoMetrics,
+  DecryptionMetrics,
+  SigningMetrics,
+}
 import com.digitalasset.canton.serialization.{DeserializationError, DeterministicEncoding}
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.{ByteStringUtil, EitherUtil}
@@ -38,15 +45,21 @@ class SymbolicPureCrypto extends CryptoPureApi {
   // NOTE: The following schemes are not really used by Symbolic crypto, but we pretend to support them
   override val defaultSymmetricKeyScheme: SymmetricKeyScheme = SymmetricKeyScheme.Aes128Gcm
   override val signingAlgorithmSpecs: CryptoScheme[SigningAlgorithmSpec] =
-    CryptoScheme(SigningAlgorithmSpec.Ed25519, NonEmpty.mk(Set, SigningAlgorithmSpec.Ed25519))
+    CryptoScheme.tryCreate(
+      SigningAlgorithmSpec.Ed25519,
+      NonEmpty.mk(Set, SigningAlgorithmSpec.Ed25519),
+    )
   override val encryptionAlgorithmSpecs: CryptoScheme[EncryptionAlgorithmSpec] =
-    CryptoScheme(
+    CryptoScheme.tryCreate(
       EncryptionAlgorithmSpec.EciesHkdfHmacSha256Aes128Cbc,
       NonEmpty.mk(Set, EncryptionAlgorithmSpec.EciesHkdfHmacSha256Aes128Cbc),
     )
   override val defaultPbkdfScheme: PbkdfScheme = PbkdfScheme.Argon2idMode1
 
-  override protected[crypto] def signBytes(
+  override def signatureVerificationParallelism: PositiveInt =
+    CryptoParallelismConfig.defaultSignatureVerificationParallelism
+
+  override private[crypto] def signBytesInternal(
       bytes: ByteString,
       signingKey: SigningPrivateKey,
       usage: NonEmpty[Set[SigningKeyUsage]],
@@ -337,6 +350,10 @@ class SymbolicPureCrypto extends CryptoPureApi {
       .map(key => PasswordBasedEncryptionKey(key, salt))
   }
 
+  val cryptoMetrics: CryptoMetrics = CommonMockMetrics.cryptoMetrics
+
+  override def signingMetrics: SigningMetrics = cryptoMetrics.signingMetrics
+  override def decryptionMetrics: DecryptionMetrics = cryptoMetrics.decryptionMetrics
 }
 
 object SymbolicPureCrypto {

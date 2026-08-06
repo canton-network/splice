@@ -5,8 +5,8 @@ import {
   config,
   loadJsonFromFile,
   externalIpRangesFile,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
-import { clusterYamlConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/config';
+} from '@canton-network/splice-pulumi-common';
+import { clusterYamlConfig } from '@canton-network/splice-pulumi-common/src/config/config';
 import { getSecretVersionOutput } from '@pulumi/gcp/secretmanager';
 import util from 'node:util';
 import { z } from 'zod';
@@ -27,7 +27,10 @@ const CloudArmorConfigSchema = z.object({
     .catchall(
       z.object({
         rulePreviewOnly: z.boolean().default(false),
-        hostname: z.string().regex(/^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/, 'valid DNS hostname'),
+        hostname: z
+          .string()
+          .regex(/^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$/, 'valid DNS hostname')
+          .optional(),
         pathPrefix: z.string().regex(/^\/[^"]*$/, 'HTTP request path starting with /'),
         throttleAcrossAllEndpointsAllIps: z.object({
           withinIntervalSeconds: z.number().positive(),
@@ -54,7 +57,12 @@ export const InfraConfigSchema = z.object({
     istio: z.object({
       enableIngressAccessLogging: z.boolean(),
       enableClusterAccessLogging: z.boolean().default(false),
+      enablePublicTokenRegistry: z.boolean().default(false),
       istiodValues: z.object({}).catchall(z.any()).default({}),
+      sequencerFlowControl: z.object({
+        initialStreamWindowSize: z.int(),
+        initialConnectionWindowSize: z.int(),
+      }),
     }),
     extraCustomResources: z.object({}).catchall(z.any()).default({}),
   }),
@@ -114,10 +122,11 @@ export function loadIPRanges(svsOnly: boolean = false): pulumi.Output<string[]> 
   const configWhitelistedIps = infraConfig.ipWhitelisting?.extraWhitelistedIngress || [];
   const excludedIps = infraConfig.ipWhitelisting?.excludedIps || [];
 
-  return internalWhitelistedIps.apply(whitelists =>
-    whitelists
+  return internalWhitelistedIps.apply(whitelists => {
+    const ips = whitelists
       .concat(externalIpRanges)
       .concat(configWhitelistedIps)
-      .filter(ip => excludedIps.indexOf(ip) < 0)
-  );
+      .filter(ip => excludedIps.indexOf(ip) < 0);
+    return [...new Set(ips)];
+  });
 }

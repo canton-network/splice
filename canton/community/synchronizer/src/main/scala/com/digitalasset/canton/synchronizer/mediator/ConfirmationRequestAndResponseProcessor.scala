@@ -7,6 +7,7 @@ import cats.data.{EitherT, OptionT}
 import cats.syntax.foldable.*
 import cats.syntax.functorFilter.*
 import cats.syntax.semigroup.*
+import com.digitalasset.base.error.ErrorCode
 import com.digitalasset.canton.*
 import com.digitalasset.canton.concurrent.FutureSupervisor
 import com.digitalasset.canton.config.RequireTypes.NonNegativeInt
@@ -36,6 +37,7 @@ import com.digitalasset.canton.tracing.{Spanning, TraceContext}
 import com.digitalasset.canton.util.*
 import com.digitalasset.canton.util.EitherUtil.RichEither
 import com.digitalasset.canton.util.ShowUtil.*
+import com.digitalasset.canton.version.ProtocolVersion
 import com.google.common.annotations.VisibleForTesting
 import io.opentelemetry.api.trace.Tracer
 import org.slf4j.event.Level
@@ -54,7 +56,6 @@ private[mediator] class ConfirmationRequestAndResponseProcessor(
     crypto: SynchronizerCryptoClient,
     timeTracker: SynchronizerTimeTracker,
     val mediatorState: MediatorState,
-    asynchronousProcessing: Boolean,
     protected val loggerFactory: NamedLoggerFactory,
     override val timeouts: ProcessingTimeout,
     batchingConfig: BatchingConfig,
@@ -68,21 +69,17 @@ private[mediator] class ConfirmationRequestAndResponseProcessor(
 
   private val psid = crypto.psid
 
-  val processingQueue: ProcessingQueue[RequestId] =
-    if (asynchronousProcessing) new ShardedSequentialProcessingQueue
-    else new SynchronousProcessingQueue
+  val processingQueue: ShardedSequentialProcessingQueue[RequestId] =
+    new GarbageCollectedShardedSequentialProcessingQueue()
 
   override def observeTimestampWithoutEvent(sequencingTimestamp: CantonTimestamp)(implicit
       traceContext: TraceContext
-  ): HandlerResult =
-    if (asynchronousProcessing) handleTimeouts(sequencingTimestamp)
-    else HandlerResult.synchronous(handleTimeouts(sequencingTimestamp).flatMap(_.unwrap))
+  ): HandlerResult = handleTimeouts(sequencingTimestamp)
 
   override def handleMediatorEvent(
       event: MediatorEvent
   )(implicit traceContext: TraceContext): HandlerResult =
-    if (asynchronousProcessing) handleMediatorEventAsynchronous(event)
-    else handleMediatorEventSynchronous(event)
+    handleMediatorEventAsynchronous(event)
 
   private def handleMediatorEventAsynchronous(
       event: MediatorEvent
@@ -91,19 +88,6 @@ private[mediator] class ConfirmationRequestAndResponseProcessor(
       asyncTimeoutHandling <- handleTimeouts(event.sequencingTimestamp)
       asyncEventHandling <- doHandleMediatorEvent(event)
     } yield asyncEventHandling |+| asyncTimeoutHandling
-
-  private def handleMediatorEventSynchronous(
-      event: MediatorEvent
-  )(implicit traceContext: TraceContext): HandlerResult = {
-    // to process synchronously, we inline the async results before continuing on to the next step
-    val future = for {
-      asyncTimeoutHandling <- handleTimeouts(event.sequencingTimestamp)
-      _ <- asyncTimeoutHandling.unwrap
-      asyncEventHandling <- doHandleMediatorEvent(event)
-      unthrottledAsync <- asyncEventHandling.unwrap
-    } yield unthrottledAsync
-    HandlerResult.synchronous(future)
-  }
 
   private def doHandleMediatorEvent(
       event: MediatorEvent
@@ -144,7 +128,7 @@ private[mediator] class ConfirmationRequestAndResponseProcessor(
             //   inner future: finalizedPromise — completes only after the verdict is persisted to DB
             HandlerResult.asynchronous(
               processingQueue
-                .enqueueForProcessing(event.requestId)(
+                .executeUS(event.requestId)(
                   processRequest(
                     event.requestId,
                     counter,
@@ -153,7 +137,8 @@ private[mediator] class ConfirmationRequestAndResponseProcessor(
                     requestEnvelope,
                     rootHashMessages,
                     batchAlsoContainsTopologyTransaction,
-                  )
+                  ),
+                  "process request",
                 )
             )
           case MediatorEvent.Response(
@@ -164,7 +149,7 @@ private[mediator] class ConfirmationRequestAndResponseProcessor(
                 recipients,
               ) =>
             HandlerResult.asynchronousUnit(
-              processingQueue.enqueueForProcessing(responses.message.requestId)(
+              processingQueue.executeUS(responses.message.requestId)(
                 processResponses(
                   responseTimestamp,
                   counter,
@@ -173,7 +158,8 @@ private[mediator] class ConfirmationRequestAndResponseProcessor(
                   responses,
                   topologyTimestamp,
                   recipients,
-                )
+                ),
+                "process response",
               )
             )
         }
@@ -201,20 +187,22 @@ private[mediator] class ConfirmationRequestAndResponseProcessor(
       requestId: RequestId,
       timestamp: CantonTimestamp,
   ): FutureUnlessShutdown[Unit] = {
+
+    // the event causing the timeout is likely unrelated to the transaction we're actually timing out,
+    // so use the original request trace context
+    implicit val traceContext =
+      mediatorState.getPending(requestId).fold(TraceContext.empty)(_.requestTraceContext)
+
     def pendingRequestNotFound: FutureUnlessShutdown[Unit] = {
       // This is logged at trace, because otherwise this would be logged for each request on DEBUG, which is actually not very helpful and just noise.
-      noTracingLogger.trace(
+      logger.trace(
         s"Pending aggregation for request [$requestId] not found. This implies the request has been finalized since the timeout was scheduled."
       )
       FutureUnlessShutdown.unit
     }
 
-    processingQueue.enqueueForProcessing(requestId)(
+    processingQueue.executeUS(requestId)(
       mediatorState.getPending(requestId).fold(pendingRequestNotFound) { responseAggregation =>
-        // the event causing the timeout is likely unrelated to the transaction we're actually timing out,
-        // so use the original request trace context
-        implicit val traceContext: TraceContext = responseAggregation.requestTraceContext
-
         logger.info(
           s"Phase 6: Request ${requestId.unwrap}: Timeout in state ${responseAggregation.state} at $timestamp"
         )
@@ -225,7 +213,8 @@ private[mediator] class ConfirmationRequestAndResponseProcessor(
         MonadUtil.whenM(mediatorState.replace(responseAggregation, timedOut))(
           sendResultIfDone(timedOut, responseAggregation.decisionTime)
         )
-      }
+      },
+      "handle timeout",
     )
   }
 
@@ -739,7 +728,35 @@ private[mediator] class ConfirmationRequestAndResponseProcessor(
         )
         logger.debug(show"Phase 5: Responses for request=${responses.requestId.unwrap}: $responses")
 
+        val mediatorGroupRecipients = recipients.allRecipients.collect {
+          case r: MediatorGroupRecipient =>
+            r
+        }
+
+        def isInGroup(
+            snapshot: SynchronizerSnapshotSyncCryptoApi
+        ): OptionT[FutureUnlessShutdown, Boolean] =
+          for {
+            mediatorGroups <- snapshot.ipsSnapshot
+              .mediatorGroupsOfAll(mediatorGroupRecipients.toSeq.map(_.group))
+              .toOption
+
+          } yield mediatorGroups.exists(_.all contains mediatorId)
+
         (for {
+          _ <-
+            if (psid.protocolVersion >= ProtocolVersion.v35 && mediatorGroupRecipients.sizeIs > 1) {
+              val error = MediatorError.MalformedMessage
+                .Reject(
+                  s"Request ${responses.requestId}, sender ${responses.sender}: More than one mediator group in the recipients: $mediatorGroupRecipients. Discarding..."
+                )
+
+              error.report()
+
+              val grpcError = ErrorCode.asGrpcError(error)
+              OptionT.liftF(FutureUnlessShutdown.failed(grpcError))
+            } else OptionT.some[FutureUnlessShutdown](())
+
           snapshot <- OptionT.liftF(crypto.awaitSnapshot(responses.requestId.unwrap))
           _ <- signedResponses
             .verifySignature(snapshot, responses.sender)
@@ -772,30 +789,54 @@ private[mediator] class ConfirmationRequestAndResponseProcessor(
               OptionT.none[FutureUnlessShutdown, Unit]
             }
           _ <- {
-            // To ensure that a mediator group address is resolved in the same way as for the request
-            // we require that the topology timestamp on the response submission request is set to the
-            // request's sequencing time. The sequencer communicates this timestamp to the client
-            // via the timestamp of signing key.
-            if (topologyTimestamp.contains(responses.requestId.unwrap))
-              OptionT.some[FutureUnlessShutdown](())
-            else {
-              MediatorError.MalformedMessage
-                .Reject(
-                  s"Request ${responses.requestId}, sender ${responses.sender}: Discarding confirmation response because the topology timestamp is not set to the request id [$topologyTimestamp]"
-                )
-                .report()
-              OptionT.none[FutureUnlessShutdown, Unit]
+
+            if (psid.protocolVersion >= ProtocolVersion.v35) {
+              // Starting from v35, we reject messages with topology timestamp set
+              if (topologyTimestamp.isEmpty)
+                OptionT.some[FutureUnlessShutdown](())
+              else {
+                MediatorError.MalformedMessage
+                  .Reject(
+                    s"Request ${responses.requestId}, sender ${responses.sender}: Discarding confirmation response because the topology timestamp is non-empty."
+                  )
+                  .report()
+                OptionT.none[FutureUnlessShutdown, Unit]
+              }
+            } else {
+              // To ensure that a mediator group address is resolved in the same way as for the request
+              // we require that the topology timestamp on the response submission request is set to the
+              // request's sequencing time. The sequencer communicates this timestamp to the client
+              // via the timestamp of signing key.
+              if (topologyTimestamp.contains(responses.requestId.unwrap))
+                OptionT.some[FutureUnlessShutdown](())
+              else {
+                MediatorError.MalformedMessage
+                  .Reject(
+                    s"Request ${responses.requestId}, sender ${responses.sender}: Discarding confirmation response because the topology timestamp is not set to the request id [$topologyTimestamp]"
+                  )
+                  .report()
+                OptionT.none[FutureUnlessShutdown, Unit]
+              }
             }
           }
 
           responseAggregation <- mediatorState.fetch(responses.requestId).orElse {
+            val logErrorOnUnknownRequestIdF =
+              if (psid.protocolVersion >= ProtocolVersion.v35) isInGroup(snapshot)
+              else OptionT.some[FutureUnlessShutdown](true)
+
             // This can happen as part of an attack.
             val cause =
               s"Received a confirmation response at $ts by ${responses.sender} with an unknown request id ${responses.requestId}. Discarding response..."
-            val error = MediatorError.InvalidMessage.Reject(cause)
-            error.log()
 
-            OptionT.none[FutureUnlessShutdown, ResponseAggregator]
+            logErrorOnUnknownRequestIdF.flatMap { logErrorOnUnknownRequestId =>
+              if (logErrorOnUnknownRequestId) {
+                val error = MediatorError.InvalidMessage.Reject(cause)
+                error.log()
+              } else logger.info(cause)
+
+              OptionT.none[FutureUnlessShutdown, ResponseAggregator]
+            }
           }
 
           _ <- {

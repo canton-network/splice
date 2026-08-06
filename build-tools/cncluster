@@ -267,10 +267,18 @@ function _assert_lock() {
         fi
 
         # Check lock for CI...
-        if ! approver=$( "$SPLICE_ROOT/build-tools/approved-by.sh" ); then
-            _error "Could not determine approver for CI workflow"
+        approver=""
+        # Check for GHA
+        if env-bool GITHUB_ACTIONS; then
+            approver="${GITHUB_ACTOR:-}"
         fi
 
+        # Check for CCI
+        if env-bool CIRCLECI; then
+            if ! approver=$( "$SPLICE_ROOT/build-tools/approved-by.sh" ); then
+                _error "Could not determine approver for CI workflow"
+            fi
+        fi
         if [[ -n "$approver" ]]; then
             local -a names
             readarray -t names < <( _get_holder_names "$approver" )
@@ -304,7 +312,6 @@ declare -A subcommand_whitelist
 
 source "${TOOLS_LIB}/pulumi-helpers"
 source "${TOOLS_LIB}/pulumi-commands"
-source "${TOOLS_LIB}/hard-domain-migration-commands"
 source "${TOOLS_LIB}/logical-synchronizer-upgrade-commands"
 source "${TOOLS_LIB}/disaster-recovery-commands"
 
@@ -437,11 +444,6 @@ function subcmd_logs() {
 
 function k8s_labels_for_app() {
     local global_domain_specific_apps=("global-domain-cometbft" "global-domain-sequencer" "global-domain-mediator")
-    local domain_specific_apps="@(participant|multi-participant-[0-9][0-9])"
-    local logical_synchronizer_deployment_mode
-    logical_synchronizer_deployment_mode=$( \
-        get_resolved_config | yq ".synchronizerMigration | pick([\"active\", \"upgrade\", \"legacy\"]) | .[]? | select(.id == ${domain}) | .enableLogicalSynchronizerDeploymentMode" || true \
-    )
 
     # shellcheck disable=SC2076
     # shellcheck disable=SC2053
@@ -449,9 +451,6 @@ function k8s_labels_for_app() {
        # If the app is in the list, append the domain to the app
        app_container=${app#"global-domain-"}
        app="global-domain-${domain}-${app#"global-domain-"}"
-    elif [[ "$app" == $domain_specific_apps && "$logical_synchronizer_deployment_mode" != "true" ]]; then
-       # If the app is in the list, append the domain to the app
-       app="${app}-${domain}"
     fi
 }
 
@@ -1949,7 +1948,7 @@ function subcmd_restore_node() {
             _info "Silencing SV report creation alerts for $sv_name for 1 hour"
             subcmd_silence_grafana_alerts "1 hour" "alertname=Report Creation Time Lag" "report_publisher=$sv_name"
             _info "Restoring sv node $node"
-            SPLICE_SV=$node SPLICE_MIGRATION_ID=$migration_id "$SPLICE_ROOT"/cluster/scripts/node-restore.sh $force "$node" "$migration_id" "$backup_run_id" cometbft sequencer participant mediator cn-apps
+            SPLICE_SV=$node SPLICE_MIGRATION_ID=$migration_id "$SPLICE_ROOT"/cluster/scripts/node-restore.sh $force "$node" "$migration_id" "$backup_run_id" cometbft cantonBft sequencer participant mediator cn-apps
             ;;
         validator1|splitwell)
             _info "Restoring validator node $node"
@@ -2337,23 +2336,36 @@ function subcmd_psql() {
   local APPLICATION="$2"
 
   _info "Retrieving DB connection info from pod description..."
-  local DB_INIT_COMMAND
-  DB_INIT_COMMAND=$(
+  local DB_INIT_SCRIPT
+  DB_INIT_SCRIPT=$(
     kubectl get deployment \
       --namespace "${NAMESPACE}" \
       --selector "app=${APPLICATION}" \
       -o 'jsonpath={..spec.template.spec.initContainers[0].command}' \
-    | jq 'join(" ")' \
-    | grep -i psql \
-    | sed -nE 's/^.*(psql.?*) 2>&1.*$/\1/p'
+    | jq -r 'join("\n")'
   )
+
+  # There can be multiple psql invocations, pick the one that contains create database.
+  local DB_INIT_COMMAND
+  DB_INIT_COMMAND=$(
+    grep -F 'create database' <<< "${DB_INIT_SCRIPT}" \
+      | sed -nE 's/^.*(psql .*) 2>&1.*$/\1/p' \
+      | tail -n 1
+  ) || true
 
   if [ -z "${DB_INIT_COMMAND}" ]; then
     _error "Application ${APPLICATION} in namespace ${NAMESPACE} does not have an associated database."
     exit 1
   fi
 
-  eval "set -- $DB_INIT_COMMAND"
+  # The participant does not directly inline the db name so we resolve things here.
+  local DB_INIT_VARS
+  DB_INIT_VARS=$(
+    sed -nE "s/^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*='[^']*')[[:space:]]*$/local \1/p" <<< "${DB_INIT_SCRIPT}"
+  ) || true
+
+  eval "${DB_INIT_VARS}
+        set -- ${DB_INIT_COMMAND}"
   while [ $# -gt 0 ]; do
     case "$1" in
       -h|--host)

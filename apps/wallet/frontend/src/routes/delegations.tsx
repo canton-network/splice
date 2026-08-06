@@ -21,8 +21,8 @@ import {
   DateDisplay,
   DisableConditionally,
   Loading,
-} from '@lfdecentralizedtrust/splice-common-frontend';
-import { Contract } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+} from '@canton-network/splice-common-frontend';
+import { Contract } from '@canton-network/splice-common-frontend-utils';
 import { useMutation } from '@tanstack/react-query';
 
 import { MintingDelegation } from '@daml.js/splice-wallet/lib/Splice/Wallet/MintingDelegation/module';

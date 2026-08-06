@@ -34,6 +34,10 @@ abstract class SpliceBackendConfig extends LocalNodeConfig {
 abstract class GrpcClientConfig extends NodeConfig {}
 abstract class HttpClientConfig extends NetworkAppNodeConfig {}
 
+final case class SplicePostgresConfig(
+    clientConnectionCheckInterval: NonNegativeFiniteDuration = NonNegativeFiniteDuration ofSeconds 5
+)
+
 final case class CircuitBreakerConfig(
     maxFailures: Int = 20,
     callTimeout: NonNegativeFiniteDuration =
@@ -45,6 +49,10 @@ final case class CircuitBreakerConfig(
     // If the last failure was more than resetFailuresAfter ago, reset the failures to 0.
     resetFailuresAfter: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofMinutes(15),
 )
+
+object CircuitBreakerConfig {
+  val never: CircuitBreakerConfig = CircuitBreakerConfig(maxFailures = Int.MaxValue)
+}
 
 final case class CircuitBreakersConfig(
     highPriority: CircuitBreakerConfig = CircuitBreakerConfig(
@@ -68,12 +76,24 @@ final case class CircuitBreakersConfig(
     ),
 )
 
+object CircuitBreakersConfig {
+  val never: CircuitBreakersConfig = CircuitBreakersConfig(
+    highPriority = CircuitBreakerConfig.never,
+    mediumPriority = CircuitBreakerConfig.never,
+    lowPriority = CircuitBreakerConfig.never,
+    amuletExpiry = CircuitBreakerConfig.never,
+  )
+}
+
 final case class EnabledFeaturesConfig(
     enableNewAcsExport: Boolean = true,
     // For now, we always need to do this as Canton does not update the configuration until a reconnect.
     // On 3.5 we should be able to set it to false.
     reconnectOnSynchronizerConfigurationChange: Boolean = true,
     enableUnsupportedDarsUnvetting: Boolean = true,
+    enableValidatorDarsUnvetting: Boolean = true,
+    ignorePartyIdWithIgnoredAmulet: Boolean = true,
+    naiveUnresponsivePartiesAutoIgnore: Boolean = true,
 )
 
 final case class SpliceCachingConfigs(
@@ -126,6 +146,10 @@ case class SharedSpliceAppParameters(
   override def startupMemoryCheckConfig: StartupMemoryCheckConfig = StartupMemoryCheckConfig(Warn)
 
   def dispatchQueueBackpressureLimit: NonNegativeInt = ???
+
+  override def topologyConfig: TopologyConfig = ???
+
+  override def sanitizePublicErrorMessages: Boolean = true
 
   override def enableTestingFeatures = false
 }

@@ -74,6 +74,7 @@ import com.digitalasset.canton.{
   SequencerCounter,
   SynchronizerAlias,
 }
+import com.digitalasset.daml.lf.value.Value.ContractId
 import com.google.common.annotations.VisibleForTesting
 
 import java.time.Instant
@@ -905,6 +906,19 @@ final class SyncStateInspection(
           .moveLedgerEndBackToScratch()
       )
       .onShutdown(throw new RuntimeException("onlyForTestingMoveLedgerEndBackToScratch"))
+
+  @VisibleForTesting
+  def internalContractIdOf(
+      contractId: ContractId
+  )(implicit traceContext: TraceContext): Option[Long] =
+    timeouts.inspection
+      .awaitUS(functionFullName) {
+        participantNodePersistentState.value.contractStore
+          .lookupBatchedInternalIdsNonReadThrough(List(contractId))
+      }
+      .onShutdown(Map.empty)
+      .headOption
+      .map(_._2)
 
   def lastSynchronizerOffset(
       synchronizerId: SynchronizerId

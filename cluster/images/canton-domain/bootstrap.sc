@@ -12,7 +12,7 @@ def main() {
 
   def staticParameters(sequencer: LocalInstanceReference) =
     synchronizerParametersConfig
-      .toStaticSynchronizerParameters(sequencer.config.crypto, ProtocolVersion.v34, NonNegativeInt.zero)
+      .toStaticSynchronizerParameters(sequencer.config.crypto, ProtocolVersion.v35, NonNegativeInt.zero)
       .map(StaticSynchronizerParameters(_))
       .getOrElse(sys.error("whatever"))
 
@@ -24,7 +24,7 @@ def main() {
         case NodeStatus.Failure(msg) =>
           logger.info(s"Failed to query sequencer status: $msg")
           false
-        case NodeStatus.NotInitialized(_, _) =>
+        case NodeStatus.NotInitialized(_, _, _) =>
           logger.info("Initializing synchronizer")
           com.digitalasset.canton.console.ConsoleMacros.bootstrap.synchronizer(
             "synchronizer",

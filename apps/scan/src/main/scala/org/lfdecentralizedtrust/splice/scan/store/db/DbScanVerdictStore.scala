@@ -209,7 +209,6 @@ object DbScanVerdictStore {
       updateId = verdict.updateId,
       submittingParties = verdict.submittingParties,
       transactionRootViews = transactionRootViews,
-      // TODO(#4060): log an error and fail ingestion if a trafficSummary is missing for a verdict
       trafficSummaryO = byTimestamp.get(recordTime),
     )
 
@@ -475,29 +474,39 @@ class DbScanVerdictStore(
     }
   }
 
-  /** Insert multiple verdicts, their transaction views and app activity records in a single transaction.
+  /** Insert verdicts, transaction views, and activity records in a single
+    * transaction.
     *
-    * Verdicts are inserted first to obtain their generated row_ids. The placeholder
-    * verdictRowId (= DUMMY_VERDICT_ROW_ID) in each app activity record is then resolved to the
-    * actual row_id (matched by sequencingTime) before insertion.
-    *
-    * @param items verdicts with their transaction view constructors
-    * @param appActivityRecords pre-computed activity records paired with their sequencingTime;
-    *                           each record has verdictRowId = DUMMY_VERDICT_ROW_ID as a placeholder
+    * @param items verdicts with transaction view constructors
+    * @param appActivityRecords activity records with placeholder verdictRowIds
+    * @param hasTrafficSummaries whether traffic summaries were fetched for this batch
+    * @param firstActiveRoundO the OpenMiningRound round active at the earliest
+    *                          record time of the batch
+    * @param lastArchivedRoundO the highest archived OpenMiningRound round as of the
+    *                           max record time of the batch
     */
   def insertVerdictsWithAppActivityRecords(
-      items: Seq[(VerdictT, Long => Seq[TransactionViewT])],
+      items: NonEmptyList[(VerdictT, Long => Seq[TransactionViewT])],
       appActivityRecords: Seq[(CantonTimestamp, AppActivityRecordT)],
+      hasTrafficSummaries: Boolean,
+      firstActiveRoundO: Option[Long] = None,
+      lastArchivedRoundO: Option[Long] = None,
   )(implicit tc: TraceContext): Future[Unit] = {
     import profile.api.jdbcActionExtensionMethods
 
     val combinedAction = for {
-      rowIdByTime <- insertVerdictAndTransactionViewsDBIO(items)
+      rowIdByTime <- insertVerdictAndTransactionViewsDBIO(items.toList)
       // Resolve placeholder verdictRowId to actual row_ids from the inserted verdicts
       resolvedAppActivityRecords = appActivityRecords.flatMap { case (sequencingTime, record) =>
         rowIdByTime.get(sequencingTime).map(rowId => record.copy(verdictRowId = rowId))
       }
-      _ <- insertAppActivityRecordsDBIO(resolvedAppActivityRecords)
+      _ <- insertAppActivityRecordsDBIO(
+        resolvedAppActivityRecords,
+        items.head._1.recordTime.toMicros,
+        hasTrafficSummaries,
+        firstActiveRoundO,
+        lastArchivedRoundO,
+      )
     } yield ()
 
     futureUnlessShutdownToFuture(
@@ -506,8 +515,8 @@ class DbScanVerdictStore(
         "scanVerdict.insertVerdictsWithAppActivityRecords",
       )
     ).map { _ =>
-      val maxRt = items.map(_._1.recordTime).maxOption
-      maxRt.foreach(advanceLastIngestedRecordTime)
+      // items is NonEmptyList so maxOption always returns Some
+      items.toList.map(_._1.recordTime).maxOption.foreach(advanceLastIngestedRecordTime)
     }
   }
 
@@ -541,13 +550,23 @@ class DbScanVerdictStore(
   }
 
   private def insertAppActivityRecordsDBIO(
-      items: Seq[AppActivityRecordT]
-  )(implicit tc: TraceContext): DBIO[Unit] = {
+      items: Seq[AppActivityRecordT],
+      firstRecordTimeMicros: Long,
+      hasTrafficSummaries: Boolean,
+      firstActiveRoundO: Option[Long],
+      lastArchivedRoundO: Option[Long],
+  )(implicit tc: TraceContext): DBIO[Unit] =
     appActivityRecordStoreO match {
       case None => DBIO.successful(())
-      case Some(s) => s.insertAppActivityRecordsDBIO(items)
+      case Some(s) =>
+        s.insertAppActivityRecordsDBIO(
+          items,
+          firstRecordTimeMicros,
+          hasTrafficSummaries,
+          firstActiveRoundO,
+          lastArchivedRoundO,
+        )
     }
-  }
 
   private def afterFilters(
       afterO: Option[(Long, CantonTimestamp)],

@@ -14,7 +14,6 @@ import com.daml.metrics.api.MetricHandle.LabeledMetricsFactory
 import com.daml.metrics.api.MetricName
 import com.daml.metrics.{CacheMetrics, ExecutorServiceMetrics, HealthMetrics}
 import com.daml.nonempty.NonEmpty
-import com.daml.tracing.DefaultOpenTelemetry
 import com.digitalasset.canton.admin.health.v30.StatusServiceGrpc
 import com.digitalasset.canton.auth.{CantonAdminTokenDispenser, GrpcAuthInterceptorFactory}
 import com.digitalasset.canton.concurrent.{
@@ -64,7 +63,7 @@ import com.digitalasset.canton.lifecycle.{
 }
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.metrics.ActiveRequestsMetrics.GrpcServerMetricsX
-import com.digitalasset.canton.metrics.{DbStorageMetrics, DeclarativeApiMetrics}
+import com.digitalasset.canton.metrics.{CryptoMetrics, DbStorageMetrics, DeclarativeApiMetrics}
 import com.digitalasset.canton.networking.grpc.{
   CantonGrpcUtil,
   CantonMutableHandlerRegistry,
@@ -127,7 +126,7 @@ import com.digitalasset.canton.util.{
   SimpleExecutionQueue,
   SingleUseCell,
 }
-import com.digitalasset.canton.version.{ProtocolVersion, ReleaseProtocolVersion}
+import com.digitalasset.canton.version.{ProtocolVersion, ReleaseProtocolVersion, ReleaseVersion}
 import com.digitalasset.canton.watchdog.WatchdogService
 import io.grpc.ServerServiceDefinition
 import io.grpc.protobuf.services.ProtoReflectionServiceV1
@@ -182,6 +181,7 @@ trait BaseMetrics {
     new CacheMetrics("topology", openTelemetryMetricsFactory)
   def healthMetrics: HealthMetrics
   def storageMetrics: DbStorageMetrics
+  def cryptoMetrics: CryptoMetrics
   val declarativeApiMetrics: DeclarativeApiMetrics
 
 }
@@ -286,7 +286,7 @@ abstract class CantonNodeBootstrapImpl[
     getNode
       .map(_.status)
       .map(NodeStatus.Success(_))
-      .getOrElse(NodeStatus.NotInitialized(isActive, waitingFor))
+      .getOrElse(NodeStatus.NotInitialized(isActive, waitingFor, ReleaseVersion.current))
 
   private def waitingFor: Option[WaitingForExternalInput] = {
     @tailrec
@@ -493,6 +493,7 @@ abstract class CantonNodeBootstrapImpl[
             ReleaseProtocolVersion.latest,
             arguments.futureSupervisor,
             arguments.clock,
+            arguments.metrics.cryptoMetrics,
             executionContext,
             bootstrapStageCallback.timeouts,
             arguments.config.parameters.batching,
@@ -531,7 +532,6 @@ abstract class CantonNodeBootstrapImpl[
     ): Either[String, CantonMutableHandlerRegistry] = {
       // The admin-API services
       logger.info(s"Starting admin-api services on $adminApiConfig")
-      val openTelemetry = new DefaultOpenTelemetry(tracerProvider.openTelemetry)
       val builder = CantonServerBuilder
         .forConfig(
           config = adminApiConfig,
@@ -544,12 +544,12 @@ abstract class CantonNodeBootstrapImpl[
             GrpcAuthInterceptorFactory.createInterceptor(
               bootstrapStageCallback.loggerFactory,
               arguments.parameterConfig.loggingConfig.api,
-              openTelemetry,
               adminTokenDispenser,
               adminApiConfig.authServices,
               adminApiConfig.jwtTimestampLeeway,
               adminApiConfig.adminTokenConfig,
               adminApiConfig.jwksCacheConfig,
+              arguments.testingConfig.warnOnJwtScopeUsage,
             )
           ),
         )
@@ -702,6 +702,7 @@ abstract class CantonNodeBootstrapImpl[
             TopologyStoreId.AuthorizedStore,
             storage,
             indexedStringStore,
+            predecessor = None,
             ProtocolVersion.latest,
             bootstrapStageCallback.timeouts,
             parameters.batchingConfig,
@@ -758,6 +759,7 @@ abstract class CantonNodeBootstrapImpl[
       val temporaryTopologyStore =
         new InMemoryTopologyStore(
           TemporaryStore.tryCreate(identifier),
+          predecessor = None,
           ProtocolVersion.latest,
           this.loggerFactory,
           this.timeouts,
@@ -772,6 +774,7 @@ abstract class CantonNodeBootstrapImpl[
         // as we are only expecting namespace delegations that end up in the authorized store, this is fine
         staticSynchronizerParameters = None,
         timeouts = this.timeouts,
+        futureSupervisor = futureSupervisor,
         loggerFactory = this.loggerFactory,
       )
 
@@ -1017,7 +1020,6 @@ abstract class CantonNodeBootstrapImpl[
                   new GrpcTopologyManagerReadService(
                     member(nodeId),
                     temporaryStoreRegistry.stores() ++ sequencedTopologyStores :+ authorizedStore,
-                    crypto,
                     topologyClientLookup = lookupTopologyClient,
                     lookupSynchronizerTimeTracker,
                     lookupActivePsid,
@@ -1036,7 +1038,6 @@ abstract class CantonNodeBootstrapImpl[
                       .managers() ++ sequencedTopologyManagers :+ topologyManager,
                     lookupActivePsid,
                     temporaryStoreRegistry,
-                    parameters,
                     bootstrapStageCallback.loggerFactory,
                   ),
                   executionContext,
@@ -1269,6 +1270,7 @@ abstract class CantonNodeBootstrapImpl[
           mapping,
           serial = None,
           keys,
+          namespacesToSignFor = Seq.empty,
           protocolVersion,
           expectFullAuthorization = true,
           waitToBecomeEffective = None,

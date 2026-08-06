@@ -19,6 +19,7 @@ import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framewor
   EpochNumber,
 }
 import com.digitalasset.canton.tracing.TraceContext
+import com.google.common.annotations.VisibleForTesting
 
 import java.util.concurrent.atomic.AtomicReference
 import scala.collection.concurrent.TrieMap
@@ -158,16 +159,15 @@ abstract class GenericInMemoryOutputMetadataStore[E <: Env[E]] extends OutputMet
       .toSeq
       .sortBy(_.blockNumber)
 
-  override def getLastBlockInLatestCompletedEpoch(implicit
+  override def getLastNonSequentialBlockMetadataStored(implicit
       traceContext: TraceContext
   ): E#FutureUnlessShutdownT[Option[OutputBlockMetadata]] =
-    createFuture(lastBlockInLatestCompletedEpochName) { () =>
-      val lastStartedEpoch = epochs.keySet.maxOption
+    createFuture(lastNonSequentialBlockMetadataStoredName) { () =>
+      val lastBlockNumberO = blocks.values.map(_.blockNumber).maxOption
       Success(
-        lastStartedEpoch.flatMap { epochNumber =>
-          sortedBlocksForEpoch(
-            EpochNumber(epochNumber - 1L) // we go the previous to get last completed
-          ).maxByOption(_.blockNumber)
+        lastBlockNumberO match {
+          case Some(blockNumber) => blocks.get(blockNumber)
+          case _ => None
         }
       )
     }
@@ -253,6 +253,8 @@ abstract class GenericInMemoryOutputMetadataStore[E <: Env[E]] extends OutputMet
   ): E#FutureUnlessShutdownT[Option[OutputMetadataStore.LowerBound]] =
     createFuture(getLowerBoundActionName)(() => Success(lowerBound.get()))
 
+  @VisibleForTesting
+  def lowerBoundForTesting(): Option[OutputMetadataStore.LowerBound] = lowerBound.get()
   def latestBlock(): Option[BlockNumber] = blocks.keySet.maxOption
 }
 

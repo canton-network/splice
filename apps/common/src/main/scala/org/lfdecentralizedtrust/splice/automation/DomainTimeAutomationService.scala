@@ -5,11 +5,7 @@ package org.lfdecentralizedtrust.splice.automation
 
 import org.lfdecentralizedtrust.splice.config.AutomationConfig
 import org.lfdecentralizedtrust.splice.environment.{ParticipantAdminConnection, RetryProvider}
-import org.lfdecentralizedtrust.splice.store.{
-  DomainTimeStore,
-  DomainTimeSynchronization,
-  DomainUnpausedSynchronization,
-}
+import org.lfdecentralizedtrust.splice.store.{DomainTimeStore, DomainTimeSynchronization}
 import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.lifecycle.*
 import com.digitalasset.canton.logging.NamedLoggerFactory
@@ -31,7 +27,6 @@ final class DomainTimeAutomationService(
       config,
       clock,
       DomainTimeSynchronization.Noop,
-      DomainUnpausedSynchronization.Noop,
       retryProvider,
     ) {
 

@@ -11,9 +11,6 @@ metadata:
   {{- end }}
   labels:
     {{- include "splice-util-lib.default-labels" (set . "app" .Release.Name) | nindent 4 }}
-    {{- with $.Values.metrics.migration }}
-    migration_id: {{ .id | quote }}
-    {{- end }}
   name: {{ .Release.Name }}
   namespace: {{ .Release.Namespace }}
 spec:
@@ -29,24 +26,29 @@ spec:
         {{- toYaml .Values.pod.annotations | nindent 8 }}
       labels:
         {{- include "splice-util-lib.default-labels" (set . "app" .Release.Name) | nindent 8 }}
-        {{- with $.Values.metrics.migration }}
-        migration_id: {{ .id | quote }}
-        {{- end }}
     spec:
       {{- include "splice-util-lib.service-account" .Values | nindent 6 }}
+      {{- if .Values.securityContexts }}
+      {{- with .Values.securityContexts.pod }}
       securityContext:
-        runAsUser: 1001
-        runAsGroup: 1001
-        fsGroup: 1001
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- end }}
       containers:
       - name: participant
-        image: "{{ .Values.imageRepo }}/canton-participant:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).canton_participant) }}"
+        {{- if .Values.securityContexts }}
+        {{- with .Values.securityContexts.containers.participant }}
+        securityContext:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- end }}
+        image: {{ .Values.imageRepo }}/{{ .Values.imageName}}:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).canton_participant) }}
         {{- with .Values.imagePullPolicy }}
         imagePullPolicy: {{ . }}
         {{- end }}
         env:
         - name: JAVA_TOOL_OPTIONS
-          value: {{ .Values.defaultJvmOptions }} {{ .Values.additionalJvmOptions }}
+          value: "{{ .Values.defaultJvmOptions }} {{ .Values.additionalJvmOptions }} -Dlogback.configurationFile=/app/logback/logback.xml"
         - name: CANTON_PARTICIPANT_POSTGRES_SERVER
           value: {{ .Values.persistence.host }}
         - name: CANTON_PARTICIPANT_POSTGRES_PORT
@@ -54,10 +56,14 @@ spec:
         - name: CANTON_PARTICIPANT_POSTGRES_SCHEMA
           value: {{ .Values.persistence.schema }}
         - name: CANTON_PARTICIPANT_POSTGRES_PASSWORD
+          {{- if ((.Values.persistence).secretOverrides).postgresPassword }}
+          value: {{ .Values.persistence.secretOverrides.postgresPassword | quote }}
+          {{- else }}
           valueFrom:
             secretKeyRef:
               name: {{ .Values.persistence.secretName }}
               key: postgresPassword
+          {{- end }}
         {{- if .Values.persistence.databaseName }}
         - name: CANTON_PARTICIPANT_POSTGRES_DB
           value: {{ .Values.persistence.databaseName }}
@@ -88,7 +94,7 @@ spec:
             }]
         {{- else }}
         - name: CANTON_PARTICIPANT_ADMIN_USER_NAME
-          valueFrom: {{ .Values.participantAdminUserNameFrom | toYaml | nindent 12 }}
+{{ include "splice-util-lib.secret" (dict "overrides" (.Values.auth).secretOverrides "overrideKey" "ledgerApiUser" "secretName" .Values.participantAdminUserNameFrom.secretKeyRef.name "secretKey" .Values.participantAdminUserNameFrom.secretKeyRef.key "optional" (.Values.participantAdminUserNameFrom.secretKeyRef.optional | default false)) | indent 10 }}
         - name: AUTH_JWKS_URL
           value: {{ .Values.auth.jwksUrl }}
         - name: AUTH_TARGET_AUDIENCE
@@ -129,9 +135,13 @@ spec:
         {{- with .Values.resources }}
         resources: {{- toYaml . | nindent 10 }}
         {{- end }}
-        {{- if or (and .Values.extraVolumeMounts (gt (len .Values.extraVolumeMounts) 0)) .Values.pvc }}
         volumeMounts:
-          {{- range .Values.extraVolumeMounts }}
+          - name: logback-config
+            # Must mount the whole configmap as a directory instead of shadowing /app/logback.xml with subPath as the latter
+            # would not receive configmap updates.
+            # see https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/#mounted-configmaps-are-updated-automatically
+            mountPath: /app/logback
+        {{- range .Values.extraVolumeMounts }}
           - name: {{ .name }}
             mountPath: {{ .mountPath }}
             {{- if .subPath }}
@@ -140,36 +150,69 @@ spec:
             {{- if .readOnly }}
             readOnly: {{ .readOnly }}
             {{- end }}
-          {{- end }}
+        {{- end }}
         {{- if .Values.pvc }}
           - name: participant-volume
             mountPath: /persistent-data
-        {{- end }}
         {{- end }}
       {{- if or (.Values.persistence.enablePgInitContainer) (.Values.extraInitContainers) }}
       initContainers:
         {{- if .Values.persistence.enablePgInitContainer }}
         - name: pg-init
-          image: postgres:14
+          {{- if .Values.securityContexts }}
+          {{- with .Values.securityContexts.containers.persistence }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- end }}
+          image: {{ .Values.persistence.initImageName}}
           env:
             - name: PGPASSWORD
+              {{- if ((.Values.persistence).secretOverrides).postgresPassword }}
+              value: {{ .Values.persistence.secretOverrides.postgresPassword | quote }}
+              {{- else }}
               valueFrom:
                 secretKeyRef:
                   key: postgresPassword
                   name: {{ .Values.persistence.secretName }}
+              {{- end }}
           command:
             - 'bash'
             - '-c'
             - |
-              until errmsg=$(psql -h {{ .Values.persistence.host }} -p {{ .Values.persistence.port }} --username=cnadmin --dbname=cantonnet -c 'create database {{ .Values.persistence.databaseName }}' 2>&1); do
-                if [[ $errmsg == *"already exists"* ]]; then
-                  echo "Database {{ .Values.persistence.databaseName }} already exists. Done."
-                  break
-                fi
+              {{- $conflictCheck := true }}
+              {{- if hasKey .Values.persistence "enableParticipantDbConflictCheck" }}
+              {{- $conflictCheck = .Values.persistence.enableParticipantDbConflictCheck }}
+              {{- end }}
+              DB_TO_CREATE='{{ .Values.persistence.databaseName }}'
 
-                echo "trying to create postgres database {{ .Values.persistence.databaseName }}, last error: $errmsg";
+              until db_exists=$(psql -h {{ .Values.persistence.host }} -p {{ .Values.persistence.port }} --username=cnadmin --dbname=cantonnet -tAc "SELECT 1 FROM pg_database WHERE datname='${DB_TO_CREATE}'" 2>&1); do
+                echo "trying to connect to postgres, last error: ${db_exists}";
                 sleep 2;
               done
+
+              if [ "${db_exists}" = "1" ]; then
+                echo "Database ${DB_TO_CREATE} already exists. Done."
+              else
+                {{- if $conflictCheck }}
+                existing=$(psql -h {{ .Values.persistence.host }} -p {{ .Values.persistence.port }} --username=cnadmin --dbname=cantonnet -tAc "SELECT datname FROM pg_database WHERE datname LIKE 'participant%'" | paste -sd ', ' -)
+                if [ -n "${existing}" ]; then
+                  echo "ERROR: Refusing to create participant database '${DB_TO_CREATE}' because the following participant database(s) already exist: ${existing}." >&2
+                  echo "       A participant database should only be created during a fresh deployment. Please double-check that this is intended and not a misconfiguration." >&2
+                  echo "       If this is expected, disable this check by setting persistence.enableParticipantDbConflictCheck=false." >&2
+                  exit 1
+                fi
+                {{- end }}
+                until errmsg=$(psql -h {{ .Values.persistence.host }} -p {{ .Values.persistence.port }} --username=cnadmin --dbname=cantonnet -c "create database ${DB_TO_CREATE}" 2>&1); do
+                  if [[ ${errmsg} == *"already exists"* ]]; then
+                    echo "Database ${DB_TO_CREATE} already exists. Done."
+                    break
+                  fi
+
+                  echo "trying to create postgres database ${DB_TO_CREATE}, last error: ${errmsg}";
+                  sleep 2;
+                done
+              fi
         {{- end }}
         {{- if .Values.extraInitContainers }}
         {{ .Values.extraInitContainers | toYaml | nindent 8 }}
@@ -187,8 +230,10 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if or (and .Values.extraVolumes (gt (len .Values.extraVolumes) 0)) .Values.pvc }}
       volumes:
+        - name: logback-config
+          configMap:
+            name: {{ .Release.Name }}-participant-logback-config
         {{- range .Values.extraVolumes }}
         - name: {{ .name }}
           {{- if .secret }}
@@ -205,7 +250,6 @@ spec:
           persistentVolumeClaim:
             claimName: {{ .Release.Name }}-participant-pvc
         {{- end }}
-      {{- end }}
 ---
 {{-  if .Values.pvc }}
 apiVersion: v1
@@ -233,9 +277,6 @@ metadata:
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "splice-util-lib.default-labels" (set . "app" .Release.Name) | nindent 4 }}
-    {{- with $.Values.metrics.migration }}
-    migration_id: {{ .id | quote }}
-    {{- end }}
 spec:
   selector:
     app: {{ .Release.Name }}
@@ -253,6 +294,15 @@ spec:
     port: 7575
     protocol: TCP
 ---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-participant-logback-config
+  namespace: {{ .Release.Namespace }}
+data:
+  logback.xml: |
+{{ .Files.Get "files/logback.xml" | indent 4 }}
+---
 {{- if .Values.enablePostgresMetrics }}
-{{- include "splice-util-lib.postgres-metrics" (dict "persistence" .Values.persistence "namespace" .Release.Namespace "nodeSelector" .Values.nodeSelector "affinity" .Values.affinity "tolerations" .Values.tolerations ) }}
+{{- include "splice-util-lib.postgres-metrics" (dict "persistence" .Values.persistence "namespace" .Release.Namespace "nodeSelector" .Values.nodeSelector "affinity" .Values.affinity "tolerations" .Values.tolerations "serviceAccountName" .Values.serviceAccountName ) }}
 {{- end}}

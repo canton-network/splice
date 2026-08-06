@@ -56,9 +56,10 @@ cluster/helm/clean: $(foreach chart,$(app_charts),cluster/helm/$(chart)/helm-cle
 .PHONY: cluster/helm/test
 cluster/helm/test: cluster/helm/build $(foreach chart,$(app_charts),cluster/helm/$(chart)/helm-test)
 
-%/values.yaml: %/values-template.yaml
-  # We do not automatically run write-digests, as we do not want that for local dev, only for published artifacts
-	cp $< $@
+%/values.yaml: %/values-template.yaml cluster/helm/splice-util-lib/security-profiles.yaml
+    # Dynamically inject and merge shared security profiles
+	yq '. as $$main | load("cluster/helm/splice-util-lib/security-profiles.yaml").profiles as $$p | $$main | (.. | select(type == "!!map" and has("security_context_profile"))) |= ($$p[.security_context_profile] * . | del(.security_context_profile))' $< > $@
+    # We do not automatically run write-digests, as we do not want that for local dev, only for published artifacts
 	if [ -f "$(IMAGE_DIGESTS)" ]; then \
 		cat "$(IMAGE_DIGESTS)" >> $@ ; \
 	fi
@@ -76,7 +77,7 @@ define DEFINE_PHONY_CHART_RULES =
 prefix := cluster/helm/$(1)
 
 .PHONY: $$(prefix)/helm-build
-$$(prefix)/helm-build: $$(prefix)/values.yaml $$(prefix)/Chart.yaml $$(prefix)/LICENSE
+$$(prefix)/helm-build: $$(prefix)/values.yaml $$(prefix)/Chart.yaml $$(prefix)/LICENSE $$(prefix)/files/logback.xml
 	helm package $$(@D) --dependency-update --destination cluster/helm/target
 
 .PHONY: $$(prefix)/helm-clean
@@ -89,6 +90,13 @@ $$(prefix)/helm-test:
 
 $$(prefix)/LICENSE: LICENSE
 	cp LICENSE $$(@D)/LICENSE
+
+.PHONY: $$(prefix)/files/logback.xml
+$$(prefix)/files/logback.xml:
+	@if [ -d "$$(@D)" ]; then \
+		cp "${SPLICE_ROOT}/scripts/canton-logback.xml" "$$@"; \
+		echo "coppied scripts/canton-logback.xml to $$@"; \
+	fi
 
 endef # end DEFINE_PHONY_CHART_RULES
 

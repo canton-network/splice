@@ -39,6 +39,7 @@ import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framewor
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.ordering.{
   OrderedBlock,
   OrderedBlockForOutput,
+  OrderingMode,
 }
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.topology.{
   Membership,
@@ -62,6 +63,7 @@ import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.{
   fakeModuleExpectingSilence,
 }
 import com.digitalasset.canton.tracing.{TraceContext, Traced}
+import com.digitalasset.canton.version.ProtocolVersion
 import org.scalatest.wordspec.AnyWordSpec
 
 import scala.util.Random
@@ -329,12 +331,14 @@ class StateTransferManagerTest extends AnyWordSpec with BftSequencerBaseTest {
       StateTransferMessage.BlockTransferResponse.create(Some(commitCert), from = otherId)
     val topologyInfo = OrderingTopologyInfo(
       myId,
-      aMembershipBeforeOnboarding.orderingTopology,
-      ProgrammableUnitTestEnv.noSignatureCryptoProvider,
-      aMembershipBeforeOnboarding.leaders,
+      currentTopology = aMembershipBeforeOnboarding.orderingTopology,
+      currentCryptoProvider = ProgrammableUnitTestEnv.noSignatureCryptoProvider,
+      currentLeaders = aMembershipBeforeOnboarding.leaders,
+      currentBlacklistedNodes = Seq.empty,
       previousTopology = aMembershipBeforeOnboarding.orderingTopology,
       previousCryptoProvider = failingCryptoProvider,
-      aMembershipBeforeOnboarding.leaders,
+      previousLeaders = aMembershipBeforeOnboarding.leaders,
+      previousBlacklistedNodes = Seq.empty,
     )
     stateTransferManager.handleStateTransferMessage(
       VerifiedStateTransferMessage(blockTransferResponse),
@@ -389,7 +393,7 @@ class StateTransferManagerTest extends AnyWordSpec with BftSequencerBaseTest {
             prePrepare.viewNumber,
             originalLeader = commitCert.prePrepare.from,
             isLastInEpoch = true,
-            mode = OrderedBlockForOutput.Mode.FromStateTransfer,
+            orderingMode = OrderingMode.StateTransfer,
           )
         )
       )
@@ -430,7 +434,9 @@ class StateTransferManagerTest extends AnyWordSpec with BftSequencerBaseTest {
   "cancel a timeout" when {
     "an epoch is transferred" in {
       val timeoutManager = mock[
-        TimeoutManager[ProgrammableUnitTestEnv, Consensus.Message[ProgrammableUnitTestEnv], String]
+        TimeoutManager[ProgrammableUnitTestEnv, Consensus.Message[
+          ProgrammableUnitTestEnv
+        ], String]
       ]
       val stateTransferManager =
         createStateTransferManager[ProgrammableUnitTestEnv](
@@ -535,23 +541,31 @@ class StateTransferManagerTest extends AnyWordSpec with BftSequencerBaseTest {
 object StateTransferManagerTest {
   private type ContextType = ProgrammableUnitTestContext[Consensus.Message[ProgrammableUnitTestEnv]]
 
-  private val aMembership =
+  private def aMembership(implicit pv: ProtocolVersion) =
     Membership.forTesting(myId, Set(otherId), epochLength = EpochLength(1))
-  private val aMembershipBeforeOnboarding =
+  private def aMembershipBeforeOnboarding(implicit pv: ProtocolVersion) =
     Membership(
       myId,
       OrderingTopology
-        .forTesting(Set(otherId), SequencingParameters.Default, epochLength = EpochLength(1)),
-      Seq(otherId),
+        .forTesting(
+          Set(otherId),
+          Option(SequencingParameters.Default),
+          epochLength = EpochLength(1),
+        ),
+      leaders = Seq(otherId),
+      blacklistedNodes = Seq.empty,
     )
-  private val aTopologyInfo = OrderingTopologyInfo[ProgrammableUnitTestEnv](
-    myId,
-    aMembership.orderingTopology,
-    ProgrammableUnitTestEnv.noSignatureCryptoProvider,
-    aMembership.leaders,
-    previousTopology = aMembership.orderingTopology,
-    previousCryptoProvider = failingCryptoProvider,
-    aMembership.leaders,
-  )
+  private def aTopologyInfo(implicit pv: ProtocolVersion) =
+    OrderingTopologyInfo[ProgrammableUnitTestEnv](
+      myId,
+      currentTopology = aMembership.orderingTopology,
+      currentCryptoProvider = ProgrammableUnitTestEnv.noSignatureCryptoProvider,
+      currentLeaders = aMembership.leaders,
+      currentBlacklistedNodes = Seq.empty,
+      previousTopology = aMembership.orderingTopology,
+      previousCryptoProvider = failingCryptoProvider,
+      previousLeaders = aMembership.leaders,
+      previousBlacklistedNodes = Seq.empty,
+    )
   private val aBootstrapEpoch = bootstrapEpoch(TestBootstrapTopologyActivationTime)
 }

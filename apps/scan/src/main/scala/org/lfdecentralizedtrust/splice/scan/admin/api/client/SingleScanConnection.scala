@@ -5,6 +5,7 @@ package org.lfdecentralizedtrust.splice.scan.admin.api.client
 
 import cats.data.OptionT
 import cats.syntax.either.*
+import com.daml.metrics.api.MetricsContext
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   FeaturedAppRight,
   UnclaimedDevelopmentFundCoupon,
@@ -31,6 +32,9 @@ import org.lfdecentralizedtrust.splice.environment.{
 }
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
+  GetRewardAccountingActivityTotalsResponse,
+  GetRewardAccountingBatchResponse,
+  GetRewardAccountingRootHashResponse,
   HoldingsSummaryRequestV1,
   HoldingsSummaryResponse,
   HoldingsSummaryResponseV1,
@@ -39,12 +43,11 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
 }
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
-import org.lfdecentralizedtrust.splice.scan.store.db.ScanAggregator
 import org.lfdecentralizedtrust.splice.store.HistoryBackfilling.SourceMigrationInfo
+import org.lfdecentralizedtrust.splice.store.VoteResultsFilters
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryResponse
 import org.lfdecentralizedtrust.splice.util.{
   ChoiceContextWithDisclosures,
-  Codec,
   Contract,
   ContractWithState,
   FactoryChoiceWithDisclosures,
@@ -64,6 +67,7 @@ import com.digitalasset.canton.topology.{ParticipantId, PartyId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
 import com.google.protobuf.ByteString
 import org.apache.pekko.stream.Materializer
+import com.daml.metrics.api.MetricsContext.Implicits.empty
 
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicReference
@@ -74,13 +78,19 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   VoteRequest,
 }
 import io.grpc.Status
+import org.apache.pekko.http.scaladsl.model.{HttpHeader, Uri}
+import org.lfdecentralizedtrust.splice.admin.api.client.commands.HttpCommand
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv1
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv1.TransferInstruction
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv1.Allocation
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv2
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv1
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationinstructionv1
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationinstructionv2
 import org.lfdecentralizedtrust.splice.http.v0.definitions.HoldingsSummaryRequest.RecordTimeMatch
+import org.lfdecentralizedtrust.splice.metrics.ScanConnectionMetrics
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.BftSequencer
-import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v1.definitions.TransferFactoryWithChoiceContext
+
+import scala.util.{Failure, Success}
 
 /** Connection to the admin API of CC Scan. This is used by other apps
   * to query for the DSO party id.
@@ -91,6 +101,7 @@ class SingleScanConnection private[client] (
     protected val clock: Clock,
     retryProvider: RetryProvider,
     outerLoggerFactory: NamedLoggerFactory,
+    connectionMetrics: Option[ScanConnectionMetrics],
 )(implicit
     protected val ec: ExecutionContextExecutor,
     tc: TraceContext,
@@ -107,7 +118,44 @@ class SingleScanConnection private[client] (
     with ScanConnection
     with BackfillingScanConnection
     with HasUrl {
-  import ScanRoundAggregatesDecoder.*
+
+  override def runHttpCmd[Res, Result, Client](
+      url: Uri,
+      command: HttpCommand[Res, Result, Client],
+      headers: List[HttpHeader] = List.empty[HttpHeader],
+  )(implicit
+      templateDecoder: TemplateJsonDecoder,
+      httpClient: HttpClient,
+      tc: TraceContext,
+      ec: ExecutionContext,
+      mat: Materializer,
+  ): Future[Result] = {
+    connectionMetrics match {
+      case Some(metrics) =>
+        MetricsContext.withExtraMetricLabels(
+          ("scan_connection", url.authority.host.address()),
+          ("request", command.fullName),
+        ) { m =>
+          val timer = metrics.latencyPerConnection.startAsync()(m)
+          super
+            .runHttpCmd(url, command, headers)
+            .andThen {
+              case Failure(e) =>
+                MetricsContext.withMetricLabels(("outcome", e.getClass.getSimpleName)) {
+                  implicit ec2 =>
+                    metrics.callPerConnection.mark()(m.merge(ec2))
+                }
+                timer.stop()(m)
+              case Success(_) =>
+                MetricsContext.withMetricLabels(("outcome", "ok")) { implicit ec2 =>
+                  metrics.callPerConnection.mark()(m.merge(ec2))
+                }
+                timer.stop()(m)
+            }
+        }
+      case None => super.runHttpCmd(url, command, headers)
+    }
+  }
 
   def url = config.adminApi.url
 
@@ -386,6 +434,15 @@ class SingleScanConnection private[client] (
     )
   }
 
+  override def getLsu()(implicit
+      tc: TraceContext
+  ): Future[Option[HttpScanAppClient.Lsu]] = {
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetLsu(),
+    )
+  }
+
   override def getPartyToParticipant(
       synchronizerId: SynchronizerId,
       partyId: PartyId,
@@ -420,72 +477,6 @@ class SingleScanConnection private[client] (
       HttpScanAppClient.GetAcsSnapshot(partyId, recordTime),
     )
   }
-  def listRoundTotals(
-      start: Long,
-      end: Long,
-  )(implicit
-      tc: TraceContext
-  ): Future[Seq[org.lfdecentralizedtrust.splice.http.v0.definitions.RoundTotals]] = {
-    runHttpCmd(
-      config.adminApi.url,
-      HttpScanAppClient.ListRoundTotals(start, end),
-    )
-  }
-  def listRoundPartyTotals(
-      start: Long,
-      end: Long,
-  )(implicit
-      tc: TraceContext
-  ): Future[Seq[org.lfdecentralizedtrust.splice.http.v0.definitions.RoundPartyTotals]] = {
-    runHttpCmd(
-      config.adminApi.url,
-      HttpScanAppClient.ListRoundPartyTotals(start, end),
-    )
-  }
-  def getAggregatedRounds()(implicit
-      tc: TraceContext
-  ): Future[Option[ScanAggregator.RoundRange]] = {
-    runHttpCmd(
-      config.adminApi.url,
-      HttpScanAppClient.GetAggregatedRounds,
-    )
-  }
-
-  def getRoundAggregate(round: Long)(implicit
-      tc: TraceContext
-  ): Future[Option[ScanAggregator.RoundAggregate]] = {
-    for {
-      roundTotals <- listRoundTotals(round, round).flatMap { roundTotals =>
-        roundTotals.headOption
-          .map { rt =>
-            decodeRoundTotal(rt).fold(
-              err =>
-                Future.failed(ScanAggregator.CannotAdvance(s"Failed to decode round totals: $err")),
-              rt => Future.successful(Some(rt)),
-            )
-          }
-          .getOrElse(Future.successful(None))
-      }
-      roundPartyTotals <- listRoundPartyTotals(round, round).flatMap { roundPartyTotals =>
-        val (errors, totals) = roundPartyTotals.partitionMap { rt =>
-          decodeRoundPartyTotals(rt)
-        }
-        if (errors.nonEmpty) {
-          Future.failed(
-            ScanAggregator.CannotAdvance(
-              s"""Failed to decode round party totals: ${errors.mkString(", ")}"""
-            )
-          )
-        } else {
-          Future.successful(totals.toVector)
-        }
-      }
-    } yield {
-      roundTotals.map { rt =>
-        ScanAggregator.RoundAggregate(roundTotals = rt, roundPartyTotals = roundPartyTotals)
-      }
-    }
-  }
 
   override def getMigrationSchedule()(implicit
       ec: ExecutionContext,
@@ -496,6 +487,15 @@ class SingleScanConnection private[client] (
         config.adminApi.url,
         HttpScanAppClient.GetMigrationSchedule(),
       )
+    )
+
+  override def getMigrationId()(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[Long] =
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetMigrationId(),
     )
 
   override def lookupTransferPreapprovalByParty(receiver: PartyId)(implicit
@@ -568,11 +568,7 @@ class SingleScanConnection private[client] (
     )
 
   override def listVoteRequestResults(
-      actionName: Option[String],
-      accepted: Option[Boolean],
-      requester: Option[String],
-      effectiveFrom: Option[String],
-      effectiveTo: Option[String],
+      filters: VoteResultsFilters,
       limit: Int,
       pageToken: Option[BigInt] = None,
   )(implicit
@@ -581,14 +577,28 @@ class SingleScanConnection private[client] (
   ): Future[(Seq[DsoRules_CloseVoteRequestResult], Option[BigInt])] = runHttpCmd(
     config.adminApi.url,
     HttpScanAppClient.ListVoteRequestResults(
-      actionName,
-      accepted,
-      requester,
-      effectiveFrom,
-      effectiveTo,
+      filters,
       limit,
       pageToken,
     ),
+  )
+
+  override def countVoteRequestResults(
+      filters: VoteResultsFilters
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[Long] = runHttpCmd(
+    config.adminApi.url,
+    HttpScanAppClient.CountVoteRequestResults(filters),
+  )
+
+  override def getPreviousSvRewardWeight(svParty: String, effectiveBefore: Option[String])(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[Option[Long]] = runHttpCmd(
+    config.adminApi.url,
+    HttpScanAppClient.GetPreviousSvRewardWeight(svParty, effectiveBefore),
   )
 
   override def listUnclaimedDevelopmentFundCoupons()(implicit
@@ -605,7 +615,7 @@ class SingleScanConnection private[client] (
     )
 
   def getTransferInstructionAcceptContext(
-      instructionCid: TransferInstruction.ContractId
+      instructionCid: transferinstructionv1.TransferInstruction.ContractId
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
@@ -615,8 +625,19 @@ class SingleScanConnection private[client] (
       HttpScanAppClient.GetTransferInstructionAcceptContext(instructionCid),
     )
 
+  def getTransferInstructionAcceptContextV2(
+      instructionCid: transferinstructionv2.TransferInstruction.ContractId
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[ChoiceContextWithDisclosures] =
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetTransferInstructionAcceptContextV2(instructionCid),
+    )
+
   def getTransferInstructionRejectContext(
-      instructionCid: TransferInstruction.ContractId
+      instructionCid: transferinstructionv1.TransferInstruction.ContractId
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
@@ -626,8 +647,19 @@ class SingleScanConnection private[client] (
       HttpScanAppClient.GetTransferInstructionRejectContext(instructionCid),
     )
 
+  def getTransferInstructionRejectContextV2(
+      instructionCid: transferinstructionv2.TransferInstruction.ContractId
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[ChoiceContextWithDisclosures] =
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetTransferInstructionRejectContextV2(instructionCid),
+    )
+
   def getTransferInstructionWithdrawContext(
-      instructionCid: TransferInstruction.ContractId
+      instructionCid: transferinstructionv1.TransferInstruction.ContractId
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
@@ -635,6 +667,17 @@ class SingleScanConnection private[client] (
     runHttpCmd(
       config.adminApi.url,
       HttpScanAppClient.GetTransferInstructionWithdrawContext(instructionCid),
+    )
+
+  def getTransferInstructionWithdrawContextV2(
+      instructionCid: transferinstructionv2.TransferInstruction.ContractId
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[ChoiceContextWithDisclosures] =
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetTransferInstructionWithdrawContextV2(instructionCid),
     )
 
   def getTransferInstructionAcceptContextRaw(
@@ -649,6 +692,18 @@ class SingleScanConnection private[client] (
       HttpScanAppClient.GetTransferInstructionTransferContextRaw(transferInstructionCid, body),
     )
 
+  def getTransferInstructionAcceptContextV2Raw(
+      transferInstructionCid: String,
+      body: transferinstruction.v2.definitions.GetChoiceContextRequest,
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[transferinstruction.v2.definitions.ChoiceContext] =
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetTransferInstructionTransferContextV2Raw(transferInstructionCid, body),
+    )
+
   def getTransferInstructionWithdrawContextRaw(
       transferInstructionCid: String,
       body: transferinstruction.v1.definitions.GetChoiceContextRequest,
@@ -659,6 +714,18 @@ class SingleScanConnection private[client] (
     runHttpCmd(
       config.adminApi.url,
       HttpScanAppClient.GetTransferInstructionWithdrawContextRaw(transferInstructionCid, body),
+    )
+
+  def getTransferInstructionWithdrawContextV2Raw(
+      transferInstructionCid: String,
+      body: transferinstruction.v2.definitions.GetChoiceContextRequest,
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[transferinstruction.v2.definitions.ChoiceContext] =
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetTransferInstructionWithdrawContextV2Raw(transferInstructionCid, body),
     )
 
   def getTransferInstructionRejectContextRaw(
@@ -673,6 +740,18 @@ class SingleScanConnection private[client] (
       HttpScanAppClient.GetTransferInstructionRejectContextRaw(transferInstructionCid, body),
     )
 
+  def getTransferInstructionRejectContextV2Raw(
+      transferInstructionCid: String,
+      body: transferinstruction.v2.definitions.GetChoiceContextRequest,
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[transferinstruction.v2.definitions.ChoiceContext] =
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetTransferInstructionRejectContextV2Raw(transferInstructionCid, body),
+    )
+
   def getTransferFactory(choiceArgs: transferinstructionv1.TransferFactory_Transfer)(implicit
       ec: ExecutionContext,
       tc: TraceContext,
@@ -682,16 +761,36 @@ class SingleScanConnection private[client] (
           transferinstructionv1.TransferFactory.ContractId,
           transferinstructionv1.TransferFactory_Transfer,
         ],
-        TransferFactoryWithChoiceContext.TransferKind,
+        transferinstruction.v1.definitions.TransferFactoryWithChoiceContext.TransferKind,
     )
   ] =
     runHttpCmd(config.adminApi.url, HttpScanAppClient.GetTransferFactory(choiceArgs))
+
+  def getTransferFactoryV2(choiceArgs: transferinstructionv2.TransferFactory_Transfer)(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[
+    (
+        FactoryChoiceWithDisclosures[
+          transferinstructionv2.TransferFactory.ContractId,
+          transferinstructionv2.TransferFactory_Transfer,
+        ],
+        transferinstruction.v2.definitions.TransferFactoryWithChoiceContext.TransferKind,
+    )
+  ] =
+    runHttpCmd(config.adminApi.url, HttpScanAppClient.GetTransferFactoryV2(choiceArgs))
 
   def getTransferFactoryRaw(arg: transferinstruction.v1.definitions.GetFactoryRequest)(implicit
       ec: ExecutionContext,
       tc: TraceContext,
   ): Future[transferinstruction.v1.definitions.TransferFactoryWithChoiceContext] =
     runHttpCmd(config.adminApi.url, HttpScanAppClient.GetTransferFactoryRaw(arg))
+
+  def getTransferFactoryV2Raw(arg: transferinstruction.v2.definitions.GetFactoryRequest)(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[transferinstruction.v2.definitions.TransferFactoryWithChoiceContext] =
+    runHttpCmd(config.adminApi.url, HttpScanAppClient.GetTransferFactoryV2Raw(arg))
 
   def listSvBftSequencers()(implicit
       ec: ExecutionContext,
@@ -731,7 +830,7 @@ class SingleScanConnection private[client] (
     )
 
   def getAllocationTransferContext(
-      allocationCid: Allocation.ContractId
+      allocationCid: allocationv1.Allocation.ContractId
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
@@ -765,6 +864,35 @@ class SingleScanConnection private[client] (
       HttpScanAppClient.GetAllocationCancelContextRaw(allocationCid, body),
     )
 
+  def getSettlementFactoryRaw(
+      body: allocation.v2.definitions.GetFactoryRequest
+  )(implicit ec: ExecutionContext, tc: TraceContext) =
+    runHttpCmd(config.adminApi.url, HttpScanAppClient.GetSettlementFactoryV2Raw(body))
+
+  def getAllocationV2CancelContextRaw(
+      allocationCid: String,
+      body: allocation.v2.definitions.GetChoiceContextRequest,
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[allocation.v2.definitions.ChoiceContext] =
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetAllocationV2CancelContextRaw(allocationCid, body),
+    )
+
+  def getAllocationV2WithdrawContextRaw(
+      allocationCid: String,
+      body: allocation.v2.definitions.GetChoiceContextRequest,
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[allocation.v2.definitions.ChoiceContext] =
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetAllocationV2WithdrawContextRaw(allocationCid, body),
+    )
+
   def getAllocationWithdrawContextRaw(
       allocationCid: String,
       body: allocation.v1.definitions.GetChoiceContextRequest,
@@ -778,7 +906,7 @@ class SingleScanConnection private[client] (
     )
 
   def getAllocationCancelContext(
-      allocationCid: Allocation.ContractId
+      allocationCid: allocationv1.Allocation.ContractId
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
@@ -788,8 +916,8 @@ class SingleScanConnection private[client] (
       HttpScanAppClient.GetAllocationCancelContext(allocationCid),
     )
 
-  def getAllocationWithdrawContext(
-      allocationCid: Allocation.ContractId
+  def getAllocationWithdrawContextV1(
+      allocationCid: allocationv1.Allocation.ContractId
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
@@ -797,6 +925,17 @@ class SingleScanConnection private[client] (
     runHttpCmd(
       config.adminApi.url,
       HttpScanAppClient.GetAllocationWithdrawContext(allocationCid),
+    )
+
+  def getAllocationWithdrawContextV2(
+      allocationCid: allocationv2.Allocation.ContractId
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[ChoiceContextWithDisclosures] =
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetAllocationWithdrawContextV2(allocationCid),
     )
 
   def getAllocationFactory(choiceArgs: allocationinstructionv1.AllocationFactory_Allocate)(implicit
@@ -810,11 +949,48 @@ class SingleScanConnection private[client] (
   ] =
     runHttpCmd(config.adminApi.url, HttpScanAppClient.GetAllocationFactory(choiceArgs))
 
+  def getAllocationFactoryV2(choiceArgs: allocationinstructionv2.AllocationFactory_Allocate)(
+      implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[
+    FactoryChoiceWithDisclosures[
+      allocationinstructionv2.AllocationFactory.ContractId,
+      allocationinstructionv2.AllocationFactory_Allocate,
+    ]
+  ] =
+    runHttpCmd(config.adminApi.url, HttpScanAppClient.GetAllocationFactoryV2(choiceArgs))
+
+  def getAllocationFactoryV2Raw(arg: allocationinstruction.v2.definitions.GetFactoryRequest)(
+      implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[allocationinstruction.v2.definitions.FactoryWithChoiceContext] =
+    runHttpCmd(config.adminApi.url, HttpScanAppClient.GetAllocationFactoryV2Raw(arg))
+
   def getAllocationFactoryRaw(arg: allocationinstruction.v1.definitions.GetFactoryRequest)(implicit
       ec: ExecutionContext,
       tc: TraceContext,
   ): Future[allocationinstruction.v1.definitions.FactoryWithChoiceContext] =
     runHttpCmd(config.adminApi.url, HttpScanAppClient.GetAllocationFactoryRaw(arg))
+
+  def getAllocationInstructionAcceptContextRaw(
+      allocationInstructionCid: String,
+      body: allocationinstruction.v2.definitions.GetChoiceContextRequest,
+  )(implicit tc: TraceContext): Future[allocationinstruction.v2.definitions.ChoiceContext] =
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetAllocationInstructionAcceptContextRaw(allocationInstructionCid, body),
+    )
+
+  def getAllocationInstructionWithdrawContext(
+      allocationInstructionCid: String,
+      body: allocationinstruction.v2.definitions.GetChoiceContextRequest,
+  )(implicit tc: TraceContext): Future[allocationinstruction.v2.definitions.ChoiceContext] =
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetAllocationInstructionWithdrawContextRaw(allocationInstructionCid, body),
+    )
 
   override def getActivePhysicalSynchronizerSerial()(implicit
       ec: ExecutionContext,
@@ -823,6 +999,33 @@ class SingleScanConnection private[client] (
     runHttpCmd(
       config.adminApi.url,
       HttpScanAppClient.GetActivePhysicalSynchronizerSerial(),
+    )
+
+  override def getRewardAccountingActivityTotals(roundNumber: Long)(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[GetRewardAccountingActivityTotalsResponse] =
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetRewardAccountingActivityTotals(roundNumber),
+    )
+
+  override def getRewardAccountingRootHash(roundNumber: Long)(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[GetRewardAccountingRootHashResponse] =
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetRewardAccountingRootHash(roundNumber),
+    )
+
+  override def getRewardAccountingBatch(roundNumber: Long, batchHash: String)(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[Option[GetRewardAccountingBatchResponse]] =
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetRewardAccountingBatch(roundNumber, batchHash),
     )
 }
 
@@ -833,6 +1036,7 @@ object SingleScanConnection {
       clock: Clock,
       retryProvider: RetryProvider,
       loggerFactory: NamedLoggerFactory,
+      connectionMetrics: Option[ScanConnectionMetrics] = None,
   )(f: SingleScanConnection => Future[T])(implicit
       ec: ExecutionContextExecutor,
       traceContext: TraceContext,
@@ -848,6 +1052,7 @@ object SingleScanConnection {
         retryProvider,
         loggerFactory,
         retryConnectionOnInitialFailure = true,
+        connectionMetrics,
       )
       r <- f(scanConnection).andThen { _ => scanConnection.close() }
     } yield r
@@ -860,13 +1065,21 @@ class CachedScanConnection private[client] (
     clock: Clock,
     retryProvider: RetryProvider,
     outerLoggerFactory: NamedLoggerFactory,
+    connectionMetrics: Option[ScanConnectionMetrics],
 )(implicit
     ec: ExecutionContextExecutor,
     tc: TraceContext,
     mat: Materializer,
     httpClient: HttpClient,
     templateDecoder: TemplateJsonDecoder,
-) extends SingleScanConnection(config, upgradesConfig, clock, retryProvider, outerLoggerFactory)
+) extends SingleScanConnection(
+      config,
+      upgradesConfig,
+      clock,
+      retryProvider,
+      outerLoggerFactory,
+      connectionMetrics,
+    )
     with CachingScanConnection {
 
   override protected val amuletRulesCacheTimeToLive: NonNegativeFiniteDuration =
@@ -926,62 +1139,4 @@ class CachedScanConnection private[client] (
       HttpScanAppClient.GetMigrationSchedule(),
     )
   )
-}
-
-object ScanRoundAggregatesDecoder {
-  def decodeRoundTotal(
-      rt: org.lfdecentralizedtrust.splice.http.v0.definitions.RoundTotals
-  ): Either[String, ScanAggregator.RoundTotals] = {
-    (for {
-      closedRoundEffectiveAt <- CantonTimestamp.fromInstant(rt.closedRoundEffectiveAt.toInstant)
-      appRewards <- Codec.decode(Codec.BigDecimal)(rt.appRewards)
-      validatorRewards <- Codec.decode(Codec.BigDecimal)(rt.validatorRewards)
-      cumulativeAppRewards <- Codec.decode(Codec.BigDecimal)(rt.cumulativeAppRewards)
-      cumulativeValidatorRewards <- Codec
-        .decode(Codec.BigDecimal)(rt.cumulativeValidatorRewards)
-    } yield {
-      // changeToInitialAmountAsOfRoundZero, changeToHoldingFeesRate, cumulativeChangeToInitialAmountAsOfRoundZero,
-      // cumulativeChangeToHoldingFeesRate and totalAmuletBalance are intentionally left out
-      // since these are not calculated anymore.
-      ScanAggregator.RoundTotals(
-        closedRound = rt.closedRound,
-        closedRoundEffectiveAt = closedRoundEffectiveAt,
-        appRewards = appRewards,
-        validatorRewards = validatorRewards,
-        cumulativeAppRewards = cumulativeAppRewards,
-        cumulativeValidatorRewards = cumulativeValidatorRewards,
-      )
-    })
-  }
-
-  def decodeRoundPartyTotals(
-      rt: org.lfdecentralizedtrust.splice.http.v0.definitions.RoundPartyTotals
-  ): Either[String, ScanAggregator.RoundPartyTotals] = {
-    (for {
-      appRewards <- Codec.decode(Codec.BigDecimal)(rt.appRewards)
-      validatorRewards <- Codec.decode(Codec.BigDecimal)(rt.validatorRewards)
-      trafficPurchasedCcSpent <- Codec.decode(Codec.BigDecimal)(rt.trafficPurchasedCcSpent)
-      cumulativeAppRewards <- Codec.decode(Codec.BigDecimal)(rt.cumulativeAppRewards)
-      cumulativeValidatorRewards <- Codec.decode(Codec.BigDecimal)(rt.cumulativeValidatorRewards)
-      cumulativeTrafficPurchasedCcSpent <- Codec
-        .decode(Codec.BigDecimal)(rt.cumulativeTrafficPurchasedCcSpent)
-    } yield {
-      // cumulativeChangeToInitialAmountAsOfRoundZero and cumulativeChangeToHoldingFeesRate are intentionally left out
-      // since these are not calculated anymore.
-      ScanAggregator.RoundPartyTotals(
-        closedRound = rt.closedRound,
-        party = rt.party,
-        appRewards = appRewards,
-        validatorRewards = validatorRewards,
-        trafficPurchased = rt.trafficPurchased,
-        trafficPurchasedCcSpent = trafficPurchasedCcSpent,
-        trafficNumPurchases = rt.trafficNumPurchases,
-        cumulativeAppRewards = cumulativeAppRewards,
-        cumulativeValidatorRewards = cumulativeValidatorRewards,
-        cumulativeTrafficPurchased = rt.cumulativeTrafficPurchased,
-        cumulativeTrafficPurchasedCcSpent = cumulativeTrafficPurchasedCcSpent,
-        cumulativeTrafficNumPurchases = rt.cumulativeTrafficNumPurchases,
-      )
-    })
-  }
 }

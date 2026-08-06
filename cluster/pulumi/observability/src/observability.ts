@@ -11,7 +11,7 @@ import {
   CLUSTER_NAME,
   clusterProdLike,
   commandScriptPath,
-  createVolumeSnapshot,
+  DecentralizedSynchronizerUpgradeConfig,
   ExactNamespace,
   GCP_PROJECT,
   GrafanaKeys,
@@ -22,20 +22,19 @@ import {
   loadTesterConfig,
   ObservabilityReleaseName,
   SPLICE_ROOT,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
-import { allSvsConfiguration } from '@lfdecentralizedtrust/splice-pulumi-common-sv/src/singleSvConfig';
+} from '@canton-network/splice-pulumi-common';
+import { allSvsConfiguration } from '@canton-network/splice-pulumi-common-sv/src/singleSvConfig';
 import {
   extraSvConfigsBasic,
   standardSvConfigsBasic,
-} from '@lfdecentralizedtrust/splice-pulumi-common-sv/src/svConfigsBasic';
-import { SweepConfig } from '@lfdecentralizedtrust/splice-pulumi-common-validator';
-import { SplicePostgres } from '@lfdecentralizedtrust/splice-pulumi-common/src/postgres';
-import { infraStack } from '@lfdecentralizedtrust/splice-pulumi-common/src/stackReferences';
+} from '@canton-network/splice-pulumi-common-sv/src/svConfigsBasic';
+import { SweepConfig } from '@canton-network/splice-pulumi-common-validator';
+import { installSplicePostgres, Postgres } from '@canton-network/splice-pulumi-common/src/postgres';
+import { infraStack } from '@canton-network/splice-pulumi-common/src/stackReferences';
 import { local } from '@pulumi/command';
 import { getSecretVersionOutput } from '@pulumi/gcp/secretmanager/getSecretVersion';
 import { Input } from '@pulumi/pulumi';
 
-import { hyperdiskSupportConfig } from '../../common/src/config/hyperdiskSupportConfig';
 import {
   clusterIsResetPeriodically,
   enableAlertEmailToSupportTeam,
@@ -106,7 +105,6 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
   const namespaceName = namespace.logicalName;
   const postgres = installPostgres(namespace);
   const adminPassword = grafanaKeysFromSecret().adminPassword;
-  const migrationSnapshots = getVolumeSnapshotsForHyperdiskMigration(namespaceName);
   const prometheusStack = new k8s.helm.v3.Release(
     'observability-metrics',
     {
@@ -195,9 +193,7 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
             logFormat: 'json',
             storage: {
               volumeClaimTemplate: {
-                ...(hyperdiskSupportConfig.hyperdiskSupport.enabledForInfra
-                  ? { metadata: { name: 'alertmanager-hd-pvc' } }
-                  : {}),
+                metadata: { name: 'alertmanager-hd-pvc' },
                 spec: {
                   storageClassName: infraStandardStorageClassName,
                   accessModes: ['ReadWriteOnce'],
@@ -206,7 +202,6 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
                       storage: '5Gi',
                     },
                   },
-                  ...(migrationSnapshots.alertManager ? migrationSnapshots.alertManager : {}),
                 },
               },
             },
@@ -257,9 +252,7 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
             scrapeNativeHistograms: true,
             storageSpec: {
               volumeClaimTemplate: {
-                ...(hyperdiskSupportConfig.hyperdiskSupport.enabledForInfra
-                  ? { metadata: { name: 'prometheus-hd-pvc' } }
-                  : {}),
+                metadata: { name: 'prometheus-hd-pvc' },
                 spec: {
                   storageClassName: infraPremiumStorageClassName,
                   accessModes: ['ReadWriteOnce'],
@@ -268,7 +261,6 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
                       storage: prometheusConfig.storageSize,
                     },
                   },
-                  ...(migrationSnapshots.prometheus ? migrationSnapshots.prometheus : {}),
                 },
               },
             },
@@ -394,7 +386,7 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
             type: 'Recreate',
           },
           persistence: {
-            enabled: !hyperdiskSupportConfig.hyperdiskSupport.migratingInfra,
+            enabled: true,
             type: 'pvc',
             accessModes: ['ReadWriteOnce'],
             size: '5Gi',
@@ -555,7 +547,7 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
   );
   createGrafanaAlerting(namespaceName);
   if (monitoringConfig.enableGrafanaServiceAccountToken) {
-    createGrafanaServiceAccount(namespaceName, adminPassword, [prometheusStack, postgres.pg]);
+    createGrafanaServiceAccount(namespaceName, adminPassword, [prometheusStack, postgres.database]);
   }
   createGrafanaEnvoyFilter(namespaceName, [prometheusStack]);
 
@@ -736,6 +728,47 @@ function defaultAlertSubstitutions(alert: string): string {
   );
 }
 
+function substituteScanConnectionDisagreementAlerts(alert: string): string {
+  const config = monitoringConfig.alerting.alerts.scanConnectionDisagreement;
+  const matchers: string[] = [];
+  if (config.excludedRequests.length > 0) {
+    matchers.push(`request!~"${config.excludedRequests.join('|')}"`);
+  }
+  if (config.excludedConnections.length > 0) {
+    matchers.push(`scan_connection!~"${config.excludedConnections.join('|')}"`);
+  }
+  const bareFilter = matchers.join(', ');
+  const filter = bareFilter ? `, ${bareFilter}` : '';
+  const connectionMatchers: string[] = [];
+  if (config.excludedConnections.length > 0) {
+    connectionMatchers.push(`scan_connection!~"${config.excludedConnections.join('|')}"`);
+  }
+  if (config.excludedHttpStatusCodes.length > 0) {
+    matchers.push(`http_status!~"${config.excludedHttpStatusCodes.join('|')}"`);
+    connectionMatchers.push(`http_status!~"${config.excludedHttpStatusCodes.join('|')}"`);
+  }
+  const connectionBareFilter = connectionMatchers.join(', ');
+  const connectionFilter = connectionBareFilter ? `, ${connectionBareFilter}` : '';
+  return alert
+    .replaceAll('$SCAN_DISAGREEMENT_FILTER_BARE', bareFilter)
+    .replaceAll('$SCAN_DISAGREEMENT_CONNECTION_FILTER_BARE', connectionBareFilter)
+    .replaceAll('$SCAN_DISAGREEMENT_CONNECTION_FILTER', connectionFilter)
+    .replaceAll('$SCAN_DISAGREEMENT_FILTER', filter)
+    .replaceAll(
+      '$SCAN_DISAGREEMENT_SUCCESS_THRESHOLD_PERCENT',
+      (config.alertThreshold * 100).toString()
+    )
+    .replaceAll('$SCAN_DISAGREEMENT_SUCCESS_THRESHOLD', config.alertThreshold.toString());
+}
+
+function substituteDsoMissedConfirmationsAlerts(alert: string): string {
+  const config = monitoringConfig.alerting.alerts.dsoMissedConfirmations;
+  return alert
+    .replaceAll('$DSO_MISSED_CONFIRMATIONS_THRESHOLD', config.threshold.toString())
+    .replaceAll('$DSO_MISSED_CONFIRMATIONS_WINDOW_SECONDS', (config.windowMinutes * 60).toString())
+    .replaceAll('$DSO_MISSED_CONFIRMATIONS_WINDOW_MINUTES', config.windowMinutes.toString());
+}
+
 // AmuletMetrics was previously using owner.toString instead of owner.toProtoPrimitive
 // This function makes it compatible for both.
 function partyIdTransform(partyId: string) {
@@ -753,6 +786,8 @@ function createGrafanaAlerting(namespace: Input<string>) {
     .concat(standardSvConfigsBasic)
     .map(sv => sv.sweep!)
     .filter(e => e != undefined);
+  const cantonBftEnabled =
+    DecentralizedSynchronizerUpgradeConfig.active.sequencer.enableBftSequencer;
   const cometbftPruningHighestBlockRetain = allSvsConfiguration
     .map(sv => sv.pruning?.cometbft?.retainBlocks)
     .filter((retainBlocks): retainBlocks is number => retainBlocks !== undefined)
@@ -781,13 +816,14 @@ function createGrafanaAlerting(namespace: Input<string>) {
                   muteTimes: monitoringConfig.alerting.muteTimeIntervals.map(interval => ({
                     orgId: 1,
                     name: interval.name,
-                    time_intervals: [
-                      {
-                        times: [{ start_time: interval.startTime, end_time: interval.endTime }],
-                        ...(interval.weekdays ? { weekdays: interval.weekdays } : {}),
-                        location: 'UTC',
-                      },
-                    ],
+                    time_intervals: interval.timeWindows.map(window => ({
+                      times: window.times.map(t => ({
+                        start_time: t.startTime,
+                        end_time: t.endTime,
+                      })),
+                      ...(window.weekdays ? { weekdays: window.weekdays } : {}),
+                      location: 'UTC',
+                    })),
                   })),
                 }),
               }
@@ -828,24 +864,30 @@ function createGrafanaAlerting(namespace: Input<string>) {
               monitoringConfig.alerting.alerts.deployment.pendingPeriodMinutes.toString()
             ),
             'load-tester_alerts.yaml': readGrafanaAlertingFile('load-tester_alerts.yaml')
-              .replace(
+              .replaceAll(
                 '$LOAD_TESTER_MIN_RATE',
                 loadTesterConfig?.minRate ? loadTesterConfig?.minRate.toString() : '1.0'
               )
               .replaceAll('$NODATA', loadTesterConfig?.enable ? 'Alerting' : 'OK'),
-            'cometbft_alerts.yaml': readGrafanaAlertingFile('cometbft_alerts.yaml')
-              .replaceAll(
-                '$EXPECTED_MAX_BLOCK_RATE_PER_SECOND',
-                monitoringConfig.alerting.alerts.cometbft.expectedMaxBlocksPerSecond.toString()
-              )
-              .replaceAll(
-                '$COMETBFT_PRUNING_DISABLED',
-                (cometbftPruningHighestBlockRetain === undefined).toString()
-              )
-              .replaceAll(
-                '$COMETBFT_RETAIN_BLOCKS',
-                String((cometbftPruningHighestBlockRetain || 0) * 1.05)
-              ),
+            ...(cantonBftEnabled
+              ? {
+                  'cometbft_deleted_alerts.yaml': readGrafanaAlertingFile('cometbft_deleted.yaml'),
+                }
+              : {
+                  'cometbft_alerts.yaml': readGrafanaAlertingFile('cometbft_alerts.yaml')
+                    .replaceAll(
+                      '$EXPECTED_MAX_BLOCK_RATE_PER_SECOND',
+                      monitoringConfig.alerting.alerts.cometbft.expectedMaxBlocksPerSecond.toString()
+                    )
+                    .replaceAll(
+                      '$COMETBFT_PRUNING_DISABLED',
+                      (cometbftPruningHighestBlockRetain === undefined).toString()
+                    )
+                    .replaceAll(
+                      '$COMETBFT_RETAIN_BLOCKS',
+                      String((cometbftPruningHighestBlockRetain || 0) * 1.05)
+                    ),
+                }),
             'automation_alerts.yaml': readGrafanaAlertingFile('automation_alerts.yaml')
               .replaceAll(
                 '$CONTENTION_THRESHOLD_PERCENTAGE_PER_NAMESPACE',
@@ -901,44 +943,63 @@ function createGrafanaAlerting(namespace: Input<string>) {
               : {}),
             'acknowledgement_alerts.yaml': readGrafanaAlertingFile(
               'acknowledgement_alerts.yaml'
-            ).replace(
+            ).replaceAll(
               '$MEDIATOR_ACKNOWLEDGEMENT_LAG_SECONDS',
               monitoringConfig.alerting.alerts.mediators.acknowledgementLagSeconds.toString()
             ),
             'sequencer_client_delay_alerts.yaml': readGrafanaAlertingFile(
               'sequencer_client_delay_alerts.yaml'
-            ).replace(
+            ).replaceAll(
               '$SEQUENCER_CLIENT_DELAY_THRESHOLD_SECONDS',
               monitoringConfig.alerting.alerts.sequencerClientDelay.seconds.toString()
             ),
             'acs_commitment_alerts.yaml': readGrafanaAlertingFile('acs_commitment_alerts.yaml')
-              .replace(
+              .replaceAll(
                 '$ACS_COMMITMENT_CHECKPOINT_DELAY_THRESHOLD_SECONDS',
                 monitoringConfig.alerting.alerts.acsCommitments.checkpointDelay.seconds.toString()
               )
-              .replace(
+              .replaceAll(
                 '$ACS_COMMITMENT_DELAY_THRESHOLD_SECONDS',
                 monitoringConfig.alerting.alerts.acsCommitments.completedDelay.seconds.toString()
               )
-              .replace(
+              .replaceAll(
                 '$ACS_COMMITMENT_COMPUTE_DURATION_THRESHOLD_SECONDS',
                 monitoringConfig.alerting.alerts.acsCommitments.computeDuration.seconds.toString()
               ),
             'sequencer_connection_pool_alerts.yaml': readGrafanaAlertingFile(
               'sequencer_connection_pool_alerts.yaml'
             ),
+            'dso_missed_confirmations_alerts.yaml': substituteDsoMissedConfirmationsAlerts(
+              readGrafanaAlertingFile('dso_missed_confirmations_alerts.yaml')
+            ),
+            'scan_connection_disagreement_alerts.yaml': substituteScanConnectionDisagreementAlerts(
+              readGrafanaAlertingFile('scan_connection_disagreement_alerts.yaml')
+            ),
+            'scan_bft_sequencers_alerts.yaml': readGrafanaAlertingFile(
+              'scan_bft_sequencers_alerts.yaml'
+            ),
             'extra_k8s_alerts.yaml': readGrafanaAlertingFile('extra_k8s_alerts.yaml'),
             'sequencer_rate_limit_alerts.yaml': readGrafanaAlertingFile(
               'sequencer_rate_limit_alerts.yaml'
             )
-              .replace(
+              .replaceAll(
                 '$SEQUENCER_RATE_LIMIT_REJECTION_RATE_THRESHOLD',
                 monitoringConfig.alerting.alerts.sequencerRateLimits.rejectionRateThreshold.toString()
               )
-              .replace(
+              .replaceAll(
                 '$SEQUENCER_RATE_LIMIT_CIRCUIT_BREAKER_STATE_THRESHOLD',
                 monitoringConfig.alerting.alerts.sequencerRateLimits.circuitBreakerStateThreshold.toString()
               ),
+            ...(cantonBftEnabled
+              ? {
+                  'cantonbft_alerts.yaml': readGrafanaAlertingFile(
+                    'cantonbft_alerts.yaml'
+                  ).replaceAll(
+                    '$CANTON_BFT_MEMPOOL_SIZE_THRESHOLD',
+                    monitoringConfig.alerting.alerts.cantonBft.mempoolMaxSizeThreshold.toString()
+                  ),
+                }
+              : {}),
             'deleted_alerts.yaml': readGrafanaAlertingFile('deleted.yaml'),
             'templates.yaml': substituteSlackNotificationTemplate(
               readGrafanaAlertingFile('templates.yaml')
@@ -959,10 +1020,19 @@ function createGrafanaAlerting(namespace: Input<string>) {
             ),
             'traffic_based_rewards_alerts.yaml': readGrafanaAlertingFile(
               'traffic_based_rewards_alerts.yaml'
-            ).replace(
-              '$FEATURED_APP_RIGHTS_LIVE_ROW_LIMIT',
-              monitoringConfig.alerting.alerts.trafficBasedRewards.featuredAppRightsLimit.toString()
-            ),
+            )
+              .replaceAll(
+                '$FEATURED_APP_RIGHTS_LIVE_ROW_LIMIT',
+                monitoringConfig.alerting.alerts.trafficBasedRewards.featuredAppRightsLimit.toString()
+              )
+              .replaceAll(
+                '$VERDICT_INGESTION_BATCH_SIZE_THRESHOLD',
+                monitoringConfig.alerting.alerts.trafficBasedRewards.verdictIngestionBatchSizeThreshold.toString()
+              )
+              .replaceAll(
+                '$VERDICT_INGESTION_BATCH_SIZE_PENDING_PERIOD_MINUTES',
+                monitoringConfig.alerting.alerts.trafficBasedRewards.verdictIngestionBatchSizePendingPeriodMinutes.toString()
+              ),
           },
         }).map(([k, v]) => [k, defaultAlertSubstitutions(v)])
       ),
@@ -1081,13 +1151,13 @@ function readAndSetAlertRulesGrafanaAlertingFile(file: string, rules: AlertRules
 
   content.groups[0].rules = rules.map(rule => {
     const newRuleString = genericAlertRule
-      .replace('$REPORT_PUBLISHER_FORMULA', rule.reportPublisherFormula ?? 'NOT_REPLACED')
-      .replace('$NOTIFICATION_DELAY', rule.notificationDelay ?? 'NOT_REPLACED')
-      .replace('$TEAM_LABEL', rule.teamLabel ?? 'NOT_REPLACED')
-      .replace('$SUB_TITLE', rule.subtitle ?? 'NOT_REPLACED')
-      .replace('$RULE_UID', rule.uid ?? 'NOT_REPLACED')
-      .replace('$OWNER_PREFIX_REGEX', rule.ownerPrefixRegex ?? 'NOT_REPLACED')
-      .replace('$MAX_BALANCE_THRESHOLD', rule.maxBalanceThreshold ?? 'NOT_REPLACED');
+      .replaceAll('$REPORT_PUBLISHER_FORMULA', rule.reportPublisherFormula ?? 'NOT_REPLACED')
+      .replaceAll('$NOTIFICATION_DELAY', rule.notificationDelay ?? 'NOT_REPLACED')
+      .replaceAll('$TEAM_LABEL', rule.teamLabel ?? 'NOT_REPLACED')
+      .replaceAll('$SUB_TITLE', rule.subtitle ?? 'NOT_REPLACED')
+      .replaceAll('$RULE_UID', rule.uid ?? 'NOT_REPLACED')
+      .replaceAll('$OWNER_PREFIX_REGEX', rule.ownerPrefixRegex ?? 'NOT_REPLACED')
+      .replaceAll('$MAX_BALANCE_THRESHOLD', rule.maxBalanceThreshold ?? 'NOT_REPLACED');
     return yaml.load(newRuleString) as GrafanaRule;
   });
   const newFileContent = yaml.dump(content);
@@ -1117,46 +1187,17 @@ function grafanaKeysFromSecret(): pulumi.Output<GrafanaKeys> {
   });
 }
 
-function installPostgres(namespace: ExactNamespace): SplicePostgres {
-  return new SplicePostgres(
+function installPostgres(namespace: ExactNamespace): Postgres {
+  const instanceName = 'grafana-postgres';
+  return installSplicePostgres(
     namespace,
-    'grafana-postgres',
-    'grafana-postgres',
+    instanceName,
     'grafana-postgres-secret',
+    monitoringConfig.grafanaPostgres,
+    undefined, // chart version
+    { disableProtection: true },
     { db: { volumeSize: '20Gi' } }, // A tiny pvc should be enough for grafana
     true, // overrideDbSizeFromValues
-    true, // disableProtection
-    undefined, // chart version
     true // useInfraAffinityAndTolerations
   );
-}
-
-function getVolumeSnapshotsForHyperdiskMigration(namespaceName: string) {
-  if (
-    hyperdiskSupportConfig.hyperdiskSupport.enabledForInfra &&
-    hyperdiskSupportConfig.hyperdiskSupport.migratingInfra
-  ) {
-    const { dataSource: prometheusDataSource } = createVolumeSnapshot({
-      resourceName: `prometheus-hd-migration-snapshot`,
-      snapshotName: `prometheus-migration-snapshot`,
-      namespace: namespaceName,
-      pvcName: `prometheus-prometheus-prometheus-db-prometheus-prometheus-prometheus-0`,
-    });
-    const { dataSource: alertManagerDataSource } = createVolumeSnapshot({
-      resourceName: `alertmanager-hd-migration-snapshot`,
-      snapshotName: `alertmanager-migration-snapshot`,
-      namespace: namespaceName,
-      pvcName: `alertmanager-prometheus-alertmanager-db-alertmanager-prometheus-alertmanager-0`,
-    });
-    return {
-      prometheus: {
-        dataSource: prometheusDataSource,
-      },
-      alertManager: {
-        dataSource: alertManagerDataSource,
-      },
-    };
-  } else {
-    return {};
-  }
 }

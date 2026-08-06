@@ -8,7 +8,7 @@ import {
   generatePortSequence,
   numNodesPerInstance,
   DecentralizedSynchronizerUpgradeConfig,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 
 import { pvcSuffix, standardStorageClassName } from '../../common/src/storage/storageClass';
 import { multiValidatorConfig } from './config';

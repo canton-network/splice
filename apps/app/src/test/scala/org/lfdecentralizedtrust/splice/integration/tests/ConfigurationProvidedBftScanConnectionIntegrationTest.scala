@@ -61,6 +61,14 @@ class ConfigurationProvidedBftScanConnectionIntegrationTest
     ) should be(false)
   }
 
+  def backgroundConnectionNotAttempted(svName: Int, message: Seq[String]) = {
+    message.exists(
+      _.contains(
+        s"Attempting to connect to Scan: ${getSvName(svName)}"
+      )
+    ) should be(false)
+  }
+
   def refreshConnectionEstablished(svName: Int, message: Seq[String]) = {
     message.exists(
       _.contains(
@@ -89,7 +97,7 @@ class ConfigurationProvidedBftScanConnectionIntegrationTest
       allHealthy shouldBe true
     }
 
-    loggerFactory.assertEventuallyLogsSeq(SuppressionRule.LevelAndAbove(Level.INFO))(
+    loggerFactory.assertEventuallyLogsSeq(SuppressionRule.LevelAndAbove(Level.DEBUG))(
       {
         // start alice validator
         aliceValidatorBackend.startSync()
@@ -107,6 +115,11 @@ class ConfigurationProvidedBftScanConnectionIntegrationTest
         }
         withClue("Validator should NOT connect to sv4:") {
           connectionNotEstablished(4, messages)
+        }
+        withClue(
+          "Temporary bootstrap connection should never attempt a background connection to sv4:"
+        ) {
+          backgroundConnectionNotAttempted(4, messages)
         }
       },
     )
@@ -235,4 +248,5 @@ class ConfigurationProvidedBftScanConnectionIntegrationTest
       aliceValidatorBackend.stop()
 
   }
+
 }

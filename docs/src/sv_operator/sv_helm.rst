@@ -650,10 +650,6 @@ For configuring your sv app, please modify the file ``splice-node/examples/sv-he
   This will create an amulet price vote from your SV with the configured price when onboarded.
   If not set, no vote will be cast. This can always be done later manually from the SV app UI.
 
-.. literalinclude:: ../../../apps/app/src/pack/examples/sv-helm/sv-values.yaml
-    :language: yaml
-    :start-after: MIGRATION_START
-    :end-before: MIGRATION_END
 
 Please modify the file ``splice-node/examples/sv-helm/info-values.yaml`` as follows:
 

@@ -15,7 +15,9 @@ function tmux_cmd() {
   else
     tmux new-window -t "$t" -n "$title"
   fi
-  tmux send-keys -t "$t" "cd $wd" C-m
+  local direnv_ready_event="${tmux_session}-cd-done-${tmux_window}"
+  tmux send-keys -t "$t" "cd $wd && tmux wait-for -S $direnv_ready_event" C-m
+  tmux wait-for "$direnv_ready_event"
   tmux send-keys -t "$t" "$cmd" C-m
   tmux_window=$((tmux_window + 1))
 }
@@ -75,11 +77,9 @@ function start_frontend() {
   local log_file="${LOG_DIR}/npm-${app}-${user}.out"
 
   tmux_cmd "${app}-${user}" "${frontend_dir}" \
-    "trap \"rm -f ${config_file}\" EXIT"
-
-  tmux send-keys -t "${tmux_session}:$((tmux_window - 1))" \
-    "BROWSER=none PORT=$port JSON_API_URL=$JSON_API_URL VITE_SPLICE_CONFIG=\"\$(cat $config_file)\" \
-    npm start 2>&1 | tee -a $log_file" C-m
+    "trap \"rm -f ${config_file}\" EXIT && \
+    BROWSER=none PORT=$port JSON_API_URL=$JSON_API_URL VITE_SPLICE_CONFIG=\"\$(cat $config_file)\" \
+    npm start 2>&1 | tee -a $log_file"
 }
 
 function start_test() {
@@ -169,12 +169,12 @@ function wait_for_workspace_build() {
 }
 
 # listen & auto-rebuild all these frontend workspaces' code when its src changes
-wait_for_workspace_build "@lfdecentralizedtrust/splice-common-frontend-utils" "common/frontend/utils/lib/index.js"
-wait_for_workspace_build "@lfdecentralizedtrust/splice-common-test-vite-utils" "common/frontend-test-vite-utils/lib/cjs/package.json"
-wait_for_workspace_build "@lfdecentralizedtrust/splice-common-test-utils" "common/frontend-test-utils/lib/index.js"
-wait_for_workspace_build "@lfdecentralizedtrust/splice-common-test-handlers" "common/frontend-test-handlers/lib/index.js"
+wait_for_workspace_build "@canton-network/splice-common-frontend-utils" "common/frontend/utils/lib/index.js"
+wait_for_workspace_build "@canton-network/splice-common-test-vite-utils" "common/frontend-test-vite-utils/lib/cjs/package.json"
+wait_for_workspace_build "@canton-network/splice-common-test-utils" "common/frontend-test-utils/lib/index.js"
+wait_for_workspace_build "@canton-network/splice-common-test-handlers" "common/frontend-test-handlers/lib/index.js"
 # order matters, common-frontend depends on all the above
-wait_for_workspace_build "@lfdecentralizedtrust/splice-common-frontend" "common/frontend/lib/index.js"
+wait_for_workspace_build "@canton-network/splice-common-frontend" "common/frontend/lib/index.js"
 
 # The set of frontends we want to start as part of typical integration testing
 function start_local_frontends() {

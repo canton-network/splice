@@ -11,9 +11,9 @@ import com.digitalasset.canton.data.{CantonTimestamp, SynchronizerSuccessor}
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.protocol.{
-  DynamicSequencingParametersWithValidity,
   DynamicSynchronizerParameters,
   DynamicSynchronizerParametersWithValidity,
+  SequencingParametersWithValidity,
 }
 import com.digitalasset.canton.topology.client.PartyTopologySnapshotClient.PartyInfo
 import com.digitalasset.canton.topology.processing.EffectiveTime
@@ -26,7 +26,6 @@ import com.digitalasset.canton.topology.store.{
 import com.digitalasset.canton.topology.transaction.TopologyChangeOp.Replace
 import com.digitalasset.canton.topology.transaction.TopologyMapping.Code
 import com.digitalasset.canton.topology.transaction.{
-  DynamicSequencingParametersState,
   HostingParticipant,
   LsuAnnouncement,
   MediatorSynchronizerState,
@@ -37,6 +36,7 @@ import com.digitalasset.canton.topology.transaction.{
   PartyToKeyMapping,
   PartyToParticipant,
   SequencerSynchronizerState,
+  SequencingParametersState,
   SynchronizerParametersState,
   SynchronizerTrustCertificate,
   TopologyChangeOp,
@@ -121,6 +121,7 @@ abstract class BaseTopologySnapshot(
                 .flatMap(_.packages.map(vp => (vp.packageId, vp)))
                 .toMap
             }
+            .filter { case (_, vettedPackages) => vettedPackages.nonEmpty }
             .toMap
         }
       }
@@ -135,22 +136,26 @@ abstract class BaseTopologySnapshot(
       packages: Set[PackageId],
       ledgerTime: CantonTimestamp,
       vettedPackages: Map[PackageId, VettedPackage],
+      checkDependencyVetting: Boolean,
   )(implicit traceContext: TraceContext): UnknownOrUnvettedPackages = {
     def isValid(pkg: PackageId): Boolean =
       vettedPackages.get(pkg).exists(_.validAt(ledgerTime))
 
     val invalidPackages = packages.filterNot(isValid)
     val validPackages = packages -- invalidPackages
-    packageDependencyResolver.packageDependencies(validPackages) match {
+
+    packageDependencyResolver.resolvePackagesAndDependencies(validPackages) match {
       case Left(unknownPackages) =>
         UnknownOrUnvettedPackages(
           unknown = Map(unknownPackages),
           unvetted = if (invalidPackages.isEmpty) Map.empty else Map(participant -> invalidPackages),
         )
-      case Right(dependencies) =>
+      case Right(resolvedPackagesAndDependencies) =>
         UnknownOrUnvettedPackages.unvetted(
-          participant,
-          invalidPackages ++ dependencies.filterNot(isValid),
+          participantId = participant,
+          packageIds = invalidPackages ++ resolvedPackagesAndDependencies
+            .packageIds(withDependencies = checkDependencyVetting)
+            .filterNot(isValid),
         )
     }
   }
@@ -183,21 +188,21 @@ abstract class BaseTopologySnapshot(
 
   override def findDynamicSequencingParameters()(implicit
       traceContext: TraceContext
-  ): FutureUnlessShutdown[Either[String, DynamicSequencingParametersWithValidity]] =
+  ): FutureUnlessShutdown[Either[String, SequencingParametersWithValidity]] =
     findTransactionsByUids(
-      types = Seq(TopologyMapping.Code.SequencingDynamicParametersState),
+      types = Seq(TopologyMapping.Code.SequencingParametersState),
       filterUid = NonEmpty(Seq, psid.uid),
     ).map { transactions =>
       for {
         storedTx <- collectLatestTransaction(
-          TopologyMapping.Code.SequencingDynamicParametersState,
+          TopologyMapping.Code.SequencingParametersState,
           transactions.asSnapshotAtMaxEffectiveTime
-            .collectOfMapping[DynamicSequencingParametersState]
+            .collectOfMapping[SequencingParametersState]
             .result,
         ).toRight(s"Unable to fetch sequencing parameters at $timestamp")
 
         mapping = storedTx.mapping
-      } yield DynamicSequencingParametersWithValidity(
+      } yield SequencingParametersWithValidity(
         mapping.parameters,
         storedTx.validFrom.value,
         storedTx.validUntil.map(_.value),
@@ -551,6 +556,7 @@ abstract class BaseTopologySnapshot(
             .collectOfMapping[OwnerToKeyMapping]
             .result
             .groupBy(_.mapping.member)
+            .view
             .map { case (member, otks) =>
               val keys = collectLatestMapping[OwnerToKeyMapping](
                 TopologyMapping.Code.OwnerToKeyMapping,
@@ -558,6 +564,8 @@ abstract class BaseTopologySnapshot(
               ).toList.flatMap(_.keys.forgetNE)
               member -> KeyCollection.empty.addAll(keys)
             }
+            .filter { case (_, keys) => !keys.isEmpty }
+            .toMap
         }
       )
       .getOrElse(FutureUnlessShutdown.pure(Map.empty))

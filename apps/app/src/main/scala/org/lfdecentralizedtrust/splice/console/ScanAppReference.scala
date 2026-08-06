@@ -33,11 +33,11 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   UpdateHistoryItemV2,
 }
 import org.lfdecentralizedtrust.splice.scan.{ScanApp, ScanAppBootstrap}
+import org.lfdecentralizedtrust.splice.store.VoteResultsFilters
 import org.lfdecentralizedtrust.splice.scan.automation.ScanAutomationService
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.TransferContextWithInstances
 import org.lfdecentralizedtrust.splice.scan.config.{ScanAppBackendConfig, ScanAppClientConfig}
-import org.lfdecentralizedtrust.splice.scan.store.db.ScanAggregator
 import org.lfdecentralizedtrust.splice.util.{
   AmuletConfigSchedule,
   ChoiceContextWithDisclosures,
@@ -54,8 +54,11 @@ import com.digitalasset.canton.topology.{Member, ParticipantId, PartyId, Synchro
 import com.google.protobuf.ByteString
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   allocationinstructionv1,
+  allocationinstructionv2,
   allocationv1,
+  allocationv2,
   transferinstructionv1,
+  transferinstructionv2,
 }
 import org.lfdecentralizedtrust.tokenstandard.transferinstruction
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
@@ -89,6 +92,15 @@ abstract class ScanAppReference(
   def getDsoInfo(): GetDsoInfoResponse = {
     consoleEnvironment.run {
       httpCommand(HttpScanAppClient.GetDsoInfo(List()))
+    }
+  }
+
+  @Help.Summary(
+    "Returns the highest synchronizer migration id this scan is aware of."
+  )
+  def getMigrationId(): Long = {
+    consoleEnvironment.run {
+      httpCommand(HttpScanAppClient.GetMigrationId())
     }
   }
 
@@ -274,57 +286,6 @@ abstract class ScanAppReference(
     }
 
   @Help.Summary(
-    "Get the latest round number for which aggregated data is available and the ledger effective time at which the round was closed"
-  )
-  def getRoundOfLatestData(): (Long, Instant) =
-    consoleEnvironment.run {
-      httpCommand(HttpScanAppClient.GetRoundOfLatestData())
-    }
-
-  @Help.Summary(
-    "Get the total rewards collected ever"
-  )
-  def getTotalRewardsCollectedEver(): BigDecimal =
-    consoleEnvironment.run {
-      httpCommand(HttpScanAppClient.GetRewardsCollected(None))
-    }
-
-  @Help.Summary(
-    "Get the total rewards collected in a specific round"
-  )
-  def getRewardsCollectedInRound(round: Long): BigDecimal =
-    consoleEnvironment.run {
-      httpCommand(HttpScanAppClient.GetRewardsCollected(Some(round)))
-    }
-
-  @Help.Summary(
-    "Get a list of top-earning app providers, and the total earned app rewards for each"
-  )
-  def getTopProvidersByAppRewards(round: Long, limit: Int): Seq[(PartyId, BigDecimal)] =
-    consoleEnvironment.run {
-      httpCommand(HttpScanAppClient.getTopProvidersByAppRewards(round, limit))
-    }
-
-  @Help.Summary(
-    "Get a list of top-earning validators, and the total earned validator rewards for each"
-  )
-  def getTopValidatorsByValidatorRewards(round: Long, limit: Int): Seq[(PartyId, BigDecimal)] =
-    consoleEnvironment.run {
-      httpCommand(HttpScanAppClient.getTopValidatorsByValidatorRewards(round, limit))
-    }
-
-  @Help.Summary(
-    "Get a list of validators and their domain fees spends, sorted by the amount of extra traffic purchased"
-  )
-  def getTopValidatorsByPurchasedTraffic(
-      round: Long,
-      limit: Int,
-  ): Seq[HttpScanAppClient.ValidatorPurchasedTraffic] =
-    consoleEnvironment.run {
-      httpCommand(HttpScanAppClient.GetTopValidatorsByPurchasedTraffic(round, limit))
-    }
-
-  @Help.Summary(
     "Get a member's (participant or mediator) traffic status as reported by the sequencer"
   )
   def getMemberTrafficStatus(
@@ -385,7 +346,7 @@ abstract class ScanAppReference(
   @Help.Summary("Get CIP-0104 activity totals for a specific round")
   def getRewardAccountingActivityTotals(
       roundNumber: Long
-  ): Option[definitions.GetRewardAccountingActivityTotalsResponse] =
+  ): definitions.GetRewardAccountingActivityTotalsResponse =
     consoleEnvironment.run {
       httpCommand(HttpScanAppClient.GetRewardAccountingActivityTotals(roundNumber))
     }
@@ -393,7 +354,7 @@ abstract class ScanAppReference(
   @Help.Summary("Get CIP-0104 root hash for a specific round")
   def getRewardAccountingRootHash(
       roundNumber: Long
-  ): Option[definitions.GetRewardAccountingRootHashResponse] =
+  ): definitions.GetRewardAccountingRootHashResponse =
     consoleEnvironment.run {
       httpCommand(HttpScanAppClient.GetRewardAccountingRootHash(roundNumber))
     }
@@ -405,30 +366,6 @@ abstract class ScanAppReference(
   ): Option[definitions.GetRewardAccountingBatchResponse] =
     consoleEnvironment.run {
       httpCommand(HttpScanAppClient.GetRewardAccountingBatch(roundNumber, batchHash))
-    }
-
-  import org.lfdecentralizedtrust.splice.http.v0.definitions.TransactionHistoryResponseItem
-  import org.lfdecentralizedtrust.splice.http.v0.definitions.TransactionHistoryRequest.SortOrder
-
-  def listTransactions(
-      pageEndEventId: Option[String],
-      sortOrder: SortOrder,
-      pageSize: Int,
-  ): Seq[TransactionHistoryResponseItem] =
-    consoleEnvironment.run {
-      httpCommand(
-        HttpScanAppClient.ListTransactions(pageEndEventId, sortOrder, pageSize)
-      )
-    }
-
-  def listActivity(
-      pageEndEventId: Option[String],
-      pageSize: Int,
-  ): Seq[TransactionHistoryResponseItem] =
-    consoleEnvironment.run {
-      httpCommand(
-        HttpScanAppClient.ListTransactions(pageEndEventId, SortOrder.Desc, pageSize)
-      )
     }
 
   def getAcsSnapshot(party: PartyId, recordTime: Option[Instant]): ByteString =
@@ -601,27 +538,6 @@ abstract class ScanAppReference(
       )
     }
 
-  def getAggregatedRounds(): Option[ScanAggregator.RoundRange] =
-    consoleEnvironment.run {
-      httpCommand(
-        HttpScanAppClient.GetAggregatedRounds
-      )
-    }
-
-  def listRoundTotals(start: Long, end: Long) =
-    consoleEnvironment.run {
-      httpCommand(
-        HttpScanAppClient.ListRoundTotals(start, end)
-      )
-    }
-
-  def listRoundPartyTotals(start: Long, end: Long) =
-    consoleEnvironment.run {
-      httpCommand(
-        HttpScanAppClient.ListRoundPartyTotals(start, end)
-      )
-    }
-
   @deprecated(message = "Use getUpdateHistory instead", since = "0.2.5")
   def getUpdateHistoryV0(
       count: Int,
@@ -719,11 +635,33 @@ abstract class ScanAppReference(
     }
   }
 
+  def getTransferFactoryV2(
+      choiceArgs: transferinstructionv2.TransferFactory_Transfer
+  ): (
+      FactoryChoiceWithDisclosures[
+        transferinstructionv2.TransferFactory.ContractId,
+        transferinstructionv2.TransferFactory_Transfer,
+      ],
+      transferinstruction.v2.definitions.TransferFactoryWithChoiceContext.TransferKind,
+  ) = {
+    consoleEnvironment.run {
+      httpCommand(HttpScanAppClient.GetTransferFactoryV2(choiceArgs))
+    }
+  }
+
   def getTransferInstructionAcceptContext(
       transferInstructionId: transferinstructionv1.TransferInstruction.ContractId
   ): ChoiceContextWithDisclosures = {
     consoleEnvironment.run {
       httpCommand(HttpScanAppClient.GetTransferInstructionAcceptContext(transferInstructionId))
+    }
+  }
+
+  def getTransferInstructionAcceptContextV2(
+      transferInstructionId: transferinstructionv2.TransferInstruction.ContractId
+  ): ChoiceContextWithDisclosures = {
+    consoleEnvironment.run {
+      httpCommand(HttpScanAppClient.GetTransferInstructionAcceptContextV2(transferInstructionId))
     }
   }
 
@@ -735,11 +673,27 @@ abstract class ScanAppReference(
     }
   }
 
+  def getTransferInstructionRejectContextV2(
+      transferInstructionId: transferinstructionv2.TransferInstruction.ContractId
+  ): ChoiceContextWithDisclosures = {
+    consoleEnvironment.run {
+      httpCommand(HttpScanAppClient.GetTransferInstructionRejectContextV2(transferInstructionId))
+    }
+  }
+
   def getTransferInstructionWithdrawContext(
       transferInstructionId: transferinstructionv1.TransferInstruction.ContractId
   ): ChoiceContextWithDisclosures = {
     consoleEnvironment.run {
       httpCommand(HttpScanAppClient.GetTransferInstructionWithdrawContext(transferInstructionId))
+    }
+  }
+
+  def getTransferInstructionWithdrawContextV2(
+      transferInstructionId: transferinstructionv2.TransferInstruction.ContractId
+  ): ChoiceContextWithDisclosures = {
+    consoleEnvironment.run {
+      httpCommand(HttpScanAppClient.GetTransferInstructionWithdrawContextV2(transferInstructionId))
     }
   }
 
@@ -784,11 +738,33 @@ abstract class ScanAppReference(
     }
   }
 
+  def getAllocationFactoryV2(
+      choiceArgs: allocationinstructionv2.AllocationFactory_Allocate
+  ): FactoryChoiceWithDisclosures[
+    allocationinstructionv2.AllocationFactory.ContractId,
+    allocationinstructionv2.AllocationFactory_Allocate,
+  ] = {
+    consoleEnvironment.run {
+      httpCommand(HttpScanAppClient.GetAllocationFactoryV2(choiceArgs))
+    }
+  }
+
   def getAllocationTransferContext(
       allocationId: allocationv1.Allocation.ContractId
   ): ChoiceContextWithDisclosures = {
     consoleEnvironment.run {
       httpCommand(HttpScanAppClient.GetAllocationTransferContext(allocationId))
+    }
+  }
+
+  def getSettlementFactoryV2(
+      choiceArgs: allocationv2.SettlementFactory_SettleBatch
+  ): FactoryChoiceWithDisclosures[
+    allocationv2.SettlementFactory.ContractId,
+    allocationv2.SettlementFactory_SettleBatch,
+  ] = {
+    consoleEnvironment.run {
+      httpCommand(HttpScanAppClient.GetSettlementFactoryV2(choiceArgs))
     }
   }
 
@@ -800,11 +776,27 @@ abstract class ScanAppReference(
     }
   }
 
+  def getAllocationV2CancelContext(
+      allocationId: allocationv2.Allocation.ContractId
+  ): ChoiceContextWithDisclosures = {
+    consoleEnvironment.run {
+      httpCommand(HttpScanAppClient.GetAllocationV2CancelContext(allocationId))
+    }
+  }
+
   def getAllocationWithdrawContext(
       allocationId: allocationv1.Allocation.ContractId
   ): ChoiceContextWithDisclosures = {
     consoleEnvironment.run {
       httpCommand(HttpScanAppClient.GetAllocationWithdrawContext(allocationId))
+    }
+  }
+
+  def getAllocationV2WithdrawContext(
+      allocationId: allocationv2.Allocation.ContractId
+  ): ChoiceContextWithDisclosures = {
+    consoleEnvironment.run {
+      httpCommand(HttpScanAppClient.GetAllocationWithdrawContextV2(allocationId))
     }
   }
 
@@ -841,22 +833,14 @@ abstract class ScanAppReference(
 
   @Help.Summary("List vote results")
   def listVoteRequestResults(
-      actionName: Option[String],
-      accepted: Option[Boolean],
-      requester: Option[String],
-      effectiveFrom: Option[String],
-      effectiveTo: Option[String],
+      filters: VoteResultsFilters,
       limit: BigInt,
       pageToken: Option[BigInt] = None,
   ): (Seq[DsoRules_CloseVoteRequestResult], Option[BigInt]) = {
     consoleEnvironment.run {
       httpCommand(
         HttpScanAppClient.ListVoteRequestResults(
-          actionName,
-          accepted,
-          requester,
-          effectiveFrom,
-          effectiveTo,
+          filters,
           limit,
           pageToken,
         )
@@ -928,6 +912,16 @@ abstract class ScanAppReference(
     consoleEnvironment.run {
       httpCommand(
         HttpScanAppClient.GetActivePhysicalSynchronizerSerial()
+      )
+    }
+
+  @Help.Summary(
+    "Retrieve information on the next logical synchronizer upgrade (LSU)"
+  )
+  def getLsu(): Option[HttpScanAppClient.Lsu] =
+    consoleEnvironment.run {
+      httpCommand(
+        HttpScanAppClient.GetLsu()
       )
     }
 }

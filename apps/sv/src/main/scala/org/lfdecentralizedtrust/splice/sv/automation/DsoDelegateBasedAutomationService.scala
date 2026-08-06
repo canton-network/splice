@@ -13,39 +13,41 @@ import org.lfdecentralizedtrust.splice.automation.AutomationServiceCompanion.{
 }
 import org.lfdecentralizedtrust.splice.automation.{AutomationService, AutomationServiceCompanion}
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
-import org.lfdecentralizedtrust.splice.store.{
-  DomainTimeSynchronization,
-  DomainUnpausedSynchronization,
-}
+import org.lfdecentralizedtrust.splice.store.{DomainTimeSynchronization, IgnoredPartiesStore}
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.{BftScanConnection, ScanConnection}
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.*
-import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.ExpiredAmuletAllocationTrigger
+import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContextExecutor, Future}
 
 class DsoDelegateBasedAutomationService(
     clock: Clock,
     domainTimeSync: DomainTimeSynchronization,
-    domainUnpausedSync: DomainUnpausedSynchronization,
     config: SvAppBackendConfig,
     svTaskContext: SvTaskBasedTrigger.Context,
+    getOwnScanConnection: () => Future[ScanConnection],
+    getPeerBftScanConnection: () => Future[BftScanConnection],
     retryProvider: RetryProvider,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit
-    ec: ExecutionContext,
+    ec: ExecutionContextExecutor,
     mat: Materializer,
     tracer: Tracer,
 ) extends AutomationService(
       config.automation,
       clock,
       domainTimeSync,
-      domainUnpausedSync,
       retryProvider,
     ) {
 
   override def companion
       : org.lfdecentralizedtrust.splice.sv.automation.DsoDelegateBasedAutomationService.type =
     DsoDelegateBasedAutomationService
+
+  val expiredAmuletIgnoredPartiesStore = new IgnoredPartiesStore(
+    triggerContext.config.ignoredPartyIds
+  )
 
   def start(): Unit = {
     registerTrigger(new AdvanceOpenMiningRoundTrigger(triggerContext, svTaskContext))
@@ -61,13 +63,48 @@ class DsoDelegateBasedAutomationService(
     }
     registerTrigger(new MergeMemberTrafficContractsTrigger(triggerContext, svTaskContext))
 
-    registerTrigger(new ExpiredAmuletTrigger(config, triggerContext, svTaskContext))
-    registerTrigger(new ExpiredLockedAmuletTrigger(config, triggerContext, svTaskContext))
     registerTrigger(
-      new ExpiredAmuletTransferInstructionTrigger(config, clock, triggerContext, svTaskContext)
+      new ExpiredAmuletTrigger(
+        config,
+        triggerContext,
+        svTaskContext,
+        expiredAmuletIgnoredPartiesStore,
+      )
     )
     registerTrigger(
-      new ExpiredAmuletAllocationTrigger(config, clock, triggerContext, svTaskContext)
+      new ExpiredLockedAmuletTrigger(
+        config,
+        triggerContext,
+        svTaskContext,
+        expiredAmuletIgnoredPartiesStore,
+      )
+    )
+    registerTrigger(
+      new ExpiredAmuletTransferInstructionTrigger(
+        config,
+        clock,
+        triggerContext,
+        svTaskContext,
+        expiredAmuletIgnoredPartiesStore,
+      )
+    )
+    registerTrigger(
+      new ExpiredAmuletAllocationTrigger(
+        config,
+        clock,
+        triggerContext,
+        svTaskContext,
+        expiredAmuletIgnoredPartiesStore,
+      )
+    )
+    registerTrigger(
+      new ExpiredAmuletAllocationV2Trigger(
+        config,
+        clock,
+        triggerContext,
+        svTaskContext,
+        expiredAmuletIgnoredPartiesStore,
+      )
     )
     registerTrigger(new ExpiredSvOnboardingRequestTrigger(triggerContext, svTaskContext))
     registerTrigger(new CloseVoteRequestTrigger(triggerContext, svTaskContext))
@@ -81,13 +118,36 @@ class DsoDelegateBasedAutomationService(
       new ExpireRewardCouponsTrigger(
         triggerContext,
         svTaskContext,
+        expiredAmuletIgnoredPartiesStore,
+        config,
       )
     )
 
     registerTrigger(new AnsSubscriptionRenewalPaymentTrigger(triggerContext, svTaskContext))
-    registerTrigger(new ExpiredAnsEntryTrigger(triggerContext, svTaskContext))
-    registerTrigger(new ExpireTransferPreapprovalsTrigger(triggerContext, svTaskContext))
-    registerTrigger(new ExpiredAnsSubscriptionTrigger(triggerContext, svTaskContext))
+    registerTrigger(
+      new ExpiredAnsEntryTrigger(
+        triggerContext,
+        svTaskContext,
+        config,
+        expiredAmuletIgnoredPartiesStore,
+      )
+    )
+    registerTrigger(
+      new ExpireTransferPreapprovalsTrigger(
+        triggerContext,
+        svTaskContext,
+        config,
+        expiredAmuletIgnoredPartiesStore,
+      )
+    )
+    registerTrigger(
+      new ExpiredAnsSubscriptionTrigger(
+        triggerContext,
+        svTaskContext,
+        config,
+        expiredAmuletIgnoredPartiesStore,
+      )
+    )
     registerTrigger(new TerminatedSubscriptionTrigger(triggerContext, svTaskContext))
     registerTrigger(new MergeSvRewardStateContractsTrigger(triggerContext, svTaskContext))
 
@@ -103,6 +163,7 @@ class DsoDelegateBasedAutomationService(
         triggerContext,
         svTaskContext,
         config,
+        expiredAmuletIgnoredPartiesStore,
       )
     )
 
@@ -135,9 +196,36 @@ class DsoDelegateBasedAutomationService(
     )
 
     registerTrigger(
+      new ExpireRewardCouponV2Trigger(
+        config,
+        triggerContext,
+        svTaskContext,
+      )
+    )
+
+    registerTrigger(new UnhideRewardCouponV2Trigger(config, triggerContext, svTaskContext))
+
+    registerTrigger(
       new BootstrapExternalPartyConfigStateInstructionTrigger(
         triggerContext,
         svTaskContext,
+      )
+    )
+
+    registerTrigger(
+      new ProcessRewardsTrigger(
+        triggerContext,
+        svTaskContext,
+        getOwnScanConnection,
+        getPeerBftScanConnection,
+      )
+    )
+    registerTrigger(
+      new ProcessRewardsDryRunTrigger(
+        triggerContext,
+        svTaskContext,
+        getOwnScanConnection,
+        getPeerBftScanConnection,
       )
     )
   }
@@ -157,6 +245,7 @@ object DsoDelegateBasedAutomationService extends AutomationServiceCompanion {
     aTrigger[ExpiredLockedAmuletTrigger],
     aTrigger[ExpiredAmuletTransferInstructionTrigger],
     aTrigger[ExpiredAmuletAllocationTrigger],
+    aTrigger[ExpiredAmuletAllocationV2Trigger],
     aTrigger[ExpiredSvOnboardingRequestTrigger],
     aTrigger[CloseVoteRequestTrigger],
     aTrigger[ExpiredSvOnboardingConfirmedTrigger],
@@ -178,6 +267,10 @@ object DsoDelegateBasedAutomationService extends AutomationServiceCompanion {
     aTrigger[ExpiredUnclaimedActivityRecordTrigger],
     aTrigger[MergeUnclaimedDevelopmentFundCouponsTrigger],
     aTrigger[ExpiredDevelopmentFundCouponTrigger],
+    aTrigger[ExpireRewardCouponV2Trigger],
+    aTrigger[UnhideRewardCouponV2Trigger],
     aTrigger[BootstrapExternalPartyConfigStateInstructionTrigger],
+    aTrigger[ProcessRewardsTrigger],
+    aTrigger[ProcessRewardsDryRunTrigger],
   )
 }

@@ -19,7 +19,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.{
 }
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.environment.{DarResources, RetryProvider}
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.store.db.{AcsJdbcTypes, AcsTables, SplicePostgresTest}
 import org.lfdecentralizedtrust.splice.store.{HardLimit, Limit, PageLimit, StoreTestBase}
 import org.lfdecentralizedtrust.splice.util.{ResourceTemplateDecoder, TemplateJsonDecoder}
@@ -374,10 +373,7 @@ class DbValidatorStoreTest
       loggerFactory = loggerFactory,
       retryProvider =
         RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory),
-      DomainMigrationInfo(
-        domainMigrationId,
-        None,
-      ),
+      domainMigrationId,
       participantId = mkParticipantId("ValidatorStoreTest"),
       IngestionConfig(),
       defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),

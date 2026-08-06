@@ -35,6 +35,7 @@ import com.digitalasset.canton.time.NonNegativeFiniteDuration
 import com.digitalasset.canton.topology.MediatorGroup.MediatorGroupIndex
 import com.digitalasset.canton.topology.{Member, SequencerId}
 import com.digitalasset.canton.util.{GrpcStreamingUtils, ResourceUtil}
+import com.digitalasset.canton.version.ProtocolVersion
 import com.google.protobuf.ByteString
 import io.grpc.Context.CancellableContext
 import io.grpc.stub.StreamObserver
@@ -243,6 +244,10 @@ object SequencerAdminCommands {
 
   }
 
+  @deprecated(
+    "Use InitializeFromOnboardingStateV2 instead",
+    since = "3.5",
+  )
   final case class InitializeFromOnboardingState(onboardingState: ByteString)
       extends GrpcAdminCommand[
         proto.InitializeSequencerFromOnboardingStateRequest,
@@ -323,6 +328,10 @@ object SequencerAdminCommands {
     override def timeoutType: TimeoutType = DefaultUnboundedTimeout
   }
 
+  @deprecated(
+    "Use InitializeFromGenesisStateV2 instead",
+    since = "3.5",
+  )
   final case class InitializeFromGenesisState(
       topologySnapshot: ByteString,
       synchronizerParameters: com.digitalasset.canton.protocol.StaticSynchronizerParameters,
@@ -457,7 +466,7 @@ object SequencerAdminCommands {
     override def timeoutType: TimeoutType = DefaultUnboundedTimeout
   }
 
-  final case class Snapshot(timestamp: CantonTimestamp)
+  final case class Snapshot(timestamp: CantonTimestamp, protocolVersion: ProtocolVersion)
       extends BaseSequencerAdministrationCommand[
         proto.SnapshotRequest,
         proto.SnapshotResponse,
@@ -480,11 +489,11 @@ object SequencerAdminCommands {
           Left(reason)
         case proto.SnapshotResponse.Value
               .Success(proto.SnapshotResponse.Success(Some(result))) =>
-          SequencerSnapshot.fromProtoV30(result).leftMap(_.toString)
+          SequencerSnapshot.fromProtoV30(protocolVersion, result).leftMap(_.toString)
         case proto.SnapshotResponse.Value
               .VersionedSuccess(proto.SnapshotResponse.VersionedSuccess(snapshot)) =>
           SequencerSnapshot
-            .fromTrustedByteString(snapshot)
+            .fromTrustedByteString(protocolVersion)(snapshot)
             .leftMap(_.toString)
         case _ => Left("response is empty")
       }
@@ -493,6 +502,10 @@ object SequencerAdminCommands {
     override def timeoutType: TimeoutType = DefaultUnboundedTimeout
   }
 
+  @deprecated(
+    "Use OnboardingStateV2 instead",
+    since = "3.5",
+  )
   final case class OnboardingState(
       observer: StreamObserver[proto.OnboardingStateResponse],
       sequencerOrTimestamp: Either[SequencerId, CantonTimestamp],

@@ -8,7 +8,7 @@ import os
 import sys
 
 APPS_DIR = "apps"
-REQUIRED_NAMESPACE = "@lfdecentralizedtrust/"
+REQUIRED_NAMESPACE = "@canton-network/"
 
 
 def main():

@@ -105,7 +105,7 @@ abstract class SvTopologyStatePollingAndAssignedTrigger[Task](
     for {
       noDsoRules <- store.lookupDsoRules().map(_.isEmpty)
       // required to prevent bogus topology transactions from being created during LSUs
-      connectedSyncs <- participantAdminConnection.traverse(_.listConnectedDomains())
+      connectedSyncs <- participantAdminConnection.traverse(_.listConnectedSynchronizers())
     } yield noDsoRules || connectedSyncs.exists(_.isEmpty)
 
   }

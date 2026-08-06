@@ -1,0 +1,399 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- | Daml script tests wrt batching transfer actions.
+module Splice.Util.Token.Wallet.IntegrationTests.TestBatchedTransfers where
+
+import Daml.Script
+
+import DA.Assert
+import DA.Action (void, when)
+import DA.Foldable (forA_)
+import DA.List (sort)
+import DA.Map qualified as Map
+import DA.Time
+import DA.Text qualified as T
+import DA.TextMap qualified as TextMap
+
+import Splice.Api.Token.MetadataV1
+import Splice.Api.Token.HoldingV2 qualified as V2
+import Splice.Api.Token.TransferInstructionV1 qualified as V1
+import Splice.Api.Token.TransferInstructionV2 qualified as V2
+
+import Splice.TokenStandard.Utils qualified as TSU
+
+import Splice.Util.Token.Wallet.BatchingUtilityV2 qualified as BatchingUtilityV2
+
+import Splice.Testing.Utils
+import Splice.Testing.Tokens.TestTokenV2 qualified as TestTokenV2
+import Splice.Testing.Registries.TestTokenV1_RegistryV1 qualified as TestTokenRegistryV1
+import Splice.Testing.Registries.TestTokenV2_RegistryV2 qualified as TestTokenRegistryV2
+import Splice.Testing.Registries.TestRegistries qualified as TestRegistries
+import Splice.Testing.TokenStandard.MultiRegistry qualified as MultiRegistry
+import Splice.Testing.TokenStandard.WalletClientV2 (SimpleTransfer(..))
+import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
+
+
+-- Standalone Transfer instruction tests
+-----------------------------------------
+
+-- These tests cover the execution of a single transfer instruction step.
+-- The working of the batching is tested in the composite batching tests below.
+
+data TestEnv = TestEnv with
+  registries : MultiRegistry.MultiRegistry
+  instrCid : ContractId V2.TransferInstruction
+  alice : Party
+  bob : Party
+
+test_TransferInstruction_AcceptV2 : Script ()
+test_TransferInstruction_AcceptV2 = testTransferInstruction $ \TestEnv {..} -> do
+  batch <- WalletClientV2.mkTransferInstruction_AcceptV2 registries bob instrCid
+  pure (bob, bob, batch)
+
+test_TransferInstruction_RejectV2 : Script ()
+test_TransferInstruction_RejectV2 = testTransferInstruction $ \TestEnv {..} -> do
+  batch <- WalletClientV2.mkTransferInstruction_RejectV2 registries bob instrCid
+  pure (bob, alice, batch)
+
+test_TransferInstruction_WithdrawV2 : Script ()
+test_TransferInstruction_WithdrawV2 = testTransferInstruction $ \TestEnv {..} -> do
+  batch <- WalletClientV2.mkTransferInstruction_WithdrawV2 registries alice instrCid
+  pure (alice, alice, batch)
+
+test_TransferInstruction_AcceptV1 : Script ()
+test_TransferInstruction_AcceptV1 = testTransferInstruction $ \TestEnv {..} -> do
+  batch <- WalletClientV2.mkTransferInstruction_AcceptV1 registries bob (TSU.downcast instrCid)
+  pure (bob, bob, batch)
+
+test_TransferInstruction_RejectV1 : Script ()
+test_TransferInstruction_RejectV1 = testTransferInstruction $ \TestEnv {..} -> do
+  batch <- WalletClientV2.mkTransferInstruction_RejectV1 registries bob (TSU.downcast instrCid)
+  pure (bob, alice, batch)
+
+test_TransferInstruction_WithdrawV1 : Script ()
+test_TransferInstruction_WithdrawV1 = testTransferInstruction $ \TestEnv {..} -> do
+  batch <- WalletClientV2.mkTransferInstruction_WithdrawV1 registries alice (TSU.downcast instrCid)
+  pure (alice, alice, batch)
+
+
+testTransferInstruction
+  : (TestEnv -> Script (Party, Party, WalletClientV2.TSABatch)) -> Script ()
+testTransferInstruction mkBatch = do
+  -- setup
+  env <- TestRegistries.initialize TestRegistries.defaultConfig
+  let registries = env.registries
+  let instrX = V2.InstrumentId with
+        id = "X2"
+        admin = env.testTokenV2.admin
+
+  -- use a non-basic account to check that metadata parsing works correctly in the batching utility
+  let mkAccount owner = V2.Account with owner = Some owner; provider = None; id = "account1"
+
+  alice <- allocatePartyExact "alice"
+  bob <- allocatePartyExact "bob"
+
+  WalletClientV2.createBatchingUtility alice
+  WalletClientV2.createBatchingUtility bob
+
+  void $ TestTokenRegistryV2.mint env.testTokenV2 (mkAccount alice) instrX.id 1000.0
+
+  -- create transfer offer
+  now <- getTime
+  inputHoldingCids <- WalletClientV2.listHoldingCids alice instrX
+  WalletClientV2.transferV2 registries alice V2.TransferFactory_Transfer with
+    transfer = V2.Transfer with
+      sender = mkAccount alice
+      receiver = mkAccount bob
+      inputHoldingCids
+      amount = 10.0
+      instrumentId = instrX
+      requestedAt = now
+      executeBefore = now `addRelTime` days 7
+      meta = emptyMetadata
+    actors = [alice]
+    extraArgs = emptyExtraArgs
+
+  [offer] <- WalletClientV2.listTransferInstructionsV1V2 bob instrX
+  let testEnv = TestEnv with instrCid = offer._1, ..
+
+  -- act on transfer offer
+  (actor, finalHolder, batch) <- mkBatch testEnv
+  result <- WalletClientV2.executeTSABatch registries actor batch
+
+  -- check the expect holdings
+  checkHoldingMap result
+    [ (mkAccount finalHolder, instrX, [10.0])
+    ]
+
+  pure ()
+
+
+checkHoldingMap : (BatchingUtilityV2.BatchingUtility_ExecuteBatchResult, b) -> [(V2.Account, V2.InstrumentId, [Decimal])] -> Script ()
+checkHoldingMap result expected = checkHoldingMap' result._1.outputHoldingMap.byAdminAndAccount expected
+
+checkHoldingMap' : Map.Map BatchingUtilityV2.ScopedAccount (TextMap.TextMap [ContractId V2.Holding]) -> [(V2.Account, V2.InstrumentId, [Decimal])] -> Script ()
+checkHoldingMap' actualMap expectedMap = do
+  -- check that all expected values are present
+  forA_ expectedMap $ \(account, instrId, expectedAmounts0) ->
+    case Map.lookup (BatchingUtilityV2.ScopedAccount instrId.admin account) actualMap of
+      None -> fail $ "No holdings found for account " <> show account <> " and admin " <> show instrId.admin
+      Some holdingMap -> do
+        let expectedAmounts = sort [ (instrId.id, amount) | amount <- expectedAmounts0 ]
+        actualAmounts <- forA (TextMap.toList holdingMap) $ \(iid, holdingCids) -> do
+          forA holdingCids $ \holdingCid -> do
+            Some holdingView <- queryInterfaceContractId @V2.Holding instrId.admin holdingCid
+            holdingView.account === account
+            holdingView.instrumentId === instrId
+            pure (iid, holdingView.amount)
+        sort (concat actualAmounts) === expectedAmounts
+
+   -- check that there are no unexpected values
+  forA_ (Map.toList actualMap) $ \(BatchingUtilityV2.ScopedAccount admin account, holdingMap) -> do
+    forA_ (TextMap.toList holdingMap) $ \(iid, holdingCids) -> do
+      let instrId = V2.InstrumentId with
+            id = iid
+            admin = admin
+      case [ amounts | (expectedAccount, expectedInstrId, amounts) <- expectedMap, expectedAccount == account, expectedInstrId == instrId ] of
+        amounts
+          | length amounts == length holdingCids  -> pure ()
+          | otherwise -> fail $ T.unlines
+              [ "Unexpected number of holdings for account " <> show account <> " and instrument " <> show instrId <> ":"
+              , "Expected amounts: " <> show amounts
+              , "Actual holding CIDs: " <> show holdingCids
+              ]
+
+
+
+-- Composite batching tests
+---------------------------
+
+data TestSetup = TestSetup with
+  registries : MultiRegistry.MultiRegistry
+  mint : Party -> Decimal -> V2.InstrumentId -> Script ()
+  instrX : V2.InstrumentId
+  instrY : V2.InstrumentId
+  mkTransfer : SimpleTransfer -> Script WalletClientV2.TSABatch
+  checkMetadata : Bool
+
+testTokenV1_test_transferV1 : Script ()
+testTokenV1_test_transferV1 = do
+  -- setup
+  env <- TestRegistries.initialize TestRegistries.defaultConfig
+  let instrX = V2.InstrumentId with
+        id = "X1"
+        admin = env.testTokenV1.admin
+  let instrY = V2.InstrumentId with
+        id = "Y1"
+        admin = env.testTokenV1.admin
+
+  let mint owner amount instrId =
+        void $ TestTokenRegistryV1.mint env.testTokenV1 owner instrId.id amount
+
+  genericTestBatchedTransfer TestSetup with
+      registries = env.registries
+      mint
+      instrX
+      instrY
+      mkTransfer = WalletClientV2.mkTransferFactory_TransferV1' env.registries
+      checkMetadata = False
+
+
+testTokenV2_test_transferV1 : Script ()
+testTokenV2_test_transferV1 = do
+  -- setup
+  env <- TestRegistries.initialize TestRegistries.defaultConfig
+  let instrX = V2.InstrumentId with
+        id = "X1"
+        admin = env.testTokenV2.admin
+  let instrY = V2.InstrumentId with
+        id = "Y1"
+        admin = env.testTokenV2.admin
+
+  let mint owner amount instrId =
+        void $ TestTokenRegistryV2.mint env.testTokenV2 (TSU.basicAccount owner) instrId.id amount
+
+  genericTestBatchedTransfer TestSetup with
+      registries = env.registries
+      mint
+      instrX
+      instrY
+      mkTransfer = WalletClientV2.mkTransferFactory_TransferV1' env.registries
+      checkMetadata = False
+
+
+testTokenV2_testV2_transfer : Script ()
+testTokenV2_testV2_transfer = do
+  -- setup
+  env <- TestRegistries.initialize TestRegistries.defaultConfig
+  let registries = env.registries
+  let instrX = V2.InstrumentId with
+        id = "X2"
+        admin = env.testTokenV2.admin
+  let instrY = V2.InstrumentId with
+        id = "Y2"
+        admin = env.testTokenV2.admin
+
+  let mint owner amount instrId =
+        void $ TestTokenRegistryV2.mint env.testTokenV2 (TSU.basicAccount owner) instrId.id amount
+
+  genericTestBatchedTransfer TestSetup with
+      registries
+      mint
+      instrX
+      instrY
+      mkTransfer = WalletClientV2.mkTransferFactory_TransferV2' registries
+      checkMetadata = True
+
+genericTestBatchedTransfer : TestSetup -> Script ()
+genericTestBatchedTransfer TestSetup {..} = do
+  let mkParty name = do
+        party <- allocatePartyExact name
+        WalletClientV2.createBatchingUtility party
+        pure party
+
+  alice <- mkParty "alice"
+  bob <- mkParty "bob"
+  charlie <- mkParty "charlie"
+  dora <- mkParty "dora"
+  accountProvider1 <- mkParty "accountProvider1"
+  let allParties = [alice, bob, charlie, dora]
+  let aliceAccount = TSU.basicAccount alice
+  let charlieAccount = TSU.basicAccount charlie
+  let doraAccount = TSU.basicAccount dora
+  let bobAccount = V2.Account with
+        owner = Some bob; provider = Some accountProvider1; id = "bob-account"
+  let bobAccountConfig = TestTokenV2.AccountConfig with
+        admin = instrX.admin
+        account = bobAccount
+        ownerConfig = TestTokenV2.PartyConfig with
+          canInitiate = True
+          mustApprove = True
+        providerConfig  = TestTokenV2.PartyConfig with
+          canInitiate = False
+          mustApprove = False
+
+  TestTokenRegistryV2.makeAccountIfMissing bobAccountConfig
+
+  mint alice 1000.0 instrX
+  mint alice 1000.0 instrY
+
+  -- test creating three outgoing transfers in on batch
+  at1 <- mkTransfer SimpleTransfer with
+        sender = aliceAccount
+        receiver = bobAccount
+        amount = 10.0
+        instrumentId = instrX
+        offerTime = days 1
+        reason = "alice -> bob - test transfer 1"
+  at2 <- mkTransfer SimpleTransfer with
+        sender = aliceAccount
+        receiver = charlieAccount
+        amount = 25.0
+        instrumentId = instrY
+        offerTime = days 1
+        reason = "alice -> charlie - test transfer 2"
+  at3 <- mkTransfer SimpleTransfer with
+        sender = aliceAccount
+        receiver = doraAccount
+        amount = 10.0
+        instrumentId = instrX
+        offerTime = days 1
+        reason = "alice -> dora - test transfer 3"
+  WalletClientV2.executeTSABatch registries alice (at1 <> at2 <> at3)
+
+  -- test accepting and forwarding a transfer using the holdings just received
+  baccept <- acceptTransferInstructionV2s registries bob instrX
+  bt1 <- mkTransfer SimpleTransfer with
+        sender = bobAccount
+        receiver = doraAccount
+        amount = 5.0
+        instrumentId = instrX
+        offerTime = days 1
+        reason = "bob -> dora - test transfer 4"
+
+  WalletClientV2.executeTSABatch registries bob (baccept <> bt1)
+
+  -- dora accepts all transfers in one go, and merges them, and then transfers to another account of theirs, from which it transfers out
+  daccept <- acceptTransferInstructionV2s registries dora instrX
+  doraMerge <- mkTransfer SimpleTransfer with
+        sender = doraAccount
+        receiver = doraAccount
+        amount = 15.0
+        instrumentId = instrX
+        offerTime = days 1
+        reason = "dora -> dora - test self-merge"
+  let doraExtraAccount = V2.Account with
+        owner = Some dora; provider = None; id = "dora-extra-account"
+  doraToExtra <- mkTransfer SimpleTransfer with
+        sender = doraAccount
+        receiver = doraExtraAccount
+        amount = 10.0
+        instrumentId = instrX
+        offerTime = days 1
+        reason = "dora -> dora - test separate account transfer"
+  doraExtraToCharlie <- mkTransfer SimpleTransfer with
+        sender = doraExtraAccount
+        receiver = charlieAccount
+        amount = 3.0
+        instrumentId = instrX
+        offerTime = days 1
+        reason = "dora -> charlie - test separate account transfer"
+  -- we do a self-merge twice just to test that this works as well
+  WalletClientV2.executeTSABatch registries dora
+    (daccept <> doraMerge <> doraMerge <> doraToExtra <> doraExtraToCharlie)
+
+  -- charlie accepts their offer for Y
+  cacceptY <- acceptTransferInstructionV2s registries charlie instrY
+  (result, changes) <- WalletClientV2.executeTSABatch registries charlie cacceptY
+
+  -- check tx history on V2 transfers
+  when checkMetadata $ do
+    let testTransferReason = "alice -> charlie - test transfer 2"
+    WalletClientV2.expectTxHistoryReasons changes
+      [ (aliceAccount, [testTransferReason], "")
+      , (charlieAccount, [testTransferReason], "")
+      ]
+    -- V1 history metadata
+    let expectedMeta = Metadata with
+          values = TextMap.fromList
+            [ ("splice.lfdecentralizedtrust.org/reason", testTransferReason)
+            , ("splice.lfdecentralizedtrust.org/sender", "alice")
+            , ("splice.lfdecentralizedtrust.org/receiver", "charlie")
+            , ("splice.lfdecentralizedtrust.org/tx-kind", "transfer")
+            ]
+    [BatchingUtilityV2.TSAR_TransferInstructionResultV2 acceptResult] <- pure result.actionResults
+    acceptResult.meta === expectedMeta
+
+  -- charlie also accepts their offer for X
+  cacceptX <- acceptTransferInstructionV2s registries charlie instrX
+  WalletClientV2.executeTSABatch registries charlie cacceptX
+
+  -- Check balances
+  WalletClientV2.checkBalance alice instrX 980.0
+  WalletClientV2.checkBalance alice instrY 975.0
+
+  WalletClientV2.checkBalance bob instrX 5.0
+  WalletClientV2.checkBalance bob instrY 0.0
+
+  WalletClientV2.checkBalance charlie instrY 25.0
+  WalletClientV2.checkBalance charlie instrX 3.0
+
+  WalletClientV2.checkBalance dora instrX 12.0
+  WalletClientV2.checkBalance dora instrY 0.0
+
+  -- No transfer instructions left
+  forA_ allParties $ \p -> do
+    [] <- queryInterface @V1.TransferInstruction p
+    [] <- queryInterface @V2.TransferInstruction p
+    pure ()
+
+  pure ()
+
+
+acceptTransferInstructionV2s : MultiRegistry.MultiRegistry -> Party -> V2.InstrumentId -> Script WalletClientV2.TSABatch
+acceptTransferInstructionV2s registries actor instrumentId = do
+  offers <- WalletClientV2.listTransferInstructionsV1V2 actor instrumentId
+  acceptChoices <- forA offers (WalletClientV2.mkTransferInstruction_AcceptV1V2 registries actor)
+  pure (mconcat acceptChoices)
+

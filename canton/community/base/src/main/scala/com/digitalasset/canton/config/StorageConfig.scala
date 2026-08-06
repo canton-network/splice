@@ -73,6 +73,7 @@ final case class DbParametersConfig(
 
     // Make the default settings a part of repeatable migrations
     repeatableMigrationsPaths: Seq[String] = Seq.empty,
+    partitions: PartitionConfig = PartitionConfig(),
 ) extends PrettyPrinting {
   override protected def pretty: Pretty[DbParametersConfig] =
     prettyOfClass(
@@ -136,7 +137,9 @@ final case class DbParametersConfig(
   * @param pruningParallelism
   *   number of parallel pruning queries to the db. defaults to 2
   * @param topologyCacheAggregator
-  *   number of parallel requests for the toplogy cache read side
+  *   number of parallel requests for the topology cache read side
+  * @param maxStakeholderGroupsBatchSize
+  *   maximum number of stakeholder groups in a batch when reading commitments from a snapshot
   */
 final case class BatchingConfig(
     maxItemsInBatch: PositiveNumeric[Int] = BatchingConfig.defaultMaxItemsBatch,
@@ -160,6 +163,8 @@ final case class BatchingConfig(
     maxPruningTimeInterval: PositiveFiniteDuration = BatchingConfig.defaultMaxPruningTimeInterval,
     pruningParallelism: PositiveNumeric[Int] = BatchingConfig.defaultPruningParallelism,
     topologyCacheAggregator: BatchAggregatorConfig = BatchingConfig.defaultAggregator,
+    maxStakeholderGroupsBatchSize: PositiveNumeric[Int] =
+      BatchingConfig.defaultMaxStakeholderGroupsBatchSize,
 )
 
 object BatchingConfig {
@@ -183,6 +188,7 @@ object BatchingConfig {
   private val defaultMaxPruningTimeInterval: PositiveFiniteDuration =
     PositiveFiniteDuration.ofMinutes(30)
   private val defaultPruningParallelism: PositiveInt = PositiveNumeric.tryCreate(2)
+  private val defaultMaxStakeholderGroupsBatchSize: PositiveInt = PositiveNumeric.tryCreate(1000)
 }
 
 final case class ConnectionAllocation(
@@ -197,6 +203,13 @@ final case class ConnectionAllocation(
       paramIfDefined("numLedgerApi", _.numLedgerApi),
     )
 }
+
+/** @param initialBftOrdererTablesPartitionSize
+  *   Initial partition size for bft-orderer tables. Note that this config is only read once, during
+  *   the initial database setup and later changes to this value won't have any effect. This is also
+  *   only used in Postgres setups.
+  */
+final case class PartitionConfig(initialBftOrdererTablesPartitionSize: Int = 1500)
 
 object DbParametersConfig {
 

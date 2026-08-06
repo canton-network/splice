@@ -89,20 +89,21 @@ class LsuNodeInitializer(
         "Initialize sequencer from the state of the predecessor",
         successorSynchronizerNode.sequencerAdminConnection.getStatus.map {
           case NodeStatus.Failure(msg) => Left(msg)
-          case NodeStatus.NotInitialized(_, _) => Left("Not initialized")
+          case NodeStatus.NotInitialized(_, _, _) => Left("Not initialized")
           case NodeStatus.Success(_) =>
             logger.info("Sequencer is already initialized")
             Right(())
         },
         (_: String) => {
+          val initParams = parameters.copy(
+            protocolVersion = successorSynchronizerId.protocolVersion
+          )
           logger.info(
-            show"Initializing sequencer from predecessor with $parameters"
+            show"Initializing sequencer from predecessor with $initParams"
           )
           successorSynchronizerNode.sequencerAdminConnection.initializeFromPredecessor(
             state.synchronizerStatePath,
-            parameters.copy(
-              protocolVersion = successorSynchronizerId.protocolVersion
-            ),
+            initParams,
             ignorePsidCheck,
           )
         },
@@ -130,7 +131,7 @@ class LsuNodeInitializer(
         "Initialize mediator after the LSU",
         successorSynchronizerNode.mediatorAdminConnection.getStatus.map {
           case NodeStatus.Failure(msg) => Left(msg)
-          case NodeStatus.NotInitialized(_, _) => Left("Not initialized")
+          case NodeStatus.NotInitialized(_, _, _) => Left("Not initialized")
           case NodeStatus.Success(_) =>
             logger.info("Mediator is already initialized")
             Right(())

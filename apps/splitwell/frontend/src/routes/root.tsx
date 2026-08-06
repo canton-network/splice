@@ -4,7 +4,7 @@ import {
   AnsEntry as AnsEntryComponent,
   useUserState,
   usePrimaryParty,
-} from '@lfdecentralizedtrust/splice-common-frontend';
+} from '@canton-network/splice-common-frontend';
 import { Outlet } from 'react-router';
 
 import { AppBar, Box, Button, CssBaseline, Toolbar, Typography } from '@mui/material';

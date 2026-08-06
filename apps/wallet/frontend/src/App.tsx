@@ -4,11 +4,12 @@ import * as React from 'react';
 import {
   AuthProvider,
   ErrorRouterPage,
+  retryQuery,
   retrySynchronizerError,
   theme,
   UserProvider,
-} from '@lfdecentralizedtrust/splice-common-frontend';
-import { replaceEqualDeep } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+} from '@canton-network/splice-common-frontend';
+import { replaceEqualDeep } from '@canton-network/splice-common-frontend-utils';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { LocalizationProvider } from '@mui/x-date-pickers';
@@ -54,6 +55,7 @@ const App: React.FC = () => {
         queries: {
           refetchInterval,
           structuralSharing: replaceEqualDeep,
+          retry: retryQuery,
         },
         mutations: {
           retry: retrySynchronizerError,

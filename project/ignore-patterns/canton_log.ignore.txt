@@ -94,6 +94,12 @@ ACS_COMMITMENT_MISMATCH.*aliceValidatorLocalNewForValidatorReonboardingIT
 # In principle the confirmations from three of the mediators and counter-participants should be sufficient, but who knows what we do in all tests; ignoring unless it causes problems
 Response message for request.*timed out.*c.d.c.p.p.TransactionProcessor:participant=
 
+# Transient WARN triggered by a shutdown of the sync connection while the participant is sending confirmation responses.
+Failed to send responses: RequestFailed\(No connection available\).*c.d.c.p.p.TransactionProcessor:participant=
+
+# Transient WARN triggered by a shutdown of the sync connection while the participant is submitting a transaction; the submitter retries.
+Failed to submit transaction due to Error\(RequestFailed\(No connection available\)\).*c.d.c.p.p.TransactionProcessor:participant=
+
 # TODO(#936): remove these ignores if possible
 The operation 'insert block' has failed with an exception
 Now retrying operation 'insert block'
@@ -176,20 +182,35 @@ Missing successor information for the following sequencers.*sv4
 # We don't use the onboarding flag clearance atm.
 Skipping insertion of pending onboarding flag clearance operation as no party ID was provided
 
+# LSU: submissions on the old physical synchronizer after the upgrade time has passed are rejected
+GrpcRequestRefusedByServer: FAILED_PRECONDITION/SEQUENCER_SUBMISSION_AFTER_UPGRADE_TIME
 # LSU SV4 migrates late
 SEQ::sv4.*Sequencer can't take requests because it is behind on processing events
 Sequencer can't take requests because it is behind on processing events.*sequencer=>sv4StandaloneSequencer
 Now retrying operation 'request current time.*participant=sv4Participant.*global-domain.*-2
+Mempool received client request but this node is currently blacklisted, rejecting.*sv4StandaloneSequencer.*psid=global-domain.*-2
 
 # Triggered by roll-forward LSU test
 No sequencer successor was found
 P2P connectivity is not ready
 Missing successor information for the following sequencers.*participant=aliceParticipant
 
-# LSU: submissions on the old physical synchronizer after the upgrade time has passed are rejected
-Request failed for server-DefaultSequencer-0.\n  GrpcRequestRefusedByServer: FAILED_PRECONDITION/SEQUENCER_SUBMISSION_AFTER_UPGRADE_TIME
-
 # TODO(DACH-NY/cn-test-failures#7920) Remove once Canton is fixed
 loadVettedPackages.*mismatch between reference and current state.*Map\(\)
 
+# can happen during start-up
+Mempool received client request but this node is currently blacklisted, rejecting
+
+# This should go away with latest Canton bump
+Flyway upgrade recommended: PostgreSQL 18.4 is newer than this version of Flyway and support has not been tested. The latest supported version of PostgreSQL is 17
+
+# TODO(DACH-NY/cn-test-failures#9055) can be removed when it's no longer a warn.
+LOCAL_VERDICT_FAILED_MODEL_CONFORMANCE_CHECK.*Rejected transaction due to a failed model conformance check: UnvettedPackages.*
+
 # Make sure to have a trailing newline
+
+# TODO(DACH-NY/cn-test-failures#9136) remove once Canton fixes this race condition from not storing packages in dependency order
+INTERNAL/Missing package-id.*in package metadata view
+
+# We can get temporarily blacklisted during onboarding triggering a retry for this.
+Now retrying operation 'request current time'

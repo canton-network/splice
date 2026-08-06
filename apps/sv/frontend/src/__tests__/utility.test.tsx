@@ -6,7 +6,7 @@ import {
   getDsoSvOffboardingAction,
   getUpdateSvRewardWeightAction,
   mkVoteRequest,
-} from '@lfdecentralizedtrust/splice-common-test-handlers';
+} from '@canton-network/splice-common-test-handlers';
 import { test, expect, describe } from 'vitest';
 
 import { hasConflictingFields } from '../utils/configDiffs';

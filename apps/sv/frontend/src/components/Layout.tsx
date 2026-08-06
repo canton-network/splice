@@ -1,31 +1,48 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import * as React from 'react';
-import {
-  Header,
-  Loading,
-  useUserState,
-  useVotesHooks,
-} from '@lfdecentralizedtrust/splice-common-frontend';
+import { Loading, useUserState, useVotesHooks } from '@canton-network/splice-common-frontend';
 
-import { Logout } from '@mui/icons-material';
-import { Box, Button, Divider, Stack, Typography } from '@mui/material';
-import Container from '@mui/material/Container';
-import Link from '@mui/material/Link';
+import { Box, Container, GlobalStyles } from '@mui/material';
+import { useLocation } from 'react-router';
 
+import { partyIdScrollGlobalStyles } from './beta/identifierStyles';
+import PartyIdScrollTracks from './PartyIdScrollTracks';
+import SvNavigationShell from './layout/SvNavigationShell';
+import { SvNavLinkItem } from './layout/SvNavLink';
 import { useFeatureSupport } from '../contexts/SvContext';
-import { useNetworkInstanceName } from '../hooks/index';
+import { CONTENT_MAX_WIDTH, layoutTokens, PAGE_PX } from '../theme/tokens';
 import { useSvConfig } from '../utils';
 
 interface LayoutProps {
   children: React.ReactNode;
 }
 
-const Layout: React.FC<LayoutProps> = (props: LayoutProps) => {
+const pathnameToPageName = (pathname: string, amuletName: string): string => {
+  if (pathname.startsWith('/governance')) {
+    return 'Governance';
+  }
+  if (pathname.startsWith('/validator-onboarding')) {
+    return 'Validators';
+  }
+  if (pathname.startsWith('/amulet-price')) {
+    return `${amuletName} Price`;
+  }
+  return 'Global Synchronizer Information';
+};
+
+/** Figma content-width 1583px centered — nav uses full width inside Navigation shell */
+const contentShellSx = {
+  maxWidth: CONTENT_MAX_WIDTH,
+  mx: 'auto',
+  px: PAGE_PX,
+  width: '100%',
+};
+
+const Layout: React.FC<LayoutProps> = ({ children }) => {
   const config = useSvConfig();
   const { logout } = useUserState();
-  const networkInstanceName = useNetworkInstanceName();
-  const networkInstanceNameColor = `colors.${networkInstanceName?.toLowerCase()}`;
+  const location = useLocation();
   const featureSupport = useFeatureSupport();
 
   const votesHooks = useVotesHooks();
@@ -40,55 +57,30 @@ const Layout: React.FC<LayoutProps> = (props: LayoutProps) => {
     return <Loading />;
   }
 
-  const navLinks = [
-    { name: 'Information', path: 'dso' },
-    { name: 'Validator Onboarding', path: 'validator-onboarding' },
-    { name: `${config.spliceInstanceNames.amuletName} Price`, path: 'amulet-price' },
-    { name: 'Governance', path: 'governance', badgeCount: actionsPending?.length },
+  const navLinks: SvNavLinkItem[] = [
+    { name: 'Global Synchronizer Information', path: '/dso' },
+    {
+      name: 'Governance',
+      path: '/governance',
+      end: false,
+      badgeCount: actionsPending?.length,
+    },
+    { name: `${config.spliceInstanceNames.amuletName} Price`, path: '/amulet-price' },
+    { name: 'Validators', path: '/validator-onboarding' },
   ];
 
-  return (
-    <Box bgcolor="colors.neutral.20" display="flex" flexDirection="column" minHeight="100vh">
-      {networkInstanceName === undefined ? (
-        <></>
-      ) : (
-        <Stack
-          direction="row"
-          alignItems="center"
-          justifyContent="center"
-          sx={{
-            position: 'sticky',
-            top: 0,
-            zIndex: 1100,
-            backgroundColor: `${networkInstanceNameColor}`,
-            color: 'black',
-            height: '50px',
-            width: '100%',
-          }}
-        >
-          <Typography id="network-instance-name" data-testid="network-instance-name" variant="h6">
-            <b>You are on {networkInstanceName} </b>
-          </Typography>
-        </Stack>
-      )}
-      <Container maxWidth="xl">
-        <Header title="Super Validator Operations" navLinks={navLinks}>
-          <Stack direction="row" alignItems="center" spacing={1} sx={{ flexShrink: 0 }}>
-            <Divider key="divider" orientation="vertical" variant="middle" flexItem />
-            <Button key="button" id="logout-button" onClick={logout} color="inherit">
-              <Stack direction="row" alignItems="center">
-                <Logout />
-                <Link color="inherit" textTransform="none">
-                  Logout
-                </Link>
-              </Stack>
-            </Button>
-          </Stack>
-        </Header>
-      </Container>
+  const pageName = pathnameToPageName(location.pathname, config.spliceInstanceNames.amuletName);
 
-      <Box bgcolor="colors.neutral.15" sx={{ flex: 1 }}>
-        <Container maxWidth="xl">{props.children}</Container>
+  return (
+    <Box bgcolor={layoutTokens.page} display="flex" flexDirection="column" minHeight="100vh">
+      <GlobalStyles styles={partyIdScrollGlobalStyles} />
+      <PartyIdScrollTracks />
+      <SvNavigationShell navLinks={navLinks} onLogout={logout} pageName={pageName} />
+
+      <Box sx={{ flex: 1, pb: 3 }}>
+        <Container maxWidth={false} sx={contentShellSx}>
+          {children}
+        </Container>
       </Box>
     </Box>
   );

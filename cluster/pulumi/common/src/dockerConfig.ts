@@ -5,7 +5,7 @@ import * as pulumi from '@pulumi/pulumi';
 import { getSecretVersionOutput } from '@pulumi/gcp/secretmanager/getSecretVersion';
 import { Secret } from '@pulumi/kubernetes/core/v1';
 
-type Credentials = {
+export type Credentials = {
   username: string;
   password: string;
 };
@@ -32,16 +32,6 @@ export class DockerConfig {
               username: jfrog.username,
               password: jfrog.password,
             },
-            'digitalasset-canton-network-docker.jfrog.io': {
-              auth: artifactoryAuth,
-              username: jfrog.username,
-              password: jfrog.password,
-            },
-            'digitalasset-canton-network-docker-dev.jfrog.io': {
-              auth: artifactoryAuth,
-              username: jfrog.username,
-              password: jfrog.password,
-            },
             'us-central1-docker.pkg.dev': {
               auth: googleAuth,
               username: google.username,
@@ -63,7 +53,7 @@ export class DockerConfig {
 
   public createDockerClientConfigSecret(
     namespaceName: string | pulumi.Input<string>,
-    secretName: string = 'docker-client-config',
+    secretName: string,
     dependsOn: pulumi.Resource[] = []
   ): Secret {
     return new k8s.core.v1.Secret(
@@ -85,7 +75,7 @@ export class DockerConfig {
 
   public createImagePullSecret(
     namespaceName: string,
-    secretName: string = 'docker-reg-cred',
+    secretName: string,
     dependsOn: pulumi.Resource[] = []
   ): Secret {
     return new k8s.core.v1.Secret(
@@ -110,7 +100,7 @@ export class DockerConfig {
     return Buffer.from(`${credentials.username}:${credentials.password}`).toString('base64');
   }
 
-  private static fetchCredentialsFromSecret(secretName: string): pulumi.Output<Credentials> {
+  public static fetchCredentialsFromSecret(secretName: string): pulumi.Output<Credentials> {
     const temp = getSecretVersionOutput({ secret: secretName });
     return temp.apply(k => {
       const secretData = k.secretData;

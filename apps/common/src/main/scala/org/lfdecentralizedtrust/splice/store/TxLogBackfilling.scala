@@ -18,7 +18,7 @@ final class TxLogBackfilling(
     ec: ExecutionContext
 ) extends NamedLogging {
 
-  private val currentMigrationId = updateHistory.domainMigrationInfo.currentMigrationId
+  private val currentMigrationId = updateHistory.domainMigrationId
   private val sourceHistory = updateHistory.sourceHistory
   private val destinationHistory = store.destinationHistory
   private val backfilling =

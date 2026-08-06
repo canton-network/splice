@@ -10,7 +10,7 @@ import {
   PartyId,
   useVotesHooks,
   VotesHooks,
-} from '@lfdecentralizedtrust/splice-common-frontend';
+} from '@canton-network/splice-common-frontend';
 import { UseQueryResult } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import React from 'react';

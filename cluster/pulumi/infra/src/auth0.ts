@@ -13,12 +13,12 @@ import {
   DEFAULT_AUDIENCE,
   NamespacedAuth0Configs,
   fixedTokens,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
-import { dsoSize } from '@lfdecentralizedtrust/splice-pulumi-common-sv/src/dsoConfig';
+} from '@canton-network/splice-pulumi-common';
+import { dsoSize } from '@canton-network/splice-pulumi-common-sv/src/dsoConfig';
 import {
   standardSvConfigsBasic,
   extraSvConfigsBasic,
-} from '@lfdecentralizedtrust/splice-pulumi-common-sv/src/svConfigsBasic';
+} from '@canton-network/splice-pulumi-common-sv/src/svConfigsBasic';
 
 function tokenLifetime(): number {
   return fixedTokens() ? 2592000 : 86400; // TODO(DACH-NY/canton-network-internal#2114): Move this to the cluster config? We want it to be long for fixed token clusters

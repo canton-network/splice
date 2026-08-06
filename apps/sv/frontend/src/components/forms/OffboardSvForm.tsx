@@ -6,7 +6,7 @@ import { useAppForm } from '../../hooks/form';
 import { useDsoInfos } from '../../contexts/SvContext';
 import dayjs from 'dayjs';
 import { createProposalActions, getInitialExpiration } from '../../utils/governance';
-import { dateTimeFormatISO } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import {
   validateEffectiveDate,
   validateExpiration,
@@ -22,7 +22,7 @@ import { EffectiveDateField } from '../form-components/EffectiveDateField';
 import { ProposalSummary } from '../governance/ProposalSummary';
 import { ProposalSubmissionError } from '../form-components/ProposalSubmissionError';
 import { useProposalMutation } from '../../hooks/useProposalMutation';
-import { THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
+import { SUPPORTING_URL_LABEL, THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
 
 interface ExtraFormFields {
   sv: string;
@@ -113,12 +113,18 @@ export const OffboardSvForm: React.FC = _ => {
         ) : (
           <>
             <form.AppField name="action">
+              {field => <field.ProposalTypeField id="offboard-sv-action" />}
+            </form.AppField>
+
+            <form.AppField
+              name="sv"
+              validators={{
+                onBlur: ({ value }) => validateSvSelection(value),
+                onChange: ({ value }) => validateSvSelection(value),
+              }}
+            >
               {field => (
-                <field.TextField
-                  title="Action"
-                  id="offboard-sv-action"
-                  muiTextFieldProps={{ disabled: true }}
-                />
+                <field.SelectField title="Member" options={svOptions} id="offboard-sv-member" />
               )}
             </form.AppField>
 
@@ -131,7 +137,7 @@ export const OffboardSvForm: React.FC = _ => {
             >
               {field => (
                 <field.DateField
-                  title="Threshold Deadline"
+                  title="Quorum Threshold Deadline"
                   description={THRESHOLD_DEADLINE_SUBTITLE}
                   id="offboard-sv-expiry-date"
                 />
@@ -146,8 +152,6 @@ export const OffboardSvForm: React.FC = _ => {
               }}
               children={_ => (
                 <EffectiveDateField
-                  title="Vote Proposal Effectivity"
-                  description="Select the date and time the proposal will take effect"
                   initialEffectiveDate={initialEffectiveDate.format(dateTimeFormatISO)}
                   id="offboard-sv-effective-date"
                 />
@@ -171,19 +175,7 @@ export const OffboardSvForm: React.FC = _ => {
                 onChange: ({ value }) => validateUrl(value),
               }}
             >
-              {field => <field.TextField title="URL" id="offboard-sv-url" />}
-            </form.AppField>
-
-            <form.AppField
-              name="sv"
-              validators={{
-                onBlur: ({ value }) => validateSvSelection(value),
-                onChange: ({ value }) => validateSvSelection(value),
-              }}
-            >
-              {field => (
-                <field.SelectField title="Member" options={svOptions} id="offboard-sv-member" />
-              )}
+              {field => <field.TextField title={SUPPORTING_URL_LABEL} id="offboard-sv-url" />}
             </form.AppField>
           </>
         )}

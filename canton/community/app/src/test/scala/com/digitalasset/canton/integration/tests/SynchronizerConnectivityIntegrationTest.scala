@@ -144,7 +144,21 @@ sealed trait SynchronizerConnectivityIntegrationTest
         participant2.synchronizers.list_connected().map(_.synchronizerAlias) shouldBe Seq(daName)
         participant2.synchronizers.disconnect_all()
         participant2.synchronizers.list_connected() shouldBe empty
+      }
+    }
 
+    "A participant" must {
+      "Be able to change the config" in { implicit env =>
+        import env.*
+
+        participant1.synchronizers.modify(daName, _.focus(_.priority).modify(_ + 1))
+        participant1.synchronizers.modify(
+          daName,
+          _.focus(_.priority).modify(_ + 1),
+          physicalSynchronizerId = Some(daId),
+        )
+
+        succeed
       }
     }
   }
@@ -182,7 +196,7 @@ sealed trait SynchronizerConnectivityIntegrationTest
         )
         // wait for all ping contracts to be archived
         eventually() {
-          participant1.ledger_api.state.acs.of_all() shouldBe empty
+          participant1.ledger_api.state.acs.count() shouldEqual 0
         }
         participant1.synchronizers.disconnect_local(daName)
         mediator1.stop()
@@ -337,7 +351,7 @@ sealed trait SynchronizerConnectivityIntegrationTest
           entry => {
             entry.shouldBeCommandFailure(InitialOnboardingError)
             entry.commandFailureMessage should include(
-              s"${participant1.id} is either active on the synchronizer or has previously been offboarded"
+              s"Unable to register onboarding topology transactions"
             )
           },
         )

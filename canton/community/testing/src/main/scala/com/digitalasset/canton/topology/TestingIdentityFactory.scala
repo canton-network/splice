@@ -17,17 +17,13 @@ import com.digitalasset.canton.concurrent.{
   HasFutureSupervision,
 }
 import com.digitalasset.canton.config.RequireTypes.{NonNegativeInt, PositiveInt}
-import com.digitalasset.canton.config.{
-  BatchingConfig,
-  CachingConfigs,
-  CryptoConfig,
-  DefaultProcessingTimeouts,
-}
+import com.digitalasset.canton.config.{CachingConfigs, CryptoConfig, DefaultProcessingTimeouts}
 import com.digitalasset.canton.crypto.*
 import com.digitalasset.canton.crypto.provider.symbolic.SymbolicCrypto
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
+import com.digitalasset.canton.metrics.CommonMockMetrics
 import com.digitalasset.canton.protocol.{
   DynamicSynchronizerParameters,
   StaticSynchronizerParameters,
@@ -209,7 +205,7 @@ final case class TestingTopology(
       val existing = flags.getOrElse(participant, Seq.empty)
       flags.updated(
         participant,
-        (ParticipantTopologyFeatureFlag.EnableUnsafeMultiSynchronizer +: existing).distinct,
+        (ParticipantTopologyFeatureFlag.EnableMultiSynchronizer +: existing).distinct,
       )
     })
 
@@ -380,8 +376,7 @@ class TestingIdentityFactory(
       ips(availableUpToInclusive, currentSnapshotApproximationTimestamp),
       crypto,
       cryptoConfig,
-      None,
-      BatchingConfig().parallelism,
+      CommonMockMetrics.cryptoMetrics,
       CachingConfigs.defaultPublicKeyConversionCache,
       DefaultProcessingTimeouts.testing,
       FutureSupervisor.Noop,
@@ -547,6 +542,7 @@ class TestingIdentityFactory(
 
     val store = new InMemoryTopologyStore(
       TopologyStoreId.SynchronizerStore(synchronizerId.toPhysical),
+      predecessor = None,
       BaseTest.testedProtocolVersion,
       loggerFactory,
       DefaultProcessingTimeouts.testing,

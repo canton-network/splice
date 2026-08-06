@@ -4,6 +4,7 @@
 package com.digitalasset.canton.synchronizer.sequencer.block.bftordering.bindings.standalone.topology
 
 import better.files.File as BFile
+import com.digitalasset.canton.config.RequireTypes.PositiveLong
 import com.digitalasset.canton.crypto.{CryptoPureApi, SigningPrivateKey, SigningPublicKey, v30}
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.protocol.DynamicSynchronizerParameters
@@ -22,29 +23,31 @@ import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.core.int
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.BftOrderingIdentifiers.{
   BftKeyId,
   BftNodeId,
-  EpochLength,
 }
+import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.topology.SequencingParameters.SegmentLength
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.topology.{
   OrderingTopology,
   SequencingParameters,
 }
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.MaxBytesToDecompress
+import com.digitalasset.canton.version.ProtocolVersion
 
 import java.io.File
 import scala.concurrent.ExecutionContext
 
 class FixedFileBasedOrderingTopologyProvider(
     standaloneConfig: BftBlockOrdererConfig.BftBlockOrderingStandaloneNetworkConfig,
-    epochLength: EpochLength,
     crypto: CryptoPureApi,
     metrics: BftOrderingMetrics,
-)(implicit executionContext: ExecutionContext)
+)(implicit executionContext: ExecutionContext, synchronizerProtocolVersion: ProtocolVersion)
     extends OrderingTopologyProvider[PekkoEnv] {
 
   import FixedFileBasedOrderingTopologyProvider.*
 
   private val pubKey = readSigningPublicKey(standaloneConfig.signingPublicKeyProtoFile)
+
+  private val segmentLength = SegmentLength(PositiveLong.tryCreate(standaloneConfig.segmentLength))
 
   private val privKey =
     SigningPrivateKey
@@ -79,7 +82,7 @@ class FixedFileBasedOrderingTopologyProvider(
             )
           )
       },
-      epochLength,
+      segmentLength.epochLength(1 + standaloneConfig.peers.size.toLong),
       SequencingParameters.Default,
       MaxBytesToDecompress(DynamicSynchronizerParameters.defaultMaxRequestSize.value),
       ConventionalBootstrapTopologyActivationTime,

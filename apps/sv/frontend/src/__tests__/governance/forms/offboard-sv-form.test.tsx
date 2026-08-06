@@ -8,7 +8,7 @@ import { SvConfigProvider } from '../../../utils';
 import App from '../../../App';
 import { svPartyId } from '../../mocks/constants';
 import { Wrapper } from '../../helpers';
-import { dateTimeFormatISO } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import dayjs from 'dayjs';
 import { OffboardSvForm } from '../../../components/forms/OffboardSvForm';
 import { server, svUrl } from '../../setup/setup';
@@ -32,7 +32,7 @@ describe('SV user can', () => {
     const button = screen.getByRole('button', { name: 'Log In' });
     await user.click(button);
 
-    expect(await screen.findAllByDisplayValue(svPartyId)).not.toBe([]);
+    expect(await screen.findAllByDisplayValue(svPartyId)).not.toHaveLength(0);
   });
 });
 
@@ -45,11 +45,11 @@ describe('Offboard SV Form', () => {
     );
 
     expect(screen.getByTestId('offboard-sv-form')).toBeInTheDocument();
-    expect(screen.getByText('Action')).toBeInTheDocument();
+    expect(screen.getByText('Proposal type')).toBeInTheDocument();
 
     const actionInput = screen.getByTestId('offboard-sv-action');
     expect(actionInput).toBeInTheDocument();
-    expect(actionInput.getAttribute('value')).toBe('Offboard Member');
+    expect(actionInput.textContent).toBe('Offboard Member');
 
     const summaryInput = screen.getByTestId('offboard-sv-summary');
     expect(summaryInput).toBeInTheDocument();
@@ -85,7 +85,7 @@ describe('Offboard SV Form', () => {
     expect(screen.getByText('Review Proposal')).toBeInTheDocument();
 
     await user.click(submitButton);
-    expect(submitButton.getAttribute('disabled')).toBeDefined();
+    expect(submitButton.getAttribute('disabled')).not.toBeNull();
     await expect(async () => await user.click(submitButton)).rejects.toThrowError(
       /Unable to perform pointer interaction/
     );
@@ -109,11 +109,8 @@ describe('Offboard SV Form', () => {
     const selectInput = screen.getByRole('combobox');
     fireEvent.mouseDown(selectInput);
 
-    await waitFor(async () => {
-      const memberToSelect = screen.getByText('Digital-Asset-Eng-2');
-      expect(memberToSelect).toBeInTheDocument();
-      await user.click(memberToSelect);
-    });
+    const memberToSelect = await screen.findByText('Digital-Asset-Eng-2');
+    await user.click(memberToSelect);
 
     await user.click(actionInput); // using this to trigger the onBlur event which triggers the validation
 
@@ -221,10 +218,8 @@ describe('Offboard SV Form', () => {
     const selectInput = screen.getByRole('combobox');
     fireEvent.mouseDown(selectInput);
 
-    await waitFor(async () => {
-      const memberToSelect = screen.getByText('Digital-Asset-Eng-2');
-      await user.click(memberToSelect);
-    });
+    const memberToSelect = await screen.findByText('Digital-Asset-Eng-2');
+    await user.click(memberToSelect);
 
     expect(screen.getByText('Review Proposal')).toBeInTheDocument();
     const submitButton = screen.getByTestId('submit-button');
@@ -265,10 +260,8 @@ describe('Offboard SV Form', () => {
     const selectInput = screen.getByRole('combobox');
     fireEvent.mouseDown(selectInput);
 
-    await waitFor(async () => {
-      const memberToSelect = screen.getByText('Digital-Asset-Eng-2');
-      await user.click(memberToSelect);
-    });
+    const memberToSelect = await screen.findByText('Digital-Asset-Eng-2');
+    await user.click(memberToSelect);
 
     expect(screen.getByText('Review Proposal')).toBeInTheDocument();
     const submitButton = screen.getByTestId('submit-button');
@@ -312,10 +305,8 @@ describe('Offboard SV Form', () => {
     const selectInput = screen.getByRole('combobox');
     fireEvent.mouseDown(selectInput);
 
-    await waitFor(async () => {
-      const memberToSelect = screen.getByText('Digital-Asset-Eng-2');
-      await user.click(memberToSelect);
-    });
+    const memberToSelect = await screen.findByText('Digital-Asset-Eng-2');
+    await user.click(memberToSelect);
 
     const submitButton = screen.getByTestId('submit-button');
     await user.click(actionInput); // using this to trigger the onBlur event which triggers the validation

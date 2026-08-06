@@ -267,7 +267,7 @@ trait AppBackendReference extends AppReference with LocalInstanceReference {
     RemoteParticipantConfig(
       participantClientConfig.adminApi,
       participantClientConfig.ledgerApi.clientConfig,
-      tokenStrO,
+      token = tokenStrO,
     )
   }
   implicit val ec: ExecutionContext = executionContext

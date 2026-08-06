@@ -1,15 +1,16 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import * as openapi from '@lfdecentralizedtrust/sv-openapi';
-import { useUserState } from '@lfdecentralizedtrust/splice-common-frontend';
+import * as openapi from '@canton-network/sv-openapi';
+import { useUserState } from '@canton-network/splice-common-frontend';
 import {
   BaseApiMiddleware,
   OpenAPILoggingMiddleware,
-} from '@lfdecentralizedtrust/splice-common-frontend-utils';
+} from '@canton-network/splice-common-frontend-utils';
 import BigNumber from 'bignumber.js';
 import React, { useContext, useMemo } from 'react';
 import {
   CastVoteRequest,
+  CountVoteResultsResponse,
   createConfiguration,
   CreateVoteRequest,
   GetPartyToParticipantResponseV1,
@@ -27,11 +28,12 @@ import {
   Middleware,
   PrepareValidatorOnboardingRequest,
   PrepareValidatorOnboardingResponse,
+  PreviousSvRewardWeightResponse,
   RequestContext,
   ResponseContext,
   ServerConfiguration,
   UpdateAmuletPriceVoteRequest,
-} from '@lfdecentralizedtrust/sv-openapi';
+} from '@canton-network/sv-openapi';
 
 import { RelTime } from '@daml.js/daml-stdlib-DA-Time-Types-1.0.0/lib/DA/Time/Types/module';
 import { ActionRequiringConfirmation } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules/module';
@@ -62,6 +64,14 @@ export interface SvAdminClient {
     accepted?: boolean,
     pageToken?: number
   ) => Promise<ListDsoRulesVoteResultsResponse>;
+  countVoteRequestResults: (
+    accepted?: boolean,
+    effectiveTo?: string
+  ) => Promise<CountVoteResultsResponse>;
+  getPreviousSvRewardWeight: (
+    svParty: string,
+    effectiveBefore?: string
+  ) => Promise<PreviousSvRewardWeightResponse>;
   lookupDsoRulesVoteRequest: (
     voteRequestContractId: string
   ) => Promise<LookupDsoRulesVoteRequestResponse>;
@@ -157,6 +167,18 @@ export const SvAdminClientProvider: React.FC<React.PropsWithChildren<SvAdminProp
           pageToken: pageToken,
         };
         return await svAdminClient.listVoteRequestResults(request);
+      },
+      countVoteRequestResults: async (
+        accepted?: boolean,
+        effectiveTo?: string
+      ): Promise<CountVoteResultsResponse> => {
+        return await svAdminClient.countVoteRequestResults({ accepted, effectiveTo });
+      },
+      getPreviousSvRewardWeight: async (
+        svParty: string,
+        effectiveBefore?: string
+      ): Promise<PreviousSvRewardWeightResponse> => {
+        return await svAdminClient.getPreviousSvRewardWeight({ svParty, effectiveBefore });
       },
       lookupDsoRulesVoteRequest: async (
         voteRequestContractId: string

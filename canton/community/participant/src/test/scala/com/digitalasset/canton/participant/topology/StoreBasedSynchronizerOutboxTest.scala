@@ -106,12 +106,14 @@ class StoreBasedSynchronizerOutboxTest
   ) = {
     val source = new InMemoryTopologyStore(
       TopologyStoreId.AuthorizedStore,
+      predecessor = None,
       testedProtocolVersion,
       loggerFactory.append("store", "Authorized"),
       timeouts,
     )
     val target = new InMemoryTopologyStore(
       TopologyStoreId.SynchronizerStore(DefaultTestIdentities.physicalSynchronizerId),
+      predecessor = None,
       testedProtocolVersion,
       loggerFactory.append("store", "Synchronizer"),
       timeouts,
@@ -253,6 +255,7 @@ class StoreBasedSynchronizerOutboxTest
           tx.mapping,
           tx.serial.some,
           signingKeys = Seq(publicKey.fingerprint),
+          namespacesToSignFor = Seq.empty,
           testedProtocolVersion,
           expectFullAuthorization = false,
           waitToBecomeEffective = waitToBecomeEffective,

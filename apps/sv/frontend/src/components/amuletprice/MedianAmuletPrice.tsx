@@ -6,7 +6,7 @@ import {
   Loading,
   medianPriceVotes,
   useVotesHooks,
-} from '@lfdecentralizedtrust/splice-common-frontend';
+} from '@canton-network/splice-common-frontend';
 import BigNumber from 'bignumber.js';
 import React, { useMemo } from 'react';
 

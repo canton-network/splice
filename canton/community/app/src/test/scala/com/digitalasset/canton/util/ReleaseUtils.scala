@@ -5,7 +5,6 @@ package com.digitalasset.canton.util
 
 import better.files.File
 import cats.data.NonEmptyList
-import cats.syntax.functorFilter.*
 import com.daml.nonempty.NonEmpty
 import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.console.BufferedProcessLogger
@@ -16,9 +15,11 @@ import com.digitalasset.canton.version.{
   ProtocolVersionCompatibility,
   ReleaseVersion,
 }
+import org.scalatest.time.SpanSugar.convertIntToGrainOfTime
 
 import java.nio.file.{Files, Paths}
 import scala.collection.concurrent.TrieMap
+import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future}
 
 /** A collection of small utilities for tests that have no obvious home */
@@ -37,8 +38,8 @@ object ReleaseUtils {
     *   - Returns [(2.7.9, [3]), (2.7.9, [4]), (2.7.9, [5]), (2.9.0, [5]), (2.9.0, [6])]
     */
   def zipReleasesWithProtocolVersions(releases: List[TestedRelease]): List[TestedRelease] =
-    releases.flatMap { case TestedRelease(v, ps) =>
-      ps.map(e => TestedRelease(v, NonEmpty.mk(List, e)))
+    releases.flatMap { release =>
+      release.protocolVersions.map(e => release.copy(protocolVersions = NonEmpty.mk(List, e)))
     }
 
   /** Given a list of `E` and a number of shards `n` returns a new list with exactly `n` sub-lists
@@ -65,64 +66,62 @@ object ReleaseUtils {
     sharded.toList
   }
 
-  private lazy val previousStableReleases: List[TestedRelease] =
+  /** Lists `canton-open-source-*` releases published in the public S3 bucket.
+    *
+    * Returned versions are deduplicated and parsed as [[ReleaseVersion]]; entries that fail to
+    * parse (e.g. legacy or unrelated objects) are silently ignored.
+    *
+    * @param includeAdHoc:
+    *   default to `false`. If false, ad-hoc releases are excluded
+    * @param includeSnapshot:
+    *   default true. If `false`, snapshot releases are excluded
+    */
+  def listAllReleases(
+      includeAdHoc: Boolean = false,
+      includeSnapshot: Boolean = true,
+  ): Seq[ReleaseVersion] = {
+    import scala.sys.process.*
+    val output =
+      """aws s3api list-objects-v2 --bucket canton-public-releases --prefix releases/canton-open-source- --query 'Contents[].Key' --output text --no-sign-request""".!!
+    output
+      .split("\\s+")
+      .toSeq
+      .filter(_.endsWith(".tar.gz"))
+      .filterNot(_.contains("-protobuf"))
+      .flatMap { key =>
+        ReleaseVersion
+          .create(key.stripPrefix("releases/canton-open-source-").stripSuffix(".tar.gz"))
+          .toOption
+      }
+      .filter(r => (includeAdHoc || !r.isAdHoc) && (includeSnapshot || !r.isSnapshot))
+      .distinct
+  }
+
+  // All previous stable releases minus releases that support only deleted protocol versions
+  lazy val previousSupportedStableReleases: List[ReleaseVersion] =
     File("release-notes/")
       .list(file => file.name.startsWith(ReleaseVersion.current.major.toString))
       .map(_.name.replace(".md", ""))
       .map(ReleaseVersion.tryCreate)
-      .collect {
-        case releaseVersion if releaseVersion.isStable =>
-          TestedRelease(
-            releaseVersion,
-            ProtocolVersionCompatibility.supportedProtocols(
-              includeAlphaVersions = false,
-              includeBetaVersions = true,
-              release = releaseVersion,
-            ),
+      .filter { releaseVersion =>
+        val protocolVersions =
+          ProtocolVersionCompatibility.supportedProtocols(
+            includeAlphaVersions = false,
+            includeBetaVersions = true,
+            release = releaseVersion,
           )
+        releaseVersion.isStable && protocolVersions.exists(pv => !pv.isDeleted)
       }
       .toList
-      .sortBy(_.releaseVersion)
-
-  // All previous stable releases minus releases that support only deleted protocol versions
-  lazy val previousSupportedStableReleases: List[TestedRelease] =
-    previousStableReleases.mapFilter { case TestedRelease(releaseVersion, protocolVersions) =>
-      NonEmpty
-        .from(protocolVersions.filterNot(_.isDeleted))
-        .map(TestedRelease(releaseVersion, _))
-    }
-
-  private def reduceToLatestSupportedStablesReleases(releases: List[TestedRelease]) =
-    releases.sortBy(_.releaseVersion).foldLeft(List.empty[TestedRelease]) {
-      case (one :: rest, item)
-          // keep the latest of each patch version
-          if (one.releaseVersion.majorMinorMatches(item.releaseVersion)) =>
-        item :: rest
-      case (acc, item) => item :: acc
-    }
-
-  /** Returns release versions for the latest patch and minor version together with their list of
-    * supported protocol versions for a given range of release versions.
-    *
-    * Example:
-    *   - Latest stable releases for 2.7 and 2.8 are 2.7.9 and 2.8.3
-    *   - Given a range from 2.7.0 to 2.9.0 this function returns the list [(2.7.9, [3, 4, 5]),
-    *     (2.8.3, [3, 4, 5])
-    */
-  def latestSupportedStableReleasesInRange(
-      fromInclusive: ReleaseVersion,
-      toExclusive: ReleaseVersion,
-  ): List[TestedRelease] =
-    reduceToLatestSupportedStablesReleases(previousStableReleases.filter {
-      case TestedRelease(releaseVersion, _) =>
-        releaseVersion >= fromInclusive && releaseVersion < toExclusive
-    })
+      .sorted
 
   /** The first time we attempt to get a release, a future is inserted into the map. This allows to
     * synchronize between different requests for the same release.
     */
   private val releasesRetrieval: TrieMap[ReleaseVersion, Future[String]] = TrieMap.empty
   private val lock = new Mutex()
+
+  val DefaultReleaseDownloadTimeout: FiniteDuration = 5.minutes
 
   /** If the .tar.gz corresponding to release is not found locally, attempts to download it from
     * artifactory. Then, extract the .tar.gz file.
@@ -157,8 +156,7 @@ object ReleaseUtils {
       release: ReleaseVersion
   )(implicit elc: ErrorLoggingContext): String = {
     import scala.sys.process.*
-
-    val cantonDir = s"tmp/canton-community-$release/bin/canton"
+    val cantonDir = s"tmp/canton-open-source-$release/bin/canton"
     if (Files.exists(Paths.get(cantonDir))) {
       elc.info(s"Release $release already downloaded.")
       cantonDir

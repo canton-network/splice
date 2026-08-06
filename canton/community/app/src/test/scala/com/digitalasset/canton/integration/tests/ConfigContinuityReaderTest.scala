@@ -14,7 +14,7 @@ import org.scalatest.wordspec.AnyWordSpec
 /** Simple test that loads config files in the /config folder for each release and verifies they
   * parse in this Canton version
   */
-class ConfigContinuityReaderTest extends AnyWordSpec with BaseTest with S3Synchronization {
+final class ConfigContinuityReaderTest extends AnyWordSpec with BaseTest with S3Synchronization {
 
   private lazy val allTransforms: Map[(Int, Int, Int), Transforms] = Map(
     (3, 5, 0) -> Transforms(
@@ -22,7 +22,13 @@ class ConfigContinuityReaderTest extends AnyWordSpec with BaseTest with S3Synchr
         // removed old code paths for async writer refactoring introduced via feature flag into 3.3
         "canton.sequencers.sequencer1.parameters.async-writer.enabled"
       )
-    )
+    ),
+    (3, 5, 2) -> Transforms(
+      Seq(
+        // remove contract state mode flag introduced in preview release and removed for 3.5
+        "canton.participants.participant1.parameters.engine.contract-state-mode"
+      )
+    ),
   )
 
   /** Make the config parsable by applying some transformations. It basically makes some breaking
@@ -48,7 +54,7 @@ class ConfigContinuityReaderTest extends AnyWordSpec with BaseTest with S3Synchr
       // Filter-out dumps that don't contain the config
       .filter { case (_, releaseVersion) => releaseVersion >= ReleaseVersion.tryCreate("3.4.10-a") }
       .foreach { case (directory, releaseVersion) =>
-        s"parse default config for version $releaseVersion" in {
+        s"parse default config for version $releaseVersion in ${directory.localDownloadPath}" in {
           val initialConfigFile = directory.localDownloadPath / "default.conf"
           val transformedConfigFile = directory.localDownloadPath / "transformed_default.conf"
 

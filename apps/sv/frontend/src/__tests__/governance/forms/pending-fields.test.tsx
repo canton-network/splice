@@ -1,8 +1,8 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { getDsoSetConfigAction } from '@lfdecentralizedtrust/splice-common-test-handlers';
-import type { ListDsoRulesVoteRequestsResponse } from '@lfdecentralizedtrust/sv-openapi';
+import { getDsoSetConfigAction } from '@canton-network/splice-common-test-handlers';
+import type { ListDsoRulesVoteRequestsResponse } from '@canton-network/sv-openapi';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -78,7 +78,7 @@ describe('DSO Pending Fields', () => {
     const button = screen.getByRole('button', { name: 'Log In' });
     await user.click(button);
 
-    expect(await screen.findAllByDisplayValue(svPartyId)).not.toBe([]);
+    expect(await screen.findAllByDisplayValue(svPartyId)).not.toHaveLength(0);
   });
 });
 

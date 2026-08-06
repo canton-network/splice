@@ -90,7 +90,7 @@ sealed trait AcsCommitmentProcessorIntegrationTest
         ConfigTransforms.useStaticTime,
         // this only sets/enables session signing keys when running with PV35 or higher
         ConfigTransforms.setSigningKeysIfPV35OrHigher(
-          SessionSigningKeysConfig.default.copy(
+          SessionSigningKeysConfig.enabled.copy(
             // we evict the session key cache right away to make sure we use a fresh session signing key for each request
             keyEvictionPeriod = config.PositiveFiniteDuration.ofMillis(1),
             // we must disable bound checks because `keyEvictionPeriod` is shorter than `keyValidityDuration`
@@ -152,7 +152,8 @@ sealed trait AcsCommitmentProcessorIntegrationTest
     import env.*
 
     val simClock = environment.simClock.value
-    deployOnTwoParticipantsAndCheckContract(daId, iouContract, participant1, participant2)
+    val iou = deployOnTwoParticipantsAndCheckContract(daId, participant1, participant2)
+    iouContract.set(iou)
 
     val tick1 = tickAfter(simClock.uniqueTime())
     val tick2 = tickAfter(tick1.forgetRefinement)
@@ -348,7 +349,7 @@ sealed trait AcsCommitmentProcessorIntegrationTest
         participant2.synchronizers.reconnect_local(daName)
         eventually() {
           participant2.synchronizers.list_connected() should not be empty
-          participant2.ledger_api.state.acs.of_all() shouldBe empty
+          participant2.ledger_api.state.acs.count() shouldEqual 0
         }
 
         logger.info(
@@ -368,7 +369,7 @@ sealed trait AcsCommitmentProcessorIntegrationTest
 
         eventually() {
           participant1.synchronizers.list_connected() should not be empty
-          participant1.ledger_api.state.acs.of_all() should not be empty
+          participant1.ledger_api.state.acs.count() should be > 0
           participant1.commitments
             .lastComputedAndSent(daName)
             .map(t =>
@@ -441,7 +442,7 @@ sealed trait AcsCommitmentProcessorIntegrationTest
           s"Wait until the contract is purged on participant1."
         )
         eventually() {
-          participant1.ledger_api.state.acs.of_all() shouldBe empty
+          participant1.ledger_api.state.acs.count() shouldEqual 0
         }
 
         logger.info(
@@ -540,9 +541,9 @@ sealed trait AcsCommitmentProcessorIntegrationTest
     )
 
     logger.info(s"We deploy the IOU again for following tests.")
-    alreadyDeployedContracts = alreadyDeployedContracts.appended(
-      deployOnTwoParticipantsAndCheckContract(daId, iouContract, participant1, participant2)
-    )
+    val iou = deployOnTwoParticipantsAndCheckContract(daId, participant1, participant2)
+    iouContract.set(iou)
+    alreadyDeployedContracts = alreadyDeployedContracts.appended(iou)
   }
 
   "Periodic synchronizer time proofs trigger commitment computations" in { implicit env =>
@@ -583,13 +584,13 @@ sealed trait AcsCommitmentProcessorIntegrationTest
 
     val simClock = environment.simClock.value
 
-    deployOnTwoParticipantsAndCheckContract(
+    val iou = deployOnTwoParticipantsAndCheckContract(
       daId,
-      iouContract,
       participant1,
       participant2,
       observers = Seq(participant3),
     )
+    iouContract.set(iou)
 
     val seq = getProgrammableSequencer(sequencer1.name)
     val p1RevokedP = Promise[Unit]()

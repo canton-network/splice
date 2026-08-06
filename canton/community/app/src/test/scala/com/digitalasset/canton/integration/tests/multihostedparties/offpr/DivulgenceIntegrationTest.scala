@@ -3,6 +3,7 @@
 
 package com.digitalasset.canton.integration.tests.multihostedparties.offpr
 
+import com.digitalasset.canton.config
 import com.digitalasset.canton.console.{CommandFailure, LocalParticipantReference}
 import com.digitalasset.canton.integration.{ConfigTransforms, EnvironmentDefinition}
 import com.digitalasset.canton.participant.config.ParticipantNodeConfig
@@ -15,18 +16,34 @@ trait DivulgenceIntegrationTest extends OfflinePartyReplicationIntegrationTestBa
   import com.digitalasset.canton.integration.tests.multihostedparties.DivulgenceIntegrationTestHelpers.*
 
   // Whether to use Assign/Unassign (multi-synchronizer) or Create/Archive for the ACS import
-  def alphaMultiSynchronizerSupport: Boolean
+  def enableAllLedgerApiReassignments: Boolean
 
   // Inject this setting into the implicit scope for the helper class
-  implicit def alphaSupportImplicit: Boolean = alphaMultiSynchronizerSupport
+  implicit def alphaSupportImplicit: Boolean = enableAllLedgerApiReassignments
+
+  // Make sure deduplication duration does not block pruning
+  private val maxDedupDuration = java.time.Duration.ofSeconds(2)
+  private val reconciliationInterval = config.PositiveDurationSeconds.ofSeconds(1)
 
   override def environmentDefinition: EnvironmentDefinition =
     super.environmentDefinition
       .addConfigTransforms(
         ConfigTransforms.updateAllParticipantConfigs_(
-          _.focus(_.parameters.alphaMultiSynchronizerSupport).replace(alphaMultiSynchronizerSupport)
-        )
+          _.focus(_.parameters.enableAllLedgerApiReassignments)
+            .replace(enableAllLedgerApiReassignments)
+        ),
+        ConfigTransforms.updateMaxDeduplicationDurations(maxDedupDuration),
       )
+
+  "make sure that ACS commitments do not block pruning (preparation for later part in this test)" in {
+    _.runOnAllInitializedSynchronizersForAllOwners((owner, synchronizer) =>
+      owner.topology.synchronizer_parameters
+        .propose_update(
+          synchronizer.synchronizerId,
+          _.update(reconciliationInterval = reconciliationInterval),
+        )
+    )
+  }
 
   "Divulgence should work as expected" in { implicit env =>
     import env.*
@@ -84,7 +101,7 @@ trait DivulgenceIntegrationTest extends OfflinePartyReplicationIntegrationTestBa
         participant: LocalParticipantReference,
         contractId: String,
         party: Party,
-    ) = if (alphaMultiSynchronizerSupport) {
+    ) = if (enableAllLedgerApiReassignments) {
       assertEventNotFound(participant, contractId, party)
     } else {
       checkCreatedEventFor(participant, contractId, party)
@@ -151,10 +168,19 @@ trait DivulgenceIntegrationTest extends OfflinePartyReplicationIntegrationTestBa
       divulgeIouByExerciseContract,
       aliceStakeholderCreated2Contract.id,
     )
+
+    // create and archive a contract visible only for bob on participant2
+    val (bobStakeholderCreated2P2, bobStakeholderCreated2P2Contract) =
+      participant2.createIou(bob, bob)
+    participant2.archiveIou(bob, bobStakeholderCreated2P2Contract)
+    val bobStakeholderCreated2ArchivedP2 = participant2.acsDeltas(bob)(4)._1
+    bobStakeholderCreated2ArchivedP2.contractId shouldBe bobStakeholderCreated2P2.contractId
+
     eventually() {
       //  ensuring that both participants see all events necessary after running the commands (these numbers are deduced from the assertions below)
       participant1.acsDeltas(alice) should have size 8
       participant2.ledgerEffects(alice) should have size 8
+      participant2.ledgerEffects(bob) should have size 11
     }
     contractFor(participant1, aliceStakeholderCreated2P1.contractId) should not be empty
     // Retroactively divulged contracts are not stored in the ContractStore
@@ -263,6 +289,8 @@ trait DivulgenceIntegrationTest extends OfflinePartyReplicationIntegrationTestBa
       bobStakeholderCreatedP2 -> Created,
       aliceBobStakeholderCreatedP2 -> Created,
       divulgeIouByExerciseP2 -> Created,
+      bobStakeholderCreated2P2 -> Created,
+      bobStakeholderCreated2ArchivedP2 -> Consumed,
     )
     participant2.acs(bob) shouldBe List(
       bobStakeholderCreatedP2,
@@ -281,6 +309,8 @@ trait DivulgenceIntegrationTest extends OfflinePartyReplicationIntegrationTestBa
         divulgeIouByExerciseP2.contractId
       ) -> NonConsumed,
       aliceStakeholder2DivulgedArchiveP2 -> Consumed,
+      bobStakeholderCreated2P2 -> Created,
+      bobStakeholderCreated2ArchivedP2 -> Consumed,
     )
     // the number of events with acs_delta field set should match the number of ACS deltas
     participant2.eventsWithAcsDelta(Seq.empty).size shouldBe participant2.acsDeltas(Seq.empty).size
@@ -303,6 +333,8 @@ trait DivulgenceIntegrationTest extends OfflinePartyReplicationIntegrationTestBa
     // Ensure active contracts are present (not filtered out)
     repair.acs.read_from_file(acsSnapshotPath) should have size 2
 
+    val targetOffsetBeforeImport = target.ledger_api.state.end()
+
     target.parties.import_party_acs(daId, Some(alice), acsSnapshotPath)
 
     reconnectAndEnsureOnboardingClearance(clock, alice, daName)
@@ -324,7 +356,7 @@ trait DivulgenceIntegrationTest extends OfflinePartyReplicationIntegrationTestBa
       divulgeIouByExerciseP1,
       immediateDivulged2P1,
     )
-    // event query
+    // participant1, event query, alice
     checkCreatedEventFor(participant1, aliceStakeholderCreatedP1.contractId, alice)
     checkCreatedEventFor(participant1, aliceBobStakeholderCreatedP1.contractId, alice)
     checkCreatedEventFor(participant1, divulgeIouByExerciseP1.contractId, alice)
@@ -342,6 +374,22 @@ trait DivulgenceIntegrationTest extends OfflinePartyReplicationIntegrationTestBa
     aliceStakeholderCreatedP2Import.contractId shouldBe aliceStakeholderCreatedP1.contractId
     val immediateDivulged2P2Import = participant2.acsDeltas(alice)(3)._1
     immediateDivulged2P2Import.contractId shouldBe immediateDivulged2P1.contractId
+    participant2.ledgerEffects(alice) shouldBe List(
+      aliceBobStakeholderCreatedP2 -> Created,
+      divulgeIouByExerciseP2 -> Created,
+      // two events for the immediate divulgence follows with the same offset: first the nonconsuming exercise, and then the immediately divulged create
+      OffsetCid(immediateDivulged1P2.offset, divulgeIouByExerciseP2.contractId) -> NonConsumed,
+      immediateDivulged1P2 -> Created,
+      // two events for the immediate divulgence follows with the same offset: first the nonconsuming exercise, and then the immediately divulged create
+      OffsetCid(immediateDivulged2P2.offset, divulgeIouByExerciseP2.contractId) -> NonConsumed,
+      immediateDivulged2P2 -> Created,
+      aliceStakeholder2DivulgedArchiveP2.copy(contractId =
+        divulgeIouByExerciseP2.contractId
+      ) -> NonConsumed,
+      aliceStakeholder2DivulgedArchiveP2 -> Consumed,
+      aliceStakeholderCreatedP2Import -> Created,
+      immediateDivulged2P2Import -> Created,
+    )
     participant2.acsDeltas(alice) shouldBe List(
       aliceBobStakeholderCreatedP2 -> Created,
       divulgeIouByExerciseP2 -> Created,
@@ -387,7 +435,7 @@ trait DivulgenceIntegrationTest extends OfflinePartyReplicationIntegrationTestBa
       aliceBobStakeholderCreatedP1,
       divulgeIouByExerciseP1,
     )
-    // event query
+    // participant1, event query, bob
     assertEventNotFound(participant1, aliceStakeholderCreatedP1.contractId, bob)
     checkCreatedEventFor(participant1, aliceBobStakeholderCreatedP1.contractId, bob)
     checkCreatedEventFor(participant1, divulgeIouByExerciseP1.contractId, bob)
@@ -401,11 +449,102 @@ trait DivulgenceIntegrationTest extends OfflinePartyReplicationIntegrationTestBa
     assertEventNotFound(participant1, aliceStakeholderCreated2P1Archived.contractId, bob)
 
     // participant2 bob
+    participant2.ledgerEffects(bob) shouldBe List(
+      bobStakeholderCreatedP2 -> Created,
+      aliceBobStakeholderCreatedP2 -> Created,
+      divulgeIouByExerciseP2 -> Created,
+      immediateDivulged1P2.copy(contractId = divulgeIouByExerciseP2.contractId) -> NonConsumed,
+      immediateDivulged1P2 -> Created,
+      immediateDivulged2P2.copy(contractId = divulgeIouByExerciseP2.contractId) -> NonConsumed,
+      immediateDivulged2P2 -> Created,
+      aliceStakeholder2DivulgedArchiveP2.copy(contractId =
+        divulgeIouByExerciseP2.contractId
+      ) -> NonConsumed,
+      aliceStakeholder2DivulgedArchiveP2 -> Consumed,
+      bobStakeholderCreated2P2 -> Created,
+      bobStakeholderCreated2ArchivedP2 -> Consumed,
+    )
     participant2.acsDeltas(bob) shouldBe List(
       bobStakeholderCreatedP2 -> Created,
       aliceBobStakeholderCreatedP2 -> Created,
       divulgeIouByExerciseP2 -> Created,
+      bobStakeholderCreated2P2 -> Created,
+      bobStakeholderCreated2ArchivedP2 -> Consumed,
     )
+    participant2.acs(bob) shouldBe List(
+      bobStakeholderCreatedP2,
+      aliceBobStakeholderCreatedP2,
+      divulgeIouByExerciseP2,
+    )
+    // participant2, event query, bob
+    assertEventNotFound(participant2, aliceStakeholderCreatedP1.contractId, bob)
+    checkCreatedEventFor(participant2, aliceBobStakeholderCreatedP1.contractId, bob)
+    checkCreatedEventFor(participant2, divulgeIouByExerciseP1.contractId, bob)
+    assertEventNotFound(participant2, immediateDivulged1P1.contractId, bob)
+    assertEventNotFound(participant2, immediateDivulged2P1.contractId, bob)
+    assertEventNotFound(participant2, immediateDivulged1ArchiveP1.contractId, bob)
+    checkCreatedEventFor(participant2, bobStakeholderCreatedP2.contractId, bob)
+    checkCreatedEventFor(participant2, aliceBobStakeholderCreatedP2.contractId, bob)
+    checkCreatedEventFor(participant2, divulgeIouByExerciseP2.contractId, bob)
+    assertEventNotFound(participant2, aliceStakeholderCreated2P1.contractId, bob)
+    assertEventNotFound(participant2, aliceStakeholderCreated2P1Archived.contractId, bob)
+    checkCreatedEventFor(participant2, bobStakeholderCreated2P2.contractId, bob)
+    // participant2 contracts
+    contractFor(participant2, aliceStakeholderCreatedP1.contractId) should not be empty
+    contractFor(participant2, bobStakeholderCreatedP2.contractId) should not be empty
+    contractFor(participant2, aliceBobStakeholderCreatedP1.contractId) should not be empty
+    contractFor(participant2, divulgeIouByExerciseP2.contractId) should not be empty
+    contractFor(participant2, immediateDivulged1P1.contractId) should not be empty
+    contractFor(participant2, immediateDivulged2P1.contractId) should not be empty
+    contractFor(participant2, aliceStakeholderCreated2P1.contractId) shouldBe empty
+    contractFor(participant2, bobStakeholderCreated2P2.contractId) should not be empty
+
+    // pruning target/participant2 participant until activation of alice
+    eventually() {
+      clock.advance(java.time.Duration.ofSeconds(5))
+      target.health.ping(target)
+      target.pruning.find_safe_offset().value should be >= targetOffsetBeforeImport
+      target.pruning.prune(targetOffsetBeforeImport)
+    }
+
+    // participant2 alice
+    participant2.ledgerEffects(
+      alice,
+      beginOffsetExclusive = targetOffsetBeforeImport,
+    ) shouldBe List(
+      aliceStakeholderCreatedP2Import -> Created,
+      immediateDivulged2P2Import -> Created,
+    )
+    participant2.acsDeltas(alice, beginOffsetExclusive = targetOffsetBeforeImport) shouldBe List(
+      aliceStakeholderCreatedP2Import -> Created,
+      immediateDivulged2P2Import -> Created,
+    )
+    participant2.acs(alice) shouldBe List(
+      aliceBobStakeholderCreatedP2,
+      divulgeIouByExerciseP2,
+      aliceStakeholderCreatedP2Import,
+      immediateDivulged2P2Import,
+    )
+    // event query
+    if (enableAllLedgerApiReassignments)
+      assertEventNotFound(participant2, aliceStakeholderCreatedP1.contractId, alice)
+    else checkCreatedEventFor(participant2, aliceStakeholderCreatedP1.contractId, alice)
+    checkCreatedEventFor(participant2, aliceBobStakeholderCreatedP1.contractId, alice)
+    checkCreatedEventFor(participant2, divulgeIouByExerciseP1.contractId, alice)
+    assertEventNotFound(participant2, immediateDivulged1P1.contractId, alice)
+    if (enableAllLedgerApiReassignments)
+      assertEventNotFound(participant2, immediateDivulged2P1.contractId, alice)
+    else checkCreatedEventFor(participant2, immediateDivulged2P1.contractId, alice)
+    assertEventNotFound(participant2, immediateDivulged1ArchiveP1.contractId, alice)
+    assertEventNotFound(participant2, bobStakeholderCreatedP2.contractId, alice)
+    checkCreatedEventFor(participant2, aliceBobStakeholderCreatedP2.contractId, alice)
+    checkCreatedEventFor(participant2, divulgeIouByExerciseP2.contractId, alice)
+    assertEventNotFound(participant2, aliceStakeholderCreated2P1.contractId, alice)
+    assertEventNotFound(participant2, aliceStakeholderCreated2P1Archived.contractId, alice)
+
+    // participant2 bob
+    participant2.ledgerEffects(bob, beginOffsetExclusive = targetOffsetBeforeImport) shouldBe List()
+    participant2.acsDeltas(bob, beginOffsetExclusive = targetOffsetBeforeImport) shouldBe List()
     participant2.acs(bob) shouldBe List(
       bobStakeholderCreatedP2,
       aliceBobStakeholderCreatedP2,
@@ -423,6 +562,18 @@ trait DivulgenceIntegrationTest extends OfflinePartyReplicationIntegrationTestBa
     checkCreatedEventFor(participant2, divulgeIouByExerciseP2.contractId, bob)
     assertEventNotFound(participant2, aliceStakeholderCreated2P1.contractId, bob)
     assertEventNotFound(participant2, aliceStakeholderCreated2P1Archived.contractId, bob)
+    assertEventNotFound(participant2, bobStakeholderCreated2P2.contractId, bob)
+    // participant2 contracts
+    contractFor(participant2, aliceStakeholderCreatedP1.contractId) should not be empty
+    contractFor(participant2, bobStakeholderCreatedP2.contractId) should not be empty
+    contractFor(participant2, aliceBobStakeholderCreatedP1.contractId) should not be empty
+    contractFor(participant2, divulgeIouByExerciseP2.contractId) should not be empty
+    // pruned
+    contractFor(participant2, immediateDivulged1P1.contractId) shouldBe empty
+    contractFor(participant2, immediateDivulged2P1.contractId) should not be empty
+    contractFor(participant2, aliceStakeholderCreated2P1.contractId) shouldBe empty
+    // pruned
+    contractFor(participant2, bobStakeholderCreated2P2.contractId) shouldBe empty
   }
 }
 
@@ -446,18 +597,18 @@ trait DivulgenceIntegrationTestWithoutCache extends DivulgenceIntegrationTest {
 }
 
 class DivulgenceIntegrationTestReassignmentWithCache extends DivulgenceIntegrationTest {
-  override def alphaMultiSynchronizerSupport: Boolean = true
+  override def enableAllLedgerApiReassignments: Boolean = true
 }
 
 class DivulgenceIntegrationTestLegacyWithCache extends DivulgenceIntegrationTest {
-  override def alphaMultiSynchronizerSupport: Boolean = false
+  override def enableAllLedgerApiReassignments: Boolean = false
 }
 
 class DivulgenceIntegrationTestReassignmentWithoutCache
     extends DivulgenceIntegrationTestWithoutCache {
-  override def alphaMultiSynchronizerSupport: Boolean = true
+  override def enableAllLedgerApiReassignments: Boolean = true
 }
 
 class DivulgenceIntegrationTestLegacyWithoutCache extends DivulgenceIntegrationTestWithoutCache {
-  override def alphaMultiSynchronizerSupport: Boolean = false
+  override def enableAllLedgerApiReassignments: Boolean = false
 }

@@ -87,6 +87,17 @@ final class SvConnection private (
       HttpSvPublicAppClient.GetDsoInfo,
     )
 
+  def getMigrationId()(implicit
+      httpClient: HttpClient,
+      templateDecoder: TemplateJsonDecoder,
+      ec: ExecutionContext,
+      mat: Materializer,
+  ): Future[Long] =
+    runHttpCmd(
+      config.url,
+      HttpSvPublicAppClient.GetMigrationId,
+    )
+
 }
 
 object SvConnection {

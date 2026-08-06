@@ -5,7 +5,7 @@ import {
   DisableConditionally,
   IntervalDisplay,
   SubscriptionButton,
-} from '@lfdecentralizedtrust/splice-common-frontend';
+} from '@canton-network/splice-common-frontend';
 import React, { useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 

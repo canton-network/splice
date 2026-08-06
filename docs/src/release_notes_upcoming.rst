@@ -7,29 +7,37 @@
 
 .. release-notes:: Upcoming
 
-    - Wallet & CNS UIs
+    - Wallet app
 
-      - The wallet and CNS UIs now support optionally configuring the OAuth token scope, to support IAM providers that require doing so.
+        - Duplicate wallet operations submitted with the same command id (e.g. tap, transfer,
+          token standard transfers) now return the original result idempotently instead of HTTP 409.
+          This aligns with standard idempotency-key semantics: a second request with a previously
+          accepted command id receives a 200 response with the same result as the first.
+          Concurrent duplicates, where no submission has completed yet, are still rejected.
 
-    - Scan UI
+        - ``TransferPreapprovalProposal`` s are now accepted if there is an existing one but it has expired.
 
-      - Bring back the governance page that was removed in release 0.5.18.
+    - CantonBft
 
-    - Wallet UI
+         - Increase the default segment length by 4x to reduce performance impact from epoch switches.
 
-      - Fix a corner case in the wallet Allocations UI where invalid values would be passed to ``/v0/allocations`` when creating allocations from allocation requests.
-        This could manifest as a browser error when clicking ``Accept`` on an allocation request.
+    - Validator App
 
-    - SV app
+        - Added a ``type`` parameter to validator config's ``reward-sharing-config-by-party`` option.
 
-      - SV participants now use the public sequencer URL instead of
-        the internal one to connect to their sequencer. This avoids
-        some redundant reconnects around LSUs where the participant
-        LSU automation would set the public URL while the SV app would
-        set the internal one.
+          When this is set to ``external``, it indicates that the assignment of reward coupons to beneficiaries is being managed by a process external to the validator app, and thus the validator app's automation does not assign or mint the unassigned coupons.
 
-        The prior behavior can be set recovered by setting
-        ``canton.sv-apps.sv.use-internal-sequencer-api = true``
-        through an ``ADDITIONAL_CONFIG`` environment variable. LSUs
-        will still work but be slightly slower due to extra
-        reconnects.
+          The ``type`` defaults to ``built-in`` preserving the existing behavior where the validator app will either mint the unassigned rewards coupons, or assign them to beneficiaries if configured.
+
+          See the reward-sharing documentation for details:
+          https://docs.canton.network/global-synchronizer/splice-fundamentals/reward-sharing#reward-sharing
+
+          Example enabling external sharing automation for a party::
+
+              canton.validator-apps.<validator>.reward-sharing-config-by-party = {
+                "<party-id>" = {
+                  type = "external"
+                  # Optionally batch-size may be specified to configure the maximum number of coupons to mint in a single transaction
+                  batch-size = 80
+                }
+              }

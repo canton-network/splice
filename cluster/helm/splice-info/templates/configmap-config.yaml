@@ -10,7 +10,8 @@ data:
   staticfile.conf: |
     server_tokens off;
 
-    add_header Cache-Control no-cache;
+    add_header Cache-Control no-cache always;
+    add_header Access-Control-Allow-Origin * always;
 
     gzip on;
     gzip_types {{ .Values.contentType }};

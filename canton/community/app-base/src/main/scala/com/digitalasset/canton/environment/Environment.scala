@@ -45,7 +45,7 @@ import com.digitalasset.canton.time.*
 import com.digitalasset.canton.tracing.TraceContext.withNewTraceContext
 import com.digitalasset.canton.tracing.{NoTracing, TraceContext, TracerProvider}
 import com.digitalasset.canton.util.FutureInstances.parallelFuture
-import com.digitalasset.canton.util.{MonadUtil, Mutex, PekkoUtil, SingleUseCell}
+import com.digitalasset.canton.util.{EitherTUtil, MonadUtil, Mutex, PekkoUtil, SingleUseCell}
 import com.google.common.annotations.VisibleForTesting
 import io.circe.Encoder
 import io.circe.generic.semiauto.deriveEncoder
@@ -74,16 +74,6 @@ abstract class Environment[Config <: SharedCantonConfig[Config]](
 
   type Console <: ConsoleEnvironment
 
-  def createConsole(
-      consoleOutput: ConsoleOutput = StandardConsoleOutput
-  ): Console = {
-    val console = _createConsole(consoleOutput)
-    healthDumpGenerator
-      .putIfAbsent(createHealthDumpGenerator(console.grpcAdminCommandRunner))
-      .discard
-    console
-  }
-
   protected def _createConsole(
       consoleOutput: ConsoleOutput = StandardConsoleOutput
   ): Console
@@ -95,6 +85,34 @@ abstract class Environment[Config <: SharedCantonConfig[Config]](
     )
 
   def config: Config = currentConfig.get()
+  def pokeOrUpdateConfig(
+      newConfig: Option[Either[String, Config]]
+  )(implicit traceContext: TraceContext): Unit = {
+    def pokeDeclarativeApis(configState: Either[Unit, Boolean]): Unit =
+      Seq(sequencers, mediators, participants).foreach { group =>
+        group.pokeDeclarativeApis(configState)
+      }
+    newConfig match {
+      case Some(Left(error)) =>
+        logger.error(s"Failed to load new dynamic configuration: $error")
+        pokeDeclarativeApis(Left(()))
+      case Some(Right(newConfig)) if currentConfig.get().parameters.alphaVersionSupport =>
+        logger.info(
+          s"Loaded new configuration. Static node changes will only be applied after a node restart."
+        )
+        currentConfig.set(newConfig)
+        pokeDeclarativeApis(Right(true))
+      case Some(Right(newConfig)) =>
+        val changedConfig = config.mergeDynamicChanges(newConfig)
+        logger.info(
+          s"Loaded new configuration. As we are running without alpha-features enabled, only the dynamic changes will be reused"
+        )
+        currentConfig.set(changedConfig)
+        pokeDeclarativeApis(Right(true))
+      case None =>
+        pokeDeclarativeApis(Right(false))
+    }
+  }
 
   private val currentConfig = new AtomicReference[Config](initialConfig)
   private val histogramInventory = new HistogramInventory()
@@ -139,6 +157,16 @@ abstract class Environment[Config <: SharedCantonConfig[Config]](
     new ExecutorServiceMetrics(
       metricsRegistry.generateMetricsFactory(MetricsContext.Empty)
     )
+
+  def createConsole(
+      consoleOutput: ConsoleOutput = StandardConsoleOutput
+  ): Console = {
+    val console = _createConsole(consoleOutput)
+    healthDumpGenerator
+      .putIfAbsent(createHealthDumpGenerator(console.grpcAdminCommandRunner))
+      .discard
+    console
+  }
 
   @VisibleForTesting
   protected def createHealthDumpGenerator(
@@ -347,6 +375,7 @@ abstract class Environment[Config <: SharedCantonConfig[Config]](
           runner
           writePortsFile()
         } // write ports after the runner has completed
+
         // log results
         startup
           .leftMap(error => logger.error(s"Failed to start ${error.name}: ${error.message}"))
@@ -399,12 +428,19 @@ abstract class Environment[Config <: SharedCantonConfig[Config]](
           }
           EitherT.rightT(())
         case Some(node) =>
-          node
-            .reconnectSynchronizersIgnoreFailures(isTriggeredManually = false)
-            .leftMap(err => StartFailed(instance.name.unwrap, err.toString))
-            .onShutdown(Left(StartFailed(instance.name.unwrap, "aborted due to shutdown")))
-
+          if (node.config.parameters.connectToSynchronizersOnStartup)
+            node
+              .reconnectSynchronizersIgnoreFailures(isTriggeredManually = false)
+              .leftMap(err => StartFailed(instance.name.unwrap, err.toString))
+              .onShutdown(Left(StartFailed(instance.name.unwrap, "aborted due to shutdown")))
+          else {
+            logger.info(
+              s"Not reconnecting $node to synchronizers because reconnect on startup is disabled"
+            )
+            EitherTUtil.unit
+          }
       }
+
     config.parameters.timeouts.processing.unbounded.await("reconnect-participants")(
       MonadUtil
         .parTraverseWithLimit_(config.parameters.getStartupParallelism(numThreads))(
@@ -614,15 +650,15 @@ trait EnvironmentFactory[C <: SharedCantonConfig[C], E <: Environment[C]] {
   ): E
 }
 
-final class CantonEnvironment(
-    override val config: CantonConfig,
+class CantonEnvironment(
+    initialConfig: CantonConfig,
     override val testingConfig: TestingConfigInternal,
     participantNodeFactory: ParticipantNodeBootstrapFactory,
     sequencerNodeFactory: SequencerNodeBootstrapFactory,
     mediatorNodeFactory: MediatorNodeBootstrapFactory,
     override val loggerFactory: NamedLoggerFactory,
 ) extends Environment[CantonConfig](
-      config,
+      initialConfig,
       testingConfig,
       participantNodeFactory,
       sequencerNodeFactory,

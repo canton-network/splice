@@ -10,7 +10,6 @@ import cats.syntax.traverse.*
 import com.daml.nonempty.NonEmpty
 import com.digitalasset.canton.checked
 import com.digitalasset.canton.concurrent.{FutureSupervisor, HasFutureSupervision}
-import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.config.{CacheConfig, CryptoConfig, ProcessingTimeout}
 import com.digitalasset.canton.crypto.SyncCryptoError.{KeyNotAvailable, SyncCryptoEncryptionError}
 import com.digitalasset.canton.crypto.signer.SyncCryptoSigner
@@ -20,7 +19,7 @@ import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.lifecycle.{FlagCloseable, FutureUnlessShutdown, LifeCycle}
 import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory, NamedLogging}
-import com.digitalasset.canton.metrics.KmsMetrics
+import com.digitalasset.canton.metrics.CryptoMetrics
 import com.digitalasset.canton.protocol.StaticSynchronizerParameters
 import com.digitalasset.canton.serialization.DeserializationError
 import com.digitalasset.canton.topology.*
@@ -55,8 +54,7 @@ class SyncCryptoApiParticipantProvider(
     val ips: IdentityProvidingServiceClient,
     val crypto: Crypto,
     cryptoConfig: CryptoConfig,
-    kmsMetrics: Option[KmsMetrics],
-    verificationParallelismLimit: PositiveInt,
+    cryptoMetrics: CryptoMetrics,
     publicKeyConversionCacheConfig: CacheConfig,
     timeouts: ProcessingTimeout,
     futureSupervisor: FutureSupervisor,
@@ -95,8 +93,7 @@ class SyncCryptoApiParticipantProvider(
       staticSynchronizerParameters,
       SynchronizerCrypto(crypto, staticSynchronizerParameters),
       cryptoConfig,
-      kmsMetrics,
-      verificationParallelismLimit,
+      cryptoMetrics,
       publicKeyConversionCacheConfig,
       timeouts,
       futureSupervisor,
@@ -387,7 +384,6 @@ object SynchronizerCryptoClient {
       ips: SynchronizerTopologyClient,
       staticSynchronizerParameters: StaticSynchronizerParameters,
       synchronizerCrypto: SynchronizerCrypto,
-      verificationParallelismLimit: PositiveInt,
       publicKeyConversionCacheConfig: CacheConfig,
       timeouts: ProcessingTimeout,
       futureSupervisor: FutureSupervisor,
@@ -411,7 +407,6 @@ object SynchronizerCryptoClient {
         synchronizerId,
         staticSynchronizerParameters,
         synchronizerCrypto.pureCrypto,
-        verificationParallelismLimit,
         publicKeyConversionCacheConfig,
         loggerFactory,
       ),
@@ -431,8 +426,7 @@ object SynchronizerCryptoClient {
       staticSynchronizerParameters: StaticSynchronizerParameters,
       synchronizerCrypto: SynchronizerCrypto,
       cryptoConfig: CryptoConfig,
-      kmsMetrics: Option[KmsMetrics],
-      verificationParallelismLimit: PositiveInt,
+      cryptoMetrics: CryptoMetrics,
       publicKeyConversionCacheConfig: CacheConfig,
       timeouts: ProcessingTimeout,
       futureSupervisor: FutureSupervisor,
@@ -446,7 +440,7 @@ object SynchronizerCryptoClient {
       member,
       synchronizerCrypto,
       cryptoConfig,
-      kmsMetrics,
+      cryptoMetrics,
       publicKeyConversionCacheConfig,
       futureSupervisor,
       timeouts,
@@ -463,7 +457,6 @@ object SynchronizerCryptoClient {
         synchronizerId.logical,
         staticSynchronizerParameters,
         synchronizerCrypto.pureCrypto,
-        verificationParallelismLimit,
         publicKeyConversionCacheConfig,
         loggerFactory,
       ),

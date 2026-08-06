@@ -68,9 +68,9 @@ object WalletTables extends AcsTables {
 
   case class ExternalPartyWalletAcsStoreRowData(
       contract: Contract[?, ?],
+      override val contractExpiresAt: Option[Timestamp] = None,
       rewardCouponRound: Option[Long] = None,
   ) extends AcsRowData.AcsRowDataFromContract {
-    override val contractExpiresAt: Option[Timestamp] = None
     override def indexColumns: Seq[(String, IndexColumnValue[?])] = Seq(
       ExternalPartyWalletAcsStoreRowData.IndexColumns.reward_coupon_round -> IndexColumnValue(
         rewardCouponRound

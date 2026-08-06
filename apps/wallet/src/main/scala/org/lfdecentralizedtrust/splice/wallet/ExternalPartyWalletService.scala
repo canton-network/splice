@@ -3,29 +3,24 @@
 
 package org.lfdecentralizedtrust.splice.wallet
 
-import org.lfdecentralizedtrust.splice.config.{AutomationConfig, SpliceParametersConfig}
-import org.lfdecentralizedtrust.splice.environment.*
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
-import org.lfdecentralizedtrust.splice.store.{
-  DomainTimeSynchronization,
-  DomainUnpausedSynchronization,
-  HistoryMetrics,
-  UpdateHistory,
-}
-import org.lfdecentralizedtrust.splice.util.{HasHealth, TemplateJsonDecoder}
-import org.lfdecentralizedtrust.splice.wallet.automation.ExternalPartyWalletAutomationService
-import org.lfdecentralizedtrust.splice.wallet.store.ExternalPartyWalletStore
-import com.digitalasset.canton.lifecycle.{CloseContext, FlagCloseable}
+import com.digitalasset.canton.lifecycle.{CloseContext, FlagCloseable, LifeCycle}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.topology.ParticipantId
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
-import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingRequirement
+import org.lfdecentralizedtrust.splice.config.{AutomationConfig, SpliceParametersConfig}
+import org.lfdecentralizedtrust.splice.environment.*
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
+import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
+import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
+import org.lfdecentralizedtrust.splice.wallet.automation.ExternalPartyWalletAutomationService
+import org.lfdecentralizedtrust.splice.wallet.config.RewardSharingConfig
+import org.lfdecentralizedtrust.splice.wallet.store.ExternalPartyWalletStore
 
 import scala.concurrent.ExecutionContext
+import scala.util.control.NonFatal
 
 /** A service managing the treasury, automation, and store for an external party's wallet. */
 class ExternalPartyWalletService(
@@ -34,14 +29,15 @@ class ExternalPartyWalletService(
     automationConfig: AutomationConfig,
     clock: Clock,
     domainTimeSync: DomainTimeSynchronization,
-    domainUnpausedSync: DomainUnpausedSynchronization,
     storage: DbStorage,
     override protected[this] val retryProvider: RetryProvider,
     override val loggerFactory: NamedLoggerFactory,
-    domainMigrationInfo: DomainMigrationInfo,
+    migrationId: Long,
     participantId: ParticipantId,
     params: SpliceParametersConfig,
     scanConnection: BftScanConnection,
+    packageVersionSupport: PackageVersionSupport,
+    rewardSharingConfig: RewardSharingConfig,
 )(implicit
     ec: ExecutionContext,
     mat: Materializer,
@@ -50,8 +46,7 @@ class ExternalPartyWalletService(
     close: CloseContext,
 ) extends RetryProvider.Has
     with FlagCloseable
-    with NamedLogging
-    with HasHealth {
+    with NamedLogging {
 
   val store: ExternalPartyWalletStore =
     ExternalPartyWalletStore(
@@ -59,46 +54,37 @@ class ExternalPartyWalletService(
       storage,
       loggerFactory,
       retryProvider,
-      domainMigrationInfo,
+      migrationId,
       participantId,
       automationConfig.ingestion,
       params.defaultLimit,
     )
 
-  val updateHistory = new UpdateHistory(
-    storage,
-    domainMigrationInfo,
-    store.storeName,
-    participantId,
-    store.acsContractFilter.ingestionFilter.primaryParty,
-    BackfillingRequirement.BackfillingNotRequired,
-    loggerFactory,
-    enableissue12777Workaround = false,
-    enableImportUpdateBackfill = false,
-    HistoryMetrics(retryProvider.metricsFactory, domainMigrationInfo.currentMigrationId),
-  )
-
-  val automation = new ExternalPartyWalletAutomationService(
-    store,
-    updateHistory,
-    ledgerClient,
-    automationConfig,
-    clock,
-    domainTimeSync,
-    domainUnpausedSync,
-    retryProvider,
-    params,
-    scanConnection,
-    loggerFactory,
-  )
-
-  override def isHealthy: Boolean =
-    automation.isHealthy
+  val automation =
+    try {
+      new ExternalPartyWalletAutomationService(
+        store,
+        ledgerClient,
+        automationConfig,
+        clock,
+        domainTimeSync,
+        retryProvider,
+        params,
+        scanConnection,
+        loggerFactory,
+        packageVersionSupport,
+        rewardSharingConfig,
+      )
+    } catch {
+      // a failed construction never reaches onClosed, so close the store here
+      case NonFatal(e) =>
+        store.close()
+        throw e
+    }
 
   override def onClosed(): Unit = {
-    automation.close()
-    updateHistory.close()
-    store.close()
+    // LifeCycle.close closes both in order even if the first close fails.
+    LifeCycle.close(automation, store)(logger)
     super.onClosed()
   }
 }

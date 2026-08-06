@@ -5,7 +5,7 @@ import {
   HELM_MAX_HISTORY_SIZE,
   exactNamespace,
   infraAffinityAndTolerations,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 
 export function configureReloader(): k8s.helm.v3.Release {
   const ns = exactNamespace('reloader', false, true);

@@ -6,8 +6,8 @@ import {
   ErrorDisplay,
   Loading,
   TransferButton,
-} from '@lfdecentralizedtrust/splice-common-frontend';
-import { Contract } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+} from '@canton-network/splice-common-frontend';
+import { Contract } from '@canton-network/splice-common-frontend-utils';
 import { Decimal } from 'decimal.js-light';
 import { useCallback, useState } from 'react';
 

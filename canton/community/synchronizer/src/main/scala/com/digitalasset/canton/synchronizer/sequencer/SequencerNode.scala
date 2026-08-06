@@ -240,6 +240,7 @@ class SequencerNodeBootstrap(
     })
     addCloseable(sequencerPublicApiHealthService)
     addCloseable(sequencerHealth)
+    addCloseable(asyncWriterHealth)
 
     private def createSequencerFactory(
         protocolVersion: ProtocolVersion
@@ -328,6 +329,7 @@ class SequencerNodeBootstrap(
           SynchronizerStore(synchronizerId),
           storage,
           indexedStringStore,
+          predecessor = None,
           synchronizerId.protocolVersion,
           timeouts,
           parameters.batchingConfig,
@@ -472,6 +474,7 @@ class SequencerNodeBootstrap(
                   config.topology,
                   Some(crypto.staticSynchronizerParameters),
                   timeouts,
+                  futureSupervisor = futureSupervisor,
                   loggerFactory,
                   // only filter out completed proposals if this is a bootstrap from genesis.
                   cleanupTopologySnapshot = sequencerSnapshot.isEmpty,
@@ -575,13 +578,14 @@ class SequencerNodeBootstrap(
 
           sequencerSnapshotTimestamp = topologyAndSequencerSnapshot
             .flatMap(_._2)
-            .map(sequencerSnapshot => EffectiveTime(sequencerSnapshot.lastTs))
+            .map(sequencerSnapshot => SequencedTime(sequencerSnapshot.lastTs))
           processorAndClient <- EitherT
             .right(
               TopologyTransactionProcessor
                 .createProcessorAndClientForSynchronizer(
                   synchronizerTopologyStore,
                   upgradeTimeFromPredecessor = lsuSequencingBounds.map(_.upgradeTime),
+                  sequencerSnapshotTimestamp = sequencerSnapshotTimestamp,
                   crypto.pureCrypto,
                   parameters,
                   arguments.config.topology,
@@ -590,7 +594,7 @@ class SequencerNodeBootstrap(
                   arguments.metrics.topologyCache,
                   futureSupervisor,
                   synchronizerLoggerFactory,
-                )(sequencerSnapshotTimestamp)
+                )
             )
           (topologyProcessor, topologyClient) = processorAndClient
           _ = addCloseable(topologyProcessor)
@@ -654,8 +658,7 @@ class SequencerNodeBootstrap(
               staticSynchronizerParameters,
               crypto,
               cryptoConfig,
-              Some(arguments.metrics.kmsMetrics),
-              parameters.batchingConfig.parallelism,
+              arguments.metrics.cryptoMetrics,
               parameters.cachingConfigs.publicKeyConversionCache,
               parameters.processingTimeouts,
               futureSupervisor,
@@ -673,7 +676,6 @@ class SequencerNodeBootstrap(
             topologyClient,
             staticSynchronizerParameters,
             crypto,
-            parameters.batchingConfig.parallelism,
             parameters.cachingConfigs.publicKeyConversionCache,
             parameters.processingTimeouts,
             futureSupervisor,
@@ -698,15 +700,6 @@ class SequencerNodeBootstrap(
               sequencingTimeLowerBoundExclusive =
                 lsuSequencingBounds.map(_.lowerBoundSequencingTimeExclusive),
               synchronizerLoggerFactory,
-            )
-
-          sequencerSynchronizerParamsLookup: DynamicSynchronizerParametersLookup[
-            SequencerSynchronizerParameters
-          ] =
-            SynchronizerParametersLookup.forSequencerSynchronizerParameters(
-              config.publicApi.overrideMaxRequestSize,
-              topologyClient,
-              loggerFactory,
             )
 
           sequencerChannelServiceO = Option.when(
@@ -749,6 +742,8 @@ class SequencerNodeBootstrap(
               new GrpcSequencerAuthenticationService(
                 authenticationService,
                 staticSynchronizerParameters.protocolVersion,
+                disableReleaseVersionHandshakeCheck =
+                  parameters.disableReleaseVersionHandshakeCheck,
                 loggerFactory,
               )
 
@@ -790,7 +785,8 @@ class SequencerNodeBootstrap(
               authenticationServices.memberAuthenticationService.isMemberCurrentlyActive(member)(
                 tc
               ),
-            sequencerSynchronizerParamsLookup,
+            topologyClient,
+            config.publicApi.overrideMaxRequestSize,
             parameters,
             staticSynchronizerParameters.protocolVersion,
             topologyStateForInitializationService,
@@ -866,7 +862,8 @@ class SequencerNodeBootstrap(
             topologyConfig = config.topology,
             store = synchronizerTopologyStore,
             outboxQueue = new SynchronizerOutboxQueue(timeouts, synchronizerLoggerFactory),
-            dispatchQueueBackpressureLimit = parameters.dispatchQueueBackpressureLimit,
+            dispatchQueueBackpressureLimit =
+              parameters.topologyConfig.dispatchQueueBackpressureLimit,
             disableOptionalTopologyChecks = config.topology.disableOptionalTopologyChecks,
             exitOnFatalFailures = parameters.exitOnFatalFailures,
             timeouts = timeouts,
@@ -977,6 +974,13 @@ class SequencerNodeBootstrap(
     SequencerHealthStatus.shutdownStatus,
   )
 
+  // Deferred health component for the block sequencer's background writer, created during
+  // initialization. It is used as a fatal dependency of the liveness health service so that the
+  // node transitions to NOT_SERVING and is restarted if the background writer can no longer make
+  // progress. Non-block sequencers never set a delegate, so it stays non-fatal.
+  private lazy val asyncWriterHealth =
+    MutableHealthComponent(loggerFactory, "block-sequencer-async-writer", timeouts)
+
   // The service exposed by the gRPC health endpoint of sequencer public API
   // This will be used by sequencer clients who perform client-side load balancing to determine sequencer health
   private lazy val sequencerPublicApiHealthService = DependenciesHealthService(
@@ -997,7 +1001,13 @@ class SequencerNodeBootstrap(
     )
     // We use the storage as a fatal dependency so that we transition liveness to NOT_SERVING if
     // the storage fails continuously for longer than `failedToFatalDelay`.
-    val liveness = LivenessHealthService(logger, timeouts, fatalDependencies = Seq(storage))
+    // The background writer health is fatal as well: once a background write fails, the writer can
+    // no longer make progress, so the node must be restarted.
+    val liveness = LivenessHealthService(
+      logger,
+      timeouts,
+      fatalDependencies = Seq(storage, asyncWriterHealth),
+    )
     (readiness, liveness)
   }
 
@@ -1046,6 +1056,8 @@ class SequencerNodeBootstrap(
         .initialize(runtime)
       // wait for the server to be initialized before reporting a serving health state
       _ = sequencerHealth.set(runtime.sequencer)
+      // bind the background writer health (block sequencers only) into the liveness fatal dependency
+      _ = runtime.sequencer.backgroundWriterHealth.foreach(asyncWriterHealth.set)
     } yield sequencerNodeServer
   }
 }

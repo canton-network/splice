@@ -21,13 +21,11 @@ import org.lfdecentralizedtrust.splice.environment.{
   DarResource,
   DarResources,
   PackageIdResolver,
+  PackageVersionSupport,
   RetryProvider,
   SpliceLedgerClient,
 }
-import org.lfdecentralizedtrust.splice.store.{
-  DomainTimeSynchronization,
-  DomainUnpausedSynchronization,
-}
+import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import org.lfdecentralizedtrust.splice.util.QualifiedName
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.ScanConnection
 import org.lfdecentralizedtrust.splice.splitwell.store.SplitwellStore
@@ -50,6 +48,7 @@ class SplitwellAutomationService(
     retryProvider: RetryProvider,
     params: SpliceParametersConfig,
     protected val loggerFactory: NamedLoggerFactory,
+    packageVersionSupport: PackageVersionSupport,
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
@@ -60,11 +59,11 @@ class SplitwellAutomationService(
       // splitwell does not have an admin connection to query the domain time and params,
       // and we care less about it behaving weirdly.
       DomainTimeSynchronization.Noop,
-      DomainUnpausedSynchronization.Noop,
       store,
       ledgerClient,
       retryProvider,
       params,
+      packageVersionSupport,
     ) {
 
   override def companion

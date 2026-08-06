@@ -13,12 +13,12 @@ import {
   ValidatorTopupConfig,
   RateLimitSchema,
   CnChartVersion,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
-import { SweepConfig } from '@lfdecentralizedtrust/splice-pulumi-common-validator';
-import { clusterYamlConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/config';
+} from '@canton-network/splice-pulumi-common';
+import { SweepConfig } from '@canton-network/splice-pulumi-common-validator';
+import { clusterYamlConfig } from '@canton-network/splice-pulumi-common/src/config/config';
 import { z } from 'zod';
 
-import { BulkStorageBucket } from './bulkStorage';
+import { BulkStorageBuckets } from './bulkStorage';
 import { SingleSvConfiguration } from './singleSvConfig';
 import {
   StaticCometBftConfig,
@@ -36,8 +36,9 @@ export type SvOnboarding =
   | {
       type: 'join-with-key';
       keys: CnInput<SvIdKey>;
-      sponsorRelease: pulumi.Resource;
+      sponsorRelease?: pulumi.Resource;
       sponsorApiUrl: string;
+      sponsorScanUrl: string;
     };
 
 export interface ScanBigQueryConfig {
@@ -83,7 +84,7 @@ export interface SvConfig extends StaticSvConfig, SingleSvConfiguration {
   initialRound?: string;
   periodicTopologySnapshotConfig?: CnInput<BucketConfig>;
   version: CnChartVersion;
-  bulkStorageBucket?: BulkStorageBucket;
+  bulkStorageBuckets?: BulkStorageBuckets;
 }
 
 export const TopologySnapshotSchema = z.object({

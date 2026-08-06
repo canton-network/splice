@@ -9,6 +9,7 @@ import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.tracing.TraceContext
+import com.digitalasset.canton.util.MonadUtil
 import com.digitalasset.canton.util.ShowUtil.*
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.decentralizedsynchronizer.{
   LegacySequencerConfig,
@@ -45,7 +46,6 @@ import scala.jdk.OptionConverters.{RichOption, RichOptional}
 class SynchronizerNodeReconciler(
     dsoStore: SvDsoStore,
     connection: SpliceLedgerConnection,
-    legacyMigrationId: Option[Long],
     versionSupport: PackageVersionSupport,
     clock: Clock,
     retryProvider: RetryProvider,
@@ -98,9 +98,7 @@ class SynchronizerNodeReconciler(
       }
       updatedSequencerConfigUpdate =
         updateLegacySequencerConfig(
-          existingLegacySequencerConfig,
-          existingSequencerConfig,
-          legacyMigrationId,
+          existingLegacySequencerConfig
         )
       _ = ensureSequencerUrlIsDifferentWhenSynchronizerUpgraded(
         existingSequencerConfig,
@@ -254,6 +252,12 @@ class SynchronizerNodeReconciler(
               buildNodeConfig(legacyNode)
             }
 
+          val additionalLegacyEntriesFuture =
+            MonadUtil.sequentialTraverse(synchronizerNodes.toList.flatMap(_.additionalLegacy)) {
+              legacyNode =>
+                buildNodeConfig(legacyNode)
+            }
+
           val successorEntryFuture =
             synchronizerNodes.flatMap(_.successor).flatTraverse { successorNode =>
               successorNode.sequencerAdminConnection
@@ -283,8 +287,11 @@ class SynchronizerNodeReconciler(
             currentEntry <- currentEntryFuture
             legacyEntry <- legacyEntryFuture
             successorEntry <- successorEntryFuture
+            additionalLegacyEntries <- additionalLegacyEntriesFuture
           } yield {
-            Some((legacyEntry.toList ++ currentEntry.toList ++ successorEntry.toList.flatten).toMap)
+            Some(
+              (legacyEntry.toList ++ currentEntry.toList ++ successorEntry.toList.flatten ++ additionalLegacyEntries).toMap
+            )
           }
         } else Future.successful(None)
       }
@@ -331,41 +338,18 @@ class SynchronizerNodeReconciler(
       sys.error("Sequencer URL must be different when domain is upgraded.")
   }
   private def updateLegacySequencerConfig(
-      existingLegacySequencerConfig: Option[LegacySequencerConfig],
-      existingSequencerConfig: Option[LocalSequencerConfig],
-      legacyMigrationId: Option[Long],
+      existingLegacySequencerConfig: Option[LegacySequencerConfig]
   )(implicit
       tc: TraceContext
-  ): Either[Unit, Option[LegacySequencerConfig]] = legacyMigrationId match {
-    case Some(expectedLegacyMigrationId) =>
-      existingSequencerConfig match {
-        case Some(existingConfig) if expectedLegacyMigrationId == existingConfig.migrationId =>
-          val legacySequencerConfig =
-            new LegacySequencerConfig(
-              expectedLegacyMigrationId,
-              existingConfig.sequencerId,
-              existingConfig.url,
-            )
-          if (!existingLegacySequencerConfig.contains(legacySequencerConfig))
-            logger.info(
-              s"overwriting existing legacy sequencer config $existingLegacySequencerConfig with $legacySequencerConfig for migration id $expectedLegacyMigrationId"
-            )
-          Right(Some(legacySequencerConfig))
-        case _ =>
-          if (existingLegacySequencerConfig.exists(_.migrationId != expectedLegacyMigrationId))
-            logger.warn(
-              s"existing legacy sequencer config with migration id is not the same as expected $expectedLegacyMigrationId"
-            )
-          Left(())
-      }
-    case None if existingLegacySequencerConfig.isDefined =>
+  ): Either[Unit, Option[LegacySequencerConfig]] =
+    if (existingLegacySequencerConfig.isDefined) {
       logger.info(
         s"removing existing legacy sequencer config as there is no expected legacy migration id"
       )
       Right(None)
-    case _ =>
+    } else {
       Left(())
-  }
+    }
 }
 
 object SynchronizerNodeReconciler {

@@ -164,7 +164,8 @@ LSU requires deployment changes for super validators. Concretely:
 
 1. Participants are now preserved as part of LSUs. So if you previously assumed participant, sequencer and mediator always come as one unit per migration id, you now need to move the participant out of that.
 2. The ``domain`` value on the sv app helm chart should be replaced by ``synchronizers``. ``synchronizers.current`` replaces the synchronizer previously configured through ``domain``. ``synchronizers.successor``
-   should be configured to the successor physical synchronizer when that is deployed. After the upgrade, ``synchronizers.current`` becomes ``synchronizers.legacy`` and ``synchronizers.successor`` becomes ``synchronizers.current``. The legacy configuration should be removed together with removing the old physical synchronizer after 30 days.
+   should be configured to the successor physical synchronizer when that is deployed. After the upgrade, ``synchronizers.current`` becomes ``synchronizers.legacy`` and ``synchronizers.successor`` becomes ``synchronizers.current``. The legacy configuration should be removed together with removing the old physical synchronizer after 30 days. If you already have a node in ``legacy`` and it should not yet be
+   decomissioned move it to ``additionalLegacy`` which accepts an array of synchronizers.
    The CometBFT configuration also moves under ``synchronizers.(current|successor|legacy)``.
 3. The ``sequencerAddress`` and ``mediatorAddress``values in scan should be replaced by ``synchronizers.current.sequencer`` and ``synchronizers.current.mediator``. The corresponding values under ``synchronizers.successor`` should be set together with
    the deployment of the successor physical synchronizer. After the upgrade ``successor`` becomes ``current`` and ``current`` is removed.

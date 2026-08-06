@@ -9,8 +9,8 @@ import {
   ConfigProvider,
   useConfig as useConfigFromContext,
   pollIntervalSchema,
-} from '@lfdecentralizedtrust/splice-common-frontend';
-import { PollingStrategy } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+} from '@canton-network/splice-common-frontend';
+import { PollingStrategy } from '@canton-network/splice-common-frontend-utils';
 import React from 'react';
 import { z } from 'zod';
 

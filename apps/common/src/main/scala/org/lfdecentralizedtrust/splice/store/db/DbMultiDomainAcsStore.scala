@@ -22,7 +22,6 @@ import org.lfdecentralizedtrust.splice.environment.ledger.api.{
   TransactionTreeUpdate,
   TreeUpdateOrOffsetCheckpoint,
 }
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.store.*
 import org.lfdecentralizedtrust.splice.util.{
   AssignedContract,
@@ -38,7 +37,7 @@ import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.lifecycle.{CloseContext, FutureUnlessShutdown}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.resource.DbStorage
-import com.digitalasset.canton.topology.SynchronizerId
+import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.ShowUtil.showPretty
 
@@ -55,6 +54,7 @@ import org.lfdecentralizedtrust.splice.store.db.AcsQueries.{
   SelectFromAcsTableWithStateResult,
 }
 import org.lfdecentralizedtrust.splice.store.db.AcsTables.ContractStateRowData
+import AsUpdateReturning.*
 import com.daml.nonempty.NonEmpty
 import com.digitalasset.canton.data.CantonTimestamp
 import com.daml.metrics.api.MetricHandle.LabeledMetricsFactory
@@ -89,7 +89,7 @@ final class DbMultiDomainAcsStore[TXE](
       ? <: AcsInterfaceViewRowData,
     ],
     txLogConfig: TxLogStore.Config[TXE],
-    domainMigrationInfo: DomainMigrationInfo,
+    val domainMigrationId: Long,
     retryProvider: RetryProvider,
     ingestionConfig: IngestionConfig,
     /** Allows processing the summary in a store-specific manner, e.g., to produce metrics
@@ -136,8 +136,6 @@ final class DbMultiDomainAcsStore[TXE](
       throw new RuntimeException("This store is not using a TxLog")
     }
   }
-
-  def domainMigrationId: Long = domainMigrationInfo.currentMigrationId
 
   private[this] def txLogTableName =
     txLogTableNameOpt.getOrElse(throw new RuntimeException("This store doesn't use a TxLog"))
@@ -212,6 +210,31 @@ final class DbMultiDomainAcsStore[TXE](
       )
       .map(result => contractWithStateFromRow(companion)(result))
       .value
+  }
+
+  override def lookupContractsById[C, TCid <: ContractId[?], T](
+      companion: C
+  )(ids: Seq[ContractId[?]])(implicit
+      companionClass: ContractCompanion[C, TCid, T],
+      traceContext: TraceContext,
+  ): Future[Seq[ContractWithState[TCid, T]]] = {
+    if (ids.isEmpty) Future.successful(Seq.empty)
+    else {
+      waitUntilAcsIngested {
+        storage
+          .query( // index: acs_store_template_sid_mid_cid
+            selectFromAcsTableWithState(
+              acsTableName,
+              acsStoreId,
+              domainMigrationId,
+              companion,
+              additionalWhere = (sql"and " ++ inClause("acs.contract_id", ids)).toActionBuilder,
+            ),
+            "lookupContractsById",
+          )
+          .map(result => result.map(contractWithStateFromRow(companion)(_)))
+      }
+    }
   }
 
   /** Returns any contract of the same template as the passed companion.
@@ -356,9 +379,23 @@ final class DbMultiDomainAcsStore[TXE](
 
   override private[splice] def listExpiredFromPayloadExpiry[C, TCid <: ContractId[
     T
-  ], T <: Template](companion: C)(implicit
+  ], T <: Template](
+      companion: C,
+      ignoredPartiesStore: Option[IgnoredPartiesStore] = None,
+      ignoredPartyFields: Seq[String] = Seq.empty,
+  )(implicit
       companionClass: ContractCompanion[C, TCid, T]
   ): ListExpiredContracts[TCid, T] = { (now, limit) => implicit traceContext =>
+    val ignoredParties = ignoredPartiesStore.fold(Set.empty[PartyId])(_.getAll)
+    val ignoredPartiesFilter: SQLActionBuilder =
+      if (ignoredParties.isEmpty || ignoredPartyFields.isEmpty) sql""
+      else
+        ignoredPartyFields.foldLeft(sql"") { (acc, field) =>
+          (acc ++ sql" and " ++ notInClause(
+            s"acs.create_arguments->>'$field'",
+            ignoredParties,
+          )).toActionBuilder
+        }
     for {
       _ <- waitUntilAcsIngested()
       result <- storage
@@ -368,7 +405,8 @@ final class DbMultiDomainAcsStore[TXE](
             acsStoreId,
             domainMigrationId,
             companion,
-            additionalWhere = sql"""and acs.contract_expires_at < $now""",
+            additionalWhere =
+              (sql"""and acs.contract_expires_at < $now""" ++ ignoredPartiesFilter).toActionBuilder,
             orderLimit = sql"""limit ${sqlLimit(limit)}""",
           ),
           "listExpiredFromPayloadExpiry",
@@ -955,26 +993,6 @@ final class DbMultiDomainAcsStore[TXE](
           case Some(descriptor) => initializeDescriptor(descriptor).map(TxLogStoreId.subst)
           case None => Future.successful(StoreNotUsed[TxLogStoreId]())
         }
-        _ <- txLogInitResult match {
-          case StoreHasData(txLogStoreId, _) => cleanUpDataAfterDomainMigration(txLogStoreId)
-          case StoreHasNoData(txLogStoreId) => cleanUpDataAfterDomainMigration(txLogStoreId)
-          case _ => Future.unit
-        }
-
-        acsSizeInDb <- acsInitResult match {
-          case StoreHasData(acsStoreId, _) =>
-            storage
-              .querySingle(
-                sql"""
-                  select count(*)
-                  from #$acsTableName
-                  where store_id = ${acsStoreId} and migration_id = $domainMigrationId
-                  """.as[Int].headOption,
-                "initialize.getAcsCount",
-              )
-              .getOrElse(0)
-          case _ => FutureUnlessShutdown.pure(0)
-        }
       } yield {
         def initState(
             acsStoreId: AcsStoreId,
@@ -987,7 +1005,6 @@ final class DbMultiDomainAcsStore[TXE](
             _.withInitialState(
               acsStoreId = acsStoreId,
               txLogStoreId = txLogStoreId,
-              acsSizeInDb = acsSizeInDb,
               lastIngestedOffset = lastIngestedOffset,
             )
           )
@@ -1149,37 +1166,43 @@ final class DbMultiDomainAcsStore[TXE](
           // This is fine because all clients are expected to use [[waitUntilAcsIngested()]] to avoid
           // reading ACS data before it has finished ingesting.
           _ <- clearDataForCurrentMigrationId()
-          acsSize <- source.runWith(
-            Sink.foldAsync[Int, Seq[BaseLedgerConnection.ActiveContractsItem]](0) {
-              case (acsSizeSoFar, batch) =>
-                val summaryState = MutableIngestionSummary.empty
-                ingestAcsBatch(
-                  offset,
-                  batch.collect { case ActiveContractsItem.ActiveContract(contract) => contract },
-                  batch.collect { case ActiveContractsItem.IncompleteUnassign(unassign) =>
-                    unassign
-                  },
-                  batch.collect { case ActiveContractsItem.IncompleteAssign(assign) => assign },
-                  summaryState,
-                ).map { _ =>
-                  val newAcsSize = summaryState.acsSizeDiff + acsSizeSoFar
+          _ <- source.runWith(
+            Sink.foreachAsync[Seq[BaseLedgerConnection.ActiveContractsItem]](1) { batch =>
+              val summaryState = MutableIngestionSummary.empty
+              logger.debug(
+                s"Ingesting ACS batch with size: ${batch.size}"
+              )
+              metrics.ingestionTimePerACSBatch
+                .timeFuture {
+                  ingestAcsBatch(
+                    offset,
+                    batch.collect { case ActiveContractsItem.ActiveContract(contract) =>
+                      contract
+                    },
+                    batch.collect { case ActiveContractsItem.IncompleteUnassign(unassign) =>
+                      unassign
+                    },
+                    batch.collect { case ActiveContractsItem.IncompleteAssign(assign) => assign },
+                    summaryState,
+                  )
+                }
+                .map { _ =>
                   val summary = summaryState
                     .toIngestionSummary(
                       synchronizerIdToRecordTime = Map.empty,
                       offset = offset,
-                      newAcsSize = newAcsSize,
+                      acsSizeDiff = summaryState.acsSizeDiff,
                       metrics = metrics,
                     )
                   handleIngestionSummary(summary)
                   logger.debug(show"Ingested ACS batch $summary")
-                  newAcsSize
                 }
             }
           )
           // A store is considered initialized if the last ingested offset is set
           // Therefore, we must do that after the ACS is ingested,
           // so that in case of failure the whole ACS ingestion will be retried.
-          _ <- markAcsIngestedAsOf(offset, acsSize)
+          _ <- markAcsIngestedAsOf(offset)
         } yield ()
       }
     }
@@ -1197,10 +1220,18 @@ final class DbMultiDomainAcsStore[TXE](
           sqlu"delete from incomplete_reassignments where store_id = $acsStoreId and migration_id = $domainMigrationId",
           "clearDataForCurrentMigrationId.deleteReassignments",
         )
+        nArchive <- acsArchiveConfigOpt match {
+          case Some(AcsArchiveConfig(archiveTableName, _)) =>
+            storage.update(
+              sqlu"delete from #$archiveTableName where store_id = $acsStoreId and migration_id = $domainMigrationId",
+              "clearDataForCurrentMigrationId.deleteArchive",
+            )
+          case None => FutureUnlessShutdown.pure(0)
+        }
       } yield {
-        if (nAcs > 0 || nReassignments > 0) {
+        if (nAcs > 0 || nReassignments > 0 || nArchive > 0) {
           logger.warn(
-            s"Deleted $nAcs rows from ACS table and $nReassignments incomplete reassignments for store $acsStoreId and migration $domainMigrationId. " +
+            s"Deleted $nAcs rows from ACS table, $nReassignments incomplete reassignments, and $nArchive archive rows for store $acsStoreId and migration $domainMigrationId. " +
               "This should only happen if the store already had some data, but was not marked as having ingested the ACS " +
               "(because of a previous failed ACS ingestion attempt)."
           )
@@ -1328,18 +1359,18 @@ final class DbMultiDomainAcsStore[TXE](
                   acsInserts.toList ++ incompleteOutInserts ++ incompleteInInserts
                 ),
               "ingestAcsBatch",
-            )
+            )(implicitly, implicitly, _ => false)
         } yield ()
       }
     }
 
-    private def markAcsIngestedAsOf(offset: Long, acsSize: Int)(implicit
+    private def markAcsIngestedAsOf(offset: Long)(implicit
         traceContext: TraceContext
     ): Future[Unit] = {
       storage.update(updateOffset(offset), "markAcsIngestedAsOf").map { _ =>
         state
           .getAndUpdate(
-            _.withUpdate(acsSize, offset)
+            _.withUpdate(offset)
           )
           .signalOffsetChanged(offset)
 
@@ -1363,7 +1394,11 @@ final class DbMultiDomainAcsStore[TXE](
           .sequentialTraverse(steps) {
             case batch: IngestTransactionTreesBatch =>
               storage
-                .queryAndUpdate(ingestTransactionTrees(batch), "ingestTransactionTrees")
+                .queryAndUpdate(ingestTransactionTrees(batch), "ingestTransactionTrees")(
+                  implicitly,
+                  implicitly,
+                  _ => false,
+                )
                 .map { summaryState =>
                   val lastTree = batch.batch.last.tree
                   val synchronizerIdToRecordTime = batch.batch
@@ -1375,7 +1410,6 @@ final class DbMultiDomainAcsStore[TXE](
                   state
                     .getAndUpdate(s =>
                       s.withUpdate(
-                        s.acsSize + summaryState.acsSizeDiff,
                         lastTree.getOffset,
                         synchronizerIdToRecordTime.toMap,
                       )
@@ -1385,7 +1419,7 @@ final class DbMultiDomainAcsStore[TXE](
                     summaryState.toIngestionSummary(
                       offset = lastTree.getOffset,
                       synchronizerIdToRecordTime = synchronizerIdToRecordTime.toMap,
-                      newAcsSize = state.get().acsSize,
+                      acsSizeDiff = summaryState.acsSizeDiff,
                       metrics = metrics,
                     )
                   logger.debug(
@@ -1398,13 +1432,12 @@ final class DbMultiDomainAcsStore[TXE](
                 .queryAndUpdate(
                   ingestReassignment(reassignment.offset, reassignment.transfer),
                   "ingestReassignment",
-                )
+                )(implicitly, implicitly, _ => false)
                 .map { summaryState =>
                   val reassignmentRecordTimes = Map(synchronizerId -> reassignment.recordTime)
                   state
                     .getAndUpdate(s =>
                       s.withUpdate(
-                        s.acsSize + summaryState.acsSizeDiff,
                         reassignment.offset,
                         reassignmentRecordTimes,
                       )
@@ -1414,7 +1447,7 @@ final class DbMultiDomainAcsStore[TXE](
                     summaryState.toIngestionSummary(
                       synchronizerIdToRecordTime = reassignmentRecordTimes,
                       offset = reassignment.offset,
-                      newAcsSize = state.get().acsSize,
+                      acsSizeDiff = summaryState.acsSizeDiff,
                       metrics = metrics,
                     )
                   logger.debug(show"Ingested reassignment $summary")
@@ -1434,13 +1467,13 @@ final class DbMultiDomainAcsStore[TXE](
                 )
                 .map { _ =>
                   state
-                    .getAndUpdate(s => s.withUpdate(s.acsSize, offset, synchronizerIdToRecordTime))
+                    .getAndUpdate(s => s.withUpdate(offset, synchronizerIdToRecordTime))
                     .signalWaiters(offset, synchronizerIdToRecordTime)
                   val summary =
                     MutableIngestionSummary.empty.toIngestionSummary(
                       synchronizerIdToRecordTime = synchronizerIdToRecordTime,
                       offset = offset,
-                      newAcsSize = state.get().acsSize,
+                      acsSizeDiff = 0,
                       metrics = metrics,
                     )
                   logger.debug(show"Ingested offset checkpoint $offset")
@@ -2154,79 +2187,6 @@ final class DbMultiDomainAcsStore[TXE](
     }
   }
 
-  private[this] def cleanUpDataAfterDomainMigration(
-      txLogStoreId: TxLogStoreId
-  )(implicit tc: TraceContext): Future[Unit] = {
-    txLogTableNameOpt.fold(Future.unit) { _ =>
-      val previousMigrationId = domainMigrationInfo.currentMigrationId - 1
-      domainMigrationInfo.migrationTimeInfo match {
-        case Some(info) =>
-          if (info.synchronizerWasPaused) {
-            verifyNoRolledBackData(txLogStoreId, previousMigrationId, info.acsRecordTime)
-          } else {
-            deleteRolledBackTxLogEntries(txLogStoreId, previousMigrationId, info.acsRecordTime)
-          }
-        case _ =>
-          logger.debug("No previous domain migration, not checking or deleting txlog entries")
-          Future.unit
-      }
-    }
-  }
-
-  private[this] def verifyNoRolledBackData(
-      txLogStoreId: TxLogStoreId, // Not using the storeId from the state, as the state might not be updated yet
-      migrationId: Long,
-      recordTime: CantonTimestamp,
-  )(implicit tc: TraceContext) = {
-    val action =
-      sql"""
-            select count(*) from #$txLogTableName
-            where store_id = $txLogStoreId and migration_id = $migrationId and record_time > $recordTime
-          """
-        .as[Long]
-        .head
-        .map(rows =>
-          if (rows > 0) {
-            throw new IllegalStateException(
-              s"Found $rows rows for $txLogStoreDescriptor where migration_id = $migrationId and record_time > $recordTime, " +
-                "but the configuration says the domain was paused during the migration. " +
-                "Check the domain migration configuration and the content of the txlog database."
-            )
-          } else {
-            logger.debug(
-              s"No txlog entries found for $txLogStoreDescriptor where migration_id = $migrationId and record_time > $recordTime"
-            )
-          }
-        )
-    storage.query(action, "verifyNoRolledBackData")
-  }
-
-  private[this] def deleteRolledBackTxLogEntries(
-      txLogStoreId: TxLogStoreId, // Not using the storeId from the state, as the state might not be updated yet
-      migrationId: Long,
-      recordTime: CantonTimestamp,
-  )(implicit tc: TraceContext) = {
-    logger.info(
-      s"Deleting all txlog entries for $txLogStoreDescriptor where migration = $migrationId and record time > $recordTime"
-    )
-    val action =
-      sqlu"""
-            delete from #$txLogTableName
-            where store_id = $txLogStoreId and migration_id = $migrationId and record_time > $recordTime
-          """.map(rows =>
-        if (rows > 0) {
-          logger.info(
-            s"Deleted $rows txlog entries for $txLogStoreDescriptor where migration_id = $migrationId and record_time > $recordTime. " +
-              "This is expected during a disaster recovery, where we are rolling back the domain to a previous state. " +
-              "In is NOT expected during regular hard domain migrations."
-          )
-        } else {
-          logger.info(s"No entries deleted for $txLogStoreDescriptor.")
-        }
-      )
-    storage.update(action, "deleteRolledBackTxLogEntries")
-  }
-
   @SuppressWarnings(Array("org.wartremover.warts.OptionPartial"))
   private def reassignmentEventUnassignFromRow(
       row: SelectFromAcsTableWithStateResult
@@ -2269,7 +2229,6 @@ object DbMultiDomainAcsStore {
   /** @param acsStoreId The primary key of this stores ACS entry in the store_descriptors table
     * @param txLogStoreId The primary key of this stores TxLog entry in the store_descriptors table
     * @param offset The last ingested offset, if any
-    * @param acsSize The number of active contracts in the store
     * @param offsetChanged A promise that is not yet completed, and will be completed the next time the offset changes
     * @param offsetIngestionsToSignal A map from offsets to promises. The keys are offsets that are not ingested yet.
     *                                 The values are promises that are not completed, and will be completed when
@@ -2281,7 +2240,6 @@ object DbMultiDomainAcsStore {
       acsStoreId: Option[AcsStoreId],
       txLogStoreId: Option[TxLogStoreId],
       offset: Option[Long],
-      acsSize: Int,
       offsetChanged: Promise[Unit],
       offsetIngestionsToSignal: SortedMap[Long, Promise[Unit]],
       lastIngestedRecordTimes: Map[SynchronizerId, CantonTimestamp],
@@ -2290,7 +2248,6 @@ object DbMultiDomainAcsStore {
     def withInitialState(
         acsStoreId: AcsStoreId,
         txLogStoreId: Option[TxLogStoreId],
-        acsSizeInDb: Int,
         lastIngestedOffset: Option[Long],
     ): State = {
       assert(
@@ -2303,14 +2260,12 @@ object DbMultiDomainAcsStore {
       this.copy(
         acsStoreId = Some(acsStoreId),
         txLogStoreId = txLogStoreId,
-        acsSize = acsSizeInDb,
         offset = lastIngestedOffset,
         offsetChanged = nextOffsetChanged,
       )
     }
 
     def withUpdate(
-        newAcsSize: Int,
         newOffset: Long,
         recordTimes: Map[SynchronizerId, CantonTimestamp] = Map.empty,
     ): State = {
@@ -2330,7 +2285,6 @@ object DbMultiDomainAcsStore {
         }
       }
       this.copy(
-        acsSize = newAcsSize,
         offset = Some(newOffset),
         offsetChanged = nextOffsetChanged,
         offsetIngestionsToSignal = offsetIngestionsToSignal.filter { case (offsetToSignal, _) =>
@@ -2423,7 +2377,6 @@ object DbMultiDomainAcsStore {
       acsStoreId = None,
       txLogStoreId = None,
       offset = None,
-      acsSize = 0,
       offsetChanged = Promise(),
       offsetIngestionsToSignal = SortedMap.empty,
       lastIngestedRecordTimes = Map.empty,

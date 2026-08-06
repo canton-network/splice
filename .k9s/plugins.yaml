@@ -34,3 +34,16 @@ plugins:
     args:
       - -c
       - "kubectl events --context $CONTEXT --namespace $NAMESPACE --for $RESOURCE_NAME.$RESOURCE_GROUP/$NAME --watch"
+
+  # shift-R on a stack to kick a reconciliation.
+  pulumi-reconcile:
+    shortCut: Shift-R
+    description: "Pulumi Reconcile"
+    scopes:
+      - stacks
+    command: bash
+    background: false
+    confirm: true
+    args:
+      - -c
+      - "kubectl annotate stack $NAME -n $NAMESPACE \"pulumi.com/reconciliation-request=$(date +%s)\" --overwrite"

@@ -8,7 +8,6 @@ import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.synchronizer.block.data.BlockInfo
 import com.digitalasset.canton.synchronizer.sequencer.{
   InFlightAggregationUpdates,
-  InFlightAggregations,
   SubmissionOutcome,
 }
 import com.digitalasset.canton.topology.Member
@@ -52,8 +51,6 @@ final case class CompleteBlockUpdate(block: BlockInfo) extends OrderedBlockUpdat
   *   aggregations.
   * @param lastSequencerEventTimestamp
   *   The highest timestamp of an event in `events` addressed to the sequencer, if any.
-  * @param inFlightAggregations
-  *   Updated inFlightAggregations to be used for processing subsequent chunks.
   * @param submissionsOutcomes
   *   A list of internal block sequencer states after processing submissions for the chunk. This is
   *   used by the unified sequencer to generate and write events in the database sequencer.
@@ -63,10 +60,11 @@ final case class ChunkUpdate(
     invalidAcknowledgements: Seq[(Member, CantonTimestamp, BaseAlarm)] = Seq.empty,
     inFlightAggregationUpdates: InFlightAggregationUpdates = Map.empty,
     lastSequencerEventTimestamp: Option[CantonTimestamp],
-    inFlightAggregations: InFlightAggregations,
     submissionsOutcomes: Seq[SubmissionOutcome] = Seq.empty,
 ) extends OrderedBlockUpdate
 
 object ChunkUpdate {
-  val noop = ChunkUpdate(lastSequencerEventTimestamp = None, inFlightAggregations = Map.empty)
+  val noop = ChunkUpdate(
+    lastSequencerEventTimestamp = None
+  )
 }

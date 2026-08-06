@@ -457,10 +457,8 @@ class WalletPaymentFrontendIntegrationTest
       webDriverType: WebDriverType,
   ): ContractWithState[AcceptedAppPayment.ContractId, AcceptedAppPayment] = {
     actAndCheck(
-      "Alice clicks on the button to confirm the payment", {
-        eventuallyClickOn(className("payment-accept"))
-        go to s"http://localhost:3000"
-      },
+      "Alice clicks on the button to confirm the payment",
+      eventuallyClickOn(className("payment-accept")),
     )(
       "The payment is processed",
       _ => {

@@ -6,12 +6,13 @@ package org.lfdecentralizedtrust.splice.store
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   Amulet,
   AppRewardCoupon,
+  RewardCouponV2,
   ValidatorRewardCoupon,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.transferinput.InputAmulet
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.IssuingMiningRound
 import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
-import org.lfdecentralizedtrust.splice.util.Contract
+import org.lfdecentralizedtrust.splice.util.{Contract, ContractWithState}
 import com.digitalasset.canton.tracing.TraceContext
 
 import scala.concurrent.Future
@@ -114,4 +115,16 @@ trait TransferInputStore extends AppStore with LimitHelpers {
           )
         ),
     )
+
+  /** Returns RewardCouponV2 contracts filtered by assignment status,
+    * sorted by expiresAt ascending. Implemented in DB stores with
+    * SQL-level filtering to avoid page-limit issues.
+    */
+  def listRewardCouponsV2(
+      includeUnassigned: Boolean,
+      includeAssigned: Boolean,
+      limit: Limit = defaultLimit,
+  )(implicit tc: TraceContext): Future[Seq[
+    ContractWithState[RewardCouponV2.ContractId, RewardCouponV2]
+  ]]
 }

@@ -6,8 +6,8 @@ import {
   SvVote,
   VotesHooks,
   VotesHooksContext,
-} from '@lfdecentralizedtrust/splice-common-frontend';
-import { Contract } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+} from '@canton-network/splice-common-frontend';
+import { Contract } from '@canton-network/splice-common-frontend-utils';
 import { UseQueryResult } from '@tanstack/react-query';
 import React from 'react';
 

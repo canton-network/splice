@@ -55,6 +55,12 @@ class WalletTxLogAcsIntegrationTest
         localToStart.foreach(_.waitForInitialization())
       }
 
+      clue("Start SV1 validator and onboard SV1 as an end user") {
+        sv1ValidatorBackend.start()
+        sv1ValidatorBackend.waitForInitialization()
+        onboardWalletUser(sv1WalletClient, sv1ValidatorBackend)
+      }
+
       // Note: this test uses an SV party, as it's easier to create
       // amulets for parties hosted on an SV participant.
       val sv1UserParty = sv1Backend.getDsoInfo().svParty
@@ -80,12 +86,6 @@ class WalletTxLogAcsIntegrationTest
           )
         },
       )
-
-      clue("Start SV1 validator and onboard SV1 as an end user") {
-        sv1ValidatorBackend.start()
-        sv1ValidatorBackend.waitForInitialization()
-        onboardWalletUser(sv1WalletClient, sv1ValidatorBackend)
-      }
 
       checkTxHistory(
         sv1WalletClient,

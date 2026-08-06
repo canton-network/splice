@@ -13,6 +13,7 @@ import com.digitalasset.canton.crypto.store.CryptoPrivateStoreExtended
 import com.digitalasset.canton.health.ComponentHealthState
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
+import com.digitalasset.canton.metrics.{DecryptionMetrics, SigningMetrics}
 import com.digitalasset.canton.tracing.TraceContext
 import com.google.protobuf.ByteString
 import org.bouncycastle.asn1.DEROctetString
@@ -23,7 +24,7 @@ import org.bouncycastle.crypto.params.Ed25519PrivateKeyParameters
 import org.bouncycastle.jce.ECNamedCurveTable
 import org.bouncycastle.jce.spec.ECNamedCurveSpec
 
-import java.security.interfaces.{ECPrivateKey, RSAPrivateKey}
+import java.security.interfaces.{ECPrivateKey, RSAPrivateCrtKey, RSAPrivateKey}
 import java.security.spec.{
   ECGenParameterSpec,
   ECPublicKeySpec,
@@ -45,6 +46,8 @@ class JcePrivateCrypto(
     override val signingSchemes: SigningCryptoSchemes,
     override val encryptionSchemes: EncryptionCryptoSchemes,
     override protected val store: CryptoPrivateStoreExtended,
+    override val signingMetrics: SigningMetrics,
+    override val decryptionMetrics: DecryptionMetrics,
     override protected val timeouts: ProcessingTimeout,
     override protected val loggerFactory: NamedLoggerFactory,
 )(override implicit val ec: ExecutionContext)
@@ -340,18 +343,30 @@ object JcePrivateCrypto {
           .leftMap(err => s"Failed to derive EC public key: $err")
       } yield ByteString.copyFrom(derivedPublicKey)
 
-    // Derives the public key from an RSA private key using the private key’s modulus and the standard exponent (e = 65537).
+    // Derives the public key from an RSA private key using the private key's modulus and
+    // the public exponent extracted from the CRT key parameters.
     def deriveRsaPublicKey(
         privateKey: PrivateKey
     ): Either[String, ByteString] =
       for {
         jKey <- JceJavaKeyConverter.toJava(privateKey).leftMap(_.toString)
-        rsaPrivateKey <- jKey match {
-          case rsaPrivateKey: RSAPrivateKey => Right(rsaPrivateKey)
+        rsaCrtPrivateKey <- jKey match {
+          case rsaCrtPrivateKey: RSAPrivateCrtKey =>
+            Right(rsaCrtPrivateKey)
+          case _: RSAPrivateKey =>
+            Left(
+              s"RSA private key is not a CRT key, cannot extract public exponent [${privateKey.id}]"
+            )
           case _ => Left(s"Invalid RSA key [${privateKey.id}]")
         }
-        modulus = rsaPrivateKey.getModulus
-        pubSpec = new RSAPublicKeySpec(modulus, RSAKeyGenParameterSpec.F4)
+        publicExponent = rsaCrtPrivateKey.getPublicExponent
+        _ <- Either.cond(
+          publicExponent == RSAKeyGenParameterSpec.F4,
+          (),
+          s"RSA public exponent $publicExponent does not match expected value ${RSAKeyGenParameterSpec.F4}",
+        )
+        modulus = rsaCrtPrivateKey.getModulus
+        pubSpec = new RSAPublicKeySpec(modulus, publicExponent)
         keyFactory = KeyFactory.getInstance("RSA", JceSecurityProvider.bouncyCastleProvider)
         derivedPublicKey <- Either
           .catchOnly[InvalidKeySpecException](keyFactory.generatePublic(pubSpec).getEncoded)

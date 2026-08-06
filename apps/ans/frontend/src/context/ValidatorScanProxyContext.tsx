@@ -1,10 +1,10 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { useUserState } from '@lfdecentralizedtrust/splice-common-frontend';
+import { useUserState } from '@canton-network/splice-common-frontend';
 import {
   BaseApiMiddleware,
   OpenAPILoggingMiddleware,
-} from '@lfdecentralizedtrust/splice-common-frontend-utils';
+} from '@canton-network/splice-common-frontend-utils';
 import React, { useContext, useMemo } from 'react';
 import {
   ScanProxyApi,
@@ -13,7 +13,7 @@ import {
   Middleware,
   RequestContext,
   ResponseContext,
-} from '@lfdecentralizedtrust/scan-proxy-openapi';
+} from '@canton-network/scan-proxy-openapi';
 
 //TODO(DACH-NY/canton-network-node#8571) deduplicate this and reuse from specific libraries instead of all on common frontend
 const ValidatorScanProxyContext = React.createContext<ScanProxyApi | undefined>(undefined);

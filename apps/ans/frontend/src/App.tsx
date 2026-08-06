@@ -5,8 +5,9 @@ import {
   theme,
   UserProvider,
   ErrorRouterPage,
-} from '@lfdecentralizedtrust/splice-common-frontend';
-import { replaceEqualDeep } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+  retryQuery,
+} from '@canton-network/splice-common-frontend';
+import { replaceEqualDeep } from '@canton-network/splice-common-frontend-utils';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import React from 'react';
@@ -33,6 +34,7 @@ const Providers: React.FC<React.PropsWithChildren> = ({ children }) => {
       queries: {
         refetchInterval,
         structuralSharing: replaceEqualDeep,
+        retry: retryQuery,
       },
     },
   });

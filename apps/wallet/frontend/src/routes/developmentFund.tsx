@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import React from 'react';
 import { Alert, Box, Stack } from '@mui/material';
-import { Loading } from '@lfdecentralizedtrust/splice-common-frontend';
+import { Loading } from '@canton-network/splice-common-frontend';
 import DevelopmentFundTotal from '../components/DevelopmentFundTotal';
 import DevelopmentFundAllocation from '../components/DevelopmentFundAllocation';
 import DevelopmentFundCouponList from '../components/DevelopmentFundCouponList';

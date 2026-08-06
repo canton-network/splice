@@ -89,8 +89,10 @@ final class P2PNetworkOutModule[
       _.asyncSend(P2PNetworkOut.Network.Authenticated(bftNodeId, maybeP2PEndpoint))
     )
 
-  override def onConnect(p2pEndpointId: P2PEndpoint.Id)(implicit traceContext: TraceContext): Unit =
-    state.maybeSelf.foreach(_.asyncSend(P2PNetworkOut.Network.Connected(p2pEndpointId)))
+  override def onConnect(maybeP2pEndpointId: Option[P2PEndpoint.Id])(implicit
+      traceContext: TraceContext
+  ): Unit =
+    state.maybeSelf.foreach(_.asyncSend(P2PNetworkOut.Network.Connected(maybeP2pEndpointId)))
 
   override def onDisconnect(p2pEndpointId: P2PEndpoint.Id)(implicit
       traceContext: TraceContext
@@ -105,7 +107,7 @@ final class P2PNetworkOutModule[
     message match {
       case P2PNetworkOut.Start =>
         val p2pEndpoints =
-          context.blockingAwait(p2pEndpointsStore.listEndpoints, blockingDbReadTimeout)
+          context.blockingAwait(p2pEndpointsStore.listEndpoints(), blockingDbReadTimeout)
         connectInitialNodes(p2pEndpoints)
         startModulesIfNeeded()
 
@@ -117,9 +119,12 @@ final class P2PNetworkOutModule[
         logger.info("Disconnecting from operator-removed endpoint " + p2pEndpointId)
         disconnect(p2pEndpointId)
 
-      case P2PNetworkOut.Network.Connected(p2pEndpointId) =>
-        if (connectedP2PEndpointIds.add(p2pEndpointId)) {
-          logger.info(s"P2P endpoint $p2pEndpointId is now connected")
+      case P2PNetworkOut.Network.Connected(maybeP2pEndpointId) =>
+        if (maybeP2pEndpointId.forall(connectedP2PEndpointIds.add)) {
+          logger.info(
+            s"P2P endpoint ${maybeP2pEndpointId.map(_.toString).getOrElse("<incoming connection>")} " +
+              s"is now connected"
+          )
           emitConnectionStateMetricsAndLogEndpointsStatus(notifyMempool = false)
         }
 
@@ -212,6 +217,7 @@ final class P2PNetworkOutModule[
       admin: P2PNetworkOut.Admin
   )(implicit context: E#ActorContextT[P2PNetworkOut.Message], traceContext: TraceContext): Unit =
     admin match {
+
       case Admin.AddEndpoint(p2pEndpoint, callback) =>
         if (p2pConnectionState.isDefined(p2pEndpoint.id)) {
           logger.info(s"Operator requested adding P2P endpoint $p2pEndpoint but it already exists")
@@ -229,6 +235,7 @@ final class P2PNetworkOutModule[
               abort(s"Failed to P2P add endpoint $p2pEndpoint", exception)
           }
         }
+
       case Admin.RemoveEndpoint(p2pEndpointId, callback) =>
         if (p2pConnectionState.isDefined(p2pEndpointId)) {
           logger.info(s"Removing existing P2P endpoint $p2pEndpointId as requested by operator")
@@ -248,6 +255,16 @@ final class P2PNetworkOutModule[
           )
           callback(false)
         }
+
+      case Admin.ListConfiguredEndpoints(callback) =>
+        context.pipeToSelf(p2pEndpointsStore.listEndpoints()) {
+          case Success(endpoints) =>
+            callback(endpoints.sortBy(_.id)) // For output determinism and easier testing
+            None
+          case Failure(exception) =>
+            abort(s"Failed to list P2P endpoints", exception)
+        }
+
       case Admin.GetStatus(callback, p2pEndpointIds) =>
         logger.info(
           s"Operator requested P2P status for endpoints ${p2pEndpointIds.getOrElse("<all>")}"
@@ -445,18 +462,31 @@ final class P2PNetworkOutModule[
       mc: MetricsContext,
       traceContext: TraceContext,
   ): Unit = {
-    emitConnectedCount(metrics, connectedP2PEndpointIds.size)
+    val status = getStatus()
+    val connectedCount = status.endpointStatuses.count {
+      case PeerConnectionStatus.PeerEndpointStatus(
+            _,
+            _,
+            PeerEndpointHealth(
+              PeerEndpointHealthStatus.Authenticated(_) | PeerEndpointHealthStatus.Unauthenticated,
+              _,
+            ),
+          ) =>
+        true
+      case PeerConnectionStatus.PeerIncomingConnection(_) => true
+      case _ => false
+    }
+    emitConnectedCount(metrics, connectedCount)
     emitAuthenticatedCount(metrics, p2pConnectionState.authenticatedCount.value)
-    logEmitForwardP2PStatus(notifyMempool)
+    logEmitForwardP2PStatus(status, notifyMempool)
   }
 
-  private def logEmitForwardP2PStatus(notifyMempool: Boolean)(implicit
-      context: E#ActorContextT[P2PNetworkOut.Message],
-      traceContext: TraceContext,
-  ): Unit = {
+  private def logEmitForwardP2PStatus(
+      status: SequencerBftAdminData.PeerNetworkStatus,
+      notifyMempool: Boolean,
+  )(implicit traceContext: TraceContext): Unit = {
     if (notifyMempool)
       sendConnectivityUpdateToMempool()
-    val status = getStatus()
     metrics.p2p.update(status)
     logger.info(s"P2P endpoints status: $status")
   }

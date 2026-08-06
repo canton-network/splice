@@ -387,7 +387,7 @@ class ParticipantPartyMigrator(
       getAcsSnapshot: PartyId => Future[ByteString],
   ): Future[Unit] = {
     for {
-      _ <- participantAdminConnection.disconnectFromAllDomains()
+      _ <- participantAdminConnection.disconnectFromAllSynchronizers()
       // ACS exports are expensive so do not change this to be parallel.
       _ <- MonadUtil.sequentialTraverse(partyIds.toSeq) { partyId =>
         for {
@@ -395,8 +395,8 @@ class ParticipantPartyMigrator(
           _ <- participantAdminConnection.uploadAcsSnapshot(Seq(acsSnapshot), synchronizerId)
         } yield ()
       }
-      _ <- participantAdminConnection.reconnectAllDomains()
-      _ <- participantAdminConnection.connectDomain(decentralizedSynchronizerAlias)
+      _ <- participantAdminConnection.reconnectAllSynchronizers()
+      _ <- participantAdminConnection.connectSynchronizer(decentralizedSynchronizerAlias)
       _ = logger.info("ACS import complete")
     } yield ()
   }

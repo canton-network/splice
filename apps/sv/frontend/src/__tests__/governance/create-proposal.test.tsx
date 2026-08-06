@@ -11,9 +11,9 @@ import userEvent from '@testing-library/user-event';
 import { Wrapper } from '../helpers';
 import { createProposalActions } from '../../utils/governance';
 import { http, HttpResponse } from 'msw';
-import { dsoInfo } from '@lfdecentralizedtrust/splice-common-test-handlers';
+import { dsoInfo } from '@canton-network/splice-common-test-handlers';
 import { server, svUrl } from '../setup/setup';
-import { dateTimeFormatISO } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import dayjs from 'dayjs';
 
 const TestWrapper: React.FC<React.PropsWithChildren> = ({ children }) => {
@@ -38,11 +38,8 @@ async function checkActionSelection(actionName: string, actionValue: string, tes
   const selectInput = actionDropdown.querySelector('[role="combobox"]') as HTMLElement;
   await user.click(selectInput);
 
-  await waitFor(async () => {
-    const actionToSelect = screen.getByText(actionName);
-    expect(actionToSelect).toBeInTheDocument();
-    await user.click(actionToSelect);
-  });
+  const actionToSelect = await screen.findByText(actionName);
+  await user.click(actionToSelect);
 
   const nextButton = screen.getByText('Next');
   expect(nextButton).toBeInTheDocument();
@@ -50,7 +47,7 @@ async function checkActionSelection(actionName: string, actionValue: string, tes
 
   const actionInput = await screen.findByTestId(testId);
   const action = createProposalActions.find(a => a.value === actionValue);
-  expect(actionInput.getAttribute('value')).toBe(action!.name);
+  expect(actionInput.textContent).toBe(action!.name);
 }
 
 describe('Create Proposal', () => {
@@ -92,9 +89,6 @@ describe('Create Proposal', () => {
       </TestWrapper>
     );
 
-    const actionSelectionTitle = screen.getByText('Select an Action');
-    expect(actionSelectionTitle).toBeDefined();
-
     const actionDropdown = screen.getByTestId('select-action');
     expect(actionDropdown).toBeDefined();
 
@@ -105,9 +99,11 @@ describe('Create Proposal', () => {
       expect(screen.getByText('Offboard Member')).toBeInTheDocument();
       expect(screen.getByText('Feature Application')).toBeInTheDocument();
       expect(screen.getByText('Unfeature Application')).toBeInTheDocument();
-      expect(screen.getByText('Set Dso Rules Configuration')).toBeInTheDocument();
+      expect(
+        screen.getByText('Set Decentralized Synchronizer Operations (DSO) Rules Configuration')
+      ).toBeInTheDocument();
       expect(screen.getByText('Set Amulet Rules Configuration')).toBeInTheDocument();
-      expect(screen.getByText('Update SV Reward Weight')).toBeInTheDocument();
+      expect(screen.getByText('Update Super Validator Reward Weight')).toBeInTheDocument();
       expect(screen.getByText('Create Unclaimed Activity Record')).toBeInTheDocument();
     });
   });
@@ -132,9 +128,9 @@ describe('Create Proposal', () => {
     );
   });
 
-  test('Set Dso Rules Configuration Form is rendered after action selection', async () => {
+  test('Set Decentralized Synchronizer Operations (DSO) Rules Configuration Form is rendered after action selection', async () => {
     await checkActionSelection(
-      'Set Dso Rules Configuration',
+      'Set Decentralized Synchronizer Operations (DSO) Rules Configuration',
       'SRARC_SetConfig',
       'set-dso-config-rules-action'
     );
@@ -148,9 +144,9 @@ describe('Create Proposal', () => {
     );
   });
 
-  test('Update SV Reward Weight Form is rendered after action selection', async () => {
+  test('Update Super Validator Reward Weight Form is rendered after action selection', async () => {
     await checkActionSelection(
-      'Update SV Reward Weight',
+      'Update Super Validator Reward Weight',
       'SRARC_UpdateSvRewardWeight',
       'update-sv-reward-weight-action'
     );
@@ -192,20 +188,19 @@ describe('Create Proposal', () => {
 
     const nextButton = screen.getByText('Next');
     expect(nextButton).toBeDefined();
-    expect(nextButton.getAttribute('disabled')).toBeDefined();
+    expect(nextButton.getAttribute('disabled')).not.toBeNull();
 
     const actionDropdown = screen.getByTestId('select-action');
     expect(actionDropdown).toBeDefined();
 
     const selectInput = actionDropdown.querySelector('[role="combobox"]') as HTMLElement;
-    user.click(selectInput);
+    await user.click(selectInput);
+
+    const actionToSelect = await screen.findByText('Offboard Member');
+    await user.click(actionToSelect);
 
     await waitFor(() => {
-      const actionToSelect = screen.getByText('Offboard Member');
-      expect(actionToSelect).toBeDefined();
-      user.click(actionToSelect);
+      expect(nextButton.getAttribute('disabled')).toBeNull();
     });
-
-    expect(nextButton.getAttribute('disabled')).toBe('');
   });
 });

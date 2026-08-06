@@ -42,6 +42,7 @@ import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.{
   BftSequencerBaseTest,
   failingCryptoProvider,
 }
+import com.digitalasset.canton.version.ProtocolVersion
 import org.scalatest.wordspec.AnyWordSpec
 import org.slf4j.event.Level
 
@@ -170,12 +171,14 @@ class StateTransferMessageValidatorTest extends AnyWordSpec with BftSequencerBas
     val leaders = Seq(myId, otherId)
     val orderingTopologyInfo = OrderingTopologyInfo[ProgrammableUnitTestEnv](
       myId,
-      orderingTopology,
-      failingCryptoProvider,
-      leaders,
-      orderingTopology,
-      failingCryptoProvider,
-      leaders,
+      currentTopology = orderingTopology,
+      currentCryptoProvider = failingCryptoProvider,
+      currentLeaders = leaders,
+      currentBlacklistedNodes = Seq.empty,
+      previousTopology = orderingTopology,
+      previousCryptoProvider = failingCryptoProvider,
+      previousLeaders = leaders,
+      previousBlacklistedNodes = Seq.empty,
     )
 
     val response = BlockTransferResponse.create(Some(commitCertificate), otherId)
@@ -211,11 +214,13 @@ class StateTransferMessageValidatorTest extends AnyWordSpec with BftSequencerBas
 }
 
 object StateTransferMessageValidatorTest {
-  private val aMembershipWithOnlyOtherNode =
+  private def aMembershipWithOnlyOtherNode(implicit pv: ProtocolVersion) =
     Membership(
       myId,
-      OrderingTopology.forTesting(Set(otherId), SequencingParameters.Default),
-      Seq(otherId),
+      OrderingTopology.forTesting(Set(otherId), Option(SequencingParameters.Default)),
+      leaders = Seq(otherId),
+      blacklistedNodes = Seq.empty,
     )
-  private val aMembershipWith2Nodes = Membership.forTesting(myId, Set(otherId))
+  private def aMembershipWith2Nodes(implicit pv: ProtocolVersion) =
+    Membership.forTesting(myId, Set(otherId))
 }

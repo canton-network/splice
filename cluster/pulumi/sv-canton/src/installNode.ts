@@ -7,7 +7,7 @@ import {
   exactNamespace,
   imagePullSecretWithNonDefaultServiceAccount,
   supportsSvRunbookReset,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 import {
   configForSv,
   coreSvsToDeploy,
@@ -15,7 +15,7 @@ import {
   sv1Config,
   svConfigs,
   svRunbookConfig,
-} from '@lfdecentralizedtrust/splice-pulumi-common-sv';
+} from '@canton-network/splice-pulumi-common-sv';
 
 import { installCantonComponents } from './canton';
 
@@ -35,6 +35,9 @@ export async function installNode(
   const isFirstSv = nodeConfig.nodeName === sv1Config.nodeName;
   const isSvRunbook = nodeConfig.nodeName === svRunbookConfig.nodeName;
 
+  const config = configForSv(nodeConfig.nodeName);
+  const supportsReset = isSvRunbook ? supportsSvRunbookReset : undefined;
+
   // namespace lifecycle is managed by the main canton-network stack
   const xns = exactNamespace(nodeConfig.nodeName, true, true);
 
@@ -51,7 +54,7 @@ export async function installNode(
       auth0SvAppName: nodeConfig.auth0SvAppName,
       isFirstSv: isFirstSv,
       isCoreSv: isCoreSv,
-      ...configForSv(nodeConfig.nodeName),
+      ...config,
     },
     DecentralizedSynchronizerUpgradeConfig,
     {
@@ -79,7 +82,7 @@ export async function installNode(
     },
     undefined,
     { dependsOn: imagePullDeps },
-    isSvRunbook ? supportsSvRunbookReset : undefined,
+    supportsReset,
     serviceAccountName
   );
 }

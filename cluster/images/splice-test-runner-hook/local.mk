@@ -8,7 +8,7 @@ source_files :=	$(shell find $(src_dir)/packages/k8s/src -name '*.ts') $(shell f
 
 $(dir)/$(docker-build): $(dir)/target/LICENSE $(dir)/target/.npm_installed $(dir)/target/index.js
 
-$(dir)/target/LICENSE: ${SPLICE_ROOT}/cluster/images/LICENSE | $(dir)/target
+$(dir)/target/LICENSE: ${SPLICE_ROOT}/LICENSE | $(dir)/target
 	cp $< $@
 
 $(dir)/target/.npm_installed: $(package_files) | $(dir)/target

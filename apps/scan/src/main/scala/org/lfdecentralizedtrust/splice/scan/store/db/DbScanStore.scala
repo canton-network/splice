@@ -4,10 +4,8 @@
 package org.lfdecentralizedtrust.splice.scan.store.db
 
 import com.daml.ledger.javaapi.data.codegen.ContractId
-import com.digitalasset.canton.config.NonNegativeDuration
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.{
-  AsyncCloseable,
   AsyncOrSyncCloseable,
   CloseContext,
   FlagCloseableAsync,
@@ -30,6 +28,8 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   DsoRules_CloseVoteRequestResult,
   VoteRequest,
 }
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_UpdateSvRewardWeight
 import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.{
   ExternalPartyAmuletRules,
   TransferCommand,
@@ -37,8 +37,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletru
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.ValidatorLicense
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient
 import org.lfdecentralizedtrust.splice.scan.store.TxLogEntry.EntryType
 import org.lfdecentralizedtrust.splice.scan.store.db.ScanTables.txLogTableName
 import org.lfdecentralizedtrust.splice.scan.store.{
@@ -61,9 +59,8 @@ import org.lfdecentralizedtrust.splice.store.{
   DbVotesAcsStoreQueryBuilder,
   DbVotesTxLogStoreQueryBuilder,
   Limit,
-  PageLimit,
+  VoteResultsFilters,
   ResultsPage,
-  SortOrder,
   TxLogStore,
   UpdateHistory,
 }
@@ -80,9 +77,7 @@ import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.store.UpdateHistoryQueries.UpdateHistoryQueries
 import org.lfdecentralizedtrust.splice.store.db.AcsQueries.AcsStoreId
 import org.lfdecentralizedtrust.splice.store.db.TxLogQueries.TxLogStoreId
-import slick.jdbc.canton.SQLActionBuilder
 
-import java.time.Instant
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
 
@@ -107,15 +102,12 @@ object DbScanStore {
 class DbScanStore(
     override val key: ScanStore.Key,
     storage: DbStorage,
-    isFirstSv: Boolean,
     override protected val loggerFactory: NamedLoggerFactory,
     override protected val retryProvider: RetryProvider,
-    createScanAggregatesReader: DbScanStore => ScanAggregatesReader,
-    domainMigrationInfo: DomainMigrationInfo,
+    val domainMigrationId: Long,
     participantId: ParticipantId,
     ingestionConfig: IngestionConfig,
     storeMetrics: DbScanStoreMetrics,
-    initialRound: Long,
     override val defaultLimit: Limit,
     acsStoreDescriptorUserVersion: Option[Long] = None,
     txLogStoreDescriptorUserVersion: Option[Long] = None,
@@ -130,6 +122,12 @@ class DbScanStore(
       interfaceViewsTableNameOpt = None,
       // Any change in the store descriptor will lead to previously deployed applications
       // forgetting all persisted data once they upgrade to the new version.
+      // WARNING: Reinitializing the acs store is a very expensive operation, as it currently fetches the full
+      // unfiltered ACS from the participant, irrespective of the filter defined by `acsContractFilter`.
+      // This may lead to the entire app being unavailable or not working properly until the full ACS has been ingested.
+      // Do not modify any part of the store descriptor unless you are sure that the resulting downtime is acceptable.
+      // If you do modify it, make sure to very clearly document in the release notes that there will be planned downtime,
+      // and notify the person coordinating the deployment.
       acsStoreDescriptor = StoreDescriptor(
         version = 3,
         name = "DbScanStore",
@@ -150,7 +148,7 @@ class DbScanStore(
         ),
         userVersion = txLogStoreDescriptorUserVersion,
       ),
-      domainMigrationInfo,
+      domainMigrationId,
       ingestionConfig,
     )
     with ScanStore
@@ -171,61 +169,16 @@ class DbScanStore(
   ] = new DbScanTxLogStoreConfig(loggerFactory)
 
   override protected def closeAsync(): Seq[AsyncOrSyncCloseable] = {
-    implicit def traceContext: TraceContext = TraceContext.empty
     Seq(
-      AsyncCloseable(
-        "db_scan_store",
-        aggregator.map(_.close()),
-        NonNegativeDuration.tryFromDuration(timeouts.shutdownNetwork.duration),
-      ),
       SyncCloseable("db_scan_store_metrics", storeMetrics.close()),
       SyncCloseable("db_scan_acs_store", multiDomainAcsStore.close()),
     )
-  }
-
-  val aggregator: Future[ScanAggregator] =
-    waitUntilAcsIngested().map(_ =>
-      new ScanAggregator(
-        storage,
-        acsStoreId,
-        txLogStoreId,
-        isFirstSv,
-        createScanAggregatesReader(this),
-        loggerFactory,
-        domainMigrationId,
-        timeouts,
-        initialRound.toInt,
-      )
-    )
-
-  def aggregate()(implicit
-      tc: TraceContext
-  ): Future[Option[ScanAggregator.RoundTotals]] = {
-    for {
-      a <- aggregator
-      lastAggregateRoundTotals <- a.aggregate()
-      _ = lastAggregateRoundTotals.foreach(rt =>
-        storeMetrics.latestAggregatedRound.updateValue(rt.closedRound)
-      )
-    } yield lastAggregateRoundTotals
-  }
-
-  def backFillAggregates()(implicit
-      tc: TraceContext
-  ): Future[Option[Long]] = {
-    for {
-      a <- aggregator
-      backFilledRound <- a.backFillAggregates()
-      _ = backFilledRound.foreach(r => storeMetrics.earliestAggregatedRound.updateValue(r))
-    } yield backFilledRound
   }
 
   private[splice] def acsStoreId: AcsStoreId = multiDomainAcsStore.acsStoreId
   private[splice] def txLogStoreId: TxLogStoreId = multiDomainAcsStore.txLogStoreId
   // Round totals are derived from TxLog entries, and are therefore linked to that store
   private[splice] def roundTotalsStoreId: TxLogStoreId = txLogStoreId
-
-  override def domainMigrationId: Long = domainMigrationInfo.currentMigrationId
 
   override def lookupAmuletRules()(implicit
       tc: TraceContext
@@ -435,63 +388,6 @@ class DbScanStore(
     } yield contractWithStateFromRow(TransferCommandCounter.COMPANION)(row)).value
   }
 
-  override def listTransactions(
-      pageEndEventId: Option[String],
-      sortOrder: SortOrder,
-      limit: PageLimit,
-  )(implicit
-      tc: TraceContext
-  ): Future[Seq[TxLogEntry.TransactionTxLogEntry]] =
-    waitUntilAcsIngested {
-      val entryTypeCondition: SQLActionBuilder = inClause(
-        "entry_type",
-        List(
-          EntryType.TransferTxLogEntry,
-          EntryType.TapTxLogEntry,
-          EntryType.MintTxLogEntry,
-          EntryType.AbortTransferInstructionTxLogEntry,
-        ),
-      )
-      // Literal sort order since Postgres complains when trying to bind it to a parameter
-      val (compareEntryNumber, orderLimit) = sortOrder match {
-        case SortOrder.Ascending =>
-          (sql" > ", sql""" order by entry_number asc limit ${sqlLimit(limit)};""")
-        case SortOrder.Descending =>
-          (sql" < ", sql""" order by entry_number desc limit ${sqlLimit(limit)};""")
-      }
-
-      // TODO (#960): don't use the event id for pagination, use the entry number
-      for {
-        rows <- storage.query(
-          pageEndEventId.fold(
-            selectFromTxLogTable(
-              txLogTableName,
-              txLogStoreId,
-              where = entryTypeCondition,
-              orderLimit = orderLimit,
-            )
-          )(pageEndEventId =>
-            selectFromTxLogTable(
-              txLogTableName,
-              txLogStoreId,
-              where = (entryTypeCondition ++ sql" and entry_number " ++ compareEntryNumber ++
-                sql"""(
-                  select entry_number
-                  from scan_txlog_store
-                  where store_id = $txLogStoreId
-                  and event_id = ${lengthLimited(pageEndEventId)}
-                  and """ ++ entryTypeCondition ++ sql"""
-              )""").toActionBuilder,
-              orderLimit = orderLimit,
-            )
-          ),
-          "listTransactions",
-        )
-        entries = rows.map(txLogEntryFromRow[TxLogEntry.TransactionTxLogEntry](txLogConfig))
-      } yield entries
-
-    }
-
   override def lookupFeaturedAppRight(
       providerPartyId: PartyId
   )(implicit
@@ -566,35 +462,6 @@ class DbScanStore(
     } yield result
   }
 
-  override def lookupRoundOfLatestData()(implicit
-      tc: TraceContext
-  ): Future[Option[(Long, Instant)]] =
-    waitUntilAcsIngested {
-      for {
-        row <- storage
-          .querySingle(
-            sql"""
-            select   closed_round,
-                     closed_round_effective_at
-            from     round_totals
-            where    store_id = $roundTotalsStoreId
-            order by closed_round desc
-            limit    1;
-            """.as[(Long, Long)].headOption,
-            "getRoundOfLatestData",
-          )
-          .value
-        result <- row match {
-          case Some((closedRound, effectiveAt)) =>
-            Future.successful(
-              Some((closedRound, CantonTimestamp.assertFromLong(micros = effectiveAt).toInstant))
-            )
-          case None =>
-            Future.successful(None)
-        }
-      } yield result
-    }
-
   override def listSvNodeStates()(implicit tc: TraceContext): Future[Seq[SvNodeState]] =
     for {
       dsoRules <- getDsoRulesWithState()
@@ -602,145 +469,6 @@ class DbScanStore(
         getSvNodeState(PartyId.tryFromProtoPrimitive(svPartyId))
       }
     } yield nodeStates.map(_.contract.payload).toVector
-
-  override def getTotalRewardsCollectedEver()(implicit tc: TraceContext): Future[BigDecimal] =
-    waitUntilAcsIngested {
-      for {
-        result <- storage.query(
-          sql"""
-          select coalesce(cumulative_app_rewards, 0) + coalesce(cumulative_validator_rewards, 0)
-          from   round_totals
-          where  store_id = $roundTotalsStoreId
-          and    closed_round = (
-                    select max(closed_round)
-                    from round_totals
-                    where store_id = $roundTotalsStoreId
-                 );
-          """.as[BigDecimal].headOption,
-          "getTotalRewardsCollectedEver",
-        )
-      } yield result.getOrElse(0)
-    }
-
-  override def getRewardsCollectedInRound(round: Long)(implicit
-      tc: TraceContext
-  ): Future[BigDecimal] = waitUntilAcsIngested {
-    for {
-      result <- ensureAggregated(round) { _ =>
-        storage.query(
-          sql"""
-            select coalesce(app_rewards, 0) + coalesce(validator_rewards, 0)
-            from   round_totals
-            where  store_id = $roundTotalsStoreId
-            and    closed_round = $round;
-            """.as[BigDecimal].headOption,
-          "getRewardsCollectedInRound",
-        )
-      }
-    } yield result.getOrElse(0)
-  }
-
-  override def getTopProvidersByAppRewards(asOfEndOfRound: Long, limit: Int)(implicit
-      tc: TraceContext
-  ): Future[Seq[(PartyId, BigDecimal)]] = waitUntilAcsIngested {
-    for {
-      rows <- ensureAggregated(asOfEndOfRound) { lastAggregatedRound =>
-        if (lastAggregatedRound == asOfEndOfRound) {
-          storage.query(
-            sql"""
-              select   rpt.party as provider,
-                       rpt.cumulative_app_rewards as cumulative_app_rewards
-              from     round_party_totals rpt
-              join     active_parties ap
-              on       rpt.store_id = ap.store_id
-              and      rpt.party = ap.party
-              and      rpt.closed_round = ap.closed_round
-              and      rpt.store_id = $roundTotalsStoreId
-              and      cumulative_app_rewards > 0
-              order by cumulative_app_rewards desc, rpt.party desc
-              limit $limit;
-            """.as[(PartyId, BigDecimal)],
-            "getTopProvidersByAppRewards",
-          )
-        } else {
-          Future.successful(Seq())
-        }
-      }
-    } yield rows
-  }
-
-  override def getTopValidatorsByValidatorRewards(asOfEndOfRound: Long, limit: Int)(implicit
-      tc: TraceContext
-  ): Future[Seq[(PartyId, BigDecimal)]] = waitUntilAcsIngested {
-    for {
-      rows <- ensureAggregated(asOfEndOfRound) { lastAggregatedRound =>
-        if (lastAggregatedRound == asOfEndOfRound) {
-          storage.query(
-            sql"""
-              select   rpt.party as validator,
-                       rpt.cumulative_validator_rewards as cumulative_validator_rewards
-              from     round_party_totals rpt
-              join     active_parties ap
-              on       rpt.store_id = ap.store_id
-              and      rpt.party = ap.party
-              and      rpt.closed_round = ap.closed_round
-              and      rpt.store_id = $roundTotalsStoreId
-              and      cumulative_validator_rewards > 0
-              order by cumulative_validator_rewards desc, rpt.party desc
-              limit $limit;
-            """.as[(PartyId, BigDecimal)],
-            "getTopValidatorsByValidatorRewards",
-          )
-        } else {
-          Future.successful(Seq())
-        }
-      }
-    } yield rows
-  }
-
-  override def getTopValidatorsByPurchasedTraffic(asOfEndOfRound: Long, limit: Int)(implicit
-      tc: TraceContext
-  ): Future[Seq[HttpScanAppClient.ValidatorPurchasedTraffic]] = waitUntilAcsIngested {
-    for {
-      rows <- ensureAggregated(asOfEndOfRound) { lastAggregatedRound =>
-        if (lastAggregatedRound == asOfEndOfRound) {
-          storage.query(
-            sql"""
-              select   rpt.party as validator,
-                       rpt.cumulative_traffic_num_purchases,
-                       rpt.cumulative_traffic_purchased,
-                       rpt.cumulative_traffic_purchased_cc_spent,
-                       coalesce(
-                         (
-                           select   closed_round as last_purchased_in_round
-                           from     round_party_totals
-                           where    store_id = rpt.store_id
-                           and      store_id = $roundTotalsStoreId
-                           and      party = rpt.party
-                           and      traffic_purchased > 0
-                           order by closed_round desc
-                           limit 1
-                         ),
-                         0
-                       ) as last_purchased_in_round
-              from     round_party_totals rpt
-              join     active_parties ap
-              on       rpt.store_id = ap.store_id
-              and      rpt.party = ap.party
-              and      rpt.closed_round = ap.closed_round
-              and      rpt.store_id = $roundTotalsStoreId
-              and      cumulative_traffic_purchased > 0
-              order by cumulative_traffic_purchased desc, rpt.party desc
-              limit $limit;
-            """.as[(PartyId, Long, Long, BigDecimal, Long)],
-            "getTopValidatorsByPurchasedTraffic",
-          )
-        } else {
-          Future.successful(Seq())
-        }
-      }
-    } yield rows.map((HttpScanAppClient.ValidatorPurchasedTraffic.apply _).tupled)
-  }
 
   override def getTopValidatorLicenses(limit: Limit)(implicit
       tc: TraceContext
@@ -813,75 +541,6 @@ class DbScanStore(
     } yield sum.getOrElse(0L)
   }
 
-  override def getAggregatedRounds()(implicit
-      tc: TraceContext
-  ): Future[Option[ScanAggregator.RoundRange]] =
-    waitUntilAcsIngested {
-      for {
-        minMaxClosedRounds <- storage
-          .querySingle(
-            sql"""
-            select min(closed_round) as min_round,
-                   max(closed_round) as max_round
-            from   round_totals
-            where  store_id = $roundTotalsStoreId;
-          """.as[(Option[Long], Option[Long])].headOption,
-            "getAggregatedRounds",
-          )
-          .value
-      } yield {
-        minMaxClosedRounds.flatMap {
-          _ match {
-            case (Some(start), Some(end)) => Some(ScanAggregator.RoundRange(start, end))
-            case _ => None
-          }
-        }
-      }
-    }
-
-  override def getRoundTotals(startRound: Long, endRound: Long)(implicit
-      tc: TraceContext
-  ): Future[Seq[ScanAggregator.RoundTotals]] = {
-    val q = sql"""
-    select   #${ScanAggregator.roundTotalsColumns}
-    from     round_totals
-    where    store_id = $roundTotalsStoreId
-    and      closed_round >= $startRound
-    and      closed_round <= $endRound
-    order by closed_round
-    """
-    waitUntilAcsIngested {
-      for {
-        roundTotals <- storage
-          .query(
-            q.as[ScanAggregator.RoundTotals],
-            "getRoundTotals",
-          )
-      } yield roundTotals
-    }
-  }
-  override def getRoundPartyTotals(startRound: Long, endRound: Long)(implicit
-      tc: TraceContext
-  ): Future[Seq[ScanAggregator.RoundPartyTotals]] = {
-    val q = sql"""
-    select   #${ScanAggregator.roundPartyTotalsColumns}
-    from     round_party_totals
-    where    store_id = $roundTotalsStoreId
-    and      closed_round >= $startRound
-    and      closed_round <= $endRound
-    order by closed_round, party
-    """
-    waitUntilAcsIngested {
-      for {
-        roundPartyTotals <- storage
-          .query(
-            q.as[ScanAggregator.RoundPartyTotals],
-            "getRoundPartyTotals",
-          )
-      } yield roundPartyTotals
-    }
-  }
-
   def lookupSvNodeState(svPartyId: PartyId)(implicit
       tc: TraceContext
   ): Future[Option[ContractWithState[SvNodeState.ContractId, SvNodeState]]] =
@@ -915,11 +574,7 @@ class DbScanStore(
   }
 
   override def listVoteRequestResults(
-      actionName: Option[String],
-      accepted: Option[Boolean],
-      requester: Option[String],
-      effectiveFrom: Option[String],
-      effectiveTo: Option[String],
+      filters: VoteResultsFilters,
       limit: Limit,
       after: Option[Long] = None,
   )(implicit tc: TraceContext): Future[ResultsPage[DsoRules_CloseVoteRequestResult]] = {
@@ -929,13 +584,8 @@ class DbScanStore(
       dbType = EntryType.VoteRequestTxLogEntry,
       actionNameColumnName = "vote_action_name",
       acceptedColumnName = "vote_accepted",
-      effectiveAtColumnName = "vote_effective_at",
       requesterNameColumnName = "vote_requester_name",
-      actionName = actionName,
-      accepted = accepted,
-      requester = requester,
-      effectiveFrom = effectiveFrom,
-      effectiveTo = effectiveTo,
+      filters = filters,
       limit = limit,
       after = after,
     )
@@ -950,6 +600,66 @@ class DbScanStore(
       afterToken = limited.lastOption.map(_.entryNumber)
     } yield ResultsPage(recentVoteResults, afterToken)
   }
+
+  override def countVoteRequestResults(
+      filters: VoteResultsFilters
+  )(implicit tc: TraceContext): Future[Long] = {
+    val query = countVoteRequestResultsQuery(
+      txLogTableName = ScanTables.txLogTableName,
+      txLogStoreId = txLogStoreId,
+      dbType = EntryType.VoteRequestTxLogEntry,
+      actionNameColumnName = "vote_action_name",
+      acceptedColumnName = "vote_accepted",
+      requesterNameColumnName = "vote_requester_name",
+      filters = filters,
+    )
+    storage
+      .query(query, "countVoteRequestResults")
+      .map(_.headOption.getOrElse(0L))
+  }
+
+  override def lookupLatestSvRewardWeightChange(
+      svParty: PartyId,
+      effectiveBefore: Option[String],
+  )(implicit tc: TraceContext): Future[Option[Long]] = {
+    val svPartyPath =
+      "entry_data->'result'->'request'->'action'->'value'->'dsoAction'->'value'->>'svParty'"
+    val where = (sql"""
+           entry_type = ${EntryType.VoteRequestTxLogEntry} and
+           vote_action_name = ${lengthLimited("SRARC_UpdateSvRewardWeight")} and
+           vote_accepted = true and
+           #$svPartyPath = ${svParty.toProtoPrimitive}""" ++ (effectiveBefore match {
+      case Some(e) => sql" and vote_effective_at < ${lengthLimited(e)}"
+      case None => sql""
+    })).toActionBuilder
+    for {
+      row <- storage
+        .querySingle(
+          selectFromTxLogTable(
+            txLogTableName,
+            txLogStoreId,
+            where = where,
+            orderLimit = sql"order by vote_effective_at desc limit 1",
+          ).headOption,
+          "lookupLatestSvRewardWeightChange",
+        )
+        .value
+    } yield row
+      .map(txLogEntryFromRow[VoteRequestTxLogEntry](txLogConfig))
+      .flatMap(_.result)
+      .flatMap(newRewardWeightOf)
+  }
+
+  private def newRewardWeightOf(result: DsoRules_CloseVoteRequestResult): Option[Long] =
+    result.request.action match {
+      case arc: ARC_DsoRules =>
+        arc.dsoAction match {
+          case srarc: SRARC_UpdateSvRewardWeight =>
+            Some(srarc.dsoRules_UpdateSvRewardWeightValue.newRewardWeight.longValue)
+          case _ => None
+        }
+      case _ => None
+    }
 
   override def listVoteRequestsByTrackingCid(
       trackingCids: Seq[VoteRequest.ContractId],

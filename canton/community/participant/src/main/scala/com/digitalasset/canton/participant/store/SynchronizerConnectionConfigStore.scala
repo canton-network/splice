@@ -29,6 +29,7 @@ import com.digitalasset.canton.participant.synchronizer.{
   SynchronizerConnectionConfig,
 }
 import com.digitalasset.canton.resource.{DbStorage, MemoryStorage, Storage}
+import com.digitalasset.canton.sequencing.SequencerConnections
 import com.digitalasset.canton.store.db.DbDeserializationException
 import com.digitalasset.canton.topology.{
   ConfiguredPhysicalSynchronizerId,
@@ -101,9 +102,18 @@ trait SynchronizerConnectionConfigStore extends AutoCloseable {
       traceContext: TraceContext
   ): EitherT[FutureUnlessShutdown, MissingConfigForSynchronizer, Unit]
 
-  /** If no entry exists for the given psid, insert a new config. Otherwise, update the config. The
-    * `transform` method should be minimal to limit the impact of race conditions with other
-    * operations.
+  /** If no entry exists for the given psid, insert a new config. If a config is found:
+    *   - Applies the overrides if defined.
+    *   - Sets the expected psid to `psid`
+    *
+    * @param psid
+    *   Physical synchronizer id of the config
+    * @param insert
+    *   Data to be inserted if no entry is found
+    * @param overrideSequencerConnections
+    *   If defined, will replace the existing connections
+    * @param overridePredecessor
+    *   If defined, will replace de predecessor
     */
   def upsert(
       psid: PhysicalSynchronizerId,
@@ -112,7 +122,8 @@ trait SynchronizerConnectionConfigStore extends AutoCloseable {
           SynchronizerConnectionConfigStore.Status,
           Option[SynchronizerPredecessor],
       ),
-      transform: SynchronizerConnectionConfig => SynchronizerConnectionConfig,
+      overrideSequencerConnections: Option[SequencerConnections] = None,
+      overridePredecessor: Option[SynchronizerPredecessor] = None,
   )(implicit
       traceContext: TraceContext
   ): EitherT[FutureUnlessShutdown, Error, StoredSynchronizerConnectionConfig]
@@ -155,8 +166,8 @@ trait SynchronizerConnectionConfigStore extends AutoCloseable {
 
   /** Retrieves the active connection for `alias`. Return an
     * [[SynchronizerConnectionConfigStore.Error]] if the alias is unknown or if no connection is
-    * active. If several active configs are found, return the one with the highest
-    * [[com.digitalasset.canton.topology.PhysicalSynchronizerId]].
+    * active. If several active configs are found, returns an
+    * [[SynchronizerConnectionConfigStore.AtMostOnePhysicalActive]] error.
     */
   def getActive(
       alias: SynchronizerAlias
@@ -172,8 +183,8 @@ trait SynchronizerConnectionConfigStore extends AutoCloseable {
 
   /** Retrieves the active connection for `id`. Return an
     * [[SynchronizerConnectionConfigStore.Error]] if the id is unknown or if no connection is
-    * active. If several active configs are found, return the one with the highest
-    * [[com.digitalasset.canton.topology.PhysicalSynchronizerId]].
+    * active. If several active configs are found, returns an
+    * [[SynchronizerConnectionConfigStore.AtMostOnePhysicalActive]] error.
     */
   def getActive(
       id: SynchronizerId
@@ -239,6 +250,10 @@ trait SynchronizerConnectionConfigStore extends AutoCloseable {
     * to ensure it has accurate configs cached.
     */
   def refreshCache()(implicit traceContext: TraceContext): FutureUnlessShutdown[Unit]
+
+  /** Clears the config cache. Used when a participant replica becomes passive.
+    */
+  def clearCache()(implicit traceContext: TraceContext): Unit
 
   /** Set the synchronizer configuration status */
   def setStatus(
@@ -327,7 +342,7 @@ object SynchronizerConnectionConfigStore {
     val canMigrateTo: Boolean = true
     val canMigrateFrom: Boolean = false
 
-    // inactive so that we connect yet connect to the synchronizer
+    // inactive so that we cannot yet connect to the synchronizer
     val isActive: Boolean = false
 
     override protected def pretty: Pretty[LsuTarget.type] =
@@ -398,7 +413,7 @@ object SynchronizerConnectionConfigStore {
       predecessorPsid: PhysicalSynchronizerId,
   ) extends Error {
     val message =
-      s"Synchronizer with id $predecessorPsid cannot be the predecessor of $predecessorPsid because their logical IDs are incompatible"
+      s"Synchronizer with id $predecessorPsid cannot be the predecessor of $currentPsid because their logical IDs are incompatible"
   }
 
   final case class InconsistentSequencerIds(
@@ -410,11 +425,19 @@ object SynchronizerConnectionConfigStore {
       s"Connection for synchronizer $psid cannot be updated to set ids $sequencerIds: $details."
   }
 
+  final case class LsuOngoing(
+      predecessorPsid: PhysicalSynchronizerId,
+      successorPsid: PhysicalSynchronizerId,
+  ) extends Error {
+    val message =
+      s"The operation is not allowed when an LSU is ongoing. Found LSU from $predecessorPsid to $successorPsid."
+  }
+
   final case class MissingConfigForSynchronizer(
       id: String
   ) extends Error {
     override def message: String =
-      s"Synchronizer with $id. Has the synchronizer been registered?"
+      s"Synchronizer with $id is missing. Has the synchronizer been registered?"
   }
 
   object MissingConfigForSynchronizer {

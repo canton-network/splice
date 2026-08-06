@@ -5,7 +5,7 @@ import {
   ActionRequiringConfirmation,
   AmuletRules_ActionRequiringConfirmation,
 } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
-import { THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
+import { SUPPORTING_URL_LABEL, THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
 import {
   buildAmuletRulesPendingConfigFields,
   configFormDataToConfigChanges,
@@ -16,7 +16,7 @@ import { CommonProposalFormData, ConfigFormData } from '../../utils/types';
 import dayjs from 'dayjs';
 import { useDsoInfos } from '../../contexts/SvContext';
 import { useMemo, useState } from 'react';
-import { dateTimeFormatISO } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import { buildAmuletConfigChanges } from '../../utils/buildAmuletConfigChanges';
 import { useAppForm } from '../../hooks/form';
 import {
@@ -38,7 +38,7 @@ import {
   getAmuletConfigToCompareWith,
   PrettyJsonDiff,
   useVotesHooks,
-} from '@lfdecentralizedtrust/splice-common-frontend';
+} from '@canton-network/splice-common-frontend';
 import { JsonDiffAccordion } from '../governance/JsonDiffAccordion';
 
 export type SetAmuletConfigCompleteFormData = {
@@ -218,14 +218,28 @@ export const SetAmuletConfigRulesForm: () => JSX.Element = () => {
           )}
 
           <form.AppField name="common.action">
-            {field => (
-              <field.TextField
-                title="Action"
-                id="set-amulet-config-rules-action"
-                muiTextFieldProps={{ disabled: true }}
-              />
-            )}
+            {field => <field.ProposalTypeField id="set-amulet-config-rules-action" />}
           </form.AppField>
+
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Typography variant="h6" gutterBottom>
+              Configuration
+            </Typography>
+
+            {allAmuletConfigChanges.map((change, index) => (
+              <form.AppField name={`config.${change.fieldName}`} key={index}>
+                {field => (
+                  <field.ConfigField
+                    configChange={change}
+                    key={index}
+                    pendingFieldInfo={pendingConfigFields.find(
+                      f => f.fieldName === change.fieldName
+                    )}
+                  />
+                )}
+              </form.AppField>
+            ))}
+          </Box>
 
           <form.AppField
             name="common.expiryDate"
@@ -236,7 +250,7 @@ export const SetAmuletConfigRulesForm: () => JSX.Element = () => {
           >
             {field => (
               <field.DateField
-                title="Threshold Deadline"
+                title="Quorum Threshold Deadline"
                 description={THRESHOLD_DEADLINE_SUBTITLE}
                 id="set-amulet-config-rules-expiry-date"
               />
@@ -274,32 +288,14 @@ export const SetAmuletConfigRulesForm: () => JSX.Element = () => {
               onChange: ({ value }) => validateUrl(value),
             }}
           >
-            {field => <field.TextField title="URL" id="set-amulet-config-rules-url" />}
+            {field => (
+              <field.TextField title={SUPPORTING_URL_LABEL} id="set-amulet-config-rules-url" />
+            )}
           </form.AppField>
-
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Typography variant="h6" gutterBottom>
-              Configuration
-            </Typography>
-
-            {allAmuletConfigChanges.map((change, index) => (
-              <form.AppField name={`config.${change.fieldName}`} key={index}>
-                {field => (
-                  <field.ConfigField
-                    configChange={change}
-                    key={index}
-                    pendingFieldInfo={pendingConfigFields.find(
-                      f => f.fieldName === change.fieldName
-                    )}
-                  />
-                )}
-              </form.AppField>
-            ))}
-          </Box>
         </>
       )}
 
-      <JsonDiffAccordion>
+      <JsonDiffAccordion variant={showConfirmation ? 'review' : 'form'}>
         {amuletConfigToCompareWith && amuletConfigToCompareWith[1] ? (
           <PrettyJsonDiff
             changes={{

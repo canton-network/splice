@@ -25,7 +25,6 @@ import com.digitalasset.canton.util.MonadUtil
 import com.digitalasset.canton.{HasActorSystem, HasExecutionContext}
 import io.grpc.StatusRuntimeException
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round as roundCodegen
-import org.lfdecentralizedtrust.splice.migration.DomainMigrationInfo
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingRequirement
 import org.scalatest.Succeeded
 
@@ -1398,7 +1397,7 @@ class AcsSnapshotStoreTest
   ): Future[UpdateHistory] = {
     val updateHistory = new UpdateHistory(
       storage.underlying, // not under test
-      new DomainMigrationInfo(migrationId, None),
+      migrationId,
       "update_history_acs_snapshot_test",
       mkParticipantId(participantId),
       dsoParty,

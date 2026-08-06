@@ -31,6 +31,7 @@ import org.lfdecentralizedtrust.splice.wallet.store.{
 }
 
 import java.time.Duration
+import scala.concurrent.duration.DurationInt
 
 @org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceDsoGovernance_0_1_21
 class DevelopmentFundCouponIntegrationTest
@@ -439,7 +440,6 @@ class DevelopmentFundCouponIntegrationTest
     val beneficiary = bobParty
     val initialUnclaimedDevelopmentFundCouponAmount = 1000.0
     val developmentFundCouponAmount = 40.0
-    val expiresAt = CantonTimestamp.now().plus(Duration.ofSeconds(5))
     val reason = "Bob has contributed to the Daml repo"
 
     val bobUserName = bobWalletClient.config.ledgerApiUser
@@ -480,6 +480,9 @@ class DevelopmentFundCouponIntegrationTest
       ) {
         actAndCheck(
           "Allocate one development fund coupon", {
+            // Note that we sample the expiry right before allocating here to avoid it being expired
+            // before we could check its existence.
+            val expiresAt = CantonTimestamp.now().plus(Duration.ofSeconds(5))
             aliceValidatorWalletClient.allocateDevelopmentFundCoupon(
               beneficiary,
               developmentFundCouponAmount,
@@ -505,7 +508,11 @@ class DevelopmentFundCouponIntegrationTest
       clue(
         "The coupon is expired"
       ) {
-        eventually() {
+        // The expiry trigger cannot act before expiresAt (5s after allocation) plus the
+        // clockSkewAutomationDelay grace period (5s), so 10s of this budget are always
+        // consumed before the DsoRules_ExpireDevelopmentFundCoupon submission can even
+        // start; leave enough headroom for slow sequencing on loaded CI runners.
+        eventually(30.seconds) {
           aliceValidatorWalletClient
             .listActiveDevelopmentFundCoupons() shouldBe empty withClue "alice coupons"
         }

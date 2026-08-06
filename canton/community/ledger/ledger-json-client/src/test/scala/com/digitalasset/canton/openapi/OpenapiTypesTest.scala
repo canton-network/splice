@@ -424,6 +424,12 @@ class OpenapiTypesTest extends AnyWordSpec with Matchers {
           openapi.GetActiveContractsRequest.fromJson
         ),
         Mapping[
+          v2.command_completion_service.GetCompletionsRequest,
+          openapi.GetCompletionsRequest,
+        ](
+          openapi.GetCompletionsRequest.fromJson
+        ),
+        Mapping[
           v2.state_service.GetConnectedSynchronizersResponse,
           openapi.GetConnectedSynchronizersResponse,
         ](
@@ -1000,6 +1006,15 @@ class OpenapiTypesTest extends AnyWordSpec with Matchers {
         ](
           openapi.AllocateExternalPartyResponse.fromJson
         ),
+        Mapping[
+          v2.state_service.GetActiveContractsPageRequest,
+          openapi.GetActiveContractsPageRequest,
+        ](
+          openapi.GetActiveContractsPageRequest.fromJson
+        ),
+        Mapping[json.JsGetActiveContractsPageResponse, openapi.JsGetActiveContractsPageResponse](
+          openapi.JsGetActiveContractsPageResponse.fromJson
+        ),
       )
     }
 
@@ -1028,6 +1043,12 @@ class OpenapiTypesTest extends AnyWordSpec with Matchers {
           openapi.GetContractRequest,
         ](
           openapi.GetContractRequest.fromJson
+        ),
+        Mapping[
+          v2.update_service.GetUpdatesPageRequest,
+          openapi.GetUpdatesPageRequest,
+        ](
+          openapi.GetUpdatesPageRequest.fromJson
         ),
       )
     }
@@ -1096,6 +1117,9 @@ class OpenapiTypesTest extends AnyWordSpec with Matchers {
           ),
           Mapping[json.JsContractService.GetContractResponse, openapi.GetContractResponse](
             openapi.GetContractResponse.fromJson
+          ),
+          Mapping[json.JsGetUpdatesPageResponse, openapi.JsGetUpdatesPageResponse](
+            openapi.JsGetUpdatesPageResponse.fromJson
           ),
         )
     }

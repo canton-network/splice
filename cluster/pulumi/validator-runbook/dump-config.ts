@@ -6,7 +6,7 @@ import {
   Auth0Config,
   Auth0NamespaceConfig,
   NamespacedAuth0Configs,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 
 import { SecretsFixtureMap, initDumpConfig } from '../common/src/dump-config-common';
 

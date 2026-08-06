@@ -5,7 +5,7 @@ import {
   DecentralizedSynchronizerMigrationConfig,
   DomainMigrationIndex,
   MigrationInfo,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 
 import { CometBftNodeConfigs } from './cometBftNodeConfigs';
 import { StaticCometBftConfigWithNodeName } from './cometbftConfig';
@@ -39,6 +39,7 @@ export class SynchronizerNodes {
   readonly participant: SvParticipant;
   readonly active: DecentralizedSynchronizerNode;
   readonly legacy?: DecentralizedSynchronizerNode;
+  readonly additionalLegacy: DecentralizedSynchronizerNode[];
   readonly upgrade?: DecentralizedSynchronizerNode;
 
   constructor(
@@ -53,13 +54,7 @@ export class SynchronizerNodes {
     const activeMigrationId = decentralizedSynchronizerMigrationConfig.active.id;
 
     this.participant = {
-      asDependencies: [],
-      internalClusterAddress: decentralizedSynchronizerMigrationConfig.active
-        .enableLogicalSynchronizerDeploymentMode
-        ? pulumi.output('participant')
-        : pulumi.output(
-            `participant-${decentralizedSynchronizerMigrationConfig.lsuEnabled ? decentralizedSynchronizerMigrationConfig.frozenMigrationId : activeMigrationId}`
-          ),
+      internalClusterAddress: pulumi.output('participant'),
     };
 
     this.active = buildDecentralizedSynchronizerNode(
@@ -77,6 +72,10 @@ export class SynchronizerNodes {
         ingressName
       );
     }
+
+    this.additionalLegacy = decentralizedSynchronizerMigrationConfig.additionalLegacy.map(info =>
+      buildDecentralizedSynchronizerNode(info, info.id, cometbftNodeConfigs, ingressName)
+    );
 
     if (decentralizedSynchronizerMigrationConfig.upgrade) {
       this.upgrade = buildDecentralizedSynchronizerNode(

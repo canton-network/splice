@@ -1,11 +1,6 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import {
-  Auth0ClientType,
-  config,
-  DecentralizedSynchronizerUpgradeConfig,
-  getAuth0Config,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+import { Auth0ClientType, config, getAuth0Config } from '@canton-network/splice-pulumi-common';
 
 import { installNode } from './installNode';
 
@@ -24,10 +19,5 @@ async function main() {
   });
 }
 
-if (
-  DecentralizedSynchronizerUpgradeConfig.active.enableLogicalSynchronizerDeploymentMode ||
-  DecentralizedSynchronizerUpgradeConfig.active.migrateParticipantsFromSvCantonToSv
-) {
-  // eslint-disable-next-line @typescript-eslint/no-floating-promises
-  main();
-}
+// eslint-disable-next-line @typescript-eslint/no-floating-promises
+main();

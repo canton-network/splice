@@ -1,9 +1,9 @@
 {
-  "name": "@lfdecentralizedtrust/splice-pulumi-gha",
+  "name": "@canton-network/splice-pulumi-gha",
   "version": "1.0.0",
   "main": "src/index.ts",
   "dependencies": {
-    "@lfdecentralizedtrust/splice-pulumi-common": "1.0.0",
+    "@canton-network/splice-pulumi-common": "1.0.0",
     "js-yaml": "^4.1.0"
   },
   "scripts": {

@@ -1,6 +1,6 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import * as postgres from '@lfdecentralizedtrust/splice-pulumi-common/src/postgres';
+import * as postgres from '@canton-network/splice-pulumi-common/src/postgres';
 import * as pulumi from '@pulumi/pulumi';
 import {
   Auth0Client,
@@ -18,16 +18,16 @@ import {
   DecentralizedSynchronizerMigrationConfig,
   ValidatorTopupConfig,
   ansDomainPrefix,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
-import { installLoopback } from '@lfdecentralizedtrust/splice-pulumi-common-sv';
+} from '@canton-network/splice-pulumi-common';
+import { installLoopback } from '@canton-network/splice-pulumi-common-sv';
 import {
   installParticipant,
   splitwellDarPaths,
-} from '@lfdecentralizedtrust/splice-pulumi-common-validator';
+} from '@canton-network/splice-pulumi-common-validator';
 import {
   AutoAcceptTransfersConfig,
   installValidatorApp,
-} from '@lfdecentralizedtrust/splice-pulumi-common-validator/src/validator';
+} from '@canton-network/splice-pulumi-common-validator/src/validator';
 
 import { spliceConfig } from '../../common/src/config/config';
 import { validator1Config } from './config';
@@ -60,6 +60,7 @@ export async function installValidator1(
         'postgres',
         activeVersion,
         spliceConfig.pulumiProjectConfig.cloudSql,
+        spliceConfig.pulumiProjectConfig.defaultSplicePostgresConfig,
         false
       )
     : undefined;
@@ -72,6 +73,7 @@ export async function installValidator1(
       `validator-pg`,
       activeVersion,
       spliceConfig.pulumiProjectConfig.cloudSql,
+      spliceConfig.pulumiProjectConfig.defaultSplicePostgresConfig,
       true
     ));
   const validatorDbName = `validator1`;
@@ -80,7 +82,6 @@ export async function installValidator1(
 
   const participant = await installParticipant(
     validator1Config,
-    decentralizedSynchronizerMigrationConfig.activeMigrationId,
     xns,
     auth0Client.getCfg(),
     validator1Config?.disableAuth,
@@ -100,7 +101,6 @@ export async function installValidator1(
     validatorWalletUsers: pulumi.output([validatorWalletUser]),
     xns,
     dependencies: [],
-    ...decentralizedSynchronizerMigrationConfig.migratingNodeConfig(),
     appDars: splitwellDarPaths,
     validatorPartyHint: `digitalasset-${name}-1`,
     svSponsorAddress: `http://sv-app.sv-1:5014`,
@@ -129,8 +129,9 @@ export async function installValidator1(
     deduplicationDuration: validator1Config?.deduplicationDuration,
     disableAuth: validator1Config?.disableAuth,
     version: activeVersion,
+    additionalEnvVars: validator1Config?.validatorApp?.additionalEnvVars,
   });
-  installIngress(xns, installSplitwell, decentralizedSynchronizerMigrationConfig);
+  installIngress(xns, installSplitwell);
 
   if (installSplitwell) {
     installSpliceHelmChart(
@@ -156,11 +157,7 @@ export async function installValidator1(
   return validator;
 }
 
-function installIngress(
-  xns: ExactNamespace,
-  splitwell: boolean,
-  decentralizedSynchronizerMigrationConfig: DecentralizedSynchronizerMigrationConfig
-) {
+function installIngress(xns: ExactNamespace, splitwell: boolean) {
   installSpliceHelmChart(
     xns,
     `cluster-ingress-${xns.logicalName}`,
@@ -176,9 +173,7 @@ function installIngress(
       },
       ingress: {
         splitwell: splitwell,
-        decentralizedSynchronizer: {
-          activeMigrationId: decentralizedSynchronizerMigrationConfig.activeMigrationId.toString(),
-        },
+        decentralizedSynchronizer: {},
       },
     }
   );

@@ -245,14 +245,6 @@ class LedgerApiStore(
       )
     )
 
-  def prunableContracts(
-      fromExclusive: Option[Offset],
-      toInclusive: Offset,
-  )(implicit traceContext: TraceContext, ec: ExecutionContext): FutureUnlessShutdown[Set[Long]] =
-    executeSqlUS(metrics.index.db.prunableContracts)(
-      eventStorageBackend.prunableContracts(fromExclusive, toInclusive)
-    )
-
   private[api] def initializeInMemoryState(implicit
       traceContext: TraceContext,
       executionContext: ExecutionContext,

@@ -6,7 +6,8 @@ package com.digitalasset.canton.participant.store
 import com.daml.nonempty.NonEmpty
 import com.digitalasset.canton.InternedPartyId
 import com.digitalasset.canton.data.{BufferedAcsCommitment, CantonTimestamp, CantonTimestampSecond}
-import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
+import com.digitalasset.canton.lifecycle.{CloseContext, FutureUnlessShutdown}
+import com.digitalasset.canton.logging.NamedLogging
 import com.digitalasset.canton.participant.event.RecordTime
 import com.digitalasset.canton.participant.store.AcsCommitmentStore.ReinitializationStatus
 import com.digitalasset.canton.protocol.messages.CommitmentPeriodState.CommitmentPeriodStateInOutstanding
@@ -29,7 +30,11 @@ import scala.util.control.Breaks.*
 /** Read and write interface for ACS commitments. Apart from pruning, should only be used by the ACS
   * commitment processor
   */
-trait AcsCommitmentStore extends AcsCommitmentLookup with PrunableByTime with AutoCloseable {
+trait AcsCommitmentStore
+    extends AcsCommitmentLookup
+    with PrunableByTime
+    with AutoCloseable
+    with NamedLogging {
 
   override protected def kind: String = "acs commitments"
 
@@ -55,7 +60,8 @@ trait AcsCommitmentStore extends AcsCommitmentLookup with PrunableByTime with Au
       periods: NonEmpty[immutable.Iterable[CommitmentPeriod]],
       counterParticipants: NonEmpty[Set[ParticipantId]],
   )(implicit
-      traceContext: TraceContext
+      traceContext: TraceContext,
+      closeContext: CloseContext,
   ): FutureUnlessShutdown[Unit]
 
   /** Marks a period as processed and thus its end as a safe point for crash-recovery.
@@ -65,7 +71,8 @@ trait AcsCommitmentStore extends AcsCommitmentLookup with PrunableByTime with Au
     * The period must be after the time point returned by [[lastComputedAndSent]].
     */
   def markComputedAndSent(period: CommitmentPeriod)(implicit
-      traceContext: TraceContext
+      traceContext: TraceContext,
+      closeContext: CloseContext,
   ): FutureUnlessShutdown[Unit]
 
   /** Store a received ACS commitment. To be called by the ACS commitment processor only.
@@ -99,7 +106,7 @@ trait AcsCommitmentStore extends AcsCommitmentLookup with PrunableByTime with Au
   def markSafe(
       counterParticipant: ParticipantId,
       periods: NonEmpty[immutable.Iterable[CommitmentPeriod]],
-  )(implicit traceContext: TraceContext): FutureUnlessShutdown[Unit] =
+  )(implicit traceContext: TraceContext, closeContext: CloseContext): FutureUnlessShutdown[Unit] =
     markPeriod(
       counterParticipant,
       periods,
@@ -122,7 +129,7 @@ trait AcsCommitmentStore extends AcsCommitmentLookup with PrunableByTime with Au
   def markUnsafe(
       counterParticipant: ParticipantId,
       periods: NonEmpty[immutable.Iterable[CommitmentPeriod]],
-  )(implicit traceContext: TraceContext): FutureUnlessShutdown[Unit] =
+  )(implicit traceContext: TraceContext, closeContext: CloseContext): FutureUnlessShutdown[Unit] =
     markPeriod(
       counterParticipant,
       periods,
@@ -144,7 +151,7 @@ trait AcsCommitmentStore extends AcsCommitmentLookup with PrunableByTime with Au
       counterParticipant: ParticipantId,
       periods: NonEmpty[immutable.Iterable[CommitmentPeriod]],
       matchingState: CommitmentPeriodStateInOutstanding,
-  )(implicit traceContext: TraceContext): FutureUnlessShutdown[Unit]
+  )(implicit traceContext: TraceContext, closeContext: CloseContext): FutureUnlessShutdown[Unit]
 
   val runningCommitments: IncrementalCommitmentStore
 
@@ -255,7 +262,8 @@ trait IncrementalCommitmentStore {
     * added yet.
     */
   def get()(implicit
-      traceContext: TraceContext
+      traceContext: TraceContext,
+      closeContext: CloseContext,
   ): FutureUnlessShutdown[
     (RecordTime, Map[SortedSet[InternedPartyId], AcsCommitment.CommitmentType])
   ]

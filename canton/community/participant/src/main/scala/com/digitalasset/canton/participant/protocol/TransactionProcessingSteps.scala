@@ -23,12 +23,7 @@ import com.digitalasset.canton.ledger.participant.state.Update.ContractInfo
 import com.digitalasset.canton.ledger.participant.state.Update.TransactionAccepted.RepresentativePackageId.SameAsContractPackageId
 import com.digitalasset.canton.lifecycle.UnlessShutdown.{AbortedDueToShutdown, Outcome}
 import com.digitalasset.canton.lifecycle.{FutureUnlessShutdown, UnlessShutdown}
-import com.digitalasset.canton.logging.{
-  ErrorLoggingContext,
-  NamedLoggerFactory,
-  NamedLogging,
-  NamedLoggingContext,
-}
+import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.metrics.*
 import com.digitalasset.canton.participant.ParticipantNodeParameters
 import com.digitalasset.canton.participant.metrics.TransactionProcessingMetrics
@@ -72,6 +67,7 @@ import com.digitalasset.canton.participant.protocol.validation.InternalConsisten
 import com.digitalasset.canton.participant.protocol.validation.ModelConformanceChecker.{
   ErrorWithSubTransaction,
   LazyAsyncReInterpretationMap,
+  Result,
 }
 import com.digitalasset.canton.participant.protocol.validation.TimeValidator.TimeCheckFailure
 import com.digitalasset.canton.participant.store.*
@@ -102,7 +98,7 @@ import com.digitalasset.canton.util.{EitherTUtil, ErrorUtil, LoggerUtil, RoseTre
 import com.digitalasset.canton.version.ProtocolVersion
 import com.digitalasset.canton.{
   LedgerSubmissionId,
-  LfKeyResolver,
+  LfGlobalKeyMapping,
   LfPartyId,
   RequestCounter,
   SequencerCounter,
@@ -257,6 +253,35 @@ class TransactionProcessingSteps(
     } yield submission
   }
 
+  override def validateSubmittersNotOnboarding(
+      submissionParam: SubmissionParam,
+      topologySnapshot: TopologySnapshot,
+      participantId: ParticipantId,
+  )(implicit
+      traceContext: TraceContext
+  ): EitherT[FutureUnlessShutdown, TransactionSubmissionError, Unit] = {
+    val submitters = submissionParam.submitterInfo.actAs.toList.map(LfPartyId.assertFromString)
+
+    EitherT(
+      topologySnapshot
+        .hostedOn(submitters.toSet, participantId)
+        .map { hosted =>
+          val onboardingSubmitters = hosted.collect {
+            case (party, attributes) if attributes.onboarding => party
+          }
+
+          if (onboardingSubmitters.nonEmpty) {
+            Left(
+              TransactionProcessor.SubmissionErrors.PartyCurrentlyOnboarding
+                .Rejection(onboardingSubmitters.toSeq)
+            )
+          } else {
+            Right(())
+          }
+        }
+    )
+  }
+
   override def embedNoMediatorError(error: NoMediatorError): TransactionSubmissionError =
     SynchronizerWithoutMediatorError.Error(error.topologySnapshotTimestamp, psid)
 
@@ -268,7 +293,7 @@ class TransactionProcessingSteps(
   private class TrackedTransactionSubmission(
       submitterInfo: SubmitterInfo,
       transactionMeta: TransactionMeta,
-      keyResolver: LfKeyResolver,
+      keyResolver: LfGlobalKeyMapping,
       wfTransaction: WellFormedTransaction[WithoutSuffixes],
       mediator: MediatorGroupRecipient,
       recentSnapshot: SynchronizerSnapshotSyncCryptoApi,
@@ -849,10 +874,24 @@ class TransactionProcessingSteps(
             commonData,
             getEngineAbortStatus = () => engineController.abortStatus,
             reInterpretedTopLevelViews,
+            protocolVersion,
           )
 
-        internalConsistencyResultE = internalConsistencyChecker.check(
-          parsedRequest.rootViewTrees
+        internalConsistencyResultET = EitherT(
+          conformanceResultET.value
+            .flatMap {
+              case Right(mcResult: Result) =>
+                internalConsistencyChecker
+                  .check(
+                    parsedRequest.rootViewTrees,
+                    mcResult.suffixedTransaction.unwrap.transaction,
+                    topologySnapshot = ipsSnapshot,
+                  )
+                  .value
+              case Left(_) =>
+                // As the model conformance has failed do not produce internal consistency noise
+                FutureUnlessShutdown.pure(().asRight[ErrorWithInternalConsistencyCheck])
+            }
         )
 
       } yield ParallelChecksResult(
@@ -860,7 +899,7 @@ class TransactionProcessingSteps(
         consistencyResultE,
         authorizationResult,
         conformanceResultET,
-        internalConsistencyResultE,
+        internalConsistencyResultET,
         timeValidationE,
         replayCheckResult,
       )
@@ -932,7 +971,7 @@ class TransactionProcessingSteps(
         authenticationResult = parallelChecksResult.authenticationResult,
         authorizationResult = parallelChecksResult.authorizationResult,
         modelConformanceResultET = parallelChecksResult.conformanceResultET,
-        internalConsistencyResultE = parallelChecksResult.internalConsistencyResultE,
+        internalConsistencyResultET = parallelChecksResult.internalConsistencyResultET,
         consumedInputsOfHostedParties = usedAndCreated.contracts.consumedInputsOfHostedStakeholders,
         witnessed = usedAndCreated.contracts.witnessed,
         createdContracts = usedAndCreated.contracts.created,
@@ -1187,14 +1226,6 @@ class TransactionProcessingSteps(
         .map(ContractInstance.assignCreationTime(_, ledgerEffectiveTime))
         .toSeq
 
-    val contractAuthenticationData =
-      // We deliberately do not forward the authentication data
-      // for retroactively divulged contracts since they are not visible on the Ledger API
-      // For immediately divulged contracts we populate this as those are visible.
-      (createdContracts ++ witnessed).view.map { case (contractId, contract) =>
-        contractId -> contract.inst.authenticationData
-      }.toMap
-
     val acceptedEvent =
       (acsChangeFactory: AcsChangeFactory) =>
         (internalContractIds: Map[LfContractId, Long]) => {
@@ -1225,9 +1256,10 @@ class TransactionProcessingSteps(
             recordTime = requestTime,
             externalTransactionHash = externalTransactionHash,
             acsChangeFactory = acsChangeFactory,
-            contractInfos =
-              contractAuthenticationData.map { case (contractId, contractAuthenticationData) =>
-                contractId -> ContractInfo(
+            contractInfos = contractsToBeStored.map { contractInstance =>
+              val contractId = contractInstance.contractId
+              contractId -> ContractInfo(
+                persistedContractInstance = PersistedContractInstance(
                   internalContractId = checked {
                     // the internal contract id must exist since we persisted the contracts before (in the ProtocolProcessor)
                     internalContractIds.getOrElse(
@@ -1237,10 +1269,11 @@ class TransactionProcessingSteps(
                       ),
                     )
                   },
-                  contractAuthenticationData = contractAuthenticationData,
-                  representativePackageId = SameAsContractPackageId,
-                )
-              },
+                  inst = contractInstance.inst,
+                ),
+                representativePackageId = SameAsContractPackageId,
+              )
+            }.toMap,
           )
         }
     CommitAndStoreContractsAndPublishEvent(
@@ -1513,7 +1546,7 @@ object TransactionProcessingSteps {
   final case class SubmissionParam(
       submitterInfo: SubmitterInfo,
       transactionMeta: TransactionMeta,
-      keyResolver: LfKeyResolver,
+      keyResolver: LfGlobalKeyMapping,
       transaction: WellFormedTransaction[WithoutSuffixes],
       disclosedContracts: Map[LfContractId, ContractInstance],
   )
@@ -1576,7 +1609,11 @@ object TransactionProcessingSteps {
         ModelConformanceChecker.ErrorWithSubTransaction[ViewAbsoluteLedgerEffect],
         ModelConformanceChecker.Result,
       ],
-      internalConsistencyResultE: Either[ErrorWithInternalConsistencyCheck, Unit],
+      internalConsistencyResultET: EitherT[
+        FutureUnlessShutdown,
+        ErrorWithInternalConsistencyCheck,
+        Unit,
+      ],
       timeValidationResultE: Either[TimeCheckFailure, Unit],
       replayCheckResult: Option[String],
   ) {
@@ -1588,11 +1625,6 @@ object TransactionProcessingSteps {
       pendingTransaction: PendingTransaction,
       errorDetails: ErrorDetails,
   )
-
-  def keyResolverFor(
-      rootView: TransactionView
-  )(implicit loggingContext: NamedLoggingContext): LfKeyResolver =
-    rootView.keyMaintainers.fmap(_.unversioned.contracts.toVector)
 
   /** @throws java.lang.IllegalArgumentException
     *   if `receivedViewTrees` contains views with different transaction root hashes

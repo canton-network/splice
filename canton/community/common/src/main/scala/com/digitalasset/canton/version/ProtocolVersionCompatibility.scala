@@ -7,14 +7,15 @@ import cats.syntax.either.*
 import com.daml.nonempty.NonEmpty
 import com.digitalasset.base.error.ErrorCategory.SecurityAlert
 import com.digitalasset.base.error.{ErrorCode, Explanation, Resolution}
-import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.environment.CantonNodeParameters
 import com.digitalasset.canton.error.CantonError
 import com.digitalasset.canton.error.CantonErrorGroups.HandshakeErrorGroup
 import com.digitalasset.canton.logging.ErrorLoggingContext
+import com.digitalasset.canton.util.ShowUtil.*
 import com.digitalasset.canton.version.ProtocolVersion.InvalidProtocolVersion
 import com.digitalasset.canton.version.ProtocolVersionCompatibility.UnsupportedVersion
+import io.grpc.Status
 import pureconfig.error.FailureReason
 import pureconfig.{ConfigReader, ConfigWriter}
 
@@ -42,8 +43,7 @@ object ProtocolVersionCompatibility {
       sys.error(
         s"Please review the supported protocol versions of release version $release in `ReleaseVersionToProtocolVersions.scala`."
       ),
-    ) ++ unstableAndBeta :+ ProtocolVersion.v35
-    // TODO(i31167): When PV35 is stable, remove the following line
+    ) ++ unstableAndBeta
 
     // If the release contains an unstable, alpha or beta protocol version, it is mentioned twice in the result
     supportedPVs.distinct
@@ -71,8 +71,7 @@ object ProtocolVersionCompatibility {
       sys.error(
         s"Please review the supported protocol versions of release version $release in `ReleaseVersionToProtocolVersions.scala`."
       ),
-    ) ++ beta ++ alpha :+ ProtocolVersion.v35
-    // TODO(i31167): When PV35 is stable, remove the following line
+    ) ++ beta ++ alpha
 
     // If the release contains an unstable, alpha or beta protocol version, it is mentioned twice in the result
     supportedPVs.distinct
@@ -120,6 +119,8 @@ object ProtocolVersionCompatibility {
 /** Trait for errors that are returned to clients when handshake fails. */
 sealed trait HandshakeError {
   def description: String
+
+  def asStatus: Status
 }
 
 final case class MinProtocolError(
@@ -133,6 +134,37 @@ final case class MinProtocolError(
         .getOrElse("")}). " +
       s"${if (clientSupportsRequiredVersion) "The participant supports the version required by the synchronizer and would be able to connect to the synchronizer if the minimum required version is configured to be lower."
         else ""} "
+
+  override def asStatus: Status = Status.INVALID_ARGUMENT.withDescription(description)
+}
+
+final case class UnstableProtocolRequiresMatchingBinaries(
+    server: ProtocolVersion,
+    serverBinary: String,
+    clientBinary: String,
+) extends HandshakeError {
+
+  override def description: String =
+    s"The server version is running an unstable protocol version $server which requires both client ($clientBinary) and server ($serverBinary) to use the same binary"
+
+  override def asStatus: Status = Status.INVALID_ARGUMENT.withDescription(description)
+
+}
+
+// Generally, we don't check by binary version,
+// but by protocol version compatibility. This error is used to signal a special
+// case when we explicitly need to ban a version from connecting.
+// This was introduced as part of the LSU34->35.
+final case class ClientBinaryIsTooOld(
+    server: ProtocolVersion,
+    clientBinary: String,
+) extends HandshakeError {
+
+  override def description: String =
+    s"The server is running protocol $server and does not support clients with binary $clientBinary. This may mean that your binary is explicitly blocked from connecting. Please upgrade to a supported version."
+
+  override def asStatus: Status = Status.INVALID_ARGUMENT.withDescription(description)
+
 }
 
 final case class VersionNotSupportedError(
@@ -140,7 +172,9 @@ final case class VersionNotSupportedError(
     clientSupportedVersions: Seq[ProtocolVersion],
 ) extends HandshakeError {
   override def description: String =
-    s"The protocol version required by the server (${server.toString}) is not among the supported protocol versions by the client $clientSupportedVersions. "
+    show"The protocol version required by the server (${server.toString}) is not among the supported protocol versions by the client: $clientSupportedVersions. "
+
+  override def asStatus: Status = Status.INVALID_ARGUMENT.withDescription(description)
 }
 
 object HandshakeErrors extends HandshakeErrorGroup {
@@ -154,7 +188,7 @@ object HandshakeErrors extends HandshakeErrorGroup {
   )
   object DeprecatedProtocolVersion extends ErrorCode("DEPRECATED_PROTOCOL_VERSION", SecurityAlert) {
     final case class WarnSequencerClient(
-        synchronizerAlias: SynchronizerAlias,
+        synchronizer: String,
         version: ProtocolVersion,
     )(implicit
         val loggingContext: ErrorLoggingContext

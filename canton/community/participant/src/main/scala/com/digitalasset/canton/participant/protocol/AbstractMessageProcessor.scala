@@ -26,6 +26,7 @@ import com.digitalasset.canton.sequencing.client.SequencerClientSend.SendRequest
 import com.digitalasset.canton.sequencing.client.{
   SendAsyncClientError,
   SendCallback,
+  SequencerClient,
   SequencerClientSend,
 }
 import com.digitalasset.canton.sequencing.protocol.{Batch, MessageId, Recipients}
@@ -33,6 +34,7 @@ import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.ShowUtil.*
 import com.digitalasset.canton.util.{ErrorUtil, FutureUnlessShutdownUtil, LoggerUtil}
+import com.digitalasset.canton.version.ProtocolVersion
 import com.digitalasset.canton.{RequestCounter, SequencerCounter}
 import org.slf4j.event.Level
 
@@ -44,6 +46,7 @@ abstract class AbstractMessageProcessor(
     crypto: SynchronizerCryptoClient,
     sequencerClient: SequencerClientSend,
     clock: Clock,
+    protocolVersion: ProtocolVersion,
 )(implicit ec: ExecutionContext)
     extends NamedLogging
     with FlagCloseable
@@ -106,6 +109,9 @@ abstract class AbstractMessageProcessor(
       logger.trace(s"Request $requestId: ProtocolProcessor scheduling the sending of responses")
       def errorBody = s"Request $requestId: Failed to send responses"
 
+      val topologyTimestamp =
+        if (protocolVersion >= ProtocolVersion.v35) None else Some(requestId.unwrap)
+
       for {
         synchronizerParameters <- crypto.ips
           .awaitSnapshot(requestId.unwrap)
@@ -121,13 +127,14 @@ abstract class AbstractMessageProcessor(
           .sendAsync(
             Batch.of(psid.protocolVersion, messages*),
             timestamps = SendRequestTimestamps(
-              topologyTimestamp = Some(requestId.unwrap),
+              topologyTimestamp = topologyTimestamp,
               // We use `clock.now` to stay consistent with how other submission requests are signed.
               approximateTimestampForSigning = clock.now,
               maxSequencingTime = maxSequencingTime,
             ),
             messageId = messageId.getOrElse(MessageId.randomMessageId()),
             callback = SendCallback.log(s"Response message for request [$requestId]", logger),
+            trafficCostValidator = SequencerClient.TrafficCostValidator.NoTrafficCostValidation,
             amplify = true,
             // We want to use a shorter patience for the confirmation responses
             useConfirmationResponseAmplificationParameters = true,

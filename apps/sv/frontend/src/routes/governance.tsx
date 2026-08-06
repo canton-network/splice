@@ -7,8 +7,8 @@ import {
   ActionRequiredSection,
   ActionRequiredData,
 } from '../components/governance/ActionRequiredSection';
-import { Loading, useVotesHooks } from '@lfdecentralizedtrust/splice-common-frontend';
-import { dateTimeFormatISO } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { Loading, useVotesHooks } from '@canton-network/splice-common-frontend';
+import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import dayjs from 'dayjs';
 import { ContractId } from '@daml/types';
 import {
@@ -23,11 +23,12 @@ import {
   computeVoteStats,
   computeYourVote,
   getVoteResultStatus,
+  getRequesterPartyId,
 } from '../utils/governance';
 import { SupportedActionTag, ProposalListingData } from '../utils/types';
 import { Link as RouterLink } from 'react-router';
 import { InfoOutlined, WarningAmberOutlined } from '@mui/icons-material';
-import { useInfiniteVoteRequestResults } from '../hooks';
+import { useInfiniteVoteRequestResults, useVoteRequestResultsCount } from '../hooks';
 
 function getAction(action: ActionRequiringConfirmation): string {
   switch (action.tag) {
@@ -48,6 +49,7 @@ export const Governance: React.FC = () => {
   const dsoInfosQuery = votesHooks.useDsoInfos();
   const listVoteRequestsQuery = votesHooks.useListDsoRulesVoteRequests();
   const voteResultsInfiniteQuery = useInfiniteVoteRequestResults();
+  const voteResultsCountQuery = useVoteRequestResultsCount();
 
   const voteRequestIds = listVoteRequestsQuery.data
     ? listVoteRequestsQuery.data.map(v => v.payload.trackingCid || v.contractId)
@@ -56,6 +58,7 @@ export const Governance: React.FC = () => {
 
   const svPartyId = dsoInfosQuery.data?.svPartyId;
   const votingThreshold = dsoInfosQuery.data?.votingThreshold;
+  const svs = dsoInfosQuery.data?.dsoRules.payload.svs;
   const alreadyVotedRequestIds: Set<ContractId<VoteRequest>> = useMemo(() => {
     return svPartyId && votesQuery.data
       ? new Set(votesQuery.data.filter(v => v.voter === svPartyId).map(v => v.requestCid))
@@ -80,7 +83,7 @@ export const Governance: React.FC = () => {
         const votes = vr.request.votes.entriesArray().map(e => e[1]);
 
         return {
-          contractId: vr.request.trackingCid,
+          contractId: (vr.request.trackingCid ?? '') as ContractId<VoteRequest>,
           actionName:
             actionTagToTitle(amuletName)[getAction(vr.request.action) as SupportedActionTag],
           description: vr.request.reason.body,
@@ -93,9 +96,10 @@ export const Governance: React.FC = () => {
           status: getVoteResultStatus(vr.outcome),
           voteStats: computeVoteStats(votes),
           acceptanceThreshold: votingThreshold,
+          requester: getRequesterPartyId(vr.request.requester, svs),
         } as ProposalListingData;
       });
-  }, [voteResultsInfiniteQuery.data?.pages, amuletName, svPartyId, votingThreshold]);
+  }, [voteResultsInfiniteQuery.data?.pages, amuletName, svPartyId, votingThreshold, svs]);
 
   if (
     dsoInfosQuery.isPending ||
@@ -127,8 +131,7 @@ export const Governance: React.FC = () => {
         description: vr.payload.reason.body,
         votingCloses: dayjs(vr.payload.voteBefore).format(dateTimeFormatISO),
         createdAt: dayjs(vr.createdAt).format(dateTimeFormatISO),
-        requester: vr.payload.requester,
-        isYou: vr.payload.requester === svPartyId,
+        requester: getRequesterPartyId(vr.payload.requester, svs),
       } as ActionRequiredData;
     });
 
@@ -151,6 +154,7 @@ export const Governance: React.FC = () => {
         status: 'In Progress',
         voteStats: computeVoteStats(votes),
         acceptanceThreshold: dsoInfosQuery.data.votingThreshold,
+        requester: getRequesterPartyId(v.payload.requester, svs),
       } as ProposalListingData;
     });
 
@@ -182,6 +186,7 @@ export const Governance: React.FC = () => {
 
           <ProposalListingSection
             sectionTitle="Inflight Votes"
+            badgeCount={inflightRequests.length}
             data={inflightRequests}
             noDataMessage="No proposals are currently in flight. Proposals you have voted on will appear here while awaiting the voting threshold or deadline."
             uniqueId="inflight-proposals"
@@ -192,6 +197,7 @@ export const Governance: React.FC = () => {
 
           <ProposalListingSection
             sectionTitle="Vote History"
+            badgeCount={voteResultsCountQuery.data}
             data={voteHistory}
             noDataMessage="No data to show. You can see your vote history here after proposals meet their threshold deadline."
             uniqueId="vote-history"

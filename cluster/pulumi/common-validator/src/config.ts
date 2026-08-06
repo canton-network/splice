@@ -6,8 +6,8 @@ import {
   K8sResourceSchema,
   KmsConfigSchema,
   LogLevelSchema,
-} from '@lfdecentralizedtrust/splice-pulumi-common/src/config';
-import { clusterSubConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/config';
+} from '@canton-network/splice-pulumi-common/src/config';
+import { clusterSubConfig } from '@canton-network/splice-pulumi-common/src/config/config';
 import { z } from 'zod';
 
 export const SynchronizerConfigSchema = z.union([
@@ -90,7 +90,11 @@ export const ValidatorNodeConfigSchema = z.object({
   logging: z
     .object({
       level: LogLevelSchema.optional(),
+      // Log level for the Splice apps' HTTP request logging (org.lfdecentralizedtrust.splice.admin.api)
       apiRequestLogLevel: LogLevelSchema.optional(),
+      // Log level for the Canton nodes' Ledger-API audit logging (com.digitalasset.canton.logging.audit)
+      // Falls back to `apiRequestLogLevel` when not specified
+      cantonApiRequestLogLevel: LogLevelSchema.optional(),
       async: z.boolean().optional(),
     })
     .default({}),

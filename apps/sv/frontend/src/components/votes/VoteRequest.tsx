@@ -7,8 +7,8 @@ import {
   DateWithDurationDisplay,
   DisableConditionally,
   SvClientProvider,
-} from '@lfdecentralizedtrust/splice-common-frontend';
-import { getUTCWithOffset } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+} from '@canton-network/splice-common-frontend';
+import { getUTCWithOffset } from '@canton-network/splice-common-frontend-utils';
 import { DecoderError } from '@mojotech/json-type-validation/dist/types/decoder';
 import { useMutation } from '@tanstack/react-query';
 import dayjs, { Dayjs } from 'dayjs';
@@ -121,9 +121,12 @@ export const CreateVoteRequest: React.FC = () => {
     { name: 'Offboard Member', value: 'SRARC_OffboardSv' },
     { name: 'Feature Application', value: 'SRARC_GrantFeaturedAppRight' },
     { name: 'Unfeature Application', value: 'SRARC_RevokeFeaturedAppRight' },
-    { name: 'Set Dso Rules Configuration', value: 'SRARC_SetConfig' },
+    {
+      name: 'Set Decentralized Synchronizer Operations (DSO) Rules Configuration',
+      value: 'SRARC_SetConfig',
+    },
     { name: 'Set Amulet Rules Configuration', value: 'CRARC_SetConfig' },
-    { name: 'Update SV Reward Weight', value: 'SRARC_UpdateSvRewardWeight' },
+    { name: 'Update Super Validator Reward Weight', value: 'SRARC_UpdateSvRewardWeight' },
     {
       name: 'Create Unclaimed Activity Record',
       value: 'SRARC_CreateUnallocatedUnclaimedActivityRecord',

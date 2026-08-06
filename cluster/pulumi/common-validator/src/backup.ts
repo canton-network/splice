@@ -7,7 +7,7 @@ import {
   config,
   GcpBucket,
   isDevNet,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 
 type BootstrapCliConfig = {
   cluster: string;

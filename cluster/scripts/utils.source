@@ -30,21 +30,57 @@ function get_cloudsql_id() {
   fi
 }
 
+function get_postgres_statefulset_name() {
+  local namespace=$1
+  local instance=$2
+
+  local candidate
+  for candidate in "${instance}-helmless" "$instance"; do
+    if kubectl get statefulset -n "$namespace" "$candidate" >/dev/null 2>&1; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+
+  _error "No postgres StatefulSet found for base name $instance in namespace $namespace"
+}
+
+function get_postgres_pvc_name() {
+  local namespace=$1
+  local instance=$2
+
+  local statefulset_name
+  statefulset_name=$(get_postgres_statefulset_name "$namespace" "$instance")
+
+  local pvc_template_name
+  pvc_template_name=$(kubectl get statefulset -n "$namespace" "$statefulset_name" -o jsonpath='{.spec.volumeClaimTemplates[0].metadata.name}')
+
+  if [ -z "$pvc_template_name" ]; then
+    _error "Unable to determine PVC template name for StatefulSet $statefulset_name in namespace $namespace"
+  fi
+
+  echo "${pvc_template_name}-${statefulset_name}-0"
+}
+
 function get_stack_for_namespace_component() {
   local namespace=$1
   local component=$2
-  local logical_synchronizer_mode=${3:-false}
+
+  local split_sv_deployment
+  split_sv_deployment=$(get_resolved_config | yq '.synchronizerMigration.splitSvDeploymentEnabled // false')
 
   local stack=""
   if [[ "${namespace}" =~ sv.* ]]; then
-    if [[ "${component}" == "participant" && "$logical_synchronizer_mode" == "true" ]]; then
+    if [[ "${component}" == "participant" ]]; then
       stack="sv"
-    elif [[ "${component}" == "participant" ]]; then
-      stack="sv-canton"
     elif [[ "${component}" == "sequencer" ]]; then
+      stack="sv-canton"
+    elif [[ "${component}" == "cantonBft" ]]; then
       stack="sv-canton"
     elif [[ "${component}" == "mediator" ]]; then
       stack="sv-canton"
+    elif [[ "${split_sv_deployment}" == "true" ]]; then
+      stack="sv"
     else
       stack="canton-network"
     fi
@@ -59,18 +95,34 @@ create_component_instance() {
     local component="$1"
     local migration_id="$2"
     local namespace="$3"
-    local logical_synchronizer_mode="${4:-false}"
 
-    if [[ "$component" == "participant" && "$logical_synchronizer_mode" == "true" ]]; then
-        component_instance="${component}"
-    elif [[ ("$component" == "sequencer" || "$component" == "mediator" || "$component" == "participant")
+    local instance_base="$component"
+    if [[ "$component" == "cantonBft" ]]; then
+        instance_base="sequencer-bft"
+    fi
+
+    if [[ ("$component" == "sequencer" || "$component" == "cantonBft" || "$component" == "mediator")
        && ("$namespace" != "splitwell" && "$namespace" != "validator1" && "$namespace" != "sv") ]]; then
-        component_instance="${component}-${migration_id}"
+        component_instance="${instance_base}-${migration_id}"
     else
-        component_instance="${component}"
+        component_instance="${instance_base}"
     fi
 
     echo "$component_instance"
+}
+
+function canton_bft_db_enabled() {
+  local migration_id=$1
+  local config=$2
+
+  echo "$config" | yq "
+    ([.synchronizerMigration.active, .synchronizerMigration.upgrade, .synchronizerMigration.legacy]
+      + (.synchronizerMigration.additionalLegacy // [])
+      + (.synchronizerMigration.archived // []))
+    | map(select(. != null and .id == ${migration_id}))
+    | .[0]
+    | ((.sequencer.enableBftSequencer // false) and (.sequencer.dedicatedBftSequencerDb // true))
+  "
 }
 
 function get_resolved_config() {

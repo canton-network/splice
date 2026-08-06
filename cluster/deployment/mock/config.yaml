@@ -9,6 +9,10 @@ validator1:
     cron: "0 /10 * * * ?" # Run every 10min
     maxDuration: "5m"
     retention: "30d"
+  validatorApp:
+    additionalEnvVars:
+      - name: ADDITIONAL_CONFIG_VALIDATOR1_DUMMY_NAME
+        value: ADDITIONAL_CONFIG_VALIDATOR1_DUMMY_NAME
 multiValidator:
   postgresPvcSize: '100Gi'
   # Dummy values for testing
@@ -30,6 +34,18 @@ multiValidator:
 sv:
   synchronizer:
     skipInitialization: true
+  scan:
+    externalRateLimits:
+      rateLimits:
+        /registry/metadata/v1/info:
+          perIpLimits:
+            overrides:
+              test:
+                ips:
+                  - 192.68.78.50
+                maxTokens: 250
+                tokensPerFill: 250
+                fillInterval: 60s
 splitwell:
   maxDarVersion: '0.1.8'
   participantPruningSchedule:
@@ -37,10 +53,9 @@ splitwell:
     maxDuration: "5m"
     retention: "30d"
 synchronizerMigration:
-  lsuEnabled: true
   frozenMigrationId: 2
   archived:
-    - id: 7
+    - id: 5
       version: 0.3.18
       releaseReference:
         gitReference: "981227e62011e386cca3cdb5f00b472cf05a12c4"
@@ -49,7 +64,7 @@ synchronizerMigration:
         pulumiBaseDir: "splice/cluster/pulumi"
         deploymentDir: "cluster/deployment"
         spliceRoot: "splice"
-    - id: 8
+    - id: 6
       version: 0.3.19
       releaseReference:
         gitReference: "refs/heads/release-line-0.3.19"
@@ -58,9 +73,35 @@ synchronizerMigration:
         pulumiBaseDir: "splice/cluster/pulumi"
         deploymentDir: "cluster/deployment"
         spliceRoot: "splice"
+  additionalLegacy:
+    - id: 7
+      version: 0.3.20
+      releaseReference:
+        gitReference: "refs/heads/release-line-0.3.20"
+        repoUrl: https://github.com/canton-network/splice
+        pulumiStacksDir: "cluster/stacks/prod"
+        pulumiBaseDir: "splice/cluster/pulumi"
+        deploymentDir: "cluster/deployment"
+        spliceRoot: "splice"
+        privateConfigsDir: "cluster/configs/configs-private"
+        publicConfigsDir: "cluster/configs/configs"
+  legacy:
+    id: 8
+    version: 0.3.20
+    releaseReference:
+      gitReference: "refs/heads/release-line-0.3.20"
+      repoUrl: https://github.com/canton-network/splice
+      pulumiStacksDir: "cluster/stacks/prod"
+      pulumiBaseDir: "splice/cluster/pulumi"
+      deploymentDir: "cluster/deployment"
+      spliceRoot: "splice"
+      privateConfigsDir: "cluster/configs/configs-private"
+      publicConfigsDir: "cluster/configs/configs"
   active:
     id: 9
     version: 0.3.20
+    sequencer:
+      enableBftSequencer: true
     releaseReference:
       gitReference: "refs/heads/release-line-0.3.20"
       repoUrl: https://github.com/canton-network/splice
@@ -73,7 +114,6 @@ synchronizerMigration:
   upgrade:
     id: 10
     version: 0.3.21
-    enableLogicalSynchronizerDeploymentMode: true
     sequencer:
       enableBftSequencer: true
     releaseReference:
@@ -117,16 +157,29 @@ monitoring:
     muteTimeIntervals:
       - name: sv1-mute
         objectMatchers:
-          - [ 'namespace', '=', 'sv1' ]
-        startTime: '04:00'
-        endTime: '07:00'
-        weekdays:
-          - saturday:sunday
+          - [ 'namespace', '=', 'sv1-test' ]
+        timeWindows:
+          - times:
+              - startTime: '18:00'
+                endTime: '24:00'
+            weekdays:
+              - wednesday
       - name: sv-runbook-mute
         objectMatchers:
-          - [ 'namespace', '=', 'sv' ]
-        startTime: '06:00'
-        endTime: '10:00'
+          - [ 'namespace', '=', 'sv-test' ]
+        timeWindows:
+          - times:
+              - startTime: '18:00'
+                endTime: '24:00'
+            weekdays:
+              - wednesday
+          - times:
+              - startTime: '00:00'
+                endTime: '06:00'
+              - startTime: '12:00'
+                endTime: '13:00'
+            weekdays:
+              - thursday
 operatorDeployment:
   reference:
     gitReference: refs/heads/main
@@ -175,6 +228,12 @@ svs:
     validatorApp:
       sweep:
         fromEnv: SV1
+    physicalSynchronizerOverrides:
+      9:
+        sequencer:
+          additionalEnvVars:
+            - name: PS9_SEQUENCER_ENV_VAR_NAME
+              value: PS9_SEQUENCER_ENV_VAR_VALUE
   sv-2: !include(sv.yaml) {}
   sv-da-1: !include(sv.yaml) # non "sv-X" key => additional SV that is always deployed (key == node name == k8s namespace)
     publicName: Digital-Asset-1
@@ -194,6 +253,9 @@ svs:
       nodeId: d825622358065aea3cb3b3479cf64d172675037e
       validatorKeyAddress: 2D21D8AB2306770E9F93E8BD0E0F07B3E86817D7
       keysGcpSecret: svda1-mock-cometbft-keys
+      additionalHelmValues:
+        node:
+          snapshotHeightDelta: 200
     svApp:
       auth0:
         clientId: bxjt0vzLyRG2rk2fapXfOzH5lzK4mrl7
@@ -210,6 +272,10 @@ svs:
       cantonLogLevel: INFO
       apiRequestLogLevel: DEBUG
 infra:
+  ipWhitelisting:
+    extraWhitelistedIngress:
+      - 1.2.3.4/32
+      - 2.3.4.5/32
   extraCustomResources:
     deny-onboard-prepare-endpoint:
       apiVersion: security.istio.io/v1
@@ -250,11 +316,20 @@ infra:
 cluster:
   nodePools:
     apps:
-      nodeType: n2-standard-16
-    hyperdiskApps:
-      nodeType: c4-standard-16
+      nodeType: n4d-standard-16
       minNodes: 0
       maxNodes: 1
+      zones: '*'
+    additionalApps:
+    - nodeType: n4-standard-16
+      minNodes: 0
+      maxNodes: 1
+      zones: '*'
+    additionalInfra:
+    - nodeType: n4-standard-8
+      minNodes: 1
+      maxNodes: 3
+      zones: '*'
 gha:
   githubRepo: "https://github.com/canton-network/splice"
   runnerVersion: "0.5.10"

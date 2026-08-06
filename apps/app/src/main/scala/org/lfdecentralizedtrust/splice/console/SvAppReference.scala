@@ -23,6 +23,7 @@ import org.lfdecentralizedtrust.splice.environment.{
   SpliceStatus,
 }
 import org.lfdecentralizedtrust.splice.http.v0.definitions
+import org.lfdecentralizedtrust.splice.store.VoteResultsFilters
 import org.lfdecentralizedtrust.splice.sv.{SvApp, SvAppBootstrap, SvAppClientConfig}
 import org.lfdecentralizedtrust.splice.sv.admin.api.client.commands.{
   HttpSvAdminAppClient,
@@ -39,7 +40,7 @@ import org.lfdecentralizedtrust.splice.sv.config.{
   SvSynchronizerNodeConfig,
   SvSynchronizerNodesConfig,
 }
-import org.lfdecentralizedtrust.splice.sv.migration.{DomainDataSnapshot, SynchronizerNodeIdentities}
+import org.lfdecentralizedtrust.splice.sv.migration.SynchronizerNodeIdentities
 import org.lfdecentralizedtrust.splice.sv.util.ValidatorOnboarding
 import org.lfdecentralizedtrust.splice.util.Contract
 
@@ -130,49 +131,10 @@ abstract class SvAppReference(
       }
       .fold(throw _, identity)
 
-  @Help.Summary("Pause the global domain")
-  def pauseDecentralizedSynchronizer(): Unit =
-    consoleEnvironment.run {
-      httpCommand(HttpSvAdminAppClient.PauseDecentralizedSynchronizer())
-    }
-
-  @Help.Summary("Unpause the global domain")
-  def unpauseDecentralizedSynchronizer(): Unit =
-    consoleEnvironment.run {
-      httpCommand(HttpSvAdminAppClient.UnpauseDecentralizedSynchronizer())
-    }
-
   @Help.Summary("Cancel a running logical synchronizer upgrade by removing its LSU announcement")
   def cancelLogicalSynchronizerUpgrade(): Unit =
     consoleEnvironment.run {
-      httpCommand(HttpSvAdminAppClient.CancelLogicalSynchronizerUpgrade())
-    }
-
-  @Help.Summary("Dump all the required data for domain migration to the configured location")
-  def triggerDecentralizedSynchronizerMigrationDump(
-      migrationId: Long,
-      at: Option[Instant] = None,
-  ): Unit =
-    consoleEnvironment.run {
-      httpCommand(HttpSvAdminAppClient.TriggerDomainMigrationDump(migrationId, at))
-    }
-
-  @Help.Summary("Get a snapshot of all the dynamic data from the domain")
-  def getDomainDataSnapshot(
-      timestamp: Instant,
-      partyId: Option[PartyId] = None,
-      migrationId: Option[Long] = None,
-      force: Boolean = false,
-  ): DomainDataSnapshot.Response =
-    consoleEnvironment.run {
-      httpCommand(
-        HttpSvAdminAppClient.GetDomainDataSnapshot(
-          timestamp,
-          partyId,
-          migrationId = migrationId,
-          force = force,
-        )
-      )
+      httpCommand(HttpSvOperatorAppClient.CancelLogicalSynchronizerUpgrade())
     }
 
   @Help.Summary("Get identities of all domain node components")
@@ -236,25 +198,27 @@ abstract class SvAppReference(
   }
 
   def listVoteRequestResults(
-      actionName: Option[String],
-      accepted: Option[Boolean],
-      requester: Option[String],
-      effectiveFrom: Option[String],
-      effectiveTo: Option[String],
+      filters: VoteResultsFilters,
       limit: BigInt,
       pageToken: Option[BigInt] = None,
   ): (Seq[DsoRules_CloseVoteRequestResult], Option[BigInt]) = {
     consoleEnvironment.run {
       httpCommand(
         HttpSvOperatorAppClient.ListVoteRequestResults(
-          actionName,
-          accepted,
-          requester,
-          effectiveFrom,
-          effectiveTo,
+          filters,
           limit,
           pageToken,
         )
+      )
+    }
+  }
+
+  def countVoteRequestResults(
+      filters: VoteResultsFilters
+  ): Long = {
+    consoleEnvironment.run {
+      httpCommand(
+        HttpSvOperatorAppClient.CountVoteRequestResults(filters)
       )
     }
   }
@@ -394,6 +358,16 @@ class SvAppBackendReference(
       )
     }
   }
+
+  @Help.Summary(
+    "Archive dry-run CalculateRewardsV2 and ProcessRewardsV2 contracts for the given rounds (via admin API)"
+  )
+  def archiveDryRunRewardAccountingContracts(rounds: Seq[Long]): Unit =
+    consoleEnvironment.run {
+      httpCommand(
+        HttpSvOperatorAppClient.ArchiveDryRunRewardAccountingContracts(rounds)
+      )
+    }
 
   @Help.Summary("Get the CometBFT node debug dump")
   def cometBftNodeDump(): definitions.CometBftNodeDumpResponse =

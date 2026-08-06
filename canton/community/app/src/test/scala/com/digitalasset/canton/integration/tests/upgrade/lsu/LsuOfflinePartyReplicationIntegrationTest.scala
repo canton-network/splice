@@ -100,7 +100,7 @@ abstract class LsuOfflinePartyReplicationIntegrationTest extends LsuBase with Ha
 
   protected val acsSnapshotFile: TempFile = tempDirectory.toTempFile("offpr_test_acs_snapshot.gz")
 
-  protected def makeFixture1(implicit env: TestEnvironment): Fixture = Fixture(
+  protected def makeFixture1(implicit env: TestEnvironment[?]): Fixture = Fixture(
     currentPsid = env.daId,
     upgradeTime = upgradeTime1,
     oldSynchronizerNodes = SynchronizerNodes(Seq(env.sequencer1), Seq(env.mediator1)),
@@ -111,16 +111,17 @@ abstract class LsuOfflinePartyReplicationIntegrationTest extends LsuBase with Ha
     newSerial = env.daId.serial.increment.toNonNegative,
   )
 
-  protected def makeFixture2(fixture1: Fixture)(implicit env: TestEnvironment): Fixture = Fixture(
-    currentPsid = fixture1.newPsid,
-    upgradeTime = upgradeTime2,
-    oldSynchronizerNodes = fixture1.newSynchronizerNodes,
-    newSynchronizerNodes = SynchronizerNodes(Seq(env.sequencer3), Seq(env.mediator3)),
-    newOldNodesResolution = Map("sequencer3" -> "sequencer2", "mediator3" -> "mediator2"),
-    oldSynchronizerOwners = Set[InstanceReference](env.sequencer2, env.mediator2),
-    newPV = testedProtocolVersion,
-    newSerial = fixture1.newSerial.increment.toNonNegative,
-  )
+  protected def makeFixture2(fixture1: Fixture)(implicit env: TestEnvironment[?]): Fixture =
+    Fixture(
+      currentPsid = fixture1.newPsid,
+      upgradeTime = upgradeTime2,
+      oldSynchronizerNodes = fixture1.newSynchronizerNodes,
+      newSynchronizerNodes = SynchronizerNodes(Seq(env.sequencer3), Seq(env.mediator3)),
+      newOldNodesResolution = Map("sequencer3" -> "sequencer2", "mediator3" -> "mediator2"),
+      oldSynchronizerOwners = Set[InstanceReference](env.sequencer2, env.mediator2),
+      newPV = testedProtocolVersion,
+      newSerial = fixture1.newSerial.increment.toNonNegative,
+    )
 
   protected def assertParticipantHostsParty(
       participant: ParticipantReference,
@@ -383,9 +384,7 @@ final class LsuOffPRInterleavedLsuAfterSourceAuthorizesOffPR
       }
 
       val offsetAfterTargetImport = withClue("ACS snapshot is imported on target") {
-        // TODO(#29427) - Address ongoing synchronizer upgrade "no more topology transaction after freeze"
-        // Switch back to import_party_acs from repair.import_acs
-        participant2.repair.import_acs(lsid, acsSnapshotFile.path.toString)
+        participant2.parties.import_party_acs(lsid, Some(alice), acsSnapshotFile.path.toString)
         participant2.ledger_api.state.end()
       }
 

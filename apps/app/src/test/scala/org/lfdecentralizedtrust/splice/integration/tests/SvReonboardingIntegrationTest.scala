@@ -19,9 +19,9 @@ import org.lfdecentralizedtrust.splice.config.{
   ParticipantClientConfig,
 }
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
+  ConfigurableApp,
   bumpUrl,
   updateAutomationConfig,
-  ConfigurableApp,
 }
 import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.TopologySnapshot
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
@@ -421,9 +421,11 @@ class SvReonboardingIntegrationTest
       )() {
         // Canton is sloooooooooooooooooooooooooooooooow
         eventuallySucceeds(timeUntilSuccess = 120.seconds) {
-          sv4ReonboardBackend.participantClientWithAdminToken.health.status should be(
-            NodeStatus.NotInitialized(true, Some(WaitingForId))
-          )
+          inside(sv4ReonboardBackend.participantClientWithAdminToken.health.status) {
+            case NodeStatus.NotInitialized(active, waitingFor, _) =>
+              active should be(true)
+              waitingFor should be(Some(WaitingForId))
+          }
         }
         better.files
           .File(dumpPath)
@@ -512,7 +514,10 @@ class SvReonboardingIntegrationTest
         val action: ActionRequiringConfirmation =
           new ARC_DsoRules(
             new SRARC_GrantFeaturedAppRight(
-              new DsoRules_GrantFeaturedAppRight(sv4PartyNew.toProtoPrimitive)
+              new DsoRules_GrantFeaturedAppRight(
+                sv4PartyNew.toProtoPrimitive,
+                java.util.Optional.empty(),
+              )
             )
           )
         actAndCheck(

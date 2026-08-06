@@ -5,13 +5,13 @@ import {
   getDsoSetConfigAction,
   getAmuletRulesAddFutureScheduleAction,
   getAmuletRulesSetConfigAction,
-} from '@lfdecentralizedtrust/splice-common-test-handlers';
-import { dsoInfo } from '@lfdecentralizedtrust/splice-common-test-handlers';
+} from '@canton-network/splice-common-test-handlers';
+import { dsoInfo } from '@canton-network/splice-common-test-handlers';
 import {
   ListDsoRulesVoteRequestsResponse,
   ListDsoRulesVoteResultsResponse,
   ListVoteRequestByTrackingCidResponse,
-} from '@lfdecentralizedtrust/sv-openapi';
+} from '@canton-network/sv-openapi';
 
 import { AmuletRules } from '@daml.js/splice-amulet/lib/Splice/AmuletRules';
 import { DsoRules } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules/module';
@@ -292,7 +292,8 @@ export const voteResultsDsoRules: ListDsoRulesVoteResultsResponse = {
           url: '',
           body: 'd',
         },
-        trackingCid: null,
+        trackingCid:
+          '99f1a2cbcd5a2dc9ad2fb9d17fec183d75de19ca91f623cbd2eaaf634e8d7cb4b5ca101220b5c5c20442f608e151ca702e0c4f51341a338c5979c0547dfcc80f911061ca99',
         action: getDsoSetConfigAction({ new: '2200', base: '100' }),
       },
       completedAt: '2024-10-01T22:10:01.253341Z',

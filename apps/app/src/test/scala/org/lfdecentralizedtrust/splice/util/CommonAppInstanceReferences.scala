@@ -52,6 +52,11 @@ trait CommonAppInstanceReferences {
     "sv1Local"
   )
 
+  def sv1NoLegacyLocalBackend(implicit env: SpliceTestConsoleEnvironment): SvAppBackendReference =
+    svb(
+      "sv1NoLegacyLocal"
+    )
+
   def sv2Backend(implicit env: SpliceTestConsoleEnvironment): SvAppBackendReference = svb("sv2")
 
   def sv2LocalBackend(implicit env: SpliceTestConsoleEnvironment): SvAppBackendReference = svb(

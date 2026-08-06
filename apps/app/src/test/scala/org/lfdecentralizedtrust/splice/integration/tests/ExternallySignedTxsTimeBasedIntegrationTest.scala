@@ -26,6 +26,7 @@ class ExternallySignedTxsTimeBasedIntegrationTest
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
       .simpleTopology1SvWithSimTime(this.getClass.getSimpleName)
+      .withTransferCommandSupport
 
   "Externally signed transactions can tolerate a preparation/submission skew larger than ledgerTimeRecordTimeTolerance" in {
     implicit env =>

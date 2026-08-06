@@ -13,21 +13,24 @@ deploymentInfo:
     {{- end }}
   synchronizer:
     {{- with .Values.deploymentDetails.synchronizer }}
-    active:
-      version: {{ .active.version | default $.Chart.Version | quote }}
-      migrationId: {{ .active.migrationId }}
-      chainIdSuffix: {{ .active.chainIdSuffix | quote }}
-    staging:
-      {{- if .staging }}
-      version: {{ .staging.version | quote }}
-      migrationId: {{ .staging.migrationId }}
-      chainIdSuffix: {{ .staging.chainIdSuffix | quote }}
+    current:
+      version: {{ .current.version | default $.Chart.Version | quote }}
+      migrationId: {{ .current.migrationId }}
+      chainIdSuffix: {{ .current.chainIdSuffix | quote }}
+      synchronizerSerialId: {{ .current.synchronizerSerialId }}
+    successor:
+      {{- if .successor }}
+      version: {{ .successor.version | quote }}
+      migrationId: {{ .successor.migrationId }}
+      chainIdSuffix: {{ .successor.chainIdSuffix | quote }}
+      synchronizerSerialId: {{ .successor.synchronizerSerialId }}
       {{- end }}
     legacy:
       {{- if .legacy }}
       version: {{ .legacy.version | quote }}
       migrationId: {{ .legacy.migrationId }}
       chainIdSuffix: {{ .legacy.chainIdSuffix | quote }}
+      synchronizerSerialId: {{ .legacy.synchronizerSerialId }}
       {{- end }}
     {{- end }}
 {{- end }}

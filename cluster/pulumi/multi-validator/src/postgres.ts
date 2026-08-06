@@ -1,82 +1,52 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import * as pulumi from '@pulumi/pulumi';
-import * as random from '@pulumi/random';
 import {
   activeVersion,
   appsAffinityAndTolerations,
   CnInput,
   ExactNamespace,
-  InstalledHelmChart,
-  installPostgresPasswordSecret,
-  installSpliceRunbookHelmChart,
   spliceConfig,
   standardStorageClassName,
-  createVolumeSnapshot,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
+import { installSplicePostgres, Postgres } from '@canton-network/splice-pulumi-common/src/postgres';
 
-import { hyperdiskSupportConfig } from '../../common/src/config/hyperdiskSupportConfig';
 import { multiValidatorConfig } from './config';
 
 export function installPostgres(
   xns: ExactNamespace,
   name: string,
   dependsOn: CnInput<pulumi.Resource>[]
-): InstalledHelmChart {
-  const password = new random.RandomPassword(`${xns.logicalName}-${name}-passwd`, {
-    length: 16,
-    overrideSpecial: '_%@',
-    special: true,
-  }).result;
+): Postgres {
   const secretName = `${name}-secret`;
-  const passwordSecret = installPostgresPasswordSecret(xns, password, secretName);
 
   if (!multiValidatorConfig) {
     throw new Error('multiValidator config must be set when they are enabled');
   }
   const config = multiValidatorConfig!;
 
-  let hyperdiskMigrationValues = {};
-  if (
-    hyperdiskSupportConfig.hyperdiskSupport.enabled &&
-    hyperdiskSupportConfig.hyperdiskSupport.migrating
-  ) {
-    const { dataSource } = createVolumeSnapshot({
-      resourceName: `pg-data-${xns.logicalName}-${name}-snapshot`,
-      snapshotName: `pg-data-${name}-snapshot`,
-      namespace: xns.logicalName,
-      pvcName: `pg-data-${name}-0`,
-    });
-    hyperdiskMigrationValues = { dataSource };
-  }
-  return installSpliceRunbookHelmChart(
+  return installSplicePostgres(
     xns,
     name,
-    'splice-postgres',
+    secretName,
+    config.postgres,
+    activeVersion,
+    {},
     {
-      persistence: { secretName },
       db: {
         volumeSize: config.postgresPvcSize,
         maxConnections: 1000,
-        ...(hyperdiskSupportConfig.hyperdiskSupport.enabled
-          ? {
-              volumeStorageClass: standardStorageClassName,
-              pvcTemplateName: 'pg-data-hd',
-              ...hyperdiskMigrationValues,
-            }
-          : {}),
+        volumeStorageClass: standardStorageClassName,
+        pvcTemplateName: 'pg-data-hd',
       },
       resources: config.resources?.postgres,
       appsAffinityAndTolerations,
     },
-    activeVersion,
+    true, // overrideDbSizeFromValues
+    false, // useInfraAffinityAndTolerations
     {
-      dependsOn: [passwordSecret, ...dependsOn],
-      ...((hyperdiskSupportConfig.hyperdiskSupport.enabled &&
-        // during the migration we first delete the stateful set, which keeps the old pvcs, and the recreate with the new pvcs
-        // the stateful sets are immutable so they need to be recreated to force the change of the pvcs
-        hyperdiskSupportConfig.hyperdiskSupport.migrating) ||
-      spliceConfig.pulumiProjectConfig.replacePostgresStatefulSetOnChanges
+      dependsOn,
+      ...(spliceConfig.pulumiProjectConfig.replacePostgresStatefulSetOnChanges
         ? {
             replaceOnChanges: ['*'],
             deleteBeforeReplace: true,

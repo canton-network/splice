@@ -2245,7 +2245,6 @@ class IssSegmentModuleTest
       parentModuleRef,
       availabilityModuleRef,
       p2pNetworkOutModuleRef,
-      config.consensusBlockCompletionTimeout,
       config.consensusEmptyBlockCreationTimeout,
       metrics,
       timeouts,
@@ -2267,7 +2266,7 @@ private object IssSegmentModuleTest {
     BftNodeId(s"node$index")
   }
   private val allIds = (myId +: otherIds).sorted
-  private val fullTopology = OrderingTopology.forTesting(allIds.toSet)
+  private def fullTopology(implicit pv: ProtocolVersion) = OrderingTopology.forTesting(allIds.toSet)
   private val aBatchId = BatchId.createForTesting("A batch id")
   private val oneRequestOrderingBlock1Ack = OrderingBlock(
     Seq(

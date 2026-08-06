@@ -79,17 +79,3 @@ As per the information in :ref:`Adding ad-hoc configuration <configuration_ad_ho
 add an environment variable
 ``ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT=canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m``
 to enable the trigger with a polling interval of 5 minutes.
-
-
-.. _metrics_grafana_dashboards:
-
-Grafana Dashboards
-++++++++++++++++++
-
-The release bundle (|bundle_download_link|) contains a set of Grafana dashboards that are built based on the metrics above.
-These dashboards can be imported into a Grafana instance. The dashboards are built assuming a K8s deployment, and may need to be modified for other deployment types.
-The dashboards can be found under the `grafana-dashboards` folder in the release bundle.
-
-.. note::
-
-    The dashboards are built using queries specific for Prometheus native histograms.

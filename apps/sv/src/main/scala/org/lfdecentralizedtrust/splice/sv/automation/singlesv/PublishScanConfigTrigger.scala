@@ -105,7 +105,6 @@ class PublishScanConfigTrigger(
       rulesAndState,
       synchronizerNodeConfig,
       damlScanConfig,
-      // TODO(#998): this domain-id is likely the wrong one to use in a soft-domain migration context
       synchronizerId,
     )).value
       .map(_.toList)

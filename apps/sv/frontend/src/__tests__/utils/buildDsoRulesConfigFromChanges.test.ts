@@ -57,6 +57,39 @@ describe('buildDsoRulesConfigFromChanges', () => {
     });
   });
 
+  it('should serialize an empty nullable acsCommitmentReconciliationInterval as null, not ""', () => {
+    const changes: ConfigChange[] = [
+      {
+        fieldName: 'decentralizedSynchronizer1',
+        label: 'Sync',
+        currentValue: 'sync1',
+        newValue: 'sync1',
+      },
+      {
+        fieldName: 'decentralizedSynchronizerState1',
+        label: 'State',
+        currentValue: 'DS_Operational',
+        newValue: 'DS_Operational',
+      },
+      {
+        fieldName: 'decentralizedSynchronizerCometBftGenesisJson1',
+        label: 'Genesis',
+        currentValue: 'genesis',
+        newValue: 'genesis',
+      },
+      {
+        fieldName: 'decentralizedSynchronizerAcsCommitmentReconciliationInterval1',
+        label: 'Interval',
+        currentValue: '',
+        newValue: '',
+      },
+    ];
+    const result = buildDsoRulesConfigFromChanges(changes);
+
+    const syncValue = result.decentralizedSynchronizer.synchronizers.get('sync1');
+    expect(syncValue?.acsCommitmentReconciliationInterval).toBeNull();
+  });
+
   it('should handle nextScheduledSynchronizerUpgrade when provided', () => {
     const changes: ConfigChange[] = [];
     const result = buildDsoRulesConfigFromChanges(changes);

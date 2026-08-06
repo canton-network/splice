@@ -98,7 +98,7 @@ class MediatorAdminConnection(
   override def isNodeInitialized()(implicit traceContext: TraceContext): Future[Boolean] = {
     getStatus.map {
       case NodeStatus.Failure(_) => false
-      case NodeStatus.NotInitialized(_, _) => false
+      case NodeStatus.NotInitialized(_, _, _) => false
       case NodeStatus.Success(_) => true
     }
   }

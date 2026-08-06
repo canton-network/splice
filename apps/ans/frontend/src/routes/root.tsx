@@ -6,7 +6,7 @@ import {
   Loading,
   PartyId,
   useUserState,
-} from '@lfdecentralizedtrust/splice-common-frontend';
+} from '@canton-network/splice-common-frontend';
 import { Outlet } from 'react-router';
 
 import { Box, Button, Stack } from '@mui/material';

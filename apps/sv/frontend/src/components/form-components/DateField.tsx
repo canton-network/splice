@@ -2,12 +2,19 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { useMemo } from 'react';
+import { KeyboardArrowDown } from '@mui/icons-material';
 import { Box, Typography } from '@mui/material';
 import { DesktopDateTimePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import dayjs, { Dayjs } from 'dayjs';
-import { dateTimeFormatISO } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import { useFieldContext } from '../../hooks/formContext';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import {
+  datePickerFieldSx,
+  fieldDescriptionSx,
+  fieldSectionSx,
+  fieldSectionTitleSx,
+} from '../../themes/fieldStyles';
 
 export interface DateFieldProps {
   title?: string;
@@ -23,18 +30,10 @@ export const DateField: React.FC<DateFieldProps> = props => {
   const dateValue = useMemo(() => dayjs(field.state.value), [field.state.value]);
 
   return (
-    <Box>
-      {title && (
-        <Typography variant="h5" gutterBottom>
-          {title}
-        </Typography>
-      )}
+    <Box sx={fieldSectionSx}>
+      {title && <Typography sx={fieldSectionTitleSx}>{title}</Typography>}
 
-      {description && (
-        <Typography variant="body2" color="text.secondary" gutterBottom>
-          {description}
-        </Typography>
-      )}
+      {description && <Typography sx={fieldDescriptionSx}>{description}</Typography>}
 
       <LocalizationProvider dateAdapter={AdapterDayjs}>
         <DesktopDateTimePicker
@@ -42,17 +41,34 @@ export const DateField: React.FC<DateFieldProps> = props => {
           format={dateTimeFormatISO}
           minDateTime={minDate || dayjs()}
           ampm={false}
+          onClose={() => field.handleBlur()}
           onChange={newDate => field.handleChange(newDate?.format(dateTimeFormatISO)!)}
           enableAccessibleFieldDOMStructure={false}
+          slots={{
+            openPickerIcon: KeyboardArrowDown,
+          }}
           slotProps={{
             textField: {
               fullWidth: true,
               variant: 'outlined',
               id: `${id}-field`,
+              error: !field.state.meta.isValid,
               helperText: field.state.meta.errors?.[0],
               onBlur: field.handleBlur,
+              sx: datePickerFieldSx,
               inputProps: {
                 'data-testid': `${id}-field`,
+              },
+            },
+            openPickerButton: {
+              sx: {
+                color: 'text.light',
+                marginRight: 0,
+                padding: 0,
+                cursor: 'pointer',
+                '& .MuiSvgIcon-root': {
+                  fontSize: 16,
+                },
               },
             },
           }}

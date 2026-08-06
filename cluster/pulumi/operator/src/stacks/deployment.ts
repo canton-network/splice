@@ -1,10 +1,7 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { GitFluxRef } from '@lfdecentralizedtrust/splice-pulumi-common/src/operator/flux-source';
-import {
-  createStackCR,
-  EnvRefs,
-} from '@lfdecentralizedtrust/splice-pulumi-common/src/operator/stack';
+import { GitFluxRef } from '@canton-network/splice-pulumi-common/src/operator/flux-source';
+import { createStackCR, EnvRefs } from '@canton-network/splice-pulumi-common/src/operator/stack';
 import { Secret } from '@pulumi/kubernetes/core/v1';
 
 import { spliceEnvConfig } from '../../../common/src/config/envConfig';

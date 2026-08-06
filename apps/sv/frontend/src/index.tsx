@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import * as React from 'react';
-import { ErrorBoundary } from '@lfdecentralizedtrust/splice-common-frontend';
+import { ErrorBoundary } from '@canton-network/splice-common-frontend';
 import ReactDOM from 'react-dom/client';
 import { Toaster } from 'sonner';
 

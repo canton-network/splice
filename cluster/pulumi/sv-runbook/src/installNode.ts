@@ -43,13 +43,14 @@ import {
   failOnAppVersionMismatch,
   networkWideConfig,
   getAdditionalJvmOptions,
+  persistentHeapDumpsPvc,
   installSvAppSecrets,
   getSvAppApiAudience,
   getValidatorAppApiAudience,
   externalIpRangesFile,
   clusterNetwork,
   CnChartVersion,
-} from '@lfdecentralizedtrust/splice-pulumi-common';
+} from '@canton-network/splice-pulumi-common';
 import {
   approvedSvIdentities,
   approvedSvIdentitiesFile,
@@ -64,12 +65,9 @@ import {
   SynchronizerNodes,
   valuesForSvApp,
   valuesForSvValidatorApp,
-} from '@lfdecentralizedtrust/splice-pulumi-common-sv';
-import { spliceConfig } from '@lfdecentralizedtrust/splice-pulumi-common/src/config/config';
-import {
-  CloudPostgres,
-  SplicePostgres,
-} from '@lfdecentralizedtrust/splice-pulumi-common/src/postgres';
+} from '@canton-network/splice-pulumi-common-sv';
+import { spliceConfig } from '@canton-network/splice-pulumi-common/src/config/config';
+import { CloudPostgres, SplicePostgres } from '@canton-network/splice-pulumi-common/src/postgres';
 import { createHash } from 'node:crypto';
 
 import { installRateLimits } from '../../common/src/ratelimit/rateLimit';
@@ -104,7 +102,7 @@ export async function installNode(
   console.error(
     activeVersion.type === 'local'
       ? 'Using locally built charts by default'
-      : `Using charts from the artifactory by default, version ${activeVersion.version}`
+      : `Using charts from the ghcr by default, version ${activeVersion.version}`
   );
   console.error(`CLUSTER_BASENAME: ${CLUSTER_BASENAME}`);
   console.error(`Installing SV node in namespace: ${svNamespaceStr}`);
@@ -307,10 +305,6 @@ async function installSvAndValidator(
       ? { secretName: participantBootstrapDumpSecretName }
       : undefined,
     approvedSvIdentities: approvedSvIdentities(),
-    migration: {
-      ...valuesFromYamlFile.migration,
-      ...decentralizedSynchronizerMigrationConfig.migratingNodeConfig().migration,
-    },
     metrics: {
       enable: true,
     },
@@ -328,6 +322,7 @@ async function installSvAndValidator(
     logAsyncFlush: svConfig.logging?.appsAsync,
     additionalJvmOptions: getAdditionalJvmOptions(svConfig.svApp?.additionalJvmOptions),
     resources: svConfig.svApp?.resources,
+    persistentDataPvc: persistentHeapDumpsPvc(),
   };
 
   const svValuesWithSpecifiedAud: ChartValues = {
@@ -360,7 +355,6 @@ async function installSvAndValidator(
     activeVersion,
     {
       dependsOn: imagePullDeps
-        .concat(canton.participant.asDependencies)
         .concat(canton.active.dependencies)
         .concat(svAppSecrets)
         .concat([appsPg])
@@ -375,13 +369,12 @@ async function installSvAndValidator(
     `${SPLICE_ROOT}/apps/app/src/pack/examples/sv-helm/scan-values.yaml`,
     {
       TARGET_HOSTNAME: CLUSTER_HOSTNAME,
-      MIGRATION_ID: decentralizedSynchronizerMigrationConfig.activeMigrationId.toString(),
       SERIAL_ID: decentralizedSynchronizerMigrationConfig.active.id.toString(),
     }
   );
-  const bftSequencerConfigFor = (node: DecentralizedSynchronizerNode) => {
+  const cantonBftConfigFor = (node: DecentralizedSynchronizerNode) => {
     return {
-      bftSequencerConfig: {
+      cantonBft: {
         p2pUrl: (node as unknown as CantonBftSynchronizerNode).externalSequencerP2pAddress,
       },
     };
@@ -391,7 +384,7 @@ async function installSvAndValidator(
     synchronizers: {
       current: {
         ...defaultScanValues.synchronizers.current,
-        ...(useCantonBft ? bftSequencerConfigFor(canton.active) : {}),
+        ...(useCantonBft ? cantonBftConfigFor(canton.active) : {}),
       },
       ...(canton.upgrade
         ? {
@@ -399,7 +392,7 @@ async function installSvAndValidator(
               sequencer: canton.upgrade.namespaceInternalSequencerAddress,
               mediator: canton.upgrade.namespaceInternalMediatorAddress,
               ...(decentralizedSynchronizerMigrationConfig.upgrade?.sequencer.enableBftSequencer
-                ? bftSequencerConfigFor(canton.upgrade)
+                ? cantonBftConfigFor(canton.upgrade)
                 : {}),
             },
           }
@@ -410,7 +403,7 @@ async function installSvAndValidator(
               sequencer: canton.legacy.namespaceInternalSequencerAddress,
               mediator: canton.legacy.namespaceInternalMediatorAddress,
               ...(decentralizedSynchronizerMigrationConfig.legacy?.sequencer.enableBftSequencer
-                ? bftSequencerConfigFor(canton.legacy)
+                ? cantonBftConfigFor(canton.legacy)
                 : {}),
             },
           }
@@ -425,9 +418,9 @@ async function installSvAndValidator(
     metrics: {
       enable: true,
     },
-    ...decentralizedSynchronizerMigrationConfig.migratingNodeConfig(),
     ...synchronizerValues,
     resources: svConfig.scanApp?.resources,
+    pvc: persistentHeapDumpsPvc(),
   };
 
   const scanValuesWithFixedTokens = {
@@ -442,10 +435,7 @@ async function installSvAndValidator(
     fixedTokens() ? scanValuesWithFixedTokens : scanValues,
     activeVersion,
     {
-      dependsOn: imagePullDeps
-        .concat(canton.participant.asDependencies)
-        .concat(svAppSecrets)
-        .concat([appsPg]),
+      dependsOn: imagePullDeps.concat(svAppSecrets).concat([appsPg]),
     }
   );
 
@@ -484,6 +474,7 @@ async function installSvAndValidator(
     ...spliceInstanceNames,
     maxVettingDelay: networkWideConfig?.maxVettingDelay,
     resources: svConfig.validatorApp?.resources,
+    persistentDataPvc: persistentHeapDumpsPvc(),
   };
 
   const validatorValuesWithSpecifiedAud: ChartValues = {
@@ -518,7 +509,6 @@ async function installSvAndValidator(
     activeVersion,
     {
       dependsOn: imagePullDeps
-        .concat(canton.participant.asDependencies)
         .concat(validatorSecrets)
         .concat(spliceConfig.pulumiProjectConfig.interAppsDependencies ? [sv] : [])
         .concat(backupConfigSecret ? [backupConfigSecret] : [])
@@ -543,6 +533,7 @@ function installInfoEndpoint(
     {
       TARGET_CLUSTER: clusterNetwork,
       MIGRATION_ID: decentralizedSynchronizerMigrationConfig.activeMigrationId.toString(),
+      SERIAL_ID: decentralizedSynchronizerMigrationConfig.active.id.toString(),
       MD5_HASH_OF_ALLOWED_IP_RANGES: `"${createHash('md5')
         .update(readFileOrEmptyString(externalIpRangesFile()))
         .digest('hex')}"`,

@@ -3,45 +3,46 @@
 
 package org.lfdecentralizedtrust.splice.wallet.automation
 
+import com.daml.metrics.api.MetricsContext
+import com.digitalasset.canton.logging.NamedLoggerFactory
+import com.digitalasset.canton.time.Clock
+import io.opentelemetry.api.trace.Tracer
+import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.automation.{
   AssignTrigger,
   AutomationServiceCompanion,
   SpliceAppAutomationService,
   TransferFollowTrigger,
-  TxLogBackfillingTrigger,
   UnassignTrigger,
 }
-import AutomationServiceCompanion.{TriggerClass, aTrigger}
+import org.lfdecentralizedtrust.splice.automation.AutomationServiceCompanion.{
+  aTrigger,
+  TriggerClass,
+}
 import org.lfdecentralizedtrust.splice.config.{AutomationConfig, SpliceParametersConfig}
 import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.environment.ledger.api.DedupDuration
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
-import org.lfdecentralizedtrust.splice.store.{
-  DomainTimeSynchronization,
-  DomainUnpausedSynchronization,
-  UpdateHistory,
+import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
+import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
+import org.lfdecentralizedtrust.splice.wallet.config.{
+  AutoAcceptTransfersConfig,
+  RewardSharingConfig,
+  WalletSweepConfig,
 }
-import org.lfdecentralizedtrust.splice.wallet.config.{AutoAcceptTransfersConfig, WalletSweepConfig}
-import org.lfdecentralizedtrust.splice.wallet.store.{TxLogEntry, UserWalletStore}
+import org.lfdecentralizedtrust.splice.wallet.store.UserWalletStore
 import org.lfdecentralizedtrust.splice.wallet.treasury.TreasuryService
 import org.lfdecentralizedtrust.splice.wallet.util.ValidatorTopupConfig
-import com.digitalasset.canton.logging.NamedLoggerFactory
-import com.digitalasset.canton.time.Clock
-import io.opentelemetry.api.trace.Tracer
-import org.apache.pekko.stream.Materializer
-import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 
 import scala.concurrent.ExecutionContext
 
 class UserWalletAutomationService(
     store: UserWalletStore,
-    val updateHistory: UpdateHistory,
     treasury: TreasuryService,
     ledgerClient: SpliceLedgerClient,
     automationConfig: AutomationConfig,
     clock: Clock,
     domainTimeSync: DomainTimeSynchronization,
-    domainUnpausedSync: DomainUnpausedSynchronization,
     scanConnection: BftScanConnection,
     retryProvider: RetryProvider,
     packageVersionSupport: PackageVersionSupport,
@@ -49,9 +50,8 @@ class UserWalletAutomationService(
     validatorTopupConfigO: Option[ValidatorTopupConfig],
     walletSweep: Option[WalletSweepConfig],
     autoAcceptTransfers: Option[AutoAcceptTransfersConfig],
+    rewardSharingConfig: RewardSharingConfig,
     dedupDuration: DedupDuration,
-    txLogBackfillEnabled: Boolean,
-    txLogBackfillingBatchSize: Int,
     paramsConfig: SpliceParametersConfig,
 )(implicit
     ec: ExecutionContext,
@@ -61,17 +61,22 @@ class UserWalletAutomationService(
       automationConfig,
       clock,
       domainTimeSync,
-      domainUnpausedSync,
       store,
       ledgerClient,
       retryProvider,
       paramsConfig,
+      packageVersionSupport,
     ) {
+
+  override protected def metricsContext: MetricsContext =
+    MetricsContext(
+      "automation_service" -> getClass.getSimpleName,
+      "party" -> store.key.endUserParty.toString,
+    )
+
   override def companion
       : org.lfdecentralizedtrust.splice.wallet.automation.UserWalletAutomationService.type =
     UserWalletAutomationService
-
-  registerUpdateHistoryIngestion(updateHistory)
 
   registerTrigger(
     new ExpireTransferOfferTrigger(
@@ -172,20 +177,23 @@ class UserWalletAutomationService(
     )
   }
 
+  rewardSharingConfig match {
+    case builtIn: RewardSharingConfig.BuiltIn if builtIn.automateRewardSharing =>
+      registerTrigger(
+        new RewardSharingTrigger(
+          triggerContext,
+          store,
+          builtIn,
+          connection(SpliceLedgerConnectionPriority.Low),
+        )
+      )
+    case _: RewardSharingConfig.BuiltIn => ()
+    case _: RewardSharingConfig.External => ()
+  }
+
   registerTrigger(
     new AmuletMetricsTrigger(triggerContext, store, scanConnection)
   )
-
-  if (txLogBackfillEnabled) {
-    registerTrigger(
-      new TxLogBackfillingTrigger(
-        store,
-        updateHistory,
-        txLogBackfillingBatchSize,
-        triggerContext,
-      )
-    )
-  }
 
   registerTrigger(
     new ExpireMintingDelegationTrigger(
@@ -224,8 +232,8 @@ object UserWalletAutomationService extends AutomationServiceCompanion {
       aTrigger[WalletPreapprovalSweepTrigger],
       aTrigger[AutoAcceptTransferOffersTrigger],
       aTrigger[AmuletMetricsTrigger],
-      aTrigger[TxLogBackfillingTrigger[TxLogEntry]],
       aTrigger[ExpireMintingDelegationTrigger],
       aTrigger[ExpireMintingDelegationProposalTrigger],
+      aTrigger[RewardSharingTrigger],
     )
 }

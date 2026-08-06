@@ -4,8 +4,8 @@
 package com.digitalasset.canton.integration.tests.upgrade.lsu
 
 import cats.syntax.option.*
-import com.digitalasset.canton.HasExecutionContext
-import com.digitalasset.canton.config.RequireTypes.PositiveInt
+import com.daml.metrics.api.MetricQualification
+import com.digitalasset.canton.config.RequireTypes.{NonNegativeInt, PositiveInt, PositiveLong}
 import com.digitalasset.canton.console.{
   CommandFailure,
   InstanceReference,
@@ -20,10 +20,16 @@ import com.digitalasset.canton.integration.plugins.UseReferenceBlockSequencer.Mu
 import com.digitalasset.canton.integration.plugins.{UseBftSequencer, UsePostgres}
 import com.digitalasset.canton.integration.tests.examples.IouSyntax
 import com.digitalasset.canton.integration.tests.upgrade.lsu.LogicalUpgradeUtils.SynchronizerNodes
-import com.digitalasset.canton.integration.tests.upgrade.lsu.LsuBase.Fixture
+import com.digitalasset.canton.integration.tests.upgrade.lsu.LsuBase.{
+  Fixture,
+  getLsuSequencingTestMetricValues,
+}
 import com.digitalasset.canton.integration.util.TestUtils.waitForTargetTimeOnSequencer
 import com.digitalasset.canton.integration.{ConfigTransforms, *}
 import com.digitalasset.canton.ledger.participant.state.SynchronizerIndex
+import com.digitalasset.canton.logging.SuppressionRule
+import com.digitalasset.canton.metrics.{MetricsConfig, MetricsReporterConfig}
+import com.digitalasset.canton.sequencing.traffic.TrafficStateController
 import com.digitalasset.canton.synchronizer.sequencer.config.{
   LsuSequencingBoundsOverride,
   SequencerNodeConfig,
@@ -31,11 +37,14 @@ import com.digitalasset.canton.synchronizer.sequencer.config.{
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.topology.transaction.GrpcConnection
 import com.digitalasset.canton.version.ProtocolVersion
+import com.digitalasset.canton.{HasExecutionContext, UniquePortGenerator, config}
 import io.scalaland.chimney.dsl.*
 import monocle.macros.syntax.lens.*
+import org.slf4j.event.Level
 
 import java.time.Duration
 import scala.annotation.nowarn
+import scala.util.chaining.*
 
 /*
 The goal is to test the following scenario:
@@ -53,7 +62,14 @@ Topology:
 Important notes:
   - State retrieval from the sequencers on S2:
     - SequencerLsuStateRequest.timestamp has to be set when exporting topology
+      Note: The sequencer will wait until this time has elapsed on the synchronizer using the time tracker.
+      In particular, it means that globalMaxSequencingTimeExclusive cannot be used.
+      Suggestion is to use the sequencing time of the latest sequenced topology transaction.
+
     - GetLsuTrafficControlStateRequest.timestamp has to be set when exporting the traffic state
+      Note: the timestamp must correspond to a fully processed message on the sequencer.
+      Suggestion is to use the sequencing time of the latest sequenced topology transaction (and potentially
+      giving a bit of free traffic to users).
 
   - Initialization of the sequencers on S3:
     - InitializeSequencerFromLsuPredecessorRequest.ignore_psid_check should be set to true
@@ -69,16 +85,34 @@ Important notes:
 Flow to guarantee time monotonicity:
   - Agree on a max sequencing time Tmax for the broken synchronizer S2
   - Have all the sequencer nodes of S2 set Tmax in the config and restart:
-      canton.sequencers.sequencer.parameters.lsu-repair.global-max-sequencing-time-inclusive=Tmax
+      canton.sequencers.sequencer.parameters.lsu-repair.global-max-sequencing-time-exclusive=Tmax
     Note: all sequencers must apply this config before this time is reached on the synchronizer
   - Agree on values for the LSU sequencing time override for the sequencers of S3
   - Have all the sequencer nodes of S3 set these values
       canton.sequencers.sequencer.parameters.lsu-repair.lsu-sequencing-bounds-override
  */
 @nowarn("msg=dead code")
-final class LsuRollForwardIntegrationTest extends LsuBase with HasExecutionContext {
+abstract class LsuRollForwardIntegrationTest
+    extends LsuBase
+    with LsuTrafficManagement
+    with HasExecutionContext {
 
-  override protected def testName: String = "lsu-roll-forward"
+  override protected def testName: String =
+    s"lsu-roll-forward-" + (if (isOnline) "online" else "offline")
+
+  /** Whether the upgradability tests are done online (connected to the synchronizer) or offline
+    * (disconnected to the synchronizer). In practice, this depends on whether the upgrade time is
+    * specified or note. See documentation of
+    * [[com.digitalasset.canton.participant.sync.OfflineManualLogicalSynchronizerUpgrade]] and
+    * [[com.digitalasset.canton.participant.sync.OnlineManualLogicalSynchronizerUpgrade]]
+    */
+  def isOnline: Boolean
+
+  /** Default tests have very frequent commitments (every 1s) interfering with testing a particular
+    * arrangement of S2 sequencer and participant last seen timestamps. This is overridden in
+    * [[com.digitalasset.canton.participant.sync.OfflineManualNoAcsLogicalSynchronizerUpgrade]]
+    */
+  def disableAcsCommitments: Boolean = false
 
   registerPlugin(
     new UseBftSequencer(
@@ -107,8 +141,13 @@ final class LsuRollForwardIntegrationTest extends LsuBase with HasExecutionConte
   private lazy val lsuSequencingBoundsOverride =
     LsuSequencingBoundsOverride(
       lowerBoundSequencingTimeExclusive = maxSequencingTime.plusSeconds(1),
-      upgradeTime = CantonTimestamp.Epoch.plusSeconds(630),
+      upgradeTime = maxSequencingTime.plusSeconds(1).plusSeconds(30),
     )
+
+  // Sequencing time of the latest topology message on the broken synchronizer (reaches participants)
+  private var lastTopologyActivityS2: CantonTimestamp = _
+  // Sequencing time of the time proof (only observed by sequencers), it is set up to be > lastTopologyActivityS2
+  private var lastSequencerObservedTimeS2: CantonTimestamp = _
 
   override protected lazy val upgradeTime: CantonTimestamp = throw new IllegalAccessException(
     "Use upgradeTime1 and upgradeTime2 instead"
@@ -126,6 +165,14 @@ final class LsuRollForwardIntegrationTest extends LsuBase with HasExecutionConte
       ConfigTransforms.useStaticTime,
       ConfigTransforms.updateSequencerConfig("sequencer5")(setLsuSequencingBoundsOverride),
       ConfigTransforms.updateSequencerConfig("sequencer6")(setLsuSequencingBoundsOverride),
+      ConfigTransforms.updateSequencerConfig("sequencer3")(
+        _.focus(_.parameters.lsuRepair.globalMaxSequencingTimeExclusive)
+          .replace(Some(maxSequencingTime))
+      ),
+      ConfigTransforms.updateSequencerConfig("sequencer4")(
+        _.focus(_.parameters.lsuRepair.globalMaxSequencingTimeExclusive)
+          .replace(Some(maxSequencingTime))
+      ),
     ) ++ ConfigTransforms.enableAlphaVersionSupport
   }
 
@@ -151,14 +198,13 @@ final class LsuRollForwardIntegrationTest extends LsuBase with HasExecutionConte
       }
       .addConfigTransforms(configTransforms*)
       .addConfigTransforms(
-        ConfigTransforms.updateSequencerConfig("sequencer3")(
-          _.focus(_.parameters.lsuRepair.globalMaxSequencingTimeInclusive)
-            .replace(Some(lsuSequencingBoundsOverride.lowerBoundSequencingTimeExclusive))
-        ),
-        ConfigTransforms.updateSequencerConfig("sequencer4")(
-          _.focus(_.parameters.lsuRepair.globalMaxSequencingTimeInclusive)
-            .replace(Some(lsuSequencingBoundsOverride.lowerBoundSequencingTimeExclusive))
-        ),
+        _.focus(_.monitoring.metrics)
+          .replace(
+            MetricsConfig(
+              qualifiers = Seq[MetricQualification](MetricQualification.Debug),
+              reporters = Seq(MetricsReporterConfig.Prometheus(port = UniquePortGenerator.next)),
+            )
+          )
       )
       .withSetup { implicit env =>
         import env.*
@@ -175,9 +221,20 @@ final class LsuRollForwardIntegrationTest extends LsuBase with HasExecutionConte
           synchronizerConnectionConfig(Seq(sequencer1, sequencer2), 2)
         )
 
-        setDefaultsDynamicSynchronizerParameters(daId, synchronizerOwners1)
+        setDefaultsDynamicSynchronizerParameters(
+          psid = daId,
+          synchronizerOwners = synchronizerOwners1,
+          reconciliationInterval = if (disableAcsCommitments) {
+            config.PositiveDurationSeconds.ofDays(365)
+          } else {
+            config.PositiveDurationSeconds.ofSeconds(1)
+          },
+        )
 
         participants.all.dars.upload(CantonExamplesPath)
+
+        updateBalanceForMember(participant2, PositiveLong.tryCreate(250_000L), sequencer1)
+
         participant1.health.ping(participant2)
         participant1.health.ping(participant3)
       }
@@ -232,7 +289,6 @@ final class LsuRollForwardIntegrationTest extends LsuBase with HasExecutionConte
 
       waitForTargetTimeOnSequencer(sequencer3, environment.clock.now, logger)
       waitForTargetTimeOnSequencer(sequencer4, environment.clock.now, logger)
-
     }
 
     "some activity happens on S2" in { implicit env =>
@@ -240,6 +296,25 @@ final class LsuRollForwardIntegrationTest extends LsuBase with HasExecutionConte
 
       IouSyntax.createIou(participant1)(bank, alice, 3.0)
       wally = participant2.parties.enable("Wally")
+
+      lastTopologyActivityS2 = participant2.topology.party_to_participant_mappings
+        .list(fixture1.newPsid, filterParty = wally.toProtoPrimitive)
+        .loneElement
+        .context
+        .sequenced
+        .pipe(CantonTimestamp.assertFromInstant)
+
+      environment.simClock.value.advanceTo(lastTopologyActivityS2.plusSeconds(1))
+
+      // move the time ahead
+      lastSequencerObservedTimeS2 =
+        sequencer3.underlying.value.sequencer.timeTracker.fetchTimeProof().futureValueUS.timestamp
+      // need to move time on both sequencers past `lastSequencerObservedTimeS2`, otherwise
+      // sequencer4 may stall on sequencer_lsu_state call
+      sequencer4.underlying.value.sequencer.timeTracker.fetchTimeProof().futureValueUS.timestamp
+
+      logger.info(s"Last topology activity on the broken synchronizer: $lastTopologyActivityS2")
+      logger.info(s"Last time proof observed on sequencer: $lastSequencerObservedTimeS2")
     }
 
     "prepare nodes of the recovery synchronizer (S3)" in { implicit env =>
@@ -269,45 +344,77 @@ final class LsuRollForwardIntegrationTest extends LsuBase with HasExecutionConte
 
       /*
       We cannot rely on the standard waitForTargetTimeOnSequencer: as soon as the sequencing time is past
-      the target time, nothing gets sequenced (and so waitForTargetTimeOnSequencer foes not complete)
+      the max sequencing time, nothing gets sequenced (and so waitForTargetTimeOnSequencer does not complete)
        */
       eventually() {
         val ts = sequencer3.underlying.value.sequencer.sequencer.sequencingTime.futureValueUS.value
         ts should be >= maxSequencingTime
       }
 
+      /*
+      What we really want is restarting the sequencer (see comment below).
+      Stopping the mediators and participants removes mediators and participants warning due to the sequencers being down.
+       */
+      mediator3.stop()
+      mediator4.stop()
+      participants.local.stop()
+
+      /*
+      When exporting the topology, the sequencer waits for the sequencerLsuStateTsOverride timestamp to be reached.
+      The goal of the restart is to ensure that the waiting works even after a crash/restart.
+       */
+      sequencer4.stop()
+      sequencer4.start()
+
+      mediator3.start()
+      mediator4.start()
+      participants.local.start()
+
       migrateSynchronizerNodes(
         fixture2,
         ignorePsidCheck = true,
-        sequencerLsuStateTsOverride = Some(maxSequencingTime),
-      )
-
-      transferTraffic(
-        Some(fixture2),
-        trafficTsOverride = Some(maxSequencingTime),
+        sequencerLsuStateTsOverride = Some(lastSequencerObservedTimeS2),
       )
     }
 
-    "manual upgrade fails if synchronizer index is lower than upgrade time " in { implicit env =>
+    "LSU sequencing test can be performed on the new synchronizer" in { implicit env =>
       import env.*
 
-      val t1 = environment.clock.now
-
-      IouSyntax.createIou(participant1)(bank, alice, 4.0)
+      environment.simClock.value.advanceTo(
+        lsuSequencingBoundsOverride.lowerBoundSequencingTimeExclusive.immediateSuccessor
+      )
 
       eventually() {
-        cleanSynchronizerIndex(participant1).recordTime should be > t1
+        environment.simClock.value.advance(Duration.ofMillis(10))
+        sequencer5.setup.test_lsu_sequencing(NonNegativeInt.zero)
+        val m = getLsuSequencingTestMetricValues(mediator5)
+        m.get(sequencer5.id).value should be > 0L
       }
+    }
+
+    "manual upgrade fails if synchronizer index is lower than upgrade time" in { implicit env =>
+      assume(isOnline)
+
+      import env.*
+
+      val upgradeTime = cleanSynchronizerIndex(participant1).recordTime.minusSeconds(1)
 
       loggerFactory.assertThrowsAndLogs[CommandFailure](
         participant1.synchronizers.perform_manual_lsu(
           currentPsid = fixture2.currentPsid,
           successorPsid = fixture2.newPsid,
-          upgradeTime = t1.some, // is smaller than the clean synchronizer index
+          upgradeTime = upgradeTime.some, // is smaller than the clean synchronizer index
           sequencerSuccessors =
             Map(sequencer1.id -> sequencer5.sequencerConnection.transformInto[GrpcConnection]),
         ),
         _.errorMessage should include("Synchronizer index is past upgrade time"),
+      )
+    }
+
+    "Traffic can bet set on the new synchronizer" in { _ =>
+      transferTraffic(
+        Some(fixture2),
+        trafficTsOverride = Some(lastSequencerObservedTimeS2),
       )
     }
 
@@ -319,7 +426,7 @@ final class LsuRollForwardIntegrationTest extends LsuBase with HasExecutionConte
         participant1.synchronizers.perform_manual_lsu(
           currentPsid = fixture2.currentPsid,
           successorPsid = fixture2.newPsid,
-          upgradeTime = upgradeTime1.some,
+          upgradeTime = Option.when(isOnline)(upgradeTime1),
           sequencerSuccessors = Map(), // should not be empty
         ),
         _.errorMessage should include("No sequencer successor was found"),
@@ -336,7 +443,7 @@ final class LsuRollForwardIntegrationTest extends LsuBase with HasExecutionConte
           participant2.synchronizers.perform_manual_lsu(
             currentPsid = fixture2.currentPsid,
             successorPsid = fixture2.newPsid,
-            upgradeTime = upgradeTime2.some,
+            upgradeTime = Option.when(isOnline)(upgradeTime2),
             sequencerSuccessors =
               Map(sequencer1.id -> sequencer5.sequencerConnection.transformInto[GrpcConnection]),
           ),
@@ -356,7 +463,7 @@ final class LsuRollForwardIntegrationTest extends LsuBase with HasExecutionConte
           participant1.synchronizers.perform_manual_lsu(
             currentPsid = fixture2.currentPsid,
             successorPsid = fixture2.newPsid,
-            upgradeTime = upgradeTime1.some,
+            upgradeTime = Option.when(isOnline)(upgradeTime1),
             sequencerSuccessors =
               Map(sequencer1.id -> sequencer5.sequencerConnection.transformInto[GrpcConnection]),
           ),
@@ -367,14 +474,33 @@ final class LsuRollForwardIntegrationTest extends LsuBase with HasExecutionConte
 
         val upgradeTime2 = cleanSynchronizerIndex(participant2).recordTime
 
-        participant2.synchronizers.perform_manual_lsu(
-          currentPsid = fixture2.currentPsid,
-          successorPsid = fixture2.newPsid,
-          upgradeTime = upgradeTime2.some,
-          sequencerSuccessors = Map(
-            sequencer1.id -> sequencer5.sequencerConnection.transformInto[GrpcConnection],
-            sequencer2.id -> sequencer6.sequencerConnection.transformInto[GrpcConnection],
+        loggerFactory.assertEventuallyLogsSeq(
+          SuppressionRule.Level(Level.DEBUG) && SuppressionRule
+            .forLogger[TrafficStateController] && SuppressionRule.LoggerNameContains(
+            s"participant=participant2"
+          )
+        )(
+          participant2.synchronizers.perform_manual_lsu(
+            currentPsid = fixture2.currentPsid,
+            successorPsid = fixture2.newPsid,
+            upgradeTime = Option.when(isOnline)(upgradeTime2),
+            sequencerSuccessors = Map(
+              sequencer1.id -> sequencer5.sequencerConnection.transformInto[GrpcConnection],
+              sequencer2.id -> sequencer6.sequencerConnection.transformInto[GrpcConnection],
+            ),
           ),
+          logs => {
+            val trafficInitLog = logs.find(
+              _.message.contains("Initializing TrafficStateController for member PAR::participant2")
+            )
+            trafficInitLog shouldBe defined
+            val extraTrafficLimitPattern = "(?s).+extraTrafficLimit = (\\d+).+".r
+            val extraTrafficLimit = trafficInitLog.value.message match {
+              case extraTrafficLimitPattern(limit) => limit.toLong
+              case x => fail(s"Could not extract extraTrafficLimit from log message: $x")
+            }
+            extraTrafficLimit shouldBe 250000L
+          },
         )
     }
 
@@ -386,7 +512,7 @@ final class LsuRollForwardIntegrationTest extends LsuBase with HasExecutionConte
       def performManualLsu() = participant3.synchronizers.perform_manual_lsu(
         currentPsid = fixture2.currentPsid,
         successorPsid = fixture2.newPsid,
-        upgradeTime = upgradeTime3.some,
+        upgradeTime = Option.when(isOnline)(upgradeTime3),
         sequencerSuccessors =
           Map(sequencer1.id -> sequencer5.sequencerConnection.transformInto[GrpcConnection]),
       )
@@ -416,7 +542,7 @@ final class LsuRollForwardIntegrationTest extends LsuBase with HasExecutionConte
       participant3.synchronizers.perform_manual_lsu(
         currentPsid = fixture2.currentPsid,
         successorPsid = fixture2.newPsid,
-        upgradeTime = upgradeTime3.some,
+        upgradeTime = Option.when(isOnline)(upgradeTime3),
         sequencerSuccessors =
           Map(sequencer1.id -> sequencer5.sequencerConnection.transformInto[GrpcConnection]),
       )
@@ -474,7 +600,7 @@ final class LsuRollForwardIntegrationTest extends LsuBase with HasExecutionConte
       participant3.synchronizers.perform_manual_lsu(
         currentPsid = fixture2.currentPsid,
         successorPsid = fixture2.newPsid,
-        upgradeTime = upgradeTime3.some,
+        upgradeTime = Option.when(isOnline)(upgradeTime3),
         sequencerSuccessors =
           Map(sequencer1.id -> sequencer5.sequencerConnection.transformInto[GrpcConnection]),
       )
@@ -489,4 +615,17 @@ final class LsuRollForwardIntegrationTest extends LsuBase with HasExecutionConte
       )
     }
   }
+}
+
+final class LsuOnlineRollForwardIntegrationTest extends LsuRollForwardIntegrationTest {
+  override def isOnline: Boolean = true
+}
+
+final class LsuOfflineRollForwardIntegrationTest extends LsuRollForwardIntegrationTest {
+  override def isOnline: Boolean = false
+}
+
+final class OfflineManualNoAcsLogicalSynchronizerUpgrade extends LsuRollForwardIntegrationTest {
+  override def isOnline: Boolean = false
+  override def disableAcsCommitments: Boolean = true
 }

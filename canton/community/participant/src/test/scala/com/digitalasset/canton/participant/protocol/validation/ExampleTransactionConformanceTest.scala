@@ -8,6 +8,7 @@ import cats.data.EitherT
 import cats.syntax.parallel.*
 import com.daml.nonempty.{NonEmpty, NonEmptyUtil}
 import com.daml.scalautil.Statement.discard
+import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.crypto.provider.symbolic.SymbolicPureCrypto
 import com.digitalasset.canton.data.*
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
@@ -19,9 +20,13 @@ import com.digitalasset.canton.participant.protocol.TransactionProcessingSteps
 import com.digitalasset.canton.participant.protocol.submission.TransactionTreeFactory
 import com.digitalasset.canton.participant.protocol.validation.ExampleTransactionConformanceTest.HashReInterpretationCounter
 import com.digitalasset.canton.participant.protocol.validation.ModelConformanceChecker.*
-import com.digitalasset.canton.participant.store.ContractAndKeyLookup
+import com.digitalasset.canton.participant.store.{ContractLookup, ReplayContractLookup}
 import com.digitalasset.canton.participant.util.DAMLe
-import com.digitalasset.canton.participant.util.DAMLe.{HasReinterpret, ReInterpretationResult}
+import com.digitalasset.canton.participant.util.DAMLe.{
+  HasReinterpret,
+  ReInterpretationResult,
+  UsedPackages,
+}
 import com.digitalasset.canton.protocol.*
 import com.digitalasset.canton.protocol.ExampleTransactionFactory.*
 import com.digitalasset.canton.topology.client.TopologySnapshot
@@ -34,7 +39,7 @@ import com.digitalasset.canton.{
   BaseTest,
   HasExecutionContext,
   LfCommand,
-  LfKeyResolver,
+  LfGlobalKeyMapping,
   LfPackageName,
   LfPackageVersion,
   LfPartyId,
@@ -85,13 +90,12 @@ class ExampleTransactionConformanceTest
 
     def reinterpretExample(
         example: ExampleTransaction,
-        usedPackages: Set[PackageId] = Set.empty,
         timeBoundaries: LedgerTimeBoundaries = LedgerTimeBoundaries.unconstrained,
     ): HasReinterpret & HashReInterpretationCounter = new HasReinterpret
       with HashReInterpretationCounter {
 
       override def reinterpret(
-          contracts: ContractAndKeyLookup,
+          contracts: ReplayContractLookup,
           contractAuthenticator: ContractAuthenticatorFn,
           submitters: Set[LfPartyId],
           command: LfCommand,
@@ -126,7 +130,7 @@ class ExampleTransactionConformanceTest
             reinterpretedTx,
             metadata,
             keyResolver,
-            usedPackages,
+            UsedPackages(Set.empty, Set.empty),
             timeBoundaries,
           )
         )
@@ -135,12 +139,12 @@ class ExampleTransactionConformanceTest
 
     def viewsWithNoInputKeys(
         rootViews: Seq[FullTransactionViewTree]
-    ): NonEmpty[Seq[(FullTransactionViewTree, Seq[(TransactionView, LfKeyResolver)])]] =
+    ): NonEmpty[Seq[(FullTransactionViewTree, Seq[(TransactionView, LfGlobalKeyMapping)])]] =
       NonEmptyUtil.fromUnsafe(rootViews.map { viewTree =>
         // Include resolvers for all the subviews
         val resolvers =
           viewTree.view.allSubviewsWithPosition(viewTree.viewPosition).map { case (view, _) =>
-            view -> (Map.empty: LfKeyResolver)
+            view -> (Map.empty: LfGlobalKeyMapping)
           }
         (viewTree, resolvers)
       })
@@ -172,7 +176,7 @@ class ExampleTransactionConformanceTest
 
     def check(
         mcc: ModelConformanceChecker,
-        views: NonEmpty[Seq[(FullTransactionViewTree, Seq[(TransactionView, LfKeyResolver)])]],
+        views: NonEmpty[Seq[(FullTransactionViewTree, Seq[(TransactionView, LfGlobalKeyMapping)])]],
         ips: TopologySnapshot = factory.topologySnapshot,
         reInterpretedTopLevelViews: ModelConformanceChecker.LazyAsyncReInterpretationMap = Map.empty,
     ): EitherT[Future, ErrorWithSubTransaction[Unit], Result] = {
@@ -187,6 +191,7 @@ class ExampleTransactionConformanceTest
           commonData,
           getEngineAbortStatus = () => EngineAbortStatus.notAborted,
           reInterpretedTopLevelViews,
+          testedProtocolVersion,
         )
         .failOnShutdown
     }
@@ -198,6 +203,9 @@ class ExampleTransactionConformanceTest
         submittingParticipant,
         ContractValidator.AllowAll,
         packageResolver,
+        mock[ContractLookup],
+        PositiveInt.tryCreate(100),
+        validateLegacyContractsV11 = true,
         pureCrypto,
         loggerFactory,
       )

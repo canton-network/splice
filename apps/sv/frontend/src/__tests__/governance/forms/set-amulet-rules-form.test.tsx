@@ -11,7 +11,7 @@ import { svPartyId } from '../../mocks/constants';
 import { Wrapper } from '../../helpers';
 import { SetAmuletConfigRulesForm } from '../../../components/forms/SetAmuletConfigRulesForm';
 import dayjs from 'dayjs';
-import { dateTimeFormatISO } from '@lfdecentralizedtrust/splice-common-frontend-utils';
+import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import { server, svUrl } from '../../setup/setup';
 import { PROPOSAL_SUMMARY_SUBTITLE, PROPOSAL_SUMMARY_TITLE } from '../../../utils/constants';
 
@@ -32,7 +32,7 @@ describe('SV user can', () => {
     const button = screen.getByRole('button', { name: 'Log In' });
     user.click(button);
 
-    expect(await screen.findAllByDisplayValue(svPartyId)).not.toBe([]);
+    expect(await screen.findAllByDisplayValue(svPartyId)).not.toHaveLength(0);
   });
 });
 
@@ -45,11 +45,11 @@ describe('Set Amulet Config Rules Form', () => {
     );
 
     expect(screen.getByTestId('set-amulet-config-rules-form')).toBeInTheDocument();
-    expect(screen.getByText('Action')).toBeInTheDocument();
+    expect(screen.getByText('Proposal type')).toBeInTheDocument();
 
     const actionInput = screen.getByTestId('set-amulet-config-rules-action');
     expect(actionInput).toBeInTheDocument();
-    expect(actionInput.getAttribute('value')).toBe('Set Amulet Rules Configuration');
+    expect(actionInput.textContent).toBe('Set Amulet Rules Configuration');
 
     const summaryInput = screen.getByTestId('set-amulet-config-rules-summary');
     expect(summaryInput).toBeInTheDocument();
@@ -80,7 +80,11 @@ describe('Set Amulet Config Rules Form', () => {
       { timeout: 1000 }
     );
 
-    expect(screen.getByTestId('json-diffs-details')).toBeInTheDocument();
+    const jsonDiffsToggle = screen.getByTestId('json-diff-toggle');
+    expect(screen.getByText('JSON')).toBeInTheDocument();
+    expect(jsonDiffsToggle).toHaveTextContent('Show JSON');
+    expect(jsonDiffsToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByTestId('json-diffs-details')).not.toBeVisible();
   });
 
   test(
@@ -99,7 +103,7 @@ describe('Set Amulet Config Rules Form', () => {
       expect(submitButton).toBeInTheDocument();
 
       await user.click(submitButton);
-      expect(submitButton.getAttribute('disabled')).toBeDefined();
+      expect(submitButton.getAttribute('disabled')).not.toBeNull();
       await expect(async () => await user.click(submitButton)).rejects.toThrowError(
         /Unable to perform pointer interaction/
       );
@@ -275,6 +279,8 @@ describe('Set Amulet Config Rules Form', () => {
     await user.click(submitButton);
 
     expect(screen.getByText(PROPOSAL_SUMMARY_TITLE)).toBeInTheDocument();
+    expect(screen.queryByText('JSON')).not.toBeInTheDocument();
+    expect(screen.getByTestId('json-diff-toggle')).toHaveTextContent('Show JSON');
   });
 
   test('should show error on form if submission fails', { timeout: 10000 }, async () => {
@@ -376,20 +382,23 @@ describe('Set Amulet Config Rules Form', () => {
     const c2Input = screen.getByTestId('config-field-transferConfigTransferFeeInitialRate');
     await user.type(c2Input, '9.99');
 
-    const jsonDiffs = screen.getByText('JSON Diffs');
-    expect(jsonDiffs).toBeInTheDocument();
+    const jsonDiffsToggle = screen.getByTestId('json-diff-toggle');
+    expect(jsonDiffsToggle).toHaveTextContent('Show JSON');
+    expect(jsonDiffsToggle).toHaveAttribute('aria-expanded', 'false');
 
-    await user.click(jsonDiffs);
-    expect(screen.queryByTestId('config-diffs-display')).toBeInTheDocument();
+    await user.click(jsonDiffsToggle);
+    expect(await screen.findByTestId('config-diffs-display')).toBeVisible();
+    expect(jsonDiffsToggle).toHaveTextContent('Hide JSON');
+    expect(jsonDiffsToggle).toHaveAttribute('aria-expanded', 'true');
 
     const reviewButton = screen.getByTestId('submit-button');
     await waitFor(async () => {
       expect(reviewButton.getAttribute('disabled')).toBeNull();
     });
 
-    expect(jsonDiffs).toBeInTheDocument();
-    await user.click(jsonDiffs);
-    expect(screen.queryByTestId('config-diffs-display')).toBeInTheDocument();
+    expect(jsonDiffsToggle).toBeInTheDocument();
+    await user.click(jsonDiffsToggle);
+    expect(await screen.findByTestId('config-diffs-display')).toBeInTheDocument();
   });
 
   test('should have decentralized synchronizer fields disabled', async () => {
