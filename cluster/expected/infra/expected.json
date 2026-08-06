@@ -1950,7 +1950,12 @@
             "gatewayTopology": {
               "numTrustedProxies": 0
             },
-            "holdApplicationUntilProxyStarts": true
+            "holdApplicationUntilProxyStarts": true,
+            "proxyStatsMatcher": {
+              "inclusionRegexps": [
+                ".*http_local_rate_limit.*"
+              ]
+            }
           },
           "defaultHttpRetryPolicy": {
             "attempts": 0

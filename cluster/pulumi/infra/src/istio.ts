@@ -143,6 +143,12 @@ function configureIstiod(
         },
         // wait for the istio container to start before starting apps to avoid network errors
         holdApplicationUntilProxyStarts: true,
+        // Export the local rate limit filter counters (enabled/ok/rate_limited/enforced).
+        // Deliberately narrow: inclusionRegexps is *additive* on top of Istio's
+        // defaults, so a broad regex here would blow up Prometheus cardinality.
+        proxyStatsMatcher: {
+          inclusionRegexps: ['.*http_local_rate_limit.*'],
+        },
       },
       // We have clients retry so we disable istio’s automatic retries.
       defaultHttpRetryPolicy: {
