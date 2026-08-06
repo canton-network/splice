@@ -2336,23 +2336,36 @@ function subcmd_psql() {
   local APPLICATION="$2"
 
   _info "Retrieving DB connection info from pod description..."
-  local DB_INIT_COMMAND
-  DB_INIT_COMMAND=$(
+  local DB_INIT_SCRIPT
+  DB_INIT_SCRIPT=$(
     kubectl get deployment \
       --namespace "${NAMESPACE}" \
       --selector "app=${APPLICATION}" \
       -o 'jsonpath={..spec.template.spec.initContainers[0].command}' \
-    | jq 'join(" ")' \
-    | grep -i psql \
-    | sed -nE 's/^.*(psql.?*) 2>&1.*$/\1/p'
+    | jq -r 'join("\n")'
   )
+
+  # There can be multiple psql invocations, pick the one that contains create database.
+  local DB_INIT_COMMAND
+  DB_INIT_COMMAND=$(
+    grep -F 'create database' <<< "${DB_INIT_SCRIPT}" \
+      | sed -nE 's/^.*(psql .*) 2>&1.*$/\1/p' \
+      | tail -n 1
+  ) || true
 
   if [ -z "${DB_INIT_COMMAND}" ]; then
     _error "Application ${APPLICATION} in namespace ${NAMESPACE} does not have an associated database."
     exit 1
   fi
 
-  eval "set -- $DB_INIT_COMMAND"
+  # The participant does not directly inline the db name so we resolve things here.
+  local DB_INIT_VARS
+  DB_INIT_VARS=$(
+    sed -nE "s/^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*='[^']*')[[:space:]]*$/local \1/p" <<< "${DB_INIT_SCRIPT}"
+  ) || true
+
+  eval "${DB_INIT_VARS}
+        set -- ${DB_INIT_COMMAND}"
   while [ $# -gt 0 ]; do
     case "$1" in
       -h|--host)
