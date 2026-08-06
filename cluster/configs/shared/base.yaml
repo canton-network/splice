@@ -209,7 +209,8 @@ monitoring:
       (
         (
           jsonPayload.message=~"(?i)(secret|token|(private|secret)(-)?key|password)=[^, ]+" AND
-          -jsonPayload.message=~"(?i)(secret|token|(private|secret)(-)?key|password)=(\"\*\*\*\*\"|hidden)"
+          -jsonPayload.message=~"(?i)(secret|token|(private|secret)(-)?key|password)=(\"\*\*\*\*\"|hidden)" AND
+          -jsonPayload.message=~"(?i)page(_|-)?token=[^, ]+"
         ) OR
         jsonPayload.message=~"eyJhbGc[A-Za-z0-9_-]{2,}\.[A-Za-z0-9_-]{2,}\.[A-Za-z0-9_-]{2,}" OR
         jsonPayload.message=~"Bearer\s+eyJ[A-Za-z0-9_-]{2,}"
