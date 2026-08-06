@@ -33,15 +33,13 @@ import com.digitalasset.canton.synchronizer.sequencer.SequencerPruningStatus
 import com.digitalasset.canton.synchronizer.sequencer.admin.grpc.InitializeSequencerResponse
 import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.topology.{Member, NodeIdentity, PhysicalSynchronizerId, SequencerId}
-import com.digitalasset.canton.topology.admin.grpc.{BaseQuery, TopologyStoreId}
 import com.digitalasset.canton.topology.admin.v30.{
   GenesisStateV2Response,
   SequencerLsuStateResponse,
 }
 import com.digitalasset.canton.topology.MediatorGroup.MediatorGroupIndex
 import com.digitalasset.canton.topology.store.StoredTopologyTransactions.GenericStoredTopologyTransactions
-import com.digitalasset.canton.topology.store.TimeQuery.Snapshot
-import com.digitalasset.canton.topology.transaction.{SequencerSynchronizerState, TopologyMapping}
+import com.digitalasset.canton.topology.transaction.SequencerSynchronizerState
 import com.digitalasset.canton.tracing.TraceContext
 import com.google.protobuf.ByteString
 import com.typesafe.config.ConfigFactory
