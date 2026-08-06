@@ -348,8 +348,9 @@ class DbAppActivityRecordStore(
         }
 
     // earliestRound: the oldest round open at the earliest record_time of this batch.
-    // or (-1) on firstSV, as it is expected to have complete data for the first round.
-    val earliestRound = if (isFirstSv) Some(-1L) else firstActiveRoundO
+    // or (initialRound - 1) on firstSV, so earliestRoundWithCompleteAppActivity()
+    // returns initialRound (correct for non-zero-round bootstrap).
+    val earliestRound = if (isFirstSv) Some(initialRound - 1) else firstActiveRoundO
 
     // lastArchived: the highest round archived as of this verdict batch.
     //   - From the caller when available
