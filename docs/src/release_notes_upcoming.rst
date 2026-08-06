@@ -22,14 +22,10 @@
     - Validator App
 
         - Added a ``type`` parameter to validator config's ``reward-sharing-config-by-party`` option.
-                
+
           When this is set to ``external``, it indicates that the assignment of reward coupons to beneficiaries is being managed by a process external to the validator app, and thus the validator app's automation does not assign or mint the unassigned coupons.
-          
+
           The ``type`` defaults to ``built-in`` preserving the existing behavior where the validator app will either mint the unassigned rewards coupons, or assign them to beneficiaries if configured.
-          When set to external, beneficiary assignment for reward coupons is managed
-          by a process external to the validator app: the validator leaves unassigned
-          coupons untouched rather than assigning or minting them itself.
-          Defaults to built-in, preserving existing behavior.
 
           See the reward-sharing documentation for details:
           https://docs.canton.network/global-synchronizer/splice-fundamentals/reward-sharing#reward-sharing
