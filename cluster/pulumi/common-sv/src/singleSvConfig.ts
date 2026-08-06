@@ -103,11 +103,11 @@ export const ScanBigQueryConfigSchema = z
     dataset: z.string(),
     prefix: z.string(),
     functionsDataset: z.string().optional(),
-    enableLegacyDatastream: z.boolean().optional(),
-    enableStagProdDatastream: z.boolean().optional(),
-    legacyDesiredState: z.enum(['RUNNING', 'PAUSED']).optional(),
-    stagProdDesiredState: z.enum(['RUNNING', 'PAUSED']).optional(),
-    prodTableExpirationMs: z.number().optional(),
+    enableLegacyDatastream: z.boolean().default(true),
+    enableStagProdDatastream: z.boolean().default(false),
+    legacyDesiredState: z.enum(['RUNNING', 'PAUSED']).default('RUNNING'),
+    stagProdDesiredState: z.enum(['RUNNING', 'PAUSED']).default('RUNNING'),
+  
   })
   .strict(); // Keeps strict mode safe now that all known fields are explicitly defined
 
@@ -123,22 +123,6 @@ const ScanAppConfigSchema = z
     resources: K8sResourceSchema,
   })
   .strict();
-  
-// const ScanAppConfigSchema = z
-//   .object({
-//     bigQuery: z
-//       .object({
-//         dataset: z.string(),
-//         prefix: z.string(),
-//         functionsDataset: z.string().optional(),
-//       })
-//       .optional(),
-//     bulkStorage: BulkStorageConfigSchema.optional(),
-//     additionalEnvVars: z.array(EnvVarConfigSchema).default([]),
-//     additionalJvmOptions: z.string().optional(),
-//     resources: K8sResourceSchema,
-//   })
-//   .strict();
 
 const SvValidatorAppConfigSchema = z
   .object({
