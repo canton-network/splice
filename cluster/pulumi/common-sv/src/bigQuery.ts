@@ -56,6 +56,8 @@ const replicatorUserName = 'bqdatastream';
 
 // Remove legacy datastream configuration once migration to stag-prod pipeline is verified.
 // issue: https://github.com/canton-network/splice/issues/6656
+// TODO (#6656) Remove legacy datastream configuration once migration to stag-prod pipeline is verified
+
 const replicationSlotName = 'update_history_datastream_r_slot';
 const publicationName = 'update_history_datastream_pub';
 
@@ -279,7 +281,7 @@ function installDatastream_stag_prod(
   pubRepSlots: pulumi.Resource,
   desiredState: 'RUNNING' | 'PAUSED'
 ): gcp.datastream.Stream {
-  const streamName = `${postgres.namespace.logicalName}-scan-stag-production-datastream`;
+  const streamName = `${CLUSTER_BASENAME}-${postgres.namespace.logicalName}-stag-production-datastream`;
   const schemaName = scanAppDatabaseName(postgres);
   return new gcp.datastream.Stream(
     streamName,
@@ -393,14 +395,12 @@ function installBigqueryStagingDataset(scanBigQuery: ScanBigQueryConfig): gcp.bi
 
 function installBigqueryProdDataset(
   scanBigQuery: ScanBigQueryConfig,
-  prodTableExpirationMs: number
 ): gcp.bigquery.Dataset {
   return new gcp.bigquery.Dataset(`${scanBigQuery.dataset}-prod`, {
     datasetId: `${scanBigQuery.dataset}_prod`,
     friendlyName: `${scanBigQuery.dataset} Production Dataset`,
     location: cloudsdkComputeRegion(),
     deleteContentsOnDestroy: true,
-    defaultTableExpirationMs: prodTableExpirationMs,
     labels: {
       cluster: CLUSTER_BASENAME,
     },
@@ -476,8 +476,8 @@ function installHourlyScheduledQueries(
       definitionBody: procedureBody,
     });
 
-    new gcp.bigquery.DataTransferConfig(`${tableName}-hourly-append`, {
-      displayName: `${tableName} Hourly Append Loop Dynamic Watermark`,
+    new gcp.bigquery.DataTransferConfig(`${CLUSTER_BASENAME}_${tableName}-hourly-append`, {
+      displayName: `${CLUSTER_BASENAME}_${tableName} Hourly Append Pipeline`,
       location: cloudsdkComputeRegion(),
       serviceAccountName: pulumi.interpolate`bigquery@${projectId}.iam.gserviceaccount.com`,
       dataSourceId: 'scheduled_query',
@@ -508,7 +508,7 @@ function installBigqueryConnectionProfile(
       connectionProfileId: profileName,
       displayName: profileName,
       location: cloudsdkComputeRegion(),
-      bigqueryProfile: {},
+      bigqueryProfile: {},// just a sumtype marker
       labels: {
         cluster: CLUSTER_BASENAME,
       },
@@ -666,8 +666,8 @@ function createPublicationAndReplicationSlots(
   enableLegacy: boolean,
   enableStagProd: boolean
 ): {
-  slot1?: pulumi.Resource;
-  slot2?: pulumi.Resource;
+  slot1?: command.local.Command;
+  slot2?: command.local.Command;
 } {
   // ---------------------------------------------------------------------------
   // 1. Shared Environment & Project Setup
@@ -677,10 +677,6 @@ function createPublicationAndReplicationSlots(
   const schemaName = dbName;
   const scriptPath = commandScriptPath('cluster/pulumi/canton-network/bigquery-cloudsql.sh');
 
-  /**
-  * Note: Uses `projectId` instead of project `name` to prevent script execution 
- * failures if the GCP project display name contains spaces or capital letters.
- */
   const projectId = gcp.organizations
     .getProjectOutput({})
     .apply(proj => proj.projectId);
@@ -692,26 +688,42 @@ function createPublicationAndReplicationSlots(
   ];
 
   // ---------------------------------------------------------------------------
-  // 2. Shared Base CLI Arguments
+  // 2. Base Arguments Split (Matches Stored Deployment Ordering & Formatting)
   // ---------------------------------------------------------------------------
 
-  const baseArgs = [
-    pulumi.interpolate`--private-network-project="${projectId}"`, // Use `projectId` instead of `name` to ensure a valid GCP project identifier for CLI flags
+  // Prefix arguments (Arguments 1–6)
+  const baseArgsPrefix: pulumi.Input<string>[] = [
+    pulumi.interpolate`--private-network-project="${projectId}"`,
     pulumi.interpolate`--compute-region="${cloudsdkComputeRegion()}"`,
     pulumi.interpolate`--service-account-email="${postgres.databaseInstance.serviceAccountEmailAddress}"`,
     pulumi.interpolate`--schema-name="${schemaName}"`,
     pulumi.interpolate`--tables-to-replicate-joined="${tablesToReplicate.join(', ')}"`,
     pulumi.interpolate`--postgres-user-name="${postgres.user.name}"`,
+  ];
+
+  // Suffix arguments (Arguments 9–12)
+  const baseArgsSuffix: pulumi.Input<string>[] = [
     pulumi.interpolate`--replicator-user-name="${replicatorUserName}"`,
     pulumi.interpolate`--postgres-instance-name="${postgres.databaseInstance.name}"`,
     pulumi.interpolate`--scan-app-database-name="${dbName}"`,
     pulumi.interpolate`--flyway-migration-to-wait-for="${flywayMigrationToWaitFor}"`,
   ];
 
-  // Join base arguments with shell line continuation (` \\\n  `)
-  const baseArgsString = pulumi
-    .all(baseArgs)
-    .apply(args => args.join(' \\\n  '));
+  // Constructs full CLI command matching original deployment state:
+  // - Places publication & slot args in positions 7 & 8
+  // - Uses 6-space indentation (` \\\n      `)
+  // - Includes trailing backslash continuation (` \\\n      `)
+  const buildScriptCommand = (
+    action: string,
+    slotArgs: pulumi.Input<string>[]
+  ): pulumi.Output<string> => {
+    const allArgs = [...baseArgsPrefix, ...slotArgs, ...baseArgsSuffix];
+
+    return pulumi.all(allArgs).apply(args => {
+      const formattedArgs = args.join(' \\\n      ');
+      return `'${scriptPath}' ${action} \\\n      ${formattedArgs} \\\n      `;
+    });
+  };
 
   // ---------------------------------------------------------------------------
   // 3. Legacy Datastream Slot (Slot 1)
@@ -720,22 +732,21 @@ function createPublicationAndReplicationSlots(
   let slot1: command.local.Command | undefined;
 
   if (enableLegacy) {
-    const scriptArgsSlot1 = pulumi.interpolate`
-${baseArgsString} \\
-  --publication-name="${publicationName}" \\
-  --replication-slot-name="${replicationSlotName}"
-`.apply(s => s.trim());
+    const slot1Args: pulumi.Input<string>[] = [
+      pulumi.interpolate`--publication-name="${publicationName}"`,
+      pulumi.interpolate`--replication-slot-name="${replicationSlotName}"`,
+    ];
 
     slot1 = new command.local.Command(
       `${postgres.namespace.logicalName}-${replicatorUserName}-pub-replicate-slots`,
       {
-        create: pulumi.interpolate`'${scriptPath}' create-pub-rep-slot \\\n  ${scriptArgsSlot1}`,
-        delete: pulumi.interpolate`'${scriptPath}' delete-pub-rep-slot \\\n  ${scriptArgsSlot1}`,
+        create: buildScriptCommand('create-pub-rep-slot', slot1Args),
+        delete: buildScriptCommand('delete-pub-rep-slot', slot1Args),
       },
       {
         deletedWith: postgres.databaseInstance,
         dependsOn: commonDependencies,
-        deleteBeforeReplace: true, // was a part of the original script, keeping it as is
+        deleteBeforeReplace: true,
       }
     );
   }
@@ -747,17 +758,16 @@ ${baseArgsString} \\
   let slot2: command.local.Command | undefined;
 
   if (enableStagProd) {
-    const scriptArgsSlot2 = pulumi.interpolate`
-${baseArgsString} \\
-  --publication-name="${publicationNameStagProd}" \\
-  --replication-slot-name="${replicationSlotNameStagProd}"
-`.apply(s => s.trim());
+    const slot2Args: pulumi.Input<string>[] = [
+      pulumi.interpolate`--publication-name="${publicationNameStagProd}"`,
+      pulumi.interpolate`--replication-slot-name="${replicationSlotNameStagProd}"`,
+    ];
 
     slot2 = new command.local.Command(
       `${postgres.namespace.logicalName}-${replicatorUserName}-pub-replicate-slot-2`,
       {
-        create: pulumi.interpolate`'${scriptPath}' create-pub-rep-slot \\\n  ${scriptArgsSlot2}`,
-        delete: pulumi.interpolate`'${scriptPath}' delete-pub-rep-slot \\\n  ${scriptArgsSlot2}`,
+        create: buildScriptCommand('create-pub-rep-slot', slot2Args),
+        delete: buildScriptCommand('delete-pub-rep-slot', slot2Args),
       },
       {
         deletedWith: postgres.databaseInstance,
@@ -787,11 +797,10 @@ export function configureScanBigQuery(
   // Destructure all config properties at function entry with fallback defaults
   // we can change this to enableLegacyDatastream to false or PAUSED once we verify the stag-prod pipeline is working correctly and we want to disable the legacy pipeline
   const {
-    enableLegacyDatastream = true,
-    enableStagProdDatastream = true,
-    prodTableExpirationMs = THREE_DAYS_MS,
-    legacyDesiredState = 'RUNNING',
-    stagProdDesiredState = 'RUNNING',
+    enableLegacyDatastream ,
+    enableStagProdDatastream ,
+    legacyDesiredState,
+    stagProdDesiredState,
   } = scanBigQuery;
 
   if (!enableLegacyDatastream && !enableStagProdDatastream) {
@@ -800,7 +809,7 @@ export function configureScanBigQuery(
     );
   }
 
-  const datastreamIamRoles = installDatastreamIamRoles();
+
 
   const passwordSecret = installReplicatorPassword(postgres);
   const slots = createPublicationAndReplicationSlots(
@@ -843,7 +852,7 @@ export function configureScanBigQuery(
 
   if (enableStagProdDatastream && slots.slot2) {
     const stagingDataset = installBigqueryStagingDataset(scanBigQuery);
-    const prodDataset = installBigqueryProdDataset(scanBigQuery, prodTableExpirationMs);
+    const prodDataset = installBigqueryProdDataset(scanBigQuery);
     const stagingDestinationProfile = installBigqueryStagingConnectionProfile(
       postgres,
       stagingDataset,
