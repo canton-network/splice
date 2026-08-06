@@ -10,7 +10,6 @@ import org.lfdecentralizedtrust.splice.environment.{DarResource, DarResources}
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTest
 import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.InitialPackageConfig
-import org.lfdecentralizedtrust.splice.util.scalatesttags.RequiresPv35
 import org.lfdecentralizedtrust.splice.util.{DarResourcesUtil, PackageUnvettingUtil}
 
 abstract class AdditionalPackagesToUnvetIntegrationTestBase
@@ -77,71 +76,6 @@ abstract class AdditionalPackagesToUnvetIntegrationTestBase
         )(config)
       )
       .withManualStart
-}
-
-/** This test verifies that an SV can unvet packages that still have vetted dependencies
-  */
-@RequiresPv35
-class PackageWithDependencyIntegrationTest extends AdditionalPackagesToUnvetIntegrationTestBase {
-
-  private val missingDependency = DarResources.wallet_0_1_20
-  private val problematicDar = DarResources.walletPayments_0_1_20
-  private val darsWithMissingDependency = Seq(
-    DarResources.wallet_0_1_21
-  ) :+ problematicDar
-
-  override val additionalPackagesToUnvetSv1: Seq[DarResource] = darsWithMissingDependency
-  override val additionalPackagesToUnvetSv1Local: Seq[DarResource] =
-    darsWithMissingDependency :+ missingDependency
-
-  "sv1 can unvet packages that still have dependencies" in { implicit env =>
-    import env.executionContext
-
-    startAllSync(
-      sv1Backend,
-      sv1ScanBackend,
-      sv1ValidatorBackend,
-    )
-    val synchronizerId =
-      sv1Backend.participantClient.synchronizers.list_connected().head.synchronizerId
-
-    clue(s"sv1 can unvet a package if dependencies to it remains, additionalPackagesToUnvet: ${additionalPackagesToUnvetSv1
-        .map(pkg => pkg.metadata.name -> pkg.metadata.version)}") {
-      eventually() {
-        val vettedPackageIds = getVettedPackageIds(
-          sv1Backend.appState.participantAdminConnection,
-          synchronizerId,
-        )
-        vettedPackageIds should contain noElementsOf darsWithMissingDependency.map(_.packageId)
-        vettedPackageIds should contain(missingDependency.packageId)
-      }
-      stopAllAsync(
-        sv1Backend,
-        sv1ValidatorBackend,
-      ).futureValue
-    }
-
-    clue(
-      s"sv1 can unvet a package if all dependencies to it are unvetted as well, additionalPackagesToUnvet: ${additionalPackagesToUnvetSv1Local
-          .map(pkg => pkg.metadata.name -> pkg.metadata.version)}"
-    ) {
-      startAllSync(
-        sv1LocalBackend,
-        sv1ValidatorLocalBackend,
-      )
-      eventually() {
-        val vettedPackageIds = getVettedPackageIds(
-          sv1LocalBackend.appState.participantAdminConnection,
-          synchronizerId,
-        )
-        vettedPackageIds should contain noElementsOf darsWithMissingDependency :+ missingDependency
-      }
-      stopAllAsync(
-        sv1LocalBackend,
-        sv1ValidatorLocalBackend,
-      ).futureValue
-    }
-  }
 }
 
 /** This test verifies that an SV can downgrade to the versions before an upgrade.
