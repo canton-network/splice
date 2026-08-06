@@ -181,9 +181,9 @@ class SqlIndexInitializationTrigger(
       Future.successful(TaskSuccess(s"Confirmed action completed for index ${action.indexName}"))
   }).transform {
     case Failure(e: FailedToAcquireIndexLockException) =>
-      // Another process is executing index DDL. This is expected whenever multiple apps share a
-      // database. The action stays in `remainingActions`, so we retry it on the next poll.
-      logger.info(s"Skipping $task, another process is currently executing index DDL", e)
+      // There was a concurrent DDL statement running.
+      // The action stays in `remainingActions`, so we retry it on the next poll.
+      logger.info(s"Skipping $task, another DDL statement was running currently", e)
       Success(TaskNoop)
     case other => other
   }
