@@ -233,7 +233,6 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
             <UpdateFeatureAppSection
               rightContractId={proposalDetails.proposal.rightContractId}
               newActivityWeight={proposalDetails.proposal.newActivityWeight}
-              reason={proposalDetails.proposal.reason}
             />
           )}
 
@@ -671,13 +670,11 @@ const UnfeatureAppSection = ({ rightContractId }: UnfeatureAppSectionProps) => {
 interface UpdateFeatureAppSectionProps {
   rightContractId: string;
   newActivityWeight: string;
-  reason: string;
 }
 
 const UpdateFeatureAppSection = ({
   rightContractId,
   newActivityWeight,
-  reason,
 }: UpdateFeatureAppSectionProps) => {
   const svAdminClient = useSvAdminClient();
   const providerQuery = useQuery({
@@ -738,12 +735,6 @@ const UpdateFeatureAppSection = ({
             ]}
           />
         }
-      />
-      <DetailItem
-        label="Reason"
-        value={reason}
-        labelId="proposal-details-update-feature-reason-label"
-        valueId="proposal-details-update-feature-reason-value"
       />
     </Box>
   );
