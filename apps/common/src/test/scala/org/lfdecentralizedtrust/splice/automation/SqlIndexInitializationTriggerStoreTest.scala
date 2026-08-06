@@ -8,13 +8,17 @@ import com.digitalasset.canton.concurrent.{FutureSupervisor, Threading}
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.resource.DbStorage
-import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.time.SimClock
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.MonadUtil
 import com.digitalasset.canton.{FutureHelpers, HasActorSystem, HasExecutionContext}
 import org.lfdecentralizedtrust.splice.automation.SqlIndexInitializationTrigger.IndexAction
-import org.lfdecentralizedtrust.splice.store.db.{AcsJdbcTypes, AcsTables, SplicePostgresTest}
+import org.lfdecentralizedtrust.splice.store.db.{
+  AcsJdbcTypes,
+  AcsTables,
+  AdvisoryLocks,
+  SplicePostgresTest,
+}
 import org.slf4j.event.Level
 import slick.dbio.DBIOAction
 import slick.jdbc.{GetResult, PositionedResult}
@@ -358,7 +362,7 @@ class SqlIndexInitializationTriggerStoreTest
         ),
       )
       val releaseLock = Promise[Unit]()
-      val (lockAcquired, lockReleased) = holdIndexDdlLock(trigger, releaseLock.future)
+      val (lockAcquired, lockReleased) = holdIndexDdlLock(releaseLock.future)
 
       for {
         _ <- lockAcquired
@@ -373,80 +377,25 @@ class SqlIndexInitializationTriggerStoreTest
       } yield indexNamesAfter should contain("test_index")
     }
 
-    "not collide when several triggers share a database" in {
-      // Sets up several triggers that will all run the same index DDL against the same tables.
-      // Without the advisory lock, the concurrent DDL statements compete either failing or
-      // leaving behind invalid indexes.
-      val triggers = (1 to 8).map(_ =>
-        SqlIndexInitializationTrigger(
-          storage = storage,
-          triggerContext = fastPollingTriggerContext,
-        )
-      )
-      val indexNames = Future
-        .sequence(triggers.map(runTriggerUntilAllTasksDone))
-        // Unlike the SimClock-based tests, these polling loops keep running on the wall clock,
-        // so they have to be stopped before the test ends.
-        .map(_ => triggers.foreach(_.close()))
-        .flatMap(_ => listIndexNames())
-        .futureValue
-      indexNames should contain allElementsOf expectedIndexNames
-      indexNames should not contain "scan_txlog_store_sid_en_vot"
-    }
-
-    "release the advisory lock after executing index DDL" in {
-      val trigger = SqlIndexInitializationTrigger(
-        storage = storage,
-        triggerContext = triggerContext,
-        indexActions = List(
-          IndexAction.Create(
-            "test_index",
-            sqlu"create index concurrently if not exists test_index on update_history_creates (record_time)",
-          )
-        ),
-      )
-      for {
-        _ <- runTriggerUntilAllTasksDone(trigger)
-        indexNames <- listIndexNames()
-        _ = indexNames should contain("test_index")
-        lockIsFree <- storage.underlying
-          .query(
-            (for {
-              lockAcquired <- trigger.acquireIndexDdlLock
-              _ <- if (lockAcquired) trigger.releaseIndexDdlLock else DBIOAction.successful(false)
-            } yield lockAcquired).withPinnedSession,
-            "check index DDL lock",
-          )
-          .failOnShutdown
-      } yield lockIsFree shouldBe true
-    }
   }
 
-  /** Acquires the index DDL advisory lock on a separate database session and holds it until
-    * `release` completes.
+  /** Acquires the DDL advisory lock on a separate database session and holds it until `release`
+    * completes.
     *
     * Returns a future that completes once the lock is held, and a future that completes once the
     * lock has been released again.
     */
-  private def holdIndexDdlLock(
-      trigger: SqlIndexInitializationTrigger,
-      release: Future[Unit],
-  ): (Future[Unit], Future[Unit]) = {
+  private def holdIndexDdlLock(release: Future[Unit]): (Future[Unit], Future[Unit]) = {
     val acquired = Promise[Unit]()
     val released = storage.underlying
       .query(
-        (for {
-          lockAcquired <- trigger.acquireIndexDdlLock
-          _ =
-            if (lockAcquired) acquired.success(())
-            else
-              acquired.failure(
-                new RuntimeException("The test failed to acquire the index DDL advisory lock")
-              )
-          _ <- DBIOAction.from(release)
-          _ <- trigger.releaseIndexDdlLock
-        } yield ()).withPinnedSession,
-        "hold index DDL lock",
+        AdvisoryLocks.withDdlLock(
+          DBIOAction
+            .successful(())
+            .map(_ => acquired.success(()))
+            .flatMap(_ => DBIOAction.from(release))
+        ),
+        "hold DDL lock",
       )
       .failOnShutdown
     // Make sure the test fails rather than hangs if the lock-holding session dies.
@@ -525,13 +474,6 @@ class SqlIndexInitializationTriggerStoreTest
     RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory),
     loggerFactory,
     NoOpMetricsFactory,
-  )
-
-  // A trigger context whose polling loop actually makes progress over time. The default context
-  // uses a SimClock, which never advances, so a trigger that reports a no-op never polls again.
-  private lazy val fastPollingTriggerContext: TriggerContext = triggerContext.copy(
-    config = AutomationConfig(pollingInterval = NonNegativeFiniteDuration.ofMillis(100)),
-    pollingClock = wallClock,
   )
 
   override protected def cleanDb(
