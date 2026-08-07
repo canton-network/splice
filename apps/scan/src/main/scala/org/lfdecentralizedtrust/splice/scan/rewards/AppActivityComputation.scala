@@ -49,13 +49,12 @@ class AppActivityComputation(
   )(implicit tc: TraceContext): Future[Option[Long]] =
     rewardsReferenceStore.lookupLatestArchivedOpenMiningRound(asOf)
 
-  /** The OpenMiningRound round number active at asOf, if the round data has been ingested. */
-  def lookupActiveOpenMiningRound(
+  /** See [[org.lfdecentralizedtrust.splice.scan.store.ScanRewardsReferenceStore.lookupEarliestIngestedRoundCandidate]].
+    */
+  def lookupEarliestIngestedRoundCandidate(
       asOf: CantonTimestamp
   )(implicit tc: TraceContext): Future[Option[Long]] =
-    rewardsReferenceStore
-      .lookupActiveOpenMiningRounds(Seq(asOf))
-      .map(_.get(asOf).map { case (roundNumber, _) => roundNumber })
+    rewardsReferenceStore.lookupEarliestIngestedRoundCandidate(asOf)
 
   /** Compute app activity records for a batch of verdicts.
     *
