@@ -2453,7 +2453,6 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "instance": "",
       "name": "cantonnet"
     },
     "name": "sv-1-db-cn-apps-pg-cantonnet",
@@ -2464,7 +2463,6 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "instance": "",
       "name": "cantonnet"
     },
     "name": "sv-1-db-participant-pg-cantonnet",
@@ -2488,7 +2486,7 @@
       }
     },
     "name": "sv-1-default",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-1-default::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-1-default::04da6b54-80e4-46f7-96ec-b56ff0331ba9",
     "type": "kubernetes:core/v1:ServiceAccountPatch"
   },
   {
@@ -4449,7 +4447,7 @@
       }
     },
     "name": "sv-1-sv",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-1-sv::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-1-sv::04da6b54-80e4-46f7-96ec-b56ff0331ba9",
     "type": "kubernetes:core/v1:ServiceAccountPatch"
   },
   {
@@ -4773,7 +4771,6 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "instance": "",
       "name": "cantonnet"
     },
     "name": "sv-da-1-db-cn-apps-pg-cantonnet",
@@ -4784,7 +4781,6 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "instance": "",
       "name": "cantonnet"
     },
     "name": "sv-da-1-db-participant-pg-cantonnet",
@@ -4808,7 +4804,7 @@
       }
     },
     "name": "sv-da-1-default",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-da-1-default::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-da-1-default::04da6b54-80e4-46f7-96ec-b56ff0331ba9",
     "type": "kubernetes:core/v1:ServiceAccountPatch"
   },
   {
@@ -6761,7 +6757,7 @@
       }
     },
     "name": "sv-da-1-sv",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-da-1-sv::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-da-1-sv::04da6b54-80e4-46f7-96ec-b56ff0331ba9",
     "type": "kubernetes:core/v1:ServiceAccountPatch"
   },
   {
@@ -6953,7 +6949,6 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "instance": "",
       "name": "cantonnet"
     },
     "name": "sv-db-participant-pg-cantonnet",
@@ -7230,7 +7225,7 @@
       }
     },
     "name": "sv-sv",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-sv::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-sv::04da6b54-80e4-46f7-96ec-b56ff0331ba9",
     "type": "kubernetes:core/v1:ServiceAccountPatch"
   },
   {
@@ -7299,7 +7294,6 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "instance": "",
       "name": "cnadmin",
       "password": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
@@ -7314,7 +7308,6 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "instance": "",
       "name": "cnadmin",
       "password": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
@@ -7329,7 +7322,6 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "instance": "",
       "name": "cnadmin",
       "password": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
@@ -7344,7 +7336,6 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "instance": "",
       "name": "cnadmin",
       "password": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
@@ -7359,7 +7350,6 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "instance": "",
       "name": "cnadmin",
       "password": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",

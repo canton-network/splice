@@ -404,11 +404,11 @@ function createPublicationAndReplicationSlots(
   );
 }
 
-export async function configureScanBigQuery(
-  namespace: ExactNamespace,
-  scanReference: ScanReference,
-  scanBigQuery: ScanBigQueryConfig
-): Promise<ScanBigQuery> {
+export async function configureScanBigQuery({
+  namespace,
+  bigQueryConfig,
+  scanReference,
+}: ScanBigQueryArgs): Promise<ScanBigQuery> {
   const zone = getCloudSdkZone();
   const [databaseInstance, scanChart] = await (async () => {
     switch (scanReference.type) {
@@ -427,7 +427,7 @@ export async function configureScanBigQuery(
   );
 
   const natVm = installNatVm(namespace, zone, databaseInstance);
-  const dataset = installBigqueryDataset(scanBigQuery);
+  const dataset = installBigqueryDataset(bigQueryConfig);
   const pcc = installPrivateConnectivityConfiguration(namespace);
   const destinationProfile = installBigqueryConnectionProfile(namespace, dataset, pcc);
   const sourceProfile = installPostgresConnectionProfile(
@@ -452,6 +452,12 @@ export async function configureScanBigQuery(
     datasetId: dataset.id,
   };
 }
+
+export type ScanBigQueryArgs = {
+  namespace: ExactNamespace;
+  bigQueryConfig: ScanBigQueryConfig;
+  scanReference: ScanReference;
+};
 
 type ScanReference =
   | {
@@ -480,7 +486,9 @@ async function getScanDb(
   const instanceName =
     result.instances.find(instance => instance.name.startsWith(instanceNamePrefix))?.name ??
     (() => {
-      throw new Error();
+      throw new Error(
+        `Could not find SV apps database instance with prefix: ${instanceNamePrefix}`
+      );
     })();
   return gcp.sql.DatabaseInstance.get(instanceNamePrefix, instanceName);
 }

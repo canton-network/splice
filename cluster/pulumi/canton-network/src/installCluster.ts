@@ -9,9 +9,11 @@ import {
   spliceConfig,
 } from '@canton-network/splice-pulumi-common';
 import { configForSv, coreSvsToDeploy } from '@canton-network/splice-pulumi-common-sv';
-import { configureScanBigQuery } from '@canton-network/splice-pulumi-common-sv/src/bigQuery';
+import {
+  configureScanBigQuery,
+  ScanBigQueryArgs,
+} from '@canton-network/splice-pulumi-common-sv/src/bigQuery';
 import { InstalledSv } from '@canton-network/splice-pulumi-common-sv/src/sv';
-import { SplitPostgresInstances } from '@canton-network/splice-pulumi-common/src/config/configs';
 import { CloudPostgres } from '@canton-network/splice-pulumi-common/src/postgres';
 
 import { activeVersion } from '../../common';
@@ -32,6 +34,7 @@ export async function installCluster(auth0Client: Auth0Client): Promise<Dso | un
       : `Using charts from the container registry by default, version ${activeVersion.version}`
   );
 
+  // TODO(#6719) once all clusters have been migrated this can be removed.
   const dso = spliceConfig.configuration.synchronizerMigration.splitSvDeploymentEnabled
     ? undefined
     : new Dso('dso', {
@@ -41,13 +44,23 @@ export async function installCluster(auth0Client: Auth0Client): Promise<Dso | un
           spliceConfig.configuration.synchronizerMigration.migrateToSplitSvDeployment,
       });
 
-  const sv1 = await dso?.sv1;
+  const locallyInstalledSvs = await dso?.allSvs;
+  const bigQueryArgs = [...iterateBigQueryArgs(locallyInstalledSvs)];
+  if (bigQueryArgs.length > 1) {
+    throw new Error(
+      `Multiple SVs with BigQuery configuration found: ${bigQueryArgs.map(arg => arg.namespace.logicalName).join(', ')}`
+    );
+  }
+  for (const args of bigQueryArgs) {
+    await configureScanBigQuery(args);
+  }
 
-  await installBigQuery(sv1);
-
-  const allSvs = (await dso?.allSvs) ?? [];
-
-  const svDependencies = allSvs.flatMap(sv => [sv.scan, sv.svApp, sv.validatorApp, sv.ingress]);
+  const svDependencies = (locallyInstalledSvs ?? []).flatMap(sv => [
+    sv.scan,
+    sv.svApp,
+    sv.validatorApp,
+    sv.ingress,
+  ]);
 
   installDocs();
 
@@ -58,30 +71,43 @@ export async function installCluster(auth0Client: Auth0Client): Promise<Dso | un
   return dso;
 }
 
-async function installBigQuery(installedSv: InstalledSv | undefined) {
-  const nodeName = installedSv?.nodeName ?? coreSvsToDeploy[0].nodeName;
-  const namespace = installedSv?.namespace ?? exactNamespace(nodeName, true, true);
-  const config = configForSv(nodeName);
-  const installedAppsPostgres = installedSv?.appsPostgres;
-  const localScanReference =
-    installedAppsPostgres !== undefined && installedAppsPostgres instanceof CloudPostgres
-      ? {
-          type: 'local' as const,
-          databaseInstance: installedAppsPostgres.databaseInstance,
-          chart: installedSv!.scan,
-        }
-      : undefined;
-  const externalScanReference =
-    SplitPostgresInstances &&
-    (config.appsPg?.cloudSql ?? spliceConfig.pulumiProjectConfig.cloudSql).enabled
-      ? {
-          type: 'external' as const,
-          databaseInstanceNamePrefix: `${namespace.logicalName}-cn-apps-pg`,
-        }
-      : undefined;
-  const scanReference = localScanReference ?? externalScanReference;
-  const bigQueryConfig = config.scanApp?.bigQuery;
-  bigQueryConfig !== undefined && scanReference !== undefined
-    ? await configureScanBigQuery(namespace, scanReference, bigQueryConfig)
-    : undefined;
+function* iterateBigQueryArgs(
+  locallyInstalledSvs?: Array<InstalledSv>
+): Generator<ScanBigQueryArgs> {
+  if (locallyInstalledSvs === undefined) {
+    for (const sv of coreSvsToDeploy) {
+      const config = configForSv(sv.nodeName);
+      const bigQueryConfig = config?.scanApp?.bigQuery;
+      const cloudSqlEnabled = (config.appsPg?.cloudSql ?? spliceConfig.pulumiProjectConfig.cloudSql)
+        .enabled;
+      if (bigQueryConfig !== undefined && cloudSqlEnabled) {
+        const namespace = exactNamespace(sv.nodeName, true, true);
+        yield {
+          namespace,
+          bigQueryConfig: bigQueryConfig,
+          scanReference: {
+            type: 'external',
+            databaseInstanceNamePrefix: `${namespace.logicalName}-cn-apps-pg`,
+          },
+        };
+      }
+    }
+  } else {
+    // TODO(#6719) once all clusters have been migrated this can be removed.
+    for (const sv of locallyInstalledSvs) {
+      const config = configForSv(sv.nodeName);
+      const bigQueryConfig = config?.scanApp?.bigQuery;
+      if (bigQueryConfig !== undefined && sv.appsPostgres instanceof CloudPostgres) {
+        yield {
+          namespace: sv.namespace,
+          bigQueryConfig: bigQueryConfig,
+          scanReference: {
+            type: 'local',
+            databaseInstance: sv.appsPostgres.databaseInstance,
+            chart: sv.scan,
+          },
+        };
+      }
+    }
+  }
 }

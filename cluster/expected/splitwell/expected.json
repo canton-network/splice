@@ -458,7 +458,6 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "instance": "",
       "name": "cantonnet"
     },
     "name": "splitwell-db-participant-pg-cantonnet",
@@ -469,7 +468,6 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "instance": "",
       "name": "cantonnet"
     },
     "name": "splitwell-db-sw-pg-cantonnet",
@@ -480,7 +478,6 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "instance": "",
       "name": "cantonnet"
     },
     "name": "splitwell-db-validator-pg-cantonnet",
@@ -504,7 +501,7 @@
       }
     },
     "name": "splitwell-default",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-splitwell-default::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-splitwell-default::04da6b54-80e4-46f7-96ec-b56ff0331ba9",
     "type": "kubernetes:core/v1:ServiceAccountPatch"
   },
   {
@@ -1251,7 +1248,6 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "instance": "",
       "name": "cnadmin",
       "password": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
@@ -1266,7 +1262,6 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "instance": "",
       "name": "cnadmin",
       "password": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
@@ -1281,7 +1276,6 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "instance": "",
       "name": "cnadmin",
       "password": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",

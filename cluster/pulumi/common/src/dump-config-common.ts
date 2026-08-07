@@ -239,20 +239,9 @@ export async function initDumpConfig({
               },
             };
           }
-          case 'gcp:sql/databaseInstance:DatabaseInstance':
-            console.error(`DB INSTANCE: ${JSON.stringify(args, null, 2)}`);
-            return {
-              id: args.id ?? args.inputs.name + '_id',
-              state: {
-                name:
-                  args.id ??
-                  `${args.inputs.name}-${Array.from({ length: 7 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`,
-                ...args.inputs,
-              },
-            };
           default:
             return {
-              id: args.inputs.name + '_id',
+              id: args.id ?? args.inputs.name + '_id',
               state: args.inputs,
             };
         }

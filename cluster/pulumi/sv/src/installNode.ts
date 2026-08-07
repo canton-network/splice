@@ -25,6 +25,7 @@ import { StackReferences } from '@canton-network/splice-pulumi-common/src/stackR
 import { installParticipant } from './participant';
 
 export async function installNode(sv: string, auth0Client: Auth0Client): Promise<void> {
+  // TODO(#6719) once all clusters have been migrated hardcode splitSvDeploymentEnabled to true
   const splitSvDeploymentEnabled =
     spliceConfig.configuration.synchronizerMigration.splitSvDeploymentEnabled;
   const staticConfig = findStaticConfigOrFail(sv);
@@ -35,6 +36,7 @@ export async function installNode(sv: string, auth0Client: Auth0Client): Promise
   const auth0Config = auth0Client.getCfg();
   const ledgerApiUserSecret = installLedgerApiUserSecret(auth0Client, xns, 'sv', 'sv');
   const ledgerApiUserSecretSource = auth0UserNameEnvVarSource('sv', true);
+  // TODO(#6719) once all clusters have been migrated remove this
   const migrateToSplitSvDeployment =
     spliceConfig.configuration.synchronizerMigration.migrateToSplitSvDeployment;
   if (
@@ -72,6 +74,7 @@ function findStaticConfigOrFail(sv: string): StaticSvConfig {
   }
 }
 
+// TODO(#6719) once all clusters have been migrated remove this
 async function getMigrationArgsForSv(nodeName: string): Promise<MigrationArgs> {
   const svs = (await StackReferences.cantonNetwork.requireOutputValue('svs')) as SvsMigrationOutput;
   const sv =

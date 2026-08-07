@@ -90,12 +90,14 @@ import pick from 'lodash/pick';
 
 import { installInfo } from './info';
 
+// TODO(#6719) once all clusters have been migrated move the whole module to the sv project
 export async function installSvNodeStandalone(
   xns: ExactNamespace,
   staticConfig: StaticSvConfig,
   config: SingleSvConfiguration,
   auth0Client: Auth0Client,
   extraDependsOn: CnInput<Resource>[] = [],
+  // TODO(#6719) once all clusters have been migrated remove this
   migrationArgs?: MigrationArgs
 ): Promise<InstalledSv | undefined> {
   const nodeName = staticConfig.nodeName;
