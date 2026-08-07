@@ -364,7 +364,8 @@ class SqlIndexInitializationTriggerStoreTest
         ),
       )
       val releaseLock = Promise[Unit]()
-      val (lockAcquired, lockReleased) = holdLock(AdvisoryLocks.withDdlLock, releaseLock.future)
+      val (lockAcquired, lockReleased) =
+        holdLock(AdvisoryLocks.withDdlLock, DBIOAction.unit, releaseLock.future)
 
       for {
         _ <- lockAcquired
