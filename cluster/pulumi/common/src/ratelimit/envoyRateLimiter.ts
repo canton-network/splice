@@ -12,12 +12,20 @@ interface Limits {
 }
 
 interface PerIpLimits extends Limits {
+  // Each IP in an override gets its own independent token bucket.
   overrides?: Record<string, { ips: string[] } & Limits>;
+}
+
+interface PerCidrLimits extends Limits {
+  // All CIDRs listed under a single override key share one token bucket. The
+  // combined request rate from every CIDR in the override is limited together.
+  overrides?: Record<string, { cidrs: string[] } & Limits>;
 }
 
 interface MatchedLimits extends Limits {
   type: 'limited';
   perIpLimits?: PerIpLimits;
+  perCidrLimits?: PerCidrLimits;
 }
 
 interface Banned {
@@ -47,6 +55,48 @@ type LocalLimit<L> = {
 // above. All existing manual YAML entries use 'client_ip' so this is the nicest
 // migration away from always specifying that.
 const clientIpEntryKey = 'client_ip';
+
+// Envoy native descriptor key for CIDR-based rate limiting using
+// remote_address_match. The action checks the connection's remote address
+// against configured CIDR ranges and produces this descriptor entry.
+const remoteAddressMatchKey = 'remote_address_match';
+const remoteAddressMatchDefaultValue = 'per-cidr-default';
+
+function cidrToEnvoyCidrRange(cidr: string): {
+  address_prefix: string;
+  prefix_len: { value: number };
+} {
+  const [network, prefixStr] = cidr.split('/');
+  return {
+    address_prefix: network,
+    prefix_len: { value: parseInt(prefixStr, 10) },
+  };
+}
+
+function ipToLong(ip: string): number {
+  return ip.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0) >>> 0;
+}
+
+function parseCidr(cidr: string): { networkLong: number; prefix: number; broadcastLong: number } {
+  const [network, prefixStr] = cidr.split('/');
+  const prefix = parseInt(prefixStr, 10);
+  const networkLong = ipToLong(network);
+  const hostBits = 32 - prefix;
+  const hostCount = 1 << hostBits;
+  const networkMask = ~(hostCount - 1) >>> 0;
+  const normalizedNetworkLong = networkLong & networkMask;
+  const broadcastLong = normalizedNetworkLong | ((hostCount - 1) >>> 0);
+  return { networkLong: normalizedNetworkLong, prefix, broadcastLong };
+}
+
+function cidrsOverlap(a: string, b: string): boolean {
+  const parsedA = parseCidr(a);
+  const parsedB = parseCidr(b);
+  return (
+    (parsedA.networkLong <= parsedB.networkLong && parsedB.networkLong <= parsedA.broadcastLong) ||
+    (parsedB.networkLong <= parsedA.networkLong && parsedA.networkLong <= parsedB.broadcastLong)
+  );
+}
 
 interface RateLimitEnvoyFilterArgs extends PerEndpointLimits {
   namespace: string;
@@ -123,6 +173,37 @@ export function validateIpLimits(pathPrefix: string, rateLimit: LocalLimit<Match
   }
 }
 
+export function validateCidrLimits(pathPrefix: string, rateLimit: LocalLimit<MatchedLimits>): void {
+  if (!rateLimit.perCidrLimits) {
+    return;
+  }
+
+  const cidrs: { cidr: string; overrideKey: string }[] = [];
+
+  Object.entries(rateLimit.perCidrLimits.overrides || {}).forEach(([overrideKey, override]) => {
+    override.cidrs.forEach(cidr => {
+      cidrs.push({ cidr, overrideKey });
+    });
+  });
+
+  const overlaps: string[] = [];
+  for (let i = 0; i < cidrs.length; i++) {
+    for (let j = i + 1; j < cidrs.length; j++) {
+      if (cidrsOverlap(cidrs[i].cidr, cidrs[j].cidr)) {
+        overlaps.push(
+          `${cidrs[i].cidr} (in override '${cidrs[i].overrideKey}') and ${cidrs[j].cidr} (in override '${cidrs[j].overrideKey}')`
+        );
+      }
+    }
+  }
+
+  if (overlaps.length > 0) {
+    throw new Error(
+      `${pathPrefix}: overlapping CIDRs in per-CIDR rate limits: ${overlaps.join(', ')}`
+    );
+  }
+}
+
 function validateEffectiveRateLimits(
   args: RateLimitEnvoyFilterArgs
 ): LocalLimits<MatchedLimits> | undefined {
@@ -186,6 +267,7 @@ function validateEffectiveRateLimits(
 
   Object.entries(effectiveRateLimits).forEach(([pathPrefix, rateLimit]) => {
     validateIpLimits(pathPrefix, rateLimit);
+    validateCidrLimits(pathPrefix, rateLimit);
   });
 
   return effectiveRateLimits;
@@ -223,6 +305,50 @@ export function buildRateLimitActions(effectiveRateLimits: LocalLimits<MatchedLi
             request_headers: {
               descriptor_key: clientIpEntryKey,
               header_name: 'x-forwarded-for',
+            },
+          },
+        ],
+      });
+    }
+
+    // Action 3: generate the per-CIDR actions if perCidrLimits exists.
+    // All CIDRs within a single override share one token bucket, identified by the
+    // override key. A final catch-all action matches any IP not covered by an override
+    // and uses the generic per-CIDR token bucket.
+    if (rateLimit.perCidrLimits) {
+      const overrideCidrRanges: { address_prefix: string; prefix_len: { value: number } }[] = [];
+
+      Object.entries(rateLimit.perCidrLimits.overrides || {}).forEach(([overrideKey, override]) => {
+        const cidrRanges = override.cidrs.map(cidrToEnvoyCidrRange);
+        overrideCidrRanges.push(...cidrRanges);
+        actions.push({
+          actions: [
+            baseAction,
+            {
+              remote_address_match: {
+                descriptor_value: overrideKey,
+                address_matcher: {
+                  cidr_ranges: cidrRanges,
+                },
+              },
+            },
+          ],
+        });
+      });
+
+      // Catch-all action for the generic per-CIDR bucket. invert_match ensures that IPs
+      // already covered by an override CIDR produce a different descriptor and therefore
+      // consume only the override bucket, not the generic one.
+      actions.push({
+        actions: [
+          baseAction,
+          {
+            remote_address_match: {
+              descriptor_value: remoteAddressMatchDefaultValue,
+              address_matcher: {
+                cidr_ranges: overrideCidrRanges,
+                invert_match: true,
+              },
             },
           },
         ],
@@ -279,6 +405,40 @@ export function buildRateLimitDescriptors(
       });
     }
 
+    // generate the per-CIDR buckets if configured.
+    // These come after per-IP buckets so explicit per-IP overrides take precedence.
+    // All CIDRs listed under a single override key share the same token bucket; the
+    // combined traffic from all those CIDRs is rate-limited as one group.
+    if (rateLimit.perCidrLimits) {
+      // CIDR-specific overrides first. The override key identifies the shared bucket.
+      Object.entries(rateLimit.perCidrLimits.overrides || {}).forEach(([overrideKey, override]) => {
+        descs.push({
+          entries: [
+            { key: 'header_match', value: rateLimit.name },
+            { key: remoteAddressMatchKey, value: overrideKey },
+          ],
+          token_bucket: {
+            max_tokens: override.maxTokens,
+            tokens_per_fill: override.tokensPerFill,
+            fill_interval: override.fillInterval,
+          },
+        });
+      });
+
+      // Generic per-CIDR fallback for IPs not covered by any override CIDR.
+      descs.push({
+        entries: [
+          { key: 'header_match', value: rateLimit.name },
+          { key: remoteAddressMatchKey, value: remoteAddressMatchDefaultValue },
+        ],
+        token_bucket: {
+          max_tokens: rateLimit.perCidrLimits.maxTokens,
+          tokens_per_fill: rateLimit.perCidrLimits.tokensPerFill,
+          fill_interval: rateLimit.perCidrLimits.fillInterval,
+        },
+      });
+    }
+
     return descs;
   });
 }
@@ -322,6 +482,8 @@ proxyStatsMatcher:
           },
           configPatches: [
             // Patch 1: Add the rate limit filter to the HTTP filter chain.
+            // It is inserted at the beginning of the HTTP filter chain so that
+            // rate limiting happens early.
             {
               applyTo: 'HTTP_FILTER',
               match: {

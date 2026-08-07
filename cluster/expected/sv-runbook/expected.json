@@ -1129,6 +1129,22 @@
           "fillInterval": "60s",
           "maxTokens": 720,
           "name": "registry-metadata-info",
+          "perCidrLimits": {
+            "fillInterval": "60s",
+            "maxTokens": 500,
+            "overrides": {
+              "validator-net": {
+                "cidrs": [
+                  "192.68.78.0/24",
+                  "10.0.0.0/24"
+                ],
+                "fillInterval": "60s",
+                "maxTokens": 1000,
+                "tokensPerFill": 1000
+              }
+            },
+            "tokensPerFill": 500
+          },
           "perIpLimits": {
             "fillInterval": "60s",
             "maxTokens": 120,
@@ -1813,6 +1829,87 @@
                       "actions": [
                         {
                           "header_value_match": {
+                            "descriptor_value": "registry-metadata-info",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/metadata/v1/info"
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "remote_address_match": {
+                            "address_matcher": {
+                              "cidr_ranges": [
+                                {
+                                  "address_prefix": "192.68.78.0",
+                                  "prefix_len": {
+                                    "value": 24
+                                  }
+                                },
+                                {
+                                  "address_prefix": "10.0.0.0",
+                                  "prefix_len": {
+                                    "value": 24
+                                  }
+                                }
+                              ]
+                            },
+                            "descriptor_value": "validator-net"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-metadata-info",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/metadata/v1/info"
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "remote_address_match": {
+                            "address_matcher": {
+                              "cidr_ranges": [
+                                {
+                                  "address_prefix": "192.68.78.0",
+                                  "prefix_len": {
+                                    "value": 24
+                                  }
+                                },
+                                {
+                                  "address_prefix": "10.0.0.0",
+                                  "prefix_len": {
+                                    "value": 24
+                                  }
+                                }
+                              ],
+                              "invert_match": true
+                            },
+                            "descriptor_value": "per-cidr-default"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
                             "descriptor_value": "registry-metadata-instruments",
                             "expect_match": true,
                             "headers": [
@@ -2357,6 +2454,40 @@
                           "fill_interval": "60s",
                           "max_tokens": 120,
                           "tokens_per_fill": 120
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-metadata-info"
+                          },
+                          {
+                            "key": "remote_address_match",
+                            "value": "validator-net"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 1000,
+                          "tokens_per_fill": 1000
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-metadata-info"
+                          },
+                          {
+                            "key": "remote_address_match",
+                            "value": "per-cidr-default"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 500,
+                          "tokens_per_fill": 500
                         }
                       },
                       {

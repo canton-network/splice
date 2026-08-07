@@ -46,6 +46,24 @@ sv:
                 maxTokens: 250
                 tokensPerFill: 250
                 fillInterval: 60s
+          # Example: give a CIDR range a shared higher limit.
+          # This uses Envoy's remote_address_match action, which checks the
+          # connection's remote address against the configured CIDR ranges.
+          perCidrLimits:
+            maxTokens: 500
+            tokensPerFill: 500
+            fillInterval: 60s
+            overrides:
+              # Multiple CIDRs under a single override key share one token bucket.
+              # In this example, the combined traffic from 192.68.78.0/24 and
+              # 10.0.0.0/24 is limited to 1000 req/min total, not 1000 req/min each.
+              validator-net:
+                cidrs:
+                  - 192.68.78.0/24
+                  - 10.0.0.0/24
+                maxTokens: 1000
+                tokensPerFill: 1000
+                fillInterval: 60s
 splitwell:
   maxDarVersion: '0.1.8'
   participantPruningSchedule:
