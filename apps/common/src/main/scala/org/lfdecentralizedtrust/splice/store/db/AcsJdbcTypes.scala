@@ -10,7 +10,7 @@ import com.daml.ledger.javaapi.data.codegen.{ContractId, DamlRecord, DefinedData
 import com.digitalasset.canton.config.CantonRequireTypes.{String2066, String3, String300}
 import com.digitalasset.canton.data.{CantonTimestamp, Offset}
 import com.digitalasset.canton.daml.lf.value.json.ApiCodecCompressed
-import com.digitalasset.canton.topology.{Member, PartyId, SynchronizerId}
+import com.digitalasset.canton.topology.{Member, SynchronizerId}
 import com.digitalasset.daml.lf.data.Ref.HexString
 import com.digitalasset.daml.lf.data.Time.Timestamp
 import com.google.protobuf.ByteString
@@ -32,13 +32,11 @@ import com.digitalasset.canton.LfValue
 import com.digitalasset.canton.logging.ErrorLoggingContext
 import spray.json.{JsString, JsValue, JsonFormat, deserializationError}
 
-import java.sql.{JDBCType, PreparedStatement, ResultSet}
+import java.sql.{PreparedStatement, ResultSet}
 import java.io.StringWriter
 
-trait AcsJdbcTypes {
+trait AcsJdbcTypes extends JdbcTypes {
   import AcsJdbcTypes.JsonString
-
-  val profile: slick.jdbc.JdbcProfile
 
   import profile.api.*
 
@@ -194,22 +192,11 @@ trait AcsJdbcTypes {
     (timestamps: Array[CantonTimestamp], pp: PositionedParameters) =>
       longArraySetParameter(timestamps.map(_.toMicros), pp)
 
-  protected implicit lazy val stringArraySetParameter: SetParameter[Array[String]] =
-    (strings: Array[String], pp: PositionedParameters) =>
-      pp.setObject(
-        pp.ps.getConnection.createArrayOf("text", strings.map(x => x)),
-        JDBCType.ARRAY.getVendorTypeNumber,
-      )
-
   protected implicit lazy val stringSeqSetParameter: SetParameter[Seq[String]] =
     (strings: Seq[String], pp: PositionedParameters) => stringArraySetParameter(strings.toArray, pp)
 
   protected implicit lazy val string3ArraySetParameter: SetParameter[Array[String3]] =
     (strings: Array[String3], pp: PositionedParameters) =>
-      stringArraySetParameter(strings.map(_.str), pp)
-
-  protected implicit lazy val string2066ArraySetParameter: SetParameter[Array[String2066]] =
-    (strings: Array[String2066], pp: PositionedParameters) =>
       stringArraySetParameter(strings.map(_.str), pp)
 
   protected implicit lazy val string2066SeqSetParameter: SetParameter[Seq[String2066]] =
@@ -223,12 +210,6 @@ trait AcsJdbcTypes {
   protected implicit def contractIdAnyArraySetParameter: SetParameter[Array[ContractId[?]]] =
     (ids: Array[ContractId[?]], pp: PositionedParameters) =>
       stringArraySetParameter(ids.map(_.contractId), pp)
-
-  protected implicit def partyIdGetResult[T]: GetResult[PartyId] =
-    GetResult.GetString.andThen(PartyId.tryFromProtoPrimitive)
-
-  protected implicit def partyIdGetResultOption[T]: GetResult[Option[PartyId]] =
-    GetResult.GetStringOption.andThen(_.map(PartyId.tryFromProtoPrimitive))
 
   protected implicit lazy val offsetJdbcType: JdbcType[Offset] =
     MappedColumnType.base[Offset, String](
@@ -272,19 +253,6 @@ trait AcsJdbcTypes {
 
   protected implicit lazy val synchronizerIdJdbcType: JdbcType[SynchronizerId] =
     MappedColumnType.base[SynchronizerId, String](_.toProtoPrimitive, SynchronizerId.tryFromString)
-
-  protected implicit lazy val partyIdJdbcType: JdbcType[PartyId] =
-    MappedColumnType.base[PartyId, String](_.toProtoPrimitive, PartyId.tryFromProtoPrimitive)
-
-  protected implicit lazy val partyIdSetParameterOption: SetParameter[Option[PartyId]] =
-    (partyId: Option[PartyId], pp: PositionedParameters) =>
-      implicitly[SetParameter[Option[String2066]]]
-        .apply(partyId.map(party => lengthLimited(party.toProtoPrimitive)), pp)
-
-  protected implicit lazy val partyIdSetParameterArray: SetParameter[Array[PartyId]] =
-    (partyId: Array[PartyId], pp: PositionedParameters) =>
-      implicitly[SetParameter[Array[String2066]]]
-        .apply(partyId.map(party => lengthLimited(party.toProtoPrimitive)), pp)
 
   protected implicit lazy val memberIdSetParameter: SetParameter[Member] =
     (memberId: Member, pp: PositionedParameters) =>
@@ -374,11 +342,6 @@ trait AcsJdbcTypes {
   protected def payloadJsonFromDefinedDataType(
       data: DefinedDataType[?]
   ): Json = AcsJdbcTypes.payloadJsonFromDefinedDataType(data)
-
-  /** The DB may truncate strings of unbounded length, so it's advised to use a LengthLimitedString instead.
-    * We use String2066 because it's the max length of an [[com.digitalasset.canton.protocol.LfTemplateId]].
-    */
-  protected def lengthLimited(s: String): String2066 = String2066.tryCreate(s)
 
   private def lengthLimitedByteString(bs: ByteString, maxLength: Int): ByteString = {
     require(
