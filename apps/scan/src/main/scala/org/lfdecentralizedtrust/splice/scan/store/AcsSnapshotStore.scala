@@ -11,6 +11,8 @@ import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{
   FailedToAcquireLockException,
   IncrementalAcsSnapshot,
   IncrementalAcsSnapshotTable,
+  LegacyAcsSnapshot,
+  PerTableAcsSnapshot,
   QueryAcsSnapshotResult,
   amuletQualifiedName,
   lockedAmuletQualifiedName,
@@ -65,7 +67,7 @@ class AcsSnapshotStore(
   )(implicit tc: TraceContext): Future[Option[AcsSnapshot]] = {
     storage
       .querySingle(
-        sql"""select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance
+        sql"""select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance, data_table_name
             from acs_snapshot
             where snapshot_record_time <= $before
               and migration_id = $migrationId
@@ -83,7 +85,7 @@ class AcsSnapshotStore(
   )(implicit tc: TraceContext): Future[Option[AcsSnapshot]] = {
 
     val select =
-      sql"select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance "
+      sql"select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance, data_table_name "
     val orderLimit = sql" order by snapshot_record_time asc limit 1 "
     val sameMig = select ++ sql""" from acs_snapshot
             where snapshot_record_time > $after
@@ -120,8 +122,10 @@ class AcsSnapshotStore(
       val from = lastSnapshot.map(_.snapshotRecordTime).getOrElse(CantonTimestamp.MinValue)
       val gtFrom = lastSnapshot.fold(">=")(_ => ">")
       val previousSnapshotDataFilter = lastSnapshot match {
-        case Some(AcsSnapshot(_, _, _, firstRowId, lastRowId, _, _)) =>
+        case Some(LegacyAcsSnapshot(_, _, _, firstRowId, lastRowId, _, _)) =>
           sql"where snapshot.row_id >= $firstRowId and snapshot.row_id <= $lastRowId"
+        case Some(_: PerTableAcsSnapshot) =>
+          throw io.grpc.Status.UNIMPLEMENTED.withDescription("TODO #6264").asRuntimeException()
         case None =>
           sql"where false"
       }
@@ -242,10 +246,15 @@ class AcsSnapshotStore(
   )(implicit
       tc: TraceContext
   ): Future[Unit] = {
-    val statement = DBIOAction.seq(
-      sqlu"""delete from acs_snapshot where snapshot_record_time = ${snapshot.snapshotRecordTime}""",
-      sqlu"""delete from acs_snapshot_data where row_id between ${snapshot.firstRowId} and ${snapshot.lastRowId}""",
-    )
+    val statement = snapshot match {
+      case snapshot: LegacyAcsSnapshot =>
+        DBIOAction.seq(
+          sqlu"""delete from acs_snapshot where snapshot_record_time = ${snapshot.snapshotRecordTime}""",
+          sqlu"""delete from acs_snapshot_data where row_id between ${snapshot.firstRowId} and ${snapshot.lastRowId}""",
+        )
+      case _: PerTableAcsSnapshot =>
+        throw io.grpc.Status.UNIMPLEMENTED.withDescription("TODO #6263").asRuntimeException()
+    }
     storage.update(statement.transactionally, "deleteSnapshot")
   }
 
@@ -258,9 +267,9 @@ class AcsSnapshotStore(
       templates: Seq[PackageQualifiedName],
   )(implicit tc: TraceContext): Future[QueryAcsSnapshotResult] = {
     for {
-      snapshot <- storage
+      snapshotTrait <- storage
         .querySingle(
-          sql"""select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance
+          sql"""select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance, data_table_name
             from acs_snapshot
             where snapshot_record_time = $snapshot
               and migration_id = $migrationId
@@ -277,6 +286,13 @@ class AcsSnapshotStore(
               .asRuntimeException()
           )
         )
+      snapshot <- (snapshotTrait match {
+        case snapshot: LegacyAcsSnapshot => Future.successful(snapshot)
+        case _: PerTableAcsSnapshot =>
+          Future.failed(
+            io.grpc.Status.UNIMPLEMENTED.withDescription("TODO #6264").asRuntimeException()
+          )
+      })
       begin <- after match {
         case Some(value) if value < snapshot.firstRowId || value > snapshot.lastRowId =>
           Future.failed(
@@ -499,9 +515,14 @@ class AcsSnapshotStore(
     */
   def initializeIncrementalSnapshot(
       table: IncrementalAcsSnapshotTable,
-      initializeFrom: AcsSnapshot,
+      initializeFromT: AcsSnapshot,
       targetRecordTime: CantonTimestamp,
   )(implicit tc: TraceContext): Future[Unit] = {
+    val initializeFrom = initializeFromT match {
+      case legacy: LegacyAcsSnapshot => legacy
+      case _: PerTableAcsSnapshot =>
+        throw io.grpc.Status.UNIMPLEMENTED.withDescription("TODO #6263").asRuntimeException()
+    }
     assert(targetRecordTime.isAfter(initializeFrom.snapshotRecordTime))
     val statement = for {
       snapshotId <- sql"""
@@ -887,7 +908,15 @@ object AcsSnapshotStore {
     """
   }
 
-  case class AcsSnapshot(
+  sealed trait AcsSnapshot extends PrettyPrinting {
+    val snapshotRecordTime: CantonTimestamp
+    val migrationId: Long
+    val historyId: Long
+    val unlockedAmuletBalance: Option[BigDecimal]
+    val lockedAmuletBalance: Option[BigDecimal]
+  }
+
+  case class LegacyAcsSnapshot(
       snapshotRecordTime: CantonTimestamp,
       migrationId: Long,
       historyId: Long,
@@ -895,7 +924,7 @@ object AcsSnapshotStore {
       lastRowId: Long,
       unlockedAmuletBalance: Option[BigDecimal],
       lockedAmuletBalance: Option[BigDecimal],
-  ) extends PrettyPrinting {
+  ) extends AcsSnapshot {
     import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
     override def pretty: Pretty[this.type] = prettyOfClass(
       param("snapshotRecordTime", _.snapshotRecordTime),
@@ -908,18 +937,62 @@ object AcsSnapshotStore {
     )
   }
 
-  object AcsSnapshot {
-    implicit val acsSnapshotGetResult: GetResult[AcsSnapshot] = GetResult(r =>
-      AcsSnapshot(
-        snapshotRecordTime = r.<<[CantonTimestamp],
-        migrationId = r.<<[Long],
-        historyId = r.<<[Long],
-        firstRowId = r.<<[Long],
-        lastRowId = r.<<[Long],
-        unlockedAmuletBalance = r.<<[Option[BigDecimal]],
-        lockedAmuletBalance = r.<<[Option[BigDecimal]],
-      )
+  case class PerTableAcsSnapshot(
+      snapshotRecordTime: CantonTimestamp,
+      migrationId: Long,
+      historyId: Long,
+      dataTableName: String,
+      unlockedAmuletBalance: Option[BigDecimal],
+      lockedAmuletBalance: Option[BigDecimal],
+  ) extends AcsSnapshot {
+    import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
+    override def pretty: Pretty[this.type] = prettyOfClass(
+      param("snapshotRecordTime", _.snapshotRecordTime),
+      param("migrationId", _.migrationId),
+      param("historyId", _.historyId),
+      param("dataTableName", _.dataTableName.singleQuoted),
+      param("unlockedAmuletBalance", _.unlockedAmuletBalance),
+      param("lockedAmuletBalance", _.lockedAmuletBalance),
     )
+  }
+
+  object AcsSnapshot {
+    implicit val acsSnapshotGetResult: GetResult[AcsSnapshot] = GetResult { r =>
+      val snapshotRecordTime = r.<<[CantonTimestamp]
+      val migrationId = r.<<[Long]
+      val historyId = r.<<[Long]
+      val firstRowId = r.<<[Option[Long]]
+      val lastRowId = r.<<[Option[Long]]
+      val unlockedAmuletBalance = r.<<[Option[BigDecimal]]
+      val lockedAmuletBalance = r.<<[Option[BigDecimal]]
+      val dataTableName = r.<<[Option[String]]
+      (firstRowId, lastRowId, dataTableName) match {
+        case (Some(first), Some(last), None) =>
+          LegacyAcsSnapshot(
+            snapshotRecordTime,
+            migrationId,
+            historyId,
+            first,
+            last,
+            unlockedAmuletBalance,
+            lockedAmuletBalance,
+          )
+        case (None, None, Some(tableName)) =>
+          PerTableAcsSnapshot(
+            snapshotRecordTime,
+            migrationId,
+            historyId,
+            tableName,
+            unlockedAmuletBalance,
+            lockedAmuletBalance,
+          )
+        case _ =>
+          throw new IllegalStateException(
+            s"Invalid ACS snapshot row: recordTime=$snapshotRecordTime firstRowId=$firstRowId, lastRowId=$lastRowId, dataTableName=$dataTableName. " +
+              s"The constraint 'legacy_or_per_snapshot' should make this impossible."
+          )
+      }
+    }
   }
 
   case class QueryAcsSnapshotResult(

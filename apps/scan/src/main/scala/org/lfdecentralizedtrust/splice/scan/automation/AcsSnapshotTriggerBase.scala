@@ -60,7 +60,7 @@ abstract class AcsSnapshotTriggerBase(
       store
         .initializeIncrementalSnapshot(
           table = snapshotTable,
-          initializeFrom = from,
+          initializeFromT = from,
           targetRecordTime = nextAt,
         )
         .map(_ => TaskSuccess(s"Initialized incremental snapshot from $from"))
