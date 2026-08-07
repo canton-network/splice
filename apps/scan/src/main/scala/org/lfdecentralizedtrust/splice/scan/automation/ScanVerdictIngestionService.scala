@@ -256,7 +256,7 @@ class ScanVerdictIngestionService(
                   }
                   firstActiveRoundO <- recordTimes.minOption match {
                     case Some(minRecordTime) =>
-                      appActivityComputation.lookupActiveOpenMiningRound(minRecordTime)
+                      appActivityComputation.lookupEarliestIngestedRoundCandidate(minRecordTime)
                     case None => Future.successful(None)
                   }
                   lastArchivedRoundO <- recordTimes.maxOption match {
