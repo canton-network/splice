@@ -5,6 +5,7 @@ import {
   AmuletConfig,
   PackageConfig,
   RewardConfig,
+  RewardVersion,
 } from '@daml.js/splice-amulet/lib/Splice/AmuletConfig';
 import { Tuple2 } from '@daml.js/daml-prim-DA-Types-1.0.0/lib/DA/Types';
 import { Set as DamlSet } from '@daml.js/daml-stdlib-DA-Set-Types-1.0.0/lib/DA/Set/Types';
@@ -320,16 +321,15 @@ function buildIssuanceCurveChanges(
   return [...initialValues, ...futureValues];
 }
 
-const rewardVersionOptions = [
-  {
-    value: 'RewardVersion_FeaturedAppMarkers',
-    label: 'Featured App Markers (pre CIP-104)',
-  },
-  {
-    value: 'RewardVersion_TrafficBasedAppRewards',
-    label: 'Traffic-Based App Rewards (CIP-104)',
-  },
-];
+const rewardVersionLabels = {
+  RewardVersion_FeaturedAppMarkers: 'Featured App Markers (pre CIP-104)',
+  RewardVersion_TrafficBasedAppRewards: 'Traffic-Based App Rewards (CIP-104)',
+} satisfies Record<RewardVersion, string>;
+
+const rewardVersionOptions = RewardVersion.keys.map(value => ({
+  value,
+  label: rewardVersionLabels[value],
+}));
 
 function buildRewardConfigChanges(
   before: RewardConfig | null | undefined,
@@ -338,7 +338,7 @@ function buildRewardConfigChanges(
   return [
     {
       fieldName: 'rewardConfigMintingVersion',
-      label: 'Reward config: reward scheme',
+      label: 'Reward config: Reward scheme',
       currentValue: before?.mintingVersion || '',
       newValue: after?.mintingVersion || '',
       options: rewardVersionOptions,
@@ -372,7 +372,8 @@ function buildRewardConfigChanges(
       label: 'Reward config: App reward coupon threshold ($)',
       currentValue: before?.appRewardCouponThreshold || '',
       newValue: after?.appRewardCouponThreshold || '',
-      description: 'Minimum reward amount in USD below which no RewardCouponV2 is created (default: $0.50)',
+      description:
+        'Minimum reward amount in USD below which no RewardCouponV2 is created (default: $0.50)',
     },
   ] as ConfigChange[];
 }
