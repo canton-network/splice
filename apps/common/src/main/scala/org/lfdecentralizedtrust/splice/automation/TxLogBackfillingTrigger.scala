@@ -4,7 +4,6 @@
 package org.lfdecentralizedtrust.splice.automation
 
 import com.daml.metrics.api.MetricsContext
-import com.digitalasset.canton.lifecycle.{AsyncOrSyncCloseable, LifeCycle}
 import org.lfdecentralizedtrust.splice.store.{
   HistoryBackfilling,
   HistoryMetrics,
@@ -26,6 +25,7 @@ class TxLogBackfillingTrigger[TXE](
     store: TxLogAppStore[TXE],
     updateHistory: UpdateHistory,
     batchSize: Int,
+    metrics: HistoryMetrics,
     override protected val context: TriggerContext,
 )(implicit
     override val ec: ExecutionContext,
@@ -35,19 +35,12 @@ class TxLogBackfillingTrigger[TXE](
 
   private def party: PartyId = updateHistory.updateStreamParty
 
-  override protected def extraMetricLabels = Seq(
+  override protected def extraMetricLabels: Seq[(String, String)] = Seq(
     "party" -> party.toProtoPrimitive
   )
 
-  private val currentMigrationId = updateHistory.domainMigrationId
+  private val historyMetrics = metrics
 
-  private val historyMetrics = new HistoryMetrics(context.metricsFactory)(
-    MetricsContext.Empty
-      .withExtraLabels(
-        "current_migration_id" -> currentMigrationId.toString
-      )
-      .withExtraLabels(extraMetricLabels*)
-  )
   private val backfilling = new TxLogBackfilling(
     store.multiDomainAcsStore,
     updateHistory,
@@ -140,11 +133,6 @@ class TxLogBackfillingTrigger[TXE](
         TaskSuccess("Backfilling completed")
     }
   } yield outcome
-
-  override def closeAsync(): Seq[AsyncOrSyncCloseable] = {
-    LifeCycle.close(historyMetrics)(logger)
-    super.closeAsync()
-  }
 }
 
 object TxLogBackfillingTrigger {
