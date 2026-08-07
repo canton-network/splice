@@ -1910,7 +1910,8 @@
             "overrides": {
               "validator-net": {
                 "cidrs": [
-                  "192.68.78.0/24"
+                  "192.68.78.0/24",
+                  "10.0.0.0/24"
                 ],
                 "fillInterval": "60s",
                 "maxTokens": 1000,
@@ -2314,7 +2315,8 @@
             "overrides": {
               "validator-net": {
                 "cidrs": [
-                  "192.68.78.0/24"
+                  "192.68.78.0/24",
+                  "10.0.0.0/24"
                 ],
                 "fillInterval": "60s",
                 "maxTokens": 1000,
@@ -3077,10 +3079,16 @@
                                   "prefix_len": {
                                     "value": 24
                                   }
+                                },
+                                {
+                                  "address_prefix": "10.0.0.0",
+                                  "prefix_len": {
+                                    "value": 24
+                                  }
                                 }
                               ]
                             },
-                            "descriptor_value": "192.68.78.0/24"
+                            "descriptor_value": "validator-net"
                           }
                         }
                       ]
@@ -3108,6 +3116,12 @@
                               "cidr_ranges": [
                                 {
                                   "address_prefix": "192.68.78.0",
+                                  "prefix_len": {
+                                    "value": 24
+                                  }
+                                },
+                                {
+                                  "address_prefix": "10.0.0.0",
                                   "prefix_len": {
                                     "value": 24
                                   }
@@ -3678,7 +3692,7 @@
                           },
                           {
                             "key": "remote_address_match",
-                            "value": "192.68.78.0/24"
+                            "value": "validator-net"
                           }
                         ],
                         "token_bucket": {
@@ -5340,10 +5354,16 @@
                                   "prefix_len": {
                                     "value": 24
                                   }
+                                },
+                                {
+                                  "address_prefix": "10.0.0.0",
+                                  "prefix_len": {
+                                    "value": 24
+                                  }
                                 }
                               ]
                             },
-                            "descriptor_value": "192.68.78.0/24"
+                            "descriptor_value": "validator-net"
                           }
                         }
                       ]
@@ -5371,6 +5391,12 @@
                               "cidr_ranges": [
                                 {
                                   "address_prefix": "192.68.78.0",
+                                  "prefix_len": {
+                                    "value": 24
+                                  }
+                                },
+                                {
+                                  "address_prefix": "10.0.0.0",
                                   "prefix_len": {
                                     "value": 24
                                   }
@@ -5941,7 +5967,7 @@
                           },
                           {
                             "key": "remote_address_match",
-                            "value": "192.68.78.0/24"
+                            "value": "validator-net"
                           }
                         ],
                         "token_bucket": {

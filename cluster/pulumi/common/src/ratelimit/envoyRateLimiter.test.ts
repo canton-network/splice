@@ -290,7 +290,7 @@ test('buildRateLimitDescriptors emits per-CIDR override and fallback descriptors
   expect(descriptors[1]).toEqual({
     entries: [
       { key: 'header_match', value: 'registry-metadata-info' },
-      { key: 'remote_address_match', value: '192.68.78.0/24' },
+      { key: 'remote_address_match', value: 'office' },
     ],
     token_bucket: {
       max_tokens: 1000,
@@ -353,7 +353,7 @@ test('buildRateLimitActions emits per-CIDR remote_address_match actions', () => 
       },
       {
         remote_address_match: {
-          descriptor_value: '192.68.78.0/24',
+          descriptor_value: 'office',
           address_matcher: {
             cidr_ranges: [
               {
@@ -399,6 +399,128 @@ test('buildRateLimitActions emits per-CIDR remote_address_match actions', () => 
       },
     ],
   });
+});
+
+test('buildRateLimitDescriptors shares one bucket across multiple CIDRs in the same override', () => {
+  const descriptors = buildRateLimitDescriptors({
+    '/registry/metadata/v1/info': {
+      name: 'registry-metadata-info',
+      type: 'limited',
+      ...baseLimits,
+      perCidrLimits: {
+        maxTokens: 500,
+        tokensPerFill: 500,
+        fillInterval: '60s',
+        overrides: {
+          'validator-net': {
+            cidrs: ['1.2.3.4/24', '5.6.7.8/24'],
+            maxTokens: 1000,
+            tokensPerFill: 1000,
+            fillInterval: '60s',
+          },
+        },
+      },
+    },
+  });
+
+  expect(descriptors).toHaveLength(3);
+  expect(descriptors[1]).toEqual({
+    entries: [
+      { key: 'header_match', value: 'registry-metadata-info' },
+      { key: 'remote_address_match', value: 'validator-net' },
+    ],
+    token_bucket: {
+      max_tokens: 1000,
+      tokens_per_fill: 1000,
+      fill_interval: '60s',
+    },
+  });
+});
+
+test('buildRateLimitActions uses a single shared remote_address_match for multiple CIDRs in the same override', () => {
+  const actions = buildRateLimitActions({
+    '/registry/metadata/v1/info': {
+      name: 'registry-metadata-info',
+      type: 'limited',
+      ...baseLimits,
+      perCidrLimits: {
+        maxTokens: 500,
+        tokensPerFill: 500,
+        fillInterval: '60s',
+        overrides: {
+          'validator-net': {
+            cidrs: ['1.2.3.4/24', '5.6.7.8/24'],
+            maxTokens: 1000,
+            tokensPerFill: 1000,
+            fillInterval: '60s',
+          },
+        },
+      },
+    },
+  });
+
+  expect(actions).toHaveLength(3);
+  expect(actions[1]).toEqual({
+    actions: [
+      {
+        header_value_match: {
+          descriptor_value: 'registry-metadata-info',
+          expect_match: true,
+          headers: [
+            {
+              name: ':path',
+              string_match: {
+                prefix: '/registry/metadata/v1/info',
+                ignore_case: true,
+              },
+            },
+          ],
+        },
+      },
+      {
+        remote_address_match: {
+          descriptor_value: 'validator-net',
+          address_matcher: {
+            cidr_ranges: [
+              {
+                address_prefix: '1.2.3.4',
+                prefix_len: { value: 24 },
+              },
+              {
+                address_prefix: '5.6.7.8',
+                prefix_len: { value: 24 },
+              },
+            ],
+          },
+        },
+      },
+    ],
+  });
+  expect(actions[2]).toEqual(
+    expect.objectContaining({
+      actions: [
+        expect.objectContaining({}),
+        {
+          remote_address_match: {
+            descriptor_value: 'per-cidr-default',
+            address_matcher: {
+              cidr_ranges: [
+                {
+                  address_prefix: '1.2.3.4',
+                  prefix_len: { value: 24 },
+                },
+                {
+                  address_prefix: '5.6.7.8',
+                  prefix_len: { value: 24 },
+                },
+              ],
+              invert_match: true,
+            },
+          },
+        },
+      ],
+    })
+  );
 });
 
 test('validateCidrLimits throws on overlapping CIDRs', () => {

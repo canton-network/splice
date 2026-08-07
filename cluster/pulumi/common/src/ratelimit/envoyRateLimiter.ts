@@ -12,10 +12,13 @@ interface Limits {
 }
 
 interface PerIpLimits extends Limits {
+  // Each IP in an override gets its own independent token bucket.
   overrides?: Record<string, { ips: string[] } & Limits>;
 }
 
 interface PerCidrLimits extends Limits {
+  // All CIDRs listed under a single override key share one token bucket. The
+  // combined request rate from every CIDR in the override is limited together.
   overrides?: Record<string, { cidrs: string[] } & Limits>;
 }
 
@@ -309,28 +312,27 @@ export function buildRateLimitActions(effectiveRateLimits: LocalLimits<MatchedLi
     }
 
     // Action 3: generate the per-CIDR actions if perCidrLimits exists.
-    // Each override CIDR gets its own action so it can use a distinct token bucket.
-    // A final catch-all action matches any IP not covered by an override and uses the
-    // generic per-CIDR token bucket.
+    // All CIDRs within a single override share one token bucket, identified by the
+    // override key. A final catch-all action matches any IP not covered by an override
+    // and uses the generic per-CIDR token bucket.
     if (rateLimit.perCidrLimits) {
       const overrideCidrRanges: { address_prefix: string; prefix_len: { value: number } }[] = [];
 
-      Object.entries(rateLimit.perCidrLimits.overrides || {}).forEach(([, override]) => {
-        override.cidrs.forEach(cidr => {
-          overrideCidrRanges.push(cidrToEnvoyCidrRange(cidr));
-          actions.push({
-            actions: [
-              baseAction,
-              {
-                remote_address_match: {
-                  descriptor_value: cidr,
-                  address_matcher: {
-                    cidr_ranges: [cidrToEnvoyCidrRange(cidr)],
-                  },
+      Object.entries(rateLimit.perCidrLimits.overrides || {}).forEach(([overrideKey, override]) => {
+        const cidrRanges = override.cidrs.map(cidrToEnvoyCidrRange);
+        overrideCidrRanges.push(...cidrRanges);
+        actions.push({
+          actions: [
+            baseAction,
+            {
+              remote_address_match: {
+                descriptor_value: overrideKey,
+                address_matcher: {
+                  cidr_ranges: cidrRanges,
                 },
               },
-            ],
-          });
+            },
+          ],
         });
       });
 
@@ -405,25 +407,25 @@ export function buildRateLimitDescriptors(
 
     // generate the per-CIDR buckets if configured.
     // These come after per-IP buckets so explicit per-IP overrides take precedence.
+    // All CIDRs listed under a single override key share the same token bucket; the
+    // combined traffic from all those CIDRs is rate-limited as one group.
     if (rateLimit.perCidrLimits) {
-      // CIDR-specific overrides first
-      Object.entries(rateLimit.perCidrLimits.overrides || {}).forEach(([, override]) => {
-        override.cidrs.forEach(cidr => {
-          descs.push({
-            entries: [
-              { key: 'header_match', value: rateLimit.name },
-              { key: remoteAddressMatchKey, value: cidr },
-            ],
-            token_bucket: {
-              max_tokens: override.maxTokens,
-              tokens_per_fill: override.tokensPerFill,
-              fill_interval: override.fillInterval,
-            },
-          });
+      // CIDR-specific overrides first. The override key identifies the shared bucket.
+      Object.entries(rateLimit.perCidrLimits.overrides || {}).forEach(([overrideKey, override]) => {
+        descs.push({
+          entries: [
+            { key: 'header_match', value: rateLimit.name },
+            { key: remoteAddressMatchKey, value: overrideKey },
+          ],
+          token_bucket: {
+            max_tokens: override.maxTokens,
+            tokens_per_fill: override.tokensPerFill,
+            fill_interval: override.fillInterval,
+          },
         });
       });
 
-      // Generic per-CIDR fallback
+      // Generic per-CIDR fallback for IPs not covered by any override CIDR.
       descs.push({
         entries: [
           { key: 'header_match', value: rateLimit.name },
