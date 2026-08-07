@@ -1543,6 +1543,73 @@ function subcmd_unlock_force() {
 
 ###
 
+subcommand_whitelist[run_workflow]='Lock the cluster and trigger a workflow in DACH-NY/canton-network-internal.'
+
+function subcmd_run_workflow() {
+    local cluster="$(basename "$PWD")"
+    local workflow=""
+    local splice_git_ref=""
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --cluster)
+                if [ -z "${2-}" ]; then
+                    _error "Missing value for --cluster"
+                fi
+                cluster="$2"
+                shift 2
+                ;;
+            --workflow)
+                if [ -z "${2-}" ]; then
+                    _error "Missing value for --workflow"
+                fi
+                workflow="$2"
+                shift 2
+                ;;
+            -h|--help)
+                echo "Usage: $SCRIPTNAME run_workflow [--cluster <cluster>] --workflow <workflow_name> <splice_git_ref>"
+                echo "  --cluster defaults to the name of the current directory if not specified."
+                exit 0
+                ;;
+            -*)
+                _error "Unknown option: $1"
+                ;;
+            *)
+                if [ -z "$splice_git_ref" ]; then
+                    splice_git_ref="$1"
+                else
+                    _error "Unexpected argument: $1"
+                fi
+                shift
+                ;;
+        esac
+    done
+
+    if [ -z "$workflow" ]; then
+        _error "Usage: $SCRIPTNAME run_workflow [--cluster <cluster>] --workflow <workflow_name> <splice_git_ref>"
+    fi
+
+    if [ -z "$splice_git_ref" ]; then
+        _error "Usage: $SCRIPTNAME run_workflow [--cluster <cluster>] --workflow <workflow_name> <splice_git_ref>"
+    fi
+
+    if ! command -v gh >/dev/null 2>&1; then
+        _error "gh CLI is required to trigger workflows"
+    fi
+
+    _cluster_must_exist
+    subcmd_lock
+
+    _info "Triggering ${workflow} on main for cluster ${cluster} with splice_git_ref=${splice_git_ref}"
+    gh workflow run "${workflow}.yml" \
+        --repo DACH-NY/canton-network-internal \
+        --ref main \
+        --field cluster="${cluster}" \
+        --field splice_git_ref="${splice_git_ref}"
+}
+
+###
+
 subcommand_whitelist[kill_sv_app]='Spin down sv-app to zero replicas for the specified namespace'
 
 function subcmd_kill_sv_app() {
