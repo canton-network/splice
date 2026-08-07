@@ -380,6 +380,7 @@ export async function initDumpConfig({
               instances: [
                 {
                   name: 'sv-1-cn-apps-pg-7ca4614',
+                  settings: [{ userLabels: { cluster: 'mock' } }],
                 },
               ],
             };

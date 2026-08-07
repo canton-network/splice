@@ -484,10 +484,14 @@ async function getScanDb(
     zone,
   });
   const instanceName =
-    result.instances.find(instance => instance.name.startsWith(instanceNamePrefix))?.name ??
+    result.instances.find(
+      instance =>
+        instance.name.startsWith(instanceNamePrefix) &&
+        instance.settings?.[0]?.userLabels?.cluster === CLUSTER_BASENAME
+    )?.name ??
     (() => {
       throw new Error(
-        `Could not find SV apps database instance with prefix: ${instanceNamePrefix}`
+        `Could not find SV apps database instance with prefix [${instanceNamePrefix}] and user label [cluster=${CLUSTER_BASENAME}].`
       );
     })();
   return gcp.sql.DatabaseInstance.get(instanceNamePrefix, instanceName);
