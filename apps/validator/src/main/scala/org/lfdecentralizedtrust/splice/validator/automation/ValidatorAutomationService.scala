@@ -63,7 +63,6 @@ class ValidatorAutomationService(
     participantAdminConnection: ParticipantAdminConnection,
     participantIdentitiesStore: NodeIdentitiesStore,
     synchronizerConnector: SynchronizerConnector,
-    domainMigrationId: Long,
     retryProvider: RetryProvider,
     svValidator: Boolean,
     sequencerSubmissionAmplificationPatience: NonNegativeFiniteDuration,
@@ -193,7 +192,6 @@ class ValidatorAutomationService(
           clock,
           walletManager,
           scanConnection,
-          domainMigrationId,
         )
       )
 

@@ -59,7 +59,6 @@ class TopupMemberTrafficTrigger(
     clock: Clock,
     walletManager: UserWalletManager,
     scanConnection: BftScanConnection,
-    domainMigrationId: Long,
 )(implicit
     override val ec: ExecutionContext,
     override val tracer: Tracer,
@@ -223,6 +222,7 @@ class TopupMemberTrafficTrigger(
       case QueryResult(dedupOffset, None) =>
         for {
           participantId <- participantAdminConnection.getParticipantId()
+          domainMigrationId <- scanConnection.getMigrationId()
           topupState <- connection
             .submit(
               Seq(validator),

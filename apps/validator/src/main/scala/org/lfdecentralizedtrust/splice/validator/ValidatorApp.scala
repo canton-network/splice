@@ -769,7 +769,6 @@ class ValidatorApp(
           retryProvider,
           loggerFactory,
         ),
-        domainMigrationId,
         retryProvider,
         config.svValidator,
         config.sequencerRequestAmplificationPatience.toInternal,
