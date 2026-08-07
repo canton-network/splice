@@ -13,12 +13,14 @@ import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.automation.SqlIndexInitializationTrigger.IndexAction
+import org.lfdecentralizedtrust.splice.store.db.AdvisoryLocks
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
 import slick.dbio.{DBIOAction, Effect, NoStream}
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 
 import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future, Promise}
+import scala.util.{Failure, Success}
 
 /** A trigger that asynchronously creates or drops SQL indexes at application startup.
   *
@@ -113,12 +115,12 @@ class SqlIndexInitializationTrigger(
 
   override protected def completeTask(task: SqlIndexInitializationTrigger.Task)(implicit
       tc: TraceContext
-  ): Future[TaskOutcome] = task match {
+  ): Future[TaskOutcome] = (task match {
     case Task.ExecuteAction(IndexAction.Drop(indexName)) =>
       logger.info(s"Dropping index $indexName")
       storage
-        .update(
-          sqlu"drop index concurrently if exists #$indexName",
+        .queryAndUpdate(
+          AdvisoryLocks.withDdlLock(sqlu"drop index concurrently if exists #$indexName"),
           "drop_" + indexName,
         )
         .unwrap
@@ -130,7 +132,7 @@ class SqlIndexInitializationTrigger(
     case Task.ExecuteAction(IndexAction.Create(indexName, createAction)) =>
       logger.info(s"Creating index $indexName")
       storage
-        .update(createAction, "create_" + indexName)
+        .queryAndUpdate(AdvisoryLocks.withDdlLock(createAction), "create_" + indexName)
         .unwrap
         .map { _ =>
           logger.info(s"Finished creating index $indexName")
@@ -144,6 +146,13 @@ class SqlIndexInitializationTrigger(
       }
       logger.info(s"Confirmed action completed for index ${action.indexName}")
       Future.successful(TaskSuccess(s"Confirmed action completed for index ${action.indexName}"))
+  }).transform {
+    case Failure(e: AdvisoryLocks.FailedToAcquireLockException) =>
+      // There was a concurrent DDL statement running.
+      // The action stays in `remainingActions`, so we retry it on the next poll.
+      logger.info(s"Skipping $task, another DDL statement was running currently", e)
+      Success(TaskNoop)
+    case other => other
   }
 }
 

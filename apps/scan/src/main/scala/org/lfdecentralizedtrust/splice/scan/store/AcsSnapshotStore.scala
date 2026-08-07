@@ -8,7 +8,6 @@ import com.daml.ledger.javaapi.data.CreatedEvent
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{Amulet, LockedAmulet}
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{
   AcsSnapshot,
-  FailedToAcquireLockException,
   IncrementalAcsSnapshot,
   IncrementalAcsSnapshotTable,
   QueryAcsSnapshotResult,
@@ -17,7 +16,12 @@ import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{
 }
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.SelectFromCreateEvents
 import org.lfdecentralizedtrust.splice.store.{HardLimit, Limit, LimitHelpers, UpdateHistory}
-import org.lfdecentralizedtrust.splice.store.db.{AcsJdbcTypes, AcsQueries, AdvisoryLockIds}
+import org.lfdecentralizedtrust.splice.store.db.{
+  AcsJdbcTypes,
+  AcsQueries,
+  AdvisoryLocks,
+  AdvisoryLockIds,
+}
 import org.lfdecentralizedtrust.splice.util.{Contract, HoldingsSummary, PackageQualifiedName}
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.{CloseContext, FutureUnlessShutdown}
@@ -220,22 +224,7 @@ class AcsSnapshotStore(
   private def withExclusiveSnapshotDataLock[T, E <: Effect](
       action: DBIOAction[T, NoStream, E]
   ): DBIOAction[T, NoStream, Effect.Read & Effect.Transactional & E] =
-    (for {
-      lockResult <- sql"SELECT pg_try_advisory_xact_lock(${AdvisoryLockIds.acsSnapshotDataInsert})"
-        .as[Boolean]
-        .head
-      result <- lockResult match {
-        case true => action
-        // Lock conflicts can happen:
-        // - In production, if the application crashes while writing a snapshot and then restarts
-        //   and tries to write another snapshot before the database has closed the connection and released the lock.
-        // - In production, if two triggers (ingesting and backfilling) happen to write a snapshot at the same time.
-        // - In testing, where multiple scan instances write to the same app database.
-        // In all cases, we want to fail immediately, and rely on the caller's infrastructure to retry.
-        case false =>
-          DBIOAction.failed(FailedToAcquireLockException())
-      }
-    } yield result).transactionally
+    AdvisoryLocks.withTransactionalLock(profile, AdvisoryLockIds.acsSnapshotDataInsert, action)
 
   def deleteSnapshot(
       snapshot: AcsSnapshot
@@ -798,11 +787,6 @@ class AcsSnapshotStore(
 }
 
 object AcsSnapshotStore {
-
-  case class FailedToAcquireLockException()
-      extends RuntimeException(
-        "Failed to acquire advisory lock for writing to the acs snapshot table."
-      )
 
   sealed trait IncrementalAcsSnapshotTable { def tableName: String }
   object IncrementalAcsSnapshotTable {
