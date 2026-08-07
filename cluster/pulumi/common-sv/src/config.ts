@@ -20,6 +20,7 @@ import { z } from 'zod';
 
 import { BulkStorageBuckets } from './bulkStorage';
 import { SingleSvConfiguration } from './singleSvConfig';
+
 import {
   StaticCometBftConfig,
   StaticCometBftConfigWithNodeName,
@@ -41,10 +42,6 @@ export type SvOnboarding =
       sponsorScanUrl: string;
     };
 
-export interface ScanBigQueryConfig {
-  dataset: string;
-  prefix: string;
-}
 
 export interface StaticSvConfigBasic {
   nodeName: string;

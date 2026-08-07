@@ -93,22 +93,37 @@ const SvAppConfigSchema = z
 const BulkStorageConfigSchema = z.object({
   enabled: z.boolean(),
 });
+
 export type BulkStorageConfig = z.infer<typeof BulkStorageConfigSchema>;
+
+// 1. Extract ScanBigQueryConfigSchema to validate all Datastream settings.
+//    All new fields are optional to ensure existing deployments do not fail parsing.
+export const ScanBigQueryConfigSchema = z
+  .object({
+    dataset: z.string(),
+    prefix: z.string(),
+    functionsDataset: z.string().optional(),
+    enableLegacyDatastream: z.boolean().default(true),
+    enableStagProdDatastream: z.boolean().default(false),
+    legacyDesiredState: z.enum(['RUNNING', 'PAUSED']).default('RUNNING'),
+    stagProdDesiredState: z.enum(['RUNNING', 'PAUSED']).default('RUNNING'),
+  
+  })
+  .strict(); // Keeps strict mode safe now that all known fields are explicitly defined
+
+// 2. Single source of truth: infer the TypeScript type directly from the Zod schema
+export type ScanBigQueryConfig = z.infer<typeof ScanBigQueryConfigSchema>;
+// 3. Update ScanAppConfigSchema to reference the extracted sub-schema
 const ScanAppConfigSchema = z
   .object({
-    bigQuery: z
-      .object({
-        dataset: z.string(),
-        prefix: z.string(),
-        functionsDataset: z.string().optional(),
-      })
-      .optional(),
+    bigQuery: ScanBigQueryConfigSchema.optional(),
     bulkStorage: BulkStorageConfigSchema.optional(),
     additionalEnvVars: z.array(EnvVarConfigSchema).default([]),
     additionalJvmOptions: z.string().optional(),
     resources: K8sResourceSchema,
   })
   .strict();
+
 const SvValidatorAppConfigSchema = z
   .object({
     walletUser: z.string().optional(),
