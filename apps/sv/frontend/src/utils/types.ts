@@ -157,6 +157,7 @@ export interface ProposalListingData {
   contractId: ContractId<VoteRequest>;
   actionName: string;
   description?: string;
+  requester: string;
   votingThresholdDeadline: string;
   voteTakesEffect: string;
   yourVote: YourVoteStatus;

@@ -5,7 +5,7 @@ import {
   ActionRequiringConfirmation,
   AmuletRules_ActionRequiringConfirmation,
 } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
-import { THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
+import { SUPPORTING_URL_LABEL, THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
 import {
   buildAmuletRulesPendingConfigFields,
   configFormDataToConfigChanges,
@@ -288,7 +288,9 @@ export const SetAmuletConfigRulesForm: () => JSX.Element = () => {
               onChange: ({ value }) => validateUrl(value),
             }}
           >
-            {field => <field.TextField title="SUPPORTING URL" id="set-amulet-config-rules-url" />}
+            {field => (
+              <field.TextField title={SUPPORTING_URL_LABEL} id="set-amulet-config-rules-url" />
+            )}
           </form.AppField>
         </>
       )}

@@ -12,7 +12,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice
 import org.lfdecentralizedtrust.splice.environment.PackageIdResolver
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
-import org.lfdecentralizedtrust.splice.sv.store.IgnoredPartiesStore
 import org.lfdecentralizedtrust.splice.util.{ChoiceContextWithDisclosures, TokenStandardMetadata}
 import org.lfdecentralizedtrust.splice.sv.util.ContractStakeholders
 
@@ -21,6 +20,7 @@ import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 import cats.implicits.*
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.metadatav1.anyvalue.AV_Bool
+import org.lfdecentralizedtrust.splice.store.IgnoredPartiesStore
 
 class ExpiredAmuletAllocationV2Trigger(
     override protected val svConfig: SvAppBackendConfig,

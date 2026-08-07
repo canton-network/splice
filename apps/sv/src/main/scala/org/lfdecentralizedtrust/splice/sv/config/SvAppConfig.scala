@@ -461,13 +461,16 @@ case class SvAppBackendConfig(
     cantonBftSequencingParameters: Option[BftSequencingParameters] = Some(
       BftSequencingParameters(
         pbftViewChangeTimeout = PositiveFiniteDuration.ofSeconds(5),
-        segmentLength = SequencingParameters.DefaultSegmentLength.length,
+        // increased from default as epoch changes are synchronization points which can slow things down.
+        segmentLength =
+          PositiveLong.tryCreate(SequencingParameters.DefaultSegmentLength.length.value * 4),
         blacklistLeaderSelectionPolicyConfig =
           SequencingParameters.DefaultLeaderSelectionPolicyConfig.copy(
             howLongToBlacklist =
               BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.Exponential(
                 initialValue = 1L,
-                maximumEpochBlacklisted = Some(250L),
+                // Reduced by 4 to compensate for increased segmentLength.
+                maximumEpochBlacklisted = Some(250L / 4L),
               )
           ),
       )

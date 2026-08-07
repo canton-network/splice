@@ -104,6 +104,20 @@ export function computeVoteStats(votes: Vote[]): {
   );
 }
 
+export function getRequesterPartyId(
+  requester: string,
+  svs: { entriesArray(): [string, SvInfo][] } | undefined
+): string {
+  if (requester.includes('::')) {
+    return requester;
+  }
+  if (!svs) {
+    return requester;
+  }
+  const match = svs.entriesArray().find(([, info]) => info.name === requester);
+  return match?.[0] ?? requester;
+}
+
 export function computeYourVote(votes: Vote[], svPartyId: string | undefined): YourVoteStatus {
   if (svPartyId === undefined) {
     return 'no-vote';

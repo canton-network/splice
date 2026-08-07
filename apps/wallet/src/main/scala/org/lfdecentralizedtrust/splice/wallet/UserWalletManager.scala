@@ -236,7 +236,7 @@ class UserWalletManager(
           walletSweep.get(endUserParty.toProtoPrimitive),
           autoAcceptTransfers.get(endUserParty.toProtoPrimitive),
           rewardSharingConfigByParty
-            .getOrElse(endUserParty.toProtoPrimitive, RewardSharingConfig()),
+            .getOrElse(endUserParty.toProtoPrimitive, RewardSharingConfig.BuiltIn()),
           dedupDuration,
           params,
         )

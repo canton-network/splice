@@ -110,11 +110,20 @@ class AcceptTransferPreapprovalProposalTrigger(
       for {
         validatorWallet <- ValidatorUtil.getValidatorWallet(store, walletManager)
         result <- store.lookupTransferPreapprovalByReceiverPartyWithOffset(receiverParty) flatMap {
-          case QueryResult(_, Some(_)) =>
+          // Expired pre-approvals are ignored: the receiver cannot be paid through them anymore
+          // and they may stick around for a while until the SV automation archives them.
+          case QueryResult(_, Some(existing))
+              if existing.payload.expiresAt.isAfter(clock.now.toInstant) =>
             Future.successful(
               TaskSuccess(show"TransferPreapproval for receiver $receiverParty already exists")
             )
-          case QueryResult(offset, None) =>
+          case QueryResult(offset, existing) =>
+            existing.foreach(expired =>
+              logger.info(
+                s"Accepting proposal for receiver $receiverParty as its existing TransferPreapproval " +
+                  s"${expired.contractId.contractId} expired at ${expired.payload.expiresAt}"
+              )
+            )
             validatorWallet.treasury
               .enqueueAmuletOperation(
                 operation,

@@ -32,7 +32,7 @@ describe('Review Proposal Component', () => {
     expect(screen.getByTestId('action-title').textContent).toBe('Action');
     expect(screen.getByTestId('action-field').textContent).toBe(actionName);
 
-    expect(screen.getByTestId('url-title').textContent).toBe('URL');
+    expect(screen.getByTestId('url-title').textContent).toBe('Supporting URL');
     expect(screen.getByTestId('url-field').textContent).toBe(url);
 
     expect(screen.getByTestId('summary-title').textContent).toBe('Summary');
@@ -96,7 +96,7 @@ describe('Review Proposal Component', () => {
     expect(screen.getByTestId('action-title').textContent).toBe('Action');
     expect(screen.getByTestId('action-field').textContent).toBe(actionName);
 
-    expect(screen.getByTestId('url-title').textContent).toBe('URL');
+    expect(screen.getByTestId('url-title').textContent).toBe('Supporting URL');
     expect(screen.getByTestId('url-field').textContent).toBe(url);
 
     expect(screen.getByTestId('summary-title').textContent).toBe('Summary');
@@ -136,7 +136,7 @@ describe('Review Proposal Component', () => {
     expect(screen.getByTestId('action-title').textContent).toBe('Action');
     expect(screen.getByTestId('action-field').textContent).toBe(actionName);
 
-    expect(screen.getByTestId('url-title').textContent).toBe('URL');
+    expect(screen.getByTestId('url-title').textContent).toBe('Supporting URL');
     expect(screen.getByTestId('url-field').textContent).toBe(url);
 
     expect(screen.getByTestId('summary-title').textContent).toBe('Summary');
@@ -180,7 +180,7 @@ describe('Review Proposal Component', () => {
     expect(screen.getByTestId('action-title').textContent).toBe('Action');
     expect(screen.getByTestId('action-field').textContent).toBe(actionName);
 
-    expect(screen.getByTestId('url-title').textContent).toBe('URL');
+    expect(screen.getByTestId('url-title').textContent).toBe('Supporting URL');
     expect(screen.getByTestId('url-field').textContent).toBe(url);
 
     expect(screen.getByTestId('summary-title').textContent).toBe('Summary');
@@ -230,7 +230,7 @@ describe('Review Proposal Component', () => {
     expect(screen.getByTestId('action-title').textContent).toBe('Action');
     expect(screen.getByTestId('action-field').textContent).toBe(actionName);
 
-    expect(screen.getByTestId('url-title').textContent).toBe('URL');
+    expect(screen.getByTestId('url-title').textContent).toBe('Supporting URL');
     expect(screen.getByTestId('url-field').textContent).toBe(url);
 
     expect(screen.getByTestId('summary-title').textContent).toBe('Summary');
@@ -296,7 +296,7 @@ describe('Review Proposal Component', () => {
     expect(screen.getByTestId('action-title').textContent).toBe('Action');
     expect(screen.getByTestId('action-field').textContent).toBe(actionName);
 
-    expect(screen.getByTestId('url-title').textContent).toBe('URL');
+    expect(screen.getByTestId('url-title').textContent).toBe('Supporting URL');
     expect(screen.getByTestId('url-field').textContent).toBe(url);
 
     expect(screen.getByTestId('summary-title').textContent).toBe('Summary');
@@ -368,7 +368,7 @@ describe('Review Proposal Component', () => {
     expect(screen.getByTestId('action-title').textContent).toBe('Action');
     expect(screen.getByTestId('action-field').textContent).toBe(actionName);
 
-    expect(screen.getByTestId('url-title').textContent).toBe('URL');
+    expect(screen.getByTestId('url-title').textContent).toBe('Supporting URL');
     expect(screen.getByTestId('url-field').textContent).toBe(url);
 
     expect(screen.getByTestId('summary-title').textContent).toBe('Summary');

@@ -36,6 +36,7 @@ import {
   persistentHeapDumpsPvc,
   sanitizedForPostgres,
   spliceInstanceNames,
+  SplicePostgresConfig,
   svCometBftGovernanceKeyFromSecret,
   svCometBftGovernanceKeySecret,
   SvIdKey,
@@ -471,6 +472,7 @@ async function installAppsPostgres(
         'postgres',
         config.version,
         spliceConfig.pulumiProjectConfig.cloudSql,
+        spliceConfig.pulumiProjectConfig.defaultSplicePostgresConfig,
         false,
         {
           logicalDecoding: !!config.scanApp?.bigQuery,
@@ -485,6 +487,7 @@ async function installAppsPostgres(
       `cn-apps-pg`,
       config.version,
       config.appsPg?.cloudSql ?? spliceConfig.pulumiProjectConfig.cloudSql,
+      spliceConfig.pulumiProjectConfig.defaultSplicePostgresConfig,
       true,
       {
         logicalDecoding: !!config.scanApp?.bigQuery,
