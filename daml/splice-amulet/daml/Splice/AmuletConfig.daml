@@ -139,7 +139,9 @@ validAmuletConfig AmuletConfig
     , tickDuration
     , packageConfig
     , transferPreapprovalFee
-    , featuredAppActivityMarkerAmount}
+    , featuredAppActivityMarkerAmount
+    , rewardConfig
+    }
   =
     validTransferConfig transferConfig &&
     validIssuanceCurve issuanceCurve &&
@@ -148,7 +150,8 @@ validAmuletConfig AmuletConfig
     validPackageConfig packageConfig &&
     optional True (>= 0.0) transferPreapprovalFee &&
     optional True (>= 0.0) featuredAppActivityMarkerAmount &&
-    featuredAppActivityMarkerAmount == Some transferConfig.extraFeaturedAppRewardAmount
+    featuredAppActivityMarkerAmount == Some transferConfig.extraFeaturedAppRewardAmount &&
+    optional True validRewardConfig rewardConfig
 
 validTransferConfig : TransferConfig unit -> Bool
 validTransferConfig TransferConfig
@@ -164,7 +167,6 @@ validTransferConfig TransferConfig
   =
     createFee == FixedFee 0.0 &&
     lockHolderFee == FixedFee 0.0 &&
-    lockHolderFee == FixedFee 0.0 &&
     transferFee.initialRate == 0.0 &&
     -- TODO(#4424) Enforce `null transferFee.steps`
     all (\(_step, rate) -> rate == 0.0) transferFee.steps &&
@@ -173,6 +175,17 @@ validTransferConfig TransferConfig
     maxNumInputs >= 1 &&
     maxNumOutputs >= 1 &&
     maxNumLockHolders >= 0
+
+validRewardConfig : RewardConfig -> Bool
+validRewardConfig (RewardConfig
+  _mintingVersion
+  _dryRunVersion
+  batchSize
+  rewardCouponTimeToLive
+  appRewardCouponThreshold) =
+    batchSize > 0 &&
+    rewardCouponTimeToLive > hours 0 &&
+    appRewardCouponThreshold >= 0.0
 
 -- | The package config defines for each daml package (identified by name)
 -- the package version that should be used for command submissions
