@@ -251,10 +251,10 @@ class PostgresTestContainerSetup(
       new PostgreSQLContainer(
         DockerImageName
           .parse("digitalasset/query-stats-postgres:local")
-          .asCompatibleSubstituteFor("postgres:17")
+          .asCompatibleSubstituteFor("postgres:18")
       )
     } else {
-      new PostgreSQLContainer(s"${PostgreSQLContainer.IMAGE}:17")
+      new PostgreSQLContainer(s"${PostgreSQLContainer.IMAGE}:18")
     }
 
   override protected def prepareDatabase(): Unit = {
