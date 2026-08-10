@@ -2,7 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Box, Typography } from '@mui/material';
-import { PROPOSAL_REVIEW_TITLE, THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
+import type { ReactNode } from 'react';
+import {
+  EFFECTIVE_AT_LABEL,
+  PROPOSAL_REVIEW_TITLE,
+  THRESHOLD_DEADLINE_LABEL,
+  THRESHOLD_DEADLINE_SUBTITLE,
+} from '../../utils/constants';
 import type { ConfigChange } from '../../utils/types';
 import { ConfigValuesChanges } from './ConfigValuesChanges';
 import { ProposalReviewField } from './ProposalReviewField';
@@ -42,6 +48,8 @@ type ProposalSummaryProps = BaseProposalSummaryProps &
     | {
         formType: 'config-change';
         configFormData: ConfigChange[];
+        /** Rendered under Proposed Configuration Changes (e.g. Show JSON). */
+        jsonDiff?: ReactNode;
       }
     | {
         formType: 'create-unallocated-unclaimed-activity-record';
@@ -55,7 +63,6 @@ type ProposalSummaryProps = BaseProposalSummaryProps &
         rightCid: string;
         currentActivityWeight: string;
         newActivityWeight: string;
-        reason: string;
       }
   );
 
@@ -81,22 +88,17 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         <ProposalReviewField id="action" label="Proposal Type" value={actionName} />
 
-        <ProposalReviewField
-          id="expiryDate"
-          label="Quorum Threshold Deadline"
-          subtitle={THRESHOLD_DEADLINE_SUBTITLE}
-          value={expiryDate}
-        />
-
-        <ProposalReviewField
-          id="effectiveDate"
-          label="Effective At"
-          value={effectiveDate ? effectiveDate : 'Threshold'}
-        />
-
-        <ProposalReviewField id="summary" label="Proposal Summary" value={summary} />
-
-        <ProposalReviewField id="url" label="Supporting URL" value={url} />
+        {/* Action-specific fields follow Action (Figma: config/member before threshold). */}
+        {formType === 'config-change' && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <ProposalReviewField
+              id="configChange"
+              label="Proposed Configuration Changes"
+              value={<ConfigValuesChanges changes={props.configFormData} isSummaryView />}
+            />
+            {props.jsonDiff}
+          </Box>
+        )}
 
         {formType === 'sv-reward-weight' && (
           <>
@@ -182,7 +184,6 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
                 />
               }
             />
-            <ProposalReviewField id="updateReason" label="Reason" value={props.reason} />
           </>
         )}
 
@@ -198,13 +199,22 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
           </>
         )}
 
-        {formType === 'config-change' && (
-          <ProposalReviewField
-            id="configChange"
-            label="Proposed Configuration Changes"
-            value={<ConfigValuesChanges changes={props.configFormData} isSummaryView />}
-          />
-        )}
+        <ProposalReviewField
+          id="expiryDate"
+          label={THRESHOLD_DEADLINE_LABEL}
+          subtitle={THRESHOLD_DEADLINE_SUBTITLE}
+          value={expiryDate}
+        />
+
+        <ProposalReviewField
+          id="effectiveDate"
+          label={EFFECTIVE_AT_LABEL}
+          value={effectiveDate ? effectiveDate : 'Threshold'}
+        />
+
+        <ProposalReviewField id="summary" label="Proposal Summary" value={summary} />
+
+        <ProposalReviewField id="url" label="Supporting URL" value={url} />
       </Box>
     </Box>
   );

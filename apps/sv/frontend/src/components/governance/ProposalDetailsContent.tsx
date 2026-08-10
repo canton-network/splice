@@ -36,7 +36,9 @@ import { useQuery } from '@tanstack/react-query';
 import { useSvAdminClient } from '../../contexts/SvAdminServiceContext';
 import {
   DEFAULT_APP_ACTIVITY_WEIGHT,
+  EFFECTIVE_AT_LABEL,
   SUPPORTING_URL_LABEL,
+  THRESHOLD_DEADLINE_LABEL,
   VOTE_PROPOSAL_CONTRACT_ID_LABEL,
   VOTE_REASON_SUMMARY_LABEL,
   VOTE_REASON_URL_LABEL,
@@ -331,7 +333,8 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
           />
 
           <DetailItem
-            label="Quorum Threshold Deadline"
+            label={THRESHOLD_DEADLINE_LABEL}
+            labelId="proposal-details-threshold-deadline-label"
             value={
               <Stack gap={3}>
                 <Box data-testid="proposal-details-voting-closes-duration">
@@ -346,7 +349,8 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
           />
 
           <DetailItem
-            label="Voting Takes Effect On"
+            label={EFFECTIVE_AT_LABEL}
+            labelId="proposal-details-effective-at-label"
             value={
               <Stack gap={3}>
                 <Box data-testid="proposal-details-vote-takes-effect-duration">

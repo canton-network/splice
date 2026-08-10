@@ -3,7 +3,12 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, test } from 'vitest';
 import { ProposalSummary } from '../../components/governance/ProposalSummary';
-import { PROPOSAL_REVIEW_TITLE } from '../../utils/constants';
+import {
+  EFFECTIVE_AT_LABEL,
+  PROPOSAL_REVIEW_TITLE,
+  SUPPORTING_URL_LABEL,
+  THRESHOLD_DEADLINE_LABEL,
+} from '../../utils/constants';
 import { ConfigChange } from '../../utils/types';
 
 const url = 'https://example.com';
@@ -15,10 +20,10 @@ const effectiveDate = '2025-09-26 11:00';
 const REVIEW_LABELS = {
   title: PROPOSAL_REVIEW_TITLE,
   action: 'Proposal Type',
-  expiryDate: 'Quorum Threshold Deadline',
-  effectiveDate: 'Effective At',
+  expiryDate: THRESHOLD_DEADLINE_LABEL,
+  effectiveDate: EFFECTIVE_AT_LABEL,
   summary: 'Proposal Summary',
-  url: 'Supporting URL',
+  url: SUPPORTING_URL_LABEL,
 } as const;
 
 function expectCommonReviewFields(actionName: string) {
@@ -78,7 +83,7 @@ describe('Review Proposal Component', () => {
       />
     );
 
-    expect(screen.getByTestId('effectiveDate-title').textContent).toBe('Effective At');
+    expect(screen.getByTestId('effectiveDate-title').textContent).toBe(EFFECTIVE_AT_LABEL);
     expect(screen.getByTestId('effectiveDate-field').textContent).toBe('Threshold');
   });
 
@@ -187,7 +192,6 @@ describe('Review Proposal Component', () => {
     const rightCid = 'bcde123456';
     const currentActivityWeight = '1.0';
     const newActivityWeight = '2.5';
-    const reason = 'boosting rewards';
 
     render(
       <ProposalSummary
@@ -201,7 +205,6 @@ describe('Review Proposal Component', () => {
         rightCid={rightCid}
         currentActivityWeight={currentActivityWeight}
         newActivityWeight={newActivityWeight}
-        reason={reason}
         onEdit={() => {}}
         onSubmit={() => {}}
       />
@@ -224,8 +227,7 @@ describe('Review Proposal Component', () => {
     );
     expect(screen.getByTestId('config-change-new-value').textContent).toBe(newActivityWeight);
 
-    expect(screen.getByTestId('updateReason-title').textContent).toBe('Reason');
-    expect(screen.getByTestId('updateReason-field').textContent).toBe(reason);
+    expect(screen.queryByTestId('updateReason-field')).not.toBeInTheDocument();
   });
 
   test('should render review proposal component for dso rules config', () => {

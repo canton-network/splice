@@ -14,6 +14,8 @@ export const SUPPORTING_URL_PLACEHOLDER = 'https://';
 export const VOTE_REASON_URL_LABEL = 'Vote Reason URL';
 export const VOTE_REASON_SUMMARY_LABEL = 'Vote Reason Summary';
 export const VOTE_PROPOSAL_CONTRACT_ID_LABEL = 'Vote Proposal Contract ID';
+export const THRESHOLD_DEADLINE_LABEL = 'Threshold Deadline';
+export const EFFECTIVE_AT_LABEL = 'Effective At';
 
 /** Figma field labels for the initiate-proposal edit step (12px uppercase). */
 export const CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE = 'PROPOSAL TYPE';

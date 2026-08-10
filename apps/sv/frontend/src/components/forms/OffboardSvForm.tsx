@@ -136,6 +136,22 @@ export const OffboardSvForm: React.FC = _ => {
             </form.AppField>
 
             <form.AppField
+              name="sv"
+              validators={{
+                onBlur: ({ value }) => validateSvSelection(value),
+                onChange: ({ value }) => validateSvSelection(value),
+              }}
+            >
+              {field => (
+                <field.SelectField
+                  title={CREATE_PROPOSAL_LABEL_MEMBER}
+                  options={svOptions}
+                  id="offboard-sv-member"
+                />
+              )}
+            </form.AppField>
+
+            <form.AppField
               name="expiryDate"
               validators={{
                 onChange: ({ value }) => validateExpiration(value),
@@ -194,22 +210,6 @@ export const OffboardSvForm: React.FC = _ => {
                   title={CREATE_PROPOSAL_LABEL_SUPPORTING_URL}
                   id="offboard-sv-url"
                   muiTextFieldProps={{ placeholder: SUPPORTING_URL_PLACEHOLDER }}
-                />
-              )}
-            </form.AppField>
-
-            <form.AppField
-              name="sv"
-              validators={{
-                onBlur: ({ value }) => validateSvSelection(value),
-                onChange: ({ value }) => validateSvSelection(value),
-              }}
-            >
-              {field => (
-                <field.SelectField
-                  title={CREATE_PROPOSAL_LABEL_MEMBER}
-                  options={svOptions}
-                  id="offboard-sv-member"
                 />
               )}
             </form.AppField>

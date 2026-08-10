@@ -150,6 +150,52 @@ export const CreateUnallocatedUnclaimedActivityRecordForm: React.FC = _ => {
             </form.AppField>
 
             <form.AppField
+              name="beneficiary"
+              validators={{
+                onBlur: ({ value }) => validateMintedBeneficiary(value),
+                onChange: ({ value }) => validateMintedBeneficiary(value),
+              }}
+            >
+              {field => (
+                <field.TextField
+                  title={CREATE_PROPOSAL_LABEL_BENEFICIARY}
+                  id="create-unallocated-unclaimed-activity-record-beneficiary"
+                  scrollableIdentifier
+                />
+              )}
+            </form.AppField>
+
+            <form.AppField
+              name="amount"
+              validators={{
+                onBlur: ({ value }) => validateRewardAmount(value),
+                onChange: ({ value }) => validateRewardAmount(value),
+              }}
+            >
+              {field => (
+                <field.TextField
+                  title={CREATE_PROPOSAL_LABEL_AMOUNT}
+                  id="create-unallocated-unclaimed-activity-record-amount"
+                />
+              )}
+            </form.AppField>
+
+            <form.AppField
+              name="mintBefore"
+              validators={{
+                onChange: ({ value }) => validateMintBefore(value),
+                onBlur: ({ value }) => validateMintBefore(value),
+              }}
+            >
+              {field => (
+                <field.DateField
+                  title={CREATE_PROPOSAL_LABEL_MUST_MINT_BEFORE}
+                  id="create-unallocated-unclaimed-activity-record-mint-before"
+                />
+              )}
+            </form.AppField>
+
+            <form.AppField
               name="expiryDate"
               validators={{
                 onChange: ({ value }) => validateExpiration(value),
@@ -207,52 +253,6 @@ export const CreateUnallocatedUnclaimedActivityRecordForm: React.FC = _ => {
                   title={CREATE_PROPOSAL_LABEL_SUPPORTING_URL}
                   id="create-unallocated-unclaimed-activity-record-url"
                   muiTextFieldProps={{ placeholder: SUPPORTING_URL_PLACEHOLDER }}
-                />
-              )}
-            </form.AppField>
-
-            <form.AppField
-              name="beneficiary"
-              validators={{
-                onBlur: ({ value }) => validateMintedBeneficiary(value),
-                onChange: ({ value }) => validateMintedBeneficiary(value),
-              }}
-            >
-              {field => (
-                <field.TextField
-                  title={CREATE_PROPOSAL_LABEL_BENEFICIARY}
-                  id="create-unallocated-unclaimed-activity-record-beneficiary"
-                  scrollableIdentifier
-                />
-              )}
-            </form.AppField>
-
-            <form.AppField
-              name="amount"
-              validators={{
-                onBlur: ({ value }) => validateRewardAmount(value),
-                onChange: ({ value }) => validateRewardAmount(value),
-              }}
-            >
-              {field => (
-                <field.TextField
-                  title={CREATE_PROPOSAL_LABEL_AMOUNT}
-                  id="create-unallocated-unclaimed-activity-record-amount"
-                />
-              )}
-            </form.AppField>
-
-            <form.AppField
-              name="mintBefore"
-              validators={{
-                onChange: ({ value }) => validateMintBefore(value),
-                onBlur: ({ value }) => validateMintBefore(value),
-              }}
-            >
-              {field => (
-                <field.DateField
-                  title={CREATE_PROPOSAL_LABEL_MUST_MINT_BEFORE}
-                  id="create-unallocated-unclaimed-activity-record-mint-before"
                 />
               )}
             </form.AppField>

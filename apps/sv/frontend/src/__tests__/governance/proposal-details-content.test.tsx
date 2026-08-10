@@ -24,7 +24,12 @@ import { ProposalVoteForm } from '../../components/governance/ProposalVoteForm';
 import App from '../../App';
 import { svPartyId } from '../mocks/constants';
 import { Wrapper } from '../helpers';
-import { SUPPORTING_URL_LABEL, VOTE_PROPOSAL_CONTRACT_ID_LABEL } from '../../utils/constants';
+import {
+  EFFECTIVE_AT_LABEL,
+  SUPPORTING_URL_LABEL,
+  THRESHOLD_DEADLINE_LABEL,
+  VOTE_PROPOSAL_CONTRACT_ID_LABEL,
+} from '../../utils/constants';
 
 const voteRequest = {
   contractId: 'abc123' as ContractId<VoteRequest>,
@@ -195,6 +200,13 @@ describe('Proposal Details Content', () => {
     );
     expect(requesterInput).toBeInTheDocument();
     expect(requesterInput.textContent).toBe('sv1');
+
+    expect(screen.getByTestId('proposal-details-threshold-deadline-label').textContent).toBe(
+      THRESHOLD_DEADLINE_LABEL
+    );
+    expect(screen.getByTestId('proposal-details-effective-at-label').textContent).toBe(
+      EFFECTIVE_AT_LABEL
+    );
 
     const votingClosesIso = within(votingInformationSection).getByTestId(
       'proposal-details-voting-closes-value'

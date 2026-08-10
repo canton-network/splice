@@ -224,6 +224,16 @@ export const SetDsoConfigRulesForm: () => JSX.Element = () => {
     dsoInfoQuery
   );
 
+  const jsonDiffContent = dsoConfigToCompareWith[1] ? (
+    <PrettyJsonDiff
+      changes={{
+        newConfig: dsoAction.value.newConfig,
+        baseConfig: dsoAction.value.baseConfig || dsoConfigToCompareWith[1],
+        actualConfig: dsoConfigToCompareWith[1],
+      }}
+    />
+  ) : null;
+
   return (
     <FormLayout
       form={form}
@@ -240,6 +250,7 @@ export const SetDsoConfigRulesForm: () => JSX.Element = () => {
           effectiveDate={form.state.values.common.effectiveDate.effectiveDate}
           formType="config-change"
           configFormData={changedFields}
+          jsonDiff={<JsonDiffAccordion variant="review">{jsonDiffContent}</JsonDiffAccordion>}
           onEdit={() => setShowConfirmation(false)}
           onSubmit={() => {}}
         />
@@ -259,6 +270,38 @@ export const SetDsoConfigRulesForm: () => JSX.Element = () => {
               />
             )}
           </form.AppField>
+
+          <Box
+            sx={{ display: 'flex', flexDirection: 'column', gap: CREATE_PROPOSAL_CONFIG_ROW_GAP }}
+          >
+            <Typography component="p" sx={{ ...CREATE_PROPOSAL_FIELD_LABEL_SX, mb: 0 }}>
+              {CREATE_PROPOSAL_LABEL_CONFIGURATION}
+            </Typography>
+
+            {dsoConfigChanges.map(change => (
+              <form.AppField name={`config.${change.fieldName}`} key={change.fieldName}>
+                {field => (
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: CREATE_PROPOSAL_CONFIG_ROW_DIVIDER_GAP,
+                    }}
+                  >
+                    <field.ConfigField
+                      configChange={change}
+                      pendingFieldInfo={pendingConfigFields.find(
+                        f => f.fieldName === change.fieldName
+                      )}
+                      effectiveDate={form.state.values.common.effectiveDate.effectiveDate}
+                    />
+                  </Box>
+                )}
+              </form.AppField>
+            ))}
+
+            <JsonDiffAccordion variant="form">{jsonDiffContent}</JsonDiffAccordion>
+          </Box>
 
           <form.AppField
             name="common.expiryDate"
@@ -321,50 +364,8 @@ export const SetDsoConfigRulesForm: () => JSX.Element = () => {
               />
             )}
           </form.AppField>
-
-          <Box
-            sx={{ display: 'flex', flexDirection: 'column', gap: CREATE_PROPOSAL_CONFIG_ROW_GAP }}
-          >
-            <Typography component="p" sx={{ ...CREATE_PROPOSAL_FIELD_LABEL_SX, mb: 0 }}>
-              {CREATE_PROPOSAL_LABEL_CONFIGURATION}
-            </Typography>
-
-            {dsoConfigChanges.map(change => (
-              <form.AppField name={`config.${change.fieldName}`} key={change.fieldName}>
-                {field => (
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: CREATE_PROPOSAL_CONFIG_ROW_DIVIDER_GAP,
-                    }}
-                  >
-                    <field.ConfigField
-                      configChange={change}
-                      pendingFieldInfo={pendingConfigFields.find(
-                        f => f.fieldName === change.fieldName
-                      )}
-                      effectiveDate={form.state.values.common.effectiveDate.effectiveDate}
-                    />
-                  </Box>
-                )}
-              </form.AppField>
-            ))}
-          </Box>
         </>
       )}
-
-      <JsonDiffAccordion variant={showConfirmation ? 'review' : 'form'}>
-        {dsoConfigToCompareWith[1] ? (
-          <PrettyJsonDiff
-            changes={{
-              newConfig: dsoAction.value.newConfig,
-              baseConfig: dsoAction.value.baseConfig || dsoConfigToCompareWith[1],
-              actualConfig: dsoConfigToCompareWith[1],
-            }}
-          />
-        ) : null}
-      </JsonDiffAccordion>
 
       <form.AppForm>
         <ProposalSubmissionError error={mutation.error} />

@@ -227,68 +227,6 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
               )}
             </form.AppField>
 
-            <form.AppField
-              name="expiryDate"
-              validators={{
-                onChange: ({ value }) => validateExpiration(value),
-                onBlur: ({ value }) => validateExpiration(value),
-              }}
-            >
-              {field => (
-                <field.DateField
-                  title={CREATE_PROPOSAL_LABEL_THRESHOLD_DEADLINE}
-                  description={THRESHOLD_DEADLINE_SUBTITLE}
-                  id={`${testIdPrefix}-expiry-date`}
-                />
-              )}
-            </form.AppField>
-
-            <form.AppField
-              name="effectiveDate"
-              validators={{
-                onChange: ({ value }) => validateEffectiveDate(value),
-                onBlur: ({ value }) => validateEffectiveDate(value),
-              }}
-              children={_ => (
-                <EffectiveDateField
-                  title={CREATE_PROPOSAL_LABEL_EFFECTIVE_AT}
-                  initialEffectiveDate={initialEffectiveDate.format(dateTimeFormatISO)}
-                  id={`${testIdPrefix}-effective-date`}
-                />
-              )}
-            />
-
-            <form.AppField
-              name="summary"
-              validators={{
-                onBlur: ({ value }) => validateSummary(value),
-                onChange: ({ value }) => validateSummary(value),
-              }}
-            >
-              {field => (
-                <field.ProposalSummaryField
-                  id={`${testIdPrefix}-summary`}
-                  title={CREATE_PROPOSAL_LABEL_PROPOSAL_SUMMARY}
-                />
-              )}
-            </form.AppField>
-
-            <form.AppField
-              name="url"
-              validators={{
-                onBlur: ({ value }) => validateUrl(value),
-                onChange: ({ value }) => validateUrl(value),
-              }}
-            >
-              {field => (
-                <field.TextField
-                  title={CREATE_PROPOSAL_LABEL_SUPPORTING_URL}
-                  id={`${testIdPrefix}-url`}
-                  muiTextFieldProps={{ placeholder: SUPPORTING_URL_PLACEHOLDER }}
-                />
-              )}
-            </form.AppField>
-
             {formAction === 'SRARC_GrantFeaturedAppRight' && (
               <form.AppField
                 name="idValue"
@@ -380,6 +318,68 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
                 </form.AppField>
               </>
             )}
+
+            <form.AppField
+              name="expiryDate"
+              validators={{
+                onChange: ({ value }) => validateExpiration(value),
+                onBlur: ({ value }) => validateExpiration(value),
+              }}
+            >
+              {field => (
+                <field.DateField
+                  title={CREATE_PROPOSAL_LABEL_THRESHOLD_DEADLINE}
+                  description={THRESHOLD_DEADLINE_SUBTITLE}
+                  id={`${testIdPrefix}-expiry-date`}
+                />
+              )}
+            </form.AppField>
+
+            <form.AppField
+              name="effectiveDate"
+              validators={{
+                onChange: ({ value }) => validateEffectiveDate(value),
+                onBlur: ({ value }) => validateEffectiveDate(value),
+              }}
+              children={_ => (
+                <EffectiveDateField
+                  title={CREATE_PROPOSAL_LABEL_EFFECTIVE_AT}
+                  initialEffectiveDate={initialEffectiveDate.format(dateTimeFormatISO)}
+                  id={`${testIdPrefix}-effective-date`}
+                />
+              )}
+            />
+
+            <form.AppField
+              name="summary"
+              validators={{
+                onBlur: ({ value }) => validateSummary(value),
+                onChange: ({ value }) => validateSummary(value),
+              }}
+            >
+              {field => (
+                <field.ProposalSummaryField
+                  id={`${testIdPrefix}-summary`}
+                  title={CREATE_PROPOSAL_LABEL_PROPOSAL_SUMMARY}
+                />
+              )}
+            </form.AppField>
+
+            <form.AppField
+              name="url"
+              validators={{
+                onBlur: ({ value }) => validateUrl(value),
+                onChange: ({ value }) => validateUrl(value),
+              }}
+            >
+              {field => (
+                <field.TextField
+                  title={CREATE_PROPOSAL_LABEL_SUPPORTING_URL}
+                  id={`${testIdPrefix}-url`}
+                  muiTextFieldProps={{ placeholder: SUPPORTING_URL_PLACEHOLDER }}
+                />
+              )}
+            </form.AppField>
           </>
         )}
 

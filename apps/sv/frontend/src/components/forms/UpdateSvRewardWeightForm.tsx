@@ -159,6 +159,41 @@ export const UpdateSvRewardWeightForm: React.FC = _ => {
             </form.AppField>
 
             <form.AppField
+              name="sv"
+              validators={{
+                onBlur: ({ value }) => validateSvSelection(value),
+                onChange: ({ value }) => {
+                  return validateSvSelection(value);
+                },
+              }}
+            >
+              {field => (
+                <field.SelectField
+                  title={CREATE_PROPOSAL_LABEL_MEMBER}
+                  options={svOptions}
+                  id="update-sv-reward-weight-member"
+                  onChange={() => form.resetField('weight')}
+                />
+              )}
+            </form.AppField>
+
+            <form.AppField
+              name="weight"
+              validators={{
+                onBlur: ({ value }) => validateWeight(value),
+                onChange: ({ value }) => validateWeight(value),
+              }}
+            >
+              {field => (
+                <field.TextField
+                  title={CREATE_PROPOSAL_LABEL_WEIGHT}
+                  id="update-sv-reward-weight-weight"
+                  subtitle={selectedSv ? `Current Weight: ${currentWeight}` : undefined}
+                />
+              )}
+            </form.AppField>
+
+            <form.AppField
               name="expiryDate"
               validators={{
                 onChange: ({ value }) => validateExpiration(value),
@@ -216,41 +251,6 @@ export const UpdateSvRewardWeightForm: React.FC = _ => {
                   title={CREATE_PROPOSAL_LABEL_SUPPORTING_URL}
                   id="update-sv-reward-weight-url"
                   muiTextFieldProps={{ placeholder: SUPPORTING_URL_PLACEHOLDER }}
-                />
-              )}
-            </form.AppField>
-
-            <form.AppField
-              name="sv"
-              validators={{
-                onBlur: ({ value }) => validateSvSelection(value),
-                onChange: ({ value }) => {
-                  return validateSvSelection(value);
-                },
-              }}
-            >
-              {field => (
-                <field.SelectField
-                  title={CREATE_PROPOSAL_LABEL_MEMBER}
-                  options={svOptions}
-                  id="update-sv-reward-weight-member"
-                  onChange={() => form.resetField('weight')}
-                />
-              )}
-            </form.AppField>
-
-            <form.AppField
-              name="weight"
-              validators={{
-                onBlur: ({ value }) => validateWeight(value),
-                onChange: ({ value }) => validateWeight(value),
-              }}
-            >
-              {field => (
-                <field.TextField
-                  title={CREATE_PROPOSAL_LABEL_WEIGHT}
-                  id="update-sv-reward-weight-weight"
-                  subtitle={selectedSv ? `Current Weight: ${currentWeight}` : undefined}
                 />
               )}
             </form.AppField>
