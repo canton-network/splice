@@ -17,8 +17,6 @@ deleteRules:
     uid: 5dcddc9a5487
   - orgId: 1
     uid: aescandisagree1
-  - orgId: 1
-    uid: cfurlpifrmvi8b
 deleteContactPoints:
   - uid: grafana-default-email
     orgId: 1
