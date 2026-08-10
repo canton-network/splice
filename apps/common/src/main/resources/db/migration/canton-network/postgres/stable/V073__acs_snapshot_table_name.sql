@@ -26,10 +26,17 @@ create table acs_incremental_snapshot_data_next_v2
     contract_id             text    not null,
 
     -- All the data necessary to reconstruct a created event
+    -- TODO: also unecessary
+    template_id             text not null,
+    -- TODO: this should be unnecessary
+    stakeholders            text[] not null,
     create_arguments        jsonb  not null,
     event_id                text   not null,
     record_time             bigint not null,
-    template_id_package_id  text   not null, -- the package_name is already included as part of the template_id
+    template_id_package_id  text   not null,
+    package_name            text not null,
+    template_id_module_name text not null,
+    template_id_entity_name text not null,
     contract_key            text   null,
     created_at              bigint not null,
     signatories             text[] not null,

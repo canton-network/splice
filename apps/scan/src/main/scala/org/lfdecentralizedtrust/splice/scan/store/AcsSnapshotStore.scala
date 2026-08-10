@@ -334,7 +334,7 @@ class AcsSnapshotStore(
             record_time,
             template_id_package_id,
             template_id,
-            contract_id,
+            s.contract_id,
             create_arguments,
             contract_key,
             signatories,
@@ -353,7 +353,7 @@ class AcsSnapshotStore(
               String,
               CantonTimestamp,
               String,
-              PackageQualifiedName,
+              String,
               String,
               String,
               Option[String],
@@ -370,7 +370,7 @@ class AcsSnapshotStore(
               eventId,
               recordTime,
               packageId,
-              templateIdPackageQualifiedName,
+              rawTemplateIdPackageQualifiedName,
               contractId,
               createArguments,
               contractKey,
@@ -378,6 +378,8 @@ class AcsSnapshotStore(
               observers,
               createdAt,
             ) =>
+          val templateIdPackageQualifiedName =
+            PackageQualifiedName.assertFromString(rawTemplateIdPackageQualifiedName)
           rowId -> SpliceCreatedEvent(
             eventId = eventId,
             recordTime = recordTime,
@@ -806,11 +808,12 @@ class AcsSnapshotStore(
       AcsTableDDL.acsSnapshotStakeholdersTableName(snapshot.targetRecordTime)
 
     for {
-      _ <- sqlu"create table #$createsTableName like acs_snapshot_creates_template"
-      _ <- sqlu"create table #$stakeholdersTableName like acs_snapshot_stakeholders_template"
+      _ <- sqlu"create table #$createsTableName (like acs_snapshot_creates_template including all)"
+      _ <-
+        sqlu"create table #$stakeholdersTableName (like acs_snapshot_stakeholders_template including all)"
       copiedCreateRows <- (sql"""
         insert into #$createsTableName (contract_id, create_arguments, event_id, record_time, template_id_package_id, contract_key, created_at, signatories, observers, unlocked_amulet_balance, locked_amulet_balance)
-        select s.contract_id, s.create_arguments, s.event-id, s.record_time, s.template_id_package_id, s.contract_key, s.creataed_at, s.signatories, s.observers, """ ++ IncrementalAcsSnapshotTable.QueryParts
+        select s.contract_id, s.create_arguments, s.event_id, s.record_time, s.template_id_package_id, s.contract_key, s.created_at, s.signatories, s.observers, """ ++ IncrementalAcsSnapshotTable.QueryParts
         .unlockedAmuletBalance() ++ sql", " ++ IncrementalAcsSnapshotTable.QueryParts
         .lockedAmuletBalance() ++ sql"""
         from #${table.tableName} s
@@ -822,7 +825,7 @@ class AcsSnapshotStore(
         insert into #${stakeholdersTableName} (stakeholder, template_id, contract_id)
         select stakeholder, s.template_id, contract_id
         from #${table.tableName} s
-        cross join unnest(array_cat(s.signatories, s.observers)) as stakeholder
+        cross join unnest(s.stakeholders) as stakeholder
         where s.snapshot_id = ${snapshot.snapshotId}
         order by created_at, contract_id
       """
@@ -844,7 +847,7 @@ class AcsSnapshotStore(
           last_row_id,
           unlocked_amulet_balance,
           locked_amulet_balance,
-          table_name
+          data_table_name
         )
         values (
           ${snapshot.recordTime},
@@ -1075,6 +1078,9 @@ object AcsSnapshotStore {
             event_id,
             record_time,
             template_id_package_id,
+            package_name,
+            template_id_module_name,
+            template_id_entity_name,
             contract_key,
             signatories,
             observers,
@@ -1098,6 +1104,9 @@ object AcsSnapshotStore {
             c.event_id,
             c.record_time,
             c.template_id_package_id,
+            c.package_name,
+            c.template_id_module_name,
+            c.template_id_entity_name,
             c.contract_key,
             c.signatories,
             c.observers,
@@ -1119,7 +1128,7 @@ object AcsSnapshotStore {
             when package_name = ${Amulet.COMPANION.PACKAGE_NAME}
               and template_id_module_name = ${Amulet.COMPANION.TEMPLATE_ID.getModuleName}
               and template_id_entity_name = ${Amulet.COMPANION.TEMPLATE_ID.getEntityName}
-            then (c.create_arguments->'record'->'fields'->2->'value'->'record'->'fields'->0->'value'->>'numeric')::numeric
+            then (create_arguments->'record'->'fields'->2->'value'->'record'->'fields'->0->'value'->>'numeric')::numeric
             else 0
           end
          """
@@ -1131,7 +1140,7 @@ object AcsSnapshotStore {
             when package_name = ${LockedAmulet.COMPANION.PACKAGE_NAME}
               and template_id_module_name = ${LockedAmulet.COMPANION.TEMPLATE_ID.getModuleName}
               and template_id_entity_name = ${LockedAmulet.COMPANION.TEMPLATE_ID.getEntityName}
-            then (c.create_arguments->'record'->'fields'->0->'value'->'record'->'fields'->2->'value'->'record'->'fields'->0->'value'->>'numeric')::numeric
+            then (create_arguments->'record'->'fields'->0->'value'->'record'->'fields'->2->'value'->'record'->'fields'->0->'value'->>'numeric')::numeric
             else 0
           end
          """
