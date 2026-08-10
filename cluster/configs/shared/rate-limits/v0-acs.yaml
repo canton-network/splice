@@ -5,7 +5,7 @@ rateLimits:
     maxTokens: 500         # The per-endpoint global limit (shared between all ips)
     tokensPerFill: 500
     fillInterval: 60s
-    perIpLimits: # per-IP limit
+    perIpRangeLimit: # per-IP-range limit
       maxTokens: 10
       tokensPerFill: 5
       fillInterval: 60s

@@ -5,8 +5,7 @@ import { expect, jest, test } from '@jest/globals';
 import {
   buildRateLimitActions,
   buildRateLimitDescriptors,
-  validateCidrLimits,
-  validateIpLimits,
+  validateIpRangeLimits,
 } from './envoyRateLimiter';
 
 jest.mock('@canton-network/splice-pulumi-common/src/config/envConfig', () => ({
@@ -24,19 +23,19 @@ const baseLimits = {
   fillInterval: '60s',
 };
 
-const perIpLimits = {
+const perIpRangeLimit = {
   maxTokens: 120,
   tokensPerFill: 120,
   fillInterval: '60s',
 };
 
-test('buildRateLimitDescriptors generates per-endpoint and generic per-IP descriptors', () => {
+test('buildRateLimitDescriptors generates per-endpoint and generic per-IP-range descriptors', () => {
   const descriptors = buildRateLimitDescriptors({
     '/registry/metadata/v1/info': {
       name: 'registry-metadata-info',
       type: 'limited',
       ...baseLimits,
-      perIpLimits,
+      perIpRangeLimit,
     },
   });
 
@@ -50,7 +49,10 @@ test('buildRateLimitDescriptors generates per-endpoint and generic per-IP descri
     },
   });
   expect(descriptors[1]).toEqual({
-    entries: [{ key: 'header_match', value: 'registry-metadata-info' }, { key: 'client_ip' }],
+    entries: [
+      { key: 'header_match', value: 'registry-metadata-info' },
+      { key: 'remote_address_match', value: 'per-ip-range-default' },
+    ],
     token_bucket: {
       max_tokens: 120,
       tokens_per_fill: 120,
@@ -59,17 +61,17 @@ test('buildRateLimitDescriptors generates per-endpoint and generic per-IP descri
   });
 });
 
-test('buildRateLimitDescriptors emits named IP overrides before generic per-IP descriptor', () => {
+test('buildRateLimitDescriptors emits named IP-range overrides before generic descriptor', () => {
   const descriptors = buildRateLimitDescriptors({
     '/registry/metadata/v1/info': {
       name: 'registry-metadata-info',
       type: 'limited',
       ...baseLimits,
-      perIpLimits: {
-        ...perIpLimits,
+      perIpRangeLimit: {
+        ...perIpRangeLimit,
         overrides: {
           'single-validator': {
-            ips: ['192.68.78.50'],
+            ipRanges: ['192.68.78.50/32'],
             maxTokens: 220,
             tokensPerFill: 220,
             fillInterval: '60s',
@@ -88,7 +90,7 @@ test('buildRateLimitDescriptors emits named IP overrides before generic per-IP d
   expect(descriptors[1]).toEqual({
     entries: [
       { key: 'header_match', value: 'registry-metadata-info' },
-      { key: 'client_ip', value: '192.68.78.50' },
+      { key: 'remote_address_match', value: 'single-validator' },
     ],
     token_bucket: {
       max_tokens: 220,
@@ -98,24 +100,27 @@ test('buildRateLimitDescriptors emits named IP overrides before generic per-IP d
   });
   expect(descriptors[2]).toEqual(
     expect.objectContaining({
-      entries: [{ key: 'header_match', value: 'registry-metadata-info' }, { key: 'client_ip' }],
+      entries: [
+        { key: 'header_match', value: 'registry-metadata-info' },
+        { key: 'remote_address_match', value: 'per-ip-range-default' },
+      ],
     })
   );
 });
 
-test('buildRateLimitDescriptors emits descriptors for named overrides with multiple ips', () => {
+test('buildRateLimitDescriptors shares one bucket across multiple IP ranges in the same override', () => {
   const descriptors = buildRateLimitDescriptors({
     '/registry/metadata/v1/info': {
       name: 'registry-metadata-info',
       type: 'limited',
       ...baseLimits,
-      perIpLimits: {
-        ...perIpLimits,
+      perIpRangeLimit: {
+        ...perIpRangeLimit,
         overrides: {
-          'multi-validators': {
-            ips: ['192.68.78.51', '192.68.78.52'],
-            maxTokens: 250,
-            tokensPerFill: 250,
+          'validator-net': {
+            ipRanges: ['1.2.3.0/24', '5.6.7.0/24'],
+            maxTokens: 1000,
+            tokensPerFill: 1000,
             fillInterval: '60s',
           },
         },
@@ -123,38 +128,27 @@ test('buildRateLimitDescriptors emits descriptors for named overrides with multi
     },
   });
 
-  expect(descriptors).toHaveLength(4);
+  expect(descriptors).toHaveLength(3);
   expect(descriptors[1]).toEqual({
     entries: [
       { key: 'header_match', value: 'registry-metadata-info' },
-      { key: 'client_ip', value: '192.68.78.51' },
+      { key: 'remote_address_match', value: 'validator-net' },
     ],
     token_bucket: {
-      max_tokens: 250,
-      tokens_per_fill: 250,
-      fill_interval: '60s',
-    },
-  });
-  expect(descriptors[2]).toEqual({
-    entries: [
-      { key: 'header_match', value: 'registry-metadata-info' },
-      { key: 'client_ip', value: '192.68.78.52' },
-    ],
-    token_bucket: {
-      max_tokens: 250,
-      tokens_per_fill: 250,
+      max_tokens: 1000,
+      tokens_per_fill: 1000,
       fill_interval: '60s',
     },
   });
 });
 
-test('buildRateLimitActions emits per-endpoint and per-IP actions', () => {
+test('buildRateLimitActions emits per-endpoint and per-IP-range actions', () => {
   const actions = buildRateLimitActions({
     '/registry/metadata/v1/info': {
       name: 'registry-metadata-info',
       type: 'limited',
       ...baseLimits,
-      perIpLimits,
+      perIpRangeLimit,
     },
   });
 
@@ -196,134 +190,31 @@ test('buildRateLimitActions emits per-endpoint and per-IP actions', () => {
         },
       },
       {
-        request_headers: {
-          descriptor_key: 'client_ip',
-          header_name: 'x-forwarded-for',
+        remote_address_match: {
+          descriptor_value: 'per-ip-range-default',
+          address_matcher: {
+            cidr_ranges: [],
+            invert_match: true,
+          },
         },
       },
     ],
   });
 });
 
-test('validateIpLimits throws on duplicate IP between two named overrides', () => {
-  expect(() =>
-    validateIpLimits('/registry/metadata/v1/info', {
-      name: 'registry-metadata-info',
-      type: 'limited',
-      ...baseLimits,
-      perIpLimits: {
-        ...perIpLimits,
-        overrides: {
-          'group-a': {
-            ips: ['192.68.78.50', '192.68.78.51'],
-            maxTokens: 250,
-            tokensPerFill: 250,
-            fillInterval: '60s',
-          },
-          'group-b': {
-            ips: ['192.68.78.51'],
-            maxTokens: 250,
-            tokensPerFill: 250,
-            fillInterval: '60s',
-          },
-        },
-      },
-    })
-  ).toThrow("192.68.78.51 (in override 'group-b')");
-});
-
-test('validateIpLimits accepts unique IPs across named overrides', () => {
-  expect(() =>
-    validateIpLimits('/registry/metadata/v1/info', {
-      name: 'registry-metadata-info',
-      type: 'limited',
-      ...baseLimits,
-      perIpLimits: {
-        ...perIpLimits,
-        overrides: {
-          'single-validator': {
-            ips: ['192.68.78.50'],
-            maxTokens: 220,
-            tokensPerFill: 220,
-            fillInterval: '60s',
-          },
-          'multi-validators': {
-            ips: ['192.68.78.51', '192.68.78.52'],
-            maxTokens: 250,
-            tokensPerFill: 250,
-            fillInterval: '60s',
-          },
-        },
-      },
-    })
-  ).not.toThrow();
-});
-
-test('buildRateLimitDescriptors emits per-CIDR override and fallback descriptors', () => {
-  const descriptors = buildRateLimitDescriptors({
-    '/registry/metadata/v1/info': {
-      name: 'registry-metadata-info',
-      type: 'limited',
-      ...baseLimits,
-      perCidrLimits: {
-        maxTokens: 500,
-        tokensPerFill: 500,
-        fillInterval: '60s',
-        overrides: {
-          office: {
-            cidrs: ['192.68.78.0/24'],
-            maxTokens: 1000,
-            tokensPerFill: 1000,
-            fillInterval: '60s',
-          },
-        },
-      },
-    },
-  });
-
-  expect(descriptors).toHaveLength(3);
-  expect(descriptors[0]).toEqual(
-    expect.objectContaining({
-      entries: [{ key: 'header_match', value: 'registry-metadata-info' }],
-    })
-  );
-  expect(descriptors[1]).toEqual({
-    entries: [
-      { key: 'header_match', value: 'registry-metadata-info' },
-      { key: 'remote_address_match', value: 'office' },
-    ],
-    token_bucket: {
-      max_tokens: 1000,
-      tokens_per_fill: 1000,
-      fill_interval: '60s',
-    },
-  });
-  expect(descriptors[2]).toEqual({
-    entries: [
-      { key: 'header_match', value: 'registry-metadata-info' },
-      { key: 'remote_address_match', value: 'per-cidr-default' },
-    ],
-    token_bucket: {
-      max_tokens: 500,
-      tokens_per_fill: 500,
-      fill_interval: '60s',
-    },
-  });
-});
-
-test('buildRateLimitActions emits per-CIDR remote_address_match actions', () => {
+test('buildRateLimitActions emits per-IP-range remote_address_match actions', () => {
   const actions = buildRateLimitActions({
     '/registry/metadata/v1/info': {
       name: 'registry-metadata-info',
       type: 'limited',
       ...baseLimits,
-      perCidrLimits: {
+      perIpRangeLimit: {
         maxTokens: 500,
         tokensPerFill: 500,
         fillInterval: '60s',
         overrides: {
           office: {
-            cidrs: ['192.68.78.0/24'],
+            ipRanges: ['192.68.78.0/24'],
             maxTokens: 1000,
             tokensPerFill: 1000,
             fillInterval: '60s',
@@ -385,7 +276,7 @@ test('buildRateLimitActions emits per-CIDR remote_address_match actions', () => 
       },
       {
         remote_address_match: {
-          descriptor_value: 'per-cidr-default',
+          descriptor_value: 'per-ip-range-default',
           address_matcher: {
             cidr_ranges: [
               {
@@ -401,55 +292,19 @@ test('buildRateLimitActions emits per-CIDR remote_address_match actions', () => 
   });
 });
 
-test('buildRateLimitDescriptors shares one bucket across multiple CIDRs in the same override', () => {
-  const descriptors = buildRateLimitDescriptors({
-    '/registry/metadata/v1/info': {
-      name: 'registry-metadata-info',
-      type: 'limited',
-      ...baseLimits,
-      perCidrLimits: {
-        maxTokens: 500,
-        tokensPerFill: 500,
-        fillInterval: '60s',
-        overrides: {
-          'validator-net': {
-            cidrs: ['1.2.3.4/24', '5.6.7.8/24'],
-            maxTokens: 1000,
-            tokensPerFill: 1000,
-            fillInterval: '60s',
-          },
-        },
-      },
-    },
-  });
-
-  expect(descriptors).toHaveLength(3);
-  expect(descriptors[1]).toEqual({
-    entries: [
-      { key: 'header_match', value: 'registry-metadata-info' },
-      { key: 'remote_address_match', value: 'validator-net' },
-    ],
-    token_bucket: {
-      max_tokens: 1000,
-      tokens_per_fill: 1000,
-      fill_interval: '60s',
-    },
-  });
-});
-
-test('buildRateLimitActions uses a single shared remote_address_match for multiple CIDRs in the same override', () => {
+test('buildRateLimitActions uses a single shared remote_address_match for multiple IP ranges in the same override', () => {
   const actions = buildRateLimitActions({
     '/registry/metadata/v1/info': {
       name: 'registry-metadata-info',
       type: 'limited',
       ...baseLimits,
-      perCidrLimits: {
+      perIpRangeLimit: {
         maxTokens: 500,
         tokensPerFill: 500,
         fillInterval: '60s',
         overrides: {
           'validator-net': {
-            cidrs: ['1.2.3.4/24', '5.6.7.8/24'],
+            ipRanges: ['1.2.3.0/24', '5.6.7.0/24'],
             maxTokens: 1000,
             tokensPerFill: 1000,
             fillInterval: '60s',
@@ -483,11 +338,11 @@ test('buildRateLimitActions uses a single shared remote_address_match for multip
           address_matcher: {
             cidr_ranges: [
               {
-                address_prefix: '1.2.3.4',
+                address_prefix: '1.2.3.0',
                 prefix_len: { value: 24 },
               },
               {
-                address_prefix: '5.6.7.8',
+                address_prefix: '5.6.7.0',
                 prefix_len: { value: 24 },
               },
             ],
@@ -502,15 +357,15 @@ test('buildRateLimitActions uses a single shared remote_address_match for multip
         expect.objectContaining({}),
         {
           remote_address_match: {
-            descriptor_value: 'per-cidr-default',
+            descriptor_value: 'per-ip-range-default',
             address_matcher: {
               cidr_ranges: [
                 {
-                  address_prefix: '1.2.3.4',
+                  address_prefix: '1.2.3.0',
                   prefix_len: { value: 24 },
                 },
                 {
-                  address_prefix: '5.6.7.8',
+                  address_prefix: '5.6.7.0',
                   prefix_len: { value: 24 },
                 },
               ],
@@ -523,23 +378,23 @@ test('buildRateLimitActions uses a single shared remote_address_match for multip
   );
 });
 
-test('validateCidrLimits throws on overlapping CIDRs', () => {
+test('validateIpRangeLimits throws on overlapping IP ranges', () => {
   expect(() =>
-    validateCidrLimits('/registry/metadata/v1/info', {
+    validateIpRangeLimits('/registry/metadata/v1/info', {
       name: 'registry-metadata-info',
       type: 'limited',
       ...baseLimits,
-      perCidrLimits: {
-        ...perIpLimits,
+      perIpRangeLimit: {
+        ...perIpRangeLimit,
         overrides: {
           'group-a': {
-            cidrs: ['192.68.78.0/24'],
+            ipRanges: ['192.68.78.0/24'],
             maxTokens: 250,
             tokensPerFill: 250,
             fillInterval: '60s',
           },
           'group-b': {
-            cidrs: ['192.68.78.128/25'],
+            ipRanges: ['192.68.78.128/25'],
             maxTokens: 250,
             tokensPerFill: 250,
             fillInterval: '60s',
@@ -550,23 +405,23 @@ test('validateCidrLimits throws on overlapping CIDRs', () => {
   ).toThrow("192.68.78.0/24 (in override 'group-a') and 192.68.78.128/25 (in override 'group-b')");
 });
 
-test('validateCidrLimits throws when one CIDR is fully contained within another', () => {
+test('validateIpRangeLimits throws when one IP range is fully contained within another', () => {
   expect(() =>
-    validateCidrLimits('/registry/metadata/v1/info', {
+    validateIpRangeLimits('/registry/metadata/v1/info', {
       name: 'registry-metadata-info',
       type: 'limited',
       ...baseLimits,
-      perCidrLimits: {
-        ...perIpLimits,
+      perIpRangeLimit: {
+        ...perIpRangeLimit,
         overrides: {
           'group-a': {
-            cidrs: ['192.68.78.0/24'],
+            ipRanges: ['192.68.78.0/24'],
             maxTokens: 250,
             tokensPerFill: 250,
             fillInterval: '60s',
           },
           'group-b': {
-            cidrs: ['192.68.78.0/25'],
+            ipRanges: ['192.68.78.0/25'],
             maxTokens: 250,
             tokensPerFill: 250,
             fillInterval: '60s',
@@ -577,23 +432,23 @@ test('validateCidrLimits throws when one CIDR is fully contained within another'
   ).toThrow("192.68.78.0/24 (in override 'group-a') and 192.68.78.0/25 (in override 'group-b')");
 });
 
-test('validateCidrLimits accepts non-overlapping CIDRs', () => {
+test('validateIpRangeLimits accepts non-overlapping IP ranges', () => {
   expect(() =>
-    validateCidrLimits('/registry/metadata/v1/info', {
+    validateIpRangeLimits('/registry/metadata/v1/info', {
       name: 'registry-metadata-info',
       type: 'limited',
       ...baseLimits,
-      perCidrLimits: {
-        ...perIpLimits,
+      perIpRangeLimit: {
+        ...perIpRangeLimit,
         overrides: {
           'group-a': {
-            cidrs: ['192.68.78.0/25'],
+            ipRanges: ['192.68.78.0/25'],
             maxTokens: 250,
             tokensPerFill: 250,
             fillInterval: '60s',
           },
           'group-b': {
-            cidrs: ['192.68.78.128/25'],
+            ipRanges: ['192.68.78.128/25'],
             maxTokens: 250,
             tokensPerFill: 250,
             fillInterval: '60s',
