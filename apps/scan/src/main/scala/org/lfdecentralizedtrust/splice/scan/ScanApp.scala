@@ -633,20 +633,27 @@ object ScanApp {
       storage.isActive
 
     override def close(): Unit = {
-      LifeCycle.close(bftSequencersAdminConnections*)(logger)
-      LifeCycle.close(cleanups*)(logger)
-      bulkStorage.foreach(LifeCycle.close(_)(logger))
-      LifeCycle.close(
-        automation,
-        verdictAutomation,
-        store,
-        storage,
-        synchronizerNodes.current,
-        participantAdminConnection,
-      )(logger)
-      synchronizerNodes.successor.foreach(
-        LifeCycle.close(_)(logger)
-      )
+      // Close everything in one LifeCycle.close call: it closes every instance left to right
+      // even when some of them fail, whereas separate calls stop at the first failing call.
+      val instances: Seq[AutoCloseable] =
+        bftSequencersAdminConnections ++
+          cleanups ++
+          bulkStorage.toList ++
+          Seq(
+            automation,
+            verdictAutomation,
+            store,
+          ) ++
+          rewardsReferenceStoreO.toList ++
+          Seq(
+            storage,
+            synchronizerNodes.current,
+            participantAdminConnection,
+          ) ++
+          synchronizerNodes.successor.toList ++
+          synchronizerNodes.legacy.toList ++
+          synchronizerNodes.additionalLegacy
+      LifeCycle.close(instances*)(logger)
     }
   }
 }

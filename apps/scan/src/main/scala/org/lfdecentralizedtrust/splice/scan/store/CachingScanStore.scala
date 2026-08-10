@@ -35,9 +35,7 @@ import org.lfdecentralizedtrust.splice.store.{
   Limit,
   MiningRoundsStore,
   MultiDomainAcsStore,
-  PageLimit,
   ResultsPage,
-  SortOrder,
   SynchronizerStore,
   TxLogStore,
   UpdateHistory,
@@ -191,17 +189,6 @@ class CachingScanStore(
       cacheConfig.cachedByParty,
       store.lookupTransferCommandCounterByParty,
     ).get(partyId)
-
-  override def listTransactions(
-      pageEndEventId: Option[String],
-      sortOrder: SortOrder,
-      limit: PageLimit,
-  )(implicit tc: TraceContext): Future[Seq[TxLogEntry.TransactionTxLogEntry]] =
-    store.listTransactions(
-      pageEndEventId,
-      sortOrder,
-      limit,
-    )
 
   override def lookupLatestTransferCommandEvents(sender: PartyId, nonce: Long, limit: Int)(implicit
       tc: TraceContext

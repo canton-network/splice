@@ -60,6 +60,7 @@ export async function installValidator1(
         'postgres',
         activeVersion,
         spliceConfig.pulumiProjectConfig.cloudSql,
+        spliceConfig.pulumiProjectConfig.defaultSplicePostgresConfig,
         false
       )
     : undefined;
@@ -72,6 +73,7 @@ export async function installValidator1(
       `validator-pg`,
       activeVersion,
       spliceConfig.pulumiProjectConfig.cloudSql,
+      spliceConfig.pulumiProjectConfig.defaultSplicePostgresConfig,
       true
     ));
   const validatorDbName = `validator1`;
@@ -80,7 +82,6 @@ export async function installValidator1(
 
   const participant = await installParticipant(
     validator1Config,
-    decentralizedSynchronizerMigrationConfig.activeMigrationId,
     xns,
     auth0Client.getCfg(),
     validator1Config?.disableAuth,
@@ -130,7 +131,7 @@ export async function installValidator1(
     version: activeVersion,
     additionalEnvVars: validator1Config?.validatorApp?.additionalEnvVars,
   });
-  installIngress(xns, installSplitwell, decentralizedSynchronizerMigrationConfig);
+  installIngress(xns, installSplitwell);
 
   if (installSplitwell) {
     installSpliceHelmChart(
@@ -156,11 +157,7 @@ export async function installValidator1(
   return validator;
 }
 
-function installIngress(
-  xns: ExactNamespace,
-  splitwell: boolean,
-  decentralizedSynchronizerMigrationConfig: DecentralizedSynchronizerMigrationConfig
-) {
+function installIngress(xns: ExactNamespace, splitwell: boolean) {
   installSpliceHelmChart(
     xns,
     `cluster-ingress-${xns.logicalName}`,
@@ -176,9 +173,7 @@ function installIngress(
       },
       ingress: {
         splitwell: splitwell,
-        decentralizedSynchronizer: {
-          activeMigrationId: decentralizedSynchronizerMigrationConfig.activeMigrationId.toString(),
-        },
+        decentralizedSynchronizer: {},
       },
     }
   );

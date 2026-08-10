@@ -8,6 +8,7 @@ import relativeTime from 'dayjs/plugin/relativeTime';
 import { useFieldContext } from '../../hooks/formContext';
 import type { ConfigChange, PendingConfigFieldInfo } from '../../utils/types';
 import { nextScheduledSynchronizerUpgradeFormat } from '@canton-network/splice-common-frontend-utils';
+import { configFieldFieldSx, configFieldInputSx } from '../../themes/fieldStyles';
 
 dayjs.extend(relativeTime);
 
@@ -55,12 +56,16 @@ export const ConfigField: React.FC<ConfigFieldProps> = props => {
 
   const textFieldProps = {
     variant: 'outlined' as const,
-    size: 'small' as const,
     color: field.state.meta.isDefaultValue ? ('primary' as const) : ('secondary' as const),
     focused: !field.state.meta.isDefaultValue,
     autoComplete: 'off' as const,
+    sx: configFieldFieldSx,
+    slotProps: {
+      input: {
+        sx: configFieldInputSx,
+      },
+    },
     inputProps: {
-      sx: { textAlign: 'right' },
       'data-testid': `config-field-${configChange.fieldName}`,
     },
     disabled: isDisabled,
@@ -72,10 +77,12 @@ export const ConfigField: React.FC<ConfigFieldProps> = props => {
         sx={{
           display: 'flex',
           justifyContent: 'space-between',
-          alignItems: 'center',
+          alignItems: 'flex-start',
+          gap: 2,
+          minWidth: 0,
         }}
       >
-        <Box>
+        <Box sx={{ minWidth: 0, flex: 1, pr: 1 }}>
           <Typography variant="body1" data-testid={`config-label-${configChange.fieldName}`}>
             {configChange.label}
           </Typography>
@@ -89,9 +96,10 @@ export const ConfigField: React.FC<ConfigFieldProps> = props => {
           </Typography>
         </Box>
 
-        <Box sx={{ width: 250 }}>
+        <Box sx={{ width: 238, maxWidth: '100%', minWidth: 0, flexShrink: 0 }}>
           <MuiTextField
             {...textFieldProps}
+            fullWidth
             // We choose empty string to represent fields that could be undefined because their values have not been set.
             value={field.state.value?.value || ''}
             onBlur={field.handleBlur}
@@ -107,7 +115,13 @@ export const ConfigField: React.FC<ConfigFieldProps> = props => {
             <Typography
               variant="caption"
               color="text.secondary"
-              sx={{ mt: 0.5, display: 'block' }}
+              title={configChange.currentValue}
+              sx={{
+                mt: 0.5,
+                display: 'block',
+                overflowWrap: 'anywhere',
+                wordBreak: 'break-word',
+              }}
               data-testid={`config-current-value-${configChange.fieldName}`}
             >
               Current Configuration: {configChange.currentValue}
@@ -140,24 +154,46 @@ export const PendingConfigDisplay: React.FC<PendingConfigDisplayProps> = ({ pend
     effectiveDate === 'Threshold' ? 'at Threshold' : dayjs(effectiveDate).fromNow();
 
   return (
-    <Typography
-      variant="caption"
-      color="text.secondary"
-      sx={{ mt: 0.5, display: 'block', textAlign: 'center' }}
+    <Box
+      sx={{ mt: 0.5, width: '100%', minWidth: 0 }}
       data-testid={`config-pending-value-${fieldName}`}
     >
-      Pending Configuration: <strong>{pendingValue}</strong> <br />
-      This{' '}
-      <RouterLink
-        to={`/governance/proposals/${proposalCid}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        style={{ color: 'inherit' }}
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        sx={{ display: 'block', textAlign: 'center' }}
       >
-        pending configuration
-      </RouterLink>{' '}
-      will go into effect <strong>{effectiveText}</strong>
-    </Typography>
+        Pending Configuration:{' '}
+        <Box
+          component="strong"
+          title={pendingValue}
+          sx={{
+            display: 'inline',
+            overflowWrap: 'anywhere',
+            wordBreak: 'break-word',
+            fontWeight: 700,
+          }}
+        >
+          {pendingValue}
+        </Box>
+      </Typography>
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        sx={{ display: 'block', textAlign: 'center', mt: 0.5 }}
+      >
+        This{' '}
+        <RouterLink
+          to={`/governance/proposals/${proposalCid}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ color: 'inherit' }}
+        >
+          pending configuration
+        </RouterLink>{' '}
+        will go into effect <strong>{effectiveText}</strong>
+      </Typography>
+    </Box>
   );
 };
 

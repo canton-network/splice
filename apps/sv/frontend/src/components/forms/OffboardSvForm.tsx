@@ -22,7 +22,7 @@ import { EffectiveDateField } from '../form-components/EffectiveDateField';
 import { ProposalSummary } from '../governance/ProposalSummary';
 import { ProposalSubmissionError } from '../form-components/ProposalSubmissionError';
 import { useProposalMutation } from '../../hooks/useProposalMutation';
-import { THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
+import { SUPPORTING_URL_LABEL, THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
 
 interface ExtraFormFields {
   sv: string;
@@ -137,7 +137,7 @@ export const OffboardSvForm: React.FC = _ => {
             >
               {field => (
                 <field.DateField
-                  title="Threshold Deadline"
+                  title="Quorum Threshold Deadline"
                   description={THRESHOLD_DEADLINE_SUBTITLE}
                   id="offboard-sv-expiry-date"
                 />
@@ -152,8 +152,6 @@ export const OffboardSvForm: React.FC = _ => {
               }}
               children={_ => (
                 <EffectiveDateField
-                  title="Vote Proposal Effectivity"
-                  description="Select the date and time the proposal will take effect"
                   initialEffectiveDate={initialEffectiveDate.format(dateTimeFormatISO)}
                   id="offboard-sv-effective-date"
                 />
@@ -177,7 +175,7 @@ export const OffboardSvForm: React.FC = _ => {
                 onChange: ({ value }) => validateUrl(value),
               }}
             >
-              {field => <field.TextField title="URL" id="offboard-sv-url" />}
+              {field => <field.TextField title={SUPPORTING_URL_LABEL} id="offboard-sv-url" />}
             </form.AppField>
           </>
         )}

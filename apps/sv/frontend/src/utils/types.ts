@@ -29,6 +29,11 @@ export interface UnfeatureAppProposal {
   rightContractId: string;
 }
 
+export interface UpdateFeatureAppProposal {
+  rightContractId: string;
+  newActivityWeight: string;
+}
+
 export interface UnclaimedActivityRecordProposal {
   beneficiary: string;
   amount: string;
@@ -86,6 +91,7 @@ export type Proposal =
   | UnclaimedActivityRecordProposal
   | AmuletRulesConfigProposal
   | DsoRulesConfigProposal
+  | UpdateFeatureAppProposal
   | undefined;
 
 export type ProposalActionMap = {
@@ -96,6 +102,7 @@ export type ProposalActionMap = {
   SRARC_CreateUnallocatedUnclaimedActivityRecord: UnclaimedActivityRecordProposal;
   CRARC_SetConfig: AmuletRulesConfigProposal;
   SRARC_SetConfig: DsoRulesConfigProposal;
+  SRARC_UpdateFeaturedAppRight: UpdateFeatureAppProposal;
   // If no proposal type is defined, can use unknown or a specific type:
   CRARC_AddFutureAmuletConfigSchedule: unknown;
 };
@@ -134,7 +141,8 @@ export type SupportedActionTag =
   | 'SRARC_RevokeFeaturedAppRight'
   | 'SRARC_SetConfig'
   | 'SRARC_UpdateSvRewardWeight'
-  | 'SRARC_CreateUnallocatedUnclaimedActivityRecord';
+  | 'SRARC_CreateUnallocatedUnclaimedActivityRecord'
+  | 'SRARC_UpdateFeaturedAppRight';
 
 export type ProposalListingStatus =
   | 'Accepted'
@@ -148,6 +156,7 @@ export interface ProposalListingData {
   contractId: ContractId<VoteRequest>;
   actionName: string;
   description?: string;
+  requester: string;
   votingThresholdDeadline: string;
   voteTakesEffect: string;
   yourVote: YourVoteStatus;
@@ -199,11 +208,18 @@ export interface ProposalMutationArgs {
   action: ActionRequiringConfirmation;
 }
 
+export interface UpdateFeatureAppFormData extends CommonProposalFormData {
+  partyId: string;
+  rightCid: string;
+  newActivityWeight: string;
+}
+
 export type NonConfigProposalFormData =
   | UpdateSvRewardWeightFormData
   | OffboardSvFormData
   | GrantRevokeFeaturedAppFormData
-  | CreateUnallocatedUnclaimedActivityRecordFormData;
+  | CreateUnallocatedUnclaimedActivityRecordFormData
+  | UpdateFeatureAppFormData;
 
 export type ConfigProposalFormData = SetDsoConfigCompleteFormData | SetAmuletConfigCompleteFormData;
 

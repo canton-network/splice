@@ -210,6 +210,52 @@ private object LsuEndToEndIntegrationTest {
   }
 }
 
+private object LsuEndToEndIntegrationTest {
+  import org.scalatest.OptionValues.*
+
+  final case class ExpectedRegisteredSynchronizers(
+      initialSynchronizerConnectionConfig: SynchronizerConnectionConfig,
+      fixture: Fixture,
+  )(implicit env: TestConsoleEnvironment) {
+    import env.*
+
+    val currentRegisteredSynchronizerBeforeLsu = RegisteredSynchronizer(
+      config = initialSynchronizerConnectionConfig,
+      status = Status.Active,
+      psid = KnownPhysicalSynchronizerId(fixture.currentPsid),
+      predecessor = None,
+      isConnected = true,
+    )
+
+    val newSequencerConnections: NonEmpty[Map[SequencerAlias, SequencerConnection]] = NonEmpty
+      .from(
+        Map(
+          sequencer1.sequencerAlias -> sequencer2.sequencerConnection
+            .copy(sequencerAlias = sequencer1.sequencerAlias, sequencerId = Some(sequencer1.id))
+        )
+      )
+      .value
+
+    val newRegisteredSynchronizerBeforeLsu = RegisteredSynchronizer(
+      config = initialSynchronizerConnectionConfig
+        .focus(_.sequencerConnections.aliasToConnection)
+        .replace(newSequencerConnections)
+        .focus(_.synchronizerId)
+        .replace(Some(fixture.newPsid)),
+      status = Status.LsuTarget,
+      psid = KnownPhysicalSynchronizerId(fixture.newPsid),
+      predecessor = Some(
+        SynchronizerPredecessor(
+          psid = fixture.currentPsid,
+          upgradeTime = fixture.upgradeTime,
+          isLateUpgrade = false,
+        )
+      ),
+      isConnected = false,
+    )
+  }
+}
+
 final class LsuEndToEndSimClockIntegrationTest extends LsuEndToEndIntegrationTest
 
 final class LsuEndToEndWallClockIntegrationTest extends LsuEndToEndIntegrationTest {

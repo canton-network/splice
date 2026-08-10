@@ -8,8 +8,8 @@ import com.digitalasset.canton.topology.PartyId
 import io.grpc.StatusRuntimeException
 import io.grpc.protobuf.StatusProto
 import org.lfdecentralizedtrust.splice.automation.{TaskOutcome, TaskSuccess}
+import org.lfdecentralizedtrust.splice.store.IgnoredPartiesStore
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
-import org.lfdecentralizedtrust.splice.sv.store.IgnoredPartiesStore
 import org.lfdecentralizedtrust.splice.util.UnresponsiveParties
 
 import scala.concurrent.{ExecutionContext, Future}

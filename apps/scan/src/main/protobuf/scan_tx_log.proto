@@ -9,13 +9,6 @@ import "google/protobuf/timestamp.proto";
 import "google/protobuf/struct.proto";
 import "scalapb/scalapb.proto";
 
-message PartyBalanceChange {
-  option (scalapb.message).companion_extends = "org.lfdecentralizedtrust.splice.store.TxLogStore.TxLogEntryTypeMappers";
-
-  string change_to_initial_amount_as_of_round_zero = 1 [(scalapb.field).type = "scala.math.BigDecimal"];
-  string change_to_holding_fees_rate = 2 [(scalapb.field).type = "scala.math.BigDecimal"];
-}
-
 message SteppedRate {
   option (scalapb.message).companion_extends = "org.lfdecentralizedtrust.splice.store.TxLogStore.TxLogEntryTypeMappers";
 
@@ -30,67 +23,11 @@ message SteppedRate {
   repeated Step steps = 2;
 }
 
-message SenderAmount {
-  option (scalapb.message).companion_extends = "org.lfdecentralizedtrust.splice.store.TxLogStore.TxLogEntryTypeMappers";
-
-  string party = 1 [(scalapb.field).type = "com.digitalasset.canton.topology.PartyId"];
-  string input_amulet_amount = 2 [(scalapb.field).type = "scala.math.BigDecimal"];
-  string input_app_reward_amount  = 3 [(scalapb.field).type = "scala.math.BigDecimal"];
-  string input_validator_reward_amount = 4 [(scalapb.field).type = "scala.math.BigDecimal"];
-  string sender_change_amount = 5 [(scalapb.field).type = "scala.math.BigDecimal"];
-  string sender_change_fee = 6 [(scalapb.field).type = "scala.math.BigDecimal"];
-  string sender_fee = 7 [(scalapb.field).type = "scala.math.BigDecimal"];
-  string holding_fees = 8 [(scalapb.field).type = "scala.math.BigDecimal"];
-  // Added after initial release, so needs to be mapped to an Option in scala
-  string input_sv_reward_amount = 9 [(scalapb.field).type = "Option[scala.math.BigDecimal]"];
-  string input_validator_faucet_amount = 10 [(scalapb.field).type = "Option[scala.math.BigDecimal]"];
-}
-
-message ReceiverAmount {
-  option (scalapb.message).companion_extends = "org.lfdecentralizedtrust.splice.store.TxLogStore.TxLogEntryTypeMappers";
-
-  string party = 1 [(scalapb.field).type = "com.digitalasset.canton.topology.PartyId"];
-  string amount = 2 [(scalapb.field).type = "scala.math.BigDecimal"];
-  string receiver_fee = 3 [(scalapb.field).type = "scala.math.BigDecimal"];
-}
-
-message BalanceChange {
-  option (scalapb.message).companion_extends = "org.lfdecentralizedtrust.splice.store.TxLogStore.TxLogEntryTypeMappers";
-
-  string party = 1 [(scalapb.field).type = "com.digitalasset.canton.topology.PartyId"];
-  string change_to_initial_amount_as_of_round_zero = 2 [(scalapb.field).type = "scala.math.BigDecimal"];
-  string change_to_holding_fees_rate = 3 [(scalapb.field).type = "scala.math.BigDecimal"];
-}
-
 message ErrorTxLogEntry {
   option (scalapb.message).extends = "org.lfdecentralizedtrust.splice.scan.store.TxLogEntry";
   option (scalapb.message).companion_extends = "org.lfdecentralizedtrust.splice.store.TxLogStore.TxLogEntryTypeMappers";
 
   string event_id = 1;
-}
-
-message BalanceChangeTxLogEntry {
-  option (scalapb.message).extends = "org.lfdecentralizedtrust.splice.scan.store.TxLogEntry";
-  option (scalapb.message).companion_extends = "org.lfdecentralizedtrust.splice.store.TxLogStore.TxLogEntryTypeMappers";
-
-  string event_id = 1;
-  string domain_id = 2 [(scalapb.field).type = "com.digitalasset.canton.topology.SynchronizerId"];
-  int64 round = 3;
-  string change_to_initial_amount_as_of_round_zero = 4 [(scalapb.field).type = "scala.math.BigDecimal"];
-  string change_to_holding_fees_rate = 5 [(scalapb.field).type = "scala.math.BigDecimal"];
-  map <string, PartyBalanceChange> party_balance_changes = 6 [(scalapb.field).key_type = "com.digitalasset.canton.topology.PartyId"];;
-}
-
-message ExtraTrafficPurchaseTxLogEntry {
-  option (scalapb.message).extends = "org.lfdecentralizedtrust.splice.scan.store.TxLogEntry";
-  option (scalapb.message).companion_extends = "org.lfdecentralizedtrust.splice.store.TxLogStore.TxLogEntryTypeMappers";
-
-  string event_id = 1;
-  string domain_id = 2 [(scalapb.field).type = "com.digitalasset.canton.topology.SynchronizerId"];
-  int64 round = 3;
-  string validator = 4 [(scalapb.field).type = "com.digitalasset.canton.topology.PartyId"];
-  int64 traffic_purchased = 5;
-  string cc_spent = 6 [(scalapb.field).type = "scala.math.BigDecimal"];
 }
 
 message OpenMiningRoundTxLogEntry {
@@ -114,98 +51,6 @@ message ClosedMiningRoundTxLogEntry {
   string domain_id = 2 [(scalapb.field).type = "com.digitalasset.canton.topology.SynchronizerId"];
   int64 round = 3;
   google.protobuf.Timestamp effective_at = 4 [(scalapb.field).type = "java.time.Instant"];
-}
-
-enum TransferKind {
-  TRANSFER_KIND_OTHER = 0;
-  TRANSFER_KIND_CREATE_TRANSFER_INSTRUCTION = 1;
-  TRANSFER_KIND_TRANSFER_INSTRUCTION_ACCEPT = 2;
-  TRANSFER_KIND_PREAPPROVAL_SEND = 3;
-}
-
-message TransferTxLogEntry {
-  option (scalapb.message).extends = "org.lfdecentralizedtrust.splice.scan.store.TxLogEntry.TransactionTxLogEntry";
-  option (scalapb.message).companion_extends = "org.lfdecentralizedtrust.splice.store.TxLogStore.TxLogEntryTypeMappers";
-
-  string event_id = 1;
-  string offset = 2;
-  string domain_id = 3 [(scalapb.field).type = "com.digitalasset.canton.topology.SynchronizerId"];
-  google.protobuf.Timestamp date = 4 [(scalapb.field).type = "java.time.Instant"];
-  string provider = 5; // unused: reserved fields don't work well with the json en/decoding so we keep it here.
-  SenderAmount sender = 6;
-  repeated ReceiverAmount receivers = 7;
-  repeated BalanceChange balance_changes = 8;
-  int64 round = 9;
-  string amulet_price = 10; // Unused but our decoding infrastructure doesn't like reserved fields.
-
-  string description = 11;
-
-  string transfer_instruction_receiver = 12;
-  string transfer_instruction_amount = 13 [(scalapb.field).type = "Option[scala.math.BigDecimal]"];
-  string transfer_instruction_cid = 14;
-
-  TransferKind transfer_kind = 15;
-}
-
-message TapTxLogEntry {
-  option (scalapb.message).extends = "org.lfdecentralizedtrust.splice.scan.store.TxLogEntry.TransactionTxLogEntry";
-  option (scalapb.message).companion_extends = "org.lfdecentralizedtrust.splice.store.TxLogStore.TxLogEntryTypeMappers";
-
-  string event_id = 1;
-  string offset = 2;
-  string domain_id = 3 [(scalapb.field).type = "com.digitalasset.canton.topology.SynchronizerId"];
-  google.protobuf.Timestamp date = 4 [(scalapb.field).type = "java.time.Instant"];
-  string amulet_owner = 5 [(scalapb.field).type = "com.digitalasset.canton.topology.PartyId"];
-  string amulet_amount = 6 [(scalapb.field).type = "scala.math.BigDecimal"];
-  int64 round = 7;
-  string amulet_price = 8; // Unused but our decoding infrastructure doesn't like reserved fields.
-}
-
-message MintTxLogEntry {
-  option (scalapb.message).extends = "org.lfdecentralizedtrust.splice.scan.store.TxLogEntry.TransactionTxLogEntry";
-  option (scalapb.message).companion_extends = "org.lfdecentralizedtrust.splice.store.TxLogStore.TxLogEntryTypeMappers";
-
-  string event_id = 1;
-  string offset = 2;
-  string domain_id = 3 [(scalapb.field).type = "com.digitalasset.canton.topology.SynchronizerId"];
-  google.protobuf.Timestamp date = 4 [(scalapb.field).type = "java.time.Instant"];
-  string amulet_owner = 5 [(scalapb.field).type = "com.digitalasset.canton.topology.PartyId"];
-  string amulet_amount = 6 [(scalapb.field).type = "scala.math.BigDecimal"];
-  int64 round = 7;
-  string amulet_price = 8; // Unused but our decoding infrastructure doesn't like reserved fields.
-}
-
-message SvRewardTxLogEntry {
-  option (scalapb.message).extends = "org.lfdecentralizedtrust.splice.scan.store.TxLogEntry.RewardTxLogEntry";
-  option (scalapb.message).companion_extends = "org.lfdecentralizedtrust.splice.store.TxLogStore.TxLogEntryTypeMappers";
-
-  string event_id = 1;
-  string domain_id = 2 [(scalapb.field).type = "com.digitalasset.canton.topology.SynchronizerId"];
-  int64 round = 3;
-  string party = 4 [(scalapb.field).type = "com.digitalasset.canton.topology.PartyId"];
-  string amount = 5 [(scalapb.field).type = "scala.math.BigDecimal"];
-}
-
-message AppRewardTxLogEntry {
-  option (scalapb.message).extends = "org.lfdecentralizedtrust.splice.scan.store.TxLogEntry.RewardTxLogEntry";
-  option (scalapb.message).companion_extends = "org.lfdecentralizedtrust.splice.store.TxLogStore.TxLogEntryTypeMappers";
-
-  string event_id = 1;
-  string domain_id = 2 [(scalapb.field).type = "com.digitalasset.canton.topology.SynchronizerId"];
-  int64 round = 3;
-  string party = 4 [(scalapb.field).type = "com.digitalasset.canton.topology.PartyId"];
-  string amount = 5 [(scalapb.field).type = "scala.math.BigDecimal"];
-}
-
-message ValidatorRewardTxLogEntry {
-  option (scalapb.message).extends = "org.lfdecentralizedtrust.splice.scan.store.TxLogEntry.RewardTxLogEntry";
-  option (scalapb.message).companion_extends = "org.lfdecentralizedtrust.splice.store.TxLogStore.TxLogEntryTypeMappers";
-
-  string event_id = 1;
-  string domain_id = 2 [(scalapb.field).type = "com.digitalasset.canton.topology.SynchronizerId"];
-  int64 round = 3;
-  string party = 4 [(scalapb.field).type = "com.digitalasset.canton.topology.PartyId"];
-  string amount = 5 [(scalapb.field).type = "scala.math.BigDecimal"];
 }
 
 message VoteRequestTxLogEntry {
@@ -252,18 +97,4 @@ enum TransferAbortKind {
   TRANSFER_ABORT_KIND_RESERVED = 0;
   TRANSFER_ABORT_KIND_WITHDRAW = 1;
   TRANSFER_ABORT_KIND_REJECT = 2;
-}
-
-message AbortTransferInstructionTxLogEntry {
-  option (scalapb.message).extends = "org.lfdecentralizedtrust.splice.scan.store.TxLogEntry.TransactionTxLogEntry";
-  option (scalapb.message).companion_extends = "org.lfdecentralizedtrust.splice.store.TxLogStore.TxLogEntryTypeMappers";
-
-  string event_id = 1;
-  string offset = 2;
-  string domain_id = 3 [(scalapb.field).type = "com.digitalasset.canton.topology.SynchronizerId"];
-  google.protobuf.Timestamp date = 4 [(scalapb.field).type = "java.time.Instant"];
-
-  string transfer_instruction_cid = 14;
-
-  TransferAbortKind transfer_abort_kind = 15;
 }

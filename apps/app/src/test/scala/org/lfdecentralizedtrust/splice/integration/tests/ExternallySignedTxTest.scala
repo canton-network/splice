@@ -21,7 +21,7 @@ trait ExternallySignedTxTest
 
   override def environmentDefinition: SpliceEnvironmentDefinition = {
     EnvironmentDefinition.simpleTopology1Sv(this.getClass.getSimpleName)
-  }
+  }.withTransferCommandSupport
 
   def prepareAndSubmitTransfer(keyName: String, sender: PartyId, receiver: PartyId)(implicit
       env: SpliceTestConsoleEnvironment

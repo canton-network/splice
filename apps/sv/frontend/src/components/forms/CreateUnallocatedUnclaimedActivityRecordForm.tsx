@@ -8,7 +8,7 @@ import { useState } from 'react';
 import { useDsoInfos } from '../../contexts/SvContext';
 import { useAppForm } from '../../hooks/form';
 import { useProposalMutation } from '../../hooks/useProposalMutation';
-import { THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
+import { SUPPORTING_URL_LABEL, THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
 import { createProposalActions, getInitialExpiration } from '../../utils/governance';
 import type { CommonProposalFormData } from '../../utils/types';
 import { EffectiveDateField } from '../form-components/EffectiveDateField';
@@ -185,7 +185,7 @@ export const CreateUnallocatedUnclaimedActivityRecordForm: React.FC = _ => {
             >
               {field => (
                 <field.DateField
-                  title="Threshold Deadline"
+                  title="Quorum Threshold Deadline"
                   description={THRESHOLD_DEADLINE_SUBTITLE}
                   id="create-unallocated-unclaimed-activity-record-expiry-date"
                 />
@@ -227,7 +227,7 @@ export const CreateUnallocatedUnclaimedActivityRecordForm: React.FC = _ => {
             >
               {field => (
                 <field.TextField
-                  title="URL"
+                  title={SUPPORTING_URL_LABEL}
                   id="create-unallocated-unclaimed-activity-record-url"
                 />
               )}

@@ -29,7 +29,6 @@ import org.lfdecentralizedtrust.splice.environment.{
   SequencerAdminConnection,
 }
 import org.lfdecentralizedtrust.splice.http.v0.definitions
-import org.lfdecentralizedtrust.splice.http.v0.definitions.TransactionHistoryRequest
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   IntegrationTest,
@@ -110,10 +109,11 @@ class LsuIntegrationTest
                   physicalSynchronizerExpiration = NonNegativeFiniteDuration.ofSeconds(1)
                 ),
                 // sv-4 is intentionally a late-joining node in this test, which means the
-                // sequencer spends some time catching up. This can cause the sv-app's
+                // sequencer spends some time catching up. This can cause the sv-4 apps'
                 // circuit breakers to trip, which makes annoying logs and delays init.
                 // The circuit breakers tripping a bit during catchup would be just fine
-                // IRL, so as a simple fix to this test we disable them for sv-4.
+                // IRL, so as a simple fix to this test we disable them for all sv-4 apps
+                // (see also the scan and validator app transforms below).
                 circuitBreakers =
                   if (name == "sv4") CircuitBreakersConfig.never
                   else config.parameters.circuitBreakers,
@@ -122,7 +122,7 @@ class LsuIntegrationTest
           }
           .andThen(
             ConfigTransforms
-              .updateAllScanAppConfigs { (_, config) =>
+              .updateAllScanAppConfigs { (name, config) =>
                 config.copy(
                   synchronizerNodes = config.synchronizerNodes.copy(
                     successor = Some(config.synchronizerNodes.current)
@@ -130,8 +130,23 @@ class LsuIntegrationTest
                   parameters = config.parameters.copy(
                     spliceCachingConfigs = config.parameters.spliceCachingConfigs.copy(
                       physicalSynchronizerExpiration = NonNegativeFiniteDuration.ofSeconds(1)
-                    )
+                    ),
+                    circuitBreakers =
+                      if (name == "sv4Scan") CircuitBreakersConfig.never
+                      else config.parameters.circuitBreakers,
                   ),
+                )
+              }
+          )
+          .andThen(
+            ConfigTransforms
+              .updateAllValidatorAppConfigs { (name, config) =>
+                config.copy(
+                  parameters = config.parameters.copy(
+                    circuitBreakers =
+                      if (name == "sv4Validator") CircuitBreakersConfig.never
+                      else config.parameters.circuitBreakers
+                  )
                 )
               }
           )(config)
@@ -204,6 +219,7 @@ class LsuIntegrationTest
       .withSvBftSequencerConnectionDisabled()
       .withAmuletPrice(walletAmuletPrice)
       .withManualStart
+      .withTransferCommandSupport
 
   override def walletAmuletPrice: java.math.BigDecimal = SpliceUtil.damlDecimal(1.0)
 
@@ -311,6 +327,29 @@ class LsuIntegrationTest
           ) shouldBe empty
       }
     }
+
+    checkSerial1Sequencers()
+  }
+
+  def checkSerial1Sequencers()(implicit env: SpliceTestConsoleEnvironment) = {
+    clue("All sequencers are registered") {
+      eventually(timeUntilSuccess = 1.minute) {
+        inside(sv1ScanBackend.listDsoSequencers()) {
+          case Seq(DomainSequencers(synchronizerId, sequencers)) =>
+            synchronizerId shouldBe decentralizedSynchronizerId
+            sequencers should have size 12
+            forExactly(4, sequencers) {
+              _.serial.value shouldBe 0
+            }
+            forExactly(4, sequencers) {
+              _.serial.value shouldBe 1
+            }
+            forExactly(4, sequencers) {
+              _.serial should be(empty)
+            }
+        }
+      }
+    }
   }
 
   "upgrade synchronizer to new physical synchronizer without downtime" in { implicit env =>
@@ -350,35 +389,19 @@ class LsuIntegrationTest
       initDso(includeLocal = false)
       startAllSync(aliceValidatorBackend, splitwellValidatorBackend)
       actAndCheck("Create some transaction history", sv1WalletClient.tap(1337))(
-        "Scan transaction history is recorded and wallet balance is updated",
+        "Wallet balance is updated",
         _ => {
           // buffer to account for domain fee payments
           assertInRange(
             sv1WalletClient.balance().unlockedQty,
             (walletUsdToAmulet(1000), walletUsdToAmulet(2000)),
           )
-          countTapsFromScan(sv1ScanBackend, walletUsdToAmulet(1337)) shouldBe 1
         },
       )
 
-      clue("All sequencers are registered") {
-        eventually(timeUntilSuccess = 1.minute) {
-          inside(sv1ScanBackend.listDsoSequencers()) {
-            case Seq(DomainSequencers(synchronizerId, sequencers)) =>
-              synchronizerId shouldBe decentralizedSynchronizerId
-              sequencers should have size 8
-              sequencers.foreach { sequencer =>
-                sequencer.serial match {
-                  case Some(serial) =>
-                    serial shouldBe 0
-                    sequencer.migrationId shouldBe -1
-                  case None =>
-                    sequencer.migrationId shouldBe 0
-                }
-              }
-          }
-        }
-      }
+      // The serial 1 sequencers are still registered at this point as we only unregister them when the successors give us back a response
+      // and they are still uninitialized here.
+      checkSerial1Sequencers()
 
       def onboardUserAndTapAmulet(
           validatorBackend: ValidatorAppBackendReference,
@@ -649,7 +672,7 @@ class LsuIntegrationTest
           inside(sv1ScanBackend.listDsoSequencers()) {
             case Seq(DomainSequencers(synchronizerId, sequencers)) =>
               synchronizerId shouldBe decentralizedSynchronizerId
-              sequencers should have size 11
+              sequencers should have size 12
               sequencers.groupBy(_.svName).foreach { case (sv, sequencers) =>
                 clue(s"check sequencers for $sv") {
                   forExactly(1, sequencers) { sequencer =>
@@ -661,6 +684,13 @@ class LsuIntegrationTest
                       sequencer.serial.value shouldBe newSynchronizerSerial.value.toLong
                       sequencer.migrationId shouldBe -1
                     }
+                  else {
+                    // sv4 still reports the old serial until it upgrades
+                    forExactly(1, sequencers) { sequencer =>
+                      sequencer.serial.value shouldBe 1
+                      sequencer.migrationId shouldBe -1
+                    }
+                  }
                   forExactly(1, sequencers) { sequencer =>
                     sequencer.serial should be(empty)
                     sequencer.migrationId shouldBe 0
@@ -946,16 +976,6 @@ class LsuIntegrationTest
       grpcClientMetrics,
       retryProvider,
     )
-
-  private def countTapsFromScan(scan: ScanAppBackendReference, tapAmount: BigDecimal) = {
-    listTransactionsFromScan(scan).count(
-      _.tap.map(a => BigDecimal(a.amuletAmount)).contains(tapAmount)
-    )
-  }
-
-  private def listTransactionsFromScan(scan: ScanAppBackendReference) = {
-    scan.listTransactions(None, TransactionHistoryRequest.SortOrder.Asc, 100)
-  }
 
   private def getSequencerUrlsConfiguredForTheSync(
       participantConnection: ParticipantClientReference,

@@ -243,7 +243,10 @@ final case class SynchronizerConnectionConfig(
     )
 
   def toInternal: SynchronizerConnectionConfigInternal =
-    this.transformInto[SynchronizerConnectionConfigInternal]
+    this
+      .into[SynchronizerConnectionConfigInternal]
+      .withFieldRenamed(_.synchronizerId, _.psid)
+      .transform
 }
 
 object SynchronizerConnectionConfig {
@@ -320,5 +323,5 @@ object SynchronizerConnectionConfig {
   private[canton] def fromInternal(
       internal: SynchronizerConnectionConfigInternal
   ): SynchronizerConnectionConfig =
-    internal.transformInto[SynchronizerConnectionConfig]
+    internal.into[SynchronizerConnectionConfig].withFieldRenamed(_.psid, _.synchronizerId).transform
 }

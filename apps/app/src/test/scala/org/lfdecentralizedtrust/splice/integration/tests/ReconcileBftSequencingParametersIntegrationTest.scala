@@ -39,9 +39,8 @@ class SvReconcileBftSequencingParametersIntegrationTest
                         blacklistLeaderSelectionPolicyConfig =
                           SequencingParameters.DefaultLeaderSelectionPolicyConfig.copy(
                             howLongToBlacklist =
-                              BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.Exponential(
-                                initialValue = 1L,
-                                maximumEpochBlacklisted = Some(250L),
+                              BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.Linear(
+                                maximumEpochBlacklisted = Some(250L)
                               )
                           ),
                       )
@@ -75,7 +74,7 @@ class SvReconcileBftSequencingParametersIntegrationTest
       bftParameters.pbftViewChangeTimeout shouldBe com.digitalasset.canton.time.PositiveFiniteDuration
         .tryOfSeconds(5)
       bftParameters.blacklistLeaderSelectionPolicyConfig.howLongToBlacklist shouldBe a[
-        BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.Linear
+        BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.Exponential
       ]
       sv1Backend.stop()
       actAndCheck(
@@ -92,7 +91,7 @@ class SvReconcileBftSequencingParametersIntegrationTest
             .fromByteString(sv1Backend.config.localSynchronizerNodes.current.protocolVersion, bytes)
             .value
           bftParameters.blacklistLeaderSelectionPolicyConfig.howLongToBlacklist shouldBe a[
-            BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.Exponential
+            BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.Linear
           ]
         },
       )

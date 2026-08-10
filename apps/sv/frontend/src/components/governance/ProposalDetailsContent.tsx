@@ -8,7 +8,7 @@ import {
 } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
 import { ContractId } from '@daml/types';
 import { ChevronLeft, Edit } from '@mui/icons-material';
-import { Box, Button, Divider, Stack, Tab, Tabs, Typography } from '@mui/material';
+import { Alert, Box, Button, Divider, Stack, Tab, Tabs, Typography } from '@mui/material';
 import React, { PropsWithChildren, useEffect, useMemo, useRef, useState } from 'react';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -20,6 +20,7 @@ import {
 } from '@canton-network/splice-common-frontend';
 import { Link as RouterLink } from 'react-router';
 import {
+  ConfigChange,
   ProposalDetails,
   ProposalVote,
   ProposalVotingInformation,
@@ -34,6 +35,18 @@ import { CreateUnallocatedUnclaimedActivityRecordSection } from './proposal-deta
 import { CopyableIdentifier, CopyableUrl, MemberIdentifier, VoteStats } from '../beta';
 import { useQuery } from '@tanstack/react-query';
 import { useSvAdminClient } from '../../contexts/SvAdminServiceContext';
+import {
+  DEFAULT_APP_ACTIVITY_WEIGHT,
+  SUPPORTING_URL_LABEL,
+  VOTE_PROPOSAL_CONTRACT_ID_LABEL,
+  VOTE_REASON_SUMMARY_LABEL,
+  VOTE_REASON_URL_LABEL,
+} from '../../utils/constants';
+
+/** True when a proposal changed fields that are locked/disabled in the create UI (e.g. emergency API). */
+export function hasAlteredDisabledFields(changes: ConfigChange[]): boolean {
+  return changes.some(c => c.disabled && c.currentValue !== c.newValue);
+}
 
 dayjs.extend(relativeTime);
 
@@ -202,7 +215,7 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
           />
 
           <DetailItem
-            label="Vote Proposal Contract ID"
+            label={VOTE_PROPOSAL_CONTRACT_ID_LABEL}
             value={
               <CopyableIdentifier
                 value={contractId}
@@ -228,6 +241,13 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
             <UnfeatureAppSection rightContractId={proposalDetails.proposal.rightContractId} />
           )}
 
+          {proposalDetails.action === 'SRARC_UpdateFeaturedAppRight' && (
+            <UpdateFeatureAppSection
+              rightContractId={proposalDetails.proposal.rightContractId}
+              newActivityWeight={proposalDetails.proposal.newActivityWeight}
+            />
+          )}
+
           {proposalDetails.action === 'SRARC_UpdateSvRewardWeight' && (
             <UpdateSvRewardWeightSection
               svToUpdate={proposalDetails.proposal.svToUpdate}
@@ -246,6 +266,15 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
 
           {proposalDetails.action === 'CRARC_SetConfig' && (
             <>
+              {hasAlteredDisabledFields(proposalDetails.proposal.configChanges) && (
+                <Alert
+                  severity="warning"
+                  variant="outlined"
+                  data-testid="proposal-details-disabled-fields-warning"
+                >
+                  Disabled fields have been altered in this vote proposal.
+                </Alert>
+              )}
               <DetailItem
                 label="Proposed Changes"
                 value={<ConfigValuesChanges changes={proposalDetails.proposal.configChanges} />}
@@ -267,6 +296,15 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
 
           {proposalDetails.action === 'SRARC_SetConfig' && (
             <>
+              {hasAlteredDisabledFields(proposalDetails.proposal.configChanges) && (
+                <Alert
+                  severity="warning"
+                  variant="outlined"
+                  data-testid="proposal-details-disabled-fields-warning"
+                >
+                  Disabled fields have been altered in this vote proposal.
+                </Alert>
+              )}
               <DetailItem
                 label="Proposed Changes"
                 value={<ConfigValuesChanges changes={proposalDetails.proposal.configChanges} />}
@@ -293,7 +331,7 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
           />
 
           <DetailItem
-            label="URL"
+            label={SUPPORTING_URL_LABEL}
             value={
               <CopyableUrl
                 url={proposalDetails.url}
@@ -319,7 +357,7 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
           />
 
           <DetailItem
-            label="Threshold Deadline"
+            label="Quorum Threshold Deadline"
             value={
               <Stack gap={3}>
                 <Box data-testid="proposal-details-voting-closes-duration">
@@ -520,11 +558,23 @@ const VoteItem: React.FC<VoteItemProps> = ({
           />
         </Box>
         {comment && (
-          <Typography fontSize={16} color="text.secondary">
-            {comment}
-          </Typography>
+          <Box>
+            <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+              {VOTE_REASON_SUMMARY_LABEL}
+            </Typography>
+            <Typography fontSize={16} color="text.secondary">
+              {comment}
+            </Typography>
+          </Box>
         )}
-        {url && <CopyableUrl url={url} size="small" data-testid="proposal-details-vote-url" />}
+        {url && (
+          <Box>
+            <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+              {VOTE_REASON_URL_LABEL}
+            </Typography>
+            <CopyableUrl url={url} size="small" data-testid="proposal-details-vote-url" />
+          </Box>
+        )}
       </Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 4 }}>
         <VoteStats
@@ -654,6 +704,79 @@ const UnfeatureAppSection = ({ rightContractId }: UnfeatureAppSectionProps) => {
           />
         }
         labelId="proposal-details-unfeature-app-label"
+      />
+    </Box>
+  );
+};
+
+interface UpdateFeatureAppSectionProps {
+  rightContractId: string;
+  newActivityWeight: string;
+}
+
+const UpdateFeatureAppSection = ({
+  rightContractId,
+  newActivityWeight,
+}: UpdateFeatureAppSectionProps) => {
+  const svAdminClient = useSvAdminClient();
+  const providerQuery = useQuery({
+    queryKey: ['featuredAppRightProviderAndWeight', rightContractId],
+    queryFn: async () => {
+      const response = await svAdminClient.lookupFeaturedAppRightByContractId(rightContractId);
+      const contract = response.featured_app_right;
+      const payload = contract?.payload as
+        | { provider?: string; activityWeight?: string | null }
+        | undefined;
+      return {
+        provider: payload?.provider ?? null,
+        currentWeight: contract ? (payload?.activityWeight ?? DEFAULT_APP_ACTIVITY_WEIGHT) : '',
+      };
+    },
+  });
+  return (
+    <Box
+      id="proposal-details-update-feature-app-section"
+      data-testid="proposal-details-update-feature-app-section"
+      sx={{ display: 'contents' }}
+    >
+      {providerQuery?.data?.provider && (
+        <DetailItem
+          label="Provider Party ID"
+          value={
+            <CopyableIdentifier
+              value={providerQuery.data?.provider}
+              size="large"
+              data-testid="proposal-details-update-feature-value"
+            />
+          }
+          labelId="proposal-details-update-feature-label"
+        />
+      )}
+      <DetailItem
+        label="Featured Application Contract ID"
+        value={
+          <CopyableIdentifier
+            value={rightContractId}
+            size="large"
+            data-testid="proposal-details-update-feature-app-value"
+          />
+        }
+        labelId="proposal-details-update-feature-app-label"
+      />
+      <DetailItem
+        label="Proposed Changes"
+        value={
+          <ConfigValuesChanges
+            changes={[
+              {
+                label: 'Activity Weight',
+                fieldName: 'newActivityWeight',
+                currentValue: providerQuery.data?.currentWeight ?? '',
+                newValue: newActivityWeight,
+              },
+            ]}
+          />
+        }
       />
     </Box>
   );

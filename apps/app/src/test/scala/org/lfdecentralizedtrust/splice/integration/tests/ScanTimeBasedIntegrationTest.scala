@@ -412,6 +412,10 @@ class ScanTimeBasedIntegrationTest
         migrationId,
         ownerPartyIds = Vector(aliceUserParty),
         recordTimeMatch = Some(definitions.HoldingsSummaryRequest.RecordTimeMatch.AtOrBefore),
+        // as_of_round defaults to the earliest open mining round at request time, and the
+        // advanceTime above lets the rounds advance, so pin it to the round the exact query
+        // resolved. Otherwise the holding fees derived from it differ by one round's worth.
+        asOfRound = holdingsSummary.map(_.computedAsOfRound),
       )
       holdingsSummaryAtOrBefore shouldBe holdingsSummary
 

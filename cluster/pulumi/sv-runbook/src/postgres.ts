@@ -10,7 +10,11 @@ import {
   supportsSvRunbookReset,
 } from '@canton-network/splice-pulumi-common';
 import { spliceConfig } from '@canton-network/splice-pulumi-common/src/config/config';
-import { CloudPostgres, SplicePostgres } from '@canton-network/splice-pulumi-common/src/postgres';
+import {
+  CloudPostgres,
+  installPasswordWithParent,
+  SplicePostgres,
+} from '@canton-network/splice-pulumi-common/src/postgres';
 
 export async function installPostgres(
   xns: ExactNamespace,
@@ -40,11 +44,15 @@ export async function installPostgres(
     return new SplicePostgres(
       xns,
       name,
-      name,
-      secretName,
+      parent => installPasswordWithParent(parent, xns, name, secretName),
+      // No need to support legacy chart
+      {
+        deployment: 'docker-image',
+        postgresImage: valuesFromFile.db.postgresImage || 'postgres:18',
+      },
       values,
-      undefined,
-      supportsSvRunbookReset
+      undefined, // overrideDbSizeFromValues
+      supportsSvRunbookReset // disableProtection
     );
   }
 }

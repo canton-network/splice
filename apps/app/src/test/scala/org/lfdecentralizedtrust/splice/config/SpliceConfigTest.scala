@@ -87,8 +87,8 @@ class SpliceConfigTest extends AsyncWordSpec with BaseTest {
   }
 
   // Shared helper for RewardSharingConfig tests
-  private def mkSharingCfg(percentages: BigDecimal*): RewardSharingConfig =
-    RewardSharingConfig(
+  private def mkSharingCfg(percentages: BigDecimal*): RewardSharingConfig.BuiltIn =
+    RewardSharingConfig.BuiltIn(
       minTtlAfterSharing = NonNegativeFiniteDuration.ofHours(30),
       beneficiaries = percentages.zipWithIndex.map { case (pct, i) =>
         AppRewardBeneficiaryConfig(
@@ -165,6 +165,7 @@ class SpliceConfigTest extends AsyncWordSpec with BaseTest {
       s"""
         |canton.validator-apps.aliceValidator.reward-sharing-config-by-party = {
         |  "alice::1220abc" = {
+        |    type = "built-in"
         |    beneficiaries = [$beneficiaries]
         |    min-ttl-after-sharing = 30h
         |  }
@@ -222,6 +223,7 @@ class SpliceConfigTest extends AsyncWordSpec with BaseTest {
         """
           |canton.validator-apps.aliceValidator.reward-sharing-config-by-party = {
           |  "alice::1220abc" = {
+          |    type = "built-in"
           |    beneficiaries = [{ beneficiary = "bob::1220", percentage = 0.4 }]
           |    min-ttl-after-sharing = 30h
           |    batch-size = 50
@@ -238,6 +240,7 @@ class SpliceConfigTest extends AsyncWordSpec with BaseTest {
         """
           |canton.validator-apps.aliceValidator.reward-sharing-config-by-party = {
           |  "alice::1220abc" = {
+          |    type = "built-in"
           |    beneficiaries = [{ beneficiary = "bob::1220", percentage = 0.4 }]
           |    min-ttl-after-sharing = 30h
           |    batch-size = 0
@@ -251,6 +254,89 @@ class SpliceConfigTest extends AsyncWordSpec with BaseTest {
         .left
         .value
         .toString should include("batchSize")
+    }
+
+    def sharingConfigOf(cfg: SpliceConfig): RewardSharingConfig =
+      cfg.validatorApps.values
+        .flatMap(_.rewardSharingConfigByParty.get("alice::1220abc"))
+        .loneElement
+
+    "accept type = external with no beneficiaries and custom batch size" in {
+      val overwrite = ConfigFactory.parseString(
+        """
+          |canton.validator-apps.aliceValidator.reward-sharing-config-by-party = {
+          |  "alice::1220abc" = {
+          |    type = "external"
+          |    batch-size = 500
+          |  }
+          |}
+          """.stripMargin
+      )
+      val validConfig = CantonConfig.mergeConfigs(config, Seq(overwrite))
+      val loaded = SpliceConfig.loadAndValidate(validConfig).value
+      sharingConfigOf(loaded) shouldBe RewardSharingConfig.External(batchSize = 500)
+    }
+
+    "accept explicit type = built-in with beneficiaries" in {
+      val overwrite = ConfigFactory.parseString(
+        """
+          |canton.validator-apps.aliceValidator.reward-sharing-config-by-party = {
+          |  "alice::1220abc" = {
+          |    type = "built-in"
+          |    beneficiaries = [{ beneficiary = "bob::1220", percentage = 0.4 }]
+          |    min-ttl-after-sharing = 30h
+          |  }
+          |}
+          """.stripMargin
+      )
+      val validConfig = CantonConfig.mergeConfigs(config, Seq(overwrite))
+      val loaded = SpliceConfig.loadAndValidate(validConfig).value
+      sharingConfigOf(loaded) shouldBe a[RewardSharingConfig.BuiltIn]
+    }
+
+    "reject type = external, with beneficiaries" in {
+      val overwrite = ConfigFactory.parseString(
+        """
+          |canton.validator-apps.aliceValidator.reward-sharing-config-by-party = {
+          |  "alice::1220abc" = {
+          |    type = "external"
+          |    beneficiaries = [{ beneficiary = "bob::1220", percentage = 0.4 }]
+          |  }
+          |}
+          """.stripMargin
+      )
+      val validConfig = CantonConfig.mergeConfigs(config, Seq(overwrite))
+      SpliceConfig.loadAndValidate(validConfig) shouldBe a[Left[?, ?]]
+    }
+
+    "reject an invalid type value" in {
+      val overwrite = ConfigFactory.parseString(
+        """
+          |canton.validator-apps.aliceValidator.reward-sharing-config-by-party = {
+          |  "alice::1220abc" = {
+          |    type = "bogus"
+          |  }
+          |}
+          """.stripMargin
+      )
+      val buggyConfig = CantonConfig.mergeConfigs(config, Seq(overwrite))
+      SpliceConfig.loadAndValidate(buggyConfig) shouldBe a[Left[?, ?]]
+    }
+
+    "default to built-in when type is omitted (legacy config shape)" in {
+      val overwrite = ConfigFactory.parseString(
+        """
+          |canton.validator-apps.aliceValidator.reward-sharing-config-by-party = {
+          |  "alice::1220abc" = {
+          |    beneficiaries = [{ beneficiary = "bob::1220", percentage = 0.4 }]
+          |    min-ttl-after-sharing = 30h
+          |  }
+          |}
+      """.stripMargin
+      )
+      val loaded =
+        SpliceConfig.loadAndValidate(CantonConfig.mergeConfigs(config, Seq(overwrite))).value
+      sharingConfigOf(loaded) shouldBe a[RewardSharingConfig.BuiltIn]
     }
   }
 }
