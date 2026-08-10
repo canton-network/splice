@@ -108,6 +108,7 @@ import org.lfdecentralizedtrust.splice.store.{
   AppStore,
   AppStoreWithIngestion,
   PageLimit,
+  TimestampWithMigrationId,
   VoteResultsFilters,
   VotesStore,
 }
@@ -704,9 +705,9 @@ class HttpScanHandler(
     implicit val tc: TraceContext = extracted
     val afterO = after.map { after =>
       val afterRecordTime = parseTimestamp(after.afterRecordTime)
-      (
-        after.afterMigrationId,
+      TimestampWithMigrationId(
         afterRecordTime,
+        after.afterMigrationId,
       )
     }
     confirmBackfillingIsCompleteThen(updateHistory) {
@@ -896,7 +897,7 @@ class HttpScanHandler(
     implicit val tc: TraceContext = extracted
     val afterO = after.map { a =>
       val afterRecordTime = parseTimestamp(a.afterRecordTime)
-      (a.afterMigrationId, afterRecordTime)
+      TimestampWithMigrationId(afterRecordTime, a.afterMigrationId)
     }
 
     confirmBackfillingIsCompleteThen(updateHistory) {
