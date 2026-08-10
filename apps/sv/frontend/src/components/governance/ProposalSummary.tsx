@@ -55,7 +55,6 @@ type ProposalSummaryProps = BaseProposalSummaryProps &
         rightCid: string;
         currentActivityWeight: string;
         newActivityWeight: string;
-        reason: string;
       }
   );
 
@@ -176,7 +175,6 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
                 />
               }
             />
-            <ProposalField id="updateReason" title="Reason" value={props.reason} />
           </>
         )}
 

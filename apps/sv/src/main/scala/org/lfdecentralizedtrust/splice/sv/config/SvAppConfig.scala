@@ -454,6 +454,11 @@ case class SvAppBackendConfig(
     convertFeaturedAppActivityMarkerObservers: Boolean = true,
     // Whether to ensure that heuristic free confirmation responses get enabled on the synchronizer via the ReconcileDynamicSynchronizerConfigTrigger.
     enableFreeConfirmationResponses: Boolean = true,
+    // Target value for the setBalanceRequestSubmissionWindowSize traffic control parameter,
+    // applied to the synchronizer via the ReconcileDynamicSynchronizerParametersTrigger.
+    // The default matches Canton's current default as of 3.5.12
+    setBalanceRequestSubmissionWindowSize: PositiveFiniteDuration =
+      PositiveFiniteDuration.ofMinutes(2),
     packageVettingCache: PackageVettingLookupService.CacheConfig =
       PackageVettingLookupService.CacheConfig(),
     useInternalSequencerApi: Boolean = false,

@@ -60,18 +60,13 @@ export interface ProposalDetailsContentProps {
 
 type VoteTab = Extract<VoteStatus, 'accepted' | 'rejected' | 'no-vote'> | 'all';
 
-const now = () => dayjs();
-
 export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = props => {
   const { contractId, proposalDetails, votingInformation, votes, currentSvPartyId } = props;
 
   const votesHooks = useVotesHooks();
   const dsoInfoQuery = useDsoInfos();
 
-  const isEffective =
-    votingInformation.voteTakesEffect && dayjs(votingInformation.voteTakesEffect).isBefore(now());
-  const isClosed =
-    !proposalDetails.isVoteRequest || isEffective || votingInformation.status === 'Rejected';
+  const isClosed = !proposalDetails.isVoteRequest || votingInformation.status === 'Rejected';
 
   const dsoConfigToCompareWith = useMemo(() => {
     if (proposalDetails.action === 'SRARC_SetConfig') {
@@ -245,7 +240,6 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
             <UpdateFeatureAppSection
               rightContractId={proposalDetails.proposal.rightContractId}
               newActivityWeight={proposalDetails.proposal.newActivityWeight}
-              reason={proposalDetails.proposal.reason}
             />
           )}
 
@@ -713,13 +707,11 @@ const UnfeatureAppSection = ({ rightContractId }: UnfeatureAppSectionProps) => {
 interface UpdateFeatureAppSectionProps {
   rightContractId: string;
   newActivityWeight: string;
-  reason: string;
 }
 
 const UpdateFeatureAppSection = ({
   rightContractId,
   newActivityWeight,
-  reason,
 }: UpdateFeatureAppSectionProps) => {
   const svAdminClient = useSvAdminClient();
   const providerQuery = useQuery({
@@ -780,12 +772,6 @@ const UpdateFeatureAppSection = ({
             ]}
           />
         }
-      />
-      <DetailItem
-        label="Reason"
-        value={reason}
-        labelId="proposal-details-update-feature-reason-label"
-        valueId="proposal-details-update-feature-reason-value"
       />
     </Box>
   );
