@@ -4,7 +4,7 @@ import * as React from 'react';
 
 import { Box } from '@mui/material';
 
-import { HEADER_PB, layoutTokens, PAGE_PX } from '../../theme/tokens';
+import { HEADER_PB, HEADER_PT, layoutTokens, PAGE_PX } from '../../theme/tokens';
 import SvTopNav from './SvTopNav';
 import { SvNavLinkItem } from './SvNavLink';
 
@@ -27,6 +27,7 @@ const SvNavigationShell: React.FC<SvNavigationShellProps> = ({ navLinks, onLogou
         display: 'flex',
         flexDirection: 'column',
         pb: HEADER_PB,
+        pt: HEADER_PT,
         bgcolor: layoutTokens.navBackground,
         width: '100%',
       }}
