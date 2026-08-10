@@ -434,7 +434,7 @@ class AcsSnapshotStore(
                with snapshot as (
                   select create_id, max(row_id) as row_id
                   from acs_snapshot_data
-                  where row_id between $begin and $end
+                  where row_id between $begin and $end and
                """ ++ stakeholdersFilter(partyIds) ++ templatesFilter(templates) ++ sql"""
                   group by create_id
                   order by row_id asc
@@ -1133,7 +1133,7 @@ object AcsSnapshotStore {
               and template_id_entity_name = ${LockedAmulet.COMPANION.TEMPLATE_ID.getEntityName}
             then (c.create_arguments->'record'->'fields'->0->'value'->'record'->'fields'->2->'value'->'record'->'fields'->0->'value'->>'numeric')::numeric
             else 0
-          end,
+          end
          """
       }
 
