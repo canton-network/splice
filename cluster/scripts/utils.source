@@ -30,6 +30,38 @@ function get_cloudsql_id() {
   fi
 }
 
+function get_postgres_statefulset_name() {
+  local namespace=$1
+  local instance=$2
+
+  local candidate
+  for candidate in "${instance}-helmless" "$instance"; do
+    if kubectl get statefulset -n "$namespace" "$candidate" >/dev/null 2>&1; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+
+  _error "No postgres StatefulSet found for base name $instance in namespace $namespace"
+}
+
+function get_postgres_pvc_name() {
+  local namespace=$1
+  local instance=$2
+
+  local statefulset_name
+  statefulset_name=$(get_postgres_statefulset_name "$namespace" "$instance")
+
+  local pvc_template_name
+  pvc_template_name=$(kubectl get statefulset -n "$namespace" "$statefulset_name" -o jsonpath='{.spec.volumeClaimTemplates[0].metadata.name}')
+
+  if [ -z "$pvc_template_name" ]; then
+    _error "Unable to determine PVC template name for StatefulSet $statefulset_name in namespace $namespace"
+  fi
+
+  echo "${pvc_template_name}-${statefulset_name}-0"
+}
+
 function get_stack_for_namespace_component() {
   local namespace=$1
   local component=$2

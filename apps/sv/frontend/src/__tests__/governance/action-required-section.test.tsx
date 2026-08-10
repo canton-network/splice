@@ -11,24 +11,27 @@ import { VoteRequest } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules'
 import { MemoryRouter } from 'react-router';
 import dayjs from 'dayjs';
 import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
+import { svPartyId, voteRequests } from '../mocks/constants';
+
+const sampleContractId = voteRequests.dso_rules_vote_requests[0]
+  .contract_id as ContractId<VoteRequest>;
 
 const requests: ActionRequiredData[] = [
   {
     actionName: 'Feature Application',
     description: 'Test description for feature application',
-    contractId: '2abcde123456' as ContractId<VoteRequest>,
+    contractId: sampleContractId,
     votingCloses: '2024-09-25 11:00',
     createdAt: '2024-09-25 11:00',
-    requester: 'sv1',
+    requester: svPartyId,
   },
   {
     actionName: 'Set DSO Rules Configuration',
     description: 'Test description for DSO rules configuration',
-    contractId: '2bcde123456' as ContractId<VoteRequest>,
+    contractId: voteRequests.dso_rules_vote_requests[1].contract_id as ContractId<VoteRequest>,
     votingCloses: '2024-09-25 11:00',
     createdAt: '2024-09-25 11:00',
-    requester: 'sv2',
-    isYou: true,
+    requester: svPartyId,
   },
 ];
 
@@ -76,10 +79,10 @@ describe('Action Required', () => {
     const actionRequired = {
       actionName: 'Feature Application',
       description: 'Test description',
-      contractId: '2abcde123456' as ContractId<VoteRequest>,
+      contractId: sampleContractId,
       votingCloses: closesDate,
       createdAt: createdDate,
-      requester: 'sv1',
+      requester: svPartyId,
     };
 
     render(
@@ -104,23 +107,22 @@ describe('Action Required', () => {
     expect(votingCloses).toBeInTheDocument();
     expect(votingCloses.textContent).toBe('10 days');
 
-    const requester = screen.getByTestId('action-required-requester-identifier-value');
-    expect(requester).toBeInTheDocument();
-    expect(requester.textContent).toBe(actionRequired.requester);
+    const submittedBy = screen.getByTestId('action-required-submitted-by-identifier-value');
+    expect(submittedBy).toBeInTheDocument();
+    expect(submittedBy.textContent).toBe(svPartyId);
 
     const viewDetails = screen.getByTestId('action-required-view-details');
     expect(viewDetails).toBeInTheDocument();
   });
 
-  test('should render isYou badge for requests created by viewing sv', () => {
+  test('should render submitted by with copy button and no You badge', () => {
     const actionRequired = {
       actionName: 'Feature Application',
       description: 'Test description',
-      contractId: '2abcde123456' as ContractId<VoteRequest>,
+      contractId: sampleContractId,
       votingCloses: '2029-09-25 11:00',
       createdAt: '2029-09-25 11:00',
-      requester: 'sv1',
-      isYou: true,
+      requester: svPartyId,
     };
 
     render(
@@ -129,18 +131,22 @@ describe('Action Required', () => {
       </MemoryRouter>
     );
 
-    const isYou = screen.getByTestId('action-required-requester-identifier-badge');
-    expect(isYou).toBeInTheDocument();
+    expect(
+      screen.getByTestId('action-required-submitted-by-identifier-copy-button')
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId('action-required-submitted-by-identifier-badge')
+    ).not.toBeInTheDocument();
   });
 
-  test('should not render isYou badge for requests created by other svs', () => {
+  test('should render vote proposal contract id with full value', () => {
     const actionRequired = {
       actionName: 'Feature Application',
       description: 'Test description',
-      contractId: '2abcde123456' as ContractId<VoteRequest>,
+      contractId: sampleContractId,
       votingCloses: '2029-09-25 11:00',
       createdAt: '2029-09-25 11:00',
-      requester: 'sv1',
+      requester: svPartyId,
     };
 
     render(
@@ -149,8 +155,8 @@ describe('Action Required', () => {
       </MemoryRouter>
     );
 
-    const isYou = screen.queryByTestId('action-required-requester-identifier-badge');
-
-    expect(isYou).not.toBeInTheDocument();
+    expect(screen.getByTestId('action-required-contract-id-value').textContent).toBe(
+      sampleContractId
+    );
   });
 });

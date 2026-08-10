@@ -640,7 +640,7 @@ class DbScanAppRewardsStoreTest
           (store, historyId) <- newStore()
           _ <- insertRoundTotal(historyId, roundNumber, BigDecimal(10.0))
           _ <- futureUnlessShutdownToFuture(
-            storage.underlying.queryAndUpdate(
+            storage.queryAndUpdate(
               store
                 .assertMintingAllowanceWithinMintingCurve(roundNumber, mkParams(BigDecimal(10.0))),
               "test.assertMintingAllowanceWithinMintingCurve",
@@ -655,7 +655,7 @@ class DbScanAppRewardsStoreTest
           // Reward exceeds issuance by 2x tolerance (0.002 > 0.001)
           _ <- insertRoundTotal(historyId, roundNumber, BigDecimal(10.002))
           result <- futureUnlessShutdownToFuture(
-            storage.underlying.queryAndUpdate(
+            storage.queryAndUpdate(
               store.assertMintingAllowanceWithinMintingCurve(
                 roundNumber,
                 mkParams(BigDecimal(10.0)),
@@ -673,7 +673,7 @@ class DbScanAppRewardsStoreTest
           (store, historyId) <- newStore()
           _ <- insertRoundTotal(historyId, roundNumber, BigDecimal(10.0005))
           _ <- futureUnlessShutdownToFuture(
-            storage.underlying.queryAndUpdate(
+            storage.queryAndUpdate(
               store
                 .assertMintingAllowanceWithinMintingCurve(roundNumber, mkParams(BigDecimal(10.0))),
               "test.assertMintingAllowanceWithinMintingCurve",
@@ -1214,7 +1214,7 @@ class DbScanAppRewardsStoreTest
     val n = storeCounter.getAndIncrement()
     val participantId = mkParticipantId(s"rewards-test-$n")
     val updateHistory = new UpdateHistory(
-      storage.underlying,
+      storage,
       migrationId,
       s"app_rewards_test_$n",
       participantId,

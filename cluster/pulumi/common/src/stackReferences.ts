@@ -10,6 +10,14 @@ export const infraStack = new pulumi.StackReference(`organization/infra/infra.${
 export class StackReferences {
   private static refCache: Partial<Record<string, pulumi.StackReference>> = {};
 
+  public static get cantonNetwork(): pulumi.StackReference {
+    const projectName = 'canton-network';
+    const stackName = `${projectName}.${CLUSTER_BASENAME}`;
+    return (StackReferences.refCache[stackName] ??= new pulumi.StackReference(
+      `organization/${projectName}/${stackName}`
+    ));
+  }
+
   public static svCanton(sv: string, migrationId: number): pulumi.StackReference {
     const projectName = 'sv-canton';
     const stackName = `${projectName}.${sv}-migration-${migrationId}.${CLUSTER_BASENAME}`;

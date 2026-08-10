@@ -49,7 +49,7 @@ export const useFeaturedAppRightPicker = (
       setRightOptions([]);
       setCurrentWeights({});
       setProviderSearched(false);
-      return 'Could not load featured app rights for this provider';
+      return 'Could not load Featured Application Contract IDs for this provider';
     }
   };
 

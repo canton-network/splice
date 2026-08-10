@@ -11,6 +11,7 @@ import monocle.macros.syntax.lens.*
 import org.apache.pekko.http.scaladsl.model.Uri
 
 import scala.collection.mutable.Map
+import scala.util.Try
 
 /** A test plugin which injects toxiproxy to certain connections, a much-simplified version of the equivalent plugin in Canton.
   * At the moment, we support only the SV apps' ledger api connections and the scan app's HTTP connections, but as we need to add more - we will generalize the code below.
@@ -252,7 +253,11 @@ case class UseToxiproxy(
 
   override def afterEnvironmentDestroyed(config: SpliceConfig): Unit = {
     logger.debug("deleting all proxies. ")
-    proxies.foreach { case (_, p) => p.delete() }
+    // Delete every proxy even if one fails: leftovers in the shared toxiproxy daemon keep
+    // their listen ports bound and cause name conflicts for the next suite.
+    proxies.foreach { case (name, p) =>
+      Try(p.delete()).failed.foreach(e => logger.warn(s"Failed to delete proxy $name", e))
+    }
   }
 
   def disableConnectionViaProxy(connection: String): Unit = {

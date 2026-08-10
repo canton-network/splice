@@ -13,7 +13,7 @@ import {
 import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import { useAppForm } from '../../hooks/form';
 import { useStore } from '@tanstack/react-form';
-import { THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
+import { SUPPORTING_URL_LABEL, THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
 import { CommonProposalFormData } from '../../utils/types';
 import { ContractId } from '@daml/types';
 import { FeaturedAppRight } from '@daml.js/splice-amulet/lib/Splice/Amulet';
@@ -263,7 +263,9 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
                       id={`${testIdPrefix}-partyId`}
                       scrollableIdentifier
                       subtitle={
-                        field.state.meta.isValidating ? 'Loading featured app rights...' : undefined
+                        field.state.meta.isValidating
+                          ? 'Loading Featured Application Contract IDs...'
+                          : undefined
                       }
                       onChange={() => {
                         picker.resetOptions();
@@ -288,7 +290,7 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
                       disabled={picker.rightOptions.length === 0}
                       placeholder={
                         providerHasNoRights
-                          ? 'No featured application rights found for this provider'
+                          ? 'No Featured Application Contract IDs found for this provider'
                           : undefined
                       }
                     />
@@ -306,7 +308,7 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
             >
               {field => (
                 <field.DateField
-                  title="Threshold Deadline"
+                  title="Quorum Threshold Deadline"
                   description={THRESHOLD_DEADLINE_SUBTITLE}
                   id={`${testIdPrefix}-expiry-date`}
                 />
@@ -344,7 +346,7 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
                 onChange: ({ value }) => validateUrl(value),
               }}
             >
-              {field => <field.TextField title="SUPPORTING URL" id={`${testIdPrefix}-url`} />}
+              {field => <field.TextField title={SUPPORTING_URL_LABEL} id={`${testIdPrefix}-url`} />}
             </form.AppField>
           </>
         )}

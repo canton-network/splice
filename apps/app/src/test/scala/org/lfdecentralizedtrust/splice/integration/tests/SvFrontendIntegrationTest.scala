@@ -63,7 +63,7 @@ class SvFrontendIntegrationTest
           },
         )(
           "logged in in the sv ui",
-          _ => find(id("app-title")).value.text should matchText("SUPER VALIDATOR OPERATIONS"),
+          _ => find(id("app-title")).value.text should matchText("Supervalidator Operations"),
         )
       }
     }
@@ -1468,7 +1468,6 @@ class SvFrontendIntegrationTest
         fillOutTextField("update-featured-app-partyId", providerPartyId)
         selectFirstMuiOption("update-featured-app-rightCid-dropdown")
         fillOutTextField("update-featured-app-activityWeight", newActivityWeight.toString)
-        fillOutTextField("update-featured-app-reason", "increasing weight")
       }
 
       clue("vote the update request to execution") {

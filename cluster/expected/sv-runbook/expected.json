@@ -16,7 +16,7 @@
       }
     },
     "name": "cluster-ingress-default",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-cluster-ingress-default::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-cluster-ingress-default::04da6b54-80e4-46f7-96ec-b56ff0331ba9",
     "type": "kubernetes:core/v1:ServiceAccountPatch"
   },
   {
@@ -1132,6 +1132,16 @@
           "perIpLimits": {
             "fillInterval": "60s",
             "maxTokens": 120,
+            "overrides": {
+              "test": {
+                "fillInterval": "60s",
+                "ips": [
+                  "192.68.78.50"
+                ],
+                "maxTokens": 250,
+                "tokensPerFill": 250
+              }
+            },
             "tokensPerFill": 120
           },
           "tokensPerFill": 720,
@@ -1583,7 +1593,7 @@
       }
     },
     "name": "sv-default",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-default::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-sv-default::04da6b54-80e4-46f7-96ec-b56ff0331ba9",
     "type": "kubernetes:core/v1:ServiceAccountPatch"
   },
   {
@@ -2314,6 +2324,23 @@
                           "fill_interval": "60s",
                           "max_tokens": 720,
                           "tokens_per_fill": 720
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-metadata-info"
+                          },
+                          {
+                            "key": "client_ip",
+                            "value": "192.68.78.50"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 250,
+                          "tokens_per_fill": 250
                         }
                       },
                       {

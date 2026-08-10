@@ -33,15 +33,13 @@ import com.digitalasset.canton.synchronizer.sequencer.SequencerPruningStatus
 import com.digitalasset.canton.synchronizer.sequencer.admin.grpc.InitializeSequencerResponse
 import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.topology.{Member, NodeIdentity, PhysicalSynchronizerId, SequencerId}
-import com.digitalasset.canton.topology.admin.grpc.{BaseQuery, TopologyStoreId}
 import com.digitalasset.canton.topology.admin.v30.{
   GenesisStateV2Response,
   SequencerLsuStateResponse,
 }
 import com.digitalasset.canton.topology.MediatorGroup.MediatorGroupIndex
 import com.digitalasset.canton.topology.store.StoredTopologyTransactions.GenericStoredTopologyTransactions
-import com.digitalasset.canton.topology.store.TimeQuery.Snapshot
-import com.digitalasset.canton.topology.transaction.{SequencerSynchronizerState, TopologyMapping}
+import com.digitalasset.canton.topology.transaction.SequencerSynchronizerState
 import com.digitalasset.canton.tracing.TraceContext
 import com.google.protobuf.ByteString
 import com.typesafe.config.ConfigFactory
@@ -68,6 +66,7 @@ import java.nio.file.{Files, Path}
 import java.util.{Base64, Collections}
 import scala.concurrent.{ExecutionContextExecutor, Future, blocking}
 import scala.jdk.CollectionConverters.*
+import scala.util.control.NonFatal
 import org.lfdecentralizedtrust.splice.store.bulk.ZstdGroupedWeight
 
 /** Connection to the subset of the Canton sequencer admin API that we rely
@@ -186,25 +185,6 @@ class SequencerAdminConnection(
     )
   }
 
-  def getTopologyTransactionsSummary(store: TopologyStoreId, now: CantonTimestamp)(implicit
-      traceContext: TraceContext
-  ): Future[Map[TopologyMapping.Code, Int]] = {
-    runCmd(
-      TopologyAdminCommands.Read.ListAllV2(
-        query = BaseQuery(
-          store = store,
-          proposals = false,
-          timeQuery = Snapshot(now),
-          ops = None,
-          filterSigningKey = "",
-          protocolVersion = None,
-        ),
-        filterNamespace = "",
-        includeMappings = Seq.empty,
-      )
-    ).map(_.result.groupMapReduce(_.mapping.code)(_ => 1)(_ + _))
-  }
-
   def getOnboardingState(sequencerIdOrTimestamp: Either[SequencerId, CantonTimestamp])(implicit
       traceContext: TraceContext
   ): Future[ByteString] = {
@@ -302,29 +282,36 @@ class SequencerAdminConnection(
       logger,
       s"$serviceName connection",
     )
-    // stub acts the client-side proxy to get access to raw grpc commands
-    val stub = request.createService(channel.channel)
-    // bridges the gRPC response stream to a Pekko Source and converts the Protobuf ByteString to a Pekko ByteString
-    val source = ClientAdapter
-      .serverStreaming(
-        request
-          .createRequestInternal()
-          .getOrElse(throw new IllegalStateException("Unable to create internal request.")),
-        (req: OnboardingStateV2Request, obs: StreamObserver[OnboardingStateV2Response]) =>
-          stub.onboardingStateV2(req, obs),
-      )
-      .map { response =>
-        val proto: ByteString = response.onboardingStateForSequencer
-        PekkoByteString(proto.asReadOnlyByteBuffer())
+    try {
+      // stub acts the client-side proxy to get access to raw grpc commands
+      val stub = request.createService(channel.channel)
+      // bridges the gRPC response stream to a Pekko Source and converts the Protobuf ByteString to a Pekko ByteString
+      val source = ClientAdapter
+        .serverStreaming(
+          request
+            .createRequestInternal()
+            .getOrElse(throw new IllegalStateException("Unable to create internal request.")),
+          (req: OnboardingStateV2Request, obs: StreamObserver[OnboardingStateV2Response]) =>
+            stub.onboardingStateV2(req, obs),
+        )
+        .map { response =>
+          val proto: ByteString = response.onboardingStateForSequencer
+          PekkoByteString(proto.asReadOnlyByteBuffer())
+        }
+        .via(
+          ZstdGroupedWeight(compressionLevel = 3, minSize = chunkSize.toLong)
+        ) // 3 is the default zstd compression level
+      val storageObject = source.runWith(sink)
+      storageObject.onComplete { _ =>
+        channel.close()
       }
-      .via(
-        ZstdGroupedWeight(compressionLevel = 3, minSize = chunkSize.toLong)
-      ) // 3 is the default zstd compression level
-    val storageObject = source.runWith(sink)
-    storageObject.onComplete { _ =>
-      channel.close()
+      storageObject
+    } catch {
+      // a throw before the onComplete callback is registered would leak the channel
+      case NonFatal(e) =>
+        channel.close()
+        Future.failed(e)
     }
-    storageObject
   }
 
   /** This is used for initializing the sequencer when the domain is first bootstrapped.

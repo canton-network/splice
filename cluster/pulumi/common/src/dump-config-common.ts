@@ -24,6 +24,7 @@ export enum PulumiFunction {
   GCP_GET_SECRET_VERSION = 'gcp:secretmanager/getSecretVersion:getSecretVersion',
   GCP_GET_CLUSTER = 'gcp:container/getCluster:getCluster',
   STD_BASE64_DECODE = 'std:index:base64decode',
+  GCP_GET_DATABASE_INSTANCES = 'gcp:sql/getDatabaseInstances:getDatabaseInstances',
 }
 
 export class SecretsFixtureMap extends Map<string, Auth0ClientSecret> {
@@ -227,20 +228,22 @@ export async function initDumpConfig({
         process.stdout.write(buffer);
         process.stdout.write('\n');
 
-        if (args.type === 'pulumi:pulumi:StackReference') {
-          const [organization, project, stack] = args.name.split('/');
-          return {
-            id: args.name + '_id',
-            state: {
-              ...args.inputs,
-              outputs: pulumi.output(stackOutputsProvider(project, stack) ?? {}),
-            },
-          };
-        } else {
-          return {
-            id: args.inputs.name + '_id',
-            state: args.inputs,
-          };
+        switch (args.type) {
+          case 'pulumi:pulumi:StackReference': {
+            const [organization, project, stack] = args.name.split('/');
+            return {
+              id: args.name + '_id',
+              state: {
+                ...args.inputs,
+                outputs: pulumi.output(stackOutputsProvider(project, stack) ?? {}),
+              },
+            };
+          }
+          default:
+            return {
+              id: args.id ?? args.inputs.name + '_id',
+              state: args.inputs,
+            };
         }
       },
       call: function (args: pulumi.runtime.MockCallArgs) {
@@ -372,6 +375,15 @@ export async function initDumpConfig({
               );
               break;
             }
+          case PulumiFunction.GCP_GET_DATABASE_INSTANCES:
+            return {
+              instances: [
+                {
+                  name: 'sv-1-cn-apps-pg-7ca4614',
+                  settings: [{ userLabels: { cluster: 'mock' } }],
+                },
+              ],
+            };
           default:
             console.error('WARN unhandled call in setMockOptions: ', args);
         }
