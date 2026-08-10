@@ -13,41 +13,62 @@ alter table acs_snapshot
     -- legacy table
     (first_row_id is not null and last_row_id is not null and data_table_name is null));
 
--- Same as acs_incremental_snapshot_data_next, but includes the create_arguments.
-create table acs_incremental_snapshot_data_nextv2
+-- TODO: template ids can be interned already
+
+-- Same as acs_incremental_snapshot_data_next,
+-- but includes ALL update_history_creates data necessary to build a CreatedEvent.
+create table acs_incremental_snapshot_data_next_v2
 (
     -- In production, we have a separate table for each scan instance so this
     -- column will be the same for all rows. However, in tests we can have multiple
     -- scan instances writing to the same table, so we need to include it.
     snapshot_id             bigint  not null references acs_incremental_snapshot (snapshot_id),
-
     contract_id             text    not null,
 
-    -- Contract data included to avoid joining with UpdateHistory tables
-    -- during the expensive operation of saving incremental ACS snapshots.
-    create_arguments        jsonb   not null,
-    created_at              bigint  not null,
-    unlocked_amulet_balance numeric not null, -- zero for non-amulet contracts
-    locked_amulet_balance   numeric not null, -- zero for non-amulet contracts
-    template_id             text    not null,
-    stakeholders            text[]  not null
+    -- All the data necessary to reconstruct a created event
+    create_arguments        jsonb  not null,
+    event_id                text   not null,
+    record_time             bigint not null,
+    template_id_package_id  text   not null, -- the package_name is already included as part of the template_id
+    contract_key            text   null,
+    created_at              bigint not null,
+    signatories             text[] not null,
+    observers               text[] not null,
+    -- plus the Amulet-specific balance columns currently computed in the working table
+    unlocked_amulet_balance numeric,
+    locked_amulet_balance   numeric
 );
+
+-- Needed for fast insert/remove by contract id
+alter table acs_incremental_snapshot_data_next_v2
+    add constraint acs_incremental_snapshot_data_next_v2_pk
+        primary key (snapshot_id, contract_id);
+
+-- Needed because ACS snapshots are ordered by creation time
+create index acs_incremental_snapshot_data_next_v2_ca_ci
+    on acs_incremental_snapshot_data_next_v2 (snapshot_id, created_at, contract_id);
 
 -- Template table for acs_snapshot_creates_<record_time_epoch>.
 -- This allows the code to just CREATE TABLE LIKE acs_snapshot_creates_template or acs_snapshot_stakeholders_template.
 -- Design decision: we don't have a single table per (contract_id, stakeholder) in order to avoid duplicating the create_arguments.
 create table acs_snapshot_creates_template
 (
-    contract_id       text   primary key,
-    create_arguments  jsonb  not null,
-    -- We might be able to derive signatories and observers from stakeholders, but this is easier
-    signatories       text[] not null,
-    observers         text[] not null,
+    contract_id             text primary key,
+    -- All the data necessary to reconstruct a created event
+    create_arguments        jsonb  not null,
+    event_id                text   not null,
+    record_time             bigint not null,
+    template_id_package_id  text   not null, -- the package_name is already included as part of the template_id
+    contract_key            text   null,
+    created_at              bigint not null,
+    signatories             text[] not null,
+    observers               text[] not null,
     -- plus the Amulet-specific balance columns currently computed in the working table
     unlocked_amulet_balance numeric,
     locked_amulet_balance   numeric
 );
 
+-- TODO: revisit this name because this does more than stakehodlering
 create table acs_snapshot_stakeholders_template
 (
     -- Important: insertion order should happen by (created_at, contract_id) for:
@@ -60,6 +81,6 @@ create table acs_snapshot_stakeholders_template
 );
 
 -- Necessary indexes:
--- 1) (stakeholder, template_id, row_id) for where stakeholder=? and template_id=? order by row_id
--- 2) (stakeholder, row_id) for where stakeholder=? order by row_id
+-- 1) (stakeholder, template_id, row_id) for where stakeholder=? and template_id=? (and row_id > $after) order by row_id
+-- 2) (stakeholder, row_id) for where stakeholder=? (and row_id > $after) order by row_id
 -- In both cases `include (contract_id)` allows index-only scans to then merge with acs_snapshot_creates_template

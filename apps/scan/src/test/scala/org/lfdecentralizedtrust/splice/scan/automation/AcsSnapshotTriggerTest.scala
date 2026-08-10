@@ -692,6 +692,7 @@ class AcsSnapshotTriggerTest
 
   private def storageConfig = ScanStorageConfig(
     dbAcsSnapshotPeriodHours = 1,
+    perAcsSnapshotTablesEnabled = false, // TODO: test this
     bulkAcsSnapshotPeriodHours = 1, // ignored in this test
     bulkDbReadChunkSize = 1, // ignored in this test
     bulkZstdFrameSize = 0L, // ignored in this test

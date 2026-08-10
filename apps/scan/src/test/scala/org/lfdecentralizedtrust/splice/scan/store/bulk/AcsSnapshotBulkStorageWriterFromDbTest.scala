@@ -65,6 +65,7 @@ class AcsSnapshotBulkStorageWriterFromDbTest
   val acsSnapshotSize = 48500
   val bulkStorageTestConfig = ScanStorageConfig(
     dbAcsSnapshotPeriodHours = 3,
+    perAcsSnapshotTablesEnabled = false,
     bulkAcsSnapshotPeriodHours = 24,
     bulkDbReadChunkSize = 1000,
     bulkZstdFrameSize = 10000L,
