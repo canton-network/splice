@@ -8,11 +8,13 @@ import { configureGatewayAccessPolicies } from './gateway';
 import { configureScanAndSvAppWhitelist } from './scanAndSvApp';
 import { configureSequencerWhitelist } from './sequencer';
 
-export function installAppWhitelisting(): pulumi.Output<pulumi.Resource[]>[] {
+export function installAppWhitelisting(
+  namespace: k8s.core.v1.Namespace
+): pulumi.Output<pulumi.Resource[]>[] {
   if (infraConfig.istio.enableGeneralIpWhitelist) {
     return [];
   }
-  return [configureScanAndSvAppWhitelist(), ...configureSequencerWhitelist()];
+  return [configureScanAndSvAppWhitelist(namespace), ...configureSequencerWhitelist(namespace)];
 }
 
 export function configureIstioGatewayPolicies(

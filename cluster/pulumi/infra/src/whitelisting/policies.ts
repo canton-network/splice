@@ -5,9 +5,6 @@ import * as pulumi from '@pulumi/pulumi';
 import * as assert from 'assert/strict';
 
 export const istioApiVersion = 'security.istio.io/v1beta1';
-
-export const CLUSTER_INGRESS_NS = 'cluster-ingress';
-
 export const istioIngressSelector = { matchLabels: { app: 'istio-ingress' } };
 
 /**
