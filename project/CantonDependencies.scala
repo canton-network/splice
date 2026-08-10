@@ -105,6 +105,7 @@ object CantonDependencies {
     "com.daml" %% "observability-metrics" % canton_library_version
   lazy val canton_contextualized_logging =
     "com.daml" %% "contextualized-logging" % canton_library_version
+  lazy val canton_slick_fork = "com.daml" %% "slick-fork" % canton_library_version
   lazy val canton_traffic_enforcement_api =
     "com.daml" %% "traffic-enforcement-api" % canton_library_version
   lazy val canton_util_external = "com.daml" %% "util-external" % canton_library_version

@@ -31,7 +31,7 @@ import org.lfdecentralizedtrust.splice.splitwell.config.{
   SplitwellSynchronizerConfig,
 }
 import org.lfdecentralizedtrust.splice.sv.config.*
-import org.lfdecentralizedtrust.splice.sv.{SvAppClientConfig}
+import org.lfdecentralizedtrust.splice.sv.SvAppClientConfig
 import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.FoundDso
 import org.lfdecentralizedtrust.splice.util.{Codec, SpliceRateLimitConfig}
 import org.lfdecentralizedtrust.splice.validator.config.*
@@ -69,8 +69,8 @@ import com.typesafe.config.{Config, ConfigRenderOptions}
 import com.typesafe.config.ConfigException.UnresolvedSubstitution
 import org.slf4j.{Logger, LoggerFactory}
 import pureconfig.configurable.{genericMapReader, genericMapWriter}
-import pureconfig.generic.FieldCoproductHint
-import pureconfig.{ConfigReader, ConfigWriter}
+import pureconfig.generic.{CoproductHint, FieldCoproductHint, ProductHint}
+import pureconfig.{ConfigCursor, ConfigReader, ConfigWriter}
 import pureconfig.error.{CannotConvert, FailureReason}
 import pureconfig.module.cats.{nonEmptyListReader, nonEmptyListWriter}
 import io.circe.parser.*
@@ -695,8 +695,34 @@ object SpliceConfig {
       deriveReader[AutoAcceptTransfersConfig]
     implicit val appRewardBeneficiaryConfigReader: ConfigReader[AppRewardBeneficiaryConfig] =
       deriveReader[AppRewardBeneficiaryConfig]
+
+    implicit val rewardSharingConfigHint: FieldCoproductHint[RewardSharingConfig] =
+      new FieldCoproductHint[RewardSharingConfig]("type") {
+        override def from(
+            cursor: ConfigCursor,
+            options: Seq[String],
+        ): ConfigReader.Result[CoproductHint.Action] = {
+          cursor.asObjectCursor.flatMap { objCur =>
+            if (objCur.atKeyOrUndefined("type").isUndefined) {
+              options
+                .find(fieldValue(_) == "built-in")
+                .fold(super.from(cursor, options))(opt => Right(CoproductHint.Use(objCur, opt)))
+            } else {
+              super.from(cursor, options)
+            }
+          }
+        }
+      }
+
+    implicit val rewardSharingBuiltInReader: ConfigReader[RewardSharingConfig.BuiltIn] =
+      deriveReader[RewardSharingConfig.BuiltIn]
+    implicit val rewardSharingExternalHint: ProductHint[RewardSharingConfig.External] =
+      ProductHint[RewardSharingConfig.External](allowUnknownKeys = false)
+    implicit val rewardSharingExternalReader: ConfigReader[RewardSharingConfig.External] =
+      deriveReader[RewardSharingConfig.External]
     implicit val rewardSharingConfigReader: ConfigReader[RewardSharingConfig] =
       deriveReader[RewardSharingConfig]
+
     implicit val validatorDecentralizedSynchronizerConfigReader
         : ConfigReader[ValidatorDecentralizedSynchronizerConfig] =
       deriveReader[ValidatorDecentralizedSynchronizerConfig].emap(config => {
@@ -828,28 +854,32 @@ object SpliceConfig {
             case (Right(()), (party, sharingConfig)) =>
               for {
                 _ <- Either.cond(
-                  sharingConfig.beneficiaries.forall(b =>
-                    b.percentage > 0 && b.percentage <= BigDecimal(1.0)
-                  ),
-                  (),
-                  ConfigValidationFailed(
-                    s"Reward sharing percentages for $party must be in (0.0, 1.0]"
-                  ),
-                )
-                _ <- Either.cond(
-                  sharingConfig.beneficiaries.map(_.percentage).sum <= BigDecimal(1.0),
-                  (),
-                  ConfigValidationFailed(
-                    s"Reward sharing percentages for $party must sum to at most 1.0"
-                  ),
-                )
-                _ <- Either.cond(
                   sharingConfig.batchSize > 0,
                   (),
-                  ConfigValidationFailed(
-                    s"Reward sharing batchSize for $party must be positive"
-                  ),
+                  ConfigValidationFailed(s"Reward sharing batchSize for $party must be positive"),
                 )
+                _ <- sharingConfig match {
+                  case RewardSharingConfig.External(_) => Right(())
+                  case builtIn: RewardSharingConfig.BuiltIn =>
+                    for {
+                      _ <- Either.cond(
+                        builtIn.beneficiaries.forall(b =>
+                          b.percentage > 0 && b.percentage <= BigDecimal(1.0)
+                        ),
+                        (),
+                        ConfigValidationFailed(
+                          s"Reward sharing percentages for $party must be in (0.0, 1.0]"
+                        ),
+                      )
+                      _ <- Either.cond(
+                        builtIn.beneficiaries.map(_.percentage).sum <= BigDecimal(1.0),
+                        (),
+                        ConfigValidationFailed(
+                          s"Reward sharing percentages for $party must sum to at most 1.0"
+                        ),
+                      )
+                    } yield ()
+                }
               } yield ()
           }
         } yield conf
@@ -1137,8 +1167,16 @@ object SpliceConfig {
       deriveWriter[AutoAcceptTransfersConfig]
     implicit val appRewardBeneficiaryConfigWriter: ConfigWriter[AppRewardBeneficiaryConfig] =
       deriveWriter[AppRewardBeneficiaryConfig]
+
+    implicit val rewardSharingConfigHint: FieldCoproductHint[RewardSharingConfig] =
+      new FieldCoproductHint[RewardSharingConfig]("type")
+    implicit val rewardSharingConfigBuiltInWriter: ConfigWriter[RewardSharingConfig.BuiltIn] =
+      deriveWriter[RewardSharingConfig.BuiltIn]
+    implicit val rewardSharingConfigExternalWriter: ConfigWriter[RewardSharingConfig.External] =
+      deriveWriter[RewardSharingConfig.External]
     implicit val rewardSharingConfigWriter: ConfigWriter[RewardSharingConfig] =
       deriveWriter[RewardSharingConfig]
+
     implicit val validatorDecentralizedSynchronizerConfigWriter
         : ConfigWriter[ValidatorDecentralizedSynchronizerConfig] =
       deriveWriter[ValidatorDecentralizedSynchronizerConfig]

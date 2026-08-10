@@ -31,17 +31,36 @@ export const ConfigValuesChanges: React.FC<ConfigValuesChangesProps> = props => 
         {changes.map((change, index) => (
           <Box
             key={index}
-            sx={{ display: 'flex', alignItems: 'center', gap: 2 }}
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 2,
+              ...(change.disabled && {
+                px: 1.5,
+                py: 1,
+                borderRadius: 1,
+                borderLeft: '3px solid',
+                borderColor: 'warning.main',
+                bgcolor: 'rgba(255, 167, 38, 0.08)',
+              }),
+            }}
             data-testid="config-change"
+            data-disabled={change.disabled ? 'true' : undefined}
           >
-            <Typography
-              variant="body1"
-              sx={{ minWidth: 200 }}
-              data-testid="config-change-field-label"
-              color={textColor}
-            >
-              {change.label}
-            </Typography>
+            <Box sx={{ minWidth: 200 }}>
+              <Typography variant="body1" data-testid="config-change-field-label" color={textColor}>
+                {change.label}
+              </Typography>
+              {change.disabled && (
+                <Typography
+                  variant="caption"
+                  color="warning.main"
+                  data-testid="config-change-disabled-label"
+                >
+                  Disabled field
+                </Typography>
+              )}
+            </Box>
 
             {change.currentValue && (
               <>

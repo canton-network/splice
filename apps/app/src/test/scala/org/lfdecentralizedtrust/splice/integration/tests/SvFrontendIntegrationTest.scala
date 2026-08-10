@@ -1468,7 +1468,6 @@ class SvFrontendIntegrationTest
         fillOutTextField("update-featured-app-partyId", providerPartyId)
         selectFirstMuiOption("update-featured-app-rightCid-dropdown")
         fillOutTextField("update-featured-app-activityWeight", newActivityWeight.toString)
-        fillOutTextField("update-featured-app-reason", "increasing weight")
       }
 
       clue("vote the update request to execution") {
