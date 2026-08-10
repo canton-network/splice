@@ -32,6 +32,7 @@ import {
   CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE,
   CREATE_PROPOSAL_LABEL_SUPPORTING_URL,
   CREATE_PROPOSAL_LABEL_THRESHOLD_DEADLINE,
+  SUPPORTING_URL_PLACEHOLDER,
   THRESHOLD_DEADLINE_SUBTITLE,
 } from '../../utils/constants';
 import {
@@ -316,6 +317,7 @@ export const SetDsoConfigRulesForm: () => JSX.Element = () => {
               <field.TextField
                 title={CREATE_PROPOSAL_LABEL_SUPPORTING_URL}
                 id="set-dso-config-rules-url"
+                muiTextFieldProps={{ placeholder: SUPPORTING_URL_PLACEHOLDER }}
               />
             )}
           </form.AppField>

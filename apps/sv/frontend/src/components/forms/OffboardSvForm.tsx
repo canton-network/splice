@@ -29,6 +29,7 @@ import {
   CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE,
   CREATE_PROPOSAL_LABEL_SUPPORTING_URL,
   CREATE_PROPOSAL_LABEL_THRESHOLD_DEADLINE,
+  SUPPORTING_URL_PLACEHOLDER,
   THRESHOLD_DEADLINE_SUBTITLE,
 } from '../../utils/constants';
 
@@ -192,6 +193,7 @@ export const OffboardSvForm: React.FC = _ => {
                 <field.TextField
                   title={CREATE_PROPOSAL_LABEL_SUPPORTING_URL}
                   id="offboard-sv-url"
+                  muiTextFieldProps={{ placeholder: SUPPORTING_URL_PLACEHOLDER }}
                 />
               )}
             </form.AppField>

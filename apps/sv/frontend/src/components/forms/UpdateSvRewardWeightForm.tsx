@@ -25,6 +25,7 @@ import {
   CREATE_PROPOSAL_LABEL_SUPPORTING_URL,
   CREATE_PROPOSAL_LABEL_THRESHOLD_DEADLINE,
   CREATE_PROPOSAL_LABEL_WEIGHT,
+  SUPPORTING_URL_PLACEHOLDER,
   THRESHOLD_DEADLINE_SUBTITLE,
 } from '../../utils/constants';
 import {
@@ -214,6 +215,7 @@ export const UpdateSvRewardWeightForm: React.FC = _ => {
                 <field.TextField
                   title={CREATE_PROPOSAL_LABEL_SUPPORTING_URL}
                   id="update-sv-reward-weight-url"
+                  muiTextFieldProps={{ placeholder: SUPPORTING_URL_PLACEHOLDER }}
                 />
               )}
             </form.AppField>

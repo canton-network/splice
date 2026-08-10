@@ -10,6 +10,7 @@ export const THRESHOLD_DEADLINE_SUBTITLE =
 export const DEFAULT_APP_ACTIVITY_WEIGHT = '1.0';
 
 export const SUPPORTING_URL_LABEL = 'Supporting URL';
+export const SUPPORTING_URL_PLACEHOLDER = 'https://';
 export const VOTE_REASON_URL_LABEL = 'Vote Reason URL';
 export const VOTE_REASON_SUMMARY_LABEL = 'Vote Reason Summary';
 export const VOTE_PROPOSAL_CONTRACT_ID_LABEL = 'Vote Proposal Contract ID';
