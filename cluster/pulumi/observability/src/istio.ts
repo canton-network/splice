@@ -39,12 +39,7 @@ export function istioMonitoring(
           metricRelabelings: [
             {
               sourceLabels: ['__name__'],
-              regex:
-                '(istio_.*' +
-                '|envoy_.*http_local_rate_limit_.*' +
-                '|envoy_server_(memory_.*|uptime|live|state|total_connections|days_until_first_cert_expiring)' +
-                '|envoy_cluster_upstream_rq_(pending_overflow|retry.*|timeout)' +
-                '|envoy_cluster_upstream_cx_connect_fail)',
+              regex: '(istio_.*' + '|envoy_.*http_local_rate_limit_.*)',
               action: 'keep',
             },
             // drop instance label, we have the pod name
