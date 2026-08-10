@@ -187,11 +187,7 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
         )}
 
         {formType === 'offboard' && (
-          <ProposalReviewField
-            id="offboardMember"
-            label="Member"
-            value={props.offboardMember}
-          />
+          <ProposalReviewField id="offboardMember" label="Member" value={props.offboardMember} />
         )}
 
         {formType === 'create-unallocated-unclaimed-activity-record' && (
