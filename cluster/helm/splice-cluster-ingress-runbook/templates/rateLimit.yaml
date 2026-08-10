@@ -11,12 +11,6 @@ kind: EnvoyFilter
 metadata:
   name: scan-rate-limit
   namespace: {{ .Release.Namespace }}
-  annotations:
-    # enable metrics for rate limit
-    proxy.istio.io/config: |-
-      proxyStatsMatcher:
-        inclusionRegexps:
-        - ".*http_local_rate_limit.*"
 spec:
   workloadSelector:
     labels:
