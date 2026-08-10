@@ -9,7 +9,7 @@ create table dso_unavailable_parties
     party_id        text   not null,
     -- the time when the party was marked as unavailable, used for capped exponential backoff
     updated_at      bigint not null,
-    -- the duration (seconds) to ignore the entry, used for capped exponential backoff
+    -- the duration (microseconds) to ignore the entry, used for capped exponential backoff
     ignore_duration bigint not null,
     -- the store ID when the party is added, used for resets
     store_id        bigint not null,
