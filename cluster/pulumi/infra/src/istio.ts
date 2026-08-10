@@ -146,6 +146,7 @@ function configureIstiod(
         // Export the local rate limit filter counters (enabled/ok/rate_limited/enforced).
         // Deliberately narrow: inclusionRegexps is *additive* on top of Istio's
         // defaults, so a broad regex here would blow up Prometheus cardinality.
+        // docs: https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/local_rate_limit_filter#statistics
         proxyStatsMatcher: {
           inclusionRegexps: ['.*http_local_rate_limit.*'],
         },
