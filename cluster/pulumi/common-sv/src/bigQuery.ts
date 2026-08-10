@@ -12,15 +12,12 @@ import {
   InstalledHelmChart,
   installPostgresPasswordSecret,
 } from '@canton-network/splice-pulumi-common';
-import {
-  clusterProdLike,
-  config,
-} from '@canton-network/splice-pulumi-common/src/config';
+import { clusterProdLike, config } from '@canton-network/splice-pulumi-common/src/config';
 import { spliceConfig } from '@canton-network/splice-pulumi-common/src/config/config';
 import {
   defaultUserName,
-  getCloudSdkZone,
   generatePassword,
+  getCloudSdkZone,
   privateNetworkId,
 } from '@canton-network/splice-pulumi-common/src/postgres';
 import {
@@ -482,7 +479,7 @@ function installBigqueryConnectionProfile(
       connectionProfileId: profileName,
       displayName: profileName,
       location: cloudsdkComputeRegion(),
-      bigqueryProfile: {},// just a sumtype marker
+      bigqueryProfile: {}, // just a sumtype marker
       labels: {
         cluster: CLUSTER_BASENAME,
       },
@@ -685,7 +682,7 @@ function createPublicationAndReplicationSlots(
     pulumi.interpolate`--service-account-email="${databaseInstance.serviceAccountEmailAddress}"`,
     pulumi.interpolate`--schema-name="${schemaName}"`,
     pulumi.interpolate`--tables-to-replicate-joined="${tablesToReplicate.join(', ')}"`,
-    pulumi.interpolate`--postgres-user-name="${replicatorUserName}"`,
+    pulumi.interpolate`--postgres-user-name="${defaultUserName}"`,
   ];
 
   // Suffix arguments (Arguments 9–12)
@@ -728,8 +725,7 @@ function createPublicationAndReplicationSlots(
         delete: buildScriptCommand('delete-pub-rep-slot', slot1Args),
       },
       {
-        deletedWith: databaseInstance,
-        dependsOn: commonDependencies,
+        dependsOn: [databaseInstance, replicatorUser, ...(scan !== undefined ? [scan] : [])],
         deleteBeforeReplace: true,
       }
     );
@@ -754,8 +750,7 @@ function createPublicationAndReplicationSlots(
         delete: buildScriptCommand('delete-pub-rep-slot', slot2Args),
       },
       {
-        deletedWith: databaseInstance,
-        dependsOn: commonDependencies,
+        dependsOn: [databaseInstance, replicatorUser, ...(scan !== undefined ? [scan] : [])],
         deleteBeforeReplace: true,
       }
     );
@@ -779,8 +774,8 @@ export async function configureScanBigQuery({
   bigQueryConfig,
   scanReference,
 }: ScanBigQueryArgs): Promise<ScanBigQuery> {
-  // Destructure all config properties at function entry with fallback defaults
-  // we can change this to enableLegacyDatastream to false or PAUSED once we verify the stag-prod pipeline is working correctly and we want to disable the legacy pipeline
+  // Use config file to determine which datastreams to enable and their desired states
+
   const {
     enableLegacyDatastream ,
     enableStagProdDatastream ,
@@ -828,6 +823,9 @@ export async function configureScanBigQuery({
   );
 
   let legacyDataset: gcp.bigquery.Dataset | undefined;
+  let stagingDataset: gcp.bigquery.Dataset | undefined;
+  let prodDataset: gcp.bigquery.Dataset | undefined;
+
   if (enableLegacyDatastream && slots.slot1) {
     legacyDataset = installBigqueryDataset(bigQueryConfig);
     const legacyDestinationProfile = installBigqueryConnectionProfile(
@@ -848,8 +846,8 @@ export async function configureScanBigQuery({
   }
 
   if (enableStagProdDatastream && slots.slot2) {
-    const stagingDataset = installBigqueryStagingDataset(bigQueryConfig);
-    const prodDataset = installBigqueryProdDataset(bigQueryConfig);
+    stagingDataset = installBigqueryStagingDataset(bigQueryConfig);
+    prodDataset = installBigqueryProdDataset(bigQueryConfig);
     const stagingDestinationProfile = installBigqueryStagingConnectionProfile(
       namespace,
       stagingDataset,
@@ -868,11 +866,16 @@ export async function configureScanBigQuery({
 
     installHourlyScheduledQueries(namespace, stagingDataset, prodDataset);
   }
+  // TODO (DACH-NY/canton-network-internal#6451) not sure if this function needs to return anything, 
+  // but we need to return something to satisfy the ScanBigQuery type. 
+  // For now, we return the primary dataset's ID, which is either legacy, staging, or prod, whichever is defined first. 
+  // we should consider removing the return datasetId if it's not needed
   
+  const primaryDataset = legacyDataset ?? stagingDataset ?? prodDataset;
 
   return {
-    datasetId: legacyDataset!.id,
-  };
+    datasetId: primaryDataset!.id,
+  }; 
 }
 
 export type ScanBigQueryArgs = {
