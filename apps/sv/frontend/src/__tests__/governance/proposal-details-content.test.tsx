@@ -300,7 +300,6 @@ describe('Proposal Details Content', () => {
       proposal: {
         rightContractId: 'rightCid123',
         newActivityWeight: '2.5',
-        reason: 'boosting rewards',
       } as UpdateFeatureAppProposal,
     } as ProposalDetails;
 
@@ -337,16 +336,6 @@ describe('Proposal Details Content', () => {
 
     const newFeaturedAppWeight = screen.getByTestId('config-change-new-value');
     expect(newFeaturedAppWeight.textContent).toMatch('2.5');
-
-    const updateFeaturedReasonLabel = screen.getByTestId(
-      'proposal-details-update-feature-reason-label'
-    );
-    expect(updateFeaturedReasonLabel.textContent).toMatch('Reason');
-
-    const updateFeaturedReasonValue = screen.getByTestId(
-      'proposal-details-update-feature-reason-value'
-    );
-    expect(updateFeaturedReasonValue.textContent).toMatch('boosting rewards');
   });
 
   test('should show only new weight when featured app right is not found', async () => {

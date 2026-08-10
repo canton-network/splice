@@ -32,7 +32,7 @@ export default defineConfig([{
         sourceType: "script",
 
         parserOptions: {
-            project: ["./tsconfig.eslint.json"],
+            project: ["./tsconfig.json"],
         },
     },
 
