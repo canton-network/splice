@@ -53,7 +53,7 @@ alter table acs_incremental_snapshot_data_next_v2
 create index acs_incremental_snapshot_data_next_v2_ca_ci
     on acs_incremental_snapshot_data_next_v2 (snapshot_id, created_at, contract_id);
 
--- Template table for acs_snapshot_creates_<record_time_epoch>.
+-- Template table for acs_snapshot_creates_<history_id>_<record_time_epoch>.
 -- This allows the code to just CREATE TABLE LIKE acs_snapshot_creates_template or acs_snapshot_stakeholders_template.
 -- Design decision: we don't have a single table per (contract_id, stakeholder) in order to avoid duplicating the create_arguments.
 create table acs_snapshot_creates_template

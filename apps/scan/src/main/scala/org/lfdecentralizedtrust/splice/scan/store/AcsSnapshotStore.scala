@@ -256,10 +256,12 @@ class AcsSnapshotStore(
         DBIOAction.seq(
           sqlu"""delete from acs_snapshot where snapshot_record_time = ${snapshot.snapshotRecordTime}""",
           sqlu"""drop table #${AcsTableDDL.acsSnapshotCreatesTableName(
-              table.snapshotRecordTime
+              historyId,
+              table.snapshotRecordTime,
             )};""",
           sqlu"""drop table #${AcsTableDDL.acsSnapshotStakeholdersTableName(
-              table.snapshotRecordTime
+              historyId,
+              table.snapshotRecordTime,
             )};""",
         )
     }
@@ -321,9 +323,9 @@ class AcsSnapshotStore(
       templates: Seq[PackageQualifiedName],
   )(implicit tc: TraceContext): Future[Vector[(Long, SpliceCreatedEvent)]] = {
     val createsTableName =
-      AcsTableDDL.acsSnapshotCreatesTableName(snapshot.snapshotRecordTime)
+      AcsTableDDL.acsSnapshotCreatesTableName(historyId, snapshot.snapshotRecordTime)
     val stakeholdersTableName =
-      AcsTableDDL.acsSnapshotStakeholdersTableName(snapshot.snapshotRecordTime)
+      AcsTableDDL.acsSnapshotStakeholdersTableName(historyId, snapshot.snapshotRecordTime)
     val afterFilter = after.fold(sql"")(after => sql" and s.row_id > $after")
     storage
       .query(
@@ -802,9 +804,9 @@ class AcsSnapshotStore(
       nextSnapshotTargetRecordTime: CantonTimestamp,
   )(implicit tc: TraceContext) = {
     val createsTableName =
-      AcsTableDDL.acsSnapshotCreatesTableName(snapshot.targetRecordTime)
+      AcsTableDDL.acsSnapshotCreatesTableName(historyId, snapshot.targetRecordTime)
     val stakeholdersTableName =
-      AcsTableDDL.acsSnapshotStakeholdersTableName(snapshot.targetRecordTime)
+      AcsTableDDL.acsSnapshotStakeholdersTableName(historyId, snapshot.targetRecordTime)
 
     for {
       _ <- sqlu"create table #$createsTableName (like acs_snapshot_creates_template including all)"
@@ -1352,11 +1354,11 @@ object AcsSnapshotStore {
   }
 
   object AcsTableDDL {
-    def acsSnapshotCreatesTableName(snapshotRecordTime: CantonTimestamp) =
-      s"acs_snapshot_creates_${snapshotRecordTime.toEpochMilli}"
+    def acsSnapshotCreatesTableName(historyId: Long, snapshotRecordTime: CantonTimestamp) =
+      s"acs_snapshot_creates_${historyId}_${snapshotRecordTime.toEpochMilli}"
 
-    def acsSnapshotStakeholdersTableName(snapshotRecordTime: CantonTimestamp) =
-      s"acs_snapshot_stakeholders_${snapshotRecordTime.toEpochMilli}"
+    def acsSnapshotStakeholdersTableName(historyId: Long, snapshotRecordTime: CantonTimestamp) =
+      s"acs_snapshot_stakeholders_${historyId}_${snapshotRecordTime.toEpochMilli}"
   }
 
   def apply(
