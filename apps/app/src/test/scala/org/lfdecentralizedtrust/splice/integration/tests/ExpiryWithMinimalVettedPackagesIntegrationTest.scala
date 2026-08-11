@@ -369,7 +369,7 @@ class ExpiryWithIgnoredAmuletVersionIntegrationTest
       )(
         s"All dust contracts remain because alice's preferred version is in ignoredAmuletVersions",
         _ => {
-          sv1Backend.dsoDelegateBasedAutomation.expiredAmuletIgnoredPartiesStore.getAll should
+          sv1Backend.dsoDelegateBasedAutomation.unavailablePartiesStore.getAll should
             contain(alice)
 
           aliceWalletClient.list().amulets should have length 2L withClue "amulets"
