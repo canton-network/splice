@@ -5,7 +5,7 @@ import {
   EnvVarConfigSchema,
   K8sResourceSchema,
   KmsConfigSchema,
-  LogLevelSchema
+  LogLevelSchema,
 } from '@canton-network/splice-pulumi-common/src/config';
 import { clusterSubConfig } from '@canton-network/splice-pulumi-common/src/config/config';
 import { z } from 'zod';
