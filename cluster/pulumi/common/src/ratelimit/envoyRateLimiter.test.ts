@@ -458,3 +458,53 @@ test('validateIpRangeLimits accepts non-overlapping IP ranges', () => {
     })
   ).not.toThrow();
 });
+
+test('validateIpRangeLimits rejects reserved override key', () => {
+  expect(() =>
+    validateIpRangeLimits('/registry/metadata/v1/info', {
+      name: 'registry-metadata-info',
+      type: 'limited',
+      ...baseLimits,
+      perIpRangeLimit: {
+        ...perIpRangeLimit,
+        overrides: {
+          'per-ip-range-default': {
+            ipRanges: ['192.68.78.50/32'],
+            maxTokens: 250,
+            tokensPerFill: 250,
+            fillInterval: '60s',
+          },
+        },
+      },
+    })
+  ).toThrow(
+    "override key 'per-ip-range-default' is reserved for the generic per-IP-range fallback bucket"
+  );
+});
+
+test('validateIpRangeLimits detects overlap with 0.0.0.0/0', () => {
+  expect(() =>
+    validateIpRangeLimits('/registry/metadata/v1/info', {
+      name: 'registry-metadata-info',
+      type: 'limited',
+      ...baseLimits,
+      perIpRangeLimit: {
+        ...perIpRangeLimit,
+        overrides: {
+          'all-ips': {
+            ipRanges: ['0.0.0.0/0'],
+            maxTokens: 250,
+            tokensPerFill: 250,
+            fillInterval: '60s',
+          },
+          'single-ip': {
+            ipRanges: ['192.68.78.50/32'],
+            maxTokens: 250,
+            tokensPerFill: 250,
+            fillInterval: '60s',
+          },
+        },
+      },
+    })
+  ).toThrow("0.0.0.0/0 (in override 'all-ips') and 192.68.78.50/32 (in override 'single-ip')");
+});

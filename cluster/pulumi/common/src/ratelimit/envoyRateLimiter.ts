@@ -46,9 +46,11 @@ type LocalLimit<L> = {
   name: string;
 } & L;
 
-// Envoy native descriptor key for IP-range-based rate limiting using
-// remote_address_match. The action checks the connection's remote address
-// against configured IP ranges and produces this descriptor entry.
+// We intentionally do not use the x-forwarded-for header / client_ip descriptor
+// for per-IP rate limiting. In our Istio configuration x-forwarded-for can be
+// spoofed by the client, so we rely on Envoy's remote_address_match action
+// instead, which checks the connection's remote address against configured IP
+// ranges and produces this descriptor entry.
 const remoteAddressMatchKey = 'remote_address_match';
 const remoteAddressMatchDefaultValue = 'per-ip-range-default';
 
@@ -71,17 +73,39 @@ function parseCidr(cidr: string): { networkLong: number; prefix: number; broadca
   const [network, prefixStr] = cidr.split('/');
   const prefix = parseInt(prefixStr, 10);
   const networkLong = ipToLong(network);
+
+  // A /prefix leaves (32 - prefix) bits for the host portion of the address.
+  // For example, /24 leaves 8 host bits, so the network contains 2^8 = 256 addresses.
   const hostBits = 32 - prefix;
-  const hostCount = 1 << hostBits;
+  const hostCount = 2 ** hostBits;
+
+  // Build a mask that keeps the network bits and clears the host bits.
+  // hostCount - 1 is a value whose lower hostBits bits are all 1s.
+  // Negating it gives 1s in the network-bit positions and 0s in the host-bit positions.
+  // The `>>> 0` forces the result into an unsigned 32-bit integer, because JavaScript
+  // bitwise operators otherwise work with signed 32-bit values.
   const networkMask = ~(hostCount - 1) >>> 0;
-  const normalizedNetworkLong = networkLong & networkMask;
-  const broadcastLong = normalizedNetworkLong | ((hostCount - 1) >>> 0);
+
+  // Normalize the network address by clearing the host bits. This also ensures the
+  // user-supplied network address is rounded down to the real network start
+  // (e.g. 192.168.1.5/24 becomes 192.168.1.0/24).
+  const normalizedNetworkLong = (networkLong & networkMask) >>> 0;
+
+  // The broadcast address is the last address in the network: set all host bits to 1.
+  // We OR the normalized network address with the host portion (hostCount - 1).
+  // Both intermediate results and the final result are forced unsigned with `>>> 0`,
+  // otherwise JavaScript's `|` operator can produce negative numbers for values >= 2^31.
+  const broadcastLong = (normalizedNetworkLong | ((hostCount - 1) >>> 0)) >>> 0;
+
   return { networkLong: normalizedNetworkLong, prefix, broadcastLong };
 }
 
 function cidrsOverlap(a: string, b: string): boolean {
   const parsedA = parseCidr(a);
   const parsedB = parseCidr(b);
+  // Two CIDRs overlap iff the start of one range falls inside the other range.
+  // Because each parsed CIDR is a contiguous [networkLong, broadcastLong] interval,
+  // checking whether either network address lies within the other's interval is enough.
   return (
     (parsedA.networkLong <= parsedB.networkLong && parsedB.networkLong <= parsedA.broadcastLong) ||
     (parsedB.networkLong <= parsedA.networkLong && parsedA.networkLong <= parsedB.broadcastLong)
@@ -148,24 +172,33 @@ export function validateIpRangeLimits(
     return;
   }
 
+  const overrideKeys = Object.keys(rateLimit.perIpRangeLimit.overrides || {});
+  const reservedKeyUsages = overrideKeys.filter(key => key === remoteAddressMatchDefaultValue);
+  if (reservedKeyUsages.length > 0) {
+    throw new Error(
+      `${pathPrefix}: override key '${remoteAddressMatchDefaultValue}' is reserved for the generic per-IP-range fallback bucket`
+    );
+  }
+
   const ipRanges: { ipRange: string; overrideKey: string }[] = [];
 
-  Object.entries(rateLimit.perIpRangeLimit.overrides || {}).forEach(([overrideKey, override]) => {
+  overrideKeys.forEach(overrideKey => {
+    const override = rateLimit.perIpRangeLimit!.overrides![overrideKey];
     override.ipRanges.forEach(ipRange => {
       ipRanges.push({ ipRange, overrideKey });
     });
   });
 
   const overlaps: string[] = [];
-  for (let i = 0; i < ipRanges.length; i++) {
-    for (let j = i + 1; j < ipRanges.length; j++) {
-      if (cidrsOverlap(ipRanges[i].ipRange, ipRanges[j].ipRange)) {
+  ipRanges.forEach((left, leftIndex) => {
+    ipRanges.slice(leftIndex + 1).forEach(right => {
+      if (cidrsOverlap(left.ipRange, right.ipRange)) {
         overlaps.push(
-          `${ipRanges[i].ipRange} (in override '${ipRanges[i].overrideKey}') and ${ipRanges[j].ipRange} (in override '${ipRanges[j].overrideKey}')`
+          `${left.ipRange} (in override '${left.overrideKey}') and ${right.ipRange} (in override '${right.overrideKey}')`
         );
       }
-    }
-  }
+    });
+  });
 
   if (overlaps.length > 0) {
     throw new Error(
