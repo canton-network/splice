@@ -19,11 +19,20 @@ export type ApprovedSvIdentity = {
   rewardWeightBps: number;
 };
 
+export type ApprovedSvIdentityFromYamlFile = {
+  name: string;
+  publicKey: string | pulumi.Output<string>;
+  // js-yaml after 4.2 doesn't support specifying numbers with separating underscores (e.g. 100_000),
+  // which means that it will parse that as a string and break the on Helm schema validation.
+  // For normal numbers (e.g 100000), it still gets parsed as a number.
+  rewardWeightBps: string | number;
+};
+
 export function approvedSvIdentitiesFile(): string | undefined {
   return getPathToPublicConfigFile('approved-sv-id-values.yaml');
 }
 
-function approvedSvIdentitiesFromFile(): ApprovedSvIdentity[] {
+function approvedSvIdentitiesFromFile(): ApprovedSvIdentityFromYamlFile[] {
   const file = approvedSvIdentitiesFile();
   return file ? loadYamlFromFile(file).approvedSvIdentities : [];
 }
@@ -48,7 +57,12 @@ function approvedSvIdentitiesFromConfig(): ApprovedSvIdentity[] {
 }
 
 export function approvedSvIdentities(): ApprovedSvIdentity[] {
-  const fromFile = approvedSvIdentitiesFromFile();
+  const rawFromFile = approvedSvIdentitiesFromFile();
+  const fromFile: ApprovedSvIdentity[] = rawFromFile.map(identity => ({
+    name: identity.name,
+    rewardWeightBps: parseInt(String(identity.rewardWeightBps).replace('_', ''), 10),
+    publicKey: identity.publicKey,
+  }));
   const fromConfig = approvedSvIdentitiesFromConfig();
 
   // We override public keys to the locally configured one,
@@ -60,7 +74,8 @@ export function approvedSvIdentities(): ApprovedSvIdentity[] {
   );
 
   return _.uniqBy([...fromFile, ...fromConfig], 'name').map(identity => ({
-    ...identity,
+    name: identity.name,
+    rewardWeightBps: identity.rewardWeightBps,
     publicKey: configuredPublicKeys[identity.name] ?? identity.publicKey,
   }));
 }

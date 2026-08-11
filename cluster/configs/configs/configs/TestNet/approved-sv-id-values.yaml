@@ -1,13 +1,13 @@
 approvedSvIdentities:
   - name: Digital-Asset-2
     publicKey: PUBKEY_0==
-    rewardWeightBps: 100000
+    rewardWeightBps: 100_000
   - name: SV1
     publicKey: PUBLIC_KEY_1==
-    rewardWeightBps: 1000000
+    rewardWeightBps: 1_000_000
   - name: SV2
     publicKey: PUBLIC_KEY_2==
-    rewardWeightBps: 150000
+    rewardWeightBps: 150_000
     extraBeneficiaries:
       - beneficiary: "mock-validator-1::123456789012345678901234567890123456789012234567890123456789012345678"
         weight: 100000
@@ -16,4 +16,4 @@ approvedSvIdentities:
   - name: Digital-Asset-1
     publicKey: THIS_IS_THE_WRONG_KEY
     # this is the right reward weight though
-    rewardWeightBps: 150000
+    rewardWeightBps: 150_000
