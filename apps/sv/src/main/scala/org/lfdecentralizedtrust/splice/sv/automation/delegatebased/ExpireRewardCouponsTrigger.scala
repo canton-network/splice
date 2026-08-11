@@ -16,7 +16,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.{
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules
 import org.lfdecentralizedtrust.splice.environment.PackageIdResolver.Package.SpliceAmulet
-import org.lfdecentralizedtrust.splice.sv.store.{ExpiredRewardCouponsBatch, IgnoredPartiesStore}
+import org.lfdecentralizedtrust.splice.sv.store.ExpiredRewardCouponsBatch
 import org.lfdecentralizedtrust.splice.util.{AssignedContract, Contract}
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
@@ -26,7 +26,7 @@ import com.digitalasset.canton.util.MonadUtil
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
-import org.lfdecentralizedtrust.splice.store.PageLimit
+import org.lfdecentralizedtrust.splice.store.{IgnoredPartiesStore, PageLimit}
 import org.lfdecentralizedtrust.splice.codegen.java.splice
 
 import java.util.Optional

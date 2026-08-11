@@ -53,6 +53,7 @@ splitwell:
     maxDuration: "5m"
     retention: "30d"
 synchronizerMigration:
+  splitSvDeploymentEnabled: true
   frozenMigrationId: 2
   archived:
     - id: 5
@@ -201,6 +202,8 @@ loadTester:
     scaleUpStep: 3
     windowStartUTC: "02:30"
     windowDurationMinutes: 150
+chaosMesh:
+  podKillSchedule: '@every 120m'
 svs:
   sv: !include(sv.yaml)
     participant:

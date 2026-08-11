@@ -10,14 +10,21 @@ import org.lfdecentralizedtrust.splice.util.AssignedContract
 import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
+import org.lfdecentralizedtrust.splice.environment.PackageIdResolver
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
+import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
+import org.lfdecentralizedtrust.splice.sv.util.ContractStakeholders
 
 import java.util.Optional
 import scala.concurrent.{ExecutionContext, Future}
+import ExpiredAnsEntryTrigger.{Task, getStakeholders}
+import org.lfdecentralizedtrust.splice.store.IgnoredPartiesStore
 
 class ExpiredAnsEntryTrigger(
     override protected val context: TriggerContext,
     override protected val svTaskContext: SvTaskBasedTrigger.Context,
+    override protected val svConfig: SvAppBackendConfig,
+    override protected val ignoredPartiesStore: IgnoredPartiesStore,
 )(implicit
     override val ec: ExecutionContext,
     mat: Materializer,
@@ -27,30 +34,52 @@ class ExpiredAnsEntryTrigger(
       splice.ans.AnsEntry,
     ](
       svTaskContext.dsoStore.multiDomainAcsStore,
-      svTaskContext.dsoStore.listExpiredAnsEntries,
+      svTaskContext.dsoStore.listExpiredAnsEntries(Some(ignoredPartiesStore)),
       splice.ans.AnsEntry.COMPANION,
     )
     with SvTaskBasedTrigger[ScheduledTaskTrigger.ReadyTask[AssignedContract[
       splice.ans.AnsEntry.ContractId,
       splice.ans.AnsEntry,
-    ]]] {
-  type Task = ScheduledTaskTrigger.ReadyTask[
-    AssignedContract[
-      splice.ans.AnsEntry.ContractId,
-      splice.ans.AnsEntry,
-    ]
-  ]
+    ]]]
+    with IgnoredAmuletVersionGuard {
 
   private val store = svTaskContext.dsoStore
 
-  override def completeTaskAsDsoDelegate(co: Task, controller: String)(implicit
+  override def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
+      tc: TraceContext
+  ): Future[TaskOutcome] = {
+    val stakeholders = getStakeholders(task.work.payload).toSet
+    svTaskContext.vettingLookupService
+      .lookupVettingState(stakeholders.toSeq, PackageIdResolver.Package.SpliceAmulet)
+      .flatMap {
+        case Some(vettedVersion) =>
+          completeWithIgnoredAmuletVersionCheck(
+            vettedVersion.toString,
+            stakeholders,
+            store.key.dsoParty,
+            enableUnresponsivePartiesAutoIgnore = true,
+          )(completeExpiryTaskAsDsoDelegate(task, controller))
+        case None =>
+          Future.successful(
+            TaskSuccess(
+              s"No vetted SpliceAmulet version for stakeholders $stakeholders of " +
+                s"AnsEntry ${task.work.contractId}, skipping."
+            )
+          )
+      }
+  }
+
+  private def completeExpiryTaskAsDsoDelegate(
+      task: Task,
+      controller: String,
+  )(implicit
       tc: TraceContext
   ): Future[TaskOutcome] =
     for {
       dsoRules <- store.getDsoRules()
       cmd = dsoRules.exercise(
         _.exerciseDsoRules_ExpireAnsEntry(
-          co.work.contractId,
+          task.work.contractId,
           new AnsEntry_Expire(store.key.dsoParty.toProtoPrimitive),
           Optional.of(controller),
         )
@@ -61,4 +90,17 @@ class ExpiredAnsEntryTrigger(
         .noDedup
         .yieldUnit()
     } yield TaskSuccess("archived expired ANS entry")
+}
+
+object ExpiredAnsEntryTrigger extends ContractStakeholders[splice.ans.AnsEntry] {
+  type Task = ScheduledTaskTrigger.ReadyTask[
+    AssignedContract[
+      splice.ans.AnsEntry.ContractId,
+      splice.ans.AnsEntry,
+    ]
+  ]
+
+  override def informees(payload: splice.ans.AnsEntry): Seq[String] = Seq(payload.user)
+
+  override def dso(payload: splice.ans.AnsEntry): String = payload.dso
 }

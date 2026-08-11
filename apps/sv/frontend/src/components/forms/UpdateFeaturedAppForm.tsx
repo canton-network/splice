@@ -19,7 +19,6 @@ import {
   validateExpiration,
   validateExpiryEffectiveDate,
   validatePartyId,
-  validateReason,
   validateRequiredActivityWeight,
   validateSummary,
   validateUrl,
@@ -57,7 +56,6 @@ export const UpdateFeaturedAppForm: React.FC = () => {
     partyId: '',
     rightCid: '',
     newActivityWeight: '',
-    reason: '',
   };
 
   const form = useAppForm({
@@ -70,7 +68,7 @@ export const UpdateFeaturedAppForm: React.FC = () => {
             tag: 'SRARC_UpdateFeaturedAppRight',
             value: {
               rightCid: value.rightCid as ContractId<FeaturedAppRight>,
-              update: { reason: value.reason, newActivityWeight: value.newActivityWeight },
+              update: { reason: '', newActivityWeight: value.newActivityWeight },
             },
           },
         },
@@ -124,7 +122,6 @@ export const UpdateFeaturedAppForm: React.FC = () => {
             rightCid={form.state.values.rightCid}
             newActivityWeight={form.state.values.newActivityWeight}
             currentActivityWeight={currentWeight}
-            reason={form.state.values.reason}
             onEdit={() => setShowConfirmation(false)}
             onSubmit={() => {}}
           />
@@ -196,16 +193,6 @@ export const UpdateFeaturedAppForm: React.FC = () => {
                   }
                 />
               )}
-            </form.AppField>
-
-            <form.AppField
-              name="reason"
-              validators={{
-                onBlur: ({ value }) => validateReason(value),
-                onChange: ({ value }) => validateReason(value),
-              }}
-            >
-              {field => <field.TextField title="Proposal Reason" id={`${idPrefix}-reason`} />}
             </form.AppField>
 
             <form.AppField

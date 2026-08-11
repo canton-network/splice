@@ -6,6 +6,7 @@ import { East } from '@mui/icons-material';
 import { Alert, Box, Stack, Typography } from '@mui/material';
 import { Link as RouterLink } from 'react-router';
 import { CopyableIdentifier, PageSectionHeader } from '../../components/beta';
+import { VOTE_PROPOSAL_CONTRACT_ID_LABEL } from '../../utils/constants';
 import React from 'react';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -131,7 +132,7 @@ const ActionCard = (props: ActionCardProps) => {
           data-testid="action-required-description"
         />
         <ActionCardSegment
-          title="VOTE PROPOSAL CONTRACT ID"
+          title={VOTE_PROPOSAL_CONTRACT_ID_LABEL}
           content={
             <CopyableIdentifier
               value={contractId}

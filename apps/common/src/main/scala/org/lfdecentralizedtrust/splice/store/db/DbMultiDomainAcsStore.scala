@@ -37,7 +37,7 @@ import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.lifecycle.{CloseContext, FutureUnlessShutdown}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.resource.DbStorage
-import com.digitalasset.canton.topology.SynchronizerId
+import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.ShowUtil.showPretty
 
@@ -54,6 +54,7 @@ import org.lfdecentralizedtrust.splice.store.db.AcsQueries.{
   SelectFromAcsTableWithStateResult,
 }
 import org.lfdecentralizedtrust.splice.store.db.AcsTables.ContractStateRowData
+import AsUpdateReturning.*
 import com.daml.nonempty.NonEmpty
 import com.digitalasset.canton.data.CantonTimestamp
 import com.daml.metrics.api.MetricHandle.LabeledMetricsFactory
@@ -378,9 +379,23 @@ final class DbMultiDomainAcsStore[TXE](
 
   override private[splice] def listExpiredFromPayloadExpiry[C, TCid <: ContractId[
     T
-  ], T <: Template](companion: C)(implicit
+  ], T <: Template](
+      companion: C,
+      ignoredPartiesStore: Option[IgnoredPartiesStore] = None,
+      ignoredPartyFields: Seq[String] = Seq.empty,
+  )(implicit
       companionClass: ContractCompanion[C, TCid, T]
   ): ListExpiredContracts[TCid, T] = { (now, limit) => implicit traceContext =>
+    val ignoredParties = ignoredPartiesStore.fold(Set.empty[PartyId])(_.getAll)
+    val ignoredPartiesFilter: SQLActionBuilder =
+      if (ignoredParties.isEmpty || ignoredPartyFields.isEmpty) sql""
+      else
+        ignoredPartyFields.foldLeft(sql"") { (acc, field) =>
+          (acc ++ sql" and " ++ notInClause(
+            s"acs.create_arguments->>'$field'",
+            ignoredParties,
+          )).toActionBuilder
+        }
     for {
       _ <- waitUntilAcsIngested()
       result <- storage
@@ -390,7 +405,8 @@ final class DbMultiDomainAcsStore[TXE](
             acsStoreId,
             domainMigrationId,
             companion,
-            additionalWhere = sql"""and acs.contract_expires_at < $now""",
+            additionalWhere =
+              (sql"""and acs.contract_expires_at < $now""" ++ ignoredPartiesFilter).toActionBuilder,
             orderLimit = sql"""limit ${sqlLimit(limit)}""",
           ),
           "listExpiredFromPayloadExpiry",
