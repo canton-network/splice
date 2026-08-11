@@ -11,13 +11,10 @@ import SpliceTests.BracketSynchronous.*
 import com.digitalasset.canton.logging.SuppressingLogger.LogEntryOptionality
 import org.lfdecentralizedtrust.splice.util.{MultiDomainTestUtil, SplitwellTestUtil, WalletTestUtil}
 import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
-import org.scalatest.Ignore
 
 import scala.concurrent.duration.DurationInt
 import scala.util.Try
 
-// TODO(#2703) Reenable or delete
-@Ignore
 class SplitwellUpgradeIntegrationTest
     extends IntegrationTest
     with MultiDomainTestUtil
