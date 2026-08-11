@@ -165,6 +165,11 @@ describe('Proposal Details Content', () => {
       </Wrapper>
     );
 
+    expect(screen.getByTestId('proposal-details-title')).toHaveTextContent('Proposal Details');
+    const backToAllVotes = screen.getByTestId('proposal-details-back-to-all-votes');
+    expect(backToAllVotes).toHaveTextContent('Back to all votes');
+    expect(backToAllVotes).toHaveAttribute('href', '/governance/proposals');
+
     const pageTitle = screen.getByTestId('proposal-details-proposal-details');
     expect(pageTitle).toBeInTheDocument();
 

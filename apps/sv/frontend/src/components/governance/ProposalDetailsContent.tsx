@@ -7,7 +7,7 @@ import {
   VoteRequest,
 } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
 import { ContractId } from '@daml/types';
-import { Edit } from '@mui/icons-material';
+import { ChevronLeft, Edit } from '@mui/icons-material';
 import { Alert, Box, Button, Divider, Stack, Tab, Tabs, Typography } from '@mui/material';
 import React, { PropsWithChildren, useEffect, useMemo, useRef, useState } from 'react';
 import dayjs from 'dayjs';
@@ -18,6 +18,7 @@ import {
   PrettyJsonDiff,
   useVotesHooks,
 } from '@canton-network/splice-common-frontend';
+import { Link as RouterLink } from 'react-router';
 import {
   ConfigChange,
   ProposalDetails,
@@ -181,6 +182,27 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
 
   return (
     <Box sx={{ width: '100%' }}>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" mb="14px">
+        <Typography
+          variant="h4"
+          fontSize={20}
+          fontWeight={700}
+          data-testid="proposal-details-title"
+        >
+          Proposal Details
+        </Typography>
+        <Button
+          component={RouterLink}
+          to="/governance/proposals"
+          size="small"
+          color="secondary"
+          startIcon={<ChevronLeft fontSize="small" />}
+          data-testid="proposal-details-back-to-all-votes"
+        >
+          Back to all votes
+        </Button>
+      </Stack>
+
       <Stack sx={{ bgcolor: 'colors.neutral.10', p: 6 }} alignItems="center" gap={8}>
         <VoteSection title="Proposal Details" data-testid="proposal-details-proposal-details">
           <DetailItem
