@@ -46,10 +46,10 @@ abstract class BatchedMultiDomainExpiredContractTrigger[
 
   protected val ignoredPartiesStore: IgnoredPartiesStore
 
-  protected def handleNoVettedVersion(
+  protected def ignorePartiesWithoutVettedAmulet(
       informees: Set[PartyId],
       contractIds: Seq[String],
-      warning: Boolean,
+      logAsWarning: Boolean,
   )(implicit tc: TraceContext): String
 
   override final protected def listReadyTasks(now: CantonTimestamp, limit: Int)(implicit
@@ -76,10 +76,10 @@ abstract class BatchedMultiDomainExpiredContractTrigger[
             }
           case (None, contracts) =>
             val informees = contracts.flatten.flatMap(c => getStakeholders(c.payload, false)).toSet
-            handleNoVettedVersion(
+            ignorePartiesWithoutVettedAmulet(
               informees,
               contracts.flatten.map(_.contractId.contractId),
-              warning = true,
+              logAsWarning = true,
             ).discard
             Seq.empty
         }
