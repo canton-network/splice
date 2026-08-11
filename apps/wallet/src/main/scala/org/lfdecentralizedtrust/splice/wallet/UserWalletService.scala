@@ -100,7 +100,7 @@ class UserWalletService(
         walletManager,
         retryProvider,
         scanConnection,
-        mintUnassignedRewardCouponsV2 = rewardSharingConfig.beneficiaries.isEmpty,
+        mintUnassignedRewardCouponsV2 = rewardSharingConfig.mintUnassignedCoupons,
         loggerFactory,
       )
     } catch {
@@ -110,7 +110,7 @@ class UserWalletService(
         throw e
     }
 
-  val automation =
+  val automation: UserWalletAutomationService =
     try {
       new UserWalletAutomationService(
         store,

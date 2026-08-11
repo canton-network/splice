@@ -32,7 +32,6 @@ export interface UnfeatureAppProposal {
 export interface UpdateFeatureAppProposal {
   rightContractId: string;
   newActivityWeight: string;
-  reason: string;
 }
 
 export interface UnclaimedActivityRecordProposal {
@@ -213,7 +212,6 @@ export interface UpdateFeatureAppFormData extends CommonProposalFormData {
   partyId: string;
   rightCid: string;
   newActivityWeight: string;
-  reason: string;
 }
 
 export type NonConfigProposalFormData =

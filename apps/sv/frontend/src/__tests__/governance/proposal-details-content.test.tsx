@@ -24,6 +24,7 @@ import { ProposalVoteForm } from '../../components/governance/ProposalVoteForm';
 import App from '../../App';
 import { svPartyId } from '../mocks/constants';
 import { Wrapper } from '../helpers';
+import { SUPPORTING_URL_LABEL, VOTE_PROPOSAL_CONTRACT_ID_LABEL } from '../../utils/constants';
 
 const voteRequest = {
   contractId: 'abc123' as ContractId<VoteRequest>,
@@ -165,6 +166,10 @@ describe('Proposal Details Content', () => {
     const action = screen.getByTestId('proposal-details-action-value');
     expect(action.textContent).toMatch(/Offboard Member/);
 
+    expect(screen.getByTestId('proposal-details-contractid-label').textContent).toBe(
+      VOTE_PROPOSAL_CONTRACT_ID_LABEL
+    );
+
     const offboardSection = screen.getByTestId('proposal-details-offboard-member-section');
     expect(offboardSection).toBeInTheDocument();
 
@@ -176,6 +181,8 @@ describe('Proposal Details Content', () => {
 
     const summary = screen.getByTestId('proposal-details-summary-value');
     expect(summary.textContent).toMatch(/Summary of the proposal/);
+
+    expect(screen.getByTestId('proposal-details-url-label').textContent).toBe(SUPPORTING_URL_LABEL);
 
     const url = screen.getByTestId('proposal-details-url');
     expect(url.textContent).toMatch(/https:\/\/example.com/);
@@ -293,7 +300,6 @@ describe('Proposal Details Content', () => {
       proposal: {
         rightContractId: 'rightCid123',
         newActivityWeight: '2.5',
-        reason: 'boosting rewards',
       } as UpdateFeatureAppProposal,
     } as ProposalDetails;
 
@@ -330,16 +336,6 @@ describe('Proposal Details Content', () => {
 
     const newFeaturedAppWeight = screen.getByTestId('config-change-new-value');
     expect(newFeaturedAppWeight.textContent).toMatch('2.5');
-
-    const updateFeaturedReasonLabel = screen.getByTestId(
-      'proposal-details-update-feature-reason-label'
-    );
-    expect(updateFeaturedReasonLabel.textContent).toMatch('Reason');
-
-    const updateFeaturedReasonValue = screen.getByTestId(
-      'proposal-details-update-feature-reason-value'
-    );
-    expect(updateFeaturedReasonValue.textContent).toMatch('boosting rewards');
   });
 
   test('should show only new weight when featured app right is not found', async () => {
@@ -511,6 +507,91 @@ describe('Proposal Details Content', () => {
     expect(jsonDiffsToggle).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByText('JSON')).not.toBeInTheDocument();
     expect(screen.getByTestId('json-diffs-details')).not.toBeVisible();
+
+    expect(
+      screen.queryByTestId('proposal-details-disabled-fields-warning')
+    ).not.toBeInTheDocument();
+  });
+
+  test('should warn when disabled fields were altered in an amulet rules config proposal', () => {
+    const amuletRulesConfigDetails = {
+      actionName: 'Set Amulet Rules Config',
+      action: 'CRARC_SetConfig',
+      proposal: {
+        configChanges: [
+          {
+            fieldName: 'transferConfigCreateFee',
+            label: 'Transfer (Create Fee)',
+            currentValue: '0.03',
+            newValue: '0.04',
+          },
+          {
+            fieldName: 'decentralizedSynchronizerActiveSynchronizer',
+            label: 'The currently active synchronizer',
+            currentValue: 'global-domain::12',
+            newValue: 'global-domain::13',
+            isId: true,
+            disabled: true,
+          },
+        ],
+      },
+    } as ProposalDetails;
+
+    render(
+      <Wrapper>
+        <ProposalDetailsContent
+          currentSvPartyId={voteRequest.votingInformation.requester}
+          contractId={voteRequest.contractId}
+          proposalDetails={amuletRulesConfigDetails}
+          votingInformation={voteRequest.votingInformation}
+          votes={voteRequest.votes}
+        />
+      </Wrapper>
+    );
+
+    const warning = screen.getByTestId('proposal-details-disabled-fields-warning');
+    expect(warning).toBeInTheDocument();
+    expect(warning.textContent).toMatch(/Disabled fields have been altered in this vote proposal/);
+
+    const changes = screen.getAllByTestId('config-change');
+    expect(changes[1]).toHaveAttribute('data-disabled', 'true');
+    expect(within(changes[1]).getByTestId('config-change-disabled-label')).toHaveTextContent(
+      'Disabled field'
+    );
+  });
+
+  test('should warn when disabled fields were altered in a dso rules config proposal', () => {
+    const dsoRulesConfigDetails = {
+      actionName: 'Set DSO Rules Configuration',
+      action: 'SRARC_SetConfig',
+      proposal: {
+        configChanges: [
+          {
+            fieldName: 'decentralizedSynchronizerActiveSynchronizerId',
+            label: 'Decentralized synchronizer: Active synchronizer identifier',
+            currentValue: 'global-domain::12',
+            newValue: 'global-domain::13',
+            isId: true,
+            disabled: true,
+          },
+        ],
+      },
+    } as ProposalDetails;
+
+    render(
+      <Wrapper>
+        <ProposalDetailsContent
+          currentSvPartyId={voteRequest.votingInformation.requester}
+          contractId={voteRequest.contractId}
+          proposalDetails={dsoRulesConfigDetails}
+          votingInformation={voteRequest.votingInformation}
+          votes={voteRequest.votes}
+        />
+      </Wrapper>
+    );
+
+    expect(screen.getByTestId('proposal-details-disabled-fields-warning')).toBeInTheDocument();
+    expect(screen.getByTestId('config-change-disabled-label')).toHaveTextContent('Disabled field');
   });
 
   test('should render dso rules config changes', () => {
@@ -1159,5 +1240,129 @@ describe('Proposal Details > Votes & Voting', () => {
     expect(rejectButton).toBeInTheDocument();
     expect(acceptButton).not.toBeDisabled();
     expect(rejectButton).not.toBeDisabled();
+  });
+});
+
+describe('Open vote request whose effectivity has passed', () => {
+  const pastEffectivity = {
+    requester: 'sv1',
+    requesterIsYou: true,
+    votingThresholdDeadline: '2024-01-01 13:00',
+    voteTakesEffect: '2024-01-02 13:00',
+    status: 'In Progress',
+  } as ProposalVotingInformation;
+
+  test('shows the vote form to an SV that has not voted', () => {
+    const votes: ProposalVote[] = [
+      { sv: 'sv1', isYou: true, vote: 'no-vote' },
+      { sv: 'sv3', vote: 'accepted', reason: { url: 'https://example.com', body: 'Reason' } },
+    ];
+
+    render(
+      <Wrapper>
+        <ProposalDetailsContent
+          currentSvPartyId="sv1"
+          contractId={voteRequest.contractId}
+          proposalDetails={voteRequest.proposalDetails}
+          votingInformation={pastEffectivity}
+          votes={votes}
+        />
+      </Wrapper>
+    );
+
+    const votingForm = screen.getByTestId('your-vote-form');
+    expect(votingForm).toBeInTheDocument();
+    expect(within(votingForm).getByTestId('your-vote-accept')).toBeInTheDocument();
+    expect(within(votingForm).getByTestId('your-vote-reject')).toBeInTheDocument();
+  });
+
+  test('shows the change-vote control to an SV that has already voted', async () => {
+    const user = userEvent.setup();
+    const votes: ProposalVote[] = [
+      {
+        sv: 'sv1',
+        isYou: true,
+        vote: 'accepted',
+        reason: { url: 'https://example.com', body: 'Reason' },
+      },
+      { sv: 'sv3', vote: 'accepted', reason: { url: 'https://example.com', body: 'Reason' } },
+    ];
+
+    render(
+      <Wrapper>
+        <ProposalDetailsContent
+          currentSvPartyId="sv1"
+          contractId={voteRequest.contractId}
+          proposalDetails={voteRequest.proposalDetails}
+          votingInformation={pastEffectivity}
+          votes={votes}
+        />
+      </Wrapper>
+    );
+
+    // An SV that has voted sees the Edit control rather than the form, until it starts editing.
+    expect(screen.queryByTestId('your-vote-form')).not.toBeInTheDocument();
+
+    const editButton = screen.getByTestId('your-vote-edit-button');
+    expect(editButton).toBeInTheDocument();
+
+    await user.click(editButton);
+
+    const votingForm = screen.getByTestId('your-vote-form');
+    expect(votingForm).toBeInTheDocument();
+    expect(within(votingForm).getByTestId('your-vote-reject')).toBeInTheDocument();
+  });
+
+  test('shows SVs that have not voted as awaiting a response', () => {
+    const votes: ProposalVote[] = [
+      {
+        sv: 'sv1',
+        isYou: true,
+        vote: 'accepted',
+        reason: { url: 'https://example.com', body: 'Reason' },
+      },
+      { sv: 'sv3', vote: 'no-vote' },
+    ];
+
+    render(
+      <Wrapper>
+        <ProposalDetailsContent
+          currentSvPartyId="sv1"
+          contractId={voteRequest.contractId}
+          proposalDetails={voteRequest.proposalDetails}
+          votingInformation={pastEffectivity}
+          votes={votes}
+        />
+      </Wrapper>
+    );
+
+    const noVoteTab = screen.getByTestId('no-vote-votes-tab');
+    expect(noVoteTab.textContent).toMatch(/Awaiting Response/);
+    expect(noVoteTab.textContent).not.toMatch(/Did not Vote/);
+
+    const statuses = screen
+      .getAllByTestId('proposal-details-vote-status-value')
+      .map(s => s.textContent);
+    expect(statuses).toContain('Awaiting Response');
+    expect(statuses).not.toContain('No Vote');
+  });
+});
+
+describe('Closed proposal', () => {
+  test('does not show the vote form or the change-vote control', () => {
+    render(
+      <Wrapper>
+        <ProposalDetailsContent
+          currentSvPartyId={voteResult.votingInformation.requester}
+          contractId={voteResult.contractId}
+          proposalDetails={voteResult.proposalDetails}
+          votingInformation={voteResult.votingInformation}
+          votes={voteResult.votes}
+        />
+      </Wrapper>
+    );
+
+    expect(screen.queryByTestId('your-vote-form')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('your-vote-edit-button')).not.toBeInTheDocument();
   });
 });

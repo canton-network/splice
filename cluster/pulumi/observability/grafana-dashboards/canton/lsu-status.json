@@ -458,7 +458,56 @@
             ]
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "successor_psid"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 749
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "namespace"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 144
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "job"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 147
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 544
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 10,
@@ -488,7 +537,7 @@
           },
           "disableTextWrap": false,
           "editorMode": "code",
-          "expr": "max by (job, node) (daml_participant_lsu_status{namespace=\"$namespace\"})",
+          "expr": "daml_participant_lsu_status{namespace=\"$namespace\"}",
           "format": "table",
           "fullMetaSearch": false,
           "includeNullMetadata": true,
@@ -505,8 +554,19 @@
           "id": "organize",
           "options": {
             "excludeByName": {
-              "Time": true
+              "Time": true,
+              "__name__": true,
+              "component": true,
+              "container": true,
+              "endpoint": true,
+              "instance": true,
+              "job": false,
+              "node": true,
+              "otel_scope_name": true,
+              "pod": true,
+              "service": true
             },
+            "includeByName": {},
             "indexByName": {},
             "renameByName": {}
           }
@@ -548,10 +608,10 @@
       {
         "current": {
           "text": [
-            "global-domain-8-sequencer"
+            "All"
           ],
           "value": [
-            "global-domain-8-sequencer"
+            "$__all"
           ]
         },
         "datasource": {

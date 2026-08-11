@@ -975,6 +975,9 @@ function createGrafanaAlerting(namespace: Input<string>) {
             'scan_connection_disagreement_alerts.yaml': substituteScanConnectionDisagreementAlerts(
               readGrafanaAlertingFile('scan_connection_disagreement_alerts.yaml')
             ),
+            'scan_bft_sequencers_alerts.yaml': readGrafanaAlertingFile(
+              'scan_bft_sequencers_alerts.yaml'
+            ),
             'extra_k8s_alerts.yaml': readGrafanaAlertingFile('extra_k8s_alerts.yaml'),
             'sequencer_rate_limit_alerts.yaml': readGrafanaAlertingFile(
               'sequencer_rate_limit_alerts.yaml'
@@ -1030,6 +1033,9 @@ function createGrafanaAlerting(namespace: Input<string>) {
                 '$VERDICT_INGESTION_BATCH_SIZE_PENDING_PERIOD_MINUTES',
                 monitoringConfig.alerting.alerts.trafficBasedRewards.verdictIngestionBatchSizePendingPeriodMinutes.toString()
               ),
+            'istio-rate-limiting_alerts.yaml': readGrafanaAlertingFile(
+              'istio-rate-limiting_alerts.yaml'
+            ),
           },
         }).map(([k, v]) => [k, defaultAlertSubstitutions(v)])
       ),

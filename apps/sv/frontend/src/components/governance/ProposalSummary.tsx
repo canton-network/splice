@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Box, Typography } from '@mui/material';
-import { THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
+import { SUPPORTING_URL_LABEL, THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
 import type { ConfigChange } from '../../utils/types';
 import { scrollContainerSx, scrollableIdentifierFieldSx } from '../beta/identifierStyles';
 import { ConfigValuesChanges } from './ConfigValuesChanges';
@@ -55,7 +55,6 @@ type ProposalSummaryProps = BaseProposalSummaryProps &
         rightCid: string;
         currentActivityWeight: string;
         newActivityWeight: string;
-        reason: string;
       }
   );
 
@@ -71,7 +70,7 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
       <Box>
         <ProposalField id="action" title="Action" value={actionName} />
 
-        <ProposalField id="url" title="URL" value={url} />
+        <ProposalField id="url" title={SUPPORTING_URL_LABEL} value={url} />
 
         <ProposalField id="summary" title="Summary" value={summary} />
 
@@ -176,7 +175,6 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
                 />
               }
             />
-            <ProposalField id="updateReason" title="Reason" value={props.reason} />
           </>
         )}
 
