@@ -778,7 +778,6 @@ class AcsSnapshotStore(
     assert(snapshot.tableName == table.tableName)
     assert(snapshot.historyId == historyId)
     assert(snapshot.recordTime == snapshot.targetRecordTime)
-    // TODO: split into insert into legacy table and insert into new table + create indexes
     val statement: DBIO[Int] = table match {
       case IncrementalAcsSnapshotTable.NextV2 =>
         saveV2IncrementalSnapshot(table, snapshot, nextSnapshotTargetRecordTime)(tc)
@@ -823,9 +822,9 @@ class AcsSnapshotStore(
       """).toActionBuilder.asUpdate
       copiedStakeholderRows <- sqlu"""
         insert into #${stakeholdersTableName} (stakeholder, template_id, contract_id)
-        select stakeholder, s.template_id, contract_id
+        select stakeholder, concat(s.package_name, ':', s.template_id_module_name, ':', s.template_id_entity_name) as template_id, contract_id
         from #${table.tableName} s
-        cross join unnest(s.stakeholders) as stakeholder
+        cross join unnest(array_cat(s.observers, s.signatories)) as stakeholder
         where s.snapshot_id = ${snapshot.snapshotId}
         order by created_at, contract_id
       """
@@ -1043,37 +1042,43 @@ object AcsSnapshotStore {
 
   sealed trait IncrementalAcsSnapshotTable {
     def tableName: String
-    protected def storeCreatedArguments: Boolean
-    def copyFromUpdateHistoryTargetColumns =
-      IncrementalAcsSnapshotTable.QueryParts.copyFromUpdateHistoryTargetColumns(
-        storeCreatedArguments
-      )
-    def copyFromUpdateHistorySourceColumns =
-      IncrementalAcsSnapshotTable.QueryParts.copyFromUpdateHistorySourceColumns(
-        storeCreatedArguments
-      )
+    def copyFromUpdateHistoryTargetColumns: SQLActionBuilderChain
+    def copyFromUpdateHistorySourceColumns: SQLActionBuilderChain
   }
   object IncrementalAcsSnapshotTable {
-    case object Next extends IncrementalAcsSnapshotTable {
-      val tableName: String = "acs_incremental_snapshot_data_next"
-      override protected def storeCreatedArguments: Boolean = false
-    }
     case object NextV2 extends IncrementalAcsSnapshotTable {
       val tableName: String = "acs_incremental_snapshot_data_next_v2"
-      override protected def storeCreatedArguments: Boolean = true
+
+      override def copyFromUpdateHistoryTargetColumns: SQLActionBuilderChain =
+        QueryParts.v2CopyFromUpdateHistoryTargetColumns
+
+      override def copyFromUpdateHistorySourceColumns: SQLActionBuilderChain =
+        QueryParts.v2CopyFromUpdateHistorySourceColumns
+    }
+    case object Next extends IncrementalAcsSnapshotTable {
+      val tableName: String = "acs_incremental_snapshot_data_next"
+
+      override def copyFromUpdateHistoryTargetColumns: SQLActionBuilderChain =
+        QueryParts.legacyCopyFromUpdateHistoryTargetColumns
+
+      override def copyFromUpdateHistorySourceColumns: SQLActionBuilderChain =
+        QueryParts.legacyCopyFromUpdateHistorySourceColumns
     }
     case object Backfill extends IncrementalAcsSnapshotTable {
       val tableName: String = "acs_incremental_snapshot_data_backfill"
-      override protected def storeCreatedArguments: Boolean = false
+
+      override def copyFromUpdateHistoryTargetColumns: SQLActionBuilderChain =
+        QueryParts.legacyCopyFromUpdateHistoryTargetColumns
+
+      override def copyFromUpdateHistorySourceColumns: SQLActionBuilderChain =
+        QueryParts.legacyCopyFromUpdateHistorySourceColumns
     }
 
     object QueryParts {
 
-      private[IncrementalAcsSnapshotTable] def copyFromUpdateHistoryTargetColumns(
-          copyCreatedEventData: Boolean
-      ): SQLActionBuilderChain = {
-        (if (copyCreatedEventData)
-           sql"""
+      private[IncrementalAcsSnapshotTable] val v2CopyFromUpdateHistoryTargetColumns
+          : SQLActionBuilderChain = {
+        sql"""
             create_arguments,
             event_id,
             record_time,
@@ -1084,22 +1089,16 @@ object AcsSnapshotStore {
             contract_key,
             signatories,
             observers,
-             """
-         else sql"") ++ (if (copyCreatedEventData) sql"" else sql"create_id,") ++ sql"""
-      contract_id,
-      created_at,
-      unlocked_amulet_balance,
-      locked_amulet_balance,
-      template_id,
-      stakeholders
-    """
+            contract_id,
+            created_at,
+            unlocked_amulet_balance,
+            locked_amulet_balance
+           """
       }
 
-      private[IncrementalAcsSnapshotTable] def copyFromUpdateHistorySourceColumns(
-          copyCreatedEventData: Boolean
-      ): SQLActionBuilderChain = {
-        (if (copyCreatedEventData)
-           sql"""
+      private[IncrementalAcsSnapshotTable] val v2CopyFromUpdateHistorySourceColumns
+          : SQLActionBuilderChain = {
+        sql"""
             c.create_arguments,
             c.event_id,
             c.record_time,
@@ -1110,16 +1109,34 @@ object AcsSnapshotStore {
             c.contract_key,
             c.signatories,
             c.observers,
-             """
-         else sql"") ++ (if (copyCreatedEventData) sql""
-                         else sql"c.row_id,") ++ sql"""
-      c.contract_id,
-      c.created_at,
-      """ ++ unlockedAmuletBalance() ++ sql"," ++
-          lockedAmuletBalance() ++ sql""",
-      concat(c.package_name, ':', c.template_id_module_name, ':', c.template_id_entity_name) as template_id,
-      array_cat(c.signatories, c.observers)
-    """
+            c.contract_id,
+            c.created_at,""" ++
+          unlockedAmuletBalance() ++ sql"," ++
+          lockedAmuletBalance()
+      }
+
+      private[IncrementalAcsSnapshotTable] val legacyCopyFromUpdateHistoryTargetColumns
+          : SQLActionBuilderChain = {
+        sql"""
+            create_id,
+            template_id,
+            stakeholders,
+            contract_id,
+            created_at,
+            unlocked_amulet_balance,
+            locked_amulet_balance"""
+      }
+
+      private[IncrementalAcsSnapshotTable] val legacyCopyFromUpdateHistorySourceColumns
+          : SQLActionBuilderChain = {
+        sql"""
+              c.row_id,
+              concat(c.package_name, ':', c.template_id_module_name, ':', c.template_id_entity_name) as template_id,
+              array_cat(c.signatories, c.observers) as stakeholder,
+              c.contract_id,
+              c.created_at,
+           """ ++ unlockedAmuletBalance() ++ sql"," ++
+          lockedAmuletBalance()
       }
 
       def unlockedAmuletBalance() = {
