@@ -218,7 +218,9 @@ async function installValidator(
     ...loadYamlFromFile(
       `${SPLICE_ROOT}/apps/app/src/pack/examples/sv-helm/standalone-validator-values.yaml`,
       {
-        MIGRATION_ID: DecentralizedSynchronizerUpgradeConfig.activeMigrationId.toString(),
+        MIGRATION_ID: (
+          validatorConfig.migrationId ?? DecentralizedSynchronizerUpgradeConfig.activeMigrationId
+        ).toString(),
         SPONSOR_SV_URL: `https://sv.sv-2.${CLUSTER_HOSTNAME}`,
         YOUR_VALIDATOR_NODE_NAME: validatorConfig.nodeIdentifier || validatorConfig.partyHint,
         TRUSTED_SCAN_URL: `https://scan.sv-2.${CLUSTER_HOSTNAME}`,

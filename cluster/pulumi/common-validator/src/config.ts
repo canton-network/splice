@@ -1,14 +1,18 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import {
-  DeployValidatorRunbook,
-  EnvVarConfigSchema,
-  K8sResourceSchema,
-  KmsConfigSchema,
-  LogLevelSchema,
-} from '@canton-network/splice-pulumi-common/src/config';
+import { DeployValidatorRunbook, EnvVarConfigSchema, K8sResourceSchema, KmsConfigSchema, LogLevelSchema } from '@canton-network/splice-pulumi-common/src/config';
 import { clusterSubConfig } from '@canton-network/splice-pulumi-common/src/config/config';
 import { z } from 'zod';
+
+
+
+
+
+
+
+
+
+
 
 export const SynchronizerConfigSchema = z.union([
   z
@@ -134,6 +138,7 @@ export const ValidatorConfigSchema = z
     onboardingSecret: z.string().optional(),
     partyAllocator: PartyAllocatorConfigSchema.prefault({ enable: false }),
     version: z.string().optional(),
+    migrationId: z.number().optional(),
   })
   .and(ValidatorNodeConfigSchema);
 
