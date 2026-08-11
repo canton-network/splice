@@ -12,8 +12,8 @@ trait ContractStakeholders[T] {
 
   def dso(payload: T): String
 
-  final def getStakeholders(payload: T): Seq[PartyId] =
-    getInformees(payload) :+ getDsoParty(payload)
+  final def getStakeholders(payload: T, includeDso: Boolean = true): Seq[PartyId] =
+    if (includeDso) getInformees(payload) :+ getDsoParty(payload) else getInformees(payload)
 
   private final def getInformees(payload: T): Seq[PartyId] =
     informees(payload).map(PartyId.tryFromProtoPrimitive)

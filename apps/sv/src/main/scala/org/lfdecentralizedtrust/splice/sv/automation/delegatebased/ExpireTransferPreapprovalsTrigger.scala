@@ -59,11 +59,9 @@ class ExpireTransferPreapprovalsTrigger(
             enableUnresponsivePartiesAutoIgnore = true,
           )(completeExpiryTaskAsDsoDelegate(task, controller))
         case None =>
+          val msg = handleNoVettedVersion(stakeholders, Seq(task.work.contractId.contractId))
           Future.successful(
-            TaskSuccess(
-              s"No vetted SpliceAmulet version for stakeholders $stakeholders of " +
-                s"TransferPreapproval ${task.work.contractId}, skipping."
-            )
+            TaskSuccess(msg)
           )
       }
   }

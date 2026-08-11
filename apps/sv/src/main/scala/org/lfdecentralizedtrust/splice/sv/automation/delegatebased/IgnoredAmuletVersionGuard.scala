@@ -4,7 +4,9 @@
 package org.lfdecentralizedtrust.splice.sv.automation.delegatebased
 
 import com.digitalasset.base.error.utils.ErrorDetails
+import com.digitalasset.canton.logging.NamedLogging
 import com.digitalasset.canton.topology.PartyId
+import com.digitalasset.canton.tracing.TraceContext
 import io.grpc.StatusRuntimeException
 import io.grpc.protobuf.StatusProto
 import org.lfdecentralizedtrust.splice.automation.{TaskOutcome, TaskSuccess}
@@ -14,7 +16,7 @@ import org.lfdecentralizedtrust.splice.util.UnresponsiveParties
 
 import scala.concurrent.{ExecutionContext, Future}
 
-trait IgnoredAmuletVersionGuard {
+trait IgnoredAmuletVersionGuard extends NamedLogging {
   protected def svConfig: SvAppBackendConfig
   protected def ignoredPartiesStore: IgnoredPartiesStore
   protected def svTaskContext: SvTaskBasedTrigger.Context
@@ -57,6 +59,19 @@ trait IgnoredAmuletVersionGuard {
           }
       }
     }
+  }
+
+  protected def handleNoVettedVersion(
+      informees: Set[PartyId],
+      contractIds: Seq[String],
+      warning: Boolean = false,
+  )(implicit tc: TraceContext): String = {
+    val toIgnore = informees - svTaskContext.dsoStore.key.dsoParty
+    ignoredPartiesStore.addAll(toIgnore)
+    val msg =
+      s"No vetted Amulet version for ${contractIds}; ignoring ${toIgnore.size} parties: $toIgnore"
+    if (warning) logger.warn(msg)
+    msg
   }
 
   private def extractUnresponsiveParties(ex: StatusRuntimeException): Set[PartyId] = {

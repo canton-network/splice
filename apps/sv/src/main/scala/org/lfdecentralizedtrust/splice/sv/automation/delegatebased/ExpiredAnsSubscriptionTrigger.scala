@@ -63,11 +63,9 @@ class ExpiredAnsSubscriptionTrigger(
             enableUnresponsivePartiesAutoIgnore = true,
           )(completeExpiryTaskAsDsoDelegate(task, controller))
         case None =>
+          val msg = handleNoVettedVersion(stakeholders, Seq(task.work.state.contractId.contractId))
           Future.successful(
-            TaskSuccess(
-              s"No vetted SpliceAmulet version for stakeholders $stakeholders of " +
-                s"ANS subscription ${task.work.state.contractId}, skipping."
-            )
+            TaskSuccess(msg)
           )
       }
   }

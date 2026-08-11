@@ -108,7 +108,9 @@ class FeaturedAppActivityMarkerTrigger(
               )
             }
           case (None, markers) =>
-            logger.warn(show"No vetted amulet version for $markers")
+            val informees = getInformeesFromContracts(markers.flatten)
+            val msg = handleNoVettedVersion(informees, markers.flatten.map(_.contractId.contractId))
+            logger.warn(msg)
             Seq.empty
         }
 

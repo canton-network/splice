@@ -200,6 +200,7 @@ class DsoDelegateBasedAutomationService(
         config,
         triggerContext,
         svTaskContext,
+        expiredAmuletIgnoredPartiesStore,
       )
     )
 

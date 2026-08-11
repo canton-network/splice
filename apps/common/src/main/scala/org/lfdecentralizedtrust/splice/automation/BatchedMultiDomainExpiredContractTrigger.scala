@@ -8,14 +8,14 @@ import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
-import com.digitalasset.canton.util.ShowUtil.*
 import com.digitalasset.daml.lf.data.Ref.PackageVersion
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.environment.{PackageIdResolver, PackageVettingLookupService}
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.ContractState
-import org.lfdecentralizedtrust.splice.store.{MultiDomainAcsStore, PageLimit}
+import org.lfdecentralizedtrust.splice.store.{IgnoredPartiesStore, MultiDomainAcsStore, PageLimit}
 import org.lfdecentralizedtrust.splice.util.{AssignedContract, Contract}
+import com.digitalasset.canton.discard.Implicits.DiscardOps
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -34,7 +34,7 @@ abstract class BatchedMultiDomainExpiredContractTrigger[
     companion: C,
     vettingLookupService: PackageVettingLookupService,
     pkg: PackageIdResolver.Package,
-    getStakeholders: T => Seq[PartyId],
+    getStakeholders: (T, Boolean) => Seq[PartyId],
 )(implicit
     ec: ExecutionContext,
     mat: Materializer,
@@ -43,6 +43,14 @@ abstract class BatchedMultiDomainExpiredContractTrigger[
 ) extends ScheduledTaskTrigger[BatchedMultiDomainExpiredContractTrigger.Batch[TCid, T]] {
 
   import BatchedMultiDomainExpiredContractTrigger.Batch
+
+  protected val ignoredPartiesStore: IgnoredPartiesStore
+
+  protected def handleNoVettedVersion(
+      informees: Set[PartyId],
+      contractIds: Seq[String],
+      warning: Boolean,
+  )(implicit tc: TraceContext): String
 
   override final protected def listReadyTasks(now: CantonTimestamp, limit: Int)(implicit
       tc: TraceContext
@@ -58,18 +66,21 @@ abstract class BatchedMultiDomainExpiredContractTrigger[
         PackageIdResolver.Package.SpliceAmulet,
         expiredContracts,
         batchSize,
-      )(c => getStakeholders(c.payload))
+      )(c => getStakeholders(c.payload, true))
       .map {
         _.toSeq.flatMap {
           case (Some(version), contractBatches) =>
             contractBatches.map { contracts =>
-              val stakeholders = contracts.flatMap(c => getStakeholders(c.payload)).toSet
+              val stakeholders = contracts.flatMap(c => getStakeholders(c.payload, true)).toSet
               Batch(pkg, version, contracts, stakeholders)
             }
           case (None, contracts) =>
-            logger.warn(
-              show"No vetted $pkg version for ${contracts.flatten.map { _.contractId.contractId }}"
-            )
+            val informees = contracts.flatten.flatMap(c => getStakeholders(c.payload, false)).toSet
+            handleNoVettedVersion(
+              informees,
+              contracts.flatten.map(_.contractId.contractId),
+              warning = true,
+            ).discard
             Seq.empty
         }
       }
