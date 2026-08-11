@@ -742,7 +742,7 @@ trait AcsSnapshotTriggerTest
   private def migration4 = 4L
 }
 
-class LegacyAcsSnapshotTriggerTest extends AcsSnapshotTriggerTest{
+class LegacyAcsSnapshotTriggerTest extends AcsSnapshotTriggerTest {
   protected def storageConfig = ScanStorageConfig(
     dbAcsSnapshotPeriodHours = 1,
     perAcsSnapshotTablesEnabled = false,
@@ -754,8 +754,7 @@ class LegacyAcsSnapshotTriggerTest extends AcsSnapshotTriggerTest{
   )
 }
 
-
-class V2AcsSnapshotTriggerTest extends AcsSnapshotTriggerTest{
+class V2AcsSnapshotTriggerTest extends AcsSnapshotTriggerTest {
   protected def storageConfig = ScanStorageConfig(
     dbAcsSnapshotPeriodHours = 1,
     perAcsSnapshotTablesEnabled = true,
