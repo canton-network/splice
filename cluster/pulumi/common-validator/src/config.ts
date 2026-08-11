@@ -4,16 +4,6 @@ import { DeployValidatorRunbook, EnvVarConfigSchema, K8sResourceSchema, KmsConfi
 import { clusterSubConfig } from '@canton-network/splice-pulumi-common/src/config/config';
 import { z } from 'zod';
 
-
-
-
-
-
-
-
-
-
-
 export const SynchronizerConfigSchema = z.union([
   z
     .object({
