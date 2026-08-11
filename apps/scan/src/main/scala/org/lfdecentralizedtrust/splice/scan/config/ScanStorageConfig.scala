@@ -147,7 +147,7 @@ object ScanStorageConfig {
     final def storageKey(prefix: String, index: Int): String = s"${prefix}_${key}_$index.zstd"
 
     final def storageKeyRegex(prefix: String): Regex =
-      Encoding.makeStorageKeyRegex(prefix, "_" + Regex.quote(key))
+      (".*" + Regex.quote(prefix) + "_" + Regex.quote(key) + "_\\d+\\.zstd").r
   }
   object Encoding {
     case object CompactJson
@@ -156,11 +156,6 @@ object ScanStorageConfig {
         extends Encoding("protobuf_json", definitions.DamlValueEncoding.ProtobufJson)
 
     lazy val all: NonEmptyList[Encoding] = NonEmptyList.of[Encoding](CompactJson, ProtobufJson)
-
-    private def makeStorageKeyRegex(prefix: String, middle: String): Regex =
-      (".*" + Regex.quote(prefix) + middle + "_\\d+\\.zstd").r
-
-    def noEncodingRegex(prefix: String): Regex = makeStorageKeyRegex(prefix, "")
   }
 }
 

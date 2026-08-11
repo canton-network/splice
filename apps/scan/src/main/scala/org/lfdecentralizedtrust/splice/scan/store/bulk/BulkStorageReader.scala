@@ -175,20 +175,12 @@ class BulkStorageReader(
         )
     }
 
-  /** Checks if a key in bulk storage has no specified encoding or matches one of the given
-    * [[storageEncodings]].
-    *
-    * The check for no encoding is to support a legacy key format, prior to the change that added
-    * support for uploading multiple encodings. Without it, pre-existing data in bulk storage would
-    * become unreadable; [[getCommittedObjectsForAcsSnapshotAtOrBefore]] and
-    * [[getCommittedUpdatesBetweenDates]] would never return objects with the old key format.
-    */
+  /** Checks if a key in bulk storage matches one of the given [[storageEncodings]]. */
   private def keyMatchesStorageEncodings(
       prefix: String,
       storageEncodings: NonEmptyList[ScanStorageConfig.Encoding],
   )(key: String): Boolean =
-    ScanStorageConfig.Encoding.noEncodingRegex(prefix).matches(key) ||
-      storageEncodings.exists(_.storageKeyRegex(prefix).matches(key))
+    storageEncodings.exists(_.storageKeyRegex(prefix).matches(key))
 
   private def getAcsSnapshotObjects(
       timestamp: CantonTimestamp,
