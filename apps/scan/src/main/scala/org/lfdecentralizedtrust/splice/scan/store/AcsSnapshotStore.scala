@@ -828,6 +828,7 @@ class AcsSnapshotStore(
         where s.snapshot_id = ${snapshot.snapshotId}
         order by created_at, contract_id
       """
+      // TODO: we should create the necessary indexes
 
       (unlocked_amulet_balance, locked_amulet_balance) <- sql"""
         select
