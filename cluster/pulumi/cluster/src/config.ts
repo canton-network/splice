@@ -9,6 +9,7 @@ const GkeNodePoolConfigSchema = z.object({
   nodeType: z.string(),
   bootDiskSizeGb: z.number().optional(),
   zones: z.literal('*').or(z.array(z.string())).optional(),
+  labels: z.record(z.string(), z.string()).optional(),
 });
 const GkeClusterConfigSchema = z.object({
   nodePools: z.object({
