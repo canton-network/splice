@@ -1,0 +1,39 @@
+name: Create Monthly Release Schedule
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Splice version, e.g. 0.8"
+        required: true
+        type: string
+      month:
+        description: "Month in YYYY-MM format, e.g. 2026-08"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  create-schedule:
+    runs-on: ubuntu-latest
+    environment: monday-production
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Create schedule
+        env:
+          MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
+          MONDAY_BOARD_ID: ${{ vars.MONDAY_BOARD_ID }}
+        run: |
+          python3 scripts/monthly-schedule.py \
+            "${{ inputs.version }}" \
+            "${{ inputs.month }}"
