@@ -221,7 +221,7 @@
             },
             "approvedSvIdentities": {
               "type": "md5",
-              "value": "5871224b744b45122540483fddbd550f"
+              "value": "6c876b92df2d92fe7ba83e883d031386"
             }
           },
           "network": "test",
@@ -1413,16 +1413,6 @@
             "rewardWeightBps": 1000000
           },
           {
-            "extraBeneficiaries": [
-              {
-                "beneficiary": "mock-validator-1::123456789012345678901234567890123456789012234567890123456789012345678",
-                "weight": 100000
-              },
-              {
-                "beneficiary": "Broadridge-validator-1::1220c89a73e7b47f16dfb48a521eeedfe2a8620ea1b19b815ab427388d9f5427faa5",
-                "weight": 50000
-              }
-            ],
             "name": "SV2",
             "publicKey": "PUBLIC_KEY_2==",
             "rewardWeightBps": 150000
