@@ -107,7 +107,6 @@ export const ScanBigQueryConfigSchema = z
     enableStagProdDatastream: z.boolean().default(false),
     legacyDesiredState: z.enum(['RUNNING', 'PAUSED']).default('RUNNING'),
     stagProdDesiredState: z.enum(['RUNNING', 'PAUSED']).default('RUNNING'),
-  
   })
   .strict(); // Keeps strict mode safe now that all known fields are explicitly defined
 

@@ -1,13 +1,12 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-
 import * as command from '@pulumi/command';
 import * as gcp from '@pulumi/gcp';
 import * as k8s from '@pulumi/kubernetes';
-import * as path from 'path';
 import * as pulumi from '@pulumi/pulumi';
-import * as ip from 'ip';
 import * as fs from 'fs';
+import * as ip from 'ip';
+import * as path from 'path';
 import {
   InstalledHelmChart,
   installPostgresPasswordSecret,
@@ -27,7 +26,8 @@ import {
   GCP_REGION,
   commandScriptPath,
 } from '@canton-network/splice-pulumi-common/src/utils';
-import { ScanBigQueryConfig } from './singleSvConfig';  
+
+import { ScanBigQueryConfig } from './singleSvConfig';
 
 // ============================================================================
 // PIPELINE CONFIGURATION & TYPES
@@ -50,7 +50,6 @@ const replicatorUserName = 'bqdatastream';
 const replicationSlotName = 'update_history_datastream_r_slot';
 const publicationName = 'update_history_datastream_pub';
 
-
 // Stream 2 (Stag-Prod) CDC Replication Configuration
 const replicationSlotNameStagProd = 'update_history_datastream_stag_prod_r_slot';
 const publicationNameStagProd = 'update_history_datastream_stag_prod_pub';
@@ -68,27 +67,27 @@ interface ReplicatedTableConfig {
 }
 
 const replicatedTables: Record<string, ReplicatedTableConfig> = {
-  'update_history_creates': {
+  update_history_creates: {
     primaryKey: 'row_id',
     datePartitionColumn: 'record_time',
     timeType: 'micros',
   },
-  'update_history_exercises': {
+  update_history_exercises: {
     primaryKey: 'row_id',
     datePartitionColumn: 'record_time',
     timeType: 'micros',
   },
-  'scan_verdict_store': {
+  scan_verdict_store: {
     primaryKey: 'row_id',
     datePartitionColumn: 'record_time',
     timeType: 'micros',
   },
-  'scan_verdict_transaction_view_store': {
+  scan_verdict_transaction_view_store: {
     primaryKey: 'verdict_row_id, view_id',
     datePartitionColumn: 'source_timestamp',
     timeType: 'datastream_metadata',
   },
-  'app_activity_record_store': {
+  app_activity_record_store: {
     primaryKey: 'row_id',
     datePartitionColumn: 'record_time',
     timeType: 'micros',
@@ -296,22 +295,23 @@ function installDatastream_stag_prod(
             },
           },
         },
-        customizationRules: [{
-          bigqueryPartitioning: {
-            ingestionTimePartition: {
-              partitioningTimeGranularity: 'PARTITIONING_TIME_GRANULARITY_HOUR'
-            }
+        customizationRules: [
+          {
+            bigqueryPartitioning: {
+              ingestionTimePartition: {
+                partitioningTimeGranularity: 'PARTITIONING_TIME_GRANULARITY_HOUR',
+              },
+            },
           },
-        }],
+        ],
       })),
       labels: {
         cluster: CLUSTER_BASENAME,
         datastream_id: 'stag_prod',
       },
     },
-    { 
-      dependsOn: [databaseInstance, source, destination, bigQueryDataset, pubRepSlots]
-      
+    {
+      dependsOn: [databaseInstance, source, destination, bigQueryDataset, pubRepSlots],
     }
   );
 }
@@ -319,7 +319,6 @@ function installDatastream_stag_prod(
 // ============================================================================
 // BIGQUERY DATASET CREATION
 // ============================================================================
-
 
 function installBigqueryDataset(scanBigQuery: ScanBigQueryConfig): gcp.bigquery.Dataset {
   return new gcp.bigquery.Dataset(scanBigQuery.dataset, {
@@ -364,9 +363,7 @@ function installBigqueryStagingDataset(scanBigQuery: ScanBigQueryConfig): gcp.bi
   });
 }
 
-function installBigqueryProdDataset(
-  scanBigQuery: ScanBigQueryConfig,
-): gcp.bigquery.Dataset {
+function installBigqueryProdDataset(scanBigQuery: ScanBigQueryConfig): gcp.bigquery.Dataset {
   return new gcp.bigquery.Dataset(`${scanBigQuery.dataset}-prod`, {
     datasetId: `${scanBigQuery.dataset}_prod`,
     friendlyName: `${scanBigQuery.dataset} Production Dataset`,
@@ -396,13 +393,15 @@ function installHourlyScheduledQueries(
   const transferServiceAgentPermission = new gcp.projects.IAMMember('bq-transfer-token-creator', {
     project: projectId,
     role: 'roles/iam.serviceAccountTokenCreator',
-    member: currentProject.apply(p => `serviceAccount:service-${p.number}@gcp-sa-bigquerydatatransfer.iam.gserviceaccount.com`),
+    member: currentProject.apply(
+      p => `serviceAccount:service-${p.number}@gcp-sa-bigquerydatatransfer.iam.gserviceaccount.com`
+    ),
   });
 
   Object.entries(replicatedTables).forEach(([tableName, tableConfig]) => {
     const primaryKeyExpr = tableConfig.primaryKey;
     const colName = tableConfig.datePartitionColumn;
-    
+
     let recordTimestampExpr: string;
     if (tableConfig.timeType === 'micros') {
       recordTimestampExpr = `TIMESTAMP_MICROS(staging.${colName})`;
@@ -415,27 +414,25 @@ function installHourlyScheduledQueries(
 
     const recordDateExpr = `CAST(${recordTimestampExpr} AS DATE)`;
 
-    const procedureBody = pulumi.all([
-      projectId, 
-      prodDataset.datasetId, 
-      stagingDataset.datasetId
-    ]).apply(([proj, prodDs, stagingDs]) => {
-      const prodTable = `\`${proj}.${prodDs}.${tableName}\``;
-      const stagingTable = `\`${proj}.${stagingDs}.${schemaName}_${tableName}\``;
-      const watermarksTable = `\`${proj}.${prodDs}.pipeline_watermarks\``;
-      const prodInfoSchema = `\`${proj}.${prodDs}.INFORMATION_SCHEMA.TABLES\``;
+    const procedureBody = pulumi
+      .all([projectId, prodDataset.datasetId, stagingDataset.datasetId])
+      .apply(([proj, prodDs, stagingDs]) => {
+        const prodTable = `\`${proj}.${prodDs}.${tableName}\``;
+        const stagingTable = `\`${proj}.${stagingDs}.${schemaName}_${tableName}\``;
+        const watermarksTable = `\`${proj}.${prodDs}.pipeline_watermarks\``;
+        const prodInfoSchema = `\`${proj}.${prodDs}.INFORMATION_SCHEMA.TABLES\``;
 
-      return rawSqlTemplate
-        .replaceAll('{{tableName}}', tableName)
-        .replaceAll('{{schemaName}}', schemaName)
-        .replaceAll('{{primaryKeyExpr}}', primaryKeyExpr)
-        .replaceAll('{{recordTimestampExpr}}', recordTimestampExpr)
-        .replaceAll('{{recordDateExpr}}', recordDateExpr)
-        .replaceAll('{{prodTable}}', prodTable)
-        .replaceAll('{{stagingTable}}', stagingTable)
-        .replaceAll('{{watermarksTable}}', watermarksTable)
-        .replaceAll('{{prodInfoSchema}}', prodInfoSchema);
-    });
+        return rawSqlTemplate
+          .replaceAll('{{tableName}}', tableName)
+          .replaceAll('{{schemaName}}', schemaName)
+          .replaceAll('{{primaryKeyExpr}}', primaryKeyExpr)
+          .replaceAll('{{recordTimestampExpr}}', recordTimestampExpr)
+          .replaceAll('{{recordDateExpr}}', recordDateExpr)
+          .replaceAll('{{prodTable}}', prodTable)
+          .replaceAll('{{stagingTable}}', stagingTable)
+          .replaceAll('{{watermarksTable}}', watermarksTable)
+          .replaceAll('{{prodInfoSchema}}', prodInfoSchema);
+      });
 
     const routineId = `sp_append_${tableName}`;
 
@@ -447,19 +444,23 @@ function installHourlyScheduledQueries(
       definitionBody: procedureBody,
     });
 
-    new gcp.bigquery.DataTransferConfig(`${CLUSTER_BASENAME}_${tableName}-hourly-append`, {
-      displayName: `${CLUSTER_BASENAME}_${tableName} Hourly Append Pipeline`,
-      location: cloudsdkComputeRegion(),
-      serviceAccountName: pulumi.interpolate`bigquery@${projectId}.iam.gserviceaccount.com`,
-      dataSourceId: 'scheduled_query',
-      schedule: 'every 1 hours from 00:07 to 23:07',
-      
-      params: {
-        query: pulumi.interpolate`CALL \`${projectId}.${prodDataset.datasetId}.${routineId}\`();`,
+    new gcp.bigquery.DataTransferConfig(
+      `${CLUSTER_BASENAME}_${tableName}-hourly-append`,
+      {
+        displayName: `${CLUSTER_BASENAME}_${tableName} Hourly Append Pipeline`,
+        location: cloudsdkComputeRegion(),
+        serviceAccountName: pulumi.interpolate`bigquery@${projectId}.iam.gserviceaccount.com`,
+        dataSourceId: 'scheduled_query',
+        schedule: 'every 1 hours from 00:07 to 23:07',
+
+        params: {
+          query: pulumi.interpolate`CALL \`${projectId}.${prodDataset.datasetId}.${routineId}\`();`,
+        },
       },
-    }, { 
-      dependsOn: [transferServiceAgentPermission, appendRoutine],
-    });
+      {
+        dependsOn: [transferServiceAgentPermission, appendRoutine],
+      }
+    );
   });
 }
 
@@ -468,7 +469,7 @@ function installHourlyScheduledQueries(
 // ============================================================================
 
 function installBigqueryConnectionProfile(
-  namespace: ExactNamespace,  
+  namespace: ExactNamespace,
   bigQuery: gcp.bigquery.Dataset,
   pcc: gcp.datastream.PrivateConnection
 ): gcp.datastream.ConnectionProfile {
@@ -489,7 +490,7 @@ function installBigqueryConnectionProfile(
 }
 
 function installBigqueryStagingConnectionProfile(
-  namespace: ExactNamespace,  
+  namespace: ExactNamespace,
   bigQuery: gcp.bigquery.Dataset,
   pcc: gcp.datastream.PrivateConnection
 ): gcp.datastream.ConnectionProfile {
@@ -646,7 +647,7 @@ function createPublicationAndReplicationSlots(
   namespace: ExactNamespace,
   databaseInstance: gcp.sql.DatabaseInstance,
   replicatorUser: gcp.sql.User,
-  scan: InstalledHelmChart| undefined,
+  scan: InstalledHelmChart | undefined,
   enableLegacy: boolean,
   enableStagProd: boolean
 ): {
@@ -661,15 +662,9 @@ function createPublicationAndReplicationSlots(
   const schemaName = dbName;
   const scriptPath = commandScriptPath('cluster/pulumi/canton-network/bigquery-cloudsql.sh');
 
-  const projectId = gcp.organizations
-    .getProjectOutput({})
-    .apply(proj => proj.projectId);
+  const projectId = gcp.organizations.getProjectOutput({}).apply(proj => proj.projectId);
 
-  const commonDependencies = [
-    scan,
-    databaseInstance,
-    replicatorUser,
-  ];
+  const commonDependencies = [scan, databaseInstance, replicatorUser];
 
   // ---------------------------------------------------------------------------
   // 2. Base Arguments Split (Matches Stored Deployment Ordering & Formatting)
@@ -692,7 +687,6 @@ function createPublicationAndReplicationSlots(
     pulumi.interpolate`--scan-app-database-name="${dbName}"`,
     pulumi.interpolate`--flyway-migration-to-wait-for="${flywayMigrationToWaitFor}"`,
   ];
-
 
   const buildScriptCommand = (
     action: string,
@@ -777,8 +771,8 @@ export async function configureScanBigQuery({
   // Use config file to determine which datastreams to enable and their desired states
 
   const {
-    enableLegacyDatastream ,
-    enableStagProdDatastream ,
+    enableLegacyDatastream,
+    enableStagProdDatastream,
     legacyDesiredState,
     stagProdDesiredState,
   } = bigQueryConfig;
@@ -797,7 +791,6 @@ export async function configureScanBigQuery({
         return [await getScanDb(scanReference.databaseInstanceNamePrefix, zone), undefined];
     }
   })();
-
 
   const passwordSecret = installReplicatorPassword(namespace);
   const slots = createPublicationAndReplicationSlots(
@@ -835,11 +828,11 @@ export async function configureScanBigQuery({
     );
 
     installDatastream(
-      namespace, 
+      namespace,
       databaseInstance,
-      sourceProfile, 
-      legacyDestinationProfile, 
-      legacyDataset, 
+      sourceProfile,
+      legacyDestinationProfile,
+      legacyDataset,
       slots.slot1,
       legacyDesiredState
     );
@@ -855,27 +848,27 @@ export async function configureScanBigQuery({
     );
 
     installDatastream_stag_prod(
-      namespace, 
+      namespace,
       databaseInstance,
-      sourceProfile, 
-      stagingDestinationProfile, 
-      stagingDataset, 
+      sourceProfile,
+      stagingDestinationProfile,
+      stagingDataset,
       slots.slot2,
       stagProdDesiredState
     );
 
     installHourlyScheduledQueries(namespace, stagingDataset, prodDataset);
   }
-  // TODO (DACH-NY/canton-network-internal#6451) not sure if this function needs to return anything, 
-  // but we need to return something to satisfy the ScanBigQuery type. 
-  // For now, we return the primary dataset's ID, which is either legacy, staging, or prod, whichever is defined first. 
+  // TODO (DACH-NY/canton-network-internal#6451) not sure if this function needs to return anything,
+  // but we need to return something to satisfy the ScanBigQuery type.
+  // For now, we return the primary dataset's ID, which is either legacy, staging, or prod, whichever is defined first.
   // we should consider removing the return datasetId if it's not needed
-  
+
   const primaryDataset = legacyDataset ?? stagingDataset ?? prodDataset;
 
   return {
     datasetId: primaryDataset!.id,
-  }; 
+  };
 }
 
 export type ScanBigQueryArgs = {
