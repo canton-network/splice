@@ -598,7 +598,7 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
           requestedAt = now,
           allocateBefore = now.plusSeconds(1800),
           settleBefore = future,
-          expiresAt = Some(now.plusSeconds(1800))
+          expiresAt = Some(now.plusSeconds(1800)),
         )
 
         val ignoredCid = amuletAllocation(
@@ -625,9 +625,15 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
           store <- mkStore()
           _ <- dummyDomain.create(dsoRules())(store.multiDomainAcsStore)
           _ <- MonadUtil.sequentialTraverse(
-            Seq(expiredCid, earlyExpiredCid,
-              activeCid, activeWithExiresAtCid,
-              ignoredCid, ignoredEarlyExpiredCid))(
+            Seq(
+              expiredCid,
+              earlyExpiredCid,
+              activeCid,
+              activeWithExiresAtCid,
+              ignoredCid,
+              ignoredEarlyExpiredCid,
+            )
+          )(
             dummyDomain.create(_)(store.multiDomainAcsStore)
           )
 
