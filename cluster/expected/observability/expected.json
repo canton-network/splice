@@ -696,7 +696,7 @@
     "id": "",
     "inputs": {
       "description": "Logs with ClusterUpdate events",
-      "filter": "\nresource.labels.cluster_name=\"cn-mocknet\"\nresource.type=~\"(gke_cluster|gke_nodepool)\"\njsonPayload.state=~\"STARTED\"",
+      "filter": "\nresource.labels.cluster_name=\"cn-mocknet\"\nresource.type=~\"(gke_cluster|gke_nodepool)\"\njsonPayload.@type=~\"UpgradeEvent\"",
       "labelExtractors": {
         "cluster": "EXTRACT(resource.labels.cluster_name)"
       },
