@@ -24,6 +24,7 @@ export type ApprovedSvIdentityFromYamlFile = {
   publicKey: string | pulumi.Output<string>;
   // js-yaml after 4.2 doesn't support specifying numbers with separating underscores (e.g. 100_000),
   // which means that it will parse that as a string and break the on Helm schema validation.
+  // This is compliant with the yaml spec, which doesn't define numbers with underscores as possible.
   // For normal numbers (e.g 100000), it still gets parsed as a number.
   rewardWeightBps: string | number;
 };
