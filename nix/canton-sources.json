@@ -1,6 +1,6 @@
 {
-  "version": "3.5.13-snapshot.20260811.19159.0.va77f0cc3",
-  "oss_sha256": "sha256:1j0m0q3b83k6z5ay9qmdvijvswh29bppxsr8w2mc8kck8prx3sqs",
+  "version": "3.5.13-snapshot.20260812.19162.0.vd36e0b8a",
+  "oss_sha256": "sha256:0q53rqa47rrky4kyzzrli7a9h0rb3a68lfaxiq09qnbs1ysn3vvd",
   "canton_base_image_sha256": "sha256:103a57fccc1ccb7edf12f75b6382d205df82e6ebe2574c6b5e63db8fefc621da",
   "canton_participant_image_sha256": "sha256:74e3c1d7cc1f19f9f10261e932613217245f55be774c78eb65c8470da887902d",
   "canton_mediator_image_sha256": "sha256:79728083e2e01074a7d2c740ea5db26c12d808702c37e6500198d649683ea9f4",
