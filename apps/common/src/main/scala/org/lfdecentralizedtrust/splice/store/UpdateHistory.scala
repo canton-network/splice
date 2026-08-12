@@ -28,6 +28,7 @@ import org.lfdecentralizedtrust.splice.store.HistoryBackfilling.{
 }
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.{HasIngestionSink, IngestionFilter}
 import org.lfdecentralizedtrust.splice.store.db.{AcsJdbcTypes, AcsQueries}
+import db.AsUpdateReturning.*
 import org.lfdecentralizedtrust.splice.util.{
   Contract,
   DomainRecordTimeRange,

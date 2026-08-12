@@ -13,7 +13,7 @@ import {
 import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import { useAppForm } from '../../hooks/form';
 import { useStore } from '@tanstack/react-form';
-import { THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
+import { SUPPORTING_URL_LABEL, THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
 import { CommonProposalFormData } from '../../utils/types';
 import { ContractId } from '@daml/types';
 import { FeaturedAppRight } from '@daml.js/splice-amulet/lib/Splice/Amulet';
@@ -346,7 +346,7 @@ export const GrantRevokeFeaturedAppForm: React.FC<GrantRevokeFeaturedAppFormProp
                 onChange: ({ value }) => validateUrl(value),
               }}
             >
-              {field => <field.TextField title="SUPPORTING URL" id={`${testIdPrefix}-url`} />}
+              {field => <field.TextField title={SUPPORTING_URL_LABEL} id={`${testIdPrefix}-url`} />}
             </form.AppField>
           </>
         )}

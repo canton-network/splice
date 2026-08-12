@@ -648,7 +648,10 @@ class TreasuryService(
       (offset, result) <- batch.dedup match {
         case None => baseSubmission.noDedup.yieldResultAndOffset()
         case Some(dedup) =>
-          baseSubmission.withDedup(dedup.commandId, dedup.config).yieldResultAndOffset()
+          baseSubmission
+            .withDedup(dedup.commandId, dedup.config)
+            .recoveringAcceptedDuplicates(dedup.recoverAcceptedDuplicates)
+            .yieldResultAndOffset()
       }
 
       // wait for store to ingest the new amulet holdings, then return all outcomes to the callers
@@ -813,7 +816,10 @@ class TreasuryService(
       (offset, result) <- operation.dedup match {
         case None => baseSubmission.noDedup.yieldResultAndOffset()
         case Some(dedup) =>
-          baseSubmission.withDedup(dedup.commandId, dedup.config).yieldResultAndOffset()
+          baseSubmission
+            .withDedup(dedup.commandId, dedup.config)
+            .recoveringAcceptedDuplicates(dedup.recoverAcceptedDuplicates)
+            .yieldResultAndOffset()
       }
       _ <- userStore.signalWhenIngestedOrShutdown(offset)
     } yield {
@@ -1559,9 +1565,14 @@ object TreasuryService {
       }
   }
 
+  /** @param recoverAcceptedDuplicates
+    *   set by client calls, so that a duplicate of an already-accepted submission returns the
+    *   original result. Automation leaves it off and lets its own retry handle the duplicate.
+    */
   final case class AmuletOperationDedupConfig(
       commandId: CommandId,
       config: DedupConfig,
+      recoverAcceptedDuplicates: Boolean = false,
   ) extends PrettyPrinting {
     override def pretty: Pretty[AmuletOperationDedupConfig.this.type] =
       prettyNode("DedupConfig", param("commandId", _.commandId), param("config", _.config))

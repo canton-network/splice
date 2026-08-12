@@ -17,7 +17,7 @@ import {
   validateUrl,
   validateWeight,
 } from './formValidators';
-import { THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
+import { SUPPORTING_URL_LABEL, THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
 import {
   createProposalActions,
   formatBasisPoints,
@@ -220,7 +220,9 @@ export const UpdateSvRewardWeightForm: React.FC = _ => {
                 onChange: ({ value }) => validateUrl(value),
               }}
             >
-              {field => <field.TextField title="SUPPORTING URL" id="update-sv-reward-weight-url" />}
+              {field => (
+                <field.TextField title={SUPPORTING_URL_LABEL} id="update-sv-reward-weight-url" />
+              )}
             </form.AppField>
           </>
         )}

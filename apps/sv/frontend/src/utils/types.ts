@@ -32,7 +32,6 @@ export interface UnfeatureAppProposal {
 export interface UpdateFeatureAppProposal {
   rightContractId: string;
   newActivityWeight: string;
-  reason: string;
 }
 
 export interface UnclaimedActivityRecordProposal {
@@ -64,6 +63,14 @@ export interface ConfigChange {
    * If the field should be disabled for editing.
    */
   disabled?: boolean;
+  /**
+   * If set, render as a dropdown with these options instead of free text.
+   */
+  options?: { value: string; label: string }[];
+  /**
+   * Optional description shown as help text below the field.
+   */
+  description?: string;
 }
 
 export interface UpdateSvRewardWeightProposal {
@@ -157,6 +164,7 @@ export interface ProposalListingData {
   contractId: ContractId<VoteRequest>;
   actionName: string;
   description?: string;
+  requester: string;
   votingThresholdDeadline: string;
   voteTakesEffect: string;
   yourVote: YourVoteStatus;
@@ -212,7 +220,6 @@ export interface UpdateFeatureAppFormData extends CommonProposalFormData {
   partyId: string;
   rightCid: string;
   newActivityWeight: string;
-  reason: string;
 }
 
 export type NonConfigProposalFormData =

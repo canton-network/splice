@@ -29,7 +29,7 @@ import {
   standardSvConfigsBasic,
 } from '@canton-network/splice-pulumi-common-sv/src/svConfigsBasic';
 import { SweepConfig } from '@canton-network/splice-pulumi-common-validator';
-import { SplicePostgres } from '@canton-network/splice-pulumi-common/src/postgres';
+import { installSplicePostgres, Postgres } from '@canton-network/splice-pulumi-common/src/postgres';
 import { infraStack } from '@canton-network/splice-pulumi-common/src/stackReferences';
 import { local } from '@pulumi/command';
 import { getSecretVersionOutput } from '@pulumi/gcp/secretmanager/getSecretVersion';
@@ -547,7 +547,7 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
   );
   createGrafanaAlerting(namespaceName);
   if (monitoringConfig.enableGrafanaServiceAccountToken) {
-    createGrafanaServiceAccount(namespaceName, adminPassword, [prometheusStack, postgres.pg]);
+    createGrafanaServiceAccount(namespaceName, adminPassword, [prometheusStack, postgres.database]);
   }
   createGrafanaEnvoyFilter(namespaceName, [prometheusStack]);
 
@@ -975,6 +975,9 @@ function createGrafanaAlerting(namespace: Input<string>) {
             'scan_connection_disagreement_alerts.yaml': substituteScanConnectionDisagreementAlerts(
               readGrafanaAlertingFile('scan_connection_disagreement_alerts.yaml')
             ),
+            'scan_bft_sequencers_alerts.yaml': readGrafanaAlertingFile(
+              'scan_bft_sequencers_alerts.yaml'
+            ),
             'extra_k8s_alerts.yaml': readGrafanaAlertingFile('extra_k8s_alerts.yaml'),
             'sequencer_rate_limit_alerts.yaml': readGrafanaAlertingFile(
               'sequencer_rate_limit_alerts.yaml'
@@ -1030,6 +1033,9 @@ function createGrafanaAlerting(namespace: Input<string>) {
                 '$VERDICT_INGESTION_BATCH_SIZE_PENDING_PERIOD_MINUTES',
                 monitoringConfig.alerting.alerts.trafficBasedRewards.verdictIngestionBatchSizePendingPeriodMinutes.toString()
               ),
+            'istio-rate-limiting_alerts.yaml': readGrafanaAlertingFile(
+              'istio-rate-limiting_alerts.yaml'
+            ),
           },
         }).map(([k, v]) => [k, defaultAlertSubstitutions(v)])
       ),
@@ -1184,16 +1190,17 @@ function grafanaKeysFromSecret(): pulumi.Output<GrafanaKeys> {
   });
 }
 
-function installPostgres(namespace: ExactNamespace): SplicePostgres {
-  return new SplicePostgres(
+function installPostgres(namespace: ExactNamespace): Postgres {
+  const instanceName = 'grafana-postgres';
+  return installSplicePostgres(
     namespace,
-    'grafana-postgres',
-    'grafana-postgres',
+    instanceName,
     'grafana-postgres-secret',
+    monitoringConfig.grafanaPostgres,
+    undefined, // chart version
+    { disableProtection: true },
     { db: { volumeSize: '20Gi' } }, // A tiny pvc should be enough for grafana
     true, // overrideDbSizeFromValues
-    true, // disableProtection
-    undefined, // chart version
     true // useInfraAffinityAndTolerations
   );
 }

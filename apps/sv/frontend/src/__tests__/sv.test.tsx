@@ -52,8 +52,8 @@ describe('SV user can', () => {
     const user = userEvent.setup();
     render(<AppWithConfig />);
 
-    expect(await screen.findByText('Validator Onboarding')).toBeDefined();
-    await user.click(screen.getByText('Validator Onboarding'));
+    expect(await screen.findByText('Validators')).toBeDefined();
+    await user.click(screen.getByText('Validators'));
 
     expect(await screen.findByText('Validator Onboarding Secrets')).toBeDefined();
   });
@@ -62,8 +62,8 @@ describe('SV user can', () => {
     const user = userEvent.setup();
     render(<AppWithConfig />);
 
-    expect(await screen.findByText('Validator Onboarding')).toBeDefined();
-    await user.click(screen.getByText('Validator Onboarding'));
+    expect(await screen.findByText('Validators')).toBeDefined();
+    await user.click(screen.getByText('Validators'));
 
     const partyHintInput = screen.getByTestId('create-party-hint');
     await user.type(partyHintInput, 'wrong-input');
@@ -306,8 +306,8 @@ describe('An AddFutureAmuletConfigSchedule request', () => {
     const user = userEvent.setup();
     render(<AppWithConfig />);
 
-    expect(await screen.findByText('Validator Onboarding')).toBeDefined();
-    await user.click(screen.getByText('Validator Onboarding'));
+    expect(await screen.findByText('Validators')).toBeDefined();
+    await user.click(screen.getByText('Validators'));
 
     expect(await screen.findByText('Validator Licenses')).toBeDefined();
 

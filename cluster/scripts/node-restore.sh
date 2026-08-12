@@ -159,14 +159,11 @@ function restore_pvc_postgres() {
   local -r component=$2
   local -r run_id=$3
 
-  local template_name
   local storage_class
-  template_name="pg-data-hd"
   storage_class="hyperdisk-standard-rwo"
 
-  local -r ss_name="$component-pg"
-  local -r pg_pod_name="$ss_name-0"
-  local -r pvc_name="$template_name-$pg_pod_name"
+  local -r ss_name=$(get_postgres_statefulset_name "$namespace" "$component-pg")
+  local -r pvc_name=$(get_postgres_pvc_name "$namespace" "$component-pg")
   local -r snapshot_name="$pvc_name-$run_id"
 
   _info "Scaling down postgres StatefulSet"

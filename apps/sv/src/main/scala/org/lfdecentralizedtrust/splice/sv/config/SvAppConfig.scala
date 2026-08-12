@@ -454,6 +454,11 @@ case class SvAppBackendConfig(
     convertFeaturedAppActivityMarkerObservers: Boolean = true,
     // Whether to ensure that heuristic free confirmation responses get enabled on the synchronizer via the ReconcileDynamicSynchronizerConfigTrigger.
     enableFreeConfirmationResponses: Boolean = true,
+    // Target value for the setBalanceRequestSubmissionWindowSize traffic control parameter,
+    // applied to the synchronizer via the ReconcileDynamicSynchronizerParametersTrigger.
+    // The default matches Canton's current default as of 3.5.12
+    setBalanceRequestSubmissionWindowSize: PositiveFiniteDuration =
+      PositiveFiniteDuration.ofMinutes(2),
     packageVettingCache: PackageVettingLookupService.CacheConfig =
       PackageVettingLookupService.CacheConfig(),
     useInternalSequencerApi: Boolean = false,
@@ -461,13 +466,16 @@ case class SvAppBackendConfig(
     cantonBftSequencingParameters: Option[BftSequencingParameters] = Some(
       BftSequencingParameters(
         pbftViewChangeTimeout = PositiveFiniteDuration.ofSeconds(5),
-        segmentLength = SequencingParameters.DefaultSegmentLength.length,
+        // increased from default as epoch changes are synchronization points which can slow things down.
+        segmentLength =
+          PositiveLong.tryCreate(SequencingParameters.DefaultSegmentLength.length.value * 4),
         blacklistLeaderSelectionPolicyConfig =
           SequencingParameters.DefaultLeaderSelectionPolicyConfig.copy(
             howLongToBlacklist =
               BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.Exponential(
                 initialValue = 1L,
-                maximumEpochBlacklisted = Some(250L),
+                // Reduced by 4 to compensate for increased segmentLength.
+                maximumEpochBlacklisted = Some(250L / 4L),
               )
           ),
       )

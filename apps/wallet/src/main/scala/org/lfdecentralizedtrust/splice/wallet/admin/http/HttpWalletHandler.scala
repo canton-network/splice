@@ -576,6 +576,7 @@ class HttpWalletHandler(
             AmuletOperationDedupConfig(
               commandId,
               dedupDuration,
+              recoverAcceptedDuplicates = true,
             )
           ),
         ),
@@ -687,6 +688,7 @@ class HttpWalletHandler(
                 AmuletOperationDedupConfig(
                   commandId,
                   dedupDuration,
+                  recoverAcceptedDuplicates = true,
                 )
               ),
             )
@@ -809,6 +811,7 @@ class HttpWalletHandler(
           ),
           deduplicationOffset = dedupOffset,
         )
+        .recoveringAcceptedDuplicates()
         .withSynchronizerId(domain)
         .yieldResult()
         .map(_.contractId)
@@ -864,6 +867,7 @@ class HttpWalletHandler(
                     body.deduplicationId,
                   ),
                   dedupDuration,
+                  recoverAcceptedDuplicates = true,
                 )
               ),
             )
@@ -887,6 +891,7 @@ class HttpWalletHandler(
       val dedupConfig = AmuletOperationDedupConfig(
         commandId,
         dedupDuration,
+        recoverAcceptedDuplicates = true,
       )
       (for {
         result <- userWallet.treasury.enqueueTokenStandardTransferOperationV1(
@@ -1072,6 +1077,7 @@ class HttpWalletHandler(
       val dedupConfig = AmuletOperationDedupConfig(
         commandId,
         dedupDuration,
+        recoverAcceptedDuplicates = true,
       )
       (for {
         result <- userWallet.treasury.enqueueTokenStandardTransferOperationV2(
@@ -1235,6 +1241,7 @@ class HttpWalletHandler(
       val dedupConfig = AmuletOperationDedupConfig(
         commandId,
         dedupDuration,
+        recoverAcceptedDuplicates = true,
       )
       for {
         result <- userWallet.treasury.enqueueAmuletAllocationOperation(
@@ -1311,6 +1318,7 @@ class HttpWalletHandler(
         commandId,
         // Overriden to be low enough (5m) that we allow the same allocation to be re-created after being withdrawn
         DedupDuration(com.google.protobuf.Duration.newBuilder().setSeconds(5L * 60L).build()),
+        recoverAcceptedDuplicates = true,
       )
       for {
         result <- userWallet.treasury.enqueueAmuletAllocationOperation(
@@ -1824,6 +1832,7 @@ class HttpWalletHandler(
               ),
             deduplicationConfig = dedupDuration,
           )
+          .recoveringAcceptedDuplicates()
           .withDisclosedContracts(
             userWallet.connection
               .disclosedContracts(amuletRules, unclaimedDevelopmentFundCouponsToAllocate*)

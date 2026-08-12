@@ -34,6 +34,18 @@ multiValidator:
 sv:
   synchronizer:
     skipInitialization: true
+  scan:
+    externalRateLimits:
+      rateLimits:
+        /registry/metadata/v1/info:
+          perIpLimits:
+            overrides:
+              test:
+                ips:
+                  - 192.68.78.50
+                maxTokens: 250
+                tokensPerFill: 250
+                fillInterval: 60s
 splitwell:
   maxDarVersion: '0.1.8'
   participantPruningSchedule:
@@ -41,6 +53,7 @@ splitwell:
     maxDuration: "5m"
     retention: "30d"
 synchronizerMigration:
+  splitSvDeploymentEnabled: true
   frozenMigrationId: 2
   archived:
     - id: 5
@@ -189,6 +202,8 @@ loadTester:
     scaleUpStep: 3
     windowStartUTC: "02:30"
     windowDurationMinutes: 150
+chaosMesh:
+  podKillSchedule: '@every 120m'
 svs:
   sv: !include(sv.yaml)
     participant:

@@ -45,7 +45,10 @@ import {
 } from '@canton-network/splice-pulumi-common';
 import { installLoopback } from '@canton-network/splice-pulumi-common-sv';
 import { installParticipant } from '@canton-network/splice-pulumi-common-validator';
-import { SplicePostgres } from '@canton-network/splice-pulumi-common/src/postgres';
+import {
+  installPasswordWithParent,
+  SplicePostgres,
+} from '@canton-network/splice-pulumi-common/src/postgres';
 
 import { installPartyAllocator } from './partyAllocator';
 import { validatorConfig, validatorName } from './validatorConfig';
@@ -168,12 +171,16 @@ async function installValidator(
         db: { ...postgresValuesFromFile.db, volumeSize: validatorConfig.postgresPvcSize },
       }
     : postgresValuesFromFile;
+  const postgresInstanceName = 'postgres';
   const postgres = new SplicePostgres(
     xns,
-    'postgres',
-    // can be removed once base version > 0.2.1
-    `postgres`,
-    'postgres-secrets',
+    postgresInstanceName,
+    parent => installPasswordWithParent(parent, xns, postgresInstanceName, 'postgres-secrets'),
+    // No need to support legacy chart
+    {
+      deployment: 'docker-image',
+      postgresImage: postgresValuesFromFile.db.postgresImage || 'postgres:18',
+    },
     postgresValues,
     true,
     supportsValidatorRunbookReset,
@@ -182,7 +189,6 @@ async function installValidator(
   const participantAddress = (
     await installParticipant(
       validatorConfig,
-      DecentralizedSynchronizerUpgradeConfig.activeMigrationId,
       xns,
       auth0Client.getCfg(),
       false, // We don't currently support non-auth for validator-runbook
@@ -247,7 +253,8 @@ async function installValidator(
     ...(participantBootstrapDumpSecret ? { nodeIdentifier: newParticipantIdentifier } : {}),
     persistence: {
       ...validatorValuesFromYamlFiles.persistence,
-      postgresName: 'postgres',
+      postgresName: postgres.instanceName,
+      host: postgres.address,
     },
     pvc: {
       volumeStorageClass: standardStorageClassName,
