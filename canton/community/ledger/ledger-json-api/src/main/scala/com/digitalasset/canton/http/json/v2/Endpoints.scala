@@ -434,6 +434,21 @@ object Endpoints {
   val wsSubprotocol: Header =
     sttp.model.Header("Sec-WebSocket-Protocol", "daml.ws.auth")
 
+  private val wsJwtTokenPrefix = "jwt.token."
+
+  // Extracts the JWT from a `Sec-WebSocket-Protocol` header value such as
+  // "daml.ws.auth, jwt.token.<TOKEN>" (RFC 6455 clients join subprotocols with ", ").
+  // Elements must be trimmed before matching the prefix, since the leading space on
+  // every element but the first would otherwise make `startsWith` fail to find the token.
+  def extractWsJwtToken(headerValue: Option[String]): Option[Jwt] =
+    headerValue
+      .map(_.split(",").toSeq.map(_.trim))
+      .getOrElse(Seq.empty)
+      .filter(_.startsWith(wsJwtTokenPrefix))
+      .map(_.substring(wsJwtTokenPrefix.length))
+      .headOption
+      .map(Jwt.apply)
+
   lazy val baseEndpoint: Endpoint[CallerContext, Unit, Unit, Unit, Any] = endpoint
     .securityIn(
       auth
@@ -445,16 +460,7 @@ object Endpoints {
         .and(
           auth
             .apiKey(header[Option[String]]("Sec-WebSocket-Protocol"))
-            .map { bearer =>
-              val tokenPrefix = "jwt.token." // TODO (i21030) test this
-              bearer
-                .map(_.split(",").toSeq)
-                .getOrElse(Seq.empty)
-                .filter(_.startsWith(tokenPrefix))
-                .map(_.substring(tokenPrefix.length))
-                .headOption
-                .map(Jwt.apply)
-            }(_.map(_.token))
+            .map(extractWsJwtToken)(_.map(_.token))
             .description("Ledger API standard JWT token (websocket)")
         )
         .and(
