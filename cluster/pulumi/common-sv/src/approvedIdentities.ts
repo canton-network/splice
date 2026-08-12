@@ -61,7 +61,7 @@ export function approvedSvIdentities(): ApprovedSvIdentity[] {
   const rawFromFile = approvedSvIdentitiesFromFile();
   const fromFile: ApprovedSvIdentity[] = rawFromFile.map(identity => ({
     name: identity.name,
-    rewardWeightBps: parseInt(String(identity.rewardWeightBps).replace('_', ''), 10),
+    rewardWeightBps: parseInt(String(identity.rewardWeightBps).replaceAll('_', ''), 10),
     publicKey: identity.publicKey,
   }));
   const fromConfig = approvedSvIdentitiesFromConfig();
