@@ -485,6 +485,8 @@ case class SvAppBackendConfig(
     // where intentional overlap is required.
     instanceLockEnabled: Boolean = true,
     minMemberTrafficToOnboardValidator: Long = 100000L,
+    devNetPublicSetupTapAmount: BigDecimal = 10000.0, // will be moved to daml, later
+    devNetPublicSetupTrafficAmount: Long = 10000000L,
 ) extends SpliceBackendConfig {
 
   def allIgnoredAmuletVersions: Set[String] =
