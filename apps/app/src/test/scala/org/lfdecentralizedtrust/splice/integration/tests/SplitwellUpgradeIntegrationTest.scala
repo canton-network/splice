@@ -128,8 +128,6 @@ class SplitwellUpgradeIntegrationTest
       val acceptedInvite = bobSplitwellClient.acceptInvite(invite)
       val splitwellSynchronizerId =
         aliceValidatorBackend.participantClient.synchronizers.id_of(splitwellAlias).logical
-      val splitwellUpgradeSynchronizerId =
-        aliceValidatorBackend.participantClient.synchronizers.id_of(splitwellUpgradeAlias).logical
 
       eventually() {
         val contractDomains =
@@ -151,6 +149,9 @@ class SplitwellUpgradeIntegrationTest
         connectSplitwellUpgradeDomain(aliceValidatorBackend.participantClient, alice),
         disconnectSplitwellUpgradeDomain(aliceValidatorBackend.participantClient),
       ) {
+        val splitwellUpgradeSynchronizerId =
+          aliceValidatorBackend.participantClient.synchronizers.id_of(splitwellUpgradeAlias).logical
+
         bracket(
           connectSplitwellUpgradeDomain(bobValidatorBackend.participantClient, bob),
           disconnectSplitwellUpgradeDomain(bobValidatorBackend.participantClient),
