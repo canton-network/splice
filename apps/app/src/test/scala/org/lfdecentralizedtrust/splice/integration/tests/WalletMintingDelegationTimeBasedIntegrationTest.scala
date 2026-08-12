@@ -766,6 +766,12 @@ class WalletMintingDelegationTimeBasedIntegrationTest
       }
     }
 
+    // Hold-back then assign+mint: coupons start above the sharing threshold and are shared only
+    // once near expiry. ttl 8m > minTtl 6m -> held (Phase 1); advanceTime(4m) leaves remaining
+    // ttl 4m <= 6m -> gate opens (Phase 2). Keep the advance under one mining-round tick (10m)
+    // or the coupons' round ages out and the mint can't collect them. Amounts 1000/500 stay
+    // under the amulet-merge limit (2x=20) so a pending merge can't force sharing. Recipient
+    // gets 40%; provider keeps 60% (added as a beneficiary of its own coupon).
     "hold back unassigned V2 coupons until the TTL threshold, then assign and mint" in {
       implicit env =>
         val aliceParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
@@ -817,7 +823,6 @@ class WalletMintingDelegationTimeBasedIntegrationTest
         val amount1 = BigDecimal(1000.0)
         val amount2 = BigDecimal(500.0)
 
-        advanceRoundsToNextRoundOpening
         setTriggersWithin(triggersToPauseAtStart = Seq(trigger)) {
           actAndCheck(
             "Create only unassigned V2 coupons, ttl (2h) > minTtl (1h)",
