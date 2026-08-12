@@ -34,7 +34,7 @@ abstract class BatchedMultiDomainExpiredContractTrigger[
     companion: C,
     vettingLookupService: PackageVettingLookupService,
     pkg: PackageIdResolver.Package,
-    getStakeholders: (T, Boolean) => Seq[PartyId],
+    getStakeholders: T => Seq[PartyId],
 )(implicit
     ec: ExecutionContext,
     mat: Materializer,
@@ -66,18 +66,18 @@ abstract class BatchedMultiDomainExpiredContractTrigger[
         PackageIdResolver.Package.SpliceAmulet,
         expiredContracts,
         batchSize,
-      )(c => getStakeholders(c.payload, true))
+      )(c => getStakeholders(c.payload))
       .map {
         _.toSeq.flatMap {
           case (Some(version), contractBatches) =>
             contractBatches.map { contracts =>
-              val stakeholders = contracts.flatMap(c => getStakeholders(c.payload, true)).toSet
+              val stakeholders = contracts.flatMap(c => getStakeholders(c.payload)).toSet
               Batch(pkg, version, contracts, stakeholders)
             }
           case (None, contracts) =>
-            val informees = contracts.flatten.flatMap(c => getStakeholders(c.payload, false)).toSet
+            val stakeholders = contracts.flatten.flatMap(c => getStakeholders(c.payload)).toSet
             ignorePartiesWithoutVettedAmulet(
-              informees,
+              stakeholders,
               contracts.flatten.map(_.contractId.contractId),
               logAsWarning = true,
             ).discard
