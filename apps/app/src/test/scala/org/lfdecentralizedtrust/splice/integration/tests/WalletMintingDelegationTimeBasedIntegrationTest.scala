@@ -825,12 +825,12 @@ class WalletMintingDelegationTimeBasedIntegrationTest
 
         setTriggersWithin(triggersToPauseAtStart = Seq(trigger)) {
           actAndCheck(
-            "Create only unassigned V2 coupons, ttl (2h) > minTtl (1h)",
+            "Create only unassigned V2 coupons, ttl (8m) > minTtl (6m)",
             createRewardCouponsV2(
               Seq((providerParty.party, amount1, None), (providerParty.party, amount2, None)),
               ttl = Duration.ofMinutes(8),
             ),
-          )("Both coupons visible an unassigned", _ => unassignedCount() shouldBe 2)
+          )("Both coupons visible and unassigned", _ => unassignedCount() shouldBe 2)
 
           clue("Gate is false while above threshold: one explicit poll does no work") {
             trigger.runOnce().futureValue shouldBe false
