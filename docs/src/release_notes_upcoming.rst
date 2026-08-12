@@ -20,3 +20,35 @@ release-notes:: Upcoming
           vote requests by their state relative to the SV (``action_needed``, ``in_progress``,
           ``ready_to_close``), allowing SV operators to alert on vote proposals that require
           their vote.
+
+    - Scan & SV App
+
+        - HTTP rate limiting has been extended with a global rate limiter applied across all
+          operations, optional per-client-IP rate limiting (enabled by default at the global level),
+          and an additional sustained rate limit enforced over a longer window on top of the existing
+          per-second burst limit. The client IP is derived from the ``X-Forwarded-For``/``X-Real-Ip``
+          headers, falling back to the remote address. These can be tuned via the following
+          ``rate-limiting`` config keys:
+
+          - ``rate-limiting.default``: overall per-operation limiter used when there is no
+            operation-specific override. Its embedded ``per-client-ip`` limiter (disabled by
+            default) applies per-client-IP limiting on top of the per-operation limiter.
+          - ``rate-limiting.rate-limiters.<operation>``: per-operation overrides of
+            ``rate-limiting.default``. Set ``rate-limiting.rate-limiters.<operation>.per-client-ip``
+            to enable per-client-IP limiting for a specific operation.
+          - ``rate-limiting.global``: overall limiter applied globally across all operations. Its
+            embedded ``rate-limiting.global.per-client-ip`` limiter applies per-client-IP limiting
+            globally (enabled by default).
+          - ``sustained-rate-per-second`` / ``sustained-window-seconds`` on any of the above limiter
+            configs: the sustained limit and the window (default 60s) over which it is enforced.
+
+        - Default rate limits have been adjusted:
+
+          - Scan app: ``rate-limiting.default.rate-per-second`` lowered from 200 to 100 with a new
+            ``rate-limiting.default.sustained-rate-per-second`` of 50; new
+            ``rate-limiting.global`` (400 burst / 200 sustained) with an embedded
+            ``rate-limiting.global.per-client-ip`` (100 burst / 50 sustained) limiter.
+          - SV app: ``rate-limiting.default.rate-per-second`` lowered from 200 to 20 with a new
+            ``rate-limiting.default.sustained-rate-per-second`` of 10; new
+            ``rate-limiting.global`` (100 burst / 50 sustained) with an embedded
+            ``rate-limiting.global.per-client-ip`` (20 burst / 10 sustained) limiter.
