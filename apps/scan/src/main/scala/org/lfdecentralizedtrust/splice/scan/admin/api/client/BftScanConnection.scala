@@ -905,10 +905,13 @@ class BftScanConnection(
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
-  ): Future[T]
-  = bftCallWithScanUris(
-      call, endpoint, callConfig, consensusFailureLogLevel,
-      shortenResponsesForLog = shortenResponsesForLog)
+  ): Future[T] = bftCallWithScanUris(
+    call,
+    endpoint,
+    callConfig,
+    consensusFailureLogLevel,
+    shortenResponsesForLog = shortenResponsesForLog,
+  )
     .map(_._1)
 
   private def bftCallWithScanUris[T](
@@ -1024,8 +1027,8 @@ class BftScanConnection(
   override def getRewardAccountingActivityTotals(roundNumber: Long)(implicit
       ec: ExecutionContext,
       tc: TraceContext,
-  ): Future[GetRewardAccountingActivityTotalsResponse]
-  = getRewardAccountingActivityTotalsWithScanUris(roundNumber).map(_._1)
+  ): Future[GetRewardAccountingActivityTotalsResponse] =
+    getRewardAccountingActivityTotalsWithScanUris(roundNumber).map(_._1)
 
   def getRewardAccountingActivityTotalsWithScanUris(roundNumber: Long)(implicit
       ec: ExecutionContext,
@@ -1054,8 +1057,7 @@ class BftScanConnection(
       )
         .transformWith {
           case Success((totals, consensusUris)) =>
-            Future.successful(
-              ( GetRewardAccountingActivityTotalsResponse(totals), consensusUris) )
+            Future.successful((GetRewardAccountingActivityTotalsResponse(totals), consensusUris))
           case Failure(_) => Future.successful((undetermined, Nil))
         }
   }
@@ -1073,8 +1075,8 @@ class BftScanConnection(
   override def getRewardAccountingRootHash(roundNumber: Long)(implicit
       ec: ExecutionContext,
       tc: TraceContext,
-  ): Future[GetRewardAccountingRootHashResponse]
-  = getRewardAccountingRootHashWithScanUris(roundNumber).map(_._1)
+  ): Future[GetRewardAccountingRootHashResponse] =
+    getRewardAccountingRootHashWithScanUris(roundNumber).map(_._1)
 
   def getRewardAccountingRootHashWithScanUris(roundNumber: Long)(implicit
       ec: ExecutionContext,
@@ -1101,16 +1103,17 @@ class BftScanConnection(
         disagreementLogLevel = Level.WARN,
       )
         .transformWith {
-          case Success ((rootHash, consensusUris)) =>
+          case Success((rootHash, consensusUris)) =>
             Future.successful(
-              ( GetRewardAccountingRootHashResponse(
+              (
+                GetRewardAccountingRootHashResponse(
                   RewardAccountingRootHashOk(
                     status = "Ok",
                     roundNumber = roundNumber,
                     rootHash = rootHash,
                   )
-                )
-              , consensusUris.map(_.toString)
+                ),
+                consensusUris.map(_.toString),
               )
             )
           case Failure(_) => Future.successful((undetermined, Nil))

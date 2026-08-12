@@ -164,7 +164,7 @@ abstract class CalculateRewardsTriggerBase(
         case (RewardAccountingRootHashOk(ok), scanUris) =>
           logger.info(
             s"Obtained the root-hash for round $round via BFT read from scans: ${scanUris.mkString(", ")}."
-  )
+          )
           new Hash(ok.rootHash)
         case _ => rootHashUnavailable("could not obtain root-hash via BFT read.")
       }

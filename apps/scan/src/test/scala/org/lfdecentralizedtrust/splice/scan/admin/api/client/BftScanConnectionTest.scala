@@ -1248,7 +1248,7 @@ class BftScanConnectionTest
       // retries a single call can fail to reach consensus.
       def attempt(remaining: Int): Future[(GetRewardAccountingRootHashResponse, List[Uri])] =
         bft.getRewardAccountingRootHashWithScanUris(round).flatMap {
-          case (ok : GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk, uris) =>
+          case (ok: GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk, uris) =>
             Future.successful((ok, uris))
           case _ if remaining > 1 => attempt(remaining - 1)
           case other => Future.successful(other)
@@ -1362,7 +1362,10 @@ class BftScanConnectionTest
       // retries a single call can fail to reach consensus.
       def attempt(remaining: Int): Future[(GetRewardAccountingActivityTotalsResponse, List[Uri])] =
         bft.getRewardAccountingActivityTotalsWithScanUris(round).flatMap {
-          case (ok: GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsOk, uris) =>
+          case (
+                ok: GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsOk,
+                uris,
+              ) =>
             Future.successful((ok, uris))
           case _ if remaining > 1 => attempt(remaining - 1)
           case other => Future.successful(other)
@@ -1370,10 +1373,11 @@ class BftScanConnectionTest
 
       attempt(100).map { resp =>
         inside(resp) {
-          case ( GetRewardAccountingActivityTotalsResponse.members
-                 .RewardAccountingActivityTotalsOk(ok)
-               , uris
-               ) =>
+          case (
+                GetRewardAccountingActivityTotalsResponse.members
+                  .RewardAccountingActivityTotalsOk(ok),
+                uris,
+              ) =>
             ok.roundNumber should be(round)
             ok.totalAppActivityWeight should be(100L)
             ok.activePartiesCount should be(10L)
