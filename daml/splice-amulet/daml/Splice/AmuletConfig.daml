@@ -107,11 +107,13 @@ data AmuletConfig unit = AmuletConfig with
     featuredAppActivityMarkerAmount : Optional Decimal -- ^ $-amount used for the conversion from FeaturedAppActivityMarker -> AppRewardCoupon
     optDevelopmentFundManager : Optional Party
       -- ^ Party authorized to manage and allocate minting rights from the Development Fund.
+    developmentFundManagerBlacklist : Optional [Party] -- ^ List of misbehaving parties that are not blocked
     externalPartyConfigStateTickDuration : Optional RelTime
       -- ^ Half the lifetime of an `ExternalPartyConfigState` contract and the overlap between two successive contracts. Default: 24h.
     rewardConfig : Optional RewardConfig
       -- ^ Configuration for the reward accounting and calculation. If None, then on-ledger reward tracking is used.
     transferPreapprovalBaseDuration : Optional RelTime -- ^ Base duration of a transfer pre-approval granted for free on creation and renewal. Default: 90 days.
+    minDevelopmentFundMintingDelay: Optional RelTime -- ^ Minimum delay between minting and collecting. Default: 0 days. Explicitly setting it to block downgrades that lack the delay enforcement logic.
   deriving (Eq, Show, Serializable)
 
 getExternalPartyConfigStateTickDuration : AmuletConfig a -> RelTime
@@ -128,6 +130,12 @@ defaultTransferPreapprovalBaseDuration = days 90
 getTransferPreapprovalBaseDuration : AmuletConfig unit -> RelTime
 getTransferPreapprovalBaseDuration config =
   fromOptional defaultTransferPreapprovalBaseDuration config.transferPreapprovalBaseDuration
+
+defaultMinDevelopmentFundMintingDelay : RelTime
+defaultMinDevelopmentFundMintingDelay = days 0
+
+getMinDevelopmentFundMintingDelay : AmuletConfig unit -> RelTime
+getMinDevelopmentFundMintingDelay config = fromOptional defaultMinDevelopmentFundMintingDelay config.minDevelopmentFundMintingDelay
 
 -- Check constraints on config params on which the implementation of the choices rely.
 validAmuletConfig : AmuletConfig unit -> Bool
@@ -219,9 +227,12 @@ instance Patchable (AmuletConfig USD) where
     transferPreapprovalFee = patch new.transferPreapprovalFee base.transferPreapprovalFee current.transferPreapprovalFee
     featuredAppActivityMarkerAmount = patch new.featuredAppActivityMarkerAmount base.featuredAppActivityMarkerAmount current.featuredAppActivityMarkerAmount
     optDevelopmentFundManager = patch new.optDevelopmentFundManager base.optDevelopmentFundManager current.optDevelopmentFundManager
+    developmentFundManagerBlacklist =
+      patchOptionalListAsSet new.developmentFundManagerBlacklist base.developmentFundManagerBlacklist current.developmentFundManagerBlacklist
     externalPartyConfigStateTickDuration = patch new.externalPartyConfigStateTickDuration base.externalPartyConfigStateTickDuration current.externalPartyConfigStateTickDuration
     rewardConfig = patch new.rewardConfig base.rewardConfig current.rewardConfig
     transferPreapprovalBaseDuration = patch new.transferPreapprovalBaseDuration base.transferPreapprovalBaseDuration current.transferPreapprovalBaseDuration
+    minDevelopmentFundMintingDelay = patch new.minDevelopmentFundMintingDelay base.minDevelopmentFundMintingDelay current.minDevelopmentFundMintingDelay
 
 instance Patchable RewardConfig where
   patch new base current = RewardConfig with

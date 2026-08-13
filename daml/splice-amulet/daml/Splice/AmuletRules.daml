@@ -859,6 +859,12 @@ template AmuletRules
             require ("controller is the configured Development Fund manager: " <> show developmentFundManager) $
               developmentFundManager == fundManager
 
+        case configUsd.developmentFundManagerBlacklist of
+          None -> pure ()
+          Some blacklist ->
+            require ("controller is not a blacklisted fund manager: " <> show fundManager) $
+              fundManager `notElem` blacklist
+
         -- Verify the amount and create a leftover UnclaimedDevelopmentFundCoupon if needed
         totalUnclaimedDevelopmentFundCoupons <- sum <$> forA unclaimedDevelopmentFundCouponCids \cid -> do
           coupon <- fetchAndArchive (ForDso with dso) cid
