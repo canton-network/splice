@@ -5,6 +5,4 @@
 
 .. NOTE: add your upcoming release notes below this line. They are included in the `release_notes.rst`.
 
-.. release-notes:: Upcoming
-
-    - next release notes
+release-notes:: Upcoming
