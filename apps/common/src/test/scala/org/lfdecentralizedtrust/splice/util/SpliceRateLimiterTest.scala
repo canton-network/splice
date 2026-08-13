@@ -1,3 +1,6 @@
+// Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+// SPDX-License-Identifier: Apache-2.0
+
 package org.lfdecentralizedtrust.splice.util
 
 import com.daml.metrics.api.MetricsContext
@@ -75,6 +78,14 @@ class SpliceRateLimiterTest
         ) should be(rejected.length)
       }
 
+    }
+
+    "not create any limiter if disabled" in {
+      // a disabled limiter must not fail even for a rate that guava would reject
+      withRateLimiter(SpliceRateLimitConfig(enabled = false, ratePerSecond = 0)) {
+        case (_, rateLimiter) =>
+          Seq.fill(100)(rateLimiter.markRun()) should contain only true
+      }
     }
 
   }

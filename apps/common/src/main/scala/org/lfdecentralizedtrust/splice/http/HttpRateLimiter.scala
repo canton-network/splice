@@ -6,15 +6,8 @@ package org.lfdecentralizedtrust.splice.http
 import com.daml.metrics.api.MetricHandle.LabeledMetricsFactory
 import com.daml.metrics.api.MetricsContext
 import com.digitalasset.canton.logging.TracedLogger
-import org.apache.pekko.http.scaladsl.model.headers.{`X-Forwarded-For`, `X-Real-Ip`}
-import org.apache.pekko.http.scaladsl.model.{
-  AttributeKeys,
-  HttpEntity,
-  HttpRequest,
-  RemoteAddress,
-  StatusCodes,
-}
-import org.apache.pekko.http.scaladsl.server.Directive0
+import org.apache.pekko.http.scaladsl.model.{HttpEntity, RemoteAddress, StatusCodes}
+import org.apache.pekko.http.scaladsl.server.{Directive0, Directive1}
 import org.lfdecentralizedtrust.splice.config.RateLimitersConfig
 import org.lfdecentralizedtrust.splice.util.{
   PerAttributeRateLimiter,
@@ -22,6 +15,7 @@ import org.lfdecentralizedtrust.splice.util.{
   SpliceRateLimitMetrics,
 }
 
+import java.net.{Inet6Address, InetAddress}
 import java.time.Instant
 
 class HttpRateLimiter(
@@ -31,9 +25,16 @@ class HttpRateLimiter(
 ) extends AutoCloseable {
 
   // need to cache it as the pekko routes get evaluated for each request
+  // keyed by (service, operation) as the same operation name can be used by multiple services
   private val rateLimiters =
-    scala.collection.concurrent.TrieMap[String, (SpliceRateLimiter, PerAttributeRateLimiter)]()
+    scala.collection.concurrent.TrieMap[
+      (String, String),
+      (SpliceRateLimiter, PerAttributeRateLimiter),
+    ]()
   private val metrics = scala.collection.concurrent.TrieMap[String, SpliceRateLimitMetrics]()
+
+  private val trustedClientIpHeader: String =
+    config.trustedClientIpHeader.trim
 
   private def metricsFor(service: String): SpliceRateLimitMetrics =
     metrics.getOrElseUpdate(
@@ -75,7 +76,7 @@ class HttpRateLimiter(
       operation: String,
   ): (SpliceRateLimiter, PerAttributeRateLimiter) =
     rateLimiters.getOrElseUpdate(
-      operation, {
+      (service, operation), {
         val rateLimiterMetrics = metricsFor(service)
         val operationConfig = config.forRateLimiter(operation)
         (
@@ -104,8 +105,7 @@ class HttpRateLimiter(
 
     import org.apache.pekko.http.scaladsl.server.Directives.*
 
-    extractRequest.flatMap { request =>
-      val clientIp = HttpRateLimiter.clientIp(request, config.trustedClientIpHeader)
+    HttpRateLimiter.extractClientIpKey(trustedClientIpHeader).flatMap { clientIp =>
       // The global limiters are checked first so that a request rejected globally does not consume
       // budget from the per-operation limiters.
       val allowed =
@@ -136,35 +136,39 @@ object HttpRateLimiter {
   private[splice] val GlobalLimiter = "global"
   private[splice] val GlobalService = "global"
 
-  private[splice] def clientIp(
-      request: HttpRequest,
-      trustedClientIpHeader: String = RateLimitersConfig.DefaultTrustedClientIpHeader,
-  ): Option[String] =
-    trustedClientIp(request, trustedClientIpHeader)
-      .orElse(
-        request
-          .header[`X-Forwarded-For`]
-          .flatMap(_.addresses.headOption)
-          .orElse(request.header[`X-Real-Ip`].map(_.address))
-          .orElse(request.attribute(AttributeKeys.remoteAddress))
-      )
-      .collect { case RemoteAddress.IP(ip, _) => ip.getHostAddress }
+  private[splice] def extractClientIpKey(
+      trustedClientIpHeader: String = RateLimitersConfig.DefaultTrustedClientIpHeader
+  ): Directive1[Option[String]] =
+    ClientIpDirectives
+      .extractClientIp(trustedClientIpHeader)
+      .map(_.collect { case RemoteAddress.IP(ip, _) => rateLimitKey(ip) })
 
-  private def trustedClientIp(
-      request: HttpRequest,
-      trustedClientIpHeader: String,
-  ): Option[RemoteAddress] = {
-    val headerName = trustedClientIpHeader.trim.toLowerCase
-    if (headerName.isEmpty) None
-    else
-      request.headers
-        .collectFirst { case header if header.is(headerName) => header.value.trim }
-        .flatMap(parseIpLiteral)
+  /** Single clients are typically assigned a whole IPv6 /64 (or larger) network, so limiting per
+    * full IPv6 address would allow a single client to trivially bypass the per client IP limit.
+    * IPv6 addresses are therefore grouped by their /64 prefix, IPv4 addresses are used as is.
+    */
+  private def rateLimitKey(address: InetAddress): String = address match {
+    case ipv6: Inet6Address =>
+      val bytes = ipv6.getAddress
+      ipv4Mapped(bytes) match {
+        // connections accepted on a dual stack socket can report IPv4 clients as IPv4-mapped IPv6
+        // addresses (e.g. ::ffff:192.0.2.1), those must use the same key as the plain IPv4 address
+        case Some(ipv4) => ipv4.getHostAddress
+        case None =>
+          // zero out the lower 64 bits (the interface identifier), keeping the /64 network prefix
+          // note that this also drops any scope/zone id, which is not meaningful for rate limiting
+          val prefix = bytes.take(8) ++ Array.fill[Byte](8)(0)
+          s"${InetAddress.getByAddress(prefix).getHostAddress}/64"
+      }
+    case ip => ip.getHostAddress
   }
 
-  private def parseIpLiteral(value: String): Option[RemoteAddress] =
-    `X-Real-Ip`
-      .parseFromValueString(value)
-      .toOption
-      .map(_.address)
+  /** ::ffff:0:0/96, see [[https://www.rfc-editor.org/rfc/rfc4291#section-2.5.5.2]] */
+  private val Ipv4MappedPrefix: Seq[Byte] =
+    Seq.fill[Byte](10)(0) ++ Seq[Byte](0xff.toByte, 0xff.toByte)
+
+  private def ipv4Mapped(bytes: Array[Byte]): Option[InetAddress] =
+    Option.when(bytes.length == 16 && bytes.startsWith(Ipv4MappedPrefix))(
+      InetAddress.getByAddress(bytes.drop(12))
+    )
 }

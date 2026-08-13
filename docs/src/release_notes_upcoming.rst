@@ -58,6 +58,9 @@ release-notes:: Upcoming
             globally (enabled by default).
           - ``sustained-rate-per-second`` / ``sustained-window-seconds`` on any of the above limiter
             configs: the sustained limit and the window (default 60s) over which it is enforced.
+          - ``per-client-ip.max-attribute-values``: the maximum number of client IPs tracked
+            concurrently by a per-client-IP limiter (default 10000). IPv6 clients are grouped by
+            their ``/64`` prefix, IPv4 clients by their full address.
 
         - Default rate limits have been adjusted:
 

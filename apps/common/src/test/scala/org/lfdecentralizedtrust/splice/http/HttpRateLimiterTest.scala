@@ -21,14 +21,14 @@ import org.lfdecentralizedtrust.splice.config.RateLimitersConfig
 import org.lfdecentralizedtrust.splice.util.{PerAttributeRateLimitConfig, SpliceRateLimitConfig}
 import org.scalatest.wordspec.AnyWordSpec
 
-import java.net.InetAddress
+import java.net.{Inet6Address, InetAddress}
 
 class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteTest {
 
   "clientIp" should {
 
     "prefer the trusted X-Envoy-External-Address over spoofable headers" in {
-      HttpRateLimiter.clientIp(
+      clientIp(
         HttpRequest()
           .withHeaders(
             RawHeader("X-Envoy-External-Address", "4.4.4.4"),
@@ -44,7 +44,7 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
     }
 
     "ignore a non-IP X-Envoy-External-Address and fall back to the trusted transport address" in {
-      HttpRateLimiter.clientIp(
+      clientIp(
         HttpRequest()
           .withHeaders(RawHeader("X-Envoy-External-Address", "evil.example.com"))
           .withAttributes(
@@ -54,7 +54,7 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
     }
 
     "use a configurable trusted proxy header" in {
-      HttpRateLimiter.clientIp(
+      clientIp(
         HttpRequest()
           .withHeaders(
             RawHeader("X-Trusted-Client-Ip", "4.4.4.4"),
@@ -65,14 +65,14 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
     }
 
     "match the trusted proxy header case-insensitively" in {
-      HttpRateLimiter.clientIp(
+      clientIp(
         HttpRequest().withHeaders(RawHeader("X-Envoy-External-Address", "4.4.4.4")),
         trustedClientIpHeader = "X-Envoy-External-Address",
       ) should be(Some("4.4.4.4"))
     }
 
     "not trust any proxy header when the trusted header is disabled" in {
-      HttpRateLimiter.clientIp(
+      clientIp(
         HttpRequest().withHeaders(
           RawHeader("X-Envoy-External-Address", "4.4.4.4"),
           `X-Forwarded-For`(RemoteAddress(InetAddress.getByName("1.1.1.1"))),
@@ -82,7 +82,7 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
     }
 
     "prefer X-Forwarded-For" in {
-      HttpRateLimiter.clientIp(
+      clientIp(
         HttpRequest()
           .withHeaders(
             `X-Forwarded-For`(RemoteAddress(InetAddress.getByName("1.1.1.1"))),
@@ -97,13 +97,13 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
     }
 
     "fall back to X-Real-Ip" in {
-      HttpRateLimiter.clientIp(
+      clientIp(
         HttpRequest().withHeaders(`X-Real-Ip`(RemoteAddress(InetAddress.getByName("2.2.2.2"))))
       ) should be(Some("2.2.2.2"))
     }
 
     "fall back to the remote address attribute" in {
-      HttpRateLimiter.clientIp(
+      clientIp(
         HttpRequest().withAttributes(
           Map(AttributeKeys.remoteAddress -> RemoteAddress(InetAddress.getByName("3.3.3.3")))
         )
@@ -111,10 +111,79 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
     }
 
     "return None if no IP can be determined" in {
-      HttpRateLimiter.clientIp(HttpRequest()) should be(None)
-      HttpRateLimiter.clientIp(
+      clientIp(HttpRequest()) should be(None)
+      clientIp(
         HttpRequest().withHeaders(RawHeader("X-Forwarded-For", "not-an-ip"))
       ) should be(None)
+    }
+  }
+
+  "the client IP used for rate limiting" should {
+
+    "use the full address for IPv4 clients" in {
+      clientIpOf("1.2.3.4") should be(Some("1.2.3.4"))
+    }
+
+    "group IPv6 clients by their /64 prefix" in {
+      // the lower 64 bits (the interface identifier) are freely chosen by the client
+      clientIpOf("2001:db8:0:1:1:2:3:4") should be(Some("2001:db8:0:1:0:0:0:0/64"))
+      clientIpOf("2001:db8:0:1:ffff:ffff:ffff:ffff") should be(
+        clientIpOf("2001:db8:0:1:1:2:3:4")
+      )
+      clientIpOf("2001:db8:0:1::") should be(clientIpOf("2001:db8:0:1:1:2:3:4"))
+    }
+
+    "not group IPv6 clients of different /64 networks" in {
+      clientIpOf("2001:db8:0:2:1:2:3:4") should not be clientIpOf("2001:db8:0:1:1:2:3:4")
+      clientIpOf("2001:db9:0:1:1:2:3:4") should not be clientIpOf("2001:db8:0:1:1:2:3:4")
+    }
+
+    "ignore the zone id of IPv6 addresses" in {
+      val scoped = Inet6Address.getByAddress(
+        null,
+        InetAddress.getByName("fe80::1:2:3:4").getAddress,
+        7,
+      )
+      // sanity check that the zone id is part of the address representation
+      scoped.getHostAddress should be("fe80:0:0:0:1:2:3:4%7")
+      clientIpOf(scoped) should be(Some("fe80:0:0:0:0:0:0:0/64"))
+    }
+
+    "use the IPv4 address for IPv4-mapped IPv6 clients" in {
+      // dual stack sockets can report IPv4 clients as ::ffff:a.b.c.d, those must not end up in a
+      // single /64 bucket shared by all IPv4 clients
+      val ipv4Mapped = Inet6Address.getByAddress(
+        null,
+        Array[Byte](0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff.toByte, 0xff.toByte, 1, 2, 3, 4),
+        0,
+      )
+      ipv4Mapped shouldBe a[Inet6Address]
+      clientIpOf(ipv4Mapped) should be(Some("1.2.3.4"))
+      clientIpOf(ipv4Mapped) should be(clientIpOf("1.2.3.4"))
+      clientIpOf(
+        Inet6Address.getByAddress(
+          null,
+          Array[Byte](0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff.toByte, 0xff.toByte, 4, 3, 2, 1),
+          0,
+        )
+      ) should not be clientIpOf(ipv4Mapped)
+    }
+
+    "apply the same grouping to all client IP sources" in {
+      val expected = Some("2001:db8:0:1:0:0:0:0/64")
+      val address = RemoteAddress(InetAddress.getByName("2001:db8:0:1:1:2:3:4"))
+      clientIp(
+        HttpRequest().withHeaders(RawHeader("X-Envoy-External-Address", "2001:db8:0:1:1:2:3:4"))
+      ) should be(expected)
+      clientIp(
+        HttpRequest().withHeaders(`X-Forwarded-For`(address))
+      ) should be(expected)
+      clientIp(
+        HttpRequest().withHeaders(`X-Real-Ip`(address))
+      ) should be(expected)
+      clientIp(
+        HttpRequest().withAttributes(Map(AttributeKeys.remoteAddress -> address))
+      ) should be(expected)
     }
   }
 
@@ -142,6 +211,21 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
           .map(_ => call(route, ip = Some("1.1.1.1")))
           .count(_ == StatusCodes.TooManyRequests) should be > 0
         call(route, ip = Some("2.2.2.2")) should be(StatusCodes.OK)
+      }
+    }
+
+    "limit IPv6 clients of the same /64 network together" in {
+      withRoutes(
+        globalPerClientIp = perClientIp(1)
+      )("testOperation") { routes =>
+        val route = routes("testOperation")
+        call(route, ip = Some("2001:db8:0:1:1:2:3:4")) should be(StatusCodes.OK)
+        // a different address of the same /64 shares the limiter, so it is rejected
+        call(route, ip = Some("2001:db8:0:1:ffff:ffff:ffff:ffff")) should be(
+          StatusCodes.TooManyRequests
+        )
+        // a different /64 is a different client
+        call(route, ip = Some("2001:db8:0:2:1:2:3:4")) should be(StatusCodes.OK)
       }
     }
 
@@ -212,10 +296,63 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
         call(routes("otherOperation"), ip = Some("1.1.1.1")) should be(StatusCodes.OK)
       }
     }
+
+    "use separate per operation limiters for equally named operations of different services" in {
+      val rateLimiter = new HttpRateLimiter(
+        RateLimitersConfig(
+          default = withPerClientIp(
+            SpliceRateLimitConfig(ratePerSecond = 1),
+            PerAttributeRateLimitConfig.Disabled,
+          ),
+          rateLimiters = Map.empty,
+          global = withPerClientIp(
+            SpliceRateLimitConfig(ratePerSecond = 1000),
+            PerAttributeRateLimitConfig.Disabled,
+          ),
+        ),
+        new InMemoryMetricsFactory(),
+        loggerFactory.getTracedLogger(classOf[HttpRateLimiterTest]),
+      )
+      try {
+        val routeV1 =
+          rateLimiter.withRateLimit("serviceV1")("sharedOperation")(complete(StatusCodes.OK))
+        val routeV2 =
+          rateLimiter.withRateLimit("serviceV2")("sharedOperation")(complete(StatusCodes.OK))
+        // the rate limiter only starts enforcing 1 second after it got created
+        Threading.sleep(1100)
+        (1 to 20)
+          .map(_ => call(routeV1, ip = Some("1.1.1.1")))
+          .count(_ == StatusCodes.TooManyRequests) should be > 0
+        call(routeV2, ip = Some("1.1.1.1")) should be(StatusCodes.OK)
+      } finally {
+        rateLimiter.close()
+      }
+    }
   }
 
   private def perClientIp(ratePerSecond: Double): PerAttributeRateLimitConfig =
     PerAttributeRateLimitConfig(limit = SpliceRateLimitConfig(ratePerSecond = ratePerSecond))
+
+  private def clientIp(
+      request: HttpRequest,
+      trustedClientIpHeader: String = RateLimitersConfig.DefaultTrustedClientIpHeader,
+  ): Option[String] = {
+    val route = HttpRateLimiter.extractClientIpKey(trustedClientIpHeader) { extracted =>
+      complete(extracted.getOrElse[String](HttpRateLimiterTest.NoClientIp))
+    }
+    request ~> route ~> check {
+      status should be(StatusCodes.OK)
+      Some(responseAs[String]).filterNot(_ == HttpRateLimiterTest.NoClientIp)
+    }
+  }
+
+  private def clientIpOf(ip: String): Option[String] =
+    clientIpOf(InetAddress.getByName(ip))
+
+  private def clientIpOf(ip: InetAddress): Option[String] =
+    clientIp(
+      HttpRequest().withAttributes(Map(AttributeKeys.remoteAddress -> RemoteAddress(ip)))
+    )
 
   private def call(route: Route, ip: Option[String]): StatusCode = {
     val request = ip match {
@@ -277,4 +414,8 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
       sustainedWindowSeconds = overall.sustainedWindowSeconds,
       perClientIp = perClientIp,
     )
+}
+
+object HttpRateLimiterTest {
+  private val NoClientIp = "<none>"
 }

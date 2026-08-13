@@ -5,7 +5,8 @@ package com.google.common.util.concurrent;
 
 /**
  * Shim that constructs a Guava {@link RateLimiter} backed by {@code SmoothBursty} with a custom
- * maximum burst duration.The relevant constructor SmoothRateLimiter.SmoothBursty are package-private
+ * maximum burst duration. It lives in this package because the relevant {@code
+ * SmoothRateLimiter.SmoothBursty} constructor is package-private.
  */
 public final class BurstyRateLimiterFactory {
 
@@ -17,7 +18,9 @@ public final class BurstyRateLimiterFactory {
      * allowing bursts of up to {@code permitsPerSecond * maxBurstSeconds} permits after idle periods.
      */
     public static RateLimiter create(double permitsPerSecond, double maxBurstSeconds) {
-        RateLimiter rateLimiter = new SmoothRateLimiter.SmoothBursty(RateLimiter.SleepingStopwatch.createFromSystemTimer(), maxBurstSeconds);
+        RateLimiter rateLimiter =
+                new SmoothRateLimiter.SmoothBursty(
+                        RateLimiter.SleepingStopwatch.createFromSystemTimer(), maxBurstSeconds);
         rateLimiter.setRate(permitsPerSecond);
         return rateLimiter;
     }

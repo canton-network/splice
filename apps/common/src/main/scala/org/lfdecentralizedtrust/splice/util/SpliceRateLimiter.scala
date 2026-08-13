@@ -19,6 +19,8 @@ import org.lfdecentralizedtrust.splice.environment.SpliceMetrics
 import java.time.{Duration, Instant}
 import java.util
 import java.util.Collections
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 import scala.concurrent.Future
 import scala.jdk.CollectionConverters.CollectionHasAsScala
 
@@ -119,6 +121,9 @@ object SpliceRateLimiter {
   val UnknownAttributeLimiterType = "unknown-attribute"
 
   val DefaultSustainedWindowSeconds: Long = 60
+
+  private[util] def sustainedWindow(config: SpliceRateLimitConfig): Duration =
+    Duration.ofSeconds(Math.max(1L, config.sustainedWindowSeconds))
 }
 
 // noinspection UnstableApiUsage
@@ -138,15 +143,24 @@ class SpliceRateLimiter(
     extraLabels ++ Map("limiter" -> name, "limiter_type" -> limiterType)
   )
 
+  // The limiters are created eagerly so that they are already "warm" (i.e. have accumulated their
+  // burst budget) by the time the limit starts being enforced. They are only created for enabled
+  // limiters: a disabled limiter is never consulted and its configured rate might not even be a
+  // valid guava rate (e.g. 0).
   // enforces the per-second burst limit (checked over a 1s window)
-  private val limiter = RateLimiter.create(config.ratePerSecond)
-  // enforces the sustained limit over the 60s window, while still allowing bursts within its budget.
+  private val limiter: Option[RateLimiter] =
+    Option.when(config.enabled)(RateLimiter.create(config.ratePerSecond))
+  // enforces the sustained limit over the sustained window, while still allowing bursts within its budget.
   private val sustainedLimiter: Option[RateLimiter] =
-    config.sustainedRatePerSecond.map(
-      BurstyRateLimiterFactory.create(_, config.sustainedWindowSeconds.toDouble)
-    )
+    Option
+      .when(config.enabled)(config.sustainedRatePerSecond)
+      .flatten
+      .map(
+        BurstyRateLimiterFactory
+          .create(_, SpliceRateLimiter.sustainedWindow(config).toSeconds.toDouble)
+      )
   // lazy to ensure metrics get registered only if the limiter is actually used
-  private lazy val rateLimiter = {
+  private lazy val rateLimiter: Option[RateLimiter] = {
     if (reportMaxLimit) {
       metrics
         .recordMaxLimit(config.ratePerSecond)(metricsContext)
@@ -156,7 +170,7 @@ class SpliceRateLimiter(
 
   def markRun(): Boolean = {
     if (config.enabled && Instant.now().isAfter(enforceAfter)) {
-      val canRun = rateLimiter.tryAcquire() && sustainedLimiter.forall(_.tryAcquire())
+      val canRun = rateLimiter.forall(_.tryAcquire()) && sustainedLimiter.forall(_.tryAcquire())
       if (canRun) {
         metrics.meter.mark()(
           metricsContext.merge(MetricsContext("result" -> "accepted"))
@@ -198,18 +212,34 @@ class PerAttributeRateLimiter(
   private val isEnabled = perAttributeConfig.enabled && perAttributeConfig.ratePerSecond > 0
   private val attributeLabel = Map("limiter_attribute" -> attribute)
 
+  // evictions by size can happen for every single request (e.g. when a large number of distinct
+  // attribute values is seen), so the warning is throttled to avoid flooding the logs
+  private val lastSizeEvictionWarning =
+    new AtomicLong(System.nanoTime() - PerAttributeRateLimiter.EvictionWarningIntervalNanos)
+
   private val evictionListener: RemovalListener[String, SpliceRateLimiter] =
     (key: String, _: SpliceRateLimiter, cause: RemovalCause) => {
       if (cause == RemovalCause.SIZE) {
-        logger.warn(
+        implicit val tc: TraceContext = TraceContext.empty
+        val message =
           s"Rate limiter cache for $name (attribute '$attribute') exceeded its maximum size of " +
             s"${attributeConfig.maxAttributeValues}; evicting the rate limiter for attribute value '$key'. " +
-            "Its rate limiting state is lost. Consider increasing maxCacheSize."
-        )(TraceContext.empty)
+            "Its rate limiting state is lost. Consider increasing max-attribute-values."
+        val now = System.nanoTime()
+        val last = lastSizeEvictionWarning.get()
+        if (
+          now - last >= PerAttributeRateLimiter.EvictionWarningIntervalNanos && lastSizeEvictionWarning
+            .compareAndSet(last, now)
+        ) {
+          logger.warn(message)
+        } else {
+          logger.debug(message)
+        }
       }
     }
 
-  private val cache: ConcurrentCache[String, SpliceRateLimiter] = CaffeineCache[
+  // lazy so that neither the cache nor its metrics are created if the limiter is disabled
+  private lazy val cache: ConcurrentCache[String, SpliceRateLimiter] = CaffeineCache[
     String,
     SpliceRateLimiter,
   ](
@@ -219,7 +249,7 @@ class PerAttributeRateLimiter(
       // Evict limiters that have not been used for a full sustained rate limiting window (the bucket
       // size of the interval rate limiter): after that time an idle limiter would have refilled its
       // budget anyway, so dropping it does not change the enforced rate.
-      .expireAfterAccess(Duration.ofSeconds(perAttributeConfig.sustainedWindowSeconds))
+      .expireAfterAccess(SpliceRateLimiter.sustainedWindow(perAttributeConfig))
       .evictionListener(evictionListener),
     Some(new CacheMetrics(s"$name-$attribute-rate-limiter", metrics.otelFactory)),
   )
@@ -263,4 +293,9 @@ class PerAttributeRateLimiter(
         ),
     )
   }
+}
+
+object PerAttributeRateLimiter {
+
+  private val EvictionWarningIntervalNanos: Long = TimeUnit.MINUTES.toNanos(1)
 }
