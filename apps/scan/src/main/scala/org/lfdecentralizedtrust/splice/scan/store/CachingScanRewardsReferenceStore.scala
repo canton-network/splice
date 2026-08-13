@@ -65,6 +65,11 @@ class CachingScanRewardsReferenceStore private[splice] (
   )(implicit tc: TraceContext): Future[Set[String]] =
     svParticipantIdsCache.get(asOf)
 
+  override def lookupEarliestIngestedRoundCandidate(
+      asOf: CantonTimestamp
+  )(implicit tc: TraceContext): Future[Option[Long]] =
+    store.lookupEarliestIngestedRoundCandidate(asOf)
+
   override def lookupOpenMiningRoundByNumber(
       roundNumber: Long
   )(implicit

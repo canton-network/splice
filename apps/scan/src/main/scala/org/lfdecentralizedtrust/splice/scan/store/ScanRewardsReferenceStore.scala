@@ -70,6 +70,23 @@ trait ScanRewardsReferenceStore extends AppStore {
       asOf: CantonTimestamp
   )(implicit tc: TraceContext): Future[Set[String]]
 
+  /** Find the oldest round which was active asOf the given time.
+    * This is safe for use in `earliest_ingested_round` of the meta table.
+    *
+    * Unlike `lookupActiveOpenMiningRounds` here we do not gate on the store's ingestion start
+    * Because we just need to know whether the round was active at `asOf` time, and
+    * we don't require the ingestion to have started before the round opened.
+    *
+    * The reason for this is simply that `earliest_ingested_round` is by
+    * definition considered incomplete by the round completion logic.
+    *
+    * This would return `None` only when the first set of OpenMiningRounds ingested
+    * in the store has `opensAt` after the `asOf`.
+    */
+  def lookupEarliestIngestedRoundCandidate(
+      asOf: CantonTimestamp
+  )(implicit tc: TraceContext): Future[Option[Long]]
+
   /** Look up an OpenMiningRound contract by its round number.
     * Checks both the active ACS table and the archive table,
     * since the round may have already been closed by the time the trigger runs.

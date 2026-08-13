@@ -197,6 +197,16 @@ class DbScanRewardsReferenceStore(
   ): Future[Seq[ContractWithState[OpenMiningRound.ContractId, OpenMiningRound]]] =
     tcsStore.listAllContractsAsOf(OpenMiningRound.COMPANION, asOf)
 
+  override def lookupEarliestIngestedRoundCandidate(
+      asOf: CantonTimestamp
+  )(implicit tc: TraceContext): Future[Option[Long]] =
+    lookupOpenMiningRoundsAsOf(asOf).map { rounds =>
+      rounds
+        .filter(r => CantonTimestamp.assertFromInstant(r.contract.payload.opensAt) <= asOf)
+        .minByOption(_.contract.payload.round.number)
+        .map(_.contract.payload.round.number.toLong)
+    }
+
   override def lookupOpenMiningRoundByNumber(
       roundNumber: Long
   )(implicit
