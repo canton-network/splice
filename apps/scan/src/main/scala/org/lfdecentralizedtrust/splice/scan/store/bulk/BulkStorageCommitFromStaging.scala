@@ -4,22 +4,15 @@
 package org.lfdecentralizedtrust.splice.scan.store.bulk
 
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
-import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.tracing.TraceContext
 import org.apache.pekko.NotUsed
-import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.http.scaladsl.model.StatusCodes
 import org.apache.pekko.stream.scaladsl.{Flow, Source}
 import org.lfdecentralizedtrust.splice.admin.http.HttpErrorWithHttpCode
-import org.lfdecentralizedtrust.splice.config.{AutomationConfig, UpgradesConfig}
-import org.lfdecentralizedtrust.splice.environment.{RetryProvider, SpliceLedgerClient}
-import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.scan.config.BulkStorageConfig
-import org.lfdecentralizedtrust.splice.scan.store.ScanStore
 import org.lfdecentralizedtrust.splice.scan.util.PeerBftScanConnection
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChecksum
-import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 
@@ -30,21 +23,11 @@ class BulkStorageCommitFromStaging[T](
     committedS3Connection: S3BucketConnection,
     getObjects: T => Future[Seq[ObjectKeyAndChecksum]],
     appConfig: BulkStorageConfig,
-    store: ScanStore,
-    svName: String,
-    ledgerClient: SpliceLedgerClient,
     scanConnection: PeerBftScanConnection,
-    automationConfig: AutomationConfig,
-    upgradesConfig: UpgradesConfig,
-    clock: Clock,
-    retryProvider: RetryProvider,
     override val loggerFactory: NamedLoggerFactory,
 )(implicit
     tc: TraceContext,
     ec: ExecutionContextExecutor,
-    actorSystem: ActorSystem,
-    httpClient: HttpClient,
-    templateJsonDecoder: TemplateJsonDecoder,
 ) extends NamedLogging {
 
   private def checkBftForObjects(
@@ -192,35 +175,18 @@ object BulkStorageCommitFromStaging {
       committedS3Connection: S3BucketConnection,
       getStagingObjects: T => Future[Seq[ObjectKeyAndChecksum]],
       appConfig: BulkStorageConfig,
-      store: ScanStore,
-      svName: String,
-      ledgerClient: SpliceLedgerClient,
       scanConnection: PeerBftScanConnection,
-      automationConfig: AutomationConfig,
-      upgradesConfig: UpgradesConfig,
-      clock: Clock,
-      retryProvider: RetryProvider,
       loggerFactory: NamedLoggerFactory,
   )(implicit
       tc: TraceContext,
       ec: ExecutionContextExecutor,
-      actorSystem: ActorSystem,
-      httpClient: HttpClient,
-      templateJsonDecoder: TemplateJsonDecoder,
   ): Flow[T, T, NotUsed] = {
     new BulkStorageCommitFromStaging[T](
       stagingS3Connection,
       committedS3Connection,
       getStagingObjects,
       appConfig,
-      store,
-      svName,
-      ledgerClient,
       scanConnection,
-      automationConfig,
-      upgradesConfig,
-      clock,
-      retryProvider,
       loggerFactory,
     ).getFlow
   }

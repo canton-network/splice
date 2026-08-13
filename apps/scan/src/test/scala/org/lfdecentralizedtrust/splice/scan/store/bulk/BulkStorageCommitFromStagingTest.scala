@@ -5,10 +5,8 @@ package org.lfdecentralizedtrust.splice.scan.store.bulk
 
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
-import com.digitalasset.canton.logging.{NamedLoggerFactory, SuppressionRule}
+import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.resource.DbStorage
-import com.digitalasset.canton.time.Clock
-import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.{HasActorSystem, HasExecutionContext}
 import org.apache.pekko.NotUsed
@@ -16,12 +14,10 @@ import org.apache.pekko.http.scaladsl.model.Uri
 import org.lfdecentralizedtrust.splice.config.NetworkAppClientConfig
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
 import org.lfdecentralizedtrust.splice.test.HasRetryProvider
-import org.apache.pekko.stream.Materializer
 import org.slf4j.event.Level
 import org.apache.pekko.stream.scaladsl.{Flow, Keep}
 import org.apache.pekko.stream.testkit.scaladsl.{TestSink, TestSource}
-import org.lfdecentralizedtrust.splice.config.{AutomationConfig, UpgradesConfig}
-import org.lfdecentralizedtrust.splice.environment.{RetryProvider, SpliceLedgerClient}
+import org.lfdecentralizedtrust.splice.environment.SpliceLedgerClient
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.http.v0.definitions.GetBulkObjectChecksumsResponse
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.{
@@ -29,15 +25,15 @@ import org.lfdecentralizedtrust.splice.scan.admin.api.client.{
   SingleScanConnection,
 }
 import org.lfdecentralizedtrust.splice.scan.config.BulkStorageConfig
-import org.lfdecentralizedtrust.splice.scan.store.{ScanInfo, ScanStore}
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChecksum
 import org.lfdecentralizedtrust.splice.store.{HasS3Mock, StoreTestBase}
 import org.lfdecentralizedtrust.splice.store.db.SplicePostgresTest
 import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
+import org.lfdecentralizedtrust.splice.scan.util.PeerBftScanConnection
 
 import java.security.MessageDigest
 import java.util.Base64
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
 import scala.concurrent.duration.*
 
@@ -102,12 +98,6 @@ class BulkStorageCommitFromStagingTest
         committedS3Connection,
         _ => Future.successful(objsWithDigests),
         appConfig,
-        null, // not used when bft reads are disabled
-        null, // not used when bft reads are disabled
-        null, // not used when bft reads are disabled
-        null, // not used when bft reads are disabled
-        null, // not used when bft reads are disabled
-        null, // not used when bft reads are disabled
         null, // not used when bft reads are disabled
         loggerFactory,
       )
@@ -292,7 +282,7 @@ class BulkStorageCommitFromStagingTest
         retryProvider = testRetryProvider,
         loggerFactory = loggerFactory,
       )
-      val bftConnection = new BftScanConnection(
+      private val bftConnection = new BftScanConnection(
         amuletLedgerClient = mock[SpliceLedgerClient],
         amuletRulesCacheTimeToLive = NonNegativeFiniteDuration.ofSeconds(1),
         scanList = scanList,
@@ -300,22 +290,9 @@ class BulkStorageCommitFromStagingTest
         retryProvider = testRetryProvider,
         loggerFactory = loggerFactory,
       )
-      private val syncId = "dummy::dummy"
-      val scanStore: ScanStore = mock[ScanStore]
-      when(scanStore.getDecentralizedSynchronizerId()(any[TraceContext]))
-        .thenReturn(Future.successful(SynchronizerId.tryFromString(syncId)))
-      when(scanStore.listDsoScans()(any[TraceContext]))
-        .thenReturn(
-          Future.successful(
-            Seq(
-              syncId -> Seq
-                .range(0, 7)
-                .map(i => ScanInfo(s"https://dummy-admin-$i", s"sv-$i"))
-                .toVector
-            ).toVector
-          )
-        )
-
+      val peerBftConnection: PeerBftScanConnection = mock[PeerBftScanConnection]
+      when(peerBftConnection.connection(any[TraceContext]))
+        .thenReturn(Future.successful(bftConnection))
     }
 
     def newCopyFlow(
@@ -329,32 +306,9 @@ class BulkStorageCommitFromStagingTest
         committedS3Connection,
         _ => Future.successful(objsWithDigests),
         appConfig,
-        mockScanConnections.scanStore,
-        "sv-1",
-        null, // no ledger client, we're using real BFT with mock single connections
-        AutomationConfig(),
-        UpgradesConfig(),
-        wallClock,
-        testRetryProvider,
+        mockScanConnections.peerBftConnection,
         loggerFactory,
-      ) {
-        override protected def getOrCreateScanConnection(
-            store: ScanStore,
-            svName: String,
-            ledgerClient: SpliceLedgerClient,
-            automationConfig: AutomationConfig,
-            upgradesConfig: UpgradesConfig,
-            clock: Clock,
-            retryProvider: RetryProvider,
-            loggerFactory: NamedLoggerFactory,
-        )(implicit
-            tc: TraceContext,
-            ec: ExecutionContextExecutor,
-            mat: Materializer,
-            httpClient: HttpClient,
-            templateJsonDecoder: TemplateJsonDecoder,
-        ): Future[BftScanConnection] = Future.successful(mockScanConnections.bftConnection)
-      }.getFlow
+      ).getFlow
     }
   }
 

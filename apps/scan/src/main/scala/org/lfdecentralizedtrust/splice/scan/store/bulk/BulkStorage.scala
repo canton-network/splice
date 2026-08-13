@@ -14,7 +14,11 @@ import org.apache.pekko.actor.{ActorSystem, Cancellable}
 import org.lfdecentralizedtrust.splice.config.{AutomationConfig, S3Config, UpgradesConfig}
 import org.lfdecentralizedtrust.splice.environment.{RetryProvider, SpliceLedgerClient}
 import org.lfdecentralizedtrust.splice.scan.config.{BulkStorageConfig, ScanStorageConfig}
-import org.lfdecentralizedtrust.splice.scan.store.{AcsSnapshotStore, ScanKeyValueProvider, ScanStore}
+import org.lfdecentralizedtrust.splice.scan.store.{
+  AcsSnapshotStore,
+  ScanKeyValueProvider,
+  ScanStore,
+}
 import org.lfdecentralizedtrust.splice.store.{HistoryMetrics, S3BucketConnection, UpdateHistory}
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
@@ -22,7 +26,13 @@ import cats.implicits.*
 import org.apache.pekko.stream.scaladsl.Source
 import org.lfdecentralizedtrust.splice.PekkoRetryableService
 import org.lfdecentralizedtrust.splice.http.HttpClient
-import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorage.{acsCommittedKvStoreKey, acsStagingKvStoreKey, firstAcsSnapshotTimestampKvStoreKey, updatesCommittedKvStoreKey, updatesStagingKvStoreKey}
+import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorage.{
+  acsCommittedKvStoreKey,
+  acsStagingKvStoreKey,
+  firstAcsSnapshotTimestampKvStoreKey,
+  updatesCommittedKvStoreKey,
+  updatesStagingKvStoreKey,
+}
 import org.lfdecentralizedtrust.splice.scan.util.PeerBftScanConnection
 import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 
@@ -141,14 +151,7 @@ class BulkStorage(
     committedConnection,
     reader,
     appConfig,
-    store,
-    svName,
-    ledgerClient,
     scanConnection,
-    automationConfig,
-    upgradesConfig,
-    backoffClock,
-    retryProvider,
     loggerFactory,
   )
   val acsCommitted = new AcsSnapshotBulkStorage(
@@ -181,14 +184,7 @@ class BulkStorage(
     committedConnection,
     reader,
     appConfig,
-    store,
-    svName,
-    ledgerClient,
     scanConnection,
-    automationConfig,
-    upgradesConfig,
-    backoffClock,
-    retryProvider,
     loggerFactory,
   )
   val updatesCommitted = new UpdateHistoryBulkStorage(
