@@ -4,7 +4,7 @@
 package org.lfdecentralizedtrust.splice.scan.store.bulk
 
 import com.daml.metrics.api.MetricHandle.LabeledMetricsFactory
-import com.digitalasset.canton.lifecycle.{AsyncOrSyncCloseable, FlagCloseableAsync}
+import com.digitalasset.canton.lifecycle.{AsyncOrSyncCloseable, FlagCloseableAsync, LifeCycle}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.tracing.TraceContext
@@ -14,11 +14,7 @@ import org.apache.pekko.actor.{ActorSystem, Cancellable}
 import org.lfdecentralizedtrust.splice.config.{AutomationConfig, S3Config, UpgradesConfig}
 import org.lfdecentralizedtrust.splice.environment.{RetryProvider, SpliceLedgerClient}
 import org.lfdecentralizedtrust.splice.scan.config.{BulkStorageConfig, ScanStorageConfig}
-import org.lfdecentralizedtrust.splice.scan.store.{
-  AcsSnapshotStore,
-  ScanKeyValueProvider,
-  ScanStore,
-}
+import org.lfdecentralizedtrust.splice.scan.store.{AcsSnapshotStore, ScanKeyValueProvider, ScanStore}
 import org.lfdecentralizedtrust.splice.store.{HistoryMetrics, S3BucketConnection, UpdateHistory}
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
@@ -26,13 +22,7 @@ import cats.implicits.*
 import org.apache.pekko.stream.scaladsl.Source
 import org.lfdecentralizedtrust.splice.PekkoRetryableService
 import org.lfdecentralizedtrust.splice.http.HttpClient
-import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorage.{
-  acsCommittedKvStoreKey,
-  acsStagingKvStoreKey,
-  firstAcsSnapshotTimestampKvStoreKey,
-  updatesCommittedKvStoreKey,
-  updatesStagingKvStoreKey,
-}
+import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorage.{acsCommittedKvStoreKey, acsStagingKvStoreKey, firstAcsSnapshotTimestampKvStoreKey, updatesCommittedKvStoreKey, updatesStagingKvStoreKey}
 import org.lfdecentralizedtrust.splice.scan.util.PeerBftScanConnection
 import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 
@@ -214,8 +204,10 @@ class BulkStorage(
     Seq[PekkoRetryableService[?]](acsStaging, acsCommitted, updatesStaging, updatesCommitted)
       .map(_.asPekkoRetryingService(automationConfig, backoffClock, retryProvider))
 
-  final override def closeAsync(): Seq[AsyncOrSyncCloseable] =
-    services.flatMap(_.closeAsync()) :+ scanConnection.close()
+  final override def closeAsync(): Seq[AsyncOrSyncCloseable] = {
+    LifeCycle.close(scanConnection)(logger)
+    services.flatMap(_.closeAsync())
+  }
 }
 
 object BulkStorage {

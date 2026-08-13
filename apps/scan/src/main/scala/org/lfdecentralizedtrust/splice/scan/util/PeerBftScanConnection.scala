@@ -28,6 +28,12 @@ class PeerBftScanConnection(
     clock: Clock,
     retryProvider: RetryProvider,
     loggerFactory: NamedLoggerFactory,
+)(implicit
+    ec: ExecutionContextExecutor,
+    tc: TraceContext,
+    mat: Materializer,
+    httpClient: HttpClient,
+    templateDecoder: TemplateJsonDecoder,
 ) extends AutoCloseable {
 
   @volatile private var initialized = false

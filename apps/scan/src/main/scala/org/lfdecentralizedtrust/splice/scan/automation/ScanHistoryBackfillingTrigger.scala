@@ -4,37 +4,17 @@
 package org.lfdecentralizedtrust.splice.scan.automation
 
 import com.daml.metrics.api.MetricsContext
-import org.lfdecentralizedtrust.splice.automation.{
-  PollingParallelTaskExecutionTrigger,
-  TaskNoop,
-  TaskOutcome,
-  TaskSuccess,
-  TriggerContext,
-}
+import org.lfdecentralizedtrust.splice.automation.{PollingParallelTaskExecutionTrigger, TaskNoop, TaskOutcome, TaskSuccess, TriggerContext}
 import org.lfdecentralizedtrust.splice.config.UpgradesConfig
 import org.lfdecentralizedtrust.splice.environment.SpliceLedgerClient
 import org.lfdecentralizedtrust.splice.http.HttpClient
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.{
-  BackfillingScanConnection,
-  BftScanConnection,
-}
-import org.lfdecentralizedtrust.splice.scan.store.ScanHistoryBackfilling.{
-  FoundingTransactionTreeUpdate,
-  InitialTransactionTreeUpdate,
-  JoiningTransactionTreeUpdate,
-}
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.{BackfillingScanConnection, BftScanConnection}
+import org.lfdecentralizedtrust.splice.scan.store.ScanHistoryBackfilling.{FoundingTransactionTreeUpdate, InitialTransactionTreeUpdate, JoiningTransactionTreeUpdate}
 import org.lfdecentralizedtrust.splice.scan.store.{ScanHistoryBackfilling, ScanStore}
-import org.lfdecentralizedtrust.splice.store.{
-  HistoryBackfilling,
-  HistoryMetrics,
-  ImportUpdatesBackfilling,
-  PageLimit,
-  TreeUpdateWithMigrationId,
-  UpdateHistory,
-}
+import org.lfdecentralizedtrust.splice.store.{HistoryBackfilling, HistoryMetrics, ImportUpdatesBackfilling, PageLimit, TreeUpdateWithMigrationId, UpdateHistory}
 import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 import com.digitalasset.canton.data.CantonTimestamp
-import com.digitalasset.canton.lifecycle.AsyncOrSyncCloseable
+import com.digitalasset.canton.lifecycle.{AsyncOrSyncCloseable, LifeCycle}
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
@@ -284,7 +264,7 @@ class ScanHistoryBackfillingTrigger(
   private def performImportUpdatesBackfilling()(implicit
       traceContext: TraceContext
   ): Future[TaskOutcome] = for {
-    connection <- getOrCreateScanConnection()
+    connection <- scanConnection.connection
     backfilling = getOrCreateBackfilling(connection)
     outcome <- backfilling.backfillImportUpdates().map {
       case ImportUpdatesBackfilling.Outcome.MoreWorkAvailableNow(workDone) =>
@@ -306,7 +286,8 @@ class ScanHistoryBackfillingTrigger(
   } yield outcome
 
   override def closeAsync(): Seq[AsyncOrSyncCloseable] = {
-    scanConnection.closeAsync()
+    LifeCycle.close(scanConnection)(logger)
+    super.closeAsync()
   }
 }
 
