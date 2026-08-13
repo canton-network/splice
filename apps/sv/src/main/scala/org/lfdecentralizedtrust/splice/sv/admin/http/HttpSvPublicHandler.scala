@@ -346,7 +346,7 @@ class HttpSvPublicHandler(
             .connection(SpliceLedgerConnectionPriority.Low)
             .submit(
               actAs = Seq(svParty),
-              readAs = Seq.empty,
+              readAs = Seq(dsoParty),
               update = tapCmd,
             )
             .withSynchronizerId(dsoRules.domain)
