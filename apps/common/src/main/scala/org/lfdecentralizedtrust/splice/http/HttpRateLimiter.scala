@@ -106,13 +106,17 @@ class HttpRateLimiter(
     import org.apache.pekko.http.scaladsl.server.Directives.*
 
     HttpRateLimiter.extractClientIpKey(trustedClientIpHeader).flatMap { clientIp =>
-      // The global limiters are checked first so that a request rejected globally does not consume
-      // budget from the per-operation limiters.
+      // The per client IP limiters are checked first (and `&&` short-circuits) so that a request
+      // rejected because of its own client IP does not consume budget from the shared overall
+      // limiters. Otherwise a single abusive client could exhaust the overall limits and thereby
+      // deny service to all other clients.
+      // Within each of those two groups the narrower per operation limiter is checked before the
+      // global one, so that a request rejected for its operation does not consume global budget.
       val allowed =
-        globalLimiter.markRun() &&
+        operationClientIpLimiter.markRun(clientIp) &&
           globalClientIpLimiter.markRun(clientIp) &&
           operationLimiter.markRun() &&
-          operationClientIpLimiter.markRun(clientIp)
+          globalLimiter.markRun()
       if (allowed) {
         pass
       } else {

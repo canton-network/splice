@@ -18,7 +18,11 @@ import org.apache.pekko.http.scaladsl.server.Directives.*
 import org.apache.pekko.http.scaladsl.server.Route
 import org.apache.pekko.http.scaladsl.testkit.ScalatestRouteTest
 import org.lfdecentralizedtrust.splice.config.RateLimitersConfig
-import org.lfdecentralizedtrust.splice.util.{PerAttributeRateLimitConfig, SpliceRateLimitConfig}
+import org.lfdecentralizedtrust.splice.util.{
+  PerAttributeRateLimitConfig,
+  SpliceRateLimitConfig,
+  SpliceRateLimiter,
+}
 import org.scalatest.wordspec.AnyWordSpec
 
 import java.net.{Inet6Address, InetAddress}
@@ -43,14 +47,14 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
       ) should be(Some("4.4.4.4"))
     }
 
-    "ignore a non-IP X-Envoy-External-Address and fall back to the trusted transport address" in {
+    "ignore a non-IP X-Envoy-External-Address and fall back to the next header" in {
       clientIp(
         HttpRequest()
-          .withHeaders(RawHeader("X-Envoy-External-Address", "evil.example.com"))
-          .withAttributes(
-            Map(AttributeKeys.remoteAddress -> RemoteAddress(InetAddress.getByName("3.3.3.3")))
+          .withHeaders(
+            RawHeader("X-Envoy-External-Address", "evil.example.com"),
+            `X-Forwarded-For`(RemoteAddress(InetAddress.getByName("1.1.1.1"))),
           )
-      ) should be(Some("3.3.3.3"))
+      ) should be(Some("1.1.1.1"))
     }
 
     "use a configurable trusted proxy header" in {
@@ -102,12 +106,13 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
       ) should be(Some("2.2.2.2"))
     }
 
-    "fall back to the remote address attribute" in {
+    "not use the remote address of the transport connection" in {
+      // the remote address is not exposed by the server, so it must not be relied upon
       clientIp(
         HttpRequest().withAttributes(
           Map(AttributeKeys.remoteAddress -> RemoteAddress(InetAddress.getByName("3.3.3.3")))
         )
-      ) should be(Some("3.3.3.3"))
+      ) should be(None)
     }
 
     "return None if no IP can be determined" in {
@@ -180,9 +185,6 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
       ) should be(expected)
       clientIp(
         HttpRequest().withHeaders(`X-Real-Ip`(address))
-      ) should be(expected)
-      clientIp(
-        HttpRequest().withAttributes(Map(AttributeKeys.remoteAddress -> address))
       ) should be(expected)
     }
   }
@@ -330,6 +332,103 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
     }
   }
 
+  "the order in which the rate limiters are applied" should {
+
+    // A limiter only records (and thereby only consumes budget for) the requests that actually
+    // reach it, as the limiters are combined with a short-circuiting `&&`. The tests below send a
+    // burst of requests that is rejected by one limiter and assert that the limiters which must be
+    // applied later only saw the requests that were accepted by the rejecting one.
+    val Burst = 20
+    val Rejecting = SpliceRateLimitConfig(ratePerSecond = 1)
+    // high enough to never reject, so that the recorded requests are exactly the ones that got here
+    val Downstream = SpliceRateLimitConfig(ratePerSecond = 1000)
+    val PerAttribute = SpliceRateLimiter.PerAttributeLimiterType
+    val Overall = SpliceRateLimiter.GlobalLimiterType
+
+    // Sends a burst of requests from a single client IP and returns how many were accepted.
+    def burst(fixture: HttpRateLimiterTest.Fixture, operation: String): Long = {
+      val results = (1 to Burst).map(_ => call(fixture(operation), ip = Some("1.1.1.1")))
+      results.count(_ == StatusCodes.TooManyRequests) should be > 0
+      results.count(_ == StatusCodes.OK).toLong
+    }
+
+    def onlySawAcceptedRequests(
+        fixture: HttpRateLimiterTest.Fixture,
+        accepted: Long,
+    )(limiters: (String, String)*) =
+      forEvery(limiters) { case (limiter, limiterType) =>
+        withClue(s"requests seen by the $limiterType limiter '$limiter': ") {
+          fixture.requestsSeenBy(limiter, limiterType) should be(accepted)
+          fixture.requestsRejectedBy(limiter, limiterType) should be(0L)
+        }
+      }
+
+    "apply the per operation client IP limiter before the overall limiters" in {
+      withRoutes(
+        rateLimiters = Map("limitedOperation" -> Downstream),
+        global = Downstream,
+        perClientIpOverrides = Map("limitedOperation" -> perClientIp(1)),
+      )("limitedOperation") { fixture =>
+        val accepted = burst(fixture, "limitedOperation")
+        onlySawAcceptedRequests(fixture, accepted)(
+          "limitedOperation" -> Overall,
+          HttpRateLimiter.GlobalLimiter -> Overall,
+        )
+      }
+    }
+
+    "apply the global per client IP limiter before the overall limiters" in {
+      withRoutes(
+        rateLimiters = Map("limitedOperation" -> Downstream),
+        global = Downstream,
+        globalPerClientIp = perClientIp(1),
+      )("limitedOperation") { fixture =>
+        val accepted = burst(fixture, "limitedOperation")
+        onlySawAcceptedRequests(fixture, accepted)(
+          "limitedOperation" -> Overall,
+          HttpRateLimiter.GlobalLimiter -> Overall,
+        )
+      }
+    }
+
+    "apply the per operation client IP limiter before the global per client IP limiter" in {
+      withRoutes(
+        globalPerClientIp = perClientIp(1000),
+        perClientIpOverrides = Map("limitedOperation" -> perClientIp(1)),
+      )("limitedOperation") { fixture =>
+        val accepted = burst(fixture, "limitedOperation")
+        onlySawAcceptedRequests(fixture, accepted)(
+          HttpRateLimiter.GlobalLimiter -> PerAttribute
+        )
+      }
+    }
+
+    "apply the per operation overall limiter before the global overall limiter" in {
+      withRoutes(
+        rateLimiters = Map("limitedOperation" -> Rejecting),
+        global = Downstream,
+      )("limitedOperation") { fixture =>
+        val accepted = burst(fixture, "limitedOperation")
+        onlySawAcceptedRequests(fixture, accepted)(
+          HttpRateLimiter.GlobalLimiter -> Overall
+        )
+      }
+    }
+
+    "still reject requests that pass the per client IP limiters but exceed an overall limit" in {
+      withRoutes(
+        global = SpliceRateLimitConfig(ratePerSecond = 2),
+        globalPerClientIp = perClientIp(1000),
+        perClientIpOverrides = Map("testOperation" -> perClientIp(1000)),
+      )("testOperation") { fixture =>
+        // every request is below both per client IP limits, but the overall global limit applies
+        val results = (1 to Burst).map(i => call(fixture("testOperation"), ip = Some(s"1.1.1.$i")))
+        results.count(_ == StatusCodes.OK) should be < Burst
+        results.count(_ == StatusCodes.TooManyRequests) should be > 0
+      }
+    }
+  }
+
   private def perClientIp(ratePerSecond: Double): PerAttributeRateLimitConfig =
     PerAttributeRateLimitConfig(limit = SpliceRateLimitConfig(ratePerSecond = ratePerSecond))
 
@@ -351,7 +450,7 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
 
   private def clientIpOf(ip: InetAddress): Option[String] =
     clientIp(
-      HttpRequest().withAttributes(Map(AttributeKeys.remoteAddress -> RemoteAddress(ip)))
+      HttpRequest().withHeaders(`X-Forwarded-For`(RemoteAddress(ip)))
     )
 
   private def call(route: Route, ip: Option[String]): StatusCode = {
@@ -370,7 +469,7 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
       global: SpliceRateLimitConfig = SpliceRateLimitConfig(ratePerSecond = 1000),
       globalPerClientIp: PerAttributeRateLimitConfig = PerAttributeRateLimitConfig.Disabled,
       perClientIpOverrides: Map[String, PerAttributeRateLimitConfig] = Map.empty,
-  )(operations: String*)(f: Map[String, Route] => A): A = {
+  )(operations: String*)(f: HttpRateLimiterTest.Fixture => A): A = {
     // Any operation with a per client IP override needs its own overall limiter entry so that the
     // embedded per client IP limiter is used instead of the `default` one.
     val perOperationConfigs: Map[String, SpliceRateLimitConfig.WithPerClientIp] =
@@ -380,13 +479,14 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
           perClientIpOverrides.getOrElse(operation, PerAttributeRateLimitConfig.Disabled),
         )
       }.toMap
+    val metricsFactory = new InMemoryMetricsFactory()
     val rateLimiter = new HttpRateLimiter(
       RateLimitersConfig(
         default = withPerClientIp(default, PerAttributeRateLimitConfig.Disabled),
         rateLimiters = perOperationConfigs,
         global = withPerClientIp(global, globalPerClientIp),
       ),
-      new InMemoryMetricsFactory(),
+      metricsFactory,
       loggerFactory.getTracedLogger(classOf[HttpRateLimiterTest]),
     )
     try {
@@ -397,7 +497,7 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
       }.toMap
       // the rate limiter only starts enforcing 1 second after it got created
       Threading.sleep(1100)
-      f(routes)
+      f(HttpRateLimiterTest.Fixture(routes, metricsFactory))
     } finally {
       rateLimiter.close()
     }
@@ -418,4 +518,37 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
 
 object HttpRateLimiterTest {
   private val NoClientIp = "<none>"
+
+  /** The routes of the rate limited operations together with the metrics recorded by their rate
+    * limiters. Requests are only recorded by the limiters they actually reach, which is what allows
+    * asserting on the order in which the limiters are applied.
+    */
+  private final case class Fixture(
+      routes: Map[String, Route],
+      metricsFactory: InMemoryMetricsFactory,
+  ) {
+
+    def apply(operation: String): Route = routes(operation)
+
+    /** Number of requests recorded by the given limiter, i.e. that were actually evaluated by it. */
+    def requestsSeenBy(limiter: String, limiterType: String): Long =
+      marks(limiter, limiterType, result = None)
+
+    /** Number of requests the given limiter rejected. */
+    def requestsRejectedBy(limiter: String, limiterType: String): Long =
+      marks(limiter, limiterType, result = Some("rejected"))
+
+    private def marks(limiter: String, limiterType: String, result: Option[String]): Long =
+      metricsFactory.metrics.meters.values
+        .flatMap(_.values)
+        .flatMap(_.markers.toSeq)
+        .collect {
+          case (context, value)
+              if context.labels.get("limiter").contains(limiter) &&
+                context.labels.get("limiter_type").contains(limiterType) &&
+                result.forall(expected => context.labels.get("result").contains(expected)) =>
+            value.get()
+        }
+        .sum
+  }
 }

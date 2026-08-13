@@ -4,7 +4,7 @@
 package org.lfdecentralizedtrust.splice.http
 
 import org.apache.pekko.http.scaladsl.model.headers.{`X-Forwarded-For`, `X-Real-Ip`}
-import org.apache.pekko.http.scaladsl.model.{AttributeKeys, RemoteAddress}
+import org.apache.pekko.http.scaladsl.model.RemoteAddress
 import org.apache.pekko.http.scaladsl.server.Directive1
 import org.apache.pekko.http.scaladsl.server.Directives.*
 
@@ -17,7 +17,6 @@ object ClientIpDirectives {
     *      by a trusted reverse proxy and hence cannot be spoofed by the client,
     *   1. the client-controlled `X-Forwarded-For` header,
     *   1. the client-controlled `X-Real-Ip` header,
-    *   1. the remote address of the transport connection, if the server is configured to expose it.
     *
     * @param trustedClientIpHeader
     *   name of the header set by a trusted reverse proxy, matched case-insensitively. An empty name
@@ -28,7 +27,6 @@ object ClientIpDirectives {
       trustedClientIp(trustedClientIpHeader),
       forwardedForClientIp,
       realIpClientIp,
-      remoteAddressClientIp,
     )
 
   private def trustedClientIp(headerName: String): Directive1[Option[RemoteAddress]] = {
@@ -46,9 +44,6 @@ object ClientIpDirectives {
 
   private val realIpClientIp: Directive1[Option[RemoteAddress]] =
     optionalHeaderValuePF { case `X-Real-Ip`(address) => address }
-
-  private val remoteAddressClientIp: Directive1[Option[RemoteAddress]] =
-    optionalAttribute(AttributeKeys.remoteAddress)
 
   /** The value of the first directive that extracts a defined value, [[None]] if there is none. */
   private def firstDefined[A](
