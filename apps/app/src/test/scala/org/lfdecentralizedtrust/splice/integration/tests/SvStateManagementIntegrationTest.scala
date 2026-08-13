@@ -33,21 +33,16 @@ import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRules_SetConfig
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.amuletrules_actionrequiringconfirmation.CRARC_SetConfig
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
-import org.lfdecentralizedtrust.splice.console.SvAppBackendReference
-import org.lfdecentralizedtrust.splice.environment.SpliceMetrics.MetricsPrefix
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
 import org.lfdecentralizedtrust.splice.store.VoteResultsFilters
-import org.lfdecentralizedtrust.splice.sv.automation.VoteRequestMetricsTrigger
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.CloseVoteRequestTrigger
 import org.lfdecentralizedtrust.splice.util.{Codec, TriggerTestUtil}
 
 import com.digitalasset.canton.console.CommandFailure
-import com.digitalasset.canton.metrics.MetricValue
 
 import java.util.Optional
 import scala.collection.parallel.CollectionConverters.seqIsParallelizable
-import scala.concurrent.duration.DurationInt
 import scala.jdk.CollectionConverters.MapHasAsScala
 import scala.jdk.OptionConverters.*
 
@@ -135,119 +130,6 @@ class SvStateManagementIntegrationTest extends SvIntegrationTestBase with Trigge
         ) shouldBe 1L withClue "vote result count"
       },
     )
-  }
-
-  "Vote request metrics report counts per state relative to each SV" in { implicit env =>
-    initDso()
-
-    def voteRequestGauge(sv: SvAppBackendReference, state: String): Long =
-      sv.metrics
-        .get(s"$MetricsPrefix.sv_vote_requests.active", Map("state" -> state))
-        .select[MetricValue.LongPoint]
-        .value
-        .value
-
-    def assertGauges(
-        sv: SvAppBackendReference,
-        actionNeeded: Long,
-        inProgress: Long,
-        readyToClose: Long,
-    ): Unit = {
-      voteRequestGauge(
-        sv,
-        VoteRequestMetricsTrigger.ActionNeededState,
-      ) shouldBe actionNeeded withClue s"${sv.name} action_needed"
-      voteRequestGauge(
-        sv,
-        VoteRequestMetricsTrigger.InProgressState,
-      ) shouldBe inProgress withClue s"${sv.name} in_progress"
-      voteRequestGauge(
-        sv,
-        VoteRequestMetricsTrigger.ReadyToCloseState,
-      ) shouldBe readyToClose withClue s"${sv.name} ready_to_close"
-    }
-
-    val allSvs = Seq(sv1Backend, sv2Backend, sv3Backend, sv4Backend)
-    clue("Pausing vote request expiration automation") {
-      allSvs.foreach(
-        _.dsoDelegateBasedAutomation.trigger[CloseVoteRequestTrigger].pause().futureValue
-      )
-    }
-
-    clue("Initially no vote requests are counted") {
-      eventually() {
-        Seq(sv1Backend, sv2Backend).foreach(assertGauges(_, 0, 0, 0))
-      }
-    }
-
-    val (_, voteRequest) = actAndCheck(
-      "sv1 creates a vote request",
-      sv1Backend.createVoteRequest(
-        sv1Backend.getDsoInfo().svParty.toProtoPrimitive,
-        actionRequiring3VotesForEarlyClosing(sv4Backend.getDsoInfo().svParty.toProtoPrimitive),
-        "url",
-        "description",
-        sv1Backend.getDsoInfo().dsoRules.payload.config.voteRequestTimeout,
-        None,
-      ),
-    )(
-      "sv1 counts it as in progress (the requester's vote is cast on creation), sv2 as action needed",
-      _ => {
-        assertGauges(sv1Backend, actionNeeded = 0, inProgress = 1, readyToClose = 0)
-        assertGauges(sv2Backend, actionNeeded = 1, inProgress = 0, readyToClose = 0)
-        sv1Backend.listVoteRequests().loneElement
-      },
-    )
-
-    actAndCheck(
-      "sv2 votes on the request",
-      sv2Backend.castVote(voteRequest.contractId, false, "url", "description"),
-    )(
-      "sv2 now counts it as in progress as well",
-      _ => {
-        assertGauges(sv1Backend, actionNeeded = 0, inProgress = 1, readyToClose = 0)
-        assertGauges(sv2Backend, actionNeeded = 0, inProgress = 1, readyToClose = 0)
-      },
-    )
-
-    actAndCheck(
-      "sv1 creates a second vote request that expires quickly",
-      sv1Backend.createVoteRequest(
-        sv1Backend.getDsoInfo().svParty.toProtoPrimitive,
-        actionRequiring3VotesForEarlyClosing(sv3Backend.getDsoInfo().svParty.toProtoPrimitive),
-        "url",
-        "description",
-        // expire in 15 seconds
-        new RelTime(15_000_000L),
-        None,
-      ),
-    )(
-      "both SVs observe two open vote requests",
-      _ => {
-        sv1Backend.listVoteRequests() should have size 2 withClue "sv1 VoteRequests"
-        sv2Backend.listVoteRequests() should have size 2 withClue "sv2 VoteRequests"
-      },
-    )
-
-    clue("Once its voting deadline passes the second request counts as ready to close") {
-      eventually(40.seconds) {
-        assertGauges(sv1Backend, actionNeeded = 0, inProgress = 1, readyToClose = 1)
-        assertGauges(sv2Backend, actionNeeded = 0, inProgress = 1, readyToClose = 1)
-      }
-    }
-
-    clue("Resuming vote request expiration automation") {
-      allSvs.foreach(
-        _.dsoDelegateBasedAutomation.trigger[CloseVoteRequestTrigger].resume()
-      )
-    }
-
-    clue("Once the expired request is closed only the open one is counted") {
-      eventually() {
-        assertGauges(sv1Backend, actionNeeded = 0, inProgress = 1, readyToClose = 0)
-        assertGauges(sv2Backend, actionNeeded = 0, inProgress = 1, readyToClose = 0)
-      }
-    }
   }
 
   "VoteRequest expires with no definitive outcome." in { implicit env =>

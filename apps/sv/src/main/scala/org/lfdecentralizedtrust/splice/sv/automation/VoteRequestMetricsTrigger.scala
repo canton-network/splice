@@ -11,10 +11,15 @@ import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.automation.{PollingTrigger, TriggerContext}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.VoteRequest
 import org.lfdecentralizedtrust.splice.environment.SpliceMetrics
 import org.lfdecentralizedtrust.splice.store.PageLimit
-import org.lfdecentralizedtrust.splice.sv.automation.VoteRequestMetricsTrigger.VoteRequestMetrics
+import org.lfdecentralizedtrust.splice.sv.automation.VoteRequestMetricsTrigger.{
+  VoteRequestMetrics,
+  countByState,
+}
 import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
+import org.lfdecentralizedtrust.splice.util.Contract
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
@@ -39,14 +44,14 @@ class VoteRequestMetricsTrigger(
         PageLimit.Max,
       )(traceContext)
     } yield {
-      val readyToCloseCids = readyToCloseContracts.map(_.contractId).toSet
-      val (readyToClose, open) =
-        voteRequests.partition(request => readyToCloseCids.contains(request.contractId))
-      val (inProgress, actionNeeded) =
-        open.partition(_.payload.votes.values().asScala.exists(_.sv == svParty))
-      voteRequestMetrics.actionNeeded.updateValue(actionNeeded.size.toLong)
-      voteRequestMetrics.inProgress.updateValue(inProgress.size.toLong)
-      voteRequestMetrics.readyToClose.updateValue(readyToClose.size.toLong)
+      val counts = countByState(
+        voteRequests,
+        readyToCloseContracts.map(_.contractId).toSet,
+        svParty,
+      )
+      voteRequestMetrics.actionNeeded.updateValue(counts.actionNeeded)
+      voteRequestMetrics.inProgress.updateValue(counts.inProgress)
+      voteRequestMetrics.readyToClose.updateValue(counts.readyToClose)
       false
     }
 
@@ -57,9 +62,23 @@ class VoteRequestMetricsTrigger(
 
 object VoteRequestMetricsTrigger {
 
-  val ActionNeededState = "action_needed"
-  val InProgressState = "in_progress"
-  val ReadyToCloseState = "ready_to_close"
+  case class VoteRequestCounts(actionNeeded: Long, inProgress: Long, readyToClose: Long)
+
+  def countByState(
+      voteRequests: Seq[Contract[VoteRequest.ContractId, VoteRequest]],
+      readyToCloseCids: Set[VoteRequest.ContractId],
+      svParty: String,
+  ): VoteRequestCounts = {
+    val (readyToClose, open) =
+      voteRequests.partition(request => readyToCloseCids.contains(request.contractId))
+    val (inProgress, actionNeeded) =
+      open.partition(_.payload.votes.values().asScala.exists(_.sv == svParty))
+    VoteRequestCounts(
+      actionNeeded = actionNeeded.size.toLong,
+      inProgress = inProgress.size.toLong,
+      readyToClose = readyToClose.size.toLong,
+    )
+  }
 
   case class VoteRequestMetrics(metricsFactory: LabeledMetricsFactory) extends AutoCloseable {
 
@@ -81,9 +100,9 @@ object VoteRequestMetricsTrigger {
         0L,
       )(MetricsContext.Empty.withExtraLabels("state" -> state))
 
-    val actionNeeded: Gauge[Long] = stateGauge(ActionNeededState)
-    val inProgress: Gauge[Long] = stateGauge(InProgressState)
-    val readyToClose: Gauge[Long] = stateGauge(ReadyToCloseState)
+    val actionNeeded: Gauge[Long] = stateGauge("action_needed")
+    val inProgress: Gauge[Long] = stateGauge("in_progress")
+    val readyToClose: Gauge[Long] = stateGauge("ready_to_close")
 
     override def close(): Unit = {
       actionNeeded.close()
