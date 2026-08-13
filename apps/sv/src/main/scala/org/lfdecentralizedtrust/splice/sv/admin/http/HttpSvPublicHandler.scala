@@ -307,6 +307,16 @@ class HttpSvPublicHandler(
     }
   }
 
+  /** Intended use: Used by validator candidates to buy member traffic using SV's DevNet faucet
+    *
+    * Protection: Rate limiting, endpoint only used for DevNet
+    */
+  override def devNetBuyMemberTraffic(
+      respond: r0.DevNetBuyMemberTrafficResponse.type
+  )(
+      body: definitions.DevNetBuyMemberTrafficRequest
+  )(extracted: TraceContext): Future[r0.DevNetBuyMemberTrafficResponse] = ???
+
   /** Intended use: Used by other validators to get a free onboarding secret
     *
     * Protection: Rate limiting, endpoint only used for DevNet
