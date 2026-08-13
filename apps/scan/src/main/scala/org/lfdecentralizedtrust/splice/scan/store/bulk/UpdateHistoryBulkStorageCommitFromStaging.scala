@@ -15,6 +15,7 @@ import org.lfdecentralizedtrust.splice.environment.{RetryProvider, SpliceLedgerC
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.scan.config.BulkStorageConfig
 import org.lfdecentralizedtrust.splice.scan.store.ScanStore
+import org.lfdecentralizedtrust.splice.scan.util.PeerBftScanConnection
 import org.lfdecentralizedtrust.splice.store.{S3BucketConnection, TimestampWithMigrationId}
 import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 
@@ -28,6 +29,7 @@ class UpdateHistoryBulkStorageCommitFromStaging(
     store: ScanStore,
     svName: String,
     ledgerClient: SpliceLedgerClient,
+    scanConnection: PeerBftScanConnection,
     automationConfig: AutomationConfig,
     upgradesConfig: UpgradesConfig,
     clock: Clock,
@@ -59,6 +61,7 @@ class UpdateHistoryBulkStorageCommitFromStaging(
       store,
       svName,
       ledgerClient,
+      scanConnection,
       automationConfig,
       upgradesConfig,
       clock,

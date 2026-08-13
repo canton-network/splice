@@ -16,7 +16,7 @@ import org.lfdecentralizedtrust.splice.environment.{RetryProvider, SpliceLedgerC
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.scan.config.BulkStorageConfig
 import org.lfdecentralizedtrust.splice.scan.store.ScanStore
-import org.lfdecentralizedtrust.splice.scan.util.HasPeerBftScanConnection
+import org.lfdecentralizedtrust.splice.scan.util.PeerBftScanConnection
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChecksum
 import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
@@ -33,6 +33,7 @@ class BulkStorageCommitFromStaging[T](
     store: ScanStore,
     svName: String,
     ledgerClient: SpliceLedgerClient,
+    scanConnection: PeerBftScanConnection,
     automationConfig: AutomationConfig,
     upgradesConfig: UpgradesConfig,
     clock: Clock,
@@ -44,8 +45,8 @@ class BulkStorageCommitFromStaging[T](
     actorSystem: ActorSystem,
     httpClient: HttpClient,
     templateJsonDecoder: TemplateJsonDecoder,
-) extends HasPeerBftScanConnection
-    with NamedLogging {
+) extends NamedLogging {
+
   private def checkBftForObjects(
       objects: Seq[ObjectKeyAndChecksum]
   ): Future[Boolean] = {
@@ -54,16 +55,7 @@ class BulkStorageCommitFromStaging[T](
     )
     if (appConfig.bftCheckEnabled) {
       for {
-        connection <- getOrCreateScanConnection(
-          store,
-          svName,
-          ledgerClient,
-          automationConfig,
-          upgradesConfig,
-          clock: Clock,
-          retryProvider,
-          loggerFactory,
-        )
+        connection <- scanConnection.connection
         bft <- connection.getBulkObjectChecksums(objects.map(_.key)).map(Some(_)).recoverWith {
           case ex @ HttpErrorWithHttpCode(code, _) =>
             if (code == StatusCodes.BadGateway) {
@@ -203,6 +195,7 @@ object BulkStorageCommitFromStaging {
       store: ScanStore,
       svName: String,
       ledgerClient: SpliceLedgerClient,
+      scanConnection: PeerBftScanConnection,
       automationConfig: AutomationConfig,
       upgradesConfig: UpgradesConfig,
       clock: Clock,
@@ -223,6 +216,7 @@ object BulkStorageCommitFromStaging {
       store,
       svName,
       ledgerClient,
+      scanConnection,
       automationConfig,
       upgradesConfig,
       clock,

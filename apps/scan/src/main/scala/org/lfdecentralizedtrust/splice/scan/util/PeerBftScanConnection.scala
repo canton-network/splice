@@ -19,64 +19,36 @@ import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 
 import scala.concurrent.{ExecutionContextExecutor, Future, blocking}
 
-class PeerBftScanConnection {
+class PeerBftScanConnection(
+    store: ScanStore,
+    svName: String,
+    ledgerClient: SpliceLedgerClient,
+    automationConfig: AutomationConfig,
+    upgradesConfig: UpgradesConfig,
+    clock: Clock,
+    retryProvider: RetryProvider,
+    loggerFactory: NamedLoggerFactory,
+) extends AutoCloseable {
 
-  private val mutex = Mutex()
+  @volatile private var initialized = false
 
-  @SuppressWarnings(Array("org.wartremover.warts.Var"))
-  @volatile
-  private var connectionVar: Option[BftScanConnection] = None
+  lazy val connection: Future[BftScanConnection] = {
+    initialized = true
+    BftScanConnection.peerScanConnection(
+      () => BftScanConnection.Bft.getPeerScansFromStore(store, svName),
+      ledgerClient,
+      // When the network is starting up, the pool of SVs is changing fast
+      // Using a short refresh interval to quickly pick up new SVs
+      scansRefreshInterval = automationConfig.pollingInterval,
+      amuletRulesCacheTimeToLive = ScanAppClientConfig.DefaultAmuletRulesCacheTimeToLive,
+      upgradesConfig,
+      clock,
+      retryProvider,
+      loggerFactory,
+    )
 
-  protected def getOrCreateScanConnection(
-      store: ScanStore,
-      svName: String,
-      ledgerClient: SpliceLedgerClient,
-      automationConfig: AutomationConfig,
-      upgradesConfig: UpgradesConfig,
-      clock: Clock,
-      retryProvider: RetryProvider,
-      loggerFactory: NamedLoggerFactory,
-  )(implicit
-      tc: TraceContext,
-      ec: ExecutionContextExecutor,
-      mat: Materializer,
-      httpClient: HttpClient,
-      templateJsonDecoder: TemplateJsonDecoder,
-  ): Future[BftScanConnection] =
-    blocking {
-      mutex.exclusive {
-        connectionVar match {
-          case Some(connection) =>
-            Future.successful(connection)
-          case None =>
-            for {
-              connection <- BftScanConnection.peerScanConnection(
-                () => BftScanConnection.Bft.getPeerScansFromStore(store, svName),
-                ledgerClient,
-                // When the network is starting up, the pool of SVs is changing fast
-                // Using a short refresh interval to quickly pick up new SVs
-                scansRefreshInterval = automationConfig.pollingInterval,
-                amuletRulesCacheTimeToLive = ScanAppClientConfig.DefaultAmuletRulesCacheTimeToLive,
-                upgradesConfig,
-                clock,
-                retryProvider,
-                loggerFactory,
-              )
-            } yield {
-              connectionVar = Some(connection)
-              connection
-            }
-        }
-      }
-    }
+  }
 
-  protected def closeScanConnection(): Option[SyncCloseable] =
-    connectionVar
-      .map(connection =>
-        SyncCloseable(
-          "closing scan connection",
-          connection.close(),
-        )
-      )
+  override def close(): Unit = if (initialized) connection.foreach(_.close())
 
 }

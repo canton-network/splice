@@ -33,6 +33,7 @@ import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorage.{
   updatesCommittedKvStoreKey,
   updatesStagingKvStoreKey,
 }
+import org.lfdecentralizedtrust.splice.scan.util.PeerBftScanConnection
 import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 
 import scala.concurrent.duration.*
@@ -69,6 +70,16 @@ class BulkStorage(
   val stagingConnection = S3BucketConnection(stagingS3Config, loggerFactory)
   val committedConnection = S3BucketConnection(committedS3Config, loggerFactory)
   val historyMetrics = HistoryMetrics(metricsFactory, currentMigrationId)
+  val scanConnection = new PeerBftScanConnection(
+    store,
+    svName,
+    ledgerClient,
+    automationConfig,
+    upgradesConfig,
+    backoffClock,
+    retryProvider,
+    loggerFactory,
+  )
 
   val backfillingCompleteGate: Source[Boolean, Cancellable] =
     Source
@@ -143,6 +154,7 @@ class BulkStorage(
     store,
     svName,
     ledgerClient,
+    scanConnection,
     automationConfig,
     upgradesConfig,
     backoffClock,
@@ -182,6 +194,7 @@ class BulkStorage(
     store,
     svName,
     ledgerClient,
+    scanConnection,
     automationConfig,
     upgradesConfig,
     backoffClock,
@@ -202,7 +215,7 @@ class BulkStorage(
       .map(_.asPekkoRetryingService(automationConfig, backoffClock, retryProvider))
 
   final override def closeAsync(): Seq[AsyncOrSyncCloseable] =
-    services.flatMap(_.closeAsync())
+    services.flatMap(_.closeAsync()) :+ scanConnection.close()
 }
 
 object BulkStorage {

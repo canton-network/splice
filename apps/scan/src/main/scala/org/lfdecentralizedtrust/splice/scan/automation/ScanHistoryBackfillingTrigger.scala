@@ -40,7 +40,7 @@ import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
-import org.lfdecentralizedtrust.splice.scan.util.HasPeerBftScanConnection
+import org.lfdecentralizedtrust.splice.scan.util.PeerBftScanConnection
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingState
 
 import scala.concurrent.{ExecutionContextExecutor, Future, blocking}
@@ -61,10 +61,20 @@ class ScanHistoryBackfillingTrigger(
     httpClient: HttpClient,
     templateJsonDecoder: TemplateJsonDecoder,
     mat: Materializer,
-) extends PollingParallelTaskExecutionTrigger[ScanHistoryBackfillingTrigger.Task]
-    with HasPeerBftScanConnection {
+) extends PollingParallelTaskExecutionTrigger[ScanHistoryBackfillingTrigger.Task] {
 
   private val currentMigrationId = updateHistory.domainMigrationId
+
+  private val scanConnection = new PeerBftScanConnection(
+    store,
+    svName,
+    ledgerClient,
+    context.config,
+    upgradesConfig,
+    context.clock,
+    context.retryProvider,
+    loggerFactory,
+  )
 
   private val historyMetrics = new HistoryMetrics(context.metricsFactory)(
     MetricsContext(
@@ -241,25 +251,8 @@ class ScanHistoryBackfillingTrigger(
     }
   }
 
-  private def getOrCreateScanConnection()(implicit
-      tc: TraceContext,
-      ec: ExecutionContextExecutor,
-      mat: Materializer,
-      httpClient: HttpClient,
-      templateJsonDecoder: TemplateJsonDecoder,
-  ): Future[BftScanConnection] = getOrCreateScanConnection(
-    store,
-    svName,
-    ledgerClient,
-    context.config,
-    upgradesConfig,
-    context.clock,
-    context.retryProvider,
-    loggerFactory,
-  )
-
   private def performBackfilling()(implicit traceContext: TraceContext): Future[TaskOutcome] = for {
-    connection <- getOrCreateScanConnection()
+    connection <- scanConnection.connection
     backfilling = getOrCreateBackfilling(connection)
     outcome <- backfilling.backfill().map {
       case HistoryBackfilling.Outcome.MoreWorkAvailableNow(workDone) =>
@@ -313,7 +306,7 @@ class ScanHistoryBackfillingTrigger(
   } yield outcome
 
   override def closeAsync(): Seq[AsyncOrSyncCloseable] = {
-    closeScanConnection().toList
+    scanConnection.closeAsync()
   }
 }
 
