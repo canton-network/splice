@@ -19,6 +19,11 @@ kms:
 additionalEnvVars:
   - name: GOOGLE_APPLICATION_CREDENTIALS
     value: "/app/gcp-credentials.json"
+  # Session signing keys reduce KMS load and cost on KMS-backed participants by signing
+  # most messages with short-lived in-memory keys instead of calling the KMS each time.
+  # This config setting only works on KMS participants.
+  - name: ADDITIONAL_CONFIG_SESSION_SIGNING_KEYS
+    value: canton.participants.participant.crypto.session-signing-keys.enabled = true
 extraVolumeMounts:
   - name: gcp-credentials
     mountPath: "/app/gcp-credentials.json"
