@@ -11,6 +11,8 @@ import org.lfdecentralizedtrust.splice.console.ParticipantClientReference
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.util.{FrontendLoginUtil, WalletFrontendTestUtil}
 import com.digitalasset.canton.http.json.v2.JsStateServiceCodecs.*
+import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
+import com.digitalasset.canton.topology.transaction.SynchronizerTrustCertificate.ParticipantTopologyFeatureFlag
 import com.digitalasset.canton.version.ProtocolVersion
 import com.daml.ledger.api.v2.state_service.GetConnectedSynchronizersResponse
 import monocle.Monocle.toAppliedFocusOps
@@ -28,7 +30,8 @@ class LocalNetFrontendIntegrationTest
       .updateTestingConfig(
         _.focus(_.participantsWithoutLapiVerification).replace(
           Set(
-            "app-provider"
+            "app-provider",
+            "app-user",
           )
         )
       )
@@ -175,34 +178,71 @@ class LocalNetFrontendIntegrationTest
       }
     }
 
+  private def participantClient(name: String)(implicit env: FixtureParam) = {
+    val remoteParticipant =
+      env.participants.remote
+        .find(_.name == name)
+        .getOrElse(fail(s"$name participant not found"))
+    new ParticipantClientReference(
+      env,
+      remoteParticipant.name,
+      remoteParticipant.config.copy(token = Some(token)),
+    )
+  }
+
+  private def testMultiSynchronizerFeatureFlag(isMultiSync: Boolean)(implicit
+      env: FixtureParam
+  ): Unit =
+    clue("Test multi-synchronizer feature flag on synchronizer trust certificates") {
+      List("app-user", "app-provider").foreach { name =>
+        clue(s"Test $name participant trust certificates") {
+          val participant = participantClient(name)
+          val connectedSynchronizers = participant.synchronizers.list_connected()
+          if (isMultiSync)
+            connectedSynchronizers should have size 2
+          else
+            connectedSynchronizers should have size 1
+          connectedSynchronizers.foreach { connected =>
+            val featureFlags = participant.topology.synchronizer_trust_certificates
+              .list(
+                store = Some(TopologyStoreId.Synchronizer(connected.synchronizerId)),
+                filterUid = participant.id.filterString,
+              )
+              .loneElement
+              .item
+              .featureFlags
+            if (isMultiSync)
+              featureFlags should contain(
+                ParticipantTopologyFeatureFlag.EnableMultiSynchronizer
+              )
+            else
+              featureFlags should not contain ParticipantTopologyFeatureFlag.EnableMultiSynchronizer
+          }
+        }
+      }
+    }
+
   "docker-compose based localnet works for single synchronizer" in { implicit env =>
     withLocalNet(Seq.empty) { implicit env =>
       testValidators
       testSvUi()
       testTokenStandardApi
       testMultiSynchronizerSupport(isMultiSync = false)
+      testMultiSynchronizerFeatureFlag(isMultiSync = false)
     }
   }
 
   "docker-compose based localnet works for multiple synchronizers" in { implicit env =>
     withLocalNet(Seq("-M")) { implicit env =>
       testMultiSynchronizerSupport(isMultiSync = true)
+      testMultiSynchronizerFeatureFlag(isMultiSync = true)
     }
   }
 
   "localnet supports configurable protocol versions" in { implicit env =>
     withLocalNet(Seq("-u", "-p", "35")) { implicit env =>
-      val appProviderParticipant =
-        env.participants.remote
-          .find(_.name == "app-provider")
-          .getOrElse(fail("app-provider participant not found"))
-
-      val participantClient = new ParticipantClientReference(
-        env,
-        appProviderParticipant.name,
-        appProviderParticipant.config.copy(token = Some(token)),
-      )
-      participantClient.synchronizers
+      val appProviderParticipant = participantClient("app-provider")
+      appProviderParticipant.synchronizers
         .list_connected()
         .loneElement
         .physicalSynchronizerId
