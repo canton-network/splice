@@ -493,7 +493,7 @@ paths:
                 "$ref": "#/components/schemas/OnboardSvSequencerResponse"
         "400":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
-  /v0/devnet/onboard/validator/buy/traffic:
+  /v0/devnet/onboard/validator/purchase-traffic:
     post:
       tags: [sv]
       x-jvm-package: sv_public

@@ -334,7 +334,7 @@ class HttpSvPublicHandler(
       } else {
         Future.failed(
           HttpErrorHandler.notImplemented(
-            "DevNet traffic purchasing self-service is only available in DevNet."
+            "Traffic purchasing self-service is only available in DevNet."
           )
         )
       }

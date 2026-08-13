@@ -83,7 +83,7 @@ abstract class SvAppReference(
       httpCommand(HttpSvPublicAppClient.getSvOnboardingStatus(candidate))
     }
 
-  @Help.Summary("Buy member traffic for a participant (DevNet only) (via client API)")
+  @Help.Summary("Buy member traffic for a new validator (DevNet only) (via client API)")
   def devNetBuyMemberTraffic(participantId: ParticipantId): Unit =
     consoleEnvironment.run {
       httpCommand(HttpSvPublicAppClient.DevNetBuyMemberTraffic(participantId.toProtoPrimitive))
