@@ -82,7 +82,7 @@ final class ConsoleTest extends AnyWordSpec with BaseTest {
     val adminToken: String = "0" * 64
 
     when(environment.tracerProvider).thenReturn(mock[TracerProvider])
-    when(environment.config).thenReturn(config)
+    doReturn(config).when(environment).config
     when(environment.testingConfig).thenReturn(
       TestingConfigInternal(initializeGlobalOpenTelemetry = false)
     )

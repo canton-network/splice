@@ -28,6 +28,7 @@ import type {
   SupportedActionTag,
   UnclaimedActivityRecordProposal,
   UnfeatureAppProposal,
+  UpdateFeatureAppProposal,
   UpdateSvRewardWeightProposal,
   YourVoteStatus,
 } from '../utils/types';
@@ -46,6 +47,7 @@ export const actionTagToTitle = (amuletName: string): Record<SupportedActionTag,
   SRARC_CreateUnallocatedUnclaimedActivityRecord: 'Create Unclaimed Activity Record',
   SRARC_SetConfig: 'Set Decentralized Synchronizer Operations (DSO) Rules Configuration',
   SRARC_UpdateSvRewardWeight: 'Update Super Validator Reward Weight',
+  SRARC_UpdateFeaturedAppRight: 'Update Featured Application',
 });
 
 export const createProposalActions: {
@@ -55,6 +57,7 @@ export const createProposalActions: {
   { name: 'Offboard Member', value: 'SRARC_OffboardSv' },
   { name: 'Feature Application', value: 'SRARC_GrantFeaturedAppRight' },
   { name: 'Unfeature Application', value: 'SRARC_RevokeFeaturedAppRight' },
+  { name: 'Update Featured Application', value: 'SRARC_UpdateFeaturedAppRight' },
   {
     name: 'Set Decentralized Synchronizer Operations (DSO) Rules Configuration',
     value: 'SRARC_SetConfig',
@@ -101,6 +104,20 @@ export function computeVoteStats(votes: Vote[]): {
   );
 }
 
+export function getRequesterPartyId(
+  requester: string,
+  svs: { entriesArray(): [string, SvInfo][] } | undefined
+): string {
+  if (requester.includes('::')) {
+    return requester;
+  }
+  if (!svs) {
+    return requester;
+  }
+  const match = svs.entriesArray().find(([, info]) => info.name === requester);
+  return match?.[0] ?? requester;
+}
+
 export function computeYourVote(votes: Vote[], svPartyId: string | undefined): YourVoteStatus {
   if (svPartyId === undefined) {
     return 'no-vote';
@@ -140,6 +157,11 @@ export function buildProposal(action: ActionRequiringConfirmation, dsoInfo?: Dso
         );
       case 'SRARC_RevokeFeaturedAppRight':
         return createRevokeFeatureAppProposal(dsoAction.value.rightCid);
+      case 'SRARC_UpdateFeaturedAppRight':
+        return createUpdateFeatureAppProposal(
+          dsoAction.value.rightCid,
+          dsoAction.value.update.newActivityWeight
+        );
       case 'SRARC_SetConfig':
         return createDsoRulesConfigProposal(dsoAction.value.baseConfig, dsoAction.value.newConfig);
     }
@@ -167,6 +189,13 @@ function createGrantFeatureAppProposal(
     provider: provider,
     activityWeight: activityWeight,
   };
+}
+
+function createUpdateFeatureAppProposal(
+  rightContractId: string,
+  newActivityWeight: string
+): UpdateFeatureAppProposal {
+  return { rightContractId, newActivityWeight };
 }
 
 function createRevokeFeatureAppProposal(rightContractId: string): UnfeatureAppProposal {

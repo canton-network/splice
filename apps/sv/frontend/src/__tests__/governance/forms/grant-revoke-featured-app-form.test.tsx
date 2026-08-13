@@ -32,7 +32,7 @@ describe('SV user can', () => {
     const button = screen.getByRole('button', { name: 'Log In' });
     await user.click(button);
 
-    expect(await screen.findAllByDisplayValue(svPartyId)).not.toBe([]);
+    expect(await screen.findAllByDisplayValue(svPartyId)).not.toHaveLength(0);
   });
 });
 
@@ -364,7 +364,9 @@ describe('Revoke Featured App Form', () => {
     fireEvent.blur(partyIdInput);
 
     await waitFor(() => {
-      expect(screen.queryByText('Loading featured app rights...')).not.toBeInTheDocument();
+      expect(
+        screen.queryByText('Loading Featured Application Contract IDs...')
+      ).not.toBeInTheDocument();
     });
 
     const rightCidDropdown = screen.getByTestId('revoke-featured-app-rightCid-dropdown');
@@ -431,12 +433,12 @@ describe('Revoke Featured App Form', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('revoke-featured-app-rightCid')).toHaveTextContent(
-        'No featured application rights found for this provider'
+        'No Featured Application Contract IDs found for this provider'
       );
     });
 
     expect(screen.getByTestId('revoke-featured-app-rightCid-error')).not.toHaveTextContent(
-      'No featured application rights found for this provider'
+      'No Featured Application Contract IDs found for this provider'
     );
 
     expect(screen.getByTestId('revoke-featured-app-rightCid-dropdown')).toBeDisabled();

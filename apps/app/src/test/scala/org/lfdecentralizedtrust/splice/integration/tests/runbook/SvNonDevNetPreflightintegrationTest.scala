@@ -109,10 +109,6 @@ abstract class SvNonDevNetPreflightIntegrationTestBase
     }
   }
 
-  "Check health status of sv cometBft node" in { implicit env =>
-    svClient.cometBftNodeStatus().catchingUp shouldBe false
-  }
-
   "Check that there is a recent participant identities backup on GCP" in { _ =>
     testRecentParticipantIdentitiesDump(svNamespace, IdentityDump)
   }

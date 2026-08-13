@@ -29,7 +29,7 @@ import {
   standardSvConfigsBasic,
 } from '@canton-network/splice-pulumi-common-sv/src/svConfigsBasic';
 import { SweepConfig } from '@canton-network/splice-pulumi-common-validator';
-import { SplicePostgres } from '@canton-network/splice-pulumi-common/src/postgres';
+import { installSplicePostgres, Postgres } from '@canton-network/splice-pulumi-common/src/postgres';
 import { infraStack } from '@canton-network/splice-pulumi-common/src/stackReferences';
 import { local } from '@pulumi/command';
 import { getSecretVersionOutput } from '@pulumi/gcp/secretmanager/getSecretVersion';
@@ -547,7 +547,7 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
   );
   createGrafanaAlerting(namespaceName);
   if (monitoringConfig.enableGrafanaServiceAccountToken) {
-    createGrafanaServiceAccount(namespaceName, adminPassword, [prometheusStack, postgres.pg]);
+    createGrafanaServiceAccount(namespaceName, adminPassword, [prometheusStack, postgres.database]);
   }
   createGrafanaEnvoyFilter(namespaceName, [prometheusStack]);
 
@@ -816,13 +816,14 @@ function createGrafanaAlerting(namespace: Input<string>) {
                   muteTimes: monitoringConfig.alerting.muteTimeIntervals.map(interval => ({
                     orgId: 1,
                     name: interval.name,
-                    time_intervals: [
-                      {
-                        times: [{ start_time: interval.startTime, end_time: interval.endTime }],
-                        ...(interval.weekdays ? { weekdays: interval.weekdays } : {}),
-                        location: 'UTC',
-                      },
-                    ],
+                    time_intervals: interval.timeWindows.map(window => ({
+                      times: window.times.map(t => ({
+                        start_time: t.startTime,
+                        end_time: t.endTime,
+                      })),
+                      ...(window.weekdays ? { weekdays: window.weekdays } : {}),
+                      location: 'UTC',
+                    })),
                   })),
                 }),
               }
@@ -863,7 +864,7 @@ function createGrafanaAlerting(namespace: Input<string>) {
               monitoringConfig.alerting.alerts.deployment.pendingPeriodMinutes.toString()
             ),
             'load-tester_alerts.yaml': readGrafanaAlertingFile('load-tester_alerts.yaml')
-              .replace(
+              .replaceAll(
                 '$LOAD_TESTER_MIN_RATE',
                 loadTesterConfig?.minRate ? loadTesterConfig?.minRate.toString() : '1.0'
               )
@@ -942,26 +943,26 @@ function createGrafanaAlerting(namespace: Input<string>) {
               : {}),
             'acknowledgement_alerts.yaml': readGrafanaAlertingFile(
               'acknowledgement_alerts.yaml'
-            ).replace(
+            ).replaceAll(
               '$MEDIATOR_ACKNOWLEDGEMENT_LAG_SECONDS',
               monitoringConfig.alerting.alerts.mediators.acknowledgementLagSeconds.toString()
             ),
             'sequencer_client_delay_alerts.yaml': readGrafanaAlertingFile(
               'sequencer_client_delay_alerts.yaml'
-            ).replace(
+            ).replaceAll(
               '$SEQUENCER_CLIENT_DELAY_THRESHOLD_SECONDS',
               monitoringConfig.alerting.alerts.sequencerClientDelay.seconds.toString()
             ),
             'acs_commitment_alerts.yaml': readGrafanaAlertingFile('acs_commitment_alerts.yaml')
-              .replace(
+              .replaceAll(
                 '$ACS_COMMITMENT_CHECKPOINT_DELAY_THRESHOLD_SECONDS',
                 monitoringConfig.alerting.alerts.acsCommitments.checkpointDelay.seconds.toString()
               )
-              .replace(
+              .replaceAll(
                 '$ACS_COMMITMENT_DELAY_THRESHOLD_SECONDS',
                 monitoringConfig.alerting.alerts.acsCommitments.completedDelay.seconds.toString()
               )
-              .replace(
+              .replaceAll(
                 '$ACS_COMMITMENT_COMPUTE_DURATION_THRESHOLD_SECONDS',
                 monitoringConfig.alerting.alerts.acsCommitments.computeDuration.seconds.toString()
               ),
@@ -974,15 +975,18 @@ function createGrafanaAlerting(namespace: Input<string>) {
             'scan_connection_disagreement_alerts.yaml': substituteScanConnectionDisagreementAlerts(
               readGrafanaAlertingFile('scan_connection_disagreement_alerts.yaml')
             ),
+            'scan_bft_sequencers_alerts.yaml': readGrafanaAlertingFile(
+              'scan_bft_sequencers_alerts.yaml'
+            ),
             'extra_k8s_alerts.yaml': readGrafanaAlertingFile('extra_k8s_alerts.yaml'),
             'sequencer_rate_limit_alerts.yaml': readGrafanaAlertingFile(
               'sequencer_rate_limit_alerts.yaml'
             )
-              .replace(
+              .replaceAll(
                 '$SEQUENCER_RATE_LIMIT_REJECTION_RATE_THRESHOLD',
                 monitoringConfig.alerting.alerts.sequencerRateLimits.rejectionRateThreshold.toString()
               )
-              .replace(
+              .replaceAll(
                 '$SEQUENCER_RATE_LIMIT_CIRCUIT_BREAKER_STATE_THRESHOLD',
                 monitoringConfig.alerting.alerts.sequencerRateLimits.circuitBreakerStateThreshold.toString()
               ),
@@ -1017,18 +1021,21 @@ function createGrafanaAlerting(namespace: Input<string>) {
             'traffic_based_rewards_alerts.yaml': readGrafanaAlertingFile(
               'traffic_based_rewards_alerts.yaml'
             )
-              .replace(
+              .replaceAll(
                 '$FEATURED_APP_RIGHTS_LIVE_ROW_LIMIT',
                 monitoringConfig.alerting.alerts.trafficBasedRewards.featuredAppRightsLimit.toString()
               )
-              .replace(
+              .replaceAll(
                 '$VERDICT_INGESTION_BATCH_SIZE_THRESHOLD',
                 monitoringConfig.alerting.alerts.trafficBasedRewards.verdictIngestionBatchSizeThreshold.toString()
               )
-              .replace(
+              .replaceAll(
                 '$VERDICT_INGESTION_BATCH_SIZE_PENDING_PERIOD_MINUTES',
                 monitoringConfig.alerting.alerts.trafficBasedRewards.verdictIngestionBatchSizePendingPeriodMinutes.toString()
               ),
+            'istio-rate-limiting_alerts.yaml': readGrafanaAlertingFile(
+              'istio-rate-limiting_alerts.yaml'
+            ),
           },
         }).map(([k, v]) => [k, defaultAlertSubstitutions(v)])
       ),
@@ -1147,13 +1154,13 @@ function readAndSetAlertRulesGrafanaAlertingFile(file: string, rules: AlertRules
 
   content.groups[0].rules = rules.map(rule => {
     const newRuleString = genericAlertRule
-      .replace('$REPORT_PUBLISHER_FORMULA', rule.reportPublisherFormula ?? 'NOT_REPLACED')
-      .replace('$NOTIFICATION_DELAY', rule.notificationDelay ?? 'NOT_REPLACED')
-      .replace('$TEAM_LABEL', rule.teamLabel ?? 'NOT_REPLACED')
-      .replace('$SUB_TITLE', rule.subtitle ?? 'NOT_REPLACED')
-      .replace('$RULE_UID', rule.uid ?? 'NOT_REPLACED')
-      .replace('$OWNER_PREFIX_REGEX', rule.ownerPrefixRegex ?? 'NOT_REPLACED')
-      .replace('$MAX_BALANCE_THRESHOLD', rule.maxBalanceThreshold ?? 'NOT_REPLACED');
+      .replaceAll('$REPORT_PUBLISHER_FORMULA', rule.reportPublisherFormula ?? 'NOT_REPLACED')
+      .replaceAll('$NOTIFICATION_DELAY', rule.notificationDelay ?? 'NOT_REPLACED')
+      .replaceAll('$TEAM_LABEL', rule.teamLabel ?? 'NOT_REPLACED')
+      .replaceAll('$SUB_TITLE', rule.subtitle ?? 'NOT_REPLACED')
+      .replaceAll('$RULE_UID', rule.uid ?? 'NOT_REPLACED')
+      .replaceAll('$OWNER_PREFIX_REGEX', rule.ownerPrefixRegex ?? 'NOT_REPLACED')
+      .replaceAll('$MAX_BALANCE_THRESHOLD', rule.maxBalanceThreshold ?? 'NOT_REPLACED');
     return yaml.load(newRuleString) as GrafanaRule;
   });
   const newFileContent = yaml.dump(content);
@@ -1183,16 +1190,17 @@ function grafanaKeysFromSecret(): pulumi.Output<GrafanaKeys> {
   });
 }
 
-function installPostgres(namespace: ExactNamespace): SplicePostgres {
-  return new SplicePostgres(
+function installPostgres(namespace: ExactNamespace): Postgres {
+  const instanceName = 'grafana-postgres';
+  return installSplicePostgres(
     namespace,
-    'grafana-postgres',
-    'grafana-postgres',
+    instanceName,
     'grafana-postgres-secret',
+    monitoringConfig.grafanaPostgres,
+    undefined, // chart version
+    { disableProtection: true },
     { db: { volumeSize: '20Gi' } }, // A tiny pvc should be enough for grafana
     true, // overrideDbSizeFromValues
-    true, // disableProtection
-    undefined, // chart version
     true // useInfraAffinityAndTolerations
   );
 }

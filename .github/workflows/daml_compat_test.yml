@@ -24,7 +24,10 @@ jobs:
         id: get_mainnet_version
         run: |
           set -eou pipefail
-          version="$(curl -sSL --fail-with-body https://docs.global.canton.network.sync.global/info | jq -r '.sv.version')"
+          info_json="$RUNNER_TEMP/info.json"
+          curl -sSL --fail-with-body -o "$info_json" https://docs.global.canton.network.sync.global/info \
+            || { echo "Fetch failed; response body:"; cat "$info_json"; exit 1; }
+          version="$(jq -r '.sv.version' "$info_json")"
           echo "MainNet version is $version"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
@@ -33,6 +36,4 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       daml_base_version: ${{ needs.get_mainnet_version.outputs.version }}
-      # TODO(#5433) - remove after adopted on mainnet
-      protocol_version: "34"
     secrets: inherit

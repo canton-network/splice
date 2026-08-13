@@ -62,6 +62,7 @@ class HttpSvOperatorHandler(
     override protected val timeouts: ProcessingTimeout,
     protected val loggerFactory: NamedLoggerFactory,
     upgradesConfig: UpgradesConfig,
+    participantAdminConnection: ParticipantAdminConnection,
 )(implicit
     ec: ExecutionContextExecutor,
     protected val tracer: Tracer,
@@ -594,6 +595,21 @@ class HttpSvOperatorHandler(
             )
           )
       }
+    }
+  }
+
+  override def cancelLogicalSynchronizerUpgrade(
+      respond: r0.CancelLogicalSynchronizerUpgradeResponse.type
+  )()(
+      extracted: ActAsKnownUserRequest
+  ): Future[r0.CancelLogicalSynchronizerUpgradeResponse] = {
+    implicit val ActAsKnownUserRequest(traceContext) = extracted
+    withSpan(s"$workflowId.cancelLogicalSynchronizerUpgrade") { _ => _ =>
+      for {
+        decentralizedSynchronizer <- dsoStore.getDsoRules().map(_.domain)
+        _ <- participantAdminConnection
+          .removeLsuAnnouncement(decentralizedSynchronizer)
+      } yield r0.CancelLogicalSynchronizerUpgradeResponseOK
     }
   }
 

@@ -108,7 +108,6 @@ import org.lfdecentralizedtrust.splice.store.{
   AppStore,
   AppStoreWithIngestion,
   PageLimit,
-  SortOrder,
   VoteResultsFilters,
   VotesStore,
 }
@@ -692,33 +691,6 @@ class HttpScanHandler(
           }
         )
       }
-    }
-  }
-
-  override def listTransactionHistory(
-      respond: v0.ScanResource.ListTransactionHistoryResponse.type
-  )(
-      request: definitions.TransactionHistoryRequest
-  )(extracted: TraceContext): Future[v0.ScanResource.ListTransactionHistoryResponse] = {
-    implicit val tc = extracted
-    withSpan(s"$workflowId.listTransactions") { _ => _ =>
-      val pageEndEventId =
-        if (request.pageEndEventId.exists(_.isEmpty)) None else request.pageEndEventId
-      val sortOrder = request.sortOrder
-        .fold[SortOrder](SortOrder.Ascending) {
-          case definitions.TransactionHistoryRequest.SortOrder.members.Asc => SortOrder.Ascending
-          case definitions.TransactionHistoryRequest.SortOrder.members.Desc => SortOrder.Descending
-        }
-
-      for {
-        txs <- store.listTransactions(
-          pageEndEventId,
-          sortOrder,
-          PageLimit.tryCreate(request.pageSize.intValue()),
-        )
-      } yield definitions.TransactionHistoryResponse(
-        txs.map(TxLogEntry.Http.toResponseItem).toVector
-      )
     }
   }
 
@@ -2527,7 +2499,7 @@ class HttpScanHandler(
                         val entry = definitions.SynchronizerBftSequencer(
                           psid.serial.unwrap.toLong,
                           id.toProtoPrimitive,
-                          bftSequencer.p2pUrl,
+                          bftSequencer.p2pUrl.toString,
                         )
                         initializedBftSequencersCache.put(idx, entry).discard
                         Some(entry)

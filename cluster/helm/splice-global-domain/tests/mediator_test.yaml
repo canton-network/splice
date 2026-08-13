@@ -196,6 +196,21 @@ tests:
           path: spec.template.spec.serviceAccountName
           value: "custom-domain-sa"
 
+  - it: "applies mediator-specific JVM options"
+    set:
+      mediator.additionalJvmOptions: "-Dmediator.option=true"
+      sequencer.additionalJvmOptions: "-Dsequencer.option=true"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.containers[?(@.name=='mediator')].env[?(@.name=='JAVA_TOOL_OPTIONS')].value
+          pattern: '-Dmediator\.option=true'
+      - notMatchRegex:
+          path: spec.template.spec.containers[?(@.name=='mediator')].env[?(@.name=='JAVA_TOOL_OPTIONS')].value
+          pattern: '-Dsequencer\.option=true'
+
   - it: "sets default security contexts for pods and containers"
     documentSelector:
       path: kind

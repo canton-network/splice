@@ -32,7 +32,7 @@ describe('SV user can', () => {
     const button = screen.getByRole('button', { name: 'Log In' });
     user.click(button);
 
-    expect(await screen.findAllByDisplayValue(svPartyId)).not.toBe([]);
+    expect(await screen.findAllByDisplayValue(svPartyId)).not.toHaveLength(0);
   });
 });
 
@@ -103,7 +103,7 @@ describe('Set Amulet Config Rules Form', () => {
       expect(submitButton).toBeInTheDocument();
 
       await user.click(submitButton);
-      expect(submitButton.getAttribute('disabled')).toBeDefined();
+      expect(submitButton.getAttribute('disabled')).not.toBeNull();
       await expect(async () => await user.click(submitButton)).rejects.toThrowError(
         /Unable to perform pointer interaction/
       );
@@ -243,6 +243,53 @@ describe('Set Amulet Config Rules Form', () => {
 
     const changes = screen.getAllByTestId('config-current-value', { exact: false });
     expect(changes.length).toBe(2);
+  });
+
+  test('reward config minting scheme renders as a dropdown', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <Wrapper>
+        <SetAmuletConfigRulesForm />
+      </Wrapper>
+    );
+
+    // Minting scheme should render as a Select, not a TextField
+    const mintingField = screen.getByTestId('config-field-rewardConfigMintingVersion');
+    expect(mintingField).toBeInTheDocument();
+    const selectInput = mintingField.querySelector('[role="combobox"]') as HTMLElement;
+    expect(selectInput).toBeInTheDocument();
+
+    // Open dropdown and verify options
+    await user.click(selectInput);
+    expect(screen.getByText('Featured App Markers (pre CIP-104)')).toBeInTheDocument();
+    expect(screen.getByText('Traffic-Based App Rewards (CIP-104)')).toBeInTheDocument();
+
+    // Select an option
+    await user.click(screen.getByText('Traffic-Based App Rewards (CIP-104)'));
+
+    // Verify current value is shown after change
+    const currentValue = screen.getByTestId('config-current-value-rewardConfigMintingVersion');
+    expect(currentValue).toBeInTheDocument();
+  });
+
+  test('reward config dry-run scheme includes None option', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <Wrapper>
+        <SetAmuletConfigRulesForm />
+      </Wrapper>
+    );
+
+    const dryRunField = screen.getByTestId('config-field-rewardConfigDryRunVersion');
+    expect(dryRunField).toBeInTheDocument();
+    const selectInput = dryRunField.querySelector('[role="combobox"]') as HTMLElement;
+    expect(selectInput).toBeInTheDocument();
+
+    // Open dropdown and verify None option exists
+    await user.click(selectInput);
+    expect(screen.getByText('None (disabled)')).toBeInTheDocument();
   });
 
   test('should show proposal review page after form completion', async () => {

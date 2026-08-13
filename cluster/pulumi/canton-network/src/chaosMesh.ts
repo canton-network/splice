@@ -16,6 +16,7 @@ const chaosMeshSchema = z.object({
   chaosMesh: z
     .object({
       dabftLatency: z.string().optional(),
+      podKillSchedule: z.string().optional(),
     })
     .optional(),
 });
@@ -30,6 +31,7 @@ export const podKillSchedule = (
   chaosMeshNs: k8s.core.v1.Namespace,
   appName: string,
   appNs: string,
+  schedule: string | undefined,
   dependsOn: Resource[]
 ): k8s.apiextensions.CustomResource =>
   new k8s.apiextensions.CustomResource(
@@ -42,8 +44,7 @@ export const podKillSchedule = (
         namespace: chaosMeshNs.metadata.name,
       },
       spec: {
-        // TODO(DACH-NY/canton-network-node#10689) Reduce this back to 5min once Canton sequencers stop being so slow
-        schedule: '@every 60m',
+        schedule: schedule ?? '@every 60m',
         historyLimit: 2,
         concurrencyPolicy: 'Forbid',
         type: 'PodChaos',
@@ -251,11 +252,16 @@ export const installChaosMesh = ({ dependsOn }: ChaosMeshArguments): k8s.helm.v3
     `global-domain-${DecentralizedSynchronizerUpgradeConfig.active.id}-cometbft`,
     `global-domain-${DecentralizedSynchronizerUpgradeConfig.active.id}-mediator`,
     `global-domain-${DecentralizedSynchronizerUpgradeConfig.active.id}-sequencer`,
-    `participant-${DecentralizedSynchronizerUpgradeConfig.active.id}`,
+    'participant',
     'scan-app',
     'sv-app',
     'validator-app',
-  ].forEach(name => podKillSchedule(ns, name, 'sv-4', [roleBinding, ...dependsOn]));
+  ].forEach(name =>
+    podKillSchedule(ns, name, 'sv-4', config.chaosMesh?.podKillSchedule, [
+      roleBinding,
+      ...dependsOn,
+    ])
+  );
   if (config.chaosMesh?.dabftLatency) {
     dabftLatency(ns, config.chaosMesh.dabftLatency, [roleBinding, ...dependsOn]);
   }

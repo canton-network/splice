@@ -12,7 +12,8 @@ import com.daml.ledger.javaapi.data.codegen.{ContractId, Created, Exercised, Has
 import com.daml.ledger.javaapi.data.{Command, CreatedEvent, ExercisedEvent, Transaction, User}
 import com.digitalasset.base.error.ErrorResource
 import com.digitalasset.base.error.utils.ErrorDetails
-import com.digitalasset.base.error.utils.ErrorDetails.ResourceInfoDetail
+import com.digitalasset.base.error.utils.ErrorDetails.{ErrorInfoDetail, ResourceInfoDetail}
+import io.grpc.protobuf.{StatusProto as GrpcStatusProto}
 import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.admin.api.client.data.parties.PartyDetails
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
@@ -35,7 +36,6 @@ import com.google.protobuf.field_mask.FieldMask
 import io.grpc.{Status, StatusRuntimeException}
 import org.apache.pekko.NotUsed
 import org.apache.pekko.actor.ActorSystem
-import org.apache.pekko.pattern.CircuitBreakerOpenException
 import org.apache.pekko.stream.scaladsl.{Flow, Keep, RestartSource, Sink, Source}
 import org.apache.pekko.stream.{KillSwitch, KillSwitches, RestartSettings}
 import org.lfdecentralizedtrust.splice.environment.ledger.api.{
@@ -52,6 +52,7 @@ import org.lfdecentralizedtrust.splice.util.{
   ContractWithState,
   DisclosedContracts,
   SpliceCircuitBreaker,
+  SpliceCircuitBreakerOpenException,
 }
 import shapeless.<:!<
 
@@ -777,6 +778,23 @@ class SpliceLedgerConnection(
     callCallbacksOnCompletion(result)(x => (None, x))
   }
 
+  // Returns Some(completionOffset) when the exception is DUPLICATE_COMMAND with accepted=true,
+  // allowing callers to fetch the already-completed transaction instead of failing.
+  private def parseDuplicateCommandAccepted(ex: StatusRuntimeException): Option[Long] = {
+    val statusProto = GrpcStatusProto.fromThrowable(ex)
+    if (statusProto == null) None
+    else
+      ErrorDetails
+        .from(statusProto)
+        .collectFirst {
+          case ErrorInfoDetail(errorCodeId, metadata)
+              if errorCodeId == "DUPLICATE_COMMAND" &&
+                metadata.get("accepted").contains("true") =>
+            metadata.get("completion_offset").flatMap(co => Try(co.toLong).toOption)
+        }
+        .flatten
+  }
+
   private def verifyEnoughExtraTrafficRemains(
       synchronizerId: SynchronizerId,
       commandPriority: CommandPriority,
@@ -863,6 +881,7 @@ class SpliceLedgerConnection(
       priority: CommandPriority,
       deadline: Option[NonNegativeFiniteDuration] = None,
       preferredPackageIds: Seq[String] = Seq.empty,
+      recoverAcceptedDuplicates: Boolean = false,
   ) {
     private type DedupNotSpecifiedYet = CmdId =:= Any
     private type SynchronizerIdRequired = DomId <:< SynchronizerId
@@ -873,6 +892,7 @@ class SpliceLedgerConnection(
         disclosedContracts: DisclosedContracts = this.disclosedContracts,
         deadline: Option[NonNegativeFiniteDuration] = this.deadline,
         preferredPackageIds: Seq[String] = this.preferredPackageIds,
+        recoverAcceptedDuplicates: Boolean = this.recoverAcceptedDuplicates,
     ): submit[C, CmdId0, DomId0] =
       new submit(
         actAs,
@@ -884,7 +904,17 @@ class SpliceLedgerConnection(
         priority,
         deadline,
         preferredPackageIds,
+        recoverAcceptedDuplicates,
       )
+
+    /** Read an already-accepted duplicate back from the ledger and return its result, rather
+      * than failing the submission.
+      *
+      * For client calls, which cannot do anything useful with the failure. Automation leaves
+      * this off: a trigger needs the error so that its own retry re-runs the staleness check.
+      */
+    def recoveringAcceptedDuplicates(enabled: Boolean = true): submit[C, CmdId, DomId] =
+      copy(recoverAcceptedDuplicates = enabled)
 
     def withDedup(commandId: CommandId, deduplicationOffset: Long)(implicit
         cid: DedupNotSpecifiedYet
@@ -990,13 +1020,28 @@ class SpliceLedgerConnection(
                     preferredPackageIds = preferredPackageIds,
                   )
                 )
-                .recover { case ex: CircuitBreakerOpenException =>
-                  // Expose a bit more info and turn it into our standard exceptions
+                .recover { case ex: SpliceCircuitBreakerOpenException =>
                   throw Status.ABORTED
                     .withDescription(
                       s"Command submission aborted by circuit breaker due to too many successive failures, next attempt in ${ex.remainingDuration.toSeconds}s"
                     )
+                    .withCause(ex.getCause)
                     .asRuntimeException
+                }
+                .recoverWith {
+                  case ex: StatusRuntimeException
+                      if recoverAcceptedDuplicates &&
+                        ex.getStatus.getCode == Status.Code.ALREADY_EXISTS =>
+                    parseDuplicateCommandAccepted(ex) match {
+                      case Some(completionOffset) =>
+                        client.recoverFromDuplicateCommand(
+                          waitFor,
+                          completionOffset,
+                          actAs.map(_.toProtoPrimitive),
+                        )
+                      case None =>
+                        Future.failed(ex)
+                    }
                 }
             )(getOffsetAndResult)
 

@@ -43,7 +43,7 @@ protoc-jar: caught exception, retrying: java\.io\.IOException: Cannot run progra
 .*no longer exists at.*
 
 # sbt 1.4 onwards logs GC warnings
-.*\[.*warn.*\].* of the last .* were spent in garbage collection\.
+.*\[.*warn.*\].* of the last .* were spent in GC\.
 
 # During release bundling, the copy of the Canton OS repo emits a bunch of warnings
 .*\[.*warn.*\].*Negative time
@@ -131,7 +131,7 @@ Cannot use file /tmp/hsperfdata_ci
 WARN: InvalidDefaultArgInFrom
 
 # the script does not try to be secure
-.*api_jwt\.py:153: InsecureKeyLengthWarning:.*
+.*api_jwt\.py:.*: InsecureKeyLengthWarning:.*
 
 # com.daml.testing-utils seems to bring its own logback-test.xml, but it doesn't seem to break anything so we just ignore it
 Resource.*logback-test.xml.*occurs

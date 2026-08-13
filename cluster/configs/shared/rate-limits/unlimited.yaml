@@ -85,10 +85,6 @@ rateLimits:
     name: dso-party-id
     type: unlimited
 
-  /api/scan/v0/transactions:
-    name: transactions
-    type: unlimited
-
   /api/scan/v0/backfilling:
     name: backfilling
     type: unlimited

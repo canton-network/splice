@@ -16,8 +16,8 @@ import ExpiredAmuletAllocationTrigger.{Task, getStakeholders}
 import com.digitalasset.canton.util.MonadUtil
 import org.lfdecentralizedtrust.splice.environment.PackageIdResolver
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
+import org.lfdecentralizedtrust.splice.store.IgnoredPartiesStore
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
-import org.lfdecentralizedtrust.splice.sv.store.IgnoredPartiesStore
 import org.lfdecentralizedtrust.splice.sv.util.ContractStakeholders
 
 import scala.jdk.CollectionConverters.*
@@ -45,18 +45,17 @@ class ExpiredAmuletAllocationTrigger(
       getStakeholders,
     )
     with SvTaskBasedTrigger[Task]
-    with IgnoredAmuletVersionGuard {
+    with IgnoredUnavailablePartiesGuard {
 
   private val store = svTaskContext.dsoStore
 
   override def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = {
-    completeWithIgnoredAmuletVersionCheck(
+    completeUnlessAmuletVersionIgnored(
       task.work.vettedVersion.toString,
       task.work.stakeholders,
-      store.key.dsoParty,
-      enableUnresponsivePartiesAutoIgnore = true,
+      ignoreUnresponsiveParties = true,
     )(completeExpiryTaskAsDsoDelegate(task, controller))
   }
 

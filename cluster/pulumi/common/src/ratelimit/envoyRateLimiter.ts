@@ -11,9 +11,13 @@ interface Limits {
   fillInterval: string;
 }
 
+interface PerIpLimits extends Limits {
+  overrides?: Record<string, { ips: string[] } & Limits>;
+}
+
 interface MatchedLimits extends Limits {
   type: 'limited';
-  perIpLimits?: Limits;
+  perIpLimits?: PerIpLimits;
 }
 
 interface Banned {
@@ -96,6 +100,29 @@ function validateEndpointCoverage(
   return { missing, orphaned };
 }
 
+export function validateIpLimits(pathPrefix: string, rateLimit: LocalLimit<MatchedLimits>): void {
+  if (!rateLimit.perIpLimits) {
+    return;
+  }
+
+  const seenIps = new Set<string>();
+  const duplicates: string[] = [];
+
+  Object.entries(rateLimit.perIpLimits.overrides || {}).forEach(([overrideKey, override]) => {
+    override.ips.forEach(ip => {
+      if (seenIps.has(ip)) {
+        duplicates.push(`${ip} (in override '${overrideKey}')`);
+      } else {
+        seenIps.add(ip);
+      }
+    });
+  });
+
+  if (duplicates.length > 0) {
+    throw new Error(`${pathPrefix}: duplicate IPs in per-IP rate limits: ${duplicates.join(', ')}`);
+  }
+}
+
 function validateEffectiveRateLimits(
   args: RateLimitEnvoyFilterArgs
 ): LocalLimits<MatchedLimits> | undefined {
@@ -145,7 +172,7 @@ function validateEffectiveRateLimits(
   }
 
   // Filter out banned and unlimited entries
-  return Object.fromEntries(
+  const effectiveRateLimits = Object.fromEntries(
     Object.entries(args.rateLimits || {}).filter(
       (ent): ent is [string, LocalLimit<MatchedLimits>] => {
         // TODO (#4201): in banned case, implement actual banning with special short-circuit for whitelisted IPs
@@ -156,6 +183,104 @@ function validateEffectiveRateLimits(
       }
     )
   );
+
+  Object.entries(effectiveRateLimits).forEach(([pathPrefix, rateLimit]) => {
+    validateIpLimits(pathPrefix, rateLimit);
+  });
+
+  return effectiveRateLimits;
+}
+
+export function buildRateLimitActions(effectiveRateLimits: LocalLimits<MatchedLimits>): unknown[] {
+  return Object.entries(effectiveRateLimits).flatMap(([pathPrefix, rateLimit]) => {
+    const actions = [];
+
+    // Action 1: generate the per-endpoint action
+    const baseAction = {
+      header_value_match: {
+        descriptor_value: rateLimit.name,
+        expect_match: true,
+        headers: [
+          {
+            name: ':path',
+            string_match: {
+              prefix: pathPrefix,
+              ignore_case: true,
+            },
+          },
+        ],
+      },
+    };
+
+    actions.push({ actions: [baseAction] });
+
+    // Action 2: generate the per-IP action if perIpLimits exists
+    if (rateLimit.perIpLimits) {
+      actions.push({
+        actions: [
+          baseAction,
+          {
+            request_headers: {
+              descriptor_key: clientIpEntryKey,
+              header_name: 'x-forwarded-for',
+            },
+          },
+        ],
+      });
+    }
+
+    return actions;
+  });
+}
+
+export function buildRateLimitDescriptors(
+  effectiveRateLimits: LocalLimits<MatchedLimits>
+): unknown[] {
+  return Object.values(effectiveRateLimits).flatMap(rateLimit => {
+    const descs = [];
+
+    // per-endpoint bucket
+    descs.push({
+      entries: [{ key: 'header_match', value: rateLimit.name }],
+      token_bucket: {
+        max_tokens: rateLimit.maxTokens,
+        tokens_per_fill: rateLimit.tokensPerFill,
+        fill_interval: rateLimit.fillInterval,
+      },
+    });
+
+    // generate the per-IP buckets if configured
+    if (rateLimit.perIpLimits) {
+      // IP-specific overrides first, so they take precedence over the generic per-IP bucket
+      Object.entries(rateLimit.perIpLimits.overrides || {}).forEach(([, override]) => {
+        override.ips.forEach(ip => {
+          descs.push({
+            entries: [
+              { key: 'header_match', value: rateLimit.name },
+              { key: clientIpEntryKey, value: ip },
+            ],
+            token_bucket: {
+              max_tokens: override.maxTokens,
+              tokens_per_fill: override.tokensPerFill,
+              fill_interval: override.fillInterval,
+            },
+          });
+        });
+      });
+
+      // Generic per-IP fallback last
+      descs.push({
+        entries: [{ key: 'header_match', value: rateLimit.name }, { key: clientIpEntryKey }],
+        token_bucket: {
+          max_tokens: rateLimit.perIpLimits.maxTokens,
+          tokens_per_fill: rateLimit.perIpLimits.tokensPerFill,
+          fill_interval: rateLimit.perIpLimits.fillInterval,
+        },
+      });
+    }
+
+    return descs;
+  });
 }
 
 export class RateLimitEnvoyFilter extends pulumi.ComponentResource {
@@ -169,52 +294,7 @@ export class RateLimitEnvoyFilter extends pulumi.ComponentResource {
     super('splice:RateLimit', `splice-${args.namespace}-${name}`, args, opts);
     const effectiveRateLimits = validateEffectiveRateLimits(args);
 
-    const rateLimitActions: unknown[] =
-      Object.entries(effectiveRateLimits || {}).flatMap(([pathPrefix, rateLimit]) => {
-        const actions = [];
-
-        // Action 1: generate the per-endpoint action
-        const baseAction = {
-          header_value_match: {
-            descriptor_value: rateLimit.name,
-            expect_match: true,
-            headers: [
-              {
-                name: ':path',
-                string_match: {
-                  prefix: pathPrefix,
-                  ignore_case: true,
-                },
-              },
-            ],
-          },
-        };
-
-        actions.push({ actions: [baseAction] });
-
-        // Action 2: generate the per-IP action if perIpLimits exists
-        if (rateLimit.perIpLimits) {
-          actions.push({
-            actions: [
-              baseAction,
-              {
-                request_headers: {
-                  descriptor_key: 'client_ip',
-                  header_name: 'x-forwarded-for',
-                },
-              },
-            ],
-          });
-        }
-
-        return actions;
-      }) || [];
-
-    const enableEnvoyRateLimitMetricsAnnotation = `
-proxyStatsMatcher:
-  inclusionRegexps:
-  - ".*http_local_rate_limit.*"
-`.trim();
+    const rateLimitActions = buildRateLimitActions(effectiveRateLimits || {});
 
     this.envoyFilter = new k8s.apiextensions.CustomResource(
       `${args.namespace}-${name}`,
@@ -224,9 +304,6 @@ proxyStatsMatcher:
         metadata: {
           name: name,
           namespace: args.namespace,
-          annotations: {
-            'proxy.istio.io/config': enableEnvoyRateLimitMetricsAnnotation,
-          },
         },
         spec: {
           workloadSelector: {
@@ -317,45 +394,7 @@ proxyStatsMatcher:
                       // simplified descriptors by combining with actions and requiring all the tokens of an action to be set
                       // a descriptor in practice is a subset of tags from a rate limit
                       // but important to note that for each rate limit only one descriptor can match, if multiple descriptors match, the first one is used
-                      descriptors: Object.values(effectiveRateLimits || {}).flatMap(rateLimit => {
-                        const descs = [];
-
-                        // per-endpoint bucket
-
-                        descs.push({
-                          entries: [
-                            {
-                              key: 'header_match',
-                              value: rateLimit.name,
-                            },
-                          ],
-                          token_bucket: {
-                            max_tokens: rateLimit.maxTokens,
-                            tokens_per_fill: rateLimit.tokensPerFill,
-                            fill_interval: rateLimit.fillInterval,
-                          },
-                        });
-
-                        // generate the per-IP bucket if configured
-                        if (rateLimit.perIpLimits) {
-                          descs.push({
-                            entries: [
-                              {
-                                key: 'header_match',
-                                value: rateLimit.name,
-                              },
-                              { key: clientIpEntryKey },
-                            ],
-                            token_bucket: {
-                              max_tokens: rateLimit.perIpLimits.maxTokens,
-                              tokens_per_fill: rateLimit.perIpLimits.tokensPerFill,
-                              fill_interval: rateLimit.perIpLimits.fillInterval,
-                            },
-                          });
-                        }
-
-                        return descs;
-                      }),
+                      descriptors: buildRateLimitDescriptors(effectiveRateLimits || {}),
                     },
                   },
                 },

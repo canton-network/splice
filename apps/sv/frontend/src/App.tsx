@@ -39,6 +39,7 @@ import { useConfigPollInterval, useSvConfig } from './utils';
 import { Governance } from './routes/governance';
 import { VoteRequestDetails } from './routes/voteRequestDetails';
 import { CreateProposal } from './routes/createProposal';
+import DelegateElection from './routes/delegateElection';
 
 const Providers: React.FC<React.PropsWithChildren> = ({ children }) => {
   const config = useSvConfig();
@@ -95,6 +96,7 @@ const App: React.FC = () => {
           <Route path="dso" element={<Dso />} />
           <Route path="validator-onboarding" element={<ValidatorOnboarding />} />
           <Route path="amulet-price" element={<AmuletPrice />} />
+          <Route path="delegate-election" element={<DelegateElection />} />
           <Route path="governance-old" element={<Voting />} />
           <Route path="votes" element={<Navigate to="/governance-old" replace />} />
 
@@ -111,8 +113,8 @@ const App: React.FC = () => {
     <ErrorBoundary>
       <HelmetProvider>
         <Helmet>
-          <title>Super Validator Operations</title>
-          <meta name="description" content="Super Validator Operations" />
+          <title>Supervalidator Operations</title>
+          <meta name="description" content="Supervalidator Operations" />
           <link rel="icon" href={config.spliceInstanceNames.networkFaviconUrl} />
         </Helmet>
         <RouterProvider router={router} />

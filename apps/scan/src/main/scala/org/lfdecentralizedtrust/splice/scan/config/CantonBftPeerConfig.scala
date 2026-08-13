@@ -3,6 +3,8 @@
 
 package org.lfdecentralizedtrust.splice.scan.config
 
+import org.apache.pekko.http.scaladsl.model.Uri
+
 case class CantonBftPeerConfig(
-    p2pUrl: String
+    p2pUrl: Uri
 )

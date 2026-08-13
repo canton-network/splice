@@ -138,8 +138,8 @@ monitoring:
       acsCommitments:
         checkpointDelay:
           # Usually every 30s but while the commitment every 30min gets computed
-          # it gets blocked so we allow up to 20min
-          seconds: 1200
+          # it gets blocked so we allow up to 40min
+          seconds: 2400
         completedDelay:
           # Usually every 30min, we allow up to 1h to avoid false positives.
           seconds: 3600
@@ -209,7 +209,8 @@ monitoring:
       (
         (
           jsonPayload.message=~"(?i)(secret|token|(private|secret)(-)?key|password)=[^, ]+" AND
-          -jsonPayload.message=~"(?i)(secret|token|(private|secret)(-)?key|password)=(\"\*\*\*\*\"|hidden)"
+          -jsonPayload.message=~"(?i)(secret|token|(private|secret)(-)?key|password)=(\"\*\*\*\*\"|hidden)" AND
+          -jsonPayload.message=~"(?i)page(_|-)?token=[^, ]+"
         ) OR
         jsonPayload.message=~"eyJhbGc[A-Za-z0-9_-]{2,}\.[A-Za-z0-9_-]{2,}\.[A-Za-z0-9_-]{2,}" OR
         jsonPayload.message=~"Bearer\s+eyJ[A-Za-z0-9_-]{2,}"

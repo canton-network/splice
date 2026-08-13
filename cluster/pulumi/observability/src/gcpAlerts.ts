@@ -210,7 +210,7 @@ export function installClusterMaintenanceUpdateAlerts(
     filter: `
 resource.labels.cluster_name="${CLUSTER_NAME}"
 resource.type=~"(gke_cluster|gke_nodepool)"
-jsonPayload.state=~"STARTED"`,
+jsonPayload.@type=~"UpgradeEvent"`,
     labelExtractors: {
       cluster: 'EXTRACT(resource.labels.cluster_name)',
     },
@@ -471,8 +471,7 @@ export function installNatAlerts(
       {
         displayName: `NAT allocation failed in ${CLUSTER_BASENAME}`,
         conditionPrometheusQueryLanguage: {
-          query:
-            'sum by (nat_gateway_name) (router_googleapis_com:nat_nat_allocation_failed{monitored_resource="nat_gateway"}) > 0',
+          query: `sum by (gateway_name) (router_googleapis_com:nat_nat_allocation_failed{monitored_resource="nat_gateway", gateway_name=~"nat-${CLUSTER_BASENAME}-gw.*"}) > 0`,
           ...prometheusDefaults,
         },
       },
@@ -491,9 +490,12 @@ export function installNatAlerts(
       {
         displayName: `NAT dropped sent packets in ${CLUSTER_BASENAME}`,
         conditionPrometheusQueryLanguage: {
-          query:
-            'sum by (nat_gateway_name, reason) (router_googleapis_com:nat_dropped_sent_packets_count{monitored_resource="nat_gateway"}) > 0',
+          query: `sum by (gateway_name, reason) (router_googleapis_com:nat_dropped_sent_packets_count{monitored_resource="nat_gateway", gateway_name=~"nat-${CLUSTER_BASENAME}-gw.*"}) > ${natConfig.droppedSentPacketsThreshold}`,
           ...prometheusDefaults,
+          // Ignore temporary spikes (likely caused by dynamic port allocation).
+          // We mostly care about sustained dropped sent packets,
+          // which most often indicates that we don't have enough ports available to the VMs.
+          duration: '1200s',
         },
       },
     ],
@@ -511,7 +513,7 @@ export function installNatAlerts(
       {
         displayName: `NAT port usage high in ${CLUSTER_BASENAME}`,
         conditionPrometheusQueryLanguage: {
-          query: `sum by (nat_gateway_name) ((router_googleapis_com:nat_port_usage{monitored_resource="nat_gateway"} / 64512) * 100) > ${natConfig.thresholdPercent}`,
+          query: `sum by (gateway_name) ((router_googleapis_com:nat_port_usage{monitored_resource="nat_gateway", gateway_name=~"nat-${CLUSTER_BASENAME}-gw.*"} / 64512) * 100) > ${natConfig.thresholdPercent}`,
           // 64512 is the maximum number of ports per IP for Cloud NAT, as documented here: https://docs.cloud.google.com/nat/docs/ports-and-addresses#ports
           ...prometheusDefaults,
         },

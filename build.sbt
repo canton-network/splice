@@ -25,28 +25,16 @@ lazy val `canton-community-participant` = BuildCommon.`canton-community-particip
 lazy val `canton-community-admin-api` = BuildCommon.`canton-community-admin-api`
 lazy val `canton-community-integration-testing` = BuildCommon.`canton-community-integration-testing`
 lazy val `canton-community-testing` = BuildCommon.`canton-community-testing`
-lazy val `canton-blake2b` = BuildCommon.`canton-blake2b`
-lazy val `canton-slick-fork` = BuildCommon.`canton-slick-fork`
 lazy val `canton-wartremover-extension` = BuildCommon.`canton-wartremover-extension`
-lazy val `canton-wartremover-annotations` = BuildCommon.`canton-wartremover-annotations`
-lazy val `canton-util-external` = BuildCommon.`canton-util-external`
 lazy val `canton-util-observability` = BuildCommon.`canton-util-observability`
-lazy val `canton-pekko-fork` = BuildCommon.`canton-pekko-fork`
-lazy val `canton-magnolify-addon` = BuildCommon.`canton-magnolify-addon`
-lazy val `canton-scalatest-addon` = BuildCommon.`canton-scalatest-addon`
-lazy val `canton-ledger-common` = BuildCommon.`canton-ledger-common`
-lazy val `canton-ledger-api-core` = BuildCommon.`canton-ledger-api-core`
 lazy val `canton-ledger-api-value` = BuildCommon.`canton-ledger-api-value`
 lazy val `canton-ledger-json-api` = BuildCommon.`canton-ledger-json-api`
-lazy val `canton-daml-adjustable-clock` = BuildCommon.`canton-daml-adjustable-clock`
-lazy val `canton-daml-jwt` = BuildCommon.`canton-daml-jwt`
-lazy val `canton-daml-tls` = BuildCommon.`canton-daml-tls`
-lazy val `canton-base-errors` = BuildCommon.`canton-base-errors`
-lazy val `canton-google-common-protos-scala` = BuildCommon.`canton-google-common-protos-scala`
 lazy val `canton-sequencer-driver-api` = BuildCommon.`canton-sequencer-driver-api`
-lazy val `canton-kms-driver-api` = BuildCommon.`canton-kms-driver-api`
 lazy val `canton-community-reference-driver` = BuildCommon.`canton-community-reference-driver`
 lazy val `canton-observability-metrics-testing` = BuildCommon.`canton-observability-metrics-testing`
+lazy val `canton-traffic-enforcement-component` = BuildCommon.`canton-traffic-enforcement-component`
+lazy val `daml-lf-transaction-test-lib` = BuildCommon.`daml-lf-transaction-test-lib`
+lazy val `daml-lf-data-scalacheck` = BuildCommon.`daml-lf-data-scalacheck`
 
 lazy val `splice-wartremover-extension` = Wartremover.`splice-wartremover-extension`
 
@@ -141,17 +129,12 @@ lazy val root: Project = (project in file("."))
     `canton-community-common`,
     `canton-community-integration-testing`,
     `canton-community-testing`,
-    `canton-blake2b`,
-    `canton-slick-fork`,
     `canton-wartremover-extension`,
     `canton-community-app`,
     `canton-community-app-base`,
     `canton-community-synchronizer`,
     `canton-community-participant`,
-    `canton-ledger-common`,
-    `canton-ledger-api-core`,
     `canton-ledger-api-value`,
-    `canton-google-common-protos-scala`,
     `canton-observability-metrics-testing`,
     pulumi,
     `load-tester`,
@@ -166,7 +149,7 @@ lazy val root: Project = (project in file("."))
     BuildCommon.sharedSettings,
     scalacOptions ++= Seq("-Wconf:src=src_managed/.*:silent"),
     // Needed to be able to resolve scalafmt snapshot versions
-    resolvers ++= Resolver.sonatypeOssRepos("snapshots"),
+    resolvers += Resolver.sonatypeCentralSnapshots,
     damlDarsLockCheckerFileArg := {
       val darFiles: Seq[File] = damlBuild.all(allDarsFilter).value.flatten
       val basePath = baseDirectory.value.toPath
@@ -1182,6 +1165,29 @@ lazy val `splitwell-test-daml` =
       Compile / damlEnableJavaCodegen := false,
     )
 
+lazy val `lf-value-json` =
+  project
+    .in(file("canton-fork/lf-value-json"))
+    .dependsOn(
+      `canton-ledger-json-api`,
+      `daml-lf-transaction-test-lib`,
+    )
+    .settings(
+      scalacOptions += "-Xsource-features:infer-override",
+      libraryDependencies ++= {
+        import CantonDependencies._
+        Seq(
+          CantonDependencies.canton_ledger_api_core,
+          daml_lf_api_type_signature,
+          scalatest % Test,
+          scalacheck % Test,
+          scalaz_scalacheck % Test,
+          scalatestScalacheck % Test,
+        )
+      },
+      CantonDependencies.excludeTranscodeConflictingDependencies,
+    )
+
 lazy val `apps-common` =
   project
     .in(file("apps/common"))
@@ -1189,6 +1195,7 @@ lazy val `apps-common` =
       `canton-community-common`,
       `canton-community-app` % "compile->compile;test->test",
       `canton-community-testing` % "test->test",
+      `lf-value-json`,
       `splice-wartremover-extension` % "compile->compile;test->test",
       // We include all DARs here to make sure they are available as resources.
       `splice-amulet-daml`,
@@ -2052,9 +2059,6 @@ def mergeStrategy(oldStrategy: String => MergeStrategy): String => MergeStrategy
           "Log4j2Plugins.dat",
         ) =>
       MergeStrategy.first
-    case (PathList("org", "apache", "pekko", "stream", "scaladsl", broadcasthub, _*))
-        if broadcasthub.startsWith("BroadcastHub") =>
-      MergeStrategy.first
     case "META-INF/versions/9/module-info.class" => MergeStrategy.discard
     case path if path.contains("module-info.class") => MergeStrategy.discard
     case PathList("org", "jline", _ @_*) => MergeStrategy.first
@@ -2067,12 +2071,23 @@ def mergeStrategy(oldStrategy: String => MergeStrategy): String => MergeStrategy
       MergeStrategy.first
     case PathList("com", "google", _*) => MergeStrategy.first
     case PathList("io", "grpc", _*) => MergeStrategy.first
+    // slick-fork
+    case PathList("slick", "jdbc", "canton", _*) => MergeStrategy.first
+    case PathList("slick", "util", name)
+        if name.startsWith("QueryCostTracker") || name.startsWith("AsyncExecutorWith") =>
+      MergeStrategy.first
+    // community-base
+    case PathList("com", "daml", "nonempty", name) if name.startsWith("NonEmptyUtil") =>
+      MergeStrategy.first
+    // Multiple dependencies ship this GraalVM metadata with differing content.
+    case PathList("META-INF", "native-image", "reflect-config.json") => MergeStrategy.first
     // Copy-pasta from Canton (DACH-NY/canton#31788): Remove this merge strategy once zipkin exporter is removed
     case PathList("okhttp3", _ @_*) => MergeStrategy.first
     // this file comes in multiple flavors, from io.get-coursier:interface and from org.scala-lang.modules:scala-collection-compat. Since the content differs it is resolve this explicitly with this MergeStrategy.
     case path if path.endsWith("scala-collection-compat.properties") => MergeStrategy.first
     // Don't really care about the notice file so just take any.
     case "META-INF/FastDoubleParser-NOTICE" => MergeStrategy.first
+    case "META-INF/FastDoubleParser-LICENSE" => MergeStrategy.first
     case "META-INF/license/LICENSE.boringssl.txt" => MergeStrategy.first
     case path if path.endsWith("/OSGI-INF/MANIFEST.MF") => MergeStrategy.first
     case x =>
@@ -2331,7 +2346,6 @@ lazy val `apps-dar-resources-generator` =
   project
     .in(file("apps/dar-resources-generator"))
     .dependsOn(
-      `canton-util-external`,
       // We include all DARs here to make sure they are available as resources.
       `splice-amulet-daml`,
       `splice-amulet-name-service-daml`,
@@ -2366,6 +2380,7 @@ lazy val `apps-dar-resources-generator` =
       Headers.ApacheDAHeaderSettings,
       libraryDependencies ++= Seq(
         Dependencies.better_files,
+        CantonDependencies.canton_util_external,
         CantonDependencies.daml_lf_archive_reader,
         CantonDependencies.cats,
       ),
@@ -2392,6 +2407,7 @@ lazy val `apps-app`: Project =
       // scalatestplus-selenium is lagging behind, it depends on selenium 4.12,
       // but that's fine as it's compatible with selenium 4.44 that we end up using
       libraryDependencies += "org.scalatestplus" %% "selenium-4-12" % "3.2.17.0" % "test",
+      libraryDependencies += CantonDependencies.scalatest_shouldmatchers,
       libraryDependencies += "org.seleniumhq.selenium" % "selenium-java" % "4.44.0" % "test",
       libraryDependencies += "eu.rekawek.toxiproxy" % "toxiproxy-java" % "2.1.4" % "test",
       libraryDependencies += auth0,
@@ -2502,10 +2518,7 @@ updateTestConfigForParallelRuns := {
   val allTestNames =
     definedTests
       .all(
-        ScopeFilter(inAggregates(root), inConfigurations(Test)) -- ScopeFilter(
-          inProjects(`canton-ledger-api-core`),
-          inConfigurations(Test),
-        )
+        ScopeFilter(inAggregates(root), inConfigurations(Test))
       )
       .value
       .flatten

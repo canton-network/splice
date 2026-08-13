@@ -60,6 +60,8 @@ export const SynchronizerMigrationSchema = z
     activeDatabaseId: z.number().optional(),
     attachPvc: z.boolean().default(true),
     frozenMigrationId: z.number(),
+    // TODO(#6719) once all clusters have been migrated the following two flags can be removed, hardcoding splitSvDeploymentEnabled to true.
     splitSvDeploymentEnabled: z.boolean().default(false),
+    migrateToSplitSvDeployment: z.boolean().default(false),
   })
   .strict();
