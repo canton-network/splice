@@ -26,10 +26,27 @@ release-notes:: Upcoming
         - HTTP rate limiting has been extended with a global rate limiter applied across all
           operations, optional per-client-IP rate limiting (enabled by default at the global level),
           and an additional sustained rate limit enforced over a longer window on top of the existing
-          per-second burst limit. The client IP is derived from the ``X-Forwarded-For``/``X-Real-Ip``
-          headers, falling back to the remote address. These can be tuned via the following
-          ``rate-limiting`` config keys:
+          per-second burst limit. The client IP is taken from the trusted, non-spoofable
+          ``X-Envoy-External-Address`` header set by the Envoy/Istio ingress, falling back to the
+          client-controlled ``X-Forwarded-For``/``X-Real-Ip`` headers and finally the remote
+          address only for requests that did not pass through the ingress. These can be tuned via
+          the following ``rate-limiting`` config keys:
 
+          .. warning::
+
+             When per-client-IP rate limiting is enabled, operators must ensure that the client IP
+             used for rate limiting cannot be spoofed. Either configure
+             ``rate-limiting.trusted-client-ip-header`` to a trusted, non-spoofable header set by
+             your ingress/proxy (e.g. ``x-envoy-external-address`` for Istio deployments), or ensure
+             that the ``X-Forwarded-For`` header contains the actual client IP as its first value
+             and cannot be spoofed by clients. Otherwise, clients may bypass per-client-IP limits or
+             cause other clients to be throttled by forging these headers.
+
+
+          - ``rate-limiting.trusted-client-ip-header``: name of the trusted proxy header carrying
+            the real client IP (default ``x-envoy-external-address``). Override it for non-Istio
+            deployments, or set it to an empty string to disable trusting a proxy header and only
+            rely on ``X-Forwarded-For``/``X-Real-Ip``/the remote address.
           - ``rate-limiting.default``: overall per-operation limiter used when there is no
             operation-specific override. Its embedded ``per-client-ip`` limiter (disabled by
             default) applies per-client-IP limiting on top of the per-operation limiter.

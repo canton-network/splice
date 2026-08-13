@@ -27,6 +27,60 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
 
   "clientIp" should {
 
+    "prefer the trusted X-Envoy-External-Address over spoofable headers" in {
+      HttpRateLimiter.clientIp(
+        HttpRequest()
+          .withHeaders(
+            RawHeader("X-Envoy-External-Address", "4.4.4.4"),
+            `X-Forwarded-For`(RemoteAddress(InetAddress.getByName("1.1.1.1"))),
+            `X-Real-Ip`(RemoteAddress(InetAddress.getByName("2.2.2.2"))),
+          )
+          .withAttributes(
+            Map(
+              AttributeKeys.remoteAddress -> RemoteAddress(InetAddress.getByName("3.3.3.3"))
+            )
+          )
+      ) should be(Some("4.4.4.4"))
+    }
+
+    "ignore a non-IP X-Envoy-External-Address and fall back to the trusted transport address" in {
+      HttpRateLimiter.clientIp(
+        HttpRequest()
+          .withHeaders(RawHeader("X-Envoy-External-Address", "evil.example.com"))
+          .withAttributes(
+            Map(AttributeKeys.remoteAddress -> RemoteAddress(InetAddress.getByName("3.3.3.3")))
+          )
+      ) should be(Some("3.3.3.3"))
+    }
+
+    "use a configurable trusted proxy header" in {
+      HttpRateLimiter.clientIp(
+        HttpRequest()
+          .withHeaders(
+            RawHeader("X-Trusted-Client-Ip", "4.4.4.4"),
+            `X-Forwarded-For`(RemoteAddress(InetAddress.getByName("1.1.1.1"))),
+          ),
+        trustedClientIpHeader = "x-trusted-client-ip",
+      ) should be(Some("4.4.4.4"))
+    }
+
+    "match the trusted proxy header case-insensitively" in {
+      HttpRateLimiter.clientIp(
+        HttpRequest().withHeaders(RawHeader("X-Envoy-External-Address", "4.4.4.4")),
+        trustedClientIpHeader = "X-Envoy-External-Address",
+      ) should be(Some("4.4.4.4"))
+    }
+
+    "not trust any proxy header when the trusted header is disabled" in {
+      HttpRateLimiter.clientIp(
+        HttpRequest().withHeaders(
+          RawHeader("X-Envoy-External-Address", "4.4.4.4"),
+          `X-Forwarded-For`(RemoteAddress(InetAddress.getByName("1.1.1.1"))),
+        ),
+        trustedClientIpHeader = "",
+      ) should be(Some("1.1.1.1"))
+    }
+
     "prefer X-Forwarded-For" in {
       HttpRateLimiter.clientIp(
         HttpRequest()

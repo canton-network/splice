@@ -18,8 +18,8 @@ import org.apache.pekko.http.scaladsl.server.Directive0
 import org.lfdecentralizedtrust.splice.config.RateLimitersConfig
 import org.lfdecentralizedtrust.splice.util.{
   PerAttributeRateLimiter,
-  SpliceRateLimitMetrics,
   SpliceRateLimiter,
+  SpliceRateLimitMetrics,
 }
 
 import java.time.Instant
@@ -105,7 +105,7 @@ class HttpRateLimiter(
     import org.apache.pekko.http.scaladsl.server.Directives.*
 
     extractRequest.flatMap { request =>
-      val clientIp = HttpRateLimiter.clientIp(request)
+      val clientIp = HttpRateLimiter.clientIp(request, config.trustedClientIpHeader)
       // The global limiters are checked first so that a request rejected globally does not consume
       // budget from the per-operation limiters.
       val allowed =
@@ -136,11 +136,35 @@ object HttpRateLimiter {
   private[splice] val GlobalLimiter = "global"
   private[splice] val GlobalService = "global"
 
-  private[splice] def clientIp(request: HttpRequest): Option[String] =
-    request
-      .header[`X-Forwarded-For`]
-      .flatMap(_.addresses.headOption)
-      .orElse(request.header[`X-Real-Ip`].map(_.address))
-      .orElse(request.attribute(AttributeKeys.remoteAddress))
+  private[splice] def clientIp(
+      request: HttpRequest,
+      trustedClientIpHeader: String = RateLimitersConfig.DefaultTrustedClientIpHeader,
+  ): Option[String] =
+    trustedClientIp(request, trustedClientIpHeader)
+      .orElse(
+        request
+          .header[`X-Forwarded-For`]
+          .flatMap(_.addresses.headOption)
+          .orElse(request.header[`X-Real-Ip`].map(_.address))
+          .orElse(request.attribute(AttributeKeys.remoteAddress))
+      )
       .collect { case RemoteAddress.IP(ip, _) => ip.getHostAddress }
+
+  private def trustedClientIp(
+      request: HttpRequest,
+      trustedClientIpHeader: String,
+  ): Option[RemoteAddress] = {
+    val headerName = trustedClientIpHeader.trim.toLowerCase
+    if (headerName.isEmpty) None
+    else
+      request.headers
+        .collectFirst { case header if header.is(headerName) => header.value.trim }
+        .flatMap(parseIpLiteral)
+  }
+
+  private def parseIpLiteral(value: String): Option[RemoteAddress] =
+    `X-Real-Ip`
+      .parseFromValueString(value)
+      .toOption
+      .map(_.address)
 }
