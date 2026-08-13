@@ -1,7 +1,6 @@
-module Splice.DSO.SvRightOwner where
+module Splice.Amulet.SvRightOwner where
 
 import DA.List (unique)
-import Splice.DSO.SvState
 import Splice.Util
 import Splice.Types
 
@@ -29,6 +28,7 @@ instance Patchable SvRightOwnerInfo where
       rewardNodeOperatorName = patch new.rewardNodeOperatorName base.rewardNodeOperatorName current.rewardNodeOperatorName
       beneficiaries = patchScalar new.beneficiaries base.beneficiaries current.beneficiaries
 
+-- This is in splice-amulet instead of splice-dso-governance as we need to know the information on who is an SV for SV locking.
 template SvRightOwner
   with
     dso : Party
@@ -38,15 +38,8 @@ template SvRightOwner
     signatory dso
     ensure validSvRightOwnerInfo info
 
-instance HasCheckedFetch SvRightOwner ForSv where
-  contractGroupId SvRightOwner{..} = 
-    ForSv
-      with
-        dso
-        svName = rightOwnerName
-
 instance HasCheckedFetch SvRightOwner ForDso where
-  contractGroupId SvRightOwner{..} = 
+  contractGroupId SvRightOwner{..} =
     ForDso
       with
         dso

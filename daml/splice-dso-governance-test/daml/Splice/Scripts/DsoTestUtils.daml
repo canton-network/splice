@@ -34,7 +34,7 @@ import Splice.DsoBootstrap
 import Splice.DSO.AmuletPrice
 import Splice.DSO.DecentralizedSynchronizer
 import Splice.DSO.SvState
-import Splice.DSO.SvRightOwner
+import Splice.Amulet.SvRightOwner
 import Splice.Scripts.AnsRulesParameters
 
 -- | Multiplier for the SV weights, which are recorded in basis-points, i.e., 1/10000ths
@@ -399,7 +399,7 @@ lookupRightOwner app rightOwnerParty = do
 querySvRightOwners : AmuletApp -> Script (Optional (TextMap.TextMap (ContractId SvRightOwner)))
 querySvRightOwners app = do
   rightOwners <- query @SvRightOwner app.dso
-  pure $ if null rightOwners 
+  pure $ if null rightOwners
     then None
     else Some (TextMap.fromList [(ro.rightOwnerName, roCid) | (roCid, ro) <- rightOwners])
 
@@ -498,7 +498,7 @@ checkSvRewardStates app = do
     Set.fromList [state.svName | (_, state) <- rewardStates] === Set.fromList (getSvRightOwners dsoRules)
   else
     Set.fromList [state.svName | (_, state) <- rewardStates] === Set.fromList (map (.name) (Map.values dsoRules.svs))
-  
+
 
 -- | Check that there's exactly one status report per SV both off-boarded and onboarded.
 checkSvStatusReports : AmuletApp -> Script ()
