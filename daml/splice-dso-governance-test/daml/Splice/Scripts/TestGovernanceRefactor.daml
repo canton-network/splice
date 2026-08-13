@@ -11,7 +11,7 @@ import Daml.Script
 import qualified DA.Map as Map
 import qualified DA.TextMap as TextMap
 
-import Splice.DSO.SvRightOwner
+import Splice.Amulet.SvRightOwner
 import Splice.Issuance()
 
 

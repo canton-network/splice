@@ -35,7 +35,7 @@ import Splice.Ans
 import Splice.SvOnboarding
 import Splice.DSO.AmuletPrice
 import Splice.DSO.DecentralizedSynchronizer
-import Splice.DSO.SvRightOwner
+import Splice.Amulet.SvRightOwner
 import Splice.DSO.SvState
 import Splice.Schedule
 import Splice.Util

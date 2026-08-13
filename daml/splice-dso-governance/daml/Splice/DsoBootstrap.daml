@@ -16,7 +16,7 @@ import Splice.Types
 
 import Splice.Ans
 import Splice.DSO.DecentralizedSynchronizer
-import Splice.DSO.SvRightOwner
+import Splice.Amulet.SvRightOwner
 import Splice.DsoRules
 
 data DsoBootstrap_BootstrapResult = DsoBootstrap_BootstrapResult
