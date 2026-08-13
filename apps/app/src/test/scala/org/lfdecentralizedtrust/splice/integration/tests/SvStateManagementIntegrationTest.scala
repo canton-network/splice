@@ -142,7 +142,7 @@ class SvStateManagementIntegrationTest extends SvIntegrationTestBase with Trigge
 
     def voteRequestGauge(sv: SvAppBackendReference, state: String): Long =
       sv.metrics
-        .get(s"$MetricsPrefix.sv.vote_requests.active", Map("state" -> state))
+        .get(s"$MetricsPrefix.sv_vote_requests.active", Map("state" -> state))
         .select[MetricValue.LongPoint]
         .value
         .value

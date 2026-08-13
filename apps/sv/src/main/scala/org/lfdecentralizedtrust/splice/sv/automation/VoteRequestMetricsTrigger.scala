@@ -64,7 +64,7 @@ object VoteRequestMetricsTrigger {
   case class VoteRequestMetrics(metricsFactory: LabeledMetricsFactory) extends AutoCloseable {
 
     private val name: MetricName =
-      SpliceMetrics.MetricsPrefix :+ "sv" :+ "vote_requests" :+ "active"
+      SpliceMetrics.MetricsPrefix :+ "sv_vote_requests" :+ "active"
 
     private def stateGauge(state: String): Gauge[Long] =
       metricsFactory.gauge(
