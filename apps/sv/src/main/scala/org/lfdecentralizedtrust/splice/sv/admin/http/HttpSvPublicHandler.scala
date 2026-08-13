@@ -328,67 +328,7 @@ class HttpSvPublicHandler(
             case Left(err) =>
               Future.failed(HttpErrorHandler.badRequest(s"Invalid participant ID: $err"))
           }
-          amuletRules <- dsoStore.getAmuletRules()
-          dsoRules <- dsoStore.getDsoRules()
-          openRound <- dsoStore.getLatestActiveOpenMiningRound()
-
-          _ = logger.info(s"AmuletRules DevNet Tap by $svUserName")
-
-          tapCmd = amuletRules.exercise(
-            _.exerciseAmuletRules_DevNet_Tap(
-              svParty.toProtoPrimitive,
-              config.devNetPublicSetupTapAmount.bigDecimal,
-              openRound.contractId,
-            )
-          )
-
-          tapResult <- dsoStoreWithIngestion
-            .connection(SpliceLedgerConnectionPriority.Low)
-            .submit(
-              actAs = Seq(svParty),
-              readAs = Seq(dsoParty),
-              update = tapCmd,
-            )
-            .withSynchronizerId(dsoRules.domain)
-            .noDedup
-            .yieldResult()
-
-          amuletCid = tapResult.exerciseResult.amuletSum.amulet
-
-          _ = logger.info(s"AmuletRules BuyMemberTraffic by $svUserName for $participantId")
-
-          buyCmd = amuletRules.exercise(
-            _.exerciseAmuletRules_BuyMemberTraffic(
-              java.util.List.of(
-                new org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.transferinput.InputAmulet(
-                  amuletCid
-                )
-              ),
-              new org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.TransferContext(
-                openRound.contractId,
-                java.util.Collections.emptyMap(),
-                java.util.Collections.emptyMap(),
-                java.util.Optional.empty(),
-              ),
-              svParty.toProtoPrimitive,
-              participantId.toProtoPrimitive,
-              dsoRules.payload.config.decentralizedSynchronizer.activeSynchronizerId,
-              dsoStore.domainMigrationId,
-              config.devNetPublicSetupTrafficAmount,
-              java.util.Optional.of(dsoParty.toProtoPrimitive),
-            )
-          )
-
-          _ <- dsoStoreWithIngestion
-            .connection(SpliceLedgerConnectionPriority.Low)
-            .submit(
-              actAs = Seq(svParty),
-              readAs = Seq(dsoParty),
-              update = buyCmd,
-            )
-            .withSynchronizerId(dsoRules.domain)
-            .noDedup
-            .yieldUnit()
+          _ <- devNetTapAndBuyMemberTraffic(participantId)
 
         } yield r0.DevNetBuyMemberTrafficResponseOK("Success")
       } else {
@@ -943,6 +883,75 @@ class HttpSvPublicHandler(
         .noDedup // No command-dedup required, as the ValidatorOnboarding contract is archived
         .yieldUnit()
     } yield ()
+
+  private def devNetTapAndBuyMemberTraffic(
+      participantId: ParticipantId
+  )(implicit tc: TraceContext): Future[Unit] = {
+    for {
+      amuletRules <- dsoStore.getAmuletRules()
+      dsoRules <- dsoStore.getDsoRules()
+      roundTriple <- dsoStore.getOpenMiningRoundTriple()
+      openRound = roundTriple.oldest
+
+      _ = logger.info(s"AmuletRules DevNet Tap by $svUserName")
+
+      tapCmd = amuletRules.exercise(
+        _.exerciseAmuletRules_DevNet_Tap(
+          svParty.toProtoPrimitive,
+          config.devNetPublicSetupTapAmount.bigDecimal,
+          openRound.contractId,
+        )
+      )
+
+      tapResult <- dsoStoreWithIngestion
+        .connection(SpliceLedgerConnectionPriority.Low)
+        .submit(
+          actAs = Seq(svParty),
+          readAs = Seq(dsoParty),
+          update = tapCmd,
+        )
+        .withSynchronizerId(dsoRules.domain)
+        .noDedup
+        .yieldResult()
+
+      amuletCid = tapResult.exerciseResult.amuletSum.amulet
+
+      _ = logger.info(s"AmuletRules BuyMemberTraffic by $svUserName for $participantId")
+
+      buyCmd = amuletRules.exercise(
+        _.exerciseAmuletRules_BuyMemberTraffic(
+          java.util.List.of(
+            new org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.transferinput.InputAmulet(
+              amuletCid
+            )
+          ),
+          new org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.TransferContext(
+            openRound.contractId,
+            java.util.Collections.emptyMap(),
+            java.util.Collections.emptyMap(),
+            java.util.Optional.empty(),
+          ),
+          svParty.toProtoPrimitive,
+          participantId.toProtoPrimitive,
+          dsoRules.payload.config.decentralizedSynchronizer.activeSynchronizerId,
+          dsoStore.domainMigrationId,
+          config.devNetPublicSetupTrafficAmount,
+          java.util.Optional.of(dsoParty.toProtoPrimitive),
+        )
+      )
+
+      _ <- dsoStoreWithIngestion
+        .connection(SpliceLedgerConnectionPriority.Low)
+        .submit(
+          actAs = Seq(svParty),
+          readAs = Seq(dsoParty),
+          update = buyCmd,
+        )
+        .withSynchronizerId(dsoRules.domain)
+        .noDedup
+        .yieldUnit()
+    } yield ()
+  }
 
   private def startSvOnboarding(
       candidateName: String,
