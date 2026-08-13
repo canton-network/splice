@@ -22,6 +22,7 @@ STATUS_COLUMN_NAME = "Submission Status"
 NETWORK_COLUMN_NAME = "Network"
 ACTIVITY_COLUMN_NAME = "Type of Activity"
 VERSION_COLUMN_NAME = "Minor Versions"
+DEPENDENCY_COLUMN_NAME = "Dependent On"
 
 INITIAL_STATUS = "To Be Confirmed"
 
@@ -29,11 +30,13 @@ NETWORK_DEVNET = "DevNet"
 NETWORK_TESTNET = "TestNet"
 NETWORK_MAINNET = "MainNet"
 
-# These must match the labels that actually exist on the Monday board.
 ACTIVITY_WEEKLY = "Weekly Upgrades"
 ACTIVITY_DAML = "Splice Daml Model Effectivity"
 ACTIVITY_LSU = "Protocol Upgrades (LSU)"
 ACTIVITY_CONFIG = "Configuration Change"
+
+_BOARD_CACHE: dict[int, dict] = {}
+_ITEMS_CACHE: dict[int, dict[str, list[str]]] = {}
 
 
 @dataclass(frozen=True)
@@ -44,18 +47,12 @@ class ScheduledEvent:
     activity: str
     minor_version: str
     time_utc: Optional[str] = None
-
-
-_BOARD_CACHE: dict[int, dict] = {}
-_ITEMS_CACHE: dict[int, dict[str, list[str]]] = {}
+    depends_on: Optional[str] = None
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description=(
-            "Create/update the monthly Splice release schedule "
-            "in monday.com."
-        )
+        description="Create/update the monthly Splice release schedule in monday.com."
     )
 
     parser.add_argument(
@@ -65,19 +62,13 @@ def parse_args() -> argparse.Namespace:
 
     parser.add_argument(
         "month",
-        help=(
-            "Month containing the first DevNet Monday, "
-            "in YYYY-MM format, e.g. 2026-08"
-        ),
+        help="Month in YYYY-MM format, e.g. 2026-08",
     )
 
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help=(
-            "Validate the Monday board and show what would change "
-            "without writing anything."
-        ),
+        help="Validate and show changes without modifying monday.com.",
     )
 
     args = parser.parse_args()
@@ -97,6 +88,7 @@ def parse_args() -> argparse.Namespace:
 
     return args
 
+
 def first_monday_in_month(
     month: str,
 ) -> datetime.date:
@@ -111,14 +103,13 @@ def first_monday_in_month(
         1,
     )
 
-    offset = (
-        0 - first_day.weekday()
-    ) % 7
-
     return (
         first_day
         + datetime.timedelta(
-            days=offset
+            days=(
+                0
+                - first_day.weekday()
+            ) % 7
         )
     )
 
@@ -145,7 +136,8 @@ def mondays_in_month(
     )
 
     first_monday_offset = (
-        0 - first_day.weekday()
+        0
+        - first_day.weekday()
     ) % 7
 
     return (
@@ -170,7 +162,11 @@ def schedule_date(
         "sunday": 6,
     }
 
-    key = weekday.strip().lower()
+    key = (
+        weekday
+        .strip()
+        .lower()
+    )
 
     if key not in weekdays:
         raise ValueError(
@@ -182,17 +178,13 @@ def schedule_date(
             "week_number must be >= 0"
         )
 
-    base_monday = (
-        first_monday_in_month(month)
-        + datetime.timedelta(
-            weeks=week_number
-        )
-    )
-
     return (
-        base_monday
+        first_monday_in_month(
+            month
+        )
         + datetime.timedelta(
-            days=weekdays[key]
+            weeks=week_number,
+            days=weekdays[key],
         )
     )
 
@@ -200,14 +192,20 @@ def schedule_date(
 def required_env(
     name: str,
 ) -> str:
-    value = os.getenv(name)
+    value = os.getenv(
+        name
+    )
 
-    if value is None or value.strip() == "":
+    if (
+        value is None
+        or value.strip() == ""
+    ):
         raise RuntimeError(
             f"Missing required environment variable: {name}"
         )
 
     return value.strip()
+
 
 def board_id_from_env() -> int:
     value = required_env(
@@ -215,42 +213,41 @@ def board_id_from_env() -> int:
     )
 
     try:
-        return int(value)
-
+        return int(
+            value
+        )
     except ValueError as exc:
         raise RuntimeError(
-            "MONDAY_BOARD_ID must be numeric; "
-            f"got {value!r}"
+            f"MONDAY_BOARD_ID must be numeric; got {value!r}"
         ) from exc
+
 
 def monday_request(
     token: str,
     query: str,
     variables: dict,
 ) -> dict:
-    payload = {
-        "query": query,
-        "variables": variables,
-    }
-
     headers = {
         "Authorization": token,
         "Content-Type": "application/json",
     }
 
-    api_version = os.getenv(
+    if os.getenv(
         "MONDAY_API_VERSION"
-    )
-
-    if api_version:
-        headers["API-Version"] = (
-            api_version
-        )
+    ):
+        headers[
+            "API-Version"
+        ] = os.environ[
+            "MONDAY_API_VERSION"
+        ]
 
     request = urllib.request.Request(
         "https://api.monday.com/v2",
         data=json.dumps(
-            payload
+            {
+                "query": query,
+                "variables": variables,
+            }
         ).encode(
             "utf-8"
         ),
@@ -263,17 +260,19 @@ def monday_request(
             request,
             timeout=30,
         ) as response:
-
             body = (
                 response
                 .read()
-                .decode("utf-8")
+                .decode(
+                    "utf-8"
+                )
             )
 
     except urllib.error.HTTPError as exc:
-
         response_body = (
-            exc.read().decode(
+            exc
+            .read()
+            .decode(
                 "utf-8",
                 errors="replace",
             )
@@ -286,154 +285,28 @@ def monday_request(
         ) from exc
 
     except urllib.error.URLError as exc:
-
         raise RuntimeError(
             f"Could not reach Monday API: {exc}"
         ) from exc
 
-    parsed = json.loads(body)
+    parsed = json.loads(
+        body
+    )
 
-    if parsed.get("errors"):
-
+    if parsed.get(
+        "errors"
+    ):
         raise RuntimeError(
             "Monday API returned errors: "
             + json.dumps(
-                parsed["errors"],
+                parsed[
+                    "errors"
+                ],
                 ensure_ascii=False,
             )
         )
 
     return parsed
-
-def normalize_settings(
-    raw_settings,
-) -> dict:
-    if raw_settings is None:
-        return {}
-
-    if isinstance(
-        raw_settings,
-        dict,
-    ):
-        return raw_settings
-
-    if isinstance(
-        raw_settings,
-        str,
-    ):
-        raw_settings = (
-            raw_settings.strip()
-        )
-
-        if not raw_settings:
-            return {}
-
-        try:
-            parsed = json.loads(
-                raw_settings
-            )
-
-            if isinstance(
-                parsed,
-                dict,
-            ):
-                return parsed
-
-        except json.JSONDecodeError:
-            pass
-
-    return {}
-
-
-def available_labels(
-    column: dict,
-) -> set[str]:
-    settings = normalize_settings(
-        column.get("settings")
-    )
-
-    raw_labels = settings.get(
-        "labels",
-        [],
-    )
-
-    labels: set[str] = set()
-
-    if isinstance(
-        raw_labels,
-        list,
-    ):
-        for entry in raw_labels:
-
-            if isinstance(
-                entry,
-                dict,
-            ):
-                label = entry.get(
-                    "label"
-                )
-
-                if (
-                    isinstance(
-                        label,
-                        str,
-                    )
-                    and label
-                ):
-                    labels.add(
-                        label
-                    )
-
-            elif (
-                isinstance(
-                    entry,
-                    str,
-                )
-                and entry
-            ):
-                labels.add(
-                    entry
-                )
-
-    elif isinstance(
-        raw_labels,
-        dict,
-    ):
-        for value in (
-            raw_labels.values()
-        ):
-
-            if (
-                isinstance(
-                    value,
-                    str,
-                )
-                and value
-            ):
-                labels.add(
-                    value
-                )
-
-            elif isinstance(
-                value,
-                dict,
-            ):
-                label = value.get(
-                    "label"
-                )
-
-                if (
-                    isinstance(
-                        label,
-                        str,
-                    )
-                    and label
-                ):
-                    labels.add(
-                        label
-                    )
-
-    return labels
 
 
 def get_board(
@@ -490,18 +363,14 @@ def get_board(
 
     if not boards:
         raise RuntimeError(
-            f"Board not found or "
-            f"not accessible: "
-            f"{board_id}"
+            f"Board not found or not accessible: {board_id}"
         )
-
-    board = boards[0]
 
     _BOARD_CACHE[
         board_id
-    ] = board
+    ] = boards[0]
 
-    return board
+    return boards[0]
 
 
 def get_column(
@@ -535,7 +404,6 @@ def get_column(
     ]
 
     if not matches:
-
         existing = ", ".join(
             sorted(
                 str(
@@ -553,19 +421,13 @@ def get_column(
         )
 
         raise RuntimeError(
-            f"Column {title!r} "
-            f"not found. "
-            f"Board columns are: "
-            f"{existing}"
+            f"Column {title!r} not found. "
+            f"Board columns are: {existing}"
         )
 
     if len(matches) > 1:
         raise RuntimeError(
-            f"More than one column "
-            f"is named {title!r}. "
-            f"Rename one so the "
-            f"automation has an "
-            f"unambiguous target."
+            f"More than one column is named {title!r}."
         )
 
     return matches[0]
@@ -610,7 +472,6 @@ def get_group_id(
     ]
 
     if not matches:
-
         existing = ", ".join(
             str(
                 group.get(
@@ -634,27 +495,144 @@ def get_group_id(
         )
 
         raise RuntimeError(
-            f"Group {group_name!r} "
-            f"not found. "
-            f"Active groups are: "
-            f"{existing}"
+            f"Group {group_name!r} not found. "
+            f"Active groups are: {existing}"
         )
 
     if len(matches) > 1:
         raise RuntimeError(
-            f"More than one active "
-            f"group is named "
-            f"{group_name!r}."
+            f"More than one active group is named {group_name!r}."
         )
 
     return str(
-        matches[0]["id"]
+        matches[0][
+            "id"
+        ]
     )
+
+
+def column_labels(
+    column: dict,
+) -> set[str]:
+    settings = (
+        column.get(
+            "settings"
+        )
+        or {}
+    )
+
+    if isinstance(
+        settings,
+        str,
+    ):
+        try:
+            settings = json.loads(
+                settings
+            )
+        except json.JSONDecodeError:
+            return set()
+
+    if not isinstance(
+        settings,
+        dict,
+    ):
+        return set()
+
+    labels: set[str] = set()
+
+    raw_labels = settings.get(
+        "labels",
+        [],
+    )
+
+    if isinstance(
+        raw_labels,
+        list,
+    ):
+        for entry in raw_labels:
+            if isinstance(
+                entry,
+                dict,
+            ):
+                label = (
+                    entry.get(
+                        "label"
+                    )
+                    or entry.get(
+                        "name"
+                    )
+                )
+
+                if (
+                    isinstance(
+                        label,
+                        str,
+                    )
+                    and label
+                ):
+                    labels.add(
+                        label
+                    )
+
+            elif (
+                isinstance(
+                    entry,
+                    str,
+                )
+                and entry
+            ):
+                labels.add(
+                    entry
+                )
+
+    elif isinstance(
+        raw_labels,
+        dict,
+    ):
+        for entry in (
+            raw_labels.values()
+        ):
+            if (
+                isinstance(
+                    entry,
+                    str,
+                )
+                and entry
+            ):
+                labels.add(
+                    entry
+                )
+
+            elif isinstance(
+                entry,
+                dict,
+            ):
+                label = (
+                    entry.get(
+                        "label"
+                    )
+                    or entry.get(
+                        "name"
+                    )
+                )
+
+                if (
+                    isinstance(
+                        label,
+                        str,
+                    )
+                    and label
+                ):
+                    labels.add(
+                        label
+                    )
+
+    return labels
 
 
 def ensure_column_type(
     column: dict,
-    allowed_types: set[str],
+    allowed: set[str],
 ) -> None:
     actual = str(
         column.get(
@@ -663,14 +641,11 @@ def ensure_column_type(
         )
     ).lower()
 
-    if actual not in allowed_types:
+    if actual not in allowed:
         raise RuntimeError(
-            f"Column "
-            f"{column['title']!r} "
-            f"has type "
-            f"{actual!r}; "
-            f"expected one of "
-            f"{sorted(allowed_types)}"
+            f"Column {column['title']!r} "
+            f"has type {actual!r}; "
+            f"expected one of {sorted(allowed)}"
         )
 
 
@@ -678,21 +653,18 @@ def require_label(
     column: dict,
     label: str,
 ) -> None:
-    labels = available_labels(
+    labels = column_labels(
         column
     )
 
-    if not labels:
-        return
-
-    if label not in labels:
+    if (
+        labels
+        and label not in labels
+    ):
         raise RuntimeError(
-            f"Column "
-            f"{column['title']!r} "
-            f"does not contain "
-            f"label {label!r}. "
-            f"Available labels: "
-            f"{sorted(labels)}"
+            f"Column {column['title']!r} "
+            f"does not contain label {label!r}. "
+            f"Available labels: {sorted(labels)}"
         )
 
 
@@ -731,9 +703,16 @@ def preflight(
         VERSION_COLUMN_NAME,
     )
 
+    dependency_col = get_column(
+        board,
+        DEPENDENCY_COLUMN_NAME,
+    )
+
     ensure_column_type(
         date_col,
-        {"date"},
+        {
+            "date"
+        },
     )
 
     ensure_column_type(
@@ -774,6 +753,13 @@ def preflight(
         },
     )
 
+    ensure_column_type(
+        dependency_col,
+        {
+            "dependency"
+        },
+    )
+
     require_label(
         status_col,
         INITIAL_STATUS,
@@ -800,15 +786,14 @@ def preflight(
             label,
         )
 
-    group_id = get_group_id(
-        board,
-        group_name,
-    )
-
     return (
         board,
-        group_id,
+        get_group_id(
+            board,
+            group_name,
+        ),
     )
+
 
 def choice_value(
     column: dict,
@@ -843,10 +828,8 @@ def choice_value(
         return label
 
     raise RuntimeError(
-        f"Unsupported choice "
-        f"column type "
-        f"{column_type!r} "
-        f"for "
+        f"Unsupported choice column type "
+        f"{column_type!r} for "
         f"{column['title']!r}"
     )
 
@@ -861,19 +844,18 @@ def date_value(
     }
 
     if time_utc is not None:
-
         if re.fullmatch(
             r"(?:[01]\d|2[0-3]):[0-5]\d",
             time_utc,
         ) is None:
-
             raise ValueError(
-                f"Invalid UTC time "
-                f"{time_utc!r}; "
+                f"Invalid UTC time {time_utc!r}; "
                 f"expected HH:MM"
             )
 
-        value["time"] = (
+        value[
+            "time"
+        ] = (
             f"{time_utc}:00"
         )
 
@@ -907,7 +889,9 @@ def build_column_values(
 
     values = {
         str(
-            date_col["id"]
+            date_col[
+                "id"
+            ]
         ):
             date_value(
                 event.date,
@@ -915,7 +899,9 @@ def build_column_values(
             ),
 
         str(
-            network_col["id"]
+            network_col[
+                "id"
+            ]
         ):
             choice_value(
                 network_col,
@@ -923,7 +909,9 @@ def build_column_values(
             ),
 
         str(
-            activity_col["id"]
+            activity_col[
+                "id"
+            ]
         ):
             choice_value(
                 activity_col,
@@ -931,7 +919,9 @@ def build_column_values(
             ),
 
         str(
-            version_col["id"]
+            version_col[
+                "id"
+            ]
         ):
             choice_value(
                 version_col,
@@ -940,7 +930,6 @@ def build_column_values(
     }
 
     if include_submission_status:
-
         status_col = get_column(
             board,
             STATUS_COLUMN_NAME,
@@ -948,7 +937,9 @@ def build_column_values(
 
         values[
             str(
-                status_col["id"]
+                status_col[
+                    "id"
+                ]
             )
         ] = choice_value(
             status_col,
@@ -956,6 +947,7 @@ def build_column_values(
         )
 
     return values
+
 
 def load_existing_items(
     token: str,
@@ -971,7 +963,7 @@ def load_existing_items(
         list[str],
     ] = {}
 
-    first_query = """
+    query = """
     query BoardItems($boardId: [ID!]!) {
       boards(ids: $boardId) {
         items_page(limit: 500) {
@@ -987,7 +979,7 @@ def load_existing_items(
 
     response = monday_request(
         token,
-        first_query,
+        query,
         {
             "boardId": [
                 board_id
@@ -1009,14 +1001,13 @@ def load_existing_items(
 
     if not boards:
         raise RuntimeError(
-            f"Board not found: "
-            f"{board_id}"
+            f"Board not found: {board_id}"
         )
 
     page = (
         boards[0]
         .get(
-            "items_page",
+            "items_page"
         )
         or {}
     )
@@ -1027,12 +1018,16 @@ def load_existing_items(
     ):
         items_by_name.setdefault(
             str(
-                item["name"]
+                item[
+                    "name"
+                ]
             ),
             [],
         ).append(
             str(
-                item["id"]
+                item[
+                    "id"
+                ]
             )
         )
 
@@ -1053,12 +1048,12 @@ def load_existing_items(
     """
 
     while cursor:
-
         response = monday_request(
             token,
             next_query,
             {
-                "cursor": cursor
+                "cursor":
+                    cursor
             },
         )
 
@@ -1069,7 +1064,7 @@ def load_existing_items(
                 {},
             )
             .get(
-                "next_items_page",
+                "next_items_page"
             )
             or {}
         )
@@ -1080,12 +1075,16 @@ def load_existing_items(
         ):
             items_by_name.setdefault(
                 str(
-                    item["name"]
+                    item[
+                        "name"
+                    ]
                 ),
                 [],
             ).append(
                 str(
-                    item["id"]
+                    item[
+                        "id"
+                    ]
                 )
             )
 
@@ -1099,10 +1098,6 @@ def load_existing_items(
 
     return items_by_name
 
-
-# =============================================================================
-# CREATE / UPDATE
-# =============================================================================
 
 def create_item(
     token: str,
@@ -1130,12 +1125,6 @@ def create_item(
     }
     """
 
-    values = build_column_values(
-        board,
-        event,
-        include_submission_status=True,
-    )
-
     response = monday_request(
         token,
         mutation,
@@ -1151,7 +1140,11 @@ def create_item(
 
             "columnValues":
                 json.dumps(
-                    values
+                    build_column_values(
+                        board,
+                        event,
+                        include_submission_status=True,
+                    )
                 ),
         },
     )
@@ -1191,12 +1184,6 @@ def update_item(
     }
     """
 
-    values = build_column_values(
-        board,
-        event,
-        include_submission_status=False,
-    )
-
     monday_request(
         token,
         mutation,
@@ -1209,7 +1196,11 @@ def update_item(
 
             "columnValues":
                 json.dumps(
-                    values
+                    build_column_values(
+                        board,
+                        event,
+                        include_submission_status=False,
+                    )
                 ),
         },
     )
@@ -1218,7 +1209,10 @@ def update_item(
 def describe_event(
     event: ScheduledEvent,
 ) -> str:
-    when = event.date.isoformat()
+    when = (
+        event.date
+        .isoformat()
+    )
 
     if event.time_utc:
         when += (
@@ -1240,73 +1234,67 @@ def upsert_event(
     board: dict,
     event: ScheduledEvent,
     dry_run: bool,
-) -> None:
+) -> Optional[str]:
     items = load_existing_items(
         token,
         board_id,
     )
 
-    matching_ids = items.get(
+    matches = items.get(
         event.title,
         [],
     )
 
-    if len(matching_ids) > 1:
+    if len(matches) > 1:
         raise RuntimeError(
             f"Cannot safely update "
             f"{event.title!r}: "
-            f"multiple items already "
-            f"have that exact name: "
-            f"{matching_ids}"
+            f"multiple exact-name items exist: "
+            f"{matches}"
         )
 
     details = describe_event(
         event
     )
 
-    if len(matching_ids) == 1:
-
+    if matches:
         item_id = (
-            matching_ids[0]
+            matches[0]
         )
 
         if dry_run:
-
             print(
                 f"WOULD UPDATE "
                 f"{item_id}: "
                 f"{event.title} "
                 f"-> {details}"
             )
+        else:
+            update_item(
+                token,
+                board_id,
+                board,
+                item_id,
+                event,
+            )
 
-            return
+            print(
+                f"UPDATED "
+                f"{item_id}: "
+                f"{event.title} "
+                f"-> {details}"
+            )
 
-        update_item(
-            token,
-            board_id,
-            board,
-            item_id,
-            event,
-        )
-
-        print(
-            f"UPDATED "
-            f"{item_id}: "
-            f"{event.title} "
-            f"-> {details}"
-        )
-
-        return
+        return item_id
 
     if dry_run:
-
         print(
             f"WOULD CREATE: "
             f"{event.title} "
             f"-> {details}"
         )
 
-        return
+        return None
 
     item_id = create_item(
         token,
@@ -1330,6 +1318,67 @@ def upsert_event(
         f"-> {details}"
     )
 
+    return item_id
+
+
+def set_dependency(
+    token: str,
+    board_id: int,
+    board: dict,
+    item_id: str,
+    dependency_item_id: str,
+) -> None:
+    dependency_col = get_column(
+        board,
+        DEPENDENCY_COLUMN_NAME,
+    )
+
+    mutation = """
+    mutation SetDependency(
+      $boardId: ID!,
+      $itemId: ID!,
+      $columnValues: JSON!
+    ) {
+      change_multiple_column_values(
+        board_id: $boardId,
+        item_id: $itemId,
+        column_values: $columnValues
+      ) {
+        id
+      }
+    }
+    """
+
+    monday_request(
+        token,
+        mutation,
+        {
+            "boardId":
+                board_id,
+
+            "itemId":
+                item_id,
+
+            "columnValues":
+                json.dumps(
+                    {
+                        str(
+                            dependency_col[
+                                "id"
+                            ]
+                        ): {
+                            "item_ids": [
+                                str(
+                                    dependency_item_id
+                                )
+                            ]
+                        }
+                    }
+                ),
+        },
+    )
+
+
 def make_schedule(
     version: str,
     month: str,
@@ -1338,449 +1387,359 @@ def make_schedule(
         ScheduledEvent
     ] = []
 
-    for patch in range(
+    patch_count = (
         mondays_in_month(
             month
         )
-    ):
-        events.append(
-            ScheduledEvent(
-                title=(
-                    f"DevNet upgrades "
-                    f"to Splice "
-                    f"{version}.{patch}"
-                ),
+    )
 
-                date=schedule_date(
-                    month,
-                    "monday",
-                    patch,
-                ),
+    specs = [
+        {
+            "network":
+                NETWORK_DEVNET,
 
-                network=(
-                    NETWORK_DEVNET
-                ),
+            "weekly_offset":
+                0,
 
-                activity=(
-                    ACTIVITY_WEEKLY
-                ),
+            "daml_week":
+                2,
 
-                minor_version=(
-                    version
-                ),
-            )
-        )
+            "freeze_week":
+                2,
 
-    events.extend(
-        [
-            ScheduledEvent(
-                title=(
+            "freeze_day":
+                "tuesday",
+
+            "lsu_week":
+                2,
+
+            "lsu_day":
+                "wednesday",
+
+            "config_week":
+                3,
+
+            "daml_title":
+                (
                     f"DevNet New Daml "
                     f"models effective "
                     f"({version})"
                 ),
 
-                date=schedule_date(
-                    month,
-                    "tuesday",
-                    2,
-                ),
-
-                time_utc="12:00",
-
-                network=(
-                    NETWORK_DEVNET
-                ),
-
-                activity=(
-                    ACTIVITY_DAML
-                ),
-
-                minor_version=(
-                    version
-                ),
-            ),
-
-            ScheduledEvent(
-                title=(
+            "freeze_title":
+                (
                     f"DevNet: "
                     f"Topology Freeze "
                     f"({version})"
                 ),
 
-                date=schedule_date(
-                    month,
-                    "tuesday",
-                    2,
-                ),
-
-                time_utc="13:00",
-
-                network=(
-                    NETWORK_DEVNET
-                ),
-
-                activity=(
-                    ACTIVITY_LSU
-                ),
-
-                minor_version=(
-                    version
-                ),
-            ),
-
-            ScheduledEvent(
-                title=(
+            "lsu_title":
+                (
                     f"DevNet LSU "
                     f"({version})"
                 ),
 
-                date=schedule_date(
-                    month,
-                    "wednesday",
-                    2,
-                ),
-
-                time_utc="13:00",
-
-                network=(
-                    NETWORK_DEVNET
-                ),
-
-                activity=(
-                    ACTIVITY_LSU
-                ),
-
-                minor_version=(
-                    version
-                ),
-            ),
-
-            ScheduledEvent(
-                title=(
+            "config_title":
+                (
                     f"DevNet Breaking "
                     f"Config Changes "
                     f"({version})"
                 ),
+        },
 
-                date=schedule_date(
-                    month,
-                    "tuesday",
-                    3,
-                ),
+        {
+            "network":
+                NETWORK_TESTNET,
 
-                time_utc="12:00",
+            "weekly_offset":
+                1,
 
-                network=(
-                    NETWORK_DEVNET
-                ),
+            "daml_week":
+                3,
 
-                activity=(
-                    ACTIVITY_CONFIG
-                ),
+            "freeze_week":
+                3,
 
-                minor_version=(
-                    version
-                ),
-            ),
-        ]
-    )
+            "freeze_day":
+                "tuesday",
 
-    for patch in range(
-        mondays_in_month(
-            month
-        )
-    ):
-        events.append(
-            ScheduledEvent(
-                title=(
-                    f"TestNet upgrades "
-                    f"to Splice "
-                    f"{version}.{patch}"
-                ),
+            "lsu_week":
+                3,
 
-                date=schedule_date(
-                    month,
-                    "monday",
-                    patch + 1,
-                ),
+            "lsu_day":
+                "wednesday",
 
-                network=(
-                    NETWORK_TESTNET
-                ),
+            "config_week":
+                4,
 
-                activity=(
-                    ACTIVITY_WEEKLY
-                ),
-
-                minor_version=(
-                    version
-                ),
-            )
-        )
-
-    events.extend(
-        [
-            ScheduledEvent(
-                title=(
+            "daml_title":
+                (
                     f"TestNet New Daml "
                     f"models effective "
                     f"({version})"
                 ),
 
-                date=schedule_date(
-                    month,
-                    "tuesday",
-                    3,
-                ),
-
-                time_utc="12:00",
-
-                network=(
-                    NETWORK_TESTNET
-                ),
-
-                activity=(
-                    ACTIVITY_DAML
-                ),
-
-                minor_version=(
-                    version
-                ),
-            ),
-
-            ScheduledEvent(
-                title=(
+            "freeze_title":
+                (
                     f"TestNet: "
                     f"Topology Freeze "
                     f"({version})"
                 ),
 
-                date=schedule_date(
-                    month,
-                    "tuesday",
-                    3,
-                ),
-
-                time_utc="13:00",
-
-                network=(
-                    NETWORK_TESTNET
-                ),
-
-                activity=(
-                    ACTIVITY_LSU
-                ),
-
-                minor_version=(
-                    version
-                ),
-            ),
-
-            ScheduledEvent(
-                title=(
+            "lsu_title":
+                (
                     f"TestNet LSU "
                     f"({version})"
                 ),
 
-                date=schedule_date(
-                    month,
-                    "wednesday",
-                    3,
-                ),
-
-                time_utc="13:00",
-
-                network=(
-                    NETWORK_TESTNET
-                ),
-
-                activity=(
-                    ACTIVITY_LSU
-                ),
-
-                minor_version=(
-                    version
-                ),
-            ),
-
-            ScheduledEvent(
-                title=(
+            "config_title":
+                (
                     f"TestNet Breaking "
                     f"Config Changes "
                     f"({version})"
                 ),
+        },
 
-                date=schedule_date(
-                    month,
-                    "tuesday",
-                    4,
-                ),
+        {
+            "network":
+                NETWORK_MAINNET,
 
-                time_utc="12:00",
+            "weekly_offset":
+                2,
 
-                network=(
-                    NETWORK_TESTNET
-                ),
+            "daml_week":
+                4,
 
-                activity=(
-                    ACTIVITY_CONFIG
-                ),
+            "freeze_week":
+                4,
 
-                minor_version=(
-                    version
-                ),
-            ),
-        ]
-    )
+            "freeze_day":
+                "friday",
 
-    for patch in range(
-        mondays_in_month(
-            month
-        )
-    ):
-        events.append(
-            ScheduledEvent(
-                title=(
-                    f"MainNet upgrades "
-                    f"to Splice "
-                    f"{version}.{patch}"
-                ),
+            "lsu_week":
+                4,
 
-                date=schedule_date(
-                    month,
-                    "monday",
-                    patch + 2,
-                ),
+            "lsu_day":
+                "saturday",
 
-                network=(
-                    NETWORK_MAINNET
-                ),
+            "config_week":
+                5,
 
-                activity=(
-                    ACTIVITY_WEEKLY
-                ),
-
-                minor_version=(
-                    version
-                ),
-            )
-        )
-
-    events.extend(
-        [
-            ScheduledEvent(
-                title=(
+            "daml_title":
+                (
                     f"MainNet new Daml "
                     f"models effective "
                     f"({version})"
                 ),
 
-                date=schedule_date(
-                    month,
-                    "tuesday",
-                    4,
-                ),
-
-                time_utc="12:00",
-
-                network=(
-                    NETWORK_MAINNET
-                ),
-
-                activity=(
-                    ACTIVITY_DAML
-                ),
-
-                minor_version=(
-                    version
-                ),
-            ),
-
-            ScheduledEvent(
-                title=(
+            "freeze_title":
+                (
                     f"MainNet "
                     f"Topology Freeze "
                     f"({version})"
                 ),
 
-                date=schedule_date(
-                    month,
-                    "friday",
-                    4,
-                ),
-
-                time_utc="13:00",
-
-                network=(
-                    NETWORK_MAINNET
-                ),
-
-                activity=(
-                    ACTIVITY_LSU
-                ),
-
-                minor_version=(
-                    version
-                ),
-            ),
-
-            ScheduledEvent(
-                title=(
+            "lsu_title":
+                (
                     f"MainNet LSU "
                     f"({version})"
                 ),
 
-                date=schedule_date(
-                    month,
-                    "saturday",
-                    4,
-                ),
-
-                time_utc="13:00",
-
-                network=(
-                    NETWORK_MAINNET
-                ),
-
-                activity=(
-                    ACTIVITY_LSU
-                ),
-
-                minor_version=(
-                    version
-                ),
-            ),
-
-            ScheduledEvent(
-                title=(
+            "config_title":
+                (
                     f"MainNet breaking "
                     f"config change "
                     f"({version})"
                 ),
+        },
+    ]
 
-                date=schedule_date(
-                    month,
-                    "tuesday",
-                    5,
-                ),
-
-                time_utc="12:00",
-
-                network=(
-                    NETWORK_MAINNET
-                ),
-
-                activity=(
-                    ACTIVITY_CONFIG
-                ),
-
-                minor_version=(
-                    version
-                ),
-            ),
+    for spec in specs:
+        network = spec[
+            "network"
         ]
-    )
+
+        for patch in range(
+            patch_count
+        ):
+            events.append(
+                ScheduledEvent(
+                    title=(
+                        f"{network} "
+                        f"upgrades to Splice "
+                        f"{version}.{patch}"
+                    ),
+
+                    date=schedule_date(
+                        month,
+                        "monday",
+                        patch
+                        + int(
+                            spec[
+                                "weekly_offset"
+                            ]
+                        ),
+                    ),
+
+                    network=str(
+                        network
+                    ),
+
+                    activity=(
+                        ACTIVITY_WEEKLY
+                    ),
+
+                    minor_version=(
+                        version
+                    ),
+                )
+            )
+
+        events.extend(
+            [
+                ScheduledEvent(
+                    title=str(
+                        spec[
+                            "daml_title"
+                        ]
+                    ),
+
+                    date=schedule_date(
+                        month,
+                        "tuesday",
+                        int(
+                            spec[
+                                "daml_week"
+                            ]
+                        ),
+                    ),
+
+                    time_utc="12:00",
+
+                    network=str(
+                        network
+                    ),
+
+                    activity=(
+                        ACTIVITY_DAML
+                    ),
+
+                    minor_version=(
+                        version
+                    ),
+                ),
+
+                ScheduledEvent(
+                    title=str(
+                        spec[
+                            "freeze_title"
+                        ]
+                    ),
+
+                    date=schedule_date(
+                        month,
+                        str(
+                            spec[
+                                "freeze_day"
+                            ]
+                        ),
+                        int(
+                            spec[
+                                "freeze_week"
+                            ]
+                        ),
+                    ),
+
+                    time_utc="13:00",
+
+                    network=str(
+                        network
+                    ),
+
+                    activity=(
+                        ACTIVITY_LSU
+                    ),
+
+                    minor_version=(
+                        version
+                    ),
+                ),
+
+                ScheduledEvent(
+                    title=str(
+                        spec[
+                            "lsu_title"
+                        ]
+                    ),
+
+                    date=schedule_date(
+                        month,
+                        str(
+                            spec[
+                                "lsu_day"
+                            ]
+                        ),
+                        int(
+                            spec[
+                                "lsu_week"
+                            ]
+                        ),
+                    ),
+
+                    time_utc="13:00",
+
+                    network=str(
+                        network
+                    ),
+
+                    activity=(
+                        ACTIVITY_LSU
+                    ),
+
+                    minor_version=(
+                        version
+                    ),
+
+                    depends_on=str(
+                        spec[
+                            "freeze_title"
+                        ]
+                    ),
+                ),
+
+                ScheduledEvent(
+                    title=str(
+                        spec[
+                            "config_title"
+                        ]
+                    ),
+
+                    date=schedule_date(
+                        month,
+                        "tuesday",
+                        int(
+                            spec[
+                                "config_week"
+                            ]
+                        ),
+                    ),
+
+                    time_utc="12:00",
+
+                    network=str(
+                        network
+                    ),
+
+                    activity=(
+                        ACTIVITY_CONFIG
+                    ),
+
+                    minor_version=(
+                        version
+                    ),
+                ),
+            ]
+        )
 
     return events
 
@@ -1808,6 +1767,7 @@ def main() -> None:
     )
 
     print()
+
     print(
         f"Splice "
         f"{args.version}.x"
@@ -1835,10 +1795,12 @@ def main() -> None:
             "changes only."
         )
 
-    board, group_id = preflight(
-        token,
-        board_id,
-        group_name,
+    board, group_id = (
+        preflight(
+            token,
+            board_id,
+            group_name,
+        )
     )
 
     print(
@@ -1862,10 +1824,16 @@ def main() -> None:
 
     print()
 
-    current_network = None
+    item_ids_by_title: dict[
+        str,
+        str,
+    ] = {}
+
+    current_network: Optional[
+        str
+    ] = None
 
     for event in events:
-
         if (
             event.network
             != current_network
@@ -1878,7 +1846,7 @@ def main() -> None:
                 current_network
             )
 
-        upsert_event(
+        item_id = upsert_event(
             token,
             board_id,
             group_id,
@@ -1887,8 +1855,79 @@ def main() -> None:
             args.dry_run,
         )
 
+        if item_id:
+            item_ids_by_title[
+                event.title
+            ] = item_id
+
     print()
-    print("Done.")
+
+    print(
+        "Dependencies"
+    )
+
+    for event in events:
+        if not event.depends_on:
+            continue
+
+        if args.dry_run:
+            print(
+                f"WOULD LINK: "
+                f"{event.title} "
+                f"depends on "
+                f"{event.depends_on}"
+            )
+
+            continue
+
+        item_id = (
+            item_ids_by_title
+            .get(
+                event.title
+            )
+        )
+
+        dependency_item_id = (
+            item_ids_by_title
+            .get(
+                event.depends_on
+            )
+        )
+
+        if not item_id:
+            raise RuntimeError(
+                f"Could not find "
+                f"Monday item for "
+                f"{event.title!r}"
+            )
+
+        if not dependency_item_id:
+            raise RuntimeError(
+                f"Could not find "
+                f"dependency item "
+                f"{event.depends_on!r}"
+            )
+
+        set_dependency(
+            token,
+            board_id,
+            board,
+            item_id,
+            dependency_item_id,
+        )
+
+        print(
+            f"LINKED: "
+            f"{event.title} "
+            f"depends on "
+            f"{event.depends_on}"
+        )
+
+    print()
+
+    print(
+        "Done."
+    )
 
 
 if __name__ == "__main__":
