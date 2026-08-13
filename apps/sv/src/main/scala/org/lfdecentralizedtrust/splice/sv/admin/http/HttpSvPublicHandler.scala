@@ -315,7 +315,91 @@ class HttpSvPublicHandler(
       respond: r0.DevNetBuyMemberTrafficResponse.type
   )(
       body: definitions.DevNetBuyMemberTrafficRequest
-  )(extracted: TraceContext): Future[r0.DevNetBuyMemberTrafficResponse] = ???
+  )(extracted: TraceContext): Future[r0.DevNetBuyMemberTrafficResponse] = {
+    implicit val traceContext: TraceContext = extracted
+    withSpan(s"$workflowId.devNetBuyMemberTraffic") { _ => _ =>
+      if (isDevNet) {
+        for {
+          participantId <- ParticipantId.fromProtoPrimitive(
+            body.participantId,
+            "participant_id",
+          ) match {
+            case Right(id) => Future.successful(id)
+            case Left(err) =>
+              Future.failed(HttpErrorHandler.badRequest(s"Invalid participant ID: $err"))
+          }
+          amuletRules <- dsoStore.getAmuletRules()
+          dsoRules <- dsoStore.getDsoRules()
+          openRound <- dsoStore.getLatestActiveOpenMiningRound()
+
+          _ = logger.info(s"AmuletRules DevNet Tap by $svUserName")
+
+          tapCmd = amuletRules.exercise(
+            _.exerciseAmuletRules_DevNet_Tap(
+              svParty.toProtoPrimitive,
+              config.devNetPublicSetupTapAmount.bigDecimal,
+              openRound.contractId,
+            )
+          )
+
+          tapResult <- dsoStoreWithIngestion
+            .connection(SpliceLedgerConnectionPriority.Low)
+            .submit(
+              actAs = Seq(svParty),
+              readAs = Seq.empty,
+              update = tapCmd,
+            )
+            .withSynchronizerId(dsoRules.domain)
+            .noDedup
+            .yieldResult()
+
+          amuletCid = tapResult.exerciseResult.amuletSum.amulet
+
+          _ = logger.info(s"AmuletRules BuyMemberTraffic by $svUserName for $participantId")
+
+          buyCmd = amuletRules.exercise(
+            _.exerciseAmuletRules_BuyMemberTraffic(
+              java.util.List.of(
+                new org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.transferinput.InputAmulet(
+                  amuletCid
+                )
+              ),
+              new org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.TransferContext(
+                openRound.contractId,
+                java.util.Collections.emptyMap(),
+                java.util.Collections.emptyMap(),
+                java.util.Optional.empty(),
+              ),
+              svParty.toProtoPrimitive,
+              participantId.toProtoPrimitive,
+              dsoRules.payload.config.decentralizedSynchronizer.activeSynchronizerId,
+              dsoStore.domainMigrationId,
+              config.devNetPublicSetupTrafficAmount,
+              java.util.Optional.of(dsoParty.toProtoPrimitive),
+            )
+          )
+
+          _ <- dsoStoreWithIngestion
+            .connection(SpliceLedgerConnectionPriority.Low)
+            .submit(
+              actAs = Seq(svParty),
+              readAs = Seq(dsoParty),
+              update = buyCmd,
+            )
+            .withSynchronizerId(dsoRules.domain)
+            .noDedup
+            .yieldUnit()
+
+        } yield r0.DevNetBuyMemberTrafficResponseOK("Success")
+      } else {
+        Future.failed(
+          HttpErrorHandler.notImplemented(
+            "DevNet traffic purchasing self-service is only available in DevNet."
+          )
+        )
+      }
+    }
+  }
 
   /** Intended use: Used by other validators to get a free onboarding secret
     *
