@@ -3278,7 +3278,8 @@ object HttpScanAppClient {
   }
 
   case class GetBulkAcsSnapshot(
-      atOrBeforeTimestamp: CantonTimestamp
+      atOrBeforeTimestamp: CantonTimestamp,
+      damlValueEncoding: Option[definitions.DamlValueEncoding],
   ) extends InternalBaseCommand[
         http.ListBulkAcsSnapshotObjectsResponse,
         definitions.ListBulkAcsSnapshotObjectsResponse,
@@ -3289,6 +3290,7 @@ object HttpScanAppClient {
     ): EitherT[Future, Either[Throwable, HttpResponse], ListBulkAcsSnapshotObjectsResponse] =
       client.listBulkAcsSnapshotObjects(
         atOrBeforeTimestamp.toInstant.atOffset(java.time.ZoneOffset.UTC),
+        damlValueEncoding,
         headers,
       )
 
@@ -3313,6 +3315,7 @@ object HttpScanAppClient {
       endRecordTime: CantonTimestamp,
       nextPageToken: Option[String],
       limit: Int,
+      damlValueEncoding: Option[definitions.DamlValueEncoding],
   ) extends InternalBaseCommand[
         http.ListBulkUpdateHistoryObjectsResponse,
         definitions.ListBulkUpdateHistoryObjectsResponse,
@@ -3327,6 +3330,7 @@ object HttpScanAppClient {
           endRecordTime.toInstant.atOffset(java.time.ZoneOffset.UTC),
           nextPageToken,
           limit,
+          damlValueEncoding,
         ),
         headers,
       )

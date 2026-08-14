@@ -156,6 +156,12 @@ object ScanStorageConfig {
         extends Encoding("protobuf_json", definitions.DamlValueEncoding.ProtobufJson)
 
     lazy val all: NonEmptyList[Encoding] = NonEmptyList.of[Encoding](CompactJson, ProtobufJson)
+
+    def fromDamlValueEncoding(damlValueEncoding: definitions.DamlValueEncoding): Encoding =
+      damlValueEncoding match {
+        case definitions.DamlValueEncoding.members.CompactJson => CompactJson
+        case definitions.DamlValueEncoding.members.ProtobufJson => ProtobufJson
+      }
   }
 }
 
