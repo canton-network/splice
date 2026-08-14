@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.scan.store.bulk
 
+import cats.data.NonEmptyList
 import com.daml.metrics.api.MetricsContext
 import com.daml.metrics.api.noop.NoOpMetricsFactory
 import com.daml.metrics.api.testing.InMemoryMetricsFactory
@@ -278,10 +279,15 @@ class AcsSnapshotBulkStorageWriterFromDbTest
       def assertGetObjects(
           queryTs: CantonTimestamp,
           expectedTs: CantonTimestamp,
+          encoding: ScanStorageConfig.Encoding,
           expectedNumObjects: Int,
       ) = {
-        val getObjectsResult =
-          reader.getCommittedObjectsForAcsSnapshotAtOrBefore(queryTs).futureValue
+        val getObjectsResult = reader
+          .getCommittedObjectsForAcsSnapshotAtOrBefore(
+            queryTs,
+            NonEmptyList.one(encoding),
+          )
+          .futureValue
         val objectKeys = getObjectsResult.objects.map(_.key).sortBy { key =>
           """_(\d+)\.zstd$""".r
             .findFirstMatchIn(key)
@@ -290,8 +296,7 @@ class AcsSnapshotBulkStorageWriterFromDbTest
         }
         objectKeys should contain theSameElementsInOrderAs
           (0 until expectedNumObjects).map(i =>
-            s"$expectedTs~${expectedTs
-                .add(1.days)}/${ScanStorageConfig.Encoding.CompactJson.storageKey("ACS", i)}"
+            s"$expectedTs~${expectedTs.add(1.days)}/${encoding.storageKey("ACS", i)}"
           )
         getObjectsResult.objects.map(_.checksum).foreach {
           // We test elsewhere that computed and persisted checksums are correct, so here we just check that they are present and not empty
@@ -300,7 +305,13 @@ class AcsSnapshotBulkStorageWriterFromDbTest
         succeed
       }
 
-      val ex = reader.getCommittedObjectsForAcsSnapshotAtOrBefore(ts1).failed.futureValue
+      val ex = reader
+        .getCommittedObjectsForAcsSnapshotAtOrBefore(
+          ts1,
+          ScanStorageConfig.Encoding.all,
+        )
+        .failed
+        .futureValue
       ex shouldBe a[StatusRuntimeException]
       ex.asInstanceOf[StatusRuntimeException]
         .getStatus
@@ -320,7 +331,8 @@ class AcsSnapshotBulkStorageWriterFromDbTest
             persistedTs1 shouldBe Some(TimestampWithMigrationId(ts1, 0))
           }
           assertLatestSnapshotInMetrics(ts1)
-          assertGetObjects(ts1, ts1, 12)
+          assertGetObjects(ts1, ts1, ScanStorageConfig.Encoding.CompactJson, 12)
+          assertGetObjects(ts1, ts1, ScanStorageConfig.Encoding.ProtobufJson, 13)
         }
 
         clue(
@@ -338,7 +350,8 @@ class AcsSnapshotBulkStorageWriterFromDbTest
             },
           )
           assertLatestSnapshotInMetrics(ts1)
-          assertGetObjects(ts2, ts1, 12)
+          assertGetObjects(ts2, ts1, ScanStorageConfig.Encoding.CompactJson, 12)
+          assertGetObjects(ts2, ts1, ScanStorageConfig.Encoding.ProtobufJson, 13)
         }
 
         clue("Add one more snapshot to the store, at the end of the period") {
@@ -349,11 +362,15 @@ class AcsSnapshotBulkStorageWriterFromDbTest
             persistedTs3.value shouldBe TimestampWithMigrationId(ts3, 0)
           }
           assertLatestSnapshotInMetrics(ts3)
-          assertGetObjects(ts3, ts3, 12)
+          assertGetObjects(ts3, ts3, ScanStorageConfig.Encoding.CompactJson, 12)
+          assertGetObjects(ts3, ts3, ScanStorageConfig.Encoding.ProtobufJson, 13)
         }
 
         val ex1 = reader
-          .getCommittedObjectsForAcsSnapshotAtOrBefore(ts1.minus(java.time.Duration.ofDays(1)))
+          .getCommittedObjectsForAcsSnapshotAtOrBefore(
+            ts1.minus(java.time.Duration.ofDays(1)),
+            ScanStorageConfig.Encoding.all,
+          )
           .failed
           .futureValue
         ex1 shouldBe a[StatusRuntimeException]
