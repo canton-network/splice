@@ -21,14 +21,31 @@ export const scrollContainerSx: SxProps<Theme> = {
 export const scrollTextSx: SxProps<Theme> = {
   display: 'inline-block',
   width: 'max-content',
-  minWidth: '100%',
+  maxWidth: '100%',
   whiteSpace: 'nowrap',
   textOverflow: 'clip',
 };
 
+export const ellipsisContainerSx: SxProps<Theme> = {
+  minWidth: 0,
+  overflow: 'hidden',
+};
+
+export const ellipsisTextSx: SxProps<Theme> = {
+  display: 'block',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+};
+
 export const scrollableIdentifierFieldSx: SxProps<Theme> = {
   fontFamily: 'Source Code Pro, monospace',
-  ...scrollTextSx,
+  display: 'inline-block',
+  width: 'max-content',
+  minWidth: '100%',
+  maxWidth: '100%',
+  whiteSpace: 'nowrap',
+  textOverflow: 'clip',
 };
 
 const scrollableInputTextSx = {

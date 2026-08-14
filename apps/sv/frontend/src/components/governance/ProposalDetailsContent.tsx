@@ -38,6 +38,7 @@ import { useSvAdminClient } from '../../contexts/SvAdminServiceContext';
 import {
   DEFAULT_APP_ACTIVITY_WEIGHT,
   EFFECTIVE_AT_LABEL,
+  PROPOSAL_CREATED_LABEL,
   SUPPORTING_URL_LABEL,
   THRESHOLD_DEADLINE_LABEL,
   VOTE_PROPOSAL_CONTRACT_ID_LABEL,
@@ -355,6 +356,13 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
           />
 
           <DetailItem
+            label={PROPOSAL_CREATED_LABEL}
+            value={proposalDetails.createdAt}
+            labelId="proposal-details-created-at-label"
+            valueId="proposal-details-created-at-value"
+          />
+
+          <DetailItem
             label={THRESHOLD_DEADLINE_LABEL}
             labelId="proposal-details-threshold-deadline-label"
             value={
@@ -549,11 +557,14 @@ const VoteItem: React.FC<VoteItemProps> = ({
       data-testid="proposal-details-vote"
     >
       <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
+        <Box
+          sx={{ display: 'flex', alignItems: 'center', minWidth: 0, maxWidth: isYou ? 350 : 298 }}
+        >
           <MemberIdentifier
             partyId={voter}
             size="large"
             isYou={isYou}
+            overflow="ellipsis"
             data-testid="proposal-details-voter-party-id"
           />
         </Box>

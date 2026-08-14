@@ -27,6 +27,19 @@ describe('CopyableIdentifier', () => {
     expect(screen.getByTestId('contract-id-scroll')).toHaveStyle({ overflowX: 'auto' });
   });
 
+  test('keeps the copy button adjacent to short identifiers', () => {
+    render(
+      <div style={{ width: 800 }}>
+        <CopyableIdentifier value="Digital-Asset-Eng-2" size="large" data-testid="short-id" />
+      </div>
+    );
+
+    expect(screen.getByTestId('short-id')).toHaveStyle({
+      display: 'inline-flex',
+      width: 'fit-content',
+    });
+  });
+
   test('shows a scroll track below the identifier when content overflows', async () => {
     render(
       <NarrowContainer>
@@ -59,6 +72,26 @@ describe('MemberIdentifier', () => {
     expect(screen.getByTestId('member-value')).toHaveTextContent(LONG_PARTY_ID);
     expect(screen.getByTestId('member-value')).not.toHaveTextContent('...');
     expect(screen.getByTestId('member-scroll')).toHaveStyle({ overflowX: 'auto' });
+  });
+
+  test('supports ellipsis overflow for compact layouts', () => {
+    render(
+      <NarrowContainer>
+        <MemberIdentifier
+          partyId={LONG_PARTY_ID}
+          isYou={false}
+          size="large"
+          overflow="ellipsis"
+          data-testid="member"
+        />
+      </NarrowContainer>
+    );
+
+    expect(screen.getByTestId('member-value')).toHaveTextContent(LONG_PARTY_ID);
+    expect(screen.getByTestId('member-value')).toHaveAttribute('title', LONG_PARTY_ID);
+    expect(screen.getByTestId('member-ellipsis')).toHaveStyle({ overflow: 'hidden' });
+    expect(screen.getByTestId('member-value')).toHaveStyle({ textOverflow: 'ellipsis' });
+    expect(screen.queryByTestId('member-scroll')).not.toBeInTheDocument();
   });
 });
 

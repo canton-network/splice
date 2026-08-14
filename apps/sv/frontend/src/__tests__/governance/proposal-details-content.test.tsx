@@ -26,6 +26,7 @@ import { svPartyId } from '../mocks/constants';
 import { Wrapper } from '../helpers';
 import {
   EFFECTIVE_AT_LABEL,
+  PROPOSAL_CREATED_LABEL,
   SUPPORTING_URL_LABEL,
   THRESHOLD_DEADLINE_LABEL,
   VOTE_PROPOSAL_CONTRACT_ID_LABEL,
@@ -205,6 +206,13 @@ describe('Proposal Details Content', () => {
     );
     expect(requesterInput).toBeInTheDocument();
     expect(requesterInput.textContent).toBe('sv1');
+
+    expect(screen.getByTestId('proposal-details-created-at-label').textContent).toBe(
+      PROPOSAL_CREATED_LABEL
+    );
+    expect(screen.getByTestId('proposal-details-created-at-value').textContent).toBe(
+      '2025-01-01 13:00'
+    );
 
     expect(screen.getByTestId('proposal-details-threshold-deadline-label').textContent).toBe(
       THRESHOLD_DEADLINE_LABEL
