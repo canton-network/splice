@@ -11,6 +11,12 @@ cluster:
       maxNodes: 20
       nodeType: n4-standard-16
       zones: '*'
+    - minNodes: 0
+      maxNodes: 20
+      nodeType: c3d-standard-16
+      zones: '*'
+      labels:
+        node-restriction.kubernetes.io/gke-volume-attach-limit-override: '15'
 infra:
   prometheus:
     retentionDuration: "30d"
