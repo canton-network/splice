@@ -107,13 +107,15 @@ data AmuletConfig unit = AmuletConfig with
     featuredAppActivityMarkerAmount : Optional Decimal -- ^ $-amount used for the conversion from FeaturedAppActivityMarker -> AppRewardCoupon
     optDevelopmentFundManager : Optional Party
       -- ^ Party authorized to manage and allocate minting rights from the Development Fund.
-    developmentFundManagerBlacklist : Optional [Party] -- ^ List of misbehaving parties that are not blocked
+    developmentFundManagerBlacklist : Optional [Party]
+      -- ^ List of blocked parties. They cannot allocate new coupons, and the coupons they allocated cannot be minted either.
     externalPartyConfigStateTickDuration : Optional RelTime
       -- ^ Half the lifetime of an `ExternalPartyConfigState` contract and the overlap between two successive contracts. Default: 24h.
     rewardConfig : Optional RewardConfig
       -- ^ Configuration for the reward accounting and calculation. If None, then on-ledger reward tracking is used.
     transferPreapprovalBaseDuration : Optional RelTime -- ^ Base duration of a transfer pre-approval granted for free on creation and renewal. Default: 90 days.
-    minDevelopmentFundMintingDelay: Optional RelTime -- ^ Minimum delay between minting and collecting. Default: 0 days. Explicitly setting it to block downgrades that lack the delay enforcement logic.
+    minDevelopmentFundMintingDelay : Optional RelTime
+      -- ^ Minimum delay between allocation and minting. Default: 0 days. Explicitly setting it to block downgrades that lack the delay enforcement logic.
   deriving (Eq, Show, Serializable)
 
 getExternalPartyConfigStateTickDuration : AmuletConfig a -> RelTime
@@ -149,6 +151,7 @@ validAmuletConfig AmuletConfig
     , transferPreapprovalFee
     , featuredAppActivityMarkerAmount
     , rewardConfig
+    , minDevelopmentFundMintingDelay
     }
   =
     validTransferConfig transferConfig &&
@@ -159,7 +162,8 @@ validAmuletConfig AmuletConfig
     optional True (>= 0.0) transferPreapprovalFee &&
     optional True (>= 0.0) featuredAppActivityMarkerAmount &&
     featuredAppActivityMarkerAmount == Some transferConfig.extraFeaturedAppRewardAmount &&
-    optional True validRewardConfig rewardConfig
+    optional True validRewardConfig rewardConfig &&
+    optional True (>= 0) minDevelopmentFundMintingDelay
 
 validTransferConfig : TransferConfig unit -> Bool
 validTransferConfig TransferConfig

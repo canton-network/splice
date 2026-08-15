@@ -13,7 +13,7 @@ import DA.Foldable (forA_)
 import DA.List (sort, dedupSort, maximumOn)
 import DA.Map (Map)
 import qualified DA.Map as Map
-import DA.Optional (fromOptional, isNone, isSome, optionalToList)
+import DA.Optional (fromOptional, isNone, isSome, optionalToList, whenSome)
 import DA.Set (Set)
 import qualified DA.Set as Set
 import DA.TextMap (TextMap)
@@ -846,6 +846,7 @@ template AmuletRules
         expiresAt : Time
         reason : Text
         fundManager : Party
+        mintAfter : Optional Time
       controller fundManager
       do
         -- Verify expiry
@@ -865,6 +866,13 @@ template AmuletRules
             require ("controller is not a blacklisted fund manager: " <> show fundManager) $
               fundManager `notElem` blacklist
 
+        whenSome configUsd.minDevelopmentFundMintingDelay $ \minDelay->
+          case mintAfter of
+            None -> abort "DevelopmentFundCoupon cannot be allocated without a mintAfter time, as a minimum development fund minting delay is configured"
+            Some mintAfterTime ->
+              assertWithinDeadline "DevelopmentFundCoupon.mintAfter should be after current time + minDevelopmentFundMintingDelay" 
+                  (mintAfterTime `subRelTime` minDelay)
+
         -- Verify the amount and create a leftover UnclaimedDevelopmentFundCoupon if needed
         totalUnclaimedDevelopmentFundCoupons <- sum <$> forA unclaimedDevelopmentFundCouponCids \cid -> do
           coupon <- fetchAndArchive (ForDso with dso) cid
@@ -877,7 +885,7 @@ template AmuletRules
 
         -- record development fund coupon contract
         developmentFundCouponCid <- create DevelopmentFundCoupon with
-          dso; beneficiary; fundManager; amount; expiresAt; reason
+          dso; beneficiary; fundManager; amount; expiresAt; reason; mintAfter
 
         return AmuletRules_AllocateDevelopmentFundCouponResult with
           developmentFundCouponCid
@@ -1498,6 +1506,8 @@ summarizeAndConsumeInputs csum dso sender inps = do
     summarizeAndConsumeInput _round s (InputDevelopmentFundCoupon couponCid) = do
       coupon <- fetchAndArchive forOwner couponCid
       assertWithinDeadline "DevelopmentFundCoupon.expiresAt" coupon.expiresAt
+      whenSome coupon.mintAfter $ \m -> do
+        assertDeadlineExceeded "DevelopmentFundCoupon.mintAfter" m
       return TransferInputsSummary with
         totalAmuletAmount = s.totalAmuletAmount
         totalAppRewardAmount = s.totalAppRewardAmount
