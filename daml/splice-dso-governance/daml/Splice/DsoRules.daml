@@ -126,6 +126,8 @@ data DsoRules_ActionRequiringConfirmation
       -- ^ Voted action to grant a validator license.
   | SRARC_RejectValidatorLicense DsoRules_RejectValidatorLicense
       -- ^ Voted action to reject a validator license request.
+  | SRARC_UnpermissionValidator DsoRules_UnpermissionValidator
+      -- ^ Voted action to update a validator's unpermission state.
   deriving (Eq, Show)
 
 data AnsEntryContext_ActionRequiringConfirmation
@@ -221,6 +223,9 @@ data DsoRules_UpdateFeaturedAppRightResult = DsoRules_UpdateFeaturedAppRightResu
 
 data DsoRules_GrantValidatorLicenseResult = DsoRules_GrantValidatorLicenseResult with
     validatorLicense : ContractId ValidatorLicense
+
+data DsoRules_UnpermissionValidatorResult = DsoRules_UnpermissionValidatorResult with
+    newValidatorUnpermissionCid : ContractId ValidatorUnpermission
 
 data DsoRules_RejectValidatorLicenseResult = DsoRules_RejectValidatorLicenseResult {}
 
@@ -1071,6 +1076,29 @@ template DsoRules with
         exercise validatorLicenseRequestCid ValidatorLicenseRequest_Expire
         return DsoRules_ExpireValidatorLicenseRequestResult
 
+    nonconsuming choice DsoRules_UnpermissionValidator : DsoRules_UnpermissionValidatorResult
+      with
+        validatorUnpermissionCid : ContractId ValidatorUnpermission
+        newLoginAfter : Optional Time
+        newRevoked : Bool
+        optValidatorLicenseCid : Optional (ContractId ValidatorLicense)
+      controller dso
+      do
+        _ <- fetchChecked (ForDso with dso) validatorUnpermissionCid
+
+        newValidatorUnpermissionCid <- exercise validatorUnpermissionCid ValidatorUnpermission_Update with
+          newLoginAfter
+          newRevoked
+
+        if newRevoked then
+          forA_ optValidatorLicenseCid $ \licenseCid -> do
+            _ <- fetchChecked (ForDso with dso) licenseCid
+            void $ exercise licenseCid ValidatorLicense_Withdraw with reason = "Permanently unpermissioned by SV vote"
+        else
+          pure ()
+
+        return DsoRules_UnpermissionValidatorResult with ..
+
     nonconsuming choice DsoRules_GrantValidatorLicense : DsoRules_GrantValidatorLicenseResult
       with
         validatorLicenseRequestCid : ContractId ValidatorLicenseRequest
@@ -1086,6 +1114,11 @@ template DsoRules with
           faucetState = None
           metadata = fmap (\version -> ValidatorLicenseMetadata with version; contactPoint = fromOptional "" request.contactPoint; lastUpdatedAt = now) request.version
           lastActiveAt = Some now
+        void $ create ValidatorUnpermission with
+          dso
+          validator = request.validator
+          loginAfter = None
+          revoked = False
         return DsoRules_GrantValidatorLicenseResult with ..
 
     nonconsuming choice DsoRules_RejectValidatorLicense : DsoRules_RejectValidatorLicenseResult
@@ -1903,6 +1936,7 @@ executeActionRequiringConfirmation dso dsoRulesCid amuletRulesCid act = case act
       SRARC_CreateBootstrapExternalPartyConfigStateInstruction choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_GrantValidatorLicense choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_RejectValidatorLicense choiceArg -> void $ exercise dsoRulesCid choiceArg
+      SRARC_UnpermissionValidator choiceArg -> void $ exercise dsoRulesCid choiceArg
   ARC_AnsEntryContext with .. -> do
     void $ fetchChecked (ForDso with dso) ansEntryContextCid
     case ansEntryContextAction of

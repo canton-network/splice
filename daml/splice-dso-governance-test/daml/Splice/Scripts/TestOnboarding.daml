@@ -710,4 +710,59 @@ testValidatorLicenseRequest = do
   reqs3 <- queryFilter @ValidatorLicenseRequest dso (\r -> r.validator == v1)
   assert (null reqs3)
 
+  v2 <- allocateParty "v2"
+  reqV2Cid <- submit v2 $ createCmd ValidatorLicenseRequest with
+    validator = v2
+    dso = dso
+    version = Some "1.0.0"
+    contactPoint = Some "v2@example.com"
+    expiresAt = requestExpiresAt
+
+  forA_ [sv1, sv2, sv3] $ \sv ->
+    submit (actAs sv <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_ConfirmAction with
+      confirmer = sv
+      action = ARC_DsoRules with
+        dsoAction = SRARC_GrantValidatorLicense $ DsoRules_GrantValidatorLicense reqV2Cid
+
+  executeAllConfirmedActions app
+
+  -- Check that the ValidatorUnpermission contract was created
+  [(unpermissionCid, unpermission)] <- queryFilter @ValidatorUnpermission dso (\u -> u.validator == v2)
+  unpermission.revoked === False
+  unpermission.loginAfter === None
+  [(licenseCid, _)] <- queryFilter @ValidatorLicense dso (\l -> l.validator == v2)
+
+  -- SVs vote to temporarily suspend the validator
+  let suspendTime = now `addRelTime` hours 1
+
+  forA_ [sv1, sv2, sv3] $ \sv ->
+    submit (actAs sv <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_ConfirmAction with
+      confirmer = sv
+      action = ARC_DsoRules with
+        dsoAction = SRARC_UnpermissionValidator $ DsoRules_UnpermissionValidator unpermissionCid (Some suspendTime) False None
+
+  executeAllConfirmedActions app
+
+  -- Check temporary suspension succeeded
+  [(unpermissionCid2, unpermission2)] <- queryFilter @ValidatorUnpermission dso (\u -> u.validator == v2)
+  unpermission2.revoked === False
+  unpermission2.loginAfter === Some suspendTime
+
+  -- SVs vote to permanently revoke the validator
+  forA_ [sv1, sv2, sv3] $ \sv ->
+    submit (actAs sv <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_ConfirmAction with
+      confirmer = sv
+      action = ARC_DsoRules with
+        dsoAction = SRARC_UnpermissionValidator $ DsoRules_UnpermissionValidator unpermissionCid2 None True (Some licenseCid)
+
+  executeAllConfirmedActions app
+
+  -- Check permanent revocation succeeded
+  [(_, unpermission3)] <- queryFilter @ValidatorUnpermission dso (\u -> u.validator == v2)
+  unpermission3.revoked === True
+
+  -- Check that the ValidatorLicense was successfully archived
+  licensesAfterRevoke <- queryFilter @ValidatorLicense dso (\l -> l.validator == v2)
+  assert (null licensesAfterRevoke)
+
   pure ()

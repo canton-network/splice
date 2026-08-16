@@ -255,8 +255,37 @@ template ValidatorLicenseRequest with
         assertDeadlineExceeded "expiresAt" expiresAt
         return ValidatorLicenseRequest_ExpireResult {}
 
+-- | ValidatorUnpermission contract is created alongside the ValidatorLicense to manage
+-- the validator's permissions on the synchronizer.
+-- We opted to create ValidatorUnpermission together with validatorLicense, instead of later (for e.g. when validator is
+-- unpermissioned for the first time),
+-- to avoid possible race conditions (for e.g. when more that 2 validator unpermission vote requests are initiated
+-- concurrently) and to avoid needing periodic merge logic.
+template ValidatorUnpermission
+  with
+    dso : Party
+    validator : Party
+    loginAfter : Optional Time
+    revoked : Bool
+  where
+    signatory dso
+    observer validator
+
+    choice ValidatorUnpermission_Update : ContractId ValidatorUnpermission
+      with
+        newLoginAfter : Optional Time
+        newRevoked : Bool
+      controller dso
+      do
+        create this with
+          loginAfter = newLoginAfter
+          revoked = newRevoked
+
 -- instances
 ------------
+
+instance HasCheckedFetch ValidatorUnpermission ForDso where
+  contractGroupId ValidatorUnpermission{..} = ForDso with dso
 
 instance HasCheckedFetch ValidatorFaucetCoupon ForOwner where
   contractGroupId ValidatorFaucetCoupon{..} = ForOwner with dso; owner = validator
