@@ -1086,9 +1086,11 @@ template DsoRules with
       do
         _ <- fetchChecked (ForDso with dso) validatorUnpermissionCid
 
-        newValidatorUnpermissionCid <- exercise validatorUnpermissionCid ValidatorUnpermission_Update with
+        updateResult <- exercise validatorUnpermissionCid ValidatorUnpermission_Update with
           newLoginAfter
           newRevoked
+
+        let newValidatorUnpermissionCid = updateResult.newValidatorUnpermissionCid
 
         if newRevoked then
           forA_ optValidatorLicenseCid $ \licenseCid -> do
