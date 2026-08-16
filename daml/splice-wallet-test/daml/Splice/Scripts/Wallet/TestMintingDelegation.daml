@@ -85,6 +85,7 @@ testMintingDelegation = do
     amount = developmentFundCouponAmount
     expiresAt = now `addRelTime` days 60
     reason = "Test development fund coupon"
+    mintAfter = None
 
   let rewardCouponV2Amount = 42.0
   rewardCouponV2Cid <- submit app.dso $ createCmd RewardCouponV2 with

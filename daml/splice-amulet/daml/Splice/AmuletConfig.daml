@@ -121,6 +121,9 @@ data AmuletConfig unit = AmuletConfig with
 getExternalPartyConfigStateTickDuration : AmuletConfig a -> RelTime
 getExternalPartyConfigStateTickDuration config = fromOptional (hours 24) config.externalPartyConfigStateTickDuration
 
+getDevelopmentFundManagerBlacklist : AmuletConfig unit -> Optional [Party]
+getDevelopmentFundManagerBlacklist config = Some (fromOptional [] config.developmentFundManagerBlacklist)
+
 -- | $1/year specified as a daily rate
 defaultTransferPreapprovalFee : Decimal
 defaultTransferPreapprovalFee = 0.00274
@@ -163,7 +166,7 @@ validAmuletConfig AmuletConfig
     optional True (>= 0.0) featuredAppActivityMarkerAmount &&
     featuredAppActivityMarkerAmount == Some transferConfig.extraFeaturedAppRewardAmount &&
     optional True validRewardConfig rewardConfig &&
-    optional True (>= 0) minDevelopmentFundMintingDelay
+    optional True (>= days 0) minDevelopmentFundMintingDelay
 
 validTransferConfig : TransferConfig unit -> Bool
 validTransferConfig TransferConfig

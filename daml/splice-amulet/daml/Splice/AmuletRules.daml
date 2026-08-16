@@ -37,7 +37,8 @@ import Splice.Amulet.RewardAccountingV2
 import Splice.Amulet.TokenApiUtils
 import Splice.AmuletConfig
   ( transferConfigToTransferConfigV2, AmuletConfig(..), TransferConfig(..), TransferConfigV2(..), validAmuletConfig
-  , defaultTransferPreapprovalFee, getExternalPartyConfigStateTickDuration, getTransferPreapprovalBaseDuration, useTrafficBasedAppRewards
+  , defaultTransferPreapprovalFee, getDevelopmentFundManagerBlacklist, getExternalPartyConfigStateTickDuration
+  , getTransferPreapprovalBaseDuration, useTrafficBasedAppRewards
   , RewardVersion(..), useFeaturedAppMarkers
   )
 import qualified Splice.AmuletConfig as Unit
@@ -212,10 +213,12 @@ template AmuletRules
       controller Set.toList (transferControllers transfer)
       do
         checkExpectedDso dso expectedDso
+        configUsd <- getValueAsOfLedgerTime configSchedule
         let rewardsConfig = RewardsIssuanceConfig with
               issueAppRewards = True
               issueValidatorRewards = True
-        executeTransfer (toInterfaceContractId self) rewardsConfig context dso transfer
+        executeTransfer (toInterfaceContractId self) rewardsConfig context dso
+          (getDevelopmentFundManagerBlacklist configUsd) transfer
 
     nonconsuming choice AmuletRules_CreateExternalPartySetupProposal : AmuletRules_CreateExternalPartySetupProposalResult
       -- ^ Propose to host an external party
@@ -308,7 +311,8 @@ template AmuletRules
           Left failureStatus -> failWithStatus failureStatus
           Right _ -> pure ()
         (trafficCostAmulet, trafficCostUsd) <- computeSynchronizerFees dso provider trafficAmount this context
-        (transferResult, meta) <- splitAndBurn (toInterfaceContractId self) provider trafficCostAmulet inputs context dso "traffic purchase"
+        (transferResult, meta) <- splitAndBurn (toInterfaceContractId self) provider trafficCostAmulet inputs context dso
+          (getDevelopmentFundManagerBlacklist configUsd) "traffic purchase"
         -- create a new MemberTraffic contract for the purchased traffic
         purchasedTraffic <- create MemberTraffic with
           dso
@@ -866,12 +870,12 @@ template AmuletRules
             require ("controller is not a blacklisted fund manager: " <> show fundManager) $
               fundManager `notElem` blacklist
 
-        whenSome configUsd.minDevelopmentFundMintingDelay $ \minDelay->
+        whenSome configUsd.minDevelopmentFundMintingDelay $ \minDelay ->
           case mintAfter of
             None -> abort "DevelopmentFundCoupon cannot be allocated without a mintAfter time, as a minimum development fund minting delay is configured"
             Some mintAfterTime ->
-              assertWithinDeadline "DevelopmentFundCoupon.mintAfter should be after current time + minDevelopmentFundMintingDelay" 
-                  (mintAfterTime `subRelTime` minDelay)
+              assertWithinDeadline "DevelopmentFundCoupon.mintAfter should be after current time + minDevelopmentFundMintingDelay"
+                  (addRelTime mintAfterTime (negate minDelay))
 
         -- Verify the amount and create a leftover UnclaimedDevelopmentFundCoupon if needed
         totalUnclaimedDevelopmentFundCoupons <- sum <$> forA unclaimedDevelopmentFundCouponCids \cid -> do
@@ -1155,11 +1159,11 @@ data RewardsIssuanceConfig = RewardsIssuanceConfig with
   deriving (Serializable)
 
 -- | Execute a transfer.
-executeTransfer : ContractId TransferEventsV2.EventLog -> RewardsIssuanceConfig -> TransferContext -> Party -> Transfer -> Update TransferResult
-executeTransfer eventLogCid config context dso t = do
+executeTransfer : ContractId TransferEventsV2.EventLog -> RewardsIssuanceConfig -> TransferContext -> Party -> Optional [Party] -> Transfer -> Update TransferResult
+executeTransfer eventLogCid config context dso optBlacklist t = do
   -- compute summaries
   csum <- summarizeAndValidateContext eventLogCid context dso t
-  executeTransfer' config csum dso t
+  executeTransfer' config csum dso optBlacklist t
 
 -- | Execute a transfer for external parties so that the prepared tx remains valid for 24h
 executeExternalPartyTransfer : Party -> ExternalPartyTransferContext -> Transfer -> Update TransferResult
@@ -1168,12 +1172,14 @@ executeExternalPartyTransfer dso context t = do
   let rewardsConfig = RewardsIssuanceConfig with
         issueAppRewards = True
         issueValidatorRewards = False -- doesn't matter with fees = 0
-  executeTransfer' rewardsConfig csum dso t
+  -- The development fund manager blacklist is not enforced on here since `AmuletConfig` is not accessible.
+  -- The standard collection paths for both internal and external parties go through `AmuletRules_Transfer` which does enforce it.
+  executeTransfer' rewardsConfig csum dso None t
 
 
-executeTransfer' : RewardsIssuanceConfig -> TransferContextSummaryV2 -> Party -> Transfer -> Update TransferResult
-executeTransfer' config csum dso t = do
-  isum <- summarizeAndConsumeInputs csum dso t.sender t.inputs
+executeTransfer' : RewardsIssuanceConfig -> TransferContextSummaryV2 -> Party -> Optional [Party] -> Transfer -> Update TransferResult
+executeTransfer' config csum dso optBlacklist t = do
+  isum <- summarizeAndConsumeInputs csum dso optBlacklist t.sender t.inputs
   osum <- preprocessOutputs csum.config t.outputs
   summary <- summarizeTransfer t.sender csum.openRoundNumber csum.amuletPrice csum.config isum osum
   -- check that overall transfer constraints are satisfied
@@ -1371,8 +1377,8 @@ getIssuingMiningRound csum round = do
     Some issuingRound -> pure issuingRound
 
 summarizeAndConsumeInputs
-  : TransferContextSummaryV2 -> Party -> Party -> [TransferInput] -> Update TransferInputsSummary
-summarizeAndConsumeInputs csum dso sender inps = do
+  : TransferContextSummaryV2 -> Party -> Optional [Party] -> Party -> [TransferInput] -> Update TransferInputsSummary
+summarizeAndConsumeInputs csum dso optBlacklist sender inps = do
     foldlA (summarizeAndConsumeInput csum.openRoundNumber) initialSummary inps
   where
     forOwner = ForOwner with dso; owner = sender
@@ -1505,6 +1511,11 @@ summarizeAndConsumeInputs csum dso sender inps = do
 
     summarizeAndConsumeInput _round s (InputDevelopmentFundCoupon couponCid) = do
       coupon <- fetchAndArchive forOwner couponCid
+      case optBlacklist of
+        None -> abort "DevelopmentFundCoupon cannot be minted in a transfer that does not resolve AmuletRules"
+        Some blacklist ->
+          require "DevelopmentFundCoupon.fundManager is not blacklisted"
+            (coupon.fundManager `notElem` blacklist)
       assertWithinDeadline "DevelopmentFundCoupon.expiresAt" coupon.expiresAt
       whenSome coupon.mintAfter $ \m -> do
         assertDeadlineExceeded "DevelopmentFundCoupon.mintAfter" m
@@ -2258,13 +2269,13 @@ computeTransferPreapprovalFee duration amuletConfig context dso = do
   let feeAmulet = feeUsd / contextMiningRound.amuletPrice
   pure (feeAmulet, feeUsd)
 
-splitAndBurn : ContractId TransferEventsV2.EventLog -> Party -> Decimal -> [TransferInput] -> TransferContext -> Party -> Text -> Update (TransferResult, Metadata)
-splitAndBurn eventLogCid sender amount inputs context dso usage = do
+splitAndBurn : ContractId TransferEventsV2.EventLog -> Party -> Decimal -> [TransferInput] -> TransferContext -> Party -> Optional [Party] -> Text -> Update (TransferResult, Metadata)
+splitAndBurn eventLogCid sender amount inputs context dso optBlacklist usage = do
 -- do not create activity records as part of the transfer. We create a validator activity record for the full burn below.
   let rewardsConfig = RewardsIssuanceConfig with
         issueAppRewards = False
         issueValidatorRewards = False
-  transferResult <- executeTransfer eventLogCid rewardsConfig context dso Transfer with
+  transferResult <- executeTransfer eventLogCid rewardsConfig context dso optBlacklist Transfer with
     sender
     provider = sender
     inputs
@@ -2342,7 +2353,8 @@ payForTransferPreapproval reason dso provider context inputs expiresAt newExpire
         , emptyMetadata)
     else do
       (amuletPaid, _) <- computeTransferPreapprovalFee paidExtension configUsd context.context dso
-      (transferResult, meta) <- splitAndBurn (toInterfaceContractId context.amuletRules) provider amuletPaid inputs context.context dso reason
+      (transferResult, meta) <- splitAndBurn (toInterfaceContractId context.amuletRules) provider amuletPaid inputs context.context dso
+        (getDevelopmentFundManagerBlacklist configUsd) reason
       pure (amuletPaid, transferResult, meta)
 
 -- Token standard context parsing

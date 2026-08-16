@@ -720,6 +720,7 @@ allocateDevelopmentFundCoupon app fundManager beneficiary amount expiresAt reaso
     expiresAt
     reason
     fundManager
+    mintAfter = None
 
 -- Metadata verification
 ------------------------

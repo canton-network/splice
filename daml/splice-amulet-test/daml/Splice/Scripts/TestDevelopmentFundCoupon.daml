@@ -71,6 +71,7 @@ testAllocateDevelopmentFundCoupon = do
     amount = firstAllocationAmount
     expiresAt
     reason
+    mintAfter = None
   leftOverUnclaimedDevelopmentFundCoupon === UnclaimedDevelopmentFundCoupon with
     dso = app.dso
     amount = secondAllocationAmount
@@ -87,6 +88,7 @@ testAllocateDevelopmentFundCoupon = do
     amount = secondAllocationAmount
     expiresAt
     reason
+    mintAfter = None
 
   pure ()
 
@@ -202,6 +204,7 @@ allocateDevelopmentFundCouponMustFail app fundManager beneficiary amount expires
       expiresAt
       reason
       fundManager
+      mintAfter = None
 
 createDevelopmentFundCoupon : AmuletApp -> Party -> Party -> Decimal -> Time -> Text -> Script (ContractId DevelopmentFundCoupon)
 createDevelopmentFundCoupon app fundManager beneficiary amount expiresAt reason =
@@ -213,6 +216,7 @@ createDevelopmentFundCoupon app fundManager beneficiary amount expiresAt reason 
       amount
       expiresAt
       reason
+      mintAfter = None
 
 rejectDevelopmentFundCoupon : Party -> Text -> ContractId DevelopmentFundCoupon -> Script (ContractId UnclaimedDevelopmentFundCoupon)
 rejectDevelopmentFundCoupon fundManager reason developmentFundCouponCid =
