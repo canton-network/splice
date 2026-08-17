@@ -99,7 +99,7 @@ spec:
           - name: DATA_SOURCE_PASS_FILE
             value: /tmp/pwd
           - name: DATA_SOURCE_USER
-            value: cnadmin
+            value: {{ $persistence.user | default "cnadmin" }}
           - name: DATA_SOURCE_URI
             value: {{ $persistence.host  }}:{{ $persistence.port | default 5432 }}/{{ $.persistence.databaseName }}?sslmode=disable
         command:
@@ -123,7 +123,7 @@ spec:
           - 'bash'
           - '-c'
           - |
-            until errmsg=$(psql -h {{ $persistence.host }} -p {{ $persistence.port }} --username=cnadmin --dbname={{ $persistence.databaseName }} -p {{ $persistence.port | default 5432 }} -c 'select 1' 2>&1); do
+            until errmsg=$(psql -h {{ $persistence.host }} -p {{ $persistence.port }} --username={{ $persistence.user | default "cnadmin" }} --dbname={{ $persistence.databaseName }} -p {{ $persistence.port | default 5432 }} -c 'select 1' 2>&1); do
                 echo "Waiting for database {{ $persistence.databaseName }}, at hostname {{ $persistence.host }}, port {{ $persistence.port | default 5432 }} to be accessible. Last error: $errmsg"
                 sleep 2;
             done

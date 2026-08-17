@@ -33,6 +33,10 @@ persistence:
   port: 5432
   user: cnadmin
   secretName: "postgres-secrets"
+  # Postgres role the charts connect as, including the pg-init containers (default cnadmin)
+  # user: cnadmin
+  # Database the pg-init container connects to in order to CREATE the target database (default cantonnet)
+  # bootstrapDatabaseName: cantonnet
   enablePgInitContainer: true
   initImageName: "postgres:14"
   # Optional: Provide raw strings to override the default Kubernetes secret injection.

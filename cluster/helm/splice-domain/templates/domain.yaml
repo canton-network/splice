@@ -131,7 +131,7 @@ spec:
             - 'bash'
             - '-c'
             - |
-              until errmsg=$(psql -h {{ .Values.sequencer.persistence.host }} -p {{ .Values.sequencer.persistence.port }} --username=cnadmin --dbname=cantonnet -c 'create database {{ .Values.sequencer.persistence.databaseName }}' 2>&1); do
+              until errmsg=$(psql -h {{ .Values.sequencer.persistence.host }} -p {{ .Values.sequencer.persistence.port }} --username={{ .Values.sequencer.persistence.user | default "cnadmin" }} --dbname={{ .Values.sequencer.persistence.bootstrapDatabaseName | default "cantonnet" }} -c 'create database {{ .Values.sequencer.persistence.databaseName }}' 2>&1); do
                 if [[ $errmsg == *"already exists"* ]]; then
                   echo "Database {{ .Values.sequencer.persistence.databaseName }} already exists. Done."
                   break
@@ -162,7 +162,7 @@ spec:
             - 'bash'
             - '-c'
             - |
-              until errmsg=$(psql -h {{ .Values.mediator.persistence.host }} -p {{ .Values.mediator.persistence.port }} --username=cnadmin --dbname=cantonnet -c 'create database {{ .Values.mediator.persistence.databaseName }}' 2>&1); do
+              until errmsg=$(psql -h {{ .Values.mediator.persistence.host }} -p {{ .Values.mediator.persistence.port }} --username={{ .Values.mediator.persistence.user | default "cnadmin" }} --dbname={{ .Values.mediator.persistence.bootstrapDatabaseName | default "cantonnet" }} -c 'create database {{ .Values.mediator.persistence.databaseName }}' 2>&1); do
                 if [[ $errmsg == *"already exists"* ]]; then
                   echo "Database {{ .Values.mediator.persistence.databaseName }} already exists. Done."
                   break
