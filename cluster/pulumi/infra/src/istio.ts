@@ -840,13 +840,13 @@ function configureSequencerHighPerformanceGrpcDestinationRule(
         },
         connectionPool: {
           http: {
-            http1MaxPendingRequests: 10000,
-            http2MaxRequests: 10000,
-            maxConcurrentStreams: 10000,
+            http1MaxPendingRequests: 20000,
+            http2MaxRequests: 20000,
+            maxConcurrentStreams: 20000,
             maxRequestsPerConnection: 0,
           },
           tcp: {
-            maxConnections: 10000,
+            maxConnections: 20000,
           },
         },
       },
