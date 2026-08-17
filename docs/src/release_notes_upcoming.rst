@@ -20,3 +20,6 @@ release-notes:: Upcoming
           vote requests by their state relative to the SV (``action_needed``, ``in_progress``,
           ``ready_to_close``), allowing SV operators to alert on vote proposals that require
           their vote.
+
+        - Verdicts returned by the ``/v0/events`` and ``/v0/events/{update_id}`` endpoints now
+          include an optional ``round_number`` field, the mining round active at the verdict's record time.
