@@ -155,6 +155,9 @@ spec:
                 echo "trying to create postgres database {{ .Values.mediator.persistence.databaseName }}, last error: $errmsg";
                 sleep 2;
               done
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -227,5 +230,5 @@ data:
 {{ .Files.Get "files/logback.xml" | indent 4 }}
 ---
 {{- if .Values.enablePostgresMetrics }}
-{{- include "splice-util-lib.postgres-metrics" (dict "persistence" .Values.mediator.persistence "namespace" .Release.Namespace "nodeSelector" .Values.nodeSelector "affinity" .Values.affinity "tolerations" .Values.tolerations "serviceAccountName" .Values.serviceAccountName ) }}
+{{- include "splice-util-lib.postgres-metrics" (dict "persistence" .Values.mediator.persistence "namespace" .Release.Namespace "nodeSelector" .Values.nodeSelector "affinity" .Values.affinity "tolerations" .Values.tolerations "priorityClassName" .Values.priorityClassName "serviceAccountName" .Values.serviceAccountName ) }}
 {{- end}}
