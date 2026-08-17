@@ -24,7 +24,6 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
-  "id": 9858,
   "links": [],
   "panels": [
     {
@@ -89,7 +88,7 @@
         "showThresholdMarkers": true,
         "sizing": "auto"
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "datasource": {
@@ -146,6 +145,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -193,7 +193,7 @@
           "sort": "desc"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "datasource": {
@@ -250,6 +250,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -297,7 +298,7 @@
           "sort": "desc"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "datasource": {
@@ -361,6 +362,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -407,7 +409,7 @@
           "sort": "desc"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "datasource": {
@@ -476,6 +478,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -522,7 +525,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "datasource": {
@@ -573,6 +576,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -620,7 +624,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "datasource": {
@@ -640,7 +644,6 @@
           },
           "editorMode": "code",
           "expr": "sum by(jvm_gc_action, jvm_gc_name, container, pod, namespace) (histogram_avg(rate(jvm_gc_duration_seconds{namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\", service=~\"$app\"}[$__rate_interval])))",
-          "hide": false,
           "legendFormat": "avg {{namespace}} {{jvm_gc_name}} {{jvm_gc_action}} {{pod}} {{container}}",
           "range": true,
           "refId": "B"
@@ -696,6 +699,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -743,7 +747,7 @@
           "sort": "desc"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "datasource": {
@@ -794,6 +798,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -841,7 +846,7 @@
           "sort": "desc"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "datasource": {
@@ -892,6 +897,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -939,7 +945,7 @@
           "sort": "desc"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "datasource": {
@@ -990,6 +996,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -1037,7 +1044,7 @@
           "sort": "desc"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "datasource": {
@@ -1088,6 +1095,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -1135,7 +1143,7 @@
           "sort": "desc"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "datasource": {
@@ -1143,7 +1151,7 @@
             "uid": "${datasource}"
           },
           "editorMode": "code",
-          "expr": "jvm_buffer_memory_usage_bytes{namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\", service=~\"$app\"}",
+          "expr": "jvm_buffer_memory_used_bytes{namespace=~\"$namespace\", pod=~\"$pod\", container=~\"$container\", service=~\"$app\"}",
           "legendFormat": "{{pod}} {{container}} - {{jvm_buffer_pool_name}}",
           "range": true,
           "refId": "A"
@@ -1186,6 +1194,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -1233,7 +1242,7 @@
           "sort": "desc"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "datasource": {
@@ -1253,7 +1262,7 @@
   ],
   "preload": false,
   "refresh": "",
-  "schemaVersion": 41,
+  "schemaVersion": 42,
   "tags": [
     "jvm"
   ],
@@ -1299,14 +1308,13 @@
         },
         "refresh": 2,
         "regex": "",
+        "regexApplyTo": "value",
         "type": "query"
       },
       {
         "allValue": ".*",
         "current": {
-          "text": [
-            "All"
-          ],
+          "text": "All",
           "value": [
             "$__all"
           ]
@@ -1329,6 +1337,7 @@
         },
         "refresh": 2,
         "regex": "",
+        "regexApplyTo": "value",
         "sort": 1,
         "type": "query"
       },
@@ -1358,6 +1367,7 @@
         },
         "refresh": 2,
         "regex": "",
+        "regexApplyTo": "value",
         "sort": 1,
         "type": "query"
       },
@@ -1365,9 +1375,7 @@
         "allValue": ".*",
         "current": {
           "text": "All",
-          "value": [
-            "$__all"
-          ]
+          "value": "$__all"
         },
         "datasource": {
           "type": "prometheus",
@@ -1387,6 +1395,7 @@
         },
         "refresh": 2,
         "regex": "",
+        "regexApplyTo": "value",
         "sort": 1,
         "type": "query"
       }
@@ -1400,5 +1409,6 @@
   "timezone": "",
   "title": "JVM Metrics",
   "uid": "rgt7PhA4z",
-  "version": 1
+  "version": 1,
+  "weekStart": ""
 }

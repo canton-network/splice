@@ -2,6 +2,7 @@ package org.lfdecentralizedtrust.splice.util
 
 import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.admin.api.client.data.GrpcSequencerConnection
+import com.digitalasset.canton.integration.util.MultiSynchronizerFeatureFlag
 import com.digitalasset.canton.topology.PartyId
 import org.lfdecentralizedtrust.splice.codegen.java.splice.splitwell as splitwellCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.payment as walletCodegen
@@ -42,8 +43,13 @@ trait SplitwellTestUtil extends TestCommon with WalletTestUtil with TimeTestUtil
     actAndCheck(
       timeUntilSuccess = 40.seconds
     )(
-      "Connect splitwell upgrade domain",
-      participant.synchronizers.connect(splitwellUpgradeAlias, url),
+      "Connect splitwell upgrade domain", {
+        participant.synchronizers.connect(splitwellUpgradeAlias, url)
+        participant.upload_dar_unless_exists(splitwellDarPath)
+        participant.synchronizers.list_connected().foreach { sync =>
+          MultiSynchronizerFeatureFlag.enable(Seq(participant), sync.synchronizerId)
+        }
+      },
     )(
       s"Wait for splitwell upgrade domain to be connected for party $ensurePartyIsOnNewDomain",
       _ => {

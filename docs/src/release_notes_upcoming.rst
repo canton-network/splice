@@ -6,3 +6,17 @@
 .. NOTE: add your upcoming release notes below this line. They are included in the `release_notes.rst`.
 
 release-notes:: Upcoming
+
+    - Scan app
+
+        - The ``enable-app-activity-record-and-traffic-ingestion`` and
+          ``serve-app-activity-records-and-traffic`` configuration options have been removed. App
+          activity records and sequencer traffic are now always ingested, and app activity is
+          always computed and served on the corresponding HTTP endpoints.
+
+    - SV App
+
+        - The SV app now exposes a ``splice.sv_vote_requests.active`` metric counting the active
+          vote requests by their state relative to the SV (``action_needed``, ``in_progress``,
+          ``ready_to_close``), allowing SV operators to alert on vote proposals that require
+          their vote.

@@ -144,16 +144,12 @@ class ScanApp(
         nodeMetrics.grpcClientMetrics,
         retryProvider,
       ),
-      if (config.enableAppActivityRecordAndTrafficIngestion) {
-        Some(
-          new SequencerTrafficClient(
-            syncConfig.sequencer,
-            retryProvider,
-            nodeMetrics.grpcClientMetrics,
-            loggerFactory,
-          )
-        )
-      } else None,
+      new SequencerTrafficClient(
+        syncConfig.sequencer,
+        retryProvider,
+        nodeMetrics.grpcClientMetrics,
+        loggerFactory,
+      ),
     )
 
   override def initialize(
@@ -277,30 +273,22 @@ class ScanApp(
           loggerFactory,
         )
       )
-      // Conditionally create traffic summary ingestion dependencies
-      appActivityRecordStoreO =
-        if (config.enableAppActivityRecordAndTrafficIngestion) {
-          Some(
-            new DbAppActivityRecordStore(
-              storage,
-              updateHistory,
-              DbAppActivityRecordStore.IngestionVersions(
-                AppActivityComputation.ActivityIngestionCodeVersion,
-                config.activityIngestionUserVersion.fold(0)(_.toInt),
-              ),
-              config.isFirstSv,
-              loggerFactory,
-            )
-          )
-        } else None
-      appRewardsStoreO = appActivityRecordStoreO.map(appActivityRecordStore =>
-        new DbScanAppRewardsStore(
-          storage,
-          updateHistory,
-          appActivityRecordStore,
-          config.rewardMintingAllowanceTolerance,
-          loggerFactory,
-        )
+      appActivityRecordStore = new DbAppActivityRecordStore(
+        storage,
+        updateHistory,
+        DbAppActivityRecordStore.IngestionVersions(
+          AppActivityComputation.ActivityIngestionCodeVersion,
+          config.activityIngestionUserVersion.fold(0)(_.toInt),
+        ),
+        config.isFirstSv,
+        loggerFactory,
+      )
+      appRewardsStore = new DbScanAppRewardsStore(
+        storage,
+        updateHistory,
+        appActivityRecordStore,
+        config.rewardMintingAllowanceTolerance,
+        loggerFactory,
       )
       synchronizerId <-
         retryProvider.getValueWithRetries(
@@ -323,8 +311,8 @@ class ScanApp(
         loggerFactory,
         store,
         updateHistory,
-        appRewardsStoreO,
-        appActivityRecordStoreO,
+        appRewardsStore,
+        appActivityRecordStore,
         storage,
         acsSnapshotStore,
         serviceUserPrimaryParty,
@@ -335,7 +323,7 @@ class ScanApp(
       scanVerdictStore = DbScanVerdictStore(
         storage,
         updateHistory,
-        appActivityRecordStoreO,
+        appActivityRecordStore,
         loggerFactory,
       )(ec)
       scanEventStore = new ScanEventStore(
@@ -364,25 +352,24 @@ class ScanApp(
         dsoParty,
         config.spliceInstanceNames.nameServiceNameAcronym.toLowerCase(),
       )
-      rewardsReferenceStoreO =
-        if (config.enableAppActivityRecordAndTrafficIngestion) {
-          val rewardsStore = ScanRewardsReferenceStore(
-            key = ScanRewardsReferenceStore.Key(
-              dsoParty = dsoParty,
-              synchronizerId = synchronizerId,
-            ),
-            storage,
-            loggerFactory,
-            retryProvider,
-            domainMigrationId,
-            participantId,
-            config.automation.ingestion,
-            config.parameters.defaultLimit,
-          )
-          automation.registerRewardsReferenceStoreIngestion(rewardsStore)
-          automation.registerRewardComputationTrigger(rewardsStore)
-          Some(rewardsStore)
-        } else None
+      rewardsReferenceStore = {
+        val rewardsStore = ScanRewardsReferenceStore(
+          key = ScanRewardsReferenceStore.Key(
+            dsoParty = dsoParty,
+            synchronizerId = synchronizerId,
+          ),
+          storage,
+          loggerFactory,
+          retryProvider,
+          domainMigrationId,
+          participantId,
+          config.automation.ingestion,
+          config.parameters.defaultLimit,
+        )
+        automation.registerRewardsReferenceStoreIngestion(rewardsStore)
+        automation.registerRewardComputationTrigger(rewardsStore)
+        rewardsStore
+      }
       verdictAutomation = new ScanVerdictAutomationService(
         config,
         syncNodes,
@@ -394,7 +381,7 @@ class ScanApp(
         domainMigrationId,
         synchronizerId,
         nodeMetrics.verdictIngestion,
-        rewardsReferenceStoreO,
+        rewardsReferenceStore,
       )
       scanHandler = new HttpScanHandler(
         serviceUserPrimaryParty,
@@ -404,15 +391,14 @@ class ScanApp(
         syncService,
         automation,
         updateHistory,
-        appRewardsStoreO,
-        appActivityRecordStoreO,
+        appRewardsStore,
+        appActivityRecordStore,
         acsSnapshotStore,
         scanEventStore,
         bulkStorage.map(_.reader),
         dsoAnsResolver,
         config.miningRoundsCacheTimeToLiveOverride,
         config.enableForcedAcsSnapshots,
-        config.serveAppActivityRecordsAndTraffic,
         clock,
         loggerFactory,
         packageVersionSupport,
@@ -552,7 +538,7 @@ class ScanApp(
         bulkStorage,
         verdictAutomation,
         scanEventStore,
-        rewardsReferenceStoreO,
+        rewardsReferenceStore,
         loggerFactory.getTracedLogger(ScanApp.State.getClass),
         timeouts,
         bftSequencersWithAdminConnections.map(_._1),
@@ -626,7 +612,7 @@ object ScanApp {
       bulkStorage: Option[BulkStorage],
       verdictAutomation: ScanVerdictAutomationService,
       eventStore: ScanEventStore,
-      rewardsReferenceStoreO: Option[ScanRewardsReferenceStore],
+      rewardsReferenceStore: ScanRewardsReferenceStore,
       logger: TracedLogger,
       timeouts: ProcessingTimeout,
       bftSequencersAdminConnections: Seq[SequencerAdminConnection],
@@ -647,9 +633,7 @@ object ScanApp {
             automation,
             verdictAutomation,
             store,
-          ) ++
-          rewardsReferenceStoreO.toList ++
-          Seq(
+            rewardsReferenceStore,
             storage,
             synchronizerNodes.current,
             participantAdminConnection,
