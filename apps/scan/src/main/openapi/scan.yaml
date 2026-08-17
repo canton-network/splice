@@ -4106,8 +4106,8 @@ components:
         round_number:
           description: |
             The mining round active at the verdict's record_time. Null for verdicts
-            ingested before this field was added, and on networks where app-activity
-            and traffic ingestion is disabled.
+            ingested before this field was added, or if no active round is known for
+            that record_time.
           type: integer
           format: int64
     TransactionViews:
