@@ -610,6 +610,7 @@ object ScanHttpEncodings {
       verdictResult = verdictResultEnum,
       mediatorGroup = verdict.mediatorGroup,
       transactionViews = txViews,
+      roundNumber = verdict.roundNumber,
     )
   }
 
