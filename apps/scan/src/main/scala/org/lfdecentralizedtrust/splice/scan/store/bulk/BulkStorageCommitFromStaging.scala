@@ -42,6 +42,9 @@ class BulkStorageCommitFromStaging[T](
         bft <- connection.getBulkObjectChecksums(objects.map(_.key)).map(Some(_)).recoverWith {
           case ex @ HttpErrorWithHttpCode(code, _) =>
             if (code == StatusCodes.BadGateway) {
+              logger.debug(
+                s"Consensus on checksums for objects ${objects.map(_.key).mkString(", ")} not reached. Assuming that this is because not all peers have processed the objects yet."
+              )
               Future.successful(None)
             } else {
               throw ex
