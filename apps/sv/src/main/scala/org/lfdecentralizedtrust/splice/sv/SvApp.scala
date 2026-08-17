@@ -118,7 +118,7 @@ class SvApp(
     ) {
 
   override def packagesForJsonDecoding: Seq[DarResource] =
-    super.packagesForJsonDecoding ++ DarResources.dsoGovernance.all ++ DarResources.validatorLifecycle.all ++ DarResources.amuletNameService.all
+    super.packagesForJsonDecoding ++ DarResources.dsoGovernance.all ++ DarResources.validatorLifecycle.all ++ DarResources.amuletNameService.all ++ DarResources.wallet.all
 
   override def preInitializeBeforeLedgerConnection()(implicit tc: TraceContext): Future[Unit] = {
     val participantAdminConnection = new ParticipantAdminConnection(

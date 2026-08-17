@@ -19,16 +19,19 @@ import org.lfdecentralizedtrust.splice.util.{Contract, TemplateJsonDecoder}
 import com.digitalasset.canton.lifecycle.CloseContext
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.resource.DbStorage
-import com.digitalasset.canton.topology.ParticipantId
+import com.digitalasset.canton.topology.{ParticipantId, PartyId}
 import com.digitalasset.canton.tracing.TraceContext
+import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.install.WalletAppInstall
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.store.db.AcsInterfaceViewRowData
+import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 
 import scala.concurrent.{ExecutionContext, Future}
 
 /* Store used by the SV app for filtering contracts visible to the SV party. */
 trait SvSvStore extends AppStore {
 
+  def config: Option[SvAppBackendConfig]
   protected val outerLoggerFactory: NamedLoggerFactory
 
   override protected lazy val loggerFactory: NamedLoggerFactory =
@@ -38,7 +41,7 @@ trait SvSvStore extends AppStore {
       : org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.ContractFilter[
         org.lfdecentralizedtrust.splice.sv.store.db.SvTables.SvAcsStoreRowData,
         AcsInterfaceViewRowData.NoInterfacesIngested,
-      ] = SvSvStore.contractFilter(key)
+      ] = SvSvStore.contractFilter(key, config.map(_.permissionedSynchronizer).getOrElse(false))
 
   def lookupValidatorOnboardingBySecretWithOffset(
       secret: String
@@ -52,6 +55,19 @@ trait SvSvStore extends AppStore {
     Option[Contract[vo.ValidatorOnboarding.ContractId, vo.ValidatorOnboarding]]
   ] =
     lookupValidatorOnboardingBySecretWithOffset(secret).map(_.value)
+
+  def lookupWalletAppInstallByEndUserWithOffset(
+      endUserParty: PartyId
+  )(implicit tc: TraceContext): Future[
+    QueryResult[Option[Contract[WalletAppInstall.ContractId, WalletAppInstall]]]
+  ]
+
+  def lookupWalletAppInstallByEndUser(
+      endUserParty: PartyId
+  )(implicit tc: TraceContext): Future[
+    Option[Contract[WalletAppInstall.ContractId, WalletAppInstall]]
+  ] =
+    lookupWalletAppInstallByEndUserWithOffset(endUserParty).map(_.value)
 
   def lookupUsedSecretWithOffset(
       secret: String
@@ -103,6 +119,7 @@ object SvSvStore {
       ingestionConfig: IngestionConfig,
       defaultLimit: Limit,
       acsStoreDescriptorUserVersion: Option[Long] = None,
+      svBackendconfig: Option[SvAppBackendConfig] = None,
   )(implicit
       ec: ExecutionContext,
       templateJsonDecoder: TemplateJsonDecoder,
@@ -118,40 +135,57 @@ object SvSvStore {
       ingestionConfig,
       acsStoreDescriptorUserVersion,
       defaultLimit = defaultLimit,
+      config = svBackendconfig,
     )
 
   /** Contract filter of an sv acs store for a specific acs party. */
-  def contractFilter(key: SvStore.Key): MultiDomainAcsStore.ContractFilter[
+  def contractFilter(
+      key: SvStore.Key,
+      enablePermissionedSynchronizer: Boolean,
+  ): MultiDomainAcsStore.ContractFilter[
     SvAcsStoreRowData,
     AcsInterfaceViewRowData.NoInterfacesIngested,
   ] = {
     import MultiDomainAcsStore.mkFilter
     val sv = key.svParty.toProtoPrimitive
 
+    val svFilters = Map(
+      mkFilter(vo.ValidatorOnboarding.COMPANION)(co => co.payload.sv == sv) { contract =>
+        SvAcsStoreRowData(
+          contract,
+          contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
+          onboardingSecret = Some(contract.payload.candidateSecret),
+        )
+      },
+      mkFilter(vo.UsedSecret.COMPANION)(co => co.payload.sv == sv) { contract =>
+        SvAcsStoreRowData(
+          contract,
+          onboardingSecret = Some(contract.payload.secret),
+        )
+      },
+      mkFilter(so.SvOnboardingConfirmed.COMPANION)(co => co.payload.svParty == sv) { contract =>
+        SvAcsStoreRowData(
+          contract,
+          contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
+          svCandidateName = Some(contract.payload.svName),
+        )
+      },
+    )
+
+    val finalFilters = if (enablePermissionedSynchronizer) {
+      svFilters + mkFilter(WalletAppInstall.COMPANION)(co => co.payload.endUserParty == sv) {
+        contract =>
+          SvAcsStoreRowData(
+            contract
+          )
+      }
+    } else {
+      svFilters
+    }
+
     MultiDomainAcsStore.SimpleContractFilter(
       key.svParty,
-      Map(
-        mkFilter(vo.ValidatorOnboarding.COMPANION)(co => co.payload.sv == sv) { contract =>
-          SvAcsStoreRowData(
-            contract,
-            contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
-            onboardingSecret = Some(contract.payload.candidateSecret),
-          )
-        },
-        mkFilter(vo.UsedSecret.COMPANION)(co => co.payload.sv == sv) { contract =>
-          SvAcsStoreRowData(
-            contract,
-            onboardingSecret = Some(contract.payload.secret),
-          )
-        },
-        mkFilter(so.SvOnboardingConfirmed.COMPANION)(co => co.payload.svParty == sv) { contract =>
-          SvAcsStoreRowData(
-            contract,
-            contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
-            svCandidateName = Some(contract.payload.svName),
-          )
-        },
-      ),
+      finalFilters,
     )
   }
 }

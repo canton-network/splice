@@ -318,7 +318,7 @@ class HttpSvPublicHandler(
   )(extracted: TraceContext): Future[r0.DevNetBuyMemberTrafficResponse] = {
     implicit val traceContext: TraceContext = extracted
     withSpan(s"$workflowId.devNetBuyMemberTraffic") { _ => _ =>
-      if (isDevNet) {
+      if (isDevNet && config.permissionedSynchronizer) {
         for {
           participantId <- ParticipantId.fromProtoPrimitive(
             body.participantId,
@@ -334,7 +334,7 @@ class HttpSvPublicHandler(
       } else {
         Future.failed(
           HttpErrorHandler.notImplemented(
-            "Traffic purchasing self-service is only available in DevNet."
+            "Traffic purchasing self-service is only available in DevNet when permissioned synchronizer is enabled."
           )
         )
       }
@@ -888,68 +888,48 @@ class HttpSvPublicHandler(
       participantId: ParticipantId
   )(implicit tc: TraceContext): Future[Unit] = {
     for {
-      amuletRules <- dsoStore.getAmuletRules()
       dsoRules <- dsoStore.getDsoRules()
-      roundTriple <- dsoStore.getOpenMiningRoundTriple()
-      openRound = roundTriple.oldest
 
-      _ = logger.info(s"AmuletRules DevNet Tap by $svUserName")
-
-      tapCmd = amuletRules.exercise(
-        _.exerciseAmuletRules_DevNet_Tap(
-          svParty.toProtoPrimitive,
-          config.devNetPublicSetupTapAmount.bigDecimal,
-          openRound.contractId,
-        )
+      svWalletInstall <- retryProvider.retryForClientCalls(
+        "wait_for_wallet_install",
+        "Wait for SV WalletAppInstall contract to be ingested",
+        for {
+          svWalletInstallOpt <- svStoreWithIngestion.store.lookupWalletAppInstallByEndUser(svParty)
+          install <- svWalletInstallOpt match {
+            case Some(install) => Future.successful(install)
+            case None =>
+              Future.failed(
+                HttpErrorHandler.internalServerError(
+                  "SV WalletAppInstall contract not found."
+                )
+              )
+          }
+        } yield install,
+        logger,
       )
 
-      tapResult <- dsoStoreWithIngestion
-        .connection(SpliceLedgerConnectionPriority.Low)
-        .submit(
-          actAs = Seq(svParty),
-          readAs = Seq(dsoParty),
-          update = tapCmd,
-        )
-        .withSynchronizerId(dsoRules.domain)
-        .noDedup
-        .yieldResult()
-
-      amuletCid = tapResult.exerciseResult.amuletSum.amulet
-
-      _ = logger.info(s"AmuletRules BuyMemberTraffic by $svUserName for $participantId")
-
-      buyCmd = amuletRules.exercise(
-        _.exerciseAmuletRules_BuyMemberTraffic(
-          java.util.List.of(
-            new org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.transferinput.InputAmulet(
-              amuletCid
-            )
-          ),
-          new org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.TransferContext(
-            openRound.contractId,
-            java.util.Collections.emptyMap(),
-            java.util.Collections.emptyMap(),
-            java.util.Optional.empty(),
-          ),
-          svParty.toProtoPrimitive,
-          participantId.toProtoPrimitive,
-          dsoRules.payload.config.decentralizedSynchronizer.activeSynchronizerId,
-          dsoStore.domainMigrationId,
-          config.devNetPublicSetupTrafficAmount,
-          java.util.Optional.of(dsoParty.toProtoPrimitive),
-        )
+      cmd = svWalletInstall.contractId.exerciseWalletAppInstall_CreateBuyTrafficRequest(
+        participantId.toProtoPrimitive,
+        dsoRules.payload.config.decentralizedSynchronizer.activeSynchronizerId,
+        dsoStore.domainMigrationId.toInt,
+        config.devNetPublicSetupTrafficAmount,
+        clock.now.plus(java.time.Duration.ofMinutes(5)).toInstant,
+        s"devnet-onboard-${participantId.toProtoPrimitive}-${clock.now.toInstant.toEpochMilli}",
       )
+
+      _ = logger.info(s"Creating BuyTrafficRequest by $svUserName for $participantId")
 
       _ <- dsoStoreWithIngestion
-        .connection(SpliceLedgerConnectionPriority.Low)
+        .connection(SpliceLedgerConnectionPriority.Medium)
         .submit(
           actAs = Seq(svParty),
           readAs = Seq(dsoParty),
-          update = buyCmd,
+          update = cmd,
         )
         .withSynchronizerId(dsoRules.domain)
         .noDedup
         .yieldUnit()
+
     } yield ()
   }
 
