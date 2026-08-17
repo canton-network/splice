@@ -20,3 +20,37 @@ release-notes:: Upcoming
           vote requests by their state relative to the SV (``action_needed``, ``in_progress``,
           ``ready_to_close``), allowing SV operators to alert on vote proposals that require
           their vote.
+
+    - Scan & SV App
+
+        - HTTP rate limiting has been extended with a global rate limiter applied across all
+          operations, optional per-client-IP rate limiting (enabled by default at the global level),
+          and an additional sustained rate limit enforced over a longer window on top of the existing
+          per-second burst limit. The client IP is taken from the trusted, non-spoofable
+          ``X-Envoy-External-Address`` header set by the Envoy/Istio ingress, falling back to the
+          client-controlled ``X-Forwarded-For``/ ``X-Real-Ip`` headers and finally the remote
+          address only for requests that did not pass through the ingress. These can be tuned via
+          the ``rate-limiting`` config keys.
+
+          .. warning::
+
+             When per-client-IP rate limiting is enabled, SV operators must ensure that the client IP
+             used for rate limiting cannot be spoofed. Either configure
+             ``rate-limiting.trusted-client-ip-header`` to a trusted, non-spoofable header set by
+             your ingress/proxy (e.g. ``x-envoy-external-address`` for Istio deployments), or ensure
+             that the ``X-Forwarded-For`` header contains the actual client IP as its first value
+             and cannot be spoofed by clients. Otherwise, clients may bypass per-client-IP limits or
+             cause other clients to be throttled by forging these headers.
+
+        - Default rate limits have been adjusted:
+
+          - Scan app: the per-operation burst limit has been lowered from 200 to 100 requests per
+            second, with a new sustained limit of 50 requests per second. A new global limiter has
+            also been added, allowing 400 requests per second burst / 200 sustained across all
+            operations combined, with an embedded per-client-IP limiter allowing 100 requests per
+            second burst / 50 sustained.
+          - SV app: the per-operation burst limit has been lowered from 200 to 20 requests per
+            second, with a new sustained limit of 10 requests per second. A new global limiter has
+            also been added, allowing 100 requests per second burst / 50 sustained across all
+            operations combined, with an embedded per-client-IP limiter allowing 20 requests per
+            second burst / 10 sustained.
