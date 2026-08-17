@@ -143,7 +143,7 @@ testDevelopmentFundCouponExpiry = do
     reason = "Alice fixed issue XXX"
   alice <- setupUser app "alice" app.dso
   developmentFundCouponCid <- (.developmentFundCouponCid) <$>
-    allocateDevelopmentFundCoupon app fundManager alice.primaryParty amount expiresAt reason [unclaimedDevelopmentFundCouponCid]
+    allocateDevelopmentFundCoupon app fundManager alice.primaryParty amount expiresAt reason [unclaimedDevelopmentFundCouponCid] None
 
   -- Unhappy - expiresAt has not been reached
   submitMustFail (actAs sv1 <> readAs app.dso) do
