@@ -11,13 +11,24 @@ import org.lfdecentralizedtrust.splice.console.ParticipantClientReference
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.util.{FrontendLoginUtil, WalletFrontendTestUtil}
 import com.digitalasset.canton.http.json.v2.JsStateServiceCodecs.*
-import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
-import com.digitalasset.canton.topology.transaction.SynchronizerTrustCertificate.ParticipantTopologyFeatureFlag
+import com.digitalasset.canton.protocol.LfContractId
+import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.version.ProtocolVersion
 import com.daml.ledger.api.v2.state_service.GetConnectedSynchronizersResponse
+import com.daml.ledger.api.v2.transaction_filter.CumulativeFilter.IdentifierFilter
+import com.daml.ledger.api.v2.transaction_filter.{
+  CumulativeFilter,
+  EventFormat,
+  Filters,
+  WildcardFilter,
+}
 import monocle.Monocle.toAppliedFocusOps
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.test.dummyholding.DummyHolding
+import org.lfdecentralizedtrust.splice.util.JavaDecodeUtil
 
+import java.nio.file.Paths
 import scala.concurrent.duration.*
+import scala.jdk.CollectionConverters.*
 import scala.sys.process.*
 
 class LocalNetFrontendIntegrationTest
@@ -43,6 +54,10 @@ class LocalNetFrontendIntegrationTest
   override lazy val resetRequiredTopologyState = false
 
   val partyHint = "localnet-localparty-1"
+
+  // The user all localnet nodes use for their ledger API access, see
+  // cluster/compose/localnet/env/*-auth-on.env
+  private val ledgerApiUserId = "ledger-api-user"
 
   private def withLocalNet(
       additionalArgs: Seq[String]
@@ -102,7 +117,9 @@ class LocalNetFrontendIntegrationTest
       withFrontEnd("frontend") { implicit webDriver =>
         actAndCheck(
           "Open the Scan UI",
-          go to "scan.localhost:4000",
+          // The scheme is required: without it Firefox parses `scan.localhost:` as a
+          // (non-special) URL scheme and refuses to navigate.
+          go to "http://scan.localhost:4000",
         )(
           "Open rounds should be listed",
           _ => findAll(className("open-mining-round-row")) should have length 2,
@@ -131,7 +148,14 @@ class LocalNetFrontendIntegrationTest
       }
     }
 
-  private val token = AuthUtil.testToken(AuthUtil.testAudience, "ledger-api-user", "unsafe")
+  private val token = AuthUtil.testToken(AuthUtil.testAudience, ledgerApiUserId, "unsafe")
+
+  private val dummyHoldingDarPath = Paths
+    .get(
+      "token-standard/examples/splice-token-test-dummy-holding/.daml/dist/splice-token-test-dummy-holding-current.dar"
+    )
+    .toAbsolutePath
+    .toString
 
   private def testTokenStandardApi(implicit env: FixtureParam): Unit =
     clue("Test token standard APIs") {
@@ -190,36 +214,106 @@ class LocalNetFrontendIntegrationTest
     )
   }
 
-  private def testMultiSynchronizerFeatureFlag(isMultiSync: Boolean)(implicit
+  private def synchronizerId(
+      participant: ParticipantClientReference,
+      alias: String,
+  ): SynchronizerId =
+    participant.synchronizers
+      .list_connected()
+      .find(_.synchronizerAlias.unwrap == alias)
+      .getOrElse(fail(s"${participant.name} is not connected to $alias"))
+      .synchronizerId
+
+  private def testReassignment(participantName: String, validatorClientName: String)(implicit
       env: FixtureParam
   ): Unit =
-    clue("Test multi-synchronizer feature flag on synchronizer trust certificates") {
-      List("app-user", "app-provider").foreach { name =>
-        clue(s"Test $name participant trust certificates") {
-          val participant = participantClient(name)
-          val connectedSynchronizers = participant.synchronizers.list_connected()
-          if (isMultiSync)
-            connectedSynchronizers should have size 2
-          else
-            connectedSynchronizers should have size 1
-          connectedSynchronizers.foreach { connected =>
-            val featureFlags = participant.topology.synchronizer_trust_certificates
-              .list(
-                store = Some(TopologyStoreId.Synchronizer(connected.synchronizerId)),
-                filterUid = participant.id.filterString,
-              )
-              .loneElement
-              .item
-              .featureFlags
-            if (isMultiSync)
-              featureFlags should contain(
-                ParticipantTopologyFeatureFlag.EnableMultiSynchronizer
-              )
-            else
-              featureFlags should not contain ParticipantTopologyFeatureFlag.EnableMultiSynchronizer
-          }
-        }
+    clue(s"Reassign a contract between global and app-synchronizer on $participantName") {
+      val participant = participantClient(participantName)
+      val party = vc(validatorClientName).copy(token = Some(token)).getValidatorPartyId()
+      val globalSynchronizerId = synchronizerId(participant, "global")
+      val appSynchronizerId = synchronizerId(participant, "app-synchronizer")
+
+      participant.upload_dar_unless_exists(dummyHoldingDarPath)
+
+      val createdContract = clue("Create a DummyHolding on the global synchronizer") {
+        val tx = participant.ledger_api_extensions.commands.submitJava(
+          actAs = Seq(party),
+          commands = new DummyHolding(
+            party.toProtoPrimitive,
+            party.toProtoPrimitive,
+            BigDecimal(42).bigDecimal,
+          ).create().commands().asScala.toSeq,
+          synchronizerId = Some(globalSynchronizerId),
+          userId = ledgerApiUserId,
+        )
+        JavaDecodeUtil.decodeAllCreated(DummyHolding.COMPANION)(tx).loneElement
       }
+      val contractId = createdContract.id.contractId
+      val lfContractId = LfContractId.assertFromString(contractId)
+
+      def synchronizerOfContract() =
+        participant.ledger_api_extensions.acs
+          .lookup_contract_domain(party, Set(contractId))
+          .get(contractId)
+
+      synchronizerOfContract() should be(Some(globalSynchronizerId))
+
+      val eventFormat = Some(
+        EventFormat(
+          filtersByParty = Map(
+            party.toProtoPrimitive -> Filters(
+              Seq(
+                CumulativeFilter(
+                  IdentifierFilter.WildcardFilter(
+                    WildcardFilter(includeCreatedEventBlob = false)
+                  )
+                )
+              )
+            )
+          ),
+          filtersForAnyParty = None,
+          verbose = true,
+        )
+      )
+
+       def reassign(source: SynchronizerId, target: SynchronizerId): Unit = {
+        val unassigned = participant.ledger_api.commands
+          .submit_unassign_with_format(
+            submitter = party,
+            contractIds = Seq(lfContractId),
+            source = source,
+            target = target,
+            userId = ledgerApiUserId,
+            eventFormat = eventFormat,
+            timeout = None,
+          )
+          .unassignedWrapper
+        val _ = participant.ledger_api.commands.submit_assign_with_format(
+          submitter = party,
+          reassignmentId = unassigned.reassignmentId,
+          source = source,
+          target = target,
+          userId = ledgerApiUserId,
+          eventFormat = eventFormat,
+          timeout = None,
+        )
+      }
+
+      actAndCheck(
+        "Reassign the contract to the app-synchronizer",
+        reassign(globalSynchronizerId, appSynchronizerId),
+      )(
+        "The contract is now assigned to the app-synchronizer",
+        _ => synchronizerOfContract() should be(Some(appSynchronizerId)),
+      )
+
+      actAndCheck(
+        "Reassign the contract back to the global synchronizer",
+        reassign(appSynchronizerId, globalSynchronizerId),
+      )(
+        "The contract is assigned to the global synchronizer again",
+        _ => synchronizerOfContract() should be(Some(globalSynchronizerId)),
+      )
     }
 
   "docker-compose based localnet works for single synchronizer" in { implicit env =>
@@ -228,14 +322,14 @@ class LocalNetFrontendIntegrationTest
       testSvUi()
       testTokenStandardApi
       testMultiSynchronizerSupport(isMultiSync = false)
-      testMultiSynchronizerFeatureFlag(isMultiSync = false)
     }
   }
 
   "docker-compose based localnet works for multiple synchronizers" in { implicit env =>
     withLocalNet(Seq("-M")) { implicit env =>
       testMultiSynchronizerSupport(isMultiSync = true)
-      testMultiSynchronizerFeatureFlag(isMultiSync = true)
+      testReassignment("app-provider", "providerValidatorClient")
+      testReassignment("app-user", "userValidatorClient")
     }
   }
 
