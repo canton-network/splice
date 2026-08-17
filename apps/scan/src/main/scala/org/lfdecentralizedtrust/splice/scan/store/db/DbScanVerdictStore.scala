@@ -160,6 +160,7 @@ object DbScanVerdictStore {
       submittingParties: Seq[String],
       transactionRootViews: Seq[Int],
       trafficSummaryO: Option[TrafficSummaryT],
+      roundNumber: Option[Long],
   )
 
   object VerdictResultDbValue {
@@ -210,6 +211,7 @@ object DbScanVerdictStore {
       submittingParties = verdict.submittingParties,
       transactionRootViews = transactionRootViews,
       trafficSummaryO = byTimestamp.get(recordTime),
+      roundNumber = None,
     )
 
     val mkViews: Long => Seq[TransactionViewT] = { rowId =>
@@ -319,6 +321,7 @@ class DbScanVerdictStore(
         <<?[Json],
         recordTime,
       ),
+      <<?[Long],
     )
   }
 
@@ -365,7 +368,8 @@ class DbScanVerdictStore(
         submitting_parties,
         transaction_root_views,
         total_traffic_cost,
-        envelope_traffic_costs
+        envelope_traffic_costs,
+        round_number
       ) values (
         $historyId,
         ${rowT.migrationId},
@@ -379,7 +383,8 @@ class DbScanVerdictStore(
         ${rowT.submittingParties.map(lengthLimited).toSeq},
         ${rowT.transactionRootViews.toSeq},
         ${rowT.trafficSummaryO.map(_.totalTrafficCost)},
-        ${envelopesO.map(seq => DbScanVerdictStore.EnvelopeT.toJson(seq))}::jsonb
+        ${envelopesO.map(seq => DbScanVerdictStore.EnvelopeT.toJson(seq))}::jsonb,
+        ${rowT.roundNumber}
       ) returning row_id
     """.as[Long].headOption
   }
@@ -539,7 +544,8 @@ class DbScanVerdictStore(
               submitting_parties,
               transaction_root_views,
               total_traffic_cost,
-              envelope_traffic_costs
+              envelope_traffic_costs,
+              round_number
             from #${Tables.verdicts}
             where history_id = $historyId and update_id = $updateId
             limit 1
@@ -600,7 +606,8 @@ class DbScanVerdictStore(
         submitting_parties,
         transaction_root_views,
         total_traffic_cost,
-        envelope_traffic_costs
+        envelope_traffic_costs,
+        round_number
       from #${Tables.verdicts}
       where history_id = $historyId and """ ++ afterFilter ++
         sql" order by " ++ orderBy ++ sql" limit $limit)"
