@@ -235,7 +235,7 @@ instance Patchable (AmuletConfig USD) where
     featuredAppActivityMarkerAmount = patch new.featuredAppActivityMarkerAmount base.featuredAppActivityMarkerAmount current.featuredAppActivityMarkerAmount
     optDevelopmentFundManager = patch new.optDevelopmentFundManager base.optDevelopmentFundManager current.optDevelopmentFundManager
     developmentFundManagerBlacklist =
-      patchOptionalListAsSet new.developmentFundManagerBlacklist base.developmentFundManagerBlacklist current.developmentFundManagerBlacklist
+      patchScalar new.developmentFundManagerBlacklist base.developmentFundManagerBlacklist current.developmentFundManagerBlacklist
     externalPartyConfigStateTickDuration = patch new.externalPartyConfigStateTickDuration base.externalPartyConfigStateTickDuration current.externalPartyConfigStateTickDuration
     rewardConfig = patch new.rewardConfig base.rewardConfig current.rewardConfig
     transferPreapprovalBaseDuration = patch new.transferPreapprovalBaseDuration base.transferPreapprovalBaseDuration current.transferPreapprovalBaseDuration

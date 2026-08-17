@@ -28,7 +28,6 @@ module Splice.Util
   patchScalar,
   patchListAsScalar,
   patchListAsSet,
-  patchOptionalListAsSet,
 
   deprecatedChoice
 ) where
@@ -185,17 +184,6 @@ patchListAsScalar new base current = patchScalar new base current
 
 patchListAsSet : (Patchable a, Ord a) => [a] -> [a] -> [a] -> [a]
 patchListAsSet new base current = Set.toList (patch (Set.fromList new) (Set.fromList base) (Set.fromList current))
-
-patchOptionalListAsSet : (Patchable a, Ord a) => Optional [a] -> Optional [a] -> Optional [a] -> Optional [a]
-patchOptionalListAsSet new base current =
-  case (base, new) of
-    (None, None) -> current
-    (Some _, None) -> None 
-    (None, Some new') -> Some new'
-    (Some base', Some new') ->
-      case current of
-        None -> None
-        Some current' -> Some (patchListAsSet new' base' current')
 
 instance (Patchable a, Ord a) => Patchable (Set a) where
   patch new base current =

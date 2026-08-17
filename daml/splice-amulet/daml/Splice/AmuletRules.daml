@@ -1512,7 +1512,7 @@ summarizeAndConsumeInputs csum dso optBlacklist sender inps = do
     summarizeAndConsumeInput _round s (InputDevelopmentFundCoupon couponCid) = do
       coupon <- fetchAndArchive forOwner couponCid
       case optBlacklist of
-        None -> abort "DevelopmentFundCoupon cannot be minted in a transfer that does not resolve AmuletRules"
+        None -> abort "DevelopmentFundCoupon cannot be minted in a transfer that does not specify the FundManager blacklist"
         Some blacklist ->
           require "DevelopmentFundCoupon.fundManager is not blacklisted"
             (coupon.fundManager `notElem` blacklist)
