@@ -355,7 +355,9 @@ function installBigqueryStagingDataset(scanBigQuery: ScanBigQueryConfig): gcp.bi
     friendlyName: `${scanBigQuery.dataset} Staging Dataset`,
     location: cloudsdkComputeRegion(),
     deleteContentsOnDestroy: true,
-    defaultTableExpirationMs: THREE_DAYS_MS,
+    // This is a TRAP!!! GCP tracks the table creation time and not the ingestion time
+    // As soon as it hit =s 3 days it deletes everything in the staging data even before the data reaches production dataset
+    //defaultTableExpirationMs: THREE_DAYS_MS,
     labels: {
       cluster: CLUSTER_BASENAME,
       datastream_id: 'stag_prod',
@@ -463,7 +465,69 @@ function installHourlyScheduledQueries(
     );
   });
 }
+// ============================================================================
+// Purguing data older than 7 days from the staging table
+// ============================================================================
+function installDailyPurgeScheduledQueries(
+  namespace: ExactNamespace,
+  stagingDataset: gcp.bigquery.Dataset
+) {
+  const currentProject = gcp.organizations.getProjectOutput({});
+  const projectId = currentProject.apply(p => p.projectId!);
+  const schemaName = scanAppDatabaseName(namespace);
 
+  // Grant BigQuery DTS service account permission to impersonate
+  const transferServiceAgentPermission = new gcp.projects.IAMMember('bq-purge-transfer-token-creator', {
+    project: projectId,
+    role: 'roles/iam.serviceAccountTokenCreator',
+    member: currentProject.apply(
+      p => `serviceAccount:service-${p.number}@gcp-sa-bigquerydatatransfer.iam.gserviceaccount.com`
+    ),
+  });
+
+  Object.entries(replicatedTables).forEach(([tableName]) => {
+    const procedureBody = pulumi
+      .all([projectId, stagingDataset.datasetId])
+      .apply(([proj, stagingDs]) => {
+        const stagingTable = `\`${proj}.${stagingDs}.${schemaName}_${tableName}\``;
+
+        return `
+          DELETE FROM ${stagingTable}
+          WHERE TIMESTAMP_MICROS(record_time) < TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 7 DAY);
+        `;
+      });
+
+    const routineId = `sp_purge_old_records_${tableName}`;
+
+    // Create the cleanup Stored Procedure
+    const purgeRoutine = new gcp.bigquery.Routine(`${tableName}-purge-routine`, {
+      datasetId: stagingDataset.datasetId,
+      routineId: routineId,
+      routineType: 'PROCEDURE',
+      language: 'SQL',
+      definitionBody: procedureBody,
+    });
+
+    // Schedule the Stored Procedure to run daily
+    new gcp.bigquery.DataTransferConfig(
+      `${CLUSTER_BASENAME}_${tableName}-daily-purge`,
+      {
+        displayName: `${CLUSTER_BASENAME}_${tableName} Daily 7-Day Retention Purge`,
+        location: cloudsdkComputeRegion(),
+        serviceAccountName: pulumi.interpolate`bigquery@${projectId}.iam.gserviceaccount.com`,
+        dataSourceId: 'scheduled_query',
+        schedule: 'every day 03:00', // Runs daily at 03:00 AM UTC
+
+        params: {
+          query: pulumi.interpolate`CALL \`${projectId}.${stagingDataset.datasetId}.${routineId}\`();`,
+        },
+      },
+      {
+        dependsOn: [transferServiceAgentPermission, purgeRoutine],
+      }
+    );
+  });
+}
 // ============================================================================
 // CONNECTION PROFILES & NETWORKING
 // ============================================================================
@@ -858,6 +922,7 @@ export async function configureScanBigQuery({
     );
 
     installHourlyScheduledQueries(namespace, stagingDataset, prodDataset);
+    installDailyPurgeScheduledQueries(namespace, stagingDataset);
   }
   // TODO (DACH-NY/canton-network-internal#6451) not sure if this function needs to return anything,
   // but we need to return something to satisfy the ScanBigQuery type.
