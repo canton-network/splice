@@ -4103,6 +4103,13 @@ components:
           format: int32
         transaction_views:
           $ref: '#/components/schemas/TransactionViews'
+        round_number:
+          description: |
+            The mining round active at the verdict's record_time. Null for verdicts
+            ingested before this field was added, and on networks where app-activity
+            and traffic ingestion is disabled.
+          type: integer
+          format: int64
     TransactionViews:
       type: object
       required:
