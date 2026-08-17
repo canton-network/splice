@@ -18,7 +18,7 @@ import { VoteRequest } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules'
 import { ContractId } from '@daml/types';
 import { useNavigate } from 'react-router';
 import { CopyableIdentifier, PageSectionHeader, VoteStats } from '../../components/beta';
-import { VOTE_PROPOSAL_CONTRACT_ID_LABEL } from '../../utils/constants';
+import { THRESHOLD_DEADLINE_LABEL, VOTE_PROPOSAL_CONTRACT_ID_LABEL } from '../../utils/constants';
 import { ProposalListingData, ProposalListingStatus, YourVoteStatus } from '../../utils/types';
 import { InfoOutlined } from '@mui/icons-material';
 import dayjs from 'dayjs';
@@ -133,7 +133,7 @@ const TableHeader: React.FC<TableHeaderProps> = ({
     <TableCell sx={governanceTableHeadCellSx}>{VOTE_PROPOSAL_CONTRACT_ID_LABEL}</TableCell>
     {showThresholdDeadline ? (
       <>
-        <TableCell sx={governanceTableHeadCellSx}>THRESHOLD DEADLINE</TableCell>
+        <TableCell sx={governanceTableHeadCellSx}>{THRESHOLD_DEADLINE_LABEL}</TableCell>
         <TableCell sx={governanceTableHeadCellSx}>SUBMITTED BY</TableCell>
         <TableCell sx={governanceTableHeadCellSx}>EFFECTIVE AT</TableCell>
       </>

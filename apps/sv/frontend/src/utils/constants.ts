@@ -4,6 +4,8 @@
 export const PROPOSAL_SUMMARY_TITLE = 'Proposal Summary';
 export const PROPOSAL_REVIEW_TITLE = 'Proposal Review';
 export const PROPOSAL_SUMMARY_SUBTITLE = 'For CIP votes, consider copying the CIP abstract here';
+/** Figma initiate Proposal Summary empty/example prompt (Body M grey105 when empty). */
+export const PROPOSAL_SUMMARY_PLACEHOLDER = 'This is the summary.';
 export const DEFAULT_PROPOSAL_SUMMARY_MAX_LENGTH = 1024;
 export const THRESHOLD_DEADLINE_SUBTITLE =
   'Proposal remains open only if ⅔ of nodes place a vote before this date-time';
@@ -12,15 +14,17 @@ export const DEFAULT_APP_ACTIVITY_WEIGHT = '1.0';
 export const SUPPORTING_URL_LABEL = 'Supporting URL';
 export const SUPPORTING_URL_PLACEHOLDER = 'https://';
 export const VOTE_REASON_URL_LABEL = 'Vote Reason URL';
-export const VOTE_REASON_SUMMARY_LABEL = 'Vote Reason Summary';
-export const VOTE_PROPOSAL_CONTRACT_ID_LABEL = 'Vote Proposal Contract ID';
-export const THRESHOLD_DEADLINE_LABEL = 'Threshold Deadline';
+export const VOTE_REASON_SUMMARY_LABEL = 'Reason';
+/** Figma Your Vote empty Reason prompt (`1013:1869`) — muted `#4F4F4F`. */
+export const VOTE_REASON_PLACEHOLDER = 'Your reason';
+export const VOTE_PROPOSAL_CONTRACT_ID_LABEL = 'Vote proposal contract id';
+export const THRESHOLD_DEADLINE_LABEL = 'Quorum Threshold Deadline';
 export const EFFECTIVE_AT_LABEL = 'Effective At';
 export const PROPOSAL_CREATED_LABEL = 'Proposal Created';
 
 /** Figma field labels for the initiate-proposal edit step (12px uppercase). */
-export const CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE = 'PROPOSAL TYPE';
-export const CREATE_PROPOSAL_LABEL_THRESHOLD_DEADLINE = 'THRESHOLD DEADLINE';
+export const CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE = 'ACTION'; // Figma FIELD H “Action” (edit + review)
+export const CREATE_PROPOSAL_LABEL_THRESHOLD_DEADLINE = 'QUORUM THRESHOLD DEADLINE';
 export const CREATE_PROPOSAL_LABEL_EFFECTIVE_AT = 'EFFECTIVE AT';
 export const CREATE_PROPOSAL_LABEL_PROPOSAL_SUMMARY = 'PROPOSAL SUMMARY';
 export const CREATE_PROPOSAL_LABEL_SUPPORTING_URL = 'SUPPORTING URL';

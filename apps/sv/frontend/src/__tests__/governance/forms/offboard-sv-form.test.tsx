@@ -16,6 +16,7 @@ import { http, HttpResponse } from 'msw';
 import {
   CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE,
   PROPOSAL_REVIEW_TITLE,
+  PROPOSAL_SUMMARY_PLACEHOLDER,
   PROPOSAL_SUMMARY_SUBTITLE,
 } from '../../../utils/constants';
 
@@ -58,6 +59,7 @@ describe('Offboard SV Form', () => {
     const summaryInput = screen.getByTestId('offboard-sv-summary');
     expect(summaryInput).toBeInTheDocument();
     expect(summaryInput.getAttribute('value')).toBeNull();
+    expect(summaryInput.getAttribute('placeholder')).toBe(PROPOSAL_SUMMARY_PLACEHOLDER);
 
     const summarySubtitle = screen.getByTestId('offboard-sv-summary-subtitle');
     expect(summarySubtitle).toBeInTheDocument();

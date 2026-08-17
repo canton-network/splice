@@ -27,9 +27,11 @@ import { Wrapper } from '../helpers';
 import {
   EFFECTIVE_AT_LABEL,
   PROPOSAL_CREATED_LABEL,
+  PROPOSAL_SUMMARY_TITLE,
   SUPPORTING_URL_LABEL,
   THRESHOLD_DEADLINE_LABEL,
   VOTE_PROPOSAL_CONTRACT_ID_LABEL,
+  VOTE_REASON_PLACEHOLDER,
 } from '../../utils/constants';
 
 const voteRequest = {
@@ -171,15 +173,15 @@ describe('Proposal Details Content', () => {
     expect(backToAllVotes).toHaveTextContent('Back to all votes');
     expect(backToAllVotes).toHaveAttribute('href', '/governance/proposals');
 
-    const pageTitle = screen.getByTestId('proposal-details-proposal-details');
-    expect(pageTitle).toBeInTheDocument();
+    const proposalDetailsSection = screen.getByTestId('proposal-details-proposal-details');
+    expect(proposalDetailsSection).toBeInTheDocument();
+    // Figma starts at Action — no duplicate inner "Proposal Details" heading
+    expect(
+      within(proposalDetailsSection).queryByRole('heading', { name: 'Proposal Details' })
+    ).toBeNull();
 
     const action = screen.getByTestId('proposal-details-action-value');
     expect(action.textContent).toMatch(/Offboard Member/);
-
-    expect(screen.getByTestId('proposal-details-contractid-label').textContent).toBe(
-      VOTE_PROPOSAL_CONTRACT_ID_LABEL
-    );
 
     const offboardSection = screen.getByTestId('proposal-details-offboard-member-section');
     expect(offboardSection).toBeInTheDocument();
@@ -189,7 +191,13 @@ describe('Proposal Details Content', () => {
     );
     expect(memberInput).toBeInTheDocument();
     expect(memberInput.textContent).toBe('sv2');
+    expect(
+      within(offboardSection).getByTestId('proposal-details-member-party-id-scroll')
+    ).toHaveStyle({ overflowX: 'auto', maxWidth: '270px' });
 
+    expect(screen.getByTestId('proposal-details-summary-label').textContent).toBe(
+      PROPOSAL_SUMMARY_TITLE
+    );
     const summary = screen.getByTestId('proposal-details-summary-value');
     expect(summary.textContent).toMatch(/Summary of the proposal/);
 
@@ -197,6 +205,30 @@ describe('Proposal Details Content', () => {
 
     const url = screen.getByTestId('proposal-details-url');
     expect(url.textContent).toMatch(/https:\/\/example.com/);
+    expect(screen.getByTestId('proposal-details-url-scroll')).toHaveStyle({
+      overflowX: 'auto',
+      maxWidth: '346px',
+    });
+
+    // Figma Offboard details order: Action → Member → Proposal Summary → Supporting URL → Contract ID
+    expect(screen.getByTestId('proposal-details-contractid-label').textContent).toBe(
+      VOTE_PROPOSAL_CONTRACT_ID_LABEL
+    );
+    expect(screen.getByTestId('proposal-details-contractid-id-scroll')).toHaveStyle({
+      overflowX: 'auto',
+      maxWidth: '270px',
+    });
+    const contractIdLabel = screen.getByTestId('proposal-details-contractid-label');
+    expect(
+      action.compareDocumentPosition(offboardSection) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      offboardSection.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(summary.compareDocumentPosition(url) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      url.compareDocumentPosition(contractIdLabel) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
 
     const votingInformationSection = screen.getByTestId('proposal-details-voting-information');
     expect(votingInformationSection).toBeInTheDocument();
@@ -206,6 +238,9 @@ describe('Proposal Details Content', () => {
     );
     expect(requesterInput).toBeInTheDocument();
     expect(requesterInput.textContent).toBe('sv1');
+    expect(
+      within(votingInformationSection).getByTestId('proposal-details-requester-party-id-scroll')
+    ).toHaveStyle({ overflowX: 'auto', maxWidth: '270px' });
 
     expect(screen.getByTestId('proposal-details-created-at-label').textContent).toBe(
       PROPOSAL_CREATED_LABEL
@@ -242,7 +277,9 @@ describe('Proposal Details Content', () => {
 
     expect(screen.getByTestId('your-vote-form')).toBeInTheDocument();
     expect(screen.getByTestId('your-vote-url-input')).toBeInTheDocument();
-    expect(screen.getByTestId('your-vote-reason-input')).toBeInTheDocument();
+    const reasonInput = screen.getByTestId('your-vote-reason-input');
+    expect(reasonInput).toBeInTheDocument();
+    expect(reasonInput.getAttribute('placeholder')).toBe(VOTE_REASON_PLACEHOLDER);
     expect(screen.getByTestId('your-vote-accept')).toBeInTheDocument();
     expect(screen.getByTestId('your-vote-reject')).toBeInTheDocument();
   });
@@ -778,6 +815,10 @@ describe('Proposal Details > Votes & Voting', () => {
     expect(acceptedVotesTab.getAttribute('aria-selected')).toBe('false');
     expect(rejectedVotesTab.getAttribute('aria-selected')).toBe('false');
     expect(noVoteVotesTab.getAttribute('aria-selected')).toBe('false');
+
+    const voterScroll = screen.getAllByTestId('proposal-details-voter-party-id-scroll');
+    expect(voterScroll.length).toBeGreaterThan(0);
+    expect(voterScroll[0]).toHaveStyle({ overflowX: 'auto', maxWidth: '270px' });
   });
 
   test('should filter votes by tabs', async () => {

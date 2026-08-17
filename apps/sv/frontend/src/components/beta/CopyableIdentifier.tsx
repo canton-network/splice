@@ -8,6 +8,7 @@ import { useHorizontalScrollMetrics } from '../../hooks/useHorizontalScrollMetri
 import {
   ellipsisContainerSx,
   ellipsisTextSx,
+  IDENTIFIER_COMPACT_MAX_WIDTH_PX,
   scrollContainerSx,
   scrollTextSx,
   scrollThumbSx,
@@ -23,6 +24,12 @@ interface CopyableIdentifierProps {
   badge?: string;
   size: CopyableIdentifierSize;
   overflow?: CopyableIdentifierOverflow;
+  /**
+   * Caps the text slot (Figma ~270px). With `overflow="scroll"`, the ID stays
+   * horizontally scrollable inside the cap (#1785 + Figma width). With
+   * `overflow="ellipsis"`, CSS ellipsis is used instead.
+   */
+  maxWidth?: number;
   'data-testid': string;
 }
 
@@ -32,12 +39,14 @@ const CopyableIdentifier: React.FC<CopyableIdentifierProps> = ({
   badge,
   size,
   overflow = 'scroll',
+  maxWidth,
   'data-testid': testId,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const metrics = useHorizontalScrollMetrics(scrollRef, [value]);
+  const metrics = useHorizontalScrollMetrics(scrollRef, [value, maxWidth]);
   const fontSize = size === 'small' ? '14px' : '18px';
   const isEllipsis = overflow === 'ellipsis';
+  const compactMaxWidth = maxWidth ?? (isEllipsis ? IDENTIFIER_COMPACT_MAX_WIDTH_PX : undefined);
 
   return (
     <Box
@@ -56,14 +65,24 @@ const CopyableIdentifier: React.FC<CopyableIdentifierProps> = ({
         sx={{
           flex: '0 1 auto',
           minWidth: 0,
-          maxWidth: '100%',
+          maxWidth: compactMaxWidth ?? '100%',
           display: 'flex',
           flexDirection: 'column',
+          position: 'relative',
         }}
       >
         <Box
           ref={isEllipsis ? undefined : scrollRef}
-          sx={isEllipsis ? ellipsisContainerSx : scrollContainerSx}
+          sx={
+            isEllipsis
+              ? ellipsisContainerSx
+              : {
+                  ...scrollContainerSx,
+                  ...(compactMaxWidth !== undefined
+                    ? { maxWidth: compactMaxWidth, width: '100%' }
+                    : {}),
+                }
+          }
           data-testid={`${testId}-${isEllipsis ? 'ellipsis' : 'scroll'}`}
         >
           <Typography

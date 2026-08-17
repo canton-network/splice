@@ -28,6 +28,8 @@ import {
   TextField,
 } from '@mui/material';
 
+import { VOTE_REASON_SUMMARY_LABEL, VOTE_REASON_URL_LABEL } from '../../utils/constants';
+
 import { VoteRequest } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
 import { ContractId } from '@daml/types';
 
@@ -145,7 +147,7 @@ const VoteForm: React.FC<VoteFormProps> = ({ vote, voteRequestCid }) => {
               </TableRow>
               <TableRow>
                 <TableCell>
-                  <Typography variant="h6">Vote Reason Summary</Typography>
+                  <Typography variant="h6">{VOTE_REASON_SUMMARY_LABEL}</Typography>
                 </TableCell>
                 <TableCell>
                   {isEditing ? (
@@ -172,7 +174,7 @@ const VoteForm: React.FC<VoteFormProps> = ({ vote, voteRequestCid }) => {
               </TableRow>
               <TableRow>
                 <TableCell>
-                  <Typography variant="h6">Vote Reason URL</Typography>
+                  <Typography variant="h6">{VOTE_REASON_URL_LABEL}</Typography>
                 </TableCell>
                 <TableCell>
                   {isEditing ? (

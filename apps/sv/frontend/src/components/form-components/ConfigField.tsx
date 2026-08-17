@@ -233,7 +233,7 @@ export const PendingConfigDisplay: React.FC<PendingConfigDisplayProps> = ({ pend
       <Typography
         variant="caption"
         color="text.secondary"
-        sx={{ display: 'block', textAlign: 'center' }}
+        sx={{ display: 'block', textAlign: 'left' }}
       >
         Pending Configuration:{' '}
         <Box
@@ -252,7 +252,7 @@ export const PendingConfigDisplay: React.FC<PendingConfigDisplayProps> = ({ pend
       <Typography
         variant="caption"
         color="text.secondary"
-        sx={{ display: 'block', textAlign: 'center', mt: 0.5 }}
+        sx={{ display: 'block', textAlign: 'left', mt: 0.5 }}
       >
         This{' '}
         <RouterLink
@@ -297,7 +297,7 @@ export const SynchronizerUpgradeTimeDisplay: React.FC<
     <Typography
       variant="caption"
       color="text.secondary"
-      sx={{ mt: 0.5, display: 'block', textAlign: 'center' }}
+      sx={{ mt: 0.5, display: 'block', textAlign: 'left' }}
       data-testid={`${fieldName}-default`}
     >
       {`Default: ${defaultMigrationTime}`}

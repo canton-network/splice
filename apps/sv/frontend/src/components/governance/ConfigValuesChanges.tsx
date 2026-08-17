@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Box, Typography } from '@mui/material';
-import { ConfigChange } from '../../utils/types';
 import { PartyId } from '@canton-network/splice-common-frontend';
+import { CREATE_PROPOSAL_FIELD_BODY_SX } from '../../constants/createProposalLayout';
+import { ConfigChange } from '../../utils/types';
 
 interface ConfigValuesChangesProps {
   changes: ConfigChange[];
@@ -12,7 +13,8 @@ interface ConfigValuesChangesProps {
 
 export const ConfigValuesChanges: React.FC<ConfigValuesChangesProps> = props => {
   const { changes, isSummaryView } = props;
-  const textColor = isSummaryView ? 'text.secondary' : 'text.primary';
+  const textColor = isSummaryView ? undefined : 'text.primary';
+  const summaryLabelSx = isSummaryView ? CREATE_PROPOSAL_FIELD_BODY_SX : undefined;
 
   return (
     <Box
@@ -22,7 +24,11 @@ export const ConfigValuesChanges: React.FC<ConfigValuesChangesProps> = props => 
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {changes.length === 0 && (
           <Box sx={{ py: 1 }}>
-            <Typography variant="body2" color={textColor}>
+            <Typography
+              variant="body2"
+              color={textColor}
+              sx={isSummaryView ? CREATE_PROPOSAL_FIELD_BODY_SX : undefined}
+            >
               No changes found.
             </Typography>
           </Box>
@@ -48,7 +54,12 @@ export const ConfigValuesChanges: React.FC<ConfigValuesChangesProps> = props => 
             data-disabled={change.disabled ? 'true' : undefined}
           >
             <Box sx={{ minWidth: 200 }}>
-              <Typography variant="body1" data-testid="config-change-field-label" color={textColor}>
+              <Typography
+                variant={isSummaryView ? undefined : 'body1'}
+                data-testid="config-change-field-label"
+                color={textColor}
+                sx={summaryLabelSx}
+              >
                 {change.label}
               </Typography>
               {change.disabled && (

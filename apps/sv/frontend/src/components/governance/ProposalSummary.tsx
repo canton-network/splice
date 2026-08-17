@@ -5,6 +5,7 @@ import { Box, Typography } from '@mui/material';
 import type { ReactNode } from 'react';
 import {
   EFFECTIVE_AT_LABEL,
+  CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE,
   PROPOSAL_REVIEW_TITLE,
   THRESHOLD_DEADLINE_LABEL,
   THRESHOLD_DEADLINE_SUBTITLE,
@@ -72,13 +73,15 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
   return (
     <Box data-testid="proposal-review">
       <Typography
-        variant="h5"
         component="h2"
         data-testid="proposal-review-title"
         sx={{
+          fontFamily: "'Inter', sans-serif",
           fontWeight: 700,
-          fontSize: '20px',
+          fontSize: '18px',
           lineHeight: '28px',
+          letterSpacing: 0,
+          color: '#FFFFFF',
           mb: 4,
         }}
       >
@@ -86,7 +89,11 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
       </Typography>
 
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <ProposalReviewField id="action" label="Proposal Type" value={actionName} />
+        <ProposalReviewField
+          id="action"
+          label={CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE}
+          value={actionName}
+        />
 
         {/* Action-specific fields follow Action (Figma: config/member before threshold). */}
         {formType === 'config-change' && (
@@ -112,6 +119,7 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
               label="Proposed Changes"
               value={
                 <ConfigValuesChanges
+                  isSummaryView
                   changes={[
                     {
                       label: 'Super Validator Reward Weight',
@@ -173,6 +181,7 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
               label="Proposed Changes"
               value={
                 <ConfigValuesChanges
+                  isSummaryView
                   changes={[
                     {
                       label: 'Activity Weight',

@@ -10,6 +10,7 @@ import { useFieldContext } from '../../hooks/formContext';
 import { useDsoInfos } from '../../contexts/SvContext';
 import {
   DEFAULT_PROPOSAL_SUMMARY_MAX_LENGTH,
+  PROPOSAL_SUMMARY_PLACEHOLDER,
   PROPOSAL_SUMMARY_SUBTITLE,
   PROPOSAL_SUMMARY_TITLE,
 } from '../../utils/constants';
@@ -53,6 +54,7 @@ export const ProposalSummaryField: React.FC<ProposalSummaryFieldProps> = props =
         onChange={e => field.handleChange(e.target.value)}
         error={!field.state.meta.isValid}
         helperText={field.state.meta.errors?.[0]}
+        placeholder={PROPOSAL_SUMMARY_PLACEHOLDER}
         inputProps={{ 'data-testid': id, maxLength }}
       />
       <Box

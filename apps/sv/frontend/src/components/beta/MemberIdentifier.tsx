@@ -9,6 +9,7 @@ interface MemberIdentifierProps {
   isYou: boolean;
   size: CopyableIdentifierSize;
   overflow?: CopyableIdentifierOverflow;
+  maxWidth?: number;
   'data-testid': string;
 }
 
@@ -17,6 +18,7 @@ const MemberIdentifier: React.FC<MemberIdentifierProps> = ({
   isYou,
   size,
   overflow,
+  maxWidth,
   'data-testid': testId,
 }) => (
   <CopyableIdentifier
@@ -25,6 +27,7 @@ const MemberIdentifier: React.FC<MemberIdentifierProps> = ({
     badge={isYou ? 'You' : undefined}
     size={size}
     overflow={overflow}
+    maxWidth={maxWidth}
     data-testid={testId}
   />
 );

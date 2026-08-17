@@ -40,26 +40,50 @@ describe('CopyableIdentifier', () => {
     });
   });
 
-  test('shows a scroll track below the identifier when content overflows', async () => {
+  test('compact scroll keeps #1785 scrolling at the Figma width', async () => {
     render(
       <NarrowContainer>
-        <CopyableIdentifier value={LONG_CONTRACT_ID} size="small" data-testid="contract-id" />
+        <CopyableIdentifier
+          value={LONG_CONTRACT_ID}
+          size="large"
+          maxWidth={270}
+          data-testid="contract-id"
+        />
       </NarrowContainer>
     );
 
     const scroll = screen.getByTestId('contract-id-scroll');
+    expect(scroll).toHaveStyle({ overflowX: 'auto', maxWidth: '270px' });
+    expect(screen.getByTestId('contract-id-value')).toHaveTextContent(LONG_CONTRACT_ID);
+
     Object.defineProperty(scroll, 'scrollWidth', { configurable: true, value: 400 });
     Object.defineProperty(scroll, 'clientWidth', { configurable: true, value: 100 });
+    Object.defineProperty(scroll, 'scrollLeft', { configurable: true, value: 0 });
     fireEvent.scroll(scroll);
 
     await waitFor(() => {
+      expect(screen.queryByTestId('contract-id-ellipsis-cue')).not.toBeInTheDocument();
       expect(screen.getByTestId('contract-id-scroll-track')).toBeInTheDocument();
     });
+  });
 
-    expect(screen.getByTestId('contract-id-scroll-track')).toHaveStyle({
-      opacity: '0',
-      height: '0px',
+  test('trims long identifiers to the Figma ellipsis width without a narrow parent', () => {
+    render(
+      <CopyableIdentifier
+        value={LONG_CONTRACT_ID}
+        size="large"
+        overflow="ellipsis"
+        data-testid="contract-id"
+      />
+    );
+
+    expect(screen.getByTestId('contract-id-value')).toHaveTextContent(LONG_CONTRACT_ID);
+    expect(screen.getByTestId('contract-id-value')).toHaveAttribute('title', LONG_CONTRACT_ID);
+    expect(screen.getByTestId('contract-id-ellipsis')).toHaveStyle({
+      overflow: 'hidden',
+      maxWidth: '270px',
     });
+    expect(screen.getByTestId('contract-id-value')).toHaveStyle({ textOverflow: 'ellipsis' });
   });
 });
 

@@ -7,7 +7,6 @@ import {
   CREATE_PROPOSAL_FIELD_BODY_SX,
   CREATE_PROPOSAL_FIELD_HELPER_SX,
   CREATE_PROPOSAL_FIELD_LABEL_SX,
-  CREATE_PROPOSAL_FIELD_SURFACE_BG,
 } from '../../constants/createProposalLayout';
 
 export interface ProposalReviewFieldProps {
@@ -17,6 +16,7 @@ export interface ProposalReviewFieldProps {
   subtitle?: string;
 }
 
+/** Read-only review value — Figma Proposal Review shows flat Body M text (no grey54 fill). */
 export const ProposalReviewField: React.FC<ProposalReviewFieldProps> = ({
   id,
   label,
@@ -42,34 +42,22 @@ export const ProposalReviewField: React.FC<ProposalReviewFieldProps> = ({
       </Typography>
     )}
 
-    <Box
-      sx={{
-        bgcolor: CREATE_PROPOSAL_FIELD_SURFACE_BG,
-        borderRadius: '4px',
-        px: '16px',
-        py: '13px',
-        minHeight: '48px',
-        display: 'flex',
-        alignItems: 'center',
-      }}
-    >
-      {typeof value === 'string' ? (
-        <Typography
-          component="p"
-          data-testid={`${id}-field`}
-          sx={{
-            ...CREATE_PROPOSAL_FIELD_BODY_SX,
-            wordBreak: 'break-word',
-            width: '100%',
-          }}
-        >
-          {value}
-        </Typography>
-      ) : (
-        <Box data-testid={`${id}-field`} sx={{ width: '100%' }}>
-          {value}
-        </Box>
-      )}
-    </Box>
+    {typeof value === 'string' ? (
+      <Typography
+        component="p"
+        data-testid={`${id}-field`}
+        sx={{
+          ...CREATE_PROPOSAL_FIELD_BODY_SX,
+          wordBreak: 'break-word',
+          width: '100%',
+        }}
+      >
+        {value}
+      </Typography>
+    ) : (
+      <Box data-testid={`${id}-field`} sx={{ width: '100%' }}>
+        {value}
+      </Box>
+    )}
   </Box>
 );

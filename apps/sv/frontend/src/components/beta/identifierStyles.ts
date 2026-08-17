@@ -28,14 +28,24 @@ export const scrollTextSx: SxProps<Theme> = {
 
 export const ellipsisContainerSx: SxProps<Theme> = {
   minWidth: 0,
+  // Figma truncated ID text slot (e.g. Vote proposal contract id Group 461): 270px
+  maxWidth: 270,
+  width: '100%',
   overflow: 'hidden',
 };
+
+/** Figma Group 461 truncated ID text width — also used to cap scrollable compact IDs. */
+export const IDENTIFIER_COMPACT_MAX_WIDTH_PX = 270;
+
+/** Figma Supporting URL value slot (`552:960`). */
+export const URL_COMPACT_MAX_WIDTH_PX = 346;
 
 export const ellipsisTextSx: SxProps<Theme> = {
   display: 'block',
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
+  maxWidth: '100%',
 };
 
 export const scrollableIdentifierFieldSx: SxProps<Theme> = {

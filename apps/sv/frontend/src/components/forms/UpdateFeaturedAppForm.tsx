@@ -27,6 +27,7 @@ import { FormLayout } from './FormLayout';
 import { ProposalSummary } from '../governance/ProposalSummary';
 import { useStore } from '@tanstack/react-form';
 import {
+  CREATE_PROPOSAL_LABEL_THRESHOLD_DEADLINE,
   DEFAULT_APP_ACTIVITY_WEIGHT,
   SUPPORTING_URL_PLACEHOLDER,
   THRESHOLD_DEADLINE_SUBTITLE,
@@ -213,7 +214,7 @@ export const UpdateFeaturedAppForm: React.FC = () => {
             >
               {field => (
                 <field.DateField
-                  title="Threshold Deadline"
+                  title={CREATE_PROPOSAL_LABEL_THRESHOLD_DEADLINE}
                   description={THRESHOLD_DEADLINE_SUBTITLE}
                   id={`${idPrefix}-expiry-date`}
                 />

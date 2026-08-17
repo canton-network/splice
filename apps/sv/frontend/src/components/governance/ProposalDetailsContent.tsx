@@ -33,12 +33,14 @@ import { useDsoInfos } from '../../contexts/SvContext';
 import { DetailItem } from './proposal-details/DetailItem';
 import { CreateUnallocatedUnclaimedActivityRecordSection } from './proposal-details/CreateUnallocatedUnclaimedActivityRecordSection';
 import { CopyableIdentifier, CopyableUrl, MemberIdentifier, VoteStats } from '../beta';
+import { IDENTIFIER_COMPACT_MAX_WIDTH_PX } from '../beta/identifierStyles';
 import { useQuery } from '@tanstack/react-query';
 import { useSvAdminClient } from '../../contexts/SvAdminServiceContext';
 import {
   DEFAULT_APP_ACTIVITY_WEIGHT,
   EFFECTIVE_AT_LABEL,
   PROPOSAL_CREATED_LABEL,
+  PROPOSAL_SUMMARY_TITLE,
   SUPPORTING_URL_LABEL,
   THRESHOLD_DEADLINE_LABEL,
   VOTE_PROPOSAL_CONTRACT_ID_LABEL,
@@ -205,24 +207,13 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
       </Stack>
 
       <Stack sx={{ bgcolor: 'colors.neutral.10', p: 6 }} alignItems="center" gap={8}>
-        <VoteSection title="Proposal Details" data-testid="proposal-details-proposal-details">
+        {/* Figma details content starts at Action — no inner section title. */}
+        <VoteSection data-testid="proposal-details-proposal-details">
           <DetailItem
             label="Action"
             value={proposalDetails.actionName}
             labelId="proposal-details-action-label"
             valueId="proposal-details-action-value"
-          />
-
-          <DetailItem
-            label={VOTE_PROPOSAL_CONTRACT_ID_LABEL}
-            value={
-              <CopyableIdentifier
-                value={contractId}
-                size="large"
-                data-testid="proposal-details-contractid-id"
-              />
-            }
-            labelId="proposal-details-contractid-label"
           />
 
           {proposalDetails.action === 'SRARC_OffboardSv' && (
@@ -323,7 +314,7 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
           )}
 
           <DetailItem
-            label="Summary"
+            label={PROPOSAL_SUMMARY_TITLE}
             value={proposalDetails.summary}
             labelId="proposal-details-summary-label"
             valueId="proposal-details-summary-value"
@@ -340,9 +331,22 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
             }
             labelId="proposal-details-url-label"
           />
+
+          <DetailItem
+            label={VOTE_PROPOSAL_CONTRACT_ID_LABEL}
+            value={
+              <CopyableIdentifier
+                value={contractId}
+                size="large"
+                maxWidth={IDENTIFIER_COMPACT_MAX_WIDTH_PX}
+                data-testid="proposal-details-contractid-id"
+              />
+            }
+            labelId="proposal-details-contractid-label"
+          />
         </VoteSection>
 
-        <VoteSection title="Voting Information" data-testid="proposal-details-voting-information">
+        <VoteSection title="Proposal Information" data-testid="proposal-details-voting-information">
           <DetailItem
             label="Requester"
             value={
@@ -350,6 +354,7 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
                 partyId={votingInformation.requester}
                 isYou={false}
                 size="large"
+                maxWidth={IDENTIFIER_COMPACT_MAX_WIDTH_PX}
                 data-testid="proposal-details-requester-party-id"
               />
             }
@@ -496,7 +501,8 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
 };
 
 interface VoteSectionProps extends PropsWithChildren {
-  title: string;
+  /** Section heading (e.g. Proposal Information). Omit when Figma has no heading above the fields. */
+  title?: string;
   'data-testid': string;
   bordered?: boolean;
   centered?: boolean;
@@ -505,9 +511,11 @@ interface VoteSectionProps extends PropsWithChildren {
 const VoteSection = React.forwardRef<HTMLDivElement, VoteSectionProps>(
   ({ title, children, 'data-testid': testId, bordered = false, centered = false }, ref) => (
     <Box sx={{ width: '100%', maxWidth: '800px' }} data-testid={testId} ref={ref}>
-      <Typography component="h2" fontSize={18} fontWeight={700} mb={3}>
-        {title}
-      </Typography>
+      {title !== undefined && (
+        <Typography component="h2" fontSize={18} fontWeight={700} mb={3}>
+          {title}
+        </Typography>
+      )}
       <Box
         sx={{
           ...(bordered && {
@@ -564,7 +572,7 @@ const VoteItem: React.FC<VoteItemProps> = ({
             partyId={voter}
             size="large"
             isYou={isYou}
-            overflow="ellipsis"
+            maxWidth={IDENTIFIER_COMPACT_MAX_WIDTH_PX}
             data-testid="proposal-details-voter-party-id"
           />
         </Box>
@@ -630,6 +638,7 @@ const OffboardMemberSection = ({ memberPartyId }: OffboardMemberSectionProps) =>
             partyId={memberPartyId}
             isYou={false}
             size="large"
+            maxWidth={IDENTIFIER_COMPACT_MAX_WIDTH_PX}
             data-testid="proposal-details-member-party-id"
           />
         }
@@ -817,6 +826,7 @@ const UpdateSvRewardWeightSection = ({
               partyId={svToUpdate}
               isYou={false}
               size="large"
+              maxWidth={IDENTIFIER_COMPACT_MAX_WIDTH_PX}
               data-testid="proposal-details-member-party-id"
             />
           }

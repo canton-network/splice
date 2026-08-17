@@ -23,9 +23,6 @@ export const CREATE_PROPOSAL_CONFIG_ROW_DIVIDER_GAP = '14px';
 /** Configuration value input width (Figma Frame 531). */
 export const CREATE_PROPOSAL_CONFIG_INPUT_WIDTH = '238px';
 
-/** Read-only review field surface (Figma grey54). */
-export const CREATE_PROPOSAL_FIELD_SURFACE_BG = '#363636';
-
 /** Figma Blue (Primary CTA) — enabled Review/Submit Proposal. */
 export const CREATE_PROPOSAL_PRIMARY_CTA = '#96E4FD';
 

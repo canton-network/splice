@@ -4,6 +4,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, test } from 'vitest';
 import { ProposalSummary } from '../../components/governance/ProposalSummary';
 import {
+  CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE,
   EFFECTIVE_AT_LABEL,
   PROPOSAL_REVIEW_TITLE,
   SUPPORTING_URL_LABEL,
@@ -19,7 +20,7 @@ const effectiveDate = '2025-09-26 11:00';
 /** Shared labels for the post-rebase ProposalSummary / ProposalReviewField chrome. */
 const REVIEW_LABELS = {
   title: PROPOSAL_REVIEW_TITLE,
-  action: 'Proposal Type',
+  action: CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE,
   expiryDate: THRESHOLD_DEADLINE_LABEL,
   effectiveDate: EFFECTIVE_AT_LABEL,
   summary: 'Proposal Summary',
