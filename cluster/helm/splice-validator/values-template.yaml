@@ -62,6 +62,9 @@ enableWallet: true
 # k8s tolerations for all deployed pods (optional)
 # tolerations:
 
+# k8s priorityClassName for all deployed pods (optional)
+# priorityClassName:
+
 spliceInstanceNames:
   networkName: # Please provide a value as provided in the docs
   networkFaviconUrl: # Please provide a value as provided in the docs

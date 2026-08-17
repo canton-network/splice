@@ -171,6 +171,9 @@ spec:
                 echo "trying to create postgres database {{ .Values.mediator.persistence.databaseName }}, last error: $errmsg";
                 sleep 2;
               done
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

@@ -464,3 +464,22 @@ tests:
               drop:
                 - ALL
 
+
+  - it: "sets priorityClassName when provided"
+    set:
+      priorityClassName: high-priority
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: high-priority
+
+  - it: "omits priorityClassName when not provided"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - notExists:
+          path: spec.template.spec.priorityClassName

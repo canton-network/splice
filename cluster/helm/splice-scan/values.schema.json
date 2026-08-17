@@ -273,6 +273,9 @@
         "tolerations": {
           "type": "array"
         },
+        "priorityClassName": {
+          "type": "string"
+        },
         "enablePostgresMetrics": {
           "type": "boolean"
         },

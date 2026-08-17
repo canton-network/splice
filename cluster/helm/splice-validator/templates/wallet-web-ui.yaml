@@ -108,6 +108,9 @@ spec:
             memory: 240Mi
           limits:
             memory: 1536Mi
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

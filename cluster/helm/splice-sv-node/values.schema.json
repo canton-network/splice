@@ -580,6 +580,9 @@
         "tolerations": {
           "type": "array"
         },
+        "priorityClassName": {
+          "type": "string"
+        },
         "livenessProbeInitialDelaySeconds": {
           "type": "integer",
           "minimum": 0
