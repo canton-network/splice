@@ -144,11 +144,7 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
         updateAllScanAppConfigs_(config =>
           config.copy(parameters =
             config.parameters.copy(rateLimiting =
-              RateLimitersConfig(
-                default = SpliceRateLimitConfig.WithPerClientIp(enabled = false, 1),
-                rateLimiters = Map.empty,
-                global = SpliceRateLimitConfig.WithPerClientIp(enabled = false, 1),
-              )
+              RateLimitersConfig(SpliceRateLimitConfig(enabled = false, 1), Map.empty)
             )
           )
         )(config)
