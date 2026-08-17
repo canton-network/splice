@@ -58,6 +58,13 @@ class AppActivityComputation(
       .lookupActiveOpenMiningRounds(Seq(asOf))
       .map(_.get(asOf).map { case TimestampWithMigrationId(_, roundNumber) => roundNumber })
 
+  def lookupActiveOpenMiningRounds(
+      asOf: Seq[CantonTimestamp]
+  )(implicit tc: TraceContext): Future[Map[CantonTimestamp, Long]] =
+    rewardsReferenceStore
+      .lookupActiveOpenMiningRounds(asOf)
+      .map(_.map { case (time, (roundNumber, _)) => time -> roundNumber })
+
   /** Compute app activity records for a batch of verdicts.
     *
     * Records are returned with verdictRowId = DUMMY_VERDICT_ROW_ID as a placeholder.

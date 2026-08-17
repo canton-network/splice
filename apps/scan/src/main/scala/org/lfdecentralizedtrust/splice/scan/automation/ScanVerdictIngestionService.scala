@@ -274,7 +274,7 @@ class ScanVerdictIngestionService(
           // Compute app activity records (before DB transaction).
           // Records have verdictRowId = DUMMY_VERDICT_ROW_ID
           // the store resolves actual row_ids during insertion.
-          (appActivityRecords, firstActiveRoundO, lastArchivedRoundO) <- {
+          (appActivityRecords, firstActiveRoundO, lastArchivedRoundO, roundByTime) <- {
             val recordTimes =
               verdicts.map(v => CantonTimestamp.tryFromProtoTimestamp(v.getRecordTime))
             for {
@@ -293,12 +293,18 @@ class ScanVerdictIngestionService(
                   appActivityComputation.lookupLatestArchivedOpenMiningRound(maxRecordTime)
                 case None => Future.successful(None)
               }
-            } yield (records, firstActiveRoundO, lastArchivedRoundO)
+              roundByTime <- appActivityComputation.lookupActiveOpenMiningRounds(recordTimes)
+            } yield (records, firstActiveRoundO, lastArchivedRoundO, roundByTime)
           }
 
           _ <- ensureVerdictsHaveTrafficSummaries(verdicts, summaryByTime)
+
+          itemsWithRounds = items.map { case (v, mkViews) =>
+            (v.copy(roundNumber = roundByTime.get(v.recordTime)), mkViews)
+          }
+
           _ <- store.insertVerdictsWithAppActivityRecords(
-            items,
+            itemsWithRounds,
             appActivityRecords,
             hasTrafficSummaries = summaryByTime.nonEmpty,
             firstActiveRoundO = firstActiveRoundO,
