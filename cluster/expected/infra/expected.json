@@ -1941,7 +1941,7 @@
         "meshConfig": {
           "accessLogEncoding": "JSON",
           "accessLogFile": "",
-          "accessLogFormat": "{\"trace_id\":\"%REQ(traceparent)%\",\"authority\":\"%REQ(:AUTHORITY)%\",\"bytes_received\":\"%BYTES_RECEIVED%\",\"bytes_sent\":\"%BYTES_SENT%\",\"downstream_local_address\":\"%DOWNSTREAM_LOCAL_ADDRESS%\",\"downstream_remote_address\":\"%DOWNSTREAM_REMOTE_ADDRESS%\",\"duration\":\"%DURATION%\",\"method\":\"%REQ(:METHOD)%\",\"path\":\"%REQ(X-ENVOY-ORIGINAL-PATH?:PATH)%\",\"protocol\":\"%PROTOCOL%\",\"request_id\":\"%REQ(X-REQUEST-ID)%\",\"requested_server_name\":\"%REQUESTED_SERVER_NAME%\",\"response_code\":\"%RESPONSE_CODE%\",\"response_code_details\":\"%RESPONSE_CODE_DETAILS%\",\"response_flags\":\"%RESPONSE_FLAGS%\",\"start_time\":\"%START_TIME%\",\"upstream_cluster\":\"%UPSTREAM_CLUSTER%\",\"upstream_host\":\"%UPSTREAM_HOST%\",\"upstream_local_address\":\"%UPSTREAM_LOCAL_ADDRESS%\",\"upstream_service_time\":\"%RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%\",\"user_agent\":\"%REQ(USER-AGENT)%\",\"x_forwarded_for\":\"%REQ(X-FORWARDED-FOR)%\"}",
+          "accessLogFormat": "{\"trace_id\":\"%REQ(traceparent)%\",\"authority\":\"%REQ(:AUTHORITY)%\",\"bytes_received\":\"%BYTES_RECEIVED%\",\"bytes_sent\":\"%BYTES_SENT%\",\"downstream_local_address\":\"%DOWNSTREAM_LOCAL_ADDRESS%\",\"downstream_remote_address\":\"%DOWNSTREAM_REMOTE_ADDRESS%\",\"duration\":\"%DURATION%\",\"method\":\"%REQ(:METHOD)%\",\"path\":\"%REQ(X-ENVOY-ORIGINAL-PATH?:PATH)%\",\"protocol\":\"%PROTOCOL%\",\"request_id\":\"%REQ(X-REQUEST-ID)%\",\"requested_server_name\":\"%REQUESTED_SERVER_NAME%\",\"response_code\":\"%RESPONSE_CODE%\",\"response_code_details\":\"%RESPONSE_CODE_DETAILS%\",\"response_flags\":\"%RESPONSE_FLAGS%\",\"start_time\":\"%START_TIME%\",\"upstream_cluster\":\"%UPSTREAM_CLUSTER%\",\"upstream_host\":\"%UPSTREAM_HOST%\",\"upstream_local_address\":\"%UPSTREAM_LOCAL_ADDRESS%\",\"upstream_service_time\":\"%RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%\",\"user_agent\":\"%REQ(USER-AGENT)%\",\"x_forwarded_for\":\"%REQ(X-FORWARDED-FOR)%\",\"local_rate_limited\":\"%RESP(x-local-rate-limit)%\",\"rate_limit_limit\":\"%RESP(x-ratelimit-limit)%\",\"rate_limit_remaining\":\"%RESP(x-ratelimit-remaining)%\",\"rate_limit_reset\":\"%RESP(x-ratelimit-reset)%\"}",
           "defaultConfig": {
             "gatewayTopology": {
               "numTrustedProxies": 0
@@ -1956,7 +1956,10 @@
           "defaultHttpRetryPolicy": {
             "attempts": 0
           },
-          "enablePrometheusMerge": false
+          "enablePrometheusMerge": false,
+          "pathNormalization": {
+            "normalization": "MERGE_SLASHES"
+          }
         },
         "telemetry": {
           "enabled": true,
@@ -2348,6 +2351,48 @@
       }
     },
     "name": "sequencer-flow-control",
+    "provider": "",
+    "type": "kubernetes:networking.istio.io/v1alpha3:EnvoyFilter"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "networking.istio.io/v1alpha3",
+      "kind": "EnvoyFilter",
+      "metadata": {
+        "name": "strip-rate-limit-headers",
+        "namespace": "cluster-ingress"
+      },
+      "spec": {
+        "configPatches": [
+          {
+            "applyTo": "ROUTE_CONFIGURATION",
+            "match": {
+              "context": "GATEWAY"
+            },
+            "patch": {
+              "operation": "MERGE",
+              "value": {
+                "response_headers_to_remove": [
+                  "x-local-rate-limit",
+                  "x-ratelimit-limit",
+                  "x-ratelimit-remaining",
+                  "x-ratelimit-reset",
+                  "x-envoy-ratelimited"
+                ]
+              }
+            }
+          }
+        ],
+        "workloadSelector": {
+          "labels": {
+            "istio": "ingress"
+          }
+        }
+      }
+    },
+    "name": "strip-rate-limit-headers",
     "provider": "",
     "type": "kubernetes:networking.istio.io/v1alpha3:EnvoyFilter"
   },

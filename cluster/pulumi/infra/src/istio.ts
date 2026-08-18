@@ -10,6 +10,7 @@ import {
 } from '@canton-network/splice-pulumi-common-sv/src/svConfigsBasic';
 import { cometBFTExternalPort } from '@canton-network/splice-pulumi-common-sv/src/synchronizer/cometbftConfig';
 import { spliceConfig } from '@canton-network/splice-pulumi-common/src/config/config';
+import { rateLimitResponseHeaders } from '@canton-network/splice-pulumi-common/src/ratelimit/rateLimitHeaders';
 import { mergeWith } from 'lodash';
 
 import {
@@ -126,9 +127,28 @@ function configureIstiod(
         upstream_service_time: '%RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%',
         user_agent: '%REQ(USER-AGENT)%',
         x_forwarded_for: '%REQ(X-FORWARDED-FOR)%',
+        // Rate limiting, see cluster/pulumi/common/src/ratelimit/envoyRateLimiter.ts.
+        // The headers are set by the inbound sidecar of the rate limited app and are
+        // stripped again on the ingress gateway (see stripRateLimitHeaders), so these
+        // fields are only populated in the access log of that sidecar.
+        // 'true' only when the rate limit was actually enforced (i.e. the request was
+        // rejected with a 429), as opposed to merely being consulted.
+        local_rate_limited: '%RESP(x-local-rate-limit)%',
+        // The limit of the token bucket that rejected the request (or, for requests that
+        // were let through, of the most constraining bucket that was consulted). Together
+        // with the path this identifies which of the configured limits was enforced:
+        // envoy emits neither per-descriptor stats nor dynamic metadata for local rate
+        // limits, so this is the only per-limit attribution available.
+        rate_limit_limit: '%RESP(x-ratelimit-limit)%',
+        rate_limit_remaining: '%RESP(x-ratelimit-remaining)%',
+        rate_limit_reset: '%RESP(x-ratelimit-reset)%',
       }),
       // https://istio.io/latest/docs/ops/integrations/prometheus/#option-1-metrics-merging  disable as we don't use annotations
       enablePrometheusMerge: false,
+      // https://istio.io/latest/docs/ops/best-practices/security/#path-normalization
+      pathNormalization: {
+        normalization: 'MERGE_SLASHES',
+      },
       defaultConfig: {
         // The GCP NLB with externalTrafficPolicy: Local preserves the client's
         // source IP without adding X-Forwarded-For hops, so there are no trusted
@@ -943,6 +963,55 @@ function configureSequencerFlowControl(
   });
 }
 
+// The local rate limit filter on the inbound sidecar of a rate limited app adds response
+// headers describing the limit that was hit (see
+// cluster/pulumi/common/src/ratelimit/envoyRateLimiter.ts). We want them in the sidecar
+// access log, but we do not want to hand out our rate limit configuration to clients, so
+// we drop them again on the ingress gateway, i.e. before the response leaves the mesh.
+// Note that envoy applies these removals before writing its access log, so these headers
+// are only visible in the access log of the sidecar that added them, not in the gateway's.
+function stripRateLimitHeaders(
+  ingressNs: k8s.core.v1.Namespace,
+  gwSvc: k8s.helm.v3.Release
+): k8s.apiextensions.CustomResource {
+  return new k8s.apiextensions.CustomResource(
+    'strip-rate-limit-headers',
+    {
+      apiVersion: 'networking.istio.io/v1alpha3',
+      kind: 'EnvoyFilter',
+      metadata: {
+        name: 'strip-rate-limit-headers',
+        namespace: ingressNs.metadata.name,
+      },
+      spec: {
+        workloadSelector: {
+          labels: {
+            istio: 'ingress',
+          },
+        },
+        configPatches: [
+          {
+            applyTo: 'ROUTE_CONFIGURATION',
+            match: {
+              context: 'GATEWAY',
+            },
+            patch: {
+              // repeated fields are appended, so this does not clobber anything istio sets
+              operation: 'MERGE',
+              value: {
+                response_headers_to_remove: rateLimitResponseHeaders,
+              },
+            },
+          },
+        ],
+      },
+    },
+    {
+      dependsOn: [gwSvc],
+    }
+  );
+}
+
 export function configureIstio(
   ingressNs: ExactNamespace,
   ingressIp: pulumi.Output<string>,
@@ -977,6 +1046,7 @@ export function configureIstio(
     ingressNs.ns
   );
   const sequencerFlowControl = configureSequencerFlowControl(ingressNs.ns);
+  const rateLimitHeaderStripping = stripRateLimitHeaders(ingressNs.ns, gwSvc);
   return {
     allResources: [
       ...gateways,
@@ -985,6 +1055,7 @@ export function configureIstio(
       ...publicTokenRegistry,
       ...sequencerHighPerformanceGrpcRules,
       ...[sequencerFlowControl],
+      ...[rateLimitHeaderStripping],
     ],
     httpServiceName: 'istio-ingress',
     istioResource: gwSvc,
