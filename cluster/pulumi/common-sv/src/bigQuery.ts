@@ -378,6 +378,21 @@ function installBigqueryProdDataset(scanBigQuery: ScanBigQueryConfig): gcp.bigqu
     },
   });
 }
+// ============================================================================
+// IAM PERMISSIONS for SCHEDULED QUERIES
+// ============================================================================
+function installBqTransferServiceAgentPermission(): gcp.projects.IAMMember {
+  const currentProject = gcp.organizations.getProjectOutput({});
+  const projectId = currentProject.apply(p => p.projectId!);
+
+  return new gcp.projects.IAMMember('bq-transfer-token-creator', {
+    project: projectId,
+    role: 'roles/iam.serviceAccountTokenCreator',
+    member: currentProject.apply(
+      p => `serviceAccount:service-${p.number}@gcp-sa-bigquerydatatransfer.iam.gserviceaccount.com`
+    ),
+  });
+}
 
 // ============================================================================
 // HOURLY DEDUPLICATION & SCHEDULED QUERIES
@@ -388,19 +403,12 @@ const rawSqlTemplate = fs.readFileSync(path.join(__dirname, 'hourly_append.sql')
 function installHourlyScheduledQueries(
   namespace: ExactNamespace,
   stagingDataset: gcp.bigquery.Dataset,
-  prodDataset: gcp.bigquery.Dataset
+  prodDataset: gcp.bigquery.Dataset,
+  transferServiceAgentPermission: gcp.projects.IAMMember
 ) {
   const currentProject = gcp.organizations.getProjectOutput({});
   const projectId = currentProject.apply(p => p.projectId!);
   const schemaName = scanAppDatabaseName(namespace);
-
-  const transferServiceAgentPermission = new gcp.projects.IAMMember('bq-transfer-token-creator', {
-    project: projectId,
-    role: 'roles/iam.serviceAccountTokenCreator',
-    member: currentProject.apply(
-      p => `serviceAccount:service-${p.number}@gcp-sa-bigquerydatatransfer.iam.gserviceaccount.com`
-    ),
-  });
 
   Object.entries(replicatedTables).forEach(([tableName, tableConfig]) => {
     const primaryKeyExpr = tableConfig.primaryKey;
@@ -473,21 +481,13 @@ function installHourlyScheduledQueries(
 function installDailyPurgeScheduledQueries(
   namespace: ExactNamespace,
   stagingDataset: gcp.bigquery.Dataset,
-  retentionPeriodSeconds: number = 604800
+  transferServiceAgentPermission: gcp.projects.IAMMember,
+  retentionPeriodSeconds: number = 604800,  
 ) {
   const currentProject = gcp.organizations.getProjectOutput({});
   const projectId = currentProject.apply(p => p.projectId!);
   const schemaName = scanAppDatabaseName(namespace);
   const retentionDays = retentionPeriodSeconds / 86400;
-
-  // Grant BigQuery DTS service account permission to impersonate
-  const transferServiceAgentPermission = new gcp.projects.IAMMember('bq-purge-transfer-token-creator', {
-    project: projectId,
-    role: 'roles/iam.serviceAccountTokenCreator',
-    member: currentProject.apply(
-      p => `serviceAccount:service-${p.number}@gcp-sa-bigquerydatatransfer.iam.gserviceaccount.com`
-    ),
-  });
 
   Object.entries(replicatedTables).forEach(([tableName, tableConfig]) => {
     const timeExpression =
@@ -930,9 +930,9 @@ export async function configureScanBigQuery({
       slots.slot2,
       stagProdDesiredState
     );
-
-    installHourlyScheduledQueries(namespace, stagingDataset, prodDataset);
-    installDailyPurgeScheduledQueries(namespace, stagingDataset,retentionPeriodSeconds);
+    const transferServiceAgentPermission = installBqTransferServiceAgentPermission();
+    installHourlyScheduledQueries(namespace, stagingDataset, prodDataset, transferServiceAgentPermission);
+    installDailyPurgeScheduledQueries(namespace, stagingDataset, transferServiceAgentPermission, retentionPeriodSeconds);
   }
   // TODO (DACH-NY/canton-network-internal#6451) not sure if this function needs to return anything,
   // but we need to return something to satisfy the ScanBigQuery type.
