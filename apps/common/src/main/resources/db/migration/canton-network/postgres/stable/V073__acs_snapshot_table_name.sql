@@ -1,6 +1,8 @@
 alter table acs_snapshot
   -- the name 'table_name' is not reserved, but it is a PostgreSQL keyword, so we use a different name to avoid confusion
   add column data_table_name text default null,
+  -- default true for all existing snapshots, any new ones will set it to false until the indexes are created
+  add column indexes_created boolean default true,
   -- these values won't be set anymore
   drop constraint acs_snapshot_first_row_id_fkey,
   drop constraint acs_snapshot_last_row_id_fkey,

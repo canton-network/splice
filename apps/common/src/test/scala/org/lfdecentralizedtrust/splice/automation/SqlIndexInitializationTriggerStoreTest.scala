@@ -96,7 +96,7 @@ class SqlIndexInitializationTriggerStoreTest
     }
 
     "drop index" in {
-      val trigger = new SqlIndexInitializationTrigger(
+      val trigger = new StartupSqlIndexInitializationTrigger(
         storage = storage,
         context = triggerContext,
         indexActions = List(
@@ -166,7 +166,7 @@ class SqlIndexInitializationTriggerStoreTest
     }
 
     "delete invalid index" in {
-      val trigger = new SqlIndexInitializationTrigger(
+      val trigger = new StartupSqlIndexInitializationTrigger(
         storage = storage,
         context = triggerContext,
         indexActions = List(
@@ -266,7 +266,7 @@ class SqlIndexInitializationTriggerStoreTest
     }
 
     "avoid deleting index that is being created" in {
-      val trigger = new SqlIndexInitializationTrigger(
+      val trigger = new StartupSqlIndexInitializationTrigger(
         storage = storage,
         context = triggerContext,
         indexActions = List(
@@ -439,7 +439,9 @@ class SqlIndexInitializationTriggerStoreTest
       .map(_ => ())
   }
 
-  private def runTriggerUntilAllTasksDone(trigger: SqlIndexInitializationTrigger): Future[Unit] = {
+  private def runTriggerUntilAllTasksDone(
+      trigger: StartupSqlIndexInitializationTrigger
+  ): Future[Unit] = {
     trigger.run(paused = false)
     trigger.remainingActionsEmpty.future
   }

@@ -5,8 +5,8 @@ package org.lfdecentralizedtrust.splice.automation
 
 import com.digitalasset.canton.config.DbConfig
 import com.digitalasset.canton.data.CantonTimestamp
+import com.digitalasset.canton.lifecycle.*
 import com.digitalasset.canton.discard.Implicits.DiscardOps
-import com.digitalasset.canton.lifecycle.{FutureUnlessShutdown, *}
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.tracing.TraceContext
@@ -17,25 +17,22 @@ import org.lfdecentralizedtrust.splice.store.db.AdvisoryLocks
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
 import slick.dbio.{DBIOAction, Effect, NoStream}
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
+import FutureUnlessShutdownImpl.*
+import com.digitalasset.canton.util.MonadUtil
 
 import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future, Promise}
 import scala.util.{Failure, Success}
 
-/** A trigger that asynchronously creates or drops SQL indexes at application startup.
-  *
-  * Indexes are processed in the order they are provided.
-  * If a created index becomes invalid, it is dropped and recreated.
+/** An implementation of [[SqlIndexInitializationTrigger]] meant to create all necessary indexes at application startup,
+  * in the order they're provided.
   */
-class SqlIndexInitializationTrigger(
+class StartupSqlIndexInitializationTrigger(
     storage: DbStorage,
-    protected val context: TriggerContext,
+    context: TriggerContext,
     indexActions: List[IndexAction],
 )(implicit ec: ExecutionContextExecutor, override val tracer: Tracer, mat: Materializer)
-    extends PollingParallelTaskExecutionTrigger[SqlIndexInitializationTrigger.Task]
-    with HasCloseContext {
-  import SqlIndexInitializationTrigger.*
-
+    extends SqlIndexInitializationTrigger(storage, context) {
   assert(
     indexActions.distinct == indexActions,
     "Index actions must be unique.",
@@ -45,59 +42,90 @@ class SqlIndexInitializationTrigger(
   )
   private[automation] val remainingActionsEmpty: Promise[Unit] = Promise()
 
-  private def nextTask(actions: List[IndexAction])(implicit
+  protected def retrieveNextIndexTasks()(implicit
+      tc: TraceContext
+  ): FutureUnlessShutdown[Seq[IndexAction]] = {
+    FutureUnlessShutdown.pure(remainingActions.get().headOption.toList)
+  }
+
+  override protected def onActionCompleted(
+      action: IndexAction
+  )(implicit tc: TraceContext): Future[Unit] = {
+    remainingActions.updateAndGet(_.filterNot(_ == action))
+    if (remainingActions.get().isEmpty) {
+      remainingActionsEmpty.trySuccess(()).discard
+    }
+    Future.successful(())
+  }
+}
+
+/** A trigger that asynchronously creates or drops SQL indexes.
+  *
+  * If a created index becomes invalid, it is dropped and recreated.
+  */
+abstract class SqlIndexInitializationTrigger(
+    storage: DbStorage,
+    protected val context: TriggerContext,
+)(implicit ec: ExecutionContextExecutor, override val tracer: Tracer, mat: Materializer)
+    extends PollingParallelTaskExecutionTrigger[SqlIndexInitializationTrigger.Task]
+    with HasCloseContext {
+  import SqlIndexInitializationTrigger.*
+
+  private def nextTask(action: IndexAction)(implicit
       tc: TraceContext
   ): FutureUnlessShutdown[Seq[Task]] =
-    actions.headOption match {
-      case None =>
-        FutureUnlessShutdown.pure(Seq.empty)
-      case Some(head) =>
-        for {
-          headStatus <- storage.query(
-            getIndexStatusAction(head.indexName),
-            "getIndexStatusAction",
-          )
-        } yield (head, headStatus) match {
-          case (_, IndexStatus.InProgress(pid)) =>
-            logger.info(
-              s"Index ${head.indexName} is being built by backend process $pid, skipping."
-            )
-            // Do not mess with the index if it is being built.
-            // Return no task, causing the trigger to try again after the next polling interval.
-            Seq.empty
+    for {
+      headStatus <- storage.query(
+        getIndexStatusAction(action.indexName),
+        "getIndexStatusAction",
+      )
+    } yield (action, headStatus) match {
+      case (_, IndexStatus.InProgress(pid)) =>
+        logger.info(
+          s"Index ${action.indexName} is being built by backend process $pid, skipping."
+        )
+        // Do not mess with the index if it is being built.
+        // Return no task, causing the trigger to try again after the next polling interval.
+        Seq.empty
 
-          case (IndexAction.Create(indexName, _), IndexStatus.Valid) =>
-            logger.info(s"Index $indexName should be created and is valid, skipping.")
-            Seq(Task.ConfirmActionCompleted(head))
+      case (IndexAction.Create(indexName, _), IndexStatus.Valid) =>
+        logger.info(s"Index $indexName should be created and is valid, skipping.")
+        Seq(Task.ConfirmActionCompleted(action))
 
-          case (IndexAction.Create(indexName, _), IndexStatus.DoesNotExist) =>
-            logger.info(s"Index $indexName should be created and does not exist, creating it.")
-            Seq(Task.ExecuteAction(head))
+      case (IndexAction.Create(indexName, _), IndexStatus.DoesNotExist) =>
+        logger.info(s"Index $indexName should be created and does not exist, creating it.")
+        Seq(Task.ExecuteAction(action))
 
-          case (IndexAction.Create(indexName, _), IndexStatus.Invalid) =>
-            logger.warn(s"Index $indexName should be created and is invalid, dropping it.")
-            Seq(Task.ExecuteAction(IndexAction.Drop(indexName)))
+      case (IndexAction.Create(indexName, _), IndexStatus.Invalid) =>
+        logger.warn(s"Index $indexName should be created and is invalid, dropping it.")
+        Seq(Task.ExecuteAction(IndexAction.Drop(indexName)))
 
-          case (IndexAction.Drop(indexName), IndexStatus.DoesNotExist) =>
-            logger.info(s"Index $indexName should be dropped and does not exist, skipping.")
-            Seq(Task.ConfirmActionCompleted(head))
+      case (IndexAction.Drop(indexName), IndexStatus.DoesNotExist) =>
+        logger.info(s"Index $indexName should be dropped and does not exist, skipping.")
+        Seq(Task.ConfirmActionCompleted(action))
 
-          case (IndexAction.Drop(indexName), IndexStatus.Valid) =>
-            logger.info(s"Index $indexName should be dropped and is valid, dropping.")
-            Seq(Task.ExecuteAction(head))
+      case (IndexAction.Drop(indexName), IndexStatus.Valid) =>
+        logger.info(s"Index $indexName should be dropped and is valid, dropping.")
+        Seq(Task.ExecuteAction(action))
 
-          case (IndexAction.Drop(indexName), IndexStatus.Invalid) =>
-            logger.warn(s"Index $indexName should be dropped and is invalid, dropping.")
-            Seq(Task.ExecuteAction(head))
-        }
+      case (IndexAction.Drop(indexName), IndexStatus.Invalid) =>
+        logger.warn(s"Index $indexName should be dropped and is invalid, dropping.")
+        Seq(Task.ExecuteAction(action))
     }
+
+  protected def retrieveNextIndexTasks()(implicit
+      tc: TraceContext
+  ): FutureUnlessShutdown[Seq[IndexAction]]
 
   override def retrieveTasks()(implicit
       tc: TraceContext
   ): Future[Seq[SqlIndexInitializationTrigger.Task]] = {
     storage.dbConfig match {
       case postgresConfig: DbConfig.Postgres =>
-        nextTask(remainingActions.get())
+        (for {
+          indexTask <- retrieveNextIndexTasks()
+          tasks <- MonadUtil.sequentialTraverse(indexTask)(nextTask(_))
+        } yield tasks.flatten)
           .failOnShutdownToAbortException("Retrieve SqlIndexInitializationTrigger tasks")
       case _ =>
         // We only really support Postgres in our apps.
@@ -112,6 +140,8 @@ class SqlIndexInitializationTrigger(
     // Statements should be safe to retry, and failing tasks should be reported as errors.
     Future.successful(false)
   }
+
+  protected def onActionCompleted(action: IndexAction)(implicit tc: TraceContext): Future[Unit]
 
   override protected def completeTask(task: SqlIndexInitializationTrigger.Task)(implicit
       tc: TraceContext
@@ -140,12 +170,10 @@ class SqlIndexInitializationTrigger(
         }
 
     case Task.ConfirmActionCompleted(action) =>
-      remainingActions.updateAndGet(_.filterNot(_ == action))
-      if (remainingActions.get().isEmpty) {
-        remainingActionsEmpty.trySuccess(()).discard
+      onActionCompleted(action).map { _ =>
+        logger.info(s"Confirmed action completed for index ${action.indexName}")
+        TaskSuccess(s"Confirmed action completed for index ${action.indexName}")
       }
-      logger.info(s"Confirmed action completed for index ${action.indexName}")
-      Future.successful(TaskSuccess(s"Confirmed action completed for index ${action.indexName}"))
   }).transform {
     case Failure(e: AdvisoryLocks.FailedToAcquireLockException) =>
       // There was a concurrent DDL statement running.
@@ -161,13 +189,13 @@ object SqlIndexInitializationTrigger {
   def apply(
       storage: DbStorage,
       triggerContext: TriggerContext,
-      indexActions: List[IndexAction] = defaultIndexActions,
+      indexActions: List[IndexAction] = SqlIndexInitializationTrigger.defaultIndexActions,
   )(implicit
       ec: ExecutionContextExecutor,
       tracer: Tracer,
       mat: Materializer,
-  ): SqlIndexInitializationTrigger = {
-    new SqlIndexInitializationTrigger(
+  ): StartupSqlIndexInitializationTrigger = {
+    new StartupSqlIndexInitializationTrigger(
       storage,
       triggerContext,
       indexActions,
