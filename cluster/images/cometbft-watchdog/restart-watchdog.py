@@ -6,6 +6,7 @@
 import json
 import math
 import os
+import random
 import re
 import signal
 import sys
@@ -289,7 +290,7 @@ def main():
                     # don't kill cometbft after we just killed it.
                     quiet_until = time.monotonic() + config.cooldown
 
-        time.sleep(max(0.0, config.poll_interval - (time.monotonic() - cycle_start)))
+        time.sleep(random.uniform(0.5, 1.0) * max(0.0, config.poll_interval - (time.monotonic() - cycle_start)))
 
 
 if __name__ == "__main__":
