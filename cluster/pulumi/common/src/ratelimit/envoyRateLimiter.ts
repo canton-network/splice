@@ -481,14 +481,9 @@ export class RateLimitEnvoyFilter extends pulumi.ComponentResource {
                           },
                         },
                       ],
-                      // Emit X-RateLimit-Limit/Remaining/Reset. Envoy populates these from
-                      // the token bucket that rejected the request, which is the only way to
-                      // tell *which* of the configured limits (global, per-endpoint or
-                      // per-IP) was enforced: the filter emits neither per-descriptor stats
-                      // nor dynamic metadata. They are logged by the sidecar access log and
-                      // then stripped again on the ingress gateway, see
-                      // cluster/pulumi/infra/src/istio.ts.
-                      // https://www.envoyproxy.io/docs/envoy/latest/api-v3/extensions/filters/http/local_ratelimit/v3/local_rate_limit.proto#envoy-v3-api-field-extensions-filters-http-local-ratelimit-v3-localratelimit-enable-x-ratelimit-headers
+                      // Emit X-RateLimit-Limit/Remaining/Reset.
+                      // used in sidecar access logs
+                      // not sent to the client, because we strip them on the ingress gateway
                       enable_x_ratelimit_headers: 'DRAFT_VERSION_03',
                       max_dynamic_descriptors: maxDynamicDescriptorsPerLimit,
                       // simplified descriptors by combining with actions and requiring all the tokens of an action to be set
