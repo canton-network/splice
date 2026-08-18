@@ -10,9 +10,10 @@ case class RateLimitersConfig(
       * in `rateLimiters`. The embedded `perClientIp` limiter is disabled by default; enable it to
       * additionally limit per client IP.
       */
-    default: SpliceRateLimitConfig.WithPerClientIp,
+    default: SpliceRateLimitConfig.WithPerClientIp =
+      SpliceRateLimitConfig.WithPerClientIp(ratePerSecond = 200),
     /** Per-operation overrides of the overall `default` rate limiter. */
-    rateLimiters: Map[String, SpliceRateLimitConfig.WithPerClientIp],
+    rateLimiters: Map[String, SpliceRateLimitConfig.WithPerClientIp] = Map.empty,
     global: SpliceRateLimitConfig.WithPerClientIp = RateLimitersConfig.DefaultGlobal,
     /** Name of the HTTP header set by a trusted reverse proxy that carries the real client IP. This header must be set - and any
       * client-provided value overwritten - by infrastructure the client cannot bypass, otherwise it
