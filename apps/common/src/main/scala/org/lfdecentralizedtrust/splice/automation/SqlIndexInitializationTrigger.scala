@@ -184,7 +184,7 @@ abstract class SqlIndexInitializationTrigger(
   }
 }
 
-object StartupSqlIndexInitializationTrigger {
+object SqlIndexInitializationTrigger {
 
   def apply(
       storage: DbStorage,
@@ -201,10 +201,6 @@ object StartupSqlIndexInitializationTrigger {
       indexActions,
     )
   }
-
-}
-
-object SqlIndexInitializationTrigger {
 
   sealed trait IndexStatus
   object IndexStatus {

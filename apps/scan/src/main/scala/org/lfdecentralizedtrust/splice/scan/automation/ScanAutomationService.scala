@@ -7,7 +7,7 @@ import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.automation.{
   AutomationServiceCompanion,
   SpliceAppAutomationService,
-  StartupSqlIndexInitializationTrigger,
+  SqlIndexInitializationTrigger,
   TxLogBackfillingTrigger,
   UpdateIngestionService,
 }
@@ -172,7 +172,7 @@ class ScanAutomationService(
     )
   }
   registerTrigger(
-    StartupSqlIndexInitializationTrigger(
+    SqlIndexInitializationTrigger(
       storage,
       triggerContext,
     )

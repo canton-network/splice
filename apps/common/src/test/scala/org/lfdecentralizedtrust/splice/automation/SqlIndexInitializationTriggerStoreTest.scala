@@ -61,7 +61,7 @@ class SqlIndexInitializationTriggerStoreTest
     }
 
     "run with default settings" in {
-      val trigger = StartupSqlIndexInitializationTrigger(
+      val trigger = SqlIndexInitializationTrigger(
         storage = storage,
         triggerContext = triggerContext,
       )
@@ -76,7 +76,7 @@ class SqlIndexInitializationTriggerStoreTest
     }
 
     "create an index" in {
-      val trigger = StartupSqlIndexInitializationTrigger(
+      val trigger = SqlIndexInitializationTrigger(
         storage = storage,
         triggerContext = triggerContext,
         indexActions = List(
@@ -119,7 +119,7 @@ class SqlIndexInitializationTriggerStoreTest
     }
 
     "do not create an index if it already exists" in {
-      val trigger = StartupSqlIndexInitializationTrigger(
+      val trigger = SqlIndexInitializationTrigger(
         storage = storage,
         triggerContext = triggerContext,
         indexActions = List(
@@ -147,7 +147,7 @@ class SqlIndexInitializationTriggerStoreTest
     }
 
     "do not drop an index if it does not exists" in {
-      val trigger = StartupSqlIndexInitializationTrigger(
+      val trigger = SqlIndexInitializationTrigger(
         storage = storage,
         triggerContext = triggerContext,
         indexActions = List(
@@ -353,7 +353,7 @@ class SqlIndexInitializationTriggerStoreTest
     }
 
     "skip index DDL quietly while another process holds the advisory lock" in {
-      val trigger = StartupSqlIndexInitializationTrigger(
+      val trigger = SqlIndexInitializationTrigger(
         storage = storage,
         triggerContext = triggerContext,
         indexActions = List(
