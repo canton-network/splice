@@ -63,7 +63,7 @@ emptyChoiceContext = ChoiceContext TextMap.empty
 data Metadata = Metadata with
     values : TextMap Text
       -- ^ Key-value pairs of metadata entries.
-  deriving (Eq,Ord, Show)
+  deriving (Eq, Ord, Show)
 
 -- | Empty metadata.
 emptyMetadata : Metadata
