@@ -1254,14 +1254,31 @@ class BftScanConnectionTest
           case other => Future.successful(other)
         }
 
-      attempt(100).map { resp =>
-        inside(resp) {
-          case (GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok), uris) =>
-            ok.rootHash should be("aabb")
-            ok.roundNumber should be(round)
-            uris.size should be(2)
-        }
-      }
+      // A call that reaches consensus here always queries a third scan that
+      // disagrees (returns IgnoreResponse or fails), which BftScanConnection
+      // logs at WARN for the reward-read paths. Assert that WARN is produced
+      // and suppress it so it doesn't fail the `sbt checkErrors` log-scan gate.
+      loggerFactory
+        .assertEventuallyLogsSeq(SuppressionRule.Level(Level.WARN))(
+          attempt(100).map { resp =>
+            inside(resp) {
+              case (
+                    GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok),
+                    uris,
+                  ) =>
+                ok.rootHash should be("aabb")
+                ok.roundNumber should be(round)
+                uris.size should be(2)
+            }
+          },
+          logs =>
+            logs.exists(log =>
+              log.level == Level.WARN && log.message.contains(
+                "disagreed with consensus"
+              )
+            ) should be(true),
+        )
+        .map(_ => succeed)
     }
 
     "returns Undetermined when no quorum agrees on a hash" in {
@@ -1371,20 +1388,34 @@ class BftScanConnectionTest
           case other => Future.successful(other)
         }
 
-      attempt(100).map { resp =>
-        inside(resp) {
-          case (
-                GetRewardAccountingActivityTotalsResponse.members
-                  .RewardAccountingActivityTotalsOk(ok),
-                uris,
-              ) =>
-            ok.roundNumber should be(round)
-            ok.totalAppActivityWeight should be(100L)
-            ok.activePartiesCount should be(10L)
-            ok.activityRecordsCount should be(5L)
-            uris.size should be(2)
-        }
-      }
+      // A call that reaches consensus here always queries a third scan that
+      // disagrees (returns IgnoreResponse or fails), which BftScanConnection
+      // logs at WARN for the reward-read paths. Assert that WARN is produced
+      // and suppress it so it doesn't fail the `sbt checkErrors` log-scan gate.
+      loggerFactory
+        .assertEventuallyLogsSeq(SuppressionRule.Level(Level.WARN))(
+          attempt(100).map { resp =>
+            inside(resp) {
+              case (
+                    GetRewardAccountingActivityTotalsResponse.members
+                      .RewardAccountingActivityTotalsOk(ok),
+                    uris,
+                  ) =>
+                ok.roundNumber should be(round)
+                ok.totalAppActivityWeight should be(100L)
+                ok.activePartiesCount should be(10L)
+                ok.activityRecordsCount should be(5L)
+                uris.size should be(2)
+            }
+          },
+          logs =>
+            logs.exists(log =>
+              log.level == Level.WARN && log.message.contains(
+                "disagreed with consensus"
+              )
+            ) should be(true),
+        )
+        .map(_ => succeed)
     }
 
     "returns Undetermined when no quorum agrees on the totals" in {
