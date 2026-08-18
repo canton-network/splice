@@ -16,7 +16,6 @@ import org.lfdecentralizedtrust.splice.sv.util.ContractStakeholders
 import java.util.Optional
 import scala.concurrent.{ExecutionContext, Future}
 import ExpireTransferPreapprovalsTrigger.{Task, getStakeholders}
-import org.lfdecentralizedtrust.splice.environment.PackageIdResolver
 import org.lfdecentralizedtrust.splice.store.IgnoredPartiesStore
 
 class ExpireTransferPreapprovalsTrigger(
@@ -40,33 +39,17 @@ class ExpireTransferPreapprovalsTrigger(
       TransferPreapproval.ContractId,
       TransferPreapproval,
     ]]]
-    with IgnoredAmuletVersionGuard {
+    with IgnoredUnavailablePartiesGuard {
 
   private val store = svTaskContext.dsoStore
 
   override def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
       tc: TraceContext
-  ): Future[TaskOutcome] = {
-    val stakeholders = getStakeholders(task.work.payload).toSet
-    svTaskContext.vettingLookupService
-      .lookupVettingState(stakeholders.toSeq, PackageIdResolver.Package.SpliceAmulet)
-      .flatMap {
-        case Some(vettedVersion) =>
-          completeWithIgnoredAmuletVersionCheck(
-            vettedVersion.toString,
-            stakeholders,
-            store.key.dsoParty,
-            enableUnresponsivePartiesAutoIgnore = true,
-          )(completeExpiryTaskAsDsoDelegate(task, controller))
-        case None =>
-          Future.successful(
-            TaskSuccess(
-              s"No vetted SpliceAmulet version for stakeholders $stakeholders of " +
-                s"TransferPreapproval ${task.work.contractId}, skipping."
-            )
-          )
-      }
-  }
+  ): Future[TaskOutcome] =
+    completeWithVettedAmuletVersion(
+      getStakeholders(task.work.payload).toSet,
+      Seq(task.work.contractId.contractId),
+    )(completeExpiryTaskAsDsoDelegate(task, controller))
 
   private def completeExpiryTaskAsDsoDelegate(
       task: Task,

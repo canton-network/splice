@@ -1,0 +1,69 @@
+# Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+suite: "Validator wallet user ids"
+templates:
+  - validator.yaml
+release:
+  name: mock-validator
+chart:
+  version: 0.1.1
+  appVersion: 0.1.0
+
+set:
+  # Things we need just to pass the schema. validatorWalletUser is deliberately
+  # left unset here so that validatorWalletUsers can be exercised: the schema
+  # accepts exactly one of the two.
+  nodeIdentifier: "helm-mock-1-validator"
+  validatorPartyHint: "helm-mock-1"
+  spliceInstanceNames:
+    networkName: MockNet
+    networkFaviconUrl: https://mock.net/favicon.ico
+    amuletName: Mocklet
+    amuletNameAcronym: MCK
+    nameServiceName: Mock Name Service
+    nameServiceNameAcronym: MNS
+  topup:
+    enabled: false
+  auth:
+    jwksUrl: "https://mock.com/.well-known/jwks.json"
+    audience: "mock_audience"
+
+tests:
+  - it: "quotes wallet user ids in the generated HOCON"
+    # An id containing '@' -- e.g. an email address, which some identity
+    # providers use as the user id -- is not a valid unquoted HOCON string.
+    set:
+      validatorWalletUsers:
+        - alice@example.com
+        - "12345678"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ADDITIONAL_CONFIG_VALIDATOR_WALLET_USER_0
+            value: |
+              canton.validator-apps.validator_backend.validator-wallet-users.0 = "alice@example.com"
+      # An all-digit id must stay a string rather than becoming a HOCON number.
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: ADDITIONAL_CONFIG_VALIDATOR_WALLET_USER_1
+            value: |
+              canton.validator-apps.validator_backend.validator-wallet-users.1 = "12345678"
+
+  - it: "keeps a single all-digit wallet user id a string in the env var"
+    set:
+      validatorWalletUser: "12345678"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: SPLICE_APP_VALIDATOR_WALLET_USER_NAME
+            value: "12345678"

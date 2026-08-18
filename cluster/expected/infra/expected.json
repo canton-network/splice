@@ -2314,6 +2314,35 @@
                 }
               }
             }
+          },
+          {
+            "applyTo": "CLUSTER",
+            "match": {
+              "cluster": {
+                "portNumber": 5010
+              }
+            },
+            "patch": {
+              "operation": "MERGE",
+              "value": {
+                "typed_extension_protocol_options": {
+                  "envoy.extensions.upstreams.http.v3.HttpProtocolOptions": {
+                    "@type": "type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions",
+                    "use_downstream_protocol_config": {
+                      "http2_protocol_options": {
+                        "connection_keepalive": {
+                          "interval": "30s",
+                          "timeout": "5s"
+                        },
+                        "initial_connection_window_size": 52428800,
+                        "initial_stream_window_size": 524288
+                      },
+                      "http_protocol_options": {}
+                    }
+                  }
+                }
+              }
+            }
           }
         ]
       }
@@ -2373,13 +2402,13 @@
         "trafficPolicy": {
           "connectionPool": {
             "http": {
-              "http1MaxPendingRequests": 10000,
-              "http2MaxRequests": 10000,
-              "maxConcurrentStreams": 10000,
+              "http1MaxPendingRequests": 20000,
+              "http2MaxRequests": 20000,
+              "maxConcurrentStreams": 20000,
               "maxRequestsPerConnection": 0
             },
             "tcp": {
-              "maxConnections": 10000
+              "maxConnections": 20000
             }
           },
           "loadBalancer": {
@@ -2407,13 +2436,13 @@
         "trafficPolicy": {
           "connectionPool": {
             "http": {
-              "http1MaxPendingRequests": 10000,
-              "http2MaxRequests": 10000,
-              "maxConcurrentStreams": 10000,
+              "http1MaxPendingRequests": 20000,
+              "http2MaxRequests": 20000,
+              "maxConcurrentStreams": 20000,
               "maxRequestsPerConnection": 0
             },
             "tcp": {
-              "maxConnections": 10000
+              "maxConnections": 20000
             }
           },
           "loadBalancer": {
@@ -2441,13 +2470,13 @@
         "trafficPolicy": {
           "connectionPool": {
             "http": {
-              "http1MaxPendingRequests": 10000,
-              "http2MaxRequests": 10000,
-              "maxConcurrentStreams": 10000,
+              "http1MaxPendingRequests": 20000,
+              "http2MaxRequests": 20000,
+              "maxConcurrentStreams": 20000,
               "maxRequestsPerConnection": 0
             },
             "tcp": {
-              "maxConnections": 10000
+              "maxConnections": 20000
             }
           },
           "loadBalancer": {
@@ -2475,13 +2504,13 @@
         "trafficPolicy": {
           "connectionPool": {
             "http": {
-              "http1MaxPendingRequests": 10000,
-              "http2MaxRequests": 10000,
-              "maxConcurrentStreams": 10000,
+              "http1MaxPendingRequests": 20000,
+              "http2MaxRequests": 20000,
+              "maxConcurrentStreams": 20000,
               "maxRequestsPerConnection": 0
             },
             "tcp": {
-              "maxConnections": 10000
+              "maxConnections": 20000
             }
           },
           "loadBalancer": {
@@ -2545,13 +2574,13 @@
         "trafficPolicy": {
           "connectionPool": {
             "http": {
-              "http1MaxPendingRequests": 10000,
-              "http2MaxRequests": 10000,
-              "maxConcurrentStreams": 10000,
+              "http1MaxPendingRequests": 20000,
+              "http2MaxRequests": 20000,
+              "maxConcurrentStreams": 20000,
               "maxRequestsPerConnection": 0
             },
             "tcp": {
-              "maxConnections": 10000
+              "maxConnections": 20000
             }
           },
           "loadBalancer": {
@@ -2579,13 +2608,13 @@
         "trafficPolicy": {
           "connectionPool": {
             "http": {
-              "http1MaxPendingRequests": 10000,
-              "http2MaxRequests": 10000,
-              "maxConcurrentStreams": 10000,
+              "http1MaxPendingRequests": 20000,
+              "http2MaxRequests": 20000,
+              "maxConcurrentStreams": 20000,
               "maxRequestsPerConnection": 0
             },
             "tcp": {
-              "maxConnections": 10000
+              "maxConnections": 20000
             }
           },
           "loadBalancer": {
@@ -2613,13 +2642,13 @@
         "trafficPolicy": {
           "connectionPool": {
             "http": {
-              "http1MaxPendingRequests": 10000,
-              "http2MaxRequests": 10000,
-              "maxConcurrentStreams": 10000,
+              "http1MaxPendingRequests": 20000,
+              "http2MaxRequests": 20000,
+              "maxConcurrentStreams": 20000,
               "maxRequestsPerConnection": 0
             },
             "tcp": {
-              "maxConnections": 10000
+              "maxConnections": 20000
             }
           },
           "loadBalancer": {
@@ -2647,13 +2676,13 @@
         "trafficPolicy": {
           "connectionPool": {
             "http": {
-              "http1MaxPendingRequests": 10000,
-              "http2MaxRequests": 10000,
-              "maxConcurrentStreams": 10000,
+              "http1MaxPendingRequests": 20000,
+              "http2MaxRequests": 20000,
+              "maxConcurrentStreams": 20000,
               "maxRequestsPerConnection": 0
             },
             "tcp": {
-              "maxConnections": 10000
+              "maxConnections": 20000
             }
           },
           "loadBalancer": {
@@ -2681,13 +2710,13 @@
         "trafficPolicy": {
           "connectionPool": {
             "http": {
-              "http1MaxPendingRequests": 10000,
-              "http2MaxRequests": 10000,
-              "maxConcurrentStreams": 10000,
+              "http1MaxPendingRequests": 20000,
+              "http2MaxRequests": 20000,
+              "maxConcurrentStreams": 20000,
               "maxRequestsPerConnection": 0
             },
             "tcp": {
-              "maxConnections": 10000
+              "maxConnections": 20000
             }
           },
           "loadBalancer": {
@@ -2715,13 +2744,13 @@
         "trafficPolicy": {
           "connectionPool": {
             "http": {
-              "http1MaxPendingRequests": 10000,
-              "http2MaxRequests": 10000,
-              "maxConcurrentStreams": 10000,
+              "http1MaxPendingRequests": 20000,
+              "http2MaxRequests": 20000,
+              "maxConcurrentStreams": 20000,
               "maxRequestsPerConnection": 0
             },
             "tcp": {
-              "maxConnections": 10000
+              "maxConnections": 20000
             }
           },
           "loadBalancer": {
@@ -2749,13 +2778,13 @@
         "trafficPolicy": {
           "connectionPool": {
             "http": {
-              "http1MaxPendingRequests": 10000,
-              "http2MaxRequests": 10000,
-              "maxConcurrentStreams": 10000,
+              "http1MaxPendingRequests": 20000,
+              "http2MaxRequests": 20000,
+              "maxConcurrentStreams": 20000,
               "maxRequestsPerConnection": 0
             },
             "tcp": {
-              "maxConnections": 10000
+              "maxConnections": 20000
             }
           },
           "loadBalancer": {
@@ -2783,13 +2812,13 @@
         "trafficPolicy": {
           "connectionPool": {
             "http": {
-              "http1MaxPendingRequests": 10000,
-              "http2MaxRequests": 10000,
-              "maxConcurrentStreams": 10000,
+              "http1MaxPendingRequests": 20000,
+              "http2MaxRequests": 20000,
+              "maxConcurrentStreams": 20000,
               "maxRequestsPerConnection": 0
             },
             "tcp": {
-              "maxConnections": 10000
+              "maxConnections": 20000
             }
           },
           "loadBalancer": {

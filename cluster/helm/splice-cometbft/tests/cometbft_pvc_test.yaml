@@ -10,6 +10,8 @@ release:
 set:
   node:
     identifier: "global-domain-3-cometbft"
+  watchdog:
+    enabled: false
 tests:
   - it: "deploys a PVC"
     template: pvc.yaml

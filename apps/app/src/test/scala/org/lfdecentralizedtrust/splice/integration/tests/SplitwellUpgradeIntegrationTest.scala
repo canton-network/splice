@@ -8,16 +8,12 @@ import org.lfdecentralizedtrust.splice.console.SplitwellAppClientReference
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTest
 import SpliceTests.BracketSynchronous.*
-import com.digitalasset.canton.logging.SuppressingLogger.LogEntryOptionality
 import org.lfdecentralizedtrust.splice.util.{MultiDomainTestUtil, SplitwellTestUtil, WalletTestUtil}
 import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
-import org.scalatest.Ignore
 
 import scala.concurrent.duration.DurationInt
 import scala.util.Try
 
-// TODO(#2703) Reenable or delete
-@Ignore
 class SplitwellUpgradeIntegrationTest
     extends IntegrationTest
     with MultiDomainTestUtil
@@ -61,27 +57,7 @@ class SplitwellUpgradeIntegrationTest
     def createInstalls(splitwells: SplitwellAppClientReference*) = for {
       splitwell <- splitwells
     } eventually() {
-      loggerFactory
-        .assertLogsUnorderedOptionalFromResult[Try[Unit]](
-          Try(splitwell.createInstallRequests()),
-          { r =>
-            if (r.isFailure) {
-              Seq(
-                (
-                  LogEntryOptionality.Required,
-                  log =>
-                    log.errorMessage should include(
-                      "Not all informee are on the specified domainID: splitwellUpgrade"
-                    ),
-                )
-              )
-            } else {
-              Seq.empty
-            }
-          },
-        )
-        .toEither
-        .valueOr(fail(_))
+      Try(splitwell.createInstallRequests()).toEither.valueOr(fail(_))
     }
 
     def twoInstalls(alice: PartyId, install: splitwellCodegen.SplitwellInstall.Contract)(implicit
@@ -152,8 +128,6 @@ class SplitwellUpgradeIntegrationTest
       val acceptedInvite = bobSplitwellClient.acceptInvite(invite)
       val splitwellSynchronizerId =
         aliceValidatorBackend.participantClient.synchronizers.id_of(splitwellAlias).logical
-      val splitwellUpgradeSynchronizerId =
-        aliceValidatorBackend.participantClient.synchronizers.id_of(splitwellUpgradeAlias).logical
 
       eventually() {
         val contractDomains =
@@ -175,6 +149,9 @@ class SplitwellUpgradeIntegrationTest
         connectSplitwellUpgradeDomain(aliceValidatorBackend.participantClient, alice),
         disconnectSplitwellUpgradeDomain(aliceValidatorBackend.participantClient),
       ) {
+        val splitwellUpgradeSynchronizerId =
+          aliceValidatorBackend.participantClient.synchronizers.id_of(splitwellUpgradeAlias).logical
+
         bracket(
           connectSplitwellUpgradeDomain(bobValidatorBackend.participantClient, bob),
           disconnectSplitwellUpgradeDomain(bobValidatorBackend.participantClient),

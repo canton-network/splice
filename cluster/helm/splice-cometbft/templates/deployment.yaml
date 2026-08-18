@@ -60,9 +60,19 @@ spec:
               containerPort: {{ .rpcPort }}
               protocol: TCP
           livenessProbe:
+            {{- if $.Values.watchdog.enabled }}
+            # combines the file created by the watchdog and the cometbft health check
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - '! [ -f {{ $.Values.watchdog.markerFile }} ] && curl -sf -o /dev/null --max-time 5 http://127.0.0.1:{{ .rpcPort }}/health'
+            timeoutSeconds: 10
+            {{- else }}
             httpGet:
               path: /health
               port: rpc
+            {{- end }}
             initialDelaySeconds: {{ $.Values.livenessProbeInitialDelaySeconds | default 600 }}
           readinessProbe:
             httpGet:
@@ -79,6 +89,10 @@ spec:
               name: data
             - mountPath: /tmp
               name: state-sync
+            {{- if $.Values.watchdog.enabled }}
+            - mountPath: {{ dir $.Values.watchdog.markerFile }}
+              name: watchdog
+            {{- end }}
           env:
             - name: HOME
               value: /cometbft
@@ -109,11 +123,55 @@ spec:
               cp -rL "${HOME}"/initial-config/. "${HOME}"/config/
               "${HOME}"/configure-state-sync.sh "${HOME}"/config/config.toml
               cp -rnL "${HOME}"/initial-data/* "${HOME}"/data || :
-              cometbft-canton-network start \
+              {{- if $.Values.watchdog.enabled }}
+              # Clear the restart request of the run that just ended, otherwise the
+              # liveness probe fails again as soon as it starts probing.
+              rm -f {{ $.Values.watchdog.markerFile }}
+              {{- end }}
+              exec cometbft-canton-network start \
               {{ include "cliArgs" (list $.Values) | indent 14 | trim }}
           {{- with $.Values.resources }}
           resources: {{- toYaml . | nindent 12 }}
           {{- end }}
+        {{- if $.Values.watchdog.enabled }}
+        # the watchdog is in a separate container mainly for easier debugging and log separation.
+        - name: "watchdog"
+          {{- if $.Values.securityContexts }}
+          {{- with $.Values.securityContexts.containers.watchdog }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- end }}
+          image: {{ $.Values.imageRepo }}/{{ $.Values.watchdog.imageName }}:{{ $.Chart.AppVersion }}{{ (($.Values.imageDigests).cometbft_watchdog) }}
+          {{- with $.Values.imagePullPolicy }}
+          imagePullPolicy: {{ . }}
+          {{- end }}
+          volumeMounts:
+            - mountPath: {{ dir $.Values.watchdog.markerFile }}
+              name: watchdog
+          env:
+            - name: WATCHDOG_SEQUENCER_METRICS_URL
+              value: {{ $.Values.watchdog.sequencerMetricsUrl | quote }}
+            - name: WATCHDOG_MEDIATOR_METRICS_URL
+              value: {{ $.Values.watchdog.mediatorMetricsUrl | quote }}
+            - name: WATCHDOG_POLL_INTERVAL_SECONDS
+              value: {{ $.Values.watchdog.pollIntervalSeconds | quote }}
+            - name: WATCHDOG_THRESHOLD
+              value: {{ $.Values.watchdog.threshold | quote }}
+            - name: WATCHDOG_EVALUATION_INTERVAL_SECONDS
+              value: {{ $.Values.watchdog.evaluationIntervalSeconds | quote }}
+            - name: WATCHDOG_SCRAPE_TIMEOUT_SECONDS
+              value: {{ $.Values.watchdog.scrapeTimeoutSeconds | quote }}
+            - name: WATCHDOG_STARTUP_GRACE_SECONDS
+              value: {{ $.Values.watchdog.startupGraceSeconds | quote }}
+            - name: WATCHDOG_COOLDOWN_SECONDS
+              value: {{ $.Values.watchdog.cooldownSeconds | quote }}
+            - name: WATCHDOG_MARKER_FILE
+              value: {{ $.Values.watchdog.markerFile | quote }}
+          {{- with $.Values.watchdog.resources }}
+          resources: {{- toYaml . | nindent 12 }}
+          {{- end }}
+        {{- end }}
       volumes:
         - name: initial-config
           projected:
@@ -139,6 +197,11 @@ spec:
           # since we are not going to scale this deployment.
           persistentVolumeClaim:
             claimName: {{ $.Values.db.pvcName | default (include "prefix" (list $.Values "cometbft-data")) }}
+        {{- if $.Values.watchdog.enabled }}
+        - name: watchdog
+          emptyDir:
+            sizeLimit: 1Mi
+        {{- end }}
       {{- with $.Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

@@ -181,6 +181,10 @@ rateLimits:
     name: listBulkUpdateHistoryObjects
     type: unlimited
 
+  /api/scan/v0/history/bulk/checksums:
+    name: getBulkHistoryChecksums
+    type: unlimited
+
   /api/scan/v0/active-synchronizer-serial:
     name: activeSynchronizerSerial
     type: unlimited
