@@ -21,7 +21,7 @@ set:
     chainId: "mock-3"
     chainIdSuffix: "1"
 tests:
-  - it: "rejects the chart defaults, so that running without a watchdog is a choice"
+  - it: "rejects the chart defaults, so that operators need to explicitly configure the right URLs"
     template: deployment.yaml
     asserts:
       - failedTemplate:
