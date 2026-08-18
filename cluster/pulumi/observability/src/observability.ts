@@ -16,7 +16,7 @@ import {
   GCP_PROJECT,
   GrafanaKeys,
   HELM_MAX_HISTORY_SIZE,
-  infraAffinityAndTolerations,
+  infraKubernetesScheduling,
   infraPremiumStorageClassName,
   infraStandardStorageClassName,
   loadTesterConfig,
@@ -205,7 +205,7 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
                 },
               },
             },
-            ...infraAffinityAndTolerations,
+            ...infraKubernetesScheduling,
           },
           templateFiles: {
             'template.tmpl': substituteSlackNotificationTemplate(
@@ -224,7 +224,7 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
           tls: {
             enabled: false, // because `admissionWebhooks` are disabled, see: https://github.com/prometheus-community/helm-charts/issues/418
           },
-          ...infraAffinityAndTolerations,
+          ...infraKubernetesScheduling,
         },
         prometheus: {
           prometheusSpec: {
@@ -265,7 +265,7 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
               },
             },
             externalUrl: prometheusExternalUrl,
-            ...infraAffinityAndTolerations,
+            ...infraKubernetesScheduling,
           },
         },
         grafana: {
@@ -394,7 +394,7 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
           },
           adminUser: 'cn-admin',
           adminPassword: adminPassword,
-          ...infraAffinityAndTolerations,
+          ...infraKubernetesScheduling,
         },
         'kube-state-metrics': {
           fullnameOverride: 'ksm',
@@ -499,7 +499,7 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
               },
             ],
           },
-          ...infraAffinityAndTolerations,
+          ...infraKubernetesScheduling,
         },
         'prometheus-node-exporter': {
           fullnameOverride: 'node-exporter',
@@ -566,7 +566,7 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
           namespace: namespaceName,
           additionalLabels: { release: 'prometheus-grafana-monitoring' },
         },
-        ...infraAffinityAndTolerations,
+        ...infraKubernetesScheduling,
       },
       maxHistory: HELM_MAX_HISTORY_SIZE,
     });
@@ -1218,6 +1218,6 @@ function installPostgres(namespace: ExactNamespace): Postgres {
     { disableProtection: true },
     { db: { volumeSize: '20Gi' } }, // A tiny pvc should be enough for grafana
     true, // overrideDbSizeFromValues
-    true // useInfraAffinityAndTolerations
+    true // useinfraKubernetesScheduling
   );
 }

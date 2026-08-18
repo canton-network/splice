@@ -1,9 +1,21 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import * as gcp from '@pulumi/gcp';
-import { config, GCP_PROJECT } from '@canton-network/splice-pulumi-common';
+import * as k8s from '@pulumi/kubernetes';
+import {
+  config,
+  GCP_PROJECT,
+  appsComputeClassName,
+  infraComputeClassName,
+  useComputeClasses,
+} from '@canton-network/splice-pulumi-common';
 
 import { gkeClusterConfig, GkeNodePoolConfig } from './config';
+
+interface NamedNodePool {
+  name: string;
+  pool: gcp.container.NodePool;
+}
 
 export async function installNodePools(): Promise<void> {
   const clusterName = `cn-${config.requireEnv('GCP_CLUSTER_BASENAME')}net`;
@@ -15,11 +27,11 @@ export async function installNodePools(): Promise<void> {
   });
   const nodePoolComputeZone = config.optionalEnv('CLOUDSDK_NODEPOOL_COMPUTE_ZONE');
 
-  installAppsNodePools(cluster, zones.names, [
+  const appPools = installAppsNodePools(cluster, zones.names, [
     gkeClusterConfig.nodePools.apps,
     ...gkeClusterConfig.nodePools.additionalApps,
   ]);
-  installInfraNodePools(cluster, zones.names, nodePoolComputeZone, [
+  const infraPools = installInfraNodePools(cluster, zones.names, nodePoolComputeZone, [
     gkeClusterConfig.nodePools.infra,
     ...gkeClusterConfig.nodePools.additionalInfra,
   ]);
@@ -50,20 +62,25 @@ export async function installNodePools(): Promise<void> {
       replaceOnChanges: ['nodeConfig.machineType'],
     }
   );
+
+  if (useComputeClasses) {
+    installComputeClass(appsComputeClassName, appPools);
+    installComputeClass(infraComputeClassName, infraPools);
+  }
 }
 
 function installAppsNodePools(
   cluster: string,
   allZones: string[],
   configs: Array<GkeNodePoolConfig>
-): Array<gcp.container.NodePool> {
+): Array<NamedNodePool> {
   const defaultZone = config.optionalEnv('CLOUDSDK_HYPERDISK_NODEPOOL_COMPUTE_ZONE');
   return configs.map((config, index) => {
     const name =
       index === 0
         ? 'cn-apps-node-pool-hd' // for backwards compat
         : `cn-apps-node-pool-${index}-hd`;
-    return new gcp.container.NodePool(
+    const pool = new gcp.container.NodePool(
       name,
       {
         cluster,
@@ -97,6 +114,7 @@ function installAppsNodePools(
         replaceOnChanges: ['nodeConfig.machineType'],
       }
     );
+    return { name, pool };
   });
 }
 
@@ -105,13 +123,13 @@ function installInfraNodePools(
   allZones: string[],
   defaultZone: string | undefined,
   configs: Array<GkeNodePoolConfig>
-): Array<gcp.container.NodePool> {
+): Array<NamedNodePool> {
   return configs.map((config, index) => {
     const name =
       index === 0
         ? 'cn-infra-node-pool' // for backwards compat
         : `cn-infra-node-pool-${index}`;
-    return new gcp.container.NodePool(
+    const pool = new gcp.container.NodePool(
       name,
       {
         cluster,
@@ -140,7 +158,31 @@ function installInfraNodePools(
         replaceOnChanges: ['nodeConfig.machineType'],
       }
     );
+    return { name, pool };
   });
+}
+
+function installComputeClass(
+  name: string,
+  pools: NamedNodePool[]
+): k8s.apiextensions.CustomResource {
+  return new k8s.apiextensions.CustomResource(
+    `compute-class-${name}`,
+    {
+      apiVersion: 'cloud.google.com/v1',
+      kind: 'ComputeClass',
+      metadata: { name },
+      spec: {
+        // Reference the existing, manually-managed node pools rather than
+        // letting GKE auto-provision. Priorities are evaluated in order.
+        priorities: pools.map(p => ({ nodepools: [p.name] })),
+        nodePoolAutoCreation: { enabled: false },
+      },
+    },
+    {
+      dependsOn: pools.map(p => p.pool),
+    }
+  );
 }
 
 function autoscalingConfigOf(config: GkeNodePoolConfig): gcp.container.NodePoolArgs['autoscaling'] {

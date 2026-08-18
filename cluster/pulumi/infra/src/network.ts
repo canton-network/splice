@@ -11,9 +11,13 @@ import {
   ExactNamespace,
   GCP_PROJECT,
   getDnsNames,
+  infraComputeClassName,
+  infraKubernetesSchedulingAffinityTolerations,
+  infraKubernetesSchedulingComputeClass,
   isDevNet,
+  useComputeClasses,
 } from '@canton-network/splice-pulumi-common';
-import { infraAffinityAndTolerations } from '@canton-network/splice-pulumi-common';
+import { infraKubernetesScheduling } from '@canton-network/splice-pulumi-common';
 import { svConfigsBasic } from '@canton-network/splice-pulumi-common-sv/src/svConfigsBasic';
 
 import { gcpDnsProject } from './config';
@@ -84,15 +88,15 @@ function certManager(certManagerNamespaceName: string): certmanager.CertManager 
       namespace: ns.metadata.name,
       version: '1.18.2',
     },
-    ...infraAffinityAndTolerations,
+    ...infraKubernetesScheduling,
     webhook: {
-      ...infraAffinityAndTolerations,
+      ...infraKubernetesScheduling,
     },
     cainjector: {
-      ...infraAffinityAndTolerations,
+      ...infraKubernetesScheduling,
     },
     startupapicheck: {
-      ...infraAffinityAndTolerations,
+      ...infraKubernetesScheduling,
     },
   });
 }

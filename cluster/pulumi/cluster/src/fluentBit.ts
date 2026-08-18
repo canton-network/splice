@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 import * as k8s from '@pulumi/kubernetes';
 import {
-  appsAffinityAndTolerations,
+  appsKubernetesScheduling,
   CLUSTER_NAME,
   exactNamespace,
   GCP_REGION,
-  infraAffinityAndTolerations,
+  infraKubernetesScheduling,
 } from '@canton-network/splice-pulumi-common';
 
 export function installFluentBit(): void {
@@ -14,9 +14,7 @@ export function installFluentBit(): void {
   const fluentBit = exactNamespace('fluent-bit');
 
   const values = {
-    tolerations: infraAffinityAndTolerations.tolerations.concat(
-      appsAffinityAndTolerations.tolerations
-    ),
+    tolerations: infraKubernetesScheduling.tolerations.concat(appsKubernetesScheduling.tolerations),
     config: {
       inputs: [
         // Input config is roughly copied from the default GCP config available from `kubectl get configmap -n kube-system fluentbit-gke-config-v1.4.0 -o yaml`
