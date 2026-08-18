@@ -115,14 +115,14 @@ data AmuletConfig unit = AmuletConfig with
     developmentFundManagerBlacklist : Optional [Party]
       -- ^ List of blocked parties. They cannot allocate new coupons, and the coupons they allocated cannot be minted either.
     minDevelopmentFundMintingDelay : Optional RelTime
-      -- ^ Minimum delay between allocation and minting. Default: 0 days. Explicitly setting it to block downgrades that lack the delay enforcement logic.
+      -- ^ Minimum delay between allocation and minting. Default: 0 days. 
   deriving (Eq, Show, Serializable)
 
 getExternalPartyConfigStateTickDuration : AmuletConfig a -> RelTime
 getExternalPartyConfigStateTickDuration config = fromOptional (hours 24) config.externalPartyConfigStateTickDuration
 
 getDevelopmentFundManagerBlacklist : AmuletConfig unit -> Optional [Party]
-getDevelopmentFundManagerBlacklist config = Some (fromOptional [] config.developmentFundManagerBlacklist)
+getDevelopmentFundManagerBlacklist config = fromOptional [] config.developmentFundManagerBlacklist
 
 -- | $1/year specified as a daily rate
 defaultTransferPreapprovalFee : Decimal

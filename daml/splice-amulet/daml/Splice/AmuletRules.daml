@@ -867,15 +867,15 @@ template AmuletRules
         case configUsd.developmentFundManagerBlacklist of
           None -> pure ()
           Some blacklist ->
-            require ("controller is not a blacklisted fund manager: " <> show fundManager) $
+            require ("fund manager is not blacklisted: " <> show fundManager) $
               fundManager `notElem` blacklist
 
         whenSome configUsd.minDevelopmentFundMintingDelay $ \minDelay ->
           case mintAfter of
             None -> abort "DevelopmentFundCoupon cannot be allocated without a mintAfter time, as a minimum development fund minting delay is configured"
             Some mintAfterTime ->
-              assertWithinDeadline "DevelopmentFundCoupon.mintAfter should be after current time + minDevelopmentFundMintingDelay"
-                  (addRelTime mintAfterTime (negate minDelay))
+              assertWithinDeadline "mintAfter - minDevelopmentFundMintingDelay"
+                  (mintAfterTime `addRelTime` negate minDelay)
 
         -- Verify the amount and create a leftover UnclaimedDevelopmentFundCoupon if needed
         totalUnclaimedDevelopmentFundCoupons <- sum <$> forA unclaimedDevelopmentFundCouponCids \cid -> do
