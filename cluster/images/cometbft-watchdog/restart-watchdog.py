@@ -101,7 +101,7 @@ def scrape(url, metric, required_labels, timeout):
         with urllib.request.urlopen(request, timeout=timeout) as response:
             charset = response.headers.get_content_charset() or "utf-8"
             body = response.read().decode(charset, errors="replace")
-    except (urllib.error.URLError, OSError, ValueError) as error:
+    except Exception as error:
         raise ScrapeError(f"failed to scrape {url}: {error}") from error
     samples = parse_samples(body, metric, required_labels, url)
     return samples
