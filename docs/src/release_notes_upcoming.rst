@@ -54,3 +54,11 @@ release-notes:: Upcoming
             also been added, allowing 100 requests per second burst / 50 sustained across all
             operations combined, with an embedded per-client-IP limiter allowing 20 requests per
             second burst / 10 sustained.
+
+    - CometBFT
+
+        - Added a watchdog to restart cometbft when we detect that it
+          is replaying messages. You must set
+          ``watchdog.sequencerMetricsUrl: global-domain-$SERIAL-sequencer:10013/metrics`` and
+          ``watchdog.mediatorMetricsUrl: http://global-domain-$SERIAL-mediator:10013/metrics`` in the
+          cometbft helm values. If needed, the watchdog can be disabled through ``watchdog.enabled: false``.
