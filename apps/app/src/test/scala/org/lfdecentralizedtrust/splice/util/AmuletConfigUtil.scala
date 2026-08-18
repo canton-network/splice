@@ -66,6 +66,8 @@ trait AmuletConfigUtil extends TestCommon {
       existingAmuletConfig.externalPartyConfigStateTickDuration,
       existingAmuletConfig.rewardConfig,
       existingAmuletConfig.transferPreapprovalBaseDuration,
+      existingAmuletConfig.developmentFundManagerBlacklist,
+      existingAmuletConfig.minDevelopmentFundMintingDelay,
     )
   }
 

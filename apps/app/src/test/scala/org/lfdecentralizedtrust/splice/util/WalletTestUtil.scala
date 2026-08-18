@@ -1132,6 +1132,7 @@ trait WalletTestUtil extends TestCommon with AnsTestUtil {
         amount.bigDecimal,
         expiresAt.toInstant,
         reason,
+        java.util.Optional.empty(), // mintAfter
       ).create
     val created = participantClient.ledger_api_extensions.commands
       .submitWithResult(

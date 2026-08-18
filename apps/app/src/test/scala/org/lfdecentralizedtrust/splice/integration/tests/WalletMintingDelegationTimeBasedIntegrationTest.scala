@@ -568,6 +568,7 @@ class WalletMintingDelegationTimeBasedIntegrationTest
                 developmentFundAmount.bigDecimal,
                 env.environment.clock.now.plus(Duration.ofDays(1)).toInstant,
                 "test development fund coupon",
+                java.util.Optional.empty(), // mintAfter
               ).create,
             )
 

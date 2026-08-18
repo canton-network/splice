@@ -506,6 +506,8 @@ class SvStateManagementIntegrationTest extends SvIntegrationTestBase with Trigge
       initialConfig.externalPartyConfigStateTickDuration,
       initialConfig.rewardConfig,
       initialConfig.transferPreapprovalBaseDuration,
+      initialConfig.developmentFundManagerBlacklist,
+      initialConfig.minDevelopmentFundMintingDelay,
     )
 
     val (_, voteRequestCid) = actAndCheck(

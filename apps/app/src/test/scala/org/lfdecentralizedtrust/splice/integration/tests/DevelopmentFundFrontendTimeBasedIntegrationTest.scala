@@ -446,6 +446,8 @@ class DevelopmentFundFrontendTimeBasedIntegrationTest
       existingConfig.externalPartyConfigStateTickDuration,
       existingConfig.rewardConfig,
       existingConfig.transferPreapprovalBaseDuration,
+      existingConfig.developmentFundManagerBlacklist,
+      existingConfig.minDevelopmentFundMintingDelay,
     )
 
     val action = new ARC_AmuletRules(

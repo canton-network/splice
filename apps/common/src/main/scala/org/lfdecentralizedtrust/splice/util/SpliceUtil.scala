@@ -399,6 +399,10 @@ object SpliceUtil {
       initialRewardConfig.toJava,
       // transferPreapprovalBaseDuration
       Optional.empty(),
+      // developmentFundManagerBlacklist
+      Optional.empty(),
+      // minDevelopmentFundMintingDelay
+      Optional.empty(),
     )
 
   def defaultAnsConfig(
