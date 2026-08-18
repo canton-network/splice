@@ -3,6 +3,8 @@ cluster:
   nodePools:
     apps:
       zones: '*'
+      maxNodes: 40
+      nodeType: c3d-standard-8
 infra:
   prometheus:
     retentionDuration: "30d"
