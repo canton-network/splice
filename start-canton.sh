@@ -107,6 +107,12 @@ do
     shift
 done
 
+# Resolve to an absolute path now, in the environment that invoked this script.
+# Otherwise, if tmux's server was started from a different (nix) shell than this
+# invocation, the bare command name would resolve against that other shell's PATH
+# once sent into the tmux pane, silently running the wrong binary.
+CANTON="$(command -v "$CANTON")"
+
 tmux_session="canton"
 tmux_window=0
 
@@ -254,7 +260,7 @@ else
   echo "-D specified, not waiting for canton to start "
 fi
 
-tmux_cmd toxiproxy "toxiproxy-server 2>&1 | tee -a log/toxi.log"
+tmux_cmd toxiproxy "$(command -v toxiproxy-server) 2>&1 | tee -a log/toxi.log"
 
 if [ $daemon -eq 0 ]; then
   if [ -z "${TMUX-}" ]; then

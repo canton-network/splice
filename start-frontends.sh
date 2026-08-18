@@ -79,14 +79,14 @@ function start_frontend() {
   tmux_cmd "${app}-${user}" "${frontend_dir}" \
     "trap \"rm -f ${config_file}\" EXIT && \
     BROWSER=none PORT=$port JSON_API_URL=$JSON_API_URL VITE_SPLICE_CONFIG=\"\$(cat $config_file)\" \
-    npm start 2>&1 | tee -a $log_file"
+    $NPM start 2>&1 | tee -a $log_file"
 }
 
 function start_test() {
   local app=$1
   local frontend_dir="${SPLICE_ROOT}/apps/${app}/frontend"
 
-  tmux_cmd "${app}-test" "${frontend_dir}" "npm run test"
+  tmux_cmd "${app}-test" "${frontend_dir}" "$NPM run test"
 }
 
 function usage() {
@@ -138,6 +138,12 @@ done
 tmux_session="cn-frontends"
 tmux_window=0
 
+# Resolve to an absolute path now, in the environment that invoked this script.
+# Otherwise, if tmux's server was started from a different (nix) shell than this
+# invocation, the bare "npm" sent into the tmux pane would resolve against that
+# other shell's PATH once sent into the tmux pane, silently running the wrong binary.
+NPM="$(command -v npm)"
+
 LOG_DIR="${SPLICE_ROOT}/log"
 
 (cd "$SPLICE_ROOT" && sbt --batch apps-frontends/compile)
@@ -154,7 +160,7 @@ function wait_for_workspace_build() {
   local log_file="${LOG_DIR}/npm-${log_file_suffix}.out"
   echo "Logging to ${log_file}"
 
-  tmux_cmd "$workspace" "$SPLICE_ROOT/apps" "npm run start --workspace $workspace 2>&1 | tee -a $log_file"
+  tmux_cmd "$workspace" "$SPLICE_ROOT/apps" "$NPM run start --workspace $workspace 2>&1 | tee -a $log_file"
 
   local count=0
   while [ ! -f "$SPLICE_ROOT/apps/$index" ]; do
