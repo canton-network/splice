@@ -807,12 +807,16 @@ class WalletMintingDelegationTimeBasedIntegrationTest
               .delegations should have size 1 withClue "delegations",
         )
 
-        val trigger = mintingDelegationTriggerTyped(aliceValidatorBackend, providerParty.party)
-        val wallet = aliceValidatorBackend.appState.walletManager
-          .valueOrFail("Wallet manager is expected to be defined")
-          .externalPartyWalletManager
-          .lookupExternalPartyWallet(providerParty.party)
-          .valueOrFail(s"Expected ${providerParty.party} to have an external party wallet")
+        val wallet = eventually() {
+          aliceValidatorBackend.appState.walletManager
+            .valueOrFail("Wallet manager is expected to be defined")
+            .externalPartyWalletManager
+            .lookupExternalPartyWallet(providerParty.party)
+            .valueOrFail(s"Expected ${providerParty.party} to have an external party wallet")
+        }
+
+        val trigger = wallet.automation
+          .trigger[MintingDelegationCollectRewardsTrigger]
 
         def unassignedCount(): Int =
           wallet.store.multiDomainAcsStore
@@ -1019,16 +1023,4 @@ class WalletMintingDelegationTimeBasedIntegrationTest
         commands = proposal.create.commands.asScala.toSeq,
       )
   }
-
-  private def mintingDelegationTriggerTyped(
-      validatorBackend: ValidatorAppBackendReference,
-      externalPartyId: PartyId,
-  ): MintingDelegationCollectRewardsTrigger =
-    validatorBackend.appState.walletManager
-      .valueOrFail("Wallet manager is expected to be defined")
-      .externalPartyWalletManager
-      .lookupExternalPartyWallet(externalPartyId)
-      .valueOrFail(s"Expected $externalPartyId to have an external party wallet")
-      .automation
-      .trigger[MintingDelegationCollectRewardsTrigger]
 }
