@@ -16,15 +16,10 @@ cloudArmor:
         withinIntervalSeconds: 60
 cluster:
   nodePools:
-    additionalApps:
-      - maxNodes: 20
-        minNodes: 0
-        nodeType: 'n4-standard-16'
-        zones: '*'
     apps:
-      maxNodes: 20
+      maxNodes: 40
       minNodes: 0
-      nodeType: 'n4d-standard-16'
+      nodeType: 'c3d-standard-8'
       zones: '*'
     infra:
       maxNodes: 3
