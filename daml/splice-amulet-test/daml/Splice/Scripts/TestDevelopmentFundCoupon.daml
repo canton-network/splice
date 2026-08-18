@@ -47,7 +47,7 @@ testAllocateDevelopmentFundCoupon = do
 
   -- Set 5% and Alice as the fund manager
   replaceDevelopmentFundConfig app baseConfig (Some alice.primaryParty) (Some 0.05)
-  setDevelopmentFundDelayConfig app None (Some minMintingDelay)
+  setMinDevelopmentFundMintingDelay app minMintingDelay
 
   -- Unhappy - expiresAt is in the past
   let invalidExpiresAt = addRelTime now (minutes (-1))
@@ -209,7 +209,7 @@ testDevelopmentFundCouponMintingDelay = do
   DefaultAppWithUsers{..} <- setupDefaultAppWithUsers
   baseConfig <- getAmuletConfig app
   replaceDevelopmentFundConfig app baseConfig (Some alice.primaryParty) (Some 0.05)
-  setDevelopmentFundDelayConfig app None (Some (minutes 1))
+  setMinDevelopmentFundMintingDelay app (minutes 1)
 
   -- Run 3 issuances for the already open rounds without the development fund configuration.
   replicateA_ 3 $ runNextIssuance app
@@ -270,7 +270,7 @@ testDevelopmentFundCouponWithoutMintingDelay = do
   developmentFundCoupon.mintAfter === None
 
   -- Happy - and the coupon mints immediately, even after a delay has been configured
-  setDevelopmentFundDelayConfig app None (Some (days 7))
+  setMinDevelopmentFundMintingDelay app (days 7)
   transferResult <- mintDevelopmentFundCoupon app bob developmentFundCouponCid
   transferResult.summary.inputDevelopmentFundAmount === Some coupon1.amount
 
@@ -305,7 +305,7 @@ testDevelopmentFundManagerBlacklist = do
       allocateDevelopmentFundCoupon app alice.primaryParty bob.primaryParty coupon2.amount
         expiresAt reason [cid2] None
 
-  setDevelopmentFundDelayConfig app (Some [alice.primaryParty]) None
+  setDevelopmentFundManagerBlacklist app [alice.primaryParty]
 
   -- Unhappy - a blacklisted fund manager cannot allocate further coupons
   allocateDevelopmentFundCouponMustFail app alice.primaryParty bob.primaryParty coupon3.amount
@@ -326,11 +326,13 @@ testDevelopmentFundManagerBlacklist = do
       expectedDso = Some app.dso
       optCreatedAt = None
 
-  setDevelopmentFundDelayConfig app (Some []) None
+  setDevelopmentFundManagerBlacklist app []
 
   -- Happy - coupon allocated
-  _ <- allocateDevelopmentFundCoupon app alice.primaryParty bob.primaryParty coupon3.amount
-    expiresAt reason [cid3] None
+  AmuletRules_AllocateDevelopmentFundCouponResult
+    { developmentFundCouponCid = expiringCouponCid, optUnclaimedDevelopmentFundCouponCid = None } <-
+      allocateDevelopmentFundCoupon app alice.primaryParty bob.primaryParty coupon3.amount
+        expiresAt reason [cid3] None
 
   -- Happy - coupon minted
   transferResult <- mintDevelopmentFundCoupon app bob transferCouponCid
@@ -348,20 +350,24 @@ testDevelopmentFundManagerBlacklist = do
       expectedDso = Some app.dso
       optCreatedAt = None
 
+  -- Happy - the DSO reclaims an expired coupon from a blacklisted manager
+  setDevelopmentFundManagerBlacklist app [alice.primaryParty]
+  passTime (days 3)
+  _ <- expiresDevelopmentFundCoupon app.dso expiringCouponCid
+
   pure ()
 
--- | `TransferPreapproval_SendV2` never resolves `AmuletRules`, so the blacklist cannot be
--- checked there. Minting a development fund coupon through it must therefore fail closed,
--- even when nobody is blacklisted.
-testDevelopmentFundCouponFailsClosedForExternalParty : Script ()
-testDevelopmentFundCouponFailsClosedForExternalParty = do
+-- | `TransferPreapproval_SendV2` never resolves `AmuletRules`, so the fund manager blacklist cannot be
+-- checked there and a blacklisted manager's coupon still mints on that path.
+testDevelopmentFundCouponBypassesBlacklistForExternalParty : Script ()
+testDevelopmentFundCouponBypassesBlacklistForExternalParty = do
   DefaultAppWithUsers{..} <- setupDefaultAppWithUsers
   now <- getTime
   let
     expiresAt = addRelTime now (days 1)
     transferAmount = 10.0
 
-  -- No blacklist is configured, so no fund manager is blacklisted.
+  setDevelopmentFundManagerBlacklist app [alice.primaryParty]
   developmentFundCouponCid <- createDevelopmentFundCoupon app alice.primaryParty bob.primaryParty 50.0
     expiresAt "Bob fixed issue XXX"
 
@@ -376,24 +382,12 @@ testDevelopmentFundCouponFailsClosedForExternalParty = do
         expiresAt
   externalContext <- getExternalPartyTransferContext app
 
-  -- Unhappy - the coupon cannot be minted on a path that does not resolve AmuletRules
-  submitMustFail (actAs bob.primaryParty <> readAs app.dso) $
-    exerciseCmd transferPreapprovalCid TransferPreapproval_SendV2 with
-      sender = bob.primaryParty
-      context = externalContext
-      inputs = [InputDevelopmentFundCoupon developmentFundCouponCid]
-      amount = transferAmount
-      description = None
-      meta = None
-
-  -- Happy - the same send succeeds with an amulet input, which confirms that the
-  -- rejection above is specific to the development fund coupon input.
-  amuletCid <- tap app bob 50.0
+  -- Happy - the coupon mints even though its fund manager is blacklisted
   _ <- submit (actAs bob.primaryParty <> readAs app.dso) $
     exerciseCmd transferPreapprovalCid TransferPreapproval_SendV2 with
       sender = bob.primaryParty
       context = externalContext
-      inputs = [InputAmulet amuletCid]
+      inputs = [InputDevelopmentFundCoupon developmentFundCouponCid]
       amount = transferAmount
       description = None
       meta = None

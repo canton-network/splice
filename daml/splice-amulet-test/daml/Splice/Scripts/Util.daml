@@ -130,11 +130,15 @@ replaceDevelopmentFundConfig app baseConfig optDevelopmentFundManager optDevelop
       initialValue = baseConfig.issuanceCurve.initialValue with
         optDevelopmentFundPercentage
 
-setDevelopmentFundDelayConfig : AmuletApp -> Optional [Party] -> Optional RelTime -> Script ()
-setDevelopmentFundDelayConfig app developmentFundManagerBlacklist minDevelopmentFundMintingDelay =
+setDevelopmentFundManagerBlacklist : AmuletApp -> [Party] -> Script ()
+setDevelopmentFundManagerBlacklist app fundManagerBlacklist =
   updateAmuletConfig app $ \config -> config with
-    developmentFundManagerBlacklist
-    minDevelopmentFundMintingDelay
+    developmentFundManagerBlacklist = Some fundManagerBlacklist
+
+setMinDevelopmentFundMintingDelay : AmuletApp -> RelTime -> Script ()
+setMinDevelopmentFundMintingDelay app delay =
+  updateAmuletConfig app $ \config -> config with
+    minDevelopmentFundMintingDelay = Some delay
 
 
 -- AmuletApp users

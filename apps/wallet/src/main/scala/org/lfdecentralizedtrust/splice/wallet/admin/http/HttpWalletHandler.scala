@@ -1806,7 +1806,7 @@ class HttpWalletHandler(
               expiresAt.toInstant,
               body.reason,
               developmentFundManager.toProtoPrimitive,
-              // `mintAfter` is not exposed via the wallet API yet.
+              // TODO(#6722): expose `mintAfter` in the wallet API
               java.util.Optional.empty(),
             )
           )
