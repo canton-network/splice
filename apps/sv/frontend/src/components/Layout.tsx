@@ -6,13 +6,14 @@ import { Loading, useUserState, useVotesHooks } from '@canton-network/splice-com
 import { Box, Container, GlobalStyles } from '@mui/material';
 import { useLocation } from 'react-router';
 
+import { useFeatureSupport } from '../contexts/SvContext';
+import { useSvConfig } from '../utils';
 import { partyIdScrollGlobalStyles } from './beta/identifierStyles';
 import PartyIdScrollTracks from './PartyIdScrollTracks';
 import SvNavigationShell from './layout/SvNavigationShell';
 import { SvNavLinkItem } from './layout/SvNavLink';
-import { useFeatureSupport } from '../contexts/SvContext';
 import { CONTENT_MAX_WIDTH, layoutTokens, PAGE_PX } from '../theme/tokens';
-import { useSvConfig } from '../utils';
+import NetworkBanner from './layout/NetworkBanner';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -75,6 +76,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     <Box bgcolor={layoutTokens.page} display="flex" flexDirection="column" minHeight="100vh">
       <GlobalStyles styles={partyIdScrollGlobalStyles} />
       <PartyIdScrollTracks />
+      <NetworkBanner />
       <SvNavigationShell navLinks={navLinks} onLogout={logout} pageName={pageName} />
 
       <Box sx={{ flex: 1, pb: 3 }}>

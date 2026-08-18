@@ -1,4 +1,5 @@
 synchronizerMigration:
+  splitSvDeploymentEnabled: true
   frozenMigrationId: 0
   active:
     id: 0

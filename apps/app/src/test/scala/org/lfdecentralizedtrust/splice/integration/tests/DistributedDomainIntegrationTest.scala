@@ -117,7 +117,7 @@ class DistributedDomainIntegrationTest
 
     // Check that things work for external validators
     clue("Alice can tap") {
-      onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
+      eventuallySucceeds()(onboardWalletUser(aliceWalletClient, aliceValidatorBackend))
       aliceWalletClient.tap(1000)
     }
 

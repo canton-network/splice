@@ -8,6 +8,7 @@ import com.digitalasset.canton.topology.PartyId
 import java.util.concurrent.ConcurrentHashMap
 import scala.jdk.CollectionConverters.*
 
+// TODO(#6817): Remove in-memory in favor of DbUnavailablePartiesStore
 class IgnoredPartiesStore(initialParties: Set[PartyId]) {
 
   private val parties: ConcurrentHashMap.KeySetView[PartyId, java.lang.Boolean] = {
