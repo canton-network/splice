@@ -458,13 +458,13 @@ sv:
           type: 'limited'
         /registry/transfer-instruction/v1/transfer-factory:
           fillInterval: '60s'
-          maxTokens: 730
+          maxTokens: 1440
           name: 'registry-transfer-factory'
           perIpLimits:
             fillInterval: '60s'
-            maxTokens: 120
-            tokensPerFill: 120
-          tokensPerFill: 730
+            maxTokens: 240
+            tokensPerFill: 240
+          tokensPerFill: 1440
           type: 'limited'
         /registry/transfer-instruction/v2:
           fillInterval: '60s'

@@ -52,12 +52,12 @@ rateLimits:
   /registry/transfer-instruction/v1/transfer-factory:
     name: registry-transfer-factory
     type: limited
-    maxTokens: 730
-    tokensPerFill: 730
+    maxTokens: 1440
+    tokensPerFill: 1440
     fillInterval: 60s
     perIpLimits:
-      maxTokens: 120
-      tokensPerFill: 120
+      maxTokens: 240
+      tokensPerFill: 240
       fillInterval: 60s
   /registry/allocation/v2/settlement-factory:
     name: registry-settlement-factory-v2
