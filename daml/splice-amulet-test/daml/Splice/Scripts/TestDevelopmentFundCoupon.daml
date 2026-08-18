@@ -350,7 +350,7 @@ testDevelopmentFundManagerBlacklist = do
       expectedDso = Some app.dso
       optCreatedAt = None
 
-  -- Happy - the DSO reclaims an expired coupon from a blacklisted manager
+  -- Happy - the DSO party reclaims an expired coupon from a blacklisted manager
   setDevelopmentFundManagerBlacklist app [alice.primaryParty]
   passTime (days 3)
   _ <- expiresDevelopmentFundCoupon app.dso expiringCouponCid
