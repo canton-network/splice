@@ -7,7 +7,7 @@ import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.automation.{
   AutomationServiceCompanion,
   SpliceAppAutomationService,
-  SqlIndexInitializationTrigger,
+  StartupSqlIndexInitializationTrigger,
   TxLogBackfillingTrigger,
   UpdateIngestionService,
 }
@@ -131,6 +131,15 @@ class ScanAutomationService(
       triggerContext,
     )
   )
+  if (scanStorageConfigV1.perAcsSnapshotTablesEnabled) {
+    registerTrigger(
+      new AcsSnapshotIndexTrigger(
+        storage,
+        snapshotStore,
+        triggerContext,
+      )
+    )
+  }
   // The acs snapshot backfilling trigger should not attempt to backfill snapshots unless the
   // backfilling UpdateHistory is fully enabled and complete.
   if (config.updateHistoryBackfillEnabled && config.updateHistoryBackfillImportUpdatesEnabled) {
@@ -163,7 +172,7 @@ class ScanAutomationService(
     )
   }
   registerTrigger(
-    SqlIndexInitializationTrigger(
+    StartupSqlIndexInitializationTrigger(
       storage,
       triggerContext,
     )

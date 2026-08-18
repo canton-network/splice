@@ -3,7 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.scan.store
 
-import cats.data.NonEmptyVector
+import cats.data.{NonEmptyVector, OptionT}
 import com.daml.ledger.javaapi.data.{CreatedEvent, Identifier}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{Amulet, LockedAmulet}
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{
@@ -21,12 +21,16 @@ import org.lfdecentralizedtrust.splice.store.{HardLimit, Limit, LimitHelpers, Up
 import org.lfdecentralizedtrust.splice.store.db.{
   AcsJdbcTypes,
   AcsQueries,
-  AdvisoryLocks,
   AdvisoryLockIds,
+  AdvisoryLocks,
 }
 import org.lfdecentralizedtrust.splice.util.{Contract, HoldingsSummary, PackageQualifiedName}
 import com.digitalasset.canton.data.CantonTimestamp
-import com.digitalasset.canton.lifecycle.{CloseContext, FutureUnlessShutdown}
+import com.digitalasset.canton.lifecycle.{
+  CloseContext,
+  FutureUnlessShutdown,
+  FutureUnlessShutdownImpl,
+}
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.resource.DbStorage
@@ -123,6 +127,45 @@ class AcsSnapshotStore(
       )
       .value
 
+  }
+
+  def lookupOldestUnindexedSnapshot()(implicit
+      tc: TraceContext
+  ): OptionT[FutureUnlessShutdown, PerTableAcsSnapshot] = {
+    storage
+      .querySingle(
+        sql"""select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance, data_table_name
+            from acs_snapshot
+            where not indexes_created
+            and   history_id = $historyId
+            order by snapshot_record_time;
+         """.as[AcsSnapshot].headOption,
+        "getOldestUnindexedSnapshot",
+      )
+      .map {
+        case snapshot: PerTableAcsSnapshot =>
+          snapshot
+        case _: LegacyAcsSnapshot =>
+          throw io.grpc.Status.FAILED_PRECONDITION
+            .withDescription("Legacy snapshots shouldn't have the indexes_created flag as false.")
+            .asRuntimeException()
+      }
+  }
+
+  def markSnapshotAsIndexed(
+      snapshotRecordTime: CantonTimestamp
+  )(implicit tc: TraceContext): Future[Unit] = {
+    storage
+      .update(
+        sqlu"""
+        update acs_snapshot
+        set indexes_created = true
+        where history_id = $historyId
+        and   snapshot_record_time = $snapshotRecordTime
+          """,
+        "markSnapshotAsIndexed",
+      )
+      .map(_ => ())
   }
 
   def insertNewSnapshot(
@@ -835,7 +878,9 @@ class AcsSnapshotStore(
         where s.snapshot_id = ${snapshot.snapshotId}
         order by created_at, contract_id
       """
-      // TODO: we should create the necessary indexes
+      // Indexes are created by AcsSnapshotIndexTrigger in order to:
+      // - prevent this from blocking for too long
+      // - allow the index creation to be retried in case of a transient failure
 
       (unlocked_amulet_balance, locked_amulet_balance) <- sql"""
         select
@@ -1359,6 +1404,32 @@ object AcsSnapshotStore {
 
     def acsSnapshotStakeholdersTableName(historyId: Long, snapshotRecordTime: CantonTimestamp) =
       s"acs_snapshot_stakeholders_${historyId}_${snapshotRecordTime.toEpochMilli}"
+
+    def stakeholderIndexName(historyId: Long, snapshotRecordTime: CantonTimestamp) =
+      s"acs_snapshot_creates_${historyId}_${snapshotRecordTime.toEpochMilli}_s_ri"
+
+    def stakeholderIndexAction(historyId: Long, snapshotRecordTime: CantonTimestamp) =
+      sql"""create index concurrently if not exists #${stakeholderIndexName(
+          historyId,
+          snapshotRecordTime,
+        )}
+           on #${acsSnapshotStakeholdersTableName(
+          historyId,
+          snapshotRecordTime,
+        )} (stakeholder, row_id) """.asUpdate
+
+    def stakeholderTemplateIdIndexName(historyId: Long, snapshotRecordTime: CantonTimestamp) =
+      s"acs_snapshot_creates_${historyId}_${snapshotRecordTime.toEpochMilli}_s_rid_ri"
+
+    def stakeholderTemplateIdIndexAction(historyId: Long, snapshotRecordTime: CantonTimestamp) =
+      sql"""create index concurrently if not exists #${stakeholderIndexName(
+          historyId,
+          snapshotRecordTime,
+        )}
+           on #${acsSnapshotStakeholdersTableName(
+          historyId,
+          snapshotRecordTime,
+        )} (stakeholder, template_id row_id) """.asUpdate
   }
 
   def apply(
