@@ -59,6 +59,6 @@ release-notes:: Upcoming
 
         - Added a watchdog to restart cometbft when we detect that it
           is replaying messages. You must set
-          ``watchdog.sequencerMetricsUrl: http://global-domain-$SERIAL-sequencer:10013/metrics`` and
-          ``watchdog.mediatorMetricsUrl: http://global-domain-$SERIAL-mediator:10013/metrics`` in the
+          ``watchdog.sequencerMetricsUrl: http://global-domain-SERIAL_ID-sequencer:10013/metrics`` and
+          ``watchdog.mediatorMetricsUrl: http://global-domain-SERIAL_ID-mediator:10013/metrics`` in the
           cometbft helm values. If needed, the watchdog can be disabled through ``watchdog.enabled: false``.
