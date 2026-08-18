@@ -1948,14 +1948,14 @@
         },
         "/registry/transfer-instruction/v1/transfer-factory": {
           "fillInterval": "60s",
-          "maxTokens": 730,
+          "maxTokens": 1440,
           "name": "registry-transfer-factory",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 120,
-            "tokensPerFill": 120
+            "maxTokens": 240,
+            "tokensPerFill": 240
           },
-          "tokensPerFill": 730,
+          "tokensPerFill": 1440,
           "type": "limited"
         },
         "/registry/transfer-instruction/v2": {
@@ -2337,14 +2337,14 @@
         },
         "/registry/transfer-instruction/v1/transfer-factory": {
           "fillInterval": "60s",
-          "maxTokens": 730,
+          "maxTokens": 1440,
           "name": "registry-transfer-factory",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 120,
-            "tokensPerFill": 120
+            "maxTokens": 240,
+            "tokensPerFill": 240
           },
-          "tokensPerFill": 730,
+          "tokensPerFill": 1440,
           "type": "limited"
         },
         "/registry/transfer-instruction/v2": {
@@ -3664,8 +3664,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 730,
-                          "tokens_per_fill": 730
+                          "max_tokens": 1440,
+                          "tokens_per_fill": 1440
                         }
                       },
                       {
@@ -3680,8 +3680,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 120,
-                          "tokens_per_fill": 120
+                          "max_tokens": 240,
+                          "tokens_per_fill": 240
                         }
                       },
                       {
@@ -5821,8 +5821,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 730,
-                          "tokens_per_fill": 730
+                          "max_tokens": 1440,
+                          "tokens_per_fill": 1440
                         }
                       },
                       {
@@ -5837,8 +5837,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 120,
-                          "tokens_per_fill": 120
+                          "max_tokens": 240,
+                          "tokens_per_fill": 240
                         }
                       },
                       {
