@@ -15,13 +15,12 @@ function sweepConfigFromEnv(nodeName: string): SweepConfig | undefined {
 
 export function fromSingleSvConfigBasic(nodeName: string): StaticSvConfigBasic {
   const config = configForSv(nodeName);
+  const sweep = config.validatorApp?.sweep;
   return {
     nodeName,
     ingressName: config.subdomain!,
     onboardingName: config.publicName!,
-    ...(config.validatorApp?.sweep
-      ? { sweep: sweepConfigFromEnv(config.validatorApp.sweep.fromEnv) }
-      : {}),
+    ...(sweep ? { sweep: 'fromEnv' in sweep ? sweepConfigFromEnv(sweep.fromEnv) : sweep } : {}),
   };
 }
 

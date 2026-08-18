@@ -10,6 +10,15 @@ import {
 import { clusterSubConfig } from '@canton-network/splice-pulumi-common/src/config/config';
 import { z } from 'zod';
 
+// Matches the `SweepConfig` type in ./sweep.
+export const SweepConfigSchema = z.object({
+  fromParty: z.string(),
+  toParty: z.string(),
+  maxBalance: z.number(),
+  minBalance: z.number(),
+  useTransferPreapproval: z.boolean().optional(),
+});
+
 export const SynchronizerConfigSchema = z.union([
   z
     .object({

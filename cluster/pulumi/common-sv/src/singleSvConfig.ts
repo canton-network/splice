@@ -8,7 +8,10 @@ import {
   LogLevelSchema,
   K8sResourceSchema,
 } from '@canton-network/splice-pulumi-common';
-import { ValidatorAppConfigSchema } from '@canton-network/splice-pulumi-common-validator/src/config';
+import {
+  SweepConfigSchema,
+  ValidatorAppConfigSchema,
+} from '@canton-network/splice-pulumi-common-validator/src/config';
 import { clusterYamlConfig } from '@canton-network/splice-pulumi-common/src/config/config';
 import { mergeConfigFragments } from '@canton-network/splice-pulumi-common/src/config/configLoader';
 import { CnChartVersionSchema } from '@canton-network/splice-pulumi-common/src/config/versionSchema';
@@ -126,12 +129,10 @@ const ScanAppConfigSchema = z
 const SvValidatorAppConfigSchema = z
   .object({
     walletUser: z.string().optional(),
-    // TODO(#2389) inline env var into config.yaml
-    sweep: z
-      .object({
-        fromEnv: z.string(),
-      })
-      .optional(),
+    // Inline values are preferred (#2389); the `fromEnv` variant is kept only for
+    // clusters whose config.yaml has not yet been migrated off of it and should be
+    // dropped once all prod configs inline their sweep values directly.
+    sweep: z.union([SweepConfigSchema, z.object({ fromEnv: z.string() })]).optional(),
     auth0: Auth0ConfigSchema.optional(),
     // Map of package name -> list of versions to explicitly unvet
     additionalPackagesToUnvet: z.record(z.string(), z.array(z.string())).optional(),

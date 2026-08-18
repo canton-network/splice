@@ -8,8 +8,6 @@ import {
   SvCometBftKeys,
   svCometBftKeysFromSecret,
 } from '@canton-network/splice-pulumi-common';
-import { SweepConfig } from '@canton-network/splice-pulumi-common-validator';
-import { spliceEnvConfig } from '@canton-network/splice-pulumi-common/src/config/envConfig';
 
 import { StaticSvConfig } from './config';
 import { dsoSize, skipExtraSvs } from './dsoConfig';
@@ -364,11 +362,6 @@ export const svRunbookConfig: StaticSvConfig = {
     },
   },
 };
-
-export function sweepConfigFromEnv(nodeName: string): SweepConfig | undefined {
-  const asJson = spliceEnvConfig.optionalEnv(`${nodeName}_SWEEP`);
-  return asJson && JSON.parse(asJson);
-}
 
 // "core SVs" are deployed as part of the `canton-network` stack;
 // if config.yaml contains any SVs that don't match the standard sv-X pattern, we deploy them independently of DSO_SIZE
