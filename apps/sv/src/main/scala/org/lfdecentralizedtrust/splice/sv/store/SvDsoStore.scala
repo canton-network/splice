@@ -68,7 +68,6 @@ trait SvDsoStore
     with ActiveVotesStore {
   protected val outerLoggerFactory: NamedLoggerFactory
   protected def templateJsonDecoder: TemplateJsonDecoder
-  def config: Option[org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig]
   override protected lazy val loggerFactory: NamedLoggerFactory =
     outerLoggerFactory.append("store", "dsoParty")
 
@@ -80,7 +79,6 @@ trait SvDsoStore
     SvDsoStore.contractFilter(
       key.dsoParty,
       domainMigrationId,
-      config.map(_.permissionedSynchronizer).getOrElse(false),
     )
 
   def key: SvStore.Key
@@ -1212,7 +1210,6 @@ object SvDsoStore {
       ingestionConfig: IngestionConfig,
       defaultLimit: Limit,
       acsStoreDescriptorUserVersion: Option[Long] = None,
-      svBackendconfig: Option[org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig],
   )(implicit
       ec: ExecutionContext,
       templateJsonDecoder: TemplateJsonDecoder,
@@ -1228,7 +1225,6 @@ object SvDsoStore {
       ingestionConfig,
       acsStoreDescriptorUserVersion,
       defaultLimit = defaultLimit,
-      config = svBackendconfig,
     )
   }
 
@@ -1236,7 +1232,6 @@ object SvDsoStore {
   def contractFilter(
       dsoParty: PartyId,
       domainMigrationId: Long,
-      enablePermissionedSynchronizer: Boolean,
   ): MultiDomainAcsStore.ContractFilter[
     DsoAcsStoreRowData,
     AcsInterfaceViewRowData.NoInterfacesIngested,
@@ -1672,22 +1667,23 @@ object SvDsoStore {
           contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
         )
       },
+      mkFilter(vl.ValidatorLicenseRequest.COMPANION)(
+        req => req.payload.dso == dso,
+        versionGuard = { case (pkgVersionSupport, now) =>
+          (tc) => pkgVersionSupport.supportsPermissionedSynchronizer(Seq(dsoParty), now)(tc)
+        },
+      ) { contract =>
+        DsoAcsStoreRowData(
+          contract,
+          contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
+          validator = Some(PartyId.tryFromProtoPrimitive(contract.payload.validator)),
+        )
+      },
     )
-
-    val finalFilters = if (enablePermissionedSynchronizer) {
-      dsoFilters + mkFilter(vl.ValidatorLicenseRequest.COMPANION)(req => req.payload.dso == dso) {
-        contract =>
-          DsoAcsStoreRowData(
-            contract,
-            contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
-            validator = Some(PartyId.tryFromProtoPrimitive(contract.payload.validator)),
-          )
-      }
-    } else dsoFilters
 
     MultiDomainAcsStore.SimpleContractFilter(
       dsoParty,
-      finalFilters,
+      dsoFilters,
     )
   }
 

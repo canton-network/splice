@@ -2349,7 +2349,6 @@ class DbSvDsoStoreTest
       participantId = mkParticipantId("SvDsoStoreTest"),
       IngestionConfig(),
       defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),
-      config = None,
     )(parallelExecutionContext, implicitly, implicitly)
     for {
       _ <- store.multiDomainAcsStore.testIngestionSink.initialize()
