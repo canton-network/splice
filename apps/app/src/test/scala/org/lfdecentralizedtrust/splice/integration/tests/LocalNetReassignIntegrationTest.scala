@@ -125,12 +125,15 @@ class LocalNetReassignIntegrationTest extends IntegrationTestWithIsolatedEnviron
       val contractId = createdContract.id.contractId
       val lfContractId = LfContractId.assertFromString(contractId)
 
-      def synchronizerOfContract() =
-        participant.ledger_api_extensions.acs
-          .lookup_contract_domain(party, Set(contractId))
-          .get(contractId)
+      // Mirrors ReassignmentSubmissionIntegrationTest: locate the contract in the party's ACS and
+      // read which synchronizer it is currently assigned to.
+      def contractSynchronizerId(): Option[String] =
+        participant.ledger_api.state.acs
+          .active_contracts_of_party(party = party)
+          .find(_.createdEvent.value.contractId == contractId)
+          .map(_.synchronizerId)
 
-      synchronizerOfContract() should be(Some(globalSynchronizerId))
+      contractSynchronizerId() shouldBe Some(globalSynchronizerId.toProtoPrimitive)
 
       // Scope the reassignment event format to `party` only: the localnet ledger API token does
       // not carry the super-reader (any-party) claim that the default event format requires.
@@ -162,7 +165,7 @@ class LocalNetReassignIntegrationTest extends IntegrationTestWithIsolatedEnviron
             userId = ledgerApiUserId,
             eventFormat = eventFormat,
             // Skip the cross-participant await, which is not readable with this token; the
-            // actAndCheck assertions on lookup_contract_domain provide the waiting instead.
+            // actAndCheck assertions on the ACS provide the waiting instead.
             timeout = None,
           )
           .unassignedWrapper
@@ -182,7 +185,7 @@ class LocalNetReassignIntegrationTest extends IntegrationTestWithIsolatedEnviron
         reassign(globalSynchronizerId, appSynchronizerId),
       )(
         "The contract is now assigned to the app-synchronizer",
-        _ => synchronizerOfContract() should be(Some(appSynchronizerId)),
+        _ => contractSynchronizerId() shouldBe Some(appSynchronizerId.toProtoPrimitive),
       )
 
       actAndCheck(
@@ -190,7 +193,7 @@ class LocalNetReassignIntegrationTest extends IntegrationTestWithIsolatedEnviron
         reassign(appSynchronizerId, globalSynchronizerId),
       )(
         "The contract is assigned to the global synchronizer again",
-        _ => synchronizerOfContract() should be(Some(globalSynchronizerId)),
+        _ => contractSynchronizerId() shouldBe Some(globalSynchronizerId.toProtoPrimitive),
       )
     }
 
@@ -201,5 +204,3 @@ class LocalNetReassignIntegrationTest extends IntegrationTestWithIsolatedEnviron
     }
   }
 }
-
-
