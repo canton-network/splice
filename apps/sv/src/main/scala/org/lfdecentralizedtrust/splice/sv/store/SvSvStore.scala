@@ -165,7 +165,12 @@ object SvSvStore {
           svCandidateName = Some(contract.payload.svName),
         )
       },
-      mkFilter(WalletAppInstall.COMPANION)(co => co.payload.endUserParty == sv) { contract =>
+      mkFilter(WalletAppInstall.COMPANION)(
+        co => co.payload.endUserParty == sv,
+        versionGuard = { case (pkgVersionSupport, now) =>
+          (tc) => pkgVersionSupport.supportsPermissionedSynchronizer(Seq(key.dsoParty), now)(tc)
+        },
+      ) { contract =>
         SvAcsStoreRowData(
           contract
         )
