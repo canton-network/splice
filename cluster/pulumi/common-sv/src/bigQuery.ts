@@ -372,7 +372,7 @@ function installBigqueryProdDataset(scanBigQuery: ScanBigQueryConfig): gcp.bigqu
     datasetId: `${scanBigQuery.dataset}_prod`,
     friendlyName: `${scanBigQuery.dataset} Production Dataset`,
     location: cloudsdkComputeRegion(),
-    deleteContentsOnDestroy: true,
+    deleteContentsOnDestroy: false,
     labels: {
       cluster: CLUSTER_BASENAME,
     },
@@ -381,17 +381,29 @@ function installBigqueryProdDataset(scanBigQuery: ScanBigQueryConfig): gcp.bigqu
 // ============================================================================
 // IAM PERMISSIONS for SCHEDULED QUERIES
 // ============================================================================
-function installBqTransferServiceAgentPermission(): gcp.projects.IAMMember {
-  const currentProject = gcp.organizations.getProjectOutput({});
-  const projectId = currentProject.apply(p => p.projectId!);
+interface ScheduledQueryContext {
+  projectId: pulumi.Output<string>;
+  transferServiceAgentPermission: gcp.projects.IAMMember;
+}
 
-  return new gcp.projects.IAMMember('bq-transfer-token-creator', {
+function installBqScheduledQueryContext(): ScheduledQueryContext {
+  const currentProject = gcp.organizations.getProjectOutput({});
+  const projectId = currentProject.apply(p => {
+    if (!p.projectId) {
+      throw new Error('Current GCP project output is missing a projectId.');
+    }
+    return p.projectId;
+  });
+
+  const transferServiceAgentPermission = new gcp.projects.IAMMember('bq-transfer-token-creator', {
     project: projectId,
     role: 'roles/iam.serviceAccountTokenCreator',
     member: currentProject.apply(
       p => `serviceAccount:service-${p.number}@gcp-sa-bigquerydatatransfer.iam.gserviceaccount.com`
     ),
   });
+
+  return { projectId, transferServiceAgentPermission };
 }
 
 // ============================================================================
@@ -404,12 +416,10 @@ function installHourlyScheduledQueries(
   namespace: ExactNamespace,
   stagingDataset: gcp.bigquery.Dataset,
   prodDataset: gcp.bigquery.Dataset,
-  transferServiceAgentPermission: gcp.projects.IAMMember
+  context: ScheduledQueryContext
 ) {
-  const currentProject = gcp.organizations.getProjectOutput({});
-  const projectId = currentProject.apply(p => p.projectId!);
+  const { projectId, transferServiceAgentPermission } = context;
   const schemaName = scanAppDatabaseName(namespace);
-
   Object.entries(replicatedTables).forEach(([tableName, tableConfig]) => {
     const primaryKeyExpr = tableConfig.primaryKey;
     const colName = tableConfig.datePartitionColumn;
@@ -481,11 +491,10 @@ function installHourlyScheduledQueries(
 function installDailyPurgeScheduledQueries(
   namespace: ExactNamespace,
   stagingDataset: gcp.bigquery.Dataset,
-  transferServiceAgentPermission: gcp.projects.IAMMember,
-  retentionPeriodSeconds: number = 604800,  
+  context: ScheduledQueryContext,
+  retentionPeriodSeconds: number,  
 ) {
-  const currentProject = gcp.organizations.getProjectOutput({});
-  const projectId = currentProject.apply(p => p.projectId!);
+  const { projectId, transferServiceAgentPermission } = context;
   const schemaName = scanAppDatabaseName(namespace);
   const retentionDays = retentionPeriodSeconds / 86400;
 
@@ -930,9 +939,9 @@ export async function configureScanBigQuery({
       slots.slot2,
       stagProdDesiredState
     );
-    const transferServiceAgentPermission = installBqTransferServiceAgentPermission();
-    installHourlyScheduledQueries(namespace, stagingDataset, prodDataset, transferServiceAgentPermission);
-    installDailyPurgeScheduledQueries(namespace, stagingDataset, transferServiceAgentPermission, retentionPeriodSeconds);
+    const scheduledQueryContext = installBqScheduledQueryContext();
+    installHourlyScheduledQueries(namespace, stagingDataset, prodDataset, scheduledQueryContext);
+    installDailyPurgeScheduledQueries(namespace, stagingDataset, scheduledQueryContext, retentionPeriodSeconds);
   }
   // TODO (DACH-NY/canton-network-internal#6451) not sure if this function needs to return anything,
   // but we need to return something to satisfy the ScanBigQuery type.
