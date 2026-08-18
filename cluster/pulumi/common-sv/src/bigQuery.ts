@@ -355,8 +355,10 @@ function installBigqueryStagingDataset(scanBigQuery: ScanBigQueryConfig): gcp.bi
     friendlyName: `${scanBigQuery.dataset} Staging Dataset`,
     location: cloudsdkComputeRegion(),
     deleteContentsOnDestroy: true,
-    // This is a TRAP!!! GCP tracks the table creation time and not the ingestion time
-    // As soon as it hit =s 3 days it deletes everything in the staging data even before the data reaches production dataset
+    // ISSUE#6814: Do not rely on ingestion timestamps for retention in staging. 
+    // GCP calculates expiration from the table creation date, which will delete 
+    // staging tables at the 3-day mark even if production sync is incomplete.
+  
     //defaultTableExpirationMs: THREE_DAYS_MS,
     labels: {
       cluster: CLUSTER_BASENAME,
@@ -466,15 +468,17 @@ function installHourlyScheduledQueries(
   });
 }
 // ============================================================================
-// Purguing data older than 7 days from the staging table
+// Purging data older than 7 days from the staging table
 // ============================================================================
 function installDailyPurgeScheduledQueries(
   namespace: ExactNamespace,
-  stagingDataset: gcp.bigquery.Dataset
+  stagingDataset: gcp.bigquery.Dataset,
+  retentionPeriodSeconds: number = 604800
 ) {
   const currentProject = gcp.organizations.getProjectOutput({});
   const projectId = currentProject.apply(p => p.projectId!);
   const schemaName = scanAppDatabaseName(namespace);
+  const retentionDays = retentionPeriodSeconds / 86400;
 
   // Grant BigQuery DTS service account permission to impersonate
   const transferServiceAgentPermission = new gcp.projects.IAMMember('bq-purge-transfer-token-creator', {
@@ -485,7 +489,12 @@ function installDailyPurgeScheduledQueries(
     ),
   });
 
-  Object.entries(replicatedTables).forEach(([tableName]) => {
+  Object.entries(replicatedTables).forEach(([tableName, tableConfig]) => {
+    const timeExpression =
+      tableConfig.timeType === 'datastream_metadata'
+        ? `TIMESTAMP_MILLIS(datastream_metadata.${tableConfig.datePartitionColumn})`
+        : `TIMESTAMP_MICROS(${tableConfig.datePartitionColumn})`;
+
     const procedureBody = pulumi
       .all([projectId, stagingDataset.datasetId])
       .apply(([proj, stagingDs]) => {
@@ -493,7 +502,7 @@ function installDailyPurgeScheduledQueries(
 
         return `
           DELETE FROM ${stagingTable}
-          WHERE TIMESTAMP_MICROS(record_time) < TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 7 DAY);
+          WHERE ${timeExpression} < TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL ${retentionPeriodSeconds} SECOND);
         `;
       });
 
@@ -512,11 +521,11 @@ function installDailyPurgeScheduledQueries(
     new gcp.bigquery.DataTransferConfig(
       `${CLUSTER_BASENAME}_${tableName}-daily-purge`,
       {
-        displayName: `${CLUSTER_BASENAME}_${tableName} Daily 7-Day Retention Purge`,
+        displayName: `${CLUSTER_BASENAME}_${tableName} Daily Retention Purge`,
         location: cloudsdkComputeRegion(),
         serviceAccountName: pulumi.interpolate`bigquery@${projectId}.iam.gserviceaccount.com`,
         dataSourceId: 'scheduled_query',
-        schedule: 'every day 03:00', // Runs daily at 03:00 AM UTC
+        schedule: 'every day 05:21', // Runs daily at 05:21 AM 
 
         params: {
           query: pulumi.interpolate`CALL \`${projectId}.${stagingDataset.datasetId}.${routineId}\`();`,
@@ -839,6 +848,7 @@ export async function configureScanBigQuery({
     enableStagProdDatastream,
     legacyDesiredState,
     stagProdDesiredState,
+    retentionPeriodSeconds,
   } = bigQueryConfig;
 
   if (!enableLegacyDatastream && !enableStagProdDatastream) {
@@ -922,7 +932,7 @@ export async function configureScanBigQuery({
     );
 
     installHourlyScheduledQueries(namespace, stagingDataset, prodDataset);
-    installDailyPurgeScheduledQueries(namespace, stagingDataset);
+    installDailyPurgeScheduledQueries(namespace, stagingDataset,retentionPeriodSeconds);
   }
   // TODO (DACH-NY/canton-network-internal#6451) not sure if this function needs to return anything,
   // but we need to return something to satisfy the ScanBigQuery type.

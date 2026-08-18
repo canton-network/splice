@@ -107,6 +107,12 @@ export const ScanBigQueryConfigSchema = z
     enableStagProdDatastream: z.boolean().default(false),
     legacyDesiredState: z.enum(['RUNNING', 'PAUSED']).default('RUNNING'),
     stagProdDesiredState: z.enum(['RUNNING', 'PAUSED']).default('RUNNING'),
+    retentionPeriodSeconds: z
+    .number()
+    .int()
+    .min(259200) // 3 days in seconds
+    .refine((v) => v % 86400 === 0) // enforces 24 hour day cut out
+    .default(604800), // 604800 = 7 days
   })
   .strict(); // Keeps strict mode safe now that all known fields are explicitly defined
 
