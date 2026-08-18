@@ -64,7 +64,6 @@ class SvDsoStoreIngestionPerformanceTest(
       participantId = mkParticipantId("IngestionPerformanceIngestionTest"),
       IngestionConfig(),
       defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),
-      config = None,
     )(ec, templateJsonDecoder, closeContext).multiDomainAcsStore
   }
 

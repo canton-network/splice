@@ -254,7 +254,7 @@ class DbSvSvStoreTest
       defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),
     )(parallelExecutionContext, implicitly, implicitly) {
       override lazy val acsContractFilter =
-        SvSvStore.contractFilter(key, enablePermissionedSynchronizer = true)
+        SvSvStore.contractFilter(key)
     }
     for {
       _ <- store.multiDomainAcsStore.testIngestionSink.initialize()

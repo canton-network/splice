@@ -84,7 +84,6 @@ class DbSvDsoStore(
     ingestionConfig: IngestionConfig,
     acsStoreDescriptorUserVersion: Option[Long] = None,
     override val defaultLimit: Limit,
-    override val config: Option[org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig],
 )(implicit
     override protected val ec: ExecutionContext,
     override protected val templateJsonDecoder: TemplateJsonDecoder,

@@ -21,7 +21,6 @@ import com.digitalasset.canton.topology.{ParticipantId, PartyId}
 import com.digitalasset.canton.tracing.TraceContext
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.store.db.AcsQueries.AcsStoreId
-import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -36,7 +35,6 @@ class DbSvSvStore(
     ingestionConfig: IngestionConfig,
     acsStoreDescriptorUserVersion: Option[Long] = None,
     override val defaultLimit: Limit,
-    override val config: Option[SvAppBackendConfig] = None,
 )(implicit
     override protected val ec: ExecutionContext,
     templateJsonDecoder: TemplateJsonDecoder,
