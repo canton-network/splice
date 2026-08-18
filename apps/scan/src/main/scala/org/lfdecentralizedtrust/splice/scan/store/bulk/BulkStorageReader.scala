@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.scan.store.bulk
 
+import cats.data.NonEmptyList
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.tracing.TraceContext
@@ -28,7 +29,9 @@ class BulkStorageReader(
     extends NamedLogging {
 
   def getCommittedObjectsForAcsSnapshotAtOrBefore(
-      atOrBeforeTimestamp: CantonTimestamp
+      atOrBeforeTimestamp: CantonTimestamp,
+      storageEncodings: NonEmptyList[ScanStorageConfig.Encoding] =
+        NonEmptyList.one(ScanStorageConfig.Encoding.CompactJson),
   )(implicit tc: TraceContext, ec: ExecutionContext): Future[AcsSnapshotObjects] = {
     for {
       snapshotTs <-
@@ -45,7 +48,12 @@ class BulkStorageReader(
               ts.timestamp
             case Some(ts) => storageConfig.computeBulkSnapshotTimeAtOrBefore(atOrBeforeTimestamp)
           }
-      objects <- getAcsSnapshotObjects(snapshotTs, committedS3Connection, storageConfig)
+      objects <- getAcsSnapshotObjects(
+        snapshotTs,
+        committedS3Connection,
+        storageConfig,
+        storageEncodings,
+      )
     } yield {
       objects
     }
@@ -99,18 +107,26 @@ class BulkStorageReader(
   def getStagingObjectsForAcsSnapshotAt(
       timestamp: CantonTimestamp
   ): Future[AcsSnapshotObjects] = {
-    getAcsSnapshotObjects(timestamp, stagingS3Connection, storageConfig)
+    getAcsSnapshotObjects(
+      timestamp,
+      stagingS3Connection,
+      storageConfig,
+      ScanStorageConfig.Encoding.all,
+    )
   }
 
   def getStagingObjectsForUpdateHistorySegment(
       segment: UpdatesSegment
-  ): Future[UpdateHistoryObjectsResponse] = getUpdateObjectsInSegment(segment, stagingS3Connection)
+  ): Future[UpdateHistoryObjectsResponse] =
+    getUpdateObjectsInSegment(segment, stagingS3Connection, ScanStorageConfig.Encoding.all)
 
   def getCommittedUpdatesBetweenDates(
       afterRecordTime: CantonTimestamp,
       atOrBeforeRecordTime: CantonTimestamp,
       limit: PageLimit,
       nextPageTokenO: Option[String],
+      storageEncodings: NonEmptyList[ScanStorageConfig.Encoding] =
+        NonEmptyList.one(ScanStorageConfig.Encoding.CompactJson),
   )(implicit tc: TraceContext, ec: ExecutionContext): Future[UpdateHistoryObjectsResponse] =
     getUpdatesBetweenDatesFromBucket(
       afterRecordTime,
@@ -119,6 +135,7 @@ class BulkStorageReader(
       nextPageTokenO,
       committedS3Connection,
       updateHistoryCommittedProgress.readLatestProcessedSegment,
+      storageEncodings,
     )
 
   def getStagingSegmentStartingAt(
@@ -143,6 +160,19 @@ class BulkStorageReader(
       }
   }
 
+  def getObjectChecksums(
+      objectKeys: Seq[String]
+  ): Future[Seq[Option[String]]] = {
+    for {
+      committed <- committedS3Connection.getChecksums(objectKeys)
+      staging <- stagingS3Connection.getChecksums(objectKeys)
+    } yield {
+      objectKeys.map { key =>
+        committed.find(_.key == key).orElse(staging.find(_.key == key)).map(_.checksum)
+      }
+    }
+  }
+
   private def getSegmentStartingAt(
       startTimestamp: Option[CantonTimestamp]
   ): Future[Option[(CantonTimestamp, CantonTimestamp)]] =
@@ -158,10 +188,18 @@ class BulkStorageReader(
         )
     }
 
+  /** Checks if a key in bulk storage matches one of the given [[storageEncodings]]. */
+  private def keyMatchesStorageEncodings(
+      prefix: String,
+      storageEncodings: NonEmptyList[ScanStorageConfig.Encoding],
+  )(key: String): Boolean =
+    storageEncodings.exists(_.storageKeyRegex(prefix).matches(key))
+
   private def getAcsSnapshotObjects(
       timestamp: CantonTimestamp,
       s3Connection: S3BucketConnection,
       storageConfig: ScanStorageConfig,
+      storageEncodings: NonEmptyList[ScanStorageConfig.Encoding],
   ): Future[AcsSnapshotObjects] = {
     for {
       objects <- s3Connection
@@ -170,7 +208,7 @@ class BulkStorageReader(
         // (hence the HardLimit, just as a safety precaution).
         .listObjects(
           storageConfig.findSegmentFolderPrefixByStartTimestamp(timestamp),
-          _.matches(".*ACS_\\d+\\.zstd"),
+          keyMatchesStorageEncodings("ACS", storageEncodings),
           HardLimit.tryCreate(Limit.DefaultMaxPageSize),
         )
       objectsWithChecksums <- s3Connection.getChecksums(objects)
@@ -201,6 +239,7 @@ class BulkStorageReader(
       nextPageTokenO: Option[String],
       s3Connection: S3BucketConnection,
       readLatestProcessedSegment: => Future[Option[UpdatesSegment]],
+      storageEncodings: NonEmptyList[ScanStorageConfig.Encoding],
   )(implicit tc: TraceContext, ec: ExecutionContext): Future[UpdateHistoryObjectsResponse] = {
 
     def isFolderInRange(folder: String): Boolean = {
@@ -299,7 +338,7 @@ class BulkStorageReader(
               if (folderLimit <= 0) {
                 Future.successful((folderAcc, folderLimit))
               } else {
-                getUpdateObjectsInFolder(s3Connection, folder).map { folderObjs =>
+                getUpdateObjectsInFolder(s3Connection, folder, storageEncodings).map { folderObjs =>
                   if (folderObjs.size > folderLimit) {
                     // Folder would exceed the limit; omit it entirely (and stop adding more by making the limit 0)
                     if (folderAcc.isEmpty) {
@@ -338,12 +377,13 @@ class BulkStorageReader(
   private def getUpdateObjectsInSegment(
       segment: UpdatesSegment,
       s3Connection: S3BucketConnection,
+      storageEncodings: NonEmptyList[ScanStorageConfig.Encoding],
   ): Future[UpdateHistoryObjectsResponse] = {
     val folder = storageConfig.getSegmentFolder(
       segment.fromTimestamp.timestamp,
       Some(segment.toTimestamp.timestamp),
     )
-    getUpdateObjectsInFolder(s3Connection, folder)
+    getUpdateObjectsInFolder(s3Connection, folder, storageEncodings)
       .flatMap(s3Connection.getChecksums)
       .map { objectsWithChecksums =>
         if (objectsWithChecksums.isEmpty) {
@@ -366,9 +406,10 @@ class BulkStorageReader(
   private def getUpdateObjectsInFolder(
       s3Connection: S3BucketConnection,
       folder: String,
+      storageEncodings: NonEmptyList[ScanStorageConfig.Encoding],
   ): Future[Seq[String]] = s3Connection.listObjects(
     prefix = folder,
-    _.matches(".*updates_\\d+\\.zstd"),
+    keyMatchesStorageEncodings("updates", storageEncodings),
     HardLimit.tryCreate(Limit.DefaultMaxPageSize),
   )
 

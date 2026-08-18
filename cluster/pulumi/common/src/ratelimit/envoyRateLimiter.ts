@@ -296,12 +296,6 @@ export class RateLimitEnvoyFilter extends pulumi.ComponentResource {
 
     const rateLimitActions = buildRateLimitActions(effectiveRateLimits || {});
 
-    const enableEnvoyRateLimitMetricsAnnotation = `
-proxyStatsMatcher:
-  inclusionRegexps:
-  - ".*http_local_rate_limit.*"
-`.trim();
-
     this.envoyFilter = new k8s.apiextensions.CustomResource(
       `${args.namespace}-${name}`,
       {
@@ -310,9 +304,6 @@ proxyStatsMatcher:
         metadata: {
           name: name,
           namespace: args.namespace,
-          annotations: {
-            'proxy.istio.io/config': enableEnvoyRateLimitMetricsAnnotation,
-          },
         },
         spec: {
           workloadSelector: {

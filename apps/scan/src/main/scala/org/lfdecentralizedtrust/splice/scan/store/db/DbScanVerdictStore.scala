@@ -237,13 +237,13 @@ object DbScanVerdictStore {
   def apply(
       storage: com.digitalasset.canton.resource.DbStorage,
       updateHistory: UpdateHistory,
-      appActivityRecordStoreO: Option[DbAppActivityRecordStore],
+      appActivityRecordStore: DbAppActivityRecordStore,
       loggerFactory: NamedLoggerFactory,
   )(implicit ec: ExecutionContext): DbScanVerdictStore =
     new DbScanVerdictStore(
       storage,
       updateHistory,
-      appActivityRecordStoreO,
+      appActivityRecordStore,
       loggerFactory,
     )
 }
@@ -251,7 +251,7 @@ object DbScanVerdictStore {
 class DbScanVerdictStore(
     storage: DbStorage,
     updateHistory: UpdateHistory,
-    val appActivityRecordStoreO: Option[DbAppActivityRecordStore],
+    val appActivityRecordStore: DbAppActivityRecordStore,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit
     ec: ExecutionContext
@@ -556,17 +556,13 @@ class DbScanVerdictStore(
       firstActiveRoundO: Option[Long],
       lastArchivedRoundO: Option[Long],
   )(implicit tc: TraceContext): DBIO[Unit] =
-    appActivityRecordStoreO match {
-      case None => DBIO.successful(())
-      case Some(s) =>
-        s.insertAppActivityRecordsDBIO(
-          items,
-          firstRecordTimeMicros,
-          hasTrafficSummaries,
-          firstActiveRoundO,
-          lastArchivedRoundO,
-        )
-    }
+    appActivityRecordStore.insertAppActivityRecordsDBIO(
+      items,
+      firstRecordTimeMicros,
+      hasTrafficSummaries,
+      firstActiveRoundO,
+      lastArchivedRoundO,
+    )
 
   private def afterFilters(
       afterO: Option[(Long, CantonTimestamp)],

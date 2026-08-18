@@ -143,6 +143,13 @@ function configureIstiod(
         },
         // wait for the istio container to start before starting apps to avoid network errors
         holdApplicationUntilProxyStarts: true,
+        // Export the local rate limit filter counters (enabled/ok/rate_limited/enforced).
+        // Deliberately narrow: inclusionRegexps is *additive* on top of Istio's
+        // defaults, so a broad regex here would blow up Prometheus cardinality.
+        // docs: https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/local_rate_limit_filter#statistics
+        proxyStatsMatcher: {
+          inclusionRegexps: ['.*http_local_rate_limit.*'],
+        },
       },
       // We have clients retry so we disable istio’s automatic retries.
       defaultHttpRetryPolicy: {
@@ -833,19 +840,23 @@ function configureSequencerHighPerformanceGrpcDestinationRule(
         },
         connectionPool: {
           http: {
-            http1MaxPendingRequests: 10000,
-            http2MaxRequests: 10000,
-            maxConcurrentStreams: 10000,
+            http1MaxPendingRequests: 20000,
+            http2MaxRequests: 20000,
+            maxConcurrentStreams: 20000,
             maxRequestsPerConnection: 0,
           },
           tcp: {
-            maxConnections: 10000,
+            maxConnections: 20000,
           },
         },
       },
     },
   });
 }
+
+// Ports of the http2 servers that we apply the upstream flow control config to:
+// the sequencer public API and the sequencer BFT P2P API.
+const sequencerFlowControlUpstreamPorts = [5008, 5010];
 
 // Istio proxies lots of client connections over relatively few connections. If one of the client connections gets stuck
 // (e.g. because the client died) buffers will fill up and eventually istio will stop sending connection-level window updates
@@ -859,6 +870,40 @@ function configureSequencerHighPerformanceGrpcDestinationRule(
 function configureSequencerFlowControl(
   ingressNs: k8s.core.v1.Namespace
 ): k8s.apiextensions.CustomResource {
+  const http2ProtocolOptions = {
+    initial_stream_window_size: infraConfig.istio.sequencerFlowControl.initialStreamWindowSize,
+    initial_connection_window_size:
+      infraConfig.istio.sequencerFlowControl.initialConnectionWindowSize,
+    connection_keepalive: {
+      interval: '30s',
+      timeout: '5s',
+    },
+  };
+  // istio -> upstream (aka sequencer)
+  const upstreamPatch = (portNumber: number) => ({
+    applyTo: 'CLUSTER',
+    match: {
+      cluster: {
+        portNumber,
+        // Ideally we would just apply it everywhere. But doing it without this portNumber breaks http1 configs. In theory there is `auto_config` which should do the right thing but then it doesn't apply it at all anymore.
+        // So for now we just apply it to the sequencer ports (public API and BFT P2P) which are the only externally exposed http2 servers so the only things where this really should matter in practice.
+      },
+    },
+    patch: {
+      operation: 'MERGE',
+      value: {
+        typed_extension_protocol_options: {
+          'envoy.extensions.upstreams.http.v3.HttpProtocolOptions': {
+            '@type': 'type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions',
+            use_downstream_protocol_config: {
+              http_protocol_options: {},
+              http2_protocol_options: http2ProtocolOptions,
+            },
+          },
+        },
+      },
+    },
+  });
   return new k8s.apiextensions.CustomResource('sequencer-flow-control', {
     apiVersion: 'networking.istio.io/v1alpha3',
     kind: 'EnvoyFilter',
@@ -887,55 +932,12 @@ function configureSequencerFlowControl(
               typed_config: {
                 '@type':
                   'type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager',
-                http2_protocol_options: {
-                  initial_stream_window_size:
-                    infraConfig.istio.sequencerFlowControl.initialStreamWindowSize,
-                  initial_connection_window_size:
-                    infraConfig.istio.sequencerFlowControl.initialConnectionWindowSize,
-                  connection_keepalive: {
-                    interval: '30s',
-                    timeout: '5s',
-                  },
-                },
+                http2_protocol_options: http2ProtocolOptions,
               },
             },
           },
         },
-        {
-          // istio -> upstream (aka sequencer)
-          applyTo: 'CLUSTER',
-          match: {
-            cluster: {
-              portNumber: 5008,
-              // Ideally we would just apply it everywhere. But doing it without this portNumber breaks http1 configs. In theory there is `auto_config` which should do the right thing but then it doesn't apply it at all anymore.
-              // So for now we just apply it to the sequencer which is the only externally exposed http2 server so the only thing where this really should matter in practice.
-            },
-          },
-          patch: {
-            operation: 'MERGE',
-            value: {
-              typed_extension_protocol_options: {
-                'envoy.extensions.upstreams.http.v3.HttpProtocolOptions': {
-                  '@type':
-                    'type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions',
-                  use_downstream_protocol_config: {
-                    http_protocol_options: {},
-                    http2_protocol_options: {
-                      initial_stream_window_size:
-                        infraConfig.istio.sequencerFlowControl.initialStreamWindowSize,
-                      initial_connection_window_size:
-                        infraConfig.istio.sequencerFlowControl.initialConnectionWindowSize,
-                      connection_keepalive: {
-                        interval: '30s',
-                        timeout: '5s',
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
+        ...sequencerFlowControlUpstreamPorts.map(upstreamPatch),
       ],
     },
   });

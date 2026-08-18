@@ -4,6 +4,7 @@ import com.daml.metrics.api.noop.NoOpMetricsFactory
 import org.lfdecentralizedtrust.splice.config.AutomationConfig
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.store.{StoreErrors, StoreTestBase}
+import org.lfdecentralizedtrust.splice.store.db.AdvisoryLocksTestHelper
 import com.digitalasset.canton.concurrent.{FutureSupervisor, Threading}
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.logging.SuppressionRule
@@ -13,13 +14,18 @@ import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.MonadUtil
 import com.digitalasset.canton.{FutureHelpers, HasActorSystem, HasExecutionContext}
 import org.lfdecentralizedtrust.splice.automation.SqlIndexInitializationTrigger.IndexAction
-import org.lfdecentralizedtrust.splice.store.db.{AcsJdbcTypes, AcsTables, SplicePostgresTest}
+import org.lfdecentralizedtrust.splice.store.db.{
+  AcsJdbcTypes,
+  AcsTables,
+  AdvisoryLocks,
+  SplicePostgresTest,
+}
 import org.slf4j.event.Level
 import slick.dbio.DBIOAction
 import slick.jdbc.{GetResult, PositionedResult}
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 
-import scala.concurrent.Future
+import scala.concurrent.{Future, Promise}
 
 class SqlIndexInitializationTriggerStoreTest
     extends StoreTestBase
@@ -29,7 +35,15 @@ class SqlIndexInitializationTriggerStoreTest
     with SplicePostgresTest
     with AcsJdbcTypes
     with AcsTables
-    with FutureHelpers {
+    with FutureHelpers
+    with AdvisoryLocksTestHelper {
+
+  private val expectedIndexNames = Seq(
+    "updt_hist_crea_hi_mi_ci_import_updates",
+    "updt_hist_tran_hi_eth",
+    "dso_acs_store_sid_mid_pn_tid_rbio",
+    "scan_txlog_store_sid_effat_en_vot",
+  )
 
   "SqlIndexInitializationTrigger" should {
 
@@ -56,12 +70,7 @@ class SqlIndexInitializationTriggerStoreTest
         indexNames <- listIndexNames()
         _ <- dumpIndexes()
       } yield {
-        indexNames should contain allElementsOf Seq(
-          "updt_hist_crea_hi_mi_ci_import_updates",
-          "updt_hist_tran_hi_eth",
-          "dso_acs_store_sid_mid_pn_tid_rbio",
-          "scan_txlog_store_sid_effat_en_vot",
-        )
+        indexNames should contain allElementsOf expectedIndexNames
         indexNames should not contain "scan_txlog_store_sid_en_vot"
       }
     }
@@ -342,6 +351,35 @@ class SqlIndexInitializationTriggerStoreTest
         tasksResult.value shouldBe empty
       }
     }
+
+    "skip index DDL quietly while another process holds the advisory lock" in {
+      val trigger = SqlIndexInitializationTrigger(
+        storage = storage,
+        triggerContext = triggerContext,
+        indexActions = List(
+          IndexAction.Create(
+            "test_index",
+            sqlu"create index concurrently if not exists test_index on update_history_creates (record_time)",
+          )
+        ),
+      )
+      val releaseLock = Promise[Unit]()
+      val (lockAcquired, lockReleased) =
+        holdLock(AdvisoryLocks.withDdlLock, DBIOAction.unit, releaseLock.future)
+
+      for {
+        _ <- lockAcquired
+        _ <- trigger.runOnce()
+        indexNamesWhileLocked <- listIndexNames()
+        _ = indexNamesWhileLocked should not contain "test_index"
+        // The contended action is still pending and succeeds once the lock is released
+        _ = releaseLock.success(())
+        _ <- lockReleased
+        _ <- runTriggerUntilAllTasksDone(trigger)
+        indexNamesAfter <- listIndexNames()
+      } yield indexNamesAfter should contain("test_index")
+    }
+
   }
 
   private def listIndexNames(): Future[Seq[String]] = {
@@ -416,6 +454,7 @@ class SqlIndexInitializationTriggerStoreTest
     loggerFactory,
     NoOpMetricsFactory,
   )
+
   override protected def cleanDb(
       storage: DbStorage
   )(implicit traceContext: TraceContext): FutureUnlessShutdown[?] = for {

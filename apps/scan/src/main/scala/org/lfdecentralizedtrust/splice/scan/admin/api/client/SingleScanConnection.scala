@@ -32,6 +32,7 @@ import org.lfdecentralizedtrust.splice.environment.{
 }
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
+  GetBulkObjectChecksumsResponse,
   GetRewardAccountingActivityTotalsResponse,
   GetRewardAccountingBatchResponse,
   GetRewardAccountingRootHashResponse,
@@ -96,7 +97,7 @@ import scala.util.{Failure, Success}
   * to query for the DSO party id.
   */
 class SingleScanConnection private[client] (
-    private[client] val config: ScanAppClientConfig,
+    val config: ScanAppClientConfig,
     upgradesConfig: UpgradesConfig,
     protected val clock: Clock,
     retryProvider: RetryProvider,
@@ -1026,6 +1027,14 @@ class SingleScanConnection private[client] (
     runHttpCmd(
       config.adminApi.url,
       HttpScanAppClient.GetRewardAccountingBatch(roundNumber, batchHash),
+    )
+
+  override def getBulkObjectChecksums(
+      objectKeys: Seq[String]
+  )(implicit ec: ExecutionContext, tc: TraceContext): Future[GetBulkObjectChecksumsResponse] =
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetBulkObjectChecksums(objectKeys),
     )
 }
 

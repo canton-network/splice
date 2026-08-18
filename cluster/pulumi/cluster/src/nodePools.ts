@@ -74,6 +74,7 @@ function installAppsNodePools(
         ],
         labels: {
           cn_apps: 'hyperdisk',
+          ...config.labels,
         },
         loggingVariant: 'DEFAULT',
       },

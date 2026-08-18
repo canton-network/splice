@@ -60,18 +60,13 @@ export interface ProposalDetailsContentProps {
 
 type VoteTab = Extract<VoteStatus, 'accepted' | 'rejected' | 'no-vote'> | 'all';
 
-const now = () => dayjs();
-
 export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = props => {
   const { contractId, proposalDetails, votingInformation, votes, currentSvPartyId } = props;
 
   const votesHooks = useVotesHooks();
   const dsoInfoQuery = useDsoInfos();
 
-  const isEffective =
-    votingInformation.voteTakesEffect && dayjs(votingInformation.voteTakesEffect).isBefore(now());
-  const isClosed =
-    !proposalDetails.isVoteRequest || isEffective || votingInformation.status === 'Rejected';
+  const isClosed = !proposalDetails.isVoteRequest || votingInformation.status === 'Rejected';
 
   const dsoConfigToCompareWith = useMemo(() => {
     if (proposalDetails.action === 'SRARC_SetConfig') {

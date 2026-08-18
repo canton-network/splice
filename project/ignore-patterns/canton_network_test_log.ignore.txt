@@ -129,15 +129,15 @@ Circuit breaker .* tripped after .* failures.*(Command|Splice)CircuitBreakerTest
 # This is more likely in test code where we run multiple apps against the same database, all trying to create the same index.
 Index .* should be created and is invalid, dropping it
 
-# TODO(#4738) - remove this
-processTaskWithRetry failed with an unknown exception, not retrying.*SqlIndexInitializationTrigger.*PSQLException: ERROR: tuple concurrently updated
-Skipping processing of.*due to unexpected failure.*SqlIndexInitializationTrigger.*PSQLException: ERROR: tuple concurrently updated
-
 # Injected errors in s3Mock
 Simulated S3 error
 
 # Shutdown issues
 Previous channel ManagedChannelImpl.* was garbage collected without being shut down!
+# This is logged by pekko's RestartSource. Ideally we'd prevent it from logging that when shutting down,
+# but it doesn't offer a clean way of doing that. Lowering log level also doesn't seem sensible,
+# as we don't want to miss non-shutdown warnings in production.
+Restarting stream due to failure.*Channel shutdown invoked
 # TODO(#564) - check what's happening here during shutdown
 Timeout 10 seconds expired, but readers are still active. Shutting down forcibly.*LsuIntegrationTest
 

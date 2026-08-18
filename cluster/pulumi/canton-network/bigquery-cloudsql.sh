@@ -200,9 +200,11 @@ case "$SUBCOMMAND" in
         IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = '$PUBLICATION_NAME') THEN
           ALTER PUBLICATION $PUBLICATION_NAME
             SET TABLE $TABLES_TO_REPLICATE_JOINED;
+           
         ELSE
           CREATE PUBLICATION $PUBLICATION_NAME
-            FOR TABLE $TABLES_TO_REPLICATE_JOINED;
+            FOR TABLE $TABLES_TO_REPLICATE_JOINED
+            WITH (publish_via_partition_root = true);
         END IF;
       END \$\$;
       COMMIT; -- otherwise fails with "cannot create logical replication slot
