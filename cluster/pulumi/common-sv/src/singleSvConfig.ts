@@ -112,7 +112,7 @@ export const ScanBigQueryConfigSchema = z
     .int()
     .min(259200) // 3 days in seconds
     .refine((v) => v % 86400 === 0) // enforces 24 hour day cut out
-    .default(604800), // 604800 = 7 days
+    .default(7 * 24 * 3600), // 604800 = 7 days
   })
   .strict(); // Keeps strict mode safe now that all known fields are explicitly defined
 

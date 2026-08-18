@@ -358,8 +358,6 @@ function installBigqueryStagingDataset(scanBigQuery: ScanBigQueryConfig): gcp.bi
     // ISSUE#6814: Do not rely on ingestion timestamps for retention in staging. 
     // GCP calculates expiration from the table creation date, which will delete 
     // staging tables at the 3-day mark even if production sync is incomplete.
-  
-    //defaultTableExpirationMs: THREE_DAYS_MS,
     labels: {
       cluster: CLUSTER_BASENAME,
       datastream_id: 'stag_prod',
