@@ -36,9 +36,9 @@ class DbUnavailablePartiesStore(
   private val baseMicros = baseDuration.underlying.toMicros
   private val maxMicros = maxIgnoreDuration.underlying.toMicros
 
-  /** Adds or updates parties.
+  /** Adds or updates parties only outside the ignore window.
     *  a. For new parties, it sets updated_at to now and the ignore_duration to base_duration.
-    *  b. For existing parties, it updates updated_at to now and doubles the ignore_duration (up to max_ignore_duration).
+    *  b. For existing parties, it updates updated_at to now and doubles the ignore_duration (up to max_ignore_duration)
     */
   def addParties(parties: Seq[PartyId], nowMicros: Long)(implicit
       tc: TraceContext
@@ -50,10 +50,10 @@ class DbUnavailablePartiesStore(
       storage
         .update(
           sql"""insert into dso_unavailable_parties
-                  (party_id, updated_at, ignore_duration, store_id)
-                select u.party_id, $nowMicros, $baseMicros, $storeId
-                from unnest($partyArray) as u(party_id)
-                on conflict (party_id) do update
+                  (party, updated_at, ignore_duration, store_id)
+                select u.party, $nowMicros, $baseMicros, $storeId
+                from unnest($partyArray) as u(party)
+                on conflict (party) do update
                   set updated_at = excluded.updated_at,
                       ignore_duration = least(
                             dso_unavailable_parties.ignore_duration * 2,
@@ -71,7 +71,7 @@ class DbUnavailablePartiesStore(
     else {
       val partyArray = parties.distinct.toArray
       storage.update(
-        sqlu"""delete from dso_unavailable_parties where party_id = any($partyArray)""",
+        sqlu"""delete from dso_unavailable_parties where party = any($partyArray)""",
         "removeParties",
       )
     }
@@ -86,7 +86,7 @@ class DbUnavailablePartiesStore(
   // List all parties for which updated_at + ignore_duration > now.
   def listParties(nowMicros: Long)(implicit tc: TraceContext): Future[Seq[PartyId]] =
     storage.query(
-      sql"""select party_id
+      sql"""select party
             from dso_unavailable_parties
             where updated_at + ignore_duration > $nowMicros""".as[PartyId],
       "listParties",

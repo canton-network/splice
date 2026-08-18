@@ -160,6 +160,23 @@ class DbUnavailablePartiesStoreTest
         }
       }
 
+      "apply the insert and the doubling branch independently within one call" in {
+        for {
+          store <- mkStore()
+          _ <- store.addParties(Seq(userParty(1)), atSeconds(0)) // expires at 1s
+          // party 1's window has just elapsed => doubles to 2s => expires at 3s
+          // party 2 is new => base duration => expires at 2s
+          _ <- store.addParties(Seq(userParty(1), userParty(2)), atSeconds(1))
+          beforeParty2Expiry <- store.listParties(atSeconds(2) - 1)
+          atParty2Expiry <- store.listParties(atSeconds(2))
+          atParty1Expiry <- store.listParties(atSeconds(3))
+        } yield {
+          beforeParty2Expiry should contain theSameElementsAs Seq(userParty(1), userParty(2))
+          atParty2Expiry should contain theSameElementsAs Seq(userParty(1))
+          atParty1Expiry shouldBe empty
+        }
+      }
+
       "keep the later expiry when a marking arrives out of order" in {
         for {
           store <- mkStore()
@@ -218,12 +235,17 @@ class DbUnavailablePartiesStoreTest
       "reset the backoff, so a re-added party starts from the base duration again" in {
         for {
           store <- mkStore()
-          _ <- store.addParties(Seq(userParty(1)), atSeconds(0)) // 1s
-          _ <- store.addParties(Seq(userParty(1)), atSeconds(1)) // 2s
-          _ <- store.removeParties(Seq(userParty(1)))
-          _ <- store.addParties(Seq(userParty(1)), atSeconds(2)) // fresh 1s => expires at 3s
-          atExpiry <- store.listParties(atSeconds(3))
+          _ <- store.addParties(Seq(userParty(1)), atSeconds(0)) // 1s => expires at 1s
+          _ <- store.addParties(Seq(userParty(1)), atSeconds(1)) // 2s => expires at 3s
+          deleted <- store.removeParties(Seq(userParty(1)))
+          afterRemoval <- store.listParties(atSeconds(1))
+          _ <- store.addParties(Seq(userParty(1)), atSeconds(3))
+          justBefore <- store.listParties(atSeconds(4) - 1)
+          atExpiry <- store.listParties(atSeconds(4))
         } yield {
+          deleted shouldBe 1
+          afterRemoval shouldBe empty
+          justBefore should contain(userParty(1))
           atExpiry shouldBe empty
         }
       }

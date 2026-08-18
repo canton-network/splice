@@ -6,7 +6,7 @@
 create table dso_unavailable_parties
 (
     -- the ID of the party that is unavailable
-    party_id        text   not null,
+    party           text   not null,
     -- the time when the party was marked as unavailable, used for capped exponential backoff
     updated_at      bigint not null,
     -- the duration (microseconds) to ignore the entry, used for capped exponential backoff
@@ -15,16 +15,12 @@ create table dso_unavailable_parties
     store_id        bigint not null,
     -- the metadata fields reserved for diagnostic/extra information
     metadata        jsonb,
-    primary key (party_id)
+    primary key (party)
 );
-
--- Index to scan by last update
-create index dso_unavailable_parties_ua
-    on dso_unavailable_parties (updated_at);
 
 -- Index for the expiry check per party
 create index dso_unavailable_parties_pid_exp
-    on dso_unavailable_parties (party_id, (updated_at + ignore_duration));
+    on dso_unavailable_parties (party, (updated_at + ignore_duration));
 
 -- Index for the efficient store cleanup
-create index dso_unavailable_parties_store on dso_unavailable_parties (store_id);
+create index dso_unavailable_parties_sid on dso_unavailable_parties (store_id);
