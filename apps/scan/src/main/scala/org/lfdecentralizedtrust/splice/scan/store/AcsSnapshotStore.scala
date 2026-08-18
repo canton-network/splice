@@ -18,12 +18,7 @@ import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{
 }
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.SelectFromCreateEvents
 import org.lfdecentralizedtrust.splice.store.{HardLimit, Limit, LimitHelpers, UpdateHistory}
-import org.lfdecentralizedtrust.splice.store.db.{
-  AcsJdbcTypes,
-  AcsQueries,
-  AdvisoryLocks,
-  AdvisoryLockIds,
-}
+import org.lfdecentralizedtrust.splice.store.db.{AdvisoryLocks}
 import org.lfdecentralizedtrust.splice.util.{Contract, HoldingsSummary, PackageQualifiedName}
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.{CloseContext, FutureUnlessShutdown}
@@ -35,19 +30,10 @@ import com.digitalasset.canton.resource.DbStorage.SQLActionBuilderChain
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
 import com.google.protobuf.ByteString
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{Amulet, LockedAmulet}
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.*
-import org.lfdecentralizedtrust.splice.store.UpdateHistory.SelectFromCreateEvents
 import org.lfdecentralizedtrust.splice.store.db.{AcsJdbcTypes, AcsQueries, AdvisoryLockIds}
 import org.lfdecentralizedtrust.splice.store.events.SpliceCreatedEvent
-import org.lfdecentralizedtrust.splice.store.{HardLimit, Limit, LimitHelpers, UpdateHistory}
-import org.lfdecentralizedtrust.splice.util.{
-  Contract,
-  EventId,
-  HoldingsSummary,
-  PackageQualifiedName,
-  ValueJsonCodecProtobuf as ProtobufCodec,
-}
+import org.lfdecentralizedtrust.splice.util.{EventId, ValueJsonCodecProtobuf as ProtobufCodec}
 import slick.dbio.{DBIO, DBIOAction, Effect, NoStream}
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 import slick.jdbc.{GetResult, JdbcProfile}
