@@ -217,6 +217,23 @@ class Watchdog:
     def evaluate(self, now, observation):
         """Given the data from poll check if we exceeded the threshold. Returns the reason to restart, or None."""
         interval_start, sequencer_rate, mediator_rate = observation
+        # counters reset to 0 after restart so guard against that.
+        if sequencer_rate < 0:
+            Log(
+                "INFO",
+                "sequencer rate was negative likely because sequencer restarted, resetting state",
+                sequencerRate=round(sequencer_rate, 4)
+            )
+            self.reset()
+            return None
+        if mediator_rate < 0:
+            Log(
+                "INFO",
+                "mediator rate was negative likely because mediator restarted, resetting state",
+                mediatorRate=round(mediator_rate, 4)
+            )
+            self.reset()
+            return None
         difference = sequencer_rate - mediator_rate
         if difference > self.config.threshold:
             if self.breach_since is None:
