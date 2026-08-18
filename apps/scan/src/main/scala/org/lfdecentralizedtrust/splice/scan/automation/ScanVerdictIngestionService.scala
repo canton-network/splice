@@ -278,22 +278,19 @@ class ScanVerdictIngestionService(
             val recordTimes =
               verdicts.map(v => CantonTimestamp.tryFromProtoTimestamp(v.getRecordTime))
             for {
-              records <- appActivityComputation.computeActivities(summariesWithVerdicts).map {
-                _.flatMap { case (summary, _, recordO) =>
-                  recordO.map(summary.sequencingTime -> _)
-                }
+              computed <- appActivityComputation.computeActivities(summariesWithVerdicts)
+              records = computed.flatMap { case (summary, _, recordO, _) =>
+                recordO.map(summary.sequencingTime -> _)
               }
-              firstActiveRoundO <- recordTimes.minOption match {
-                case Some(minRecordTime) =>
-                  appActivityComputation.lookupActiveOpenMiningRound(minRecordTime)
-                case None => Future.successful(None)
-              }
+              roundByTime = computed.collect { case (summary, _, _, Some(round)) =>
+                summary.sequencingTime -> round
+              }.toMap
+              firstActiveRoundO = recordTimes.minOption.flatMap(roundByTime.get)
               lastArchivedRoundO <- recordTimes.maxOption match {
                 case Some(maxRecordTime) =>
                   appActivityComputation.lookupLatestArchivedOpenMiningRound(maxRecordTime)
                 case None => Future.successful(None)
               }
-              roundByTime <- appActivityComputation.lookupActiveOpenMiningRounds(recordTimes)
             } yield (records, firstActiveRoundO, lastArchivedRoundO, roundByTime)
           }
 
