@@ -100,5 +100,25 @@ class PermissionedSynchronizerIntegrationTest
         aliceValidatorBackend.onboardUser("TestUser")
       },
     )
+
+    clue("Sponser SV Buys Member Traffic for Bob in the DevNet") {
+      sv1Backend.devNetBuyMemberTraffic(bobValidatorBackend.participantClient.id)
+    }
+
+    clue("Verify Bob is granted ParticipantSynchronizerPermission") {
+      eventually() {
+        sv1ScanBackend.getParticipantSynchronizerPermission(
+          decentralizedSynchronizerId.toProtoPrimitive,
+          bobValidatorBackend.participantClient.id.toProtoPrimitive,
+        ) shouldBe Some(
+          SynchronizerPermissionState(None)
+        )
+      }
+    }
+
+    clue("Bob Validator starts and onboards correctly") {
+      bobValidatorBackend.startSync()
+      bobValidatorBackend.onboardUser("TestUserBob")
+    }
   }
 }

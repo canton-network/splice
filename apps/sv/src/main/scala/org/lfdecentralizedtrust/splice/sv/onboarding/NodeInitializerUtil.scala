@@ -147,7 +147,6 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
       config.automation.ingestion,
       config.parameters.defaultLimit,
       acsStoreDescriptorUserVersion,
-      Some(config),
     )
   }
 
