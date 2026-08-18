@@ -26,8 +26,7 @@ import scala.sys.process.*
   * global synchronizer and the app-synchronizer. Without the flag, the unassignment is rejected
   * with MultiSynchronizerIsNotEnabled.
   *
-  * This spins up the docker-compose localnet with the `multi-sync` profile enabled (-M), so it is
-  * kept separate from [[LocalNetFrontendIntegrationTest]] which exercises the UIs.
+  * This spins up the docker-compose localnet with the `multi-sync` profile enabled (-M)
   */
 class LocalNetReassignIntegrationTest extends IntegrationTestWithIsolatedEnvironment {
 
@@ -62,16 +61,15 @@ class LocalNetReassignIntegrationTest extends IntegrationTestWithIsolatedEnviron
     .toString
 
   private def withLocalNet(
-      additionalArgs: Seq[String]
   )(f: FixtureParam => Any)(implicit env: FixtureParam): Unit =
     try {
-      val ret = (Seq("build-tools/splice-localnet-compose.sh", "start") ++ additionalArgs).!
+      val ret = (Seq("build-tools/splice-localnet-compose.sh", "start") ++ Seq("-M")).!
       if (ret != 0) {
         fail("Failed to start docker-compose SV and validator")
       }
       f(env)
     } finally {
-      (Seq("build-tools/splice-localnet-compose.sh", "stop", "-D") ++ additionalArgs).!
+      (Seq("build-tools/splice-localnet-compose.sh", "stop", "-D") ++ Seq("-M")).!
     }
 
   private def participantClient(name: String)(implicit env: FixtureParam) = {
@@ -198,7 +196,7 @@ class LocalNetReassignIntegrationTest extends IntegrationTestWithIsolatedEnviron
     }
 
   "docker-compose based localnet supports reassignment between synchronizers" in { implicit env =>
-    withLocalNet(Seq("-M")) { implicit env =>
+    withLocalNet() { implicit env =>
       testReassignment("app-provider", "providerValidatorClient")
       testReassignment("app-user", "userValidatorClient")
     }
