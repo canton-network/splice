@@ -178,10 +178,6 @@ services:
       - multi-sync
 
   console:
-    # Empty by default so published multi-arch images run on the host platform.
-    # Set to e.g. linux/amd64 when building the console image FROM a single-arch
-    # local canton image (see build-tools/splice-localnet-compose.sh).
-    platform: ${CONSOLE_PLATFORM:-}
     build:
       context: ${LOCALNET_DIR}/docker/console
       args:

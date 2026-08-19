@@ -21,13 +21,6 @@ export IMAGE_TAG
 IMAGE_REPO=""
 export IMAGE_REPO
 
-# Local images are built for linux/amd64 only (see cluster/images/local.mk, which
-# pins --platform=linux/amd64 so builds work on Apple Silicon). The console image
-# is built FROM the local canton image, so its build/run platform must match,
-# otherwise buildx fails with "no match for platform in manifest" on arm64 hosts.
-CONSOLE_PLATFORM="linux/amd64"
-export CONSOLE_PLATFORM
-
 # let docker assign a port to postgres. In CI, we have another postgres instance running, so can't use the default 5432
 DB_PORT=""
 export DB_PORT
