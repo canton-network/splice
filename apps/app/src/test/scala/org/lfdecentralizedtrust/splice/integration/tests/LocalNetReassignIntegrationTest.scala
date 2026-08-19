@@ -146,7 +146,7 @@ class LocalNetReassignIntegrationTest extends IntegrationTestWithIsolatedEnviron
           filtersForAnyParty = None,
           verbose = true,
         )
-      
+
       def reassign(source: SynchronizerId, target: SynchronizerId): Unit = {
         val unassigned = participant.ledger_api.commands
           .submit_unassign_with_format(
