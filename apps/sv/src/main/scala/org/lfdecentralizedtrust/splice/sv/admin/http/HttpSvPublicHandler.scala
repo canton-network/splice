@@ -369,6 +369,7 @@ class HttpSvPublicHandler(
         amuletRules <- dsoStore.getAssignedAmuletRules()
         rulesAndStates <- dsoStore.getDsoRulesWithStateWithSvNodeStates()
         dsoRules = rulesAndStates.dsoRules
+        issuanceConfig = latestOpenMiningRound.payload.issuanceConfig
       } yield definitions.GetDsoInfoResponse(
         svUser = svUserName,
         svPartyId = svParty.toProtoPrimitive,
@@ -379,6 +380,15 @@ class HttpSvPublicHandler(
         dsoRules = dsoRules.toHttp,
         svNodeStates = rulesAndStates.svNodeStates.values.map(_.toHttp).toVector,
         initialRound = Some(initialRound),
+        validatorRewardCap = Some(Codec.encode(issuanceConfig.validatorRewardCap)),
+        featuredAppRewardCap = Some(Codec.encode(issuanceConfig.featuredAppRewardCap)),
+        unfeaturedAppRewardCap = Some(Codec.encode(issuanceConfig.unfeaturedAppRewardCap)),
+        validatorFaucetCap = Some(
+          Codec.encode(
+            issuanceConfig.optValidatorFaucetCap.toScala
+              .getOrElse(java.math.BigDecimal.valueOf(2.85))
+          )
+        ),
       )
     }
   }

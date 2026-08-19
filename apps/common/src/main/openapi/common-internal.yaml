@@ -266,6 +266,27 @@ components:
           description: |
             Initial round from which the network bootstraps
           type: string
+        validator_reward_cap:
+          description: |
+            Maximum per-validator issuance of validator reward coupons, in $,
+            from `latest_mining_round`'s `issuanceConfig`
+          type: string
+        featured_app_reward_cap:
+          description: |
+            Maximum per-featured-app issuance of app reward coupons, in $,
+            from `latest_mining_round`'s `issuanceConfig`
+          type: string
+        unfeatured_app_reward_cap:
+          description: |
+            Maximum per-unfeatured-app issuance of app reward coupons, in $,
+            from `latest_mining_round`'s `issuanceConfig`
+          type: string
+        validator_faucet_cap:
+          description: |
+            Maximum per-validator issuance of validator faucet coupons, in $,
+            from `latest_mining_round`'s `issuanceConfig`. Defaults to 2.85 if
+            not set on-ledger (see `Splice.Issuance.getValidatorFaucetCap`).
+          type: string
 
     BatchListVotesByVoteRequestsRequest:
       type: object
