@@ -42,6 +42,7 @@ import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
   ProcessRewardsDryRunTrigger,
   ProcessRewardsTrigger,
 }
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
 import org.lfdecentralizedtrust.splice.scan.automation.RewardComputationTrigger
 import org.lfdecentralizedtrust.splice.sv.config.InitialRewardConfig
 import org.lfdecentralizedtrust.splice.util.{
@@ -557,15 +558,38 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
       }
     } finally {
       otherProcessRewardsTriggers.foreach(_.resume())
-      clue("Restart sv3") {
-        sv3ScanBackend.start()
-        sv3Backend.start()
-        sv3Backend.waitForInitialization(
-          timeout = NonNegativeDuration.tryFromDuration(120.seconds)
-        )
-        sv3ScanBackend.waitForInitialization(
-          timeout = NonNegativeDuration.tryFromDuration(120.seconds)
-        )
+      // On restart, sv3 catches up on the round that was processed while sv3
+      // was down. The reward triggers may fire before that round
+      // advances. sv2's own scan still answers 'CannotProvide' for that round
+      // (its earliest-ingested round was bumped above), so it contributes an
+      // 'IgnoreResponse' to sv3's BFT reads, which 'BftScanConnection' logs at
+      // WARN as "The following Scan URLs disagreed with consensus". These WARNs
+      // are an expected consequence of the 'CannotProvide' scenario under test,
+      // so we suppress them (targeted to 'BftScanConnection' WARNs) to keep the
+      // `sbt checkErrors` log-scan gate green.
+      //
+      // The same supression happens in 'withExpectedRewardTriggersLogging' but
+      // 
+      // 1. 'withExpectedRewardTriggersLogging' targets a narrow part of the try
+      //     block and doesn't expand into this finally block, and
+      // 2. 'withExpectedRewardTriggersLogging' has strict expectation about the
+      //     logs when rewards trigger fire. Here triggers may or may not fire
+      //     -- it's a race between sv3 catching up and triggers firing. We
+      //     can't guarantee that triggers fire => can't expect that WARNs will
+      //     appear. So we just supress them instead of expecting them.
+      loggerFactory.suppress(
+        SuppressionRule.forLogger[BftScanConnection] && SuppressionRule.Level(Level.WARN)
+      ) {
+        clue("Restart sv3") {
+          sv3ScanBackend.start()
+          sv3Backend.start()
+          sv3Backend.waitForInitialization(
+            timeout = NonNegativeDuration.tryFromDuration(120.seconds)
+          )
+          sv3ScanBackend.waitForInitialization(
+            timeout = NonNegativeDuration.tryFromDuration(120.seconds)
+          )
+        }
       }
     }
   }
