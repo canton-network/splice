@@ -258,16 +258,14 @@ template ValidatorLicenseRequest with
         assertDeadlineExceeded "expiresAt" expiresAt
         return ValidatorLicenseRequest_ExpireResult {}
 
--- | ValidatorUnpermission contract is created alongside the ValidatorLicense to manage
+-- | ValidatorUnpermission contract is created to manage
 -- the validator's permissions on the synchronizer.
--- We create ValidatorUnpermission together with validatorLicense, instead of later (for e.g., when validator is
--- unpermissioned for the first time),
--- to avoid possible race conditions (for e.g., when more that 2 validator unpermission vote requests are initiated
--- concurrently) and to avoid needing periodic merge logic.
+-- It is created lazily when SVs successfully vote to restrict a validator's permissions.
 template ValidatorUnpermission
   with
     dso : Party
     validator : Party
+    participantId : Text
     loginAfter : Optional Time
     revoked : Bool
   where
