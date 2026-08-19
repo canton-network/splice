@@ -265,8 +265,3 @@ instance GovernanceAllocation AmuletAllocationV2 where
           authorizerChangeCids = TextMap.empty
           meta = emptyMetadata
     pure (amuletAllocCid, allocInstrResult)
-
--- Governance Lock Support
--- =======================
-
-

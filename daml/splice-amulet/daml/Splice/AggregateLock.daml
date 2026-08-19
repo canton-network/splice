@@ -11,6 +11,7 @@ import Splice.TokenStandard.Utils.Internal.Conversions (timeFromMeta)
 import Splice.Util
 
 import DA.Action hiding (mapA)
+import DA.Assert (assertWithinDeadline)
 import DA.Either
 import DA.Optional
 import qualified DA.Set as S
@@ -36,7 +37,7 @@ data GovernanceLock
 
 data AggregatedLock =
   AggregatedLock with
-    lockBeneficiary : Text
+    lockSubject : Text
     controllers : GovernanceLockControllers
   deriving (Eq, Show, Serializable)
 
@@ -51,24 +52,33 @@ data VestingLock =
 
 typeKey : Text
 typeKey = "cip-105/type"
-beneficiaryKey : Text
-beneficiaryKey = "cip-105/lockBeneficiary"
-startDateKey : Text
-startDateKey = "cip-105/startDate"
-endDateKey : Text
-endDateKey = "cip-105/endDate"
-initialAmountKey : Text
-initialAmountKey = "cip-105/initialAmount"
-effectiveAtKey : Text
-effectiveAtKey = "cip-105/effectiveAt"
 
+beneficiaryKey : Text
+beneficiaryKey = "cip-105/lock-subject"
+
+startDateKey : Text
+startDateKey = "cip-105/start-date"
+
+endDateKey : Text
+endDateKey = "cip-105/end-date"
+
+initialAmountKey : Text
+initialAmountKey = "cip-105/initial-amount"
+
+effectiveAtKey : Text
+effectiveAtKey = "cip-105/effective-at"
 
 unlockControllerKey : Text
-unlockControllerKey = "cip-105/unlockControllers"
+unlockControllerKey = "cip-105/unlock-controllers"
+
 withdrawControllerKey : Text
-withdrawControllerKey = "cip-105/withdrawControllers"
+withdrawControllerKey = "cip-105/withdraw-controllers"
+
 substituteControllerKey : Text
-substituteControllerKey = "cip-105/substituteControllers"
+substituteControllerKey = "cip-105/substitute-controllers"
+
+withdrawAmountKey : Text
+withdrawAmountKey = "cip-105/withdraw-amount"
 
 
 governanceMetadataKeys : Metadata -> S.Set Text
@@ -112,16 +122,16 @@ requireSome msg a =
 
 instance CanAssert m => ParseLockDataFromMeta m AggregatedLock where
   parseFromMetadata meta = do
-    lockBeneficiary <- requireSome "has a lockBeneficiary field in metadata" $ "cip-105/lockBeneficiary" `TM.lookup` meta.values
+    lockSubject <- requireSome "has a lockSubject field in metadata" $ "cip-105/lock-subject" `TM.lookup` meta.values
     controllers <- parseFromMetadata meta
     checkGovernanceMetadataKeys aggregatedLockKeys meta
     pure $ AggregatedLock with ..
 
 instance CanAssert m => ParseLockDataFromMeta m VestingLock where
   parseFromMetadata meta = do
-    startDate <- requireSome "has a valid startDate field in metadata" $ timeFromMeta "cip-105/startDate" meta
-    endDate <- requireSome "has a valid endDate field in metadata" $ timeFromMeta "cip-105/endDate" meta
-    initialAmount <- requireSome "has a valid initialAmount field in metadata" $ "cip-105/initialAmount" `TM.lookup` meta.values >>= parseDecimal
+    startDate <- requireSome "has a valid startDate field in metadata" $ timeFromMeta startDateKey meta
+    endDate <- requireSome "has a valid endDate field in metadata" $ timeFromMeta endDateKey meta
+    initialAmount <- requireSome "has a valid initialAmount field in metadata" $ initialAmountKey `TM.lookup` meta.values >>= parseDecimal
     checkGovernanceMetadataKeys vestingLockKeys meta
     controllers <- parseFromMetadata meta
     pure $ VestingLock with ..
@@ -191,6 +201,7 @@ checkControllerSpecification actors set =
 
 
 -- This will also need to get a configuration template to set the vesting period and potentially other settings.
+-- TODO: The above should be passed in via `ExternalPartyConfigState` as mentioned under PR #6815
 
 governanceLockedWithdrawImpl
   : (HasToInterface a V2.Allocation, GovernanceAllocation a)
@@ -220,12 +231,12 @@ aggregateLockUnlock lock a aCid arg = do
     checkControllerSpecification arg.actors $ fromOptional (defaultControllerSpecification ownerParty) lock.controllers.unlock
 
     now <- getFromContextU arg.extraArgs.context effectiveAtKey -- FIXME: read from metadata not context.
-    isLedgerTimeLE now >>= require "effectiveAt must not be in the past"      
+    assertWithinDeadline "effectiveAt must not be in the past" now
 
     let endDate = getEndTime now
         transferLegId = "unlock"
 
-    let alternateAmount = TM.lookup "cip-105/withdraw-amount" arg.extraArgs.meta.values >>= parseDecimal
+    let alternateAmount = TM.lookup withdrawAmountKey arg.extraArgs.meta.values >>= parseDecimal
         amount = fromOptional currentLockedAmount alternateAmount
         newLockedAmount = currentLockedAmount - amount
         newLockedNextIterationFunding
@@ -301,15 +312,15 @@ aggregateLockUnlock lock a aCid arg = do
 
 -- TODO: Potentially make return type, it's own data type?
 calculateAvailableWithdrawAmount : Time -> VestingLock -> Decimal -> (Decimal, Decimal)
-calculateAvailableWithdrawAmount currentDateTime (VestingLock {..}) nextIterationFundAmount = max (0.0, 0.0) availAmount
+calculateAvailableWithdrawAmount vestUntil (VestingLock {..}) nextIterationFundAmount = availAmount
   where
-    availAmount = if currentDateTime >= endDate
+    availAmount = max (0.0, 0.0) $ if vestUntil >= endDate
       then (nextIterationFundAmount, 0.0)
       else (availableWithdrawAmount, remainingVestingAmount)
     availableWithdrawAmount = (initialAmount * totalVestedRatioElapsed) - withdrawnAmount
     remainingVestingAmount = nextIterationFundAmount - availableWithdrawAmount
     totalUnlockPeriod : Decimal = intToDecimal . convertRelTimeToMicroseconds $ subTime endDate startDate
-    unlockPeriodElapsed : Decimal = intToDecimal . convertRelTimeToMicroseconds $ subTime currentDateTime startDate
+    unlockPeriodElapsed : Decimal = intToDecimal . convertRelTimeToMicroseconds $ subTime vestUntil startDate
     totalVestedRatioElapsed : Decimal = unlockPeriodElapsed / totalUnlockPeriod
     withdrawnAmount = initialAmount - nextIterationFundAmount
 

@@ -1162,7 +1162,6 @@ executeTransfer' config csum dso t = do
   isum <- summarizeAndConsumeInputs csum dso t.sender t.inputs
   osum <- preprocessOutputs csum.config t.outputs
   summary <- summarizeTransfer t.sender csum.openRoundNumber csum.amuletPrice csum.config isum osum
-
   -- check that overall transfer constraints are satisfied
   case checkTransferConstraints t summary csum.config of
     Left failureStatus -> failWithStatus failureStatus

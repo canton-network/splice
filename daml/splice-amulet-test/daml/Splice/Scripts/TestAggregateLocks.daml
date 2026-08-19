@@ -47,7 +47,7 @@ lockForGovernance (TestEnv {..}) amounts meta party = do
 lockForAggregate : TestEnv -> Decimal -> Text -> Party -> Script AllocationInstructionResult
 lockForAggregate te amount lockName = lockForGovernance te (TM.fromList [(te.instrId.id, amount)]) $ Metadata $ TM.fromList
   [ ("cip-105/type", "svLock")
-  , ("cip-105/lockBeneficiary", lockName)
+  , ("cip-105/lock-subject", lockName)
   ]
 
 -- | Directly create a vesting lock allocation funded with @initialAmount@,
