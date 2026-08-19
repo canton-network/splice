@@ -117,7 +117,11 @@ class S3BucketConnection(
 
   def getChecksums(
       objectKeys: Seq[String]
-  )(implicit ec: ExecutionContext, as: ActorSystem, tc: TraceContext): Future[Seq[ObjectKeyAndChecksum]] = {
+  )(implicit
+      ec: ExecutionContext,
+      as: ActorSystem,
+      tc: TraceContext,
+  ): Future[Seq[ObjectKeyAndChecksum]] = {
     Source(objectKeys.toList)
       .mapAsync(4) { key => // TODO(#3429): make this parallelism configurable
         readChecksum(key)
@@ -127,7 +131,9 @@ class S3BucketConnection(
       .runWith(Sink.seq[ObjectKeyAndChecksum])
   }
 
-  private def readChecksum(key: String)(implicit ec: ExecutionContext, tc: TraceContext): Future[Option[String]] = {
+  private def readChecksum(
+      key: String
+  )(implicit ec: ExecutionContext, tc: TraceContext): Future[Option[String]] = {
     val headRequest = HeadObjectRequest
       .builder()
       .bucket(bucketName)
