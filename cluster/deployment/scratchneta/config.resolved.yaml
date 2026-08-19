@@ -106,6 +106,10 @@ monitoring:
       sequencerRateLimits:
         circuitBreakerStateThreshold: 0.5
         rejectionRateThreshold: 0
+      spliceRateLimits:
+        excludedLimiters: []
+        rejectionRateThreshold: 3
+        usageThreshold: 0.8
       trafficBasedRewards:
         featuredAppRightsLimit: 10000
         verdictIngestionBatchSizePendingPeriodMinutes: 60
