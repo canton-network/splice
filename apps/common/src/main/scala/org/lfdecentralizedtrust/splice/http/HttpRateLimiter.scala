@@ -16,7 +16,6 @@ import org.lfdecentralizedtrust.splice.util.{
 }
 
 import java.net.{Inet6Address, InetAddress}
-import java.time.Instant
 
 class HttpRateLimiter(
     config: RateLimitersConfig,
@@ -46,10 +45,6 @@ class HttpRateLimiter(
       ),
     )
 
-  // the rate limiter has a cold start, to avoid the first request being rejected
-  // we enforce the rate limit only after 1 second
-  private def enforceAfter = Instant.now().plusSeconds(1)
-
   private val globalRateLimiter: (SpliceRateLimiter, PerAttributeRateLimiter) = {
     val globalMetrics = metricsFor(HttpRateLimiter.GlobalService)
     (
@@ -57,7 +52,6 @@ class HttpRateLimiter(
         HttpRateLimiter.GlobalLimiter,
         config.global,
         globalMetrics,
-        enforceAfter,
       ),
       new PerAttributeRateLimiter(
         HttpRateLimiter.GlobalLimiter,
@@ -65,7 +59,6 @@ class HttpRateLimiter(
         config.global,
         config.global.perClientIp,
         globalMetrics,
-        enforceAfter,
         logger,
       ),
     )
@@ -84,7 +77,6 @@ class HttpRateLimiter(
             operation,
             operationConfig,
             rateLimiterMetrics,
-            enforceAfter,
           ),
           new PerAttributeRateLimiter(
             operation,
@@ -92,7 +84,6 @@ class HttpRateLimiter(
             operationConfig,
             operationConfig.perClientIp,
             rateLimiterMetrics,
-            enforceAfter,
             logger,
           ),
         )

@@ -62,3 +62,6 @@ release-notes:: Upcoming
           ``watchdog.sequencerMetricsUrl: http://global-domain-SERIAL_ID-sequencer:10013/metrics`` and
           ``watchdog.mediatorMetricsUrl: http://global-domain-SERIAL_ID-mediator:10013/metrics`` in the
           cometbft helm values. If needed, the watchdog can be disabled through ``watchdog.enabled: false``.
+
+
+        - Bump the default ``deduplicationCacheSize`` to ``1000000``.

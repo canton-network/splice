@@ -2,15 +2,15 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { ContractId } from '@daml/types';
-import { useVoteRequest } from './useVoteRequest';
 import {
   DsoRules_CloseVoteRequestResult,
   VoteRequest,
 } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
-import { useVotesHooks } from '@canton-network/splice-common-frontend';
 import { Contract } from '@canton-network/splice-common-frontend-utils';
 
-const QUERY_LIMIT = 500;
+import { usePaginatedVoteRequestResultsByContractId } from './useListVoteRequests';
+import { useVoteRequest } from './useVoteRequest';
+import { findByContractId } from '../utils/proposalSearch';
 
 interface UseVoteRequestResultByCidResult {
   voteRequest: Contract<VoteRequest> | undefined;
@@ -25,54 +25,37 @@ interface UseVoteRequestResultByCidResult {
 export function useVoteRequestResultByCid(
   contractId: ContractId<VoteRequest>
 ): UseVoteRequestResultByCidResult {
-  const votesHooks = useVotesHooks();
-  const voteRequestQuery = useVoteRequest(contractId, false);
+  const voteRequestQuery = useVoteRequest(contractId, false, false);
 
-  const voteResultsWithAcceptedQuery = (accepted: boolean) =>
-    votesHooks.useListVoteRequestResult(
-      QUERY_LIMIT,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      accepted,
-      false
-    );
-  const acceptedResultsQuery = voteResultsWithAcceptedQuery(true);
-  const notAcceptedResultsQuery = voteResultsWithAcceptedQuery(false);
+  const hasVoteRequest = voteRequestQuery.isSuccess && voteRequestQuery.data != null;
 
-  const acceptedResult = acceptedResultsQuery.data?.find(
-    vr => vr.request.trackingCid === contractId
+  const needsClosedVoteFetch =
+    (voteRequestQuery.isSuccess || voteRequestQuery.isError) && !hasVoteRequest;
+
+  const closedVoteResults = usePaginatedVoteRequestResultsByContractId(needsClosedVoteFetch, {
+    contractId,
+  });
+
+  const voteResult = findByContractId(
+    closedVoteResults.results,
+    contractId,
+    result => result.request.trackingCid
   );
-  const notAcceptedResult = notAcceptedResultsQuery.data?.find(
-    vr => vr.request.trackingCid === contractId
-  );
-
-  const hasVoteRequest =
-    voteRequestQuery.isSuccess &&
-    voteRequestQuery.data != null &&
-    voteRequestQuery.data != undefined;
-
-  const hasVoteResult =
-    (acceptedResultsQuery.isSuccess && acceptedResult != undefined) ||
-    (notAcceptedResultsQuery.isSuccess && notAcceptedResult != undefined);
+  const hasVoteResult = voteResult !== undefined;
 
   const isPending =
     voteRequestQuery.isPending ||
-    acceptedResultsQuery.isPending ||
-    notAcceptedResultsQuery.isPending;
+    (needsClosedVoteFetch && !closedVoteResults.isComplete && !hasVoteResult);
 
   const isComplete =
     (voteRequestQuery.isSuccess || voteRequestQuery.isError) &&
-    (acceptedResultsQuery.isSuccess || acceptedResultsQuery.isError) &&
-    (notAcceptedResultsQuery.isSuccess || notAcceptedResultsQuery.isError);
+    (!needsClosedVoteFetch || closedVoteResults.isComplete || hasVoteResult);
 
   const voteRequest = voteRequestQuery.data;
-  const voteResult = acceptedResult || notAcceptedResult;
 
   return {
-    voteRequest: voteRequest,
-    voteResult: voteResult,
+    voteRequest,
+    voteResult,
     hasVoteRequest,
     hasVoteResult,
     isPending,
