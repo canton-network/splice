@@ -80,6 +80,9 @@ template AmuletAllocationV2
       allocation_cancelExtraObservers _arg = observer this
       allocation_withdrawExtraObservers _arg = observer this
 
+
+      allocation_withdrawImpl self arg | Some governanceLock <- this.governanceLock =
+        governanceLockedWithdrawImpl this (fromInterfaceContractId self) arg
       allocation_withdrawImpl self arg@(V2.Allocation_Withdraw{..}) = do
         archiveAndCheckActors self arg.actors [[accountPrincipal allocation.admin allocation.authorizer]]
         ensureWithdrawIsAllowed allocation
