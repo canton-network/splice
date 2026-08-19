@@ -96,29 +96,31 @@ class HttpRateLimiter(
 
     import org.apache.pekko.http.scaladsl.server.Directives.*
 
-    HttpRateLimiter.extractClientIpKey(trustedClientIpHeader).flatMap { clientIp =>
-      // The per client IP limiters are checked first (and `&&` short-circuits) so that a request
-      // rejected because of its own client IP does not consume budget from the shared overall
-      // limiters. Otherwise a single abusive client could exhaust the overall limits and thereby
-      // deny service to all other clients.
-      // Within each of those two groups the narrower per operation limiter is checked before the
-      // global one, so that a request rejected for its operation does not consume global budget.
-      val allowed =
-        operationClientIpLimiter.markRun(clientIp) &&
-          globalClientIpLimiter.markRun(clientIp) &&
-          operationLimiter.markRun() &&
-          globalLimiter.markRun()
-      if (allowed) {
-        pass
-      } else {
-        complete(
-          StatusCodes.TooManyRequests,
-          HttpEntity(
-            "Too Many Requests: Server is busy, please try again later."
-          ),
-        )
+    HttpRateLimiter
+      .extractClientIpKey(trustedClientIpHeader, config.enableClientProvidedIpHeaders)
+      .flatMap { clientIp =>
+        // The per client IP limiters are checked first (and `&&` short-circuits) so that a request
+        // rejected because of its own client IP does not consume budget from the shared overall
+        // limiters. Otherwise a single abusive client could exhaust the overall limits and thereby
+        // deny service to all other clients.
+        // Within each of those two groups the narrower per operation limiter is checked before the
+        // global one, so that a request rejected for its operation does not consume global budget.
+        val allowed =
+          operationClientIpLimiter.markRun(clientIp) &&
+            globalClientIpLimiter.markRun(clientIp) &&
+            operationLimiter.markRun() &&
+            globalLimiter.markRun()
+        if (allowed) {
+          pass
+        } else {
+          complete(
+            StatusCodes.TooManyRequests,
+            HttpEntity(
+              "Too Many Requests: Server is busy, please try again later."
+            ),
+          )
+        }
       }
-    }
   }
 
   def close(): Unit = metrics.view.values.foreach(_.close())
@@ -132,10 +134,11 @@ object HttpRateLimiter {
   private[splice] val GlobalService = "global"
 
   private[splice] def extractClientIpKey(
-      trustedClientIpHeader: String = RateLimitersConfig.DefaultTrustedClientIpHeader
+      trustedClientIpHeader: String = RateLimitersConfig.DefaultTrustedClientIpHeader,
+      enableClientProvidedIpHeaders: Boolean,
   ): Directive1[Option[String]] =
     ClientIpDirectives
-      .extractClientIp(trustedClientIpHeader)
+      .extractClientIp(trustedClientIpHeader, enableClientProvidedIpHeaders)
       .map(_.collect { case RemoteAddress.IP(ip, _) => rateLimitKey(ip) })
 
   /** Single clients are typically assigned a whole IPv6 /64 (or larger) network, so limiting per

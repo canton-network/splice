@@ -15,19 +15,27 @@ object ClientIpDirectives {
     * The address is taken from the first of the following sources that yields an address:
     *   1. the `trustedClientIpHeader` (if configured and parseable as an IP literal), which is set
     *      by a trusted reverse proxy and hence cannot be spoofed by the client,
-    *   1. the client-controlled `X-Forwarded-For` header,
-    *   1. the client-controlled `X-Real-Ip` header,
+    *   1. the client-controlled `X-Forwarded-For` header (unless disabled),
+    *   1. the client-controlled `X-Real-Ip` header (unless disabled),
     *
     * @param trustedClientIpHeader
     *   name of the header set by a trusted reverse proxy, matched case-insensitively. An empty name
     *   disables trusting a proxy header.
+    * @param enableClientProvidedIpHeaders
+    *   whether to fall back to the client-controlled `X-Forwarded-For`/`X-Real-Ip` headers when the
+    *   trusted proxy header does not yield an address. Set to `false` to only rely on the trusted
+    *   proxy header, so that clients cannot influence the extracted address by forging these headers.
     */
-  def extractClientIp(trustedClientIpHeader: String): Directive1[Option[RemoteAddress]] =
-    firstDefined(
-      trustedClientIp(trustedClientIpHeader),
-      forwardedForClientIp,
-      realIpClientIp,
-    )
+  def extractClientIp(
+      trustedClientIpHeader: String,
+      enableClientProvidedIpHeaders: Boolean,
+  ): Directive1[Option[RemoteAddress]] = {
+    val clientProvidedSources: Seq[Directive1[Option[RemoteAddress]]] =
+      if (enableClientProvidedIpHeaders) Seq(forwardedForClientIp, realIpClientIp)
+      else Seq.empty
+    val sources = trustedClientIp(trustedClientIpHeader) +: clientProvidedSources
+    firstDefined(sources*)
+  }
 
   private def trustedClientIp(headerName: String): Directive1[Option[RemoteAddress]] = {
     val trimmedHeaderName = headerName.trim

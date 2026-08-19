@@ -41,6 +41,17 @@ case class SpliceRateLimitMetrics(
     )
   )
 
+  val unknownAttributeNotLimited: MetricHandle.Meter = otelFactory.meter(
+    MetricInfo(
+      SpliceMetrics.MetricsPrefix :+ "rate_limiting_unknown_attribute_not_limited",
+      "Number of requests not rate limited by a per-attribute limiter because the attribute value is unknown",
+      Saturation,
+    )
+  )
+
+  def recordUnknownAttributeNotLimited()(implicit extraMc: MetricsContext): Unit =
+    unknownAttributeNotLimited.mark()(mc.merge(extraMc))
+
   /*we need to pass the full context when we create it to avoid duplicate values warnings*/
   def recordMaxLimit(limit: Double)(implicit extraMc: MetricsContext): Unit = {
     val createdGauge = otelFactory.gauge[Double](
@@ -118,7 +129,6 @@ object SpliceRateLimiter {
 
   val GlobalLimiterType = "global"
   val PerAttributeLimiterType = "per-attribute"
-  val UnknownAttributeLimiterType = "unknown-attribute"
 
   val DefaultSustainedWindowSeconds: Long = 60
 
@@ -248,14 +258,6 @@ class PerAttributeRateLimiter(
     Some(new CacheMetrics(s"$name-$attribute-rate-limiter", metrics.otelFactory)),
   )
 
-  private lazy val defaultRateLimiter = new SpliceRateLimiter(
-    name,
-    perAttributeConfig,
-    metrics,
-    limiterType = SpliceRateLimiter.UnknownAttributeLimiterType,
-    extraLabels = attributeLabel,
-  )
-
   private lazy val reportedMaxLimit: Unit =
     metrics.recordMaxLimit(perAttributeConfig.ratePerSecond)(
       MetricsContext(
@@ -267,7 +269,19 @@ class PerAttributeRateLimiter(
     )
 
   def markRun(attributeValue: Option[String]): Boolean =
-    if (isEnabled) attributeValue.fold(defaultRateLimiter)(limiterFor).markRun()
+    if (isEnabled) attributeValue match {
+      case Some(value) => limiterFor(value).markRun()
+      case None =>
+        metrics.recordUnknownAttributeNotLimited()(
+          MetricsContext(
+            attributeLabel ++ Map(
+              "limiter" -> name,
+              "limiter_type" -> SpliceRateLimiter.PerAttributeLimiterType,
+            )
+          )
+        )
+        true
+    }
     else true
 
   private def limiterFor(attributeValue: String): SpliceRateLimiter = {

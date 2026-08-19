@@ -84,6 +84,27 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
       ) should be(Some("1.1.1.1"))
     }
 
+    "not fall back to client-provided headers when they are disabled" in {
+      clientIp(
+        HttpRequest().withHeaders(
+          RawHeader("X-Envoy-External-Address", "4.4.4.4"),
+          `X-Forwarded-For`(RemoteAddress(InetAddress.getByName("1.1.1.1"))),
+          `X-Real-Ip`(RemoteAddress(InetAddress.getByName("2.2.2.2"))),
+        ),
+        enableClientProvidedIpHeaders = false,
+      ) should be(Some("4.4.4.4"))
+    }
+
+    "return None when client-provided headers are disabled and no trusted header is present" in {
+      clientIp(
+        HttpRequest().withHeaders(
+          `X-Forwarded-For`(RemoteAddress(InetAddress.getByName("1.1.1.1"))),
+          `X-Real-Ip`(RemoteAddress(InetAddress.getByName("2.2.2.2"))),
+        ),
+        enableClientProvidedIpHeaders = false,
+      ) should be(None)
+    }
+
     "prefer X-Forwarded-For" in {
       clientIp(
         HttpRequest()
@@ -234,17 +255,14 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
       }
     }
 
-    "fall back to the default limiter if no client IP is known" in {
+    "not apply the per client IP limiter if no client IP is known" in {
       withRoutes(
         globalPerClientIp = perClientIp(1)
       )("testOperation") { routes =>
         val route = routes("testOperation")
-        call(route, ip = None) should be(StatusCodes.OK)
-        (1 to 20)
-          .map(_ => call(route, ip = None))
-          .count(_ == StatusCodes.TooManyRequests) should be > 0
-        // a request with a client IP uses a different limiter
+        (1 to 20).map(_ => call(route, ip = None)) should contain only StatusCodes.OK
         call(route, ip = Some("1.1.1.1")) should be(StatusCodes.OK)
+        call(route, ip = Some("1.1.1.1")) should be(StatusCodes.TooManyRequests)
       }
     }
 
@@ -438,10 +456,13 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
   private def clientIp(
       request: HttpRequest,
       trustedClientIpHeader: String = RateLimitersConfig.DefaultTrustedClientIpHeader,
+      enableClientProvidedIpHeaders: Boolean = true,
   ): Option[String] = {
-    val route = HttpRateLimiter.extractClientIpKey(trustedClientIpHeader) { extracted =>
-      complete(extracted.getOrElse[String](HttpRateLimiterTest.NoClientIp))
-    }
+    val route =
+      HttpRateLimiter.extractClientIpKey(trustedClientIpHeader, enableClientProvidedIpHeaders) {
+        extracted =>
+          complete(extracted.getOrElse[String](HttpRateLimiterTest.NoClientIp))
+      }
     request ~> route ~> check {
       status should be(StatusCodes.OK)
       Some(responseAs[String]).filterNot(_ == HttpRateLimiterTest.NoClientIp)

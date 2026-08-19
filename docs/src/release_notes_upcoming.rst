@@ -42,6 +42,10 @@ release-notes:: Upcoming
              and cannot be spoofed by clients. Otherwise, clients may bypass per-client-IP limits or
              cause other clients to be throttled by forging these headers.
 
+          The fallback to the client-controlled ``X-Forwarded-For``/ ``X-Real-Ip`` headers can be
+          disabled by setting ``rate-limiting.enable-client-provided-ip-headers`` to ``false``.
+          If no IP can be extracted no per IP rate limit is enforced.
+
         - Default rate limits have been adjusted:
 
           - Scan app: the per-operation burst limit has been lowered from 200 to 100 requests per

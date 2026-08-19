@@ -22,6 +22,13 @@ case class RateLimitersConfig(
       * trusting a proxy header and only rely on `X-Forwarded-For`/`X-Real-Ip`/the remote address.
       */
     trustedClientIpHeader: String = RateLimitersConfig.DefaultTrustedClientIpHeader,
+    /** Whether to fall back to the client-controlled `X-Forwarded-For`/`X-Real-Ip` headers when the
+      * trusted proxy header (see `trustedClientIpHeader`) does not yield a client IP. Enabled by
+      * default. Set to `false` in deployments where a trusted proxy always sets
+      * `trustedClientIpHeader`, so that clients cannot influence the extracted IP - and thereby the
+      * per-client-IP rate limiting - by forging these spoofable headers.
+      */
+    enableClientProvidedIpHeaders: Boolean = true,
 ) {
   def forRateLimiter(name: String): SpliceRateLimitConfig.WithPerClientIp =
     rateLimiters.getOrElse(name, default)

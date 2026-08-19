@@ -138,22 +138,27 @@ class SpliceRateLimiterTest
       }
     }
 
-    "use a single default limiter if the attribute value is unknown" in {
+    "not limit requests with an unknown attribute value" in {
       withPerAttributeRateLimiter(
         SpliceRateLimitConfig(ratePerSecond = 10),
         PerAttributeRateLimitConfig(limit = SpliceRateLimitConfig(ratePerSecond = 1)),
       ) { case (metrics, perAttributeRateLimiter) =>
+        // requests without an attribute value are not rate limited here; the overall/global
+        // rate limiter is relied upon to bound them instead
         val results = Seq.fill(20)(perAttributeRateLimiter.markRun(None))
-        results.count(identity) should be(2)
+        results.count(identity) should be(20)
 
-        metrics.meter.valueFilteredOnLabels(
+        metrics.unknownAttributeNotLimited.valueFilteredOnLabels(
           LabelFilter("limiter", "test"),
           LabelFilter("limiter_attribute", "test_attribute"),
-          LabelFilter("limiter_type", SpliceRateLimiter.UnknownAttributeLimiterType),
-          LabelFilter("result", "rejected"),
-        ) should be(results.count(!_))
+          LabelFilter("limiter_type", SpliceRateLimiter.PerAttributeLimiterType),
+        ) should be(20)
 
-        // requests with a known attribute value are not affected by the default limiter
+        metrics.meter.valuesWithContext.keys
+          .flatMap(_.labels.get("limiter_attribute"))
+          .toSeq should be(empty)
+
+        // requests with a known attribute value are still limited
         perAttributeRateLimiter.markRun(Some("1.1.1.1")) should be(true)
       }
     }
@@ -177,7 +182,7 @@ class SpliceRateLimiterTest
           LabelFilter("limiter_type", SpliceRateLimiter.PerAttributeLimiterType),
           LabelFilter("result", "rejected"),
         ) should be(results.count(!_))
-        // no metrics are reported for the default limiter of unknown attribute values
+        // only per attribute limiters report metrics
         metrics.meter.valuesWithContext.keys
           .flatMap(_.labels.get("limiter_type"))
           .toSet should be(Set(SpliceRateLimiter.PerAttributeLimiterType))
