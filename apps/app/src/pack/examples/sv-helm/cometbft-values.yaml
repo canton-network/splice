@@ -39,6 +39,11 @@ stateSync:
   # Note that the port number is significant in the list of rpcServers
   rpcServers: "https://sv.sv-2.TARGET_HOSTNAME:443/api/sv/v0/admin/domain/cometbft/json-rpc,https://sv.sv-2.TARGET_HOSTNAME:443/api/sv/v0/admin/domain/cometbft/json-rpc"
 
+watchdog:
+  enabled: true
+  sequencerMetricsUrl: http://global-domain-SERIAL_ID-sequencer:10013/metrics
+  mediatorMetricsUrl: http://global-domain-SERIAL_ID-mediator:10013/metrics
+
 # k8s affinity for all deployed pods (optional)
 # affinity:
 #   nodeAffinity:

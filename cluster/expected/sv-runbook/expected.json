@@ -945,6 +945,10 @@
           "name": "listBulkAcsSnapshotObjects",
           "type": "unlimited"
         },
+        "/api/scan/v0/history/bulk/checksums": {
+          "name": "getBulkHistoryChecksums",
+          "type": "unlimited"
+        },
         "/api/scan/v0/history/bulk/updates": {
           "name": "listBulkUpdateHistoryObjects",
           "type": "unlimited"
@@ -1173,14 +1177,14 @@
         },
         "/registry/transfer-instruction/v1/transfer-factory": {
           "fillInterval": "60s",
-          "maxTokens": 730,
+          "maxTokens": 1440,
           "name": "registry-transfer-factory",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 120,
-            "tokensPerFill": 120
+            "maxTokens": 240,
+            "tokensPerFill": 240
           },
-          "tokensPerFill": 730,
+          "tokensPerFill": 1440,
           "type": "limited"
         },
         "/registry/transfer-instruction/v2": {
@@ -1612,6 +1616,40 @@
     "custom": true,
     "id": "",
     "inputs": {
+      "apiVersion": "telemetry.istio.io/v1",
+      "kind": "Telemetry",
+      "metadata": {
+        "name": "scan-app-rate-limit-access-log",
+        "namespace": "sv"
+      },
+      "spec": {
+        "accessLogging": [
+          {
+            "filter": {
+              "expression": "response.code == 429"
+            },
+            "providers": [
+              {
+                "name": "envoy"
+              }
+            ]
+          }
+        ],
+        "selector": {
+          "matchLabels": {
+            "app": "scan-app"
+          }
+        }
+      }
+    },
+    "name": "sv-scan-app-rate-limit-access-log",
+    "provider": "",
+    "type": "kubernetes:telemetry.istio.io/v1:Telemetry"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
       "apiVersion": "networking.istio.io/v1alpha3",
       "kind": "EnvoyFilter",
       "metadata": {
@@ -1701,9 +1739,9 @@
                           }
                         },
                         {
-                          "request_headers": {
-                            "descriptor_key": "client_ip",
-                            "header_name": "x-forwarded-for"
+                          "masked_remote_address": {
+                            "v4_prefix_mask_len": 32,
+                            "v6_prefix_mask_len": 128
                           }
                         }
                       ]
@@ -1745,9 +1783,9 @@
                           }
                         },
                         {
-                          "request_headers": {
-                            "descriptor_key": "client_ip",
-                            "header_name": "x-forwarded-for"
+                          "masked_remote_address": {
+                            "v4_prefix_mask_len": 32,
+                            "v6_prefix_mask_len": 128
                           }
                         }
                       ]
@@ -1789,9 +1827,9 @@
                           }
                         },
                         {
-                          "request_headers": {
-                            "descriptor_key": "client_ip",
-                            "header_name": "x-forwarded-for"
+                          "masked_remote_address": {
+                            "v4_prefix_mask_len": 32,
+                            "v6_prefix_mask_len": 128
                           }
                         }
                       ]
@@ -1833,9 +1871,9 @@
                           }
                         },
                         {
-                          "request_headers": {
-                            "descriptor_key": "client_ip",
-                            "header_name": "x-forwarded-for"
+                          "masked_remote_address": {
+                            "v4_prefix_mask_len": 32,
+                            "v6_prefix_mask_len": 128
                           }
                         }
                       ]
@@ -1877,9 +1915,9 @@
                           }
                         },
                         {
-                          "request_headers": {
-                            "descriptor_key": "client_ip",
-                            "header_name": "x-forwarded-for"
+                          "masked_remote_address": {
+                            "v4_prefix_mask_len": 32,
+                            "v6_prefix_mask_len": 128
                           }
                         }
                       ]
@@ -1921,9 +1959,9 @@
                           }
                         },
                         {
-                          "request_headers": {
-                            "descriptor_key": "client_ip",
-                            "header_name": "x-forwarded-for"
+                          "masked_remote_address": {
+                            "v4_prefix_mask_len": 32,
+                            "v6_prefix_mask_len": 128
                           }
                         }
                       ]
@@ -1965,9 +2003,9 @@
                           }
                         },
                         {
-                          "request_headers": {
-                            "descriptor_key": "client_ip",
-                            "header_name": "x-forwarded-for"
+                          "masked_remote_address": {
+                            "v4_prefix_mask_len": 32,
+                            "v6_prefix_mask_len": 128
                           }
                         }
                       ]
@@ -2009,9 +2047,9 @@
                           }
                         },
                         {
-                          "request_headers": {
-                            "descriptor_key": "client_ip",
-                            "header_name": "x-forwarded-for"
+                          "masked_remote_address": {
+                            "v4_prefix_mask_len": 32,
+                            "v6_prefix_mask_len": 128
                           }
                         }
                       ]
@@ -2053,9 +2091,9 @@
                           }
                         },
                         {
-                          "request_headers": {
-                            "descriptor_key": "client_ip",
-                            "header_name": "x-forwarded-for"
+                          "masked_remote_address": {
+                            "v4_prefix_mask_len": 32,
+                            "v6_prefix_mask_len": 128
                           }
                         }
                       ]
@@ -2097,9 +2135,9 @@
                           }
                         },
                         {
-                          "request_headers": {
-                            "descriptor_key": "client_ip",
-                            "header_name": "x-forwarded-for"
+                          "masked_remote_address": {
+                            "v4_prefix_mask_len": 32,
+                            "v6_prefix_mask_len": 128
                           }
                         }
                       ]
@@ -2141,9 +2179,9 @@
                           }
                         },
                         {
-                          "request_headers": {
-                            "descriptor_key": "client_ip",
-                            "header_name": "x-forwarded-for"
+                          "masked_remote_address": {
+                            "v4_prefix_mask_len": 32,
+                            "v6_prefix_mask_len": 128
                           }
                         }
                       ]
@@ -2185,9 +2223,9 @@
                           }
                         },
                         {
-                          "request_headers": {
-                            "descriptor_key": "client_ip",
-                            "header_name": "x-forwarded-for"
+                          "masked_remote_address": {
+                            "v4_prefix_mask_len": 32,
+                            "v6_prefix_mask_len": 128
                           }
                         }
                       ]
@@ -2229,9 +2267,9 @@
                           }
                         },
                         {
-                          "request_headers": {
-                            "descriptor_key": "client_ip",
-                            "header_name": "x-forwarded-for"
+                          "masked_remote_address": {
+                            "v4_prefix_mask_len": 32,
+                            "v6_prefix_mask_len": 128
                           }
                         }
                       ]
@@ -2262,7 +2300,7 @@
                             "value": "acs"
                           },
                           {
-                            "key": "client_ip"
+                            "key": "masked_remote_address"
                           }
                         ],
                         "token_bucket": {
@@ -2291,7 +2329,7 @@
                             "value": "registry-allocations"
                           },
                           {
-                            "key": "client_ip"
+                            "key": "masked_remote_address"
                           }
                         ],
                         "token_bucket": {
@@ -2320,8 +2358,8 @@
                             "value": "registry-metadata-info"
                           },
                           {
-                            "key": "client_ip",
-                            "value": "192.68.78.50"
+                            "key": "masked_remote_address",
+                            "value": "192.68.78.50/32"
                           }
                         ],
                         "token_bucket": {
@@ -2337,7 +2375,7 @@
                             "value": "registry-metadata-info"
                           },
                           {
-                            "key": "client_ip"
+                            "key": "masked_remote_address"
                           }
                         ],
                         "token_bucket": {
@@ -2366,7 +2404,7 @@
                             "value": "registry-metadata-instruments"
                           },
                           {
-                            "key": "client_ip"
+                            "key": "masked_remote_address"
                           }
                         ],
                         "token_bucket": {
@@ -2395,7 +2433,7 @@
                             "value": "registry-allocation-factory"
                           },
                           {
-                            "key": "client_ip"
+                            "key": "masked_remote_address"
                           }
                         ],
                         "token_bucket": {
@@ -2424,7 +2462,7 @@
                             "value": "registry-transfer-instruction"
                           },
                           {
-                            "key": "client_ip"
+                            "key": "masked_remote_address"
                           }
                         ],
                         "token_bucket": {
@@ -2442,8 +2480,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 730,
-                          "tokens_per_fill": 730
+                          "max_tokens": 1440,
+                          "tokens_per_fill": 1440
                         }
                       },
                       {
@@ -2453,13 +2491,13 @@
                             "value": "registry-transfer-factory"
                           },
                           {
-                            "key": "client_ip"
+                            "key": "masked_remote_address"
                           }
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 120,
-                          "tokens_per_fill": 120
+                          "max_tokens": 240,
+                          "tokens_per_fill": 240
                         }
                       },
                       {
@@ -2482,7 +2520,7 @@
                             "value": "registry-settlement-factory-v2"
                           },
                           {
-                            "key": "client_ip"
+                            "key": "masked_remote_address"
                           }
                         ],
                         "token_bucket": {
@@ -2511,7 +2549,7 @@
                             "value": "registry-allocations-v2"
                           },
                           {
-                            "key": "client_ip"
+                            "key": "masked_remote_address"
                           }
                         ],
                         "token_bucket": {
@@ -2540,7 +2578,7 @@
                             "value": "registry-allocation-factory-v2"
                           },
                           {
-                            "key": "client_ip"
+                            "key": "masked_remote_address"
                           }
                         ],
                         "token_bucket": {
@@ -2569,7 +2607,7 @@
                             "value": "registry-allocation-instruction-v2"
                           },
                           {
-                            "key": "client_ip"
+                            "key": "masked_remote_address"
                           }
                         ],
                         "token_bucket": {
@@ -2598,7 +2636,7 @@
                             "value": "registry-transfer-factory-v2"
                           },
                           {
-                            "key": "client_ip"
+                            "key": "masked_remote_address"
                           }
                         ],
                         "token_bucket": {
@@ -2627,7 +2665,7 @@
                             "value": "registry-transfer-instruction-v2"
                           },
                           {
-                            "key": "client_ip"
+                            "key": "masked_remote_address"
                           }
                         ],
                         "token_bucket": {
@@ -2637,6 +2675,7 @@
                         }
                       }
                     ],
+                    "enable_x_ratelimit_headers": "DRAFT_VERSION_03",
                     "filter_enabled": {
                       "default_value": {
                         "denominator": "HUNDRED",
@@ -2651,6 +2690,7 @@
                       },
                       "runtime_key": "local_rate_limit_enforced"
                     },
+                    "max_dynamic_descriptors": 10000,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",

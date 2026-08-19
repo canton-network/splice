@@ -42,6 +42,7 @@ import org.lfdecentralizedtrust.tokenstandard.{
 }
 import org.lfdecentralizedtrust.splice.http.v0.scan.{
   ForceAcsSnapshotNowResponse,
+  GetBulkObjectChecksumsResponse,
   GetDateOfFirstSnapshotAfterResponse,
   GetDateOfMostRecentSnapshotBeforeResponse,
   GetLsuResponse,
@@ -3341,6 +3342,32 @@ object HttpScanAppClient {
       case http.ListBulkUpdateHistoryObjectsResponse.NotFound(err) => Left(err.error)
       case http.ListBulkUpdateHistoryObjectsResponse.BadRequest(err) => Left(err.error)
       case http.ListBulkUpdateHistoryObjectsResponse.NotImplemented(err) => Left(err.error)
+    }
+  }
+
+  case class GetBulkObjectChecksums(
+      objectKeys: Seq[String]
+  ) extends InternalBaseCommand[
+        http.GetBulkObjectChecksumsResponse,
+        definitions.GetBulkObjectChecksumsResponse,
+      ] {
+    override def submitRequest(
+        client: Client,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[Throwable, HttpResponse], GetBulkObjectChecksumsResponse] =
+      client.getBulkObjectChecksums(
+        definitions.GetBulkObjectChecksumsRequest(objectKeys.toVector),
+        headers,
+      )
+
+    override protected def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ): PartialFunction[GetBulkObjectChecksumsResponse, Either[
+      String,
+      definitions.GetBulkObjectChecksumsResponse,
+    ]] = {
+      case http.GetBulkObjectChecksumsResponse.OK(response) => Right(response)
+      case http.GetBulkObjectChecksumsResponse.NotImplemented(err) => Left(err.error)
     }
   }
 

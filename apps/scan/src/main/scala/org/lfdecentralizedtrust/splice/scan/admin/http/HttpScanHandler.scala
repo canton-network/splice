@@ -68,10 +68,11 @@ import org.lfdecentralizedtrust.splice.http.v0.{definitions, scan as v0}
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   AcsRequest,
   BatchListVotesByVoteRequestsRequest,
-  DamlValueEncoding,
   CountVoteResultsRequest,
+  DamlValueEncoding,
   ErrorResponse,
   EventHistoryRequest,
+  GetBulkObjectChecksumsRequest,
   HoldingsStateRequest,
   HoldingsSummaryRequest,
   HoldingsSummaryRequestV1,
@@ -2605,6 +2606,29 @@ class HttpScanHandler(
               )
             )
           }
+      }
+    }
+  }
+
+  override def getBulkObjectChecksums(respond: ScanResource.GetBulkObjectChecksumsResponse.type)(
+      body: GetBulkObjectChecksumsRequest
+  )(extracted: TraceContext): Future[ScanResource.GetBulkObjectChecksumsResponse] = {
+    implicit val tc = extracted
+    withSpan(s"$workflowId.getBulkObjectChecksums") { _ => _ =>
+      bulkStorage.fold(
+        Future.failed[ScanResource.GetBulkObjectChecksumsResponse](
+          Status.UNIMPLEMENTED
+            .withDescription("Bulk storage is not configured")
+            .asRuntimeException()
+        )
+      ) { bulkStorage =>
+        bulkStorage.getObjectChecksums(body.objectKeys).map { checksums =>
+          ScanResource.GetBulkObjectChecksumsResponse.OK(
+            definitions.GetBulkObjectChecksumsResponse(
+              checksums.map(definitions.GetBulkObjectChecksumsResponse.Checksums(_)).toVector
+            )
+          )
+        }
       }
     }
   }

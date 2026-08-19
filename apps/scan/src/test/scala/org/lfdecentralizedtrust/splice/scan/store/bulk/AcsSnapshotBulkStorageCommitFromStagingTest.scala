@@ -52,7 +52,8 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
     zstdCompressionLevel = 3,
   )
   val appConfig = BulkStorageConfig(
-    snapshotPollingInterval = NonNegativeFiniteDuration.ofSeconds(5)
+    snapshotPollingInterval = NonNegativeFiniteDuration.ofSeconds(5),
+    bftCheckEnabled = false, // bft checks are tested elsewhere
   )
 
   override val initialBuckets: Seq[String] = Seq("staging", "committed")
@@ -104,6 +105,7 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
           committedConnection,
           reader,
           appConfig,
+          null, // not used when bft reads are disabled
           loggerFactory,
         )
         val commitService = {

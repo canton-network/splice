@@ -48,9 +48,12 @@ spec:
           route:
             rate_limits:
               - actions:
-                  - request_headers:
-                      descriptor_key: client_ip
-                      header_name: x-forwarded-for
+                  # Deliberately not keyed on the raw x-forwarded-for header: clients can
+                  # prepend arbitrary entries to it, so per-IP limits keyed on it can be
+                  # evaded. masked_remote_address uses the address envoy trusts instead.
+                  - masked_remote_address:
+                      v4_prefix_mask_len: 32
+                      v6_prefix_mask_len: 128
                   - header_value_match:
                       descriptor_value: acs
                       expect_match: true
@@ -83,9 +86,10 @@ spec:
                   header:
                     key: x-local-rate-limit
                     value: 'true'
+              max_dynamic_descriptors: 10000
               descriptors:
                 - entries:
-                    - key: "client_ip"
+                    - key: "masked_remote_address"
                     - key: header_match
                       value: acs
                   token_bucket:
