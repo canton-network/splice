@@ -125,7 +125,7 @@ monitoring:
         windowMinutes: 10
       spliceRateLimits:
         usageThreshold: 0.8
-        rejectionRateThreshold: 3
+        rejectionCountThreshold: 10
         excludedLimiters: []
       cloudSql:
         maintenance: false

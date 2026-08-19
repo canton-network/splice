@@ -108,7 +108,7 @@ monitoring:
         rejectionRateThreshold: 0
       spliceRateLimits:
         excludedLimiters: []
-        rejectionRateThreshold: 3
+        rejectionCountThreshold: 10
         usageThreshold: 0.8
       trafficBasedRewards:
         featuredAppRightsLimit: 10000

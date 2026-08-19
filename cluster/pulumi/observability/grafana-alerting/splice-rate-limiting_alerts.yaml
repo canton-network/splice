@@ -78,7 +78,7 @@ groups:
               editorMode: code
               expr: |-
                 sum by (namespace, node_name, http_service, limiter, limiter_type) (
-                  rate(splice_rate_limiting_total{result!="accepted"$SPLICE_RATE_LIMITS_FILTER}[$__rate_interval])
+                  increase(splice_rate_limiting_total{result!="accepted"$SPLICE_RATE_LIMITS_FILTER}[5m])
                 )
               instant: true
               intervalMs: 1000
@@ -92,7 +92,7 @@ groups:
               conditions:
               - evaluator:
                   params:
-                    - $SPLICE_RATE_LIMITS_REJECTION_RATE_THRESHOLD
+                    - $SPLICE_RATE_LIMITS_REJECTION_COUNT_THRESHOLD
                   type: gt
                 operator:
                   type: and
@@ -116,7 +116,7 @@ groups:
         execErrState: Alerting
         for: 5m
         annotations:
-          description: This limiter has been rejecting more than $SPLICE_RATE_LIMITS_REJECTION_RATE_THRESHOLD requests per second with HTTP 429 for 5 minutes.
+          description: This limiter has been rejecting more than $SPLICE_RATE_LIMITS_REJECTION_COUNT_THRESHOLD requests with HTTP 429 for 5 minutes.
           summary: Rate limiter "{{ $labels.limiter }}" ({{ $labels.limiter_type }}) on {{ $labels.node_name }} ({{ $labels.http_service }}) in {{ $labels.namespace }} is rejecting requests.
         labels:
           gcloud_filter: resource.labels.namespace_name=%22cluster-ingress%22%0AjsonPayload.response_code=429

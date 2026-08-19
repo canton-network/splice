@@ -777,8 +777,8 @@ function substituteSpliceRateLimitsAlerts(alert: string): string {
   return alert
     .replaceAll('$SPLICE_RATE_LIMITS_USAGE_THRESHOLD', config.usageThreshold.toString())
     .replaceAll(
-      '$SPLICE_RATE_LIMITS_REJECTION_RATE_THRESHOLD',
-      config.rejectionRateThreshold.toString()
+      '$SPLICE_RATE_LIMITS_REJECTION_COUNT_THRESHOLD',
+      config.rejectionCountThreshold.toString()
     )
     .replaceAll('$SPLICE_RATE_LIMITS_FILTER', filter);
 }
