@@ -165,6 +165,15 @@ class DsoDelegateBasedAutomationService(
       )
     )
 
+    if (config.permissionedSynchronizer) {
+      registerTrigger(
+        new MergeValidatorUnpermissionContractsTrigger(
+          triggerContext,
+          svTaskContext,
+        )
+      )
+    }
+
     registerTrigger(
       new FeaturedAppActivityMarkerTrigger(
         triggerContext,
@@ -268,6 +277,7 @@ object DsoDelegateBasedAutomationService extends AutomationServiceCompanion {
     aTrigger[TerminatedSubscriptionTrigger],
     aTrigger[MergeSvRewardStateContractsTrigger],
     aTrigger[MergeValidatorLicenseContractsTrigger],
+    aTrigger[MergeValidatorUnpermissionContractsTrigger],
     aTrigger[FeaturedAppActivityMarkerTrigger],
     aTrigger[AllocateUnallocatedUnclaimedActivityRecordTrigger],
     aTrigger[ExpiredUnallocatedUnclaimedActivityRecordTrigger],
