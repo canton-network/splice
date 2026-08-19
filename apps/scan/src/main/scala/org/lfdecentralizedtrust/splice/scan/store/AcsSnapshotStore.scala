@@ -323,7 +323,7 @@ class AcsSnapshotStore(
     storage
       .query(
         (sql"""
-          select
+          select distinct on(c.contract_id)
             s.row_id,
             event_id,
             record_time,
