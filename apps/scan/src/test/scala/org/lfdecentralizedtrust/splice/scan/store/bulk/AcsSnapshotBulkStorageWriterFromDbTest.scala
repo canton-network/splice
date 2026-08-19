@@ -417,7 +417,7 @@ class AcsSnapshotBulkStorageWriterFromDbTest
               .sorted
               .headOption
               .map(next =>
-                AcsSnapshotStore.AcsSnapshot(
+                AcsSnapshotStore.LegacyAcsSnapshot(
                   // only record time and migration ID are used, everything else is ignored
                   snapshotRecordTime = next,
                   migrationId = 0L,
