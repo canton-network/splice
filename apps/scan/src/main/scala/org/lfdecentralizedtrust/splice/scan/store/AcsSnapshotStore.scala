@@ -323,7 +323,15 @@ class AcsSnapshotStore(
     storage
       .query(
         (sql"""
-          select --distinct on(c.contract_id)
+          with contracts as (
+            select distinct on (contract_id) contract_id, row_id, template_id
+            from #$stakeholdersTableName
+            where """ ++ stakeholdersFilter(partyIds) ++
+          templatesFilter(templates) ++
+          afterFilter ++ sql"""
+            order by contract_id
+          )
+          select
             s.row_id,
             event_id,
             record_time,
@@ -335,11 +343,8 @@ class AcsSnapshotStore(
             signatories,
             observers,
             created_at
-          from #$stakeholdersTableName s
+          from contracts s
           join #$createsTableName c on s.contract_id = c.contract_id
-          where """ ++ stakeholdersFilter(partyIds) ++
-          templatesFilter(templates) ++
-          afterFilter ++ sql"""
           order by s.row_id
           limit ${sqlLimit(limit)}
            """).toActionBuilder.as[
