@@ -40,11 +40,15 @@ export const ConfigSchema = z.object({
   // Settings that affect both how node pools are created and how pods are deployed
   // (e.g, how we set labels/taints). Since these are implemented in different pulumi projects,
   // we need to have a common config schema for them.
-  kubernetesScheduling: z.object({
-    computeClasses: z.object({
-      enabled: z.boolean().default(false),
-    }),
-  }),
+  kubernetesScheduling: z
+    .object({
+      computeClasses: z
+        .object({
+          enabled: z.boolean().default(false),
+        })
+        .prefault({}),
+    })
+    .prefault({}),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
