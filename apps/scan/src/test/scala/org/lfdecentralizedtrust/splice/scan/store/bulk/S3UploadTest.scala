@@ -6,12 +6,11 @@ package org.lfdecentralizedtrust.splice.scan.store.bulk
 import org.apache.pekko.stream.scaladsl.Keep
 import org.apache.pekko.stream.testkit.scaladsl.{TestSink, TestSource}
 import org.apache.pekko.util.ByteString
-import org.lfdecentralizedtrust.splice.store.{HasS3Mock, StoreTestBase}
+import org.lfdecentralizedtrust.splice.store.{HasS3Mock, S3BucketConnection, StoreTestBase}
 
 import scala.util.Random
 import scala.concurrent.duration.*
 import scala.jdk.CollectionConverters.*
-
 import java.nio.ByteBuffer
 
 class S3UploadTest extends StoreTestBase with HasS3Mock {
@@ -59,6 +58,7 @@ class S3UploadTest extends StoreTestBase with HasS3Mock {
         .run()
 
       val it = data.iterator
+
       def sendBytes(n: Int) =
         pub.sendNext(it.getByteString(n))
 
@@ -105,6 +105,7 @@ class S3UploadTest extends StoreTestBase with HasS3Mock {
         .run()
 
       val it = data.iterator
+
       def sendBytes(n: Int) =
         pub.sendNext(it.getByteString(n))
 
@@ -114,6 +115,14 @@ class S3UploadTest extends StoreTestBase with HasS3Mock {
       sub.request(1)
       sub.expectError()
       succeed
+    }
+  }
+
+  "S3BucketConnection" should {
+    "Get checksums does not panic on non existing object" in {
+      val bucketConnection = new S3BucketConnection(s3ConfigMock(), loggerFactory)
+      val checksum = bucketConnection.getChecksums(Seq("non-existing-object")).futureValue
+      checksum shouldBe empty
     }
   }
 }
