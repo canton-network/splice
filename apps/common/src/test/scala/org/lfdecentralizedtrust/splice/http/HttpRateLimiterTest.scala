@@ -261,8 +261,9 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
       )("testOperation") { routes =>
         val route = routes("testOperation")
         (1 to 20).map(_ => call(route, ip = None)) should contain only StatusCodes.OK
-        call(route, ip = Some("1.1.1.1")) should be(StatusCodes.OK)
-        call(route, ip = Some("1.1.1.1")) should be(StatusCodes.TooManyRequests)
+        val results = (1 to 20).map(_ => call(route, ip = Some("1.1.1.1")))
+        results.count(_ == StatusCodes.OK) should be(2)
+        results.count(_ == StatusCodes.TooManyRequests) should be(18)
       }
     }
 
