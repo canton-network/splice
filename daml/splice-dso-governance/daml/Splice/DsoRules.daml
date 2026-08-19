@@ -1084,7 +1084,18 @@ template DsoRules with
         optValidatorLicenseCid : Optional (ContractId ValidatorLicense)
       controller dso
       do
-        _ <- fetchChecked (ForDso with dso) validatorUnpermissionCid
+        unpermission <- fetchChecked (ForDso with dso) validatorUnpermissionCid
+
+        -- Ensure license CID is provided if we are permanently revoking them
+        if newRevoked then do
+          require "optValidatorLicenseCid must be provided when permanently revoking a validator" (isSome optValidatorLicenseCid)
+        else
+          pure ()
+
+        -- Ensure the provided license actually belongs to this validator
+        forA_ optValidatorLicenseCid $ \licenseCid -> do
+          license <- fetchChecked (ForDso with dso) licenseCid
+          require "optValidatorLicenseCid must belong to the same validator" (license.validator == unpermission.validator)
 
         updateResult <- exercise validatorUnpermissionCid ValidatorUnpermission_Update with
           newLoginAfter
@@ -1094,7 +1105,6 @@ template DsoRules with
 
         if newRevoked then
           forA_ optValidatorLicenseCid $ \licenseCid -> do
-            _ <- fetchChecked (ForDso with dso) licenseCid
             void $ exercise licenseCid ValidatorLicense_Withdraw with reason = "Permanently unpermissioned by SV vote"
         else
           pure ()

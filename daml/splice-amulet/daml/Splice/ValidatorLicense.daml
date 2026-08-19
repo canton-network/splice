@@ -260,9 +260,9 @@ template ValidatorLicenseRequest with
 
 -- | ValidatorUnpermission contract is created alongside the ValidatorLicense to manage
 -- the validator's permissions on the synchronizer.
--- We opted to create ValidatorUnpermission together with validatorLicense, instead of later (for e.g. when validator is
+-- We create ValidatorUnpermission together with validatorLicense, instead of later (for e.g., when validator is
 -- unpermissioned for the first time),
--- to avoid possible race conditions (for e.g. when more that 2 validator unpermission vote requests are initiated
+-- to avoid possible race conditions (for e.g., when more that 2 validator unpermission vote requests are initiated
 -- concurrently) and to avoid needing periodic merge logic.
 template ValidatorUnpermission
   with
@@ -272,7 +272,6 @@ template ValidatorUnpermission
     revoked : Bool
   where
     signatory dso
-    observer validator
 
     choice ValidatorUnpermission_Update : ValidatorUnpermission_UpdateResult
       with
