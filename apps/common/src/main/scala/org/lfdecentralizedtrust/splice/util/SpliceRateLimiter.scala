@@ -16,7 +16,7 @@ import com.github.benmanes.caffeine.cache.{Caffeine, RemovalCause, RemovalListen
 import com.google.common.util.concurrent.{BurstyRateLimiterFactory, RateLimiter}
 import org.lfdecentralizedtrust.splice.environment.SpliceMetrics
 
-import java.time.{Duration, Instant}
+import java.time.Duration
 import java.util
 import java.util.Collections
 import java.util.concurrent.TimeUnit
@@ -131,7 +131,6 @@ class SpliceRateLimiter(
     name: String,
     config: SpliceRateLimitConfig,
     metrics: SpliceRateLimitMetrics,
-    enforceAfter: Instant = Instant.now(),
     limiterType: String = SpliceRateLimiter.GlobalLimiterType,
     extraLabels: Map[String, String] = Map.empty,
     // must be disabled for the per-attribute limiters as they'd all report the same value
@@ -143,13 +142,9 @@ class SpliceRateLimiter(
     extraLabels ++ Map("limiter" -> name, "limiter_type" -> limiterType)
   )
 
-  // The limiters are created eagerly so that they are already "warm" (i.e. have accumulated their
-  // burst budget) by the time the limit starts being enforced. They are only created for enabled
-  // limiters: a disabled limiter is never consulted and its configured rate might not even be a
-  // valid guava rate (e.g. 0).
-  // enforces the per-second burst limit (checked over a 1s window)
+  // The limiters are created with one second worth of permits already available
   private val limiter: Option[RateLimiter] =
-    Option.when(config.enabled)(RateLimiter.create(config.ratePerSecond))
+    Option.when(config.enabled)(BurstyRateLimiterFactory.create(config.ratePerSecond))
   // enforces the sustained limit over the sustained window, while still allowing bursts within its budget.
   private val sustainedLimiter: Option[RateLimiter] =
     Option
@@ -169,7 +164,7 @@ class SpliceRateLimiter(
   }
 
   def markRun(): Boolean = {
-    if (config.enabled && Instant.now().isAfter(enforceAfter)) {
+    if (config.enabled) {
       val canRun = rateLimiter.forall(_.tryAcquire()) && sustainedLimiter.forall(_.tryAcquire())
       if (canRun) {
         metrics.meter.mark()(
@@ -204,7 +199,6 @@ class PerAttributeRateLimiter(
     config: SpliceRateLimitConfig,
     attributeConfig: PerAttributeRateLimitConfig,
     metrics: SpliceRateLimitMetrics,
-    enforceAfter: Instant = Instant.now(),
     logger: TracedLogger,
 ) {
 
@@ -258,7 +252,6 @@ class PerAttributeRateLimiter(
     name,
     perAttributeConfig,
     metrics,
-    enforceAfter,
     limiterType = SpliceRateLimiter.UnknownAttributeLimiterType,
     extraLabels = attributeLabel,
   )
@@ -286,7 +279,6 @@ class PerAttributeRateLimiter(
           name,
           perAttributeConfig,
           metrics,
-          enforceAfter,
           limiterType = SpliceRateLimiter.PerAttributeLimiterType,
           extraLabels = attributeLabel,
           reportMaxLimit = false,

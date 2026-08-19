@@ -15,7 +15,6 @@ import org.lfdecentralizedtrust.splice.admin.api.client.commands.HttpCommandExce
 import org.lfdecentralizedtrust.splice.util.SpliceRateLimiterTest.runRateLimited
 import org.scalatest.wordspec.AnyWordSpecLike
 
-import java.time.Instant
 import scala.concurrent.Future
 import scala.concurrent.duration.DurationInt
 
@@ -80,6 +79,16 @@ class SpliceRateLimiterTest
 
     }
 
+    "start with the configured rate per second worth of permits" in {
+      withRateLimiter(SpliceRateLimitConfig(ratePerSecond = 10)) { case (_, rateLimiter) =>
+        // the limiter must not have to warm up first: it holds its configured rate worth of permits
+        // (10) right from its creation, plus guava's deferred payment for the next one
+        val results = Seq.fill(50)(rateLimiter.markRun())
+        results.take(11) should contain only true
+        results.count(!_) should be > 35
+      }
+    }
+
     "not create any limiter if disabled" in {
       // a disabled limiter must not fail even for a rate that guava would reject
       withRateLimiter(SpliceRateLimitConfig(enabled = false, ratePerSecond = 0)) {
@@ -118,12 +127,12 @@ class SpliceRateLimiterTest
         SpliceRateLimitConfig(ratePerSecond = 10),
         PerAttributeRateLimitConfig(limit = SpliceRateLimitConfig(ratePerSecond = 1)),
       ) { case (_, perAttributeRateLimiter) =>
-        // 1 per second per attribute value, so a burst is rejected after the first request
         val ip1 = Seq.fill(20)(perAttributeRateLimiter.markRun(Some("1.1.1.1")))
-        ip1.count(identity) should be(1)
-        ip1.count(!_) should be(19)
+        ip1.count(identity) should be(2)
+        ip1.count(!_) should be(18)
 
         // a different attribute value is not affected by the limiter of the first one
+        perAttributeRateLimiter.markRun(Some("2.2.2.2")) should be(true)
         perAttributeRateLimiter.markRun(Some("2.2.2.2")) should be(true)
         perAttributeRateLimiter.markRun(Some("2.2.2.2")) should be(false)
       }
@@ -135,7 +144,7 @@ class SpliceRateLimiterTest
         PerAttributeRateLimitConfig(limit = SpliceRateLimitConfig(ratePerSecond = 1)),
       ) { case (metrics, perAttributeRateLimiter) =>
         val results = Seq.fill(20)(perAttributeRateLimiter.markRun(None))
-        results.count(identity) should be(1)
+        results.count(identity) should be(2)
 
         metrics.meter.valueFilteredOnLabels(
           LabelFilter("limiter", "test"),
@@ -214,10 +223,6 @@ class SpliceRateLimiterTest
       withRateLimiter(
         SpliceRateLimitConfig(ratePerSecond = 1000, sustainedRatePerSecond = Some(10))
       ) { case (_, rateLimiter) =>
-        // The per-second limit is high enough to never reject the throttled input, so the sustained
-        // limiter (10/s) is the binding constraint over the run. The sustained limiter starts with
-        // an empty burst budget (Guava SmoothBursty semantics), so throughput tracks the sustained
-        // rate plus a small initial allowance.
         val results = runRateLimited(40, 120) {
           rateLimiter.runWithLimit(Future.successful(true))
         }.futureValue
@@ -271,8 +276,6 @@ class SpliceRateLimiterTest
       config,
       attributeConfig,
       rateLimitMetrics,
-      // no cold start delay in tests
-      Instant.now().minusSeconds(1),
       logger,
     )
     try {

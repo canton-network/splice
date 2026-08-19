@@ -5,7 +5,6 @@ package org.lfdecentralizedtrust.splice.http
 
 import com.daml.metrics.api.testing.InMemoryMetricsFactory
 import com.digitalasset.canton.BaseTest
-import com.digitalasset.canton.concurrent.Threading
 import org.apache.pekko.http.scaladsl.model.headers.{RawHeader, `X-Forwarded-For`, `X-Real-Ip`}
 import org.apache.pekko.http.scaladsl.model.{
   AttributeKeys,
@@ -198,9 +197,10 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
       )("testOperation") { routes =>
         val route = routes("testOperation")
         val results = (1 to 20).map(_ => call(route, ip = Some("1.1.1.1")))
-        // 1 request per second per client IP => the burst gets rejected
-        results.count(_ == StatusCodes.OK) should be(1)
-        results.count(_ == StatusCodes.TooManyRequests) should be(19)
+        // 1 request per second per client IP, with 1 permit available from the creation of the
+        // limiter plus guava's deferred payment for the next one => the rest of the burst is rejected
+        results.count(_ == StatusCodes.OK) should be(2)
+        results.count(_ == StatusCodes.TooManyRequests) should be(18)
       }
     }
 
@@ -221,7 +221,10 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
         globalPerClientIp = perClientIp(1)
       )("testOperation") { routes =>
         val route = routes("testOperation")
-        call(route, ip = Some("2001:db8:0:1:1:2:3:4")) should be(StatusCodes.OK)
+        // drain the budget of the /64 network
+        (1 to 20)
+          .map(_ => call(route, ip = Some("2001:db8:0:1:1:2:3:4")))
+          .count(_ == StatusCodes.OK) should be > 0
         // a different address of the same /64 shares the limiter, so it is rejected
         call(route, ip = Some("2001:db8:0:1:ffff:ffff:ffff:ffff")) should be(
           StatusCodes.TooManyRequests
@@ -250,7 +253,9 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
       withRoutes(
         globalPerClientIp = perClientIp(1)
       )("operationA", "operationB") { routes =>
-        call(routes("operationA"), ip = Some("1.1.1.1")) should be(StatusCodes.OK)
+        (1 to 20)
+          .map(_ => call(routes("operationA"), ip = Some("1.1.1.1")))
+          .count(_ == StatusCodes.OK) should be > 0
         call(routes("operationB"), ip = Some("1.1.1.1")) should be(StatusCodes.TooManyRequests)
       }
     }
@@ -282,7 +287,7 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
       )("limitedOperation", "otherOperation") { routes =>
         val results =
           (1 to 20).map(_ => call(routes("limitedOperation"), ip = Some("1.1.1.1")))
-        results.count(_ == StatusCodes.OK) should be(1)
+        results.count(_ == StatusCodes.OK) should be(2)
         // a different operation is not affected by the per operation client IP limiter
         call(routes("otherOperation"), ip = Some("1.1.1.1")) should be(StatusCodes.OK)
       }
@@ -320,8 +325,6 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
           rateLimiter.withRateLimit("serviceV1")("sharedOperation")(complete(StatusCodes.OK))
         val routeV2 =
           rateLimiter.withRateLimit("serviceV2")("sharedOperation")(complete(StatusCodes.OK))
-        // the rate limiter only starts enforcing 1 second after it got created
-        Threading.sleep(1100)
         (1 to 20)
           .map(_ => call(routeV1, ip = Some("1.1.1.1")))
           .count(_ == StatusCodes.TooManyRequests) should be > 0
@@ -495,8 +498,6 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
           complete(StatusCodes.OK)
         }
       }.toMap
-      // the rate limiter only starts enforcing 1 second after it got created
-      Threading.sleep(1100)
       f(HttpRateLimiterTest.Fixture(routes, metricsFactory))
     } finally {
       rateLimiter.close()
