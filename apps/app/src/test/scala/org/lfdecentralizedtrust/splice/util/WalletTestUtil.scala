@@ -66,11 +66,12 @@ trait WalletTestUtil extends TestCommon with AnsTestUtil {
       wallet: WalletAppClientReference,
       expectedAmountRanges: Seq[(BigDecimal, BigDecimal)],
       holdingFee: BigDecimal = defaultHoldingFeeAmulet.bigDecimal,
+      timeUntilSuccess: FiniteDuration = 10.seconds,
   ): Unit = clue(s"checking wallet with $expectedAmountRanges") {
     val expectedRatePerRound = new feesCodegen.RatePerRound(
       holdingFee.bigDecimal setScale 10
     )
-    eventually(10.seconds, 500.millis) {
+    eventually(timeUntilSuccess, 500.millis) {
       val amulets =
         wallet.list().amulets.sortBy(amulet => amulet.contract.payload.amount.initialAmount)
       amulets should have size (expectedAmountRanges.size.toLong)
