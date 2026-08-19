@@ -134,7 +134,11 @@ class S3BucketConnection(
       .key(key)
       .build()
     for {
-      head <- s3Client.headObject(headRequest).asScala.map(Some(_)).recover { case _ => None }
+      head <- s3Client.headObject(headRequest).asScala.map(Some(_)).recover { case e =>
+        // TODO(#3429): distinguish between "object not found" and other errors, probably want to catch only NoSuchKeyException, and throw everything else
+        logger.debug(s"Failed to read checksum for object $key, object may not exist: ${e.getMessage}")
+        None
+      }
       checksum = head.map(
         _.metadata().asScala
           .getOrElse("splice-checksum", throw new RuntimeException("Missing checksum metadata"))
