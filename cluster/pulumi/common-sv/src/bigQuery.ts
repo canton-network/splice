@@ -355,8 +355,8 @@ function installBigqueryStagingDataset(scanBigQuery: ScanBigQueryConfig): gcp.bi
     friendlyName: `${scanBigQuery.dataset} Staging Dataset`,
     location: cloudsdkComputeRegion(),
     deleteContentsOnDestroy: true,
-    // ISSUE#6814: Do not rely on ingestion timestamps for retention in staging. 
-    // GCP calculates expiration from the table creation date, which will delete 
+    // ISSUE#6814: Do not rely on ingestion timestamps for retention in staging.
+    // GCP calculates expiration from the table creation date, which will delete
     // staging tables at the 3-day mark even if production sync is incomplete.
     labels: {
       cluster: CLUSTER_BASENAME,
@@ -490,7 +490,7 @@ function installDailyPurgeScheduledQueries(
   namespace: ExactNamespace,
   stagingDataset: gcp.bigquery.Dataset,
   context: ScheduledQueryContext,
-  retentionPeriodSeconds: number,  
+  retentionPeriodSeconds: number
 ) {
   const { projectId, transferServiceAgentPermission } = context;
   const schemaName = scanAppDatabaseName(namespace);
@@ -532,7 +532,7 @@ function installDailyPurgeScheduledQueries(
         location: cloudsdkComputeRegion(),
         serviceAccountName: pulumi.interpolate`bigquery@${projectId}.iam.gserviceaccount.com`,
         dataSourceId: 'scheduled_query',
-        schedule: 'every day 05:21', // Runs daily at 05:21 AM 
+        schedule: 'every day 05:21', // Runs daily at 05:21 AM
 
         params: {
           query: pulumi.interpolate`CALL \`${projectId}.${stagingDataset.datasetId}.${routineId}\`();`,
@@ -939,7 +939,12 @@ export async function configureScanBigQuery({
     );
     const scheduledQueryContext = installBqScheduledQueryContext();
     installHourlyScheduledQueries(namespace, stagingDataset, prodDataset, scheduledQueryContext);
-    installDailyPurgeScheduledQueries(namespace, stagingDataset, scheduledQueryContext, retentionPeriodSeconds);
+    installDailyPurgeScheduledQueries(
+      namespace,
+      stagingDataset,
+      scheduledQueryContext,
+      retentionPeriodSeconds
+    );
   }
   // TODO (DACH-NY/canton-network-internal#6451) not sure if this function needs to return anything,
   // but we need to return something to satisfy the ScanBigQuery type.
