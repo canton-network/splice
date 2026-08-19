@@ -23,6 +23,7 @@ import scala.util.matching.Regex
 
 case class ScanStorageConfig(
     dbAcsSnapshotPeriodHours: Int, // Period between two consecutive acs snapshots to be computed and stored in the DB
+    perAcsSnapshotTablesEnabled: Boolean, // Whether each ACS snapshot should be stored in its own table
     bulkAcsSnapshotPeriodHours: Int, // Period between two consecutive acs snapshots to be dumped to bulk storage (currently must be <=24 hr, and a multiple of dbAcsSnapshotPeriodHours)
     bulkDbReadChunkSize: Int, // Chunk size to read from the DB for copying to bulk storage
     bulkZstdFrameSize: Long, // Size of each zstd frame. In prod, must be >= 5 MB as each frame is written as a part in multi-part upload, which are enforced by most s3 implementations to be >= 5MB each
@@ -162,6 +163,7 @@ object ScanStorageConfig {
 object ScanStorageConfigs {
   val scanStorageConfigV1 = ScanStorageConfig(
     dbAcsSnapshotPeriodHours = 3,
+    perAcsSnapshotTablesEnabled = false,
     bulkAcsSnapshotPeriodHours = 24,
     bulkDbReadChunkSize = 1000,
     bulkZstdFrameSize = 12L * 1024 * 1024,

@@ -1,7 +1,7 @@
 package org.lfdecentralizedtrust.splice.store.db
 
 import cats.data.NonEmptyVector
-import com.daml.ledger.javaapi.data.{Unit as damlUnit}
+import com.daml.ledger.javaapi.data.Unit as damlUnit
 import com.daml.ledger.javaapi.data.codegen.ContractId
 import com.daml.metrics.api.noop.NoOpMetricsFactory
 import org.lfdecentralizedtrust.splice.environment.DarResources
@@ -32,8 +32,9 @@ import java.time.Instant
 import scala.concurrent.Future
 import scala.util.{Failure, Success}
 import StoreTestBase.*
+import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.IncrementalAcsSnapshotTable
 
-class AcsSnapshotStoreTest
+trait AcsSnapshotStoreTest
     extends StoreTestBase
     with HasExecutionContext
     with StoreErrors
@@ -41,6 +42,8 @@ class AcsSnapshotStoreTest
     with SplicePostgresTest
     with AcsJdbcTypes
     with AcsTables {
+
+  val nextTable: IncrementalAcsSnapshotTable
 
   private val DefaultMigrationId = 0L
   private val timestamp1 = CantonTimestamp.Epoch.plusSeconds(3600)
@@ -1077,9 +1080,7 @@ class AcsSnapshotStoreTest
         for {
           updateHistory <- mkUpdateHistory()
           store = mkStore(updateHistory)
-          incrementalSnapshotN <- store.getIncrementalSnapshot(
-            AcsSnapshotStore.IncrementalAcsSnapshotTable.Next
-          )
+          incrementalSnapshotN <- store.getIncrementalSnapshot(nextTable)
           incrementalSnapshotB <- store.getIncrementalSnapshot(
             AcsSnapshotStore.IncrementalAcsSnapshotTable.Backfill
           )
@@ -1122,13 +1123,13 @@ class AcsSnapshotStoreTest
           } yield snapshot1)
 
           _ <- store.initializeIncrementalSnapshot(
-            AcsSnapshotStore.IncrementalAcsSnapshotTable.Next,
+            nextTable,
             snapshot1.value,
             timestamp2,
           )
 
           incrementalSnapshotN <- store.getIncrementalSnapshot(
-            AcsSnapshotStore.IncrementalAcsSnapshotTable.Next
+            nextTable
           )
           incrementalSnapshotB <- store.getIncrementalSnapshot(
             AcsSnapshotStore.IncrementalAcsSnapshotTable.Backfill
@@ -1136,10 +1137,10 @@ class AcsSnapshotStoreTest
 
           _ <- clueF(s"Update snapshot")(for {
             snapshot <- store.getIncrementalSnapshot(
-              AcsSnapshotStore.IncrementalAcsSnapshotTable.Next
+              nextTable
             )
             _ <- store.updateIncrementalSnapshot(
-              AcsSnapshotStore.IncrementalAcsSnapshotTable.Next,
+              nextTable,
               snapshot.value,
               timestamp2,
             )
@@ -1147,10 +1148,10 @@ class AcsSnapshotStoreTest
 
           _ <- clueF(s"Save snapshot")(for {
             snapshot <- store.getIncrementalSnapshot(
-              AcsSnapshotStore.IncrementalAcsSnapshotTable.Next
+              nextTable
             )
             _ <- store.saveIncrementalSnapshot(
-              AcsSnapshotStore.IncrementalAcsSnapshotTable.Next,
+              nextTable,
               snapshot.value,
               nextSnapshotTargetRecordTime = timestamp3,
             )
@@ -1193,13 +1194,13 @@ class AcsSnapshotStoreTest
 
           snapshotRecordTime = timestamp1.minusSeconds(1L)
           _ <- store.initializeIncrementalSnapshotFromImportUpdates(
-            AcsSnapshotStore.IncrementalAcsSnapshotTable.Next,
+            nextTable,
             snapshotRecordTime,
             timestamp2,
             DefaultMigrationId,
           )
           incrementalSnapshotN <- store.getIncrementalSnapshot(
-            AcsSnapshotStore.IncrementalAcsSnapshotTable.Next
+            nextTable
           )
           incrementalSnapshotB <- store.getIncrementalSnapshot(
             AcsSnapshotStore.IncrementalAcsSnapshotTable.Backfill
@@ -1253,7 +1254,7 @@ class AcsSnapshotStoreTest
 
           _ <- clueF(s"Snapshot A: start from import updates at T0")(
             storeM1.initializeIncrementalSnapshotFromImportUpdates(
-              AcsSnapshotStore.IncrementalAcsSnapshotTable.Next,
+              nextTable,
               recordTime = timestamp1,
               targetRecordTime = timestamp1.plusSeconds(9L),
               1L,
@@ -1266,10 +1267,10 @@ class AcsSnapshotStoreTest
             for {
               (_, cid1) <- ingestHistory(updateHistoryM1, 0L)
               snapshot <- storeM1.getIncrementalSnapshot(
-                AcsSnapshotStore.IncrementalAcsSnapshotTable.Next
+                nextTable
               )
               _ <- storeM1.updateIncrementalSnapshot(
-                AcsSnapshotStore.IncrementalAcsSnapshotTable.Next,
+                nextTable,
                 snapshot.value,
                 // Note: there is no event at exactly T9
                 timestamp1.plusSeconds(9L),
@@ -1279,11 +1280,11 @@ class AcsSnapshotStoreTest
 
           _ <- clueF(s"Snapshot A: finalize snapshot at T9")(for {
             snapshot <- storeM1.getIncrementalSnapshot(
-              AcsSnapshotStore.IncrementalAcsSnapshotTable.Next
+              nextTable
             )
             _ = snapshot.value.recordTime shouldBe timestamp1.plusSeconds(9L)
             _ <- storeM1.saveIncrementalSnapshot(
-              AcsSnapshotStore.IncrementalAcsSnapshotTable.Next,
+              nextTable,
               snapshot.value,
               nextSnapshotTargetRecordTime = timestamp1.plusSeconds(20L),
             )
@@ -1311,10 +1312,10 @@ class AcsSnapshotStoreTest
           )(for {
             (_, cid2) <- ingestHistory(updateHistoryM1, 12L)
             snapshot <- storeM1.getIncrementalSnapshot(
-              AcsSnapshotStore.IncrementalAcsSnapshotTable.Next
+              nextTable
             )
             _ <- storeM1.updateIncrementalSnapshot(
-              AcsSnapshotStore.IncrementalAcsSnapshotTable.Next,
+              nextTable,
               snapshot.value,
               // Note: there is an event at exactly T20
               timestamp1.plusSeconds(20L),
@@ -1323,11 +1324,11 @@ class AcsSnapshotStoreTest
 
           _ <- clueF(s"Snapshot B: finalize snapshot at T20")(for {
             snapshot <- storeM1.getIncrementalSnapshot(
-              AcsSnapshotStore.IncrementalAcsSnapshotTable.Next
+              nextTable
             )
             _ = snapshot.value.recordTime shouldBe timestamp1.plusSeconds(20L)
             _ <- storeM1.saveIncrementalSnapshot(
-              AcsSnapshotStore.IncrementalAcsSnapshotTable.Next,
+              nextTable,
               snapshot.value,
               nextSnapshotTargetRecordTime = timestamp1.plusSeconds(30L),
             )
@@ -1364,23 +1365,23 @@ class AcsSnapshotStoreTest
           _ <- ingestCreate(updateHistory, amuletRules(), CantonTimestamp.MinValue)
 
           _ <- store.initializeIncrementalSnapshotFromImportUpdates(
-            AcsSnapshotStore.IncrementalAcsSnapshotTable.Next,
+            nextTable,
             timestamp2,
             timestamp3,
             DefaultMigrationId,
           )
 
           incrementalSnapshotBefore <- store.getIncrementalSnapshot(
-            AcsSnapshotStore.IncrementalAcsSnapshotTable.Next
+            nextTable
           )
 
           _ <- store.deleteIncrementalSnapshot(
-            AcsSnapshotStore.IncrementalAcsSnapshotTable.Next,
+            nextTable,
             incrementalSnapshotBefore.value,
           )
 
           incrementalSnapshotAfter <- store.getIncrementalSnapshot(
-            AcsSnapshotStore.IncrementalAcsSnapshotTable.Next
+            nextTable
           )
         } yield {
           incrementalSnapshotAfter shouldBe None
@@ -1530,4 +1531,12 @@ class AcsSnapshotStoreTest
       _ <- resetAllAppTables(storage)
     } yield ()
 
+}
+
+class LegacyAcsSnapshotStoreTest extends AcsSnapshotStoreTest {
+  override val nextTable: IncrementalAcsSnapshotTable = IncrementalAcsSnapshotTable.Next
+}
+
+class TablePerAcsSnapshotStoreTest extends AcsSnapshotStoreTest {
+  override val nextTable: IncrementalAcsSnapshotTable = IncrementalAcsSnapshotTable.NextV2
 }
