@@ -164,15 +164,12 @@ class DsoDelegateBasedAutomationService(
         svTaskContext,
       )
     )
-
-    if (config.permissionedSynchronizer) {
-      registerTrigger(
-        new MergeValidatorUnpermissionContractsTrigger(
-          triggerContext,
-          svTaskContext,
-        )
+    registerTrigger(
+      new MergeValidatorUnpermissionContractsTrigger(
+        triggerContext,
+        svTaskContext,
       )
-    }
+    )
 
     registerTrigger(
       new FeaturedAppActivityMarkerTrigger(
