@@ -103,8 +103,6 @@ class LocalNetReassignIntegrationTest extends IntegrationTestWithIsolatedEnviron
       val globalSynchronizerId = synchronizerId(participant, "global")
       val appSynchronizerId = synchronizerId(participant, "app-synchronizer")
 
-      // The package must be vetted on both synchronizers for the assignment to succeed.
-      // upload_dar_unless_exists vets on all synchronizers the participant is connected to.
       participant.upload_dar_unless_exists(dummyHoldingDarPath)
 
       val createdContract = clue("Create a DummyHolding on the global synchronizer") {
@@ -123,8 +121,6 @@ class LocalNetReassignIntegrationTest extends IntegrationTestWithIsolatedEnviron
       val contractId = createdContract.id.contractId
       val lfContractId = LfContractId.assertFromString(contractId)
 
-      // Mirrors ReassignmentSubmissionIntegrationTest: locate the contract in the party's ACS and
-      // read which synchronizer it is currently assigned to.
       def contractSynchronizerId(): Option[String] =
         participant.ledger_api.state.acs
           .active_contracts_of_party(party = party)
@@ -133,9 +129,8 @@ class LocalNetReassignIntegrationTest extends IntegrationTestWithIsolatedEnviron
 
       contractSynchronizerId() shouldBe Some(globalSynchronizerId.toProtoPrimitive)
 
-      // Scope the reassignment event format to `party` only: the localnet ledger API token does
-      // not carry the super-reader (any-party) claim that the default event format requires.
-      val eventFormat = Some(
+      // Scope the reassignment event format to `party`
+      val eventFormat =
         EventFormat(
           filtersByParty = Map(
             party.toProtoPrimitive -> Filters(
@@ -151,8 +146,7 @@ class LocalNetReassignIntegrationTest extends IntegrationTestWithIsolatedEnviron
           filtersForAnyParty = None,
           verbose = true,
         )
-      )
-
+      println(eventFormat)
       def reassign(source: SynchronizerId, target: SynchronizerId): Unit = {
         val unassigned = participant.ledger_api.commands
           .submit_unassign_with_format(
@@ -161,9 +155,7 @@ class LocalNetReassignIntegrationTest extends IntegrationTestWithIsolatedEnviron
             source = source,
             target = target,
             userId = ledgerApiUserId,
-            eventFormat = eventFormat,
-            // Skip the cross-participant await, which is not readable with this token; the
-            // actAndCheck assertions on the ACS provide the waiting instead.
+            eventFormat = Some(eventFormat),
             timeout = None,
           )
           .unassignedWrapper
@@ -173,7 +165,7 @@ class LocalNetReassignIntegrationTest extends IntegrationTestWithIsolatedEnviron
           source = source,
           target = target,
           userId = ledgerApiUserId,
-          eventFormat = eventFormat,
+          eventFormat = Some(eventFormat),
           timeout = None,
         )
       }
