@@ -47,11 +47,11 @@ object AppActivityStore {
     /** Cannot compute an answer for this round from local state.
       * Callers should delegate to BFT read.
       */
-    case object AskElsewhere extends RoundIngestionStatus
+    case object CannotProvide extends RoundIngestionStatus
 
     /** Do not yet have an answer but expect to have one after
       * ingesting up to this round. Callers should retry.
       */
-    case object TryAgainLater extends RoundIngestionStatus
+    case object Undetermined extends RoundIngestionStatus
   }
 }

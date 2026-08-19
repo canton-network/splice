@@ -2776,8 +2776,8 @@ class HttpScanHandler(
           }
         case None =>
           appActivityStore.ingestionStatusForRound(roundNumber).map {
-            case RoundIngestionStatus.AskElsewhere => cannotProvide
-            case RoundIngestionStatus.TryAgainLater => undetermined
+            case RoundIngestionStatus.CannotProvide => cannotProvide
+            case RoundIngestionStatus.Undetermined => undetermined
           }
       }
     }
@@ -2815,8 +2815,8 @@ class HttpScanHandler(
           )
         case None =>
           appActivityStore.ingestionStatusForRound(roundNumber).map {
-            case RoundIngestionStatus.AskElsewhere => cannotProvide
-            case RoundIngestionStatus.TryAgainLater => undetermined
+            case RoundIngestionStatus.CannotProvide => cannotProvide
+            case RoundIngestionStatus.Undetermined => undetermined
           }
       }
     }

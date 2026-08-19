@@ -192,21 +192,26 @@ class DbAppActivityRecordStore(
       tc: TraceContext
   ): Future[RoundIngestionStatus] =
     earliestIngestedRound().map {
-      // Meta row is present and the requested round is within-or-before
-      // our ingestion boundary but no root hash was computed for it:
-      // delegate to peers.
       case Some(earliestIngested) if roundNumber <= earliestIngested =>
-        RoundIngestionStatus.AskElsewhere
+        // We should have data for this round but no root hash exists:
+        // a peer likely does, so delegate.
+        RoundIngestionStatus.CannotProvide
 
-      // Meta row absent on a non-firstSV Scan — during bootstrap we
-      // have no ingestion boundary yet:
-      // delegate to peers.
-      case None if !isFirstSv => RoundIngestionStatus.AskElsewhere
+      case Some(_) =>
+        // Meta row present but round is beyond our ingested boundary —
+        // ingestion is still catching up; retry.
+        RoundIngestionStatus.Undetermined
 
-      // Otherwise (meta row absent on firstSV during ms-scale warm-up,
-      // OR meta row present but roundNumber > earliestIngested):
-      // the caller should retry.
-      case _ => RoundIngestionStatus.TryAgainLater
+      case None if !isFirstSv =>
+        // Late-joining Scan with no ingestion boundary of its own —
+        // it might seem Undetermined is right, but peers do have one,
+        // so we delegate.
+        RoundIngestionStatus.CannotProvide
+
+      case None =>
+        // firstSV during initial ingestion (brief startup window before
+        // the meta row is inserted) — retry.
+        RoundIngestionStatus.Undetermined
     }
 
   /** Find the latest round with complete app activity.
