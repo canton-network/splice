@@ -32,7 +32,7 @@ class StartupSqlIndexInitializationTrigger(
     context: TriggerContext,
     indexActions: List[IndexAction],
 )(implicit ec: ExecutionContextExecutor, override val tracer: Tracer, mat: Materializer)
-    extends SqlIndexInitializationTrigger(storage, context) {
+    extends SqlIndexInitializationTrigger[Unit](storage, context) {
   assert(
     indexActions.distinct == indexActions,
     "Index actions must be unique.",
@@ -44,12 +44,13 @@ class StartupSqlIndexInitializationTrigger(
 
   protected def retrieveNextIndexTasks()(implicit
       tc: TraceContext
-  ): FutureUnlessShutdown[Seq[IndexAction]] = {
-    FutureUnlessShutdown.pure(remainingActions.get().headOption.toList)
+  ): FutureUnlessShutdown[Seq[(IndexAction, Unit)]] = {
+    FutureUnlessShutdown.pure(remainingActions.get().headOption.toList.map(_ -> ()))
   }
 
   override protected def onActionCompleted(
-      action: IndexAction
+      action: IndexAction,
+      meta: Unit,
   )(implicit tc: TraceContext): Future[Unit] = {
     remainingActions.updateAndGet(_.filterNot(_ == action))
     if (remainingActions.get().isEmpty) {
@@ -62,18 +63,19 @@ class StartupSqlIndexInitializationTrigger(
 /** A trigger that asynchronously creates or drops SQL indexes.
   *
   * If a created index becomes invalid, it is dropped and recreated.
+  * @tparam TaskMeta additional information useful for the onActionCompleted callback.
   */
-abstract class SqlIndexInitializationTrigger(
+abstract class SqlIndexInitializationTrigger[TaskMeta](
     storage: DbStorage,
     protected val context: TriggerContext,
 )(implicit ec: ExecutionContextExecutor, override val tracer: Tracer, mat: Materializer)
-    extends PollingParallelTaskExecutionTrigger[SqlIndexInitializationTrigger.Task]
+    extends PollingParallelTaskExecutionTrigger[SqlIndexInitializationTrigger.Task[TaskMeta]]
     with HasCloseContext {
   import SqlIndexInitializationTrigger.*
 
-  private def nextTask(action: IndexAction)(implicit
+  private def nextTask(action: IndexAction, meta: TaskMeta)(implicit
       tc: TraceContext
-  ): FutureUnlessShutdown[Seq[Task]] =
+  ): FutureUnlessShutdown[Seq[Task[TaskMeta]]] =
     for {
       headStatus <- storage.query(
         getIndexStatusAction(action.indexName),
@@ -90,41 +92,43 @@ abstract class SqlIndexInitializationTrigger(
 
       case (IndexAction.Create(indexName, _), IndexStatus.Valid) =>
         logger.info(s"Index $indexName should be created and is valid, skipping.")
-        Seq(Task.ConfirmActionCompleted(action))
+        Seq(Task.ConfirmActionCompleted(action, meta))
 
       case (IndexAction.Create(indexName, _), IndexStatus.DoesNotExist) =>
         logger.info(s"Index $indexName should be created and does not exist, creating it.")
-        Seq(Task.ExecuteAction(action))
+        Seq(Task.ExecuteAction(action, meta))
 
       case (IndexAction.Create(indexName, _), IndexStatus.Invalid) =>
         logger.warn(s"Index $indexName should be created and is invalid, dropping it.")
-        Seq(Task.ExecuteAction(IndexAction.Drop(indexName)))
+        Seq(Task.ExecuteAction(IndexAction.Drop(indexName), meta))
 
       case (IndexAction.Drop(indexName), IndexStatus.DoesNotExist) =>
         logger.info(s"Index $indexName should be dropped and does not exist, skipping.")
-        Seq(Task.ConfirmActionCompleted(action))
+        Seq(Task.ConfirmActionCompleted(action, meta))
 
       case (IndexAction.Drop(indexName), IndexStatus.Valid) =>
         logger.info(s"Index $indexName should be dropped and is valid, dropping.")
-        Seq(Task.ExecuteAction(action))
+        Seq(Task.ExecuteAction(action, meta))
 
       case (IndexAction.Drop(indexName), IndexStatus.Invalid) =>
         logger.warn(s"Index $indexName should be dropped and is invalid, dropping.")
-        Seq(Task.ExecuteAction(action))
+        Seq(Task.ExecuteAction(action, meta))
     }
 
   protected def retrieveNextIndexTasks()(implicit
       tc: TraceContext
-  ): FutureUnlessShutdown[Seq[IndexAction]]
+  ): FutureUnlessShutdown[Seq[(IndexAction, TaskMeta)]]
 
   override def retrieveTasks()(implicit
       tc: TraceContext
-  ): Future[Seq[SqlIndexInitializationTrigger.Task]] = {
+  ): Future[Seq[SqlIndexInitializationTrigger.Task[TaskMeta]]] = {
     storage.dbConfig match {
       case postgresConfig: DbConfig.Postgres =>
         (for {
           indexTask <- retrieveNextIndexTasks()
-          tasks <- MonadUtil.sequentialTraverse(indexTask)(nextTask(_))
+          tasks <- MonadUtil.sequentialTraverse(indexTask) { case (action, meta) =>
+            nextTask(action, meta)
+          }
         } yield tasks.flatten)
           .failOnShutdownToAbortException("Retrieve SqlIndexInitializationTrigger tasks")
       case _ =>
@@ -133,7 +137,7 @@ abstract class SqlIndexInitializationTrigger(
     }
   }
 
-  override protected def isStaleTask(task: SqlIndexInitializationTrigger.Task)(implicit
+  override protected def isStaleTask(task: SqlIndexInitializationTrigger.Task[TaskMeta])(implicit
       tc: TraceContext
   ): Future[Boolean] = {
     // We are using "if not exists" for index creation and dropping.
@@ -141,12 +145,14 @@ abstract class SqlIndexInitializationTrigger(
     Future.successful(false)
   }
 
-  protected def onActionCompleted(action: IndexAction)(implicit tc: TraceContext): Future[Unit]
+  protected def onActionCompleted(action: IndexAction, meta: TaskMeta)(implicit
+      tc: TraceContext
+  ): Future[Unit]
 
-  override protected def completeTask(task: SqlIndexInitializationTrigger.Task)(implicit
+  override protected def completeTask(task: SqlIndexInitializationTrigger.Task[TaskMeta])(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = (task match {
-    case Task.ExecuteAction(IndexAction.Drop(indexName)) =>
+    case Task.ExecuteAction(IndexAction.Drop(indexName), _) =>
       logger.info(s"Dropping index $indexName")
       storage
         .queryAndUpdate(
@@ -159,7 +165,7 @@ abstract class SqlIndexInitializationTrigger(
           TaskSuccess(s"Dropped index $indexName")
         }
 
-    case Task.ExecuteAction(IndexAction.Create(indexName, createAction)) =>
+    case Task.ExecuteAction(IndexAction.Create(indexName, createAction), _) =>
       logger.info(s"Creating index $indexName")
       storage
         .queryAndUpdate(AdvisoryLocks.withDdlLock(createAction), "create_" + indexName)
@@ -169,8 +175,8 @@ abstract class SqlIndexInitializationTrigger(
           TaskSuccess(s"Created index $indexName")
         }
 
-    case Task.ConfirmActionCompleted(action) =>
-      onActionCompleted(action).map { _ =>
+    case Task.ConfirmActionCompleted(action, meta) =>
+      onActionCompleted(action, meta).map { _ =>
         logger.info(s"Confirmed action completed for index ${action.indexName}")
         TaskSuccess(s"Confirmed action completed for index ${action.indexName}")
       }
@@ -304,10 +310,10 @@ object SqlIndexInitializationTrigger {
     IndexAction.Drop(indexName = "scan_txlog_store_sid_en_vot"),
   )
 
-  sealed trait Task extends Product with Serializable with PrettyPrinting
+  sealed trait Task[Meta] extends Product with Serializable with PrettyPrinting
   object Task {
 
-    final case class ExecuteAction(action: IndexAction) extends Task {
+    final case class ExecuteAction[Meta](action: IndexAction, meta: Meta) extends Task[Meta] {
       override def pretty: Pretty[this.type] =
         prettyOfClass(
           param("action", _.action.showType),
@@ -315,7 +321,8 @@ object SqlIndexInitializationTrigger {
         )
     }
 
-    final case class ConfirmActionCompleted(action: IndexAction) extends Task {
+    final case class ConfirmActionCompleted[Meta](action: IndexAction, meta: Meta)
+        extends Task[Meta] {
       override def pretty: Pretty[this.type] =
         prettyOfClass(
           param("action", _.action.showType),

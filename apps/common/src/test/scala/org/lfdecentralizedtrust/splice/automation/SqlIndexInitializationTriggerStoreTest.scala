@@ -138,7 +138,9 @@ class SqlIndexInitializationTriggerStoreTest
           )
           .failOnShutdown
         tasks <- trigger.retrieveTasks()
-        _ = tasks.loneElement shouldBe a[SqlIndexInitializationTrigger.Task.ConfirmActionCompleted]
+        _ = tasks.loneElement shouldBe a[
+          SqlIndexInitializationTrigger.Task.ConfirmActionCompleted[_]
+        ]
         _ <- runTriggerUntilAllTasksDone(trigger)
         indexNames <- listIndexNames()
       } yield {
@@ -157,7 +159,9 @@ class SqlIndexInitializationTriggerStoreTest
 
       for {
         tasks <- trigger.retrieveTasks()
-        _ = tasks.loneElement shouldBe a[SqlIndexInitializationTrigger.Task.ConfirmActionCompleted]
+        _ = tasks.loneElement shouldBe a[
+          SqlIndexInitializationTrigger.Task.ConfirmActionCompleted[_]
+        ]
         _ <- runTriggerUntilAllTasksDone(trigger)
         indexNames <- listIndexNames()
       } yield {
@@ -240,7 +244,8 @@ class SqlIndexInitializationTriggerStoreTest
           },
         )
         _ = tasks.loneElement match {
-          case SqlIndexInitializationTrigger.Task.ExecuteAction(IndexAction.Drop("test_index")) =>
+          case SqlIndexInitializationTrigger.Task
+                .ExecuteAction(IndexAction.Drop("test_index"), ()) =>
             succeed
           case other =>
             fail(s"Expected Drop for test_index, got $other")
@@ -277,7 +282,7 @@ class SqlIndexInitializationTriggerStoreTest
         ),
       )
       // Too annoying to get this value out of Future.sequence below, so we use a var
-      var tasksResult: Option[Seq[SqlIndexInitializationTrigger.Task]] = None
+      var tasksResult: Option[Seq[SqlIndexInitializationTrigger.Task[Unit]]] = None
       for {
         _ <- Future.unit
         _ <- storage.underlying

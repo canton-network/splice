@@ -11,40 +11,27 @@ import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.automation.{SqlIndexInitializationTrigger, TriggerContext}
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore
-import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.AcsTableDDL
+import com.digitalasset.canton.discard.Implicits.DiscardOps
+import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{AcsSnapshot, AcsTableDDL}
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 
-import java.time.Instant
 import scala.concurrent.{ExecutionContextExecutor, Future}
-import scala.util.Try
 
 class AcsSnapshotIndexTrigger(storage: DbStorage, store: AcsSnapshotStore, context: TriggerContext)(
     implicit
     ec: ExecutionContextExecutor,
     override val tracer: Tracer,
     mat: Materializer,
-) extends SqlIndexInitializationTrigger(storage, context) {
+) extends SqlIndexInitializationTrigger[AcsSnapshot](storage, context) {
 
   override protected def retrieveNextIndexTasks()(implicit
       tc: TraceContext
-  ): FutureUnlessShutdown[Seq[SqlIndexInitializationTrigger.IndexAction]] = {
+  ): FutureUnlessShutdown[Seq[(SqlIndexInitializationTrigger.IndexAction, AcsSnapshot)]] = {
     store
       .lookupOldestUnindexedSnapshot()
       .map { snapshot =>
         // Statements are safe to retry because of `if not exists`
-        Seq(
-          SqlIndexInitializationTrigger.IndexAction.Create(
-            AcsTableDDL
-              .stakeholderIndexName(snapshot.historyId, snapshot.snapshotRecordTime),
-            AcsTableDDL.stakeholderIndexAction(snapshot.historyId, snapshot.snapshotRecordTime),
-          ),
-          SqlIndexInitializationTrigger.IndexAction.Create(
-            AcsTableDDL
-              .stakeholderTemplateIdIndexName(snapshot.historyId, snapshot.snapshotRecordTime),
-            AcsTableDDL
-              .stakeholderTemplateIdIndexAction(snapshot.historyId, snapshot.snapshotRecordTime),
-          ),
-        )
+        indexesToCreate(snapshot).map(_ -> snapshot)
       }
       .value
       .map {
@@ -53,19 +40,46 @@ class AcsSnapshotIndexTrigger(storage: DbStorage, store: AcsSnapshotStore, conte
       }
   }
 
+  private def indexesToCreate(snapshot: AcsSnapshot) = Seq(
+    SqlIndexInitializationTrigger.IndexAction.Create(
+      AcsTableDDL
+        .stakeholderIndexName(snapshot.historyId, snapshot.snapshotRecordTime),
+      AcsTableDDL.stakeholderIndexAction(snapshot.historyId, snapshot.snapshotRecordTime),
+    ),
+    SqlIndexInitializationTrigger.IndexAction.Create(
+      AcsTableDDL
+        .stakeholderTemplateIdIndexName(snapshot.historyId, snapshot.snapshotRecordTime),
+      AcsTableDDL
+        .stakeholderTemplateIdIndexAction(snapshot.historyId, snapshot.snapshotRecordTime),
+    ),
+  )
+
+  private val createdIndexesMap =
+    new java.util.concurrent.ConcurrentHashMap[CantonTimestamp, Set[String]]()
   override protected def onActionCompleted(
-      action: SqlIndexInitializationTrigger.IndexAction
+      action: SqlIndexInitializationTrigger.IndexAction,
+      // We could also extract the snapshotRecordTime from the action,
+      // but that will require regex-ing the index name, which is significantly more error-prone than this.
+      meta: AcsSnapshot,
   )(implicit tc: TraceContext): Future[Unit] = {
-    for {
-      snapshotRecordTime <- Future.fromTry(
-        Try(
-          CantonTimestamp.assertFromInstant(
-            Instant.ofEpochMilli(action.indexName.split("_").last.toLong)
-          )
-        )
+    val snapshotRecordTime = meta.snapshotRecordTime
+    val createdIndexesForSnapshot =
+      createdIndexesMap.compute(
+        snapshotRecordTime,
+        (_, createdIndexes) => createdIndexes + action.indexName,
       )
-      _ <- store.markSnapshotAsIndexed(snapshotRecordTime)
-    } yield ()
+
+    // Once all the indexes are created, we can mark the snapshot as indexed
+    if (createdIndexesForSnapshot.size == indexesToCreate(meta).size) {
+      for {
+        _ <- store.markSnapshotAsIndexed(snapshotRecordTime)
+      } yield {
+        // Cleanup to avoid filling it up forever
+        createdIndexesMap.remove(snapshotRecordTime).discard
+      }
+    } else {
+      Future.unit
+    }
   }
 
 }
