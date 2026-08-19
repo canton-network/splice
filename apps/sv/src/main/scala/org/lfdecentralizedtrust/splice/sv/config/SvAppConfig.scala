@@ -419,7 +419,11 @@ case class SvAppBackendConfig(
     delegatelessAutomationUnhideRewardCouponV2BatchSize: Int = 220,
     // configuration to periodically take topology snapshots
     topologySnapshotConfig: Option[PeriodicBackupDumpConfig] = None,
-    bftSequencerConnection: Boolean = true,
+    // Defaults to false to match prod, where BFT sequencer connections for SVs are
+    // not enabled: losing rewards when a node is down already provides the right
+    // incentive, so there isn't a case for SVs relying on BFT sequencer connections
+    // to stay up (#6336).
+    bftSequencerConnection: Boolean = false,
     // Skip synchronizer initialization and synchronizer config reconciliation.
     // Can be safely set to true for an SV that has completed onboarding unless you
     // 1. try to reset one of your sequencers or mediators
