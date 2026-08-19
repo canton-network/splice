@@ -63,5 +63,8 @@ release-notes:: Upcoming
           ``watchdog.mediatorMetricsUrl: http://global-domain-SERIAL_ID-mediator:10013/metrics`` in the
           cometbft helm values. If needed, the watchdog can be disabled through ``watchdog.enabled: false``.
 
-
         - Bump the default ``deduplicationCacheSize`` to ``1000000``.
+
+    - Docker
+
+        - Updated Docker base image to 1.0.12, which updates gRPC health probe to v0.4.54.
