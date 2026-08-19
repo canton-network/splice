@@ -1036,6 +1036,9 @@ function createGrafanaAlerting(namespace: Input<string>) {
             'istio-rate-limiting_alerts.yaml': readGrafanaAlertingFile(
               'istio-rate-limiting_alerts.yaml'
             ),
+            'splice-rate-limiting_alerts.yaml': readGrafanaAlertingFile(
+              'splice-rate-limiting_alerts.yaml'
+            ),
           },
         }).map(([k, v]) => [k, defaultAlertSubstitutions(v)])
       ),
