@@ -104,7 +104,7 @@ mempool:
   # max number of transactions kept in the mempool
   size: 4000
   # number of transactions to keep to deduplicate new transactions
-  deduplicationCacheSize: 200000
+  deduplicationCacheSize: 1000000
   # max number of seconds that a transaction will be kept in the mempool without being included in a block before being discarded
   ttlSeconds: 60
 
