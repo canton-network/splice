@@ -21,10 +21,7 @@ import org.lfdecentralizedtrust.splice.store.{HardLimit, Limit, LimitHelpers, Up
 import org.lfdecentralizedtrust.splice.store.db.AdvisoryLocks
 import org.lfdecentralizedtrust.splice.util.{Contract, HoldingsSummary, PackageQualifiedName}
 import com.digitalasset.canton.data.CantonTimestamp
-import com.digitalasset.canton.lifecycle.{
-  CloseContext,
-  FutureUnlessShutdown,
-}
+import com.digitalasset.canton.lifecycle.{CloseContext, FutureUnlessShutdown}
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.resource.DbStorage
@@ -884,7 +881,8 @@ class AcsSnapshotStore(
           last_row_id,
           unlocked_amulet_balance,
           locked_amulet_balance,
-          data_table_name
+          data_table_name,
+          indexes_created
         )
         values (
           ${snapshot.recordTime},
@@ -894,7 +892,8 @@ class AcsSnapshotStore(
           null,
           ${unlocked_amulet_balance},
           ${locked_amulet_balance},
-          ${createsTableName}
+          ${createsTableName},
+          false
         )
        """
 
