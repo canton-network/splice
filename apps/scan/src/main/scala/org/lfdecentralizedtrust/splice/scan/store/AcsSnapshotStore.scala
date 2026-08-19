@@ -246,14 +246,16 @@ class AcsSnapshotStore(
       case table: PerTableAcsSnapshot =>
         DBIOAction.seq(
           sqlu"""delete from acs_snapshot where snapshot_record_time = ${snapshot.snapshotRecordTime}""",
-          sqlu"""drop table #${AcsTableDDL.acsSnapshotCreatesTableName(
+          AdvisoryLocks.withDdlLock(sqlu"""drop table #${AcsTableDDL.acsSnapshotCreatesTableName(
               historyId,
               table.snapshotRecordTime,
-            )};""",
-          sqlu"""drop table #${AcsTableDDL.acsSnapshotStakeholdersTableName(
-              historyId,
-              table.snapshotRecordTime,
-            )};""",
+            )};"""),
+          AdvisoryLocks.withDdlLock(
+            sqlu"""drop table #${AcsTableDDL.acsSnapshotStakeholdersTableName(
+                historyId,
+                table.snapshotRecordTime,
+              )};"""
+          ),
         )
     }
     storage.update(statement.transactionally, "deleteSnapshot")
