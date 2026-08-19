@@ -330,6 +330,7 @@ class AcsSnapshotStore(
           templatesFilter(templates) ++
           afterFilter ++ sql"""
             order by contract_id
+            limit ${sqlLimit(limit)}
           )
           select
             s.row_id,
@@ -345,8 +346,8 @@ class AcsSnapshotStore(
             created_at
           from contracts s
           join #$createsTableName c on s.contract_id = c.contract_id
+          -- This will only sort over LIMIT rows, which is acceptable
           order by s.row_id
-          limit ${sqlLimit(limit)}
            """).toActionBuilder.as[
           (
               Long,
