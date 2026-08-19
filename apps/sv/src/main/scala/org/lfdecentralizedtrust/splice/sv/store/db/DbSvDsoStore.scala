@@ -19,6 +19,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.{
   ValidatorFaucetCoupon,
   ValidatorLicense,
   ValidatorLivenessActivityRecord,
+  ValidatorUnpermission,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.ans.{AnsEntry, AnsEntryContext}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.amuletprice.AmuletPriceVote
@@ -138,6 +139,61 @@ class DbSvDsoStore(
   import multiDomainAcsStore.waitUntilAcsIngested
 
   private def acsStoreId: AcsStoreId = multiDomainAcsStore.acsStoreId
+
+  override def lookupValidatorUnpermissionWithOffset(
+      validator: PartyId,
+      participantId: String,
+  )(implicit tc: TraceContext): Future[
+    MultiDomainAcsStore.QueryResult[Option[
+      Contract[ValidatorUnpermission.ContractId, ValidatorUnpermission]
+    ]]
+  ] = waitUntilAcsIngested {
+    (for {
+      resultWithOffset <- storage
+        .querySingle(
+          selectFromAcsTableWithOffset(
+            DsoTables.acsTableName,
+            acsStoreId,
+            domainMigrationId,
+            ValidatorUnpermission.COMPANION,
+            where = sql"""validator = $validator
+                          and create_arguments->>'participantId' = ${lengthLimited(
+                participantId
+              )}""",
+            orderLimit = sql"limit 1",
+          ).headOption,
+          "lookupValidatorUnpermissionWithOffset",
+        )
+    } yield MultiDomainAcsStore.QueryResult(
+      resultWithOffset.offset,
+      resultWithOffset.row.map(contractFromRow(ValidatorUnpermission.COMPANION)(_)),
+    )).getOrRaise(offsetExpectedError())
+  }
+
+  override def listValidatorUnpermissionsPerValidator(
+      validator: PartyId,
+      participantId: String,
+      limit: Limit = defaultLimit,
+  )(implicit
+      tc: TraceContext
+  ): Future[Seq[Contract[ValidatorUnpermission.ContractId, ValidatorUnpermission]]] =
+    for {
+      result <- storage
+        .query(
+          selectFromAcsTable(
+            DsoTables.acsTableName,
+            acsStoreId,
+            domainMigrationId,
+            ValidatorUnpermission.COMPANION,
+            where = sql"""validator = $validator
+                          and create_arguments->>'participantId' = ${lengthLimited(
+                participantId
+              )}""",
+            orderLimit = sql"""limit ${sqlLimit(limit)}""",
+          ),
+          "listValidatorUnpermissionsPerValidator",
+        )
+    } yield result.map(contractFromRow(ValidatorUnpermission.COMPANION)(_))
 
   override def listExpiredAnsSubscriptions(
       now: CantonTimestamp,

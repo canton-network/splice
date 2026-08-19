@@ -1197,6 +1197,20 @@ trait SvDsoStore
     splice.ans.amuletconversionratefeed.AmuletConversionRateFeed,
   ]]]
 
+  def lookupValidatorUnpermissionWithOffset(validator: PartyId, participantId: String)(implicit
+      tc: TraceContext
+  ): Future[
+    QueryResult[Option[Contract[vl.ValidatorUnpermission.ContractId, vl.ValidatorUnpermission]]]
+  ]
+
+  def listValidatorUnpermissionsPerValidator(
+      validator: PartyId,
+      participantId: String,
+      limit: Limit = defaultLimit,
+  )(implicit
+      tc: TraceContext
+  ): Future[Seq[Contract[vl.ValidatorUnpermission.ContractId, vl.ValidatorUnpermission]]]
+
 }
 
 object SvDsoStore {
@@ -1676,6 +1690,17 @@ object SvDsoStore {
         DsoAcsStoreRowData(
           contract,
           contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
+          validator = Some(PartyId.tryFromProtoPrimitive(contract.payload.validator)),
+        )
+      },
+      mkFilter(vl.ValidatorUnpermission.COMPANION)(
+        co => co.payload.dso == dso,
+        versionGuard = { case (pkgVersionSupport, now) =>
+          (tc) => pkgVersionSupport.supportsPermissionedSynchronizer(Seq(dsoParty), now)(tc)
+        },
+      ) { contract =>
+        DsoAcsStoreRowData(
+          contract,
           validator = Some(PartyId.tryFromProtoPrimitive(contract.payload.validator)),
         )
       },
