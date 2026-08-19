@@ -258,7 +258,7 @@ class AcsSnapshotStore(
           ),
         )
     }
-    storage.update(statement.transactionally, "deleteSnapshot")
+    storage.queryAndUpdate(statement.transactionally, "deleteSnapshot")
   }
 
   def queryAcsSnapshot(
@@ -323,7 +323,7 @@ class AcsSnapshotStore(
     storage
       .query(
         (sql"""
-          select distinct on(c.contract_id)
+          select --distinct on(c.contract_id)
             s.row_id,
             event_id,
             record_time,
