@@ -1,0 +1,123 @@
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: splice-rate-limiting
+    folder: platform
+    interval: 5m
+    rules:
+      - uid: cfvmu2hs596v4d
+        title: Splice Rate Limiting Usage
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              editorMode: code
+              expr: |-
+                (max by (namespace, node_name, http_service, limiter, limiter_type) (
+                  splice_rate_limiting_max_limit_per_second
+                ) * $SPLICE_RATE_LIMITS_USAGE_THRESHOLD)
+                -
+                sum by (namespace, node_name, http_service, limiter, limiter_type) (
+                  rate(splice_rate_limiting_total[$__rate_interval])
+                )
+              instant: true
+              intervalMs: 1000
+              legendFormat: __auto
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                    type: lt
+                  operator:
+                    type: and
+                  query:
+                    params: []
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        dashboardUid: splice-rate-limit-db
+        panelId: 6
+        noDataState: OK
+        execErrState: Alerting
+        for: 5m
+        annotations:
+          description: Incoming request rate for this limiter has exceeded $SPLICE_RATE_LIMITS_USAGE_THRESHOLD of its configured splice_rate_limiting_max_limit_per_second for 5 minutes.
+          summary: Rate limiter "{{ $labels.limiter }}" on {{ $labels.node_name }} ({{ $labels.http_service }}) in {{ $labels.namespace }} is receiving more requests than $SPLICE_RATE_LIMITS_USAGE_THRESHOLD of its configured limit allows.
+        labels:
+          gcloud_filter: resource.labels.namespace_name=%22cluster-ingress%22%0AjsonPayload.response_code=429
+        isPaused: false
+      - uid: chvmb2hs494v1y
+        title: Splice Rate Limiting Rejections
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              editorMode: code
+              expr: |-
+                sum by (namespace, node_name, http_service, limiter, limiter_type) (
+                  increase(splice_rate_limiting_total{result!="accepted"$SPLICE_RATE_LIMITS_FILTER}[$__rate_interval])
+                )
+              instant: true
+              intervalMs: 1000
+              legendFormat: __auto
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+              - evaluator:
+                  params:
+                    - $SPLICE_RATE_LIMITS_REJECTION_COUNT_THRESHOLD
+                  type: gt
+                operator:
+                  type: and
+                query:
+                  params: []
+                reducer:
+                  params: []
+                  type: last
+                type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        dashboardUid: splice-rate-limit-db
+        panelId: 6
+        noDataState: OK
+        execErrState: Alerting
+        for: 5m
+        annotations:
+          description: This limiter has been rejecting more than $SPLICE_RATE_LIMITS_REJECTION_COUNT_THRESHOLD requests with HTTP 429 for 5 minutes.
+          summary: Rate limiter "{{ $labels.limiter }}" ({{ $labels.limiter_type }}) on {{ $labels.node_name }} ({{ $labels.http_service }}) in {{ $labels.namespace }} is rejecting requests.
+        labels:
+          gcloud_filter: resource.labels.namespace_name=%22cluster-ingress%22%0AjsonPayload.response_code=429
+        isPaused: false
