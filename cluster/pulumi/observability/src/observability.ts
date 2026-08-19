@@ -769,6 +769,20 @@ function substituteDsoMissedConfirmationsAlerts(alert: string): string {
     .replaceAll('$DSO_MISSED_CONFIRMATIONS_WINDOW_MINUTES', config.windowMinutes.toString());
 }
 
+function substituteSpliceRateLimitsAlerts(alert: string): string {
+  const config = monitoringConfig.alerting.alerts.spliceRateLimits;
+  const bareFilter =
+    config.excludedLimiters.length > 0 ? `limiter!~"${config.excludedLimiters.join('|')}"` : '';
+  const filter = bareFilter ? `, ${bareFilter}` : '';
+  return alert
+    .replaceAll('$SPLICE_RATE_LIMITS_USAGE_THRESHOLD', config.usageThreshold.toString())
+    .replaceAll(
+      '$SPLICE_RATE_LIMITS_REJECTION_COUNT_THRESHOLD',
+      config.rejectionCountThreshold.toString()
+    )
+    .replaceAll('$SPLICE_RATE_LIMITS_FILTER', filter);
+}
+
 // AmuletMetrics was previously using owner.toString instead of owner.toProtoPrimitive
 // This function makes it compatible for both.
 function partyIdTransform(partyId: string) {
@@ -1033,6 +1047,12 @@ function createGrafanaAlerting(namespace: Input<string>) {
                 '$VERDICT_INGESTION_BATCH_SIZE_PENDING_PERIOD_MINUTES',
                 monitoringConfig.alerting.alerts.trafficBasedRewards.verdictIngestionBatchSizePendingPeriodMinutes.toString()
               ),
+            'istio-rate-limiting_alerts.yaml': readGrafanaAlertingFile(
+              'istio-rate-limiting_alerts.yaml'
+            ),
+            'splice-rate-limiting_alerts.yaml': substituteSpliceRateLimitsAlerts(
+              readGrafanaAlertingFile('splice-rate-limiting_alerts.yaml')
+            ),
           },
         }).map(([k, v]) => [k, defaultAlertSubstitutions(v)])
       ),

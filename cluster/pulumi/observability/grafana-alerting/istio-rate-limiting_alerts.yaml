@@ -1,0 +1,67 @@
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: istio-rate-limit
+    folder: platform
+    interval: 5m
+    rules:
+      - uid: cfurlpifrmvi8w
+        title: Enforced requests
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 21600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: sum(rate(envoy_http_local_rate_limiter_http_local_rate_limit_enforced{namespace=~"sv.*"}[$__rate_interval])) by (namespace, pod)
+              instant: true
+              interval: ""
+              intervalMs: 30000
+              legendFormat: '{{namespace}} - {{pod}}'
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: []
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        dashboardUid: cnr56dj
+        panelId: 9
+        noDataState: OK
+        execErrState: Alerting
+        for: 5m
+        annotations:
+          runbook_url: ""
+          severity: warning
+          description: Envoy local rate limiting is active, requests are being rejected. Check the "Istio Rate Limiting" dashboard.
+          summary: Envoy is rate limiting requests in {{ $labels.namespace }} on pod {{ $labels.pod }}.
+        labels:
+          "": ""
+          gcloud_filter: resource.labels.namespace_name=%22cluster-ingress%22%0AjsonPayload.response_code=429
+        isPaused: false
