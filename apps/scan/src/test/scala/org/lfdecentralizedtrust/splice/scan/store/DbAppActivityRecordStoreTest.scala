@@ -660,25 +660,25 @@ class DbAppActivityRecordStoreTest
 
   "ingestionStatusForRound" should {
 
-    "return AskElsewhere when meta row absent and isFirstSv=false" in {
+    "return CannotProvide when meta row absent and isFirstSv=false" in {
       for {
         (store, _) <- newStore(isFirstSv = false)
         result <- store.ingestionStatusForRound(5L)
       } yield {
-        result shouldBe RoundIngestionStatus.AskElsewhere
+        result shouldBe RoundIngestionStatus.CannotProvide
       }
     }
 
-    "return TryAgainLater when meta row absent and isFirstSv=true" in {
+    "return Undetermined when meta row absent and isFirstSv=true" in {
       for {
         (store, _) <- newStore(isFirstSv = true)
         result <- store.ingestionStatusForRound(5L)
       } yield {
-        result shouldBe RoundIngestionStatus.TryAgainLater
+        result shouldBe RoundIngestionStatus.Undetermined
       }
     }
 
-    "return AskElsewhere when meta row present and roundNumber <= earliestIngested" in {
+    "return CannotProvide when meta row present and roundNumber <= earliestIngested" in {
       for {
         (store, _) <- newStore()
         baseTs = CantonTimestamp.now()
@@ -686,19 +686,19 @@ class DbAppActivityRecordStoreTest
         atBoundary <- store.ingestionStatusForRound(10L)
         below <- store.ingestionStatusForRound(5L)
       } yield {
-        atBoundary shouldBe RoundIngestionStatus.AskElsewhere
-        below shouldBe RoundIngestionStatus.AskElsewhere
+        atBoundary shouldBe RoundIngestionStatus.CannotProvide
+        below shouldBe RoundIngestionStatus.CannotProvide
       }
     }
 
-    "return TryAgainLater when meta row present and roundNumber > earliestIngested" in {
+    "return Undetermined when meta row present and roundNumber > earliestIngested" in {
       for {
         (store, _) <- newStore()
         baseTs = CantonTimestamp.now()
         _ <- store.insertActivityRecordMetaForTesting(1, 0, baseTs.toMicros, 10L, Some(11L))
         result <- store.ingestionStatusForRound(15L)
       } yield {
-        result shouldBe RoundIngestionStatus.TryAgainLater
+        result shouldBe RoundIngestionStatus.Undetermined
       }
     }
   }
