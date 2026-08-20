@@ -818,7 +818,11 @@ describe('Proposal Details > Votes & Voting', () => {
 
     const voterScroll = screen.getAllByTestId('proposal-details-voter-party-id-scroll');
     expect(voterScroll.length).toBeGreaterThan(0);
-    expect(voterScroll[0]).toHaveStyle({ overflowX: 'auto', maxWidth: '270px' });
+    expect(voterScroll[0]).toHaveStyle({ overflowX: 'auto' });
+    // Votes rows fill width and scroll — no fixed 270px cap.
+    expect(screen.getAllByTestId('proposal-details-voter-party-id')[0]).toHaveStyle({
+      width: '100%',
+    });
   });
 
   test('should filter votes by tabs', async () => {

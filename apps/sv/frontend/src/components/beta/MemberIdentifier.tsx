@@ -10,6 +10,7 @@ interface MemberIdentifierProps {
   size: CopyableIdentifierSize;
   overflow?: CopyableIdentifierOverflow;
   maxWidth?: number;
+  fullWidth?: boolean;
   'data-testid': string;
 }
 
@@ -19,6 +20,7 @@ const MemberIdentifier: React.FC<MemberIdentifierProps> = ({
   size,
   overflow,
   maxWidth,
+  fullWidth,
   'data-testid': testId,
 }) => (
   <CopyableIdentifier
@@ -28,6 +30,7 @@ const MemberIdentifier: React.FC<MemberIdentifierProps> = ({
     size={size}
     overflow={overflow}
     maxWidth={maxWidth}
+    fullWidth={fullWidth}
     data-testid={testId}
   />
 );

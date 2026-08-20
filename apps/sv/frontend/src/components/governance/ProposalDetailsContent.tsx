@@ -7,8 +7,19 @@ import {
   VoteRequest,
 } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
 import { ContractId } from '@daml/types';
-import { ChevronLeft, Edit } from '@mui/icons-material';
-import { Alert, Box, Button, Divider, Stack, Tab, Tabs, Typography } from '@mui/material';
+import { ChevronLeft, ContentCopy, Edit } from '@mui/icons-material';
+import {
+  Alert,
+  Box,
+  Button,
+  Chip,
+  Divider,
+  IconButton,
+  Stack,
+  Tab,
+  Tabs,
+  Typography,
+} from '@mui/material';
 import React, { PropsWithChildren, useEffect, useMemo, useRef, useState } from 'react';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -451,7 +462,7 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
           </Tabs>
 
           <Box
-            sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}
+            sx={{ display: 'flex', flexDirection: 'column', gap: 3, width: '100%', minWidth: 0 }}
             data-testid="proposal-details-votes-list"
           >
             {getFilteredVotes().map((vote, index) => (
@@ -546,6 +557,21 @@ interface VoteItemProps {
   onEdit?: () => void;
 }
 
+/** Gap between party-ID / You and the copy icon. */
+const VOTE_ROW_ACCESSORY_GAP_PX = 8;
+/** Gap between copy icon and status column. */
+const VOTE_ROW_STATUS_GAP_PX = 40;
+/** Fixed copy column so every row’s copy icon shares one vertical edge. */
+const VOTE_ROW_COPY_COL_WIDTH_PX = 40;
+/** Fixed status column so Accepted / Awaiting Response share the right edge. */
+const VOTE_ROW_STATUS_COL_WIDTH_PX = 170;
+/** Trailing tracks (8 + copy + 40 + status) — party-ID (+ You) width is calc(100% − this). */
+const VOTE_ROW_FIXED_TRAILING_PX =
+  VOTE_ROW_ACCESSORY_GAP_PX +
+  VOTE_ROW_COPY_COL_WIDTH_PX +
+  VOTE_ROW_STATUS_GAP_PX +
+  VOTE_ROW_STATUS_COL_WIDTH_PX;
+
 const VoteItem: React.FC<VoteItemProps> = ({
   voter,
   url,
@@ -558,36 +584,64 @@ const VoteItem: React.FC<VoteItemProps> = ({
   <>
     <Box
       sx={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
+        display: 'grid',
+        // Copy + status are fixed tracks. "You" lives in the party-ID track (before the
+        // 8px gap) so it never shifts the copy icon.
+        gridTemplateColumns: `minmax(0, calc(100% - ${VOTE_ROW_FIXED_TRAILING_PX}px)) ${VOTE_ROW_ACCESSORY_GAP_PX}px ${VOTE_ROW_COPY_COL_WIDTH_PX}px ${VOTE_ROW_STATUS_GAP_PX}px ${VOTE_ROW_STATUS_COL_WIDTH_PX}px`,
+        alignItems: 'start',
+        width: '100%',
+        maxWidth: '100%',
+        minWidth: 0,
+        overflow: 'hidden',
+        boxSizing: 'border-box',
       }}
       data-testid="proposal-details-vote"
     >
-      <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-        <Box
-          sx={{ display: 'flex', alignItems: 'center', minWidth: 0, maxWidth: isYou ? 350 : 298 }}
+      <Box
+        sx={{
+          gridColumn: 1,
+          minWidth: 0,
+          maxWidth: '100%',
+          overflow: 'hidden',
+        }}
+      >
+        <Stack
+          direction="row"
+          alignItems="center"
+          spacing={1}
+          sx={{ minWidth: 0, maxWidth: '100%', width: '100%' }}
         >
-          <MemberIdentifier
-            partyId={voter}
-            size="large"
-            isYou={isYou}
-            maxWidth={IDENTIFIER_COMPACT_MAX_WIDTH_PX}
-            data-testid="proposal-details-voter-party-id"
-          />
-        </Box>
+          <Box sx={{ flex: '1 1 0%', minWidth: 0, overflow: 'hidden' }}>
+            <CopyableIdentifier
+              value={voter}
+              copyValue={voter}
+              size="large"
+              fullWidth
+              hideCopy
+              data-testid="proposal-details-voter-party-id"
+            />
+          </Box>
+          {isYou && (
+            <Chip
+              label="You"
+              size="small"
+              data-testid="proposal-details-voter-party-id-badge"
+              sx={{ flexShrink: 0 }}
+            />
+          )}
+        </Stack>
         {comment && (
-          <Box>
+          <Box sx={{ mt: 1, minWidth: 0, maxWidth: '100%' }}>
             <Typography variant="caption" color="text.secondary" display="block" mb={1}>
               {VOTE_REASON_SUMMARY_LABEL}
             </Typography>
-            <Typography fontSize={16} color="text.secondary">
+            <Typography fontSize={16} color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>
               {comment}
             </Typography>
           </Box>
         )}
         {url && (
-          <Box>
+          <Box sx={{ mt: 1, minWidth: 0, maxWidth: '100%' }}>
             <Typography variant="caption" color="text.secondary" display="block" mb={1}>
               {VOTE_REASON_URL_LABEL}
             </Typography>
@@ -595,7 +649,39 @@ const VoteItem: React.FC<VoteItemProps> = ({
           </Box>
         )}
       </Box>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+
+      <Box
+        sx={{
+          gridColumn: 3,
+          display: 'flex',
+          justifyContent: 'center',
+          pt: '2px',
+        }}
+      >
+        <IconButton
+          color="secondary"
+          data-testid="proposal-details-voter-party-id-copy-button"
+          sx={{ flexShrink: 0, p: 0.5 }}
+          onClick={e => {
+            e.stopPropagation();
+            e.preventDefault();
+            navigator.clipboard.writeText(voter);
+          }}
+        >
+          <ContentCopy sx={{ fontSize: '16px' }} />
+        </IconButton>
+      </Box>
+
+      <Box
+        sx={{
+          gridColumn: 5,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'flex-end',
+          gap: 1,
+          pt: '2px',
+        }}
+      >
         <VoteStats
           vote={status}
           noVoteMessage={isClosed ? 'No Vote' : 'Awaiting Response'}
@@ -609,6 +695,8 @@ const VoteItem: React.FC<VoteItemProps> = ({
             data-testid="your-vote-edit-button"
             sx={{
               fontSize: 16,
+              minWidth: 0,
+              px: 0,
             }}
           >
             Edit

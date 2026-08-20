@@ -23,7 +23,7 @@ interface CopyableUrlProps {
 
 const CopyableUrl: React.FC<CopyableUrlProps> = ({ url, size, 'data-testid': testId }) => {
   const sanitizedUrl = sanitizeUrl(url);
-  const fontSize = size === 'small' ? '14px' : '18px';
+  const fontSize = size === 'small' ? '14px' : '16px';
   const scrollRef = useRef<HTMLDivElement>(null);
   const metrics = useHorizontalScrollMetrics(scrollRef, [sanitizedUrl]);
 

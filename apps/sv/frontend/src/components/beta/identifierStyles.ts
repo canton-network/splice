@@ -20,10 +20,10 @@ export const scrollContainerSx: SxProps<Theme> = {
 
 export const scrollTextSx: SxProps<Theme> = {
   display: 'inline-block',
-  width: 'max-content',
-  maxWidth: '100%',
   whiteSpace: 'nowrap',
   textOverflow: 'clip',
+  // Intrinsic width for overflow scroll; parent must clip (minmax(0,1fr) / overflow).
+  width: 'max-content',
 };
 
 export const ellipsisContainerSx: SxProps<Theme> = {

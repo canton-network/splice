@@ -67,6 +67,23 @@ describe('CopyableIdentifier', () => {
     });
   });
 
+  test('fullWidth fills the parent and keeps scrolling', () => {
+    render(
+      <div style={{ width: 200 }}>
+        <CopyableIdentifier
+          value={LONG_CONTRACT_ID}
+          size="large"
+          fullWidth
+          data-testid="contract-id"
+        />
+      </div>
+    );
+
+    expect(screen.getByTestId('contract-id')).toHaveStyle({ width: '100%', display: 'flex' });
+    expect(screen.getByTestId('contract-id-scroll')).toHaveStyle({ overflowX: 'auto' });
+    expect(screen.getByTestId('contract-id-value')).toHaveTextContent(LONG_CONTRACT_ID);
+  });
+
   test('trims long identifiers to the Figma ellipsis width without a narrow parent', () => {
     render(
       <CopyableIdentifier
