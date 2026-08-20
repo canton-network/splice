@@ -265,21 +265,21 @@ object ProtocolVersion {
     s"stable protocol versions $stable should be in sync with build info $releaseStable",
   )
 
-  val alpha: NonEmpty[List[AlphaProtocolVersion]] =
-    NonEmpty.mk(List, ProtocolVersion.dev)
+  val alpha: List[AlphaProtocolVersion] = List(ProtocolVersion.v36)
 
   val beta: List[BetaProtocolVersion] =
     parseFromBuildInfo(BuildInfo.betaProtocolVersions)
       .map(pv => ProtocolVersion.createBeta(pv.v))
 
-  val supported: NonEmpty[List[ProtocolVersion]] = (alpha ++ beta ++ stable).sorted
+  val supported: NonEmpty[List[ProtocolVersion]] =
+    (NonEmpty.mk(List, dev) ++ alpha ++ beta ++ stable).sorted
 
-  private val allProtocolVersions = deprecated ++ deleted ++ alpha ++ beta ++ stable
+  private val allProtocolVersions = deprecated ++ deleted ++ List(dev) ++ alpha ++ beta ++ stable
 
   require(
     allProtocolVersions.sizeCompare(allProtocolVersions.distinct) == 0,
     s"All the protocol versions should be distinct." +
-      s"Found: ${Map("deprecated" -> deprecated, "deleted" -> deleted.forgetNE, "beta" -> beta, "alpha" -> alpha.forgetNE, "stable" -> stable.forgetNE)}",
+      s"Found: ${Map("deprecated" -> deprecated, "deleted" -> deleted.forgetNE, "beta" -> beta, "alpha" -> alpha, "dev" -> List(dev), "stable" -> stable.forgetNE)}",
   )
 
   /** The latest stable protocol version.
@@ -313,6 +313,9 @@ object ProtocolVersion {
 
   lazy val v35: ProtocolVersionWithStatus[ProtocolVersionAnnotation.Stable] =
     ProtocolVersion.createStable(35)
+
+  lazy val v36: ProtocolVersionWithStatus[ProtocolVersionAnnotation.Alpha] =
+    ProtocolVersion.createAlpha(36)
 
   // Minimum stable protocol version introduced
   lazy val minimum: ProtocolVersion = v34
