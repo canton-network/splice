@@ -569,7 +569,7 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
       // `sbt checkErrors` log-scan gate green.
       //
       // The same supression happens in 'withExpectedRewardTriggersLogging' but
-      // 
+      //
       // 1. 'withExpectedRewardTriggersLogging' targets a narrow part of the try
       //     block and doesn't expand into this finally block, and
       // 2. 'withExpectedRewardTriggersLogging' has strict expectation about the
