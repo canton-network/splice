@@ -3904,9 +3904,8 @@ components:
           $ref: '#/components/schemas/TransactionViews'
         round_number:
           description: |
-            The mining round active at the verdict's record_time. Null for verdicts
-            ingested before this field was added, or if no active round is known for
-            that record_time.
+            The oldest open mining round active at record_time. Same as the round assigned to `app_activity_records` associated with this verdict.
+            This could be null for verdicts ingested before this field was added.
           type: integer
           format: int64
     TransactionViews:

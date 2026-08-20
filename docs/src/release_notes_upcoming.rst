@@ -14,12 +14,14 @@ release-notes:: Upcoming
           activity records and sequencer traffic are now always ingested, and app activity is
           always computed and served on the corresponding HTTP endpoints.
 
+        - Verdicts returned by the ``/v0/events`` and ``/v0/events/{update_id}`` endpoints now
+          include an optional ``round_number`` field.The value of this field may be ``null``,
+          or differ among SVs (``null`` value and a valid round), for a brief period till
+          this release is adopted by all SVs.
+
     - SV App
 
         - The SV app now exposes a ``splice.sv_vote_requests.active`` metric counting the active
           vote requests by their state relative to the SV (``action_needed``, ``in_progress``,
           ``ready_to_close``), allowing SV operators to alert on vote proposals that require
           their vote.
-
-        - Verdicts returned by the ``/v0/events`` and ``/v0/events/{update_id}`` endpoints now
-          include an optional ``round_number`` field, the mining round active at the verdict's record time.
