@@ -253,7 +253,7 @@ export async function initDumpConfig({
               result: `base64-decoded-mock`,
             };
           case PulumiFunction.GCP_GET_PROJECT:
-            return { ...args.inputs, name: projectName };
+            return { ...args.inputs, name: projectName, projectId: projectName };
           case PulumiFunction.GCP_GET_SUB_NETWORK:
             if (args.inputs.name === `cn-${stackName}net-subnet`) {
               return { ...args.inputs, id: 'subnet-id' };
