@@ -251,30 +251,24 @@ class ScanEventHistoryIntegrationTest
     startAllSync(sv1Backend, sv1ScanBackend, sv1ValidatorBackend)
 
     val _ = onboardAliceAndBob()
-    // Get the current top wallet transaction event id (if any)
-    val topBeforeO = withoutDevNetTopups(
-      aliceWalletClient
-        .listTransactions(beginAfterId = None, pageSize = 1)
-    ).headOption
-      .map(_.eventId)
-
     val cursorBeforeTap = eventuallySucceeds() { latestEventHistoryCursor(sv1ScanBackend) }
-    (1 to 3).foreach(_ => advanceRoundsByOneTickViaAutomation())
-    // Create a new event (tap) and capture its update id from wallet transaction history
-    aliceWalletClient.tap(4)
-
     val updateIdFromTap = eventuallySucceeds() {
-      val latest =
-        withoutDevNetTopups(aliceWalletClient.listTransactions(beginAfterId = None, pageSize = 10))
-      // Prefer the first new entry different from the previous top if available
-      val candidateEventId = topBeforeO match {
-        case Some(prev) =>
-          latest.find(_.eventId != prev).map(_.eventId).orElse(latest.headOption.map(_.eventId))
-        case None => latest.headOption.map(_.eventId)
-      }
-      val eventId =
-        candidateEventId.getOrElse(fail("Expected at least one wallet transaction after tap"))
-      EventId.updateIdFromEventId(eventId)
+      advanceRoundsByOneTickViaAutomation()
+      aliceWalletClient.tap(4)
+
+      val eventId = withoutDevNetTopups(
+        aliceWalletClient.listTransactions(beginAfterId = None, pageSize = 10)
+      ).headOption
+        .map(_.eventId)
+        .getOrElse(fail("Expected a wallet transaction after tap"))
+      val updateId = EventId.updateIdFromEventId(eventId)
+
+      val roundO = sv1ScanBackend
+        .getEventById(updateId, Some(CompactJson))
+        .flatMap(_.verdict)
+        .flatMap(_.roundNumber)
+      roundO shouldBe defined withClue "verdict round_number not populated yet (advance more)"
+      updateId
     }
 
     // Both update, and verdict should be returned
