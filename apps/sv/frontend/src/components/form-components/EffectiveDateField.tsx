@@ -23,9 +23,9 @@ export interface EffectiveDateFieldProps {
 
 export const EffectiveDateField: React.FC<EffectiveDateFieldProps> = props => {
   const { initialEffectiveDate, id } = props;
-  const title = props.title ?? 'Vote Proposal Effectivity';
+  const title = props.title ?? 'Effective At';
   const dateDescription =
-    props.description ?? 'Select the date and time the proposal will take effect';
+    props.description ?? 'Select the block at which the proposal will take effect';
 
   const field = useFieldContext<{
     type: EffectivityType;

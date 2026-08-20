@@ -18,7 +18,11 @@ import { VoteRequest } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules'
 import { ContractId } from '@daml/types';
 import { useNavigate } from 'react-router';
 import { CopyableIdentifier, PageSectionHeader, VoteStats } from '../../components/beta';
-import { THRESHOLD_DEADLINE_LABEL, VOTE_PROPOSAL_CONTRACT_ID_LABEL } from '../../utils/constants';
+import {
+  CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE,
+  THRESHOLD_DEADLINE_LABEL,
+  VOTE_PROPOSAL_CONTRACT_ID_LABEL,
+} from '../../utils/constants';
 import { ProposalListingData, ProposalListingStatus, YourVoteStatus } from '../../utils/types';
 import { InfoOutlined } from '@mui/icons-material';
 import dayjs from 'dayjs';
@@ -62,7 +66,7 @@ const sortProposals = (
     return data.toSorted((a, b) => dayjs(b.voteTakesEffect).diff(dayjs(a.voteTakesEffect)));
   }
 
-  // For effectiveAtAsc (Inflight Votes):
+  // For effectiveAtAsc (In-flight Proposals):
   // Threshold items first (by votes desc, then deadline asc), then dated items (by effective date asc)
   return data
     .toSorted((a, b) => dayjs(a.votingThresholdDeadline).diff(dayjs(b.votingThresholdDeadline)))
@@ -129,7 +133,7 @@ const TableHeader: React.FC<TableHeaderProps> = ({
   showVoteStats,
 }) => (
   <>
-    <TableCell sx={governanceTableHeadCellSx}>PROPOSAL TYPE</TableCell>
+    <TableCell sx={governanceTableHeadCellSx}>{CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE}</TableCell>
     <TableCell sx={governanceTableHeadCellSx}>{VOTE_PROPOSAL_CONTRACT_ID_LABEL}</TableCell>
     {showThresholdDeadline ? (
       <>
