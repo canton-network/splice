@@ -601,12 +601,11 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
       aliceParty: PartyId
   )(implicit env: SpliceTestConsoleEnvironment): Option[PackageVersion] =
     sv1Backend.participantClient.ledger_api.interactive_submission
-      .preferred_package_version(
-        Set(aliceParty),
-        DarResources.amulet.latest.metadata.name,
+      .preferred_packages(
+        Map(DarResources.amulet.latest.metadata.name -> Set(aliceParty)),
         Some(decentralizedSynchronizerId),
       )
-      .flatMap(_.packageReference.map(ref => PackageVersion.assertFromString(ref.packageVersion)))
+      .packageReferences.headOption.map(ref => PackageVersion.assertFromString(ref.packageVersion))
 
   private def hiddenCouponsMetricValue(
       party: PartyId
