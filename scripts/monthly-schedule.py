@@ -1421,29 +1421,24 @@ def make_schedule(
 
             "daml_title":
                 (
-                    f"DevNet New Daml "
-                    f"models effective "
-                    f"({version})"
+                    f"DevNet New Daml models introduced by Splice {version}.x take effect"
                 ),
 
             "freeze_title":
                 (
-                    f"DevNet: "
-                    f"Topology Freeze "
-                    f"({version})"
+                    f"DevNet Topology Freeze ({version} Required) (MONTH YEAR)"
                 ),
 
             "lsu_title":
                 (
-                    f"DevNet LSU "
-                    f"({version})"
+                    f"DevNet LSU ({version} Required) (MONTH YEAR)"
                 ),
 
             "config_title":
                 (
                     f"DevNet Breaking "
                     f"Config Changes "
-                    f"({version})"
+                    f"({version} Required)"
                 ),
         },
 
@@ -1474,29 +1469,24 @@ def make_schedule(
 
             "daml_title":
                 (
-                    f"TestNet New Daml "
-                    f"models effective "
-                    f"({version})"
+                    f"TestNet New Daml models introduced by Splice {version}.x take effect"
                 ),
 
             "freeze_title":
                 (
-                    f"TestNet: "
-                    f"Topology Freeze "
-                    f"({version})"
+                    f"TestNet Topology Freeze ({version} Required) (MONTH YEAR)"
                 ),
 
             "lsu_title":
                 (
-                    f"TestNet LSU "
-                    f"({version})"
+                    f"TestNet LSU ({version} Required) (MONTH YEAR)"
                 ),
 
             "config_title":
                 (
                     f"TestNet Breaking "
                     f"Config Changes "
-                    f"({version})"
+                    f"({version} Required)"
                 ),
         },
 
@@ -1527,9 +1517,7 @@ def make_schedule(
 
             "daml_title":
                 (
-                    f"MainNet new Daml "
-                    f"models effective "
-                    f"({version})"
+                    f"MainNet New Daml models introduced by Splice {version}.x take effect"
                 ),
 
             "freeze_title":
@@ -1541,15 +1529,14 @@ def make_schedule(
 
             "lsu_title":
                 (
-                    f"MainNet LSU "
-                    f"({version})"
+                    f"MainNet LSU ({version} Required) (MONTH YEAR)"
                 ),
 
             "config_title":
                 (
                     f"MainNet breaking "
                     f"config change "
-                    f"({version})"
+                    f"({version} Required)"
                 ),
         },
     ]
@@ -1558,6 +1545,49 @@ def make_schedule(
         network = spec[
             "network"
         ]
+
+        lsu_date = schedule_date(
+            month,
+            str(
+                spec[
+                    "lsu_day"
+                ]
+            ),
+            int(
+                spec[
+                    "lsu_week"
+                ]
+            ),
+        )
+
+        lsu_month_year = (
+            f"{calendar.month_name[lsu_date.month]} "
+            f"{lsu_date.year:04d}"
+        )
+
+        freeze_title = (
+            str(
+                spec[
+                    "freeze_title"
+                ]
+            )
+            .replace(
+                "MONTH YEAR",
+                lsu_month_year,
+            )
+        )
+
+        lsu_title = (
+            str(
+                spec[
+                    "lsu_title"
+                ]
+            )
+            .replace(
+                "MONTH YEAR",
+                lsu_month_year,
+            )
+        )
 
         for patch in range(
             patch_count
@@ -1630,11 +1660,7 @@ def make_schedule(
                 ),
 
                 ScheduledEvent(
-                    title=str(
-                        spec[
-                            "freeze_title"
-                        ]
-                    ),
+                    title=freeze_title,
 
                     date=schedule_date(
                         month,
@@ -1666,25 +1692,9 @@ def make_schedule(
                 ),
 
                 ScheduledEvent(
-                    title=str(
-                        spec[
-                            "lsu_title"
-                        ]
-                    ),
+                    title=lsu_title,
 
-                    date=schedule_date(
-                        month,
-                        str(
-                            spec[
-                                "lsu_day"
-                            ]
-                        ),
-                        int(
-                            spec[
-                                "lsu_week"
-                            ]
-                        ),
-                    ),
+                    date=lsu_date,
 
                     time_utc="13:00",
 
@@ -1700,11 +1710,7 @@ def make_schedule(
                         version
                     ),
 
-                    depends_on=str(
-                        spec[
-                            "freeze_title"
-                        ]
-                    ),
+                    depends_on=freeze_title,
                 ),
 
                 ScheduledEvent(
