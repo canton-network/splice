@@ -10,6 +10,7 @@ import qualified DA.TextMap as TM
 import Daml.Script
 
 import Splice.AggregateLock
+import Splice.AmuletAllocationV2 (AmuletAllocationV2)
 import Splice.Api.Token.AllocationInstructionV2
 import Splice.Api.Token.AllocationV2
 import Splice.Api.Token.AllocationV2 qualified as V2
@@ -23,7 +24,6 @@ import Splice.Testing.TokenStandard.RegistryApiV2
 import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
 import Splice.Testing.Utils
 import Splice.TokenStandard.Utils qualified as TSU
-import Splice.TokenStandard.Utils.Internal.Conversions (encodeTime)
 
 
 lockForGovernance : TestEnv -> TM.TextMap Decimal -> Metadata -> Party -> Script AllocationInstructionResult
@@ -45,53 +45,74 @@ lockForGovernance (TestEnv {..}) amounts meta party = do
       meta
 
 lockForAggregate : TestEnv -> Decimal -> Text -> Party -> Script AllocationInstructionResult
-lockForAggregate te amount lockName = lockForGovernance te (TM.fromList [(te.instrId.id, amount)]) $ Metadata $ TM.fromList
-  [ ("cip-105/type", "svLock")
-  , ("cip-105/lock-subject", lockName)
+lockForAggregate te amount lockSubject = lockForGovernance te (TM.fromList [(te.instrId.id, amount)]) $ Metadata $ TM.fromList
+  [ (typeKey, "svLock")
+  , (beneficiaryKey, lockSubject)
   ]
 
--- | Directly create a vesting lock allocation funded with @initialAmount@,
--- bypassing the aggregate-lock unlock path.  Used to exercise the vesting
--- withdrawal flow in isolation.
-lockForVesting : Decimal -> Time -> TestEnv -> Party -> Script AllocationInstructionResult
-lockForVesting initialAmount now te =
-  lockForGovernance te (TM.fromList [(te.instrId.id, initialAmount)]) $ Metadata $ TM.fromList
-    [ ("cip-105/type", "vestingLock")
-    , ("cip-105/vestingLock.startDate", encodeTime now)
-    , ("cip-105/vestingLock.endDate", encodeTime $ addRelTime now $ days 365 + hours 6)
-    , ("cip-105/vestingLock.initialAmount", show initialAmount)
-    ]
-
--- | Enrich the wallet-side withdraw context with the external party config
--- state disclosure, which AmuletAllocationV2's settle path reads when the
--- governance-lock withdraw fans out through the settlement factory.
-withAggregateWithdrawContext : TestEnv -> MultiRegistry.MultiRegistry -> MultiRegistry.MultiRegistry
-withAggregateWithdrawContext env registries =
+withGovernanceWithdrawContext : RelTime -> TestEnv -> MultiRegistry.MultiRegistry -> MultiRegistry.MultiRegistry
+withGovernanceWithdrawContext effectiveAtOffset env registries =
     flip fmap registries $ \reg ->
       reg { v2Api = fmap updateApi reg.v2Api }
   where
     addContext a = do
       baseCtxt <- a
       extraContext <- getExternalPartyConfigStateContext env.registriesEnv.amuletV2
-      pure $ baseCtxt <> extraContext
+      now <- getTime
+      let effectiveAtContext = OpenApiChoiceContext with
+            choiceContext = ChoiceContext with
+              values = TM.singleton effectiveAtKey (AV_Time (now `addRelTime` effectiveAtOffset))
+            disclosures = mempty
+      pure $ baseCtxt <> extraContext <> effectiveAtContext
     updateApi api =
       api { ggetAllocation_WithdrawContext = \a -> addContext . api.ggetAllocation_WithdrawContext a }
 
-testTopUpAllocations : Script ()
-testTopUpAllocations = do
-  env@TestEnv{..} <- setupTest
-  let dso = env.instrId.admin
+withAggregateWithdrawContext : TestEnv -> MultiRegistry.MultiRegistry -> MultiRegistry.MultiRegistry
+withAggregateWithdrawContext = withGovernanceWithdrawContext (microseconds 1)
 
-  AmuletRegistryV2.tapFaucet registriesEnv.amuletV2 alice 1200.0
-  AmuletRegistryV2.tapFaucet registriesEnv.amuletV2 bob 1800.0
+withVestingWithdrawContext : TestEnv -> MultiRegistry.MultiRegistry -> MultiRegistry.MultiRegistry
+withVestingWithdrawContext = withGovernanceWithdrawContext (microseconds 0)
 
---  _ <- lockForAggregate env 300.0 "alice-supervalidator" alice
+aggregateLocksOf : Party -> Script [(ContractId V2.Allocation, AmuletAllocationV2, AggregatedLock)]
+aggregateLocksOf p = do
+  allocs <- query @AmuletAllocationV2 p
+  pure
+    [ (toInterfaceContractId cid, alloc, lock)
+    | (cid, alloc) <- allocs
+    , Some (GovernanceLock_SVLocked lock) <- [alloc.governanceLock]
+    ]
 
-  pure ()
+vestingLocksOf : Party -> Script [(ContractId V2.Allocation, AmuletAllocationV2, VestingLock)]
+vestingLocksOf p = do
+  allocs <- query @AmuletAllocationV2 p
+  pure
+    [ (toInterfaceContractId cid, alloc, lock)
+    | (cid, alloc) <- allocs
+    , Some (GovernanceLock_VestingLocked lock) <- [alloc.governanceLock]
+    ]
 
-{- TODO: This is to be fixed, as they're old erroring out tests
--- | Verify that locking funds for a "for-benefit-of" name aggregates over
--- separate lock allocations sharing the same name.
+getNextIterationFunding : TestEnv -> AmuletAllocationV2 -> Decimal
+getNextIterationFunding te alloc =
+  fromOptional 0.0 $ alloc.allocation.nextIterationFunding >>= TM.lookup te.instrId.id
+
+createVestingLock
+  : TestEnv -> Decimal -> Party
+  -> Script (ContractId V2.Allocation, V2.AllocationView, VestingLock)
+createVestingLock env amount party = do
+  AllocationInstructionResult { output = AllocationInstructionResult_Completed aggregateCid } <-
+    lockForAggregate env amount "alice-supervalidator" party
+
+  Some aggregateView <- queryInterfaceContractId party aggregateCid
+  _ <- WalletClientV2.withdrawAllocationV2
+    (withAggregateWithdrawContext env env.registries) party (aggregateCid, aggregateView)
+
+  [(vestingCid, _, lock)] <- vestingLocksOf party
+  Some vestingView <- queryInterfaceContractId party vestingCid
+
+  pure (vestingCid, vestingView, lock)
+
+-- | Verify that locking funds for a lock subject aggregates over separate lock allocations
+-- sharing the same subject.
 testAggregateLockTotals : Script ()
 testAggregateLockTotals = do
   env@TestEnv{..} <- setupTest
@@ -105,25 +126,19 @@ testAggregateLockTotals = do
   _ <- lockForAggregate env 600.0 "alice-supervalidator" bob
   _ <- lockForAggregate env 300.0 "charlie-supervalidator" bob
 
-  allocs <- queryInterface @V2.Allocation dso
-  let aggregateLocks =
-        filter (isValidAggregateLockedAllocation dso) $ fromSome . snd <$> allocs
-      benefitOfAmount alloc =
-        ( "cip-105/for-benefit-of" `TM.lookup` alloc.allocation.meta.values
-        , fromOptional 0.0 $ alloc.allocation.nextIterationFunding >>= TM.lookup env.instrId.id
-        )
-      totals = M.fromListWithR (+) $ benefitOfAmount <$> aggregateLocks
+  aggregates <- aggregateLocksOf dso
+  let totals = M.fromListWithR (+)
+        [ (lock.lockSubject, getNextIterationFunding env alloc) | (_, alloc, lock) <- aggregates ]
 
-  assertEq (Some 1300.0) (Some "alice-supervalidator" `M.lookup` totals)
-  assertEq (Some 300.0) (Some "charlie-supervalidator" `M.lookup` totals)
+  M.lookup "alice-supervalidator" totals === Some 1300.0
+  M.lookup "charlie-supervalidator" totals === Some 300.0
 
 -- | Withdrawing an aggregate-lock allocation moves the locked funds into a
 -- fresh vesting-lock destination for the same owner.
 testAggregateLockUnlockCreatesVestingLock : Script ()
 testAggregateLockUnlockCreatesVestingLock = do
   env@TestEnv{..} <- setupTest
-  let dso = env.instrId.admin
-      newRegistries = withAggregateWithdrawContext env registries
+  let newRegistries = withAggregateWithdrawContext env registries
 
   AmuletRegistryV2.tapFaucet registriesEnv.amuletV2 bob 1800.0
 
@@ -131,34 +146,29 @@ testAggregateLockUnlockCreatesVestingLock = do
     lockForAggregate env 1000.0 "alice-supervalidator" bob
   Some lockedView <- queryInterfaceContractId bob locked
 
+  -- Withdraw from governanceLock to initiate vesting
   _ <- WalletClientV2.withdrawAllocationV2 newRegistries bob (locked, lockedView)
 
   liveAllocs <- fmap (fromSome . snd) . filter (isSome . snd) <$>
     queryInterface @V2.Allocation bob
   length liveAllocs === 1
 
-  let aggregates = filter (isValidAggregateLockedAllocation dso) liveAllocs
-      vestings = filter (isValidVestingLockedDestination dso) liveAllocs
-
+  aggregates <- aggregateLocksOf bob
+  vestings <- vestingLocksOf bob
   length aggregates === 0
   length vestings === 1
 
-  let [vesting] = vestings
-  fromOptional 0.0 (vesting.allocation.nextIterationFunding >>= TM.lookup instrId.id) === 1000.0
-
-  -- The vesting destination records its start/end dates.
-  assertMsg "vesting destination must record startDate" $
-    TM.member "cip-105/vestingLock.startDate" vesting.allocation.meta.values
-  assertMsg "vesting destination must record endDate" $
-    TM.member "cip-105/vestingLock.endDate" vesting.allocation.meta.values
+  let [(_, vestingAlloc, vesting)] = vestings
+  -- Check locked amount
+  getNextIterationFunding env vestingAlloc === 1000.0
+  vesting.initialAmount === 1000.0
 
 -- | Partially withdrawing an aggregate-lock allocation moves only that amount
 -- of the locked funds into a fresh vesting-lock destination for the same owner.
 testAggregateLockPartialWithdraw : Script ()
 testAggregateLockPartialWithdraw = do
   env@TestEnv{..} <- setupTest
-  let dso = env.instrId.admin
-      newRegistries = withAggregateWithdrawContext env registries
+  let newRegistries = withAggregateWithdrawContext env registries
 
   AmuletRegistryV2.tapFaucet registriesEnv.amuletV2 bob 1800.0
 
@@ -166,51 +176,40 @@ testAggregateLockPartialWithdraw = do
     lockForAggregate env 1000.0 "alice-supervalidator" bob
   Some lockedView <- queryInterfaceContractId bob locked
 
-  _ <- WalletClientV2.withdrawAllocationV2Meta newRegistries bob (locked, lockedView) $ Metadata $ TM.singleton "cip-105/withdraw-amount" "500.0"
+  let amountToWithdraw = 500.0
+  _ <- WalletClientV2.withdrawAllocationV2Meta newRegistries bob (locked, lockedView) $
+    Metadata $ TM.singleton withdrawAmountKey $ show amountToWithdraw
 
   liveAllocs <- fmap (fromSome . snd) . filter (isSome . snd) <$>
     queryInterface @V2.Allocation bob
   length liveAllocs === 2
 
-  let aggregates = filter (isValidAggregateLockedAllocation dso) liveAllocs
-      vestings = filter (isValidVestingLockedDestination dso) liveAllocs
-
+  aggregates <- aggregateLocksOf bob
+  vestings <- vestingLocksOf bob
   length aggregates === 1
   length vestings === 1
 
-  let [aggregate] = aggregates
-      [vesting] = vestings
-  fromOptional 0.0 (aggregate.allocation.nextIterationFunding >>= TM.lookup instrId.id) === 500.0
-  fromOptional 0.0 (vesting.allocation.nextIterationFunding >>= TM.lookup instrId.id) === 500.0
+  let [(_, aggregateAlloc, aggregate)] = aggregates
+      [(_, vestingAlloc, vesting)] = vestings
+  getNextIterationFunding env aggregateAlloc === 500.0
+  getNextIterationFunding env vestingAlloc === 500.0
 
-  -- Metadata carried over correctly: same owner and DSO on both sides.
-  aggregate.allocation.authorizer === vesting.allocation.authorizer
-  aggregate.allocation.admin === vesting.allocation.admin
-
-  -- The vesting destination records its start/end dates.
-  assertMsg "vesting destination must record startDate" $
-    TM.member "cip-105/vestingLock.startDate" vesting.allocation.meta.values
-  assertMsg "vesting destination must record endDate" $
-    TM.member "cip-105/vestingLock.endDate" vesting.allocation.meta.values
+  -- Check lockSubject and vestedAmount
+  aggregate.lockSubject === "alice-supervalidator"
+  vesting.initialAmount === amountToWithdraw
 
 -- | Withdrawing from a vesting-lock allocation vests funds linearly over the
--- lock's start/end period.  This exercises the flow against a vesting lock
--- created directly by 'lockForVesting'; the round-trip through
--- 'aggregateLockUnlock' + 'vestingLockWithdraw' isn't tested here because
--- 'aggregateLockUnlock' doesn't (yet) populate the destination's
--- @cip-105/vestingLock.initialAmount@ metadata.
+-- lock's start/end period.
 testVestingLockWithdraw : Script ()
 testVestingLockWithdraw = do
   env@TestEnv{..} <- setupTest
-  let newRegistries = withAggregateWithdrawContext env registries
+  let newRegistries = withVestingWithdrawContext env registries
       initialAmount = 365.25 -- one unit per day of the 365 day + 6 hour vesting period
 
   AmuletRegistryV2.tapFaucet registriesEnv.amuletV2 bob 1800.0
 
-  vestStart <- getTime
-  AllocationInstructionResult { output = AllocationInstructionResult_Completed vestingLockCid } <-
-    lockForVesting initialAmount vestStart env bob
-  Some vestingLockView <- queryInterfaceContractId bob vestingLockCid
+  (vestingLockCid, vestingLockView, vestingLock) <- createVestingLock env initialAmount bob
+  vestingLock.initialAmount === initialAmount
 
   -- Withdrawing immediately fails: nothing has vested yet.
   vestingLockView.allocation.admin `submitMustFailWithdraw` (vestingLockCid, vestingLockView) $ newRegistries
@@ -236,6 +235,8 @@ testVestingLockWithdraw = do
 
       let holdingCids2 = fromSome $ TM.lookup instrId.id vestingResult2.authorizerHoldingCids
       amount2 <- unlockedAmountOf bob holdingCids2
+
+      -- The full amount should now be withdrawn
       amount1 + amount2 === initialAmount
     other ->
       fail $ "expected AllocationResult_Settled with a next-iteration allocation, got: " <> show other
@@ -243,20 +244,17 @@ testVestingLockWithdraw = do
 testVestingLockTotalWithdraw : Script ()
 testVestingLockTotalWithdraw = do
   env@TestEnv{..} <- setupTest
-  let newRegistries = withAggregateWithdrawContext env registries
+  let newRegistries = withVestingWithdrawContext env registries
       initialAmount = 365.25 -- one unit per day of the 365 day + 6 hour vesting period
 
   AmuletRegistryV2.tapFaucet registriesEnv.amuletV2 bob 1800.0
 
-  vestStart <- getTime
-  AllocationInstructionResult { output = AllocationInstructionResult_Completed vestingLockCid } <-
-    lockForVesting initialAmount vestStart env bob
-  Some vestingLockView <- queryInterfaceContractId bob vestingLockCid
+  (vestingLockCid, vestingLockView, _) <- createVestingLock env initialAmount bob
 
   -- Withdrawing immediately fails: nothing has vested yet.
   vestingLockView.allocation.admin `submitMustFailWithdraw` (vestingLockCid, vestingLockView) $ newRegistries
 
-  -- After some time passes a proportional amount can be withdrawn.
+  -- Once the whole vesting period has elapsed, everything can be withdrawn at once.
   passTime (days 366)
   vestingResult1 <- WalletClientV2.extractAllocationResult <$>
     WalletClientV2.withdrawAllocationV2 newRegistries bob (vestingLockCid, vestingLockView)
@@ -265,6 +263,7 @@ testVestingLockTotalWithdraw = do
   amount1 <- unlockedAmountOf bob holdingCids1
   amount1 === 365.25
 
+  -- Nothing is left to vest, so no follow-up allocation is created.
   liveAllocs <- fmap (fromSome . snd) . filter (isSome . snd) <$>
     queryInterface @V2.Allocation bob
   length liveAllocs === 0
@@ -299,4 +298,3 @@ unlockedAmountOf p wantedCids = do
         , isNone h.lock
         ]
   pure $ sum (fmap (.amount) matching)
--}

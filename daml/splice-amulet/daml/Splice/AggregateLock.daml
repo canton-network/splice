@@ -65,6 +65,7 @@ endDateKey = "cip-105/end-date"
 initialAmountKey : Text
 initialAmountKey = "cip-105/initial-amount"
 
+-- TODO: Simon mentioned to rename this within PR obsidiansystems/splice/pull/12
 effectiveAtKey : Text
 effectiveAtKey = "cip-105/effective-at"
 
