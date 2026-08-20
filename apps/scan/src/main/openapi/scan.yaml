@@ -667,6 +667,37 @@ paths:
         "500":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
 
+  /v2/state/acs:
+    post:
+      tags: [ external, scan ]
+      x-jvm-package: scan
+      operationId: "getAcsSnapshotAtV2"
+      description: |
+        Returns the ACS in creation date ascending order, paged, for a given migration id and record time.
+        Unlike /v0/state/acs, every contract is identified by an (optional) update_id
+        (as opposed to the event ID in /v0/state/acs, which was not BFT-safe).
+        The update_id is the ID of the update in which the contract was created, and can be used to correlate with updates returned by /v2/updates.
+        For contracts created in an earlier migration ID, the update_id will be absent.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/AcsRequestV2"
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcsResponseV2"
+        "400":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
+        "404":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
+        "500":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
+
   /v0/state/acs/force:
     post:
       tags: [external, scan]
@@ -737,6 +768,33 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AcsResponseV1"
+        "400":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
+        "404":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
+        "500":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
+
+  /v2/holdings/state:
+    post:
+      tags: [external, scan]
+      x-jvm-package: scan
+      operationId: "getHoldingsStateAtV2"
+      description: |
+        Returns the active amulet contracts for a given migration id and record time, in creation date ascending order, paged.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/HoldingsStateRequestV2"
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcsResponseV2"
         "400":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
         "404":
@@ -2831,6 +2889,60 @@ components:
             type: string
           description: |
             Filters the ACS by contracts with these template IDs, specified as "PACKAGE_NAME:MODULE_NAME:ENTITY_NAME".
+    AcsRequestV2:
+      type: object
+      required:
+        - migration_id
+        - record_time
+        - page_size
+      properties:
+        migration_id:
+          type: integer
+          format: int64
+          description: |
+            The migration id for which to return the ACS.
+        record_time:
+          type: string
+          format: date-time
+          description: |
+            The timestamp at which the contract set was active.
+            This needs to be an exact timestamp, i.e.,
+            needs to correspond to a timestamp reported by `/v0/state/acs/snapshot-timestamp` if `record_time_match` is set to `exact` (which is the default).
+            If `record_time_match` is set to `at_or_before`, this can be any timestamp, and the most recent snapshot at or before the given `record_time` will be returned.
+        record_time_match:
+          type: string
+          description: |
+            How to match the record_time. "exact" requires the record_time to match exactly.
+            "at_or_before" finds the most recent snapshot at or before the given record_time.
+          enum:
+            - "exact"
+            - "at_or_before"
+          default: "exact"
+        after:
+          type: string
+          description: |
+            Pagination token for the next page of results. For this to be valid,
+            this must be the `next_page_token` from a prior request with identical
+            parameters aside from `after` and `page_size`; the response may be
+            invalid otherwise.
+            This token is opaque and not meant to be edited by users.
+        page_size:
+          description: |
+            The maximum number of created events returned for this request.
+          type: integer
+          format: int32
+        party_ids:
+          type: array
+          items:
+            type: string
+          description: |
+            Filters the ACS by contracts in which these party IDs are stakeholders.
+        templates:
+          type: array
+          items:
+            type: string
+          description: |
+            Filters the ACS by contracts with these template IDs, specified as "PACKAGE_NAME:MODULE_NAME:ENTITY_NAME".
     HoldingsStateRequest: # subset of AcsRequest
       type: object
       required:
@@ -2866,6 +2978,54 @@ components:
           format: int64
           description: |
             Pagination token for the next page of results.
+        page_size:
+          description: |
+            The maximum number of created events returned for this request.
+          type: integer
+          format: int32
+        owner_party_ids:
+          type: array
+          items:
+            type: string
+          minItems: 1
+          description: |
+            Filters by contracts in which these party_ids are the owners of the amulets.
+
+    HoldingsStateRequestV2: # subset of AcsRequestV2
+      type: object
+      required:
+        - migration_id
+        - record_time
+        - page_size
+        - owner_party_ids
+      properties:
+        migration_id:
+          type: integer
+          format: int64
+          description: |
+            The migration id for which to return the ACS.
+        record_time:
+          type: string
+          format: date-time
+          description: |
+            The timestamp at which the contract set was active.
+            This needs to be an exact timestamp, i.e.,
+            needs to correspond to a timestamp reported by `/v0/state/acs/snapshot-timestamp` if `record_time_match` is set to `exact` (which is the default).
+            If `record_time_match` is set to `at_or_before`, this can be any timestamp, and the most recent snapshot at or before the given `record_time` will be returned.
+        record_time_match:
+          type: string
+          description: |
+            How to match the record_time. "exact" requires the record_time to match exactly.
+            "at_or_before" finds the most recent snapshot at or before the given record_time.
+          enum:
+            - "exact"
+            - "at_or_before"
+          default: "exact"
+        after:
+          type: string
+          description: |
+            Pagination token for the next page of results.
+            This token is opaque and not meant to be edited by users.
         page_size:
           description: |
             The maximum number of created events returned for this request.
@@ -3032,6 +3192,36 @@ components:
             When requesting the next page of results, pass this as `after`
             to the `AcsRequest` or `HoldingsStateRequest`.
             Will be absent when there are no more pages.
+
+    AcsResponseV2:
+      type: object
+      required:
+        - record_time
+        - migration_id
+        - created_events
+      properties:
+        record_time:
+          description: The same `record_time` as in the request.
+          type: string
+          format: date-time
+        migration_id:
+          description: The same `migration_id` as in the request.
+          type: integer
+          format: int64
+        created_events:
+          description: |
+            Up to `page_size` contracts in the ACS.
+            `create_arguments` are always encoded as `compact_json`.
+          type: array
+          items:
+            $ref: "#/components/schemas/ActiveContract"
+        next_page_token:
+          type: string
+          description: |
+            When requesting the next page of results, pass this as `after`
+            to the `AcsRequestV2` or `HoldingsStateRequestV2`.
+            Will be absent when there are no more pages.
+            This token is opaque and not meant to be edited by users.
 
     HoldingsSummaryResponse:
       type: object
