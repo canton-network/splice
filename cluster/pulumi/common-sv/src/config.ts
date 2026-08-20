@@ -41,11 +41,6 @@ export type SvOnboarding =
       sponsorScanUrl: string;
     };
 
-export interface ScanBigQueryConfig {
-  dataset: string;
-  prefix: string;
-}
-
 export interface StaticSvConfigBasic {
   nodeName: string;
   ingressName: string;
