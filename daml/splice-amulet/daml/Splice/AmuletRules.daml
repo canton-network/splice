@@ -867,6 +867,9 @@ template AmuletRules
         require ("fund manager is not blacklisted: " <> show fundManager) $
           fundManager `notElem` getDevelopmentFundManagerBlacklist configUsd
 
+        -- sanity check that mintAfter is in the future
+        forA_ mintAfter $ assertWithinDeadline "mintAfter"
+
         whenSome configUsd.minDevelopmentFundMintingDelay $ \minDelay ->
           case mintAfter of
             None -> abort "DevelopmentFundCoupon cannot be allocated without a mintAfter time, as a minimum development fund minting delay is configured"
@@ -1360,7 +1363,10 @@ summarizeAndValidateExternalPartyContext context dso tf = do
     amuletPrice = externalPartyConfigState.amuletPrice
     rewardCalculationVersion = externalPartyConfigState.rewardCalculationVersion
     eventLogCid = Some (toInterfaceContractId context.externalPartyConfigState)
-    developmentFundManagerBlacklist = Some []
+    -- External party context cannot be used with `DevelopmentFundCoupon` as of now. But to ensure
+    -- the blacklist is still enforced in the future once we add support, we set it to `None` here
+    -- to show that the list is unknown in the context.
+    developmentFundManagerBlacklist = None
 
 getValidatorRight : TransferContextSummaryV2 -> Party -> Update (ContractId ValidatorRight)
 getValidatorRight csum user =
@@ -1381,8 +1387,6 @@ summarizeAndConsumeInputs csum dso sender inps = do
   where
     forOwner = ForOwner with dso; owner = sender
     forDso = ForDso with dso
-
-    developmentFundManagerBlacklist = fromOptional [] csum.developmentFundManagerBlacklist
 
     initialSummary = TransferInputsSummary with
       totalAmuletAmount = 0.0
@@ -1511,6 +1515,9 @@ summarizeAndConsumeInputs csum dso sender inps = do
 
     summarizeAndConsumeInput _round s (InputDevelopmentFundCoupon couponCid) = do
       coupon <- fetchAndArchive forOwner couponCid
+      developmentFundManagerBlacklist <- case csum.developmentFundManagerBlacklist of
+        None -> abort "DevelopmentFundCoupons.developmentFundManagerBlacklist is not defined"
+        Some blacklist -> pure blacklist
       require ("DevelopmentFundCoupon.fundManager is not blacklisted: " <> show coupon.fundManager)
         (coupon.fundManager `notElem` developmentFundManagerBlacklist)
       assertWithinDeadline "DevelopmentFundCoupon.expiresAt" coupon.expiresAt

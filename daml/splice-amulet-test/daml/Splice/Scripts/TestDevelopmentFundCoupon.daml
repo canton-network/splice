@@ -262,6 +262,10 @@ testDevelopmentFundCouponWithoutMintingDelay = do
     expiresAt = addRelTime now (days 2)
     reason = "Bob fixed issue XXX"
 
+  -- Unhappy - a mintAfter in the past is rejected even with no minimum minting delay configured
+  allocateDevelopmentFundCouponMustFail app alice.primaryParty bob.primaryParty coupon1.amount
+    expiresAt reason [cid1] (Some (addRelTime now (minutes (-1))))
+
   AmuletRules_AllocateDevelopmentFundCouponResult
     { developmentFundCouponCid, optUnclaimedDevelopmentFundCouponCid = None } <-
       allocateDevelopmentFundCoupon app alice.primaryParty bob.primaryParty coupon1.amount
@@ -357,10 +361,10 @@ testDevelopmentFundManagerBlacklist = do
 
   pure ()
 
--- | `TransferPreapproval_SendV2` never resolves `AmuletRules`, so the fund manager blacklist cannot be
--- checked there and a blacklisted manager's coupon still mints on that path.
-testDevelopmentFundCouponBypassesBlacklistForExternalParty : Script ()
-testDevelopmentFundCouponBypassesBlacklistForExternalParty = do
+-- | External party context cannot be used with `DevelopmentFundCoupon` as of now. The test will
+-- pass once we add the support for external party context and configure the blacklisted fund managers.
+testDevelopmentFundCouponRejectedForExternalParty : Script ()
+testDevelopmentFundCouponRejectedForExternalParty = do
   DefaultAppWithUsers{..} <- setupDefaultAppWithUsers
   now <- getTime
   let
@@ -382,8 +386,8 @@ testDevelopmentFundCouponBypassesBlacklistForExternalParty = do
         expiresAt
   externalContext <- getExternalPartyTransferContext app
 
-  -- Happy - the coupon mints even though its fund manager is blacklisted
-  _ <- submit (actAs bob.primaryParty <> readAs app.dso) $
+  -- Unhappy - the coupon cannot be minted where the blacklist is unknown
+  submitMustFail (actAs bob.primaryParty <> readAs app.dso) $
     exerciseCmd transferPreapprovalCid TransferPreapproval_SendV2 with
       sender = bob.primaryParty
       context = externalContext

@@ -12,7 +12,7 @@ import DA.List.Total (head)
 import Splice.Amulet
 import Splice.AmuletRules
 import Splice.Api.RewardAssignmentV1 qualified as Api.RewardAssignmentV1
-import Splice.Testing.Utils (emptyExtraArgs)
+import Splice.Testing.Utils (emptyExtraArgs, expectErrorId, expectMessageContains, submitMustFail'')
 import Splice.Round
 import Splice.Util
 import Splice.Wallet.MintingDelegation
@@ -233,24 +233,28 @@ testMintingDelegation_checksMintAfter = do
 
   (amuletRulesCid, _) <- getAmuletRules app
 
+  -- Shared between the failing and the succeeding submission, so the only difference
+  -- between them is the elapsed time.
+  let submitOptions = actAs delegate <> readAs beneficiary <> readAs app.dso
+      mintCmd context = exerciseCmd mintingDelegationCid MintingDelegation_Mint with
+        inputs = [InputDevelopmentFundCoupon developmentFundCouponCid]
+        context = PaymentTransferContext with
+          context
+          amuletRules = amuletRulesCid
+
   -- Unhappy - mintAfter has not passed yet
   contextBefore <- getTransferContext app alice None
-  submitMustFail (actAs delegate <> readAs beneficiary <> readAs app.dso) $
-    exerciseCmd mintingDelegationCid MintingDelegation_Mint with
-      inputs = [InputDevelopmentFundCoupon developmentFundCouponCid]
-      context = PaymentTransferContext with
-        context = contextBefore
-        amuletRules = amuletRulesCid
+  submitMustFail''
+    ( expectErrorId "stdlib.daml.com/deadline-not-exceeded" <>
+      expectMessageContains "deadline 'DevelopmentFundCoupon.mintAfter'"
+    )
+    submitOptions
+    (mintCmd contextBefore)
 
   -- Happy - the same mint succeeds once mintAfter has passed
   passTime (minutes 3)
   contextAfter <- getTransferContext app alice None
-  submit (actAs delegate <> readAs beneficiary <> readAs app.dso) $
-    exerciseCmd mintingDelegationCid MintingDelegation_Mint with
-      inputs = [InputDevelopmentFundCoupon developmentFundCouponCid]
-      context = PaymentTransferContext with
-        context = contextAfter
-        amuletRules = amuletRulesCid
+  _ <- submit submitOptions (mintCmd contextAfter)
 
   pure ()
 

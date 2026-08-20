@@ -136,12 +136,6 @@ getTransferPreapprovalBaseDuration : AmuletConfig unit -> RelTime
 getTransferPreapprovalBaseDuration config =
   fromOptional defaultTransferPreapprovalBaseDuration config.transferPreapprovalBaseDuration
 
-defaultMinDevelopmentFundMintingDelay : RelTime
-defaultMinDevelopmentFundMintingDelay = days 0
-
-getMinDevelopmentFundMintingDelay : AmuletConfig unit -> RelTime
-getMinDevelopmentFundMintingDelay config = fromOptional defaultMinDevelopmentFundMintingDelay config.minDevelopmentFundMintingDelay
-
 -- Check constraints on config params on which the implementation of the choices rely.
 validAmuletConfig : AmuletConfig unit -> Bool
 validAmuletConfig AmuletConfig
