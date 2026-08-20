@@ -20,7 +20,6 @@ import { spliceConfig } from './config/config';
 import { GcpProject } from './config/gcpConfig';
 import {
   appsAffinityAndTolerations,
-  CnInput,
   infraAffinityAndTolerations,
   installSpliceHelmChart,
   SpliceCustomResourceOptions,
@@ -149,6 +148,7 @@ export class CloudPostgres
           },
           insightsConfig: {
             queryInsightsEnabled: true,
+            enhancedQueryInsightsEnabled: cloudSqlConfig.enterprisePlus,
           },
           tier: cloudSqlConfig.tier,
           edition: cloudSqlConfig.enterprisePlus ? 'ENTERPRISE_PLUS' : 'ENTERPRISE',
