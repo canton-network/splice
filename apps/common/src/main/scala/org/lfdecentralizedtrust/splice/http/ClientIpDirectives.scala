@@ -37,7 +37,7 @@ object ClientIpDirectives {
     firstDefined(sources*)
   }
 
-  private def trustedClientIp(headerName: String): Directive1[Option[RemoteAddress]] = {
+  private[splice] def trustedClientIp(headerName: String): Directive1[Option[RemoteAddress]] = {
     val trimmedHeaderName = headerName.trim
     if (trimmedHeaderName.isEmpty) provide(None)
     else

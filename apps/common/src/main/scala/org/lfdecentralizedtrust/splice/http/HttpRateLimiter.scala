@@ -6,6 +6,7 @@ package org.lfdecentralizedtrust.splice.http
 import com.daml.metrics.api.MetricHandle.LabeledMetricsFactory
 import com.daml.metrics.api.MetricsContext
 import com.digitalasset.canton.logging.TracedLogger
+import com.digitalasset.canton.tracing.TraceContext
 import org.apache.pekko.http.scaladsl.model.{HttpEntity, RemoteAddress, StatusCodes}
 import org.apache.pekko.http.scaladsl.server.{Directive0, Directive1}
 import org.lfdecentralizedtrust.splice.config.RateLimitersConfig
@@ -16,6 +17,8 @@ import org.lfdecentralizedtrust.splice.util.{
 }
 
 import java.net.{Inet6Address, InetAddress}
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 
 class HttpRateLimiter(
     config: RateLimitersConfig,
@@ -34,6 +37,11 @@ class HttpRateLimiter(
 
   private val trustedClientIpHeader: String =
     config.trustedClientIpHeader.trim
+
+  private val lastMissingTrustedClientIpHeaderWarning =
+    new AtomicLong(
+      System.nanoTime() - HttpRateLimiter.MissingTrustedClientIpHeaderWarningIntervalNanos
+    )
 
   private def metricsFor(service: String): SpliceRateLimitMetrics =
     metrics.getOrElseUpdate(
@@ -96,8 +104,10 @@ class HttpRateLimiter(
 
     import org.apache.pekko.http.scaladsl.server.Directives.*
 
-    HttpRateLimiter
-      .extractClientIpKey(trustedClientIpHeader, config.enableClientProvidedIpHeaders)
+    val perClientIpRateLimitingEnabled =
+      globalClientIpLimiter.enabled || operationClientIpLimiter.enabled
+
+    extractClientIpKey(perClientIpRateLimitingEnabled)
       .flatMap { clientIp =>
         // The per client IP limiters are checked first (and `&&` short-circuits) so that a request
         // rejected because of its own client IP does not consume budget from the shared overall
@@ -123,12 +133,50 @@ class HttpRateLimiter(
       }
   }
 
+  private def extractClientIpKey(warnOnFallback: Boolean): Directive1[Option[String]] = {
+    import org.apache.pekko.http.scaladsl.server.Directives.*
+
+    ClientIpDirectives.trustedClientIp(trustedClientIpHeader).flatMap {
+      case Some(RemoteAddress.IP(ip, _)) => provide(Some(HttpRateLimiter.rateLimitKey(ip)))
+      case Some(_) => provide(None)
+      case None =>
+        HttpRateLimiter
+          .extractClientIpKey("", config.enableClientProvidedIpHeaders)
+          .map { clientIp =>
+            if (warnOnFallback && trustedClientIpHeader.nonEmpty && clientIp.nonEmpty) {
+              warnAboutMissingTrustedClientIpHeader()
+            }
+            clientIp
+          }
+    }
+  }
+
+  private def warnAboutMissingTrustedClientIpHeader(): Unit = {
+    val now = System.nanoTime()
+    val last = lastMissingTrustedClientIpHeaderWarning.get()
+    if (
+      now - last >= HttpRateLimiter.MissingTrustedClientIpHeaderWarningIntervalNanos &&
+      lastMissingTrustedClientIpHeaderWarning.compareAndSet(last, now)
+    ) {
+      implicit val traceContext: TraceContext = TraceContext.empty
+      logger.warn(
+        s"The configured trusted client IP header '$trustedClientIpHeader' is missing or does not " +
+          "contain a valid IP address. Per-client-IP rate limiting is falling back to a " +
+          "client-provided X-Forwarded-For or X-Real-Ip header, which may allow clients to spoof " +
+          "their rate-limit identity."
+      )
+    }
+  }
+
   def close(): Unit = metrics.view.values.foreach(_.close())
 }
 
 object HttpRateLimiter {
 
   private val ClientIpAttribute = "client_ip"
+
+  private val MissingTrustedClientIpHeaderWarningIntervalNanos: Long =
+    TimeUnit.MINUTES.toNanos(1)
 
   private[splice] val GlobalLimiter = "global"
   private[splice] val GlobalService = "global"

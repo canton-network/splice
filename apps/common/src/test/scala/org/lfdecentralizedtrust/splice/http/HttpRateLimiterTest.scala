@@ -5,6 +5,7 @@ package org.lfdecentralizedtrust.splice.http
 
 import com.daml.metrics.api.testing.InMemoryMetricsFactory
 import com.digitalasset.canton.BaseTest
+import com.digitalasset.canton.logging.SuppressionRule
 import org.apache.pekko.http.scaladsl.model.headers.{RawHeader, `X-Forwarded-For`, `X-Real-Ip`}
 import org.apache.pekko.http.scaladsl.model.{
   AttributeKeys,
@@ -23,6 +24,7 @@ import org.lfdecentralizedtrust.splice.util.{
   SpliceRateLimiter,
 }
 import org.scalatest.wordspec.AnyWordSpec
+import org.slf4j.event.Level
 
 import java.net.{Inet6Address, InetAddress}
 
@@ -210,6 +212,35 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
   }
 
   "the http rate limiter" should {
+
+    "warn once when the trusted client IP header is unavailable and a client-provided header is used" in {
+      loggerFactory.assertLogsSeq(SuppressionRule.Level(Level.WARN))(
+        withRoutes(
+          globalPerClientIp = perClientIp(1000),
+          trustedClientIpHeader = "X-Trusted-Client-Ip",
+        )("testOperation") { routes =>
+          call(routes("testOperation"), ip = Some("1.1.1.1")) should be(StatusCodes.OK)
+          call(routes("testOperation"), ip = Some("1.1.1.1")) should be(StatusCodes.OK)
+        },
+        logEntries => {
+          logEntries should have size 1
+          logEntries.head.message should include("X-Trusted-Client-Ip")
+          logEntries.head.message should include("X-Forwarded-For")
+          logEntries.head.message should include("spoof")
+        },
+      )
+    }
+
+    "not warn about a missing trusted client IP header when per-client-IP limiting is disabled" in {
+      loggerFactory.assertLogsSeq(SuppressionRule.Level(Level.WARN))(
+        withRoutes(
+          trustedClientIpHeader = "X-Trusted-Client-Ip"
+        )("testOperation") { routes =>
+          call(routes("testOperation"), ip = Some("1.1.1.1")) should be(StatusCodes.OK)
+        },
+        _ shouldBe empty,
+      )
+    }
 
     "reject requests of a client IP over the global per client IP limit" in {
       // the global per client IP limiter is enabled by default
@@ -494,6 +525,7 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
       global: SpliceRateLimitConfig = SpliceRateLimitConfig(ratePerSecond = 1000),
       globalPerClientIp: PerAttributeRateLimitConfig = PerAttributeRateLimitConfig.Disabled,
       perClientIpOverrides: Map[String, PerAttributeRateLimitConfig] = Map.empty,
+      trustedClientIpHeader: String = RateLimitersConfig.DefaultTrustedClientIpHeader,
   )(operations: String*)(f: HttpRateLimiterTest.Fixture => A): A = {
     // Any operation with a per client IP override needs its own overall limiter entry so that the
     // embedded per client IP limiter is used instead of the `default` one.
@@ -510,6 +542,7 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
         default = withPerClientIp(default, PerAttributeRateLimitConfig.Disabled),
         rateLimiters = perOperationConfigs,
         global = withPerClientIp(global, globalPerClientIp),
+        trustedClientIpHeader = trustedClientIpHeader,
       ),
       metricsFactory,
       loggerFactory.getTracedLogger(classOf[HttpRateLimiterTest]),

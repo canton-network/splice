@@ -216,6 +216,8 @@ class PerAttributeRateLimiter(
   private val isEnabled = perAttributeConfig.enabled && perAttributeConfig.ratePerSecond > 0
   private val attributeLabel = Map("limiter_attribute" -> attribute)
 
+  private[splice] def enabled: Boolean = isEnabled
+
   // evictions by size can happen for every single request (e.g. when a large number of distinct
   // attribute values is seen), so the warning is throttled to avoid flooding the logs
   private val lastSizeEvictionWarning =
