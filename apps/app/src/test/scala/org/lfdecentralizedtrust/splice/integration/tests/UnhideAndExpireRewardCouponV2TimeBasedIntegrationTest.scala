@@ -605,7 +605,9 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
         Map(DarResources.amulet.latest.metadata.name -> Set(aliceParty)),
         Some(decentralizedSynchronizerId),
       )
-      .packageReferences.headOption.map(ref => PackageVersion.assertFromString(ref.packageVersion))
+      .packageReferences
+      .headOption
+      .map(ref => PackageVersion.assertFromString(ref.packageVersion))
 
   private def hiddenCouponsMetricValue(
       party: PartyId
