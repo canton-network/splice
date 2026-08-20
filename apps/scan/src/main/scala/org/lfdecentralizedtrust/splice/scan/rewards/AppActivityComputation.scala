@@ -97,11 +97,9 @@ class AppActivityComputation(
       roundInfoByTime <- rewardsReferenceStore.lookupActiveOpenMiningRounds(allTimes)
       results <- Future.traverse(tagged) {
         case (summary, verdict, false) =>
-          roundInfoByTime.get(summary.sequencingTime) match {
-            case Some((roundNumber, _)) =>
-              Future.successful((summary, verdict, None, Some(roundNumber)))
-            case None => Future.successful((summary, verdict, None, None))
-          }
+          Future.successful(
+            (summary, verdict, None, roundInfoByTime.get(summary.sequencingTime).map(_._1))
+          )
         case (summary, verdict, true) =>
           roundInfoByTime.get(summary.sequencingTime) match {
             case Some((roundNumber, roundOpensAt)) =>
