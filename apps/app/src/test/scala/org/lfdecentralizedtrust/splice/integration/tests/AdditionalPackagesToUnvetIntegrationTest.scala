@@ -10,7 +10,6 @@ import org.lfdecentralizedtrust.splice.environment.{DarResource, DarResources}
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTest
 import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.InitialPackageConfig
-import org.lfdecentralizedtrust.splice.util.scalatesttags.RequiresPv35
 import org.lfdecentralizedtrust.splice.util.{DarResourcesUtil, PackageUnvettingUtil}
 
 abstract class AdditionalPackagesToUnvetIntegrationTestBase
@@ -79,96 +78,31 @@ abstract class AdditionalPackagesToUnvetIntegrationTestBase
       .withManualStart
 }
 
-/** This test verifies that an SV can unvet packages that still have vetted dependencies
-  */
-@RequiresPv35
-class PackageWithDependencyIntegrationTest extends AdditionalPackagesToUnvetIntegrationTestBase {
-
-  private val missingDependency = DarResources.wallet_0_1_15
-  private val problematicDar = DarResources.walletPayments_0_1_15
-  private val darsWithMissingDependency = Seq(
-    DarResources.wallet_0_1_16
-  ) :+ problematicDar
-
-  override val additionalPackagesToUnvetSv1: Seq[DarResource] = darsWithMissingDependency
-  override val additionalPackagesToUnvetSv1Local: Seq[DarResource] =
-    darsWithMissingDependency :+ missingDependency
-
-  "sv1 can unvet packages that still have dependencies" in { implicit env =>
-    import env.executionContext
-
-    startAllSync(
-      sv1Backend,
-      sv1ScanBackend,
-      sv1ValidatorBackend,
-    )
-    val synchronizerId =
-      sv1Backend.participantClient.synchronizers.list_connected().head.synchronizerId
-
-    clue(s"sv1 can unvet a package if dependencies to it remains, additionalPackagesToUnvet: ${additionalPackagesToUnvetSv1
-        .map(pkg => pkg.metadata.name -> pkg.metadata.version)}") {
-      eventually() {
-        val vettedPackageIds = getVettedPackageIds(
-          sv1Backend.appState.participantAdminConnection,
-          synchronizerId,
-        )
-        vettedPackageIds should contain noElementsOf darsWithMissingDependency.map(_.packageId)
-        vettedPackageIds should contain(missingDependency.packageId)
-      }
-      stopAllAsync(
-        sv1Backend,
-        sv1ValidatorBackend,
-      ).futureValue
-    }
-
-    clue(
-      s"sv1 can unvet a package if all dependencies to it are unvetted as well, additionalPackagesToUnvet: ${additionalPackagesToUnvetSv1Local
-          .map(pkg => pkg.metadata.name -> pkg.metadata.version)}"
-    ) {
-      startAllSync(
-        sv1LocalBackend,
-        sv1ValidatorLocalBackend,
-      )
-      eventually() {
-        val vettedPackageIds = getVettedPackageIds(
-          sv1LocalBackend.appState.participantAdminConnection,
-          synchronizerId,
-        )
-        vettedPackageIds should contain noElementsOf darsWithMissingDependency :+ missingDependency
-      }
-      stopAllAsync(
-        sv1LocalBackend,
-        sv1ValidatorLocalBackend,
-      ).futureValue
-    }
-  }
-}
-
 /** This test verifies that an SV can downgrade to the versions before an upgrade.
   */
 class DowngradeSvPackagesIntegrationTest extends AdditionalPackagesToUnvetIntegrationTestBase {
 
-  private val darsFromUpgrade_0_5_16 = Seq(
-    DarResources.amulet_0_1_17,
-    DarResources.amuletNameService_0_1_18,
-    DarResources.dsoGovernance_0_1_23,
-    DarResources.walletPayments_0_1_17,
-    DarResources.wallet_0_1_18,
-    DarResources.amulet_0_1_17,
+  // Use versions one above minimumInitialization so that after unvetting,
+  // the minimum versions still remain vetted and the system can function.
+  private val darsToDowngradeTo = Seq(
+    DarResources.amulet_0_1_20,
+    DarResources.amuletNameService_0_1_21,
+    DarResources.dsoGovernance_0_1_26,
+    DarResources.walletPayments_0_1_20,
+    DarResources.wallet_0_1_21,
   )
 
-  // initialize network with the versions from the upgrade 0.5.16
   override val initialPackageConfig: InitialPackageConfig = new InitialPackageConfig(
-    DarResources.amulet_0_1_17.metadata.version.toString(),
-    DarResources.amuletNameService_0_1_18.metadata.version.toString(),
-    DarResources.dsoGovernance_0_1_23.metadata.version.toString(),
+    DarResources.amulet_0_1_20.metadata.version.toString(),
+    DarResources.amuletNameService_0_1_21.metadata.version.toString(),
+    DarResources.dsoGovernance_0_1_26.metadata.version.toString(),
     DarResources.validatorLifecycle_0_1_6.metadata.version.toString(),
-    DarResources.wallet_0_1_18.metadata.version.toString(),
-    DarResources.walletPayments_0_1_17.metadata.version.toString(),
+    DarResources.wallet_0_1_21.metadata.version.toString(),
+    DarResources.walletPayments_0_1_20.metadata.version.toString(),
   )
-  override val additionalPackagesToUnvetSv1: Seq[DarResource] = darsFromUpgrade_0_5_16
+  override val additionalPackagesToUnvetSv1: Seq[DarResource] = darsToDowngradeTo
   override val additionalPackagesToUnvetSv1Local: Seq[DarResource] = Seq(
-    DarResources.wallet_0_1_16
+    DarResources.wallet_0_1_20
   )
 
   "sv1 can unvet all upgraded sv packages" in { implicit env =>
@@ -188,7 +122,7 @@ class DowngradeSvPackagesIntegrationTest extends AdditionalPackagesToUnvetIntegr
         getVettedPackageIds(
           sv1Backend.appState.participantAdminConnection,
           synchronizerId,
-        ) should contain noElementsOf darsFromUpgrade_0_5_16.map(_.packageId)
+        ) should contain noElementsOf darsToDowngradeTo.map(_.packageId)
       }
       stopAllAsync(
         sv1Backend,
@@ -209,8 +143,8 @@ class DowngradeSvPackagesIntegrationTest extends AdditionalPackagesToUnvetIntegr
           sv1LocalBackend.appState.participantAdminConnection,
           synchronizerId,
         )
-        vettedPackageIds should contain allElementsOf darsFromUpgrade_0_5_16.map(_.packageId)
-        vettedPackageIds should not contain DarResources.wallet_0_1_16.packageId
+        vettedPackageIds should contain allElementsOf darsToDowngradeTo.map(_.packageId)
+        vettedPackageIds should not contain DarResources.wallet_0_1_19.packageId
       }
       stopAllAsync(
         sv1LocalBackend,

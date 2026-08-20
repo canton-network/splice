@@ -265,8 +265,9 @@ class AmuletExpiryV1FallbackIntegrationTest
 class ExpiryWithIgnoredAmuletVersionIntegrationTest
     extends ExpiryWithMinimalVettedPackagesIntegrationTestBase {
 
+  // Amulet version 0.1.19 is just below the minimumInitialization version.
   override val ignoredAmuletVersions: Set[String] = Set(
-    DarResources.amulet_0_1_15.metadata.version.toString
+    DarResources.amulet_0_1_19.metadata.version.toString
   )
 
   private val entryName = "alice.unverified.ans"
