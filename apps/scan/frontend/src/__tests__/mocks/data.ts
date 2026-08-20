@@ -180,6 +180,8 @@ export function amuletRules(zeroTransferFees: boolean): any {
         externalPartyConfigStateTickDuration: null,
         rewardConfig: null,
         transferPreapprovalBaseDuration: null,
+        developmentFundManagerBlacklist: null,
+        minDevelopmentFundMintingDelay: null,
       },
       futureValues: [],
     },

@@ -104,6 +104,8 @@ export function buildAmuletRulesConfigFromChanges(
         ? null
         : { microseconds: externalPartyConfigStateTickDuration },
     transferPreapprovalBaseDuration: null,
+    developmentFundManagerBlacklist: null,
+    minDevelopmentFundMintingDelay: null,
     transferConfig: {
       createFee: { fee: getValue('transferConfigCreateFee', false) },
       holdingFee: { rate: getValue('transferConfigHoldingFeeRate', false) },

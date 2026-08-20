@@ -230,6 +230,8 @@ export function getAmuletRulesConfig(
     externalPartyConfigStateTickDuration: null,
     rewardConfig: null,
     transferPreapprovalBaseDuration: null,
+    developmentFundManagerBlacklist: null,
+    minDevelopmentFundMintingDelay: null,
   };
 }
 
@@ -450,6 +452,14 @@ export function getExpectedAmuletRulesConfigDiffsHTML(
       class="jsondiffpatch-unchanged"
       data-key="transferPreapprovalBaseDuration"><div
         class="jsondiffpatch-property-name">transferPreapprovalBaseDuration</div><div
+      class="jsondiffpatch-value"><pre>null</pre></div></li><li
+      class="jsondiffpatch-unchanged"
+      data-key="developmentFundManagerBlacklist"><div
+        class="jsondiffpatch-property-name">developmentFundManagerBlacklist</div><div
+      class="jsondiffpatch-value"><pre>null</pre></div></li><li
+      class="jsondiffpatch-unchanged"
+      data-key="minDevelopmentFundMintingDelay"><div
+        class="jsondiffpatch-property-name">minDevelopmentFundMintingDelay</div><div
       class="jsondiffpatch-value"><pre>null</pre></div></li></ul></div>
   `;
   return mock;
