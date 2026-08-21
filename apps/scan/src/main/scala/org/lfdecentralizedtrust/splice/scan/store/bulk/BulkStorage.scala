@@ -198,8 +198,10 @@ class BulkStorage(
     objs =>
       objs.foreach { obj =>
         val encoding = ScanStorageConfig.Encoding.all.toList
-          .find(enc => enc.storageKeyRegex("updates").matches(obj.key))
-          .map(_.key)
+          .collectFirst {
+            case enc if enc.storageKeyRegex("updates").matches(obj.key) =>
+              enc.key
+          }
           .getOrElse("unknown")
         historyMetrics.BulkStorage.incUpdateObjects(encoding, "committed")
       },
