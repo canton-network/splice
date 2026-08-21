@@ -12,7 +12,10 @@ import { http, HttpResponse } from 'msw';
 import { describe, expect, test } from 'vitest';
 import App from '../../../App';
 import { SetDsoConfigRulesForm } from '../../../components/forms/SetDsoConfigRulesForm';
-import { CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE } from '../../../utils/constants';
+import {
+  CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE,
+  DATE_TIME_PLACEHOLDER,
+} from '../../../utils/constants';
 import { SvConfigProvider } from '../../../utils';
 import { Wrapper } from '../../helpers';
 import { svPartyId } from '../../mocks/constants';
@@ -63,6 +66,15 @@ describe('Set DSO Config Rules Form', () => {
     const urlInput = screen.getByTestId('set-dso-config-rules-url');
     expect(urlInput).toBeInTheDocument();
     expect(urlInput.getAttribute('value')).toBe('');
+
+    expect(screen.getByTestId('set-dso-config-rules-expiry-date-field')).toHaveAttribute(
+      'placeholder',
+      DATE_TIME_PLACEHOLDER
+    );
+    expect(screen.getByTestId('set-dso-config-rules-effective-date-field')).toHaveAttribute(
+      'placeholder',
+      DATE_TIME_PLACEHOLDER
+    );
 
     const configLabels = screen.getAllByTestId(/config-label-/);
     expect(configLabels.length).toBeGreaterThan(15);

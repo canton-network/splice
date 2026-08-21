@@ -18,6 +18,7 @@ import {
   PROPOSAL_REVIEW_TITLE,
   PROPOSAL_SUMMARY_PLACEHOLDER,
   PROPOSAL_SUMMARY_SUBTITLE,
+  SUPPORTING_URL_PLACEHOLDER,
 } from '../../../utils/constants';
 
 describe('SV user can', () => {
@@ -68,10 +69,12 @@ describe('Offboard SV Form', () => {
     const urlInput = screen.getByTestId('offboard-sv-url');
     expect(urlInput).toBeInTheDocument();
     expect(urlInput.getAttribute('value')).toBe('');
+    expect(urlInput).toHaveAttribute('placeholder', SUPPORTING_URL_PLACEHOLDER);
 
     const memberInput = screen.getByTestId('offboard-sv-member-dropdown');
     expect(memberInput).toBeInTheDocument();
     expect(memberInput.getAttribute('value')).toBe('');
+    expect(screen.getByText('Select a member')).toBeInTheDocument();
 
     expect(screen.getByText('Review Proposal')).toBeInTheDocument();
   });

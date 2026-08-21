@@ -28,6 +28,7 @@ import {
   EFFECTIVE_AT_LABEL,
   PROPOSAL_CREATED_LABEL,
   PROPOSAL_SUMMARY_TITLE,
+  SUPPORTING_URL_PLACEHOLDER,
   SUPPORTING_URL_LABEL,
   THRESHOLD_DEADLINE_LABEL,
   VOTE_PROPOSAL_CONTRACT_ID_LABEL,
@@ -1051,6 +1052,7 @@ describe('Proposal Details > Votes & Voting', () => {
 
     const votingFormUrlInput = within(votingForm).getByTestId('your-vote-url-input');
     expect(votingFormUrlInput).toBeInTheDocument();
+    expect(votingFormUrlInput).toHaveAttribute('placeholder', SUPPORTING_URL_PLACEHOLDER);
 
     const votingFormReasonInput = within(votingForm).getByTestId('your-vote-reason-input');
     expect(votingFormReasonInput).toBeInTheDocument();

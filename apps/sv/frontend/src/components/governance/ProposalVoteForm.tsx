@@ -11,6 +11,7 @@ import { VoteRequest } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules'
 import { ProposalVote } from '../../utils/types';
 import { Alert, Box, Button, Stack, TextField, Typography } from '@mui/material';
 import {
+  SUPPORTING_URL_PLACEHOLDER,
   VOTE_REASON_PLACEHOLDER,
   VOTE_REASON_SUMMARY_LABEL,
   VOTE_REASON_URL_LABEL,
@@ -186,6 +187,7 @@ export const ProposalVoteForm: React.FC<ProposalVoteFormProps> = props => {
                         {field.state.meta.errors?.[0]}
                       </span>
                     }
+                    placeholder={SUPPORTING_URL_PLACEHOLDER}
                     inputProps={{ 'data-testid': 'your-vote-url-input' }}
                     sx={{
                       '& .MuiFilledInput-root': {
