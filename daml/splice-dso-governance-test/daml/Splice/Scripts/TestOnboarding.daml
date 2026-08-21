@@ -18,6 +18,7 @@ import Splice.DecentralizedSynchronizer (MemberTraffic(..))
 import Splice.DsoRules
 import Splice.DSO.DecentralizedSynchronizer
 import Splice.SvOnboarding
+import Splice.ValidatorUnpermission
 
 import Splice.Scripts.DsoTestUtils
 import Splice.Testing.Registries.AmuletRegistry (getActiveOpenRoundsSorted)
@@ -740,9 +741,7 @@ testValidatorUnpermissionWorkflow = do
 
   executeAllConfirmedActions app
 
-  [(licenseCid, _)] <- queryFilter @ValidatorLicense dso (\l -> l.validator == v1)
-
-  -- vote confirmation creates a new ValidatorUnpermission contract
+  -- vote confirmation with temporary unpermissioning creates a new ValidatorUnpermission contract
   let suspendTime1 = now `addRelTime` hours 1
 
   forA_ [sv1, sv2, sv3] $ \sv ->
@@ -750,23 +749,20 @@ testValidatorUnpermissionWorkflow = do
       confirmer = sv
       action = ARC_DsoRules with
         dsoAction = SRARC_UnpermissionValidator $ DsoRules_UnpermissionValidator with
-          validator = v1
           participantId = participantId
-          optValidatorUnpermissionCid = None
-          newLoginAfter = Some suspendTime1
-          newRevoked = False
-          optValidatorLicenseCid = None
+          loginAfter = Some suspendTime1
+          revoked = False
 
   executeAllConfirmedActions app
 
-  unpermissions1 <- queryFilter @ValidatorUnpermission dso (\u -> u.validator == v1)
+  unpermissions1 <- queryFilter @ValidatorUnpermission dso (\u -> u.participantId == participantId)
 
   length unpermissions1 === 1
-  let (unpCid1, unp1) = head unpermissions1
+  let (_, unp1) = head unpermissions1
   unp1.loginAfter === Some suspendTime1
   unp1.revoked === False
 
-  -- Second vote updates the existing contract & revokes the license
+  -- Second vote with permanent unpermissioning creates a new ValidatorUnpermission contract
   let suspendTime2 = now `addRelTime` hours 2
 
   forA_ [sv1, sv2, sv3] $ \sv ->
@@ -774,67 +770,39 @@ testValidatorUnpermissionWorkflow = do
       confirmer = sv
       action = ARC_DsoRules with
         dsoAction = SRARC_UnpermissionValidator $ DsoRules_UnpermissionValidator with
-          validator = v1
           participantId = participantId
-          optValidatorUnpermissionCid = Some unpCid1
-          newLoginAfter = Some suspendTime2
-          newRevoked = True
-          optValidatorLicenseCid = Some licenseCid
+          loginAfter = Some suspendTime2
+          revoked = True
 
   executeAllConfirmedActions app
 
-  unpermissions2 <- queryFilter @ValidatorUnpermission dso (\u -> u.validator == v1)
-  length unpermissions2 === 1
-  let (unpCid2, unp2) = head unpermissions2
-  unp2.loginAfter === Some suspendTime2
-  unp2.revoked === True
+  unpermissions2 <- queryFilter @ValidatorUnpermission dso (\u -> u.participantId == participantId)
+  length unpermissions2 === 2
 
-  -- Verify license was successfully archived by the revocation
-  licensesAfterRevoke <- queryFilter @ValidatorLicense dso (\l -> l.validator == v1)
-  assert (null licensesAfterRevoke)
+  -- Check whether 1 of the contracts has revoked == True
+  let hasRevoked = any (\(_, u) -> u.revoked == True) unpermissions2
+  hasRevoked === True
+
+  let unpCidsToMerge = map fst unpermissions2
 
   -- When more than 1 unpermission contract exists, merging works
-  let suspendTime3 = now `addRelTime` hours 5
-
-  unpCidRace <- submit dso $ createCmd ValidatorUnpermission with
-    dso
-    validator = v1
-    participantId = participantId
-    loginAfter = Some suspendTime3
-    revoked = False
-
-  unpermissions3 <- queryFilter @ValidatorUnpermission dso (\u -> u.validator == v1)
-  length unpermissions3 === 2
-
   DsoRules_MergeValidatorUnpermissionResult mergedCid <-
     submit (actAs sv1 <> readAs dso) $
-      exerciseCmd dsoRulesCid (DsoRules_MergeValidatorUnpermission [unpCid2, unpCidRace] (Some sv1))
+      exerciseCmd dsoRulesCid (DsoRules_MergeValidatorUnpermission unpCidsToMerge (Some sv1))
 
-  unpermissionsAfterMerge <- queryFilter @ValidatorUnpermission dso (\u -> u.validator == v1)
+  unpermissionsAfterMerge <- queryFilter @ValidatorUnpermission dso (\u -> u.participantId == participantId)
   length unpermissionsAfterMerge === 1
   let (_, finalUnpermission) = head unpermissionsAfterMerge
 
-  -- The revoked flag should be True (because the updated contract was True)
+  -- The revoked flag should be True
   finalUnpermission.revoked === True
 
-  -- The loginAfter should be the maximum of the two times (suspendTime3)
-  finalUnpermission.loginAfter === Some suspendTime3
-
-  -- Cannot merge contracts belonging to different validators
-  v2 <- allocateParty "v2"
-  unpermissionV2Cid <- submit dso $ createCmd ValidatorUnpermission with
-    dso
-    validator = v2
-    participantId = "v2-participant-id"
-    loginAfter = None
-    revoked = False
-
-  submitMustFail (actAs sv1 <> readAs dso) $ exerciseCmd dsoRulesCid (DsoRules_MergeValidatorUnpermission [mergedCid, unpermissionV2Cid] (Some sv1))
+  -- The loginAfter should be the maximum of the two times (suspendTime2)
+  finalUnpermission.loginAfter === Some suspendTime2
 
   -- Cannot merge contracts belonging to different participant IDs
   unpermissionDiffParticipantCid <- submit dso $ createCmd ValidatorUnpermission with
     dso
-    validator = v1
     participantId = "different-participant-id"
     loginAfter = None
     revoked = False

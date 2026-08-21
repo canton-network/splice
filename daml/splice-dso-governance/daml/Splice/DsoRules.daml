@@ -27,6 +27,7 @@ import Splice.ExternalPartyConfigState
 import Splice.Round
 import Splice.Types
 import Splice.ValidatorLicense
+import Splice.ValidatorUnpermission
 import Splice.Wallet.Subscriptions
 import Splice.DecentralizedSynchronizer (MemberTraffic(..))
 
@@ -228,7 +229,7 @@ data DsoRules_MergeValidatorUnpermissionResult = DsoRules_MergeValidatorUnpermis
     validatorUnpermissionCid : ContractId ValidatorUnpermission
 
 data DsoRules_UnpermissionValidatorResult = DsoRules_UnpermissionValidatorResult with
-    newValidatorUnpermissionCid : ContractId ValidatorUnpermission
+    validatorUnpermissionCid : ContractId ValidatorUnpermission
 
 data DsoRules_RejectValidatorLicenseResult = DsoRules_RejectValidatorLicenseResult {}
 
@@ -1081,47 +1082,16 @@ template DsoRules with
 
     nonconsuming choice DsoRules_UnpermissionValidator : DsoRules_UnpermissionValidatorResult
       with
-        validator : Party
         participantId : Text
-        optValidatorUnpermissionCid : Optional (ContractId ValidatorUnpermission)
-        newLoginAfter : Optional Time
-        newRevoked : Bool
-        optValidatorLicenseCid : Optional (ContractId ValidatorLicense)
+        loginAfter : Optional Time
+        revoked : Bool
       controller dso
       do
-        -- Ensure license CID is provided if we are permanently revoking them
-        if newRevoked then do
-          require "optValidatorLicenseCid must be provided when permanently revoking a validator" (isSome optValidatorLicenseCid)
-        else
-          pure ()
-
-        -- Ensure the provided license actually belongs to this validator
-        forA_ optValidatorLicenseCid $ \licenseCid -> do
-          license <- fetchChecked (ForDso with dso) licenseCid
-          require "optValidatorLicenseCid must belong to the same validator" (license.validator == validator)
-
-        -- Handle License Archival
-        if newRevoked then
-          forA_ optValidatorLicenseCid $ \licenseCid -> do
-            void $ exercise licenseCid ValidatorLicense_Withdraw with reason = "Permanently unpermissioned by SV vote"
-        else
-          pure ()
-
-        newValidatorUnpermissionCid <- case optValidatorUnpermissionCid of
-          Some cid -> do
-            unpermission <- fetchChecked (ForDso with dso) cid
-            require "optValidatorUnpermissionCid must belong to the same validator" (unpermission.validator == validator)
-            updateResult <- exercise cid ValidatorUnpermission_Update with
-              newLoginAfter
-              newRevoked
-            pure updateResult.newValidatorUnpermissionCid
-          None -> do
-            create ValidatorUnpermission with
-              dso
-              validator
-              participantId
-              loginAfter = newLoginAfter
-              revoked = newRevoked
+        validatorUnpermissionCid <- create ValidatorUnpermission with
+          dso
+          participantId
+          loginAfter
+          revoked
 
         return DsoRules_UnpermissionValidatorResult with ..
 
@@ -1137,10 +1107,8 @@ template DsoRules with
         unpermissions <- forA unpermissionCids $ \cid -> fetchAndArchive (ForDso with dso) cid
 
         let headUnpermission = head unpermissions
-        let validator = headUnpermission.validator
         let participantId = headUnpermission.participantId
 
-        require "All ValidatorUnpermission contracts must belong to the same validator" (all (\u -> u.validator == validator) unpermissions)
         require "All ValidatorUnpermission contracts must have the same participantId" (all (\u -> u.participantId == participantId) unpermissions)
 
         -- Revoked if ANY are revoked. LoginAfter is the maximum (latest) time.
@@ -1150,7 +1118,6 @@ template DsoRules with
 
         validatorUnpermissionCid <- create ValidatorUnpermission with
           dso
-          validator
           participantId
           loginAfter = mergedLoginAfter
           revoked = mergedRevoked

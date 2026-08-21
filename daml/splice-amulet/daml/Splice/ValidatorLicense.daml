@@ -17,9 +17,6 @@ data ValidatorLicenseRequest_ExpireResult = ValidatorLicenseRequest_ExpireResult
 data ValidatorLicenseRequest_AcceptResult = ValidatorLicenseRequest_AcceptResult {}
 data ValidatorLicenseRequest_RejectResult = ValidatorLicenseRequest_RejectResult {}
 
-data ValidatorUnpermission_UpdateResult = ValidatorUnpermission_UpdateResult with
-    newValidatorUnpermissionCid : ContractId ValidatorUnpermission
-
 data FaucetState = FaucetState with
     firstReceivedFor : Round -- ^ The first round for which a coupon was received.
     lastReceivedFor : Round -- ^ The last round for which a coupon was received.
@@ -258,35 +255,8 @@ template ValidatorLicenseRequest with
         assertDeadlineExceeded "expiresAt" expiresAt
         return ValidatorLicenseRequest_ExpireResult {}
 
--- | ValidatorUnpermission contract is created to manage
--- the validator's permissions on the synchronizer.
--- It is created lazily when SVs successfully vote to restrict a validator's permissions.
-template ValidatorUnpermission
-  with
-    dso : Party
-    validator : Party
-    participantId : Text
-    loginAfter : Optional Time
-    revoked : Bool
-  where
-    signatory dso
-
-    choice ValidatorUnpermission_Update : ValidatorUnpermission_UpdateResult
-      with
-        newLoginAfter : Optional Time
-        newRevoked : Bool
-      controller dso
-      do
-        newValidatorUnpermissionCid <- create this with
-          loginAfter = newLoginAfter
-          revoked = newRevoked
-        return ValidatorUnpermission_UpdateResult with ..
-
 -- instances
 ------------
-
-instance HasCheckedFetch ValidatorUnpermission ForDso where
-  contractGroupId ValidatorUnpermission{..} = ForDso with dso
 
 instance HasCheckedFetch ValidatorFaucetCoupon ForOwner where
   contractGroupId ValidatorFaucetCoupon{..} = ForOwner with dso; owner = validator

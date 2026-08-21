@@ -1,0 +1,29 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+module Splice.ValidatorUnpermission where
+
+import Splice.Util
+import Splice.Types (ForDso(..))
+
+-- | ValidatorUnpermission contract is created to manage
+-- the validator's permissions on the synchronizer.
+-- It is created lazily when SVs successfully vote to restrict a validator's permissions.
+template ValidatorUnpermission
+  with
+    dso : Party
+    participantId : Text
+    -- The timestamp after which the validator is allowed to log in again.
+    -- If set, this acts as a temporary suspension until the specified time.
+    loginAfter : Optional Time
+    -- A flag indicating whether the validator has been permanently banned.
+    -- If True, the validator's ParticipantSynchronizerPermission topology is revoked.
+    revoked : Bool
+  where
+    signatory dso
+
+-- instances
+------------
+
+instance HasCheckedFetch ValidatorUnpermission ForDso where
+  contractGroupId ValidatorUnpermission{..} = ForDso with dso
