@@ -285,7 +285,7 @@ function installDatastream_stag_prod(
         },
         destinationConnectionProfile: destination.name,
       },
-      backfillAll: {},
+      backfillNone: {}, // Addressing issue #6919 - partition overflow problem with backfillAll, so using backfillNone for stag-prod datastream
       ruleSets: tablesToReplicate.map(tableName => ({
         objectFilter: {
           sourceObjectIdentifier: {
