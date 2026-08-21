@@ -4,7 +4,6 @@
 package org.lfdecentralizedtrust.splice.scan.store.bulk
 
 import com.daml.metrics.api.MetricHandle.LabeledMetricsFactory
-import com.daml.metrics.api.MetricsContext
 import com.digitalasset.canton.lifecycle.{AsyncOrSyncCloseable, FlagCloseableAsync, LifeCycle}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.time.Clock
@@ -153,15 +152,14 @@ class BulkStorage(
     reader,
     appConfig,
     scanConnection,
-    count =>
-      historyMetrics.BulkStorage.objectsCount
-        .inc(count.toLong)(
-          MetricsContext(
-            "object_type" -> "ACS_snapshots",
-            "encoding" -> "mixed",
-            "bucket" -> "committed",
-          )
-        ),
+    objs =>
+      objs.foreach { obj =>
+        val encoding = ScanStorageConfig.Encoding.all.toList
+          .find(enc => enc.storageKeyRegex("ACS").matches(obj.key))
+          .map(_.key)
+          .getOrElse("unknown")
+        historyMetrics.BulkStorage.incAcsSnapshotObjects(encoding, "committed")
+      },
     loggerFactory,
   )
   val acsCommitted = new AcsSnapshotBulkStorage(
@@ -195,11 +193,14 @@ class BulkStorage(
     reader,
     appConfig,
     scanConnection,
-    count =>
-      historyMetrics.BulkStorage.objectsCount
-        .inc(count.toLong)(
-          MetricsContext("object_type" -> "updates", "encoding" -> "mixed", "bucket" -> "committed")
-        ),
+    objs =>
+      objs.foreach { obj =>
+        val encoding = ScanStorageConfig.Encoding.all.toList
+          .find(enc => enc.storageKeyRegex("updates").matches(obj.key))
+          .map(_.key)
+          .getOrElse("unknown")
+        historyMetrics.BulkStorage.incUpdateObjects(encoding, "committed")
+      },
     loggerFactory,
   )
   val updatesCommitted = new UpdateHistoryBulkStorage(

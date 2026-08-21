@@ -20,7 +20,7 @@ class UpdateHistoryBulkStorageCommitFromStaging(
     bulkStorageReader: BulkStorageReader,
     appConfig: BulkStorageConfig,
     scanConnection: PeerBftScanConnection,
-    onObjectCommitted: Int => Unit,
+    onObjectCommitted: Seq[S3BucketConnection.ObjectKeyAndChecksum] => Unit,
     val loggerFactory: NamedLoggerFactory,
 )(implicit
     ec: ExecutionContextExecutor

@@ -25,7 +25,7 @@ class BulkStorageCommitFromStaging[T](
     appConfig: BulkStorageConfig,
     scanConnection: PeerBftScanConnection,
     override val loggerFactory: NamedLoggerFactory,
-    onObjectCommitted: Int => Unit = _ => (),
+    onObjectCommitted: Seq[ObjectKeyAndChecksum] => Unit = _ => (),
 )(implicit
     tc: TraceContext,
     ec: ExecutionContextExecutor,
@@ -139,7 +139,7 @@ class BulkStorageCommitFromStaging[T](
         Future
           .sequence(objs.map(copyObjectToCommitted(stagingS3Connection, committedS3Connection)))
           .map { _ =>
-            onObjectCommitted(objs.size)
+            onObjectCommitted(objs)
             (ts, objs)
           }
       }
@@ -184,7 +184,7 @@ object BulkStorageCommitFromStaging {
       appConfig: BulkStorageConfig,
       scanConnection: PeerBftScanConnection,
       loggerFactory: NamedLoggerFactory,
-      onObjectCommitted: Int => Unit = _ => (),
+      onObjectCommitted: Seq[ObjectKeyAndChecksum] => Unit = _ => (),
   )(implicit
       tc: TraceContext,
       ec: ExecutionContextExecutor,
