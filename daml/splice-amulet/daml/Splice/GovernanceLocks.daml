@@ -35,19 +35,19 @@ template GovernanceLockFactory
     dso : Party
   where
     signatory dso
-    choice GovernanceLockFactory_Lock : GovernanceLockFactory_LockResult
+    nonconsuming choice GovernanceLockFactory_Lock : GovernanceLockFactory_LockResult
       with
         amount : Decimal
         inputs : [ContractId Holding]
         specification : GovernanceLockSpecification
         context : ExternalPartyTransferContext
         owner : Party
-      controller authorizer
+      controller owner
       do
-        ([holding], changeHolding) <- lockAmulet (ForOwner with dso; owner=authorizer) [amount] inputs context
+        ([holding], changeHolding) <- lockAmulet (ForOwner with dso; owner) [amount] inputs context
         governanceLock <- create GovernanceLock with
           dso
-          owner = authorizer
+          owner
           holding
           specification
         pure $ GovernanceLockFactory_LockResult with
@@ -80,7 +80,7 @@ template GovernanceLock
         actors : [Party]
       controller actors
       do
-        require "Only the owner may unlock" $ authorizers == [owner] -- TODO: custom controllers
+        require "Only the owner may unlock" $ actors == [owner] -- TODO: custom controllers
         assertWithinDeadline "requestedAt must be in the future for unlock" requestedAt
 
         (vestingLockedHolding, governanceLock, initialAmount) <- case amount of
@@ -133,10 +133,10 @@ template VestingLock
         amount : Optional Decimal
         requestedAt : Time
         context : ExternalPartyTransferContext
-        authorizers : [Party]
-      controller authorizers
+        actors : [Party]
+      controller actors
       do
-        require "Only the authorizer may withdraw" $ authorizers == [owner] -- TODO: custom controllers
+        require "Only the owner may withdraw" $ actors == [owner] -- TODO: custom controllers
         currentAmount <- fetchAmount (ForOwner with dso; owner) holding
         assertDeadlineExceeded "requestAt must be in the past for withdraw" requestedAt
         require "withdrawal time must be after the start time" $ requestedAt > startTime
