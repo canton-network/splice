@@ -285,7 +285,7 @@ function installDatastream_stag_prod(
         },
         destinationConnectionProfile: destination.name,
       },
-      backfillAll: {},
+      backfillNone: {}, // Addressing issue #6919 - partition overflow problem with backfillAll, so using backfillNone for stag-prod datastream
       ruleSets: tablesToReplicate.map(tableName => ({
         objectFilter: {
           sourceObjectIdentifier: {
@@ -355,7 +355,9 @@ function installBigqueryStagingDataset(scanBigQuery: ScanBigQueryConfig): gcp.bi
     friendlyName: `${scanBigQuery.dataset} Staging Dataset`,
     location: cloudsdkComputeRegion(),
     deleteContentsOnDestroy: true,
-    defaultTableExpirationMs: THREE_DAYS_MS,
+    // ISSUE#6814: Do not rely on ingestion timestamps for retention in staging.
+    // GCP calculates expiration from the table creation date, which will delete
+    // staging tables at the 3-day mark even if production sync is incomplete.
     labels: {
       cluster: CLUSTER_BASENAME,
       datastream_id: 'stag_prod',
@@ -368,11 +370,38 @@ function installBigqueryProdDataset(scanBigQuery: ScanBigQueryConfig): gcp.bigqu
     datasetId: `${scanBigQuery.dataset}_prod`,
     friendlyName: `${scanBigQuery.dataset} Production Dataset`,
     location: cloudsdkComputeRegion(),
-    deleteContentsOnDestroy: true,
+    deleteContentsOnDestroy: false,
     labels: {
       cluster: CLUSTER_BASENAME,
     },
   });
+}
+// ============================================================================
+// IAM PERMISSIONS for SCHEDULED QUERIES
+// ============================================================================
+interface ScheduledQueryContext {
+  projectId: pulumi.Output<string>;
+  transferServiceAgentPermission: gcp.projects.IAMMember;
+}
+
+function installBqScheduledQueryContext(): ScheduledQueryContext {
+  const currentProject = gcp.organizations.getProjectOutput({});
+  const projectId = currentProject.apply(p => {
+    if (!p.projectId) {
+      throw new Error('Current GCP project output is missing a projectId.');
+    }
+    return p.projectId;
+  });
+
+  const transferServiceAgentPermission = new gcp.projects.IAMMember('bq-transfer-token-creator', {
+    project: projectId,
+    role: 'roles/iam.serviceAccountTokenCreator',
+    member: currentProject.apply(
+      p => `serviceAccount:service-${p.number}@gcp-sa-bigquerydatatransfer.iam.gserviceaccount.com`
+    ),
+  });
+
+  return { projectId, transferServiceAgentPermission };
 }
 
 // ============================================================================
@@ -384,20 +413,11 @@ const rawSqlTemplate = fs.readFileSync(path.join(__dirname, 'hourly_append.sql')
 function installHourlyScheduledQueries(
   namespace: ExactNamespace,
   stagingDataset: gcp.bigquery.Dataset,
-  prodDataset: gcp.bigquery.Dataset
+  prodDataset: gcp.bigquery.Dataset,
+  context: ScheduledQueryContext
 ) {
-  const currentProject = gcp.organizations.getProjectOutput({});
-  const projectId = currentProject.apply(p => p.projectId!);
+  const { projectId, transferServiceAgentPermission } = context;
   const schemaName = scanAppDatabaseName(namespace);
-
-  const transferServiceAgentPermission = new gcp.projects.IAMMember('bq-transfer-token-creator', {
-    project: projectId,
-    role: 'roles/iam.serviceAccountTokenCreator',
-    member: currentProject.apply(
-      p => `serviceAccount:service-${p.number}@gcp-sa-bigquerydatatransfer.iam.gserviceaccount.com`
-    ),
-  });
-
   Object.entries(replicatedTables).forEach(([tableName, tableConfig]) => {
     const primaryKeyExpr = tableConfig.primaryKey;
     const colName = tableConfig.datePartitionColumn;
@@ -463,7 +483,67 @@ function installHourlyScheduledQueries(
     );
   });
 }
+// ============================================================================
+// Purging data older than 7 days from the staging table
+// ============================================================================
+function installDailyPurgeScheduledQueries(
+  namespace: ExactNamespace,
+  stagingDataset: gcp.bigquery.Dataset,
+  context: ScheduledQueryContext,
+  retentionPeriodSeconds: number
+) {
+  const { projectId, transferServiceAgentPermission } = context;
+  const schemaName = scanAppDatabaseName(namespace);
+  const retentionDays = retentionPeriodSeconds / 86400;
 
+  Object.entries(replicatedTables).forEach(([tableName, tableConfig]) => {
+    const timeExpression =
+      tableConfig.timeType === 'datastream_metadata'
+        ? `TIMESTAMP_MILLIS(datastream_metadata.${tableConfig.datePartitionColumn})`
+        : `TIMESTAMP_MICROS(${tableConfig.datePartitionColumn})`;
+
+    const procedureBody = pulumi
+      .all([projectId, stagingDataset.datasetId])
+      .apply(([proj, stagingDs]) => {
+        const stagingTable = `\`${proj}.${stagingDs}.${schemaName}_${tableName}\``;
+
+        return `
+          DELETE FROM ${stagingTable}
+          WHERE ${timeExpression} < TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL ${retentionPeriodSeconds} SECOND);
+        `;
+      });
+
+    const routineId = `sp_purge_old_records_${tableName}`;
+
+    // Create the cleanup Stored Procedure
+    const purgeRoutine = new gcp.bigquery.Routine(`${tableName}-purge-routine`, {
+      datasetId: stagingDataset.datasetId,
+      routineId: routineId,
+      routineType: 'PROCEDURE',
+      language: 'SQL',
+      definitionBody: procedureBody,
+    });
+
+    // Schedule the Stored Procedure to run daily
+    new gcp.bigquery.DataTransferConfig(
+      `${CLUSTER_BASENAME}_${tableName}-daily-purge`,
+      {
+        displayName: `${CLUSTER_BASENAME}_${tableName} Daily Retention Purge`,
+        location: cloudsdkComputeRegion(),
+        serviceAccountName: pulumi.interpolate`bigquery@${projectId}.iam.gserviceaccount.com`,
+        dataSourceId: 'scheduled_query',
+        schedule: 'every day 05:21', // Runs daily at 05:21 AM
+
+        params: {
+          query: pulumi.interpolate`CALL \`${projectId}.${stagingDataset.datasetId}.${routineId}\`();`,
+        },
+      },
+      {
+        dependsOn: [transferServiceAgentPermission, purgeRoutine],
+      }
+    );
+  });
+}
 // ============================================================================
 // CONNECTION PROFILES & NETWORKING
 // ============================================================================
@@ -775,6 +855,7 @@ export async function configureScanBigQuery({
     enableStagProdDatastream,
     legacyDesiredState,
     stagProdDesiredState,
+    retentionPeriodSeconds,
   } = bigQueryConfig;
 
   if (!enableLegacyDatastream && !enableStagProdDatastream) {
@@ -856,8 +937,14 @@ export async function configureScanBigQuery({
       slots.slot2,
       stagProdDesiredState
     );
-
-    installHourlyScheduledQueries(namespace, stagingDataset, prodDataset);
+    const scheduledQueryContext = installBqScheduledQueryContext();
+    installHourlyScheduledQueries(namespace, stagingDataset, prodDataset, scheduledQueryContext);
+    installDailyPurgeScheduledQueries(
+      namespace,
+      stagingDataset,
+      scheduledQueryContext,
+      retentionPeriodSeconds
+    );
   }
   // TODO (DACH-NY/canton-network-internal#6451) not sure if this function needs to return anything,
   // but we need to return something to satisfy the ScanBigQuery type.
