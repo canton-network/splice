@@ -1,7 +1,7 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import * as React from 'react';
-import { NavLink } from 'react-router';
+import { NavLink, useLocation } from 'react-router';
 
 import { Box } from '@mui/material';
 
@@ -16,6 +16,8 @@ export interface SvNavLinkItem {
   hasAlert?: boolean;
   /** When false, nav stays active on nested paths (e.g. /governance/proposals). */
   end?: boolean;
+  /** Extra pathnames that should show this link as active (e.g. `/` for GSI). */
+  alsoActiveFor?: string[];
 }
 
 interface SvNavLinkProps {
@@ -47,27 +49,34 @@ const navLinkSx = (isActive: boolean, accessoryGap: string) => ({
   },
 });
 
-const SvNavLink: React.FC<SvNavLinkProps> = ({ link }) => (
-  <NavLink
-    id={`navlink-${link.path.replace(/^\//, '')}`}
-    data-testid={`navlink-${link.path.replace(/^\//, '')}`}
-    to={link.path}
-    end={link.end ?? true}
-    style={{ textDecoration: 'none' }}
-  >
-    {({ isActive }) => (
-      <Box sx={navLinkSx(isActive, link.hasAlert ? '10px' : '6px')}>
-        {link.name}
-        {link.badgeCount !== undefined && link.badgeCount > 0 ? (
-          <NavCountBadge
-            count={link.badgeCount}
-            id={`nav-badge-${link.path.replace(/^\//, '')}-count`}
-          />
-        ) : null}
-        {link.hasAlert ? <NavAttentionIcon /> : null}
-      </Box>
-    )}
-  </NavLink>
-);
+const SvNavLink: React.FC<SvNavLinkProps> = ({ link }) => {
+  const location = useLocation();
+
+  return (
+    <NavLink
+      id={`navlink-${link.path.replace(/^\//, '')}`}
+      data-testid={`navlink-${link.path.replace(/^\//, '')}`}
+      to={link.path}
+      end={link.end ?? true}
+      style={{ textDecoration: 'none' }}
+    >
+      {({ isActive }) => {
+        const active = isActive || (link.alsoActiveFor?.includes(location.pathname) ?? false);
+        return (
+          <Box sx={navLinkSx(active, link.hasAlert ? '10px' : '6px')}>
+            {link.name}
+            {link.badgeCount !== undefined && link.badgeCount > 0 ? (
+              <NavCountBadge
+                count={link.badgeCount}
+                id={`nav-badge-${link.path.replace(/^\//, '')}-count`}
+              />
+            ) : null}
+            {link.hasAlert ? <NavAttentionIcon /> : null}
+          </Box>
+        );
+      }}
+    </NavLink>
+  );
+};
 
 export default SvNavLink;
