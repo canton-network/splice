@@ -155,7 +155,13 @@ class BulkStorage(
     scanConnection,
     count =>
       historyMetrics.BulkStorage.objectsCount
-        .inc(count.toLong)(MetricsContext("object_type" -> "ACS_snapshots", "encoding" -> "mixed", "bucket" -> "committed")),
+        .inc(count.toLong)(
+          MetricsContext(
+            "object_type" -> "ACS_snapshots",
+            "encoding" -> "mixed",
+            "bucket" -> "committed",
+          )
+        ),
     loggerFactory,
   )
   val acsCommitted = new AcsSnapshotBulkStorage(
@@ -191,7 +197,9 @@ class BulkStorage(
     scanConnection,
     count =>
       historyMetrics.BulkStorage.objectsCount
-        .inc(count.toLong)(MetricsContext("object_type" -> "updates", "encoding" -> "mixed", "bucket" -> "committed")),
+        .inc(count.toLong)(
+          MetricsContext("object_type" -> "updates", "encoding" -> "mixed", "bucket" -> "committed")
+        ),
     loggerFactory,
   )
   val updatesCommitted = new UpdateHistoryBulkStorage(
