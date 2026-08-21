@@ -63,7 +63,8 @@ describe('Review Proposal Component', () => {
     expect(screen.getByTestId('effectiveDate-field').textContent).toBe(effectiveDate);
 
     expect(screen.getByTestId('offboardMember-title').textContent).toBe('Member');
-    expect(screen.getByTestId('offboardMember-field').textContent).toBe(offboardMember);
+    expect(screen.getByTestId('offboardMember-party-id-value').textContent).toBe(offboardMember);
+    expect(screen.getByTestId('offboardMember-party-id-copy-button')).toBeInTheDocument();
   });
 
   test('should render review proposal component for offboard member at Threshold', () => {
@@ -115,7 +116,10 @@ describe('Review Proposal Component', () => {
     expect(screen.getByTestId('effectiveDate-field').textContent).toBe(effectiveDate);
 
     expect(screen.getByTestId('svRewardWeightMember-title').textContent).toBe('Member');
-    expect(screen.getByTestId('svRewardWeightMember-field').textContent).toBe(svRewardWeightMember);
+    expect(screen.getByTestId('svRewardWeightMember-party-id-value').textContent).toBe(
+      svRewardWeightMember
+    );
+    expect(screen.getByTestId('svRewardWeightMember-party-id-copy-button')).toBeInTheDocument();
 
     expect(screen.getByTestId('configChange-title').textContent).toBe('Proposed Changes');
     expect(screen.getByTestId('config-change-field-label').textContent).toBe(title);
@@ -147,7 +151,8 @@ describe('Review Proposal Component', () => {
     expect(screen.getByTestId('effectiveDate-field').textContent).toBe(effectiveDate);
 
     expect(screen.getByTestId('grantRight-title').textContent).toBe('Provider Party ID');
-    expect(screen.getByTestId('grantRight-field').textContent).toBe(provider);
+    expect(screen.getByTestId('grantRight-party-id-value').textContent).toBe(provider);
+    expect(screen.getByTestId('grantRight-party-id-copy-button')).toBeInTheDocument();
 
     expect(screen.getByTestId('grantRightActivityWeight-title').textContent).toBe(
       'Activity Weight'
@@ -179,7 +184,10 @@ describe('Review Proposal Component', () => {
     expect(screen.getByTestId('effectiveDate-field').textContent).toBe(effectiveDate);
 
     expect(screen.getByTestId('revokeProviderPartyId-title').textContent).toBe('Provider Party ID');
-    expect(screen.getByTestId('revokeProviderPartyId-field').textContent).toBe(providerPartyId);
+    expect(screen.getByTestId('revokeProviderPartyId-party-id-value').textContent).toBe(
+      providerPartyId
+    );
+    expect(screen.getByTestId('revokeProviderPartyId-party-id-copy-button')).toBeInTheDocument();
 
     expect(screen.getByTestId('revokeRight-title').textContent).toBe(
       'Featured Application Contract ID'
@@ -215,7 +223,10 @@ describe('Review Proposal Component', () => {
     expect(screen.getByTestId('effectiveDate-field').textContent).toBe(effectiveDate);
 
     expect(screen.getByTestId('updateProviderPartyId-title').textContent).toBe('Provider Party ID');
-    expect(screen.getByTestId('updateProviderPartyId-field').textContent).toBe(providerPartyId);
+    expect(screen.getByTestId('updateProviderPartyId-party-id-value').textContent).toBe(
+      providerPartyId
+    );
+    expect(screen.getByTestId('updateProviderPartyId-party-id-copy-button')).toBeInTheDocument();
 
     expect(screen.getByTestId('updateRight-title').textContent).toBe(
       'Featured Application Contract ID'

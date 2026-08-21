@@ -3,6 +3,8 @@
 
 import { Box, Typography } from '@mui/material';
 import type { ReactNode } from 'react';
+import { MemberIdentifier } from '../beta';
+import { IDENTIFIER_COMPACT_MAX_WIDTH_PX } from '../beta/identifierStyles';
 import {
   EFFECTIVE_AT_LABEL,
   CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE,
@@ -13,6 +15,20 @@ import {
 import type { ConfigChange } from '../../utils/types';
 import { ConfigValuesChanges } from './ConfigValuesChanges';
 import { ProposalReviewField } from './ProposalReviewField';
+
+/** Figma review party IDs: Source Code Pro 14px + copy (node 4832:4323). */
+const ReviewPartyId: React.FC<{ partyId: string; 'data-testid': string }> = ({
+  partyId,
+  'data-testid': testId,
+}) => (
+  <MemberIdentifier
+    partyId={partyId}
+    isYou={false}
+    size="small"
+    maxWidth={IDENTIFIER_COMPACT_MAX_WIDTH_PX}
+    data-testid={testId}
+  />
+);
 
 interface BaseProposalSummaryProps {
   actionName: string;
@@ -112,7 +128,12 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
             <ProposalReviewField
               id="svRewardWeightMember"
               label="Member"
-              value={props.svRewardWeightMember}
+              value={
+                <ReviewPartyId
+                  partyId={props.svRewardWeightMember}
+                  data-testid="svRewardWeightMember-party-id"
+                />
+              }
             />
             <ProposalReviewField
               id="configChange"
@@ -139,7 +160,7 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
             <ProposalReviewField
               id="grantRight"
               label="Provider Party ID"
-              value={props.grantRight}
+              value={<ReviewPartyId partyId={props.grantRight} data-testid="grantRight-party-id" />}
             />
             <ProposalReviewField
               id="grantRightActivityWeight"
@@ -154,7 +175,12 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
             <ProposalReviewField
               id="revokeProviderPartyId"
               label="Provider Party ID"
-              value={props.providerPartyId}
+              value={
+                <ReviewPartyId
+                  partyId={props.providerPartyId}
+                  data-testid="revokeProviderPartyId-party-id"
+                />
+              }
             />
             <ProposalReviewField
               id="revokeRight"
@@ -169,7 +195,12 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
             <ProposalReviewField
               id="updateProviderPartyId"
               label="Provider Party ID"
-              value={props.providerPartyId}
+              value={
+                <ReviewPartyId
+                  partyId={props.providerPartyId}
+                  data-testid="updateProviderPartyId-party-id"
+                />
+              }
             />
             <ProposalReviewField
               id="updateRight"
@@ -197,12 +228,24 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
         )}
 
         {formType === 'offboard' && (
-          <ProposalReviewField id="offboardMember" label="Member" value={props.offboardMember} />
+          <ProposalReviewField
+            id="offboardMember"
+            label="Member"
+            value={
+              <ReviewPartyId partyId={props.offboardMember} data-testid="offboardMember-party-id" />
+            }
+          />
         )}
 
         {formType === 'create-unallocated-unclaimed-activity-record' && (
           <>
-            <ProposalReviewField id="beneficiary" label="Beneficiary" value={props.beneficiary} />
+            <ProposalReviewField
+              id="beneficiary"
+              label="Beneficiary"
+              value={
+                <ReviewPartyId partyId={props.beneficiary} data-testid="beneficiary-party-id" />
+              }
+            />
             <ProposalReviewField id="amount" label="Amount" value={props.amount} />
             <ProposalReviewField id="expiresAt" label="Must Mint Before" value={props.expiresAt} />
           </>
