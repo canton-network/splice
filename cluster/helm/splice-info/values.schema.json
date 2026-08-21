@@ -23,6 +23,17 @@
         "version": { "type": "string", "minLength": 1 }
       }
     },
+    "sequencer_rate_limit_message_config": {
+      "type": "object",
+      "required": [ "globalTpsCap", "perClientTpsCap", "globalKbpsCap", "perClientKbpsCap" ],
+      "additionalProperties": false,
+      "properties": {
+        "globalTpsCap": { "type": "integer", "minimum": 0 },
+        "perClientTpsCap": { "type": "integer", "minimum": 0 },
+        "globalKbpsCap": { "type": "integer", "minimum": 0 },
+        "perClientKbpsCap": { "type": "integer", "minimum": 0 }
+      }
+    },
     "digest": {
       "type": "object",
       "required": [ "type", "value" ],
@@ -84,7 +95,29 @@
       "properties": {
         "scanUrl": { "type": "string", "minLength": 1 },
         "synchronizerSerialId": { "type": "integer", "minimum": 0 },
-        "tlsSkipVerify": { "type": "boolean", "default": false }
+        "tlsSkipVerify": { "type": "boolean", "default": false },
+        "sequencerRateLimits": {
+          "description": "Optional. The sequencer block throughput caps applied by this SV's sequencer. When set, exposed at /runtime/sequencer-caps.json.",
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "required": [ "messages" ],
+              "additionalProperties": false,
+              "properties": {
+                "messages": {
+                  "type": "object",
+                  "required": [ "confirmationRequest", "topology" ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "confirmationRequest": { "$ref": "#/$defs/sequencer_rate_limit_message_config" },
+                    "topology": { "$ref": "#/$defs/sequencer_rate_limit_message_config" }
+                  }
+                }
+              }
+            }
+          ]
+        }
       }
     },
     "deploymentDetails": {

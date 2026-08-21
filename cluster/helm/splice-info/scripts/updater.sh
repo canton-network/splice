@@ -32,15 +32,20 @@ status_json_file="$html_dir/$status_json_path"
 info_json_path=runtime/info.json
 info_json_file="$html_dir/$info_json_path"
 
+sequencer_caps_json_path=runtime/sequencer-caps.json
+sequencer_caps_json_file="$html_dir/$sequencer_caps_json_path"
+
 jq -n \
   --arg dso "/$dso_json_path" \
   --arg status "/$status_json_path" \
   --arg info "/$info_json_path" \
+  --arg sequencerCaps "/$sequencer_caps_json_path" \
   '
     {
       $dso,
       $info,
       $status,
+      $sequencerCaps,
     }
   ' > "$runtime_index_file"
 
@@ -61,6 +66,12 @@ while true; do
 
   if result=$(/scripts/get-info.sh); then
     dest="$info_json_file"
+    echo "$result" > "$dest.new"
+    mv "$dest.new" "$dest"
+  fi &
+
+  if result=$(/scripts/get-sequencer-caps.sh); then
+    dest="$sequencer_caps_json_file"
     echo "$result" > "$dest.new"
     mv "$dest.new" "$dest"
   fi &

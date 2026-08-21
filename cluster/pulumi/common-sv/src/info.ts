@@ -6,6 +6,7 @@ import {
   DecentralizedSynchronizerMigrationConfig,
   ExactNamespace,
   externalIpRangesFile,
+  getSequencerRateLimits,
   installSpliceHelmChart,
 } from '@canton-network/splice-pulumi-common';
 import {
@@ -38,6 +39,7 @@ export function installInfo(
     runtimeDetails: {
       synchronizerSerialId: decentralizedSynchronizerMigrationConfig.active.id,
       scanUrl: scanUrl,
+      sequencerRateLimits: getSequencerRateLimits(),
     },
     deploymentDetails: {
       network: clusterNetwork,

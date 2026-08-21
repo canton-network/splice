@@ -45,6 +45,7 @@ class DsoPreflightIntegrationTest
         s"${infoUrl}/runtime/dso.json",
         s"${infoUrl}/runtime/info.json",
         s"${infoUrl}/runtime/status.json",
+        s"${infoUrl}/runtime/sequencer-caps.json",
       )
 
       urls.foreach { url =>
@@ -64,9 +65,16 @@ class DsoPreflightIntegrationTest
             assert(json.isObject, s"Response body must be a JSON object, but got: $body")
             if (url == s"${infoUrl}/runtime/") {
               val expected = parse(
-                """{"dso":"/runtime/dso.json","info":"/runtime/info.json","status":"/runtime/status.json"}"""
+                """{"dso":"/runtime/dso.json","info":"/runtime/info.json","status":"/runtime/status.json","sequencerCaps":"/runtime/sequencer-caps.json"}"""
               ).getOrElse(fail("Hardcoded JSON invalid"))
               assert(json == expected, s"Expected $expected but got $json")
+            }
+            if (url == s"${infoUrl}/runtime/sequencer-caps.json") {
+              val rateLimits = json.hcursor.downField("rateLimits")
+              assert(
+                rateLimits.downField("messages").succeeded,
+                s"Expected sequencer-caps.json to have a rateLimits.messages field, but got: $body",
+              )
             }
           }
         }

@@ -9,13 +9,13 @@ import {
   DomainMigrationIndex,
   ExactNamespace,
   getAdditionalJvmOptions,
-  getPathToPrivateConfigFile,
+  getSequencerRateLimits,
   installSpliceHelmChart,
-  loadJsonFromFile,
   loadYamlFromFile,
   LogLevel,
   persistentHeapDumpsPvc,
   sanitizedForPostgres,
+  SequencerRateLimitMessageConfig,
   sequencerTokenExpirationTime,
   SPLICE_ROOT,
   SpliceCustomResourceOptions,
@@ -33,13 +33,11 @@ import { Release } from '@pulumi/kubernetes/helm/v3';
 import { ComponentResource, Output, Resource } from '@pulumi/pulumi';
 
 const getSequencerRateLimitConfig = (): string | undefined => {
-  const rateLimitsFile = getPathToPrivateConfigFile('sequencer-rate-limits.json');
-  if (!rateLimitsFile) {
+  const rateLimits = getSequencerRateLimits();
+  if (!rateLimits) {
     return undefined;
   }
-  const rateLimits = loadJsonFromFile(rateLimitsFile);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const limitsForMessageType = (message: string, config: any): string =>
+  const limitsForMessageType = (message: string, config: SequencerRateLimitMessageConfig): string =>
     [
       `canton.sequencers.sequencer.sequencer.block.throughput-cap.messages.${message} {`,
       `  global-tps-cap = ${config.globalTpsCap}`,

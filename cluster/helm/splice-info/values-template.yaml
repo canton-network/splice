@@ -9,6 +9,18 @@ contentType: "application/json"
 #   synchronizerSerialId: 5  # Serial ID of the current synchronizer to fetch metrics
 #   scanUrl: https://scan.sv.global.canton.network.xxx  # Optional, the default is the internal scan address, it's used to fetch the runtime configuration
 #   tlsSkipVerify: true  # Optional, the default is false
+#   sequencerRateLimits:  # Optional, exposed as-is under /runtime/sequencer-caps.json
+#     messages:
+#       confirmationRequest:
+#         globalTpsCap: 2
+#         perClientTpsCap: 1
+#         globalKbpsCap: 200
+#         perClientKbpsCap: 100
+#       topology:
+#         globalTpsCap: 4
+#         perClientTpsCap: 3
+#         globalKbpsCap: 400
+#         perClientKbpsCap: 300
 
 # deploymentDetails:  # Optional, exposes static configuration under path /
 #   network: "dev"

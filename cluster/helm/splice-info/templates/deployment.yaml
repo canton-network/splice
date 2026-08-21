@@ -82,6 +82,10 @@ spec:
             value: {{ .Values.runtimeDetails.scanUrl | default "http://scan-app:5012" | quote }}
           - name: TLS_SKIP_VERIFY
             value: {{ .Values.runtimeDetails.tlsSkipVerify | default false | quote }}
+          {{- if .Values.runtimeDetails.sequencerRateLimits }}
+          - name: SEQUENCER_RATE_LIMITS_JSON
+            value: {{ .Values.runtimeDetails.sequencerRateLimits | toJson | quote }}
+          {{- end }}
         volumeMounts:
         - name: scripts
           mountPath: /scripts

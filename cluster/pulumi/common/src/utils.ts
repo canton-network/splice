@@ -169,6 +169,30 @@ export function externalIpRangesFile(): string | undefined {
   return getPathToPrivateConfigFile('allowed-ip-ranges.json');
 }
 
+export interface SequencerRateLimitMessageConfig {
+  globalTpsCap: number;
+  perClientTpsCap: number;
+  globalKbpsCap: number;
+  perClientKbpsCap: number;
+}
+
+export interface SequencerRateLimitConfig {
+  messages: {
+    confirmationRequest: SequencerRateLimitMessageConfig;
+    topology: SequencerRateLimitMessageConfig;
+  };
+}
+
+// Reads the per-cluster sequencer rate-limit caps (block throughput caps applied by every SV's
+// sequencer), if configured. Returns undefined for clusters that don't set them.
+export function getSequencerRateLimits(): SequencerRateLimitConfig | undefined {
+  const rateLimitsFile = getPathToPrivateConfigFile('sequencer-rate-limits.json');
+  if (!rateLimitsFile) {
+    return undefined;
+  }
+  return loadJsonFromFile(rateLimitsFile);
+}
+
 // Typically used for overriding chart values.
 // The pulumi documentation also doesn't suggest a better type than this. ¯\_(ツ)_/¯
 

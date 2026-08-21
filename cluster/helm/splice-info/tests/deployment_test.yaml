@@ -38,6 +38,43 @@ tests:
           path: spec.template.spec.containers[?(@.name=='updater')].env[?(@.name=='SERIAL_ID')].value
           value: "101"
 
+  - it: "includes the sequencer rate limits env var when set"
+    template: deployment.yaml
+    set:
+      runtimeDetails:
+        synchronizerSerialId: 101
+        sequencerRateLimits:
+          messages:
+            confirmationRequest:
+              globalTpsCap: 2
+              perClientTpsCap: 1
+              globalKbpsCap: 200
+              perClientKbpsCap: 100
+            topology:
+              globalTpsCap: 4
+              perClientTpsCap: 3
+              globalKbpsCap: 400
+              perClientKbpsCap: 300
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[?(@.name=='updater')].env[?(@.name=='SEQUENCER_RATE_LIMITS_JSON')].value
+          value: '{"messages":{"confirmationRequest":{"globalKbpsCap":200,"globalTpsCap":2,"perClientKbpsCap":100,"perClientTpsCap":1},"topology":{"globalKbpsCap":400,"globalTpsCap":4,"perClientKbpsCap":300,"perClientTpsCap":3}}}'
+
+  - it: "omits the sequencer rate limits env var when not set"
+    template: deployment.yaml
+    set:
+      runtimeDetails:
+        synchronizerSerialId: 101
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[?(@.name=='updater')].env[?(@.name=='SEQUENCER_RATE_LIMITS_JSON')]
+
   - it: "injects custom serviceAccountName into Deployment when specified"
     template: deployment.yaml
     set:
