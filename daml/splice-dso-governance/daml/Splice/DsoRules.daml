@@ -8,7 +8,7 @@ import Prelude hiding (all)
 import DA.Action (void, unless)
 import DA.Assert
 import DA.Either (partitionEithers)
-import DA.Foldable (forA_, all)
+import DA.Foldable (forA_, all, maximum)
 import DA.List as List hiding (all)
 import DA.Optional (isNone, fromSome, fromOptional, isSome)
 import qualified DA.Map as Map
@@ -27,6 +27,7 @@ import Splice.ExternalPartyConfigState
 import Splice.Round
 import Splice.Types
 import Splice.ValidatorLicense
+import Splice.ValidatorUnpermission
 import Splice.Wallet.Subscriptions
 import Splice.DecentralizedSynchronizer (MemberTraffic(..))
 
@@ -126,6 +127,8 @@ data DsoRules_ActionRequiringConfirmation
       -- ^ Voted action to grant a validator license.
   | SRARC_RejectValidatorLicense DsoRules_RejectValidatorLicense
       -- ^ Voted action to reject a validator license request.
+  | SRARC_UnpermissionValidator DsoRules_UnpermissionValidator
+      -- ^ Voted action to update a validator's unpermission state.
   deriving (Eq, Show)
 
 data AnsEntryContext_ActionRequiringConfirmation
@@ -221,6 +224,12 @@ data DsoRules_UpdateFeaturedAppRightResult = DsoRules_UpdateFeaturedAppRightResu
 
 data DsoRules_GrantValidatorLicenseResult = DsoRules_GrantValidatorLicenseResult with
     validatorLicense : ContractId ValidatorLicense
+
+data DsoRules_MergeValidatorUnpermissionResult = DsoRules_MergeValidatorUnpermissionResult with
+    validatorUnpermissionCid : ContractId ValidatorUnpermission
+
+data DsoRules_UnpermissionValidatorResult = DsoRules_UnpermissionValidatorResult with
+    validatorUnpermissionCid : ContractId ValidatorUnpermission
 
 data DsoRules_RejectValidatorLicenseResult = DsoRules_RejectValidatorLicenseResult {}
 
@@ -1071,6 +1080,50 @@ template DsoRules with
         exercise validatorLicenseRequestCid ValidatorLicenseRequest_Expire
         return DsoRules_ExpireValidatorLicenseRequestResult
 
+    nonconsuming choice DsoRules_UnpermissionValidator : DsoRules_UnpermissionValidatorResult
+      with
+        participantId : Text
+        loginAfter : Optional Time
+        revoked : Bool
+      controller dso
+      do
+        validatorUnpermissionCid <- create ValidatorUnpermission with
+          dso
+          participantId
+          loginAfter
+          revoked
+
+        return DsoRules_UnpermissionValidatorResult with ..
+
+    nonconsuming choice DsoRules_MergeValidatorUnpermission : DsoRules_MergeValidatorUnpermissionResult
+      with
+        unpermissionCids : [ContractId ValidatorUnpermission]
+        sv : Optional Party
+      controller sv
+      do
+        _ <- getAndValidateSvParty this sv
+        require "Number of ValidatorUnpermission contracts to merge is >= 2" (length unpermissionCids >= 2)
+
+        unpermissions <- forA unpermissionCids $ \cid -> fetchAndArchive (ForDso with dso) cid
+
+        let headUnpermission = head unpermissions
+        let participantId = headUnpermission.participantId
+
+        require "All ValidatorUnpermission contracts must have the same participantId" (all (\u -> u.participantId == participantId) unpermissions)
+
+        -- Revoked if ANY are revoked. LoginAfter is the maximum (latest) time.
+        let mergedRevoked = any (.revoked) unpermissions
+        let allLoginAfters = [ t | Some t <- map (.loginAfter) unpermissions ]
+        let mergedLoginAfter = if null allLoginAfters then None else Some (maximum allLoginAfters)
+
+        validatorUnpermissionCid <- create ValidatorUnpermission with
+          dso
+          participantId
+          loginAfter = mergedLoginAfter
+          revoked = mergedRevoked
+
+        return DsoRules_MergeValidatorUnpermissionResult  with ..
+
     nonconsuming choice DsoRules_GrantValidatorLicense : DsoRules_GrantValidatorLicenseResult
       with
         validatorLicenseRequestCid : ContractId ValidatorLicenseRequest
@@ -1903,6 +1956,7 @@ executeActionRequiringConfirmation dso dsoRulesCid amuletRulesCid act = case act
       SRARC_CreateBootstrapExternalPartyConfigStateInstruction choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_GrantValidatorLicense choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_RejectValidatorLicense choiceArg -> void $ exercise dsoRulesCid choiceArg
+      SRARC_UnpermissionValidator choiceArg -> void $ exercise dsoRulesCid choiceArg
   ARC_AnsEntryContext with .. -> do
     void $ fetchChecked (ForDso with dso) ansEntryContextCid
     case ansEntryContextAction of
