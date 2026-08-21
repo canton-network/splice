@@ -135,7 +135,13 @@ class UpdateHistoryBulkStorageTest
             .get(MetricsContext.Empty)
             .value
             .markers
-            .get(MetricsContext("object_type" -> "updates", "encoding" -> encoding.key))
+            .get(
+              MetricsContext(
+                "object_type" -> "updates",
+                "encoding" -> encoding.key,
+                "bucket" -> "staging",
+              )
+            )
             .value
             .get()
         numObjectsFromMetric(ScanStorageConfig.Encoding.CompactJson) shouldBe 2
