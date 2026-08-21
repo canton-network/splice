@@ -623,6 +623,12 @@
       "namespace": "sv",
       "timeout": 600,
       "values": {
+        "additionalEnvVars": [
+          {
+            "name": "ADDITIONAL_CONFIG_CLIENT_IP_HEADERS",
+            "value": "canton.scan-apps.scan-app.parameters.rate-limiting.client-ip-headers = [\"x-envoy-external-address\"]\n"
+          }
+        ],
         "affinity": {
           "nodeAffinity": {
             "requiredDuringSchedulingIgnoredDuringExecution": {
@@ -1379,6 +1385,10 @@
           {
             "name": "ADDITIONAL_CONFIG_ADDITIONAL_PACKAGES_TO_UNVET",
             "value": "canton.sv-apps.sv.additional-packages-to-unvet.\"splice-wallet-payments\" = [\"0.1.15\", \"0.1.16\"]\ncanton.sv-apps.sv.additional-packages-to-unvet.\"splice-amulet\" = [\"0.1.15\"]"
+          },
+          {
+            "name": "ADDITIONAL_CONFIG_CLIENT_IP_HEADERS",
+            "value": "canton.sv-apps.sv.parameters.rate-limiting.client-ip-headers = [\"x-envoy-external-address\"]\n"
           }
         ],
         "additionalJvmOptions": "-Dcom.sun.management.jmxremote=true -Dcom.sun.management.jmxremote.port=9010 -Dcom.sun.management.jmxremote.rmi.port=9010 -Dcom.sun.management.jmxremote.local.only=false -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Djava.rmi.server.hostname=127.0.0.1 -DcustomSvAppJvmFlag",

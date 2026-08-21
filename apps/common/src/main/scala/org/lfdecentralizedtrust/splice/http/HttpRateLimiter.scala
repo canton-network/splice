@@ -32,8 +32,8 @@ class HttpRateLimiter(
     ]()
   private val metrics = scala.collection.concurrent.TrieMap[String, SpliceRateLimitMetrics]()
 
-  private val trustedClientIpHeader: String =
-    config.trustedClientIpHeader.trim
+  private val clientIpHeaders: Seq[String] =
+    config.clientIpHeaders.map(_.trim).filter(_.nonEmpty)
 
   private def metricsFor(service: String): SpliceRateLimitMetrics =
     metrics.getOrElseUpdate(
@@ -97,7 +97,7 @@ class HttpRateLimiter(
     import org.apache.pekko.http.scaladsl.server.Directives.*
 
     HttpRateLimiter
-      .extractClientIpKey(trustedClientIpHeader, config.enableClientProvidedIpHeaders)
+      .extractClientIpKey(clientIpHeaders)
       .flatMap { clientIp =>
         // The per client IP limiters are checked first (and `&&` short-circuits) so that a request
         // rejected because of its own client IP does not consume budget from the shared overall
@@ -134,11 +134,10 @@ object HttpRateLimiter {
   private[splice] val GlobalService = "global"
 
   private[splice] def extractClientIpKey(
-      trustedClientIpHeader: String = RateLimitersConfig.DefaultTrustedClientIpHeader,
-      enableClientProvidedIpHeaders: Boolean,
+      clientIpHeaders: Seq[String] = RateLimitersConfig.DefaultClientIpHeaders
   ): Directive1[Option[String]] =
     ClientIpDirectives
-      .extractClientIp(trustedClientIpHeader, enableClientProvidedIpHeaders)
+      .extractClientIp(clientIpHeaders)
       .map(_.collect { case RemoteAddress.IP(ip, _) => rateLimitKey(ip) })
 
   /** Single clients are typically assigned a whole IPv6 /64 (or larger) network, so limiting per

@@ -18,6 +18,7 @@ import {
   DecentralizedSynchronizerMigrationConfig,
   DecentralizedSynchronizerUpgradeConfig,
   ExactNamespace,
+  envoyClientIpHeaderEnvVar,
   failOnAppVersionMismatch,
   fetchAndInstallParticipantBootstrapDump,
   getAdditionalJvmOptions,
@@ -772,7 +773,9 @@ function installScan(
     logLevel: config.logging?.appsLogLevel,
     apiRequestLogLevel: config.logging?.apiRequestLogLevel,
     logAsyncFlush: config.logging?.appsAsync,
-    additionalEnvVars: config.scanApp?.additionalEnvVars || [],
+    additionalEnvVars: (config.scanApp?.additionalEnvVars || []).concat([
+      envoyClientIpHeaderEnvVar('canton.scan-apps.scan-app'),
+    ]),
     resources: config.scanApp?.resources,
     ...(config.bulkStorageBuckets
       ? {

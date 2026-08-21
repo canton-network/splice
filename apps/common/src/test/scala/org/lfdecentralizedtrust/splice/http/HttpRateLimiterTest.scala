@@ -24,86 +24,11 @@ import org.lfdecentralizedtrust.splice.util.{
 }
 import org.scalatest.wordspec.AnyWordSpec
 
-import java.net.{Inet6Address, InetAddress}
+import java.net.InetAddress
 
 class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteTest {
 
   "clientIp" should {
-
-    "prefer the trusted X-Envoy-External-Address over spoofable headers" in {
-      clientIp(
-        HttpRequest()
-          .withHeaders(
-            RawHeader("X-Envoy-External-Address", "4.4.4.4"),
-            `X-Forwarded-For`(RemoteAddress(InetAddress.getByName("1.1.1.1"))),
-            `X-Real-Ip`(RemoteAddress(InetAddress.getByName("2.2.2.2"))),
-          )
-          .withAttributes(
-            Map(
-              AttributeKeys.remoteAddress -> RemoteAddress(InetAddress.getByName("3.3.3.3"))
-            )
-          )
-      ) should be(Some("4.4.4.4"))
-    }
-
-    "ignore a non-IP X-Envoy-External-Address and fall back to the next header" in {
-      clientIp(
-        HttpRequest()
-          .withHeaders(
-            RawHeader("X-Envoy-External-Address", "evil.example.com"),
-            `X-Forwarded-For`(RemoteAddress(InetAddress.getByName("1.1.1.1"))),
-          )
-      ) should be(Some("1.1.1.1"))
-    }
-
-    "use a configurable trusted proxy header" in {
-      clientIp(
-        HttpRequest()
-          .withHeaders(
-            RawHeader("X-Trusted-Client-Ip", "4.4.4.4"),
-            `X-Forwarded-For`(RemoteAddress(InetAddress.getByName("1.1.1.1"))),
-          ),
-        trustedClientIpHeader = "x-trusted-client-ip",
-      ) should be(Some("4.4.4.4"))
-    }
-
-    "match the trusted proxy header case-insensitively" in {
-      clientIp(
-        HttpRequest().withHeaders(RawHeader("X-Envoy-External-Address", "4.4.4.4")),
-        trustedClientIpHeader = "X-Envoy-External-Address",
-      ) should be(Some("4.4.4.4"))
-    }
-
-    "not trust any proxy header when the trusted header is disabled" in {
-      clientIp(
-        HttpRequest().withHeaders(
-          RawHeader("X-Envoy-External-Address", "4.4.4.4"),
-          `X-Forwarded-For`(RemoteAddress(InetAddress.getByName("1.1.1.1"))),
-        ),
-        trustedClientIpHeader = "",
-      ) should be(Some("1.1.1.1"))
-    }
-
-    "not fall back to client-provided headers when they are disabled" in {
-      clientIp(
-        HttpRequest().withHeaders(
-          RawHeader("X-Envoy-External-Address", "4.4.4.4"),
-          `X-Forwarded-For`(RemoteAddress(InetAddress.getByName("1.1.1.1"))),
-          `X-Real-Ip`(RemoteAddress(InetAddress.getByName("2.2.2.2"))),
-        ),
-        enableClientProvidedIpHeaders = false,
-      ) should be(Some("4.4.4.4"))
-    }
-
-    "return None when client-provided headers are disabled and no trusted header is present" in {
-      clientIp(
-        HttpRequest().withHeaders(
-          `X-Forwarded-For`(RemoteAddress(InetAddress.getByName("1.1.1.1"))),
-          `X-Real-Ip`(RemoteAddress(InetAddress.getByName("2.2.2.2"))),
-        ),
-        enableClientProvidedIpHeaders = false,
-      ) should be(None)
-    }
 
     "prefer X-Forwarded-For" in {
       clientIp(
@@ -124,6 +49,64 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
       clientIp(
         HttpRequest().withHeaders(`X-Real-Ip`(RemoteAddress(InetAddress.getByName("2.2.2.2"))))
       ) should be(Some("2.2.2.2"))
+    }
+
+    "ignore a non-IP value and fall back to the next header" in {
+      clientIp(
+        HttpRequest()
+          .withHeaders(
+            RawHeader("X-Forwarded-For", "evil.example.com"),
+            `X-Real-Ip`(RemoteAddress(InetAddress.getByName("2.2.2.2"))),
+          )
+      ) should be(Some("2.2.2.2"))
+    }
+
+    "use the first address of a comma separated header value" in {
+      clientIp(
+        HttpRequest().withHeaders(RawHeader("X-Forwarded-For", "1.1.1.1, 2.2.2.2, 3.3.3.3"))
+      ) should be(Some("1.1.1.1"))
+    }
+
+    "use the configured headers in order" in {
+      val request = HttpRequest().withHeaders(
+        RawHeader("X-Envoy-External-Address", "4.4.4.4"),
+        `X-Forwarded-For`(RemoteAddress(InetAddress.getByName("1.1.1.1"))),
+        `X-Real-Ip`(RemoteAddress(InetAddress.getByName("2.2.2.2"))),
+      )
+      clientIp(
+        request,
+        clientIpHeaders = Seq("x-envoy-external-address", "x-forwarded-for"),
+      ) should be(Some("4.4.4.4"))
+      clientIp(
+        request,
+        clientIpHeaders = Seq("x-real-ip", "x-envoy-external-address"),
+      ) should be(Some("2.2.2.2"))
+    }
+
+    "not use headers that are not configured" in {
+      clientIp(
+        HttpRequest().withHeaders(
+          `X-Forwarded-For`(RemoteAddress(InetAddress.getByName("1.1.1.1"))),
+          `X-Real-Ip`(RemoteAddress(InetAddress.getByName("2.2.2.2"))),
+        ),
+        clientIpHeaders = Seq("x-envoy-external-address"),
+      ) should be(None)
+    }
+
+    "match the configured headers case-insensitively" in {
+      clientIp(
+        HttpRequest().withHeaders(RawHeader("X-Envoy-External-Address", "4.4.4.4")),
+        clientIpHeaders = Seq("X-Envoy-External-Address"),
+      ) should be(Some("4.4.4.4"))
+    }
+
+    "not extract any IP when no headers are configured" in {
+      clientIp(
+        HttpRequest().withHeaders(
+          `X-Forwarded-For`(RemoteAddress(InetAddress.getByName("1.1.1.1")))
+        ),
+        clientIpHeaders = Seq.empty,
+      ) should be(None)
     }
 
     "not use the remote address of the transport connection" in {
@@ -163,42 +146,25 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
       clientIpOf("2001:db9:0:1:1:2:3:4") should not be clientIpOf("2001:db8:0:1:1:2:3:4")
     }
 
-    "ignore the zone id of IPv6 addresses" in {
-      val scoped = Inet6Address.getByAddress(
-        null,
-        InetAddress.getByName("fe80::1:2:3:4").getAddress,
-        7,
-      )
-      // sanity check that the zone id is part of the address representation
-      scoped.getHostAddress should be("fe80:0:0:0:1:2:3:4%7")
-      clientIpOf(scoped) should be(Some("fe80:0:0:0:0:0:0:0/64"))
+    "reject IPv6 addresses carrying a zone id" in {
+      // zone ids are only meaningful locally and are not valid in an IP literal of a header
+      clientIpOf("fe80::1:2:3:4%7") should be(None)
     }
 
     "use the IPv4 address for IPv4-mapped IPv6 clients" in {
-      // dual stack sockets can report IPv4 clients as ::ffff:a.b.c.d, those must not end up in a
-      // single /64 bucket shared by all IPv4 clients
-      val ipv4Mapped = Inet6Address.getByAddress(
-        null,
-        Array[Byte](0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff.toByte, 0xff.toByte, 1, 2, 3, 4),
-        0,
-      )
-      ipv4Mapped shouldBe a[Inet6Address]
-      clientIpOf(ipv4Mapped) should be(Some("1.2.3.4"))
-      clientIpOf(ipv4Mapped) should be(clientIpOf("1.2.3.4"))
-      clientIpOf(
-        Inet6Address.getByAddress(
-          null,
-          Array[Byte](0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff.toByte, 0xff.toByte, 4, 3, 2, 1),
-          0,
-        )
-      ) should not be clientIpOf(ipv4Mapped)
+      // clients behind a dual stack proxy can be reported as ::ffff:a.b.c.d, those must not end up
+      // in a single /64 bucket shared by all IPv4 clients
+      clientIpOf("::ffff:1.2.3.4") should be(Some("1.2.3.4"))
+      clientIpOf("::ffff:1.2.3.4") should be(clientIpOf("1.2.3.4"))
+      clientIpOf("::ffff:4.3.2.1") should not be clientIpOf("::ffff:1.2.3.4")
     }
 
     "apply the same grouping to all client IP sources" in {
       val expected = Some("2001:db8:0:1:0:0:0:0/64")
       val address = RemoteAddress(InetAddress.getByName("2001:db8:0:1:1:2:3:4"))
       clientIp(
-        HttpRequest().withHeaders(RawHeader("X-Envoy-External-Address", "2001:db8:0:1:1:2:3:4"))
+        HttpRequest().withHeaders(RawHeader("X-Envoy-External-Address", "2001:db8:0:1:1:2:3:4")),
+        clientIpHeaders = Seq("x-envoy-external-address"),
       ) should be(expected)
       clientIp(
         HttpRequest().withHeaders(`X-Forwarded-For`(address))
@@ -264,6 +230,23 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
         val results = (1 to 20).map(_ => call(route, ip = Some("1.1.1.1")))
         results.count(_ == StatusCodes.OK) should be(2)
         results.count(_ == StatusCodes.TooManyRequests) should be(18)
+      }
+    }
+
+    "not apply the per client IP limiters if no client IP headers are configured" in {
+      withRoutes(
+        globalPerClientIp = perClientIp(1),
+        perClientIpOverrides = Map("testOperation" -> perClientIp(1)),
+        clientIpHeaders = Seq.empty,
+      )("testOperation") { fixture =>
+        val route = fixture("testOperation")
+        (1 to 20).map(_ => call(route, ip = Some("1.1.1.1"))) should contain only StatusCodes.OK
+        forEvery(Seq("testOperation", HttpRateLimiter.GlobalLimiter)) { limiter =>
+          fixture.requestsRejectedBy(
+            limiter,
+            SpliceRateLimiter.PerAttributeLimiterType,
+          ) should be(0L)
+        }
       }
     }
 
@@ -456,13 +439,11 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
 
   private def clientIp(
       request: HttpRequest,
-      trustedClientIpHeader: String = RateLimitersConfig.DefaultTrustedClientIpHeader,
-      enableClientProvidedIpHeaders: Boolean = true,
+      clientIpHeaders: Seq[String] = RateLimitersConfig.DefaultClientIpHeaders,
   ): Option[String] = {
     val route =
-      HttpRateLimiter.extractClientIpKey(trustedClientIpHeader, enableClientProvidedIpHeaders) {
-        extracted =>
-          complete(extracted.getOrElse[String](HttpRateLimiterTest.NoClientIp))
+      HttpRateLimiter.extractClientIpKey(clientIpHeaders) { extracted =>
+        complete(extracted.getOrElse[String](HttpRateLimiterTest.NoClientIp))
       }
     request ~> route ~> check {
       status should be(StatusCodes.OK)
@@ -471,12 +452,7 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
   }
 
   private def clientIpOf(ip: String): Option[String] =
-    clientIpOf(InetAddress.getByName(ip))
-
-  private def clientIpOf(ip: InetAddress): Option[String] =
-    clientIp(
-      HttpRequest().withHeaders(`X-Forwarded-For`(RemoteAddress(ip)))
-    )
+    clientIp(HttpRequest().withHeaders(RawHeader("X-Forwarded-For", ip)))
 
   private def call(route: Route, ip: Option[String]): StatusCode = {
     val request = ip match {
@@ -494,6 +470,7 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
       global: SpliceRateLimitConfig = SpliceRateLimitConfig(ratePerSecond = 1000),
       globalPerClientIp: PerAttributeRateLimitConfig = PerAttributeRateLimitConfig.Disabled,
       perClientIpOverrides: Map[String, PerAttributeRateLimitConfig] = Map.empty,
+      clientIpHeaders: Seq[String] = RateLimitersConfig.DefaultClientIpHeaders,
   )(operations: String*)(f: HttpRateLimiterTest.Fixture => A): A = {
     // Any operation with a per client IP override needs its own overall limiter entry so that the
     // embedded per client IP limiter is used instead of the `default` one.
@@ -510,6 +487,7 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
         default = withPerClientIp(default, PerAttributeRateLimitConfig.Disabled),
         rateLimiters = perOperationConfigs,
         global = withPerClientIp(global, globalPerClientIp),
+        clientIpHeaders = clientIpHeaders,
       ),
       metricsFactory,
       loggerFactory.getTracedLogger(classOf[HttpRateLimiterTest]),

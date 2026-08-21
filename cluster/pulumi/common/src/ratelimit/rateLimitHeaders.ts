@@ -12,3 +12,19 @@ export const rateLimitResponseHeaders = [
   // added by envoy itself on the local reply it generates when rate limiting
   'x-envoy-ratelimited',
 ];
+
+export const envoyExternalAddressHeader = 'x-envoy-external-address';
+
+/**
+ * Overrides the (client-controlled) headers the apps extract the client IP for their per-client-IP
+ * rate limiting from, so that only the non-spoofable header set by the Envoy sidecar is used.
+ */
+export function envoyClientIpHeaderEnvVar(appConfigPath: string): {
+  name: string;
+  value: string;
+} {
+  return {
+    name: 'ADDITIONAL_CONFIG_CLIENT_IP_HEADERS',
+    value: `${appConfigPath}.parameters.rate-limiting.client-ip-headers = ["${envoyExternalAddressHeader}"]\n`,
+  };
+}
