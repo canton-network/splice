@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import * as gcp from '@pulumi/gcp';
 import * as k8s from '@pulumi/kubernetes';
+import * as pulumi from '@pulumi/pulumi';
 import {
   config,
   GCP_PROJECT,
@@ -69,11 +70,16 @@ type NodeConfigLabelsAndTaints = Pick<
   'labels' | 'taints'
 >;
 
+interface NodePoolWithConfig {
+  pool: gcp.container.NodePool;
+  config: GkeNodePoolConfig;
+}
+
 function installAppsNodePools(
   cluster: string,
   allZones: string[],
   configs: Array<GkeNodePoolConfig>
-): Array<gcp.container.NodePool> {
+): Array<NodePoolWithConfig> {
   const defaultZone = config.optionalEnv('CLOUDSDK_HYPERDISK_NODEPOOL_COMPUTE_ZONE');
   return configs.map((config, index) => {
     const name =
@@ -110,7 +116,7 @@ function installAppsNodePools(
             ...config.labels,
           },
         };
-    return new gcp.container.NodePool(
+    const pool = new gcp.container.NodePool(
       name,
       {
         cluster,
@@ -134,6 +140,7 @@ function installAppsNodePools(
         replaceOnChanges: ['nodeConfig.machineType'],
       }
     );
+    return { pool, config };
   });
 }
 
@@ -142,7 +149,7 @@ function installInfraNodePools(
   allZones: string[],
   defaultZone: string | undefined,
   configs: Array<GkeNodePoolConfig>
-): Array<gcp.container.NodePool> {
+): Array<NodePoolWithConfig> {
   return configs.map((config, index) => {
     const name =
       index === 0
@@ -179,7 +186,7 @@ function installInfraNodePools(
           },
         };
 
-    return new gcp.container.NodePool(
+    const pool = new gcp.container.NodePool(
       name,
       {
         cluster,
@@ -199,13 +206,30 @@ function installInfraNodePools(
         replaceOnChanges: ['nodeConfig.machineType'],
       }
     );
+    return { pool, config };
   });
 }
 
 function installComputeClass(
   name: string,
-  pools: gcp.container.NodePool[]
+  pools: NodePoolWithConfig[]
 ): k8s.apiextensions.CustomResource {
+  // Group node pools by their configured priority.
+  // Priority defaults to -index (so that the first pool is highest priority, second is next, etc),
+  // and any explicitly set positive priority will be sorted above the defaulted ones.
+  const byPriority = new Map<number, pulumi.Input<string>[]>();
+  pools.forEach(({ pool, config: poolConfig }, index) => {
+    const priority = poolConfig.priority ?? -index;
+    const group = byPriority.get(priority) ?? [];
+    group.push(pool.name);
+    byPriority.set(priority, group);
+  });
+
+  // Sort by descending priority (highest first) and emit one entry per group.
+  const priorities = [...byPriority.entries()]
+    .sort(([a], [b]) => b - a)
+    .map(([, nodepools]) => ({ nodepools }));
+
   return new k8s.apiextensions.CustomResource(
     `compute-class-${name}`,
     {
@@ -213,14 +237,12 @@ function installComputeClass(
       kind: 'ComputeClass',
       metadata: { name },
       spec: {
-        // Reference the existing, manually-managed node pools rather than
-        // letting GKE auto-provision. Priorities are evaluated in order.
-        priorities: pools.map(p => ({ nodepools: [p.name] })),
+        priorities,
         nodePoolAutoCreation: { enabled: false },
       },
     },
     {
-      dependsOn: pools,
+      dependsOn: pools.map(({ pool }) => pool),
     }
   );
 }
