@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import * as pulumi from '@pulumi/pulumi';
 import * as path from 'path';
+import { coreSvsToDeployBasic } from '@canton-network/splice-pulumi-common-sv';
 import { setMocks } from '@pulumi/pulumi/runtime/mocks';
 
 import {
@@ -396,14 +397,25 @@ export type StackOutputsProvider = (
 ) => Partial<Record<string, any>> | undefined;
 
 export const infraStackOutputsProvider: StackOutputsProvider = (project: string) => {
-  return project === 'infra'
-    ? {
+  switch (project) {
+    case 'canton-network':
+      return {
+        svs: coreSvsToDeployBasic.map(sv => ({
+          nodeName: sv.nodeName,
+          databaseInstanceName: `${sv.nodeName}-cn-apps-pg`,
+          databaseSecretName: `${sv.nodeName}-cn-apps-pg-secret`,
+        })),
+      };
+    case 'infra':
+      return {
         istioDashboardVersions: '1234',
         auth0: {
           svRunbook: svRunbookAuth0Config,
           cantonNetwork: cantonNetworkAuth0Config,
           mainnet: cantonNetworkAuth0Config,
         } as Auth0ClusterConfig,
-      }
-    : undefined;
+      };
+    default:
+      return undefined;
+  }
 };
