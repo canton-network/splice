@@ -20,6 +20,7 @@ class UpdateHistoryBulkStorageCommitFromStaging(
     bulkStorageReader: BulkStorageReader,
     appConfig: BulkStorageConfig,
     scanConnection: PeerBftScanConnection,
+    onObjectCommitted: Int => Unit,
     val loggerFactory: NamedLoggerFactory,
 )(implicit
     ec: ExecutionContextExecutor
@@ -43,6 +44,7 @@ class UpdateHistoryBulkStorageCommitFromStaging(
       appConfig,
       scanConnection,
       loggerFactory,
+      onObjectCommitted,
     )
 
   override def getNextSegmentAfter(

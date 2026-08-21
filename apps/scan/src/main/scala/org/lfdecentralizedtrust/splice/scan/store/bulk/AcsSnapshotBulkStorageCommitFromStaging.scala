@@ -21,6 +21,7 @@ class AcsSnapshotBulkStorageCommitFromStaging(
     bulkStorageReader: BulkStorageReader,
     appConfig: BulkStorageConfig,
     scanConnection: PeerBftScanConnection,
+    onObjectCommitted: Int => Unit,
     val loggerFactory: NamedLoggerFactory,
 )(implicit
     ec: ExecutionContextExecutor
@@ -60,6 +61,7 @@ class AcsSnapshotBulkStorageCommitFromStaging(
       appConfig,
       scanConnection,
       loggerFactory,
+      onObjectCommitted,
     )
   }
 }
