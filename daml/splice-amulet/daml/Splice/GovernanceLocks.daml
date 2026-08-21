@@ -77,8 +77,8 @@ template GovernanceLock
         amount : Optional Decimal
         requestedAt : Time
         context : ExternalPartyTransferContext
-        authorizers : [Party]
-      controller authorizers
+        actors : [Party]
+      controller actors
       do
         require "Only the authorizer may unlock" $ authorizers == [owner] -- TODO: custom controllers
         assertWithinDeadline "requestedAt must be in the future for unlock" requestedAt
