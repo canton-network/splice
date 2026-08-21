@@ -418,6 +418,9 @@
         "tolerations": {
           "type": "array"
         },
+        "priorityClassName": {
+          "type": "string"
+        },
         "auth": {
           "type": "object",
           "required": ["audience", "jwksUrl"],
