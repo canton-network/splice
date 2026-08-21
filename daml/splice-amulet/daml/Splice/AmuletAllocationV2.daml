@@ -9,6 +9,7 @@ module Splice.AmuletAllocationV2 (
   validateAmuletTransferLegSides,
   computeAllocationExpiry,
   computeAllocationExpiryInternal,
+  unlockAmuletAllocationV2,
 ) where
 
 import DA.Action
@@ -21,8 +22,10 @@ import DA.Time
 import Splice.Api.Token.MetadataV1
 import Splice.Api.Token.HoldingV2 qualified as V2
 import Splice.Api.Token.AllocationV2 qualified as V2
+import Splice.Api.Token.AllocationInstructionV2 as V2
 import Splice.TokenStandard.Utils hiding (require)
 
+import Splice.AggregateLock
 import Splice.Amulet
 import Splice.AmuletConfig (TransferConfigV2, getTokenStandardMaxTTL)
 import Splice.AmuletRules
@@ -47,6 +50,7 @@ template AmuletAllocationV2
     expiresAt : Time
     numIterations : Int
     createdAt : Time
+    governanceLock : Optional GovernanceLock
   where
     signatory allocation.admin, allocation.authorizer.owner
     observer settlement.executors
@@ -76,6 +80,9 @@ template AmuletAllocationV2
       allocation_cancelExtraObservers _arg = observer this
       allocation_withdrawExtraObservers _arg = observer this
 
+
+      allocation_withdrawImpl self arg | Some governanceLock <- this.governanceLock =
+        governanceLockedWithdrawImpl this (fromInterfaceContractId self) arg
       allocation_withdrawImpl self arg@(V2.Allocation_Withdraw{..}) = do
         archiveAndCheckActors self arg.actors [[accountPrincipal allocation.admin allocation.authorizer]]
         ensureWithdrawIsAllowed allocation
@@ -137,7 +144,7 @@ template AmuletAllocationV2
         -- Bump the allocation expiry using the old `expiresAt` as the "current time",
         -- which is safe to do as the traffic spend to iterate the allocation covers
         -- the cost of storing the allocation for the longer period.
-        newExpiresAt <- computeAllocationExpiry configAmulet expiresAt allocation.settlementDeadline
+        newExpiresAt <- computeAllocationExpiry configAmulet (isSome this.governanceLock) expiresAt allocation.settlementDeadline
         lockedAmulet <-
           if outputFundingAmount <= 0.0 then pure None else do
             lockedAmuletCid <- create LockedAmulet with
@@ -163,6 +170,7 @@ template AmuletAllocationV2
               expiresAt = newExpiresAt
               numIterations = numIterations + 1
               createdAt
+              governanceLock
             pure (Some (toInterfaceContractId nextAllocationCid))
 
         -- log the tx history v2 event
@@ -230,15 +238,33 @@ computeAllocationExpiryInternal transferConfig oldExpiresAt settlementDeadline =
       | maxTime `subTime` oldExpiresAt <= maxTTL = maxTime
       | otherwise = oldExpiresAt `addRelTime` maxTTL
 
-computeAllocationExpiry : TransferConfigV2 Amulet -> Time -> Optional Time -> Update Time
-computeAllocationExpiry transferConfig oldExpiresAt settlementDeadline = do
-  let expiresAt = computeAllocationExpiryInternal transferConfig oldExpiresAt settlementDeadline
-  assertWithinDeadline "allocation.expiresAt" expiresAt
-  pure expiresAt
-
+computeAllocationExpiry : TransferConfigV2 Amulet -> Bool -> Time -> Optional Time -> Update Time
+computeAllocationExpiry transferConfig isGovernance oldExpiresAt settlementDeadline
+  | isGovernance = pure maxComparableTime
+  | otherwise = do
+    let expiresAt = computeAllocationExpiryInternal transferConfig oldExpiresAt settlementDeadline
+    assertWithinDeadline "allocation.expiresAt" expiresAt
+    pure expiresAt
 
 -- instances
 ------------
 
 instance HasCheckedFetch AmuletAllocationV2 ForDso where
   contractGroupId AmuletAllocationV2{..} = ForDso with dso = allocation.admin
+
+instance GovernanceAllocation AmuletAllocationV2 where
+  getGovernanceLock AmuletAllocationV2 { governanceLock } = governanceLock
+  createUnfundedGovernanceAllocation governanceLock V2.AllocationFactory_Allocate{..} = do
+    amuletAllocCid <- create AmuletAllocationV2 with
+          lockedAmulet = None
+          settlement
+          allocation
+          expiresAt = maxComparableTime
+          numIterations = 0
+          createdAt = requestedAt
+          governanceLock = Some governanceLock
+    let allocInstrResult = AllocationInstructionResult with
+          output = AllocationInstructionResult_Completed with allocationCid = toInterfaceContractId amuletAllocCid
+          authorizerChangeCids = TextMap.empty
+          meta = emptyMetadata
+    pure (amuletAllocCid, allocInstrResult)

@@ -1,0 +1,375 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
+module Splice.AggregateLock where
+
+import Splice.Amulet.TokenApiUtils
+import Splice.Api.Token.AllocationV2 as V2
+import Splice.Api.Token.AllocationInstructionV2 as V2
+import Splice.Api.Token.MetadataV1
+import Splice.TokenStandard.Utils (maxTime, regularAccountOwner)
+import Splice.TokenStandard.Utils.Internal.Allocations (settlementFactoryV2_settleBatchDefaultImplNoSelf)
+import Splice.TokenStandard.Utils.Internal.Conversions (timeFromMeta)
+import Splice.Util
+
+import DA.Action hiding (mapA)
+import DA.Assert (assertWithinDeadline)
+import DA.Either
+import DA.Optional
+import qualified DA.Set as S
+import DA.Text as T
+import DA.List hiding (concat)
+import qualified DA.TextMap as TM
+import DA.Time
+import DA.Traversable (mapA)
+import Prelude hiding (mapA, concat)
+
+-- Lock management
+-- ===============
+
+class GovernanceAllocation a where
+  getGovernanceLock : a -> Optional GovernanceLock
+  createUnfundedGovernanceAllocation : GovernanceLock -> V2.AllocationFactory_Allocate -> Update (ContractId a, V2.AllocationInstructionResult)
+  -- ^ uses ContractId a to avoid an ambiguous type. There's probably a better way to hook into settlement-like funds movement than to use this and settleBatch.
+
+data GovernanceLock
+  = GovernanceLock_SVLocked AggregatedLock
+  | GovernanceLock_VestingLocked VestingLock
+  deriving (Eq, Show, Serializable)
+
+data AggregatedLock =
+  AggregatedLock with
+    lockSubject : Text
+    controllers : GovernanceLockControllers
+  deriving (Eq, Show, Serializable)
+
+data VestingLock =
+  VestingLock with
+    startDate : Time
+    endDate : Time
+    initialAmount : Decimal
+    -- ^ The initial amount represents the total that was locked initially when thrown into vesting state
+    controllers : GovernanceLockControllers
+  deriving (Eq, Show, Serializable)
+
+typeKey : Text
+typeKey = "cip-105/type"
+
+beneficiaryKey : Text
+beneficiaryKey = "cip-105/lock-subject"
+
+startDateKey : Text
+startDateKey = "cip-105/start-date"
+
+endDateKey : Text
+endDateKey = "cip-105/end-date"
+
+initialAmountKey : Text
+initialAmountKey = "cip-105/initial-amount"
+
+-- TODO: Simon mentioned to rename this within PR obsidiansystems/splice/pull/12
+effectiveAtKey : Text
+effectiveAtKey = "cip-105/effective-at"
+
+unlockControllerKey : Text
+unlockControllerKey = "cip-105/unlock-controllers"
+
+withdrawControllerKey : Text
+withdrawControllerKey = "cip-105/withdraw-controllers"
+
+substituteControllerKey : Text
+substituteControllerKey = "cip-105/substitute-controllers"
+
+withdrawAmountKey : Text
+withdrawAmountKey = "cip-105/withdraw-amount"
+
+
+governanceMetadataKeys : Metadata -> S.Set Text
+governanceMetadataKeys meta = S.fromList $ fst <$> TM.toList ( TM.filterWithKey ( \a _ -> "cip-105/" `T.isPrefixOf` a ) meta.values )
+
+isGovernanceAllocationArgument : V2.AllocationFactory_Allocate -> Bool
+isGovernanceAllocationArgument arg = not ( S.null $ governanceMetadataKeys arg.allocation.meta ) 
+  || not (TM.null ( TM.filterWithKey ( \a _ -> "cip-105/" `T.isPrefixOf` a ) arg.extraArgs.context.values))
+
+checkGovernanceMetadataKeys : (CanAssert m) => S.Set Text -> Metadata -> m ()
+checkGovernanceMetadataKeys knownKeys =
+  require "Only known metadata keys are supplied under cip-105/" . (`S.isSubsetOf` knownKeys) . governanceMetadataKeys
+
+controllerKeys = [unlockControllerKey, withdrawControllerKey, substituteControllerKey]
+aggregatedLockKeys = S.fromList $ typeKey::beneficiaryKey::controllerKeys
+vestingLockKeys = S.fromList $ typeKey::startDateKey::endDateKey::initialAmountKey::controllerKeys
+
+
+class CanAssert m => ParseLockDataFromMeta m a where
+  parseFromMetadata : Metadata -> m a
+
+class CanAssert m => ParseLockDataFromText m a where
+  parseFromText : Text -> m a
+
+governanceLockToMeta _ = Metadata $ TM.singleton "cip-105/gov-lock-flag" "true" -- FIXME: actually serialize to metadata, this just lets allocateImplCore work.
+
+instance CanAssert m => ParseLockDataFromMeta m (Optional GovernanceLock) where
+  parseFromMetadata meta
+    | S.null $ governanceMetadataKeys meta = pure None
+    | otherwise = do
+      case "cip-105/type" `TM.lookup` meta.values of
+        Some "svLock" -> Some . GovernanceLock_SVLocked <$> parseFromMetadata meta
+        Some "vestingLock" -> Some . GovernanceLock_VestingLocked <$> parseFromMetadata meta
+        _ -> assertFail "Unknown governance lock type"
+
+requireSome : CanAssert m => Text -> Optional a -> m a
+requireSome msg a =
+  case a of
+    None -> assertFail $ "The requirement '" <> msg <> "' was not met."
+    Some a -> pure a
+
+instance CanAssert m => ParseLockDataFromMeta m AggregatedLock where
+  parseFromMetadata meta = do
+    lockSubject <- requireSome "has a lockSubject field in metadata" $ "cip-105/lock-subject" `TM.lookup` meta.values
+    controllers <- parseFromMetadata meta
+    checkGovernanceMetadataKeys aggregatedLockKeys meta
+    pure $ AggregatedLock with ..
+
+instance CanAssert m => ParseLockDataFromMeta m VestingLock where
+  parseFromMetadata meta = do
+    startDate <- requireSome "has a valid startDate field in metadata" $ timeFromMeta startDateKey meta
+    endDate <- requireSome "has a valid endDate field in metadata" $ timeFromMeta endDateKey meta
+    initialAmount <- requireSome "has a valid initialAmount field in metadata" $ initialAmountKey `TM.lookup` meta.values >>= parseDecimal
+    checkGovernanceMetadataKeys vestingLockKeys meta
+    controllers <- parseFromMetadata meta
+    pure $ VestingLock with ..
+
+-- | Parsing entry point
+
+parseAndValidateGovernanceLock : CanAssert m => Bool -> Party -> V2.AllocationFactory_Allocate -> m (Optional GovernanceLock)
+parseAndValidateGovernanceLock fromAllocate dso alloc = do
+  lock <- parseFromMetadata alloc.allocation.meta
+  case lock of
+    Some _ -> do
+      require "must have the DSO as admin" $ alloc.allocation.admin == dso
+      require "must have the DSO as executors" $ alloc.settlement.executors == [dso]
+      require "must be a committed allocation" alloc.allocation.committed
+      require "must not have specified transfer leg sides" $ null alloc.allocation.transferLegSides
+      require "must not expire" $ alloc.allocation.settlementDeadline == Some maxComparableTime
+      -- Lock expiry also simply forced to max in computeAllocationExpiry when governance locked.
+      -- Note: instrument id of only amulet and non-zero allocation are already checked by AmuletAllocationV2 ensure clause.
+      pure lock
+    None -> pure None
+
+governanceLock_rules (GovernanceLock_VestingLocked _)
+  = assertFail "Creating vesting locks from an allocation instruction is not permitted"
+governanceLock_rules _ = pure ()
+
+maxComparableTime : Time
+maxComparableTime = addRelTime maxTime $ microseconds (-1)
+
+type ControllerSpecification = [[Party]]
+
+defaultControllerSpecification : Party -> ControllerSpecification
+defaultControllerSpecification owner = [[owner]]
+
+
+data GovernanceLockControllers = GovernanceLockControllers with
+    unlock : Optional ControllerSpecification
+    withdraw : Optional ControllerSpecification
+    substitute : Optional ControllerSpecification
+  deriving (Eq, Show, Serializable)
+
+instance CanAssert m => ParseLockDataFromText m ControllerSpecification where
+  parseFromText = mapA parseFromText . splitOn ";"
+
+instance CanAssert m => ParseLockDataFromText m [Party] where
+  parseFromText = mapA (requireSome "party can be converted from text" . partyFromText) . splitOn "," 
+
+instance CanAssert m => ParseLockDataFromMeta m GovernanceLockControllers where
+  parseFromMetadata meta = do
+        unlock <- mapA parseFromText $ unlockControllerKey `TM.lookup` meta.values
+        withdraw <- mapA parseFromText $ withdrawControllerKey `TM.lookup` meta.values
+        substitute <- mapA parseFromText $ substituteControllerKey `TM.lookup` meta.values
+        pure $ GovernanceLockControllers with ..
+
+-- TODO / FIXME: Expose the error message from parseGovernanceLock
+partiesFromText : Text -> Optional [Party]
+partiesFromText = eitherToOptional . parseCommaSeparated "Parties" partyFromText
+
+checkControllerSpecification : [Party] -> ControllerSpecification -> Update ()
+checkControllerSpecification actors set =
+    require "Controllers must be one of the listed options" $
+      any actorsMatch set
+  where
+    actorsMatch : [Party] -> Bool
+    actorsMatch set
+      = all (\s -> any ((==) s) actors) set
+      && all (\a -> any (a ==) set) actors
+
+
+-- This will also need to get a configuration template to set the vesting period and potentially other settings.
+-- TODO: The above should be passed in via `ExternalPartyConfigState` as mentioned under PR #6815
+
+governanceLockedWithdrawImpl
+  : (HasToInterface a V2.Allocation, GovernanceAllocation a)
+  => a
+  -> ContractId a
+  -> V2.Allocation_Withdraw
+  -> Update V2.AllocationResult
+governanceLockedWithdrawImpl this self arg@(V2.Allocation_Withdraw{..}) =
+  case getGovernanceLock this of
+    Some (GovernanceLock_SVLocked lock) -> aggregateLockUnlock lock this self arg
+    Some (GovernanceLock_VestingLocked lock) -> vestingLockWithdraw lock this self arg
+    _ -> assertFail "governanceLockedWithdrawImpl called witha a non-governance lock"
+
+
+aggregateLockUnlock : forall a. (HasToInterface a V2.Allocation, GovernanceAllocation a) => AggregatedLock -> a -> ContractId a -> Allocation_Withdraw -> Update V2.AllocationResult
+aggregateLockUnlock lock a aCid arg = do
+    let alloc = view $ toInterface @V2.Allocation a
+        allocCid = toInterfaceContractId @V2.Allocation aCid
+
+    -- That this is a singleton with the amulet insturment ID is enforced by AmuletAllocationV2, but not encoded in the types we see here.
+    (instrumentId, currentLockedAmount) <- case TM.toList <$> alloc.allocation.nextIterationFunding of
+        Some [a] -> pure a
+        _ -> assertFail "The requirement 'Must reserve a single amount of a single token' was not met"
+
+    let ownerParty = regularAccountOwner alloc.allocation.authorizer
+
+    checkControllerSpecification arg.actors $ fromOptional (defaultControllerSpecification ownerParty) lock.controllers.unlock
+
+    now <- getFromContextU arg.extraArgs.context effectiveAtKey -- FIXME: read from metadata not context.
+    assertWithinDeadline "effectiveAt must not be in the past" now
+
+    let endDate = getEndTime now
+        transferLegId = "unlock"
+
+    let alternateAmount = TM.lookup withdrawAmountKey arg.extraArgs.meta.values >>= parseDecimal
+        amount = fromOptional currentLockedAmount alternateAmount
+        newLockedAmount = currentLockedAmount - amount
+        newLockedNextIterationFunding
+          | newLockedAmount == 0.0 = None
+          | otherwise = Some $ TM.singleton instrumentId newLockedAmount
+        vestingGovernanceLock = GovernanceLock_VestingLocked $ VestingLock with
+          startDate = now
+          endDate
+          initialAmount = amount
+          controllers = lock.controllers
+
+    -- Not easy to call directly into amulet_allocationFactoryV2_allocateImpl or the like here as that would make a circular dependency.
+    (withdrawTo : ContractId a, _) <- createUnfundedGovernanceAllocation vestingGovernanceLock $ V2.AllocationFactory_Allocate with
+      settlement = alloc.settlement
+      allocation = AllocationSpecification with
+        admin = alloc.allocation.admin
+        authorizer = alloc.allocation.authorizer
+        transferLegSides = []
+        settlementDeadline = Some maxComparableTime
+        nextIterationFunding = Some TM.empty -- Iterated settlement enabled, with no funding
+        committed = True
+        meta = emptyMetadata -- governance settings passed in the dedicated argument to createGovernanceAllocation
+      requestedAt = now
+      inputHoldingCids = []
+      extraArgs = ExtraArgs with
+        meta = emptyMetadata
+        context = emptyChoiceContext
+      actors = [ ownerParty ]
+
+    settleBatchResult <- settlementFactoryV2_settleBatchDefaultImplNoSelf (\_ _ -> pure arg.extraArgs) alloc.allocation.admin $ SettlementFactory_SettleBatch with
+      settlement = alloc.settlement
+      actors = [ alloc.allocation.admin ]
+      extraArgs = arg.extraArgs
+      transferLegs =
+        [ TransferLeg with
+            transferLegId
+            sender = alloc.allocation.authorizer
+            receiver = alloc.allocation.authorizer
+            amount
+            instrumentId
+            meta = emptyMetadata
+        ]
+      allocations =
+        [ FinalizedAllocation with
+            allocationCid = allocCid
+            extraTransferLegSides =
+              [ TransferLegSide with
+                transferLegId
+                side = SenderSide
+                otherside = alloc.allocation.authorizer
+                amount
+                instrumentId
+                meta = emptyMetadata
+              ]
+            nextIterationFunding = newLockedNextIterationFunding
+        , FinalizedAllocation with
+            allocationCid = toInterfaceContractId withdrawTo
+            extraTransferLegSides =
+              [ TransferLegSide with
+                transferLegId
+                side = ReceiverSide
+                otherside = alloc.allocation.authorizer
+                amount
+                instrumentId
+                meta = emptyMetadata
+              ]
+            nextIterationFunding = Some $ TM.singleton instrumentId amount
+        ]
+    pure $ head settleBatchResult.allocationSettleResults
+  where
+    getEndTime now = addRelTime now $ days 365 + hours 6
+
+
+-- TODO: Potentially make return type, it's own data type?
+calculateAvailableWithdrawAmount : Time -> VestingLock -> Decimal -> (Decimal, Decimal)
+calculateAvailableWithdrawAmount vestUntil (VestingLock {..}) nextIterationFundAmount = availAmount
+  where
+    availAmount = max (0.0, 0.0) $ if vestUntil >= endDate
+      then (nextIterationFundAmount, 0.0)
+      else (availableWithdrawAmount, remainingVestingAmount)
+    availableWithdrawAmount = (initialAmount * totalVestedRatioElapsed) - withdrawnAmount
+    remainingVestingAmount = nextIterationFundAmount - availableWithdrawAmount
+    totalUnlockPeriod : Decimal = intToDecimal . convertRelTimeToMicroseconds $ subTime endDate startDate
+    unlockPeriodElapsed : Decimal = intToDecimal . convertRelTimeToMicroseconds $ subTime vestUntil startDate
+    totalVestedRatioElapsed : Decimal = unlockPeriodElapsed / totalUnlockPeriod
+    withdrawnAmount = initialAmount - nextIterationFundAmount
+
+
+vestingLockWithdraw : (HasToInterface a V2.Allocation) => VestingLock -> a -> ContractId a -> Allocation_Withdraw -> Update V2.AllocationResult
+vestingLockWithdraw lock a aCid arg = do
+    let vestingLock = view $ toInterface @V2.Allocation a
+        vestingLockCid = toInterfaceContractId @V2.Allocation aCid
+
+    now <- getFromContextU arg.extraArgs.context effectiveAtKey -- FIXME: read from metadata, not context.
+    isLedgerTimeGE now >>= require "effectiveAt must not be in the future"
+
+    -- Removed withdraw controllers for the moment on vesting locks, it seems significantly more questionable to restrict withdrawal of conceptually unlocked amulet.
+
+    -- That this is a singleton with the amulet insturment ID is enforced by AmuletAllocationV2, but not encoded in the types we see here.
+    (instrumentId, nextIterationFunding) <- case TM.toList <$> vestingLock.allocation.nextIterationFunding of
+        Some [a] -> pure a
+        _ -> assertFail "The requirement 'Must reserve a single amount of a single token' was not met"
+
+    let (availableWithdrawAmount, remainingVestingAmount) : (Decimal, Decimal) =
+          calculateAvailableWithdrawAmount now lock nextIterationFunding
+
+    require ("Current eligible withdraw amount for vesting lock is not greater than 0.0. "
+             <> "currentEligibleWithdrawableAmount came back = '"
+             <> show availableWithdrawAmount
+             <> "'."
+             )
+           $ availableWithdrawAmount > 0.0
+
+    let
+      transferLegId = "withdraw"
+      nextIterationFunding
+        | remainingVestingAmount <= 0.0 = None
+        | otherwise = Some $ TM.singleton instrumentId remainingVestingAmount
+
+    settleResult <- settlementFactoryV2_settleBatchDefaultImplNoSelf (\_ _ -> pure arg.extraArgs) vestingLock.allocation.admin $ SettlementFactory_SettleBatch with
+      settlement = vestingLock.settlement
+      actors = [ vestingLock.allocation.admin ]
+      extraArgs = ExtraArgs emptyChoiceContext emptyMetadata
+      transferLegs = []
+      allocations =
+        [ FinalizedAllocation with
+            allocationCid = vestingLockCid
+            extraTransferLegSides = []
+            nextIterationFunding
+        ]
+
+    -- We should have one result from settleBatch
+    case settleResult.allocationSettleResults of
+      [allocationResult] -> pure allocationResult
+      _ -> abort "VestingUnlock_Withdraw should result in one allocation result. "

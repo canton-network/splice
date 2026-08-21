@@ -55,6 +55,7 @@ module Splice.Testing.TokenStandard.WalletClientV2
     acceptAllocationInstructionV2,
     withdrawAllocationInstructionV2,
     withdrawAllocationV2,
+    withdrawAllocationV2Meta,
 
     allocateV1,
     withdrawAllocationInstructionV1,
@@ -73,6 +74,7 @@ module Splice.Testing.TokenStandard.WalletClientV2
 
     -- ** Allocations
     extractNextIterationAllocationCid,
+    extractAllocationResult,
 
     mkAllocationFactory_AllocateV2,
     mkAllocationInstruction_AcceptV2,
@@ -469,6 +471,20 @@ withdrawAllocationV2 registries actor alloc = do
   batch <- mkAllocation_WithdrawV2 registries actor alloc
   executeSingletonTSABatch registries actor batch
 
+-- | Simulate a V2 wallet withdrawing an allocation from a V2 app, with extra metadata
+withdrawAllocationV2Meta
+  :  MultiRegistry.MultiRegistry -> Party -> (ContractId V2.Allocation, V2.AllocationView) -> Metadata
+  -> Script BatchingUtilityV2.TokenStandardActionResult
+withdrawAllocationV2Meta registries actor alloc meta = do
+  batch <- mkAllocation_WithdrawV2Meta registries actor alloc meta
+  executeSingletonTSABatch registries actor batch
+
+-- | Extract the underlying @AllocationResult@ from a wallet-client batch result.
+extractAllocationResult : BatchingUtilityV2.TokenStandardActionResult -> V2.AllocationResult
+extractAllocationResult (BatchingUtilityV2.TSAR_AllocationResultV2 r) = r
+extractAllocationResult other =
+  error $ "expected TSAR_AllocationResultV2, got: " <> show other
+
 -- | Simulate a V2 wallet withdrawing an allocation from a V1 app.
 withdrawAllocationV1
   :  MultiRegistry.MultiRegistry -> Party -> (ContractId V1.Allocation, V1.AllocationView)
@@ -812,7 +828,10 @@ mkAllocationFactory_AllocateV2 registryV2 actor settlement allocation = do
     disclosures = enrichedChoice.disclosures
 
 mkAllocation_WithdrawV2 : MultiRegistry.MultiRegistry -> Party -> (ContractId V2.Allocation, V2.AllocationView) -> Script TSABatch
-mkAllocation_WithdrawV2 registries actor (allocCid, allocView) = do
+mkAllocation_WithdrawV2 registries actor (allocCid, allocView) = mkAllocation_WithdrawV2Meta registries actor (allocCid, allocView) emptyMetadata
+
+mkAllocation_WithdrawV2Meta : MultiRegistry.MultiRegistry -> Party -> (ContractId V2.Allocation, V2.AllocationView) -> Metadata -> Script TSABatch
+mkAllocation_WithdrawV2Meta registries actor (allocCid, allocView) meta = do
   registry <- MultiRegistry.getRegistryApiV2 registries allocView.allocation.admin
   context <- V2.getAllocation_WithdrawContext registry allocCid emptyMetadata
   let withdrawRequest = BatchingUtilityV2.TSA_Allocation_WithdrawV2 BatchingUtilityV2.ChoiceCall with
@@ -820,7 +839,7 @@ mkAllocation_WithdrawV2 registries actor (allocCid, allocView) = do
         arg = V2.Allocation_Withdraw with
           extraArgs = ExtraArgs with
             context = context.choiceContext
-            meta = emptyMetadata
+            meta
           actors = [actor]
   pure TSABatch with
     actions = [withdrawRequest]

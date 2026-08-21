@@ -9,11 +9,13 @@ import DA.Assert
 import DA.Foldable (forA_)
 import DA.Optional
 import qualified DA.TextMap as TextMap
+import qualified DA.Map as Map
 import DA.Time
 
 import Splice.Api.Token.MetadataV1
 import Splice.Api.Token.TransferInstructionV1 qualified as Api.Token.TransferInstructionV1
 import Splice.Api.Token.HoldingV1 qualified as V1
+import Splice.Api.Token.HoldingV2 qualified as V2
 import Splice.Api.Token.AllocationInstructionV1 qualified as V1
 import Splice.Api.Token.AllocationV2 qualified as V2
 import Splice.Api.Token.AllocationInstructionV2 qualified as V2
@@ -21,6 +23,7 @@ import Splice.Api.Token.TransferInstructionV2 qualified as V2
 import Splice.Api.Token.TransferEventsV2 qualified as TransferEventsV2
 import Splice.TokenStandard.Utils hiding (require, reasonMetaKey)
 
+import Splice.AggregateLock
 import Splice.Amulet
 import Splice.AmuletConfig (getTokenStandardMaxTTL)
 import Splice.Amulet.TokenApiUtils
@@ -453,6 +456,8 @@ amulet_allocationFactoryV2_allocateImpl
   -> ContractId V2.AllocationFactory
   -> V2.AllocationFactory_Allocate
   -> Update V2.AllocationInstructionResult
+amulet_allocationFactoryV2_allocateImpl _ _self arg
+  | isGovernanceAllocationArgument arg = governanceAllocateImpl arg
 amulet_allocationFactoryV2_allocateImpl externalAmuletRules _self arg = do
   let netTransferAmount = netAmuletCreditAmount arg.allocation.authorizer arg.allocation.transferLegSides
   outputFundingAmount <- validateAmuletNextIterationFunding arg.allocation.nextIterationFunding
@@ -466,6 +471,7 @@ amulet_allocationFactoryV2_allocateImpl externalAmuletRules _self arg = do
     expiresAt
     createdAt = arg.requestedAt
     numIterations = 0
+    governanceLock = None
   pure V2.AllocationInstructionResult with
     authorizerChangeCids = TextMap.fromList [(amuletInstrumentIdName, map upcast senderChangeCids)]
     output = V2.AllocationInstructionResult_Completed with allocationCid
@@ -523,7 +529,7 @@ amulet_allocationFactoryV2_allocateImplCore externalAmuletRules arg fundingAmoun
   -- compute the allocation expiry time
   (_, configState) <- getExternalPartyConfigStateFromChoiceContext dso arg.extraArgs.context
   let configAmulet = transferConfigAmuletFromExternalPartyConfigState configState
-  expiresAt <- computeAllocationExpiry configAmulet requestedAt allocation.settlementDeadline
+  expiresAt <- computeAllocationExpiry configAmulet (isGovernanceAllocationArgument arg) requestedAt allocation.settlementDeadline
 
   -- create locked amulet if required
   if fundingAmount <= 0.0
@@ -601,3 +607,26 @@ requireExpectedAdminMatch expected actual =   require ("Expected admin " <> show
 
 instance HasCheckedFetch ExternalPartyAmuletRules ForDso where
   contractGroupId ExternalPartyAmuletRules{..} = ForDso dso
+
+governanceAllocateImpl : V2.AllocationFactory_Allocate -> Update V2.AllocationInstructionResult
+governanceAllocateImpl arg@V2.AllocationFactory_Allocate{..} = do
+  let dso = arg.allocation.admin
+      Some [ (_, allocationAmount) ] = TextMap.toList <$> allocation.nextIterationFunding -- Valid because of the ensure above, but FIXME: better reporting desirable.
+  Some lock <- parseAndValidateGovernanceLock True dso arg -- FIXME: change the return value now that we aren't calling in allocate
+  governanceLock_rules lock
+
+  (lockedAmulet, senderChangeCids, expiresAt, meta) <-
+    amulet_allocationFactoryV2_allocateImplCore (ExternalPartyAmuletRules dso) arg allocationAmount
+
+  allocationCid <- toInterfaceContractId <$> create AmuletAllocationV2 with
+    settlement = arg.settlement
+    allocation = arg.allocation
+    lockedAmulet
+    expiresAt
+    createdAt = arg.requestedAt
+    numIterations = 0
+    governanceLock = Some lock
+  pure V2.AllocationInstructionResult with
+    authorizerChangeCids = TextMap.fromList [(amuletInstrumentIdName, map upcast senderChangeCids)]
+    output = V2.AllocationInstructionResult_Completed with allocationCid
+    meta
