@@ -5,6 +5,7 @@ import * as _ from 'lodash';
 import {
   activeVersion,
   appsAffinityAndTolerations,
+  ChartValues,
   CLUSTER_BASENAME,
   CLUSTER_HOSTNAME,
   clusterSmallDisk,
@@ -143,6 +144,7 @@ export function installCometBftNode(
     extraLogLevelFlags: svConfiguration.logging?.cometbftExtraLogLevelFlags,
     serviceAccountName: imagePullServiceAccountName,
     resources: svConfiguration.cometbft?.resources,
+    watchdog: watchdogValues(migrationId),
   });
   if (svConfiguration.cometbft?.additionalHelmValues) {
     _.merge(cometbftChartValues, svConfiguration.cometbft.additionalHelmValues);
@@ -153,7 +155,7 @@ export function installCometBftNode(
     `cometbft-global-domain-${migrationId}`,
     `splice-cometbft`,
     cometbftChartValues,
-    version,
+    { type: 'remote', version: '0.7.4' }, // Hardcoded to a newer version to get the cometbft watchdog.
     // support old runbook names, can be removed once the runbooks are all reset and latest release is >= 0.2.x
     {
       ...withAddedDependencies(opts, keysSecret ? [keysSecret] : []),
@@ -165,6 +167,27 @@ export function installCometBftNode(
     appsAffinityAndTolerations
   );
   return { rpcServiceName: `${nodeConfig.identifier}-cometbft-rpc`, release };
+}
+
+const CANTON_METRICS_PORT = 10013;
+
+function watchdogValues(migrationId: DomainMigrationIndex): ChartValues {
+  const watchdog = svsConfig?.cometbft?.watchdog;
+  if (watchdog?.disabled) {
+    return { enabled: false };
+  }
+  const synchronizer = `global-domain-${migrationId}`;
+  return {
+    enabled: true,
+    sequencerMetricsUrl: `http://${synchronizer}-sequencer:${CANTON_METRICS_PORT}/metrics`,
+    mediatorMetricsUrl: `http://${synchronizer}-mediator:${CANTON_METRICS_PORT}/metrics`,
+    threshold: watchdog?.threshold,
+    evaluationIntervalSeconds: watchdog?.evaluationIntervalSeconds,
+    pollIntervalSeconds: watchdog?.pollIntervalSeconds,
+    scrapeTimeoutSeconds: watchdog?.scrapeTimeoutSeconds,
+    startupGraceSeconds: watchdog?.startupGraceSeconds,
+    cooldownSeconds: watchdog?.cooldownSeconds,
+  };
 }
 
 function installCometBftKeysSecret(
