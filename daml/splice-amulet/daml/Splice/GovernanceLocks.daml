@@ -80,7 +80,7 @@ template GovernanceLock
         actors : [Party]
       controller actors
       do
-        require "Only the authorizer may unlock" $ authorizers == [owner] -- TODO: custom controllers
+        require "Only the owner may unlock" $ authorizers == [owner] -- TODO: custom controllers
         assertWithinDeadline "requestedAt must be in the future for unlock" requestedAt
 
         (vestingLockedHolding, governanceLock, initialAmount) <- case amount of
