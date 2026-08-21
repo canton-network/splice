@@ -47,6 +47,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.svonboarding.{
   SvOnboardingRequest,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
+import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorunpermission.ValidatorUnpermission
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.payment.{PaymentAmount, Unit}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.subscriptions.*
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
@@ -786,6 +787,30 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
           resultFullyFiltered.map(_.contract) should contain theSameElementsAs Seq(visibleCid)
         }
       }
+    }
+
+    "listValidatorUnpermissions" should {
+
+      "list all contracts matching the participantId" in {
+        val good1 = validatorUnpermission("participant1")
+        val good2 = validatorUnpermission("participant1", revoked = true)
+
+        val badParticipant1 = validatorUnpermission("wrong-participant")
+        val badParticipant2 = validatorUnpermission("another-wrong-participant")
+
+        for {
+          store <- mkStore()
+          _ <- MonadUtil.sequentialTraverse(
+            Seq(good1, good2, badParticipant1, badParticipant2)
+          )(
+            dummyDomain.create(_)(store.multiDomainAcsStore)
+          )
+          result <- store.listValidatorUnpermissions(
+            "participant1"
+          )(traceContext)
+        } yield result should contain theSameElementsAs Seq(good1, good2)
+      }
+
     }
 
     "listExpiredAmuletTransferInstructions" should {
@@ -2195,6 +2220,24 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
     contract(
       MemberTraffic.TEMPLATE_ID_WITH_PACKAGE_ID,
       new MemberTraffic.ContractId(nextCid()),
+      template,
+    )
+  }
+
+  protected def validatorUnpermission(
+      participantId: String,
+      revoked: Boolean = false,
+      loginAfter: Option[Instant] = None,
+  ) = {
+    val template = new ValidatorUnpermission(
+      dsoParty.toProtoPrimitive,
+      participantId,
+      loginAfter.map(Optional.of(_)).getOrElse(Optional.empty()),
+      java.lang.Boolean.valueOf(revoked),
+    )
+    contract(
+      ValidatorUnpermission.TEMPLATE_ID_WITH_PACKAGE_ID,
+      new ValidatorUnpermission.ContractId(nextCid()),
       template,
     )
   }
