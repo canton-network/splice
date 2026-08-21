@@ -41,7 +41,7 @@ template GovernanceLockFactory
         inputs : [ContractId Holding]
         specification : GovernanceLockSpecification
         context : ExternalPartyTransferContext
-        authorizer : Party
+        owner : Party
       controller authorizer
       do
         ([holding], changeHolding) <- lockAmulet (ForOwner with dso; owner=authorizer) [amount] inputs context
