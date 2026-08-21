@@ -13,7 +13,12 @@ import dayjs from 'dayjs';
 import { OffboardSvForm } from '../../../components/forms/OffboardSvForm';
 import { server, svUrl } from '../../setup/setup';
 import { http, HttpResponse } from 'msw';
-import { PROPOSAL_SUMMARY_SUBTITLE, PROPOSAL_SUMMARY_TITLE } from '../../../utils/constants';
+import {
+  PROPOSAL_SUMMARY_SUBTITLE,
+  PROPOSAL_SUMMARY_TITLE,
+  REASON_PLACEHOLDER,
+  URL_PLACEHOLDER,
+} from '../../../utils/constants';
 
 describe('SV user can', () => {
   test('login and see the SV party ID', async () => {
@@ -54,6 +59,7 @@ describe('Offboard SV Form', () => {
     const summaryInput = screen.getByTestId('offboard-sv-summary');
     expect(summaryInput).toBeInTheDocument();
     expect(summaryInput.getAttribute('value')).toBeNull();
+    expect(summaryInput).toHaveAttribute('placeholder', REASON_PLACEHOLDER);
 
     const summarySubtitle = screen.getByTestId('offboard-sv-summary-subtitle');
     expect(summarySubtitle).toBeInTheDocument();
@@ -62,10 +68,12 @@ describe('Offboard SV Form', () => {
     const urlInput = screen.getByTestId('offboard-sv-url');
     expect(urlInput).toBeInTheDocument();
     expect(urlInput.getAttribute('value')).toBe('');
+    expect(urlInput).toHaveAttribute('placeholder', URL_PLACEHOLDER);
 
     const memberInput = screen.getByTestId('offboard-sv-member-dropdown');
     expect(memberInput).toBeInTheDocument();
     expect(memberInput.getAttribute('value')).toBe('');
+    expect(screen.getByText('Select a member')).toBeInTheDocument();
 
     expect(screen.getByText('Review Proposal')).toBeInTheDocument();
   });

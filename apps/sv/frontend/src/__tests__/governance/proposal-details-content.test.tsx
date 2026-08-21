@@ -24,7 +24,12 @@ import { ProposalVoteForm } from '../../components/governance/ProposalVoteForm';
 import App from '../../App';
 import { svPartyId } from '../mocks/constants';
 import { Wrapper } from '../helpers';
-import { SUPPORTING_URL_LABEL, VOTE_PROPOSAL_CONTRACT_ID_LABEL } from '../../utils/constants';
+import {
+  REASON_PLACEHOLDER,
+  SUPPORTING_URL_LABEL,
+  URL_PLACEHOLDER,
+  VOTE_PROPOSAL_CONTRACT_ID_LABEL,
+} from '../../utils/constants';
 
 const voteRequest = {
   contractId: 'abc123' as ContractId<VoteRequest>,
@@ -973,9 +978,11 @@ describe('Proposal Details > Votes & Voting', () => {
 
     const votingFormUrlInput = within(votingForm).getByTestId('your-vote-url-input');
     expect(votingFormUrlInput).toBeInTheDocument();
+    expect(votingFormUrlInput).toHaveAttribute('placeholder', URL_PLACEHOLDER);
 
     const votingFormReasonInput = within(votingForm).getByTestId('your-vote-reason-input');
     expect(votingFormReasonInput).toBeInTheDocument();
+    expect(votingFormReasonInput).toHaveAttribute('placeholder', REASON_PLACEHOLDER);
 
     const votingFormAccept = within(votingForm).getByTestId('your-vote-accept');
     expect(votingFormAccept).toBeInTheDocument();

@@ -20,7 +20,11 @@ import { useAppForm } from '../../hooks/form';
 import { useProposalMutation } from '../../hooks/useProposalMutation';
 import { buildDsoConfigChanges } from '../../utils/buildDsoConfigChanges';
 import { buildDsoRulesConfigFromChanges } from '../../utils/buildDsoRulesConfigFromChanges';
-import { SUPPORTING_URL_LABEL, THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
+import {
+  SUPPORTING_URL_LABEL,
+  THRESHOLD_DEADLINE_SUBTITLE,
+  URL_PLACEHOLDER,
+} from '../../utils/constants';
 import {
   buildPendingConfigFields,
   configFormDataToConfigChanges,
@@ -305,7 +309,11 @@ export const SetDsoConfigRulesForm: () => JSX.Element = () => {
             }}
           >
             {field => (
-              <field.TextField title={SUPPORTING_URL_LABEL} id="set-dso-config-rules-url" />
+              <field.TextField
+                title={SUPPORTING_URL_LABEL}
+                id="set-dso-config-rules-url"
+                muiTextFieldProps={{ placeholder: URL_PLACEHOLDER }}
+              />
             )}
           </form.AppField>
         </>
