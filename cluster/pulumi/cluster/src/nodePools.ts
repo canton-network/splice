@@ -12,11 +12,6 @@ import {
 
 import { gkeClusterConfig, GkeNodePoolConfig } from './config';
 
-interface NamedNodePool {
-  name: string;
-  pool: gcp.container.NodePool;
-}
-
 export async function installNodePools(): Promise<void> {
   const clusterName = `cn-${config.requireEnv('GCP_CLUSTER_BASENAME')}net`;
   const cluster = config.optionalEnv('CLOUDSDK_COMPUTE_ZONE')
@@ -69,27 +64,40 @@ export async function installNodePools(): Promise<void> {
   }
 }
 
+type NodeConfigLabelsAndTaints = Pick<
+  gcp.types.input.container.NodePoolNodeConfig,
+  'labels' | 'taints'
+>;
+
 function installAppsNodePools(
   cluster: string,
   allZones: string[],
   configs: Array<GkeNodePoolConfig>
-): Array<NamedNodePool> {
+): Array<gcp.container.NodePool> {
   const defaultZone = config.optionalEnv('CLOUDSDK_HYPERDISK_NODEPOOL_COMPUTE_ZONE');
   return configs.map((config, index) => {
     const name =
       index === 0
         ? 'cn-apps-node-pool-hd' // for backwards compat
         : `cn-apps-node-pool-${index}-hd`;
-    const pool = new gcp.container.NodePool(
-      name,
-      {
-        cluster,
-        nodeConfig: {
-          machineType: config.nodeType,
-          bootDisk: {
-            diskType: 'hyperdisk-balanced',
-            sizeGb: config.bootDiskSizeGb || 100,
+    // With ComputeClasses, we rely on the `cloud.google.com/compute-class` label only.
+    // That label *must* be present for the ComputeClass use the node pool, even
+    // if it's explicitly mentioned in the ComputeClass priorities.
+    const labelsAndTaints: NodeConfigLabelsAndTaints = useComputeClasses
+      ? {
+          taints: [
+            {
+              effect: 'NO_SCHEDULE',
+              key: 'cloud.google.com/compute-class',
+              value: appsComputeClassName,
+            },
+          ],
+          labels: {
+            'cloud.google.com/compute-class': appsComputeClassName,
+            ...config.labels,
           },
+        }
+      : {
           taints: [
             {
               effect: 'NO_SCHEDULE',
@@ -101,6 +109,18 @@ function installAppsNodePools(
             cn_apps: 'hyperdisk',
             ...config.labels,
           },
+        };
+    return new gcp.container.NodePool(
+      name,
+      {
+        cluster,
+        nodeConfig: {
+          machineType: config.nodeType,
+          bootDisk: {
+            diskType: 'hyperdisk-balanced',
+            sizeGb: config.bootDiskSizeGb || 100,
+          },
+          ...labelsAndTaints,
           loggingVariant: 'DEFAULT',
         },
         nodeLocations:
@@ -114,7 +134,6 @@ function installAppsNodePools(
         replaceOnChanges: ['nodeConfig.machineType'],
       }
     );
-    return { name, pool };
   });
 }
 
@@ -123,18 +142,31 @@ function installInfraNodePools(
   allZones: string[],
   defaultZone: string | undefined,
   configs: Array<GkeNodePoolConfig>
-): Array<NamedNodePool> {
+): Array<gcp.container.NodePool> {
   return configs.map((config, index) => {
     const name =
       index === 0
         ? 'cn-infra-node-pool' // for backwards compat
         : `cn-infra-node-pool-${index}`;
-    const pool = new gcp.container.NodePool(
-      name,
-      {
-        cluster,
-        nodeConfig: {
-          machineType: config.nodeType,
+
+    // With ComputeClasses, we rely on the `cloud.google.com/compute-class` label only.
+    // That label *must* be present for the ComputeClass use the node pool, even
+    // if it's explicitly mentioned in the ComputeClass priorities.
+    const labelsAndTaints: NodeConfigLabelsAndTaints = useComputeClasses
+      ? {
+          taints: [
+            {
+              effect: 'NO_SCHEDULE',
+              key: 'cloud.google.com/compute-class',
+              value: infraComputeClassName,
+            },
+          ],
+          labels: {
+            'cloud.google.com/compute-class': infraComputeClassName,
+            ...config.labels,
+          },
+        }
+      : {
           taints: [
             {
               effect: 'NO_SCHEDULE',
@@ -145,6 +177,15 @@ function installInfraNodePools(
           labels: {
             cn_infra: 'true',
           },
+        };
+
+    return new gcp.container.NodePool(
+      name,
+      {
+        cluster,
+        nodeConfig: {
+          machineType: config.nodeType,
+          ...labelsAndTaints,
           loggingVariant: 'DEFAULT',
         },
         nodeLocations:
@@ -158,13 +199,12 @@ function installInfraNodePools(
         replaceOnChanges: ['nodeConfig.machineType'],
       }
     );
-    return { name, pool };
   });
 }
 
 function installComputeClass(
   name: string,
-  pools: NamedNodePool[]
+  pools: gcp.container.NodePool[]
 ): k8s.apiextensions.CustomResource {
   return new k8s.apiextensions.CustomResource(
     `compute-class-${name}`,
@@ -180,7 +220,7 @@ function installComputeClass(
       },
     },
     {
-      dependsOn: pools.map(p => p.pool),
+      dependsOn: pools,
     }
   );
 }

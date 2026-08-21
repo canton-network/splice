@@ -11,9 +11,8 @@ import {
   ExactNamespace,
   GCP_PROJECT,
   getDnsNames,
-  infraComputeClassName,
   infraKubernetesSchedulingAffinityTolerations,
-  infraKubernetesSchedulingComputeClass,
+  infraKubernetesSchedulingComputeClassViaAffinity,
   isDevNet,
   useComputeClasses,
 } from '@canton-network/splice-pulumi-common';
@@ -88,7 +87,13 @@ function certManager(certManagerNamespaceName: string): certmanager.CertManager 
       namespace: ns.metadata.name,
       version: '1.18.2',
     },
-    ...infraKubernetesScheduling,
+    // Ideally, we would just use `...infraKubernetesScheduling` here.
+    // Unfortunately, the cert-manager helm chart does not support the `nodeSelector` field.
+    // It uses the wrong typing for it and then enforces it in Go,
+    // so no amount of TypeScript hacking will help.
+    ...(useComputeClasses
+      ? infraKubernetesSchedulingComputeClassViaAffinity
+      : infraKubernetesSchedulingAffinityTolerations),
     webhook: {
       ...infraKubernetesScheduling,
     },

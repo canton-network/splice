@@ -228,29 +228,7 @@ export const appsComputeClassName = 'cn-apps';
 export const infraComputeClassName = 'cn-infra';
 
 const appsKubernetesSchedulingComputeClass = {
-  // A nodeSelector is a simpler way to select a single ComputeClass.
-  // We still use nodeAffinity for better compatibility with other parts of the code.
-  // As long as the node affinity is a single term, it *should* trigger the ComputeClass
-  // mechanism for scaling up nodes.
-  // nodeSelector: {'cloud.google.com/compute-class': appsComputeClassName},
-  affinity: {
-    nodeAffinity: {
-      requiredDuringSchedulingIgnoredDuringExecution: {
-        nodeSelectorTerms: [
-          {
-            matchExpressions: [
-              {
-                key: 'cloud.google.com/compute-class',
-                operator: 'In',
-                values: [appsComputeClassName],
-              },
-            ],
-          },
-        ],
-      },
-    },
-  },
-  tolerations: [{ key: 'cn_apps', operator: 'Exists', effect: 'NoSchedule' }],
+  nodeSelector: { 'cloud.google.com/compute-class': appsComputeClassName },
 };
 
 const appsKubernetesSchedulingAffinityTolerations = {
@@ -293,11 +271,13 @@ export const appsKubernetesScheduling = useComputeClasses
   : appsKubernetesSchedulingAffinityTolerations;
 
 export const infraKubernetesSchedulingComputeClass = {
-  // A nodeSelector is a simpler way to select a single ComputeClass.
-  // We still use nodeAffinity for better compatibility with other parts of the code.
-  // As long as the node affinity is a single term, it *should* trigger the ComputeClass
-  // mechanism for scaling up nodes.
-  // nodeSelector: {'cloud.google.com/compute-class': infraComputeClassName},
+  nodeSelector: { 'cloud.google.com/compute-class': infraComputeClassName },
+};
+
+// This should have the same effect as infraKubernetesSchedulingComputeClass,
+// but uses affinity instead of nodeSelector. It's not the documented way to use
+// compute classes, but can be used for helm charts that do not support node selectors.
+export const infraKubernetesSchedulingComputeClassViaAffinity = {
   affinity: {
     nodeAffinity: {
       requiredDuringSchedulingIgnoredDuringExecution: {
@@ -315,7 +295,6 @@ export const infraKubernetesSchedulingComputeClass = {
       },
     },
   },
-  tolerations: [{ key: 'cn_infra', operator: 'Exists', effect: 'NoSchedule' }],
 };
 
 export const infraKubernetesSchedulingAffinityTolerations = {
@@ -352,30 +331,21 @@ export const infraKubernetesScheduling = useComputeClasses
 // Values that determine how daemons are scheduled that need to run on BOTH apps and infra nodes.
 export const infraAndAppsKubernetesSchedulingForDaemonSets = useComputeClasses
   ? {
-      // A pod can only pick a single ComputeClass via a nodeSelector,
-      // so we use nodeAffinity that allows OR-expressions.
-      // This is fine because DaemonSets do not trigger autoscaling and are instead scheduled once
+      // DaemonSets do not trigger autoscaling and are instead scheduled once
       // per existing, eligible node.
-      affinity: {
-        nodeAffinity: {
-          requiredDuringSchedulingIgnoredDuringExecution: {
-            nodeSelectorTerms: [
-              {
-                matchExpressions: [
-                  {
-                    key: 'cloud.google.com/compute-class',
-                    operator: 'In',
-                    values: [appsComputeClassName, infraComputeClassName],
-                  },
-                ],
-              },
-            ],
-          },
-        },
-      },
       tolerations: [
-        ...appsKubernetesSchedulingComputeClass.tolerations,
-        ...infraKubernetesSchedulingComputeClass.tolerations,
+        {
+          key: 'cloud.google.com/compute-class',
+          operator: 'Equal',
+          value: infraComputeClassName,
+          effect: 'NoSchedule',
+        },
+        {
+          key: 'cloud.google.com/compute-class',
+          operator: 'Equal',
+          value: appsComputeClassName,
+          effect: 'NoSchedule',
+        },
       ],
     }
   : {

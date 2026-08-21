@@ -6,6 +6,7 @@ import {
   CLUSTER_NAME,
   exactNamespace,
   GCP_REGION,
+  infraAndAppsKubernetesSchedulingForDaemonSets,
   infraKubernetesScheduling,
 } from '@canton-network/splice-pulumi-common';
 
@@ -14,7 +15,7 @@ export function installFluentBit(): void {
   const fluentBit = exactNamespace('fluent-bit');
 
   const values = {
-    tolerations: infraKubernetesScheduling.tolerations.concat(appsKubernetesScheduling.tolerations),
+    ...infraAndAppsKubernetesSchedulingForDaemonSets,
     config: {
       inputs: [
         // Input config is roughly copied from the default GCP config available from `kubectl get configmap -n kube-system fluentbit-gke-config-v1.4.0 -o yaml`
