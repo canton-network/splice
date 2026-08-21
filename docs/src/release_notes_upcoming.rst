@@ -9,7 +9,7 @@ release-notes:: Upcoming
 
     - Scan & SV App
 
-        - The client IP used for per-client-IP HTTP rate limiting is now extracted from a
+        - The client IP used for per-client-IP HTTP rate limiting is now extracted based on a
           configurable, ordered list of headers, ``rate-limiting.client-ip-headers``, which defaults
           to ``["x-forwarded-for", "x-real-ip"]``. The first configured header that is present and
           whose value parses as an IP literal is used; for comma separated values (as in
