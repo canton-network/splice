@@ -831,6 +831,14 @@ describe('Proposal Details > Votes & Voting', () => {
     expect(screen.getAllByTestId('proposal-details-voter-party-id')[0]).toHaveStyle({
       width: '100%',
     });
+    // Vote URLs use the same full-width slot as SV IDs.
+    expect(screen.getAllByTestId('proposal-details-vote-url')[0]).toHaveStyle({
+      width: '100%',
+    });
+    expect(screen.getAllByTestId('proposal-details-vote-url-scroll')[0]).toHaveStyle({
+      overflowX: 'auto',
+      maxWidth: '100%',
+    });
   });
 
   test('should filter votes by tabs', async () => {
