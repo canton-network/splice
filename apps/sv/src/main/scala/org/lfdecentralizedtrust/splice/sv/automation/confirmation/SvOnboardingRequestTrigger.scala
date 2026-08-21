@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.sv.automation.confirmation
 
+import com.digitalasset.canton.data.CantonTimestamp
 import org.lfdecentralizedtrust.splice.automation.{
   OnAssignedContractTrigger,
   TaskOutcome,
@@ -17,12 +18,12 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   DsoRules_ConfirmSvOnboarding,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.svonboarding.SvOnboardingRequest
-import org.lfdecentralizedtrust.splice.environment.SpliceLedgerConnection
+import org.lfdecentralizedtrust.splice.environment.{PackageVersionSupport, SpliceLedgerConnection}
 import org.lfdecentralizedtrust.splice.environment.ledger.api.DedupOffset
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.QueryResult
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 import org.lfdecentralizedtrust.splice.sv.SvApp
-import org.lfdecentralizedtrust.splice.sv.store.{SvSvStore, SvDsoStore}
+import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvSvStore}
 import org.lfdecentralizedtrust.splice.util.AssignedContract
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
@@ -38,6 +39,7 @@ class SvOnboardingRequestTrigger(
     svStore: SvSvStore,
     config: SvAppBackendConfig,
     connection: SpliceLedgerConnection,
+    packageVersionSupport: PackageVersionSupport,
 )(implicit
     ec: ExecutionContext,
     mat: Materializer,
@@ -59,6 +61,7 @@ class SvOnboardingRequestTrigger(
       weightBps: Long,
       candidateParticipantId: String,
       reason: String,
+      migrationIdOpt: java.util.Optional[java.lang.Long],
   ): ActionRequiringConfirmation = {
     new ARC_DsoRules(
       new SRARC_ConfirmSvOnboarding(
@@ -68,6 +71,7 @@ class SvOnboardingRequestTrigger(
           candidateParticipantId,
           weightBps,
           reason,
+          migrationIdOpt,
         )
       )
     )
@@ -118,14 +122,27 @@ class SvOnboardingRequestTrigger(
             case Left(err) =>
               Future.failed(err.asRuntimeException())
             case Right(_) =>
-              confirm(
-                party,
-                name,
-                weightBps,
-                svOnboarding.payload.candidateParticipantId,
-                svOnboarding.payload.token,
-                dsoRules,
-              )
+              for {
+                featureSupport <- packageVersionSupport.supportsPermissionedSynchronizer(
+                  Seq(dsoParty),
+                  CantonTimestamp.now(),
+                )
+                migrationIdOpt =
+                  if (featureSupport.supported) {
+                    java.util.Optional.of(java.lang.Long.valueOf(dsoStore.domainMigrationId))
+                  } else {
+                    java.util.Optional.empty[java.lang.Long]()
+                  }
+                res <- confirm(
+                  party,
+                  name,
+                  weightBps,
+                  svOnboarding.payload.candidateParticipantId,
+                  svOnboarding.payload.token,
+                  dsoRules,
+                  migrationIdOpt,
+                )
+              } yield res
           }
         }
     } yield outcome
@@ -171,8 +188,17 @@ class SvOnboardingRequestTrigger(
       participantId: String,
       reason: String,
       dsoRules: AssignedContract[DsoRules.ContractId, DsoRules],
+      migrationIdOpt: java.util.Optional[java.lang.Long],
   )(implicit tc: TraceContext): Future[TaskOutcome] = {
-    val action = dsoRulesConfirmSvOnboardingAction(party, name, weightBps, participantId, reason)
+    val action =
+      dsoRulesConfirmSvOnboardingAction(
+        party,
+        name,
+        weightBps,
+        participantId,
+        reason,
+        migrationIdOpt,
+      )
     for {
       queryResult <- dsoStore.lookupConfirmationByActionWithOffset(svParty, action)
       cmd = dsoRules.exercise(

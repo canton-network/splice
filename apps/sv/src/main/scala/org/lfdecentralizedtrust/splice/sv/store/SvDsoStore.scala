@@ -68,7 +68,6 @@ trait SvDsoStore
     with ActiveVotesStore {
   protected val outerLoggerFactory: NamedLoggerFactory
   protected def templateJsonDecoder: TemplateJsonDecoder
-
   override protected lazy val loggerFactory: NamedLoggerFactory =
     outerLoggerFactory.append("store", "dsoParty")
 
@@ -77,7 +76,10 @@ trait SvDsoStore
         org.lfdecentralizedtrust.splice.sv.store.db.DsoTables.DsoAcsStoreRowData,
         AcsInterfaceViewRowData.NoInterfacesIngested,
       ] =
-    SvDsoStore.contractFilter(key.dsoParty, domainMigrationId)
+    SvDsoStore.contractFilter(
+      key.dsoParty,
+      domainMigrationId,
+    )
 
   def key: SvStore.Key
 
@@ -849,6 +851,7 @@ trait SvDsoStore
   def listSvOnboardingConfirmations(
       svOnboarding: Contract[so.SvOnboardingRequest.ContractId, so.SvOnboardingRequest],
       weight: Long,
+      migrationIdOpt: java.util.Optional[java.lang.Long],
       limit: Limit = defaultLimit,
   )(implicit
       tc: TraceContext
@@ -863,6 +866,7 @@ trait SvDsoStore
           svOnboarding.payload.candidateParticipantId,
           weight,
           svOnboarding.payload.token,
+          migrationIdOpt,
         )
       )
     )
@@ -1661,6 +1665,18 @@ object SvDsoStore {
         DsoAcsStoreRowData(
           contract,
           contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
+        )
+      },
+      mkFilter(vl.ValidatorLicenseRequest.COMPANION)(
+        req => req.payload.dso == dso,
+        versionGuard = { case (pkgVersionSupport, now) =>
+          (tc) => pkgVersionSupport.supportsPermissionedSynchronizer(Seq(dsoParty), now)(tc)
+        },
+      ) { contract =>
+        DsoAcsStoreRowData(
+          contract,
+          contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
+          validator = Some(PartyId.tryFromProtoPrimitive(contract.payload.validator)),
         )
       },
     )

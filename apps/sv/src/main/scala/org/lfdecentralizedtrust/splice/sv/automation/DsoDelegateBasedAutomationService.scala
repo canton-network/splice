@@ -50,6 +50,12 @@ class DsoDelegateBasedAutomationService(
   )
 
   def start(): Unit = {
+    registerTrigger(
+      new SvOnboardingObserverTrigger(
+        triggerContext,
+        svTaskContext,
+      )
+    )
     registerTrigger(new AdvanceOpenMiningRoundTrigger(triggerContext, svTaskContext))
     registerTrigger(new UpdateExternalPartyConfigStateTrigger(triggerContext, svTaskContext))
     registerTrigger(new CompletedSvOnboardingTrigger(triggerContext, svTaskContext))
@@ -58,6 +64,7 @@ class DsoDelegateBasedAutomationService(
         new ExecuteConfirmedActionTrigger(
           triggerContext,
           svTaskContext,
+          config,
         )
       )
     }
@@ -273,5 +280,6 @@ object DsoDelegateBasedAutomationService extends AutomationServiceCompanion {
     aTrigger[BootstrapExternalPartyConfigStateInstructionTrigger],
     aTrigger[ProcessRewardsTrigger],
     aTrigger[ProcessRewardsDryRunTrigger],
+    aTrigger[SvOnboardingObserverTrigger],
   )
 }

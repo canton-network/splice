@@ -36,7 +36,10 @@ import org.lfdecentralizedtrust.splice.scan.{ScanApp, ScanAppBootstrap}
 import org.lfdecentralizedtrust.splice.store.VoteResultsFilters
 import org.lfdecentralizedtrust.splice.scan.automation.ScanAutomationService
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.TransferContextWithInstances
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.{
+  SynchronizerPermissionState,
+  TransferContextWithInstances,
+}
 import org.lfdecentralizedtrust.splice.scan.config.{ScanAppBackendConfig, ScanAppClientConfig}
 import org.lfdecentralizedtrust.splice.util.{
   AmuletConfigSchedule,
@@ -294,6 +297,17 @@ abstract class ScanAppReference(
   ): definitions.MemberTrafficStatus =
     consoleEnvironment.run {
       httpCommand(HttpScanAppClient.GetMemberTrafficStatus(synchronizerId, memberId))
+    }
+
+  @Help.Summary("Check if a participant has ParticipantSynchronizerPermission")
+  def getParticipantSynchronizerPermission(
+      synchronizerId: String,
+      participantId: String,
+  ): Option[SynchronizerPermissionState] =
+    consoleEnvironment.run {
+      httpCommand(
+        HttpScanAppClient.GetParticipantSynchronizerPermission(synchronizerId, participantId)
+      )
     }
 
   @deprecated(message = "Use getPartyToParticipant instead", since = "0.5.17")

@@ -493,6 +493,31 @@ paths:
                 "$ref": "#/components/schemas/OnboardSvSequencerResponse"
         "400":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
+  /v0/devnet/onboard/validator/purchase-traffic:
+    post:
+      tags: [sv]
+      x-jvm-package: sv_public
+      description: "faucet for validator candidates to buy member traffic"
+      operationId: "devNetBuyMemberTraffic"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/DevNetBuyMemberTrafficRequest"
+      responses:
+        "200":
+          description: ok
+          content:
+            text/plain:
+              schema:
+                type: string
+        "400":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
+        "500":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
+        "501":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/501"
   /v0/devnet/onboard/validator/prepare:
     post:
       tags: [sv]
@@ -719,6 +744,14 @@ components:
         party_hint:
           description: |
             Human-readable alias of the validator party decoded from the stored secret.
+          type: string
+
+    DevNetBuyMemberTrafficRequest:
+      type: object
+      required:
+        - participant_id
+      properties:
+        participant_id:
           type: string
 
     PrepareValidatorOnboardingRequest:
