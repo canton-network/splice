@@ -30,7 +30,7 @@ import {
 } from '@canton-network/splice-pulumi-common-sv/src/svConfigsBasic';
 import { SweepConfig } from '@canton-network/splice-pulumi-common-validator';
 import { installSplicePostgres, Postgres } from '@canton-network/splice-pulumi-common/src/postgres';
-import { infraStack } from '@canton-network/splice-pulumi-common/src/stackReferences';
+import { StackReferences } from '@canton-network/splice-pulumi-common/src/stackReferences';
 import { local } from '@pulumi/command';
 import { getSecretVersionOutput } from '@pulumi/gcp/secretmanager/getSecretVersion';
 import { Input } from '@pulumi/pulumi';
@@ -96,7 +96,7 @@ const shouldIgnoreNoDataOrDataSourceError = clusterIsResetPeriodically;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const istioDashboardVersions: pulumi.Output<any> =
-  infraStack.requireOutput('istioDashboardVersions');
+  StackReferences.infra.requireOutput('istioDashboardVersions');
 
 export function configureObservability(namespace: ExactNamespace): pulumi.Resource {
   // If the stack version is updated the crd version might need to be upgraded as well, check the release notes https://artifacthub.io/packages/helm/prometheus-community/kube-prometheus-stack

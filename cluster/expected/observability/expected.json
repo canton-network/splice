@@ -1961,7 +1961,7 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "create": "bash SPLICE_ROOT/cluster/pulumi/observability/prometheus-crd-update.sh 0.89.0"
+      "create": "bash ../../../cluster/pulumi/observability/prometheus-crd-update.sh 0.89.0"
     },
     "name": "update-prometheus-crd-0.89.0",
     "provider": "",
