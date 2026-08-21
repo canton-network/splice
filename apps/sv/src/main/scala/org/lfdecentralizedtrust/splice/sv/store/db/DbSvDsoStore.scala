@@ -154,7 +154,7 @@ class DbSvDsoStore(
             acsStoreId,
             domainMigrationId,
             ValidatorUnpermission.COMPANION,
-            where = sql"""participant_id = ${lengthLimited(participantId)})}""",
+            where = sql"""participant_id = ${lengthLimited(participantId)}""",
             orderLimit = sql"""limit ${sqlLimit(limit)}""",
           ),
           "listValidatorUnpermissions",
