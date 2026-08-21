@@ -676,7 +676,7 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
             )
 
             val getUpdatesResponse = makeJsonApiV2Request(
-              "/v2/updates/flats",
+              "/v2/updates",
               getUpdatesPayload,
               io.circe.Decoder.decodeSeq(JsUpdateServiceCodecs.jsGetUpdatesResponseRW),
             )

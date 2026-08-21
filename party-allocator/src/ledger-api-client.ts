@@ -188,7 +188,6 @@ export class LedgerApiClient {
       })),
     };
     const request: GetActiveContractsRequest = {
-      verbose: false,
       activeAtOffset: ledgerEnd!,
       eventFormat: {
         verbose: false,
