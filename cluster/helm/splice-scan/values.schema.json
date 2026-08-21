@@ -183,6 +183,9 @@
             "txLogStoreDescriptorUserVersion": {
               "type": "integer"
             },
+            "bootstrapDatabaseName": {
+              "type": "string"
+            },
             "initImageName": {
               "type": "string"
             },
