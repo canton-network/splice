@@ -19,7 +19,7 @@ Requirements
 2) A development workstation with the following:
 
     a. ``kubectl`` - At least v1.26.1
-    b. ``helm`` - At least v3.11.1
+    b. ``helm`` - At least v3.17.0
 
 3) Your cluster needs a static egress IP. After acquiring that, propose to the other SVs to add it to the IP allowlist.
 
