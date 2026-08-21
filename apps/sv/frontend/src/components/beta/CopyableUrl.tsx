@@ -10,17 +10,23 @@ import type { CopyableIdentifierSize } from './CopyableIdentifier';
 interface CopyableUrlProps {
   url: string;
   size: CopyableIdentifierSize;
+  maxContentLength?: number;
   'data-testid': string;
 }
 
-function abbreviateUrl(url: string, maxLength = 50): string {
-  if (url.length <= maxLength) {
+function abbreviateUrl(url: string, maxContentLength = 50): string {
+  if (url.length <= maxContentLength) {
     return url;
   }
-  return `${url.slice(0, maxLength)}...`;
+  return `${url.slice(0, maxContentLength)}...`;
 }
 
-const CopyableUrl: React.FC<CopyableUrlProps> = ({ url, size, 'data-testid': testId }) => {
+const CopyableUrl: React.FC<CopyableUrlProps> = ({
+  url,
+  size,
+  maxContentLength,
+  'data-testid': testId,
+}) => {
   const sanitizedUrl = sanitizeUrl(url);
 
   return (
@@ -40,7 +46,7 @@ const CopyableUrl: React.FC<CopyableUrlProps> = ({ url, size, 'data-testid': tes
         }}
         data-testid={`${testId}-link`}
       >
-        {abbreviateUrl(sanitizedUrl)}
+        {abbreviateUrl(sanitizedUrl, maxContentLength)}
       </Link>
       <IconButton
         color="secondary"

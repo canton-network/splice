@@ -725,6 +725,34 @@ const votesData = [
 ] as ProposalVote[];
 
 describe('Proposal Details > Votes & Voting', () => {
+  test('should render vote URLs with the same display length as SV IDs', () => {
+    const voter = 'sv-party::1220abcdef1234567890';
+    const url = 'https://example.com/a/long/vote/reason/url';
+
+    render(
+      <Wrapper>
+        <ProposalDetailsContent
+          currentSvPartyId={voteRequest.votingInformation.requester}
+          contractId={voteRequest.contractId}
+          proposalDetails={voteRequest.proposalDetails}
+          votingInformation={voteRequest.votingInformation}
+          votes={[
+            {
+              sv: voter,
+              vote: 'accepted',
+              reason: { url, body: 'Reason' },
+            },
+          ]}
+        />
+      </Wrapper>
+    );
+
+    const displayedUrl = screen.getByTestId('proposal-details-vote-url-link');
+    expect(displayedUrl.textContent).toHaveLength(voter.length);
+    expect(displayedUrl.textContent).toBe(`${url.slice(0, voter.length - 3)}...`);
+    expect(displayedUrl).toHaveAttribute('href', url);
+  });
+
   test('should render votes table', () => {
     render(
       <Wrapper>

@@ -567,7 +567,12 @@ const VoteItem: React.FC<VoteItemProps> = ({
             <Typography variant="caption" color="text.secondary" display="block" mb={1}>
               {VOTE_REASON_URL_LABEL}
             </Typography>
-            <CopyableUrl url={url} size="small" data-testid="proposal-details-vote-url" />
+            <CopyableUrl
+              url={url}
+              size="large"
+              maxContentLength={Math.max(0, voter.length - 3)}
+              data-testid="proposal-details-vote-url"
+            />
           </Box>
         )}
       </Box>
