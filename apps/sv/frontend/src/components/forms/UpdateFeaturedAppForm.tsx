@@ -26,7 +26,11 @@ import {
 import { FormLayout } from './FormLayout';
 import { ProposalSummary } from '../governance/ProposalSummary';
 import { useStore } from '@tanstack/react-form';
-import { DEFAULT_APP_ACTIVITY_WEIGHT, THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
+import {
+  DEFAULT_APP_ACTIVITY_WEIGHT,
+  THRESHOLD_DEADLINE_SUBTITLE,
+  URL_PLACEHOLDER,
+} from '../../utils/constants';
 import { EffectiveDateField } from '../form-components/EffectiveDateField';
 import { ProposalSubmissionError } from '../form-components/ProposalSubmissionError';
 
@@ -242,7 +246,13 @@ export const UpdateFeaturedAppForm: React.FC = () => {
                 onChange: ({ value }) => validateUrl(value),
               }}
             >
-              {field => <field.TextField title="URL" id={`${idPrefix}-url`} />}
+              {field => (
+                <field.TextField
+                  title="URL"
+                  id={`${idPrefix}-url`}
+                  muiTextFieldProps={{ placeholder: URL_PLACEHOLDER }}
+                />
+              )}
             </form.AppField>
           </>
         )}

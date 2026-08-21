@@ -11,6 +11,7 @@ import { EffectivityType } from '../../utils/types';
 import React, { useMemo } from 'react';
 import { RadioSelector } from './RadioSelector';
 import { datePickerFieldSx } from '../../themes/fieldStyles';
+import { DATE_TIME_PLACEHOLDER } from '../../utils/constants';
 
 const effectiveAtDisplayFormat = 'YYYY-MM-DD HH:mm';
 
@@ -110,6 +111,7 @@ export const EffectiveDateField: React.FC<EffectiveDateFieldProps> = props => {
                       sx: datePickerFieldSx,
                       inputProps: {
                         'data-testid': `${id}-field`,
+                        placeholder: DATE_TIME_PLACEHOLDER,
                       },
                     },
                   }}

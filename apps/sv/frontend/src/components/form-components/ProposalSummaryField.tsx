@@ -8,6 +8,7 @@ import {
   DEFAULT_PROPOSAL_SUMMARY_MAX_LENGTH,
   PROPOSAL_SUMMARY_SUBTITLE,
   PROPOSAL_SUMMARY_TITLE,
+  REASON_PLACEHOLDER,
 } from '../../utils/constants';
 import {
   fieldDescriptionSx,
@@ -60,7 +61,7 @@ export const ProposalSummaryField: React.FC<ProposalSummaryFieldProps> = props =
         onChange={e => field.handleChange(e.target.value)}
         error={!field.state.meta.isValid}
         helperText={field.state.meta.errors?.[0]}
-        inputProps={{ 'data-testid': id, maxLength }}
+        inputProps={{ 'data-testid': id, maxLength, placeholder: REASON_PLACEHOLDER }}
       />
       <Box
         sx={{

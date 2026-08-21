@@ -8,6 +8,9 @@ export const THRESHOLD_DEADLINE_SUBTITLE =
   'Proposal remains open only if ⅔ of nodes place a vote before this date-time';
 export const DEFAULT_APP_ACTIVITY_WEIGHT = '1.0';
 
+export const DATE_TIME_PLACEHOLDER = 'YYYY-MM-DD HH:MM';
+export const REASON_PLACEHOLDER = 'Add your reasoning here';
+export const URL_PLACEHOLDER = 'https://example.com';
 export const SUPPORTING_URL_LABEL = 'Supporting URL';
 export const VOTE_REASON_URL_LABEL = 'Vote Reason URL';
 export const VOTE_REASON_SUMMARY_LABEL = 'Vote Reason Summary';

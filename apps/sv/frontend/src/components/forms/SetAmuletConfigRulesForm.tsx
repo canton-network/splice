@@ -5,7 +5,11 @@ import {
   ActionRequiringConfirmation,
   AmuletRules_ActionRequiringConfirmation,
 } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
-import { SUPPORTING_URL_LABEL, THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
+import {
+  SUPPORTING_URL_LABEL,
+  THRESHOLD_DEADLINE_SUBTITLE,
+  URL_PLACEHOLDER,
+} from '../../utils/constants';
 import {
   buildAmuletRulesPendingConfigFields,
   configFormDataToConfigChanges,
@@ -289,7 +293,11 @@ export const SetAmuletConfigRulesForm: () => JSX.Element = () => {
             }}
           >
             {field => (
-              <field.TextField title={SUPPORTING_URL_LABEL} id="set-amulet-config-rules-url" />
+              <field.TextField
+                title={SUPPORTING_URL_LABEL}
+                id="set-amulet-config-rules-url"
+                muiTextFieldProps={{ placeholder: URL_PLACEHOLDER }}
+              />
             )}
           </form.AppField>
         </>

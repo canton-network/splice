@@ -8,7 +8,11 @@ import { useState } from 'react';
 import { useDsoInfos } from '../../contexts/SvContext';
 import { useAppForm } from '../../hooks/form';
 import { useProposalMutation } from '../../hooks/useProposalMutation';
-import { SUPPORTING_URL_LABEL, THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
+import {
+  SUPPORTING_URL_LABEL,
+  THRESHOLD_DEADLINE_SUBTITLE,
+  URL_PLACEHOLDER,
+} from '../../utils/constants';
 import { createProposalActions, getInitialExpiration } from '../../utils/governance';
 import type { CommonProposalFormData } from '../../utils/types';
 import { EffectiveDateField } from '../form-components/EffectiveDateField';
@@ -229,6 +233,7 @@ export const CreateUnallocatedUnclaimedActivityRecordForm: React.FC = _ => {
                 <field.TextField
                   title={SUPPORTING_URL_LABEL}
                   id="create-unallocated-unclaimed-activity-record-url"
+                  muiTextFieldProps={{ placeholder: URL_PLACEHOLDER }}
                 />
               )}
             </form.AppField>

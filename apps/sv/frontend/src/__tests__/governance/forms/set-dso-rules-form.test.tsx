@@ -16,6 +16,11 @@ import { SvConfigProvider } from '../../../utils';
 import { Wrapper } from '../../helpers';
 import { svPartyId } from '../../mocks/constants';
 import { server, svUrl } from '../../setup/setup';
+import {
+  DATE_TIME_PLACEHOLDER,
+  REASON_PLACEHOLDER,
+  URL_PLACEHOLDER,
+} from '../../../utils/constants';
 
 describe('SV user can', () => {
   test('login and see the SV party ID', async () => {
@@ -58,10 +63,21 @@ describe('Set DSO Config Rules Form', () => {
     const summaryInput = screen.getByTestId('set-dso-config-rules-summary');
     expect(summaryInput).toBeInTheDocument();
     expect(summaryInput.getAttribute('value')).not.toBeInTheDocument();
+    expect(summaryInput).toHaveAttribute('placeholder', REASON_PLACEHOLDER);
 
     const urlInput = screen.getByTestId('set-dso-config-rules-url');
     expect(urlInput).toBeInTheDocument();
     expect(urlInput.getAttribute('value')).toBe('');
+    expect(urlInput).toHaveAttribute('placeholder', URL_PLACEHOLDER);
+
+    expect(screen.getByTestId('set-dso-config-rules-expiry-date-field')).toHaveAttribute(
+      'placeholder',
+      DATE_TIME_PLACEHOLDER
+    );
+    expect(screen.getByTestId('set-dso-config-rules-effective-date-field')).toHaveAttribute(
+      'placeholder',
+      DATE_TIME_PLACEHOLDER
+    );
 
     const configLabels = screen.getAllByTestId(/config-label-/);
     expect(configLabels.length).toBeGreaterThan(15);

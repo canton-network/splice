@@ -22,7 +22,11 @@ import { EffectiveDateField } from '../form-components/EffectiveDateField';
 import { ProposalSummary } from '../governance/ProposalSummary';
 import { ProposalSubmissionError } from '../form-components/ProposalSubmissionError';
 import { useProposalMutation } from '../../hooks/useProposalMutation';
-import { SUPPORTING_URL_LABEL, THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
+import {
+  SUPPORTING_URL_LABEL,
+  THRESHOLD_DEADLINE_SUBTITLE,
+  URL_PLACEHOLDER,
+} from '../../utils/constants';
 
 interface ExtraFormFields {
   sv: string;
@@ -175,7 +179,13 @@ export const OffboardSvForm: React.FC = _ => {
                 onChange: ({ value }) => validateUrl(value),
               }}
             >
-              {field => <field.TextField title={SUPPORTING_URL_LABEL} id="offboard-sv-url" />}
+              {field => (
+                <field.TextField
+                  title={SUPPORTING_URL_LABEL}
+                  id="offboard-sv-url"
+                  muiTextFieldProps={{ placeholder: URL_PLACEHOLDER }}
+                />
+              )}
             </form.AppField>
           </>
         )}

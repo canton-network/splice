@@ -15,6 +15,7 @@ import {
   fieldSectionSx,
   fieldSectionTitleSx,
 } from '../../themes/fieldStyles';
+import { DATE_TIME_PLACEHOLDER } from '../../utils/constants';
 
 export interface DateFieldProps {
   title?: string;
@@ -58,6 +59,7 @@ export const DateField: React.FC<DateFieldProps> = props => {
               sx: datePickerFieldSx,
               inputProps: {
                 'data-testid': `${id}-field`,
+                placeholder: DATE_TIME_PLACEHOLDER,
               },
             },
             openPickerButton: {
