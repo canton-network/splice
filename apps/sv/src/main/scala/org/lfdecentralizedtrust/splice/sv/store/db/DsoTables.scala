@@ -56,6 +56,7 @@ object DsoTables extends AcsTables with NamedLogging {
       walletParty: Option[PartyId] = None,
       conversionRateFeedPublisher: Option[PartyId] = None,
       rewardBeneficiaryIsObserver: Option[Boolean] = None,
+      participantId: Option[String] = None,
   ) extends AcsRowData.AcsRowDataFromContract {
     override def indexColumns: Seq[(String, IndexColumnValue[?])] = Seq(
       DsoAcsStoreRowData.IndexColumns.amulet_round_of_expiry -> amuletRoundOfExpiry,
@@ -91,6 +92,7 @@ object DsoTables extends AcsTables with NamedLogging {
       DsoAcsStoreRowData.IndexColumns.wallet_party -> walletParty,
       DsoAcsStoreRowData.IndexColumns.conversion_rate_feed_publisher -> conversionRateFeedPublisher,
       DsoAcsStoreRowData.IndexColumns.reward_beneficiary_is_observer -> rewardBeneficiaryIsObserver,
+      DsoAcsStoreRowData.IndexColumns.participant_id -> participantId.map(lengthLimited),
     )
   }
   object DsoAcsStoreRowData {
@@ -133,6 +135,7 @@ object DsoTables extends AcsTables with NamedLogging {
       val wallet_party = "wallet_party"
       val conversion_rate_feed_publisher = "conversion_rate_feed_publisher"
       val reward_beneficiary_is_observer = "reward_beneficiary_is_observer"
+      val participant_id = "participant_id"
       val All = Seq(
         amulet_round_of_expiry,
         reward_round,
@@ -166,6 +169,7 @@ object DsoTables extends AcsTables with NamedLogging {
         wallet_party,
         conversion_rate_feed_publisher,
         reward_beneficiary_is_observer,
+        participant_id,
       )
     }
   }

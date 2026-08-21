@@ -52,6 +52,7 @@ import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.MonadUtil
 import com.digitalasset.canton.util.ShowUtil.*
 import io.grpc.Status
+import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorunpermission.ValidatorUnpermission
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 
 import scala.concurrent.duration.FiniteDuration
@@ -1197,19 +1198,12 @@ trait SvDsoStore
     splice.ans.amuletconversionratefeed.AmuletConversionRateFeed,
   ]]]
 
-  def lookupValidatorUnpermissionWithOffset(validator: PartyId, participantId: String)(implicit
-      tc: TraceContext
-  ): Future[
-    QueryResult[Option[Contract[vl.ValidatorUnpermission.ContractId, vl.ValidatorUnpermission]]]
-  ]
-
-  def listValidatorUnpermissionsPerValidator(
-      validator: PartyId,
+  def listValidatorUnpermissions(
       participantId: String,
       limit: Limit = defaultLimit,
   )(implicit
       tc: TraceContext
-  ): Future[Seq[Contract[vl.ValidatorUnpermission.ContractId, vl.ValidatorUnpermission]]]
+  ): Future[Seq[Contract[ValidatorUnpermission.ContractId, ValidatorUnpermission]]]
 
 }
 
@@ -1693,7 +1687,7 @@ object SvDsoStore {
           validator = Some(PartyId.tryFromProtoPrimitive(contract.payload.validator)),
         )
       },
-      mkFilter(vl.ValidatorUnpermission.COMPANION)(
+      mkFilter(ValidatorUnpermission.COMPANION)(
         co => co.payload.dso == dso,
         versionGuard = { case (pkgVersionSupport, now) =>
           (tc) => pkgVersionSupport.supportsPermissionedSynchronizer(Seq(dsoParty), now)(tc)
@@ -1701,7 +1695,7 @@ object SvDsoStore {
       ) { contract =>
         DsoAcsStoreRowData(
           contract,
-          validator = Some(PartyId.tryFromProtoPrimitive(contract.payload.validator)),
+          participantId = Some(contract.payload.participantId),
         )
       },
     )

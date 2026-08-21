@@ -2,10 +2,8 @@ package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.daml.ledger.javaapi.data.Identifier
 import com.digitalasset.canton.logging.SuppressionRule
-import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.{
-  ValidatorLicense,
-  ValidatorUnpermission,
-}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.{ValidatorLicense}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorunpermission.ValidatorUnpermission
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   ConfigurableApp,
   updateAutomationConfig,
@@ -97,76 +95,65 @@ class SvMergeDuplicatedValidatorLicenseAndValidatorUnpermissionIntegrationTest
     )
   }
 
-  "Duplicated ValidatorUnpermissions for the same validator and participant get mergeded" in {
-    implicit env =>
-      def getValidatorUnpermissions() =
-        sv1Backend.participantClientWithAdminToken.ledger_api_extensions.acs
-          .filterJava(ValidatorUnpermission.COMPANION)(
-            sv1Backend.getDsoInfo().dsoParty,
-            _ => true,
-          )
+  "Duplicated ValidatorUnpermissions for the same participant get merged" in { implicit env =>
+    def getValidatorUnpermissions() =
+      sv1Backend.participantClientWithAdminToken.ledger_api_extensions.acs
+        .filterJava(ValidatorUnpermission.COMPANION)(
+          sv1Backend.getDsoInfo().dsoParty,
+          _ => true,
+        )
 
-      val dso = sv1Backend.getDsoInfo().dsoParty.toProtoPrimitive
+    val dso = sv1Backend.getDsoInfo().dsoParty.toProtoPrimitive
 
-      val create1 = new ValidatorUnpermission(
-        dso,
-        aliceValidatorBackend.getValidatorPartyId().toProtoPrimitive,
-        "participant1",
-        java.util.Optional.empty(),
-        java.lang.Boolean.FALSE,
-      ).create()
-      val create2 = new ValidatorUnpermission(
-        dso,
-        aliceValidatorBackend.getValidatorPartyId().toProtoPrimitive,
-        "participant1",
-        java.util.Optional.empty(),
-        java.lang.Boolean.TRUE,
-      ).create()
-      val create3 = new ValidatorUnpermission(
-        dso,
-        bobValidatorBackend.getValidatorPartyId().toProtoPrimitive,
-        "participant1",
-        java.util.Optional.empty(),
-        java.lang.Boolean.FALSE,
-      ).create()
-      val create4 = new ValidatorUnpermission(
-        dso,
-        aliceValidatorBackend.getValidatorPartyId().toProtoPrimitive,
-        "participant2",
-        java.util.Optional.empty(),
-        java.lang.Boolean.FALSE,
-      ).create()
+    val create1 = new ValidatorUnpermission(
+      dso,
+      "participant1",
+      java.util.Optional.empty(),
+      java.lang.Boolean.FALSE,
+    ).create()
+    val create2 = new ValidatorUnpermission(
+      dso,
+      "participant1",
+      java.util.Optional.empty(),
+      java.lang.Boolean.TRUE,
+    ).create()
+    val create3 = new ValidatorUnpermission(
+      dso,
+      "participant2",
+      java.util.Optional.empty(),
+      java.lang.Boolean.FALSE,
+    ).create()
 
-      actAndCheck(
-        "Create 4 ValidatorUnpermission contracts",
-        sv1Backend.participantClientWithAdminToken.ledger_api_extensions.commands.submitJava(
-          Seq(sv1Backend.getDsoInfo().dsoParty),
-          commands = Seq(create1, create2, create3, create4).flatMap(_.commands.asScala),
-        ),
-      )(
-        "4 validator unpermissions get created",
-        _ => {
-          val unpermissions = getValidatorUnpermissions()
-          unpermissions should have size 4 withClue "has 4 ValidatorUnpermissions"
-        },
-      )
+    actAndCheck(
+      "Create 3 ValidatorUnpermission contracts",
+      sv1Backend.participantClientWithAdminToken.ledger_api_extensions.commands.submitJava(
+        Seq(sv1Backend.getDsoInfo().dsoParty),
+        commands = Seq(create1, create2, create3).flatMap(_.commands.asScala),
+      ),
+    )(
+      "3 validator unpermissions get created",
+      _ => {
+        val unpermissions = getValidatorUnpermissions()
+        unpermissions should have size 3 withClue "has 3 ValidatorUnpermissions"
+      },
+    )
 
-      loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(Level.WARN))(
-        {
-          resumeAllDsoDelegateTriggers[MergeValidatorUnpermissionContractsTrigger]
-          clue("Trigger merges the duplicated validator unpermission contracts") {
-            eventually() {
-              val unpermissions = getValidatorUnpermissions()
-              unpermissions should have size 3 withClue "has 3 ValidatorUnpermissions"
-            }
+    loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(Level.WARN))(
+      {
+        resumeAllDsoDelegateTriggers[MergeValidatorUnpermissionContractsTrigger]
+        clue("Trigger merges the duplicated validator unpermission contracts") {
+          eventually() {
+            val unpermissions = getValidatorUnpermissions()
+            unpermissions should have size 2 withClue "has 2 ValidatorUnpermissions"
           }
-          pauseAllDsoDelegateTriggers[MergeValidatorUnpermissionContractsTrigger]
-        },
-        forAll(_)(
-          _.warningMessage should include(
-            s"has 2 ValidatorUnpermission contracts"
-          )
-        ),
-      )
+        }
+        pauseAllDsoDelegateTriggers[MergeValidatorUnpermissionContractsTrigger]
+      },
+      forAll(_)(
+        _.warningMessage should include(
+          s"has 2 ValidatorUnpermission contracts"
+        )
+      ),
+    )
   }
 }

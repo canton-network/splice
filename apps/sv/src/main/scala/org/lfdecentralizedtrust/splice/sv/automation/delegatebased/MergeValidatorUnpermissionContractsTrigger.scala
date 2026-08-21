@@ -10,13 +10,12 @@ import org.lfdecentralizedtrust.splice.automation.{
   TriggerContext,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules_MergeValidatorUnpermission
-import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.ValidatorUnpermission
 import org.lfdecentralizedtrust.splice.store.PageLimit
 import org.lfdecentralizedtrust.splice.util.{AssignedContract, Contract}
-import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
+import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorunpermission.ValidatorUnpermission
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 
 import java.util.Optional
@@ -51,7 +50,6 @@ class MergeValidatorUnpermissionContractsTrigger(
       unpermission: AssignedContract[ValidatorUnpermission.ContractId, ValidatorUnpermission],
       controller: String,
   )(implicit tc: TraceContext): Future[TaskOutcome] = {
-    val validator = unpermission.payload.validator
     val participantId = unpermission.payload.participantId
 
     for {
@@ -66,8 +64,7 @@ class MergeValidatorUnpermissionContractsTrigger(
 
       validatorUnpermissions <-
         if (supportsPermissionedSynchronizer.supported) {
-          store.listValidatorUnpermissionsPerValidator(
-            PartyId.tryFromProtoPrimitive(validator),
+          store.listValidatorUnpermissions(
             participantId,
             MAX_VALIDATOR_UNPERMISSION_CONTRACTS,
           )
@@ -78,10 +75,9 @@ class MergeValidatorUnpermissionContractsTrigger(
       outcome <-
         if (validatorUnpermissions.length > 1) {
           logger.warn(
-            s"Validator $validator with participant $participantId has ${validatorUnpermissions.length} ValidatorUnpermission contracts, hence merging them"
+            s"Participant $participantId has ${validatorUnpermissions.length} ValidatorUnpermission contracts, hence merging them"
           )
           mergeValidatorUnpermissionContracts(
-            validator,
             participantId,
             validatorUnpermissions,
             controller,
@@ -89,13 +85,13 @@ class MergeValidatorUnpermissionContractsTrigger(
         } else if (supportsPermissionedSynchronizer.supported) {
           Future.successful(
             TaskSuccess(
-              s"Only one ValidatorUnpermission contract for $validator, nothing to merge."
+              s"Only one ValidatorUnpermission contract for $participantId, nothing to merge."
             )
           )
         } else {
           Future.successful(
             TaskSuccess(
-              s"Skipping merging ValidatorUnpermission contracts for $validator as the package does not support it."
+              s"Skipping merging ValidatorUnpermission contracts for $participantId as the package does not support it."
             )
           )
         }
@@ -103,7 +99,6 @@ class MergeValidatorUnpermissionContractsTrigger(
   }
 
   private def mergeValidatorUnpermissionContracts(
-      validator: String,
       participantId: String,
       validatorUnpermissions: Seq[
         Contract[ValidatorUnpermission.ContractId, ValidatorUnpermission]
@@ -123,7 +118,7 @@ class MergeValidatorUnpermissionContractsTrigger(
         .noDedup
         .yieldResult()
     } yield TaskSuccess(
-      s"Merged ${validatorUnpermissions.length} ValidatorUnpermission contracts for $validator with participant $participantId)"
+      s"Merged ${validatorUnpermissions.length} ValidatorUnpermission contracts for participant $participantId"
     )
   }
 

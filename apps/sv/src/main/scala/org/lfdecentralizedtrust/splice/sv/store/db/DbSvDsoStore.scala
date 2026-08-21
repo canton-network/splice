@@ -19,7 +19,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.{
   ValidatorFaucetCoupon,
   ValidatorLicense,
   ValidatorLivenessActivityRecord,
-  ValidatorUnpermission,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.ans.{AnsEntry, AnsEntryContext}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.amuletprice.AmuletPriceVote
@@ -66,6 +65,7 @@ import com.digitalasset.canton.resource.DbStorage.Implicits.BuilderChain.toSQLAc
 import com.digitalasset.canton.topology.{Member, ParticipantId, PartyId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
 import io.grpc.Status
+import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorunpermission.ValidatorUnpermission
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import slick.jdbc.GetResult
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
@@ -140,38 +140,7 @@ class DbSvDsoStore(
 
   private def acsStoreId: AcsStoreId = multiDomainAcsStore.acsStoreId
 
-  override def lookupValidatorUnpermissionWithOffset(
-      validator: PartyId,
-      participantId: String,
-  )(implicit tc: TraceContext): Future[
-    MultiDomainAcsStore.QueryResult[Option[
-      Contract[ValidatorUnpermission.ContractId, ValidatorUnpermission]
-    ]]
-  ] = waitUntilAcsIngested {
-    (for {
-      resultWithOffset <- storage
-        .querySingle(
-          selectFromAcsTableWithOffset(
-            DsoTables.acsTableName,
-            acsStoreId,
-            domainMigrationId,
-            ValidatorUnpermission.COMPANION,
-            where = sql"""validator = $validator
-                          and create_arguments->>'participantId' = ${lengthLimited(
-                participantId
-              )}""",
-            orderLimit = sql"limit 1",
-          ).headOption,
-          "lookupValidatorUnpermissionWithOffset",
-        )
-    } yield MultiDomainAcsStore.QueryResult(
-      resultWithOffset.offset,
-      resultWithOffset.row.map(contractFromRow(ValidatorUnpermission.COMPANION)(_)),
-    )).getOrRaise(offsetExpectedError())
-  }
-
-  override def listValidatorUnpermissionsPerValidator(
-      validator: PartyId,
+  def listValidatorUnpermissions(
       participantId: String,
       limit: Limit = defaultLimit,
   )(implicit
@@ -185,13 +154,10 @@ class DbSvDsoStore(
             acsStoreId,
             domainMigrationId,
             ValidatorUnpermission.COMPANION,
-            where = sql"""validator = $validator
-                          and create_arguments->>'participantId' = ${lengthLimited(
-                participantId
-              )}""",
+            where = sql"""participant_id = ${lengthLimited(participantId)})}""",
             orderLimit = sql"""limit ${sqlLimit(limit)}""",
           ),
-          "listValidatorUnpermissionsPerValidator",
+          "listValidatorUnpermissions",
         )
     } yield result.map(contractFromRow(ValidatorUnpermission.COMPANION)(_))
 

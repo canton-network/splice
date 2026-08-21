@@ -47,6 +47,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.svonboarding.{
   SvOnboardingRequest,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
+import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorunpermission.ValidatorUnpermission
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.payment.{PaymentAmount, Unit}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.subscriptions.*
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
@@ -207,15 +208,6 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
       noise = (2 to 4).map(n => featuredAppRight(userParty(n))),
     )(
       _.lookupFeaturedAppRightWithOffset(userParty(1))
-    )
-    lookupTests("lookupValidatorUnpermissionWithOffset")(
-      create = validatorUnpermission(userParty(1), "participant1"),
-      noise = Seq(
-        validatorUnpermission(userParty(2), "participant1"),
-        validatorUnpermission(userParty(1), "wrong-participant"),
-      ),
-    )(
-      _.lookupValidatorUnpermissionWithOffset(userParty(1), "participant1")
     )
 
     "getOpenMiningRoundTriple" should {
@@ -797,24 +789,24 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
       }
     }
 
-    "listValidatorUnpermissionsPerValidator" should {
+    "listValidatorUnpermissions" should {
 
-      "list all contracts matching both validator and participantId" in {
-        val good1 = validatorUnpermission(userParty(1), "participant1")
-        val good2 = validatorUnpermission(userParty(1), "participant1", revoked = true)
-        val badValidator = validatorUnpermission(userParty(2), "participant1")
-        val badParticipant = validatorUnpermission(userParty(1), "wrong-participant")
+      "list all contracts matching the participantId" in {
+        val good1 = validatorUnpermission("participant1")
+        val good2 = validatorUnpermission("participant1", revoked = true)
+
+        val badParticipant1 = validatorUnpermission("wrong-participant")
+        val badParticipant2 = validatorUnpermission("another-wrong-participant")
 
         for {
           store <- mkStore()
           _ <- MonadUtil.sequentialTraverse(
-            Seq(good1, good2, badValidator, badParticipant)
+            Seq(good1, good2, badParticipant1, badParticipant2)
           )(
             dummyDomain.create(_)(store.multiDomainAcsStore)
           )
-          result <- store.listValidatorUnpermissionsPerValidator(
-            userParty(1),
-            "participant1",
+          result <- store.listValidatorUnpermissions(
+            "participant1"
           )(traceContext)
         } yield result should contain theSameElementsAs Seq(good1, good2)
       }
@@ -2233,21 +2225,19 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
   }
 
   protected def validatorUnpermission(
-      validator: PartyId,
       participantId: String,
       revoked: Boolean = false,
       loginAfter: Option[Instant] = None,
   ) = {
-    val template = new splice.validatorlicense.ValidatorUnpermission(
+    val template = new ValidatorUnpermission(
       dsoParty.toProtoPrimitive,
-      validator.toProtoPrimitive,
       participantId,
       loginAfter.map(Optional.of(_)).getOrElse(Optional.empty()),
       java.lang.Boolean.valueOf(revoked),
     )
     contract(
-      splice.validatorlicense.ValidatorUnpermission.TEMPLATE_ID_WITH_PACKAGE_ID,
-      new splice.validatorlicense.ValidatorUnpermission.ContractId(nextCid()),
+      ValidatorUnpermission.TEMPLATE_ID_WITH_PACKAGE_ID,
+      new ValidatorUnpermission.ContractId(nextCid()),
       template,
     )
   }
