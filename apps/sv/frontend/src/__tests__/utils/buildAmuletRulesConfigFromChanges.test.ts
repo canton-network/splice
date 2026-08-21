@@ -346,6 +346,50 @@ describe('buildAmuletRulesConfigFromChanges', () => {
     ]);
   });
 
+  test('should round-trip the development fund blacklist and minting delay', () => {
+    const changes: ConfigChange[] = [
+      {
+        fieldName: 'developmentFundManagerBlacklist',
+        label: 'Development Fund Manager Blacklist',
+        currentValue: 'alice::122',
+        newValue: 'alice::122, bob::122',
+      },
+      {
+        fieldName: 'minDevelopmentFundMintingDelay',
+        label: 'Min Development Fund Minting Delay',
+        currentValue: '',
+        newValue: '604800000000',
+      },
+    ];
+
+    const result = buildAmuletRulesConfigFromChanges(changes);
+
+    expect(result.developmentFundManagerBlacklist).toEqual(['alice::122', 'bob::122']);
+    expect(result.minDevelopmentFundMintingDelay).toEqual({ microseconds: '604800000000' });
+  });
+
+  test('should map an emptied development fund blacklist to an empty list and the delay to null', () => {
+    const changes: ConfigChange[] = [
+      {
+        fieldName: 'developmentFundManagerBlacklist',
+        label: 'Development Fund Manager Blacklist',
+        currentValue: 'alice::122',
+        newValue: '  ,  ',
+      },
+      {
+        fieldName: 'minDevelopmentFundMintingDelay',
+        label: 'Min Development Fund Minting Delay',
+        currentValue: '604800000000',
+        newValue: '',
+      },
+    ];
+
+    const result = buildAmuletRulesConfigFromChanges(changes);
+
+    expect(result.developmentFundManagerBlacklist).toEqual([]);
+    expect(result.minDevelopmentFundMintingDelay).toBeNull();
+  });
+
   test('should handle issuance curve future values', () => {
     const changes: ConfigChange[] = [
       {
