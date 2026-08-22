@@ -63,7 +63,7 @@ class UpdateHistorySegmentBulkStorage(
   ): Future[Option[(TimestampWithMigrationId, Seq[TreeUpdateWithMigrationId])]] = {
     for {
       updates <- updateHistory.getUpdatesWithoutImportUpdates(
-        Some((afterTs.migrationId, afterTs.timestamp)),
+        Some(TimestampWithMigrationId(afterTs.timestamp, afterTs.migrationId)),
         PageLimit.tryCreate(storageConfig.bulkDbReadChunkSize),
       )
       updatesInSegment = updates.filter(update =>
