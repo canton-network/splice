@@ -176,9 +176,10 @@ data VestingLock_WithdrawResult
 calculateAvailableWithdrawAmount : Decimal -> Time -> VestingLock -> Optional Decimal -- None indicates the _full_ amount is available
 calculateAvailableWithdrawAmount currentAmount currentTime VestingLock{ .. }
     | currentTime > (startTime `addRelTime` unlockPeriod) = None
-    | otherwise = Some $ initialAmount * fractionElapsed - (initialAmount - currentAmount)
+    | otherwise = Some $ initialAmount `mul` fractionElapsed - (initialAmount - currentAmount)
   where
     fractionElapsed = (currentTime `subTime` startTime) `divRelTime` unlockPeriod
+    divRelTime : RelTime -> RelTime -> Numeric 37 -- Specifically valid and maximum cleanly represented range for 0 < a < b
     divRelTime = \a b -> (intToDecimal $ convertRelTimeToMicroseconds a) `div` (intToDecimal $ convertRelTimeToMicroseconds b)
 
 -- Lock properties for LockSubject types
