@@ -1,0 +1,129 @@
+module Splice.Scripts.TestGovernanceLocks where
+
+import DA.Assert
+import DA.List.Total
+import DA.Time
+
+import Splice.Testing.Registries.AmuletRegistryV2 qualified as AmuletRegistryV2
+import Daml.Script
+import Splice.Amulet
+import Splice.AmuletRules
+import Splice.Api.Token.HoldingV1
+import Splice.ExternalPartyConfigState
+import Splice.GovernanceLocks
+import Splice.Scripts.TokenStandard.TestAmuletTokenStandardTestEnv
+import Splice.Testing.Utils
+
+
+testGovernanceLockHappyPath : Script ()
+testGovernanceLockHappyPath = do
+  env@TestEnv{..} <- setupTest
+  let dso = env.instrId.admin
+
+  let someSvSpec = GovernanceLockSpecification with
+        subject = GLS_SuperValidatorRightsOwner "SomeApp"
+
+  submit (actAs dso) $ createCmd GovernanceLockFactory with dso
+
+  AmuletRegistryV2.tapFaucet registriesEnv.amuletV2 alice 180000.0
+  AmuletRegistryV2.tapFaucet registriesEnv.amuletV2 bob 10000.0
+
+  aliceLock <- governanceLockRawChoice env alice 180000.0 someSvSpec
+
+  _bobLock <- governanceLockRawChoice env bob 10000.0 someSvSpec
+
+  now <- getTime
+
+  let unlockTime = now `addRelTime` minutes 5
+
+  (aliceVesting, Some aliceLock) <- governanceUnlockRawChoice env aliceLock (Some 80000.0) unlockTime [alice]
+
+  assertLockedHoldingAmount alice aliceLock 100000.0
+
+  (externalPartyContext, disc) <- getExternalPartyTransferContext dso
+  submitMustFail (actAs alice <> discloseMany' disc) $ exerciseCmd aliceVesting VestingLock_Withdraw with
+    amount = Some 1.0
+    requestedAt = unlockTime
+    context = externalPartyContext
+    actors = [ alice ]
+
+  passTime (days 46)
+
+
+  let withdrawTime = unlockTime `addRelTime` (days 45 + hours 15 + minutes 45) -- Chosen to be 1/8th of the specified 365.25 year.
+
+  (unlocked, Some newVestingLock) <- vestingWithdrawRawChoice env aliceVesting None withdrawTime [alice]
+
+  assertHoldingAmount alice unlocked 10000.0
+
+  assertLockedHoldingAmount alice newVestingLock 70000.0
+
+  passTime (days 365)
+
+  let fullWithdrawTime = unlockTime `addRelTime` days 366
+
+  (unlockedHolding2, None) <- vestingWithdrawRawChoice env newVestingLock None fullWithdrawTime [alice]
+
+  assertHoldingAmount alice unlockedHolding2 70000.0
+
+
+
+assertHoldingAmount : Implements a Holding => Party -> ContractId a -> Decimal -> Script ()
+assertHoldingAmount p holdingCid amount = do
+  Some holding <- (queryInterfaceContractId p $ toInterfaceContractId @Holding holdingCid)
+  holding.amount === amount
+
+assertLockedHoldingAmount : (Template t, HasEnsure t, HasField "holding" t (ContractId LockedAmulet)) => Party -> ContractId t -> Decimal -> Script ()
+assertLockedHoldingAmount p lockCid amount = do
+  Some lock <- queryContractId p lockCid
+  assertHoldingAmount p lock.holding amount
+
+getExternalPartyTransferContext : Party -> Script (ExternalPartyTransferContext, Disclosures')
+getExternalPartyTransferContext dso = do
+  extPartyConfigs <- query @ExternalPartyConfigState dso
+  let (externalPartyConfigState, _) = case maximumOn (\(_, c) -> c.targetArchiveAfter) extPartyConfigs of
+        None -> error "No ExternalPartyConfigState found: have you initialized the Amulet registry?"
+        Some c -> c
+  ecDD <- queryDisclosure' @ExternalPartyConfigState dso externalPartyConfigState
+  let eptc = ExternalPartyTransferContext with externalPartyConfigState; featuredAppRight = None
+  pure (eptc, ecDD)
+
+submitWithTransferContext : TestEnv -> SubmitOptions -> (ExternalPartyTransferContext -> Commands a) -> Script a
+submitWithTransferContext env options commands = do
+  let dso = env.instrId.admin
+  (context, disclosures) <- getExternalPartyTransferContext dso
+  submit (options <> discloseMany' disclosures) $ commands context
+
+governanceLockRawChoice : TestEnv -> Party -> Decimal -> GovernanceLockSpecification -> Script (ContractId GovernanceLock)
+governanceLockRawChoice env owner amount specification = do
+  let dso = env.instrId.admin
+  [(glfCid, _glf)] <- query @GovernanceLockFactory dso
+  disc <- queryDisclosure' dso glfCid
+  inputs <- fmap fst <$> query @Amulet owner -- Excessive, check how the normal registry does it.
+  GovernanceLockFactory_LockResult cid _ <- submitWithTransferContext env (actAs [owner] <> discloseMany' disc) $
+    \context -> exerciseCmd glfCid GovernanceLockFactory_Lock with
+      amount
+      inputs = toInterfaceContractId <$> inputs
+      specification
+      context
+      owner
+  pure cid
+
+governanceUnlockRawChoice : TestEnv -> ContractId GovernanceLock -> Optional Decimal -> Time -> [Party] -> Script (ContractId VestingLock, Optional (ContractId GovernanceLock))
+governanceUnlockRawChoice env cid amount requestedAt actors = do
+  result <- submitWithTransferContext env (actAs actors) $ \context -> exerciseCmd cid GovernanceLock_Unlock with
+    amount
+    context
+    requestedAt
+    actors
+  pure (result.vestingLock, result.governanceLock)
+
+vestingWithdrawRawChoice : TestEnv -> ContractId VestingLock -> Optional Decimal -> Time -> [Party] -> Script (ContractId Amulet, Optional (ContractId VestingLock))
+vestingWithdrawRawChoice env cid amount requestedAt actors = do
+  result <- submitWithTransferContext env (actAs actors) $ \context -> exerciseCmd cid VestingLock_Withdraw with
+    amount
+    context
+    requestedAt
+    actors
+  pure (result.unlocked, result.vestingLock)
+
