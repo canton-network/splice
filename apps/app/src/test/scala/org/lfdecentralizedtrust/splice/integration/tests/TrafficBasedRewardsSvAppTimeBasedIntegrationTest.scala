@@ -54,7 +54,7 @@ import org.lfdecentralizedtrust.splice.util.{
 }
 import org.slf4j.event.Level
 
-import scala.concurrent.duration.DurationInt
+import scala.concurrent.duration.{DurationInt, FiniteDuration}
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 
 // This test focuses on the SV app side triggers testing
@@ -746,11 +746,12 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
         historyId: Long,
         store: ScanRewardsReferenceStore,
         upperExclusive: Long,
+        timeUntilSuccess: FiniteDuration = 20.seconds,
     ): Unit = {
-      eventually() {
+      eventually(timeUntilSuccess) {
         hasUnprunedRewardAccountingDataBelow(db, historyId, upperExclusive) shouldBe false
       }
-      eventually() {
+      eventually(timeUntilSuccess) {
         hasUnprunedArchiveDataForRound(store, upperExclusive - 1) shouldBe false
       }
     }
@@ -760,6 +761,11 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
     val newLowestOpen = pauseScanVerdictIngestionWithin(sv2ScanBackend) {
       advanceRoundsToNextRoundOpening
       val newLowestOpen = oldestOpenRound
+
+      // We need the archived_at of newLowestOpen + 1 to be lower than the
+      // the active open round's openAt.
+      // So advancing by 3 rounds is a safe way to achieve this.
+      (1 to 3).foreach(_ => advanceRoundsToNextRoundOpening)
 
       clue(s"sv1 prunes rounds below $newLowestOpen") {
         confirmFullyPruned(sv1Db, sv1HistoryId, sv1RewardsRefStore, newLowestOpen)
@@ -775,7 +781,14 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
     }
 
     clue(s"sv2 eventually prunes data once verdict ingestion resumes") {
-      confirmFullyPruned(sv2Db, sv2HistoryId, sv2RewardsRefStore, newLowestOpen)
+      // This can occasionally take longer than the default 20s eventually window
+      confirmFullyPruned(
+        sv2Db,
+        sv2HistoryId,
+        sv2RewardsRefStore,
+        newLowestOpen,
+        timeUntilSuccess = 90.seconds,
+      )
     }
   }
 
