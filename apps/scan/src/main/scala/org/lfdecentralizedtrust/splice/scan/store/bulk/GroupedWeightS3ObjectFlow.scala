@@ -83,6 +83,15 @@ case class GroupedWeightS3ObjectFlow(
       @SuppressWarnings(Array("org.wartremover.warts.Var"))
       private var state = State.initial()
 
+      // True between the moment we call finish() on the current object and the moment finishCallback
+      // advances `state` to the next object. Without this guard, `onUpstreamFinish` can arrive in that
+      // window (upstream completion is delivered eagerly, regardless of demand) and trigger a second
+      // finish() on the very same object. The object's content would be correct, but its
+      // `splice-checksum` metadata would be overwritten with the checksum of an empty input,
+      // because MessageDigest.digest() resets the digest.
+      @SuppressWarnings(Array("org.wartremover.warts.Var"))
+      private var finishingObject = false
+
       private def objectDone = state.currentObjectSize >= maxObjectSize || isClosed(in)
 
       private val uploadCallback = getAsyncCallback[Unit] { _ =>
@@ -111,6 +120,7 @@ case class GroupedWeightS3ObjectFlow(
 
       private val finishCallback = getAsyncCallback[Unit] { _ =>
         logger.debug(s"Finished uploading and finalizing object ${state.currentObject.key}")
+        finishingObject = false
         push(out, state.currentObject.key)
         if (isClosed(in)) {
           logger.trace("Upstream completed, completing too.")
@@ -156,13 +166,24 @@ case class GroupedWeightS3ObjectFlow(
       }
 
       private def finishCurrentObject(): Unit =
-        state.currentObject.finish().onComplete {
-          case Success(_) => finishCallback.invoke(())
-          case Failure(ex) => failCallback.invoke(ex)
+        if (finishingObject) {
+          logger.debug(
+            s"Object ${state.currentObject.key} is already being finished, not finishing it again"
+          )
+        } else {
+          finishingObject = true
+          state.currentObject.finish().onComplete {
+            case Success(_) => finishCallback.invoke(())
+            case Failure(ex) => failCallback.invoke(ex)
+          }
         }
 
       override def onUpstreamFinish(): Unit = {
-        if (state.numPendingPartUploads == 0) {
+        if (finishingObject) {
+          logger.debug(
+            s"Upstream finished while object ${state.currentObject.key} is being finished, waiting for it to complete"
+          )
+        } else if (state.numPendingPartUploads == 0) {
           if (state.currentObjectSize > 0) {
             logger.debug(
               s"Upstream finished, finishing current object ${state.currentObject.key} with size ${state.currentObjectSize}"
