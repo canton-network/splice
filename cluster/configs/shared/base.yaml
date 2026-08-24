@@ -123,6 +123,10 @@ monitoring:
       dsoMissedConfirmations:
         threshold: 0 # alert as soon as there's any confirmation missing
         windowMinutes: 10
+      spliceRateLimits:
+        usageThreshold: 0.8
+        rejectionCountThreshold: 10
+        excludedLimiters: []
       cloudSql:
         maintenance: false
       cometbft:

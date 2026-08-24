@@ -2399,6 +2399,7 @@ lazy val `apps-app`: Project =
       `canton-community-app` % "compile->compile;test->test",
       `canton-community-base`,
       `canton-community-integration-testing` % "test",
+      `splice-amulet-test-daml` % "test",
       `splice-util-featured-app-proxies-daml` % "test",
       // necessary for token-standard-cli to get `npm install`ed so that TokenStandardCliSanityCheckPlugin can run
       `apps-common-frontend`,

@@ -33,7 +33,11 @@ import org.lfdecentralizedtrust.splice.splitwell.config.{
 import org.lfdecentralizedtrust.splice.sv.config.*
 import org.lfdecentralizedtrust.splice.sv.SvAppClientConfig
 import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.FoundDso
-import org.lfdecentralizedtrust.splice.util.{Codec, SpliceRateLimitConfig}
+import org.lfdecentralizedtrust.splice.util.{
+  Codec,
+  PerAttributeRateLimitConfig,
+  SpliceRateLimitConfig,
+}
 import org.lfdecentralizedtrust.splice.validator.config.*
 import org.lfdecentralizedtrust.splice.wallet.config.{
   AppRewardBeneficiaryConfig,
@@ -427,10 +431,15 @@ object SpliceConfig {
       deriveReader[SpliceCachingConfigs]
     implicit val spliceParametersConfig: ConfigReader[SpliceParametersConfig] =
       deriveReader[SpliceParametersConfig]
+    implicit val spliceRateLimiterSimpleConfig: ConfigReader[SpliceRateLimitConfig.Simple] =
+      deriveReader[SpliceRateLimitConfig.Simple]
+    implicit val clientIpRateLimitConfig: ConfigReader[PerAttributeRateLimitConfig] =
+      deriveReader[PerAttributeRateLimitConfig]
+    implicit val spliceRateLimiterWithPerClientIpConfig
+        : ConfigReader[SpliceRateLimitConfig.WithPerClientIp] =
+      deriveReader[SpliceRateLimitConfig.WithPerClientIp]
     implicit val rateLimitersConfig: ConfigReader[RateLimitersConfig] =
       deriveReader[RateLimitersConfig]
-    implicit val spliceRateLimiterConfig: ConfigReader[SpliceRateLimitConfig] =
-      deriveReader[SpliceRateLimitConfig]
     implicit val enabledFeaturesConfigReader: ConfigReader[EnabledFeaturesConfig] =
       deriveReader[EnabledFeaturesConfig]
     implicit val splicePostgresConfigReader: ConfigReader[SplicePostgresConfig] =
@@ -948,10 +957,15 @@ object SpliceConfig {
     implicit val spliceParametersConfig: ConfigWriter[SpliceParametersConfig] =
       deriveWriter[SpliceParametersConfig]
 
+    implicit val spliceRateLimiterSimpleConfig: ConfigWriter[SpliceRateLimitConfig.Simple] =
+      deriveWriter[SpliceRateLimitConfig.Simple]
+    implicit val clientIpRateLimitConfig: ConfigWriter[PerAttributeRateLimitConfig] =
+      deriveWriter[PerAttributeRateLimitConfig]
+    implicit val spliceRateLimiterWithPerClientIpConfig
+        : ConfigWriter[SpliceRateLimitConfig.WithPerClientIp] =
+      deriveWriter[SpliceRateLimitConfig.WithPerClientIp]
     implicit val rateLimitersConfig: ConfigWriter[RateLimitersConfig] =
       deriveWriter[RateLimitersConfig]
-    implicit val spliceRateLimiterConfig: ConfigWriter[SpliceRateLimitConfig] =
-      deriveWriter[SpliceRateLimitConfig]
 
     implicit val enabledFeaturesConfigWriter: ConfigWriter[EnabledFeaturesConfig] =
       deriveWriter[EnabledFeaturesConfig]

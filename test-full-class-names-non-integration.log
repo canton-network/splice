@@ -11,6 +11,7 @@ org.lfdecentralizedtrust.splice.environment.ActiveContractsRestartTest
 org.lfdecentralizedtrust.splice.environment.CommandCircuitBreakerTest
 org.lfdecentralizedtrust.splice.environment.CommandIdDedupTest
 org.lfdecentralizedtrust.splice.environment.TopologyAwarePackageVersionSupportTest
+org.lfdecentralizedtrust.splice.http.HttpRateLimiterTest
 org.lfdecentralizedtrust.splice.http.InvalidResponseContentTest
 org.lfdecentralizedtrust.splice.http.NonProxyHostsTest
 org.lfdecentralizedtrust.splice.http.UrlValidatorTest
@@ -29,6 +30,7 @@ org.lfdecentralizedtrust.splice.scan.store.DbScanAppRewardsStoreTest
 org.lfdecentralizedtrust.splice.scan.store.ScanEventStoreTest
 org.lfdecentralizedtrust.splice.scan.store.bulk.ZstdTest
 org.lfdecentralizedtrust.splice.scan.store.db.CheckMetaVersionsTest
+org.lfdecentralizedtrust.splice.store.DbUnavailablePartiesStoreTest
 org.lfdecentralizedtrust.splice.store.DomainTimeStoreTest
 org.lfdecentralizedtrust.splice.store.InMemorySynchronizerStoreTest
 org.lfdecentralizedtrust.splice.store.KeyValueStoreTest
@@ -47,6 +49,7 @@ org.lfdecentralizedtrust.splice.store.db.DbSvSvStoreTest
 org.lfdecentralizedtrust.splice.store.db.DbTcsStoreTest
 org.lfdecentralizedtrust.splice.store.db.DbUserWalletStoreTest
 org.lfdecentralizedtrust.splice.store.db.SpliceStorageMultiLockTest
+org.lfdecentralizedtrust.splice.sv.automation.VoteRequestMetricsTriggerTest
 org.lfdecentralizedtrust.splice.sv.cometbft.CometBftNodeTest
 org.lfdecentralizedtrust.splice.sv.cometbft.CometBftRequestSignerTest
 org.lfdecentralizedtrust.splice.sv.onboarding.SequencerBftPeerReconcilerSpec

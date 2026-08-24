@@ -253,7 +253,7 @@ export async function initDumpConfig({
               result: `base64-decoded-mock`,
             };
           case PulumiFunction.GCP_GET_PROJECT:
-            return { ...args.inputs, name: projectName };
+            return { ...args.inputs, name: projectName, projectId: projectName };
           case PulumiFunction.GCP_GET_SUB_NETWORK:
             if (args.inputs.name === `cn-${stackName}net-subnet`) {
               return { ...args.inputs, id: 'subnet-id' };
@@ -315,15 +315,6 @@ export async function initDumpConfig({
                 jsonCredentials: 'topology-snapshot-bucket-sa-key-secret-creds',
                 bucketSaKeySecret: 'gcp-topology-snapshot-bucket-sa-key-example',
                 bucketSaIamAccount: 'da-cn-examplet@da-cn-shared.iam.gserviceaccount.com',
-              });
-              return {
-                ...args.inputs,
-                secretData,
-              };
-            } else if (args.inputs.secret == 'artifactory-keys') {
-              const secretData = JSON.stringify({
-                username: 'art_user',
-                password: 's3cr3t',
               });
               return {
                 ...args.inputs,
@@ -405,14 +396,27 @@ export type StackOutputsProvider = (
 ) => Partial<Record<string, any>> | undefined;
 
 export const infraStackOutputsProvider: StackOutputsProvider = (project: string) => {
-  return project === 'infra'
-    ? {
+  switch (project) {
+    case 'canton-network':
+      return {
+        svs: [...Array.from({ length: 16 }, (_, index) => `sv-${index + 1}`), 'sv-da-1'].map(
+          nodeName => ({
+            nodeName,
+            databaseInstanceName: `${nodeName}-cn-apps-pg`,
+            databaseSecretName: `${nodeName}-cn-apps-pg-secret`,
+          })
+        ),
+      };
+    case 'infra':
+      return {
         istioDashboardVersions: '1234',
         auth0: {
           svRunbook: svRunbookAuth0Config,
           cantonNetwork: cantonNetworkAuth0Config,
           mainnet: cantonNetworkAuth0Config,
         } as Auth0ClusterConfig,
-      }
-    : undefined;
+      };
+    default:
+      return undefined;
+  }
 };

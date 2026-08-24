@@ -174,11 +174,21 @@ class SplitwellFrontendIntegrationTest
         }
       }
 
-      eventually() {
-        // Check final amounts in the wallets
-        checkWallet(aliceUserParty, aliceWalletClient, Seq((400.0, 400)))
-        checkWallet(bobUserParty, bobWalletClient, Seq((39.0, 39.0)))
-        checkWallet(charlieUserParty, charlieWalletClient, Seq((111.0, 111.0)))
+      withClue("check final amounts in the wallets") {
+        val waitTime = 20.seconds
+        checkWallet(
+          aliceUserParty,
+          aliceWalletClient,
+          Seq((400.0, 400)),
+          timeUntilSuccess = waitTime,
+        )
+        checkWallet(bobUserParty, bobWalletClient, Seq((39.0, 39.0)), timeUntilSuccess = waitTime)
+        checkWallet(
+          charlieUserParty,
+          charlieWalletClient,
+          Seq((111.0, 111.0)),
+          timeUntilSuccess = waitTime,
+        )
       }
     }
 

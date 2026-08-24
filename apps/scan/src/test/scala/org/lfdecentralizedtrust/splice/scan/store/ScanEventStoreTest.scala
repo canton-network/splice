@@ -11,7 +11,7 @@ import org.lfdecentralizedtrust.splice.store.{
   StoreTestBase,
   UpdateHistory,
 }
-import org.lfdecentralizedtrust.splice.scan.store.db.DbScanVerdictStore
+import org.lfdecentralizedtrust.splice.scan.store.db.{DbAppActivityRecordStore, DbScanVerdictStore}
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanVerdictStore.{TrafficSummaryT, EnvelopeT}
 import org.lfdecentralizedtrust.splice.store.db.SplicePostgresTest
 import com.digitalasset.canton.resource.DbStorage
@@ -880,7 +880,18 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
   }
 
   private def newVerdictStore(updateHistory: UpdateHistory) =
-    new DbScanVerdictStore(storage.underlying, updateHistory, None, loggerFactory)
+    new DbScanVerdictStore(
+      storage.underlying,
+      updateHistory,
+      new DbAppActivityRecordStore(
+        storage.underlying,
+        updateHistory,
+        DbAppActivityRecordStore.IngestionVersions(1, 0),
+        false,
+        loggerFactory,
+      ),
+      loggerFactory,
+    )
 
   private def insertUpdate(
       updateHistory: UpdateHistory,

@@ -102,6 +102,13 @@ const MonitoringConfigSchema = z
           // rate is computed.
           windowMinutes: z.number(),
         }),
+        spliceRateLimits: z.object({
+          // Fraction (0-1) of a rate limiter's configured maximum rate above which the alert fires
+          usageThreshold: z.number(),
+          // Rejected requests per second, above which the rejection alert fires
+          rejectionCountThreshold: z.number(),
+          excludedLimiters: z.array(z.string()).default([]),
+        }),
         cloudSql: z.object({
           maintenance: z.boolean(),
         }),

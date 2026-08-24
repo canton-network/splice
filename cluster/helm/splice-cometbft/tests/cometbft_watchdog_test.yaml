@@ -1,0 +1,98 @@
+# Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+suite: "cometbft watchdog"
+templates:
+  - deployment.yaml
+release:
+  name: global-domain-3
+set:
+  sv1:
+    externalAddress: sv.mock.net:26316
+    nodeId: "4c7c99516fb3309b89b7f8ed94690994c8ec0ab0"
+    publicKey: "H2bcJU2zbzbLmP78YWiwMgtB0QG1MNTSozGl1tP11hI="
+    keyAddress: "9473617BBC80C12F68CC25B5A754D1ED9035886C"
+  node:
+    id: "1234dedbeef1234dedbeef1234dedbeef1234ded"
+    identifier: "global-domain-3-cometbft"
+    externalAddress: "global-domain-3-cometbft.sv.mock.net:26356"
+    keysSecret: "cometbft-keys"
+  genesis:
+    chainId: "mock-3"
+    chainIdSuffix: "1"
+tests:
+  - it: "rejects the chart defaults, so that operators need to explicitly configure the right URLs"
+    template: deployment.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: "missing properties 'sequencerMetricsUrl', 'mediatorMetricsUrl'"
+
+  - it: "leaves the pod untouched when disabled"
+    template: deployment.yaml
+    set:
+      watchdog:
+        enabled: false
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 1
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet
+          value:
+            path: /health
+            port: rpc
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].command[4]
+          pattern: "restart-requested"
+
+  - it: "deploys the watchdog sidecar when enabled"
+    template: deployment.yaml
+    set:
+      watchdog:
+        enabled: true
+        sequencerMetricsUrl: http://global-domain-3-sequencer:10013/metrics
+        mediatorMetricsUrl: http://global-domain-3-mediator:10013/metrics
+        threshold: 2.5
+        evaluationIntervalSeconds: 900
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 2
+      - equal:
+          path: spec.template.spec.containers[1].name
+          value: "watchdog"
+      - matchRegex:
+          path: spec.template.spec.containers[1].image
+          pattern: "/cometbft-watchdog:"
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: WATCHDOG_MEDIATOR_METRICS_URL
+            value: "http://global-domain-3-mediator:10013/metrics"
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: WATCHDOG_THRESHOLD
+            value: "2.5"
+      - contains:
+          path: spec.template.spec.containers[1].env
+          content:
+            name: WATCHDOG_EVALUATION_INTERVAL_SECONDS
+            value: "900"
+      - contains:
+          path: spec.template.spec.containers[1].volumeMounts
+          content:
+            mountPath: /watchdog
+            name: watchdog
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: watchdog
+            emptyDir:
+              sizeLimit: 1Mi

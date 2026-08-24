@@ -41,11 +41,6 @@ export type SvOnboarding =
       sponsorScanUrl: string;
     };
 
-export interface ScanBigQueryConfig {
-  dataset: string;
-  prefix: string;
-}
-
 export interface StaticSvConfigBasic {
   nodeName: string;
   ingressName: string;
@@ -102,6 +97,18 @@ export const SvConfigSchema = z.object({
         .object({
           volumeSize: z.string().optional(),
           protected: z.boolean().optional(),
+          watchdog: z
+            .object({
+              disabled: z.boolean().default(false),
+              threshold: z.number().optional(),
+              evaluationIntervalSeconds: z.number().optional(),
+              pollIntervalSeconds: z.number().optional(),
+              scrapeTimeoutSeconds: z.number().optional(),
+              startupGraceSeconds: z.number().optional(),
+              cooldownSeconds: z.number().optional(),
+            })
+            .strict()
+            .optional(),
         })
         .optional(),
       scan: z

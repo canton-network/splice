@@ -229,7 +229,7 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
 
           clue("CalculateRewardsV2 contracts are also visible in scan rewards reference store") {
             eventually() {
-              val v2s = sv1ScanBackend.appState.rewardsReferenceStoreO.value
+              val v2s = sv1ScanBackend.appState.rewardsReferenceStore
                 .listActiveCalculateRewardsV2()
                 .futureValue
               v2s.map(c =>

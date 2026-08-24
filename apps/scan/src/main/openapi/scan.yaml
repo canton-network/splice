@@ -1780,6 +1780,30 @@ paths:
         "501":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/501"
 
+  /v0/history/bulk/checksums:
+    post:
+      tags: [ internal, pre-alpha, scan ]
+      x-jvm-package: scan
+      operationId: "getBulkObjectChecksums"
+      description: |
+        **Under Development, do not use in production yet** Get checksums for bulk history objects. Searches for object_keys in both staging and committed objects.
+        Meant for internal use only, as part of the processing pipeline of bulk history objects.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/GetBulkObjectChecksumsRequest"
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/GetBulkObjectChecksumsResponse"
+        "501":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/501"
+
 
 components:
   schemas:
@@ -4092,6 +4116,33 @@ components:
             When requesting the next page of results, pass this as `after`
             to the next `ListBulkUpdateHistoryObjectsRequest` invocation.
             Will be absent when there are no more pages.
+
+    GetBulkObjectChecksumsRequest:
+      type: object
+      required:
+        - object_keys
+      properties:
+        object_keys:
+          description: |
+            The list of keys of the bulk storage objects for which checksums are requested.
+          type: array
+          items:
+            type: string
+
+    GetBulkObjectChecksumsResponse:
+      type: object
+      required:
+        - checksums
+      properties:
+        checksums:
+          description: |
+            The list of checksums for the requested bulk storage objects (in the same order as the object_keys).
+          type: array
+          items:
+            type: object
+            properties:
+              value:
+                type: string
 
     BulkStorageObjectRef:
       type: object

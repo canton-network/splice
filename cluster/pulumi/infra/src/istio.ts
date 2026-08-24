@@ -3,13 +3,12 @@
 import * as gcp from '@pulumi/gcp';
 import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
-import * as assert from 'assert/strict';
 import {
   allSvsToDeployBasic,
   coreSvsToDeployBasic,
 } from '@canton-network/splice-pulumi-common-sv/src/svConfigsBasic';
 import { cometBFTExternalPort } from '@canton-network/splice-pulumi-common-sv/src/synchronizer/cometbftConfig';
-import { spliceConfig } from '@canton-network/splice-pulumi-common/src/config/config';
+import { rateLimitResponseHeaders } from '@canton-network/splice-pulumi-common/src/ratelimit/rateLimitHeaders';
 import { mergeWith } from 'lodash';
 
 import {
@@ -25,7 +24,11 @@ import {
   isDevNet,
   isMainNet,
 } from '../../common';
-import { clusterBasename, infraConfig, loadIPRanges } from './config';
+import { clusterBasename, infraConfig } from './config';
+import { configureIstioGatewayPolicies, installAppWhitelisting } from './whitelisting';
+import { loadInternalWhitelistedIps, loadIPRanges } from './whitelisting/ipRanges';
+import { configurePublicInfo } from './whitelisting/publicInfo';
+import { configurePublicTokenRegistry } from './whitelisting/publicTokenRegistry';
 
 interface ConfiguredIstio {
   allResources: pulumi.Resource[];
@@ -126,9 +129,18 @@ function configureIstiod(
         upstream_service_time: '%RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%',
         user_agent: '%REQ(USER-AGENT)%',
         x_forwarded_for: '%REQ(X-FORWARDED-FOR)%',
+        // rate limiting fields, will show up in sidecar access logging
+        local_rate_limited: '%RESP(x-local-rate-limit)%',
+        rate_limit_limit: '%RESP(x-ratelimit-limit)%',
+        rate_limit_remaining: '%RESP(x-ratelimit-remaining)%',
+        rate_limit_reset: '%RESP(x-ratelimit-reset)%',
       }),
       // https://istio.io/latest/docs/ops/integrations/prometheus/#option-1-metrics-merging  disable as we don't use annotations
       enablePrometheusMerge: false,
+      // https://istio.io/latest/docs/ops/best-practices/security/#path-normalization
+      pathNormalization: {
+        normalization: 'MERGE_SLASHES',
+      },
       defaultConfig: {
         // The GCP NLB with externalTrafficPolicy: Local preserves the client's
         // source IP without adding X-Forwarded-For hops, so there are no trusted
@@ -237,13 +249,17 @@ function configureInternalGatewayService(
   // The loopback traffic would be prevented by our policy. To still allow it, we
   // add the node pool ip ranges to the list.
   // eslint-disable-next-line promise/prefer-await-to-then
-  const internalIPRanges = cluster.then(c =>
+  const gcpInternalIPRanges = cluster.then(c =>
     c.nodePools.map(p => p.networkConfigs.map(c => c.podIpv4CidrBlock)).flat()
   );
-  const externalIPRanges = loadIPRanges();
+  const gatewayIPRanges = infraConfig.istio.enableGeneralIpWhitelist
+    ? pulumi.all([loadIPRanges(), gcpInternalIPRanges]).apply(([a, b]) => a.concat(b))
+    : pulumi
+        .all([loadInternalWhitelistedIps(), gcpInternalIPRanges])
+        .apply(([a, b]) => a.concat(b));
   return configureGatewayService(
     ingressNs,
-    pulumi.all([externalIPRanges, internalIPRanges]).apply(([a, b]) => a.concat(b)),
+    gatewayIPRanges,
     ingress.viaGKEL7
       ? { type: 'ClusterIP' }
       : {
@@ -308,82 +324,6 @@ function configureCometBFTGatewayService(
   );
 }
 
-/**
- * There doesn't seem to be an istio-level limit on number of IP lists but at
- * some point we probably hit some k8s limits on the size of a definition so we
- * split it into 100-500 IP ranges per policy.
- *
- * For 100k IPs, the difference between a chunk size of 100 vs 500 from scratch
- * is 20min in pulumi vs 130min in pulumi. But we're still concerned about k8s
- * limits on definition size. So if we break 10000 we'll gradually increase
- * the chunk size, 20 IPs at a time, until reaching 500 chunk size for 50k IPs,
- * which at least is tested for up to 100k IPs.
- *
- * Why 20? Too small jumps makes much noisier Pulumi previews. Too large, and we
- * might jump right into a limit only revealed after extensive testing without
- * really knowing where that limit is. 20 is a compromise: only jumps every 200
- * IPs so realignment updates are rare.
- */
-function istioAccessPolicyChunkSize(ipRangesLength: number) {
-  assert.ok(ipRangesLength >= 0, 'nonsense');
-  assert.ok(
-    ipRangesLength < 250000,
-    `${ipRangesLength} IPs untested, consider testing & increasing maximum chunk size`
-  );
-  const stepSize = 20;
-  return Math.max(100, Math.min(500, Math.ceil(ipRangesLength / (stepSize * 100)) * stepSize));
-}
-
-const istioApiVersion = 'security.istio.io/v1beta1';
-
-function istioAccessPolicies(
-  ingressNs: k8s.core.v1.Namespace,
-  externalIPRanges: pulumi.Output<string[]>,
-  suffix: string
-) {
-  const selector = {
-    matchLabels: {
-      app: `istio-ingress${suffix}`,
-    },
-  };
-  const defaultDenyAll = new k8s.apiextensions.CustomResource(
-    `istio-access-policy-deny-all${suffix}`,
-    {
-      apiVersion: istioApiVersion,
-      kind: 'AuthorizationPolicy',
-      metadata: {
-        name: `istio-access-policy-deny-all${suffix}`,
-        namespace: ingressNs.metadata.name,
-      },
-      // empty spec is deny all
-      spec: { selector },
-    }
-  );
-  return externalIPRanges.apply(ipRanges => {
-    const chunkSize = istioAccessPolicyChunkSize(ipRanges.length);
-    const chunks = Array.from({ length: Math.ceil(ipRanges.length / chunkSize) }, (_, i) =>
-      ipRanges.slice(i * chunkSize, i * chunkSize + chunkSize)
-    );
-    const policies = chunks.map(
-      (chunk, i) =>
-        new k8s.apiextensions.CustomResource(`istio-access-policy-allow${suffix}-${i}`, {
-          apiVersion: istioApiVersion,
-          kind: 'AuthorizationPolicy',
-          metadata: {
-            name: `istio-access-policy-allow${suffix}-${i}`,
-            namespace: ingressNs.metadata.name,
-          },
-          spec: {
-            selector,
-            action: 'ALLOW',
-            rules: [{ from: [{ source: { remoteIpBlocks: chunk } }] }],
-          },
-        })
-    );
-    return [defaultDenyAll].concat(policies);
-  });
-}
-
 // how gateway is configured: https://github.com/istio/istio/blob/master/manifests/charts/gateway/templates/service.yaml
 type IstioGatewayVariant =
   | {
@@ -411,8 +351,7 @@ function configureGatewayService(
   // - For cometbft traffic, which is tcp traffic, we failed to use istio policies, so we route it through a dedicated
   //   LoadBalancer service that uses loadBalancerSourceRanges. The size limit is not an issue as we need only SV IPs.
   //   These IPs should be provided in externalIPRangesInLB.
-
-  const istioPolicies = istioAccessPolicies(ingressNs, externalIPRangesInIstio, suffix);
+  const istioPolicies = configureIstioGatewayPolicies(ingressNs, externalIPRangesInIstio, suffix);
 
   const { serviceValues, deploymentValues } =
     gatewayVariant.type === 'LoadBalancer'
@@ -722,84 +661,6 @@ function configureDocsAndReleases(
   ];
 }
 
-function configurePublicInfo(ingressNs: k8s.core.v1.Namespace): k8s.apiextensions.CustomResource[] {
-  return spliceConfig.pulumiProjectConfig.hasPublicInfo
-    ? [
-        new k8s.apiextensions.CustomResource('allow-sv-info', {
-          apiVersion: 'security.istio.io/v1beta1',
-          kind: 'AuthorizationPolicy',
-          metadata: {
-            name: 'allow-sv-info',
-            namespace: ingressNs.metadata.name,
-          },
-          spec: {
-            selector: {
-              matchLabels: {
-                istio: 'ingress',
-              },
-            },
-            action: 'ALLOW',
-            rules: [
-              {
-                to: [
-                  {
-                    operation: {
-                      hosts: [
-                        // We could also have done `info.sv*.whatever` here but enumerating what we expect seems slightly more secure
-                        ...new Set(
-                          allSvsToDeployBasic
-                            .map(sv => [
-                              `info.${sv.ingressName}.${getDnsNames().cantonDnsName}`,
-                              `info.${sv.ingressName}.${getDnsNames().daDnsName}`,
-                            ])
-                            .flat()
-                        ),
-                      ],
-                    },
-                  },
-                ],
-              },
-            ],
-          },
-        }),
-      ]
-    : [];
-}
-
-function configurePublicTokenRegistry(
-  ingressNs: k8s.core.v1.Namespace
-): k8s.apiextensions.CustomResource[] {
-  return [
-    new k8s.apiextensions.CustomResource('allow-public-token-registry', {
-      apiVersion: istioApiVersion,
-      kind: 'AuthorizationPolicy',
-      metadata: {
-        name: 'allow-public-token-registry',
-        namespace: ingressNs.metadata.name,
-      },
-      spec: {
-        selector: {
-          matchLabels: {
-            app: 'istio-ingress',
-          },
-        },
-        action: 'ALLOW',
-        rules: [
-          {
-            to: [
-              {
-                operation: {
-                  paths: ['/registry/*'],
-                },
-              },
-            ],
-          },
-        ],
-      },
-    }),
-  ];
-}
-
 function configureSequencerHighPerformanceGrpcDestinationRules(
   ingressNs: k8s.core.v1.Namespace
 ): Array<k8s.apiextensions.CustomResource> {
@@ -840,19 +701,23 @@ function configureSequencerHighPerformanceGrpcDestinationRule(
         },
         connectionPool: {
           http: {
-            http1MaxPendingRequests: 10000,
-            http2MaxRequests: 10000,
-            maxConcurrentStreams: 10000,
+            http1MaxPendingRequests: 20000,
+            http2MaxRequests: 20000,
+            maxConcurrentStreams: 20000,
             maxRequestsPerConnection: 0,
           },
           tcp: {
-            maxConnections: 10000,
+            maxConnections: 20000,
           },
         },
       },
     },
   });
 }
+
+// Ports of the http2 servers that we apply the upstream flow control config to:
+// the sequencer public API and the sequencer BFT P2P API.
+const sequencerFlowControlUpstreamPorts = [5008, 5010];
 
 // Istio proxies lots of client connections over relatively few connections. If one of the client connections gets stuck
 // (e.g. because the client died) buffers will fill up and eventually istio will stop sending connection-level window updates
@@ -866,6 +731,40 @@ function configureSequencerHighPerformanceGrpcDestinationRule(
 function configureSequencerFlowControl(
   ingressNs: k8s.core.v1.Namespace
 ): k8s.apiextensions.CustomResource {
+  const http2ProtocolOptions = {
+    initial_stream_window_size: infraConfig.istio.sequencerFlowControl.initialStreamWindowSize,
+    initial_connection_window_size:
+      infraConfig.istio.sequencerFlowControl.initialConnectionWindowSize,
+    connection_keepalive: {
+      interval: '30s',
+      timeout: '5s',
+    },
+  };
+  // istio -> upstream (aka sequencer)
+  const upstreamPatch = (portNumber: number) => ({
+    applyTo: 'CLUSTER',
+    match: {
+      cluster: {
+        portNumber,
+        // Ideally we would just apply it everywhere. But doing it without this portNumber breaks http1 configs. In theory there is `auto_config` which should do the right thing but then it doesn't apply it at all anymore.
+        // So for now we just apply it to the sequencer ports (public API and BFT P2P) which are the only externally exposed http2 servers so the only things where this really should matter in practice.
+      },
+    },
+    patch: {
+      operation: 'MERGE',
+      value: {
+        typed_extension_protocol_options: {
+          'envoy.extensions.upstreams.http.v3.HttpProtocolOptions': {
+            '@type': 'type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions',
+            use_downstream_protocol_config: {
+              http_protocol_options: {},
+              http2_protocol_options: http2ProtocolOptions,
+            },
+          },
+        },
+      },
+    },
+  });
   return new k8s.apiextensions.CustomResource('sequencer-flow-control', {
     apiVersion: 'networking.istio.io/v1alpha3',
     kind: 'EnvoyFilter',
@@ -894,58 +793,57 @@ function configureSequencerFlowControl(
               typed_config: {
                 '@type':
                   'type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager',
-                http2_protocol_options: {
-                  initial_stream_window_size:
-                    infraConfig.istio.sequencerFlowControl.initialStreamWindowSize,
-                  initial_connection_window_size:
-                    infraConfig.istio.sequencerFlowControl.initialConnectionWindowSize,
-                  connection_keepalive: {
-                    interval: '30s',
-                    timeout: '5s',
-                  },
-                },
+                http2_protocol_options: http2ProtocolOptions,
               },
             },
           },
         },
-        {
-          // istio -> upstream (aka sequencer)
-          applyTo: 'CLUSTER',
-          match: {
-            cluster: {
-              portNumber: 5008,
-              // Ideally we would just apply it everywhere. But doing it without this portNumber breaks http1 configs. In theory there is `auto_config` which should do the right thing but then it doesn't apply it at all anymore.
-              // So for now we just apply it to the sequencer which is the only externally exposed http2 server so the only thing where this really should matter in practice.
-            },
-          },
-          patch: {
-            operation: 'MERGE',
-            value: {
-              typed_extension_protocol_options: {
-                'envoy.extensions.upstreams.http.v3.HttpProtocolOptions': {
-                  '@type':
-                    'type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions',
-                  use_downstream_protocol_config: {
-                    http_protocol_options: {},
-                    http2_protocol_options: {
-                      initial_stream_window_size:
-                        infraConfig.istio.sequencerFlowControl.initialStreamWindowSize,
-                      initial_connection_window_size:
-                        infraConfig.istio.sequencerFlowControl.initialConnectionWindowSize,
-                      connection_keepalive: {
-                        interval: '30s',
-                        timeout: '5s',
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
+        ...sequencerFlowControlUpstreamPorts.map(upstreamPatch),
       ],
     },
   });
+}
+
+function stripRateLimitHeaders(
+  ingressNs: k8s.core.v1.Namespace,
+  gwSvc: k8s.helm.v3.Release
+): k8s.apiextensions.CustomResource {
+  return new k8s.apiextensions.CustomResource(
+    'strip-rate-limit-headers',
+    {
+      apiVersion: 'networking.istio.io/v1alpha3',
+      kind: 'EnvoyFilter',
+      metadata: {
+        name: 'strip-rate-limit-headers',
+        namespace: ingressNs.metadata.name,
+      },
+      spec: {
+        workloadSelector: {
+          labels: {
+            istio: 'ingress',
+          },
+        },
+        configPatches: [
+          {
+            applyTo: 'ROUTE_CONFIGURATION',
+            match: {
+              context: 'GATEWAY',
+            },
+            patch: {
+              // repeated fields are appended, so this does not clobber anything istio sets
+              operation: 'MERGE',
+              value: {
+                response_headers_to_remove: rateLimitResponseHeaders,
+              },
+            },
+          },
+        ],
+      },
+    },
+    {
+      dependsOn: [gwSvc],
+    }
+  );
 }
 
 export function configureIstio(
@@ -982,6 +880,8 @@ export function configureIstio(
     ingressNs.ns
   );
   const sequencerFlowControl = configureSequencerFlowControl(ingressNs.ns);
+  installAppWhitelisting(ingressNs.ns);
+  const rateLimitHeaderStripping = stripRateLimitHeaders(ingressNs.ns, gwSvc);
   return {
     allResources: [
       ...gateways,
@@ -990,6 +890,7 @@ export function configureIstio(
       ...publicTokenRegistry,
       ...sequencerHighPerformanceGrpcRules,
       ...[sequencerFlowControl],
+      ...[rateLimitHeaderStripping],
     ],
     httpServiceName: 'istio-ingress',
     istioResource: gwSvc,

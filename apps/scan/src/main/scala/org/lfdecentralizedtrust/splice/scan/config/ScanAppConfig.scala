@@ -47,6 +47,7 @@ final case class BulkStorageConfig(
     maxParallelPartUploads: Int = 4,
     staging: Option[S3Config] = None,
     committed: Option[S3Config] = None,
+    bftCheckEnabled: Boolean = true,
 )
 
 /** @param miningRoundsCacheTimeToLiveOverride Intended only for testing!
@@ -61,8 +62,6 @@ case class ScanAppBackendConfig(
     synchronizerNodes: ScanSynchronizerNodesConfig,
     override val automation: AutomationConfig = AutomationConfig(),
     mediatorVerdictIngestion: MediatorVerdictIngestionConfig = MediatorVerdictIngestionConfig(),
-    enableAppActivityRecordAndTrafficIngestion: Boolean = true,
-    serveAppActivityRecordsAndTraffic: Boolean = true,
     isFirstSv: Boolean = false,
     // Max rounding error tolerated wrt actual total of minting allowances
     // and the per-round minting allowance from the CC whitepaper.
