@@ -1625,9 +1625,6 @@
       "apiVersion": "networking.istio.io/v1alpha3",
       "kind": "EnvoyFilter",
       "metadata": {
-        "annotations": {
-          "proxy.istio.io/config": "proxyStatsMatcher:\n  inclusionRegexps:\n  - \".*http_local_rate_limit.*\""
-        },
         "name": "scan-app-rate-limit",
         "namespace": "sv"
       },
