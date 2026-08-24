@@ -4,12 +4,13 @@
 package org.lfdecentralizedtrust.splice.admin.api
 
 import org.apache.pekko.http.scaladsl.model.{ContentTypes, HttpEntity, RemoteAddress}
-import org.apache.pekko.http.scaladsl.server.{Directive0, RequestContext}
+import org.apache.pekko.http.scaladsl.server.{Directive0, Directive1, RequestContext}
 import org.apache.pekko.http.scaladsl.server.Directives.*
 import com.digitalasset.canton.config.ApiLoggingConfig
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.ShowUtil.*
+import org.lfdecentralizedtrust.splice.http.ClientIpDirectives
 
 object HttpRequestLogger {
   def apply(
@@ -17,6 +18,7 @@ object HttpRequestLogger {
       maxPathLength: Int,
       maxStringLength: Int,
       maxMetadataSize: Int,
+      clientIpHeaders: Seq[String],
       loggerFactory: NamedLoggerFactory,
   )(implicit traceContext: TraceContext): Directive0 = {
     new HttpRequestLogger(
@@ -24,6 +26,7 @@ object HttpRequestLogger {
       maxPathLength,
       maxStringLength,
       maxMetadataSize,
+      clientIpHeaders,
       loggerFactory,
     ).directive
   }
@@ -31,12 +34,14 @@ object HttpRequestLogger {
   // ignores maxMethodLength and maxMessageLines
   def apply(
       loggingConfig: ApiLoggingConfig,
+      clientIpHeaders: Seq[String],
       loggerFactory: NamedLoggerFactory,
   )(implicit traceContext: TraceContext): Directive0 = apply(
     messagePayloads = loggingConfig.messagePayloads,
     maxPathLength = loggingConfig.maxMethodLength,
     maxStringLength = loggingConfig.maxStringLength,
     maxMetadataSize = loggingConfig.maxMetadataSize,
+    clientIpHeaders = clientIpHeaders,
     loggerFactory = loggerFactory,
   )
 }
@@ -46,6 +51,7 @@ final class HttpRequestLogger(
     maxPathLength: Int,
     maxStringLength: Int,
     maxMetadataSize: Int,
+    clientIpHeaders: Seq[String],
     override protected val loggerFactory: NamedLoggerFactory,
 ) extends NamedLogging {
   def createLogMessage(ctx: RequestContext, remoteAddress: RemoteAddress)(
@@ -56,8 +62,14 @@ final class HttpRequestLogger(
     s"HTTP ${ctx.request.method.name} ${pathLimited} from (${remoteAddress}): ${message}"
   }
 
+  private def extractConfiguredClientIp: Directive1[RemoteAddress] =
+    ClientIpDirectives.extractClientIp(clientIpHeaders).flatMap {
+      case Some(remoteAddress) => provide(remoteAddress)
+      case None => extractClientIP
+    }
+
   private def directive(implicit traceContext: TraceContext): Directive0 = {
-    extractClientIP.flatMap { remoteAddress =>
+    extractConfiguredClientIp.flatMap { remoteAddress =>
       extractRequestContext.flatMap { ctx =>
         val msg = createLogMessage(ctx, remoteAddress)
         logger.debug(msg("received request."))
