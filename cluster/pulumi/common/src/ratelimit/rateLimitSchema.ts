@@ -42,14 +42,31 @@ export const RateLimitConfigSchema = z.discriminatedUnion('type', [
 
 export type ExternalRateLimit = z.infer<typeof RateLimitSchema>;
 
+export const defaultGlobalLimits = {
+  maxTokens: 10000,
+  tokensPerFill: 10000,
+  fillInterval: '60s',
+};
+
+export const defaultGlobalPerIpLimits = {
+  maxTokens: 1000,
+  tokensPerFill: 1000,
+  fillInterval: '60s',
+};
+
 export const RateLimitSchema = z.object({
-  globalLimits: BucketRateLimitSchema,
-  rateLimits: z.object({}).catchall(
-    z.intersection(
-      z.object({
-        name: z.string(),
-      }),
-      RateLimitConfigSchema
+  globalLimits: BucketRateLimitSchema.default(defaultGlobalLimits),
+  globalPerIpLimits: BucketRateLimitSchema.default(defaultGlobalPerIpLimits),
+  enablePerEndpointRateLimits: z.boolean().default(false),
+  rateLimits: z
+    .object({})
+    .catchall(
+      z.intersection(
+        z.object({
+          name: z.string(),
+        }),
+        RateLimitConfigSchema
+      )
     )
-  ),
+    .optional(),
 });

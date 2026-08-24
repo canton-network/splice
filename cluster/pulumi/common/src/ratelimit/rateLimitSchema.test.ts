@@ -30,6 +30,21 @@ test('RateLimitSchema accepts config without overrides', () => {
   expect(() => RateLimitSchema.parse(validConfig)).not.toThrow();
 });
 
+test('RateLimitSchema defaults to global and global per-IP limits with per-endpoint limits off', () => {
+  const parsed = RateLimitSchema.parse({});
+  expect(parsed).toEqual({
+    globalLimits: { maxTokens: 10000, tokensPerFill: 10000, fillInterval: '60s' },
+    globalPerIpLimits: { maxTokens: 1000, tokensPerFill: 1000, fillInterval: '60s' },
+    enablePerEndpointRateLimits: false,
+  });
+});
+
+test('RateLimitSchema keeps per-endpoint limits optional and opt-in', () => {
+  const parsed = RateLimitSchema.parse({ ...validConfig, enablePerEndpointRateLimits: true });
+  expect(parsed.enablePerEndpointRateLimits).toEqual(true);
+  expect(parsed.rateLimits).toBeDefined();
+});
+
 test('RateLimitSchema accepts named overrides with ips', () => {
   const config = {
     ...validConfig,

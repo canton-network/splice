@@ -62,17 +62,18 @@ const minFillIntervalMs = 50;
 // uint32 in envoy's TokenBucket proto
 const maxTokenValue = 4294967295;
 
-interface RateLimitEnvoyFilterArgs extends PerEndpointLimits {
+export interface RateLimitEnvoyFilterArgs extends PerEndpointLimits {
   namespace: string;
 
   appLabel: pulumi.Input<string>;
 
   inboundPort: pulumi.Input<number>;
 
-  /**
-   * Used when no descriptors match the request.
-   * */
   globalLimits: Limits;
+
+  globalPerIpLimits?: Limits;
+
+  enablePerEndpointRateLimits?: boolean;
 }
 
 export interface PerEndpointLimits {
@@ -179,10 +180,14 @@ function validateLimits(context: string, limits: Limits, globalFillIntervalMs?: 
 
 export function validateTokenBuckets(
   globalLimits: Limits,
-  effectiveRateLimits: LocalLimits<MatchedLimits>
+  effectiveRateLimits: LocalLimits<MatchedLimits>,
+  globalPerIpLimits?: Limits
 ): void {
   validateLimits('globalLimits', globalLimits);
   const globalFillIntervalMs = parseFillIntervalMs(globalLimits.fillInterval, 'globalLimits');
+  if (globalPerIpLimits) {
+    validateLimits('globalPerIpLimits', globalPerIpLimits, globalFillIntervalMs);
+  }
   Object.entries(effectiveRateLimits).forEach(([pathPrefix, rateLimit]) => {
     validateLimits(pathPrefix, rateLimit, globalFillIntervalMs);
     if (rateLimit.perIpLimits) {
@@ -198,9 +203,14 @@ export function validateTokenBuckets(
   });
 }
 
-function validateEffectiveRateLimits(
+export function validateEffectiveRateLimits(
   args: RateLimitEnvoyFilterArgs
 ): LocalLimits<MatchedLimits> | undefined {
+  if (!args.enablePerEndpointRateLimits) {
+    validateTokenBuckets(args.globalLimits, {}, args.globalPerIpLimits);
+    return undefined;
+  }
+
   const collidingPathNames = Object.entries(args.rateLimits || {})
     .filter(([, rl]) => reservedEntryKeys.includes(rl.name))
     .map(([path]) => path);
@@ -263,13 +273,44 @@ function validateEffectiveRateLimits(
     validateIpLimits(pathPrefix, rateLimit);
   });
 
-  validateTokenBuckets(args.globalLimits, effectiveRateLimits);
+  validateTokenBuckets(args.globalLimits, effectiveRateLimits, args.globalPerIpLimits);
 
   return effectiveRateLimits;
 }
 
 export function clientIpDescriptorValue(ip: string): string {
   return `${ip}/32`;
+}
+
+// We deliberately do not key on the raw x-forwarded-for header: clients can
+// prepend arbitrary entries to it, and our gateway only appends to it, so
+// the header value is attacker controlled and per-IP limits could be evaded
+// by simply varying the header on every request.
+// masked_remote_address instead uses the address envoy trusts, which for the
+// sidecar is the last x-forwarded-for hop, i.e. the one appended by our own
+// ingress gateway.
+const maskedRemoteAddressAction = {
+  masked_remote_address: {
+    // one bucket per client address
+    v4_prefix_mask_len: 32,
+    // the default of 0 would put all IPv6 clients into a single bucket
+    v6_prefix_mask_len: 128,
+  },
+};
+
+export function buildGlobalPerIpRateLimitAction(): unknown {
+  return { actions: [maskedRemoteAddressAction] };
+}
+
+export function buildGlobalPerIpRateLimitDescriptor(globalPerIpLimits: Limits): unknown {
+  return {
+    entries: [{ key: clientIpEntryKey }],
+    token_bucket: {
+      max_tokens: globalPerIpLimits.maxTokens,
+      tokens_per_fill: globalPerIpLimits.tokensPerFill,
+      fill_interval: globalPerIpLimits.fillInterval,
+    },
+  };
 }
 
 export function buildRateLimitActions(effectiveRateLimits: LocalLimits<MatchedLimits>): unknown[] {
@@ -298,24 +339,7 @@ export function buildRateLimitActions(effectiveRateLimits: LocalLimits<MatchedLi
     // Action 2: generate the per-IP action if perIpLimits exists
     if (rateLimit.perIpLimits) {
       actions.push({
-        actions: [
-          baseAction,
-          {
-            // We deliberately do not key on the raw x-forwarded-for header: clients can
-            // prepend arbitrary entries to it, and our gateway only appends to it, so
-            // the header value is attacker controlled and per-IP limits could be evaded
-            // by simply varying the header on every request.
-            // masked_remote_address instead uses the address envoy trusts, which for the
-            // sidecar is the last x-forwarded-for hop, i.e. the one appended by our own
-            // ingress gateway.
-            masked_remote_address: {
-              // one bucket per client address
-              v4_prefix_mask_len: 32,
-              // the default of 0 would put all IPv6 clients into a single bucket
-              v6_prefix_mask_len: 128,
-            },
-          },
-        ],
+        actions: [baseAction, maskedRemoteAddressAction],
       });
     }
 
@@ -384,7 +408,14 @@ export class RateLimitEnvoyFilter extends pulumi.ComponentResource {
     super('splice:RateLimit', `splice-${args.namespace}-${name}`, args, opts);
     const effectiveRateLimits = validateEffectiveRateLimits(args);
 
-    const rateLimitActions = buildRateLimitActions(effectiveRateLimits || {});
+    // The global per-IP action/descriptor come last so that the more specific per-endpoint
+    // descriptors are matched first.
+    const rateLimitActions = buildRateLimitActions(effectiveRateLimits || {}).concat(
+      args.globalPerIpLimits ? [buildGlobalPerIpRateLimitAction()] : []
+    );
+    const rateLimitDescriptors = buildRateLimitDescriptors(effectiveRateLimits || {}).concat(
+      args.globalPerIpLimits ? [buildGlobalPerIpRateLimitDescriptor(args.globalPerIpLimits)] : []
+    );
 
     this.envoyFilter = new k8s.apiextensions.CustomResource(
       `${args.namespace}-${name}`,
@@ -489,7 +520,7 @@ export class RateLimitEnvoyFilter extends pulumi.ComponentResource {
                       // simplified descriptors by combining with actions and requiring all the tokens of an action to be set
                       // a descriptor in practice is a subset of tags from a rate limit
                       // but important to note that for each rate limit only one descriptor can match, if multiple descriptors match, the first one is used
-                      descriptors: buildRateLimitDescriptors(effectiveRateLimits || {}),
+                      descriptors: rateLimitDescriptors,
                     },
                   },
                 },

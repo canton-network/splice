@@ -199,10 +199,15 @@ splitwell:
 sv:
   scan:
     externalRateLimits:
+      enablePerEndpointRateLimits: false
       globalLimits:
         fillInterval: '60s'
-        maxTokens: 2147483647
-        tokensPerFill: 2147483647
+        maxTokens: 10000
+        tokensPerFill: 10000
+      globalPerIpLimits:
+        fillInterval: '60s'
+        maxTokens: 1000
+        tokensPerFill: 1000
       rateLimits:
         /api/scan/livez:
           name: 'livez'
