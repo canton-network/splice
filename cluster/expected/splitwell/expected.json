@@ -229,16 +229,6 @@
   },
   {
     "custom": true,
-    "id": "organization/infra/infra.mock",
-    "inputs": {
-      "name": "organization/infra/infra.mock"
-    },
-    "name": "organization/infra/infra.mock",
-    "provider": "",
-    "type": "pulumi:pulumi:StackReference"
-  },
-  {
-    "custom": true,
     "id": "",
     "inputs": {
       "apiVersion": "v1",
@@ -501,7 +491,7 @@
       }
     },
     "name": "splitwell-default",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-splitwell-default::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-splitwell-default::04da6b54-80e4-46f7-96ec-b56ff0331ba9",
     "type": "kubernetes:core/v1:ServiceAccountPatch"
   },
   {
@@ -517,7 +507,7 @@
       "stringData": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
         "value": {
-          ".dockerconfigjson": "{\"auths\":{\"digitalasset-canton-enterprise-docker.jfrog.io\":{\"auth\":\"YXJ0X3VzZXI6czNjcjN0\",\"username\":\"art_user\",\"password\":\"s3cr3t\"},\"us-central1-docker.pkg.dev\":{\"auth\":\"X2pzb25fa2V5OnsidHlwZSI6InNlcnZpY2VfYWNjb3VudCIsInByb2plY3RfaWQiOiJmYWtlLXByb2plY3QiLCJwcml2YXRlX2tleV9pZCI6ImZha2VfaWQiLCJwcml2YXRlX2tleSI6Ii0tLS0tQkVHSU4gUFJJVkFURSBLRVktLS0tLVxuZmFrZVxuLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLVxuIiwiY2xpZW50X2VtYWlsIjoiZmFrZUBmYWtlLXByb2plY3QuaWFtLmdzZXJ2aWNlYWNjb3VudC5jb20iLCJjbGllbnRfaWQiOiJmYWtlLWNsaWVudC1pZCIsImF1dGhfdXJpIjoiaHR0cHM6Ly9hY2NvdW50cy5nb29nbGUuY29tL28vb2F1dGgyL2F1dGgiLCJ0b2tlbl91cmkiOiJodHRwczovL29hdXRoMi5nb29nbGVhcGlzLmNvbS90b2tlbiIsImF1dGhfcHJvdmlkZXJfeDUwOV9jZXJ0X3VybCI6Imh0dHBzOi8vd3d3Lmdvb2dsZWFwaXMuY29tL29hdXRoMi92MS9jZXJ0cyIsImNsaWVudF94NTA5X2NlcnRfdXJsIjoiaHR0cHM6Ly93d3cuZ29vZ2xlYXBpcy5jb20vcm9ib3QvdjEvbWV0YWRhdGEveDUwOS9mYWtlJTQwZmFrZS1wcm9qZWN0LmlhbS5nc2VydmljZWFjY291bnQuY29tIiwidW5pdmVyc2VfZG9tYWluIjoiZ29vZ2xlYXBpcy5jb20ifQ==\",\"username\":\"_json_key\",\"password\":\"{\\\"type\\\":\\\"service_account\\\",\\\"project_id\\\":\\\"fake-project\\\",\\\"private_key_id\\\":\\\"fake_id\\\",\\\"private_key\\\":\\\"-----BEGIN PRIVATE KEY-----\\\\nfake\\\\n-----END PRIVATE KEY-----\\\\n\\\",\\\"client_email\\\":\\\"fake@fake-project.iam.gserviceaccount.com\\\",\\\"client_id\\\":\\\"fake-client-id\\\",\\\"auth_uri\\\":\\\"https://accounts.google.com/o/oauth2/auth\\\",\\\"token_uri\\\":\\\"https://oauth2.googleapis.com/token\\\",\\\"auth_provider_x509_cert_url\\\":\\\"https://www.googleapis.com/oauth2/v1/certs\\\",\\\"client_x509_cert_url\\\":\\\"https://www.googleapis.com/robot/v1/metadata/x509/fake%40fake-project.iam.gserviceaccount.com\\\",\\\"universe_domain\\\":\\\"googleapis.com\\\"}\"}}}"
+          ".dockerconfigjson": "{\"auths\":{\"us-central1-docker.pkg.dev\":{\"auth\":\"X2pzb25fa2V5OnsidHlwZSI6InNlcnZpY2VfYWNjb3VudCIsInByb2plY3RfaWQiOiJmYWtlLXByb2plY3QiLCJwcml2YXRlX2tleV9pZCI6ImZha2VfaWQiLCJwcml2YXRlX2tleSI6Ii0tLS0tQkVHSU4gUFJJVkFURSBLRVktLS0tLVxuZmFrZVxuLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLVxuIiwiY2xpZW50X2VtYWlsIjoiZmFrZUBmYWtlLXByb2plY3QuaWFtLmdzZXJ2aWNlYWNjb3VudC5jb20iLCJjbGllbnRfaWQiOiJmYWtlLWNsaWVudC1pZCIsImF1dGhfdXJpIjoiaHR0cHM6Ly9hY2NvdW50cy5nb29nbGUuY29tL28vb2F1dGgyL2F1dGgiLCJ0b2tlbl91cmkiOiJodHRwczovL29hdXRoMi5nb29nbGVhcGlzLmNvbS90b2tlbiIsImF1dGhfcHJvdmlkZXJfeDUwOV9jZXJ0X3VybCI6Imh0dHBzOi8vd3d3Lmdvb2dsZWFwaXMuY29tL29hdXRoMi92MS9jZXJ0cyIsImNsaWVudF94NTA5X2NlcnRfdXJsIjoiaHR0cHM6Ly93d3cuZ29vZ2xlYXBpcy5jb20vcm9ib3QvdjEvbWV0YWRhdGEveDUwOS9mYWtlJTQwZmFrZS1wcm9qZWN0LmlhbS5nc2VydmljZWFjY291bnQuY29tIiwidW5pdmVyc2VfZG9tYWluIjoiZ29vZ2xlYXBpcy5jb20ifQ==\",\"username\":\"_json_key\",\"password\":\"{\\\"type\\\":\\\"service_account\\\",\\\"project_id\\\":\\\"fake-project\\\",\\\"private_key_id\\\":\\\"fake_id\\\",\\\"private_key\\\":\\\"-----BEGIN PRIVATE KEY-----\\\\nfake\\\\n-----END PRIVATE KEY-----\\\\n\\\",\\\"client_email\\\":\\\"fake@fake-project.iam.gserviceaccount.com\\\",\\\"client_id\\\":\\\"fake-client-id\\\",\\\"auth_uri\\\":\\\"https://accounts.google.com/o/oauth2/auth\\\",\\\"token_uri\\\":\\\"https://oauth2.googleapis.com/token\\\",\\\"auth_provider_x509_cert_url\\\":\\\"https://www.googleapis.com/oauth2/v1/certs\\\",\\\"client_x509_cert_url\\\":\\\"https://www.googleapis.com/robot/v1/metadata/x509/fake%40fake-project.iam.gserviceaccount.com\\\",\\\"universe_domain\\\":\\\"googleapis.com\\\"}\"}}}"
         }
       },
       "type": "kubernetes.io/dockerconfigjson"
@@ -525,99 +515,6 @@
     "name": "splitwell-docker-reg-cred",
     "provider": "",
     "type": "kubernetes:core/v1:Secret"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-participant",
-      "compat": "true",
-      "maxHistory": 10,
-      "name": "participant-2",
-      "namespace": "splitwell",
-      "timeout": 600,
-      "values": {
-        "additionalEnvVars": [
-          {
-            "name": "ADDITIONAL_CONFIG_PARTICIPANT_PRUNING",
-            "value": "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
-          }
-        ],
-        "additionalJvmOptions": "-Dcom.sun.management.jmxremote=true -Dcom.sun.management.jmxremote.port=9010 -Dcom.sun.management.jmxremote.rmi.port=9010 -Dcom.sun.management.jmxremote.local.only=false -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Djava.rmi.server.hostname=127.0.0.1",
-        "affinity": {
-          "nodeAffinity": {
-            "requiredDuringSchedulingIgnoredDuringExecution": {
-              "nodeSelectorTerms": [
-                {
-                  "matchExpressions": [
-                    {
-                      "key": "cn_apps",
-                      "operator": "Exists"
-                    },
-                    {
-                      "key": "cn_apps",
-                      "operator": "In",
-                      "values": [
-                        "hyperdisk"
-                      ]
-                    }
-                  ]
-                }
-              ]
-            }
-          }
-        },
-        "auth": {
-          "jwksUrl": "https://canton-network-dev.us.auth0.com/.well-known/jwks.json",
-          "targetAudience": "https://canton.network.global"
-        },
-        "cluster": {
-          "dnsName": "mock.global.canton.network.digitalasset.com",
-          "fixedTokens": false,
-          "hostname": "mock.global.canton.network.digitalasset.com",
-          "name": "cn-mocknet"
-        },
-        "disableAuth": false,
-        "enableHealthProbes": true,
-        "enablePostgresMetrics": true,
-        "imageRepo": "us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker",
-        "metrics": {
-          "enable": true
-        },
-        "participantAdminUserNameFrom": {
-          "secretKeyRef": {
-            "key": "ledger-api-user",
-            "name": "splice-app-validator-ledger-api-auth",
-            "optional": false
-          }
-        },
-        "persistence": {
-          "databaseName": "participant_2",
-          "postgresName": "participant-pg",
-          "schema": "participant",
-          "secretName": "participant-pg-secrets"
-        },
-        "resources": {
-          "limits": {
-            "memory": "8Gi"
-          },
-          "requests": {
-            "memory": "4Gi"
-          }
-        },
-        "tolerations": [
-          {
-            "effect": "NoSchedule",
-            "key": "cn_apps",
-            "operator": "Exists"
-          }
-        ]
-      },
-      "version": "0.3.20"
-    },
-    "name": "splitwell-participant-2",
-    "provider": "",
-    "type": "kubernetes:helm.sh/v3:Release"
   },
   {
     "custom": true,
@@ -724,6 +621,7 @@
         "deletionProtectionEnabled": true,
         "edition": "ENTERPRISE",
         "insightsConfig": {
+          "enhancedQueryInsightsEnabled": false,
           "queryInsightsEnabled": true
         },
         "ipConfiguration": {
@@ -747,6 +645,99 @@
     "name": "splitwell-participant-pg",
     "provider": "",
     "type": "gcp:sql/databaseInstance:DatabaseInstance"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-participant",
+      "compat": "true",
+      "maxHistory": 10,
+      "name": "participant",
+      "namespace": "splitwell",
+      "timeout": 600,
+      "values": {
+        "additionalEnvVars": [
+          {
+            "name": "ADDITIONAL_CONFIG_PARTICIPANT_PRUNING",
+            "value": "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
+          }
+        ],
+        "additionalJvmOptions": "-Dcom.sun.management.jmxremote=true -Dcom.sun.management.jmxremote.port=9010 -Dcom.sun.management.jmxremote.rmi.port=9010 -Dcom.sun.management.jmxremote.local.only=false -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Djava.rmi.server.hostname=127.0.0.1",
+        "affinity": {
+          "nodeAffinity": {
+            "requiredDuringSchedulingIgnoredDuringExecution": {
+              "nodeSelectorTerms": [
+                {
+                  "matchExpressions": [
+                    {
+                      "key": "cn_apps",
+                      "operator": "Exists"
+                    },
+                    {
+                      "key": "cn_apps",
+                      "operator": "In",
+                      "values": [
+                        "hyperdisk"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "auth": {
+          "jwksUrl": "https://canton-network-dev.us.auth0.com/.well-known/jwks.json",
+          "targetAudience": "https://canton.network.global"
+        },
+        "cluster": {
+          "dnsName": "mock.global.canton.network.digitalasset.com",
+          "fixedTokens": false,
+          "hostname": "mock.global.canton.network.digitalasset.com",
+          "name": "cn-mocknet"
+        },
+        "disableAuth": false,
+        "enableHealthProbes": true,
+        "enablePostgresMetrics": true,
+        "imageRepo": "us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker",
+        "metrics": {
+          "enable": true
+        },
+        "participantAdminUserNameFrom": {
+          "secretKeyRef": {
+            "key": "ledger-api-user",
+            "name": "splice-app-validator-ledger-api-auth",
+            "optional": false
+          }
+        },
+        "persistence": {
+          "databaseName": "participant_2",
+          "postgresName": "participant-pg",
+          "schema": "participant",
+          "secretName": "participant-pg-secrets"
+        },
+        "resources": {
+          "limits": {
+            "memory": "8Gi"
+          },
+          "requests": {
+            "memory": "4Gi"
+          }
+        },
+        "tolerations": [
+          {
+            "effect": "NoSchedule",
+            "key": "cn_apps",
+            "operator": "Exists"
+          }
+        ]
+      },
+      "version": "0.3.20"
+    },
+    "name": "splitwell-participant",
+    "provider": "",
+    "type": "kubernetes:helm.sh/v3:Release"
   },
   {
     "custom": true,
@@ -797,7 +788,7 @@
         "migration": {
           "id": 9
         },
-        "participantHost": "participant-2",
+        "participantHost": "participant",
         "persistence": {
           "databaseName": "app_splitwell",
           "port": 5432,
@@ -925,6 +916,7 @@
         "deletionProtectionEnabled": true,
         "edition": "ENTERPRISE",
         "insightsConfig": {
+          "enhancedQueryInsightsEnabled": false,
           "queryInsightsEnabled": true
         },
         "ipConfiguration": {
@@ -1054,6 +1046,7 @@
         "deletionProtectionEnabled": true,
         "edition": "ENTERPRISE",
         "insightsConfig": {
+          "enhancedQueryInsightsEnabled": false,
           "queryInsightsEnabled": true
         },
         "ipConfiguration": {
@@ -1160,7 +1153,7 @@
               "optional": false
             }
           },
-          "participantAddress": "participant-2",
+          "participantAddress": "participant",
           "participantIdentitiesDumpPeriodicBackup": {
             "backupInterval": "10m",
             "location": {

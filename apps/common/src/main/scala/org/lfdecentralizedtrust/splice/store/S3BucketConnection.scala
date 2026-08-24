@@ -117,27 +117,39 @@ class S3BucketConnection(
 
   def getChecksums(
       objectKeys: Seq[String]
-  )(implicit ec: ExecutionContext, as: ActorSystem): Future[Seq[ObjectKeyAndChecksum]] = {
+  )(implicit
+      ec: ExecutionContext,
+      as: ActorSystem,
+      tc: TraceContext,
+  ): Future[Seq[ObjectKeyAndChecksum]] = {
     Source(objectKeys.toList)
       .mapAsync(4) { key => // TODO(#3429): make this parallelism configurable
         readChecksum(key)
-          .map(checksum => ObjectKeyAndChecksum(key, checksum))
+          .map(checksum => checksum.map(ObjectKeyAndChecksum(key, _)))
       }
+      .collect { case Some(obj) => obj }
       .runWith(Sink.seq[ObjectKeyAndChecksum])
   }
 
-  private def readChecksum(key: String)(implicit ec: ExecutionContext): Future[String] = {
+  private def readChecksum(
+      key: String
+  )(implicit ec: ExecutionContext, tc: TraceContext): Future[Option[String]] = {
     val headRequest = HeadObjectRequest
       .builder()
       .bucket(bucketName)
       .key(key)
       .build()
     for {
-      head <- s3Client.headObject(headRequest).asScala
-      checksum = head
-        .metadata()
-        .asScala
-        .getOrElse("splice-checksum", throw new RuntimeException("Missing checksum metadata"))
+      head <- s3Client.headObject(headRequest).asScala.map(Some(_)).recover { case e =>
+        // TODO(#3429): distinguish between "object not found" and other errors, probably want to catch only NoSuchKeyException, and throw everything else
+        logger
+          .debug(s"Failed to read checksum for object $key, object may not exist: ${e.getMessage}")
+        None
+      }
+      checksum = head.map(
+        _.metadata().asScala
+          .getOrElse("splice-checksum", throw new RuntimeException("Missing checksum metadata"))
+      )
     } yield checksum
   }
 

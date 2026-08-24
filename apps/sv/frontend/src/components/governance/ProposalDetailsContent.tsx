@@ -7,8 +7,19 @@ import {
   VoteRequest,
 } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
 import { ContractId } from '@daml/types';
-import { ChevronLeft, Edit } from '@mui/icons-material';
-import { Box, Button, Divider, Stack, Tab, Tabs, Typography } from '@mui/material';
+import { ChevronLeft, ContentCopy, Edit } from '@mui/icons-material';
+import {
+  Alert,
+  Box,
+  Button,
+  Chip,
+  Divider,
+  IconButton,
+  Stack,
+  Tab,
+  Tabs,
+  Typography,
+} from '@mui/material';
 import React, { PropsWithChildren, useEffect, useMemo, useRef, useState } from 'react';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -20,6 +31,7 @@ import {
 } from '@canton-network/splice-common-frontend';
 import { Link as RouterLink } from 'react-router';
 import {
+  ConfigChange,
   ProposalDetails,
   ProposalVote,
   ProposalVotingInformation,
@@ -32,9 +44,25 @@ import { useDsoInfos } from '../../contexts/SvContext';
 import { DetailItem } from './proposal-details/DetailItem';
 import { CreateUnallocatedUnclaimedActivityRecordSection } from './proposal-details/CreateUnallocatedUnclaimedActivityRecordSection';
 import { CopyableIdentifier, CopyableUrl, MemberIdentifier, VoteStats } from '../beta';
+import { IDENTIFIER_COMPACT_MAX_WIDTH_PX } from '../beta/identifierStyles';
 import { useQuery } from '@tanstack/react-query';
 import { useSvAdminClient } from '../../contexts/SvAdminServiceContext';
-import { DEFAULT_APP_ACTIVITY_WEIGHT } from '../../utils/constants';
+import {
+  DEFAULT_APP_ACTIVITY_WEIGHT,
+  EFFECTIVE_AT_LABEL,
+  PROPOSAL_CREATED_LABEL,
+  PROPOSAL_SUMMARY_TITLE,
+  SUPPORTING_URL_LABEL,
+  THRESHOLD_DEADLINE_LABEL,
+  VOTE_PROPOSAL_CONTRACT_ID_LABEL,
+  VOTE_REASON_SUMMARY_LABEL,
+  VOTE_REASON_URL_LABEL,
+} from '../../utils/constants';
+
+/** True when a proposal changed fields that are locked/disabled in the create UI (e.g. emergency API). */
+export function hasAlteredDisabledFields(changes: ConfigChange[]): boolean {
+  return changes.some(c => c.disabled && c.currentValue !== c.newValue);
+}
 
 dayjs.extend(relativeTime);
 
@@ -48,18 +76,13 @@ export interface ProposalDetailsContentProps {
 
 type VoteTab = Extract<VoteStatus, 'accepted' | 'rejected' | 'no-vote'> | 'all';
 
-const now = () => dayjs();
-
 export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = props => {
   const { contractId, proposalDetails, votingInformation, votes, currentSvPartyId } = props;
 
   const votesHooks = useVotesHooks();
   const dsoInfoQuery = useDsoInfos();
 
-  const isEffective =
-    votingInformation.voteTakesEffect && dayjs(votingInformation.voteTakesEffect).isBefore(now());
-  const isClosed =
-    !proposalDetails.isVoteRequest || isEffective || votingInformation.status === 'Rejected';
+  const isClosed = !proposalDetails.isVoteRequest || votingInformation.status === 'Rejected';
 
   const dsoConfigToCompareWith = useMemo(() => {
     if (proposalDetails.action === 'SRARC_SetConfig') {
@@ -188,30 +211,20 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
           size="small"
           color="secondary"
           startIcon={<ChevronLeft fontSize="small" />}
+          data-testid="proposal-details-back-to-all-votes"
         >
           Back to all votes
         </Button>
       </Stack>
 
       <Stack sx={{ bgcolor: 'colors.neutral.10', p: 6 }} alignItems="center" gap={8}>
-        <VoteSection title="Proposal Details" data-testid="proposal-details-proposal-details">
+        {/* Figma details content starts at Action — no inner section title. */}
+        <VoteSection data-testid="proposal-details-proposal-details">
           <DetailItem
             label="Action"
             value={proposalDetails.actionName}
             labelId="proposal-details-action-label"
             valueId="proposal-details-action-value"
-          />
-
-          <DetailItem
-            label="Vote Proposal Contract ID"
-            value={
-              <CopyableIdentifier
-                value={contractId}
-                size="large"
-                data-testid="proposal-details-contractid-id"
-              />
-            }
-            labelId="proposal-details-contractid-label"
           />
 
           {proposalDetails.action === 'SRARC_OffboardSv' && (
@@ -233,7 +246,6 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
             <UpdateFeatureAppSection
               rightContractId={proposalDetails.proposal.rightContractId}
               newActivityWeight={proposalDetails.proposal.newActivityWeight}
-              reason={proposalDetails.proposal.reason}
             />
           )}
 
@@ -255,6 +267,15 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
 
           {proposalDetails.action === 'CRARC_SetConfig' && (
             <>
+              {hasAlteredDisabledFields(proposalDetails.proposal.configChanges) && (
+                <Alert
+                  severity="warning"
+                  variant="outlined"
+                  data-testid="proposal-details-disabled-fields-warning"
+                >
+                  Disabled fields have been altered in this vote proposal.
+                </Alert>
+              )}
               <DetailItem
                 label="Proposed Changes"
                 value={<ConfigValuesChanges changes={proposalDetails.proposal.configChanges} />}
@@ -276,6 +297,15 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
 
           {proposalDetails.action === 'SRARC_SetConfig' && (
             <>
+              {hasAlteredDisabledFields(proposalDetails.proposal.configChanges) && (
+                <Alert
+                  severity="warning"
+                  variant="outlined"
+                  data-testid="proposal-details-disabled-fields-warning"
+                >
+                  Disabled fields have been altered in this vote proposal.
+                </Alert>
+              )}
               <DetailItem
                 label="Proposed Changes"
                 value={<ConfigValuesChanges changes={proposalDetails.proposal.configChanges} />}
@@ -295,14 +325,14 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
           )}
 
           <DetailItem
-            label="Summary"
+            label={PROPOSAL_SUMMARY_TITLE}
             value={proposalDetails.summary}
             labelId="proposal-details-summary-label"
             valueId="proposal-details-summary-value"
           />
 
           <DetailItem
-            label="URL"
+            label={SUPPORTING_URL_LABEL}
             value={
               <CopyableUrl
                 url={proposalDetails.url}
@@ -312,9 +342,22 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
             }
             labelId="proposal-details-url-label"
           />
+
+          <DetailItem
+            label={VOTE_PROPOSAL_CONTRACT_ID_LABEL}
+            value={
+              <CopyableIdentifier
+                value={contractId}
+                size="large"
+                maxWidth={IDENTIFIER_COMPACT_MAX_WIDTH_PX}
+                data-testid="proposal-details-contractid-id"
+              />
+            }
+            labelId="proposal-details-contractid-label"
+          />
         </VoteSection>
 
-        <VoteSection title="Voting Information" data-testid="proposal-details-voting-information">
+        <VoteSection title="Proposal Information" data-testid="proposal-details-voting-information">
           <DetailItem
             label="Requester"
             value={
@@ -322,13 +365,22 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
                 partyId={votingInformation.requester}
                 isYou={false}
                 size="large"
+                maxWidth={IDENTIFIER_COMPACT_MAX_WIDTH_PX}
                 data-testid="proposal-details-requester-party-id"
               />
             }
           />
 
           <DetailItem
-            label="Quorum Threshold Deadline"
+            label={PROPOSAL_CREATED_LABEL}
+            value={proposalDetails.createdAt}
+            labelId="proposal-details-created-at-label"
+            valueId="proposal-details-created-at-value"
+          />
+
+          <DetailItem
+            label={THRESHOLD_DEADLINE_LABEL}
+            labelId="proposal-details-threshold-deadline-label"
             value={
               <Stack gap={3}>
                 <Box data-testid="proposal-details-voting-closes-duration">
@@ -343,7 +395,8 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
           />
 
           <DetailItem
-            label="Voting Takes Effect On"
+            label={EFFECTIVE_AT_LABEL}
+            labelId="proposal-details-effective-at-label"
             value={
               <Stack gap={3}>
                 <Box data-testid="proposal-details-vote-takes-effect-duration">
@@ -409,7 +462,7 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
           </Tabs>
 
           <Box
-            sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}
+            sx={{ display: 'flex', flexDirection: 'column', gap: 3, width: '100%', minWidth: 0 }}
             data-testid="proposal-details-votes-list"
           >
             {getFilteredVotes().map((vote, index) => (
@@ -459,7 +512,8 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
 };
 
 interface VoteSectionProps extends PropsWithChildren {
-  title: string;
+  /** Section heading (e.g. Proposal Information). Omit when Figma has no heading above the fields. */
+  title?: string;
   'data-testid': string;
   bordered?: boolean;
   centered?: boolean;
@@ -468,9 +522,11 @@ interface VoteSectionProps extends PropsWithChildren {
 const VoteSection = React.forwardRef<HTMLDivElement, VoteSectionProps>(
   ({ title, children, 'data-testid': testId, bordered = false, centered = false }, ref) => (
     <Box sx={{ width: '100%', maxWidth: '800px' }} data-testid={testId} ref={ref}>
-      <Typography component="h2" fontSize={18} fontWeight={700} mb={3}>
-        {title}
-      </Typography>
+      {title !== undefined && (
+        <Typography component="h2" fontSize={18} fontWeight={700} mb={3}>
+          {title}
+        </Typography>
+      )}
       <Box
         sx={{
           ...(bordered && {
@@ -501,6 +557,21 @@ interface VoteItemProps {
   onEdit?: () => void;
 }
 
+/** Gap between party-ID / You and the copy icon. */
+const VOTE_ROW_ACCESSORY_GAP_PX = 8;
+/** Gap between copy icon and status column. */
+const VOTE_ROW_STATUS_GAP_PX = 40;
+/** Fixed copy column so every row’s copy icon shares one vertical edge. */
+const VOTE_ROW_COPY_COL_WIDTH_PX = 40;
+/** Fixed status column so Accepted / Awaiting Response share the right edge. */
+const VOTE_ROW_STATUS_COL_WIDTH_PX = 170;
+/** Trailing tracks (8 + copy + 40 + status) — party-ID (+ You) width is calc(100% − this). */
+const VOTE_ROW_FIXED_TRAILING_PX =
+  VOTE_ROW_ACCESSORY_GAP_PX +
+  VOTE_ROW_COPY_COL_WIDTH_PX +
+  VOTE_ROW_STATUS_GAP_PX +
+  VOTE_ROW_STATUS_COL_WIDTH_PX;
+
 const VoteItem: React.FC<VoteItemProps> = ({
   voter,
   url,
@@ -513,29 +584,104 @@ const VoteItem: React.FC<VoteItemProps> = ({
   <>
     <Box
       sx={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
+        display: 'grid',
+        // Copy + status are fixed tracks. "You" lives in the party-ID track (before the
+        // 8px gap) so it never shifts the copy icon.
+        gridTemplateColumns: `minmax(0, calc(100% - ${VOTE_ROW_FIXED_TRAILING_PX}px)) ${VOTE_ROW_ACCESSORY_GAP_PX}px ${VOTE_ROW_COPY_COL_WIDTH_PX}px ${VOTE_ROW_STATUS_GAP_PX}px ${VOTE_ROW_STATUS_COL_WIDTH_PX}px`,
+        alignItems: 'start',
+        width: '100%',
+        maxWidth: '100%',
+        minWidth: 0,
+        overflow: 'hidden',
+        boxSizing: 'border-box',
       }}
       data-testid="proposal-details-vote"
     >
-      <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
-          <MemberIdentifier
-            partyId={voter}
-            size="large"
-            isYou={isYou}
-            data-testid="proposal-details-voter-party-id"
-          />
-        </Box>
+      <Box
+        sx={{
+          gridColumn: 1,
+          minWidth: 0,
+          maxWidth: '100%',
+          overflow: 'hidden',
+        }}
+      >
+        <Stack
+          direction="row"
+          alignItems="center"
+          spacing={1}
+          sx={{ minWidth: 0, maxWidth: '100%', width: '100%' }}
+        >
+          <Box sx={{ flex: '1 1 0%', minWidth: 0, overflow: 'hidden' }}>
+            <CopyableIdentifier
+              value={voter}
+              copyValue={voter}
+              size="large"
+              fullWidth
+              hideCopy
+              data-testid="proposal-details-voter-party-id"
+            />
+          </Box>
+          {isYou && (
+            <Chip
+              label="You"
+              size="small"
+              data-testid="proposal-details-voter-party-id-badge"
+              sx={{ flexShrink: 0 }}
+            />
+          )}
+        </Stack>
         {comment && (
-          <Typography fontSize={16} color="text.secondary">
-            {comment}
-          </Typography>
+          <Box sx={{ mt: 1, minWidth: 0, maxWidth: '100%' }}>
+            <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+              {VOTE_REASON_SUMMARY_LABEL}
+            </Typography>
+            <Typography fontSize={16} color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>
+              {comment}
+            </Typography>
+          </Box>
         )}
-        {url && <CopyableUrl url={url} size="small" data-testid="proposal-details-vote-url" />}
+        {url && (
+          <Box sx={{ mt: 1, minWidth: 0, maxWidth: '100%' }}>
+            <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+              {VOTE_REASON_URL_LABEL}
+            </Typography>
+            <CopyableUrl url={url} size="small" data-testid="proposal-details-vote-url" />
+          </Box>
+        )}
       </Box>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+
+      <Box
+        sx={{
+          gridColumn: 3,
+          display: 'flex',
+          justifyContent: 'center',
+          pt: '2px',
+        }}
+      >
+        <IconButton
+          color="secondary"
+          data-testid="proposal-details-voter-party-id-copy-button"
+          sx={{ flexShrink: 0, p: 0.5 }}
+          onClick={e => {
+            e.stopPropagation();
+            e.preventDefault();
+            navigator.clipboard.writeText(voter);
+          }}
+        >
+          <ContentCopy sx={{ fontSize: '16px' }} />
+        </IconButton>
+      </Box>
+
+      <Box
+        sx={{
+          gridColumn: 5,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'flex-end',
+          gap: 1,
+          pt: '2px',
+        }}
+      >
         <VoteStats
           vote={status}
           noVoteMessage={isClosed ? 'No Vote' : 'Awaiting Response'}
@@ -549,6 +695,8 @@ const VoteItem: React.FC<VoteItemProps> = ({
             data-testid="your-vote-edit-button"
             sx={{
               fontSize: 16,
+              minWidth: 0,
+              px: 0,
             }}
           >
             Edit
@@ -578,6 +726,7 @@ const OffboardMemberSection = ({ memberPartyId }: OffboardMemberSectionProps) =>
             partyId={memberPartyId}
             isYou={false}
             size="large"
+            maxWidth={IDENTIFIER_COMPACT_MAX_WIDTH_PX}
             data-testid="proposal-details-member-party-id"
           />
         }
@@ -671,13 +820,11 @@ const UnfeatureAppSection = ({ rightContractId }: UnfeatureAppSectionProps) => {
 interface UpdateFeatureAppSectionProps {
   rightContractId: string;
   newActivityWeight: string;
-  reason: string;
 }
 
 const UpdateFeatureAppSection = ({
   rightContractId,
   newActivityWeight,
-  reason,
 }: UpdateFeatureAppSectionProps) => {
   const svAdminClient = useSvAdminClient();
   const providerQuery = useQuery({
@@ -739,12 +886,6 @@ const UpdateFeatureAppSection = ({
           />
         }
       />
-      <DetailItem
-        label="Reason"
-        value={reason}
-        labelId="proposal-details-update-feature-reason-label"
-        valueId="proposal-details-update-feature-reason-value"
-      />
     </Box>
   );
 };
@@ -773,6 +914,7 @@ const UpdateSvRewardWeightSection = ({
               partyId={svToUpdate}
               isYou={false}
               size="large"
+              maxWidth={IDENTIFIER_COMPACT_MAX_WIDTH_PX}
               data-testid="proposal-details-member-party-id"
             />
           }

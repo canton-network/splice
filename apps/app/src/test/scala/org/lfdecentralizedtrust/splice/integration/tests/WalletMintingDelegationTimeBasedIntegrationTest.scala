@@ -51,6 +51,7 @@ class WalletMintingDelegationTimeBasedIntegrationTest
   // Pre-generate key pairs so external party IDs are known at config time
   private val sharingAppProvider = preGenerateExternalParty("sharing_app_provider")
   private val sharingRecipient = preGenerateExternalParty("sharing_recipient")
+  private val externalSharingProvider = preGenerateExternalParty("external_sharing_provider")
 
   // We create many coupons directly, so avoid running sanity checks
   override protected def runUpdateHistorySanityCheck: Boolean = false
@@ -66,13 +67,14 @@ class WalletMintingDelegationTimeBasedIntegrationTest
         updateAllValidatorConfigs { case (name, c) =>
           if (name == "aliceValidator") {
             c.copy(
-              rewardSharingConfigByParty = Map(
-                sharingAppProvider.partyId.toProtoPrimitive -> RewardSharingConfig(
+              rewardSharingConfigByParty = Map[String, RewardSharingConfig](
+                sharingAppProvider.partyId.toProtoPrimitive -> RewardSharingConfig.BuiltIn(
                   minTtlAfterSharing = NonNegativeFiniteDuration.ofHours(25),
                   beneficiaries = Seq(
                     AppRewardBeneficiaryConfig(sharingRecipient.partyId, BigDecimal(0.4))
                   ),
-                )
+                ),
+                externalSharingProvider.partyId.toProtoPrimitive -> RewardSharingConfig.External(),
               )
             )
           } else c
@@ -755,6 +757,106 @@ class WalletMintingDelegationTimeBasedIntegrationTest
             "Balance should include provider's 60% of each unassigned coupon + directly minted assigned coupon"
         }
       }
+    }
+    "mint already-assigned V2 coupons but hold back unassigned ones in external sharing mode" in {
+      implicit env =>
+        val aliceParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
+        aliceWalletClient.tap(100.0)
+        aliceValidatorWalletClient.tap(100.0)
+
+        val externalSharingParty =
+          onboardExternalParty(aliceValidatorBackend, externalSharingProvider)
+        createAndAcceptExternalPartySetupProposal(aliceValidatorBackend, externalSharingParty)
+
+        val expiresAt = env.environment.clock.now.plus(Duration.ofDays(30)).toInstant
+        val (_, proposalContractId) = actAndCheck(
+          "Create minting delegation proposal",
+          createMintingDelegationProposal(externalSharingParty, aliceParty, expiresAt),
+        )(
+          "Proposal is visible",
+          _ => {
+            val proposals = aliceWalletClient.listMintingDelegationProposals()
+            proposals.proposals should have size 1 withClue "proposals"
+            proposals.proposals.head.contract.contractId
+          },
+        )
+
+        actAndCheck(
+          "Alice accepts the proposal",
+          aliceWalletClient.acceptMintingDelegationProposal(proposalContractId),
+        )(
+          "Delegation is created",
+          _ => {
+            val delegations = aliceWalletClient.listMintingDelegations()
+            delegations.delegations should have size 1 withClue "delegations"
+          },
+        )
+
+        val unassignedAmount1 = BigDecimal(1000.0)
+        val unassignedAmount2 = BigDecimal(500.0)
+        val assignedAmount = BigDecimal(250.0)
+
+        val externalPartyMintingDelegationTrigger = mintingDelegationCollectRewardsTrigger(
+          aliceValidatorBackend,
+          externalSharingParty.party,
+        )
+
+        val externalPartyWallet = aliceValidatorBackend.appState.walletManager
+          .valueOrFail("WalletManager is expected to be defined")
+          .externalPartyWalletManager
+          .lookupExternalPartyWallet(externalSharingParty.party)
+          .valueOrFail(
+            s"Expected ${externalSharingParty.party} to have an external party wallet"
+          )
+
+        // Pause the trigger, create two unassigned and one already-assigned V2
+        // coupon, then resume. In external sharing mode the off-node automation
+        // owns beneficiary assignment, so the trigger must leave the unassigned
+        // coupons untouched while still minting the already-assigned coupon.
+        setTriggersWithin(triggersToPauseAtStart = Seq(externalPartyMintingDelegationTrigger)) {
+          actAndCheck(
+            "Create V2 coupons",
+            createRewardCouponsV2(
+              Seq(
+                (externalSharingParty.party, unassignedAmount1, None),
+                (externalSharingParty.party, unassignedAmount2, None),
+                (externalSharingParty.party, assignedAmount, Some(externalSharingParty.party)),
+              )
+            ),
+          )(
+            "Coupons are visible in store",
+            _ =>
+              externalPartyWallet.store.multiDomainAcsStore
+                .listContracts(RewardCouponV2.COMPANION)
+                .futureValue should have size 3,
+          )
+        }
+
+        clue("Assigned coupon is minted while unassigned coupons are held back untouched") {
+          eventually() {
+            val v2Coupons = externalPartyWallet.store.multiDomainAcsStore
+              .listContracts(RewardCouponV2.COMPANION)
+              .futureValue
+            v2Coupons.filter(_.payload.beneficiary.isEmpty) should have size 2 withClue
+              "external sharing mode must leave unassigned coupons untouched"
+            v2Coupons.filter(_.payload.beneficiary.isPresent) shouldBe
+              empty withClue "the already-assigned coupon must be minted and consumed"
+          }
+        }
+
+        // Only the already-assigned coupon is minted; the two unassigned coupons
+        // are neither shared nor collected, so they do not contribute to the balance.
+        clue("Balance reflects only the directly minted assigned coupon") {
+          eventually() {
+            val balance = BigDecimal(
+              aliceValidatorBackend
+                .getExternalPartyBalance(externalSharingParty.party)
+                .totalUnlockedCoin
+            )
+            balance shouldBe assignedAmount withClue
+              "external sharing mode mints only the already-assigned coupon, not the held-back unassigned ones"
+          }
+        }
     }
   }
 

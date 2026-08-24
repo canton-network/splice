@@ -25,7 +25,6 @@ lazy val `canton-community-participant` = BuildCommon.`canton-community-particip
 lazy val `canton-community-admin-api` = BuildCommon.`canton-community-admin-api`
 lazy val `canton-community-integration-testing` = BuildCommon.`canton-community-integration-testing`
 lazy val `canton-community-testing` = BuildCommon.`canton-community-testing`
-lazy val `canton-slick-fork` = BuildCommon.`canton-slick-fork`
 lazy val `canton-wartremover-extension` = BuildCommon.`canton-wartremover-extension`
 lazy val `canton-util-observability` = BuildCommon.`canton-util-observability`
 lazy val `canton-ledger-api-value` = BuildCommon.`canton-ledger-api-value`
@@ -130,7 +129,6 @@ lazy val root: Project = (project in file("."))
     `canton-community-common`,
     `canton-community-integration-testing`,
     `canton-community-testing`,
-    `canton-slick-fork`,
     `canton-wartremover-extension`,
     `canton-community-app`,
     `canton-community-app-base`,
@@ -2089,6 +2087,7 @@ def mergeStrategy(oldStrategy: String => MergeStrategy): String => MergeStrategy
     case path if path.endsWith("scala-collection-compat.properties") => MergeStrategy.first
     // Don't really care about the notice file so just take any.
     case "META-INF/FastDoubleParser-NOTICE" => MergeStrategy.first
+    case "META-INF/FastDoubleParser-LICENSE" => MergeStrategy.first
     case "META-INF/license/LICENSE.boringssl.txt" => MergeStrategy.first
     case path if path.endsWith("/OSGI-INF/MANIFEST.MF") => MergeStrategy.first
     case x =>
@@ -2400,6 +2399,7 @@ lazy val `apps-app`: Project =
       `canton-community-app` % "compile->compile;test->test",
       `canton-community-base`,
       `canton-community-integration-testing` % "test",
+      `splice-amulet-test-daml` % "test",
       `splice-util-featured-app-proxies-daml` % "test",
       // necessary for token-standard-cli to get `npm install`ed so that TokenStandardCliSanityCheckPlugin can run
       `apps-common-frontend`,

@@ -18,7 +18,7 @@ import com.digitalasset.canton.ledger.api.util.LfEngineToApi
 import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.ErrorUtil
-import com.digitalasset.daml.lf.archive.{ArchivePayload, Dar, DarReader}
+import com.digitalasset.daml.lf.archive.DarReader
 import com.digitalasset.daml.lf.data.Ref
 import com.digitalasset.daml.lf.data.Ref.{PackageId, QualifiedName}
 import com.digitalasset.daml.lf.typesig
@@ -27,6 +27,7 @@ import io.circe.Json
 import org.lfdecentralizedtrust.splice.environment.DarResource
 
 import java.util.zip.ZipInputStream
+import scala.util.Using
 
 abstract class TemplateJsonDecoder {
   def decodeTemplate[TCid <: ContractId[T], T](
@@ -148,12 +149,16 @@ object ResourceTemplateDecoder {
         if (inputStream == null) {
           throw new IllegalArgumentException("Resource not found: " + path)
         }
-        val dar: Dar[ArchivePayload] = DarReader
-          .readArchive(resource.path, new ZipInputStream(inputStream))
-          .valueOr(e =>
-            throw new IllegalArgumentException(s"Failed to read DAR at path ${resource.path}: $e")
-          )
-        dar.all.map(a => a.pkgId -> typesig.reader.SignatureReader.readPackageSignature(a)._2).toMap
+        Using(new ZipInputStream(inputStream)) { zip =>
+          DarReader
+            .readArchive(resource.path, zip)
+            .valueOr(e =>
+              throw new IllegalArgumentException(s"Failed to read DAR at path ${resource.path}: $e")
+            )
+        }.fold(
+          e => throw e,
+          _.all.map(a => a.pkgId -> typesig.reader.SignatureReader.readPackageSignature(a)._2).toMap,
+        )
       },
     )
   }

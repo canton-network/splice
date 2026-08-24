@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.build_tools
 
+import better.files.*
 import com.digitalasset.daml.lf.data.Ref.{PackageName, PackageVersion}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
@@ -12,6 +13,52 @@ class DarLockCheckerTest extends AnyWordSpec with Matchers {
   private def pkg(name: String): PackageName = PackageName.assertFromString(name)
   private def ver(v: String): PackageVersion = PackageVersion.assertFromString(v)
   private def key(name: String, v: String) = (pkg(name), ver(v))
+
+  "lockOutOfDateMessage" should {
+    def lock(entries: String*): String = entries.mkString(System.lineSeparator())
+
+    def messageFor(currentLockContent: String, expectedLockStr: String): String =
+      File.temporaryFile(prefix = "current-dars", suffix = ".lock").apply { currentFile =>
+        val _ = currentFile.write(currentLockContent)
+        DarLockChecker.lockOutOfDateMessage(currentFile.toString, expectedLockStr, "never")
+      }
+
+    // The `-`/`+` lines of the diff embedded in the message
+    def changedLines(message: String): Seq[String] =
+      message.linesIterator
+        .filterNot(line => line.startsWith("---") || line.startsWith("+++"))
+        .filter(line => line.startsWith("-") || line.startsWith("+"))
+        .toSeq
+
+    "report only the entries whose package id changed" in {
+      val current = lock(
+        "splice-amulet 0.1.0 hash0",
+        "splice-amulet 0.1.1 hash1",
+        "splice-amulet 0.1.2 hash2",
+      )
+      val expected = lock(
+        "splice-amulet 0.1.0 hash0",
+        "splice-amulet 0.1.1 rebuiltHash1",
+        "splice-amulet 0.1.2 hash2",
+      )
+      changedLines(messageFor(current, expected)) shouldBe Seq(
+        "-splice-amulet 0.1.1 hash1",
+        "+splice-amulet 0.1.1 rebuiltHash1",
+      )
+    }
+
+    "report entries missing from the lock file" in {
+      val current = lock()
+      val expected = lock("splice-amulet 0.1.0 hash0")
+      changedLines(messageFor(current, expected)) shouldBe Seq("+splice-amulet 0.1.0 hash0")
+    }
+
+    "report entries that are no longer expected" in {
+      val current = lock("splice-amulet 0.1.0 hash0")
+      val expected = lock()
+      changedLines(messageFor(current, expected)) shouldBe Seq("-splice-amulet 0.1.0 hash0")
+    }
+  }
 
   "detectBumps" should {
     "return empty when branch and compare base match exactly" in {

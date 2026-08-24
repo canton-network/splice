@@ -163,8 +163,6 @@ jobs:
 
   scala_test_with_cometbft:
     uses: ./.github/workflows/build.scala_test_with_cometbft.yml
-    # skip for external contributors (fork PRs) as we pull the cometbft image from artifactory.
-    if: github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name
     with:
       runs_on: self-hosted-k8s-medium
       test_names_file: "test-cometbft-full-class-names.log"

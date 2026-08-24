@@ -7,6 +7,7 @@ import {
   EnvVarConfigSchema,
   K8sResourceSchema,
   spliceConfig,
+  SplicePostgresSchema,
 } from '@canton-network/splice-pulumi-common';
 import { z } from 'zod';
 
@@ -18,6 +19,11 @@ export const SvMediatorConfigSchema = z
     additionalEnvVars: z.array(EnvVarConfigSchema).default([]),
     additionalJvmOptions: z.string().optional(),
     cloudSql: CloudSqlWithOverrideConfigSchema,
+    // Mediator is either deployed on cloudSQL or is reset frequently, so we can skip migration
+    splicePostgres: SplicePostgresSchema.default({
+      postgresImage: 'postgres:18',
+      deployment: 'docker-image',
+    }),
     resources: K8sResourceSchema,
   })
   .strict();
@@ -27,6 +33,11 @@ export const SvSequencerConfigSchema = z
     additionalEnvVars: z.array(EnvVarConfigSchema).default([]),
     additionalJvmOptions: z.string().optional(),
     cloudSql: CloudSqlWithOverrideConfigSchema,
+    // Sequencer is either deployed on cloudSQL or is reset frequently, so we can skip migration
+    splicePostgres: SplicePostgresSchema.default({
+      postgresImage: 'postgres:18',
+      deployment: 'docker-image',
+    }),
     resources: K8sResourceSchema,
     enableAntiAffinity: z.boolean().default(true),
   })

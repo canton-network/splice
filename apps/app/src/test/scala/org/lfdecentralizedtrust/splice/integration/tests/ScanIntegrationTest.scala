@@ -76,9 +76,10 @@ class ScanIntegrationTest
               // used for the rate limit test
               rateLimiting = config.parameters.rateLimiting.copy(
                 rateLimiters =
-                  config.parameters.rateLimiting.rateLimiters + ("listAnsEntries" -> SpliceRateLimitConfig(
-                    ratePerSecond = 5
-                  ))
+                  config.parameters.rateLimiting.rateLimiters + ("listAnsEntries" -> SpliceRateLimitConfig
+                    .WithPerClientIp(
+                      ratePerSecond = 5
+                    ))
               ),
             ),
           )

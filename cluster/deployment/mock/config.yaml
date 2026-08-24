@@ -32,6 +32,10 @@ multiValidator:
     - name: MULTI_PARTICIPANT_ADDITIONAL_CONFIG_MAX_CONNECTIONS
       value: canton.participants.participant_INDEX.storage.parameters.max-connections = 33
 sv:
+  cometbft:
+    watchdog:
+      threshold: 2
+      evaluationIntervalSeconds: 900
   synchronizer:
     skipInitialization: true
   scan:
@@ -69,6 +73,7 @@ splitwell:
     maxDuration: "5m"
     retention: "30d"
 synchronizerMigration:
+  splitSvDeploymentEnabled: true
   frozenMigrationId: 2
   archived:
     - id: 5
@@ -217,6 +222,8 @@ loadTester:
     scaleUpStep: 3
     windowStartUTC: "02:30"
     windowDurationMinutes: 150
+chaosMesh:
+  podKillSchedule: '@every 120m'
 svs:
   sv: !include(sv.yaml)
     participant:
@@ -319,6 +326,7 @@ infra:
         key: value
         anotherKey: anotherValue
   istio:
+    enableGeneralIpWhitelist: false
     istiodValues: # example istiod overrides
       global:
         proxy:

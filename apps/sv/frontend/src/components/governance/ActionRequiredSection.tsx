@@ -5,7 +5,11 @@ import { ContractId } from '@daml/types';
 import { East } from '@mui/icons-material';
 import { Alert, Box, Stack, Typography } from '@mui/material';
 import { Link as RouterLink } from 'react-router';
-import { CopyableIdentifier, MemberIdentifier, PageSectionHeader } from '../../components/beta';
+import { CopyableIdentifier, PageSectionHeader } from '../../components/beta';
+import {
+  CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE,
+  VOTE_PROPOSAL_CONTRACT_ID_LABEL,
+} from '../../utils/constants';
 import React from 'react';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -19,18 +23,19 @@ export interface ActionRequiredData {
   votingCloses: string;
   createdAt: string;
   requester: string;
-  isYou?: boolean;
 }
 
 export interface ActionRequiredProps {
   actionRequiredRequests: ActionRequiredData[];
+  noDataMessage?: string;
 }
 
-export const ActionRequiredSection: React.FC<ActionRequiredProps> = (
-  props: ActionRequiredProps
-) => {
-  const { actionRequiredRequests } = props;
+const DEFAULT_NO_DATA_MESSAGE = 'No Action Required items available';
 
+export const ActionRequiredSection: React.FC<ActionRequiredProps> = ({
+  actionRequiredRequests,
+  noDataMessage = DEFAULT_NO_DATA_MESSAGE,
+}) => {
   // Sort by voting closes date ascending (closest deadline first)
   const sortedRequests = actionRequiredRequests.toSorted((a, b) =>
     dayjs(a.votingCloses).isBefore(dayjs(b.votingCloses)) ? -1 : 1
@@ -48,7 +53,7 @@ export const ActionRequiredSection: React.FC<ActionRequiredProps> = (
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, mb: 3 }}>
         {sortedRequests.length === 0 ? (
           <Alert severity="info" data-testid={'action-required-section-no-items'}>
-            No Action Required items available
+            {noDataMessage}
           </Alert>
         ) : (
           sortedRequests.map((ar, index) => (
@@ -60,7 +65,6 @@ export const ActionRequiredSection: React.FC<ActionRequiredProps> = (
               contractId={ar.contractId}
               votingEnds={ar.votingCloses}
               requester={ar.requester}
-              isYou={ar.isYou}
             />
           ))
         )}
@@ -76,11 +80,13 @@ interface ActionCardProps {
   contractId: ContractId<VoteRequest>;
   votingEnds: string;
   requester: string;
-  isYou?: boolean;
 }
 
+const actionRequiredGridTemplate =
+  'minmax(0, 0.85fr) minmax(0, 1fr) minmax(0, 1.15fr) minmax(0, 0.75fr) minmax(0, 0.85fr) 270px auto';
+
 const ActionCard = (props: ActionCardProps) => {
-  const { action, description, createdAt, contractId, votingEnds, requester, isYou } = props;
+  const { action, description, createdAt, contractId, votingEnds, requester } = props;
   const remainingTime = dayjs(votingEnds).fromNow(true);
 
   return (
@@ -92,99 +98,87 @@ const ActionCard = (props: ActionCardProps) => {
       <Box
         sx={{
           bgcolor: 'colors.neutral.10',
-          p: 2,
           borderRadius: '4px',
+          display: 'grid',
+          gridTemplateColumns: actionRequiredGridTemplate,
+          alignItems: 'center',
           '&:hover': { backgroundColor: '#363636' },
         }}
         className="action-required-card"
         data-testid="action-required-card"
       >
-        <Stack direction="row" gap={5} alignItems="flex-start">
-          <Box sx={{ flexShrink: 0 }}>
-            <ActionCardSegment
-              title="ACTION"
-              content={action}
-              data-testid="action-required-action"
-            />
-          </Box>
-          <Box sx={{ flexShrink: 1, minWidth: 0, maxWidth: 200 }}>
-            <ActionCardSegment
-              title="DESCRIPTION"
-              content={
-                <Typography
-                  variant="body1"
-                  color="text.light"
-                  fontWeight="medium"
-                  fontSize={14}
-                  lineHeight={1.4}
-                  sx={{
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                  }}
-                  data-testid="action-required-description-content"
-                >
-                  {description}
-                </Typography>
-              }
-              data-testid="action-required-description"
-            />
-          </Box>
-          <Box sx={{ flexShrink: 1, minWidth: 0, maxWidth: 300 }}>
-            <ActionCardSegment
-              title="CONTRACT ID"
-              content={
-                <CopyableIdentifier
-                  value={contractId}
-                  size="small"
-                  data-testid="action-required-contract-id"
-                />
-              }
-              data-testid="action-required-contract-id-segment"
-            />
-          </Box>
-          <Box sx={{ flexShrink: 0 }}>
-            <ActionCardSegment
-              title="CREATED AT"
-              content={createdAt}
-              data-testid="action-required-created-at"
-            />
-          </Box>
-          <Box sx={{ flexShrink: 0 }}>
-            <ActionCardSegment
-              title="REMAINING TIME"
-              content={remainingTime}
-              data-testid="action-required-voting-closes"
-            />
-          </Box>
-          <Box sx={{ flexShrink: 1, minWidth: 0, maxWidth: 300 }}>
-            <ActionCardSegment
-              title="REQUESTER"
-              content={
-                <MemberIdentifier
-                  partyId={requester}
-                  isYou={isYou ?? false}
-                  size="small"
-                  data-testid="action-required-requester-identifier"
-                />
-              }
-              data-testid="action-required-requester"
-            />
-          </Box>
-          <Stack
-            direction="row"
-            alignItems="center"
-            gap={1}
-            sx={{ ml: 'auto', flexShrink: 0, alignSelf: 'center' }}
-            data-testid="action-required-view-details"
-          >
-            <Typography fontWeight={500} color="text.light">
-              View Details
+        <ActionCardSegment
+          title={CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE}
+          content={action}
+          data-testid="action-required-action"
+        />
+        <ActionCardSegment
+          title="DESCRIPTION"
+          content={
+            <Typography
+              variant="body1"
+              color="text.light"
+              fontWeight="medium"
+              fontSize={14}
+              lineHeight={1.4}
+              sx={{
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                width: '100%',
+              }}
+              data-testid="action-required-description-content"
+            >
+              {description}
             </Typography>
-            <East fontSize="small" color="secondary" />
-          </Stack>
+          }
+          data-testid="action-required-description"
+        />
+        <ActionCardSegment
+          title={VOTE_PROPOSAL_CONTRACT_ID_LABEL}
+          content={
+            <CopyableIdentifier
+              value={contractId}
+              size="small"
+              data-testid="action-required-contract-id"
+            />
+          }
+          data-testid="action-required-contract-id-segment"
+        />
+        <ActionCardSegment
+          title="REMAINING TIME"
+          content={remainingTime}
+          data-testid="action-required-voting-closes"
+        />
+        <ActionCardSegment
+          title="VOTE CREATED"
+          content={createdAt}
+          data-testid="action-required-created-at"
+        />
+        <ActionCardSegment
+          title="SUBMITTED BY"
+          content={
+            <CopyableIdentifier
+              value={requester}
+              size="small"
+              data-testid="action-required-submitted-by-identifier"
+            />
+          }
+          data-testid="action-required-submitted-by"
+        />
+        <Stack
+          direction="row"
+          alignItems="center"
+          gap={1}
+          sx={{ flexShrink: 0, justifySelf: 'end', py: '15px', px: '16px' }}
+          data-testid="action-required-view-details"
+        >
+          <Typography fontWeight={500} color="text.light" whiteSpace="nowrap">
+            View Details
+          </Typography>
+          <East fontSize="small" color="secondary" />
         </Stack>
       </Box>
     </RouterLink>
@@ -202,14 +196,25 @@ const ActionCardSegment: React.FC<ActionCardSegmentProps> = ({
   content,
   'data-testid': testId,
 }) => (
-  <Stack height="100%" justifyContent="space-between" data-testid={testId}>
+  <Stack
+    sx={{
+      py: '15px',
+      px: '16px',
+      gap: '4px',
+      alignItems: 'flex-start',
+      minWidth: 0,
+      overflow: 'hidden',
+      width: '100%',
+    }}
+    data-testid={testId}
+  >
     <Typography
       fontSize={12}
-      lineHeight={2}
-      fontWeight={700}
+      lineHeight="22px"
+      fontWeight={600}
       variant="subtitle2"
-      color="text.light"
-      gutterBottom
+      color="colors.neutral.80"
+      sx={{ textTransform: 'uppercase' }}
       data-testid={`${testId}-title`}
     >
       {title}
@@ -220,13 +225,13 @@ const ActionCardSegment: React.FC<ActionCardSegmentProps> = ({
         color="text.light"
         fontWeight="medium"
         fontSize={14}
-        lineHeight={2}
+        lineHeight="26px"
         data-testid={`${testId}-content`}
       >
         {content}
       </Typography>
     ) : (
-      content
+      <Box sx={{ width: '100%', minWidth: 0, overflow: 'hidden' }}>{content}</Box>
     )}
   </Stack>
 );

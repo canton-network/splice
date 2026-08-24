@@ -196,6 +196,8 @@ class ReconcileDynamicSynchronizerParametersTrigger(
           maxBaseTrafficAccumulationDuration = PositiveFiniteDuration.tryOfSeconds(
             domainFeesConfig.baseRateTrafficLimits.burstWindow.microseconds / 1000_000
           ),
+          setBalanceRequestSubmissionWindowSize =
+            PositiveFiniteDuration.fromConfig(config.setBalanceRequestSubmissionWindowSize),
           freeConfirmationResponses = enableFreeConfirmationResponses,
         )
       },

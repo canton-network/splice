@@ -54,6 +54,7 @@ import org.lfdecentralizedtrust.splice.environment.{DarResources, RetryProvider}
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.QueryResult
 import org.lfdecentralizedtrust.splice.store.{
   HardLimit,
+  IgnoredPartiesStore,
   Limit,
   MiningRoundsStore,
   PageLimit,
@@ -61,7 +62,7 @@ import org.lfdecentralizedtrust.splice.store.{
 }
 import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore.{IdleAnsSubscription, RoundBatch}
 import org.lfdecentralizedtrust.splice.sv.store.db.DbSvDsoStore
-import org.lfdecentralizedtrust.splice.sv.store.{IgnoredPartiesStore, SvDsoStore, SvStore}
+import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvStore}
 import org.lfdecentralizedtrust.splice.sv.util.SvUtil
 import org.lfdecentralizedtrust.splice.util.{
   AssignedContract,
@@ -1775,28 +1776,64 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
 
     }
 
-    "listExpiredAnsSubscriptions" should {
+    "listExpiredAnsEntries" should {
 
-      "return all entries where subscription_next_payment_due_at < now" in {
+      // 1 to 3 expire at time(1..3), 4 to 6 at time(4..6); queries run at time(4).
+      def mkAnsEntries(range: Range) =
+        range.map(i => ansEntry(userParty(i), s"entry$i", expiresAt = time(i.toLong).toInstant))
+
+      def setupAnsEntries(store: SvDsoStore) = {
+        val expired = mkAnsEntries(1 to 3)
+        val notExpired = mkAnsEntries(4 to 6)
+        MonadUtil
+          .sequentialTraverse(expired ++ notExpired)(
+            dummyDomain.create(_)(store.multiDomainAcsStore)
+          )
+          .map(_ => expired)
+      }
+
+      "return all expired ans entries" in {
         for {
           store <- mkStore()
-          // 1 to 3 are expired, 4 to 6 are not
-          data = ((1 to 3).map(n =>
-            n -> Instant.now().truncatedTo(ChronoUnit.MICROS).minusSeconds(n * 1000L)
-          ) ++ (4 to 6)
-            .map(n => n -> Instant.now().truncatedTo(ChronoUnit.MICROS).plusSeconds(n * 1000L)))
-            .map { case (n, nextPaymentDueAt) =>
-              val contextContract =
-                ansEntryContext(n, n.toString)
-              val idleStateContract =
-                subscriptionIdleState(
-                  n,
-                  nextPaymentDueAt,
-                )
+          expired <- setupAnsEntries(store)
+          result <- store.listExpiredAnsEntries(None)(
+            time(4),
+            PageLimit.tryCreate(100),
+          )(traceContext)
+        } yield {
+          result.map(_.contract) should contain theSameElementsAs expired
+        }
+      }
 
-              (contextContract, idleStateContract)
-            }
-          _ <- MonadUtil.sequentialTraverse(data) { case (contextContract, idleContract) =>
+      "filter out ans entries whose user is ignored" in {
+        for {
+          store <- mkStore()
+          expired <- setupAnsEntries(store)
+          result <- store.listExpiredAnsEntries(
+            Some(new IgnoredPartiesStore(Set(userParty(1), userParty(2))))
+          )(
+            time(4),
+            PageLimit.tryCreate(100),
+          )(traceContext)
+        } yield {
+          result.map(_.contract) should contain theSameElementsAs Seq(expired(2))
+        }
+      }
+    }
+
+    "listExpiredAnsSubscriptions" should {
+
+      def setupExpiredSubscriptions(store: SvDsoStore) = {
+        // 1 to 3 are expired, 4 to 6 are not
+        val data = ((1 to 3).map(n =>
+          n -> Instant.now().truncatedTo(ChronoUnit.MICROS).minusSeconds(n * 1000L)
+        ) ++ (4 to 6)
+          .map(n => n -> Instant.now().truncatedTo(ChronoUnit.MICROS).plusSeconds(n * 1000L)))
+          .map { case (n, nextPaymentDueAt) =>
+            (ansEntryContext(n, n.toString), subscriptionIdleState(n, nextPaymentDueAt))
+          }
+        MonadUtil
+          .sequentialTraverse(data) { case (contextContract, idleContract) =>
             for {
               _ <- dummyDomain.create(contextContract, createdEventSignatories = Seq(dsoParty))(
                 store.multiDomainAcsStore
@@ -1806,6 +1843,13 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
               )
             } yield ()
           }
+          .map(_ => data)
+      }
+
+      "return all entries where subscription_next_payment_due_at < now" in {
+        for {
+          store <- mkStore()
+          data <- setupExpiredSubscriptions(store)
         } yield {
           val expected = data
             .take(3)
@@ -1814,7 +1858,34 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
             }
             .reverse
           store
-            .listExpiredAnsSubscriptions(CantonTimestamp.now(), limit = PageLimit.tryCreate(3))
+            .listExpiredAnsSubscriptions(
+              CantonTimestamp.now(),
+              limit = PageLimit.tryCreate(3),
+              None,
+            )
+            .futureValue should be(expected)
+        }
+      }
+
+      "filter out subscriptions whose sender is in the ignored parties store" in {
+        for {
+          store <- mkStore()
+          data <- setupExpiredSubscriptions(store)
+        } yield {
+          // n=1 and n=2 are expired but their senders are ignored, only n=3 remains
+          val expected = data
+            .slice(2, 3)
+            .map { case (ctxContract, idleContract) =>
+              IdleAnsSubscription(idleContract, ctxContract)
+            }
+          store
+            .listExpiredAnsSubscriptions(
+              CantonTimestamp.now(),
+              limit = PageLimit.tryCreate(3),
+              ignoredPartiesStore = Some(
+                new IgnoredPartiesStore(Set(userParty(1), userParty(2)))
+              ),
+            )
             .futureValue should be(expected)
         }
       }
@@ -1935,41 +2006,54 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
 
     "listExpiredTransferPreapprovals" should {
 
-      "return all expired transfer pre-approvals" in {
-        val expired = (1 to 3).map(n =>
+      def mkTransferPreapprovals(n: Range) =
+        n.map(i =>
           transferPreapproval(
-            userParty(n),
-            providerParty(n),
+            userParty(i),
+            providerParty(i),
             time(0),
-            expiresAt = time(n.toLong),
+            expiresAt = time(i.toLong),
           )
         )
-        val notExpired =
-          (4 to 6).map(n =>
-            transferPreapproval(
-              userParty(n),
-              providerParty(n),
-              time(0),
-              expiresAt = time(n.toLong),
-            )
-          )
-        for {
-          store <- mkStore()
-          _ <- MonadUtil.sequentialTraverse(expired ++ notExpired)(
+
+      def setupTransferPreapprovals(store: SvDsoStore) = {
+        val expired = mkTransferPreapprovals(1 to 3)
+        val notExpired = mkTransferPreapprovals(4 to 6)
+        MonadUtil
+          .sequentialTraverse(expired ++ notExpired)(
             dummyDomain.create(_)(store.multiDomainAcsStore)
           )
-          result <- store.listExpiredTransferPreapprovals(
+          .map(_ => expired)
+      }
+
+      "return all expired transfer pre-approvals" in {
+        for {
+          store <- mkStore()
+          expired <- setupTransferPreapprovals(store)
+          result <- store.listExpiredTransferPreapprovals(None)(
             time(4),
             PageLimit.tryCreate(100),
-          )(
-            traceContext
-          )
+          )(traceContext)
         } yield {
-          val contracts = result.map(_.contract)
-          contracts should contain theSameElementsAs expired
+          result.map(_.contract) should contain theSameElementsAs expired
         }
       }
 
+      "filter out pre-approvals whose receiver or provider is ignored" in {
+        for {
+          store <- mkStore()
+          expired <- setupTransferPreapprovals(store)
+          result <- store.listExpiredTransferPreapprovals(
+            // n=1 is dropped via its receiver, n=2 via its provider
+            Some(new IgnoredPartiesStore(Set(userParty(1), providerParty(2))))
+          )(
+            time(4),
+            PageLimit.tryCreate(100),
+          )(traceContext)
+        } yield {
+          result.map(_.contract) should contain theSameElementsAs Seq(expired(2))
+        }
+      }
     }
   }
 

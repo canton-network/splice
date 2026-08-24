@@ -179,7 +179,7 @@ class ExternalPartyWalletManager(
           packageVersionSupport,
           rewardSharingConfigByParty.getOrElse(
             externalParty.toProtoPrimitive,
-            RewardSharingConfig(),
+            RewardSharingConfig.BuiltIn(),
           ),
         )
       } catch {

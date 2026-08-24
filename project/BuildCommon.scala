@@ -212,7 +212,6 @@ object BuildCommon {
       Global / excludeLintKeys += `canton-community-synchronizer` / autoAPIMappings,
       Global / excludeLintKeys += `canton-community-participant` / autoAPIMappings,
       //      Global / excludeLintKeys += `demo` / autoAPIMappings,
-      Global / excludeLintKeys += `canton-slick-fork` / autoAPIMappings,
       Global / excludeLintKeys += Global / damlCodeGeneration,
       Global / googleCredentialsDisable := true,
       Global / resolvers += ("Canton snapshots" at "artifactregistry://europe-maven.pkg.dev/da-images/public-maven-unstable"),
@@ -511,8 +510,7 @@ object BuildCommon {
       .apply("canton-community-base", file("canton/community/base"))
       .enablePlugins(BuildInfoPlugin)
       .dependsOn(
-        `canton-slick-fork`,
-        `canton-community-admin-api`,
+        `canton-community-admin-api`
         // Canton depends on the Daml code via a git submodule and the two
         // projects below. We instead depend on the artifacts released
         // from the Daml repo listed in libraryDependencies below.
@@ -531,6 +529,7 @@ object BuildCommon {
           bouncycastle_bcpkix_jdk15on,
           bouncycastle_bcprov_jdk15on,
           canton_kms_driver_api,
+          canton_slick_fork,
           canton_util_external,
           cats,
           chimney,
@@ -920,27 +919,10 @@ object BuildCommon {
       )
   }
 
-  lazy val `canton-slick-fork` = {
-    import CantonDependencies._
-    sbt.Project
-      .apply("canton-slick-fork", file("canton/community/lib/slick"))
-      .disablePlugins(ScalafmtPlugin, WartRemover)
-      .settings(
-        sharedCantonSettings,
-        removeTestSources,
-        sharedSettings,
-        libraryDependencies ++= Seq(
-          scala_reflect,
-          slick,
-        ),
-      )
-  }
-
   lazy val `canton-wartremover-extension` = {
     import CantonDependencies._
     sbt.Project
       .apply("canton-wartremover-extension", file("canton/community/lib/wartremover"))
-      .dependsOn(`canton-slick-fork`)
       .settings(
         Test / scalacOptions ++= Seq(
           "-Wconf:msg=synchronized not selected from this instance:silent"
@@ -948,6 +930,7 @@ object BuildCommon {
         disableTests,
         sharedSettings,
         libraryDependencies ++= Seq(
+          canton_slick_fork,
           canton_wartremover_annotations,
           cats,
           grpc_stub,

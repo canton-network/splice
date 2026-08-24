@@ -16,7 +16,7 @@
       }
     },
     "name": "cluster-ingress-default",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-cluster-ingress-default::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-cluster-ingress-default::04da6b54-80e4-46f7-96ec-b56ff0331ba9",
     "type": "kubernetes:core/v1:ServiceAccountPatch"
   },
   {
@@ -32,7 +32,7 @@
       "stringData": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
         "value": {
-          ".dockerconfigjson": "{\"auths\":{\"digitalasset-canton-enterprise-docker.jfrog.io\":{\"auth\":\"YXJ0X3VzZXI6czNjcjN0\",\"username\":\"art_user\",\"password\":\"s3cr3t\"},\"us-central1-docker.pkg.dev\":{\"auth\":\"X2pzb25fa2V5OnsidHlwZSI6InNlcnZpY2VfYWNjb3VudCIsInByb2plY3RfaWQiOiJmYWtlLXByb2plY3QiLCJwcml2YXRlX2tleV9pZCI6ImZha2VfaWQiLCJwcml2YXRlX2tleSI6Ii0tLS0tQkVHSU4gUFJJVkFURSBLRVktLS0tLVxuZmFrZVxuLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLVxuIiwiY2xpZW50X2VtYWlsIjoiZmFrZUBmYWtlLXByb2plY3QuaWFtLmdzZXJ2aWNlYWNjb3VudC5jb20iLCJjbGllbnRfaWQiOiJmYWtlLWNsaWVudC1pZCIsImF1dGhfdXJpIjoiaHR0cHM6Ly9hY2NvdW50cy5nb29nbGUuY29tL28vb2F1dGgyL2F1dGgiLCJ0b2tlbl91cmkiOiJodHRwczovL29hdXRoMi5nb29nbGVhcGlzLmNvbS90b2tlbiIsImF1dGhfcHJvdmlkZXJfeDUwOV9jZXJ0X3VybCI6Imh0dHBzOi8vd3d3Lmdvb2dsZWFwaXMuY29tL29hdXRoMi92MS9jZXJ0cyIsImNsaWVudF94NTA5X2NlcnRfdXJsIjoiaHR0cHM6Ly93d3cuZ29vZ2xlYXBpcy5jb20vcm9ib3QvdjEvbWV0YWRhdGEveDUwOS9mYWtlJTQwZmFrZS1wcm9qZWN0LmlhbS5nc2VydmljZWFjY291bnQuY29tIiwidW5pdmVyc2VfZG9tYWluIjoiZ29vZ2xlYXBpcy5jb20ifQ==\",\"username\":\"_json_key\",\"password\":\"{\\\"type\\\":\\\"service_account\\\",\\\"project_id\\\":\\\"fake-project\\\",\\\"private_key_id\\\":\\\"fake_id\\\",\\\"private_key\\\":\\\"-----BEGIN PRIVATE KEY-----\\\\nfake\\\\n-----END PRIVATE KEY-----\\\\n\\\",\\\"client_email\\\":\\\"fake@fake-project.iam.gserviceaccount.com\\\",\\\"client_id\\\":\\\"fake-client-id\\\",\\\"auth_uri\\\":\\\"https://accounts.google.com/o/oauth2/auth\\\",\\\"token_uri\\\":\\\"https://oauth2.googleapis.com/token\\\",\\\"auth_provider_x509_cert_url\\\":\\\"https://www.googleapis.com/oauth2/v1/certs\\\",\\\"client_x509_cert_url\\\":\\\"https://www.googleapis.com/robot/v1/metadata/x509/fake%40fake-project.iam.gserviceaccount.com\\\",\\\"universe_domain\\\":\\\"googleapis.com\\\"}\"}}}"
+          ".dockerconfigjson": "{\"auths\":{\"us-central1-docker.pkg.dev\":{\"auth\":\"X2pzb25fa2V5OnsidHlwZSI6InNlcnZpY2VfYWNjb3VudCIsInByb2plY3RfaWQiOiJmYWtlLXByb2plY3QiLCJwcml2YXRlX2tleV9pZCI6ImZha2VfaWQiLCJwcml2YXRlX2tleSI6Ii0tLS0tQkVHSU4gUFJJVkFURSBLRVktLS0tLVxuZmFrZVxuLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLVxuIiwiY2xpZW50X2VtYWlsIjoiZmFrZUBmYWtlLXByb2plY3QuaWFtLmdzZXJ2aWNlYWNjb3VudC5jb20iLCJjbGllbnRfaWQiOiJmYWtlLWNsaWVudC1pZCIsImF1dGhfdXJpIjoiaHR0cHM6Ly9hY2NvdW50cy5nb29nbGUuY29tL28vb2F1dGgyL2F1dGgiLCJ0b2tlbl91cmkiOiJodHRwczovL29hdXRoMi5nb29nbGVhcGlzLmNvbS90b2tlbiIsImF1dGhfcHJvdmlkZXJfeDUwOV9jZXJ0X3VybCI6Imh0dHBzOi8vd3d3Lmdvb2dsZWFwaXMuY29tL29hdXRoMi92MS9jZXJ0cyIsImNsaWVudF94NTA5X2NlcnRfdXJsIjoiaHR0cHM6Ly93d3cuZ29vZ2xlYXBpcy5jb20vcm9ib3QvdjEvbWV0YWRhdGEveDUwOS9mYWtlJTQwZmFrZS1wcm9qZWN0LmlhbS5nc2VydmljZWFjY291bnQuY29tIiwidW5pdmVyc2VfZG9tYWluIjoiZ29vZ2xlYXBpcy5jb20ifQ==\",\"username\":\"_json_key\",\"password\":\"{\\\"type\\\":\\\"service_account\\\",\\\"project_id\\\":\\\"fake-project\\\",\\\"private_key_id\\\":\\\"fake_id\\\",\\\"private_key\\\":\\\"-----BEGIN PRIVATE KEY-----\\\\nfake\\\\n-----END PRIVATE KEY-----\\\\n\\\",\\\"client_email\\\":\\\"fake@fake-project.iam.gserviceaccount.com\\\",\\\"client_id\\\":\\\"fake-client-id\\\",\\\"auth_uri\\\":\\\"https://accounts.google.com/o/oauth2/auth\\\",\\\"token_uri\\\":\\\"https://oauth2.googleapis.com/token\\\",\\\"auth_provider_x509_cert_url\\\":\\\"https://www.googleapis.com/oauth2/v1/certs\\\",\\\"client_x509_cert_url\\\":\\\"https://www.googleapis.com/robot/v1/metadata/x509/fake%40fake-project.iam.gserviceaccount.com\\\",\\\"universe_domain\\\":\\\"googleapis.com\\\"}\"}}}"
         }
       },
       "type": "kubernetes.io/dockerconfigjson"
@@ -294,16 +294,6 @@
   },
   {
     "custom": true,
-    "id": "organization/infra/infra.mock",
-    "inputs": {
-      "name": "organization/infra/infra.mock"
-    },
-    "name": "organization/infra/infra.mock",
-    "provider": "",
-    "type": "pulumi:pulumi:StackReference"
-  },
-  {
-    "custom": true,
     "id": "",
     "inputs": {
       "apiVersion": "v1",
@@ -388,7 +378,7 @@
       }
     },
     "name": "validator-default",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-validator-default::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-validator-default::04da6b54-80e4-46f7-96ec-b56ff0331ba9",
     "type": "kubernetes:core/v1:ServiceAccountPatch"
   },
   {
@@ -404,7 +394,7 @@
       "stringData": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
         "value": {
-          ".dockerconfigjson": "{\"auths\":{\"digitalasset-canton-enterprise-docker.jfrog.io\":{\"auth\":\"YXJ0X3VzZXI6czNjcjN0\",\"username\":\"art_user\",\"password\":\"s3cr3t\"},\"us-central1-docker.pkg.dev\":{\"auth\":\"X2pzb25fa2V5OnsidHlwZSI6InNlcnZpY2VfYWNjb3VudCIsInByb2plY3RfaWQiOiJmYWtlLXByb2plY3QiLCJwcml2YXRlX2tleV9pZCI6ImZha2VfaWQiLCJwcml2YXRlX2tleSI6Ii0tLS0tQkVHSU4gUFJJVkFURSBLRVktLS0tLVxuZmFrZVxuLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLVxuIiwiY2xpZW50X2VtYWlsIjoiZmFrZUBmYWtlLXByb2plY3QuaWFtLmdzZXJ2aWNlYWNjb3VudC5jb20iLCJjbGllbnRfaWQiOiJmYWtlLWNsaWVudC1pZCIsImF1dGhfdXJpIjoiaHR0cHM6Ly9hY2NvdW50cy5nb29nbGUuY29tL28vb2F1dGgyL2F1dGgiLCJ0b2tlbl91cmkiOiJodHRwczovL29hdXRoMi5nb29nbGVhcGlzLmNvbS90b2tlbiIsImF1dGhfcHJvdmlkZXJfeDUwOV9jZXJ0X3VybCI6Imh0dHBzOi8vd3d3Lmdvb2dsZWFwaXMuY29tL29hdXRoMi92MS9jZXJ0cyIsImNsaWVudF94NTA5X2NlcnRfdXJsIjoiaHR0cHM6Ly93d3cuZ29vZ2xlYXBpcy5jb20vcm9ib3QvdjEvbWV0YWRhdGEveDUwOS9mYWtlJTQwZmFrZS1wcm9qZWN0LmlhbS5nc2VydmljZWFjY291bnQuY29tIiwidW5pdmVyc2VfZG9tYWluIjoiZ29vZ2xlYXBpcy5jb20ifQ==\",\"username\":\"_json_key\",\"password\":\"{\\\"type\\\":\\\"service_account\\\",\\\"project_id\\\":\\\"fake-project\\\",\\\"private_key_id\\\":\\\"fake_id\\\",\\\"private_key\\\":\\\"-----BEGIN PRIVATE KEY-----\\\\nfake\\\\n-----END PRIVATE KEY-----\\\\n\\\",\\\"client_email\\\":\\\"fake@fake-project.iam.gserviceaccount.com\\\",\\\"client_id\\\":\\\"fake-client-id\\\",\\\"auth_uri\\\":\\\"https://accounts.google.com/o/oauth2/auth\\\",\\\"token_uri\\\":\\\"https://oauth2.googleapis.com/token\\\",\\\"auth_provider_x509_cert_url\\\":\\\"https://www.googleapis.com/oauth2/v1/certs\\\",\\\"client_x509_cert_url\\\":\\\"https://www.googleapis.com/robot/v1/metadata/x509/fake%40fake-project.iam.gserviceaccount.com\\\",\\\"universe_domain\\\":\\\"googleapis.com\\\"}\"}}}"
+          ".dockerconfigjson": "{\"auths\":{\"us-central1-docker.pkg.dev\":{\"auth\":\"X2pzb25fa2V5OnsidHlwZSI6InNlcnZpY2VfYWNjb3VudCIsInByb2plY3RfaWQiOiJmYWtlLXByb2plY3QiLCJwcml2YXRlX2tleV9pZCI6ImZha2VfaWQiLCJwcml2YXRlX2tleSI6Ii0tLS0tQkVHSU4gUFJJVkFURSBLRVktLS0tLVxuZmFrZVxuLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLVxuIiwiY2xpZW50X2VtYWlsIjoiZmFrZUBmYWtlLXByb2plY3QuaWFtLmdzZXJ2aWNlYWNjb3VudC5jb20iLCJjbGllbnRfaWQiOiJmYWtlLWNsaWVudC1pZCIsImF1dGhfdXJpIjoiaHR0cHM6Ly9hY2NvdW50cy5nb29nbGUuY29tL28vb2F1dGgyL2F1dGgiLCJ0b2tlbl91cmkiOiJodHRwczovL29hdXRoMi5nb29nbGVhcGlzLmNvbS90b2tlbiIsImF1dGhfcHJvdmlkZXJfeDUwOV9jZXJ0X3VybCI6Imh0dHBzOi8vd3d3Lmdvb2dsZWFwaXMuY29tL29hdXRoMi92MS9jZXJ0cyIsImNsaWVudF94NTA5X2NlcnRfdXJsIjoiaHR0cHM6Ly93d3cuZ29vZ2xlYXBpcy5jb20vcm9ib3QvdjEvbWV0YWRhdGEveDUwOS9mYWtlJTQwZmFrZS1wcm9qZWN0LmlhbS5nc2VydmljZWFjY291bnQuY29tIiwidW5pdmVyc2VfZG9tYWluIjoiZ29vZ2xlYXBpcy5jb20ifQ==\",\"username\":\"_json_key\",\"password\":\"{\\\"type\\\":\\\"service_account\\\",\\\"project_id\\\":\\\"fake-project\\\",\\\"private_key_id\\\":\\\"fake_id\\\",\\\"private_key\\\":\\\"-----BEGIN PRIVATE KEY-----\\\\nfake\\\\n-----END PRIVATE KEY-----\\\\n\\\",\\\"client_email\\\":\\\"fake@fake-project.iam.gserviceaccount.com\\\",\\\"client_id\\\":\\\"fake-client-id\\\",\\\"auth_uri\\\":\\\"https://accounts.google.com/o/oauth2/auth\\\",\\\"token_uri\\\":\\\"https://oauth2.googleapis.com/token\\\",\\\"auth_provider_x509_cert_url\\\":\\\"https://www.googleapis.com/oauth2/v1/certs\\\",\\\"client_x509_cert_url\\\":\\\"https://www.googleapis.com/robot/v1/metadata/x509/fake%40fake-project.iam.gserviceaccount.com\\\",\\\"universe_domain\\\":\\\"googleapis.com\\\"}\"}}}"
         }
       },
       "type": "kubernetes.io/dockerconfigjson"
@@ -420,7 +410,7 @@
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-participant",
       "compat": "true",
       "maxHistory": 10,
-      "name": "participant-2",
+      "name": "participant",
       "namespace": "validator",
       "timeout": 600,
       "values": {
@@ -480,8 +470,8 @@
         },
         "persistence": {
           "databaseName": "participant_2",
-          "host": "postgres.validator.svc.cluster.local",
-          "postgresName": "postgres",
+          "host": "postgres-helmless.validator.svc.cluster.local",
+          "postgresName": "postgres-helmless",
           "schema": "participant",
           "secretName": "postgres-secrets"
         },
@@ -503,7 +493,7 @@
       },
       "version": "0.3.20"
     },
-    "name": "validator-participant-2",
+    "name": "validator-participant",
     "provider": "",
     "type": "kubernetes:helm.sh/v3:Release"
   },
@@ -548,7 +538,7 @@
           "name": "cn-mocknet"
         },
         "config": {
-          "jsonLedgerApiUrl": "http://participant-2:7575",
+          "jsonLedgerApiUrl": "http://participant:7575",
           "keyDirectory": "/keys",
           "maxParties": 1234,
           "parallelism": 321,
@@ -582,19 +572,55 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "length": 16,
-      "overrideSpecial": "_%@",
-      "special": true
+      "apiVersion": "v1",
+      "data": {
+        "PGDATA": "/var/lib/postgresql/data/pgdata",
+        "POSTGRES_DB": "cantonnet",
+        "POSTGRES_INITDB_ARGS": "--data-checksums",
+        "POSTGRES_USER": "cnadmin"
+      },
+      "kind": "ConfigMap",
+      "metadata": {
+        "name": "postgres-helmless-configuration",
+        "namespace": "validator"
+      }
     },
-    "name": "validator-postgres-passwd",
+    "name": "validator-postgres-helmless-configuration",
     "provider": "",
-    "type": "random:index/randomPassword:RandomPassword"
+    "type": "kubernetes:core/v1:ConfigMap"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "postgres-helmless",
+        "namespace": "validator"
+      },
+      "spec": {
+        "ports": [
+          {
+            "name": "postgresdb",
+            "port": 5432,
+            "protocol": "TCP"
+          }
+        ],
+        "selector": {
+          "app": "postgres-helmless"
+        }
+      }
+    },
+    "name": "validator-postgres-helmless-svc",
+    "provider": "",
+    "type": "kubernetes:core/v1:Service"
   },
   {
     "custom": false,
     "id": "",
     "inputs": {},
-    "name": "validator-postgres",
+    "name": "validator-postgres-helmless",
     "provider": "",
     "type": "canton:network:postgres"
   },
@@ -602,64 +628,186 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-postgres",
-      "compat": "true",
-      "maxHistory": 10,
-      "name": "postgres",
-      "namespace": "validator",
-      "timeout": 600,
-      "values": {
-        "affinity": {
-          "nodeAffinity": {
-            "requiredDuringSchedulingIgnoredDuringExecution": {
-              "nodeSelectorTerms": [
-                {
-                  "matchExpressions": [
+      "apiVersion": "apps/v1",
+      "kind": "StatefulSet",
+      "metadata": {
+        "name": "postgres-helmless",
+        "namespace": "validator"
+      },
+      "spec": {
+        "replicas": 1,
+        "selector": {
+          "matchLabels": {
+            "app": "postgres-helmless"
+          }
+        },
+        "serviceName": "postgres-helmless",
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "postgres-helmless",
+              "namespace": "validator"
+            }
+          },
+          "spec": {
+            "affinity": {
+              "nodeAffinity": {
+                "requiredDuringSchedulingIgnoredDuringExecution": {
+                  "nodeSelectorTerms": [
                     {
-                      "key": "cn_apps",
-                      "operator": "Exists"
-                    },
-                    {
-                      "key": "cn_apps",
-                      "operator": "In",
-                      "values": [
-                        "hyperdisk"
+                      "matchExpressions": [
+                        {
+                          "key": "cn_apps",
+                          "operator": "Exists"
+                        },
+                        {
+                          "key": "cn_apps",
+                          "operator": "In",
+                          "values": [
+                            "hyperdisk"
+                          ]
+                        }
                       ]
                     }
                   ]
                 }
-              ]
+              }
+            },
+            "containers": [
+              {
+                "args": [
+                  "-c",
+                  "max_connections=300",
+                  "-c",
+                  "max_wal_size=2GB"
+                ],
+                "env": [
+                  {
+                    "name": "POSTGRES_PASSWORD",
+                    "valueFrom": {
+                      "secretKeyRef": {
+                        "key": "postgresPassword",
+                        "name": "postgres-secrets"
+                      }
+                    }
+                  }
+                ],
+                "envFrom": [
+                  {
+                    "configMapRef": {
+                      "name": "postgres-helmless-configuration"
+                    }
+                  }
+                ],
+                "image": "postgres:18",
+                "imagePullPolicy": "IfNotPresent",
+                "livenessProbe": {
+                  "exec": {
+                    "command": [
+                      "psql",
+                      "-U",
+                      "cnadmin",
+                      "-d",
+                      "template1",
+                      "-c",
+                      "SELECT 1"
+                    ]
+                  },
+                  "failureThreshold": 3,
+                  "periodSeconds": 10,
+                  "successThreshold": 1,
+                  "timeoutSeconds": 1
+                },
+                "name": "postgres-helmless",
+                "ports": [
+                  {
+                    "containerPort": 5432,
+                    "name": "postgresdb",
+                    "protocol": "TCP"
+                  }
+                ],
+                "resources": {
+                  "limits": {
+                    "memory": "12Gi"
+                  },
+                  "requests": {
+                    "cpu": "0.5",
+                    "memory": "1Gi"
+                  }
+                },
+                "securityContext": {
+                  "allowPrivilegeEscalation": false,
+                  "capabilities": {
+                    "drop": [
+                      "ALL"
+                    ]
+                  },
+                  "privileged": false,
+                  "runAsGroup": 999,
+                  "runAsNonRoot": true,
+                  "runAsUser": 999
+                },
+                "volumeMounts": [
+                  {
+                    "mountPath": "/var/lib/postgresql/data",
+                    "name": "pg-data-hd"
+                  }
+                ]
+              }
+            ],
+            "restartPolicy": "Always",
+            "securityContext": {
+              "fsGroup": 999,
+              "fsGroupChangePolicy": "OnRootMismatch",
+              "seccompProfile": {
+                "type": "RuntimeDefault"
+              }
+            },
+            "tolerations": [
+              {
+                "effect": "NoSchedule",
+                "key": "cn_apps",
+                "operator": "Exists"
+              }
+            ]
+          }
+        },
+        "volumeClaimTemplates": [
+          {
+            "metadata": {
+              "name": "pg-data-hd"
+            },
+            "spec": {
+              "accessModes": [
+                "ReadWriteOnce"
+              ],
+              "resources": {
+                "requests": {
+                  "storage": "200Gi"
+                }
+              },
+              "storageClassName": "hyperdisk-standard-rwo",
+              "volumeMode": "Filesystem"
             }
           }
-        },
-        "cluster": {
-          "dnsName": "mock.global.canton.network.digitalasset.com",
-          "fixedTokens": false,
-          "hostname": "mock.global.canton.network.digitalasset.com",
-          "name": "cn-mocknet"
-        },
-        "db": {
-          "pvcTemplateName": "pg-data-hd",
-          "volumeSize": "200Gi",
-          "volumeStorageClass": "hyperdisk-standard-rwo"
-        },
-        "imageRepo": "us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker",
-        "persistence": {
-          "secretName": "postgres-secrets"
-        },
-        "tolerations": [
-          {
-            "effect": "NoSchedule",
-            "key": "cn_apps",
-            "operator": "Exists"
-          }
         ]
-      },
-      "version": "0.3.20"
+      }
     },
-    "name": "validator-postgres",
+    "name": "validator-postgres-helmless",
     "provider": "",
-    "type": "kubernetes:helm.sh/v3:Release"
+    "type": "kubernetes:apps/v1:StatefulSet"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "length": 16,
+      "overrideSpecial": "_%@",
+      "special": true
+    },
+    "name": "validator-postgres-passwd",
+    "provider": "",
+    "type": "random:index/randomPassword:RandomPassword"
   },
   {
     "custom": true,
@@ -737,7 +885,7 @@
           },
           "migrateValidatorParty": false,
           "nodeIdentifier": "validator-runbook",
-          "participantAddress": "participant-2",
+          "participantAddress": "participant",
           "participantIdentitiesDumpPeriodicBackup": {
             "backupInterval": "10m",
             "location": {
@@ -756,8 +904,8 @@
             "retention": "30d"
           },
           "persistence": {
-            "host": "postgres",
-            "postgresName": "postgres",
+            "host": "postgres-helmless.validator.svc.cluster.local",
+            "postgresName": "postgres-helmless",
             "secretName": "postgres-secrets"
           },
           "pvc": {

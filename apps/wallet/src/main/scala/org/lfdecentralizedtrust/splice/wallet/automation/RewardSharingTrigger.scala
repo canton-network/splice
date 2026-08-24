@@ -32,7 +32,7 @@ import scala.jdk.CollectionConverters.*
 class RewardSharingTrigger(
     override protected val context: TriggerContext,
     store: UserWalletStore,
-    config: RewardSharingConfig,
+    config: RewardSharingConfig.BuiltIn,
     spliceLedgerConnection: SpliceLedgerConnection,
 )(implicit
     override val ec: ExecutionContext,

@@ -753,15 +753,20 @@ trait SvDsoStore
       : ListExpiredContracts[so.SvOnboardingConfirmed.ContractId, so.SvOnboardingConfirmed] =
     multiDomainAcsStore.listExpiredFromPayloadExpiry(so.SvOnboardingConfirmed.COMPANION)
 
-  def listExpiredAnsEntries: ListExpiredContracts[
+  def listExpiredAnsEntries(ignoredPartiesStore: Option[IgnoredPartiesStore]): ListExpiredContracts[
     splice.ans.AnsEntry.ContractId,
     splice.ans.AnsEntry,
   ] =
-    multiDomainAcsStore.listExpiredFromPayloadExpiry(splice.ans.AnsEntry.COMPANION)
+    multiDomainAcsStore.listExpiredFromPayloadExpiry(
+      splice.ans.AnsEntry.COMPANION,
+      ignoredPartiesStore,
+      ignoredPartyFields = Seq("user"),
+    )
 
   def listExpiredAnsSubscriptions(
       now: CantonTimestamp,
       limit: Limit = defaultLimit,
+      ignoredPartiesStore: Option[IgnoredPartiesStore],
   )(implicit tc: TraceContext): Future[Seq[SvDsoStore.IdleAnsSubscription]]
 
   def listExpiredUnallocatedUnclaimedActivityRecord: ListExpiredContracts[
@@ -1102,12 +1107,16 @@ trait SvDsoStore
     Seq[Contract[splice.dsorules.Confirmation.ContractId, splice.dsorules.Confirmation]]
   ]
 
-  def listExpiredTransferPreapprovals: ListExpiredContracts[
+  def listExpiredTransferPreapprovals(
+      ignoredPartiesStore: Option[IgnoredPartiesStore]
+  ): ListExpiredContracts[
     splice.amuletrules.TransferPreapproval.ContractId,
     splice.amuletrules.TransferPreapproval,
   ] =
     multiDomainAcsStore.listExpiredFromPayloadExpiry(
-      splice.amuletrules.TransferPreapproval.COMPANION
+      splice.amuletrules.TransferPreapproval.COMPANION,
+      ignoredPartiesStore,
+      ignoredPartyFields = Seq("receiver", "provider"),
     )
 
   def getExternalPartyAmuletRules()(implicit

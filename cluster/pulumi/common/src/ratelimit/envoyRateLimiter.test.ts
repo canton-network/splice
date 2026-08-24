@@ -5,7 +5,9 @@ import { expect, jest, test } from '@jest/globals';
 import {
   buildRateLimitActions,
   buildRateLimitDescriptors,
+  parseFillIntervalMs,
   validateIpRangeLimits,
+  validateTokenBuckets,
 } from './envoyRateLimiter';
 
 jest.mock('@canton-network/splice-pulumi-common/src/config/envConfig', () => ({
@@ -457,6 +459,80 @@ test('validateIpRangeLimits accepts non-overlapping IP ranges', () => {
       },
     })
   ).not.toThrow();
+});
+
+test('parseFillIntervalMs parses protobuf durations and rejects other formats', () => {
+  expect(parseFillIntervalMs('60s', 'ctx')).toEqual(60000);
+  expect(parseFillIntervalMs('0.5s', 'ctx')).toEqual(500);
+  expect(() => parseFillIntervalMs('500ms', 'ctx')).toThrow('invalid fillInterval');
+  expect(() => parseFillIntervalMs('1m', 'ctx')).toThrow('invalid fillInterval');
+});
+
+test('validateTokenBuckets accepts intervals that are multiples of the global interval', () => {
+  expect(() =>
+    validateTokenBuckets(baseLimits, {
+      '/api/scan/v0/acs': {
+        name: 'acs',
+        type: 'limited',
+        maxTokens: 500,
+        tokensPerFill: 500,
+        fillInterval: '120s',
+        perIpRangeLimit,
+      },
+    })
+  ).not.toThrow();
+});
+
+test('validateTokenBuckets rejects intervals that envoy would NACK', () => {
+  expect(() =>
+    validateTokenBuckets(baseLimits, {
+      '/api/scan/v0/acs': {
+        name: 'acs',
+        type: 'limited',
+        maxTokens: 500,
+        tokensPerFill: 500,
+        fillInterval: '90s',
+      },
+    })
+  ).toThrow('must be a multiple of the globalLimits fillInterval');
+
+  // below envoy's 50ms minimum
+  expect(() =>
+    validateTokenBuckets(
+      { maxTokens: 1, tokensPerFill: 1, fillInterval: '0.01s' },
+      {
+        '/api/scan/v0/acs': {
+          name: 'acs',
+          type: 'limited',
+          maxTokens: 500,
+          tokensPerFill: 500,
+          fillInterval: '60s',
+        },
+      }
+    )
+  ).toThrow('below the 50ms minimum');
+
+  // per-IP-range overrides are validated as well
+  expect(() =>
+    validateTokenBuckets(baseLimits, {
+      '/api/scan/v0/acs': {
+        name: 'acs',
+        type: 'limited',
+        ...baseLimits,
+        perIpRangeLimit: {
+          ...perIpRangeLimit,
+          overrides: {
+            'single-validator': {
+              ipRanges: ['192.68.78.50/32'],
+              maxTokens: 220,
+              tokensPerFill: 220,
+              fillInterval: '90s',
+            },
+          },
+        },
+      },
+    })
+  ).toThrow("perIpRangeLimit override 'single-validator'");
 });
 
 test('validateIpRangeLimits rejects reserved override key', () => {

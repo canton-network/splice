@@ -20,6 +20,7 @@ import {
 interface DsoArgs {
   auth0Client: Auth0Client;
   decentralizedSynchronizerUpgradeConfig: DecentralizedSynchronizerMigrationConfig;
+  exportSvResources?: boolean;
 }
 
 export class Dso extends pulumi.ComponentResource {
@@ -31,15 +32,19 @@ export class Dso extends pulumi.ComponentResource {
     svConf: StaticSvConfig,
     extraDependsOn: CnInput<pulumi.Resource>[] = []
   ): Promise<InstalledSv> {
-    const xns = exactNamespace(svConf.nodeName, true);
+    const xns = exactNamespace(svConf.nodeName, true, this.args.exportSvResources);
     const dynamicConfig = configForSv(svConf.nodeName);
-    return await installSvNodeStandalone(
+    const sv = await installSvNodeStandalone(
       xns,
       svConf,
       dynamicConfig,
       this.args.auth0Client,
-      extraDependsOn
+      extraDependsOn,
+      (this.args.exportSvResources ?? false) ? { action: 'export' } : undefined
     );
+    // we never run import from here so the following is ok
+    // migration code is temporary so it doesn't have to be beautiful
+    return sv!;
   }
 
   private async installDso() {

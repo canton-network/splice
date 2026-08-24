@@ -29,8 +29,8 @@ import {
   standardSvConfigsBasic,
 } from '@canton-network/splice-pulumi-common-sv/src/svConfigsBasic';
 import { SweepConfig } from '@canton-network/splice-pulumi-common-validator';
-import { SplicePostgres } from '@canton-network/splice-pulumi-common/src/postgres';
-import { infraStack } from '@canton-network/splice-pulumi-common/src/stackReferences';
+import { installSplicePostgres, Postgres } from '@canton-network/splice-pulumi-common/src/postgres';
+import { StackReferences } from '@canton-network/splice-pulumi-common/src/stackReferences';
 import { local } from '@pulumi/command';
 import { getSecretVersionOutput } from '@pulumi/gcp/secretmanager/getSecretVersion';
 import { Input } from '@pulumi/pulumi';
@@ -96,7 +96,7 @@ const shouldIgnoreNoDataOrDataSourceError = clusterIsResetPeriodically;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const istioDashboardVersions: pulumi.Output<any> =
-  infraStack.requireOutput('istioDashboardVersions');
+  StackReferences.infra.requireOutput('istioDashboardVersions');
 
 export function configureObservability(namespace: ExactNamespace): pulumi.Resource {
   // If the stack version is updated the crd version might need to be upgraded as well, check the release notes https://artifacthub.io/packages/helm/prometheus-community/kube-prometheus-stack
@@ -547,7 +547,7 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
   );
   createGrafanaAlerting(namespaceName);
   if (monitoringConfig.enableGrafanaServiceAccountToken) {
-    createGrafanaServiceAccount(namespaceName, adminPassword, [prometheusStack, postgres.pg]);
+    createGrafanaServiceAccount(namespaceName, adminPassword, [prometheusStack, postgres.database]);
   }
   createGrafanaEnvoyFilter(namespaceName, [prometheusStack]);
 
@@ -769,6 +769,20 @@ function substituteDsoMissedConfirmationsAlerts(alert: string): string {
     .replaceAll('$DSO_MISSED_CONFIRMATIONS_WINDOW_MINUTES', config.windowMinutes.toString());
 }
 
+function substituteSpliceRateLimitsAlerts(alert: string): string {
+  const config = monitoringConfig.alerting.alerts.spliceRateLimits;
+  const bareFilter =
+    config.excludedLimiters.length > 0 ? `limiter!~"${config.excludedLimiters.join('|')}"` : '';
+  const filter = bareFilter ? `, ${bareFilter}` : '';
+  return alert
+    .replaceAll('$SPLICE_RATE_LIMITS_USAGE_THRESHOLD', config.usageThreshold.toString())
+    .replaceAll(
+      '$SPLICE_RATE_LIMITS_REJECTION_COUNT_THRESHOLD',
+      config.rejectionCountThreshold.toString()
+    )
+    .replaceAll('$SPLICE_RATE_LIMITS_FILTER', filter);
+}
+
 // AmuletMetrics was previously using owner.toString instead of owner.toProtoPrimitive
 // This function makes it compatible for both.
 function partyIdTransform(partyId: string) {
@@ -975,6 +989,9 @@ function createGrafanaAlerting(namespace: Input<string>) {
             'scan_connection_disagreement_alerts.yaml': substituteScanConnectionDisagreementAlerts(
               readGrafanaAlertingFile('scan_connection_disagreement_alerts.yaml')
             ),
+            'scan_bft_sequencers_alerts.yaml': readGrafanaAlertingFile(
+              'scan_bft_sequencers_alerts.yaml'
+            ),
             'extra_k8s_alerts.yaml': readGrafanaAlertingFile('extra_k8s_alerts.yaml'),
             'sequencer_rate_limit_alerts.yaml': readGrafanaAlertingFile(
               'sequencer_rate_limit_alerts.yaml'
@@ -1030,6 +1047,12 @@ function createGrafanaAlerting(namespace: Input<string>) {
                 '$VERDICT_INGESTION_BATCH_SIZE_PENDING_PERIOD_MINUTES',
                 monitoringConfig.alerting.alerts.trafficBasedRewards.verdictIngestionBatchSizePendingPeriodMinutes.toString()
               ),
+            'istio-rate-limiting_alerts.yaml': readGrafanaAlertingFile(
+              'istio-rate-limiting_alerts.yaml'
+            ),
+            'splice-rate-limiting_alerts.yaml': substituteSpliceRateLimitsAlerts(
+              readGrafanaAlertingFile('splice-rate-limiting_alerts.yaml')
+            ),
           },
         }).map(([k, v]) => [k, defaultAlertSubstitutions(v)])
       ),
@@ -1184,16 +1207,17 @@ function grafanaKeysFromSecret(): pulumi.Output<GrafanaKeys> {
   });
 }
 
-function installPostgres(namespace: ExactNamespace): SplicePostgres {
-  return new SplicePostgres(
+function installPostgres(namespace: ExactNamespace): Postgres {
+  const instanceName = 'grafana-postgres';
+  return installSplicePostgres(
     namespace,
-    'grafana-postgres',
-    'grafana-postgres',
+    instanceName,
     'grafana-postgres-secret',
+    monitoringConfig.grafanaPostgres,
+    undefined, // chart version
+    { disableProtection: true },
     { db: { volumeSize: '20Gi' } }, // A tiny pvc should be enough for grafana
     true, // overrideDbSizeFromValues
-    true, // disableProtection
-    undefined, // chart version
     true // useInfraAffinityAndTolerations
   );
 }

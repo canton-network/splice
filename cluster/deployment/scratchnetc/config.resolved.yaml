@@ -16,15 +16,10 @@ cloudArmor:
         withinIntervalSeconds: 60
 cluster:
   nodePools:
-    additionalApps:
-      - maxNodes: 20
-        minNodes: 0
-        nodeType: 'n4-standard-16'
-        zones: '*'
     apps:
-      maxNodes: 20
+      maxNodes: 40
       minNodes: 0
-      nodeType: 'n4d-standard-16'
+      nodeType: 'c3d-standard-8'
       zones: '*'
     infra:
       maxNodes: 3
@@ -111,6 +106,10 @@ monitoring:
       sequencerRateLimits:
         circuitBreakerStateThreshold: 0.5
         rejectionRateThreshold: 0
+      spliceRateLimits:
+        excludedLimiters: []
+        rejectionCountThreshold: 10
+        usageThreshold: 0.8
       trafficBasedRewards:
         featuredAppRightsLimit: 10000
         verdictIngestionBatchSizePendingPeriodMinutes: 60
@@ -122,7 +121,7 @@ monitoring:
       walletSweep:
         tolerance: 1.5
     enableNoDataAlerts: false
-    loggedSecretsFilter: "(\n  (\n    jsonPayload.message=~\"(?i)(secret|token|(private|secret)(-)?key|password)=[^, ]+\" AND\n    -jsonPayload.message=~\"(?i)(secret|token|(private|secret)(-)?key|password)=(\\\"\\*\\*\\*\\*\\\"|hidden)\"\n  ) OR\n  jsonPayload.message=~\"eyJhbGc[A-Za-z0-9_-]{2,}\\.[A-Za-z0-9_-]{2,}\\.[A-Za-z0-9_-]{2,}\" OR\n  jsonPayload.message=~\"Bearer\\s+eyJ[A-Za-z0-9_-]{2,}\"\n)\n"
+    loggedSecretsFilter: "(\n  (\n    jsonPayload.message=~\"(?i)(secret|token|(private|secret)(-)?key|password)=[^, ]+\" AND\n    -jsonPayload.message=~\"(?i)(secret|token|(private|secret)(-)?key|password)=(\\\"\\*\\*\\*\\*\\\"|hidden)\" AND\n    -jsonPayload.message=~\"(?i)page(_|-)?token=[^, ]+\"\n  ) OR\n  jsonPayload.message=~\"eyJhbGc[A-Za-z0-9_-]{2,}\\.[A-Za-z0-9_-]{2,}\\.[A-Za-z0-9_-]{2,}\" OR\n  jsonPayload.message=~\"Bearer\\s+eyJ[A-Za-z0-9_-]{2,}\"\n)\n"
     muteTimeIntervals: []
   enableGrafanaServiceAccountToken: true
 multiValidator:
@@ -286,6 +285,9 @@ sv:
           type: 'unlimited'
         /api/scan/v0/history/bulk/acs:
           name: 'listBulkAcsSnapshotObjects'
+          type: 'unlimited'
+        /api/scan/v0/history/bulk/checksums:
+          name: 'getBulkHistoryChecksums'
           type: 'unlimited'
         /api/scan/v0/history/bulk/updates:
           name: 'listBulkUpdateHistoryObjects'
@@ -460,13 +462,13 @@ sv:
           type: 'limited'
         /registry/transfer-instruction/v1/transfer-factory:
           fillInterval: '60s'
-          maxTokens: 730
+          maxTokens: 1440
           name: 'registry-transfer-factory'
           perIpRangeLimit:
             fillInterval: '60s'
-            maxTokens: 120
-            tokensPerFill: 120
-          tokensPerFill: 730
+            maxTokens: 240
+            tokensPerFill: 240
+          tokensPerFill: 1440
           type: 'limited'
         /registry/transfer-instruction/v2:
           fillInterval: '60s'
@@ -1862,6 +1864,7 @@ synchronizerMigration:
       spliceRoot: 'splice'
     version: 'local'
   frozenMigrationId: 0
+  splitSvDeploymentEnabled: true
 validator1:
   deduplicationDuration: '30m'
   logging:

@@ -18,6 +18,7 @@ import {
   DecentralizedSynchronizerMigrationConfig,
   DecentralizedSynchronizerUpgradeConfig,
   ExactNamespace,
+  envoyClientIpHeaderEnvVar,
   failOnAppVersionMismatch,
   fetchAndInstallParticipantBootstrapDump,
   getAdditionalJvmOptions,
@@ -36,6 +37,7 @@ import {
   persistentHeapDumpsPvc,
   sanitizedForPostgres,
   spliceInstanceNames,
+  SplicePostgresConfig,
   svCometBftGovernanceKeyFromSecret,
   svCometBftGovernanceKeySecret,
   SvIdKey,
@@ -88,16 +90,18 @@ import { topologySnapshotConfig } from '@canton-network/splice-pulumi-common/src
 import { Resource } from '@pulumi/pulumi';
 import pick from 'lodash/pick';
 
-import { configureScanBigQuery } from './bigQuery';
 import { installInfo } from './info';
 
+// TODO(#6719) once all clusters have been migrated move the whole module to the sv project
 export async function installSvNodeStandalone(
   xns: ExactNamespace,
   staticConfig: StaticSvConfig,
   config: SingleSvConfiguration,
   auth0Client: Auth0Client,
-  extraDependsOn: CnInput<Resource>[] = []
-): Promise<InstalledSv> {
+  extraDependsOn: CnInput<Resource>[] = [],
+  // TODO(#6719) once all clusters have been migrated remove this
+  migrationArgs?: MigrationArgs
+): Promise<InstalledSv | undefined> {
   const nodeName = staticConfig.nodeName;
   const [sv1StaticConfig, ...otherSvsStaticConfigs] = coreSvsToDeploy;
   const isFoundingSv = nodeName === sv1StaticConfig.nodeName;
@@ -183,7 +187,8 @@ export async function installSvNodeStandalone(
       ...config,
     },
     DecentralizedSynchronizerUpgradeConfig,
-    extraDependsOn
+    extraDependsOn,
+    migrationArgs
   );
 }
 
@@ -234,27 +239,23 @@ export function installSvKeySecret(
 }
 
 export type InstalledSv = {
+  namespace: ExactNamespace;
+  nodeName: string;
   validatorApp: Resource;
   svApp: InstalledHelmChart;
   scan: InstalledHelmChart;
   canton: SynchronizerNodes;
   ingress: Resource;
+  appsPostgres: postgres.Postgres;
 };
 
 export async function installSvNode(
   xns: ExactNamespace,
   baseConfig: SvConfig,
   decentralizedSynchronizerUpgradeConfig: DecentralizedSynchronizerMigrationConfig,
-  extraDependsOn: CnInput<Resource>[] = []
-): Promise<InstalledSv> {
-  const loopback = installSvLoopback(xns, decentralizedSynchronizerUpgradeConfig.usesCometbft());
-  const imagePullDeps = imagePullSecret(xns);
-
-  const auth0Secrets: CnInput<pulumi.Resource>[] = await installSvAppSecrets(
-    xns,
-    baseConfig.auth0Client
-  );
-
+  extraDependsOn: CnInput<Resource>[] = [],
+  migrationArgs?: MigrationArgs
+): Promise<InstalledSv | undefined> {
   const periodicBackupConfig: BucketConfig | undefined = baseConfig.periodicBackupConfig
     ? {
         ...baseConfig.periodicBackupConfig,
@@ -291,65 +292,179 @@ export async function installSvNode(
     bulkStorageBuckets,
   };
 
-  const identitiesBackupConfigSecret = installBucketSecret(
-    xns,
-    config.identitiesBackupLocation.bucket
-  );
+  if (migrationArgs?.action === 'import') {
+    const appsPostgres = await installAppsPostgres(xns, config, migrationArgs);
 
-  const topologySnapshotConfigSecret = periodicTopologySnapshotConfig
-    ? installBucketSecret(xns, periodicTopologySnapshotConfig.location.bucket)
-    : undefined;
-  const backupConfigSecret: pulumi.Resource | undefined = config.periodicBackupConfig
-    ? config.periodicBackupConfig.location.bucket != config.identitiesBackupLocation.bucket
-      ? installBucketSecret(xns, config.periodicBackupConfig.location.bucket)
-      : identitiesBackupConfigSecret
-    : undefined;
+    return undefined;
+  } else {
+    const loopback = installSvLoopback(xns, decentralizedSynchronizerUpgradeConfig.usesCometbft());
+    const imagePullDeps = imagePullSecret(xns);
 
-  const participantBootstrapDumpSecret: pulumi.Resource | undefined = config.bootstrappingDumpConfig
-    ? await fetchAndInstallParticipantBootstrapDump(xns, config.bootstrappingDumpConfig)
-    : undefined;
+    const auth0Secrets: CnInput<pulumi.Resource>[] = await installSvAppSecrets(
+      xns,
+      baseConfig.auth0Client
+    );
 
-  const dependsOn: CnInput<pulumi.Resource>[] = auth0Secrets
-    .concat(
-      config.onboarding.type == 'join-with-key'
-        ? installSvKeySecret(xns, config.onboarding.keys)
-        : []
-    )
-    .concat(
-      config.onboarding.type == 'join-with-key' &&
-        config.onboarding.sponsorRelease !== undefined &&
-        spliceConfig.pulumiProjectConfig.interAppsDependencies
-        ? [config.onboarding.sponsorRelease]
-        : []
-    )
-    .concat(
-      config.expectedValidatorOnboardings.map(onboarding =>
-        installValidatorOnboardingSecret(xns, onboarding.name, onboarding.secret)
+    const identitiesBackupConfigSecret = installBucketSecret(
+      xns,
+      config.identitiesBackupLocation.bucket
+    );
+
+    const topologySnapshotConfigSecret = periodicTopologySnapshotConfig
+      ? installBucketSecret(xns, periodicTopologySnapshotConfig.location.bucket)
+      : undefined;
+    const backupConfigSecret: pulumi.Resource | undefined = config.periodicBackupConfig
+      ? config.periodicBackupConfig.location.bucket != config.identitiesBackupLocation.bucket
+        ? installBucketSecret(xns, config.periodicBackupConfig.location.bucket)
+        : identitiesBackupConfigSecret
+      : undefined;
+
+    const participantBootstrapDumpSecret: pulumi.Resource | undefined =
+      config.bootstrappingDumpConfig
+        ? await fetchAndInstallParticipantBootstrapDump(xns, config.bootstrappingDumpConfig)
+        : undefined;
+
+    const dependsOn: CnInput<pulumi.Resource>[] = auth0Secrets
+      .concat(
+        config.onboarding.type == 'join-with-key'
+          ? installSvKeySecret(xns, config.onboarding.keys)
+          : []
       )
-    )
-    .concat([identitiesBackupConfigSecret])
-    .concat(backupConfigSecret ? [backupConfigSecret] : [])
-    .concat(topologySnapshotConfigSecret ? [topologySnapshotConfigSecret] : [])
-    .concat(participantBootstrapDumpSecret ? [participantBootstrapDumpSecret] : [])
-    .concat(loopback)
-    .concat(imagePullDeps)
-    .concat(
-      config.cometBftGovernanceKey
-        ? svCometBftGovernanceKeySecret(xns, config.cometBftGovernanceKey)
-        : []
-    )
-    .concat(
-      bulkStorageBuckets
-        ? [
-            bulkStorageBuckets.staging.secret,
-            bulkStorageBuckets.staging.bucket,
-            bulkStorageBuckets.committed.secret,
-            bulkStorageBuckets.committed.bucket,
-          ]
-        : []
-    )
-    .concat(extraDependsOn);
+      .concat(
+        config.onboarding.type == 'join-with-key' &&
+          config.onboarding.sponsorRelease !== undefined &&
+          spliceConfig.pulumiProjectConfig.interAppsDependencies
+          ? [config.onboarding.sponsorRelease]
+          : []
+      )
+      .concat(
+        config.expectedValidatorOnboardings.map(onboarding =>
+          installValidatorOnboardingSecret(xns, onboarding.name, onboarding.secret)
+        )
+      )
+      .concat([identitiesBackupConfigSecret])
+      .concat(backupConfigSecret ? [backupConfigSecret] : [])
+      .concat(topologySnapshotConfigSecret ? [topologySnapshotConfigSecret] : [])
+      .concat(participantBootstrapDumpSecret ? [participantBootstrapDumpSecret] : [])
+      .concat(loopback)
+      .concat(imagePullDeps)
+      .concat(
+        config.cometBftGovernanceKey
+          ? svCometBftGovernanceKeySecret(xns, config.cometBftGovernanceKey)
+          : []
+      )
+      .concat(
+        bulkStorageBuckets
+          ? [
+              bulkStorageBuckets.staging.secret,
+              bulkStorageBuckets.staging.bucket,
+              bulkStorageBuckets.committed.secret,
+              bulkStorageBuckets.committed.bucket,
+            ]
+          : []
+      )
+      .concat(extraDependsOn);
 
+    const appsPostgres = await installAppsPostgres(xns, config, migrationArgs);
+
+    const canton = new SynchronizerNodes(
+      decentralizedSynchronizerUpgradeConfig,
+      {
+        ...config.nodeConfigs,
+        self: { ...config.cometBft, nodeName: config.nodeName },
+      },
+      config.ingressName
+    );
+
+    const svApp = installSvApp(
+      decentralizedSynchronizerUpgradeConfig,
+      { ...config, periodicTopologySnapshotConfig },
+      xns,
+      dependsOn,
+      appsPostgres,
+      canton
+    );
+
+    const scan = installScan(
+      xns,
+      config,
+      decentralizedSynchronizerUpgradeConfig,
+      dependsOn,
+      canton,
+      svApp,
+      appsPostgres
+    );
+
+    installInfo(
+      xns,
+      `info.${config.ingressName}.${CLUSTER_HOSTNAME}`,
+      'cluster-ingress/cn-http-gateway',
+      decentralizedSynchronizerUpgradeConfig,
+      `http://scan-app.${config.nodeName}:5012`,
+      scan,
+      config.version
+    );
+
+    const validatorApp = await installValidator(
+      appsPostgres,
+      xns,
+      decentralizedSynchronizerUpgradeConfig,
+      baseConfig,
+      backupConfigSecret,
+      canton,
+      svApp,
+      scan
+    );
+
+    const ingress = installSpliceHelmChart(
+      xns,
+      'ingress-sv',
+      'splice-cluster-ingress-runbook',
+      {
+        withSvIngress: true,
+        ingress: {
+          decentralizedSynchronizer: {
+            migrationIds: decentralizedSynchronizerUpgradeConfig
+              .runningMigrations()
+              .map(x => x.id.toString()),
+          },
+        },
+        spliceDomainNames: {
+          nameServiceDomain: ansDomainPrefix,
+        },
+        cluster: {
+          hostname: CLUSTER_HOSTNAME,
+          svNamespace: xns.logicalName,
+          svIngressName: config.ingressName,
+        },
+        rateLimit: {
+          scan: {
+            enable: false,
+          },
+        },
+      },
+      config.version,
+      { dependsOn: [xns.ns] }
+    );
+
+    return {
+      namespace: xns,
+      nodeName: config.nodeName,
+      canton,
+      validatorApp,
+      svApp,
+      scan,
+      ingress,
+      appsPostgres,
+    };
+  }
+}
+
+async function installAppsPostgres(
+  xns: ExactNamespace,
+  config: SvConfig,
+  migrationArgs?: MigrationArgs
+): Promise<postgres.Postgres> {
   const defaultPostgres = config.splitPostgresInstances
     ? undefined
     : await postgres.installPostgres(
@@ -358,9 +473,10 @@ export async function installSvNode(
         'postgres',
         config.version,
         spliceConfig.pulumiProjectConfig.cloudSql,
+        spliceConfig.pulumiProjectConfig.defaultSplicePostgresConfig,
         false,
         {
-          logicalDecoding: !!baseConfig.scanApp?.bigQuery,
+          logicalDecoding: !!config.scanApp?.bigQuery,
         }
       );
 
@@ -371,98 +487,30 @@ export async function installSvNode(
       `cn-apps-pg`,
       `cn-apps-pg`,
       config.version,
-      svConfig.appsPg?.cloudSql ?? spliceConfig.pulumiProjectConfig.cloudSql,
+      config.appsPg?.cloudSql ?? spliceConfig.pulumiProjectConfig.cloudSql,
+      spliceConfig.pulumiProjectConfig.defaultSplicePostgresConfig,
       true,
       {
-        logicalDecoding: !!baseConfig.scanApp?.bigQuery,
+        logicalDecoding: !!config.scanApp?.bigQuery,
+        ...(() => {
+          switch (migrationArgs?.action) {
+            case 'import':
+              return {
+                existingInstanceName: migrationArgs.databaseInstanceName,
+                existingSecretName: migrationArgs.databaseSecretName,
+              };
+            case 'export':
+              return {
+                retainDbResourcesOnDelete: true,
+              };
+            case undefined:
+              return {};
+          }
+        })(),
       }
     ));
 
-  const canton = new SynchronizerNodes(
-    decentralizedSynchronizerUpgradeConfig,
-    {
-      ...config.nodeConfigs,
-      self: { ...config.cometBft, nodeName: config.nodeName },
-    },
-    config.ingressName
-  );
-
-  const svApp = installSvApp(
-    decentralizedSynchronizerUpgradeConfig,
-    { ...config, periodicTopologySnapshotConfig },
-    xns,
-    dependsOn,
-    appsPostgres,
-    canton
-  );
-
-  const scan = installScan(
-    xns,
-    config,
-    decentralizedSynchronizerUpgradeConfig,
-    dependsOn,
-    canton,
-    svApp,
-    appsPostgres
-  );
-
-  installInfo(
-    xns,
-    `info.${config.ingressName}.${CLUSTER_HOSTNAME}`,
-    'cluster-ingress/cn-http-gateway',
-    decentralizedSynchronizerUpgradeConfig,
-    `http://scan-app.${config.nodeName}:5012`,
-    scan,
-    config.version
-  );
-
-  if (baseConfig.scanApp?.bigQuery && appsPostgres instanceof postgres.CloudPostgres) {
-    configureScanBigQuery(appsPostgres, baseConfig.scanApp!.bigQuery, scan);
-  }
-
-  const validatorApp = await installValidator(
-    appsPostgres,
-    xns,
-    decentralizedSynchronizerUpgradeConfig,
-    baseConfig,
-    backupConfigSecret,
-    canton,
-    svApp,
-    scan
-  );
-
-  const ingress = installSpliceHelmChart(
-    xns,
-    'ingress-sv',
-    'splice-cluster-ingress-runbook',
-    {
-      withSvIngress: true,
-      ingress: {
-        decentralizedSynchronizer: {
-          migrationIds: decentralizedSynchronizerUpgradeConfig
-            .runningMigrations()
-            .map(x => x.id.toString()),
-        },
-      },
-      spliceDomainNames: {
-        nameServiceDomain: ansDomainPrefix,
-      },
-      cluster: {
-        hostname: CLUSTER_HOSTNAME,
-        svNamespace: xns.logicalName,
-        svIngressName: config.ingressName,
-      },
-      rateLimit: {
-        scan: {
-          enable: false,
-        },
-      },
-    },
-    config.version,
-    { dependsOn: [xns.ns] }
-  );
-
-  return { canton, validatorApp, svApp, scan, ingress };
+  return appsPostgres;
 }
 
 function persistenceConfig(postgresDb: postgres.Postgres, dbName: string): PersistenceConfig {
@@ -725,7 +773,9 @@ function installScan(
     logLevel: config.logging?.appsLogLevel,
     apiRequestLogLevel: config.logging?.apiRequestLogLevel,
     logAsyncFlush: config.logging?.appsAsync,
-    additionalEnvVars: config.scanApp?.additionalEnvVars || [],
+    additionalEnvVars: (config.scanApp?.additionalEnvVars || []).concat([
+      envoyClientIpHeaderEnvVar('canton.scan-apps.scan-app'),
+    ]),
     resources: config.scanApp?.resources,
     ...(config.bulkStorageBuckets
       ? {
@@ -764,3 +814,19 @@ function installScan(
       ),
   });
 }
+
+export type MigrationArgs =
+  | {
+      action: 'import';
+      databaseInstanceName: string;
+      databaseSecretName: string;
+    }
+  | {
+      action: 'export';
+    };
+
+export type SvsMigrationOutput = Array<{
+  nodeName: string;
+  databaseInstanceName: string;
+  databaseSecretName: string;
+}>;

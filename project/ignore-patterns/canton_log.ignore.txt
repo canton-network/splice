@@ -211,3 +211,6 @@ LOCAL_VERDICT_FAILED_MODEL_CONFORMANCE_CHECK.*Rejected transaction due to a fail
 
 # TODO(DACH-NY/cn-test-failures#9136) remove once Canton fixes this race condition from not storing packages in dependency order
 INTERNAL/Missing package-id.*in package metadata view
+
+# We can get temporarily blacklisted during onboarding triggering a retry for this.
+Now retrying operation 'request current time'

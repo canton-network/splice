@@ -228,7 +228,10 @@ class SvTimeBasedOnboardingIntegrationTest
           },
         )
 
-        actAndCheck("one week has passed", advanceTime(JavaDuration.ofDays(8)))(
+        actAndCheck(timeUntilSuccess = 30.seconds)(
+          "one week has passed",
+          advanceTime(JavaDuration.ofDays(8)),
+        )(
           "the vote request is not displayed anymore",
           _ => {
             sv1Backend.listVoteRequests() shouldBe empty withClue "VoteRequests"

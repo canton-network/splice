@@ -8,7 +8,6 @@ import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.topology.PhysicalSynchronizerId
-import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.canton.tracing.TraceContext
 import io.circe.Json
 import io.grpc.{Status, StatusRuntimeException}
@@ -153,21 +152,12 @@ class PeriodicTopologySnapshotTrigger(
         },
         logger,
       )
-      // list a summary of the transactions state at the time of the snapshot to validate further imports
-      summary <- triggerContext.retryProvider.retry(
-        RetryFor.Automation,
-        "getTopologyTransactionsSummary",
-        "Get topology transactions summary",
-        sequencerAdminConnection.getTopologyTransactionsSummary(
-          TopologyStoreId.Synchronizer(physicalSynchronizerId.logical),
-          clock.now,
-        ),
-        logger,
-      )
       // we create a single metadata file to store the amounts of the different transactions along the sequencerId
-      metadataMap = summary.map(e => (e._1.code, e._2.toString)) +
-        ("sequencerId" -> sequencerId.toProtoPrimitive) +
-        ("physicalSynchronizerId" -> physicalSynchronizerId.toProtoPrimitive)
+      metadataMap =
+        Map(
+          "sequencerId" -> sequencerId.toProtoPrimitive,
+          "physicalSynchronizerId" -> physicalSynchronizerId.toProtoPrimitive,
+        )
       metadataJson = Json
         .obj(metadataMap.map { case (k, v) => k -> Json.fromString(v) }.toSeq*)
         .spaces2

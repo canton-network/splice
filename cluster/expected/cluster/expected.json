@@ -194,15 +194,5 @@
     "name": "hyperdisk-standard-rwo",
     "provider": "",
     "type": "kubernetes:storage.k8s.io/v1:StorageClass"
-  },
-  {
-    "custom": true,
-    "id": "organization/infra/infra.mock",
-    "inputs": {
-      "name": "organization/infra/infra.mock"
-    },
-    "name": "organization/infra/infra.mock",
-    "provider": "",
-    "type": "pulumi:pulumi:StackReference"
   }
 ]

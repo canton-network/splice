@@ -18,11 +18,12 @@ import { EnvironmentVariable, multiValidatorConfig } from './config';
 export interface BaseMultiNodeArgs {
   namespace: k8s.core.v1.Namespace;
   postgres: {
-    host: string;
+    initImageName: string;
+    host: pulumi.Output<string>;
     schema: string;
     port: string;
     db: string;
-    secret: { name: string; key: string };
+    secret: { name: pulumi.Output<string>; key: string };
   };
 }
 
@@ -140,7 +141,7 @@ export class MultiNodeDeployment extends pulumi.ComponentResource {
               initContainers: [
                 {
                   name: 'pg-init',
-                  image: 'postgres:14',
+                  image: args.postgres.initImageName,
                   env: [
                     {
                       name: 'PGPASSWORD',
@@ -152,13 +153,12 @@ export class MultiNodeDeployment extends pulumi.ComponentResource {
                   command: [
                     'bash',
                     '-c',
-                    `
+                    args.postgres.host.apply(
+                      host => `
                         function createDb() {
                           local dbname="$1"
 
-                          until errmsg=$(psql -h ${
-                            args.postgres.host
-                          } --username=cnadmin --dbname=cantonnet -c "create database $dbname" 2>&1); do
+                          until errmsg=$(psql -h ${host} --username=cnadmin --dbname=cantonnet -c "create database $dbname" 2>&1); do
                           if [[ $errmsg == *"already exists"* ]]; then
                               echo "Database $dbname already exists. Done."
                               break
@@ -173,7 +173,8 @@ export class MultiNodeDeployment extends pulumi.ComponentResource {
                           { length: numNodesPerInstance },
                           (_, i) => `createDb ${args.postgres.db}_${zeroPad(i, 2)}`
                         ).join('\n')}
-                      `,
+                      `
+                    ),
                   ],
                 },
               ],

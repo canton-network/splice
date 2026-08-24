@@ -13,7 +13,11 @@ import { SetAmuletConfigRulesForm } from '../../../components/forms/SetAmuletCon
 import dayjs from 'dayjs';
 import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import { server, svUrl } from '../../setup/setup';
-import { PROPOSAL_SUMMARY_SUBTITLE, PROPOSAL_SUMMARY_TITLE } from '../../../utils/constants';
+import {
+  CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE,
+  PROPOSAL_REVIEW_TITLE,
+  PROPOSAL_SUMMARY_SUBTITLE,
+} from '../../../utils/constants';
 
 describe('SV user can', () => {
   test('login and see the SV party ID', async () => {
@@ -45,7 +49,7 @@ describe('Set Amulet Config Rules Form', () => {
     );
 
     expect(screen.getByTestId('set-amulet-config-rules-form')).toBeInTheDocument();
-    expect(screen.getByText('Proposal type')).toBeInTheDocument();
+    expect(screen.getByText(CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE)).toBeInTheDocument();
 
     const actionInput = screen.getByTestId('set-amulet-config-rules-action');
     expect(actionInput).toBeInTheDocument();
@@ -245,6 +249,53 @@ describe('Set Amulet Config Rules Form', () => {
     expect(changes.length).toBe(2);
   });
 
+  test('reward config minting scheme renders as a dropdown', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <Wrapper>
+        <SetAmuletConfigRulesForm />
+      </Wrapper>
+    );
+
+    // Minting scheme should render as a Select, not a TextField
+    const mintingField = screen.getByTestId('config-field-rewardConfigMintingVersion');
+    expect(mintingField).toBeInTheDocument();
+    const selectInput = mintingField.querySelector('[role="combobox"]') as HTMLElement;
+    expect(selectInput).toBeInTheDocument();
+
+    // Open dropdown and verify options
+    await user.click(selectInput);
+    expect(screen.getByText('Featured App Markers (pre CIP-104)')).toBeInTheDocument();
+    expect(screen.getByText('Traffic-Based App Rewards (CIP-104)')).toBeInTheDocument();
+
+    // Select an option
+    await user.click(screen.getByText('Traffic-Based App Rewards (CIP-104)'));
+
+    // Verify current value is shown after change
+    const currentValue = screen.getByTestId('config-current-value-rewardConfigMintingVersion');
+    expect(currentValue).toBeInTheDocument();
+  });
+
+  test('reward config dry-run scheme includes None option', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <Wrapper>
+        <SetAmuletConfigRulesForm />
+      </Wrapper>
+    );
+
+    const dryRunField = screen.getByTestId('config-field-rewardConfigDryRunVersion');
+    expect(dryRunField).toBeInTheDocument();
+    const selectInput = dryRunField.querySelector('[role="combobox"]') as HTMLElement;
+    expect(selectInput).toBeInTheDocument();
+
+    // Open dropdown and verify None option exists
+    await user.click(selectInput);
+    expect(screen.getByText('None (disabled)')).toBeInTheDocument();
+  });
+
   test('should show proposal review page after form completion', async () => {
     const user = userEvent.setup();
 
@@ -278,7 +329,7 @@ describe('Set Amulet Config Rules Form', () => {
 
     await user.click(submitButton);
 
-    expect(screen.getByText(PROPOSAL_SUMMARY_TITLE)).toBeInTheDocument();
+    expect(screen.getByText(PROPOSAL_REVIEW_TITLE)).toBeInTheDocument();
     expect(screen.queryByText('JSON')).not.toBeInTheDocument();
     expect(screen.getByTestId('json-diff-toggle')).toHaveTextContent('Show JSON');
   });

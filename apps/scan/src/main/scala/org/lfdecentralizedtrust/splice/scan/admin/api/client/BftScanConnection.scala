@@ -37,6 +37,7 @@ import org.lfdecentralizedtrust.splice.environment.{
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   AnsEntry,
+  GetBulkObjectChecksumsResponse,
   GetDsoInfoResponse,
   GetRewardAccountingActivityTotalsResponse,
   GetRewardAccountingBatchResponse,
@@ -1120,6 +1121,15 @@ class BftScanConnection(
       )
         .transform(tryBatch => Success(tryBatch.toOption))
   }
+
+  override def getBulkObjectChecksums(
+      objectKeys: Seq[String]
+  )(implicit ec: ExecutionContext, tc: TraceContext): Future[GetBulkObjectChecksumsResponse] =
+    bftCall(
+      _.getBulkObjectChecksums(objectKeys),
+      "getBulkObjectChecksums",
+      consensusFailureLogLevel = Level.DEBUG,
+    )
 }
 trait HasUrl {
   def url: Uri

@@ -109,10 +109,11 @@ class LsuIntegrationTest
                   physicalSynchronizerExpiration = NonNegativeFiniteDuration.ofSeconds(1)
                 ),
                 // sv-4 is intentionally a late-joining node in this test, which means the
-                // sequencer spends some time catching up. This can cause the sv-app's
+                // sequencer spends some time catching up. This can cause the sv-4 apps'
                 // circuit breakers to trip, which makes annoying logs and delays init.
                 // The circuit breakers tripping a bit during catchup would be just fine
-                // IRL, so as a simple fix to this test we disable them for sv-4.
+                // IRL, so as a simple fix to this test we disable them for all sv-4 apps
+                // (see also the scan and validator app transforms below).
                 circuitBreakers =
                   if (name == "sv4") CircuitBreakersConfig.never
                   else config.parameters.circuitBreakers,
@@ -121,7 +122,7 @@ class LsuIntegrationTest
           }
           .andThen(
             ConfigTransforms
-              .updateAllScanAppConfigs { (_, config) =>
+              .updateAllScanAppConfigs { (name, config) =>
                 config.copy(
                   synchronizerNodes = config.synchronizerNodes.copy(
                     successor = Some(config.synchronizerNodes.current)
@@ -129,8 +130,23 @@ class LsuIntegrationTest
                   parameters = config.parameters.copy(
                     spliceCachingConfigs = config.parameters.spliceCachingConfigs.copy(
                       physicalSynchronizerExpiration = NonNegativeFiniteDuration.ofSeconds(1)
-                    )
+                    ),
+                    circuitBreakers =
+                      if (name == "sv4Scan") CircuitBreakersConfig.never
+                      else config.parameters.circuitBreakers,
                   ),
+                )
+              }
+          )
+          .andThen(
+            ConfigTransforms
+              .updateAllValidatorAppConfigs { (name, config) =>
+                config.copy(
+                  parameters = config.parameters.copy(
+                    circuitBreakers =
+                      if (name == "sv4Validator") CircuitBreakersConfig.never
+                      else config.parameters.circuitBreakers
+                  )
                 )
               }
           )(config)

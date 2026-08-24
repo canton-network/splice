@@ -12,7 +12,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice
 import org.lfdecentralizedtrust.splice.environment.PackageIdResolver
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
-import org.lfdecentralizedtrust.splice.sv.store.IgnoredPartiesStore
 import org.lfdecentralizedtrust.splice.util.{ChoiceContextWithDisclosures, TokenStandardMetadata}
 import org.lfdecentralizedtrust.splice.sv.util.ContractStakeholders
 
@@ -21,6 +20,7 @@ import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 import cats.implicits.*
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.metadatav1.anyvalue.AV_Bool
+import org.lfdecentralizedtrust.splice.store.IgnoredPartiesStore
 
 class ExpiredAmuletAllocationV2Trigger(
     override protected val svConfig: SvAppBackendConfig,
@@ -45,7 +45,7 @@ class ExpiredAmuletAllocationV2Trigger(
       ExpiredAmuletAllocationV2Trigger.getStakeholders,
     )
     with SvTaskBasedTrigger[ExpiredAmuletAllocationV2Trigger.Task]
-    with IgnoredAmuletVersionGuard {
+    with IgnoredUnavailablePartiesGuard {
 
   private val store = svTaskContext.dsoStore
 
@@ -55,11 +55,10 @@ class ExpiredAmuletAllocationV2Trigger(
   )(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = {
-    completeWithIgnoredAmuletVersionCheck(
+    completeUnlessAmuletVersionIgnored(
       task.work.vettedVersion.toString,
       task.work.stakeholders,
-      store.key.dsoParty,
-      enableUnresponsivePartiesAutoIgnore = true,
+      ignoreUnresponsiveParties = true,
     )(completeExpiryTaskAsDsoDelegate(task, controller))
   }
 

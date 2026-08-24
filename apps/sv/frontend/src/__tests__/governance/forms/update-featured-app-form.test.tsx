@@ -68,9 +68,6 @@ describe('Update Featured App Form', () => {
 
     const activityWeightInput = screen.getByTestId('update-featured-app-activityWeight');
     await user.type(activityWeightInput, '2.5');
-
-    const reasonInput = screen.getByTestId('update-featured-app-reason');
-    await user.type(reasonInput, 'test');
   };
 
   test('should render all Form components', () => {
@@ -112,7 +109,6 @@ describe('Update Featured App Form', () => {
     expect(rightCidDropdown).toBeDisabled();
 
     expect(screen.getByTestId('update-featured-app-activityWeight')).toBeInTheDocument();
-    expect(screen.getByTestId('update-featured-app-reason')).toBeInTheDocument();
 
     expect(screen.getByText('Review Proposal')).toBeInTheDocument();
   });
@@ -139,7 +135,7 @@ describe('Update Featured App Form', () => {
     });
   });
 
-  test('should send new activity weight and reason to backend', async () => {
+  test('should send new activity weight to backend', async () => {
     let requestBody = '';
     server.use(
       http.post(`${svUrl}/v0/admin/sv/voterequest/create`, async ({ request }) => {
@@ -171,7 +167,6 @@ describe('Update Featured App Form', () => {
 
     await waitFor(() => {
       expect(requestBody).toContain('"newActivityWeight":"2.5"');
-      expect(requestBody).toContain('"reason":"test"');
     });
   });
 
@@ -202,28 +197,6 @@ describe('Update Featured App Form', () => {
     await user.type(activityWeightInput, '1.12345678912');
     await waitFor(() => {
       expect(activityWeightError.textContent).toBe('Weight can have at most 10 decimal places');
-    });
-  });
-
-  test('reason is required', async () => {
-    const user = userEvent.setup();
-
-    render(
-      <Wrapper>
-        <UpdateFeaturedAppForm />
-      </Wrapper>
-    );
-
-    const reasonInput = screen.getByTestId('update-featured-app-reason');
-    const actionInput = screen.getByTestId('update-featured-app-action');
-
-    await user.click(reasonInput);
-    await user.click(actionInput); // blur to trigger validation
-
-    await waitFor(() => {
-      expect(screen.getByTestId('update-featured-app-reason-error').textContent).toBe(
-        'Reason is required'
-      );
     });
   });
 
@@ -338,6 +311,5 @@ describe('Update Featured App Form', () => {
     expect(screen.getByTestId('updateRight-field').textContent).toBe('rightCid123');
     expect(screen.getByTestId('config-change-current-value').textContent).toBe('1.0');
     expect(screen.getByTestId('config-change-new-value').textContent).toBe('2.5');
-    expect(screen.getByTestId('updateReason-field').textContent).toBe('test');
   });
 });

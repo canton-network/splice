@@ -15,27 +15,28 @@ interface SvNavigationShellProps {
 }
 
 /**
- * Figma "Navigation" component — nav row (network banner to be restored later).
+ * Figma "Navigation" component — network banner above the nav row.
  * Dev Mode: padding-bottom 64px, background #272727.
- * `HEADER_PT` is temporary breathing room until the banner returns.
  */
-const SvNavigationShell: React.FC<SvNavigationShellProps> = ({ navLinks, onLogout, pageName }) => (
-  <Box
-    data-component="navigation"
-    data-page={pageName}
-    sx={{
-      display: 'flex',
-      flexDirection: 'column',
-      pt: HEADER_PT,
-      pb: HEADER_PB,
-      bgcolor: layoutTokens.navBackground,
-      width: '100%',
-    }}
-  >
-    <Box sx={{ px: PAGE_PX, width: '100%' }}>
-      <SvTopNav navLinks={navLinks} onLogout={onLogout} />
+const SvNavigationShell: React.FC<SvNavigationShellProps> = ({ navLinks, onLogout, pageName }) => {
+  return (
+    <Box
+      data-component="navigation"
+      data-page={pageName}
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        pb: HEADER_PB,
+        pt: HEADER_PT,
+        bgcolor: layoutTokens.navBackground,
+        width: '100%',
+      }}
+    >
+      <Box sx={{ px: PAGE_PX, width: '100%' }}>
+        <SvTopNav navLinks={navLinks} onLogout={onLogout} />
+      </Box>
     </Box>
-  </Box>
-);
+  );
+};
 
 export default SvNavigationShell;

@@ -10,6 +10,11 @@ import { ContractId } from '@daml/types';
 import { VoteRequest } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
 import { ProposalVote } from '../../utils/types';
 import { Alert, Box, Button, Stack, TextField, Typography } from '@mui/material';
+import {
+  VOTE_REASON_PLACEHOLDER,
+  VOTE_REASON_SUMMARY_LABEL,
+  VOTE_REASON_URL_LABEL,
+} from '../../utils/constants';
 interface CastVoteArgs {
   accepted: boolean;
   url: string;
@@ -109,7 +114,7 @@ export const ProposalVoteForm: React.FC<ProposalVoteFormProps> = props => {
                     fontSize={18}
                     lineHeight={1}
                   >
-                    Reason
+                    {VOTE_REASON_SUMMARY_LABEL}
                   </Typography>
                   <TextField
                     variant="filled"
@@ -121,6 +126,7 @@ export const ProposalVoteForm: React.FC<ProposalVoteFormProps> = props => {
                     onChange={e => field.handleChange(e.target.value)}
                     error={!field.state.meta.isValid}
                     helperText={field.state.meta.errors?.[0]}
+                    placeholder={VOTE_REASON_PLACEHOLDER}
                     inputProps={{ 'data-testid': 'your-vote-reason-input' }}
                     sx={{
                       '& .MuiFilledInput-root': {
@@ -129,6 +135,11 @@ export const ProposalVoteForm: React.FC<ProposalVoteFormProps> = props => {
                         '&:before, &:after': {
                           display: 'none',
                         },
+                      },
+                      // Figma empty Reason (`1013:1869`): muted `#4F4F4F`.
+                      '& .MuiFilledInput-input::placeholder': {
+                        color: '#4F4F4F',
+                        opacity: 1,
                       },
                     }}
                   />
@@ -161,7 +172,7 @@ export const ProposalVoteForm: React.FC<ProposalVoteFormProps> = props => {
                     fontSize={18}
                     lineHeight={1}
                   >
-                    Vote Reason URL
+                    {VOTE_REASON_URL_LABEL}
                   </Typography>
                   <TextField
                     variant="filled"

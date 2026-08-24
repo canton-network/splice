@@ -123,6 +123,10 @@ monitoring:
       dsoMissedConfirmations:
         threshold: 0 # alert as soon as there's any confirmation missing
         windowMinutes: 10
+      spliceRateLimits:
+        usageThreshold: 0.8
+        rejectionCountThreshold: 10
+        excludedLimiters: []
       cloudSql:
         maintenance: false
       cometbft:
@@ -209,7 +213,8 @@ monitoring:
       (
         (
           jsonPayload.message=~"(?i)(secret|token|(private|secret)(-)?key|password)=[^, ]+" AND
-          -jsonPayload.message=~"(?i)(secret|token|(private|secret)(-)?key|password)=(\"\*\*\*\*\"|hidden)"
+          -jsonPayload.message=~"(?i)(secret|token|(private|secret)(-)?key|password)=(\"\*\*\*\*\"|hidden)" AND
+          -jsonPayload.message=~"(?i)page(_|-)?token=[^, ]+"
         ) OR
         jsonPayload.message=~"eyJhbGc[A-Za-z0-9_-]{2,}\.[A-Za-z0-9_-]{2,}\.[A-Za-z0-9_-]{2,}" OR
         jsonPayload.message=~"Bearer\s+eyJ[A-Za-z0-9_-]{2,}"

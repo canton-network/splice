@@ -7,11 +7,16 @@ import { VoteRequest } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules'
 import { ContractId } from '@daml/types';
 import { ProposalListingData } from '../../utils/types';
 import { MemoryRouter } from 'react-router';
+import { svPartyId, voteRequests } from '../mocks/constants';
+
+const sampleContractId = voteRequests.dso_rules_vote_requests[0]
+  .contract_id as ContractId<VoteRequest>;
 
 const inflightVoteRequests: ProposalListingData[] = [
   {
     actionName: 'Feature Application',
-    contractId: '2abcde123456' as ContractId<VoteRequest>,
+    contractId: sampleContractId,
+    requester: svPartyId,
     votingThresholdDeadline: '2025-09-25 11:00',
     voteTakesEffect: '2025-09-26 11:00',
     yourVote: 'no-vote',
@@ -21,7 +26,8 @@ const inflightVoteRequests: ProposalListingData[] = [
   },
   {
     actionName: 'Set DSO Rules Configuration',
-    contractId: 'bcde123456' as ContractId<VoteRequest>,
+    contractId: voteRequests.dso_rules_vote_requests[1].contract_id as ContractId<VoteRequest>,
+    requester: svPartyId,
     votingThresholdDeadline: '2025-09-25 11:00',
     voteTakesEffect: '2025-09-26 11:00',
     yourVote: 'accepted',
@@ -34,7 +40,8 @@ const inflightVoteRequests: ProposalListingData[] = [
 const voteHistory: ProposalListingData[] = [
   {
     actionName: 'Feature Application',
-    contractId: '2abcde123456' as ContractId<VoteRequest>,
+    contractId: sampleContractId,
+    requester: svPartyId,
     votingThresholdDeadline: '2025-09-25 11:00',
     voteTakesEffect: '2025-09-26 11:00',
     yourVote: 'no-vote',
@@ -44,7 +51,8 @@ const voteHistory: ProposalListingData[] = [
   },
   {
     actionName: 'Set DSO Rules Configuration',
-    contractId: '2bcde123456' as ContractId<VoteRequest>,
+    contractId: voteRequests.dso_rules_vote_requests[1].contract_id as ContractId<VoteRequest>,
+    requester: svPartyId,
     votingThresholdDeadline: '2025-09-25 11:00',
     voteTakesEffect: '2025-09-26 11:00',
     yourVote: 'accepted',
@@ -93,6 +101,8 @@ describe('Inflight Vote Requests', () => {
     const uniqueId = 'proposals-request';
     const data = {
       actionName: 'Feature Application',
+      contractId: sampleContractId,
+      requester: svPartyId,
       votingThresholdDeadline: '2025-09-25 11:00',
       voteTakesEffect: '2025-09-26 11:00',
       yourVote: 'no-vote',
@@ -136,10 +146,49 @@ describe('Inflight Vote Requests', () => {
     expect(yourVote.textContent).toMatch(/No Vote/);
   });
 
+  test('should render submitted by column with full party id and copy button', () => {
+    const uniqueId = 'proposals-request';
+    const data = {
+      actionName: 'Feature Application',
+      contractId: sampleContractId,
+      requester: svPartyId,
+      votingThresholdDeadline: '2025-09-25 11:00',
+      voteTakesEffect: '2025-09-26 11:00',
+      yourVote: 'accepted',
+      status: 'In Progress',
+      voteStats: { accepted: 0, rejected: 0, 'no-vote': 0 },
+      acceptanceThreshold: BigInt(11),
+    } as ProposalListingData;
+
+    render(
+      <MemoryRouter>
+        <ProposalListingSection
+          sectionTitle="Inflight Vote Requests"
+          data={[data]}
+          noDataMessage="No Inflight Vote Requests available"
+          uniqueId={uniqueId}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('SUBMITTED BY')).toBeInTheDocument();
+    expect(screen.getByTestId(`${uniqueId}-row-submitted-by-identifier-value`).textContent).toBe(
+      svPartyId
+    );
+    expect(
+      screen.getByTestId(`${uniqueId}-row-submitted-by-identifier-copy-button`)
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId(`${uniqueId}-row-submitted-by-identifier-badge`)
+    ).not.toBeInTheDocument();
+  });
+
   test('should render Accepted inflight vote request', () => {
     const uniqueId = 'proposals-request';
     const data = {
       actionName: 'Feature Application',
+      contractId: sampleContractId,
+      requester: svPartyId,
       votingThresholdDeadline: '2025-09-25 11:00',
       voteTakesEffect: '2025-09-26 11:00',
       yourVote: 'accepted',
@@ -171,6 +220,8 @@ describe('Inflight Vote Requests', () => {
     const uniqueId = 'proposals-request';
     const data = {
       actionName: 'Feature Application',
+      contractId: sampleContractId,
+      requester: svPartyId,
       votingThresholdDeadline: '2025-09-25 11:00',
       voteTakesEffect: '2025-09-26 11:00',
       yourVote: 'rejected',
@@ -255,6 +306,8 @@ describe('Vote history', () => {
     const uniqueId = 'vote-history';
     const data = {
       actionName: 'Feature Application',
+      contractId: sampleContractId,
+      requester: svPartyId,
       votingThresholdDeadline: '2024-09-25 11:00',
       voteTakesEffect: '2024-09-26 11:00',
       yourVote: 'accepted',

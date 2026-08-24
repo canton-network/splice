@@ -5,12 +5,16 @@
 
 .. NOTE: add your upcoming release notes below this line. They are included in the `release_notes.rst`.
 
-.. release-notes:: Upcoming
+release-notes:: Upcoming
 
-    - Wallet app
+    - Scan & SV App
 
-        - Duplicate wallet operations submitted with the same command id (e.g. tap, transfer,
-          token standard transfers) now return the original result idempotently instead of HTTP 409.
-          This aligns with standard idempotency-key semantics: a second request with a previously
-          accepted command id receives a 200 response with the same result as the first.
-          Concurrent duplicates, where no submission has completed yet, are still rejected.
+        - The client IP used for per-client-IP HTTP rate limiting is now extracted based on a
+          configurable, ordered list of headers, ``rate-limiting.client-ip-headers``, which defaults
+          to ``["x-forwarded-for", "x-real-ip"]``. The first configured header that is present and
+          whose value parses as an IP literal is used; for comma separated values (as in
+          ``X-Forwarded-For``) the first entry is taken. Configuring an empty list disables the
+          extraction, in which case no per-client-IP rate limit is enforced.
+
+          This replaces the ``rate-limiting.trusted-client-ip-header`` and
+          ``rate-limiting.enable-client-provided-ip-headers`` options, which have been removed.

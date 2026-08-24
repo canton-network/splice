@@ -37,6 +37,7 @@ declare module '@mui/material/styles' {
       testnet: string;
       devnet: string;
       scratchnet: string;
+      localnet: string;
     };
   }
   // allow configuration using `createTheme`
@@ -51,6 +52,7 @@ declare module '@mui/material/styles' {
       testnet: string;
       devnet: string;
       scratchnet: string;
+      localnet: string;
     };
   }
 }
@@ -97,6 +99,7 @@ let theme = createTheme({
       testnet: '#C8F1FE',
       devnet: '#C6B2FF',
       scratchnet: '#FFFFFF',
+      localnet: '#BDC9DB',
     },
   },
 });

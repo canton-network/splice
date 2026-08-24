@@ -34,7 +34,7 @@ class ScanVerdictAutomationService(
     migrationId: Long,
     synchronizerId: SynchronizerId,
     ingestionMetrics: ScanMediatorVerdictIngestionMetrics,
-    rewardsReferenceStoreO: Option[ScanRewardsReferenceStore],
+    rewardsReferenceStore: ScanRewardsReferenceStore,
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
@@ -49,10 +49,8 @@ class ScanVerdictAutomationService(
 
   override def companion: AutomationServiceCompanion = ScanVerdictAutomationService
 
-  private val appActivityComputationO: Option[AppActivityComputation] =
-    rewardsReferenceStoreO.map { store =>
-      new AppActivityComputation(store, loggerFactory)
-    }
+  private val appActivityComputation: AppActivityComputation =
+    new AppActivityComputation(rewardsReferenceStore, loggerFactory)
 
   registerService(
     new ScanVerdictIngestionService(
@@ -63,7 +61,7 @@ class ScanVerdictAutomationService(
       migrationId = migrationId,
       synchronizerId = synchronizerId,
       ingestionMetrics = ingestionMetrics,
-      appActivityComputationO = appActivityComputationO,
+      appActivityComputation = appActivityComputation,
       backoffClock = triggerContext.pollingClock,
       retryProvider = triggerContext.retryProvider,
       loggerFactory = triggerContext.loggerFactory,

@@ -191,7 +191,7 @@ class AutoIgnoreUnresponsivePartiesIntegrationTest
       )(
         "Alice is added to the ignored parties store after mediator timeout",
         _ => {
-          sv1Backend.dsoDelegateBasedAutomation.expiredAmuletIgnoredPartiesStore.getAll should contain(
+          sv1Backend.dsoDelegateBasedAutomation.unavailablePartiesStore.getAll should contain(
             aliceParty
           )
         },

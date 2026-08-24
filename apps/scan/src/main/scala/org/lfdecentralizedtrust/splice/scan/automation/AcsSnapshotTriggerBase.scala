@@ -26,6 +26,7 @@ import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.scan.config.ScanStorageConfig
 import org.lfdecentralizedtrust.splice.store.UpdateHistory
 import org.lfdecentralizedtrust.splice.store.HistoryMetrics.AcsSnapshotsMetrics
+import org.lfdecentralizedtrust.splice.store.db.AdvisoryLocks
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
@@ -126,7 +127,7 @@ abstract class AcsSnapshotTriggerBase(
     case Success(result) =>
       snapshotMetrics.waitingForLock.updateValue(0)
       Success(result)
-    case Failure(e: AcsSnapshotStore.FailedToAcquireLockException) =>
+    case Failure(e: AdvisoryLocks.FailedToAcquireLockException) =>
       // It is expected that we sometimes fail to acquire the lock on the snapshot table.
       // The time until the lock is released is typically much larger than our task retry timeouts,
       // so we can just silently skip the task and try again later.

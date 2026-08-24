@@ -6,7 +6,6 @@ package org.lfdecentralizedtrust.splice.store.db
 import com.daml.ledger.javaapi.data.Identifier
 import com.daml.ledger.javaapi.data.codegen.ContractId
 import com.digitalasset.canton.resource.DbStorage.Implicits.BuilderChain.toSQLActionBuilderChain
-import com.digitalasset.canton.resource.DbStorage.SQLActionBuilderChain
 import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
 import com.digitalasset.daml.lf.data.Time.Timestamp
 import com.google.protobuf.ByteString
@@ -25,13 +24,11 @@ import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
 import scalaz.{@@, Tag}
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 import slick.jdbc.canton.SQLActionBuilder
-import slick.jdbc.{GetResult, PositionedResult, SetParameter}
+import slick.jdbc.{GetResult, PositionedResult}
 import slick.dbio.Effect
 import slick.sql.SqlStreamingAction
 
-import scala.reflect.ClassTag
-
-trait AcsQueries extends AcsJdbcTypes {
+trait AcsQueries extends Queries with AcsJdbcTypes {
 
   /** @param tableName Must be SQL-safe, as it needs to be interpolated unsafely.
     *                  This is fine, as all calls to this method should use static string constants.
@@ -266,39 +263,6 @@ trait AcsQueries extends AcsJdbcTypes {
         ),
       )
   }
-
-  /** Constructions like `seq.mkString("(", ",", ")")` are dangerous because they can lead to SQL injection.
-    * Prefer using this instead.
-    */
-  protected def sqlCommaSeparated(
-      seq: Iterable[SQLActionBuilder]
-  ): SQLActionBuilderChain = {
-    seq
-      .map(SQLActionBuilderChain(_))
-      .reduceOption { (acc, next) =>
-        acc ++ sql"," ++ next
-      }
-      .getOrElse(SQLActionBuilderChain(sql""))
-  }
-
-  /*
-   * TODO(#3900) move to use toInClause when canton fork has it: https://github.com/canton-network/splice/issues/3900
-   */
-  protected def inClause[V: ClassTag](
-      field: String,
-      seq: Iterable[V],
-  )(implicit
-      arraySetParameter: SetParameter[Array[V]]
-  ): SQLActionBuilder =
-    sql" #$field = ANY(${seq.toArray[V]})"
-
-  protected def notInClause[V: ClassTag](
-      field: String,
-      seq: Iterable[V],
-  )(implicit
-      arraySetParameter: SetParameter[Array[V]]
-  ): SQLActionBuilder =
-    sql" NOT (#$field = ANY(${seq.toArray[V]}))"
 
   protected def contractFromRow[C, TCId <: ContractId[?], T](companion: C)(
       row: AcsQueries.SelectFromAcsTableResult

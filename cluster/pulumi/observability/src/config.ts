@@ -1,6 +1,10 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { clusterSubConfig } from '@canton-network/splice-pulumi-common';
+import {
+  clusterSubConfig,
+  SplicePostgresConfig,
+  SplicePostgresSchema,
+} from '@canton-network/splice-pulumi-common';
 import { z } from 'zod';
 
 const quotaMetricNameSchema = z
@@ -53,9 +57,14 @@ const MuteTimeIntervalSchema = z.array(
 );
 export type MuteTimeInterval = z.infer<typeof MuteTimeIntervalSchema>[number];
 
+// Observability needs to be migrated
+const defaultObservabilityPostgresConfig: SplicePostgresConfig = {
+  deployment: 'legacy-helm-chart',
+};
 const MonitoringConfigSchema = z
   .object({
     enableGrafanaServiceAccountToken: z.boolean(),
+    grafanaPostgres: SplicePostgresSchema.default({ deployment: 'legacy-helm-chart' }),
     alerting: z.object({
       enableNoDataAlerts: z.boolean(),
       alerts: z.object({
@@ -92,6 +101,13 @@ const MonitoringConfigSchema = z
           // Rolling window (in minutes) over which the DSO party missed confirmation
           // rate is computed.
           windowMinutes: z.number(),
+        }),
+        spliceRateLimits: z.object({
+          // Fraction (0-1) of a rate limiter's configured maximum rate above which the alert fires
+          usageThreshold: z.number(),
+          // Rejected requests per second, above which the rejection alert fires
+          rejectionCountThreshold: z.number(),
+          excludedLimiters: z.array(z.string()).default([]),
         }),
         cloudSql: z.object({
           maintenance: z.boolean(),

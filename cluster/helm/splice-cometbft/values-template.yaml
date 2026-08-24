@@ -104,12 +104,34 @@ mempool:
   # max number of transactions kept in the mempool
   size: 4000
   # number of transactions to keep to deduplicate new transactions
-  deduplicationCacheSize: 200000
+  deduplicationCacheSize: 1000000
   # max number of seconds that a transaction will be kept in the mempool without being included in a block before being discarded
   ttlSeconds: 60
 
 # should stakater reloader annotation be added (note: reloader needs to be installed separately)
 enableReloader: true
+
+# Restarts CometBFT when cometbft starts replaying messages
+watchdog:
+  # Enabled by default to make sure noone accidentally forgets to enable it.
+  enabled: true
+  # Required but we don't know the migration id to set sensible defaults.
+  # sequencerMetricsUrl: http://global-domain-0-sequencer:10013/metrics
+  # mediatorMetricsUrl: http://global-domain-0-mediator:10013/metrics
+  pollIntervalSeconds: 30
+  threshold: 5
+  evaluationIntervalSeconds: 300
+  scrapeTimeoutSeconds: 10
+  startupGraceSeconds: 600
+  cooldownSeconds: 600
+  markerFile: /watchdog/restart-requested
+  imageName: "cometbft-watchdog"
+  resources:
+    limits:
+      memory: 128Mi
+    requests:
+      cpu: 0.05
+      memory: 64Mi
 
 securityContexts:
   pod:
@@ -119,3 +141,6 @@ securityContexts:
   containers:
     cometbft:
       security_context_profile: app_security_context
+    watchdog:
+      security_context_profile: app_security_context
+      readOnlyRootFilesystem: true
