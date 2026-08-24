@@ -19,11 +19,12 @@ const IpRangeSchema = z.string().refine(
     if (isIP(network) !== 4) {
       return false;
     }
-    const prefix = parseInt(prefixStr, 10);
-    return !isNaN(prefix) && prefix >= 0 && prefix <= 32;
+    const prefix = Number(prefixStr);
+    return Number.isInteger(prefix) && prefix >= 0 && prefix <= 32;
   },
   {
-    message: 'Expected IPv4 CIDR (e.g., 192.168.0.0/24)',
+    message:
+      'Expected IPv4 CIDR (e.g., 192.168.0.0/24). Single IPs must be specified as x.x.x.x/32',
   }
 );
 
