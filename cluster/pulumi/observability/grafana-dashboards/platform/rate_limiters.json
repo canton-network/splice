@@ -273,10 +273,14 @@
       "id": 5,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "sortBy": "Last *",
+          "sortDesc": true
         },
         "tooltip": {
           "hideZeros": false,
@@ -292,9 +296,9 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(rate(splice_rate_limiting_total{namespace=~\"$namespace\", http_service=~\"$http_service\", limiter=~\"$limiter\", node_name=~\"$node_name\"}[$__rate_interval])) by (limiter)",
+          "expr": "sum(rate(splice_rate_limiting_total{namespace=~\"$namespace\", http_service=~\"$http_service\", limiter=~\"$limiter\", node_name=~\"$node_name\"}[$__rate_interval])) by (limiter, limiter_type, limiter_attribute)",
           "instant": false,
-          "legendFormat": "{{ limiter }}",
+          "legendFormat": "{{ limiter }} {{limiter_type}} {{limiter_attribute}}",
           "range": true,
           "refId": "A"
         }
@@ -392,9 +396,9 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(rate(splice_rate_limiting_total{namespace=~\"$namespace\", http_service=~\"$http_service\", limiter=~\"$limiter\", node_name=~\"$node_name\", result!=\"accepted\"}[$__rate_interval])) by (result, limiter)",
+          "expr": "sum(rate(splice_rate_limiting_total{namespace=~\"$namespace\", http_service=~\"$http_service\", limiter=~\"$limiter\", node_name=~\"$node_name\", result!=\"accepted\"}[$__rate_interval])) by (result, limiter, limiter_type, limiter_attribute)",
           "instant": false,
-          "legendFormat": "{{ limiter }}",
+          "legendFormat": "{{ limiter }} {{limiter_type}} {{limiter_attribute}}",
           "range": true,
           "refId": "A"
         }
@@ -473,10 +477,14 @@
       "id": 7,
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "sortBy": "Last *",
+          "sortDesc": true
         },
         "tooltip": {
           "hideZeros": false,
@@ -491,15 +499,120 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "editorMode": "builder",
+          "editorMode": "code",
           "expr": "splice_rate_limiting_max_limit_per_second{namespace=~\"$namespace\", node_name=~\"$node_name\", http_service=~\"$http_service\", limiter=~\"$limiter\"}",
           "instant": false,
-          "legendFormat": "{{ limiter }}",
+          "legendFormat": "{{ limiter }} {{limiter_type}}{{limiter_attribute}}",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "Limits",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Cannot extract the attribute value",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 33
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "sortBy": "Last *",
+          "sortDesc": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.4.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(rate_limiting_unknown_attribute_not_limited{namespace=~\"$namespace\", http_service=~\"$http_service\", limiter=~\"$limiter\", node_name=~\"$node_name\"}[$__rate_interval])) by (limiter, limiter_type, limiter_attribute)",
+          "instant": false,
+          "legendFormat": "{{ limiter }} {{limiter_type}} {{limiter_attribute}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Attribute Limits not enforced",
       "type": "timeseries"
     }
   ],
@@ -539,9 +652,11 @@
       {
         "allowCustomValue": false,
         "current": {
-          "text": "All",
+          "text": [
+            "scan-app"
+          ],
           "value": [
-            "$__all"
+            "scan-app"
           ]
         },
         "datasource": {
@@ -633,6 +748,6 @@
   "timezone": "",
   "title": "Splice Rate Limiting",
   "uid": "splice-rate-limit-db",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }
