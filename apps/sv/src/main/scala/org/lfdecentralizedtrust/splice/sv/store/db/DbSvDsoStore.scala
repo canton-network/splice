@@ -65,6 +65,7 @@ import com.digitalasset.canton.resource.DbStorage.Implicits.BuilderChain.toSQLAc
 import com.digitalasset.canton.topology.{Member, ParticipantId, PartyId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
 import io.grpc.Status
+import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorunpermission.ValidatorUnpermission
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import slick.jdbc.GetResult
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
@@ -138,6 +139,27 @@ class DbSvDsoStore(
   import multiDomainAcsStore.waitUntilAcsIngested
 
   private def acsStoreId: AcsStoreId = multiDomainAcsStore.acsStoreId
+
+  def listValidatorUnpermissions(
+      participantId: String,
+      limit: Limit = defaultLimit,
+  )(implicit
+      tc: TraceContext
+  ): Future[Seq[Contract[ValidatorUnpermission.ContractId, ValidatorUnpermission]]] =
+    for {
+      result <- storage
+        .query(
+          selectFromAcsTable(
+            DsoTables.acsTableName,
+            acsStoreId,
+            domainMigrationId,
+            ValidatorUnpermission.COMPANION,
+            where = sql"""participant_id = ${lengthLimited(participantId)}""",
+            orderLimit = sql"""limit ${sqlLimit(limit)}""",
+          ),
+          "listValidatorUnpermissions",
+        )
+    } yield result.map(contractFromRow(ValidatorUnpermission.COMPANION)(_))
 
   override def listExpiredAnsSubscriptions(
       now: CantonTimestamp,
