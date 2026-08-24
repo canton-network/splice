@@ -795,6 +795,42 @@ const votesData = [
 ] as ProposalVote[];
 
 describe('Proposal Details > Votes & Voting', () => {
+  test('should render vote URLs at the same column width as SV IDs', () => {
+    const voter = 'sv-party::1220abcdef1234567890abcdef';
+    const url = 'https://example.com/a/long/vote/reason/url/that-exceeds-compact-width';
+
+    render(
+      <Wrapper>
+        <ProposalDetailsContent
+          currentSvPartyId={voteRequest.votingInformation.requester}
+          contractId={voteRequest.contractId}
+          proposalDetails={voteRequest.proposalDetails}
+          votingInformation={voteRequest.votingInformation}
+          votes={[
+            {
+              sv: voter,
+              vote: 'accepted',
+              reason: { url, body: 'Reason' },
+            },
+          ]}
+        />
+      </Wrapper>
+    );
+
+    // Party IDs fill the vote-row text column (no 270px compact cap).
+    expect(screen.getByTestId('proposal-details-voter-party-id')).toHaveStyle({ width: '100%' });
+    // Vote reason URLs match that column width; copy sits in the party-ID copy track.
+    expect(screen.getByTestId('proposal-details-vote-url')).toHaveStyle({ width: '100%' });
+    expect(screen.getByTestId('proposal-details-vote-url-scroll')).toHaveStyle({
+      overflowX: 'auto',
+      width: '100%',
+    });
+    expect(screen.getByTestId('proposal-details-vote-url-copy-button')).toBeInTheDocument();
+    const displayedUrl = screen.getByTestId('proposal-details-vote-url-link');
+    expect(displayedUrl).toHaveAttribute('href', url);
+    expect(displayedUrl.textContent).toBe(url);
+  });
+
   test('should render votes table', () => {
     render(
       <Wrapper>
