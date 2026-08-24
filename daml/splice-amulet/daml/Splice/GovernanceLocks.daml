@@ -137,7 +137,6 @@ template VestingLock
     -- and the time of this request.
     choice VestingLock_Withdraw : VestingLock_WithdrawResult
       with
-        amount : Optional Decimal
         requestedAt : Time -- ^ Time to use for determining the funds that have vested. Must be in the past.
         context : ExternalPartyTransferContext
         actors : [Party]
@@ -148,15 +147,12 @@ template VestingLock
         assertDeadlineExceeded "requestedAt" requestedAt
         require "withdrawal time must be after the start time" $ requestedAt > startTime
 
-        let available = calculateAvailableWithdrawAmount currentAmount requestedAt this
+        let withdrawAmount = calculateAvailableWithdrawAmount currentAmount requestedAt this
 
-        -- If available is None, full amount is available. If amount is None, withdraw all available.
-        -- We only have to check if the amount is available if both are defined:
-        forA_ ((,) <$> amount <*> available) $
-          \(amount, available) -> require "may only withdraw up to the currently vested amount" $ amount <= available
+        forA_ withdrawAmount $ -- None in this case is the maximum value.
+          \amount -> require' ("withdraw amount", amount) isGreaterR ("zero", 0.0)
 
-        let finalAmount = listToOptional $ catOptionals [amount, available]
-        case finalAmount of
+        case withdrawAmount of
           None -> do -- No split or partial availability, unlock everything.
             unlockResult <- exercise holding LockedAmulet_UnlockV2
             pure VestingLock_WithdrawResult with

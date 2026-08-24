@@ -44,7 +44,6 @@ testGovernanceLockHappyPath = do
 
   (externalPartyContext, disc) <- getExternalPartyTransferContext dso
   submitMustFail (actAs alice <> discloseMany' disc) $ exerciseCmd aliceVesting VestingLock_Withdraw with
-    amount = Some 1.0
     requestedAt = unlockTime
     context = externalPartyContext
     actors = [ alice ]
@@ -58,7 +57,7 @@ testGovernanceLockHappyPath = do
 
   let withdrawTime = unlockTime `addRelTime` (days 45 + hours 15 + minutes 45)
 
-  (unlocked, Some newVestingLock) <- vestingWithdrawRawChoice env aliceVesting None withdrawTime [alice]
+  (unlocked, Some newVestingLock) <- vestingWithdrawRawChoice env aliceVesting withdrawTime [alice]
 
   -- Check that we did indeed unlock 10k amulet as expected - 1/8th of the total vesting amount of 80k.
   checkHolding' alice unlocked 10000.0
@@ -70,7 +69,7 @@ testGovernanceLockHappyPath = do
 
   let fullWithdrawTime = unlockTime `addRelTime` days 366
 
-  (unlockedHolding2, None) <- vestingWithdrawRawChoice env newVestingLock None fullWithdrawTime [alice]
+  (unlockedHolding2, None) <- vestingWithdrawRawChoice env newVestingLock fullWithdrawTime [alice]
 
   -- Check that we withdrew all and exactly the 70k _remaining_ after the above withdrawal.
   checkHolding' alice unlockedHolding2 70000.0
@@ -125,10 +124,9 @@ governanceUnlockRawChoice env cid unlockAmount unlockAt actors = do
     actors
   pure (result.vestingLock, result.governanceLock)
 
-vestingWithdrawRawChoice : TestEnv -> ContractId VestingLock -> Optional Decimal -> Time -> [Party] -> Script (ContractId Amulet, Optional (ContractId VestingLock))
-vestingWithdrawRawChoice env cid amount requestedAt actors = do
+vestingWithdrawRawChoice : TestEnv -> ContractId VestingLock -> Time -> [Party] -> Script (ContractId Amulet, Optional (ContractId VestingLock))
+vestingWithdrawRawChoice env cid requestedAt actors = do
   result <- submitWithTransferContext env (actAs actors) $ \context -> exerciseCmd cid VestingLock_Withdraw with
-    amount
     context
     requestedAt
     actors
