@@ -1773,6 +1773,7 @@ class HttpWalletHandler(
         beneficiary = Codec.tryDecode(Codec.Party)(body.beneficiary)
         amount = Codec.tryDecode(Codec.BigDecimal)(body.amount)
         expiresAt = Codec.tryDecode(Codec.Timestamp)(body.expiresAt)
+        mintAfter = body.mintAfter.map(Codec.tryDecode(Codec.Timestamp)(_).toInstant)
         optDevelopmentFundManager =
           amuletRulesCt.contract.payload.configSchedule.initialValue.optDevelopmentFundManager
             .map(Codec.tryDecode(Codec.Party)(_))
@@ -1814,8 +1815,7 @@ class HttpWalletHandler(
               expiresAt.toInstant,
               body.reason,
               developmentFundManager.toProtoPrimitive,
-              // TODO(#6722): expose `mintAfter` in the wallet API
-              java.util.Optional.empty(),
+              mintAfter.toJava,
             )
           )
         result <- userWallet.connection
@@ -1830,7 +1830,9 @@ class HttpWalletHandler(
               .CommandId(
                 "org.lfdecentralizedtrust.splice.wallet.allocateDevelopmentFundCoupon",
                 Seq(store.key.validatorParty, store.key.endUserParty),
-                Seq(s"${body.beneficiary}:${body.amount}:${body.expiresAt}:${body.reason}"),
+                Seq(
+                  s"${body.beneficiary}:${body.amount}:${body.expiresAt}:${body.reason}:${body.mintAfter}"
+                ),
               ),
             deduplicationConfig = dedupDuration,
           )

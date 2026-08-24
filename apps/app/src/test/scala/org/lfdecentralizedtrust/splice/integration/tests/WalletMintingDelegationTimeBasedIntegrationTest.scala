@@ -659,6 +659,119 @@ class WalletMintingDelegationTimeBasedIntegrationTest
       }
     }
 
+    "not collect a development fund coupon before its mintAfter" in { implicit env =>
+      val aliceParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
+      aliceWalletClient.tap(100.0)
+      aliceValidatorWalletClient.tap(100.0)
+
+      val beneficiaryParty =
+        onboardExternalParty(aliceValidatorBackend, Some("delayed_coupon_beneficiary"))
+      createAndAcceptExternalPartySetupProposal(aliceValidatorBackend, beneficiaryParty)
+
+      val delegationExpiresAt = env.environment.clock.now.plus(Duration.ofDays(30)).toInstant
+      val (_, proposalContractId) = actAndCheck(
+        "Create minting delegation proposal",
+        createMintingDelegationProposal(beneficiaryParty, aliceParty, delegationExpiresAt),
+      )(
+        "Proposal is visible",
+        _ => {
+          val proposals = aliceWalletClient.listMintingDelegationProposals()
+          proposals.proposals should have size 1 withClue "proposals"
+          proposals.proposals.head.contract.contractId
+        },
+      )
+
+      actAndCheck(
+        "Alice accepts the proposal",
+        aliceWalletClient.acceptMintingDelegationProposal(proposalContractId),
+      )(
+        "Delegation is created",
+        _ => {
+          val delegations = aliceWalletClient.listMintingDelegations()
+          delegations.delegations should have size 1 withClue "delegations"
+        },
+      )
+
+      val externalPartyWallet = eventually() {
+        aliceValidatorBackend.appState.walletManager
+          .valueOrFail("WalletManager is expected to be defined")
+          .externalPartyWalletManager
+          .lookupExternalPartyWallet(beneficiaryParty.party)
+          .valueOrFail(
+            s"Expected ${beneficiaryParty.party} to have an external party wallet"
+          )
+      }
+
+      def getBalance(): BigDecimal = BigDecimal(
+        aliceValidatorBackend
+          .getExternalPartyBalance(beneficiaryParty.party)
+          .totalUnlockedCoin
+      )
+
+      advanceRoundsToNextRoundOpening
+      advanceRoundsToNextRoundOpening
+
+      val balanceBefore = getBalance()
+      val developmentFundAmount = BigDecimal(300.0)
+      // Short enough that advancing past it does not disturb round automation.
+      val mintDelay = Duration.ofMinutes(10)
+
+      val mintAfter = env.environment.clock.now.plus(mintDelay).toInstant
+      val couponExpiresAt = env.environment.clock.now.plus(Duration.ofDays(30)).toInstant
+
+      val validatorRewardTrigger = collectRewardsAndMergeAmuletsTrigger(
+        aliceValidatorBackend,
+        aliceValidatorWalletClient.config.ledgerApiUser,
+      )
+
+      setTriggersWithin(triggersToPauseAtStart = Seq(validatorRewardTrigger)) {
+        val externalPartyMintingDelegationTrigger = mintingDelegationCollectRewardsTrigger(
+          aliceValidatorBackend,
+          beneficiaryParty.party,
+        )
+
+        setTriggersWithin(triggersToPauseAtStart = Seq(externalPartyMintingDelegationTrigger)) {
+          sv1Backend.participantClientWithAdminToken.ledger_api_extensions.commands
+            .submitWithResult(
+              userId = sv1Backend.config.ledgerApiUser,
+              actAs = Seq(dsoParty),
+              readAs = Seq.empty,
+              update = new DevelopmentFundCoupon(
+                dsoParty.toProtoPrimitive,
+                beneficiaryParty.party.toProtoPrimitive,
+                dsoParty.toProtoPrimitive,
+                developmentFundAmount.bigDecimal,
+                couponExpiresAt,
+                "delayed development fund coupon",
+                java.util.Optional.of(mintAfter),
+              ).create,
+            )
+        }
+
+        clue("Coupon is left alone while mintAfter is in the future") {
+          (1 to 3).foreach(_ => advanceTime(Duration.ofMinutes(1)))
+          externalPartyWallet.store
+            .listDevelopmentFundCoupons()
+            .futureValue should have size 1 withClue "DevelopmentFundCoupon before mintAfter"
+          getBalance() shouldBe balanceBefore
+        }
+
+        actAndCheck(
+          "Advance past mintAfter",
+          advanceTime(mintDelay.plus(Duration.ofHours(1))),
+        )(
+          "Coupon is collected",
+          _ => {
+            advanceTime(Duration.ofSeconds(1))
+            externalPartyWallet.store
+              .listDevelopmentFundCoupons()
+              .futureValue shouldBe empty withClue "DevelopmentFundCoupon after mintAfter"
+            getBalance() shouldBe balanceBefore + developmentFundAmount
+          },
+        )
+      }
+    }
+
     "assign and mint unassigned V2 coupons when sharing is configured" in { implicit env =>
       val aliceParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
       aliceWalletClient.tap(100.0)

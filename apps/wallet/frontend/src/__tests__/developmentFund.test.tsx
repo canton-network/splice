@@ -50,6 +50,11 @@ const buildAllocationFormMock = (
   setAmount: vi.fn(),
   expiresAt: dayjs().add(2, 'day'),
   setExpiresAt: vi.fn(),
+  mintAfter: dayjs().add(1, 'hour'),
+  setMintAfter: vi.fn(),
+  minMintAfter: dayjs(),
+  isMintAfterValid: true,
+  mintAfterError: undefined,
   reason: 'Valid allocation',
   setReason: vi.fn(),
   amountNum: new BigNumber(1),
@@ -558,6 +563,7 @@ describe('Development Fund page', () => {
   test('triggers allocation request on allocate click', async () => {
     const mutate = vi.fn();
     const expiresAt = dayjs().add(2, 'day');
+    const mintAfter = dayjs().add(1, 'hour');
 
     const hookSpy = vi
       .spyOn(developmentFundAllocationFormHook, 'useDevelopmentFundAllocationForm')
@@ -570,6 +576,11 @@ describe('Development Fund page', () => {
         setAmount: vi.fn(),
         expiresAt,
         setExpiresAt: vi.fn(),
+        mintAfter,
+        setMintAfter: vi.fn(),
+        minMintAfter: dayjs(),
+        isMintAfterValid: true,
+        mintAfterError: undefined,
         reason: 'Valid allocation',
         setReason: vi.fn(),
         amountNum: new BigNumber(1),
@@ -599,7 +610,56 @@ describe('Development Fund page', () => {
       amount: new BigNumber(1),
       expiresAt: expiresAt.toDate(),
       reason: 'Valid allocation',
+      mintAfter: mintAfter.toDate(),
     });
+
+    hookSpy.mockRestore();
+  });
+
+  test('sends the chosen mintAfter with the allocation', async () => {
+    const mutate = vi.fn();
+    const expiresAt = dayjs().add(2, 'day');
+    const mintAfter = dayjs().add(1, 'day');
+
+    const hookSpy = vi
+      .spyOn(developmentFundAllocationFormHook, 'useDevelopmentFundAllocationForm')
+      .mockReturnValue(
+        buildAllocationFormMock({
+          expiresAt,
+          mintAfter,
+          allocateMutation: {
+            mutate,
+            isPending: false,
+          } as unknown as ReturnType<
+            typeof developmentFundAllocationFormHook.useDevelopmentFundAllocationForm
+          >['allocateMutation'],
+        })
+      );
+
+    const { user } = await loginAndOpenDevelopmentFund();
+    await user.click(await screen.findByRole('button', { name: 'Allocate' }));
+
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({ mintAfter: mintAfter.toDate() }));
+
+    hookSpy.mockRestore();
+  });
+
+  test('disables Allocate button when mintAfter is invalid', async () => {
+    const hookSpy = vi
+      .spyOn(developmentFundAllocationFormHook, 'useDevelopmentFundAllocationForm')
+      .mockReturnValue(
+        buildAllocationFormMock({
+          mintAfter: null,
+          isMintAfterValid: false,
+          mintAfterError: 'Mint after is required',
+          isValid: false,
+        })
+      );
+
+    await loginAndOpenDevelopmentFund();
+
+    expect(await screen.findByRole('button', { name: 'Allocate' })).toBeDisabled();
+    expect(screen.getByText('Mint after is required')).toBeDefined();
 
     hookSpy.mockRestore();
   });

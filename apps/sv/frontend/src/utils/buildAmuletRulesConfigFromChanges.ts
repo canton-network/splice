@@ -110,7 +110,8 @@ export function buildAmuletRulesConfigFromChanges(
         ? null
         : { microseconds: externalPartyConfigStateTickDuration },
     transferPreapprovalBaseDuration: null,
-    // `null` marks a DSO that has not upgraded yet, so an emptied list stays `Some []`
+    // The frontend will never send null for developmentFundManagerBlacklist, an empty list is sent as `Some []`
+    // so that we can distinguish DSO that have not upgraded yet (they will have None for the field)
     developmentFundManagerBlacklist,
     minDevelopmentFundMintingDelay:
       minDevelopmentFundMintingDelay === null

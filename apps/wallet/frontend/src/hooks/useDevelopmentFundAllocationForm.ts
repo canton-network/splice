@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import { useMutation, useQueryClient, UseMutationResult } from '@tanstack/react-query';
 import { extractApiErrorMessage } from '@canton-network/splice-common-frontend';
 import { useWalletClient } from '../contexts/WalletServiceContext';
+import useGetAmuletRules from './scan-proxy/useGetAmuletRules';
 import { useIsDevelopmentFundManager } from './useIsDevelopmentFundManager';
 import { useUnclaimedDevelopmentFundTotal } from './useUnclaimedDevelopmentFundTotal';
 import { invalidateAllDevelopmentFundQueries } from '../utils/invalidateDevelopmentFundQueries';
@@ -19,6 +20,11 @@ export interface UseDevelopmentFundAllocationFormResult {
   setAmount: (value: string) => void;
   expiresAt: Dayjs | null;
   setExpiresAt: (value: Dayjs | null) => void;
+  mintAfter: Dayjs | null;
+  setMintAfter: (value: Dayjs | null) => void;
+  minMintAfter: Dayjs;
+  isMintAfterValid: boolean;
+  mintAfterError: string | undefined;
   reason: string;
   setReason: (value: string) => void;
   amountNum: BigNumber | null;
@@ -39,12 +45,16 @@ interface AllocationPayload {
   amount: BigNumber;
   expiresAt: Date;
   reason: string;
+  mintAfter?: Date;
 }
+
+const SUBMISSION_HEADROOM_HOURS = 1;
 
 export const useDevelopmentFundAllocationForm = (): UseDevelopmentFundAllocationFormResult => {
   const { allocateDevelopmentFundCoupon } = useWalletClient();
   const { isFundManager } = useIsDevelopmentFundManager();
   const { data: unclaimedTotal } = useUnclaimedDevelopmentFundTotal();
+  const { data: amuletRulesData } = useGetAmuletRules();
   const queryClient = useQueryClient();
 
   const [formKey, setFormKey] = useState(0);
@@ -52,7 +62,23 @@ export const useDevelopmentFundAllocationForm = (): UseDevelopmentFundAllocation
   const [beneficiary, setBeneficiary] = useState('');
   const [amount, setAmount] = useState('');
   const [expiresAt, setExpiresAt] = useState<Dayjs | null>(null);
+  const [mintAfterOverride, setMintAfterOverride] = useState<Dayjs | null | undefined>(undefined);
+  const [defaultBaseTime, setDefaultBaseTime] = useState<Dayjs>(() => dayjs());
   const [reason, setReason] = useState('');
+
+  const minMintingDelayMicros =
+    amuletRulesData?.contract.payload.configSchedule.initialValue.minDevelopmentFundMintingDelay
+      ?.microseconds;
+  const { minMintAfter, defaultMintAfter } = useMemo(() => {
+    const earliest = defaultBaseTime.add(Number(minMintingDelayMicros ?? 0) / 1000, 'millisecond');
+    return {
+      minMintAfter: earliest,
+      defaultMintAfter: earliest.add(SUBMISSION_HEADROOM_HOURS, 'hour'),
+    };
+  }, [minMintingDelayMicros, defaultBaseTime]);
+
+  const mintAfter = mintAfterOverride !== undefined ? mintAfterOverride : defaultMintAfter;
+  const setMintAfter = (value: Dayjs | null) => setMintAfterOverride(value);
 
   const amountNum = useMemo(() => (amount ? new BigNumber(amount) : null), [amount]);
   const isAmountValid = amountNum !== null && amountNum.isFinite() && amountNum.gt(0);
@@ -67,11 +93,33 @@ export const useDevelopmentFundAllocationForm = (): UseDevelopmentFundAllocation
           : undefined
       : undefined;
   const isReasonValid = reason.trim().length > 0;
+
+  const mintAfterError = (() => {
+    if (mintAfter == null) {
+      return 'Mint after is required';
+    }
+    if (!mintAfter.isValid()) {
+      return 'Invalid date';
+    }
+    if (mintAfter.isBefore(minMintAfter)) {
+      return `Mint after must be at or after ${minMintAfter.format('MMM D, YYYY hh:mm A')}`;
+    }
+    if (!mintAfter.isAfter(dayjs())) {
+      return 'Mint after must be in the future';
+    }
+    if (expiresAt != null && expiresAt.isValid() && !mintAfter.isBefore(expiresAt)) {
+      return 'Mint after must be before the expiry';
+    }
+    return undefined;
+  })();
+  const isMintAfterValid = mintAfterError === undefined;
+
   const isValid =
     Boolean(beneficiary) &&
     isAmountValid &&
     !amountExceedsAvailable &&
     isExpiryValid &&
+    isMintAfterValid &&
     isReasonValid;
 
   const resetForm = () => {
@@ -79,6 +127,8 @@ export const useDevelopmentFundAllocationForm = (): UseDevelopmentFundAllocation
     setBeneficiary('');
     setAmount('');
     setExpiresAt(null);
+    setMintAfterOverride(undefined);
+    setDefaultBaseTime(dayjs());
     setReason('');
     setFormKey(prev => prev + 1);
   };
@@ -89,7 +139,8 @@ export const useDevelopmentFundAllocationForm = (): UseDevelopmentFundAllocation
         data.beneficiary,
         data.amount,
         data.expiresAt,
-        data.reason
+        data.reason,
+        data.mintAfter
       );
     },
     onSuccess: () => {
@@ -111,6 +162,11 @@ export const useDevelopmentFundAllocationForm = (): UseDevelopmentFundAllocation
     setAmount,
     expiresAt,
     setExpiresAt,
+    mintAfter,
+    setMintAfter,
+    minMintAfter,
+    isMintAfterValid,
+    mintAfterError,
     reason,
     setReason,
     amountNum,
