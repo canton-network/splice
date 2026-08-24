@@ -21,6 +21,7 @@ import { deployGCPodReaper } from './maintenance';
 import { configureNetwork } from './network';
 import { configureReloader } from './reloader';
 import { configureStorage } from './storage';
+import { configureSweet } from '../sweet';
 
 const network = configureNetwork(clusterBasename, clusterBaseDomain);
 
@@ -63,6 +64,8 @@ if (useGKEL7Gateway) {
 configureStorage();
 
 configureReloader();
+
+configureSweet();
 
 installExtraCustomResources();
 

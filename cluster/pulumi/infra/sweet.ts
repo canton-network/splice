@@ -9,9 +9,6 @@ import {
   infraAffinityAndTolerations,
 } from '@canton-network/splice-pulumi-common';
 
-//helm install --namespace sweet --create-namespace sweet-operator
-// oci://registry.sweet.security/helm/operatorchart --set sweet.apiKey=[...] --set sweet.secret=[...]
-
 export function configureSweet(): k8s.helm.v3.Release {
   const operatorNs = exactNamespace('sweet-operator', false, true);
   const sweetNs = exactNamespace('sweet', false, true);
@@ -23,22 +20,32 @@ export function configureSweet(): k8s.helm.v3.Release {
     secret: 'sweet-secret',
   }).secretData;
 
-
   return new k8s.helm.v3.Release(
-    'sweet',
+    'sweet-operator',
     {
-      name: 'sweet',
-      chart: 'operatorchart',
-      version: '1.0.265090',
+      name: 'sweet-operator',
+      chart: 'oci://registry.sweet.security/helm/operatorchart',
+      version: '1.0.265090+06a1b12d61fc35ceb20b350388f7e812d382e4b2',
       namespace: sweetNs.ns.metadata.name,
-      repositoryOpts: {
-        repo: 'oci://registry.sweet.security/helm',
-      },
       values: {
-        apiKey,
-        secret,
+        sweet: {
+          apiKey,
+          secret,
+        },
         operator: {
           ...infraAffinityAndTolerations,
+        },
+        frontier: {
+          extraValues: {
+            informer: {
+              ...infraAffinityAndTolerations,
+            },
+          }
+        },
+        admiral: {
+          extraValues: {
+            ...infraAffinityAndTolerations,
+          },
         }
       },
       maxHistory: HELM_MAX_HISTORY_SIZE,
