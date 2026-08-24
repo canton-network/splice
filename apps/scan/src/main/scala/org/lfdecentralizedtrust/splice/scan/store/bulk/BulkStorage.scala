@@ -4,23 +4,28 @@
 package org.lfdecentralizedtrust.splice.scan.store.bulk
 
 import com.daml.metrics.api.MetricHandle.LabeledMetricsFactory
-import com.digitalasset.canton.lifecycle.{AsyncOrSyncCloseable, FlagCloseableAsync}
+import com.digitalasset.canton.lifecycle.{AsyncOrSyncCloseable, FlagCloseableAsync, LifeCycle}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.tracing.TraceContext
 import io.grpc.Status
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.actor.{ActorSystem, Cancellable}
-import org.lfdecentralizedtrust.splice.config.{AutomationConfig, S3Config}
-import org.lfdecentralizedtrust.splice.environment.RetryProvider
+import org.lfdecentralizedtrust.splice.config.{AutomationConfig, S3Config, UpgradesConfig}
+import org.lfdecentralizedtrust.splice.environment.{RetryProvider, SpliceLedgerClient}
 import org.lfdecentralizedtrust.splice.scan.config.{BulkStorageConfig, ScanStorageConfig}
-import org.lfdecentralizedtrust.splice.scan.store.{AcsSnapshotStore, ScanKeyValueProvider}
+import org.lfdecentralizedtrust.splice.scan.store.{
+  AcsSnapshotStore,
+  ScanKeyValueProvider,
+  ScanStore,
+}
 import org.lfdecentralizedtrust.splice.store.{HistoryMetrics, S3BucketConnection, UpdateHistory}
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContextExecutor, Future}
 import cats.implicits.*
 import org.apache.pekko.stream.scaladsl.Source
 import org.lfdecentralizedtrust.splice.PekkoRetryableService
+import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorage.{
   acsCommittedKvStoreKey,
   acsStagingKvStoreKey,
@@ -28,6 +33,8 @@ import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorage.{
   updatesCommittedKvStoreKey,
   updatesStagingKvStoreKey,
 }
+import org.lfdecentralizedtrust.splice.scan.util.PeerBftScanConnection
+import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 
 import scala.concurrent.duration.*
 
@@ -43,13 +50,19 @@ class BulkStorage(
     metricsFactory: LabeledMetricsFactory,
     automationConfig: AutomationConfig,
     backoffClock: Clock,
+    store: ScanStore,
+    svName: String,
+    ledgerClient: SpliceLedgerClient,
+    upgradesConfig: UpgradesConfig,
     override val retryProvider: RetryProvider,
     override val loggerFactory: NamedLoggerFactory,
 )(implicit
     actorSystem: ActorSystem,
     tc: TraceContext,
-    ec: ExecutionContext,
+    ec: ExecutionContextExecutor,
     tracer: Tracer,
+    httpClient: HttpClient,
+    templateJsonDecoder: TemplateJsonDecoder,
 ) extends NamedLogging
     with FlagCloseableAsync
     with RetryProvider.Has {
@@ -57,6 +70,16 @@ class BulkStorage(
   val stagingConnection = S3BucketConnection(stagingS3Config, loggerFactory)
   val committedConnection = S3BucketConnection(committedS3Config, loggerFactory)
   val historyMetrics = HistoryMetrics(metricsFactory, currentMigrationId)
+  val scanConnection = new PeerBftScanConnection(
+    store,
+    svName,
+    ledgerClient,
+    automationConfig,
+    upgradesConfig,
+    backoffClock,
+    retryProvider,
+    loggerFactory,
+  )
 
   val backfillingCompleteGate: Source[Boolean, Cancellable] =
     Source
@@ -128,6 +151,7 @@ class BulkStorage(
     committedConnection,
     reader,
     appConfig,
+    scanConnection,
     loggerFactory,
   )
   val acsCommitted = new AcsSnapshotBulkStorage(
@@ -160,6 +184,7 @@ class BulkStorage(
     committedConnection,
     reader,
     appConfig,
+    scanConnection,
     loggerFactory,
   )
   val updatesCommitted = new UpdateHistoryBulkStorage(
@@ -175,8 +200,10 @@ class BulkStorage(
     Seq[PekkoRetryableService[?]](acsStaging, acsCommitted, updatesStaging, updatesCommitted)
       .map(_.asPekkoRetryingService(automationConfig, backoffClock, retryProvider))
 
-  final override def closeAsync(): Seq[AsyncOrSyncCloseable] =
+  final override def closeAsync(): Seq[AsyncOrSyncCloseable] = {
+    LifeCycle.close(scanConnection)(logger)
     services.flatMap(_.closeAsync())
+  }
 }
 
 object BulkStorage {
@@ -197,13 +224,19 @@ object BulkStorage {
       metricsFactory: LabeledMetricsFactory,
       automationConfig: AutomationConfig,
       backoffClock: Clock,
+      store: ScanStore,
+      svName: String,
+      ledgerClient: SpliceLedgerClient,
+      upgradesConfig: UpgradesConfig,
       retryProvider: RetryProvider,
       loggerFactory: NamedLoggerFactory,
   )(implicit
       actorSystem: ActorSystem,
       tc: TraceContext,
-      ec: ExecutionContext,
+      ec: ExecutionContextExecutor,
       tracer: Tracer,
+      httpClient: HttpClient,
+      templateJsonDecoder: TemplateJsonDecoder,
   ): BulkStorage = {
     val logger = loggerFactory.getTracedLogger(classOf[BulkStorage])
 
@@ -225,6 +258,10 @@ object BulkStorage {
         metricsFactory,
         automationConfig,
         backoffClock,
+        store,
+        svName,
+        ledgerClient,
+        upgradesConfig,
         retryProvider,
         loggerFactory,
       )

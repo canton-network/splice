@@ -9,6 +9,7 @@ images := \
 	canton-mediator \
 	canton-cometbft-sequencer \
 	cometbft \
+	cometbft-watchdog \
 	\
 	splice-app \
 	splice-debug \

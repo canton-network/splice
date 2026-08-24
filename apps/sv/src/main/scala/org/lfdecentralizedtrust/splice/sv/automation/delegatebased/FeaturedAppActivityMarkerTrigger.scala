@@ -28,9 +28,10 @@ import scala.jdk.OptionConverters.*
 import FeaturedAppActivityMarkerTrigger.{
   CrossVersionBatch,
   Task,
-  getStakeholders,
   getInformeesFromContracts,
+  getStakeholders,
 }
+import com.digitalasset.canton.discard.Implicits.DiscardOps
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.store.IgnoredPartiesStore
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
@@ -51,7 +52,7 @@ class FeaturedAppActivityMarkerTrigger(
     // This is a polling trigger as we usually expect to be able to batch together the conversion
 ) extends PollingParallelTaskExecutionTrigger[Task]
     with SvTaskBasedTrigger[Task]
-    with IgnoredAmuletVersionGuard {
+    with IgnoredUnavailablePartiesGuard {
 
   private val rng: Random = new Random()
 
@@ -108,7 +109,11 @@ class FeaturedAppActivityMarkerTrigger(
               )
             }
           case (None, markers) =>
-            logger.warn(show"No vetted amulet version for $markers")
+            ignorePartiesWithoutVettedAmulet(
+              getInformeesFromContracts(markers.flatten),
+              markers.flatten.map(_.contractId.contractId),
+              logAsWarning = true,
+            ).discard
             Seq.empty
         }
 
@@ -200,12 +205,11 @@ class FeaturedAppActivityMarkerTrigger(
   override def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = {
-    completeWithIgnoredAmuletVersionCheck(
+    completeUnlessAmuletVersionIgnored(
       task.vettedAmuletVersion.toString,
       task.informees,
-      store.key.dsoParty,
       // ignoring a party would mean their featured app activity markers do not get converted into rewards
-      enableUnresponsivePartiesAutoIgnore = false,
+      ignoreUnresponsiveParties = false,
     )(completeExpiryTaskAsDsoDelegate(task, controller))
   }
 

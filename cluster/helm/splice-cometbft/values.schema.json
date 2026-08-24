@@ -16,12 +16,20 @@
           "properties": {
             "cometbft": {
               "type": "object"
+            },
+            "watchdog": {
+              "type": "object"
             }
           },
-          "required": ["cometbft"]
+          "required": [
+            "cometbft"
+          ]
         }
       },
-      "required": ["pod", "containers"]
+      "required": [
+        "pod",
+        "containers"
+      ]
     },
     "imageName": {
       "type": "string"
@@ -44,6 +52,76 @@
         "chainIdSuffix": {
           "type": "string"
         }
+      }
+    },
+    "watchdog": {
+      "type": "object",
+      "required": [
+        "enabled"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "sequencerMetricsUrl": {
+          "type": "string",
+          "format": "uri",
+          "minLength": 1
+        },
+        "mediatorMetricsUrl": {
+          "type": "string",
+          "format": "uri",
+          "minLength": 1
+        },
+        "pollIntervalSeconds": {
+          "type": "number",
+          "minimum": 1
+        },
+        "threshold": {
+          "type": "number"
+        },
+        "evaluationIntervalSeconds": {
+          "type": "number",
+          "minimum": 1
+        },
+        "scrapeTimeoutSeconds": {
+          "type": "number",
+          "minimum": 1
+        },
+        "startupGraceSeconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "cooldownSeconds": {
+          "type": "number",
+          "minimum": 0
+        },
+        "markerFile": {
+          "type": "string",
+          "pattern": "^/[^/]+/[^/]+"
+        },
+        "imageName": {
+          "type": "string"
+        },
+        "resources": {
+          "type": "object"
+        }
+      },
+      "if": {
+        "properties": {
+          "enabled": {
+            "const": true
+          }
+        },
+        "required": [
+          "enabled"
+        ]
+      },
+      "then": {
+        "required": [
+          "sequencerMetricsUrl",
+          "mediatorMetricsUrl"
+        ]
       }
     }
   }

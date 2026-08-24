@@ -438,11 +438,11 @@ class HistoryMetrics(metricsFactory: LabeledMetricsFactory)(implicit
         )
       )(metricsContext)
 
-    def incAcsSnapshotObjects(): Unit =
-      objectsCount.inc()(MetricsContext("object_type" -> "ACS_snapshots"))
+    def incAcsSnapshotObjects(encoding: String): Unit =
+      objectsCount.inc()(MetricsContext("object_type" -> "ACS_snapshots", "encoding" -> encoding))
 
-    def incUpdateObjects(): Unit =
-      objectsCount.inc()(MetricsContext("object_type" -> "updates"))
+    def incUpdateObjects(encoding: String): Unit =
+      objectsCount.inc()(MetricsContext("object_type" -> "updates", "encoding" -> encoding))
 
     def incUpdatesCount(count: Int): Unit =
       updatesCount.inc(count.toLong)(MetricsContext.Empty)

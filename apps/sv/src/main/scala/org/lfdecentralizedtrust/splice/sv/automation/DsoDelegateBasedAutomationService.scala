@@ -45,7 +45,7 @@ class DsoDelegateBasedAutomationService(
       : org.lfdecentralizedtrust.splice.sv.automation.DsoDelegateBasedAutomationService.type =
     DsoDelegateBasedAutomationService
 
-  val expiredAmuletIgnoredPartiesStore = new IgnoredPartiesStore(
+  val unavailablePartiesStore = new IgnoredPartiesStore(
     triggerContext.config.ignoredPartyIds
   )
 
@@ -68,7 +68,7 @@ class DsoDelegateBasedAutomationService(
         config,
         triggerContext,
         svTaskContext,
-        expiredAmuletIgnoredPartiesStore,
+        unavailablePartiesStore,
       )
     )
     registerTrigger(
@@ -76,7 +76,7 @@ class DsoDelegateBasedAutomationService(
         config,
         triggerContext,
         svTaskContext,
-        expiredAmuletIgnoredPartiesStore,
+        unavailablePartiesStore,
       )
     )
     registerTrigger(
@@ -85,7 +85,7 @@ class DsoDelegateBasedAutomationService(
         clock,
         triggerContext,
         svTaskContext,
-        expiredAmuletIgnoredPartiesStore,
+        unavailablePartiesStore,
       )
     )
     registerTrigger(
@@ -94,7 +94,7 @@ class DsoDelegateBasedAutomationService(
         clock,
         triggerContext,
         svTaskContext,
-        expiredAmuletIgnoredPartiesStore,
+        unavailablePartiesStore,
       )
     )
     registerTrigger(
@@ -103,7 +103,7 @@ class DsoDelegateBasedAutomationService(
         clock,
         triggerContext,
         svTaskContext,
-        expiredAmuletIgnoredPartiesStore,
+        unavailablePartiesStore,
       )
     )
     registerTrigger(new ExpiredSvOnboardingRequestTrigger(triggerContext, svTaskContext))
@@ -118,7 +118,7 @@ class DsoDelegateBasedAutomationService(
       new ExpireRewardCouponsTrigger(
         triggerContext,
         svTaskContext,
-        expiredAmuletIgnoredPartiesStore,
+        unavailablePartiesStore,
         config,
       )
     )
@@ -129,7 +129,7 @@ class DsoDelegateBasedAutomationService(
         triggerContext,
         svTaskContext,
         config,
-        expiredAmuletIgnoredPartiesStore,
+        unavailablePartiesStore,
       )
     )
     registerTrigger(
@@ -137,7 +137,7 @@ class DsoDelegateBasedAutomationService(
         triggerContext,
         svTaskContext,
         config,
-        expiredAmuletIgnoredPartiesStore,
+        unavailablePartiesStore,
       )
     )
     registerTrigger(
@@ -145,7 +145,7 @@ class DsoDelegateBasedAutomationService(
         triggerContext,
         svTaskContext,
         config,
-        expiredAmuletIgnoredPartiesStore,
+        unavailablePartiesStore,
       )
     )
     registerTrigger(new TerminatedSubscriptionTrigger(triggerContext, svTaskContext))
@@ -163,7 +163,7 @@ class DsoDelegateBasedAutomationService(
         triggerContext,
         svTaskContext,
         config,
-        expiredAmuletIgnoredPartiesStore,
+        unavailablePartiesStore,
       )
     )
 
@@ -200,6 +200,7 @@ class DsoDelegateBasedAutomationService(
         config,
         triggerContext,
         svTaskContext,
+        unavailablePartiesStore,
       )
     )
 

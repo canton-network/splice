@@ -253,7 +253,7 @@ export async function initDumpConfig({
               result: `base64-decoded-mock`,
             };
           case PulumiFunction.GCP_GET_PROJECT:
-            return { ...args.inputs, name: projectName };
+            return { ...args.inputs, name: projectName, projectId: projectName };
           case PulumiFunction.GCP_GET_SUB_NETWORK:
             if (args.inputs.name === `cn-${stackName}net-subnet`) {
               return { ...args.inputs, id: 'subnet-id' };
@@ -315,15 +315,6 @@ export async function initDumpConfig({
                 jsonCredentials: 'topology-snapshot-bucket-sa-key-secret-creds',
                 bucketSaKeySecret: 'gcp-topology-snapshot-bucket-sa-key-example',
                 bucketSaIamAccount: 'da-cn-examplet@da-cn-shared.iam.gserviceaccount.com',
-              });
-              return {
-                ...args.inputs,
-                secretData,
-              };
-            } else if (args.inputs.secret == 'artifactory-keys') {
-              const secretData = JSON.stringify({
-                username: 'art_user',
-                password: 's3cr3t',
               });
               return {
                 ...args.inputs,

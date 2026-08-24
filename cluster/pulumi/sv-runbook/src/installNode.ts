@@ -50,6 +50,7 @@ import {
   externalIpRangesFile,
   clusterNetwork,
   CnChartVersion,
+  envoyClientIpHeaderEnvVar,
 } from '@canton-network/splice-pulumi-common';
 import {
   approvedSvIdentities,
@@ -419,6 +420,9 @@ async function installSvAndValidator(
       enable: true,
     },
     ...synchronizerValues,
+    additionalEnvVars: (defaultScanValues.additionalEnvVars || []).concat([
+      envoyClientIpHeaderEnvVar('canton.scan-apps.scan-app'),
+    ]),
     resources: svConfig.scanApp?.resources,
     pvc: persistentHeapDumpsPvc(),
   };

@@ -60,7 +60,7 @@ export const VoteRequestDetails: React.FC = () => {
       currentEffectiveAt
     );
 
-  if (dsoInfosQuery.isPending && isPending) {
+  if (dsoInfosQuery.isPending || isPending) {
     return <Loading />;
   }
 

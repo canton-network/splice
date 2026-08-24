@@ -33,6 +33,8 @@ interface ProposalListingSectionProps {
   noDataMessage: string;
   uniqueId: string;
   badgeCount?: number;
+  isLoading?: boolean;
+  loadingMessage?: string;
   showThresholdDeadline?: boolean;
   showVoteStats?: boolean;
   showStatus?: boolean;
@@ -154,6 +156,8 @@ export const ProposalListingSection: React.FC<ProposalListingSectionProps> = pro
     noDataMessage,
     uniqueId,
     badgeCount,
+    isLoading,
+    loadingMessage = 'Searching…',
     showThresholdDeadline,
     showVoteStats,
     showStatus,
@@ -189,7 +193,11 @@ export const ProposalListingSection: React.FC<ProposalListingSectionProps> = pro
       />
 
       {sortedData.length === 0 && !hasNextPage ? (
-        <InfoBox info={noDataMessage} data-testid={`${uniqueId}-section-info`} />
+        isLoading ? (
+          <LoadingBox message={loadingMessage} data-testid={`${uniqueId}-section-loading`} />
+        ) : (
+          <InfoBox info={noDataMessage} data-testid={`${uniqueId}-section-info`} />
+        )
       ) : (
         <>
           <TableContainer data-testid={`${uniqueId}-section-table`}>
@@ -291,6 +299,28 @@ const InfoBox: React.FC<InfoBoxProps> = ({ info, 'data-testid': testId }) => {
       <InfoOutlined color="secondary" fontSize="small" />
       <Typography fontWeight="bold" fontSize={14}>
         {info}
+      </Typography>
+    </Stack>
+  );
+};
+
+interface LoadingBoxProps {
+  message: string;
+  'data-testid': string;
+}
+
+const LoadingBox: React.FC<LoadingBoxProps> = ({ message, 'data-testid': testId }) => {
+  return (
+    <Stack
+      gap={1.5}
+      direction="row"
+      alignItems="center"
+      sx={{ width: 'max-content', p: 2 }}
+      data-testid={testId}
+    >
+      <CircularProgress size={20} />
+      <Typography fontSize={14} color="text.secondary">
+        {message}
       </Typography>
     </Stack>
   );

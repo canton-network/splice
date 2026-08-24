@@ -1143,7 +1143,7 @@ class DbAppActivityRecordStoreTest
       val verdictStore = new DbScanVerdictStore(
         storage.underlying,
         updateHistory,
-        Some(appStore),
+        appStore,
         loggerFactory,
       )
       (appStore, verdictStore)

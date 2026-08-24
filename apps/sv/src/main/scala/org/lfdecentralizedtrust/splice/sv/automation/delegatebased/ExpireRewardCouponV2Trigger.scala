@@ -11,9 +11,10 @@ import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
 
 import scala.concurrent.{ExecutionContext, Future}
-import ExpireRewardCouponV2Trigger.{Task, Coupon, CouponCid, getStakeholders}
+import ExpireRewardCouponV2Trigger.{Coupon, CouponCid, Task, getStakeholders}
 import org.lfdecentralizedtrust.splice.environment.{DarResources, PackageIdResolver}
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
+import org.lfdecentralizedtrust.splice.store.IgnoredPartiesStore
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 import org.lfdecentralizedtrust.splice.sv.util.ContractStakeholders
 
@@ -21,9 +22,10 @@ import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 
 class ExpireRewardCouponV2Trigger(
-    svConfig: SvAppBackendConfig,
+    override protected val svConfig: SvAppBackendConfig,
     override protected val context: TriggerContext,
     override protected val svTaskContext: SvTaskBasedTrigger.Context,
+    override protected val ignoredPartiesStore: IgnoredPartiesStore,
 )(implicit
     override val ec: ExecutionContext,
     mat: Materializer,
@@ -37,10 +39,20 @@ class ExpireRewardCouponV2Trigger(
       PackageIdResolver.Package.SpliceAmulet,
       getStakeholders,
     )
-    with SvTaskBasedTrigger[Task] {
+    with SvTaskBasedTrigger[Task]
+    with IgnoredUnavailablePartiesGuard {
   private val store = svTaskContext.dsoStore
 
   override def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
+      tc: TraceContext
+  ): Future[TaskOutcome] =
+    completeUnlessAmuletVersionIgnored(
+      task.work.vettedVersion.toString,
+      task.work.stakeholders,
+      ignoreUnresponsiveParties = true,
+    )(completeExpiryTaskAsDsoDelegate(task, controller))
+
+  private def completeExpiryTaskAsDsoDelegate(task: Task, controller: String)(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = {
     val expiredCoupons = task.work.expiredContracts
@@ -85,6 +97,7 @@ class ExpireRewardCouponV2Trigger(
       } yield TaskSuccess(s"archived ${expiredCoupons.size} expired reward coupons v2")
     }
   }
+
 }
 
 object ExpireRewardCouponV2Trigger extends ContractStakeholders[splice.amulet.RewardCouponV2] {

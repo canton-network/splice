@@ -24,26 +24,32 @@ export async function installNodePools(): Promise<void> {
     ...gkeClusterConfig.nodePools.additionalInfra,
   ]);
 
-  new gcp.container.NodePool('gke-node-pool', {
-    cluster,
-    nodeConfig: {
-      machineType: 'e2-standard-4',
-      taints: [
-        {
-          effect: 'NO_SCHEDULE',
-          key: 'components.gke.io/gke-managed-components',
-          value: 'true',
-        },
-      ],
-      loggingVariant: 'DEFAULT',
+  new gcp.container.NodePool(
+    'gke-node-pool',
+    {
+      cluster,
+      nodeConfig: {
+        machineType: 'e2-standard-4',
+        taints: [
+          {
+            effect: 'NO_SCHEDULE',
+            key: 'components.gke.io/gke-managed-components',
+            value: 'true',
+          },
+        ],
+        loggingVariant: 'DEFAULT',
+      },
+      nodeLocations: nodePoolComputeZone ? [nodePoolComputeZone] : undefined,
+      initialNodeCount: 1,
+      autoscaling: {
+        minNodeCount: 1,
+        maxNodeCount: 3,
+      },
     },
-    nodeLocations: nodePoolComputeZone ? [nodePoolComputeZone] : undefined,
-    initialNodeCount: 1,
-    autoscaling: {
-      minNodeCount: 1,
-      maxNodeCount: 3,
-    },
-  });
+    {
+      replaceOnChanges: ['nodeConfig.machineType'],
+    }
+  );
 }
 
 function installAppsNodePools(
@@ -57,33 +63,40 @@ function installAppsNodePools(
       index === 0
         ? 'cn-apps-node-pool-hd' // for backwards compat
         : `cn-apps-node-pool-${index}-hd`;
-    return new gcp.container.NodePool(name, {
-      cluster,
-      nodeConfig: {
-        machineType: config.nodeType,
-        bootDisk: {
-          diskType: 'hyperdisk-balanced',
-          sizeGb: config.bootDiskSizeGb || 100,
-        },
-        taints: [
-          {
-            effect: 'NO_SCHEDULE',
-            key: 'cn_apps',
-            value: 'true',
+    return new gcp.container.NodePool(
+      name,
+      {
+        cluster,
+        nodeConfig: {
+          machineType: config.nodeType,
+          bootDisk: {
+            diskType: 'hyperdisk-balanced',
+            sizeGb: config.bootDiskSizeGb || 100,
           },
-        ],
-        labels: {
-          cn_apps: 'hyperdisk',
+          taints: [
+            {
+              effect: 'NO_SCHEDULE',
+              key: 'cn_apps',
+              value: 'true',
+            },
+          ],
+          labels: {
+            cn_apps: 'hyperdisk',
+            ...config.labels,
+          },
+          loggingVariant: 'DEFAULT',
         },
-        loggingVariant: 'DEFAULT',
+        nodeLocations:
+          config.zones === '*'
+            ? allZones
+            : (config.zones ?? (defaultZone !== undefined ? [defaultZone] : undefined)),
+        initialNodeCount: 0,
+        autoscaling: autoscalingConfigOf(config),
       },
-      nodeLocations:
-        config.zones === '*'
-          ? allZones
-          : (config.zones ?? (defaultZone !== undefined ? [defaultZone] : undefined)),
-      initialNodeCount: 0,
-      autoscaling: autoscalingConfigOf(config),
-    });
+      {
+        replaceOnChanges: ['nodeConfig.machineType'],
+      }
+    );
   });
 }
 

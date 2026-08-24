@@ -5,7 +5,9 @@ import { expect, jest, test } from '@jest/globals';
 import {
   buildRateLimitActions,
   buildRateLimitDescriptors,
+  parseFillIntervalMs,
   validateIpLimits,
+  validateTokenBuckets,
 } from './envoyRateLimiter';
 
 jest.mock('@canton-network/splice-pulumi-common/src/config/envConfig', () => ({
@@ -49,7 +51,10 @@ test('buildRateLimitDescriptors generates per-endpoint and generic per-IP descri
     },
   });
   expect(descriptors[1]).toEqual({
-    entries: [{ key: 'header_match', value: 'registry-metadata-info' }, { key: 'client_ip' }],
+    entries: [
+      { key: 'header_match', value: 'registry-metadata-info' },
+      { key: 'masked_remote_address' },
+    ],
     token_bucket: {
       max_tokens: 120,
       tokens_per_fill: 120,
@@ -87,7 +92,7 @@ test('buildRateLimitDescriptors emits named IP overrides before generic per-IP d
   expect(descriptors[1]).toEqual({
     entries: [
       { key: 'header_match', value: 'registry-metadata-info' },
-      { key: 'client_ip', value: '192.68.78.50' },
+      { key: 'masked_remote_address', value: '192.68.78.50/32' },
     ],
     token_bucket: {
       max_tokens: 220,
@@ -97,7 +102,10 @@ test('buildRateLimitDescriptors emits named IP overrides before generic per-IP d
   });
   expect(descriptors[2]).toEqual(
     expect.objectContaining({
-      entries: [{ key: 'header_match', value: 'registry-metadata-info' }, { key: 'client_ip' }],
+      entries: [
+        { key: 'header_match', value: 'registry-metadata-info' },
+        { key: 'masked_remote_address' },
+      ],
     })
   );
 });
@@ -126,7 +134,7 @@ test('buildRateLimitDescriptors emits descriptors for named overrides with multi
   expect(descriptors[1]).toEqual({
     entries: [
       { key: 'header_match', value: 'registry-metadata-info' },
-      { key: 'client_ip', value: '192.68.78.51' },
+      { key: 'masked_remote_address', value: '192.68.78.51/32' },
     ],
     token_bucket: {
       max_tokens: 250,
@@ -137,7 +145,7 @@ test('buildRateLimitDescriptors emits descriptors for named overrides with multi
   expect(descriptors[2]).toEqual({
     entries: [
       { key: 'header_match', value: 'registry-metadata-info' },
-      { key: 'client_ip', value: '192.68.78.52' },
+      { key: 'masked_remote_address', value: '192.68.78.52/32' },
     ],
     token_bucket: {
       max_tokens: 250,
@@ -195,9 +203,10 @@ test('buildRateLimitActions emits per-endpoint and per-IP actions', () => {
         },
       },
       {
-        request_headers: {
-          descriptor_key: 'client_ip',
-          header_name: 'x-forwarded-for',
+        // the raw x-forwarded-for header must not be used, it is attacker controlled
+        masked_remote_address: {
+          v4_prefix_mask_len: 32,
+          v6_prefix_mask_len: 128,
         },
       },
     ],
@@ -256,4 +265,78 @@ test('validateIpLimits accepts unique IPs across named overrides', () => {
       },
     })
   ).not.toThrow();
+});
+
+test('parseFillIntervalMs parses protobuf durations and rejects other formats', () => {
+  expect(parseFillIntervalMs('60s', 'ctx')).toEqual(60000);
+  expect(parseFillIntervalMs('0.5s', 'ctx')).toEqual(500);
+  expect(() => parseFillIntervalMs('500ms', 'ctx')).toThrow('invalid fillInterval');
+  expect(() => parseFillIntervalMs('1m', 'ctx')).toThrow('invalid fillInterval');
+});
+
+test('validateTokenBuckets accepts intervals that are multiples of the global interval', () => {
+  expect(() =>
+    validateTokenBuckets(baseLimits, {
+      '/api/scan/v0/acs': {
+        name: 'acs',
+        type: 'limited',
+        maxTokens: 500,
+        tokensPerFill: 500,
+        fillInterval: '120s',
+        perIpLimits,
+      },
+    })
+  ).not.toThrow();
+});
+
+test('validateTokenBuckets rejects intervals that envoy would NACK', () => {
+  expect(() =>
+    validateTokenBuckets(baseLimits, {
+      '/api/scan/v0/acs': {
+        name: 'acs',
+        type: 'limited',
+        maxTokens: 500,
+        tokensPerFill: 500,
+        fillInterval: '90s',
+      },
+    })
+  ).toThrow('must be a multiple of the globalLimits fillInterval');
+
+  // below envoy's 50ms minimum
+  expect(() =>
+    validateTokenBuckets(
+      { maxTokens: 1, tokensPerFill: 1, fillInterval: '0.01s' },
+      {
+        '/api/scan/v0/acs': {
+          name: 'acs',
+          type: 'limited',
+          maxTokens: 500,
+          tokensPerFill: 500,
+          fillInterval: '60s',
+        },
+      }
+    )
+  ).toThrow('below the 50ms minimum');
+
+  // per-IP overrides are validated as well
+  expect(() =>
+    validateTokenBuckets(baseLimits, {
+      '/api/scan/v0/acs': {
+        name: 'acs',
+        type: 'limited',
+        ...baseLimits,
+        perIpLimits: {
+          ...perIpLimits,
+          overrides: {
+            'single-validator': {
+              ips: ['192.68.78.50'],
+              maxTokens: 220,
+              tokensPerFill: 220,
+              fillInterval: '90s',
+            },
+          },
+        },
+      },
+    })
+  ).toThrow("perIpLimits override 'single-validator'");
 });

@@ -47,8 +47,8 @@ class ScanAutomationService(
     protected val loggerFactory: NamedLoggerFactory,
     store: ScanStore,
     val updateHistory: UpdateHistory,
-    appRewardsStoreO: Option[DbScanAppRewardsStore],
-    appActivityStoreO: Option[AppActivityStore],
+    appRewardsStore: DbScanAppRewardsStore,
+    appActivityStore: AppActivityStore,
     storage: DbStorage,
     snapshotStore: AcsSnapshotStore,
     svParty: PartyId,
@@ -79,10 +79,7 @@ class ScanAutomationService(
   def registerRewardComputationTrigger(
       rewardsReferenceStore: ScanRewardsReferenceStore
   ): Unit =
-    for {
-      appRewardsStore <- appRewardsStoreO
-      appActivityStore <- appActivityStoreO
-    } registerTrigger(
+    registerTrigger(
       new RewardComputationTrigger(
         appRewardsStore,
         appActivityStore,

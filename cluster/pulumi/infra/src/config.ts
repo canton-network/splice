@@ -1,13 +1,8 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import * as pulumi from '@pulumi/pulumi';
-import {
-  config,
-  loadJsonFromFile,
-  externalIpRangesFile,
-} from '@canton-network/splice-pulumi-common';
+import { config } from '@canton-network/splice-pulumi-common';
 import { clusterYamlConfig } from '@canton-network/splice-pulumi-common/src/config/config';
-import { getSecretVersionOutput } from '@pulumi/gcp/secretmanager';
 import util from 'node:util';
 import { z } from 'zod';
 
@@ -58,6 +53,7 @@ export const InfraConfigSchema = z.object({
       enableIngressAccessLogging: z.boolean(),
       enableClusterAccessLogging: z.boolean().default(false),
       enablePublicTokenRegistry: z.boolean().default(false),
+      enableGeneralIpWhitelist: z.boolean().default(true),
       istiodValues: z.object({}).catchall(z.any()).default({}),
       sequencerFlowControl: z.object({
         initialStreamWindowSize: z.int(),
@@ -86,47 +82,3 @@ console.error(
 
 export const infraConfig = fullConfig.infra;
 export const cloudArmorConfig: CloudArmorConfig = fullConfig.cloudArmor;
-
-type IpRangesDict = { [key: string]: IpRangesDict } | string[];
-
-function extractIpRanges(x: IpRangesDict, svsOnly: boolean = false): string[] {
-  if (svsOnly) {
-    if (Array.isArray(x)) {
-      throw new Error('Cannot distinguish SV IP ranges from non-SV IP ranges in an array');
-    }
-    return extractIpRanges(x['svs'], false);
-  } else {
-    return Array.isArray(x)
-      ? x
-      : Object.keys(x).reduce((acc: string[], k: string) => acc.concat(extractIpRanges(x[k])), []);
-  }
-}
-
-export function loadIPRanges(svsOnly: boolean = false): pulumi.Output<string[]> {
-  const file = externalIpRangesFile();
-  const externalIpRanges = file ? extractIpRanges(loadJsonFromFile(file), svsOnly) : [];
-
-  const internalWhitelistedIps = getSecretVersionOutput({
-    secret: 'pulumi-internal-whitelists',
-  }).apply(whitelists => {
-    const secretData = whitelists.secretData;
-    const json = JSON.parse(secretData);
-    const ret: string[] = [];
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    json.forEach((ip: any) => {
-      ret.push(ip);
-    });
-    return ret;
-  });
-
-  const configWhitelistedIps = infraConfig.ipWhitelisting?.extraWhitelistedIngress || [];
-  const excludedIps = infraConfig.ipWhitelisting?.excludedIps || [];
-
-  return internalWhitelistedIps.apply(whitelists => {
-    const ips = whitelists
-      .concat(externalIpRanges)
-      .concat(configWhitelistedIps)
-      .filter(ip => excludedIps.indexOf(ip) < 0);
-    return [...new Set(ips)];
-  });
-}

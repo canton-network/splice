@@ -20,7 +20,6 @@ import { spliceConfig } from './config/config';
 import { GcpProject } from './config/gcpConfig';
 import {
   appsAffinityAndTolerations,
-  CnInput,
   infraAffinityAndTolerations,
   installSpliceHelmChart,
   SpliceCustomResourceOptions,
@@ -149,6 +148,7 @@ export class CloudPostgres
           },
           insightsConfig: {
             queryInsightsEnabled: true,
+            enhancedQueryInsightsEnabled: cloudSqlConfig.enterprisePlus,
           },
           tier: cloudSqlConfig.tier,
           edition: cloudSqlConfig.enterprisePlus ? 'ENTERPRISE_PLUS' : 'ENTERPRISE',
@@ -509,8 +509,7 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
     instanceName: string,
     installPassword: (parent: Resource) => k8s.core.v1.Secret,
     splicePostgresHelmMigrationConfig:
-      | SplicePostgresMigrateConfig
-      | SplicePostgresDockerImageConfig,
+      SplicePostgresMigrateConfig | SplicePostgresDockerImageConfig,
     values?: LegacyChartValues,
     overrideDbSizeFromValues?: boolean,
     disableProtection?: boolean,
@@ -926,8 +925,7 @@ export function installSplicePostgres(
       instanceName,
       parent => installPasswordWithParent(parent, xns, instanceName, secretName),
       splicePostgresHelmMigrationConfig as
-        | SplicePostgresMigrateConfig
-        | SplicePostgresDockerImageConfig,
+        SplicePostgresMigrateConfig | SplicePostgresDockerImageConfig,
       chartValues,
       overrideDbSizeFromValues,
       opts.disableProtection,

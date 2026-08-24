@@ -2087,6 +2087,7 @@ def mergeStrategy(oldStrategy: String => MergeStrategy): String => MergeStrategy
     case path if path.endsWith("scala-collection-compat.properties") => MergeStrategy.first
     // Don't really care about the notice file so just take any.
     case "META-INF/FastDoubleParser-NOTICE" => MergeStrategy.first
+    case "META-INF/FastDoubleParser-LICENSE" => MergeStrategy.first
     case "META-INF/license/LICENSE.boringssl.txt" => MergeStrategy.first
     case path if path.endsWith("/OSGI-INF/MANIFEST.MF") => MergeStrategy.first
     case x =>
@@ -2398,6 +2399,7 @@ lazy val `apps-app`: Project =
       `canton-community-app` % "compile->compile;test->test",
       `canton-community-base`,
       `canton-community-integration-testing` % "test",
+      `splice-amulet-test-daml` % "test",
       `splice-util-featured-app-proxies-daml` % "test",
       // necessary for token-standard-cli to get `npm install`ed so that TokenStandardCliSanityCheckPlugin can run
       `apps-common-frontend`,

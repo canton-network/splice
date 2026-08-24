@@ -4,6 +4,7 @@ import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
 
 import { parseScanYamlEndpoints, parseTokenRegistrySpecEndpoints } from '../config/scanEndpoints';
+import { localRateLimitedHeader } from './rateLimitHeaders';
 
 interface Limits {
   maxTokens: number;
@@ -43,10 +44,23 @@ type LocalLimit<L> = {
   name: string;
 } & L;
 
-// This is arbitrary, but must not match any limit `name` used for an EnvoyFilter
-// above. All existing manual YAML entries use 'client_ip' so this is the nicest
-// migration away from always specifying that.
-const clientIpEntryKey = 'client_ip';
+// The descriptor entry key emitted by envoy's `masked_remote_address` rate limit action.
+// This is hardcoded in envoy (see MaskedRemoteAddressAction::populateDescriptor) and
+// cannot be configured, so the descriptors we generate must use exactly this key.
+const clientIpEntryKey = 'masked_remote_address';
+const reservedEntryKeys = [clientIpEntryKey, 'client_ip'];
+
+// The per-IP descriptors are wildcard descriptors: envoy allocates a token bucket per
+// observed client IP and keeps them in an LRU cache whose size defaults to a mere 20
+// entries.
+export const maxDynamicDescriptorsPerLimit = 10000;
+
+// Envoy rejects token buckets refilling faster than this, and requires every descriptor
+// fill interval to be a multiple of the global (default) bucket's fill interval.
+const minFillIntervalMs = 50;
+
+// uint32 in envoy's TokenBucket proto
+const maxTokenValue = 4294967295;
 
 interface RateLimitEnvoyFilterArgs extends PerEndpointLimits {
   namespace: string;
@@ -123,15 +137,76 @@ export function validateIpLimits(pathPrefix: string, rateLimit: LocalLimit<Match
   }
 }
 
+/**
+ * Parses a protobuf duration (as accepted by envoy's `fill_interval`) into milliseconds.
+ */
+export function parseFillIntervalMs(fillInterval: string, context: string): number {
+  const match = /^(\d+(?:\.\d+)?)s$/.exec(fillInterval);
+  if (!match) {
+    throw new Error(
+      `${context}: invalid fillInterval '${fillInterval}', expected a duration in seconds such as '60s'`
+    );
+  }
+  return Math.round(parseFloat(match[1]) * 1000);
+}
+
+function validateLimits(context: string, limits: Limits, globalFillIntervalMs?: number): void {
+  const fillIntervalMs = parseFillIntervalMs(limits.fillInterval, context);
+  // envoy rejects fill intervals below 50ms, see the local rate limit filter docs.
+  // https://www.envoyproxy.io/docs/envoy/latest/api-v3/extensions/filters/http/local_ratelimit/v3/local_rate_limit.proto#envoy-v3-api-field-extensions-filters-http-local-ratelimit-v3-localratelimit-token-bucket
+  if (fillIntervalMs < minFillIntervalMs) {
+    throw new Error(
+      `${context}: fillInterval '${limits.fillInterval}' is below the ${minFillIntervalMs}ms minimum enforced by envoy`
+    );
+  }
+  // envoy requires descriptor fill intervals to be a multiple of the default bucket's
+  // fill interval; violating this makes istiod push a config that envoy NACKs, which
+  // silently leaves the sidecar running without any rate limits at all.
+  // https://www.envoyproxy.io/docs/envoy/latest/api-v3/extensions/filters/http/local_ratelimit/v3/local_rate_limit.proto#envoy-v3-api-field-extensions-filters-http-local-ratelimit-v3-localratelimit-descriptors
+  if (globalFillIntervalMs !== undefined && fillIntervalMs % globalFillIntervalMs !== 0) {
+    throw new Error(
+      `${context}: fillInterval '${limits.fillInterval}' must be a multiple of the globalLimits fillInterval (${globalFillIntervalMs}ms)`
+    );
+  }
+  [['maxTokens', limits.maxTokens] as const, ['tokensPerFill', limits.tokensPerFill] as const]
+    .filter(([, value]) => !Number.isInteger(value) || value < 0 || value > maxTokenValue)
+    .forEach(([field, value]) => {
+      throw new Error(
+        `${context}: ${field} must be an integer in [0, ${maxTokenValue}], got ${value}`
+      );
+    });
+}
+
+export function validateTokenBuckets(
+  globalLimits: Limits,
+  effectiveRateLimits: LocalLimits<MatchedLimits>
+): void {
+  validateLimits('globalLimits', globalLimits);
+  const globalFillIntervalMs = parseFillIntervalMs(globalLimits.fillInterval, 'globalLimits');
+  Object.entries(effectiveRateLimits).forEach(([pathPrefix, rateLimit]) => {
+    validateLimits(pathPrefix, rateLimit, globalFillIntervalMs);
+    if (rateLimit.perIpLimits) {
+      validateLimits(`${pathPrefix} perIpLimits`, rateLimit.perIpLimits, globalFillIntervalMs);
+      Object.entries(rateLimit.perIpLimits.overrides || {}).forEach(([name, override]) =>
+        validateLimits(
+          `${pathPrefix} perIpLimits override '${name}'`,
+          override,
+          globalFillIntervalMs
+        )
+      );
+    }
+  });
+}
+
 function validateEffectiveRateLimits(
   args: RateLimitEnvoyFilterArgs
 ): LocalLimits<MatchedLimits> | undefined {
   const collidingPathNames = Object.entries(args.rateLimits || {})
-    .filter(([, rl]) => rl.name === clientIpEntryKey)
+    .filter(([, rl]) => reservedEntryKeys.includes(rl.name))
     .map(([path]) => path);
   if (collidingPathNames.length > 0) {
     throw new Error(
-      `${collidingPathNames.join(', ')} use reserved name ${clientIpEntryKey}; choose a different name`
+      `${collidingPathNames.join(', ')} use reserved name ${reservedEntryKeys.join('/')}; choose a different name`
     );
   }
 
@@ -188,7 +263,13 @@ function validateEffectiveRateLimits(
     validateIpLimits(pathPrefix, rateLimit);
   });
 
+  validateTokenBuckets(args.globalLimits, effectiveRateLimits);
+
   return effectiveRateLimits;
+}
+
+export function clientIpDescriptorValue(ip: string): string {
+  return `${ip}/32`;
 }
 
 export function buildRateLimitActions(effectiveRateLimits: LocalLimits<MatchedLimits>): unknown[] {
@@ -220,12 +301,18 @@ export function buildRateLimitActions(effectiveRateLimits: LocalLimits<MatchedLi
         actions: [
           baseAction,
           {
-            request_headers: {
-              descriptor_key: clientIpEntryKey,
-              // x-forwarded-for can include multiple proxy hops and vary as
-              // requests traverse different paths. Envoy's external address
-              // header is the normalized client address we want for per-IP limits.
-              header_name: 'x-envoy-external-address',
+            // We deliberately do not key on the raw x-forwarded-for header: clients can
+            // prepend arbitrary entries to it, and our gateway only appends to it, so
+            // the header value is attacker controlled and per-IP limits could be evaded
+            // by simply varying the header on every request.
+            // masked_remote_address instead uses the address envoy trusts, which for the
+            // sidecar is the last x-forwarded-for hop, i.e. the one appended by our own
+            // ingress gateway.
+            masked_remote_address: {
+              // one bucket per client address
+              v4_prefix_mask_len: 32,
+              // the default of 0 would put all IPv6 clients into a single bucket
+              v6_prefix_mask_len: 128,
             },
           },
         ],
@@ -260,7 +347,7 @@ export function buildRateLimitDescriptors(
           descs.push({
             entries: [
               { key: 'header_match', value: rateLimit.name },
-              { key: clientIpEntryKey, value: ip },
+              { key: clientIpEntryKey, value: clientIpDescriptorValue(ip) },
             ],
             token_bucket: {
               max_tokens: override.maxTokens,
@@ -389,11 +476,16 @@ export class RateLimitEnvoyFilter extends pulumi.ComponentResource {
                         {
                           append_action: 'OVERWRITE_IF_EXISTS_OR_ADD',
                           header: {
-                            key: 'x-local-rate-limit',
+                            key: localRateLimitedHeader,
                             value: 'true',
                           },
                         },
                       ],
+                      // Emit X-RateLimit-Limit/Remaining/Reset.
+                      // used in sidecar access logs
+                      // not sent to the client, because we strip them on the ingress gateway
+                      enable_x_ratelimit_headers: 'DRAFT_VERSION_03',
+                      max_dynamic_descriptors: maxDynamicDescriptorsPerLimit,
                       // simplified descriptors by combining with actions and requiring all the tokens of an action to be set
                       // a descriptor in practice is a subset of tags from a rate limit
                       // but important to note that for each rate limit only one descriptor can match, if multiple descriptors match, the first one is used
