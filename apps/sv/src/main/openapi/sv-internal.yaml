@@ -76,6 +76,7 @@ paths:
     get:
       tags: [sv]
       x-jvm-package: sv_public
+      x-public-audience: none
       operationId: "getCometBftNodeStatus"
       responses:
         "200":
@@ -96,6 +97,7 @@ paths:
     post:
       tags: [sv]
       x-jvm-package: sv_public
+      x-public-audience: none
       operationId: "cometBftJsonRpcRequest"
       requestBody:
         required: true
@@ -393,6 +395,7 @@ paths:
     post:
       tags: [sv]
       x-jvm-package: sv_public
+      x-public-audience: validators
       operationId: "onboardValidator"
       requestBody:
         required: true
@@ -411,6 +414,7 @@ paths:
     post:
       tags: [sv]
       x-jvm-package: sv_public
+      x-public-audience: sv-operators
       operationId: "startSvOnboarding"
       requestBody:
         required: true
@@ -429,6 +433,7 @@ paths:
     get:
       tags: [sv]
       x-jvm-package: sv_public
+      x-public-audience: sv-operators
       operationId: "getSvOnboardingStatus"
       parameters:
         - name: "candidate_party_id_or_name"
@@ -451,6 +456,7 @@ paths:
     post:
       tags: [sv]
       x-jvm-package: sv_public
+      x-public-audience: sv-operators
       operationId: "onboardSvPartyMigrationAuthorize"
       requestBody:
         required: true
@@ -477,6 +483,7 @@ paths:
     post:
       tags: [sv]
       x-jvm-package: sv_public
+      x-public-audience: sv-operators
       operationId: "onboardSvSequencer"
       requestBody:
         required: true
@@ -497,6 +504,7 @@ paths:
     post:
       tags: [sv]
       x-jvm-package: sv_public
+      x-public-audience: validators
       description: "faucet for validator candidates self-service"
       operationId: "devNetOnboardValidatorPrepare"
       responses:
@@ -515,6 +523,7 @@ paths:
       tags: [sv]
       # TODO(DACH-NY/canton-network-internal#2106) Move to sv_operator
       x-jvm-package: sv_public
+      x-public-audience: validators
       operationId: "getDsoInfo"
       responses:
         "200":
@@ -528,6 +537,7 @@ paths:
     get:
       tags: [sv]
       x-jvm-package: sv_public
+      x-public-audience: sv-operators
       operationId: "getMigrationId"
       description: |
         Returns the synchronizer migration id this SV is currently using.
