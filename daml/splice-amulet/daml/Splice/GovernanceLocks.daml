@@ -145,7 +145,6 @@ template VestingLock
         checkActors actors [[owner]] -- ^ TODO: custom controllers
         currentAmount <- fetchAmount (ForOwner with dso; owner) holding
         assertDeadlineExceeded "requestedAt" requestedAt
-        require "withdrawal time must be after the start time" $ requestedAt > startTime
 
         let withdrawAmount = calculateAvailableWithdrawAmount currentAmount requestedAt this
 
