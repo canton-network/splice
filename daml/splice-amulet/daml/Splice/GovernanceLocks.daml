@@ -13,7 +13,7 @@ import Splice.AmuletRules
 import Splice.Api.Token.HoldingV1 (Holding)
 import Splice.Api.Token.MetadataV1
 import Splice.Expiry
-import qualified Splice.TokenStandard.Utils as TSU
+import Splice.TokenStandard.Utils hiding (require)
 import Splice.Types
 import Splice.Util
 
@@ -21,15 +21,16 @@ data GovernanceLockSubject
   = GLS_FeaturedApp with
       appProviderParty : Party
   | GLS_SuperValidatorRightsOwner with
-      superValidatorName : Text
+      svName : Text  -- ^ Name of the SV rights owner for whom the funds are locked.
   deriving (Eq, Show, Serializable)
 
--- Note: will also contain controllers specifications, when added.
+-- FIXME: add controllers specifications
 data GovernanceLockSpecification
   = GovernanceLockSpecification with
       subject : GovernanceLockSubject
   deriving (Eq, Show, Serializable)
 
+-- FIXME: move the choices of this factory into `ExternalPartyAmuletRules` once we're happy with them
 template GovernanceLockFactory
   with
     dso : Party
@@ -48,6 +49,7 @@ template GovernanceLockFactory
         governanceLock <- create GovernanceLock with
           dso
           owner
+          amount
           holding
           specification
         pure $ GovernanceLockFactory_LockResult with
@@ -67,23 +69,24 @@ data GovernanceLockFactory_LockResult
 template GovernanceLock
   with
     dso : Party
-    owner : Party
+    owner : Party  -- ^ Lock owner
+    amount : Decimal  -- ^ Locked amount
     holding : ContractId LockedAmulet
     specification : GovernanceLockSpecification
   where
     signatory dso, owner
     choice GovernanceLock_Unlock : GovernanceLock_UnlockResult
       with
-        amount : Optional Decimal
-        requestedAt : Time
+        unlockAmount : Optional Decimal -- ^ Amount to unlock. Defaults to the full amount if not set.
+        unlockAt : Time  -- ^ Time as of which the unlock is to be registered and vesting starts. Must be in the future.
         context : ExternalPartyTransferContext
         actors : [Party]
       controller actors
       do
-        require "Only the owner may unlock" $ actors == [owner] -- TODO: custom controllers
-        assertWithinDeadline "requestedAt must be in the future for unlock" requestedAt
+        checkActors actors [[owner]] -- ^ TODO: custom controllers
+        assertWithinDeadline "unlockAt" unlockAt
 
-        (vestingLockedHolding, governanceLock, initialAmount) <- case amount of
+        (vestingLockedHolding, governanceLock, initialAmount) <- case unlockAmount of
           None -> do -- No split required, reuse the LockedAmulet contract.
             currentAmount <- fetchAmount (ForOwner with dso; owner) holding
             pure (holding, None, currentAmount)
@@ -92,6 +95,7 @@ template GovernanceLock
             governanceLock <- create
               this with
                 holding = stillLockedHolding
+                amount = amount - unlockAmount
             pure (vesting, Some governanceLock, unlockAmount)
 
         let vestingDuration = vestingDurationFor specification.subject context
@@ -101,7 +105,7 @@ template GovernanceLock
           owner
           holding = vestingLockedHolding
           unlockPeriod = vestingDuration
-          startTime = requestedAt
+          startTime = unlockAt
           initialAmount
 
         pure $ GovernanceLock_UnlockResult with
@@ -128,17 +132,20 @@ template VestingLock
     initialAmount : Decimal
   where
     signatory dso, owner
+
+    -- | Withdraw all funds that have vested since the last withdrawal
+    -- and the time of this request.
     choice VestingLock_Withdraw : VestingLock_WithdrawResult
       with
         amount : Optional Decimal
-        requestedAt : Time
+        requestedAt : Time -- ^ Time to use for determining the funds that have vested. Must be in the past.
         context : ExternalPartyTransferContext
         actors : [Party]
       controller actors
       do
-        require "Only the owner may withdraw" $ actors == [owner] -- TODO: custom controllers
+        checkActors actors [[owner]] -- ^ TODO: custom controllers
         currentAmount <- fetchAmount (ForOwner with dso; owner) holding
-        assertDeadlineExceeded "requestAt must be in the past for withdraw" requestedAt
+        assertDeadlineExceeded "requestedAt" requestedAt
         require "withdrawal time must be after the start time" $ requestedAt > startTime
 
         let available = calculateAvailableWithdrawAmount currentAmount requestedAt this
@@ -230,7 +237,7 @@ lockAmulet forOwner@ForOwner {..} amounts inputHoldingCids context = do
                 expiresAt = maxBound -- We don't have any call to isLedgerTimeLE, so we can use the true maxBound here for arbitrary duration.
                 holders = [dso]
                 optContext = Some lockContext
-              meta = Some (TSU.reasonToMeta ("lock for " <> lockContext) emptyMetadata)
+              meta = Some (reasonToMeta ("lock for " <> lockContext) emptyMetadata)
         inputs = transferInputs
         beneficiaries = None
 

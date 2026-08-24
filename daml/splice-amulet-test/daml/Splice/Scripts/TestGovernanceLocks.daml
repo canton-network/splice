@@ -21,7 +21,7 @@ testGovernanceLockHappyPath = do
   let dso = env.instrId.admin
 
   let someSvSpec = GovernanceLockSpecification with
-        subject = GLS_SuperValidatorRightsOwner "SomeApp"
+        subject = GLS_SuperValidatorRightsOwner "TestSV"
 
   submit (actAs dso) $ createCmd GovernanceLockFactory with dso
 
@@ -110,11 +110,11 @@ governanceLockRawChoice env owner amount specification = do
   pure cid
 
 governanceUnlockRawChoice : TestEnv -> ContractId GovernanceLock -> Optional Decimal -> Time -> [Party] -> Script (ContractId VestingLock, Optional (ContractId GovernanceLock))
-governanceUnlockRawChoice env cid amount requestedAt actors = do
+governanceUnlockRawChoice env cid unlockAmount unlockAt actors = do
   result <- submitWithTransferContext env (actAs actors) $ \context -> exerciseCmd cid GovernanceLock_Unlock with
-    amount
+    unlockAmount
     context
-    requestedAt
+    unlockAt
     actors
   pure (result.vestingLock, result.governanceLock)
 
