@@ -396,14 +396,27 @@ export type StackOutputsProvider = (
 ) => Partial<Record<string, any>> | undefined;
 
 export const infraStackOutputsProvider: StackOutputsProvider = (project: string) => {
-  return project === 'infra'
-    ? {
+  switch (project) {
+    case 'canton-network':
+      return {
+        svs: [...Array.from({ length: 16 }, (_, index) => `sv-${index + 1}`), 'sv-da-1'].map(
+          nodeName => ({
+            nodeName,
+            databaseInstanceName: `${nodeName}-cn-apps-pg`,
+            databaseSecretName: `${nodeName}-cn-apps-pg-secret`,
+          })
+        ),
+      };
+    case 'infra':
+      return {
         istioDashboardVersions: '1234',
         auth0: {
           svRunbook: svRunbookAuth0Config,
           cantonNetwork: cantonNetworkAuth0Config,
           mainnet: cantonNetworkAuth0Config,
         } as Auth0ClusterConfig,
-      }
-    : undefined;
+      };
+    default:
+      return undefined;
+  }
 };
