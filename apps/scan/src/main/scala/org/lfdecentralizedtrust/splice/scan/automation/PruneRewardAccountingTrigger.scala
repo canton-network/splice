@@ -14,6 +14,7 @@ import org.lfdecentralizedtrust.splice.scan.automation.PruneRewardAccountingTrig
 import org.lfdecentralizedtrust.splice.scan.store.{ScanAppRewardsStore, ScanRewardsReferenceStore}
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanVerdictStore
 import org.lfdecentralizedtrust.splice.store.UpdateHistory
+import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
@@ -65,22 +66,61 @@ class PruneRewardAccountingTrigger(
         case None =>
           Future.successful(Seq.empty)
         case Some(roundNumber) =>
-          rewardsReferenceStore.lookupArchivedAtForOpenMiningRound(roundNumber).map {
+          // For ScanRewardsReferenceStore the earliest archived_at row act as
+          // an indicator of the "ingestion start", and therefore we need to ensure
+          // that we keep at least one archived row in the store with record_time lower than
+          // the lastIngestedRecordTime's oldest active round's `openAt` time.
+          //
+          // A simple way to ensure this is to compare the `openAt` with the roundNumber + 1 archived_at.
+          verdictStore.lastIngestedRecordTime match {
             case None =>
-              logger.warn(
-                s"This should never happen, could not resolve archived_at for round $roundNumber."
-              )
-              Seq.empty
-            case Some(uptoInclusive) =>
-              if (verdictStore.lastIngestedRecordTime.exists(_ >= uptoInclusive)) {
-                Seq(Task(roundNumber))
-              } else {
-                logger.debug(
-                  s"Skipping pruning as the verdict ingestion (last ingested record time: ${verdictStore.lastIngestedRecordTime}) " +
-                    s"has not yet caught up to round $roundNumber's archivedAt ($uptoInclusive)"
-                )
-                Seq.empty
-              }
+              logger.debug("Skipping pruning as no verdict has been ingested yet.")
+              Future.successful(Seq.empty)
+            case Some(lastIngestedRecordTime) =>
+              rewardsReferenceStore
+                .lookupActiveOpenMiningRounds(Seq(lastIngestedRecordTime))
+                .flatMap(_.get(lastIngestedRecordTime) match {
+                  case None =>
+                    logger.warn(
+                      s"We should never hit this, as we should always have an active OpenMiningRound" +
+                        s"as of the last ingested verdict record time ($lastIngestedRecordTime)."
+                    )
+                    Future.successful(Seq.empty)
+                  case Some((activeRoundNumber, _)) =>
+                    for {
+                      activeRoundO <- rewardsReferenceStore.lookupOpenMiningRoundByNumber(
+                        activeRoundNumber
+                      )
+                      archivedAtNextO <- rewardsReferenceStore.lookupArchivedAtForOpenMiningRound(
+                        roundNumber + 1
+                      )
+                    } yield (activeRoundO, archivedAtNextO) match {
+                      case (Some(activeRound), Some(archivedAtNext)) =>
+                        if (
+                          CantonTimestamp
+                            .assertFromInstant(activeRound.payload.opensAt) > archivedAtNext
+                        ) {
+                          Seq(Task(roundNumber))
+                        } else {
+                          logger.debug(
+                            s"Skipping pruning of round $roundNumber as the ingestion's currently active round " +
+                              s"$activeRoundNumber opened at ${activeRound.payload.opensAt}, which is not yet " +
+                              s"past round ${roundNumber + 1}'s archivedAt ($archivedAtNext)."
+                          )
+                          Seq.empty
+                        }
+                      case (_, None) =>
+                        logger.debug(
+                          s"Skipping pruning of round $roundNumber as round ${roundNumber + 1} has not archived yet."
+                        )
+                        Seq.empty
+                      case (None, _) =>
+                        logger.warn(
+                          s"This should never happen, could not resolve OpenMiningRound $activeRoundNumber."
+                        )
+                        Seq.empty
+                    }
+                })
           }
       }
 
