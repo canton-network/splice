@@ -1,17 +1,17 @@
 module Splice.Scripts.TestGovernanceLocks where
 
-import DA.Assert
 import DA.List.Total
 import DA.Time
 
-import Splice.Testing.Registries.AmuletRegistryV2 qualified as AmuletRegistryV2
 import Daml.Script
 import Splice.Amulet
 import Splice.AmuletRules
-import Splice.Api.Token.HoldingV1
+import Splice.Api.Token.HoldingV2 qualified as V2
 import Splice.ExternalPartyConfigState
 import Splice.GovernanceLocks
 import Splice.Scripts.TokenStandard.TestAmuletTokenStandardTestEnv
+import Splice.Testing.Registries.AmuletRegistryV2 qualified as AmuletRegistryV2
+import Splice.Testing.TokenStandard.WalletClientV2
 import Splice.Testing.Utils
 
 
@@ -40,7 +40,7 @@ testGovernanceLockHappyPath = do
   (aliceVesting, Some aliceLock) <- governanceUnlockRawChoice env aliceLock (Some 80000.0) unlockTime [alice]
 
   -- Assert that we have a lock remaining of 100k Amulet.
-  assertLockedHoldingAmount alice aliceLock 100000.0
+  checkLockedHolding alice aliceLock 100000.0
 
   (externalPartyContext, disc) <- getExternalPartyTransferContext dso
   submitMustFail (actAs alice <> discloseMany' disc) $ exerciseCmd aliceVesting VestingLock_Withdraw with
@@ -61,10 +61,10 @@ testGovernanceLockHappyPath = do
   (unlocked, Some newVestingLock) <- vestingWithdrawRawChoice env aliceVesting None withdrawTime [alice]
 
   -- Check that we did indeed unlock 10k amulet as expected - 1/8th of the total vesting amount of 80k.
-  assertHoldingAmount alice unlocked 10000.0
+  checkHolding' alice unlocked 10000.0
 
   -- And check that we remain with 7/8ths of the vesting amount - 70k.
-  assertLockedHoldingAmount alice newVestingLock 70000.0
+  checkLockedHolding alice newVestingLock 70000.0
 
   passTime (days 365)
 
@@ -73,19 +73,17 @@ testGovernanceLockHappyPath = do
   (unlockedHolding2, None) <- vestingWithdrawRawChoice env newVestingLock None fullWithdrawTime [alice]
 
   -- Check that we withdrew all and exactly the 70k _remaining_ after the above withdrawal.
-  assertHoldingAmount alice unlockedHolding2 70000.0
+  checkHolding' alice unlockedHolding2 70000.0
 
+-- | Polymorphic checkHolding, to avoid repeated toInterfaceContractId when we have a LockedAmulet or Amulet ContractId.
+checkHolding' : Implements a V2.Holding => Party -> ContractId a -> Decimal -> Script ()
+checkHolding' party holding amount = checkHolding party (toInterfaceContractId holding) amount
 
-
-assertHoldingAmount : Implements a Holding => Party -> ContractId a -> Decimal -> Script ()
-assertHoldingAmount p holdingCid amount = do
-  Some holding <- (queryInterfaceContractId p $ toInterfaceContractId @Holding holdingCid)
-  holding.amount === amount
-
-assertLockedHoldingAmount : (Template t, HasEnsure t, HasField "holding" t (ContractId LockedAmulet)) => Party -> ContractId t -> Decimal -> Script ()
-assertLockedHoldingAmount p lockCid amount = do
+-- | Find the holding for a GovernanceLock or VestingLock, and check that it has the correct amount.
+checkLockedHolding : (Template t, HasEnsure t, HasField "holding" t (ContractId LockedAmulet)) => Party -> ContractId t -> Decimal -> Script ()
+checkLockedHolding p lockCid amount = do
   Some lock <- queryContractId p lockCid
-  assertHoldingAmount p lock.holding amount
+  checkHolding' p lock.holding amount
 
 getExternalPartyTransferContext : Party -> Script (ExternalPartyTransferContext, Disclosures')
 getExternalPartyTransferContext dso = do
@@ -108,11 +106,11 @@ governanceLockRawChoice env owner amount specification = do
   let dso = env.instrId.admin
   [(glfCid, _glf)] <- query @GovernanceLockFactory dso
   disc <- queryDisclosure' dso glfCid
-  inputs <- fmap fst <$> query @Amulet owner -- Excessive, check how the normal registry does it.
+  inputs <- listHoldingCids owner env.instrId
   GovernanceLockFactory_LockResult cid _ <- submitWithTransferContext env (actAs [owner] <> discloseMany' disc) $
     \context -> exerciseCmd glfCid GovernanceLockFactory_Lock with
       amount
-      inputs = toInterfaceContractId <$> inputs
+      inputs = coerceContractId <$> inputs -- These are Amulet and LockedAmulet, but we don't have convenient constraints to show that.
       specification
       context
       owner
