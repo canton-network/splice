@@ -86,7 +86,7 @@ template GovernanceLock
         checkActors actors [[owner]] -- ^ TODO: custom controllers
         assertWithinDeadline "unlockAt" unlockAt
 
-        (vestingLockedHolding, governanceLock, initialAmount) <- case unlockAmount of
+        (vestingLockedHolding, governanceLock, vestingAmount) <- case unlockAmount of
           None -> do -- No split required, reuse the LockedAmulet contract.
             currentAmount <- fetchAmount (ForOwner with dso; owner) holding
             pure (holding, None, currentAmount)
@@ -98,22 +98,22 @@ template GovernanceLock
                 amount = amount - unlockAmount
             pure (vesting, Some governanceLock, unlockAmount)
 
-        let vestingDuration = vestingDurationFor specification.subject context
+        let vestingPeriod = vestingDurationFor specification.subject context
 
         vestingLock <- create VestingLock with
           dso
           owner
           holding = vestingLockedHolding
-          unlockPeriod = vestingDuration
+          vestingPeriod
           startTime = unlockAt
-          initialAmount
+          vestingAmount
 
         pure $ GovernanceLock_UnlockResult with
           vestingLock
           governanceLock
 
   -- TODO: implement V2 Allocation interface on above. Most fields of the view are generated, as they are constants or specific presentations of the above.
-  -- TODO: implement pending V1 transaction for the above, for backwards compatibility.
+  -- TODO: implement pending V1 transfer for the above, for backwards compatibility.
   -- TODO: substitution, probably with a loose function for implementation sharing.
 
 data GovernanceLock_UnlockResult
@@ -127,9 +127,9 @@ template VestingLock
     dso : Party
     owner : Party
     holding : ContractId LockedAmulet
-    unlockPeriod : RelTime
-    startTime : Time
-    initialAmount : Decimal
+    vestingPeriod : RelTime  -- ^ Duration over which the amount vests in a linear fashion.
+    startTime : Time  -- ^ Time at which vesting starts.
+    vestingAmount : Decimal  -- ^ The amount that is vesting.
   where
     signatory dso, owner
 
@@ -177,10 +177,10 @@ data VestingLock_WithdrawResult
 
 calculateAvailableWithdrawAmount : Decimal -> Time -> VestingLock -> Optional Decimal -- None indicates the _full_ amount is available
 calculateAvailableWithdrawAmount currentAmount currentTime VestingLock{ .. }
-    | currentTime > (startTime `addRelTime` unlockPeriod) = None
-    | otherwise = Some $ initialAmount `mul` fractionElapsed - (initialAmount - currentAmount)
+    | currentTime > (startTime `addRelTime` vestingPeriod) = None
+    | otherwise = Some $ vestingAmount `mul` fractionElapsed - (vestingAmount - currentAmount)
   where
-    fractionElapsed = (currentTime `subTime` startTime) `divRelTime` unlockPeriod
+    fractionElapsed = (currentTime `subTime` startTime) `divRelTime` vestingPeriod
     divRelTime : RelTime -> RelTime -> Numeric 37 -- Specifically valid and maximum cleanly represented range for 0 < a < b
     divRelTime = \a b -> (intToDecimal $ convertRelTimeToMicroseconds a) `div` (intToDecimal $ convertRelTimeToMicroseconds b)
 
