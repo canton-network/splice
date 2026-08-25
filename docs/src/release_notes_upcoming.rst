@@ -38,3 +38,10 @@ release-notes:: Upcoming
           before the SVs set a non-zero delay. After that, the choice rejects allocations
           that omit ``mintAfter``. Coupons allocated before that vote have no ``mintAfter``.
           A beneficiary can mint those coupons with no delay.
+
+    - Validator
+
+        - *breaking*: The deprecated ``TransferCommand`` functionality
+          enabled by ``canton.validator-apps.validator_backend.enable-deprecated-transfer-command-support=true``
+          has been fully removed. Migrate to token standard transfers
+          and remove the flag.

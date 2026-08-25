@@ -224,8 +224,6 @@ case class ValidatorAppBackendConfig(
     // from running concurrently against the same database.  Only disable for migration scenarios
     // where intentional overlap is required.
     instanceLockEnabled: Boolean = true,
-    // Enable the deprecated transfer command support, will be fully removed in 0.8.0.
-    enableDeprecatedTransferCommandSupport: Boolean = false,
 ) extends SpliceBackendConfig // TODO(DACH-NY/canton-network-node#736): fork or generalize this trait.
     {
   override val nodeTypeName: String = "validator"
