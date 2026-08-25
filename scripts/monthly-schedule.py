@@ -135,7 +135,8 @@ def board_id_from_env() -> int:
 
 
 def monday_request(token: str, query: str, variables: dict) -> dict:
-    headers = {"Authorization": token, "Content-Type": "application/json"}
+    headers = {"Authorization": token, "Content-Type": "application/json",
+               "Accept": "application/graphql-response+json, application/json"}
 
     if os.getenv("MONDAY_API_VERSION"):
         headers["API-Version"] = os.environ["MONDAY_API_VERSION"]
