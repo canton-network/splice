@@ -71,7 +71,7 @@ class BulkStorageCommitFromStaging[T](
                 bftChecksums.checksums.filter(_.value.isDefined).map(_.value) == objects.map(oc =>
                   Some(oc.checksum)
                 )
-              if (!consensus)    {
+              if (!consensus) {
                 logger.error(
                   s"Checksums do not match for objects ${objects.map(_.key).mkString(", ")}. My checksums are: ${objects
                       .map(_.checksum)
@@ -80,27 +80,31 @@ class BulkStorageCommitFromStaging[T](
 
                 if (appConfig.debugObjectsToNotCommit.intersect(objects.map(_.key)).nonEmpty) {
                   logger.debug(
-                    s"Some relevant objects are listed in debugObjectsToNotCommit, will ignore them for the consensus check. Ignored objects: ${
-                      appConfig.debugObjectsToNotCommit
+                    s"Some relevant objects are listed in debugObjectsToNotCommit, will ignore them for the consensus check. Ignored objects: ${appConfig.debugObjectsToNotCommit
                         .intersect(objects.map(_.key))
-                        .mkString(", ")
-                    }"
+                        .mkString(", ")}"
                   )
                   val objectsWithConsensusChecksums = objects.zip(consensusChecksums)
                   // Filter out objects for which the key is listed in appConfig.debugObjectsToNotCommit
-                  val unignoredObjectsWithTheirConsensusChecksums = objectsWithConsensusChecksums.filter {
-                    case (obj, _) => !appConfig.debugObjectsToNotCommit.contains(obj.key)
-                  }
-                  val unignoredObjectsWithMyChecksums = objects.filter(obj => !appConfig.debugObjectsToNotCommit.contains(obj.key))
+                  val unignoredObjectsWithTheirConsensusChecksums =
+                    objectsWithConsensusChecksums.filter { case (obj, _) =>
+                      !appConfig.debugObjectsToNotCommit.contains(obj.key)
+                    }
+                  val unignoredObjectsWithMyChecksums =
+                    objects.filter(obj => !appConfig.debugObjectsToNotCommit.contains(obj.key))
                   // recheck consensus, but now only on the unignored objects. The comparison should be similar to val consensus above
                   val unignoredConsensus =
-                    unignoredObjectsWithTheirConsensusChecksums.filter(_._2.value.isDefined).map(_._2.value) == unignoredObjectsWithMyChecksums.map(oc =>
+                    unignoredObjectsWithTheirConsensusChecksums
+                      .filter(_._2.value.isDefined)
+                      .map(_._2.value) == unignoredObjectsWithMyChecksums.map(oc =>
                       Some(oc.checksum)
                     )
 
                   if (!unignoredConsensus) {
                     logger.error(
-                      s"Checksums still do not match for unignored objects ${unignoredObjectsWithMyChecksums.map(_.key).mkString(", ")}. Expected: ${unignoredObjectsWithMyChecksums
+                      s"Checksums still do not match for unignored objects ${unignoredObjectsWithMyChecksums
+                          .map(_.key)
+                          .mkString(", ")}. Expected: ${unignoredObjectsWithMyChecksums
                           .map(_.checksum)
                           .mkString(", ")}, got: ${unignoredObjectsWithTheirConsensusChecksums.map(_._2.value).mkString(", ")}"
                     )
