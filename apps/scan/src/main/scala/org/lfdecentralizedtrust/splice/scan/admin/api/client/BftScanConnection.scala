@@ -1355,6 +1355,29 @@ object BftScanConnection {
     def randomSingleCall(connections: ScanConnections): BftCallConfig =
       default(connections).copy(requestsToDo = 1, targetSuccess = 1)
 
+    /** BFT config for a two-phase probe-filter-consensus call: the caller
+      * has already queried every open scan and kept only those that
+      * returned data. `n` is recomputed from that filtered set, so
+      * `f = (n-1)/3` scales with data availability (n=1 → f=0 →
+      * targetSuccess=1; n=4 → f=1 → targetSuccess=2). Reverts to full
+      * BFT as more scans catch up.
+      *
+      * Precondition: callers only invoke this with a non-empty
+      * `withData`. The `n<=0` branch returns a config that
+      * `enoughAvailableScans` rejects cleanly as a defensive default.
+      */
+    def forWithDataOnly(
+        withData: Seq[SingleScanConnection]
+    ): BftCallConfig = {
+      val n = withData.size
+      val f = if (n <= 0) 0 else (n - 1) / 3
+      BftCallConfig(
+        connections = withData,
+        requestsToDo = n,
+        targetSuccess = if (n <= 0) 0 else f + 1,
+      )
+    }
+
     def forAvailableData(
         connections: ScanConnections,
         dataAvailable: SingleScanConnection => Boolean,

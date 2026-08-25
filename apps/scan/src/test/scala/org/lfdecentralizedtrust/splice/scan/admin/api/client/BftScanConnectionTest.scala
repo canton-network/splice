@@ -46,7 +46,7 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   RewardAccountingRootHashUndetermined,
 }
 
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection.Bft
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection.{Bft, BftCallConfig}
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.{
   DomainScans,
   DsoScan,
@@ -1531,6 +1531,69 @@ class BftScanConnectionTest
         // So if the caller attempts 100 times, we should hit a batch with very high probability.
         resp <- attempt(100)
       } yield resp should be(Some(rewardAccountingBatchResponse))
+    }
+  }
+
+  "BftCallConfig.forWithDataOnly" should {
+
+    "treat a single-scan set as its own quorum (n=1, f=0)" in {
+      val withData = getMockedConnections(n = 1)
+      val config = BftCallConfig.forWithDataOnly(withData)
+      config.connections should have size 1
+      config.requestsToDo shouldBe 1
+      config.targetSuccess shouldBe 1
+      config.enoughAvailableScans shouldBe true
+    }
+
+    "require a single Ok when n=2 (f=0)" in {
+      val withData = getMockedConnections(n = 2)
+      val config = BftCallConfig.forWithDataOnly(withData)
+      config.connections should have size 2
+      config.requestsToDo shouldBe 2
+      config.targetSuccess shouldBe 1
+      config.enoughAvailableScans shouldBe true
+    }
+
+    "require a single Ok when n=3 (f=0)" in {
+      val withData = getMockedConnections(n = 3)
+      val config = BftCallConfig.forWithDataOnly(withData)
+      config.connections should have size 3
+      config.requestsToDo shouldBe 3
+      config.targetSuccess shouldBe 1
+      config.enoughAvailableScans shouldBe true
+    }
+
+    "engage BFT (f=1, targetSuccess=2) when n=4" in {
+      val withData = getMockedConnections(n = 4)
+      val config = BftCallConfig.forWithDataOnly(withData)
+      config.connections should have size 4
+      config.requestsToDo shouldBe 4
+      config.targetSuccess shouldBe 2
+      config.enoughAvailableScans shouldBe true
+    }
+
+    "keep targetSuccess at 2 for n=5 and n=6 (f=1)" in {
+      val forFive = BftCallConfig.forWithDataOnly(getMockedConnections(n = 5))
+      forFive.targetSuccess shouldBe 2
+      forFive.requestsToDo shouldBe 5
+
+      val forSix = BftCallConfig.forWithDataOnly(getMockedConnections(n = 6))
+      forSix.targetSuccess shouldBe 2
+      forSix.requestsToDo shouldBe 6
+    }
+
+    "raise targetSuccess to 3 when n=7 (f=2)" in {
+      val config = BftCallConfig.forWithDataOnly(getMockedConnections(n = 7))
+      config.targetSuccess shouldBe 3
+      config.requestsToDo shouldBe 7
+    }
+
+    "return a config that enoughAvailableScans rejects when given an empty set" in {
+      val config = BftCallConfig.forWithDataOnly(Seq.empty)
+      config.connections shouldBe empty
+      config.requestsToDo shouldBe 0
+      config.targetSuccess shouldBe 0
+      config.enoughAvailableScans shouldBe false
     }
   }
 
