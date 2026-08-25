@@ -17,7 +17,7 @@ const validConfig = {
       maxTokens: 720,
       tokensPerFill: 720,
       fillInterval: '60s',
-      perIpRangeLimit: {
+      perIpLimits: {
         maxTokens: 120,
         tokensPerFill: 120,
         fillInterval: '60s',
@@ -30,23 +30,23 @@ test('RateLimitSchema accepts config without overrides', () => {
   expect(() => RateLimitSchema.parse(validConfig)).not.toThrow();
 });
 
-test('RateLimitSchema accepts named overrides with ipRanges', () => {
+test('RateLimitSchema accepts named overrides with ips', () => {
   const config = {
     ...validConfig,
     rateLimits: {
       '/registry/metadata/v1/info': {
         ...validConfig.rateLimits['/registry/metadata/v1/info'],
-        perIpRangeLimit: {
-          ...validConfig.rateLimits['/registry/metadata/v1/info'].perIpRangeLimit,
+        perIpLimits: {
+          ...validConfig.rateLimits['/registry/metadata/v1/info'].perIpLimits,
           overrides: {
             'single-validator': {
-              ipRanges: ['192.68.78.50/32'],
+              ips: ['192.68.78.50'],
               maxTokens: 220,
               tokensPerFill: 220,
               fillInterval: '60s',
             },
             'multi-validators': {
-              ipRanges: ['192.68.78.0/24', '192.68.79.0/24'],
+              ips: ['192.68.78.51', '192.68.78.52'],
               maxTokens: 250,
               tokensPerFill: 250,
               fillInterval: '60s',
@@ -59,14 +59,14 @@ test('RateLimitSchema accepts named overrides with ipRanges', () => {
   expect(() => RateLimitSchema.parse(config)).not.toThrow();
 });
 
-test('RateLimitSchema rejects override without ipRanges', () => {
+test('RateLimitSchema rejects override without ips', () => {
   const config = {
     ...validConfig,
     rateLimits: {
       '/registry/metadata/v1/info': {
         ...validConfig.rateLimits['/registry/metadata/v1/info'],
-        perIpRangeLimit: {
-          ...validConfig.rateLimits['/registry/metadata/v1/info'].perIpRangeLimit,
+        perIpLimits: {
+          ...validConfig.rateLimits['/registry/metadata/v1/info'].perIpLimits,
           overrides: {
             '192.68.78.50': {
               maxTokens: 220,
@@ -81,17 +81,17 @@ test('RateLimitSchema rejects override without ipRanges', () => {
   expect(() => RateLimitSchema.parse(config)).toThrow();
 });
 
-test('RateLimitSchema rejects invalid IP ranges in ipRanges', () => {
+test('RateLimitSchema rejects non-IPv4 addresses in ips', () => {
   const config = {
     ...validConfig,
     rateLimits: {
       '/registry/metadata/v1/info': {
         ...validConfig.rateLimits['/registry/metadata/v1/info'],
-        perIpRangeLimit: {
-          ...validConfig.rateLimits['/registry/metadata/v1/info'].perIpRangeLimit,
+        perIpLimits: {
+          ...validConfig.rateLimits['/registry/metadata/v1/info'].perIpLimits,
           overrides: {
             'multi-validators': {
-              ipRanges: ['2001:db8::1/128'],
+              ips: ['2001:db8::1'],
               maxTokens: 250,
               tokensPerFill: 250,
               fillInterval: '60s',
@@ -104,42 +104,19 @@ test('RateLimitSchema rejects invalid IP ranges in ipRanges', () => {
   expect(() => RateLimitSchema.parse(config)).toThrow();
 });
 
-test('RateLimitSchema rejects empty override ipRanges array', () => {
+test('RateLimitSchema rejects empty override ips array', () => {
   const config = {
     ...validConfig,
     rateLimits: {
       '/registry/metadata/v1/info': {
         ...validConfig.rateLimits['/registry/metadata/v1/info'],
-        perIpRangeLimit: {
-          ...validConfig.rateLimits['/registry/metadata/v1/info'].perIpRangeLimit,
+        perIpLimits: {
+          ...validConfig.rateLimits['/registry/metadata/v1/info'].perIpLimits,
           overrides: {
             'empty-group': {
-              ipRanges: [],
+              ips: [],
               maxTokens: 250,
               tokensPerFill: 250,
-              fillInterval: '60s',
-            },
-          },
-        },
-      },
-    },
-  };
-  expect(() => RateLimitSchema.parse(config)).toThrow();
-});
-
-test('RateLimitSchema rejects invalid prefix length in ipRanges', () => {
-  const config = {
-    ...validConfig,
-    rateLimits: {
-      '/registry/metadata/v1/info': {
-        ...validConfig.rateLimits['/registry/metadata/v1/info'],
-        perIpRangeLimit: {
-          ...validConfig.rateLimits['/registry/metadata/v1/info'].perIpRangeLimit,
-          overrides: {
-            bad: {
-              ipRanges: ['192.68.78.0/99'],
-              maxTokens: 5000,
-              tokensPerFill: 5000,
               fillInterval: '60s',
             },
           },

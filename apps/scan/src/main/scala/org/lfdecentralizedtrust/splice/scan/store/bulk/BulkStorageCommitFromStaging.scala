@@ -73,9 +73,9 @@ class BulkStorageCommitFromStaging[T](
                 )
               if (!consensus)    {
                 logger.error(
-                  s"Checksums do not match for objects ${objects.map(_.key).mkString(", ")}. Expected: ${objects
+                  s"Checksums do not match for objects ${objects.map(_.key).mkString(", ")}. My checksums are: ${objects
                       .map(_.checksum)
-                      .mkString(", ")}, got: ${consensusChecksums.mkString(", ")}"
+                      .mkString(", ")}, consensus checksums are: ${consensusChecksums.mkString(", ")}"
                 )
 
                 if (appConfig.debugObjectsToNotCommit.intersect(objects.map(_.key)).nonEmpty) {
