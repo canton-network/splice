@@ -89,7 +89,7 @@ abstract class SvAppReference(
       httpCommand(HttpSvPublicAppClient.DevNetOnboardValidatorPrepare())
     }
 
-  def getDsoInfo(): HttpSvPublicAppClient.DsoInfo =
+  def getDsoInfo(): HttpSvOperatorAppClient.DsoInfo =
     consoleEnvironment.run {
       httpCommand(HttpSvOperatorAppClient.GetDsoInfo)
     }

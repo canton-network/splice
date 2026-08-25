@@ -4,18 +4,13 @@
 package org.lfdecentralizedtrust.splice.sv.admin.api.client.commands
 
 import cats.data.EitherT
-import cats.syntax.either.*
-import cats.syntax.traverse.*
 import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.synchronizer.sequencer.SequencerSnapshot as CantonSequencerSnapshot
 import com.digitalasset.canton.topology.store.StoredTopologyTransactions.GenericStoredTopologyTransactions
 import com.digitalasset.canton.topology.{ParticipantId, PartyId, SequencerId}
 import com.google.protobuf.ByteString
 import org.apache.pekko.http.scaladsl.model.{HttpHeader, HttpResponse, StatusCodes}
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRules
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.svstate.SvNodeState
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules
-import org.lfdecentralizedtrust.splice.codegen.java.splice.round.OpenMiningRound
 import org.lfdecentralizedtrust.splice.codegen.java.splice.svonboarding.{
   SvOnboardingConfirmed,
   SvOnboardingRequest,
@@ -23,61 +18,12 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.svonboarding.{
 import org.lfdecentralizedtrust.splice.environment.RetryProvider.QuietNonRetryableException
 import org.lfdecentralizedtrust.splice.http.v0.{definitions, sv_public as http}
 import org.lfdecentralizedtrust.splice.sv.http.SvHttpClient.BaseCommandPublic
-import org.lfdecentralizedtrust.splice.util.{Codec, ContractWithState, TemplateJsonDecoder}
+import org.lfdecentralizedtrust.splice.util.{Codec, TemplateJsonDecoder}
 
 import java.util.Base64
 import scala.concurrent.Future
 
 object HttpSvPublicAppClient {
-  final case class DsoInfo(
-      svUser: String,
-      svParty: PartyId,
-      dsoParty: PartyId,
-      votingThreshold: BigInt,
-      latestMiningRound: ContractWithState[OpenMiningRound.ContractId, OpenMiningRound],
-      amuletRules: ContractWithState[AmuletRules.ContractId, AmuletRules],
-      dsoRules: ContractWithState[DsoRules.ContractId, DsoRules],
-      svNodeStates: Map[PartyId, ContractWithState[SvNodeState.ContractId, SvNodeState]],
-      initialRound: Option[String],
-  )
-
-  def decodeDsoInfo(
-      dsoInfo: definitions.GetDsoInfoResponse
-  )(implicit decoder: TemplateJsonDecoder): Either[String, DsoInfo] =
-    for {
-      svPartyId <- Codec.decode(Codec.Party)(dsoInfo.svPartyId)
-      dsoPartyId <- Codec.decode(Codec.Party)(dsoInfo.dsoPartyId)
-      latestMiningRound <- ContractWithState
-        .fromHttp(OpenMiningRound.COMPANION)(dsoInfo.latestMiningRound)
-        .leftMap(_.toString)
-      amuletRules <- ContractWithState
-        .fromHttp(AmuletRules.COMPANION)(dsoInfo.amuletRules)
-        .left
-        .map(_.toString)
-      dsoRules <- ContractWithState
-        .fromHttp(DsoRules.COMPANION)(dsoInfo.dsoRules)
-        .left
-        .map(_.toString)
-      svNodeStates <- dsoInfo.svNodeStates.traverse { co =>
-        for {
-          nodeState <- ContractWithState
-            .fromHttp(SvNodeState.COMPANION)(co)
-            .left
-            .map(_.toString)
-          partyId <- Codec.decode(Codec.Party)(nodeState.payload.sv)
-        } yield partyId -> nodeState
-      }
-    } yield DsoInfo(
-      dsoInfo.svUser,
-      svPartyId,
-      dsoPartyId,
-      dsoInfo.votingThreshold,
-      latestMiningRound,
-      amuletRules,
-      dsoRules,
-      svNodeStates.toMap,
-      dsoInfo.initialRound,
-    )
 
   sealed trait SvOnboardingStatus
   object SvOnboardingStatus {

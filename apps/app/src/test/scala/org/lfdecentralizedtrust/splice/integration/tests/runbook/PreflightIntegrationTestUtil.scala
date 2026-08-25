@@ -3,7 +3,7 @@ package org.lfdecentralizedtrust.splice.integration.tests.runbook
 import org.lfdecentralizedtrust.splice.console.ScanAppClientReference
 import org.lfdecentralizedtrust.splice.environment.DarResources
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.TestCommon
-import org.lfdecentralizedtrust.splice.sv.admin.api.client.commands.HttpSvPublicAppClient
+import org.lfdecentralizedtrust.splice.sv.admin.api.client.commands.HttpSvOperatorAppClient
 import org.lfdecentralizedtrust.splice.util.{ResourceTemplateDecoder, TemplateJsonDecoder}
 
 import scala.concurrent.duration.*
@@ -14,7 +14,7 @@ trait PreflightIntegrationTestUtil extends TestCommon {
     * APIs the preflight tests have no credentials for, since the SV app's `/v1/dso` endpoint
     * requires authorization as SV operator.
     */
-  protected def getDsoInfoViaScan(scan: ScanAppClientReference): HttpSvPublicAppClient.DsoInfo = {
+  protected def getDsoInfoViaScan(scan: ScanAppClientReference): HttpSvOperatorAppClient.DsoInfo = {
     implicit val decoder: TemplateJsonDecoder =
       new ResourceTemplateDecoder(
         ResourceTemplateDecoder.loadPackageSignaturesFromResources(
@@ -22,7 +22,7 @@ trait PreflightIntegrationTestUtil extends TestCommon {
         ),
         loggerFactory,
       )
-    HttpSvPublicAppClient
+    HttpSvOperatorAppClient
       .decodeDsoInfo(scan.getDsoInfo())
       .fold(
         err => throw new IllegalStateException(s"Failed to decode DSO info from scan: $err"),

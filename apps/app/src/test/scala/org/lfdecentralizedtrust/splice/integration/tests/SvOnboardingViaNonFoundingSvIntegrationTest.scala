@@ -2,7 +2,6 @@ package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.admin.api.client.data.GrpcSequencerConnection
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
-import org.apache.pekko.http.scaladsl.model.Uri
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules_OffboardSv
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
@@ -57,6 +56,17 @@ class SvOnboardingViaNonFoundingSvIntegrationTest
             case node: JoinWithKey => bumpUrl(sv1ToSv2Bump, node.svClient.adminApi.url.toString())
             case _ => throw new IllegalStateException("JoinWithKey configuration not found.")
           }
+        val sv2OnboardingScanClientUrl =
+          configuration
+            .svApps(InstanceName.tryCreate("sv2"))
+            .onboarding
+            .getOrElse(
+              throw new IllegalStateException("Onboarding configuration not found.")
+            ) match {
+            case node: JoinWithKey =>
+              bumpUrl(sv1ToSv2Bump, node.scanClient.adminApi.url.toString())
+            case _ => throw new IllegalStateException("JoinWithKey configuration not found.")
+          }
         val sv2BootstrapSequencerUrl =
           configuration
             .svApps(InstanceName.tryCreate("sv2"))
@@ -79,7 +89,7 @@ class SvOnboardingViaNonFoundingSvIntegrationTest
                       node.publicKey,
                       node.privateKey,
                       // fetch DSO info via the sponsor's (sv2's) scan
-                      ScanAppClientConfig(NetworkAppClientConfig(Uri("http://localhost:5112"))),
+                      ScanAppClientConfig(NetworkAppClientConfig(sv2OnboardingScanClientUrl)),
                     )
                   )
                 case _ => throw new IllegalStateException("JoinWithKey configuration not found.")

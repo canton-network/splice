@@ -23,7 +23,7 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   SpliceTestConsoleEnvironment,
 }
 import org.lfdecentralizedtrust.splice.scan.config.CantonBftPeerConfig
-import org.lfdecentralizedtrust.splice.sv.admin.api.client.commands.HttpSvPublicAppClient
+import org.lfdecentralizedtrust.splice.sv.admin.api.client.commands.HttpSvOperatorAppClient
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
   AdvanceOpenMiningRoundTrigger,
   ExpireIssuingMiningRoundTrigger,
@@ -103,7 +103,7 @@ class ScanIntegrationTest
   "return dso info same as the sv app" in { implicit env =>
     val scan = sv1ScanBackend.getDsoInfo()
     inside(sv1Backend.getDsoInfo()) {
-      case HttpSvPublicAppClient.DsoInfo(
+      case HttpSvOperatorAppClient.DsoInfo(
             svUser,
             svParty,
             dsoParty,
