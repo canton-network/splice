@@ -98,6 +98,36 @@ class DbScanTxLogStoreConfig(loggerFactory: NamedLoggerFactory)
 object DbScanStore {
   type CacheKey = java.lang.Long // caffeine metrics function demands AnyRefs
   type CacheValue = BigDecimal
+
+  def acsStoreDescriptor(
+      participantId: ParticipantId,
+      dsoParty: PartyId,
+      userVersion: Option[Long],
+  ): StoreDescriptor = StoreDescriptor(
+    version = 3,
+    name = "DbScanStore",
+    party = dsoParty,
+    participant = participantId,
+    key = Map(
+      "dsoParty" -> dsoParty.toProtoPrimitive
+    ),
+    userVersion = userVersion,
+  )
+
+  def txLogStoreDescriptor(
+      participantId: ParticipantId,
+      dsoParty: PartyId,
+      userVersion: Option[Long],
+  ): StoreDescriptor = StoreDescriptor(
+    version = 1,
+    name = "DbScanStore",
+    party = dsoParty,
+    participant = participantId,
+    key = Map(
+      "dsoParty" -> dsoParty.toProtoPrimitive
+    ),
+    userVersion = userVersion,
+  )
 }
 class DbScanStore(
     override val key: ScanStore.Key,
@@ -128,26 +158,10 @@ class DbScanStore(
       // Do not modify any part of the store descriptor unless you are sure that the resulting downtime is acceptable.
       // If you do modify it, make sure to very clearly document in the release notes that there will be planned downtime,
       // and notify the person coordinating the deployment.
-      acsStoreDescriptor = StoreDescriptor(
-        version = 3,
-        name = "DbScanStore",
-        party = key.dsoParty,
-        participant = participantId,
-        key = Map(
-          "dsoParty" -> key.dsoParty.toProtoPrimitive
-        ),
-        userVersion = acsStoreDescriptorUserVersion,
-      ),
-      txLogStoreDescriptor = StoreDescriptor(
-        version = 1,
-        name = "DbScanStore",
-        party = key.dsoParty,
-        participant = participantId,
-        key = Map(
-          "dsoParty" -> key.dsoParty.toProtoPrimitive
-        ),
-        userVersion = txLogStoreDescriptorUserVersion,
-      ),
+      acsStoreDescriptor =
+        DbScanStore.acsStoreDescriptor(participantId, key.dsoParty, acsStoreDescriptorUserVersion),
+      txLogStoreDescriptor = DbScanStore
+        .txLogStoreDescriptor(participantId, key.dsoParty, txLogStoreDescriptorUserVersion),
       domainMigrationId,
       ingestionConfig,
     )
@@ -764,4 +778,9 @@ class DbScanStore(
       row.map(contractFromEvent(companion)(_))
     }
   }
+
+  override def acsStoreDescriptor: StoreDescriptor =
+    DbScanStore.acsStoreDescriptor(participantId, key.dsoParty, acsStoreDescriptorUserVersion)
+  override def txLogStoreDescriptor: StoreDescriptor =
+    DbScanStore.txLogStoreDescriptor(participantId, key.dsoParty, txLogStoreDescriptorUserVersion)
 }

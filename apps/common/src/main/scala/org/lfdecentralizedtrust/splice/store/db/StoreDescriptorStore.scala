@@ -104,4 +104,47 @@ object StoreDescriptorStore extends StoreErrors {
 
     } yield newStoreId
   }
+
+  /** True if the running config's userVersion is strictly lower than the
+    * highest userVersion that actually has committed data. `None` sorts lowest,
+    * so a removed config field counts as a downgrade against any stored version.
+    */
+  def isUserVersionDowngrade(
+      configured: Option[Long],
+      maxStoredWithData: Option[Long],
+  ): Boolean = Ordering[Option[Long]].lt(configured, maxStoredWithData)
+
+  def maxStoredUserVersionWithData(
+      storage: DbStorage,
+      dataTableName: String,
+      expectedDescriptor: StoreDescriptor,
+  )(implicit
+      traceContext: TraceContext,
+      executionContext: scala.concurrent.ExecutionContext,
+      closeContext: CloseContext,
+  ): FutureUnlessShutdown[Option[Long]] = {
+    val expectedNoUserVersion =
+      String256M.tryCreate(expectedDescriptor.copy(userVersion = None).toJson.noSpacesSortKeys)
+    storage
+      .query(
+        sql"""
+        with recursive used as (
+          (select store_id from #$dataTableName order by store_id limit 1)
+          union all
+          select (
+            select store_id from #$dataTableName
+            where store_id > used.store_id order by store_id limit 1
+          )
+          from used where used.store_id is not null
+        )
+        select max((d.descriptor ->> 'userVersion')::bigint)
+        from store_descriptors d
+        join used u on d.id = u.store_id
+        where u.store_id is not null
+          and (d.descriptor - 'userVersion') = ${expectedNoUserVersion}::jsonb
+      """.as[Option[Long]].headOption,
+        "maxStoredUserVersionWithData",
+      )
+      .map(_.flatten)
+  }
 }

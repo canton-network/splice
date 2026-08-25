@@ -31,6 +31,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.Vali
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.scan.config.{CacheConfig, ScanCacheConfig}
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanStoreMetrics
+import org.lfdecentralizedtrust.splice.store.db.StoreDescriptor
 import org.lfdecentralizedtrust.splice.store.{
   Limit,
   MiningRoundsStore,
@@ -319,4 +320,8 @@ class CachingScanStore(
   }
 
   def defaultLimit: Limit = store.defaultLimit
+
+  override def acsStoreDescriptor: StoreDescriptor = store.acsStoreDescriptor
+
+  override def txLogStoreDescriptor: StoreDescriptor = store.txLogStoreDescriptor
 }

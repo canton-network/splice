@@ -22,12 +22,16 @@ import org.lfdecentralizedtrust.splice.scan.config.ScanCacheConfig
 import org.lfdecentralizedtrust.splice.scan.store.db.ScanTables.ScanAcsStoreRowData
 import org.lfdecentralizedtrust.splice.scan.store.db.{DbScanStore, DbScanStoreMetrics}
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.ContractCompanion
-import org.lfdecentralizedtrust.splice.store.db.{AcsInterfaceViewRowData, AcsJdbcTypes}
+import org.lfdecentralizedtrust.splice.store.db.{
+  AcsInterfaceViewRowData,
+  AcsJdbcTypes,
+  StoreDescriptor,
+}
 import org.lfdecentralizedtrust.splice.store.{
   AppStore,
   DsoRulesStore,
-  Limit,
   ExternalPartyConfigStateStore,
+  Limit,
   MiningRoundsStore,
   MultiDomainAcsStore,
   TxLogAppStore,
@@ -50,6 +54,9 @@ trait ScanStore
     with MiningRoundsStore
     with VotesStore
     with ExternalPartyConfigStateStore {
+
+  def acsStoreDescriptor: StoreDescriptor
+  def txLogStoreDescriptor: StoreDescriptor
 
   override def dsoPartyId = key.dsoParty
 
