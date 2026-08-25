@@ -102,8 +102,7 @@ class ScanIntegrationTest
   "return dso info same as the sv app" in { implicit env =>
     val scan = sv1ScanBackend.getDsoInfo()
     val svDsoInfo = sv1Backend.getDsoInfo()
-    // initialRound is read from each app's own ledger user metadata, so we don't compare it
-    scan.copy(initialRound = None) should be(svDsoInfo.copy(initialRound = None))
+    scan shouldBe svDsoInfo
     val dsoParty = scan.dsoParty
     clue("Returns physical synchronizer id") {
       sv1ScanBackend.getActivePhysicalSynchronizerSerial() shouldBe NonNegativeInt.zero

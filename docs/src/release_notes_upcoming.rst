@@ -21,17 +21,14 @@ release-notes:: Upcoming
 
     - SV App
 
-        - A new ``/v1/dso`` endpoint has been added that returns the same response as ``/v0/dso``
-          but requires authorization as SV operator, like most other SV app endpoints.
-          The public ``/v0/dso`` endpoint is now deprecated and will be removed in 0.8.0
+        - The public ``/v0/dso`` endpoint is deprecated and will be removed in 0.8.0
           (see also the release notes for 0.5.5 for the original deprecation notice).
           Use the public ``/v0/dso`` endpoint in the scan app if you need to fetch DSO info
           without SV operator credentials.
+          A new ``/v1/dso`` endpoint has been added that returns the same response as ``/v0/dso``
+          but requires authorization as SV operator.
 
-        - **Breaking**: Joining SVs now fetch DSO info during onboarding from a scan instance
+        - Joining SVs now fetch DSO info during onboarding from a scan instance
           (typically the sponsor's) instead of the sponsor SV app's deprecated public
-          ``/v0/dso`` endpoint. The scan is configured via the new, required
-          ``onboarding.scan-client.admin-api.url`` config option
-          (Helm value ``joinWithKeyOnboarding.sponsorScanUrl``).
-          SVs whose app config still contains an ``onboarding`` section of type
-          ``join-with-key`` must set it before upgrading.
+          ``/v0/dso`` endpoint. The scan is configured via the new ``.joinWithKeyOnboarding.sponsorScanUrl`` Helm value.
+          SVs who set the ``.joinWithKeyOnboarding`` key config must set it before upgrading.
