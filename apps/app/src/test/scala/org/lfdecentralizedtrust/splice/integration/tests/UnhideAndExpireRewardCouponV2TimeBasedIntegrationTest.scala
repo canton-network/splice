@@ -465,7 +465,7 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
         },
         logs => {
           forAtLeast(1, logs) { entry =>
-            entry.message should include("No vetted splice-amulet version for")
+            entry.message should include("No vetted Amulet version for")
           }
         },
       )
