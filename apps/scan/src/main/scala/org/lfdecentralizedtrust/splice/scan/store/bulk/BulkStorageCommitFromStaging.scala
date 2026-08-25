@@ -63,9 +63,9 @@ class BulkStorageCommitFromStaging[T](
               )
             if (consensusChecksums.length == objects.length && !consensus) {
               logger.error(
-                s"All objects are known to the BFT peers, but the checksums do not match. This indicates an error in the actual data generated for bulk storage. Expected: ${objects
+                s"All objects are known to the BFT peers, but the checksums do not match, when checking objects: ${objects.map(_.key).mkString(", ")}. This indicates an error in the actual data generated for bulk storage. My checksums are: ${objects
                     .map(_.checksum)
-                    .mkString(", ")}, got: ${consensusChecksums.mkString(", ")}"
+                    .mkString(", ")}, consensus checksums are: ${consensusChecksums.mkString(", ")}"
               )
             }
             consensus
