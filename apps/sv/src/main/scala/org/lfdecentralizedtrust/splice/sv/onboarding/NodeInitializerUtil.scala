@@ -30,8 +30,8 @@ import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerC
 import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import org.lfdecentralizedtrust.splice.store.db.DbAppStore
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.ScanConnection
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient
 import org.lfdecentralizedtrust.splice.sv.LocalSynchronizerNode
-import org.lfdecentralizedtrust.splice.sv.admin.api.client.commands.HttpSvOperatorAppClient
 import org.lfdecentralizedtrust.splice.sv.automation.{SvDsoAutomationService, SvSvAutomationService}
 import org.lfdecentralizedtrust.splice.sv.cometbft.{CometBftNode, CometBftRequestSigner}
 import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.{
@@ -404,7 +404,7 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
       httpClient: HttpClient,
       templateDecoder: TemplateJsonDecoder,
       mat: Materializer,
-  ): Future[HttpSvOperatorAppClient.DsoInfo] =
+  ): Future[HttpScanAppClient.DsoInfo] =
     for {
       scanConnection <- ScanConnection.singleUncached(
         joiningConfig.scanClient,
@@ -417,7 +417,7 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
       dsoInfo <- scanConnection
         .getDsoInfo()
         .map(response =>
-          HttpSvOperatorAppClient
+          HttpScanAppClient
             .decodeDsoInfo(response)
             .fold(
               err =>

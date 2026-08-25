@@ -25,6 +25,7 @@ import org.lfdecentralizedtrust.splice.environment.{
 import org.lfdecentralizedtrust.splice.http.v0.definitions
 import org.lfdecentralizedtrust.splice.store.VoteResultsFilters
 import org.lfdecentralizedtrust.splice.sv.{SvApp, SvAppBootstrap, SvAppClientConfig}
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient
 import org.lfdecentralizedtrust.splice.sv.admin.api.client.commands.{
   HttpSvAdminAppClient,
   HttpSvOperatorAppClient,
@@ -89,7 +90,7 @@ abstract class SvAppReference(
       httpCommand(HttpSvPublicAppClient.DevNetOnboardValidatorPrepare())
     }
 
-  def getDsoInfo(): HttpSvOperatorAppClient.DsoInfo =
+  def getDsoInfo(): HttpScanAppClient.DsoInfo =
     consoleEnvironment.run {
       httpCommand(HttpSvOperatorAppClient.GetDsoInfo)
     }

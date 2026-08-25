@@ -36,7 +36,7 @@ abstract class SvNonDevNetPreflightIntegrationTestBase
   protected def svScanClient(implicit env: SpliceTestConsoleEnvironment) = scancl(s"${svName}Scan")
 
   "SV reports devnet=false" in { implicit env =>
-    getDsoInfoViaScan(svScanClient).dsoRules.payload.isDevNet shouldBe false
+    svScanClient.getDsoInfo().dsoRules.payload.isDevNet shouldBe false
   }
 
   val svUsername = s"admin@${svName}.com"

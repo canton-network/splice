@@ -15,7 +15,6 @@ import com.digitalasset.canton.ScalaFuturesWithPatience
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.SuppressingLogger
 import com.digitalasset.canton.tracing.TraceContext
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules
 import org.lfdecentralizedtrust.splice.scan.config.ScanStorageConfigs.scanStorageConfigV1
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingState
 import org.scalatest.{Inspectors, LoneElement}
@@ -65,10 +64,9 @@ class UpdateHistorySanityCheckPlugin(
             initializedScans.foreach(waitUntilBackfillingComplete)
             val (founders, others) = initializedScans.partition(_.config.isFirstSv)
             val founder = founders.loneElement
-            val dsoRules =
-              DsoRules.fromJson(founder.getDsoInfo().dsoRules.contract.payload.noSpaces)
+            val dsoRules = founder.getDsoInfo().dsoRules.payload
             val (scansInDsoRules, scansNotInDsoRules) = others.partition { otherScan =>
-              val svPartyId = otherScan.getDsoInfo().svPartyId
+              val svPartyId = otherScan.getDsoInfo().svParty.toProtoPrimitive
               dsoRules.svs.containsKey(svPartyId)
             }
             scansNotInDsoRules.foreach { notInDso =>
@@ -78,7 +76,7 @@ class UpdateHistorySanityCheckPlugin(
               //  - U2: Involves SV
               // founder sees U1, U2 but otherScan only U2
               logger.info(
-                s"The SV party of Scan ${notInDso.name} (partyId=${notInDso.getDsoInfo().svPartyId}) is not in DsoRules. Ignoring."
+                s"The SV party of Scan ${notInDso.name} (partyId=${notInDso.getDsoInfo().svParty}) is not in DsoRules. Ignoring."
               )
             }
             compareHistories(founder, scansInDsoRules)

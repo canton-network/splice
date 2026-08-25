@@ -2,7 +2,7 @@ package org.lfdecentralizedtrust.splice.integration.tests.runbook
 
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.TestCommon
 import org.lfdecentralizedtrust.splice.integration.tests.FrontendTestCommon
-import org.lfdecentralizedtrust.splice.sv.admin.api.client.commands.HttpSvOperatorAppClient.DsoInfo
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.DsoInfo
 import com.digitalasset.canton.topology.PartyId
 import scala.concurrent.duration.*
 

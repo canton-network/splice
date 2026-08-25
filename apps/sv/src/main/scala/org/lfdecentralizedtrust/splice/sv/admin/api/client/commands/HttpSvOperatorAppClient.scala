@@ -8,13 +8,10 @@ import cats.data.EitherT
 import cats.implicits.toTraverseOps
 import cats.syntax.either.*
 import org.lfdecentralizedtrust.splice.admin.api.client.commands.HttpCommand
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRules
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.svstate.SvNodeState
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.OpenMiningRound
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.amuletprice.AmuletPriceVote
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   ActionRequiringConfirmation,
-  DsoRules,
   DsoRules_CloseVoteRequestResult,
   VoteRequest,
 }
@@ -23,17 +20,12 @@ import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
 import org.lfdecentralizedtrust.splice.environment.SpliceStatus
 import org.lfdecentralizedtrust.splice.http.v0.{definitions, sv_operator as http}
 import org.lfdecentralizedtrust.splice.store.VoteResultsFilters
-import org.lfdecentralizedtrust.splice.util.{
-  Codec,
-  Contract,
-  ContractWithState,
-  TemplateJsonDecoder,
-}
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient
+import org.lfdecentralizedtrust.splice.util.{Codec, Contract, TemplateJsonDecoder}
 import org.lfdecentralizedtrust.splice.sv.util.ValidatorOnboarding
 import com.digitalasset.canton.admin.api.client.data.NodeStatus
 import com.digitalasset.canton.daml.lf.value.json.ApiCodecCompressed
 import com.digitalasset.canton.logging.ErrorLoggingContext
-import com.digitalasset.canton.topology.PartyId
 
 import java.time.Instant
 import scala.concurrent.duration.FiniteDuration
@@ -45,57 +37,7 @@ object HttpSvOperatorAppClient {
     val createGenClientFn = (fn, host, ec, mat) => Client.httpClient(fn, host)(ec, mat)
   }
 
-  final case class DsoInfo(
-      svUser: String,
-      svParty: PartyId,
-      dsoParty: PartyId,
-      votingThreshold: BigInt,
-      latestMiningRound: ContractWithState[OpenMiningRound.ContractId, OpenMiningRound],
-      amuletRules: ContractWithState[AmuletRules.ContractId, AmuletRules],
-      dsoRules: ContractWithState[DsoRules.ContractId, DsoRules],
-      svNodeStates: Map[PartyId, ContractWithState[SvNodeState.ContractId, SvNodeState]],
-      initialRound: Option[String],
-  )
-
-  def decodeDsoInfo(
-      dsoInfo: definitions.GetDsoInfoResponse
-  )(implicit decoder: TemplateJsonDecoder): Either[String, DsoInfo] =
-    for {
-      svPartyId <- Codec.decode(Codec.Party)(dsoInfo.svPartyId)
-      dsoPartyId <- Codec.decode(Codec.Party)(dsoInfo.dsoPartyId)
-      latestMiningRound <- ContractWithState
-        .fromHttp(OpenMiningRound.COMPANION)(dsoInfo.latestMiningRound)
-        .leftMap(_.toString)
-      amuletRules <- ContractWithState
-        .fromHttp(AmuletRules.COMPANION)(dsoInfo.amuletRules)
-        .left
-        .map(_.toString)
-      dsoRules <- ContractWithState
-        .fromHttp(DsoRules.COMPANION)(dsoInfo.dsoRules)
-        .left
-        .map(_.toString)
-      svNodeStates <- dsoInfo.svNodeStates.traverse { co =>
-        for {
-          nodeState <- ContractWithState
-            .fromHttp(SvNodeState.COMPANION)(co)
-            .left
-            .map(_.toString)
-          partyId <- Codec.decode(Codec.Party)(nodeState.payload.sv)
-        } yield partyId -> nodeState
-      }
-    } yield DsoInfo(
-      dsoInfo.svUser,
-      svPartyId,
-      dsoPartyId,
-      dsoInfo.votingThreshold,
-      latestMiningRound,
-      amuletRules,
-      dsoRules,
-      svNodeStates.toMap,
-      dsoInfo.initialRound,
-    )
-
-  case object GetDsoInfo extends BaseCommand[http.GetDsoInfoV1Response, DsoInfo] {
+  case object GetDsoInfo extends BaseCommand[http.GetDsoInfoV1Response, HttpScanAppClient.DsoInfo] {
 
     override def submitRequest(
         client: Client,
@@ -106,7 +48,7 @@ object HttpSvOperatorAppClient {
     override def handleOk()(implicit
         decoder: TemplateJsonDecoder
     ) = { case http.GetDsoInfoV1Response.OK(dsoInfo) =>
-      decodeDsoInfo(dsoInfo)
+      HttpScanAppClient.decodeDsoInfo(dsoInfo)
     }
   }
 

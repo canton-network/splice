@@ -90,7 +90,9 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   transferinstructionv1,
   transferinstructionv2,
 }
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.svstate.SvNodeState
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
+  DsoRules,
   DsoRules_CloseVoteRequestResult,
   VoteRequest,
 }
@@ -215,6 +217,75 @@ object HttpScanAppClient {
         decoder: TemplateJsonDecoder
     ) = { case http.GetDsoInfoResponse.OK(response) =>
       Right(response)
+    }
+  }
+
+  /** Decoded version of [[definitions.GetDsoInfoResponse]], as served by scan's `/v0/dso`
+    * and the SV app's `/v1/dso` endpoints.
+    */
+  final case class DsoInfo(
+      svUser: String,
+      svParty: PartyId,
+      dsoParty: PartyId,
+      votingThreshold: BigInt,
+      latestMiningRound: ContractWithState[OpenMiningRound.ContractId, OpenMiningRound],
+      amuletRules: ContractWithState[AmuletRules.ContractId, AmuletRules],
+      dsoRules: ContractWithState[DsoRules.ContractId, DsoRules],
+      svNodeStates: Map[PartyId, ContractWithState[SvNodeState.ContractId, SvNodeState]],
+      initialRound: Option[String],
+  )
+
+  def decodeDsoInfo(
+      dsoInfo: definitions.GetDsoInfoResponse
+  )(implicit decoder: TemplateJsonDecoder): Either[String, DsoInfo] =
+    for {
+      svPartyId <- Codec.decode(Codec.Party)(dsoInfo.svPartyId)
+      dsoPartyId <- Codec.decode(Codec.Party)(dsoInfo.dsoPartyId)
+      latestMiningRound <- ContractWithState
+        .fromHttp(OpenMiningRound.COMPANION)(dsoInfo.latestMiningRound)
+        .leftMap(_.toString)
+      amuletRules <- ContractWithState
+        .fromHttp(AmuletRules.COMPANION)(dsoInfo.amuletRules)
+        .left
+        .map(_.toString)
+      dsoRules <- ContractWithState
+        .fromHttp(DsoRules.COMPANION)(dsoInfo.dsoRules)
+        .left
+        .map(_.toString)
+      svNodeStates <- dsoInfo.svNodeStates.traverse { co =>
+        for {
+          nodeState <- ContractWithState
+            .fromHttp(SvNodeState.COMPANION)(co)
+            .left
+            .map(_.toString)
+          partyId <- Codec.decode(Codec.Party)(nodeState.payload.sv)
+        } yield partyId -> nodeState
+      }
+    } yield DsoInfo(
+      dsoInfo.svUser,
+      svPartyId,
+      dsoPartyId,
+      dsoInfo.votingThreshold,
+      latestMiningRound,
+      amuletRules,
+      dsoRules,
+      svNodeStates.toMap,
+      dsoInfo.initialRound,
+    )
+
+  case class GetDecodedDsoInfo(headers: List[HttpHeader])
+      extends InternalBaseCommand[http.GetDsoInfoResponse, DsoInfo] {
+
+    override def submitRequest(
+        client: ScanClient,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[Throwable, HttpResponse], http.GetDsoInfoResponse] =
+      client.getDsoInfo(headers)
+
+    override def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ) = { case http.GetDsoInfoResponse.OK(response) =>
+      decodeDsoInfo(response)
     }
   }
 

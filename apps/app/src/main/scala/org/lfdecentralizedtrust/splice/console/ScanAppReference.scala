@@ -27,11 +27,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.ans.AnsRules
 import org.lfdecentralizedtrust.splice.config.NetworkAppClientConfig
 import org.lfdecentralizedtrust.splice.environment.SpliceConsoleEnvironment
 import org.lfdecentralizedtrust.splice.http.v0.definitions
-import org.lfdecentralizedtrust.splice.http.v0.definitions.{
-  GetDsoInfoResponse,
-  UpdateHistoryItem,
-  UpdateHistoryItemV2,
-}
+import org.lfdecentralizedtrust.splice.http.v0.definitions.{UpdateHistoryItem, UpdateHistoryItemV2}
 import org.lfdecentralizedtrust.splice.scan.{ScanApp, ScanAppBootstrap}
 import org.lfdecentralizedtrust.splice.store.VoteResultsFilters
 import org.lfdecentralizedtrust.splice.scan.automation.ScanAutomationService
@@ -89,9 +85,9 @@ abstract class ScanAppReference(
       httpCommand(HttpScanAppClient.GetDsoPartyId(List()))
     }
 
-  def getDsoInfo(): GetDsoInfoResponse = {
+  def getDsoInfo(): HttpScanAppClient.DsoInfo = {
     consoleEnvironment.run {
-      httpCommand(HttpScanAppClient.GetDsoInfo(List()))
+      httpCommand(HttpScanAppClient.GetDecodedDsoInfo(List()))
     }
   }
 
