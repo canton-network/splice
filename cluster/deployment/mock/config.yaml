@@ -42,13 +42,29 @@ sv:
     externalRateLimits:
       rateLimits:
         /registry/metadata/v1/info:
-          perIpLimits:
+          perIpRangeLimit:
+            maxTokens: 500
+            tokensPerFill: 500
+            fillInterval: 60s
             overrides:
+              # A single IP address is expressed as a /32 IP range.
               test:
-                ips:
-                  - 192.68.78.50
+                ipRanges:
+                  - 192.68.79.50/32
                 maxTokens: 250
                 tokensPerFill: 250
+                fillInterval: 60s
+              # Multiple IP ranges under a single override key share one token bucket.
+              # This uses Envoy's remote_address_match action, which checks the
+              # connection's remote address against the configured IP ranges.
+              # In this example, the combined traffic from 192.68.78.0/24 and
+              # 10.0.0.0/24 is limited to 1000 req/min total, not 1000 req/min each.
+              validator-net:
+                ipRanges:
+                  - 192.68.78.0/24
+                  - 10.0.0.0/24
+                maxTokens: 1000
+                tokensPerFill: 1000
                 fillInterval: 60s
 splitwell:
   maxDarVersion: '0.1.8'

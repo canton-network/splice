@@ -5,7 +5,7 @@ rateLimits:
     maxTokens: 720
     tokensPerFill: 720
     fillInterval: 60s
-    perIpLimits:
+    perIpRangeLimit:
       maxTokens: 120
       tokensPerFill: 120
       fillInterval: 60s
@@ -15,7 +15,7 @@ rateLimits:
     maxTokens: 720
     tokensPerFill: 720
     fillInterval: 60s
-    perIpLimits:
+    perIpRangeLimit:
       maxTokens: 120
       tokensPerFill: 120
       fillInterval: 60s
@@ -25,7 +25,7 @@ rateLimits:
     maxTokens: 720
     tokensPerFill: 720
     fillInterval: 60s
-    perIpLimits:
+    perIpRangeLimit:
       maxTokens: 120
       tokensPerFill: 120
       fillInterval: 60s
@@ -35,7 +35,7 @@ rateLimits:
     maxTokens: 720
     tokensPerFill: 720
     fillInterval: 60s
-    perIpLimits:
+    perIpRangeLimit:
       maxTokens: 120
       tokensPerFill: 120
       fillInterval: 60s
@@ -45,7 +45,7 @@ rateLimits:
     maxTokens: 720
     tokensPerFill: 720
     fillInterval: 60s
-    perIpLimits:
+    perIpRangeLimit:
       maxTokens: 120
       tokensPerFill: 120
       fillInterval: 60s
@@ -55,7 +55,7 @@ rateLimits:
     maxTokens: 1440
     tokensPerFill: 1440
     fillInterval: 60s
-    perIpLimits:
+    perIpRangeLimit:
       maxTokens: 240
       tokensPerFill: 240
       fillInterval: 60s
@@ -65,7 +65,7 @@ rateLimits:
     maxTokens: 720
     tokensPerFill: 720
     fillInterval: 60s
-    perIpLimits:
+    perIpRangeLimit:
       maxTokens: 120
       tokensPerFill: 120
       fillInterval: 60s
@@ -75,7 +75,7 @@ rateLimits:
     maxTokens: 720
     tokensPerFill: 720
     fillInterval: 60s
-    perIpLimits:
+    perIpRangeLimit:
       maxTokens: 120
       tokensPerFill: 120
       fillInterval: 60s
@@ -85,7 +85,7 @@ rateLimits:
     maxTokens: 720
     tokensPerFill: 720
     fillInterval: 60s
-    perIpLimits:
+    perIpRangeLimit:
       maxTokens: 120
       tokensPerFill: 120
       fillInterval: 60s
@@ -95,7 +95,7 @@ rateLimits:
     maxTokens: 720
     tokensPerFill: 720
     fillInterval: 60s
-    perIpLimits:
+    perIpRangeLimit:
       maxTokens: 120
       tokensPerFill: 120
       fillInterval: 60s
@@ -105,7 +105,7 @@ rateLimits:
     maxTokens: 720
     tokensPerFill: 720
     fillInterval: 60s
-    perIpLimits:
+    perIpRangeLimit:
       maxTokens: 120
       tokensPerFill: 120
       fillInterval: 60s
@@ -115,7 +115,7 @@ rateLimits:
     maxTokens: 720
     tokensPerFill: 720
     fillInterval: 60s
-    perIpLimits:
+    perIpRangeLimit:
       maxTokens: 120
       tokensPerFill: 120
       fillInterval: 60s

@@ -9,21 +9,36 @@ export const BucketRateLimitSchema = z.object({
   fillInterval: z.string(),
 });
 
-const Ipv4AddressSchema = z.string().refine(ip => isIP(ip) === 4, {
-  message: 'Expected IPv4 address',
+const IpRangeSchema = z.string().refine(
+  cidr => {
+    const parts = cidr.split('/');
+    if (parts.length !== 2) {
+      return false;
+    }
+    const [network, prefixStr] = parts;
+    if (isIP(network) !== 4) {
+      return false;
+    }
+    const prefix = Number(prefixStr);
+    return Number.isInteger(prefix) && prefix >= 0 && prefix <= 32;
+  },
+  {
+    message:
+      'Expected IPv4 CIDR (e.g., 192.168.0.0/24). Single IPs must be specified as x.x.x.x/32',
+  }
+);
+
+const IpRangeOverrideSchema = BucketRateLimitSchema.extend({
+  ipRanges: z.array(IpRangeSchema).min(1),
 });
 
-const OverrideSchema = BucketRateLimitSchema.extend({
-  ips: z.array(Ipv4AddressSchema).min(1),
-});
-
-export const PerIpLimitsSchema = BucketRateLimitSchema.extend({
-  overrides: z.record(z.string().min(1), OverrideSchema).optional(),
+export const PerIpRangeLimitSchema = BucketRateLimitSchema.extend({
+  overrides: z.record(z.string().min(1), IpRangeOverrideSchema).optional(),
 });
 
 const BucketMatchedRateLimitSchema = BucketRateLimitSchema.extend({
   type: z.literal('limited'),
-  perIpLimits: PerIpLimitsSchema.optional(),
+  perIpRangeLimit: PerIpRangeLimitSchema.optional(),
 });
 
 export const BannedSchema = z.object({
