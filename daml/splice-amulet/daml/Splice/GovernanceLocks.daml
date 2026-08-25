@@ -73,7 +73,7 @@ template GovernanceLock
         checkActors actors [[owner]] -- ^ TODO: custom controllers
         assertWithinDeadline "unlockAt" unlockAt
 
-        (vestingLockedHolding, governanceLock, vestingAmount) <- case unlockAmount of
+        (vestingLockedHolding, governanceLock, vestingAmount) <- case guard (unlockAmount /= Some amount) >> unlockAmount of
           None -> do -- No split required, reuse the LockedAmulet contract.
             currentAmount <- fetchAmount (ForOwner with dso; owner) lockedAmulet
             pure (lockedAmulet, None, currentAmount)
