@@ -79,10 +79,10 @@ checkHolding' : Implements a V2.Holding => Party -> ContractId a -> Decimal -> S
 checkHolding' party holding amount = checkHolding party (toInterfaceContractId holding) amount
 
 -- | Find the holding for a GovernanceLock or VestingLock, and check that it has the correct amount.
-checkLockedHolding : (Template t, HasEnsure t, HasField "holding" t (ContractId LockedAmulet)) => Party -> ContractId t -> Decimal -> Script ()
+checkLockedHolding : (Template t, HasEnsure t, HasField "lockedAmulet" t (ContractId LockedAmulet)) => Party -> ContractId t -> Decimal -> Script ()
 checkLockedHolding p lockCid amount = do
   Some lock <- queryContractId p lockCid
-  checkHolding' p lock.holding amount
+  checkHolding' p lock.lockedAmulet amount
 
 getExternalPartyTransferContext : Party -> Script (ExternalPartyTransferContext, Disclosures')
 getExternalPartyTransferContext dso = do

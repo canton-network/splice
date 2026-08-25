@@ -17,9 +17,9 @@ import Splice.TokenStandard.Utils hiding (require)
 import Splice.Types
 import Splice.Util
 
-data GovernanceLockSubject
+data GovernanceLockType
   = GLS_FeaturedApp with
-      appProviderParty : Party
+      provider : Party -- ^ Featured app provider party.
   | GLS_SuperValidatorRightsOwner with
       svName : Text  -- ^ Name of the SV rights owner for whom the funds are locked.
   deriving (Eq, Show, Serializable)
@@ -27,7 +27,7 @@ data GovernanceLockSubject
 -- FIXME: add controllers specifications
 data GovernanceLockSpecification
   = GovernanceLockSpecification with
-      subject : GovernanceLockSubject
+      subject : GovernanceLockType
   deriving (Eq, Show, Serializable)
 
 -- FIXME: move the choices of this factory into `ExternalPartyAmuletRules` once we're happy with them
@@ -45,12 +45,12 @@ template GovernanceLockFactory
         owner : Party
       controller owner
       do
-        ([holding], changeHolding) <- lockAmulet (ForOwner with dso; owner) [amount] inputs context
+        ([lockedAmulet], changeHolding) <- lockAmulet (ForOwner with dso; owner) [amount] inputs context
         governanceLock <- create GovernanceLock with
           dso
           owner
           amount
-          holding
+          lockedAmulet
           specification
         pure $ GovernanceLockFactory_LockResult with
           governanceLock
@@ -71,10 +71,11 @@ template GovernanceLock
     dso : Party
     owner : Party  -- ^ Lock owner
     amount : Decimal  -- ^ Locked amount
-    holding : ContractId LockedAmulet
+    lockedAmulet : ContractId LockedAmulet
     specification : GovernanceLockSpecification
   where
     signatory dso, owner
+
     choice GovernanceLock_Unlock : GovernanceLock_UnlockResult
       with
         unlockAmount : Optional Decimal -- ^ Amount to unlock. Defaults to the full amount if not set.
@@ -88,13 +89,13 @@ template GovernanceLock
 
         (vestingLockedHolding, governanceLock, vestingAmount) <- case unlockAmount of
           None -> do -- No split required, reuse the LockedAmulet contract.
-            currentAmount <- fetchAmount (ForOwner with dso; owner) holding
-            pure (holding, None, currentAmount)
+            currentAmount <- fetchAmount (ForOwner with dso; owner) lockedAmulet
+            pure (lockedAmulet, None, currentAmount)
           Some unlockAmount -> do -- Splitting.
-            (vesting, stillLockedHolding) <- splitLockedAmulet (ForOwner with dso; owner) holding unlockAmount context
+            (vesting, stillLockedHolding) <- splitLockedAmulet (ForOwner with dso; owner) lockedAmulet unlockAmount context
             governanceLock <- create
               this with
-                holding = stillLockedHolding
+                lockedAmulet = stillLockedHolding
                 amount = amount - unlockAmount
             pure (vesting, Some governanceLock, unlockAmount)
 
@@ -103,7 +104,7 @@ template GovernanceLock
         vestingLock <- create VestingLock with
           dso
           owner
-          holding = vestingLockedHolding
+          lockedAmulet = vestingLockedHolding
           vestingPeriod
           startTime = unlockAt
           vestingAmount
@@ -126,7 +127,7 @@ template VestingLock
   with
     dso : Party
     owner : Party
-    holding : ContractId LockedAmulet
+    lockedAmulet : ContractId LockedAmulet
     vestingPeriod : RelTime  -- ^ Duration over which the amount vests in a linear fashion.
     startTime : Time  -- ^ Time at which vesting starts.
     vestingAmount : Decimal  -- ^ The amount that is vesting.
@@ -143,7 +144,7 @@ template VestingLock
       controller actors
       do
         checkActors actors [[owner]] -- ^ TODO: custom controllers
-        currentAmount <- fetchAmount (ForOwner with dso; owner) holding
+        currentAmount <- fetchAmount (ForOwner with dso; owner) lockedAmulet
         assertDeadlineExceeded "requestedAt" requestedAt
 
         let withdrawAmount = calculateAvailableWithdrawAmount currentAmount requestedAt this
@@ -153,14 +154,14 @@ template VestingLock
 
         case withdrawAmount of
           None -> do -- No split or partial availability, unlock everything.
-            unlockResult <- exercise holding LockedAmulet_UnlockV2
+            unlockResult <- exercise lockedAmulet LockedAmulet_UnlockV2
             pure VestingLock_WithdrawResult with
               vestingLock = None
               unlocked = unlockResult.amuletCid
           Some partial -> do -- We have a fraction that is not the whole being withdrawn, do a partial unlock.
-            (locked, unlocked) <- partialUnlock (ForOwner with dso; owner) holding partial context
+            (locked, unlocked) <- partialUnlock (ForOwner with dso; owner) lockedAmulet partial context
             vestingLock <- Some <$> create this with
-              holding = locked
+              lockedAmulet = locked
             pure VestingLock_WithdrawResult with
               vestingLock
               unlocked
@@ -186,7 +187,7 @@ calculateAvailableWithdrawAmount currentAmount currentTime VestingLock{ .. }
 
 -- Lock properties for LockSubject types
 
-vestingDurationFor : GovernanceLockSubject -> ExternalPartyTransferContext -> RelTime
+vestingDurationFor : GovernanceLockType -> ExternalPartyTransferContext -> RelTime
 vestingDurationFor (GLS_FeaturedApp _) _ = days 60
 vestingDurationFor (GLS_SuperValidatorRightsOwner _) _ = days 365 + hours 6
 
