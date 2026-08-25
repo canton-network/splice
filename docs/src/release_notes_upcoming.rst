@@ -28,8 +28,10 @@ release-notes:: Upcoming
           Use the public ``/v0/dso`` endpoint in the scan app if you need to fetch DSO info
           without SV operator credentials.
 
-        - Joining SVs can now be configured with a scan instance (typically the sponsor's) for
-          fetching DSO info during onboarding, via ``onboarding.scan-client.admin-api.url``
-          (Helm value ``joinWithKeyOnboarding.sponsorScanUrl``). If unset, the joining SV falls
-          back to the sponsor SV app's deprecated public ``/v0/dso`` endpoint, so operators
-          should configure this before ``/v0/dso`` is removed in 0.8.0.
+        - **Breaking**: Joining SVs now fetch DSO info during onboarding from a scan instance
+          (typically the sponsor's) instead of the sponsor SV app's deprecated public
+          ``/v0/dso`` endpoint. The scan is configured via the new, required
+          ``onboarding.scan-client.admin-api.url`` config option
+          (Helm value ``joinWithKeyOnboarding.sponsorScanUrl``).
+          SVs whose app config still contains an ``onboarding`` section of type
+          ``join-with-key`` must set it before upgrading.

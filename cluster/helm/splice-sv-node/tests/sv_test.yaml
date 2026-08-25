@@ -56,21 +56,13 @@ tests:
               scan-client.admin-api.url = "https://sponsor-scan.mock.com"
             }
 
-  - it: "sets join-with-key onboarding config without sponsor scan"
+  - it: "fails join-with-key onboarding config without sponsor scan"
     set:
       joinWithKeyOnboarding:
         sponsorApiUrl: "https://sponsor.mock.com"
-    documentSelector:
-      path: kind
-      value: Deployment
     asserts:
-      - equal:
-          path: spec.template.spec.containers[?(@.name=='sv-app')].env[?(@.name=='ADDITIONAL_CONFIG_SV_ONBOARDING')].value
-          value: |
-            _onboarding {
-              type = "join-with-key"
-              sv-client.admin-api.url = "https://sponsor.mock.com"
-            }
+      - failedTemplate:
+          errorPattern: "sponsorScanUrl"
 
   - it: "sets JWKS timeouts"
     set:
@@ -351,6 +343,7 @@ tests:
   - it: "allows overriding all 8 SV secret env vars with raw strings"
     set:
       joinWithKeyOnboarding.sponsorApiUrl: "https://sponsor.mock.com"
+      joinWithKeyOnboarding.sponsorScanUrl: "https://sponsor-scan.mock.com"
       cometBFT.externalGovernanceKey: true
       identitiesExport.prefix: "mock-prefix"
       identitiesExport.bucket.bucketName: "mock-bucket"
@@ -413,6 +406,7 @@ tests:
           scope: "vault:kv/data/sv/auth-scope"
       joinWithKeyOnboarding:
         sponsorApiUrl: "https://sponsor.mock.com"
+        sponsorScanUrl: "https://sponsor-scan.mock.com"
       cometBFT:
         externalGovernanceKey: true
         secretOverrides:

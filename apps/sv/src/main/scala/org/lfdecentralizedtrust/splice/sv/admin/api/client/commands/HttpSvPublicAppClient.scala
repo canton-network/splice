@@ -215,21 +215,6 @@ object HttpSvPublicAppClient {
     }
   }
 
-  case object GetDsoInfo extends BaseCommandPublic[http.GetDsoInfoResponse, DsoInfo] {
-
-    override def submitRequest(
-        client: Client,
-        headers: List[HttpHeader],
-    ): EitherT[Future, Either[Throwable, HttpResponse], http.GetDsoInfoResponse] =
-      client.getDsoInfo(headers = headers)
-
-    override def handleOk()(implicit
-        decoder: TemplateJsonDecoder
-    ) = { case http.GetDsoInfoResponse.OK(dsoInfo) =>
-      decodeDsoInfo(dsoInfo)
-    }
-  }
-
   case object GetMigrationId extends BaseCommandPublic[http.GetMigrationIdResponse, Long] {
 
     override def submitRequest(

@@ -2,6 +2,7 @@ package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.admin.api.client.data.GrpcSequencerConnection
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
+import org.apache.pekko.http.scaladsl.model.Uri
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules_OffboardSv
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
@@ -13,6 +14,7 @@ import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
 import org.lfdecentralizedtrust.splice.config.{ConfigTransforms, NetworkAppClientConfig}
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTestWithIsolatedEnvironment
+import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
 import org.lfdecentralizedtrust.splice.sv.{LocalSynchronizerNode, SvAppClientConfig}
 import org.lfdecentralizedtrust.splice.sv.automation.singlesv.SvBftSequencerPeerOffboardingTrigger
 import org.lfdecentralizedtrust.splice.sv.automation.singlesv.offboarding.SvOffboardingSequencerTrigger
@@ -76,6 +78,8 @@ class SvOnboardingViaNonFoundingSvIntegrationTest
                       SvAppClientConfig(NetworkAppClientConfig(sv2OnboardingSvClientUrl)),
                       node.publicKey,
                       node.privateKey,
+                      // fetch DSO info via the sponsor's (sv2's) scan
+                      ScanAppClientConfig(NetworkAppClientConfig(Uri("http://localhost:5112"))),
                     )
                   )
                 case _ => throw new IllegalStateException("JoinWithKey configuration not found.")

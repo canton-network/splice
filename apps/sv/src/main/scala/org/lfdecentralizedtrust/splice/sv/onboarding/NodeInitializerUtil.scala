@@ -31,7 +31,6 @@ import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import org.lfdecentralizedtrust.splice.store.db.DbAppStore
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.ScanConnection
 import org.lfdecentralizedtrust.splice.sv.LocalSynchronizerNode
-import org.lfdecentralizedtrust.splice.sv.admin.api.client.SvConnection
 import org.lfdecentralizedtrust.splice.sv.admin.api.client.commands.HttpSvPublicAppClient
 import org.lfdecentralizedtrust.splice.sv.automation.{SvDsoAutomationService, SvSvAutomationService}
 import org.lfdecentralizedtrust.splice.sv.cometbft.{CometBftNode, CometBftRequestSigner}
@@ -393,8 +392,8 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
       _ <- setInitialRound(connection, initialRound.toLong)
     } yield initialRound.toLong
 
-  /** Fetch the DSO info a joining SV needs from its sponsor: via the configured scan instance,
-    * or, if none is configured, via the sponsor SV app's deprecated public `/v0/dso` endpoint.
+  /** Fetch the DSO info a joining SV needs from its sponsor, via the configured scan instance
+    * (typically the sponsor's).
     */
   protected def getDsoInfoFromSponsor(
       joiningConfig: JoinWithKey,
@@ -406,43 +405,30 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
       templateDecoder: TemplateJsonDecoder,
       mat: Materializer,
   ): Future[HttpSvPublicAppClient.DsoInfo] =
-    joiningConfig.scanClient match {
-      case Some(scanClientConfig) =>
-        for {
-          scanConnection <- ScanConnection.singleUncached(
-            scanClientConfig,
-            upgradesConfig,
-            clock,
-            retryProvider,
-            loggerFactory,
-            retryConnectionOnInitialFailure = true,
-          )
-          dsoInfo <- scanConnection
-            .getDsoInfo()
-            .map(response =>
-              HttpSvPublicAppClient
-                .decodeDsoInfo(response)
-                .fold(
-                  err =>
-                    throw Status.INTERNAL
-                      .withDescription(s"Failed to decode DSO info from scan: $err")
-                      .asRuntimeException(),
-                  identity,
-                )
+    for {
+      scanConnection <- ScanConnection.singleUncached(
+        joiningConfig.scanClient,
+        upgradesConfig,
+        clock,
+        retryProvider,
+        loggerFactory,
+        retryConnectionOnInitialFailure = true,
+      )
+      dsoInfo <- scanConnection
+        .getDsoInfo()
+        .map(response =>
+          HttpSvPublicAppClient
+            .decodeDsoInfo(response)
+            .fold(
+              err =>
+                throw Status.INTERNAL
+                  .withDescription(s"Failed to decode DSO info from scan: $err")
+                  .asRuntimeException(),
+              identity,
             )
-            .andThen(_ => scanConnection.close())
-        } yield dsoInfo
-      // TODO(DACH-NY/canton-network-internal#2106) remove this fallback together with /v0/dso
-      case None =>
-        SvConnection(
-          joiningConfig.svClient.adminApi,
-          upgradesConfig,
-          retryProvider,
-          loggerFactory,
-        ).flatMap { svConnection =>
-          svConnection.getDsoInfo().andThen(_ => svConnection.close())
-        }
-    }
+        )
+        .andThen(_ => scanConnection.close())
+    } yield dsoInfo
 
   private def setInitialRoundFromSponsor(
       joiningConfig: JoinWithKey,

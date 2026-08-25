@@ -129,10 +129,8 @@ object SvOnboardingConfig {
       svClient: SvAppClientConfig, // an SV that we'll contact to start our onboarding
       publicKey: String, // the key that identifies us together with our name
       privateKey: String, // the private key we use for authenticating ourselves
-      // A scan instance (typically the sponsor's) used to fetch DSO info during onboarding.
-      // If unset, we fall back to the sponsor SV app's deprecated public /v0/dso endpoint.
-      // TODO(DACH-NY/canton-network-internal#2106) make this required once /v0/dso is removed
-      scanClient: Option[ScanAppClientConfig] = None,
+      // A scan instance (typically the sponsor's) used to fetch DSO info during onboarding
+      scanClient: ScanAppClientConfig,
   ) extends SvOnboardingConfig
 
   object JoinWithKey
