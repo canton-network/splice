@@ -9,6 +9,7 @@ import com.daml.ledger.api.v2.TraceContextOuterClass
 import com.daml.ledger.javaapi.data.codegen.{ContractId, DamlRecord}
 import com.daml.ledger.javaapi.data.{CreatedEvent, Event, ExercisedEvent, Identifier, Transaction}
 import com.daml.metrics.api.MetricsContext
+import com.daml.nonempty.NonEmpty
 import com.google.protobuf.ByteString
 import com.digitalasset.canton.util.HexString
 import org.lfdecentralizedtrust.splice.environment.ledger.api.ReassignmentEvent.{Assign, Unassign}
@@ -1339,33 +1340,33 @@ class UpdateHistory(
   private def queryCreateEvents(
       transactionRowIds: Seq[Long]
   )(implicit tc: TraceContext): Future[Map[Long, Seq[SelectFromCreateEvents]]] = {
-    if (transactionRowIds.isEmpty) {
-      Future.successful(Map.empty)
-    } else {
-      storage
-        .query(
-          (sql"""
-      select
-        update_row_id,
-        event_id,
-        contract_id,
-        created_at,
-        template_id_package_id,
-        template_id_module_name,
-        template_id_entity_name,
-        package_name,
-        create_arguments,
-        signatories,
-        observers,
-        contract_key,
-        record_time
+    NonEmpty.from(transactionRowIds) match {
+      case None => Future.successful(Map.empty)
+      case Some(transactionRowIds) =>
+        storage
+          .query(
+            (sql"""
+        select
+          update_row_id,
+          event_id,
+          contract_id,
+          created_at,
+          template_id_package_id,
+          template_id_module_name,
+          template_id_entity_name,
+          package_name,
+          create_arguments,
+          signatories,
+          observers,
+          contract_key,
+          record_time
 
-      from update_history_creates
-      where """ ++ inClause("update_row_id", transactionRowIds)).toActionBuilder
-            .as[SelectFromCreateEvents],
-          "queryCreateEvents",
-        )
-        .map(_.groupBy(_.updateRowId))
+        from update_history_creates
+        where """ ++ DbStorage.toInClause("update_row_id", transactionRowIds)).toActionBuilder
+              .as[SelectFromCreateEvents],
+            "queryCreateEvents",
+          )
+          .map(_.groupBy(_.updateRowId))
     }
   }
 
@@ -1410,35 +1411,35 @@ class UpdateHistory(
   private def queryExerciseEvents(
       transactionRowIds: Seq[Long]
   )(implicit tc: TraceContext): Future[Map[Long, Seq[SelectFromExerciseEvents]]] = {
-    if (transactionRowIds.isEmpty) {
-      Future.successful(Map.empty)
-    } else {
-      storage
-        .query(
-          (sql"""
-      select
-        update_row_id,
-        event_id,
-        child_event_ids,
-        choice,
-        template_id_package_id,
-        template_id_module_name,
-        template_id_entity_name,
-        contract_id,
-        consuming,
-        package_name,
-        argument,
-        result,
-        acting_parties,
-        interface_id_package_id,
-        interface_id_module_name,
-        interface_id_entity_name
-      from update_history_exercises
-      where """ ++ inClause("update_row_id", transactionRowIds)).toActionBuilder
-            .as[SelectFromExerciseEvents],
-          "queryExerciseEvents",
-        )
-        .map(_.groupBy(_.updateRowId))
+    NonEmpty.from(transactionRowIds) match {
+      case None => Future.successful(Map.empty)
+      case Some(transactionRowIds) =>
+        storage
+          .query(
+            (sql"""
+        select
+          update_row_id,
+          event_id,
+          child_event_ids,
+          choice,
+          template_id_package_id,
+          template_id_module_name,
+          template_id_entity_name,
+          contract_id,
+          consuming,
+          package_name,
+          argument,
+          result,
+          acting_parties,
+          interface_id_package_id,
+          interface_id_module_name,
+          interface_id_entity_name
+        from update_history_exercises
+        where """ ++ DbStorage.toInClause("update_row_id", transactionRowIds)).toActionBuilder
+              .as[SelectFromExerciseEvents],
+            "queryExerciseEvents",
+          )
+          .map(_.groupBy(_.updateRowId))
     }
   }
 
