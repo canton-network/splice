@@ -667,7 +667,7 @@ def make_schedule(version: str, month: str) -> list[ScheduledEvent]:
             "daml_title": (f"MainNet New Daml models introduced by Splice {version}.x take effect"),
             "freeze_title": (f"MainNet Topology Freeze ({version})"),
             "lsu_title": (f"MainNet LSU ({version} Required) (MONTH YEAR)"),
-            "config_title": (f"MainNet breaking config change ({version} Required)"),
+            "config_title": (f"MainNet Breaking Config Changes ({version} Required)"),
         },
     ]
 
