@@ -191,9 +191,12 @@ describe('Proposal Details Content', () => {
     );
     expect(memberInput).toBeInTheDocument();
     expect(memberInput.textContent).toBe('sv2');
+    expect(within(offboardSection).getByTestId('proposal-details-member-party-id')).toHaveStyle({
+      width: '100%',
+    });
     expect(
       within(offboardSection).getByTestId('proposal-details-member-party-id-scroll')
-    ).toHaveStyle({ overflowX: 'auto', maxWidth: '270px' });
+    ).toHaveStyle({ overflowX: 'auto', width: '100%' });
 
     expect(screen.getByTestId('proposal-details-summary-label').textContent).toBe(
       PROPOSAL_SUMMARY_TITLE
@@ -205,18 +208,20 @@ describe('Proposal Details Content', () => {
 
     const url = screen.getByTestId('proposal-details-url');
     expect(url.textContent).toMatch(/https:\/\/example.com/);
+    expect(url).toHaveStyle({ width: '100%' });
     expect(screen.getByTestId('proposal-details-url-scroll')).toHaveStyle({
       overflowX: 'auto',
-      maxWidth: '346px',
+      width: '100%',
     });
 
     // Figma Offboard details order: Action → Member → Proposal Summary → Supporting URL → Contract ID
     expect(screen.getByTestId('proposal-details-contractid-label').textContent).toBe(
       VOTE_PROPOSAL_CONTRACT_ID_LABEL
     );
+    expect(screen.getByTestId('proposal-details-contractid-id')).toHaveStyle({ width: '100%' });
     expect(screen.getByTestId('proposal-details-contractid-id-scroll')).toHaveStyle({
       overflowX: 'auto',
-      maxWidth: '270px',
+      width: '100%',
     });
     const contractIdLabel = screen.getByTestId('proposal-details-contractid-label');
     expect(
@@ -239,8 +244,11 @@ describe('Proposal Details Content', () => {
     expect(requesterInput).toBeInTheDocument();
     expect(requesterInput.textContent).toBe('sv1');
     expect(
+      within(votingInformationSection).getByTestId('proposal-details-requester-party-id')
+    ).toHaveStyle({ width: '100%' });
+    expect(
       within(votingInformationSection).getByTestId('proposal-details-requester-party-id-scroll')
-    ).toHaveStyle({ overflowX: 'auto', maxWidth: '270px' });
+    ).toHaveStyle({ overflowX: 'auto', width: '100%' });
 
     expect(screen.getByTestId('proposal-details-created-at-label').textContent).toBe(
       PROPOSAL_CREATED_LABEL
