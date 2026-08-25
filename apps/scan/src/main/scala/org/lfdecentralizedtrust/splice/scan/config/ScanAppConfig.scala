@@ -48,13 +48,13 @@ final case class BulkStorageConfig(
     staging: Option[S3Config] = None,
     committed: Option[S3Config] = None,
     bftCheckEnabled: Boolean = true,
-    /** A debug config that, when enabled, on app start ignores the persisted progress and starts
-     * processing bulk storage from genesis. Note that it does not delete existing data, nor does
-     * it immediately move the progress markers (those will be updated only when new data is written
-     * to each bucket) typically you'd want to do that manually before starting the app in this mode.
-     * After enabling it once and accumulating some data in every bucket (so that all progress markers
-     * are reset), you'd typically want to disable this back, to avoid the next app restart
-     * from resetting again. */
+    /** When enabled, the app will reset all progress markers thus force recomputing data from genesis.
+     * Note that this does not delete any existing data, you usually would want to do that before setting
+     * this flag. Also, after restarting the app once with this flag enabled, you'd want to disable it back
+     * to avoid having the markers reset on every restart.
+     * TODO(scan-pruning): this makes sense for initial stages of testing&deploying bulk storage, in case of
+     *   encountered issues, but will not make sense when we start pruning the data from scan. We should remove
+     *   this before starting to prune data. */
     debugForceStartFromGenesis: Boolean = false,
     /** A list of objects that this instance should not save to the committed bucket, and instead only
      * delete from staging. To be used only in extreme cases where we decide to accept a BFT disagreement,

@@ -57,18 +57,72 @@ class BulkStorageCommitFromStaging[T](
             logger.debug(
               s"Consensus achieved on ${consensusChecksums.length} out of ${objects.length} objects"
             )
-            val consensus =
-              bftChecksums.checksums.filter(_.value.isDefined).map(_.value) == objects.map(oc =>
-                Some(oc.checksum)
+
+            if (consensusChecksums.length < objects.length) {
+              logger.debug(
+                s"Not all objects are known to the BFT peers yet. Will retry after delay."
               )
-            if (consensusChecksums.length == objects.length && !consensus) {
-              logger.error(
-                s"All objects are known to the BFT peers, but the checksums do not match. This indicates an error in the actual data generated for bulk storage. Expected: ${objects
-                    .map(_.checksum)
-                    .mkString(", ")}, got: ${consensusChecksums.mkString(", ")}"
+              false
+            } else {
+              logger.debug(
+                s"All objects are known to the BFT peers. Checking if checksums match."
               )
+              val consensus =
+                bftChecksums.checksums.filter(_.value.isDefined).map(_.value) == objects.map(oc =>
+                  Some(oc.checksum)
+                )
+              if (!consensus)    {
+                logger.error(
+                  s"Checksums do not match for objects ${objects.map(_.key).mkString(", ")}. Expected: ${objects
+                      .map(_.checksum)
+                      .mkString(", ")}, got: ${consensusChecksums.mkString(", ")}"
+                )
+
+                if (appConfig.debugObjectsToNotCommit.intersect(objects.map(_.key)).nonEmpty) {
+                  logger.debug(
+                    s"Some relevant objects are listed in debugObjectsToNotCommit, will ignore them for the consensus check. Ignored objects: ${
+                      appConfig.debugObjectsToNotCommit
+                        .intersect(objects.map(_.key))
+                        .mkString(", ")
+                    }"
+                  )
+                  val objectsWithConsensusChecksums = objects.zip(consensusChecksums)
+                  // Filter out objects for which the key is listed in appConfig.debugObjectsToNotCommit
+                  val unignoredObjectsWithTheirConsensusChecksums = objectsWithConsensusChecksums.filter {
+                    case (obj, _) => !appConfig.debugObjectsToNotCommit.contains(obj.key)
+                  }
+                  val unignoredObjectsWithMyChecksums = objects.filter(obj => !appConfig.debugObjectsToNotCommit.contains(obj.key))
+                  // recheck consensus, but now only on the unignored objects. The comparison should be similar to val consensus above
+                  val unignoredConsensus =
+                    unignoredObjectsWithTheirConsensusChecksums.filter(_._2.value.isDefined).map(_._2.value) == unignoredObjectsWithMyChecksums.map(oc =>
+                      Some(oc.checksum)
+                    )
+
+                  if (!unignoredConsensus) {
+                    logger.error(
+                      s"Checksums still do not match for unignored objects ${unignoredObjectsWithMyChecksums.map(_.key).mkString(", ")}. Expected: ${unignoredObjectsWithMyChecksums
+                          .map(_.checksum)
+                          .mkString(", ")}, got: ${unignoredObjectsWithTheirConsensusChecksums.map(_._2.value).mkString(", ")}"
+                    )
+                  } else {
+                    logger.debug(
+                      s"After ignoring objects from the config, Checksums match ${unignoredObjectsWithMyChecksums.map(_.key).mkString(", ")}. Proceeding with commit."
+                    )
+                  }
+                  unignoredConsensus
+                } else {
+                  logger.trace(
+                    s"No relevant objects are listed in debugObjectsToNotCommit, will not ignore any objects for the consensus check."
+                  )
+                  consensus
+                }
+              } else {
+                logger.trace(
+                  s"Checksums match for all objects ${objects.map(_.key).mkString(", ")}. Proceeding with commit."
+                )
+                true
+              }
             }
-            consensus
           case None =>
             false
         }
@@ -78,7 +132,6 @@ class BulkStorageCommitFromStaging[T](
       Future.successful(true)
     }
   }
-  // TODO(#5884): implement the BFT check
 
   private def waitForBftAgreement: Flow[
     (T, Seq[ObjectKeyAndChecksum]),
@@ -120,8 +173,15 @@ class BulkStorageCommitFromStaging[T](
         )
         Future.unit
       case false =>
-        logger.debug(s"Copying object ${obj.key} from staging to committed storage")
-        committedS3Connection.copyObject(stagingS3Connection.bucketName, obj.key)
+        if (appConfig.debugObjectsToNotCommit.contains(obj.key)) {
+          logger.debug(
+            s"Object ${obj.key} is listed in debugObjectsToNotCommit, skipping copy to committed storage"
+          )
+          Future.unit
+        } else {
+          logger.debug(s"Copying object ${obj.key} from staging to committed storage")
+          committedS3Connection.copyObject(stagingS3Connection.bucketName, obj.key)
+        }
     }
   }
 
