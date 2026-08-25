@@ -7,6 +7,7 @@ import Daml.Script
 import Splice.Amulet
 import Splice.AmuletRules
 import Splice.Api.Token.HoldingV2 qualified as V2
+import Splice.ExternalPartyAmuletRules
 import Splice.ExternalPartyConfigState
 import Splice.GovernanceLocks
 import Splice.Scripts.TokenStandard.TestAmuletTokenStandardTestEnv
@@ -22,8 +23,6 @@ testGovernanceLockHappyPath = do
 
   let someSvSpec = GovernanceLockSpecification with
         subject = GLS_SuperValidatorRightsOwner "TestSV"
-
-  submit (actAs dso) $ createCmd GovernanceLockFactory with dso
 
   AmuletRegistryV2.tapFaucet registriesEnv.amuletV2 alice 180000.0
   AmuletRegistryV2.tapFaucet registriesEnv.amuletV2 bob 10000.0
@@ -103,11 +102,11 @@ submitWithTransferContext env options commands = do
 governanceLockRawChoice : TestEnv -> Party -> Decimal -> GovernanceLockSpecification -> Script (ContractId GovernanceLock)
 governanceLockRawChoice env owner amount specification = do
   let dso = env.instrId.admin
-  [(glfCid, _glf)] <- query @GovernanceLockFactory dso
-  disc <- queryDisclosure' dso glfCid
+  [(eparCid, _)] <- query @ExternalPartyAmuletRules dso -- TODO: low priority: determine if there's already a way to call choices on this in the test env.
+  disc <- queryDisclosure' dso eparCid
   inputs <- listHoldingCids owner env.instrId
-  GovernanceLockFactory_LockResult cid _ <- submitWithTransferContext env (actAs [owner] <> discloseMany' disc) $
-    \context -> exerciseCmd glfCid GovernanceLockFactory_Lock with
+  ExternalPartyAmuletRules_LockForGovernanceResult cid _ <- submitWithTransferContext env (actAs [owner] <> discloseMany' disc) $
+    \context -> exerciseCmd eparCid ExternalPartyAmuletRules_LockForGovernance with
       amount
       inputs = coerceContractId <$> inputs -- These are Amulet and LockedAmulet, but we don't have convenient constraints to show that.
       specification

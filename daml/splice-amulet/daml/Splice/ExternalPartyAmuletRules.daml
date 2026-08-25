@@ -29,6 +29,7 @@ import Splice.AmuletAllocation as AmuletAllocationV1
 import Splice.AmuletAllocationV2 as AmuletAllocationV2
 import Splice.AmuletTransferInstruction
 import Splice.AmuletRules
+import Splice.GovernanceLocks
 import Splice.Types
 import Splice.Util
 
@@ -45,6 +46,12 @@ data ExternalPartyAmuletRules_ExpireAmuletAllocationsResult = ExternalPartyAmule
 
 data ExternalPartyAmuletRules_ExpireAmuletAllocationsV2Result = ExternalPartyAmuletRules_ExpireAmuletAllocationsV2Result {}
   -- intentionally no results to save storage space in Scan
+  deriving (Eq, Show, Serializable)
+
+data ExternalPartyAmuletRules_LockForGovernanceResult = ExternalPartyAmuletRules_LockForGovernanceResult
+  with
+    governanceLock : ContractId GovernanceLock
+    changeHolding : Optional (ContractId Amulet)
   deriving (Eq, Show, Serializable)
 
 -- | Rules contract that can be used in transactions that require signatures
@@ -126,6 +133,21 @@ template ExternalPartyAmuletRules
            nonce
            description
          pure (ExternalPartyAmuletRules_CreateTransferCommandResult cmd)
+
+    nonconsuming choice ExternalPartyAmuletRules_LockForGovernance : ExternalPartyAmuletRules_LockForGovernanceResult
+      with
+        amount : Decimal
+        inputs : [ContractId V1.Holding]
+        specification : GovernanceLockSpecification
+        context : ExternalPartyTransferContext
+        owner : Party
+      controller owner
+      do
+        (governanceLock, changeHolding) <- createGovernanceLock dso amount inputs specification context owner
+        pure $ ExternalPartyAmuletRules_LockForGovernanceResult with
+          governanceLock
+          changeHolding
+
 
     interface instance Api.Token.TransferInstructionV1.TransferFactory for ExternalPartyAmuletRules where
       view = Api.Token.TransferInstructionV1.TransferFactoryView with

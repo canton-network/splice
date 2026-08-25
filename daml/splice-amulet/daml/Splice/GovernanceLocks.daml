@@ -30,40 +30,26 @@ data GovernanceLockSpecification
       subject : GovernanceLockType
   deriving (Eq, Show, Serializable)
 
--- FIXME: move the choices of this factory into `ExternalPartyAmuletRules` once we're happy with them
-template GovernanceLockFactory
-  with
-    dso : Party
-  where
-    signatory dso
-    nonconsuming choice GovernanceLockFactory_Lock : GovernanceLockFactory_LockResult
-      with
-        amount : Decimal
-        inputs : [ContractId Holding]
-        specification : GovernanceLockSpecification
-        context : ExternalPartyTransferContext
-        owner : Party
-      controller owner
-      do
-        ([lockedAmulet], changeHolding) <- lockAmulet (ForOwner with dso; owner) [amount] inputs context
-        governanceLock <- create GovernanceLock with
-          dso
-          owner
-          amount
-          lockedAmulet
-          specification
-        pure $ GovernanceLockFactory_LockResult with
-          governanceLock
-          changeHolding
+createGovernanceLock
+  : Party
+ -> Decimal
+ -> [ContractId Holding]
+ -> GovernanceLockSpecification
+ -> ExternalPartyTransferContext
+ -> Party
+ -> Update (ContractId GovernanceLock, Optional (ContractId Amulet))
+createGovernanceLock dso amount inputs specification context owner = do
+  ([lockedAmulet], changeHolding) <- lockAmulet (ForOwner with dso; owner) [amount] inputs context
+  governanceLock <- create GovernanceLock with
+    dso
+    owner
+    amount
+    lockedAmulet
+    specification
+  pure $ (governanceLock, changeHolding)
 
   -- TODO: implement V2 AllocationFactory in terms of above.
   -- TODO: find and use binding point for "magic address" V1 token standard to above.
-
-data GovernanceLockFactory_LockResult
-  = GovernanceLockFactory_LockResult with
-      governanceLock : ContractId GovernanceLock
-      changeHolding : Optional (ContractId Amulet)
-  deriving (Eq, Show, Serializable)
 
 
 template GovernanceLock
