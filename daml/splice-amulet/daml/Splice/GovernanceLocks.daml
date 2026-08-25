@@ -61,6 +61,7 @@ template GovernanceLock
     specification : GovernanceLockSpecification
   where
     signatory dso, owner
+    ensure amount > 0.0
 
     choice GovernanceLock_Unlock : GovernanceLock_UnlockResult
       with
@@ -119,6 +120,7 @@ template VestingLock
     vestingAmount : Decimal  -- ^ The amount that is vesting.
   where
     signatory dso, owner
+    ensure vestingAmount > 0.0 && vestingPeriod >= aunit
 
     -- | Withdraw all funds that have vested since the last withdrawal
     -- and the time of this request.
