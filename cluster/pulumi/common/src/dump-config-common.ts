@@ -12,6 +12,7 @@ import {
   NamespacedAuth0Configs,
 } from './auth0/auth0types';
 import { isMainNet } from './config';
+import { ClusterBasename } from './config/gcpConfig';
 
 // Importing DEFAULT_AUDIENCE from auth0/audiences.ts creates a nightmare of things getting initialized too early, so we just redefine it here
 const DEFAULT_AUDIENCE = 'https://canton.network.global';
@@ -371,7 +372,7 @@ export async function initDumpConfig({
               instances: [
                 {
                   name: 'sv-1-cn-apps-pg-7ca4614',
-                  settings: [{ userLabels: { cluster: 'mock' } }],
+                  settings: [{ userLabels: { cluster: ClusterBasename } }],
                 },
               ],
             };

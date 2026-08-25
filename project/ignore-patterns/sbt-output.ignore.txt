@@ -43,7 +43,7 @@ protoc-jar: caught exception, retrying: java\.io\.IOException: Cannot run progra
 .*no longer exists at.*
 
 # sbt 1.4 onwards logs GC warnings
-.*\[.*warn.*\].* of the last .* were spent in GC\.
+.*\[.*warn.*\].* In the last .* were spent in GC\.
 
 # During release bundling, the copy of the Canton OS repo emits a bunch of warnings
 .*\[.*warn.*\].*Negative time
