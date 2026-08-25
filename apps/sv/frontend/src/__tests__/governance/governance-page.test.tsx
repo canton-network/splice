@@ -183,7 +183,7 @@ describe('Governance Page', () => {
 
     await user.click(viewDetailsLink);
 
-    const proposalDetails = screen.getByTestId('proposal-details-title');
+    const proposalDetails = screen.getByTestId('proposal-details-proposal-details');
     expect(proposalDetails).toBeInTheDocument();
   });
 
@@ -201,7 +201,7 @@ describe('Governance Page', () => {
 
     await user.click(viewDetailsLink);
 
-    const proposalDetails = screen.getByTestId('proposal-details-title');
+    const proposalDetails = screen.getByTestId('proposal-details-proposal-details');
     expect(proposalDetails).toBeInTheDocument();
 
     const action = screen.getByTestId('proposal-details-action-value');

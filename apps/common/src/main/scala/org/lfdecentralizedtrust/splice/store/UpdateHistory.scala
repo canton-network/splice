@@ -40,6 +40,8 @@ import com.digitalasset.canton.config.CantonRequireTypes.String256M
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.CloseContext
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
+import com.digitalasset.canton.logging.pretty.Pretty
+import com.digitalasset.canton.logging.pretty.Pretty.{param, prettyOfClass}
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.topology.{ParticipantId, PartyId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
@@ -906,14 +908,14 @@ class UpdateHistory(
   }
 
   private def afterFilters(
-      afterO: Option[(Long, CantonTimestamp)],
+      afterO: Option[TimestampWithMigrationId],
       includeImportUpdates: Boolean,
   ): NonEmptyList[SQLActionBuilder] = {
     val gtMin = if (includeImportUpdates) ">=" else ">"
     afterO match {
       case None =>
         NonEmptyList.of(sql"migration_id >= 0 and record_time #$gtMin ${CantonTimestamp.MinValue}")
-      case Some((afterMigrationId, afterRecordTime)) =>
+      case Some(TimestampWithMigrationId(afterRecordTime, afterMigrationId)) =>
         // This makes it so that the two queries use updt_hist_tran_hi_mi_rt_di,
         NonEmptyList.of(
           sql"migration_id = ${afterMigrationId} and record_time > ${afterRecordTime} ",
@@ -1101,7 +1103,7 @@ class UpdateHistory(
   }
 
   def getUpdatesWithoutImportUpdates(
-      afterO: Option[(Long, CantonTimestamp)],
+      afterO: Option[TimestampWithMigrationId],
       limit: Limit,
   )(implicit tc: TraceContext): Future[Seq[TreeUpdateWithMigrationId]] = {
     val filters = afterFilters(afterO, includeImportUpdates = false)
@@ -1132,7 +1134,7 @@ class UpdateHistory(
   }
 
   def getAllUpdates(
-      afterO: Option[(Long, CantonTimestamp)],
+      afterO: Option[TimestampWithMigrationId],
       limit: PageLimit,
   )(implicit tc: TraceContext): Future[Seq[TreeUpdateWithMigrationId]] = {
     val filters = afterFilters(afterO, includeImportUpdates = true)
@@ -2595,6 +2597,12 @@ final case class TimestampWithMigrationId(
 object TimestampWithMigrationId {
   implicit val ordering: Ordering[TimestampWithMigrationId] =
     Ordering.by(x => (x.migrationId, x.timestamp))
+
+  implicit val prettyTimestampWithMigrationId: Pretty[TimestampWithMigrationId] =
+    prettyOfClass(
+      param("timestamp", _.timestamp),
+      param("migrationId", _.migrationId),
+    )
 }
 
 final case class TreeUpdateWithMigrationId(

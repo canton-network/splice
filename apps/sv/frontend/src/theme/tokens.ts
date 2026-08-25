@@ -33,9 +33,6 @@ export const HEADER_PB = 8;
 
 export const HEADER_PT = 3;
 
-/** Figma Dev Mode — fixed 145px gap between brand wordmark and nav cluster. */
-export const NAV_BRAND_GAP = '145px';
-
 /** Figma Dev Mode — fixed 60px between nav pills (not responsive). */
 export const NAV_GAP = '60px';
 

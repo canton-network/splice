@@ -205,6 +205,11 @@ export const proposalSummaryFieldSx: SxProps<Theme> = theme => ({
     typeof proposalSummaryInputRootSx === 'function'
       ? proposalSummaryInputRootSx(theme)
       : proposalSummaryInputRootSx,
+  // Figma empty-field prompt: Body M grey105 (same as Select Action placeholder).
+  '& .MuiOutlinedInput-input::placeholder': {
+    color: '#696969',
+    opacity: 1,
+  },
 });
 
 /** Date picker OutlinedInput root — single row; 16px inset for chevron via root padding. */

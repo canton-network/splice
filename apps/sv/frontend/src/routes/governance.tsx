@@ -240,7 +240,7 @@ export const Governance: React.FC = () => {
           />
 
           <ProposalListingSection
-            sectionTitle="Inflight Votes"
+            sectionTitle="In-flight Proposals"
             badgeCount={inflightRequests.length}
             data={inflightRequests}
             noDataMessage={
