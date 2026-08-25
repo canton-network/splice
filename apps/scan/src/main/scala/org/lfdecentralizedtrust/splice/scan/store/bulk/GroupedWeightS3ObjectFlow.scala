@@ -83,12 +83,11 @@ case class GroupedWeightS3ObjectFlow(
       @SuppressWarnings(Array("org.wartremover.warts.Var"))
       private var state = State.initial()
 
-      // True between the moment we call finish() on the current object and the moment finishCallback
-      // advances `state` to the next object. Without this guard, `onUpstreamFinish` can arrive in that
-      // window (upstream completion is delivered eagerly, regardless of demand) and trigger a second
-      // finish() on the very same object. The object's content would be correct, but its
-      // `splice-checksum` metadata would be overwritten with the checksum of an empty input,
-      // because MessageDigest.digest() resets the digest.
+      // Guards against finishing the same object twice, which can otherwise happen because finish()
+      // is triggered both from uploadCallback and from onUpstreamFinish.
+      // At the time of writing, a duplicate finish is actually harmless, as it calls
+      // AppendWriteObject.finish() which is idempotent. We guard against it anyway, to protect against
+      // future changes that would make finishing an object non-idempotent.
       @SuppressWarnings(Array("org.wartremover.warts.Var"))
       private var finishingObject = false
 

@@ -42,10 +42,10 @@ class S3UploadTest extends StoreTestBase with HasS3Mock {
     }
 
     "not corrupt the checksum if finish() is called more than once" in {
-      val content = "idempotency test"
+      val expectedContent = "idempotency test"
       val bucketConnection = new S3BucketConnectionForUnitTests(s3ConfigMock(), loggerFactory)
       val o = bucketConnection.newAppendWriteObject("finish-twice")
-      val part = ByteBuffer.wrap(content.getBytes("UTF-8"))
+      val part = ByteBuffer.wrap(expectedContent.getBytes("UTF-8"))
 
       o.prepareUploadNext(part)
       for {
@@ -58,7 +58,7 @@ class S3UploadTest extends StoreTestBase with HasS3Mock {
       } yield {
         checksumAfterFirstFinish.map(_.checksum) should not contain emptyDigest
         checksumAfterSecondFinish shouldBe checksumAfterFirstFinish
-        new String(content.toArray, "UTF-8") shouldBe content
+        new String(content.toArray, "UTF-8") shouldBe expectedContent
       }
     }
   }
