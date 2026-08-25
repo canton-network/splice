@@ -211,6 +211,7 @@ class AppUpgradeIntegrationTest
             // p2p transfer between an upgraded validator (alice's) and a non-upgraded (sv-1's).
             // Note: we cannot use sv1's (authenticated, current-version) /v1/dso to look up its
             // party here, as sv1 is still running the old release at this point.
+            // TODO(DACH-NY/canton-network-internal#2106) clean this up once the old release is new enough
             p2pTransfer(
               bobValidatorWalletClient,
               sv1WalletClient,
