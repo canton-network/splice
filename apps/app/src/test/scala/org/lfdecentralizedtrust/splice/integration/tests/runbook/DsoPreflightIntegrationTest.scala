@@ -2,6 +2,7 @@ package org.lfdecentralizedtrust.splice.integration.tests.runbook
 
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.FrontendIntegrationTest
+import org.lfdecentralizedtrust.splice.integration.tests.auth.PreflightAuthUtil
 
 import scala.concurrent.duration.DurationInt
 
@@ -15,7 +16,8 @@ import io.circe.parser.parse
 class DsoPreflightIntegrationTest
     extends FrontendIntegrationTest("sv", "docs")
     with PreflightIntegrationTestUtil
-    with SvUiPreflightIntegrationTestUtil {
+    with SvUiPreflightIntegrationTestUtil
+    with PreflightAuthUtil {
 
   override lazy val resetRequiredTopologyState: Boolean = false
   override protected def runTokenStandardCliSanityCheck: Boolean = false
@@ -25,11 +27,11 @@ class DsoPreflightIntegrationTest
       this.getClass.getSimpleName()
     )
 
-  "SVs 1-3 + DA-1 are online and reachable via their public HTTP API" in { implicit env =>
+  "SVs 1-3 + DA-1 are online and reachable via their HTTP API" in { implicit env =>
     env.svs.remote.foreach(sv =>
       clue(s"Checking SV at ${sv.httpClientConfig.url}") {
         eventuallySucceeds(timeUntilSuccess = 2.minutes) {
-          sv.getDsoInfo()
+          svClientWithToken(sv.name).getDsoInfo()
         }
       }
     )
@@ -74,7 +76,7 @@ class DsoPreflightIntegrationTest
     }
   }
 
-  "The Web UIs of SVs 1-3 + DA-1 are reachable and working as expected" in { env =>
+  "The Web UIs of SVs 1-3 + DA-1 are reachable and working as expected" in { implicit env =>
     // we put many checks in one test case to reduce testing time (logging in is slow)
     for ((svName, ingressName) <- coreSvIngressNames) {
       val svUiUrl = s"https://sv.${ingressName}.${sys.env("NETWORK_APPS_ADDRESS")}/";
@@ -82,11 +84,12 @@ class DsoPreflightIntegrationTest
       val svUsername = s"admin@${svName}-dev.com";
       // our current practice is to use the same password for all SVs
       val svPassword = sys.env(s"SV_DEV_NET_WEB_UI_PASSWORD")
-      val sv = env.svs.remote.find(sv => sv.name == svName).value
-      val svInfo = eventuallySucceeds() { sv.getDsoInfo() }
+      val svInfo = eventuallySucceeds() { svClientWithToken(svName).getDsoInfo() }
 
       val votedSvParties =
-        env.svs.remote.filter(_ != sv).map(sv_ => eventuallySucceeds() { sv_.getDsoInfo().svParty })
+        env.svs.remote
+          .filter(_.name != svName)
+          .map(sv_ => eventuallySucceeds() { svClientWithToken(sv_.name).getDsoInfo().svParty })
 
       withFrontEnd("sv") { implicit webDriver =>
         testSvUi(

@@ -513,9 +513,24 @@ paths:
   /v0/dso:
     get:
       tags: [sv]
-      # TODO(DACH-NY/canton-network-internal#2106) Move to sv_operator
+      # Deprecated in favor of /v1/dso, which requires authorization as SV operator.
+      # TODO(DACH-NY/canton-network-internal#2106) Remove in 0.8.0
+      deprecated: true
       x-jvm-package: sv_public
       operationId: "getDsoInfo"
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                "$ref": "../../../../common/src/main/openapi/common-internal.yaml#/components/schemas/GetDsoInfoResponse"
+
+  /v1/dso:
+    get:
+      tags: [sv]
+      x-jvm-package: sv_operator
+      operationId: "getDsoInfoV1"
       responses:
         "200":
           description: ok

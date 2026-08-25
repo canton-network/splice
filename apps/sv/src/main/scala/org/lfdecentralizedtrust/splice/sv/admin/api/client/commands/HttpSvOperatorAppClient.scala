@@ -36,6 +36,22 @@ object HttpSvOperatorAppClient {
     val createGenClientFn = (fn, host, ec, mat) => Client.httpClient(fn, host)(ec, mat)
   }
 
+  case object GetDsoInfo
+      extends BaseCommand[http.GetDsoInfoV1Response, HttpSvPublicAppClient.DsoInfo] {
+
+    override def submitRequest(
+        client: Client,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[Throwable, HttpResponse], http.GetDsoInfoV1Response] =
+      client.getDsoInfoV1(headers = headers)
+
+    override def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ) = { case http.GetDsoInfoV1Response.OK(dsoInfo) =>
+      HttpSvPublicAppClient.decodeDsoInfo(dsoInfo)
+    }
+  }
+
   case object ListOngoingValidatorOnboardings
       extends BaseCommand[http.ListOngoingValidatorOnboardingsResponse, Seq[ValidatorOnboarding]] {
     override def submitRequest(

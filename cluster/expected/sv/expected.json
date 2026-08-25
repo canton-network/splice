@@ -6678,7 +6678,8 @@
           "initialAmuletPrice": "0.0517",
           "isDevNet": false,
           "joinWithKeyOnboarding": {
-            "sponsorApiUrl": "http://sv-app.sv-1:5014"
+            "sponsorApiUrl": "http://sv-app.sv-1:5014",
+            "sponsorScanUrl": "http://scan-app.sv-1:5012"
           },
           "logAsyncFlush": false,
           "logLevel": "INFO",

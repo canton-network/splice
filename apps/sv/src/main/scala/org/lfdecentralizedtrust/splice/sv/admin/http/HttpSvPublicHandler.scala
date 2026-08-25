@@ -354,10 +354,9 @@ class HttpSvPublicHandler(
     }
   }
 
-  /** Intended use: The SV app UI.
-    *
-    * Protection: None for backwards compatibility reasons
-    * TODO(DACH-NY/canton-network-internal#2106): Move to HttpSvOperatorHandler
+  /** Deprecated in favor of `getDsoInfoV1` in [[HttpSvOperatorHandler]], which requires
+    * authorization as SV operator. Kept public for backwards compatibility.
+    * TODO(DACH-NY/canton-network-internal#2106): Remove in 0.8.0
     */
   override def getDsoInfo(
       respond: r0.GetDsoInfoResponse.type

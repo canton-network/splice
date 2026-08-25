@@ -24,7 +24,7 @@ import org.lfdecentralizedtrust.splice.admin.http.HttpErrorHandler
 import org.lfdecentralizedtrust.splice.auth.ActAsKnownPartyAuthExtractor.ActAsKnownUserRequest
 import org.lfdecentralizedtrust.splice.http.v0.{definitions, sv_operator as v0}
 import org.lfdecentralizedtrust.splice.http.v0.sv_operator.SvOperatorResource as r0
-import org.lfdecentralizedtrust.splice.config.{NetworkAppClientConfig, UpgradesConfig}
+import org.lfdecentralizedtrust.splice.config.{NetworkAppClientConfig, Thresholds, UpgradesConfig}
 import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.http.{
   HttpClient,
@@ -63,6 +63,7 @@ class HttpSvOperatorHandler(
     protected val loggerFactory: NamedLoggerFactory,
     upgradesConfig: UpgradesConfig,
     participantAdminConnection: ParticipantAdminConnection,
+    initialRound: String,
 )(implicit
     ec: ExecutionContextExecutor,
     protected val tracer: Tracer,
@@ -112,6 +113,36 @@ class HttpSvOperatorHandler(
           scanConnectionV = Some(f)
           f
       }
+    }
+  }
+
+  /** Intended use: The SV app UI.
+    *
+    * Protection: Requires authorization as SV operator; replaces the public `/v0/dso` endpoint.
+    */
+  override def getDsoInfoV1(
+      respond: r0.GetDsoInfoV1Response.type
+  )()(extracted: ActAsKnownUserRequest): Future[r0.GetDsoInfoV1Response] = {
+    implicit val ActAsKnownUserRequest(traceContext) = extracted
+    withSpan(s"$workflowId.getDsoInfoV1") { _ => _ =>
+      for {
+        latestOpenMiningRound <- dsoStore.getLatestActiveOpenMiningRound()
+        amuletRules <- dsoStore.getAssignedAmuletRules()
+        rulesAndStates <- dsoStore.getDsoRulesWithStateWithSvNodeStates()
+        dsoRules = rulesAndStates.dsoRules
+      } yield r0.GetDsoInfoV1Response.OK(
+        definitions.GetDsoInfoResponse(
+          svUser = config.ledgerApiUser,
+          svPartyId = dsoStore.key.svParty.toProtoPrimitive,
+          dsoPartyId = dsoStore.key.dsoParty.toProtoPrimitive,
+          votingThreshold = Thresholds.requiredNumVotes(dsoRules),
+          latestMiningRound = latestOpenMiningRound.toContractWithState.toHttp,
+          amuletRules = amuletRules.toContractWithState.toHttp,
+          dsoRules = dsoRules.toHttp,
+          svNodeStates = rulesAndStates.svNodeStates.values.map(_.toHttp).toVector,
+          initialRound = Some(initialRound),
+        )
+      )
     }
   }
 

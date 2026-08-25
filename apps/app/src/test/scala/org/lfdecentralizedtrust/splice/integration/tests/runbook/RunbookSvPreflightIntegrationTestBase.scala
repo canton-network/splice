@@ -76,10 +76,9 @@ abstract class RunbookSvPreflightIntegrationTestBase
   }
 
   "The SV rewards are claimed by the SV, with 33.33% going to validator1" in { implicit env =>
-    val svClient = sv_client("sv")
     val sv1ScanClient = scancl("sv1Scan")
 
-    val dsoInfo = svClient.getDsoInfo()
+    val dsoInfo = getDsoInfoViaScan(scancl("svTestScan"))
     val svParty = dsoInfo.svParty.toProtoPrimitive
     val svInfo = dsoInfo.dsoRules.payload.svs.asScala.get(svParty).value
     val joinedAsOfRound = svInfo.joinedAsOfRound.number

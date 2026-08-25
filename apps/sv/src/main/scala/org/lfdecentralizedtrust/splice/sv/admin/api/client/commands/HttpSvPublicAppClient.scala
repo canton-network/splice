@@ -41,6 +41,44 @@ object HttpSvPublicAppClient {
       initialRound: Option[String],
   )
 
+  def decodeDsoInfo(
+      dsoInfo: definitions.GetDsoInfoResponse
+  )(implicit decoder: TemplateJsonDecoder): Either[String, DsoInfo] =
+    for {
+      svPartyId <- Codec.decode(Codec.Party)(dsoInfo.svPartyId)
+      dsoPartyId <- Codec.decode(Codec.Party)(dsoInfo.dsoPartyId)
+      latestMiningRound <- ContractWithState
+        .fromHttp(OpenMiningRound.COMPANION)(dsoInfo.latestMiningRound)
+        .leftMap(_.toString)
+      amuletRules <- ContractWithState
+        .fromHttp(AmuletRules.COMPANION)(dsoInfo.amuletRules)
+        .left
+        .map(_.toString)
+      dsoRules <- ContractWithState
+        .fromHttp(DsoRules.COMPANION)(dsoInfo.dsoRules)
+        .left
+        .map(_.toString)
+      svNodeStates <- dsoInfo.svNodeStates.traverse { co =>
+        for {
+          nodeState <- ContractWithState
+            .fromHttp(SvNodeState.COMPANION)(co)
+            .left
+            .map(_.toString)
+          partyId <- Codec.decode(Codec.Party)(nodeState.payload.sv)
+        } yield partyId -> nodeState
+      }
+    } yield DsoInfo(
+      dsoInfo.svUser,
+      svPartyId,
+      dsoPartyId,
+      dsoInfo.votingThreshold,
+      latestMiningRound,
+      amuletRules,
+      dsoRules,
+      svNodeStates.toMap,
+      dsoInfo.initialRound,
+    )
+
   sealed trait SvOnboardingStatus
   object SvOnboardingStatus {
     final case class Unknown() extends SvOnboardingStatus
@@ -187,51 +225,8 @@ object HttpSvPublicAppClient {
 
     override def handleOk()(implicit
         decoder: TemplateJsonDecoder
-    ) = {
-      case http.GetDsoInfoResponse.OK(
-            definitions.GetDsoInfoResponse(
-              svUser,
-              svPartyId,
-              dsoPartyId,
-              votingThreshold,
-              latestMiningRound,
-              amuletRules,
-              dsoRules,
-              svNodeStates,
-              initialRound,
-            )
-          ) =>
-        for {
-          svPartyId <- Codec.decode(Codec.Party)(svPartyId)
-          dsoPartyId <- Codec.decode(Codec.Party)(dsoPartyId)
-          latestMiningRound <- ContractWithState
-            .fromHttp(OpenMiningRound.COMPANION)(latestMiningRound)
-            .leftMap(_.toString)
-          amuletRules <- ContractWithState
-            .fromHttp(AmuletRules.COMPANION)(amuletRules)
-            .left
-            .map(_.toString)
-          dsoRules <- ContractWithState.fromHttp(DsoRules.COMPANION)(dsoRules).left.map(_.toString)
-          svNodeStates <- svNodeStates.traverse { co =>
-            for {
-              nodeState <- ContractWithState
-                .fromHttp(SvNodeState.COMPANION)(co)
-                .left
-                .map(_.toString)
-              partyId <- Codec.decode(Codec.Party)(nodeState.payload.sv)
-            } yield partyId -> nodeState
-          }
-        } yield DsoInfo(
-          svUser,
-          svPartyId,
-          dsoPartyId,
-          votingThreshold,
-          latestMiningRound,
-          amuletRules,
-          dsoRules,
-          svNodeStates.toMap,
-          initialRound,
-        )
+    ) = { case http.GetDsoInfoResponse.OK(dsoInfo) =>
+      decodeDsoInfo(dsoInfo)
     }
   }
 

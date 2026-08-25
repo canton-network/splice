@@ -500,6 +500,7 @@ class SvApp(
         loggerFactory,
         amuletAppParameters.upgradesConfig,
         participantAdminConnection,
+        initialRound,
       )
 
       adminHandler = new HttpSvAdminHandler(

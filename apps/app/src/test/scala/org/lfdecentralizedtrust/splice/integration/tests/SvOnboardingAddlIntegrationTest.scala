@@ -1,13 +1,16 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.admin.api.client.data.GrpcSequencerConnection
+import org.apache.pekko.http.scaladsl.model.Uri
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.Amulet
 import org.lfdecentralizedtrust.splice.codegen.java.splice
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet as amuletCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules_ConfirmSvOnboarding
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_ConfirmSvOnboarding
-import org.lfdecentralizedtrust.splice.config.ConfigTransforms
+import org.lfdecentralizedtrust.splice.config.{ConfigTransforms, NetworkAppClientConfig}
+import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
+import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig
 import org.lfdecentralizedtrust.splice.sv.util.{SvOnboardingToken, SvUtil}
 
 import scala.jdk.OptionConverters.*
@@ -37,6 +40,19 @@ class SvOnboardingAddlIntegrationTest
               )
             )
           } else config
+        }(config)
+      )
+      // Exercise fetching DSO info via the sponsor's scan during onboarding
+      // (instead of the fallback via the sponsor SV app's deprecated /v0/dso endpoint)
+      .addConfigTransform((_, config) =>
+        ConfigTransforms.updateAllSvAppConfigs { (_, svConfig) =>
+          svConfig.copy(onboarding = svConfig.onboarding.map {
+            case join: SvOnboardingConfig.JoinWithKey =>
+              join.copy(scanClient =
+                Some(ScanAppClientConfig(NetworkAppClientConfig(Uri("http://localhost:5012"))))
+              )
+            case other => other
+          })
         }(config)
       )
 

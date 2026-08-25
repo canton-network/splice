@@ -126,7 +126,7 @@ describe('Set Amulet Config Rules Form', () => {
 
       await user.click(actionInput); // using this to trigger the onBlur event which triggers the validation
 
-      expect(submitButton.getAttribute('disabled')).toBeNull();
+      await waitFor(() => expect(submitButton.getAttribute('disabled')).toBeNull());
     },
     { timeout: 10000 }
   );

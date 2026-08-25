@@ -51,6 +51,7 @@ sv helm values
 
    -    joinWithKeyOnboarding:
    -      sponsorApiUrl: https://sv.sv-2.whatever.global.canton.network.digitalasset.com
+   -      sponsorScanUrl: https://scan.sv-2.whatever.global.canton.network.digitalasset.com
 
 2) Add initial helm values You may use these number values or choose
    other ones

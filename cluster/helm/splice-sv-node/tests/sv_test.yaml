@@ -38,6 +38,40 @@ set:
     audience: "mock_audience"
 
 tests:
+  - it: "sets join-with-key onboarding config incl. sponsor scan"
+    set:
+      joinWithKeyOnboarding:
+        sponsorApiUrl: "https://sponsor.mock.com"
+        sponsorScanUrl: "https://sponsor-scan.mock.com"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[?(@.name=='sv-app')].env[?(@.name=='ADDITIONAL_CONFIG_SV_ONBOARDING')].value
+          value: |
+            _onboarding {
+              type = "join-with-key"
+              sv-client.admin-api.url = "https://sponsor.mock.com"
+              scan-client.admin-api.url = "https://sponsor-scan.mock.com"
+            }
+
+  - it: "sets join-with-key onboarding config without sponsor scan"
+    set:
+      joinWithKeyOnboarding:
+        sponsorApiUrl: "https://sponsor.mock.com"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[?(@.name=='sv-app')].env[?(@.name=='ADDITIONAL_CONFIG_SV_ONBOARDING')].value
+          value: |
+            _onboarding {
+              type = "join-with-key"
+              sv-client.admin-api.url = "https://sponsor.mock.com"
+            }
+
   - it: "sets JWKS timeouts"
     set:
       auth:

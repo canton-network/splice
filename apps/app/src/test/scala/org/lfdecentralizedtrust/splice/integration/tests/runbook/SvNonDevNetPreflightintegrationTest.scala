@@ -11,6 +11,7 @@ import java.time.Instant
 
 abstract class SvNonDevNetPreflightIntegrationTestBase
     extends FrontendIntegrationTest("sv")
+    with PreflightIntegrationTestUtil
     with SvUiPreflightIntegrationTestUtil
     with DataExportTestUtil
     with FrontendLoginUtil {
@@ -35,7 +36,7 @@ abstract class SvNonDevNetPreflightIntegrationTestBase
   protected def svScanClient(implicit env: SpliceTestConsoleEnvironment) = scancl(s"${svName}Scan")
 
   "SV reports devnet=false" in { implicit env =>
-    svClient.getDsoInfo().dsoRules.payload.isDevNet shouldBe false
+    getDsoInfoViaScan(svScanClient).dsoRules.payload.isDevNet shouldBe false
   }
 
   val svUsername = s"admin@${svName}.com"

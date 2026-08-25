@@ -91,7 +91,7 @@ abstract class SvAppReference(
 
   def getDsoInfo(): HttpSvPublicAppClient.DsoInfo =
     consoleEnvironment.run {
-      httpCommand(HttpSvPublicAppClient.GetDsoInfo)
+      httpCommand(HttpSvOperatorAppClient.GetDsoInfo)
     }
 
   @Help.Summary("Get the CometBFT node status")

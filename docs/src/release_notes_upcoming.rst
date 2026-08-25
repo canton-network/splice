@@ -18,3 +18,18 @@ release-notes:: Upcoming
 
           This replaces the ``rate-limiting.trusted-client-ip-header`` and
           ``rate-limiting.enable-client-provided-ip-headers`` options, which have been removed.
+
+    - SV App
+
+        - A new ``/v1/dso`` endpoint has been added that returns the same response as ``/v0/dso``
+          but requires authorization as SV operator, like most other SV app endpoints.
+          The public ``/v0/dso`` endpoint is now deprecated and will be removed in 0.8.0
+          (see also the release notes for 0.5.5 for the original deprecation notice).
+          Use the public ``/v0/dso`` endpoint in the scan app if you need to fetch DSO info
+          without SV operator credentials.
+
+        - Joining SVs can now be configured with a scan instance (typically the sponsor's) for
+          fetching DSO info during onboarding, via ``onboarding.scan-client.admin-api.url``
+          (Helm value ``joinWithKeyOnboarding.sponsorScanUrl``). If unset, the joining SV falls
+          back to the sponsor SV app's deprecated public ``/v0/dso`` endpoint, so operators
+          should configure this before ``/v0/dso`` is removed in 0.8.0.

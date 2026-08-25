@@ -114,7 +114,7 @@ describe('Set DSO Config Rules Form', () => {
 
     await user.click(actionInput); // using this to trigger the onBlur event which triggers the validation
 
-    expect(submitButton.getAttribute('disabled')).not.toBeInTheDocument();
+    await waitFor(() => expect(submitButton.getAttribute('disabled')).toBeNull());
   });
 
   test('expiry date must be in the future', async () => {

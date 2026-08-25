@@ -9,7 +9,9 @@ import scala.jdk.OptionConverters.*
 
 /** Preflight test that makes sure that the sequencer url is published to dsoRules
   */
-class RunbookSvSequencerInfoPreflightIntegrationTest extends IntegrationTest {
+class RunbookSvSequencerInfoPreflightIntegrationTest
+    extends IntegrationTest
+    with PreflightIntegrationTestUtil {
 
   override lazy val resetRequiredTopologyState: Boolean = false
   override protected def runTokenStandardCliSanityCheck: Boolean = false
@@ -20,9 +22,8 @@ class RunbookSvSequencerInfoPreflightIntegrationTest extends IntegrationTest {
     )
 
   "The SV sequencer public url has been published to DsoRules" in { implicit env =>
-    val sv = sv_client("sv")
     val dsoInfo = eventuallySucceeds() {
-      sv.getDsoInfo()
+      getDsoInfoViaScan(scancl("svTestScan"))
     }
     val nodeState: SvNodeState = dsoInfo.svNodeStates.get(dsoInfo.svParty).value.payload
     val domainConfig = nodeState.state.synchronizerNodes.asScala.values.headOption.value

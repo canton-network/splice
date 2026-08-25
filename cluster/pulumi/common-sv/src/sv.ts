@@ -685,6 +685,7 @@ function installSvApp(
   if (config.onboarding.type == 'join-with-key') {
     svValues.joinWithKeyOnboarding = {
       sponsorApiUrl: config.onboarding.sponsorApiUrl,
+      sponsorScanUrl: config.onboarding.sponsorScanUrl,
     };
   }
 

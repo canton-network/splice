@@ -626,9 +626,8 @@ class RunbookValidatorPreflightIntegrationTest extends ValidatorPreflightIntegra
   // TODO(#979): remove this check once canton handles sequencer connections more gracefully
   override def checkValidatorIsConnectedToSvRunbook() = "Validator is connected to SV runbook" in {
     implicit env =>
-      val sv = sv_client("sv")
       eventually(2.minutes) {
-        val dsoInfo = sv.getDsoInfo()
+        val dsoInfo = getDsoInfoViaScan(scancl("svTestScan"))
         val nodeState = dsoInfo.svNodeStates.get(dsoInfo.svParty).value.payload
         val synchronizerNodeConfig =
           nodeState.state.synchronizerNodes.asScala.values.headOption.value
