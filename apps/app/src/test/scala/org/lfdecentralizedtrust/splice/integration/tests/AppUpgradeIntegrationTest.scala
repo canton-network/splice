@@ -26,6 +26,7 @@ import org.lfdecentralizedtrust.splice.wallet.store.BalanceChangeTxLogEntry
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
+import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.canton.topology.store.TimeQuery.HeadState
 import monocle.macros.syntax.lens.*
@@ -160,7 +161,6 @@ class AppUpgradeIntegrationTest
           bobValidatorBackend.participantClient.upload_dar_unless_exists(splitwellDarPathV1)
 
           val sv2Wallet = wc("sv2Wallet")
-          val sv1Client = sv_client("sv1Client")
 
           val bob = onboardWalletUser(bobWalletClient, bobValidatorBackend)
 
@@ -208,11 +208,13 @@ class AppUpgradeIntegrationTest
           clue("Testing some more transactions after 2 SVs upgraded") {
             sv2Wallet.tap(1003)
             sv2Wallet.balance().unlockedQty should be > BigDecimal(2000)
-            // p2p transfer between an upgraded validator (alice's) and a non-upgraded (sv-1's)
+            // p2p transfer between an upgraded validator (alice's) and a non-upgraded (sv-1's).
+            // Note: we cannot use sv1's (authenticated, current-version) /v1/dso to look up its
+            // party here, as sv1 is still running the old release at this point.
             p2pTransfer(
               bobValidatorWalletClient,
               sv1WalletClient,
-              sv1Client.getDsoInfo().svParty,
+              PartyId.tryFromProtoPrimitive(sv1WalletClient.userStatus().party),
               501,
             )
             sv1WalletClient.balance().unlockedQty should be > BigDecimal(400)
@@ -299,7 +301,7 @@ class AppUpgradeIntegrationTest
           )(
             "observing AmuletRules with upgraded config",
             _ => {
-              val newAmuletRules = sv1Client.getDsoInfo().amuletRules
+              val newAmuletRules = sv1Backend.getDsoInfo().amuletRules
               val config =
                 newAmuletRules.payload.configSchedule.initialValue
               config.packageConfig.amulet should endWith(".123")

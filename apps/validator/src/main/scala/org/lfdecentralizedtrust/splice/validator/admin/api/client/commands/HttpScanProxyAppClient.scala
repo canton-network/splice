@@ -12,6 +12,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.ans.AnsRules
 import org.apache.pekko.http.scaladsl.model.{HttpHeader, HttpResponse, StatusCodes}
 import org.lfdecentralizedtrust.splice.http.v0.{definitions, scanproxy as scanProxy}
 import org.lfdecentralizedtrust.splice.http.v0.scanproxy.{GetDsoPartyIdResponse, ScanproxyClient}
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient
 import org.lfdecentralizedtrust.splice.util.{Codec, ContractWithState, TemplateJsonDecoder}
 import com.digitalasset.canton.topology.PartyId
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.UnclaimedDevelopmentFundCoupon
@@ -43,7 +44,7 @@ object HttpScanProxyAppClient {
   }
 
   case object GetDsoInfo
-      extends ScanProxyBaseCommand[scanProxy.GetDsoInfoResponse, definitions.GetDsoInfoResponse] {
+      extends ScanProxyBaseCommand[scanProxy.GetDsoInfoResponse, HttpScanAppClient.DsoInfo] {
     override def submitRequest(
         client: ScanproxyClient,
         headers: List[HttpHeader],
@@ -54,9 +55,9 @@ object HttpScanProxyAppClient {
         decoder: TemplateJsonDecoder
     ): PartialFunction[scanProxy.GetDsoInfoResponse, Either[
       String,
-      definitions.GetDsoInfoResponse,
+      HttpScanAppClient.DsoInfo,
     ]] = { case scanProxy.GetDsoInfoResponse.OK(response) =>
-      Right(response)
+      HttpScanAppClient.decodeDsoInfo(response)
     }
   }
 

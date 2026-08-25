@@ -360,7 +360,7 @@ abstract class ValidatorAppReference(
       }
     }
 
-    def getDsoInfo(): definitions.GetDsoInfoResponse = {
+    def getDsoInfo(): HttpScanAppClient.DsoInfo = {
       consoleEnvironment.run {
         httpCommand(
           HttpScanProxyAppClient.GetDsoInfo
