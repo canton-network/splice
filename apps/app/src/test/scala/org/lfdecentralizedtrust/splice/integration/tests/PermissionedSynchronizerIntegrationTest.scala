@@ -1,11 +1,19 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.HasExecutionContext
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules_UnpermissionValidator
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_UnpermissionValidator
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTest
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.SynchronizerPermissionState
 import org.lfdecentralizedtrust.splice.util.*
+
+import java.time.Instant
+import scala.concurrent.duration.*
+import java.util.Optional
+import com.digitalasset.canton.data.CantonTimestamp
 
 class PermissionedSynchronizerIntegrationTest
     extends IntegrationTest
@@ -120,5 +128,78 @@ class PermissionedSynchronizerIntegrationTest
       bobValidatorBackend.startSync()
       bobValidatorBackend.onboardUser("TestUserBob")
     }
+
+    val bobParticipantId = bobValidatorBackend.participantClient.id.toProtoPrimitive
+    val suspendTime = env.environment.clock.now.plus(java.time.Duration.ofHours(1)).toInstant
+
+    clue("SVs vote to temporarily suspend Bob") {
+      manuallyUnpermissionValidator(bobParticipantId, Some(suspendTime), revoked = false)
+    }
+
+    clue("Verify Bob's ParticipantSynchronizerPermission is updated with loginAfter") {
+      eventually() {
+        sv1ScanBackend.getParticipantSynchronizerPermission(
+          decentralizedSynchronizerId.toProtoPrimitive,
+          bobParticipantId,
+        ) shouldBe Some(
+          SynchronizerPermissionState(Some(CantonTimestamp.assertFromInstant(suspendTime)))
+        )
+      }
+    }
+
+    clue("SVs vote to permanently revoke Bob") {
+      manuallyUnpermissionValidator(bobParticipantId, None, revoked = true)
+    }
+
+    clue("Verify Bob's ParticipantSynchronizerPermission is completely removed") {
+      eventually() {
+        sv1ScanBackend.getParticipantSynchronizerPermission(
+          decentralizedSynchronizerId.toProtoPrimitive,
+          bobParticipantId,
+        ) shouldBe None
+      }
+    }
+    def manuallyUnpermissionValidator(
+        participantId: String,
+        loginAfter: Option[Instant],
+        revoked: Boolean,
+    ): Unit = {
+      val dsoParty = sv1Backend.getDsoInfo().dsoParty
+
+      Seq(sv1Backend, sv2Backend, sv3Backend).foreach { sv =>
+        eventuallySucceeds(timeUntilSuccess = 40.seconds, maxPollInterval = 1.second) {
+          val svParty = sv.getDsoInfo().svParty
+          val dsoRules = sv.appState.dsoStore.getDsoRules().futureValue
+
+          clue(s"${sv.participantClient.name} votes for UnpermissionValidator(revoked=$revoked)") {
+            sv.appState.svAutomation
+              .connection(
+                org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority.High
+              )
+              .submit(
+                actAs = Seq(svParty),
+                readAs = Seq(dsoParty),
+                update = dsoRules.contractId.exerciseDsoRules_ConfirmAction(
+                  svParty.toProtoPrimitive,
+                  new ARC_DsoRules(
+                    new SRARC_UnpermissionValidator(
+                      new DsoRules_UnpermissionValidator(
+                        participantId,
+                        loginAfter.map(Optional.of(_)).getOrElse(Optional.empty()),
+                        java.lang.Boolean.valueOf(revoked),
+                      )
+                    )
+                  ),
+                ),
+              )
+              .withSynchronizerId(decentralizedSynchronizerId)
+              .noDedup
+              .yieldUnit()
+              .futureValue
+          }
+        }
+      }
+    }
+
   }
 }

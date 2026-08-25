@@ -272,6 +272,16 @@ class ExecuteConfirmedActionTrigger(
                 rejectAction.dsoRules_RejectValidatorLicenseValue.validatorLicenseRequestCid
               )
               .map(_.isEmpty)
+          case unpermissionAction: SRARC_UnpermissionValidator if config.permissionedSynchronizer =>
+            val participantId = unpermissionAction.dsoRules_UnpermissionValidatorValue.participantId
+            val revoked = unpermissionAction.dsoRules_UnpermissionValidatorValue.revoked
+            val loginAfterOpt = unpermissionAction.dsoRules_UnpermissionValidatorValue.loginAfter
+            store.listValidatorUnpermissions(participantId).map { contracts =>
+              contracts.exists(co =>
+                co.payload.revoked == revoked &&
+                  co.payload.loginAfter == loginAfterOpt
+              )
+            }
           case action =>
             throw new UnsupportedOperationException(
               show"DsoRules $action is not yet supported"
