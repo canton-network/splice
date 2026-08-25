@@ -992,6 +992,29 @@ function createGrafanaAlerting(namespace: Input<string>) {
             'scan_bft_sequencers_alerts.yaml': readGrafanaAlertingFile(
               'scan_bft_sequencers_alerts.yaml'
             ),
+            'global-sync-health_alerts.yaml': readGrafanaAlertingFile(
+              'global-sync-health_alerts.yaml'
+            )
+              .replaceAll(
+                '$DISCARDED_CONFIRMATION_REQUESTS_FRACTION_THRESHOLD',
+                monitoringConfig.alerting.alerts.globalSynchronizerHealth.discardedConfirmationRequests.fractionThreshold.toString()
+              )
+              .replaceAll(
+                '$FAILED_CONFIRMATION_REQUESTS_INCREASE_FACTOR',
+                monitoringConfig.alerting.alerts.globalSynchronizerHealth.failedConfirmationRequests.increaseFactor.toString()
+              )
+              .replaceAll(
+                '$FAILED_CONFIRMATION_REQUESTS_RATE_FLOOR',
+                monitoringConfig.alerting.alerts.globalSynchronizerHealth.failedConfirmationRequests.rateFloor.toString()
+              )
+              .replaceAll(
+                '$TPS_DROP_THRESHOLD_FRACTION',
+                monitoringConfig.alerting.alerts.globalSynchronizerHealth.tpsDrop.thresholdFraction.toString()
+              )
+              .replaceAll(
+                '$TPS_DROP_MIN_PRIOR_TPS',
+                monitoringConfig.alerting.alerts.globalSynchronizerHealth.tpsDrop.minPriorTps.toString()
+              ),
             'extra_k8s_alerts.yaml': readGrafanaAlertingFile('extra_k8s_alerts.yaml'),
             'sequencer_rate_limit_alerts.yaml': readGrafanaAlertingFile(
               'sequencer_rate_limit_alerts.yaml'
