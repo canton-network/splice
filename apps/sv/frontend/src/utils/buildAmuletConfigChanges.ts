@@ -48,8 +48,7 @@ export function buildAmuletConfigChanges(
     },
     {
       fieldName: 'developmentFundManagerBlacklist',
-      label:
-        'Blacklisted development fund managers (comma-separated party ids)',
+      label: 'Blacklisted development fund managers (comma-separated party ids)',
       currentValue: before?.developmentFundManagerBlacklist?.join(', ') || '',
       newValue: after?.developmentFundManagerBlacklist?.join(', ') || '',
     },
