@@ -3683,7 +3683,7 @@ components:
           $ref: "#/components/schemas/TargetMemberTrafficState"
     ActualMemberTrafficState:
       type: object
-      required: [ "total_consumed", "total_limit" ]
+      required: [ "total_consumed", "total_limit", "base_traffic_remainder" ]
       properties:
         total_consumed:
           description: |
@@ -3694,6 +3694,12 @@ components:
           description: |
             Current extra traffic limit set for the member on the given synchronizer.
             An extra traffic top-up is complete once total_limit matches total_purchased.
+          type: integer
+          format: int64
+        base_traffic_remainder:
+          description: |
+            Current replenishing base traffic remaining for the member on the
+            given synchronizer. This traffic is consumed before extra traffic.
           type: integer
           format: int64
     TargetMemberTrafficState:

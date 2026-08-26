@@ -2302,11 +2302,16 @@ class HttpScanHandler(
           .flatMap(_.getSequencerTrafficControlState(member))
         actualConsumed = actual.extraTrafficConsumed.value
         actualLimit = actual.extraTrafficLimit.value
+        baseTrafficRemainder = actual.baseTrafficRemainder.value
         targetTotalPurchased <- store.getTotalPurchasedMemberTraffic(member, domain)
       } yield {
         definitions.GetMemberTrafficStatusResponse(
           definitions.MemberTrafficStatus(
-            definitions.ActualMemberTrafficState(actualConsumed, actualLimit),
+            definitions.ActualMemberTrafficState(
+              actualConsumed,
+              actualLimit,
+              baseTrafficRemainder,
+            ),
             definitions.TargetMemberTrafficState(targetTotalPurchased),
           )
         )

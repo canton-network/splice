@@ -7,6 +7,12 @@
 
 release-notes:: Upcoming
 
+    - Scan app
+
+        - The member traffic-status response now includes ``base_traffic_remainder`` in
+          ``traffic_status.actual``, exposing the member's current replenishing base
+          traffic alongside its extra-traffic counters.
+
     - Scan & SV App
 
         - The client IP used for per-client-IP HTTP rate limiting is now extracted based on a

@@ -133,6 +133,7 @@ class MemberTrafficIntegrationTest
 
       statusAsPerScan.actual.totalConsumed shouldBe actualStateAsPerSequencer.extraTrafficConsumed.value
       statusAsPerScan.actual.totalLimit shouldBe actualStateAsPerSequencer.extraTrafficPurchased.value
+      statusAsPerScan.actual.baseTrafficRemainder shouldBe actualStateAsPerSequencer.baseTrafficRemainder.value
       statusAsPerScan.target.totalPurchased shouldBe actualTotalPurchasedAsPerDso
     }
   }
