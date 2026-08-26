@@ -19,8 +19,8 @@ import {
 import { spliceConfig } from './config/config';
 import { GcpProject } from './config/gcpConfig';
 import {
-  appsAffinityAndTolerations,
-  infraAffinityAndTolerations,
+  appsKubernetesScheduling,
+  infraKubernetesScheduling,
   installSpliceHelmChart,
   SpliceCustomResourceOptions,
 } from './helm';
@@ -395,7 +395,7 @@ export class LegacyHelmSplicePostgres extends pulumi.ComponentResource implement
     overrideDbSizeFromValues?: boolean,
     disableProtection?: boolean,
     version?: CnChartVersion,
-    useInfraAffinityAndTolerations: boolean = false,
+    useinfraKubernetesScheduling: boolean = false,
     resourceOpts?: SpliceCustomResourceOptions
   ) {
     const logicalName = xns.logicalName + '-' + instanceName;
@@ -445,7 +445,7 @@ export class LegacyHelmSplicePostgres extends pulumi.ComponentResource implement
           : {}),
       },
       true,
-      useInfraAffinityAndTolerations ? infraAffinityAndTolerations : appsAffinityAndTolerations
+      useinfraKubernetesScheduling ? infraKubernetesScheduling : appsKubernetesScheduling
     );
     this.pg = pg;
     this.database = pg;
@@ -514,7 +514,7 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
     overrideDbSizeFromValues?: boolean,
     disableProtection?: boolean,
     version?: CnChartVersion,
-    useInfraAffinityAndTolerations: boolean = false,
+    useinfraKubernetesScheduling: boolean = false,
     resourceOpts?: SpliceCustomResourceOptions
   ) {
     // Avoiding collisions with the name in LegacyHelmSplicePostgres
@@ -539,7 +539,7 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
         overrideDbSizeFromValues,
         disableProtection,
         version,
-        useInfraAffinityAndTolerations
+        useinfraKubernetesScheduling
       );
 
       migrationSource = {
@@ -574,9 +574,9 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
       { limits: { memory: '12Gi' }, requests: { cpu: '0.5', memory: '1Gi' } },
       values?.resources || {}
     );
-    const affinityAndTolerations = useInfraAffinityAndTolerations
-      ? infraAffinityAndTolerations
-      : appsAffinityAndTolerations;
+    const kubernetesScheduling = useinfraKubernetesScheduling
+      ? infraKubernetesScheduling
+      : appsKubernetesScheduling;
 
     // Optional init container that migrates data from a pre-existing postgres instance.
     // It runs pg_dumpall against the source and writes migration.dump into a dedicated
@@ -772,8 +772,7 @@ export class SplicePostgres extends pulumi.ComponentResource implements Postgres
                 },
               ],
               restartPolicy: 'Always',
-              affinity: affinityAndTolerations.affinity,
-              tolerations: affinityAndTolerations.tolerations,
+              ...kubernetesScheduling,
               ...(migrationVolumes.length > 0 ? { volumes: migrationVolumes } : {}),
             },
           },
@@ -903,7 +902,7 @@ export function installSplicePostgres(
   opts: SplicePostgresInstallOptions = {},
   chartValues?: LegacyChartValues,
   overrideDbSizeFromValues?: boolean,
-  useInfraAffinityAndTolerations: boolean = false,
+  useinfraKubernetesScheduling: boolean = false,
   resourceOpts?: SpliceCustomResourceOptions
 ): Postgres {
   if (splicePostgresHelmMigrationConfig.deployment == 'legacy-helm-chart') {
@@ -915,7 +914,7 @@ export function installSplicePostgres(
       overrideDbSizeFromValues,
       opts.disableProtection,
       version,
-      useInfraAffinityAndTolerations,
+      useinfraKubernetesScheduling,
       resourceOpts
     );
   } else {
@@ -930,7 +929,7 @@ export function installSplicePostgres(
       overrideDbSizeFromValues,
       opts.disableProtection,
       version,
-      useInfraAffinityAndTolerations,
+      useinfraKubernetesScheduling,
       resourceOpts
     );
   }

@@ -3,12 +3,12 @@
 import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
 import {
-  appsAffinityAndTolerations,
+  appsKubernetesScheduling,
   DOCKER_REPO,
   ExactNamespace,
   HELM_MAX_HISTORY_SIZE,
   imagePullSecretByNamespaceNameForServiceAccount,
-  infraAffinityAndTolerations,
+  infraKubernetesScheduling,
   K8sResourceSchema,
   SingleK8sResourceSchema,
 } from '@canton-network/splice-pulumi-common';
@@ -86,7 +86,7 @@ function installDockerRunnerScaleSet(
         listenerTemplate: {
           spec: {
             containers: [{ name: 'listener' }],
-            ...infraAffinityAndTolerations,
+            ...infraKubernetesScheduling,
           },
         },
         template: {
@@ -231,7 +231,7 @@ function installDockerRunnerScaleSet(
               },
             ],
             serviceAccountName: serviceAccountName,
-            ...appsAffinityAndTolerations,
+            ...appsKubernetesScheduling,
           },
           metadata: {
             // prevent eviction by the gke autoscaler
@@ -244,7 +244,7 @@ function installDockerRunnerScaleSet(
             },
           },
         },
-        ...infraAffinityAndTolerations,
+        ...infraKubernetesScheduling,
         maxHistory: HELM_MAX_HISTORY_SIZE,
       },
     },
@@ -407,7 +407,7 @@ function installK8sRunnerScaleSet(
                   },
                 ],
                 serviceAccountName: serviceAccountName,
-                ...appsAffinityAndTolerations,
+                ...appsKubernetesScheduling,
               },
               metadata: {
                 // prevent eviction by the gke autoscaler
@@ -439,7 +439,7 @@ function installK8sRunnerScaleSet(
         listenerTemplate: {
           spec: {
             containers: [{ name: 'listener' }],
-            ...infraAffinityAndTolerations,
+            ...infraKubernetesScheduling,
           },
         },
         template: {
@@ -524,7 +524,7 @@ function installK8sRunnerScaleSet(
               // Mount the volumes as owned by the runner user
               fsGroup: 1001,
             },
-            ...appsAffinityAndTolerations,
+            ...appsKubernetesScheduling,
             volumes: [
               {
                 name: 'work',
@@ -559,7 +559,7 @@ function installK8sRunnerScaleSet(
             },
           },
         },
-        ...infraAffinityAndTolerations,
+        ...infraKubernetesScheduling,
         maxHistory: HELM_MAX_HISTORY_SIZE,
       },
     },

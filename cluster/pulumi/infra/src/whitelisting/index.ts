@@ -13,8 +13,12 @@ export function installAppWhitelisting(
 ): pulumi.Output<pulumi.Resource[]>[] {
   if (infraConfig.istio.enableGeneralIpWhitelist) {
     return [];
+  } else {
+    return [
+      ...configureScanAndSvAppWhitelist(namespace),
+      ...configureSequencerWhitelist(namespace),
+    ];
   }
-  return [configureScanAndSvAppWhitelist(namespace), ...configureSequencerWhitelist(namespace)];
 }
 
 export function configureIstioGatewayPolicies(

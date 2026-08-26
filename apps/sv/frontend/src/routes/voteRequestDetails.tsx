@@ -19,6 +19,7 @@ import {
   buildProposal,
   formatBasisPoints,
   getActionValue,
+  getRequesterPartyId,
   getVoteResultStatus,
 } from '../utils/governance';
 import { useDsoInfos } from '../contexts/SvContext';
@@ -73,7 +74,8 @@ export const VoteRequestDetails: React.FC = () => {
   }
 
   const svPartyId = dsoInfosQuery.data?.svPartyId || '';
-  const allSvs = dsoInfosQuery.data?.dsoRules.payload.svs.entriesArray().map(e => e[0]) || [];
+  const svs = dsoInfosQuery.data?.dsoRules.payload.svs;
+  const allSvs = svs?.entriesArray().map(e => e[0]) || [];
   const amuletOrDsoAction = getActionValue(request.action);
 
   // check that amuletOrDsoAction is a supported action
@@ -123,9 +125,10 @@ export const VoteRequestDetails: React.FC = () => {
       ? dayjs(voteResult.outcome.value.effectiveAt).format(dateTimeFormatISO)
       : dayjs(voteResult?.completedAt).format(dateTimeFormatISO);
 
+  const requesterPartyId = getRequesterPartyId(request.requester, svs);
   const votingInformation: ProposalVotingInformation = {
-    requester: request.requester,
-    requesterIsYou: request.requester === svPartyId,
+    requester: requesterPartyId,
+    requesterIsYou: requesterPartyId === svPartyId,
     votingThresholdDeadline: dayjs(request.voteBefore).format(dateTimeFormatISO),
     voteTakesEffect,
     status: hasVoteRequest ? 'In Progress' : getVoteResultStatus(voteResult?.outcome),

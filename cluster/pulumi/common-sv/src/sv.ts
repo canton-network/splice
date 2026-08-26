@@ -6,7 +6,7 @@ import * as pulumi from '@pulumi/pulumi';
 import {
   activeVersion,
   ansDomainPrefix,
-  appsAffinityAndTolerations,
+  appsKubernetesScheduling,
   Auth0Client,
   btoa,
   ChartValues,
@@ -698,7 +698,7 @@ function installSvApp(
       dependsOn: dependsOn.concat([postgres]).concat(allSynchronizerDependencies),
     },
     undefined,
-    appsAffinityAndTolerations
+    appsKubernetesScheduling
   );
 }
 

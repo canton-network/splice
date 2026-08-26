@@ -98,6 +98,7 @@ import org.lfdecentralizedtrust.splice.scan.store.{
   ScanStore,
   TxLogEntry,
 }
+import org.lfdecentralizedtrust.splice.scan.store.AppActivityStore.RoundIngestionStatus
 import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorageReader
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.QueryAcsSnapshotResult
 import org.lfdecentralizedtrust.splice.scan.store.bulk.AcsSnapshotBulkStorage.AcsSnapshotObjects
@@ -108,6 +109,7 @@ import org.lfdecentralizedtrust.splice.store.{
   AppStore,
   AppStoreWithIngestion,
   PageLimit,
+  TimestampWithMigrationId,
   VoteResultsFilters,
   VotesStore,
 }
@@ -704,9 +706,9 @@ class HttpScanHandler(
     implicit val tc: TraceContext = extracted
     val afterO = after.map { after =>
       val afterRecordTime = parseTimestamp(after.afterRecordTime)
-      (
-        after.afterMigrationId,
+      TimestampWithMigrationId(
         afterRecordTime,
+        after.afterMigrationId,
       )
     }
     confirmBackfillingIsCompleteThen(updateHistory) {
@@ -896,7 +898,7 @@ class HttpScanHandler(
     implicit val tc: TraceContext = extracted
     val afterO = after.map { a =>
       val afterRecordTime = parseTimestamp(a.afterRecordTime)
-      (a.afterMigrationId, afterRecordTime)
+      TimestampWithMigrationId(afterRecordTime, a.afterMigrationId)
     }
 
     confirmBackfillingIsCompleteThen(updateHistory) {
@@ -2774,11 +2776,9 @@ class HttpScanHandler(
               undetermined
           }
         case None =>
-          appActivityStore.earliestIngestedRound().map {
-            case Some(earliestIngested) if roundNumber <= earliestIngested =>
-              cannotProvide
-            case _ =>
-              undetermined
+          appActivityStore.ingestionStatusForRound(roundNumber).map {
+            case RoundIngestionStatus.CannotProvide => cannotProvide
+            case RoundIngestionStatus.Undetermined => undetermined
           }
       }
     }
@@ -2815,11 +2815,9 @@ class HttpScanHandler(
             )
           )
         case None =>
-          appActivityStore.earliestIngestedRound().map {
-            case Some(earliestIngested) if roundNumber <= earliestIngested =>
-              cannotProvide
-            case _ =>
-              undetermined
+          appActivityStore.ingestionStatusForRound(roundNumber).map {
+            case RoundIngestionStatus.CannotProvide => cannotProvide
+            case RoundIngestionStatus.Undetermined => undetermined
           }
       }
     }

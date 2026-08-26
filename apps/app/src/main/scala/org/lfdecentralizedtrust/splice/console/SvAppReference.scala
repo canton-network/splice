@@ -292,13 +292,10 @@ class SvAppBackendReference(
   def appState: SvApp.State = _appState[SvApp.State, SvApp]
 
   @Help.Summary(
-    "Returns the current delegate based automation. Do not keep references to the result, as this automation gets replaced whenever the DSO delegate changes."
+    "Returns the delegate based automation. The reference is stable for the lifetime of the app."
   )
-  def dsoDelegateBasedAutomation: DsoDelegateBasedAutomationService = {
-    appState.dsoAutomation.restartDsoDelegateBasedAutomationTrigger.epochState
-      .getOrElse(throw new RuntimeException("LeaderBasedAutomation is not fully started up"))
-      .dsoDelegateBasedAutomation
-  }
+  def dsoDelegateBasedAutomation: DsoDelegateBasedAutomationService =
+    appState.dsoAutomation.dsoDelegateBasedAutomation
 
   @Help.Summary(
     "Returns the current DSO automation."

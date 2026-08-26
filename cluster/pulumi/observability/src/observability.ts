@@ -16,7 +16,7 @@ import {
   GCP_PROJECT,
   GrafanaKeys,
   HELM_MAX_HISTORY_SIZE,
-  infraAffinityAndTolerations,
+  infraKubernetesScheduling,
   infraPremiumStorageClassName,
   infraStandardStorageClassName,
   loadTesterConfig,
@@ -30,7 +30,7 @@ import {
 } from '@canton-network/splice-pulumi-common-sv/src/svConfigsBasic';
 import { SweepConfig } from '@canton-network/splice-pulumi-common-validator';
 import { installSplicePostgres, Postgres } from '@canton-network/splice-pulumi-common/src/postgres';
-import { infraStack } from '@canton-network/splice-pulumi-common/src/stackReferences';
+import { StackReferences } from '@canton-network/splice-pulumi-common/src/stackReferences';
 import { local } from '@pulumi/command';
 import { getSecretVersionOutput } from '@pulumi/gcp/secretmanager/getSecretVersion';
 import { Input } from '@pulumi/pulumi';
@@ -96,7 +96,7 @@ const shouldIgnoreNoDataOrDataSourceError = clusterIsResetPeriodically;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const istioDashboardVersions: pulumi.Output<any> =
-  infraStack.requireOutput('istioDashboardVersions');
+  StackReferences.infra.requireOutput('istioDashboardVersions');
 
 export function configureObservability(namespace: ExactNamespace): pulumi.Resource {
   // If the stack version is updated the crd version might need to be upgraded as well, check the release notes https://artifacthub.io/packages/helm/prometheus-community/kube-prometheus-stack
@@ -205,7 +205,7 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
                 },
               },
             },
-            ...infraAffinityAndTolerations,
+            ...infraKubernetesScheduling,
           },
           templateFiles: {
             'template.tmpl': substituteSlackNotificationTemplate(
@@ -224,7 +224,7 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
           tls: {
             enabled: false, // because `admissionWebhooks` are disabled, see: https://github.com/prometheus-community/helm-charts/issues/418
           },
-          ...infraAffinityAndTolerations,
+          ...infraKubernetesScheduling,
         },
         prometheus: {
           prometheusSpec: {
@@ -265,7 +265,7 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
               },
             },
             externalUrl: prometheusExternalUrl,
-            ...infraAffinityAndTolerations,
+            ...infraKubernetesScheduling,
           },
         },
         grafana: {
@@ -394,7 +394,7 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
           },
           adminUser: 'cn-admin',
           adminPassword: adminPassword,
-          ...infraAffinityAndTolerations,
+          ...infraKubernetesScheduling,
         },
         'kube-state-metrics': {
           fullnameOverride: 'ksm',
@@ -499,7 +499,7 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
               },
             ],
           },
-          ...infraAffinityAndTolerations,
+          ...infraKubernetesScheduling,
         },
         'prometheus-node-exporter': {
           fullnameOverride: 'node-exporter',
@@ -566,7 +566,7 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
           namespace: namespaceName,
           additionalLabels: { release: 'prometheus-grafana-monitoring' },
         },
-        ...infraAffinityAndTolerations,
+        ...infraKubernetesScheduling,
       },
       maxHistory: HELM_MAX_HISTORY_SIZE,
     });
@@ -992,6 +992,21 @@ function createGrafanaAlerting(namespace: Input<string>) {
             'scan_bft_sequencers_alerts.yaml': readGrafanaAlertingFile(
               'scan_bft_sequencers_alerts.yaml'
             ),
+            'global-sync-health_alerts.yaml': readGrafanaAlertingFile(
+              'global-sync-health_alerts.yaml'
+            )
+              .replaceAll(
+                '$DISCARDED_CONFIRMATION_REQUESTS_THRESHOLD',
+                monitoringConfig.alerting.alerts.globalSynchronizerHealth.discardedConfirmationRequestsThreshold.toString()
+              )
+              .replaceAll(
+                '$FAILED_CONFIRMATION_REQUESTS_THRESHOLD',
+                monitoringConfig.alerting.alerts.globalSynchronizerHealth.failedConfirmationRequestsThreshold.toString()
+              )
+              .replaceAll(
+                '$TPS_DROP_THRESHOLD',
+                monitoringConfig.alerting.alerts.globalSynchronizerHealth.tpsDropThreshold.toString()
+              ),
             'extra_k8s_alerts.yaml': readGrafanaAlertingFile('extra_k8s_alerts.yaml'),
             'sequencer_rate_limit_alerts.yaml': readGrafanaAlertingFile(
               'sequencer_rate_limit_alerts.yaml'
@@ -1218,6 +1233,6 @@ function installPostgres(namespace: ExactNamespace): Postgres {
     { disableProtection: true },
     { db: { volumeSize: '20Gi' } }, // A tiny pvc should be enough for grafana
     true, // overrideDbSizeFromValues
-    true // useInfraAffinityAndTolerations
+    true // useinfraKubernetesScheduling
   );
 }

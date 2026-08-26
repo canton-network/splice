@@ -22,6 +22,7 @@ import org.lfdecentralizedtrust.splice.scan.store.{
 import org.lfdecentralizedtrust.splice.store.{HistoryMetrics, S3BucketConnection, UpdateHistory}
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
+import com.digitalasset.canton.discard.Implicits.DiscardOps
 import cats.implicits.*
 import org.apache.pekko.stream.scaladsl.Source
 import org.lfdecentralizedtrust.splice.PekkoRetryableService
@@ -152,6 +153,16 @@ class BulkStorage(
     reader,
     appConfig,
     scanConnection,
+    objs =>
+      objs.foreach { obj =>
+        val encoding = ScanStorageConfig.Encoding.all.toList
+          .collectFirst {
+            case enc if enc.storageKeyRegex("ACS").matches(obj.key) =>
+              enc.key
+          }
+          .getOrElse("unknown")
+        historyMetrics.BulkStorage.incAcsSnapshotObjects(encoding, "committed")
+      },
     loggerFactory,
   )
   val acsCommitted = new AcsSnapshotBulkStorage(
@@ -185,6 +196,16 @@ class BulkStorage(
     reader,
     appConfig,
     scanConnection,
+    objs =>
+      objs.foreach { obj =>
+        val encoding = ScanStorageConfig.Encoding.all.toList
+          .collectFirst {
+            case enc if enc.storageKeyRegex("updates").matches(obj.key) =>
+              enc.key
+          }
+          .getOrElse("unknown")
+        historyMetrics.BulkStorage.incUpdateObjects(encoding, "committed")
+      },
     loggerFactory,
   )
   val updatesCommitted = new UpdateHistoryBulkStorage(
@@ -196,9 +217,29 @@ class BulkStorage(
     loggerFactory,
   )
 
-  private val services =
+  // Services are only started once initialization has completed.
+  private lazy val services =
     Seq[PekkoRetryableService[?]](acsStaging, acsCommitted, updatesStaging, updatesCommitted)
       .map(_.asPekkoRetryingService(automationConfig, backoffClock, retryProvider))
+
+  private def initialize(): Future[BulkStorage] = {
+    val resetAll =
+      if (appConfig.debugForceStartFromGenesis) {
+        logger.warn(
+          "debugForceStartFromGenesis is set to true, resetting all bulk storage progress and starting from genesis"
+        )
+        for {
+          _ <- acsStagingProgress.reset
+          _ <- acsCommittedProgress.reset
+          _ <- updatesStagingProgress.reset
+          _ <- updatesCommittedProgress.reset
+        } yield ()
+      } else Future.unit
+    resetAll.map { _ =>
+      services.discard
+      this
+    }
+  }
 
   final override def closeAsync(): Seq[AsyncOrSyncCloseable] = {
     LifeCycle.close(scanConnection)(logger)
@@ -237,7 +278,7 @@ object BulkStorage {
       tracer: Tracer,
       httpClient: HttpClient,
       templateJsonDecoder: TemplateJsonDecoder,
-  ): BulkStorage = {
+  ): Future[BulkStorage] = {
     val logger = loggerFactory.getTracedLogger(classOf[BulkStorage])
 
     (appConfig.staging, appConfig.committed).tupled.fold {
@@ -264,7 +305,7 @@ object BulkStorage {
         upgradesConfig,
         retryProvider,
         loggerFactory,
-      )
+      ).initialize()
     }
   }
 }
