@@ -30,8 +30,10 @@ import {
   PROPOSAL_SUMMARY_TITLE,
   SUPPORTING_URL_LABEL,
   THRESHOLD_DEADLINE_LABEL,
+  URL_PLACEHOLDER,
   VOTE_PROPOSAL_CONTRACT_ID_LABEL,
   VOTE_REASON_PLACEHOLDER,
+  VOTE_REASON_URL_PLACEHOLDER,
 } from '../../utils/constants';
 
 const voteRequest = {
@@ -288,6 +290,9 @@ describe('Proposal Details Content', () => {
     const reasonInput = screen.getByTestId('your-vote-reason-input');
     expect(reasonInput).toBeInTheDocument();
     expect(reasonInput.getAttribute('placeholder')).toBe(VOTE_REASON_PLACEHOLDER);
+    expect(screen.getByTestId('your-vote-url-input').getAttribute('placeholder')).toBe(
+      VOTE_REASON_URL_PLACEHOLDER
+    );
     expect(screen.getByTestId('your-vote-accept')).toBeInTheDocument();
     expect(screen.getByTestId('your-vote-reject')).toBeInTheDocument();
   });
@@ -1051,9 +1056,11 @@ describe('Proposal Details > Votes & Voting', () => {
 
     const votingFormUrlInput = within(votingForm).getByTestId('your-vote-url-input');
     expect(votingFormUrlInput).toBeInTheDocument();
+    expect(votingFormUrlInput).toHaveAttribute('placeholder', URL_PLACEHOLDER);
 
     const votingFormReasonInput = within(votingForm).getByTestId('your-vote-reason-input');
     expect(votingFormReasonInput).toBeInTheDocument();
+    expect(votingFormReasonInput).toHaveAttribute('placeholder', VOTE_REASON_PLACEHOLDER);
 
     const votingFormAccept = within(votingForm).getByTestId('your-vote-accept');
     expect(votingFormAccept).toBeInTheDocument();
@@ -1104,6 +1111,12 @@ describe('Proposal Details > Votes & Voting', () => {
     expect(acceptButton.textContent).toMatch(/Accept/);
     expect(rejectButton).toBeInTheDocument();
     expect(rejectButton.textContent).toMatch(/Reject/);
+    // Figma / #6912: Reject (left) → Accept (right); primary on the right
+    const voteButtons = within(votingForm).getAllByRole('button');
+    expect(voteButtons.map(b => b.getAttribute('data-testid'))).toEqual([
+      'your-vote-reject',
+      'your-vote-accept',
+    ]);
   });
 
   test('render success message after api returns success', async () => {
