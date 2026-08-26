@@ -1,18 +1,18 @@
-// Copyright (c) 2026 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+// Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
 import sbt.*
 import sbt.Keys.*
 
 /** Points `protocGenerate` at a stable launcher for every native protoc plugin.
- *
- * When `NIX_CC` is set (it always is, since sbt runs inside the nix shell) sbt-protoc wraps each
- * native plugin binary in a fresh `/tmp/nix<random>` script per task run and passes that path as
- * `--plugin=`. The path is part of the task's cache key, so codegen and the doc rendering rerun on
- * every build even when no proto changed, and the scripts pile up in `/tmp` for the life of the
- * sbt server. Writing the launcher ourselves under a digest-named path keeps the key stable, and
- * the `.sh` suffix stops sbt-protoc from wrapping it again.
- */
+  *
+  * When `NIX_CC` is set (it always is, since sbt runs inside the nix shell) sbt-protoc wraps each
+  * native plugin binary in a fresh `/tmp/nix<random>` script per task run and passes that path as
+  * `--plugin=`. The path is part of the task's cache key, so codegen and the doc rendering rerun on
+  * every build even when no proto changed, and the scripts pile up in `/tmp` for the life of the
+  * sbt server. Writing the launcher ourselves under a digest-named path keeps the key stable, and
+  * the `.sh` suffix stops sbt-protoc from wrapping it again.
+  */
 object ProtocNixPlugin extends AutoPlugin {
   override def trigger: PluginTrigger = allRequirements
   override def requires: Plugins = sbtprotoc.ProtocPlugin
