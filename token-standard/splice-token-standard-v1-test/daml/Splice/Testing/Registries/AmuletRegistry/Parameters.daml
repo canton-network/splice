@@ -103,6 +103,8 @@ defaultAmuletConfig = AmuletConfig with
 
   minDevelopmentFundMintingDelay = None
 
+  amuletSwitchOverTimes = None
+
 -- | Default configuration schedule with single current amulet config
 defaultAmuletConfigSchedule : Schedule Time (AmuletConfig USD)
 defaultAmuletConfigSchedule = Schedule with
