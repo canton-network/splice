@@ -35,3 +35,5 @@ release-notes:: Upcoming
           given audience need to be reachable from the corresponding networks, and endpoints with
           an audience of ``none``, as well as endpoints without an ``x-external-audience``, do not
           need to be exposed to external traffic at all.
+          Note that endpoints currently marked for exposure to validators will be phased out in the foreseeable future,
+          and replaced by a new limited number of endpoints which should be available only on DevNet.
