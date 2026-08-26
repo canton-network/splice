@@ -992,6 +992,21 @@ function createGrafanaAlerting(namespace: Input<string>) {
             'scan_bft_sequencers_alerts.yaml': readGrafanaAlertingFile(
               'scan_bft_sequencers_alerts.yaml'
             ),
+            'global-sync-health_alerts.yaml': readGrafanaAlertingFile(
+              'global-sync-health_alerts.yaml'
+            )
+              .replaceAll(
+                '$DISCARDED_CONFIRMATION_REQUESTS_THRESHOLD',
+                monitoringConfig.alerting.alerts.globalSynchronizerHealth.discardedConfirmationRequestsThreshold.toString()
+              )
+              .replaceAll(
+                '$FAILED_CONFIRMATION_REQUESTS_THRESHOLD',
+                monitoringConfig.alerting.alerts.globalSynchronizerHealth.failedConfirmationRequestsThreshold.toString()
+              )
+              .replaceAll(
+                '$TPS_DROP_THRESHOLD',
+                monitoringConfig.alerting.alerts.globalSynchronizerHealth.tpsDropThreshold.toString()
+              ),
             'extra_k8s_alerts.yaml': readGrafanaAlertingFile('extra_k8s_alerts.yaml'),
             'sequencer_rate_limit_alerts.yaml': readGrafanaAlertingFile(
               'sequencer_rate_limit_alerts.yaml'
