@@ -996,24 +996,16 @@ function createGrafanaAlerting(namespace: Input<string>) {
               'global-sync-health_alerts.yaml'
             )
               .replaceAll(
-                '$DISCARDED_CONFIRMATION_REQUESTS_FRACTION_THRESHOLD',
-                monitoringConfig.alerting.alerts.globalSynchronizerHealth.discardedConfirmationRequests.fractionThreshold.toString()
+                '$DISCARDED_CONFIRMATION_REQUESTS_THRESHOLD',
+                monitoringConfig.alerting.alerts.globalSynchronizerHealth.discardedConfirmationRequestsThreshold.toString()
               )
               .replaceAll(
-                '$FAILED_CONFIRMATION_REQUESTS_INCREASE_FACTOR',
-                monitoringConfig.alerting.alerts.globalSynchronizerHealth.failedConfirmationRequests.increaseFactor.toString()
+                '$FAILED_CONFIRMATION_REQUESTS_THRESHOLD',
+                monitoringConfig.alerting.alerts.globalSynchronizerHealth.failedConfirmationRequestsThreshold.toString()
               )
               .replaceAll(
-                '$FAILED_CONFIRMATION_REQUESTS_RATE_FLOOR',
-                monitoringConfig.alerting.alerts.globalSynchronizerHealth.failedConfirmationRequests.rateFloor.toString()
-              )
-              .replaceAll(
-                '$TPS_DROP_THRESHOLD_FRACTION',
-                monitoringConfig.alerting.alerts.globalSynchronizerHealth.tpsDrop.thresholdFraction.toString()
-              )
-              .replaceAll(
-                '$TPS_DROP_MIN_PRIOR_TPS',
-                monitoringConfig.alerting.alerts.globalSynchronizerHealth.tpsDrop.minPriorTps.toString()
+                '$TPS_DROP_THRESHOLD',
+                monitoringConfig.alerting.alerts.globalSynchronizerHealth.tpsDropThreshold.toString()
               ),
             'extra_k8s_alerts.yaml': readGrafanaAlertingFile('extra_k8s_alerts.yaml'),
             'sequencer_rate_limit_alerts.yaml': readGrafanaAlertingFile(

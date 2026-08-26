@@ -174,25 +174,16 @@ monitoring:
         # 1.5 means the alert fires if the balance is 50% higher than expected.
         tolerance: 1.5
       globalSynchronizerHealth:
-        discardedConfirmationRequests:
-          # Fraction (0-1) of sequenced confirmation requests that were discarded
-          # (i.e., never processed by the mediator, e.g. due to CometBFT replays)
-          # above which the alert fires.
-          fractionThreshold: 0.2
-        failedConfirmationRequests:
-          # Fire when the confirmation request failure rate over the last 30m exceeds
-          # the failure rate of the previous 30m by more than this factor ...
-          increaseFactor: 2
-          # ... and is above this floor (fraction 0-1), to avoid alerting on
-          # relative increases over a tiny baseline.
-          rateFloor: 0.05
-        tpsDrop:
-          # Fire when TPS (approved confirmation requests per second) over the last
-          # 30m drops below this fraction of the previous 30m ...
-          thresholdFraction: 0.5
-          # ... and the previous 30m TPS was above this floor, to avoid alerting on
-          # relative drops over a tiny baseline.
-          minPriorTps: 0.1
+        # Fraction (0-1) of sequenced confirmation requests that were discarded
+        # (i.e., never processed by the mediator, e.g. due to CometBFT replays)
+        # above which the alert fires.
+        discardedConfirmationRequestsThreshold: 0.2
+        # Fraction (0-1) of confirmation requests that failed (as observed by the
+        # mediator, over the last 30m) above which the alert fires.
+        failedConfirmationRequestsThreshold: 0.05
+        # Fire when TPS (approved confirmation requests per second) over the last
+        # 30m drops below this fraction of the previous 30m.
+        tpsDropThreshold: 0.5
       gcpQuotas:
         # Quota metric names to exclude from all GCP quota alerts.
         # Each entry is matched exactly for quota exceeded.

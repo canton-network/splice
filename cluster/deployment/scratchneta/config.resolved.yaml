@@ -84,14 +84,9 @@ monitoring:
         retestWindowSeconds: 600
         rollingWindowSeconds: 600
       globalSynchronizerHealth:
-        discardedConfirmationRequests:
-          fractionThreshold: 0.2
-        failedConfirmationRequests:
-          increaseFactor: 2
-          rateFloor: 0.05
-        tpsDrop:
-          minPriorTps: 0.1
-          thresholdFraction: 0.5
+        discardedConfirmationRequestsThreshold: 0.2
+        failedConfirmationRequestsThreshold: 0.05
+        tpsDropThreshold: 0.5
       ingestion:
         thresholdEntriesPerBatch: 80
       loadTester:

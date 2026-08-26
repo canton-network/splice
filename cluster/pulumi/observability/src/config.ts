@@ -179,28 +179,16 @@ const MonitoringConfigSchema = z
           droppedSentPacketsThreshold: 30,
         }),
         globalSynchronizerHealth: z.object({
-          discardedConfirmationRequests: z.object({
-            // Fraction (0-1) of sequenced confirmation requests that were discarded
-            // (i.e., never processed by the mediator, e.g. due to CometBFT replays)
-            // above which the alert fires.
-            fractionThreshold: z.number(),
-          }),
-          failedConfirmationRequests: z.object({
-            // Fire when the confirmation request failure rate over the last 30m exceeds
-            // the failure rate of the previous 30m by more than this factor ...
-            increaseFactor: z.number(),
-            // ... and is above this floor (fraction 0-1), to avoid alerting on
-            // relative increases over a tiny baseline.
-            rateFloor: z.number(),
-          }),
-          tpsDrop: z.object({
-            // Fire when TPS (approved confirmation requests per second) over the last
-            // 30m drops below this fraction of the previous 30m ...
-            thresholdFraction: z.number(),
-            // ... and the previous 30m TPS was above this floor, to avoid alerting on
-            // relative drops over a tiny baseline.
-            minPriorTps: z.number(),
-          }),
+          // Fraction (0-1) of sequenced confirmation requests that were discarded
+          // (i.e., never processed by the mediator, e.g. due to CometBFT replays)
+          // above which the alert fires.
+          discardedConfirmationRequestsThreshold: z.number(),
+          // Fraction (0-1) of confirmation requests that failed (as observed by the
+          // mediator, over the last 30m) above which the alert fires.
+          failedConfirmationRequestsThreshold: z.number(),
+          // Fire when TPS (approved confirmation requests per second) over the last
+          // 30m drops below this fraction of the previous 30m.
+          tpsDropThreshold: z.number(),
         }),
         trafficBasedRewards: z.object({
           featuredAppRightsLimit: z.number(),

@@ -33,7 +33,7 @@ groups:
               conditions:
                 - evaluator:
                     params:
-                      - $DISCARDED_CONFIRMATION_REQUESTS_FRACTION_THRESHOLD
+                      - $DISCARDED_CONFIRMATION_REQUESTS_THRESHOLD
                     type: gt
                   operator:
                     type: and
@@ -62,18 +62,17 @@ groups:
           __panelId__: "10"
           runbook_url: ""
           severity: warning
-          summary: "{{ $labels.namespace }} discarded more than $DISCARDED_CONFIRMATION_REQUESTS_FRACTION_THRESHOLD of sequenced confirmation requests over the last 10 minutes"
+          summary: "{{ $labels.namespace }} discarded more than $DISCARDED_CONFIRMATION_REQUESTS_THRESHOLD of sequenced confirmation requests over the last 10 minutes"
           description: 'A significant fraction of sequenced confirmation requests was never processed by the mediator. This typically matches CometBFT replays.'
         labels: {}
         isPaused: false
-      # Failure rate of confirmation requests (as observed by the mediator), compared
-      # to the previous 30m window. Can increase for non-network reasons, but a large
-      # relative jump is a strong signal for network issues.
+      # Failure rate of confirmation requests, as observed by the mediator.
+      # Can increase for non-network reasons, but is relatively unlikely to.
       - uid: gsh0failedcr0rel
-        title: Failed Confirmation Request Rate Increased
-        condition: failure rate increased
+        title: High Failed Confirmation Request Rate
+        condition: failure rate threshold exceeded
         data:
-          - refId: A
+          - refId: failure_rate
             relativeTimeRange:
               from: 600
               to: 0
@@ -86,48 +85,20 @@ groups:
               legendFormat: __auto
               maxDataPoints: 43200
               range: false
-              refId: A
-          - refId: B
-            relativeTimeRange:
-              from: 600
-              to: 0
-            datasourceUid: prometheus
-            model:
-              editorMode: code
-              expr: 1 - sum by (namespace) (rate(daml_mediator_approved_requests_total[30m] offset 30m)) / sum by (namespace) (rate(daml_mediator_requests_total[30m] offset 30m))
-              instant: true
-              intervalMs: 1000
-              legendFormat: __auto
-              maxDataPoints: 43200
-              range: false
-              refId: B
-          - refId: C
-            relativeTimeRange:
-              from: 600
-              to: 0
-            datasourceUid: __expr__
-            model:
-              datasource:
-                name: Expression
-                type: __expr__
-                uid: __expr__
-              expression: ($A > $B * $FAILED_CONFIRMATION_REQUESTS_INCREASE_FACTOR) && ($A > $FAILED_CONFIRMATION_REQUESTS_RATE_FLOOR)
-              intervalMs: 1000
-              maxDataPoints: 43200
-              refId: C
-              type: math
-          - refId: failure rate increased
+              refId: failure_rate
+          - refId: failure rate threshold exceeded
             datasourceUid: __expr__
             model:
               conditions:
                 - evaluator:
                     params:
-                      - 0
+                      - $FAILED_CONFIRMATION_REQUESTS_THRESHOLD
                     type: gt
                   operator:
                     type: and
                   query:
-                    params: []
+                    params:
+                      - C
                   reducer:
                     params: []
                     type: last
@@ -135,10 +106,10 @@ groups:
               datasource:
                 type: __expr__
                 uid: __expr__
-              expression: C
+              expression: failure_rate
               intervalMs: 1000
               maxDataPoints: 43200
-              refId: failure rate increased
+              refId: failure rate threshold exceeded
               type: threshold
         dashboardUid: fe8wt04z620aof
         panelId: 8
@@ -150,8 +121,8 @@ groups:
           __panelId__: "8"
           runbook_url: ""
           severity: warning
-          summary: "{{ $labels.namespace }} saw the confirmation request failure rate increase by more than $FAILED_CONFIRMATION_REQUESTS_INCREASE_FACTORx over the last 30 minutes compared to the previous 30 minutes"
-          description: 'Confirmation requests are failing significantly more often than in the previous 30m window. Can happen for non-network reasons, but is relatively unlikely to.'
+          summary: "{{ $labels.namespace }} saw more than $FAILED_CONFIRMATION_REQUESTS_THRESHOLD of confirmation requests fail over the last 30 minutes"
+          description: 'Confirmation requests are failing at a high rate. Can happen for non-network reasons, but is relatively unlikely to.'
         labels: {}
         isPaused: false
       # Overall TPS (approved confirmation requests per second), compared to the
@@ -199,7 +170,7 @@ groups:
                 name: Expression
                 type: __expr__
                 uid: __expr__
-              expression: ($A < $B * $TPS_DROP_THRESHOLD_FRACTION) && ($B > $TPS_DROP_MIN_PRIOR_TPS)
+              expression: $A < $B * $TPS_DROP_THRESHOLD
               intervalMs: 1000
               maxDataPoints: 43200
               refId: C
@@ -238,7 +209,7 @@ groups:
           __panelId__: "4"
           runbook_url: ""
           severity: warning
-          summary: "{{ $labels.namespace }} saw TPS drop below $TPS_DROP_THRESHOLD_FRACTION of the previous 30 minute window"
+          summary: "{{ $labels.namespace }} saw TPS drop below $TPS_DROP_THRESHOLD of the previous 30 minute window"
           description: 'The rate of approved confirmation requests over the last 30m dropped significantly compared to the previous 30m window. Can happen for non-network reasons, but is relatively unlikely to.'
         labels: {}
         isPaused: false
