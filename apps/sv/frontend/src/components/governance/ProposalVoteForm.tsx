@@ -169,15 +169,7 @@ export const ProposalVoteForm: React.FC<ProposalVoteFormProps> = props => {
                     }
                     placeholder={VOTE_REASON_URL_PLACEHOLDER}
                     inputProps={{ 'data-testid': 'your-vote-url-input' }}
-                    sx={theme => ({
-                      ...(typeof singleLineFieldSx === 'function'
-                        ? singleLineFieldSx(theme)
-                        : singleLineFieldSx),
-                      '& .MuiOutlinedInput-input::placeholder': {
-                        color: '#696969',
-                        opacity: 1,
-                      },
-                    })}
+                    sx={singleLineFieldSx}
                   />
                 </Box>
               );
