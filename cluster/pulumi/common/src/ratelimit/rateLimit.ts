@@ -48,7 +48,6 @@ export function installRateLimits(
     inboundPort: appPort,
     globalLimits: rateLimit.globalLimits,
     globalPerIpLimits: rateLimit.globalPerIpLimits,
-    enablePerEndpointRateLimits: rateLimit.enablePerEndpointRateLimits,
     rateLimits: rateLimit.rateLimits,
   });
   logRateLimitedRequests(namespace, app);

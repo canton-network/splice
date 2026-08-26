@@ -1,6 +1,6 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { expect, jest, test } from '@jest/globals';
+import { expect, test } from '@jest/globals';
 
 import {
   buildGlobalPerIpRateLimitAction,
@@ -12,15 +12,6 @@ import {
   validateIpLimits,
   validateTokenBuckets,
 } from './envoyRateLimiter';
-
-jest.mock('@canton-network/splice-pulumi-common/src/config/envConfig', () => ({
-  __esModule: true,
-  spliceEnvConfig: {
-    requireEnv() {
-      return 'dummy';
-    },
-  },
-}));
 
 const baseLimits = {
   maxTokens: 720,
@@ -269,6 +260,51 @@ test('validateEffectiveRateLimits validates the global per-IP limits', () => {
       globalPerIpLimits: { maxTokens: 1000, tokensPerFill: 1000, fillInterval: '90s' },
     })
   ).toThrow('globalPerIpLimits: fillInterval');
+});
+
+test('validateEffectiveRateLimits keeps limited endpoints and drops banned ones', () => {
+  const effective = validateEffectiveRateLimits({
+    ...envoyFilterArgs,
+    rateLimits: {
+      ...envoyFilterArgs.rateLimits,
+      '/api/scan/v1/updates': { name: 'v1-updates', type: 'banned' as const },
+    },
+  });
+
+  expect(Object.keys(effective)).toEqual(['/api/scan/v0/acs']);
+});
+
+test('validateEffectiveRateLimits drops unlimited endpoints so they fall back to the global limits', () => {
+  const unlimited = {
+    '/api/scan/livez': { name: 'livez', type: 'unlimited' as const },
+    '/api/scan/readyz': { name: 'readyz', type: 'unlimited' as const },
+  };
+  const baseline = validateEffectiveRateLimits(envoyFilterArgs);
+  const effective = validateEffectiveRateLimits({
+    ...envoyFilterArgs,
+    rateLimits: { ...envoyFilterArgs.rateLimits, ...unlimited },
+  });
+
+  expect(Object.keys(effective)).toEqual(['/api/scan/v0/acs']);
+  // unlimited endpoints must not contribute any envoy config at all
+  expect(buildRateLimitActions(effective)).toEqual(buildRateLimitActions(baseline));
+  expect(buildRateLimitDescriptors(effective)).toEqual(buildRateLimitDescriptors(baseline));
+  expect(JSON.stringify(buildRateLimitDescriptors(effective))).not.toContain('livez');
+});
+
+test('validateEffectiveRateLimits rejects reserved descriptor names', () => {
+  expect(() =>
+    validateEffectiveRateLimits({
+      ...envoyFilterArgs,
+      rateLimits: {
+        '/api/scan/v0/acs': {
+          name: 'masked_remote_address',
+          type: 'limited' as const,
+          ...baseLimits,
+        },
+      },
+    })
+  ).toThrow('use reserved name');
 });
 
 test('validateIpLimits throws on duplicate IP between two named overrides', () => {

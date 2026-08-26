@@ -835,7 +835,6 @@
     "id": "",
     "inputs": {
       "appLabel": "scan-app",
-      "enablePerEndpointRateLimits": false,
       "globalLimits": {
         "fillInterval": "60s",
         "maxTokens": 10000,
@@ -849,225 +848,13 @@
       "inboundPort": 5012,
       "namespace": "sv",
       "rateLimits": {
-        "/api/scan/livez": {
-          "name": "livez",
-          "type": "unlimited"
-        },
-        "/api/scan/readyz": {
-          "name": "readyz",
-          "type": "unlimited"
-        },
-        "/api/scan/status": {
-          "name": "status",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/acs": {
-          "fillInterval": "60s",
-          "maxTokens": 500,
-          "name": "acs",
-          "perIpLimits": {
-            "fillInterval": "60s",
-            "maxTokens": 10,
-            "tokensPerFill": 5
-          },
-          "tokensPerFill": 500,
-          "type": "limited"
-        },
-        "/api/scan/v0/active-synchronizer-serial": {
-          "name": "activeSynchronizerSerial",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/admin/sv/previous-sv-reward-weight": {
-          "name": "sv-previous-sv-reward-weight",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/admin/sv/voterequests": {
-          "name": "sv-voterequests",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/admin/sv/voteresults": {
-          "name": "sv-voteresults",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/admin/validator": {
-          "name": "validator-licenses",
-          "type": "unlimited"
-        },
         "/api/scan/v0/amulet-config-for-round": {
           "name": "amulet-config-for-round",
           "type": "banned"
         },
-        "/api/scan/v0/amulet-price": {
-          "name": "amulet-price-votes",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/amulet-rules": {
-          "name": "amulet-rules",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/ans-entries": {
-          "name": "ans-entries",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/ans-rules": {
-          "name": "ans-rules",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/backfilling": {
-          "name": "backfilling",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/closed-rounds": {
-          "name": "closed-rounds",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/domains": {
-          "name": "domains",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/dso": {
-          "name": "dso-info",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/dso-party-id": {
-          "name": "dso-party-id",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/dso-sequencers": {
-          "name": "dso-sequencers",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/events": {
-          "name": "events",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/external-party-amulet-rules": {
-          "name": "external-party-amulet-rules",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/feature-support": {
-          "name": "feature-support",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/featured-apps": {
-          "name": "featured-apps",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/history/bulk/acs": {
-          "name": "listBulkAcsSnapshotObjects",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/history/bulk/checksums": {
-          "name": "getBulkHistoryChecksums",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/history/bulk/updates": {
-          "name": "listBulkUpdateHistoryObjects",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/holdings": {
-          "name": "holdings",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/internal/reward-accounting-process": {
-          "name": "reward-accounting-process",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/lsu": {
-          "name": "lsu",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/migrations": {
-          "name": "migrations-schedule",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/open-and-issuing-mining-rounds": {
-          "name": "open-and-issuing-mining-rounds",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/roll-forward-lsu": {
-          "name": "rollForwardLsu",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/scans": {
-          "name": "scans",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/splice-instance-names": {
-          "name": "splice-instance-names",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/state": {
-          "name": "state",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/sv-bft-sequencers": {
-          "name": "bft-sequencers",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/synchronizer-bootstrapping-transactions": {
-          "name": "synchronizer-bootstrapping-transactions",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/synchronizer-identities": {
-          "name": "synchronizer-identities",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/transfer-command": {
-          "name": "transfer-command-status",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/transfer-command-counter": {
-          "name": "transfer-command-counter",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/transfer-preapprovals": {
-          "name": "transfer-preapprovals",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/unclaimed-development-fund-coupons": {
-          "name": "unclaimed-development-fund-coupons",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/updates": {
-          "name": "v0-updates",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/validators": {
-          "name": "validators",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/voterequest": {
-          "name": "voterequest",
-          "type": "unlimited"
-        },
-        "/api/scan/v0/voterequests": {
-          "name": "voterequests",
-          "type": "unlimited"
-        },
-        "/api/scan/v1/domains": {
-          "name": "domains-v1",
-          "type": "unlimited"
-        },
-        "/api/scan/v1/holdings": {
-          "name": "holdings",
-          "type": "unlimited"
-        },
-        "/api/scan/v1/state": {
-          "name": "state",
-          "type": "unlimited"
-        },
         "/api/scan/v1/updates": {
           "name": "v1-updates",
           "type": "banned"
-        },
-        "/api/scan/v2/updates": {
-          "name": "v2-updates",
-          "type": "unlimited"
-        },
-        "/api/scan/version": {
-          "name": "version",
-          "type": "unlimited"
         },
         "/registry/allocation-instruction/v1/allocation-factory": {
           "fillInterval": "60s",
@@ -1722,6 +1509,534 @@
                     {
                       "actions": [
                         {
+                          "header_value_match": {
+                            "descriptor_value": "registry-allocations",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/allocations/v1"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-allocations",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/allocations/v1"
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "masked_remote_address": {
+                            "v4_prefix_mask_len": 32,
+                            "v6_prefix_mask_len": 128
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-metadata-info",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/metadata/v1/info"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-metadata-info",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/metadata/v1/info"
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "masked_remote_address": {
+                            "v4_prefix_mask_len": 32,
+                            "v6_prefix_mask_len": 128
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-metadata-instruments",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/metadata/v1/instruments"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-metadata-instruments",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/metadata/v1/instruments"
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "masked_remote_address": {
+                            "v4_prefix_mask_len": 32,
+                            "v6_prefix_mask_len": 128
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-allocation-factory",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/allocation-instruction/v1/allocation-factory"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-allocation-factory",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/allocation-instruction/v1/allocation-factory"
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "masked_remote_address": {
+                            "v4_prefix_mask_len": 32,
+                            "v6_prefix_mask_len": 128
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-transfer-instruction",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/transfer-instruction/v1"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-transfer-instruction",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/transfer-instruction/v1"
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "masked_remote_address": {
+                            "v4_prefix_mask_len": 32,
+                            "v6_prefix_mask_len": 128
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-transfer-factory",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/transfer-instruction/v1/transfer-factory"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-transfer-factory",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/transfer-instruction/v1/transfer-factory"
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "masked_remote_address": {
+                            "v4_prefix_mask_len": 32,
+                            "v6_prefix_mask_len": 128
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-settlement-factory-v2",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/allocation/v2/settlement-factory"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-settlement-factory-v2",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/allocation/v2/settlement-factory"
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "masked_remote_address": {
+                            "v4_prefix_mask_len": 32,
+                            "v6_prefix_mask_len": 128
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-allocations-v2",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/allocations/v2"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-allocations-v2",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/allocations/v2"
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "masked_remote_address": {
+                            "v4_prefix_mask_len": 32,
+                            "v6_prefix_mask_len": 128
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-allocation-factory-v2",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/allocation-instruction/v2/allocation-factory"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-allocation-factory-v2",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/allocation-instruction/v2/allocation-factory"
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "masked_remote_address": {
+                            "v4_prefix_mask_len": 32,
+                            "v6_prefix_mask_len": 128
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-allocation-instruction-v2",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/allocation-instruction/v2"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-allocation-instruction-v2",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/allocation-instruction/v2"
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "masked_remote_address": {
+                            "v4_prefix_mask_len": 32,
+                            "v6_prefix_mask_len": 128
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-transfer-factory-v2",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/transfer-instruction/v2/transfer-factory"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-transfer-factory-v2",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/transfer-instruction/v2/transfer-factory"
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "masked_remote_address": {
+                            "v4_prefix_mask_len": 32,
+                            "v6_prefix_mask_len": 128
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-transfer-instruction-v2",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/transfer-instruction/v2"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
+                          "header_value_match": {
+                            "descriptor_value": "registry-transfer-instruction-v2",
+                            "expect_match": true,
+                            "headers": [
+                              {
+                                "name": ":path",
+                                "string_match": {
+                                  "ignore_case": true,
+                                  "prefix": "/registry/transfer-instruction/v2"
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "masked_remote_address": {
+                            "v4_prefix_mask_len": 32,
+                            "v6_prefix_mask_len": 128
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "actions": [
+                        {
                           "masked_remote_address": {
                             "v4_prefix_mask_len": 32,
                             "v6_prefix_mask_len": 128
@@ -1735,6 +2050,371 @@
                   "envoy.filters.http.local_ratelimit": {
                     "@type": "type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit",
                     "descriptors": [
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-allocations"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 720,
+                          "tokens_per_fill": 720
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-allocations"
+                          },
+                          {
+                            "key": "masked_remote_address"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 120,
+                          "tokens_per_fill": 120
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-metadata-info"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 720,
+                          "tokens_per_fill": 720
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-metadata-info"
+                          },
+                          {
+                            "key": "masked_remote_address",
+                            "value": "192.68.78.50/32"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 250,
+                          "tokens_per_fill": 250
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-metadata-info"
+                          },
+                          {
+                            "key": "masked_remote_address"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 120,
+                          "tokens_per_fill": 120
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-metadata-instruments"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 720,
+                          "tokens_per_fill": 720
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-metadata-instruments"
+                          },
+                          {
+                            "key": "masked_remote_address"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 120,
+                          "tokens_per_fill": 120
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-allocation-factory"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 720,
+                          "tokens_per_fill": 720
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-allocation-factory"
+                          },
+                          {
+                            "key": "masked_remote_address"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 120,
+                          "tokens_per_fill": 120
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-transfer-instruction"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 720,
+                          "tokens_per_fill": 720
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-transfer-instruction"
+                          },
+                          {
+                            "key": "masked_remote_address"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 120,
+                          "tokens_per_fill": 120
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-transfer-factory"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 1440,
+                          "tokens_per_fill": 1440
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-transfer-factory"
+                          },
+                          {
+                            "key": "masked_remote_address"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 240,
+                          "tokens_per_fill": 240
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-settlement-factory-v2"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 720,
+                          "tokens_per_fill": 720
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-settlement-factory-v2"
+                          },
+                          {
+                            "key": "masked_remote_address"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 120,
+                          "tokens_per_fill": 120
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-allocations-v2"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 720,
+                          "tokens_per_fill": 720
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-allocations-v2"
+                          },
+                          {
+                            "key": "masked_remote_address"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 120,
+                          "tokens_per_fill": 120
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-allocation-factory-v2"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 720,
+                          "tokens_per_fill": 720
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-allocation-factory-v2"
+                          },
+                          {
+                            "key": "masked_remote_address"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 120,
+                          "tokens_per_fill": 120
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-allocation-instruction-v2"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 720,
+                          "tokens_per_fill": 720
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-allocation-instruction-v2"
+                          },
+                          {
+                            "key": "masked_remote_address"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 120,
+                          "tokens_per_fill": 120
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-transfer-factory-v2"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 720,
+                          "tokens_per_fill": 720
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-transfer-factory-v2"
+                          },
+                          {
+                            "key": "masked_remote_address"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 120,
+                          "tokens_per_fill": 120
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-transfer-instruction-v2"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 720,
+                          "tokens_per_fill": 720
+                        }
+                      },
+                      {
+                        "entries": [
+                          {
+                            "key": "header_match",
+                            "value": "registry-transfer-instruction-v2"
+                          },
+                          {
+                            "key": "masked_remote_address"
+                          }
+                        ],
+                        "token_bucket": {
+                          "fill_interval": "60s",
+                          "max_tokens": 120,
+                          "tokens_per_fill": 120
+                        }
+                      },
                       {
                         "entries": [
                           {

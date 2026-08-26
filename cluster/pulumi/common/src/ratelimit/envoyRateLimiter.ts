@@ -3,7 +3,6 @@
 import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
 
-import { parseScanYamlEndpoints, parseTokenRegistrySpecEndpoints } from '../config/scanEndpoints';
 import { localRateLimitedHeader } from './rateLimitHeaders';
 
 interface Limits {
@@ -72,8 +71,6 @@ export interface RateLimitEnvoyFilterArgs extends PerEndpointLimits {
   globalLimits: Limits;
 
   globalPerIpLimits?: Limits;
-
-  enablePerEndpointRateLimits?: boolean;
 }
 
 export interface PerEndpointLimits {
@@ -96,23 +93,6 @@ export function extractPathPrefixes(
     .filter(
       info => info.pathPrefix.startsWith('/api/scan') || info.pathPrefix.startsWith('/registry')
     );
-}
-
-function validateEndpointCoverage(
-  scanEndpoints: string[],
-  configuredScanPrefixes: string[]
-): { missing: string[]; orphaned: string[] } {
-  // Check for missing prefixes
-  const missing = scanEndpoints.filter(
-    endpoint => !configuredScanPrefixes.some(prefix => endpoint.startsWith(prefix))
-  );
-
-  // Check for orphaned prefixes
-  const orphaned = configuredScanPrefixes.filter(
-    prefix => !scanEndpoints.some(endpoint => endpoint.startsWith(prefix))
-  );
-
-  return { missing, orphaned };
 }
 
 export function validateIpLimits(pathPrefix: string, rateLimit: LocalLimit<MatchedLimits>): void {
@@ -205,12 +185,7 @@ export function validateTokenBuckets(
 
 export function validateEffectiveRateLimits(
   args: RateLimitEnvoyFilterArgs
-): LocalLimits<MatchedLimits> | undefined {
-  if (!args.enablePerEndpointRateLimits) {
-    validateTokenBuckets(args.globalLimits, {}, args.globalPerIpLimits);
-    return undefined;
-  }
-
+): LocalLimits<MatchedLimits> {
   const collidingPathNames = Object.entries(args.rateLimits || {})
     .filter(([, rl]) => reservedEntryKeys.includes(rl.name))
     .map(([path]) => path);
@@ -220,49 +195,13 @@ export function validateEffectiveRateLimits(
     );
   }
 
-  // Validate scan.yaml endpoint coverage
-  const scanEndpoints = parseScanYamlEndpoints();
-
-  const configuredScanPrefixes = Object.keys(args.rateLimits || {}).filter(pathPrefix =>
-    pathPrefix.startsWith('/api/scan')
-  );
-
-  const { missing, orphaned } = validateEndpointCoverage(scanEndpoints, configuredScanPrefixes);
-
-  const tokenRegistryEndpoints = parseTokenRegistrySpecEndpoints();
-
-  const configuredRegistryPrefixes = Object.keys(args.rateLimits || {}).filter(pathPrefix =>
-    pathPrefix.startsWith('/registry')
-  );
-
-  const registryValidation = validateEndpointCoverage(
-    tokenRegistryEndpoints,
-    configuredRegistryPrefixes
-  );
-
-  const totalMissing = missing.concat(registryValidation.missing);
-  const totalOrphaned = orphaned.concat(registryValidation.orphaned);
-
-  if (totalMissing.length > 0 || totalOrphaned.length > 0) {
-    const errorParts: string[] = ['Rate limit configuration errors:'];
-    if (totalMissing.length > 0) {
-      errorParts.push(`- Missing rate limit prefixes for endpoints: ${totalMissing.join(', ')}`);
-    }
-    if (totalOrphaned.length > 0) {
-      errorParts.push(
-        `- Orphaned rate limit prefixes not matching any schema route: ${totalOrphaned.join(', ')}`
-      );
-    }
-    throw new Error(errorParts.join('\n'));
-  }
-
   // Filter out banned and unlimited entries
   const effectiveRateLimits = Object.fromEntries(
     Object.entries(args.rateLimits || {}).filter(
       (ent): ent is [string, LocalLimit<MatchedLimits>] => {
         // TODO (#4201): in banned case, implement actual banning with special short-circuit for whitelisted IPs
         // Currently skipping banned endpoints instead of setting 0/0 limits
-        // in unlimited case, we fall back to globalRateLimit so don't need a rule
+        // in unlimited case, we fall back to the global limits so no descriptor is needed
         const [, rl] = ent;
         return rl.type === 'limited';
       }
@@ -410,10 +349,10 @@ export class RateLimitEnvoyFilter extends pulumi.ComponentResource {
 
     // The global per-IP action/descriptor come last so that the more specific per-endpoint
     // descriptors are matched first.
-    const rateLimitActions = buildRateLimitActions(effectiveRateLimits || {}).concat(
+    const rateLimitActions = buildRateLimitActions(effectiveRateLimits).concat(
       args.globalPerIpLimits ? [buildGlobalPerIpRateLimitAction()] : []
     );
-    const rateLimitDescriptors = buildRateLimitDescriptors(effectiveRateLimits || {}).concat(
+    const rateLimitDescriptors = buildRateLimitDescriptors(effectiveRateLimits).concat(
       args.globalPerIpLimits ? [buildGlobalPerIpRateLimitDescriptor(args.globalPerIpLimits)] : []
     );
 

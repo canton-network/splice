@@ -57,7 +57,6 @@ export const defaultGlobalPerIpLimits = {
 export const RateLimitSchema = z.object({
   globalLimits: BucketRateLimitSchema.default(defaultGlobalLimits),
   globalPerIpLimits: BucketRateLimitSchema.default(defaultGlobalPerIpLimits),
-  enablePerEndpointRateLimits: z.boolean().default(false),
   rateLimits: z
     .object({})
     .catchall(

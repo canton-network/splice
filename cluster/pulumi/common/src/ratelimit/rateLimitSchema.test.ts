@@ -30,19 +30,39 @@ test('RateLimitSchema accepts config without overrides', () => {
   expect(() => RateLimitSchema.parse(validConfig)).not.toThrow();
 });
 
-test('RateLimitSchema defaults to global and global per-IP limits with per-endpoint limits off', () => {
+test('RateLimitSchema defaults to global and global per-IP limits', () => {
   const parsed = RateLimitSchema.parse({});
   expect(parsed).toEqual({
     globalLimits: { maxTokens: 10000, tokensPerFill: 10000, fillInterval: '60s' },
     globalPerIpLimits: { maxTokens: 1000, tokensPerFill: 1000, fillInterval: '60s' },
-    enablePerEndpointRateLimits: false,
   });
 });
 
-test('RateLimitSchema keeps per-endpoint limits optional and opt-in', () => {
-  const parsed = RateLimitSchema.parse({ ...validConfig, enablePerEndpointRateLimits: true });
-  expect(parsed.enablePerEndpointRateLimits).toEqual(true);
+test('RateLimitSchema keeps per-endpoint limits optional', () => {
+  const parsed = RateLimitSchema.parse(validConfig);
   expect(parsed.rateLimits).toBeDefined();
+});
+
+test('RateLimitSchema accepts unlimited and banned endpoints', () => {
+  const config = {
+    ...validConfig,
+    rateLimits: {
+      '/api/scan/livez': { name: 'livez', type: 'unlimited' },
+      '/api/scan/v0/amulet-config-for-round': { name: 'amulet-config-for-round', type: 'banned' },
+    },
+  };
+  const parsed = RateLimitSchema.parse(config);
+  expect(parsed.rateLimits!['/api/scan/livez']).toEqual({ name: 'livez', type: 'unlimited' });
+});
+
+test('RateLimitSchema rejects an unknown endpoint type', () => {
+  const config = {
+    ...validConfig,
+    rateLimits: {
+      '/api/scan/livez': { name: 'livez', type: 'whatever' },
+    },
+  };
+  expect(() => RateLimitSchema.parse(config)).toThrow();
 });
 
 test('RateLimitSchema accepts named overrides with ips', () => {
