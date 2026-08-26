@@ -100,6 +100,37 @@ function down() {
   done
 }
 
+# Adapted from gc-pod-reaper.
+# This is necessary because wait_down might block on pods that failed initializing
+# e.g., (maybe) because GCP failed to schedule a pod due to Out of Resources
+function kill_dead_pods() {
+  local -r namespace=$1
+  local -r bad_pods=$(
+    kubectl get pods -n "$namespace" -o json | \
+    jq -r '.items[] |
+        select(
+        (.status.phase == "Unknown" and .status.reason == "ContainerStatusUnknown") or
+        (.status.reason == "Evicted") or
+        (.status.containerStatuses[]?.state.terminated? | .reason == "Error" and .exitCode == 137) or
+        (.status.initContainerStatuses[]?.state.waiting?.reason == "ContainerStatusUnknown")
+      ) | .metadata.name' | sort -u
+  );
+  if [ -z "$bad_pods" ]; then
+      echo "No bad pods found in $namespace. Skipping.";
+      return
+  fi
+  echo "Found bad pods in $namespace: $bad_pods";
+  for pod_name in $bad_pods; do
+      echo "Attempting to delete pod $namespace/$pod_name";
+      kubectl delete pod -n "$namespace" "$pod_name"
+      if [ $? -eq 0 ]; then
+          echo "Successfully deleted $namespace/$pod_name";
+      else
+          echo "Failed to delete $namespace/$pod_name";
+      fi
+  done
+}
+
 function wait_down() {
   local -r namespace=$1
   local -r component=$2
@@ -468,6 +499,8 @@ function main() {
   for component in "${components[@]}"; do
     down "$namespace" "$component" "$migration_id"
   done
+
+  kill_dead_pods "$namespace"
 
   for component in "${components[@]}"; do
     wait_down "$namespace" "$component" "$migration_id"
