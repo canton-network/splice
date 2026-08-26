@@ -180,7 +180,7 @@ monitoring:
         discardedConfirmationRequestsThreshold: 0.2
         # Fraction (0-1) of confirmation requests that failed (as observed by the
         # mediator, over the last 30m) above which the alert fires.
-        failedConfirmationRequestsThreshold: 0.05
+        failedConfirmationRequestsThreshold: 0.1
         # Fire when TPS (approved confirmation requests per second) over the last
         # 30m drops below this fraction of the previous 30m.
         tpsDropThreshold: 0.5
