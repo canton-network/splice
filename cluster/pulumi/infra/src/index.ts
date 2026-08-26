@@ -5,6 +5,7 @@ import * as k8s from '@pulumi/kubernetes';
 import { config } from '@canton-network/splice-pulumi-common';
 import { svsConfig } from '@canton-network/splice-pulumi-common-sv/src/config';
 
+import { configureSweet } from '../sweet';
 import { configureAuth0 } from './auth0';
 import { configureCloudArmorPolicy } from './cloudArmor';
 import {
@@ -21,7 +22,6 @@ import { deployGCPodReaper } from './maintenance';
 import { configureNetwork } from './network';
 import { configureReloader } from './reloader';
 import { configureStorage } from './storage';
-import { configureSweet } from '../sweet';
 
 const network = configureNetwork(clusterBasename, clusterBaseDomain);
 

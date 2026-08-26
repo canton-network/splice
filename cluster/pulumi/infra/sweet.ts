@@ -44,7 +44,9 @@ export function configureSweet(): k8s.helm.v3.Release {
         },
         admiral: {
           extraValues: {
-            ...infraAffinityAndTolerations,
+            admirald: {
+              ...infraAffinityAndTolerations,
+            },
           },
         }
       },
