@@ -25,13 +25,13 @@ release-notes:: Upcoming
 
     - SV app
 
-        - The SV app OpenAPI specification now annotates public endpoints
-          (``x-jvm-package: sv_public``) with an ``x-public-audience`` extension, which is one of
-          ``validators`` (endpoints that validator operators need to reach), ``sv-operators``
-          (endpoints that only other SV operators need to reach) or ``none`` (endpoints that do not
+        - The SV app OpenAPI specification now annotates endpoints
+          (``x-jvm-package: sv_public``) with an ``x-external-audience`` extension, which is one of
+          ``validators`` (endpoints that validator operators need to reach), ``svs``
+          (endpoints that only other SVs need to reach) or ``none`` (endpoints that do not
           need to be reachable from outside of the SV node's own deployment, e.g. the CometBFT
           endpoints). SV operators can use this
           annotation to restrict the external exposure of their SV app: only the endpoints of a
           given audience need to be reachable from the corresponding networks, and endpoints with
-          an audience of ``none``, as well as endpoints without an ``x-public-audience``, do not
+          an audience of ``none``, as well as endpoints without an ``x-external-audience``, do not
           need to be exposed to external traffic at all.

@@ -41,11 +41,11 @@ export function configureScanAndSvAppWhitelist(
       to: [{ operation: { hosts: svHosts, paths: publicPaths['validators'] } }],
     }),
     createIstioIpAllowPolicies({
-      namePrefix: 'sv-app-sv-operators-ip-whitelist',
+      namePrefix: 'sv-app-svs-ip-whitelist',
       namespace: namespace.metadata.name,
       selector: istioIngressSelector,
       ipRanges: loadIPRanges(true),
-      to: [{ operation: { hosts: svHosts, paths: publicPaths['sv-operators'] } }],
+      to: [{ operation: { hosts: svHosts, paths: publicPaths['svs'] } }],
     }),
   ];
 }

@@ -5,10 +5,10 @@ import { load } from 'js-yaml';
 
 export const svApiPathPrefix = '/api/sv';
 
-export const publicAudiences = ['validators', 'sv-operators', 'none'] as const;
+export const publicAudiences = ['validators', 'svs', 'none'] as const;
 export type PublicAudience = (typeof publicAudiences)[number];
 
-export const exposedAudiences = ['validators', 'sv-operators'] as const;
+export const exposedAudiences = ['validators', 'svs'] as const;
 export type ExposedAudience = (typeof exposedAudiences)[number];
 
 const httpMethods = ['get', 'put', 'post', 'delete', 'patch', 'head', 'options'];
@@ -28,7 +28,7 @@ function isPublicAudience(value: unknown): value is PublicAudience {
  * Parses the SV OpenAPI spec and returns all endpoints that are exposed without
  * authentication (`x-jvm-package: sv_public`).
  *
- * Throws if an `sv_public` endpoint does not declare a valid `x-public-audience`,
+ * Throws if an `sv_public` endpoint does not declare a valid `x-external-audience`,
  * or if a non-public endpoint declares one.
  */
 export function parseSvPublicEndpoints(openApiContent: string): SvPublicEndpoint[] {
@@ -43,19 +43,19 @@ export function parseSvPublicEndpoints(openApiContent: string): SvPublicEndpoint
       if (!operation) {
         continue;
       }
-      const audience = operation['x-public-audience'];
+      const audience = operation['x-external-audience'];
       const isPublic = operation['x-jvm-package'] === 'sv_public';
       if (!isPublic) {
         if (audience !== undefined) {
           errors.push(
-            `${method.toUpperCase()} ${path}: x-public-audience is only allowed on endpoints with x-jvm-package: sv_public`
+            `${method.toUpperCase()} ${path}: x-external-audience is only allowed on endpoints with x-jvm-package: sv_public`
           );
         }
         continue;
       }
       if (!isPublicAudience(audience)) {
         errors.push(
-          `${method.toUpperCase()} ${path}: sv_public endpoints must declare x-public-audience as one of ${publicAudiences.join(
+          `${method.toUpperCase()} ${path}: sv_public endpoints must declare x-external-audience as one of ${publicAudiences.join(
             ', '
           )} but got ${JSON.stringify(audience)}`
         );

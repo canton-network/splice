@@ -20,7 +20,7 @@ const svOpenApiFile = path.join(
 describe('the SV OpenAPI spec', () => {
   const content = fs.readFileSync(svOpenApiFile, 'utf-8');
 
-  test('declares an x-public-audience for every sv_public endpoint', () => {
+  test('declares an x-external-audience for every sv_public endpoint', () => {
     const endpoints = parseSvPublicEndpoints(content);
     expect(endpoints.length).toBeGreaterThan(0);
     endpoints.forEach(endpoint => {
@@ -32,8 +32,8 @@ describe('the SV OpenAPI spec', () => {
     const paths = svPublicIngressPathsByAudience(content);
     expect(paths['validators']).toContain('/api/sv/v0/onboard/validator');
     expect(paths['validators']).toContain('/api/sv/v0/dso');
-    expect(paths['sv-operators']).toContain('/api/sv/v0/migration-id');
-    expect(paths['sv-operators']).toContain('/api/sv/v0/onboard/sv/status/*');
+    expect(paths['svs']).toContain('/api/sv/v0/migration-id');
+    expect(paths['svs']).toContain('/api/sv/v0/onboard/sv/status/*');
     const allPaths = exposedAudiences.flatMap(audience => paths[audience]);
     // endpoints with an audience of none must not be whitelisted
     expect(allPaths).not.toContain('/api/sv/v0/admin/domain/cometbft/status');
@@ -58,24 +58,24 @@ ${extra}
           description: ok
 `;
 
-  test('fails if an sv_public endpoint has no x-public-audience', () => {
-    expect(() => parseSvPublicEndpoints(spec(''))).toThrow(/must declare x-public-audience/);
+  test('fails if an sv_public endpoint has no x-external-audience', () => {
+    expect(() => parseSvPublicEndpoints(spec(''))).toThrow(/must declare x-external-audience/);
   });
 
-  test('fails on an unknown x-public-audience', () => {
-    expect(() => parseSvPublicEndpoints(spec('      x-public-audience: everyone'))).toThrow(
-      /must declare x-public-audience/
+  test('fails on an unknown x-external-audience', () => {
+    expect(() => parseSvPublicEndpoints(spec('      x-external-audience: everyone'))).toThrow(
+      /must declare x-external-audience/
     );
   });
 
-  test('accepts a valid x-public-audience', () => {
-    expect(parseSvPublicEndpoints(spec('      x-public-audience: validators'))).toEqual([
+  test('accepts a valid x-external-audience', () => {
+    expect(parseSvPublicEndpoints(spec('      x-external-audience: validators'))).toEqual([
       { path: '/v0/foo', method: 'get', operationId: 'getFoo', audience: 'validators' },
     ]);
   });
 
   test('accepts an audience of none but does not whitelist the endpoint', () => {
-    const content = spec('      x-public-audience: none');
+    const content = spec('      x-external-audience: none');
     expect(parseSvPublicEndpoints(content)).toEqual([
       { path: '/v0/foo', method: 'get', operationId: 'getFoo', audience: 'none' },
     ]);
@@ -83,14 +83,14 @@ ${extra}
     expect(exposedAudiences.flatMap(audience => paths[audience])).toEqual([]);
   });
 
-  test('rejects x-public-audience on non-public endpoints', () => {
+  test('rejects x-external-audience on non-public endpoints', () => {
     const nonPublic = `
 openapi: 3.0.0
 paths:
   /v0/foo:
     get:
       x-jvm-package: sv_operator
-      x-public-audience: validators
+      x-external-audience: validators
       operationId: getFoo
 `;
     expect(() => parseSvPublicEndpoints(nonPublic)).toThrow(/only allowed on endpoints/);

@@ -2825,7 +2825,7 @@
       "apiVersion": "security.istio.io/v1beta1",
       "kind": "AuthorizationPolicy",
       "metadata": {
-        "name": "sv-app-sv-operators-ip-whitelist-0",
+        "name": "sv-app-svs-ip-whitelist-0",
         "namespace": "cluster-ingress"
       },
       "spec": {
@@ -2875,7 +2875,7 @@
         }
       }
     },
-    "name": "sv-app-sv-operators-ip-whitelist-0",
+    "name": "sv-app-svs-ip-whitelist-0",
     "provider": "",
     "type": "kubernetes:security.istio.io/v1beta1:AuthorizationPolicy"
   },
