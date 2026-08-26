@@ -1,7 +1,7 @@
 # This file is generated automatically. Do not edit directly.
 cloudArmor:
   allRulesPreviewOnly: true
-  enabled: true
+  enabled: false
   publicEndpoints:
     publicScan:
       hostname: 'scan.sv-2.scratcha.global.canton.network.digitalasset.com'
@@ -27,7 +27,7 @@ cluster:
       nodeType: 'n4d-standard-8'
 infra:
   gkeGateway:
-    proxyForIstioHttp: true
+    proxyForIstioHttp: false
   istio:
     enableIngressAccessLogging: true
     enablePublicTokenRegistry: true
