@@ -221,7 +221,7 @@ sv:
           fillInterval: '60s'
           maxTokens: 500
           name: 'acs'
-          perIpRangeLimit:
+          perIpLimits:
             fillInterval: '60s'
             maxTokens: 10
             tokensPerFill: 5
@@ -378,7 +378,7 @@ sv:
           fillInterval: '60s'
           maxTokens: 720
           name: 'registry-allocation-factory'
-          perIpRangeLimit:
+          perIpLimits:
             fillInterval: '60s'
             maxTokens: 120
             tokensPerFill: 120
@@ -388,7 +388,7 @@ sv:
           fillInterval: '60s'
           maxTokens: 720
           name: 'registry-allocation-instruction-v2'
-          perIpRangeLimit:
+          perIpLimits:
             fillInterval: '60s'
             maxTokens: 120
             tokensPerFill: 120
@@ -398,7 +398,7 @@ sv:
           fillInterval: '60s'
           maxTokens: 720
           name: 'registry-allocation-factory-v2'
-          perIpRangeLimit:
+          perIpLimits:
             fillInterval: '60s'
             maxTokens: 120
             tokensPerFill: 120
@@ -408,7 +408,7 @@ sv:
           fillInterval: '60s'
           maxTokens: 720
           name: 'registry-settlement-factory-v2'
-          perIpRangeLimit:
+          perIpLimits:
             fillInterval: '60s'
             maxTokens: 120
             tokensPerFill: 120
@@ -418,7 +418,7 @@ sv:
           fillInterval: '60s'
           maxTokens: 720
           name: 'registry-allocations'
-          perIpRangeLimit:
+          perIpLimits:
             fillInterval: '60s'
             maxTokens: 120
             tokensPerFill: 120
@@ -428,7 +428,7 @@ sv:
           fillInterval: '60s'
           maxTokens: 720
           name: 'registry-allocations-v2'
-          perIpRangeLimit:
+          perIpLimits:
             fillInterval: '60s'
             maxTokens: 120
             tokensPerFill: 120
@@ -438,7 +438,7 @@ sv:
           fillInterval: '60s'
           maxTokens: 720
           name: 'registry-metadata-info'
-          perIpRangeLimit:
+          perIpLimits:
             fillInterval: '60s'
             maxTokens: 120
             tokensPerFill: 120
@@ -448,7 +448,7 @@ sv:
           fillInterval: '60s'
           maxTokens: 720
           name: 'registry-metadata-instruments'
-          perIpRangeLimit:
+          perIpLimits:
             fillInterval: '60s'
             maxTokens: 120
             tokensPerFill: 120
@@ -458,7 +458,7 @@ sv:
           fillInterval: '60s'
           maxTokens: 720
           name: 'registry-transfer-instruction'
-          perIpRangeLimit:
+          perIpLimits:
             fillInterval: '60s'
             maxTokens: 120
             tokensPerFill: 120
@@ -468,7 +468,7 @@ sv:
           fillInterval: '60s'
           maxTokens: 1440
           name: 'registry-transfer-factory'
-          perIpRangeLimit:
+          perIpLimits:
             fillInterval: '60s'
             maxTokens: 240
             tokensPerFill: 240
@@ -478,7 +478,7 @@ sv:
           fillInterval: '60s'
           maxTokens: 720
           name: 'registry-transfer-instruction-v2'
-          perIpRangeLimit:
+          perIpLimits:
             fillInterval: '60s'
             maxTokens: 120
             tokensPerFill: 120
@@ -488,7 +488,7 @@ sv:
           fillInterval: '60s'
           maxTokens: 720
           name: 'registry-transfer-factory-v2'
-          perIpRangeLimit:
+          perIpLimits:
             fillInterval: '60s'
             maxTokens: 120
             tokensPerFill: 120

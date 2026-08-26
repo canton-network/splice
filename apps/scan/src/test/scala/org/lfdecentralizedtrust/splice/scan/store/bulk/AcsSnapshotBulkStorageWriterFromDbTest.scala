@@ -162,7 +162,13 @@ class AcsSnapshotBulkStorageWriterFromDbTest
             .get(MetricsContext.Empty)
             .value
             .markers
-            .get(MetricsContext("object_type" -> "ACS_snapshots", "encoding" -> encoding.key))
+            .get(
+              MetricsContext(
+                "object_type" -> "ACS_snapshots",
+                "encoding" -> encoding.key,
+                "bucket" -> "staging",
+              )
+            )
             .value
             .get()
           numObjectsFromMetric shouldBe expectedDigests.length

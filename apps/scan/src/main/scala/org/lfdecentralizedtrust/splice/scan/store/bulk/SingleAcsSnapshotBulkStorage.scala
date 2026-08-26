@@ -107,7 +107,7 @@ class SingleAcsSnapshotBulkStorage(
                     .storageKey("ACS", objIdx)}",
               loggerFactory,
             ),
-          encoding => historyMetrics.BulkStorage.incAcsSnapshotObjects(encoding.key),
+          encoding => historyMetrics.BulkStorage.incAcsSnapshotObjects(encoding.key, "staging"),
         )
       )
       .fold(Seq.empty[String])(_ :+ _)

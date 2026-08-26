@@ -170,7 +170,7 @@ class UpdateHistorySegmentBulkStorage(
                 loggerFactory,
               )
             ),
-          encoding => historyMetrics.BulkStorage.incUpdateObjects(encoding.key),
+          encoding => historyMetrics.BulkStorage.incUpdateObjects(encoding.key, "staging"),
         )
       )
       .orElse(Source.lazySource { () =>

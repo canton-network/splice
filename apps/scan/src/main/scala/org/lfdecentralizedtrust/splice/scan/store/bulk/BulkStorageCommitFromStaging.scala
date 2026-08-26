@@ -25,6 +25,7 @@ class BulkStorageCommitFromStaging[T](
     appConfig: BulkStorageConfig,
     scanConnection: PeerBftScanConnection,
     override val loggerFactory: NamedLoggerFactory,
+    onObjectCommitted: Seq[ObjectKeyAndChecksum] => Unit = _ => (),
 )(implicit
     tc: TraceContext,
     ec: ExecutionContextExecutor,
@@ -63,9 +64,9 @@ class BulkStorageCommitFromStaging[T](
               )
             if (consensusChecksums.length == objects.length && !consensus) {
               logger.error(
-                s"All objects are known to the BFT peers, but the checksums do not match. This indicates an error in the actual data generated for bulk storage. Expected: ${objects
+                s"All objects are known to the BFT peers, but the checksums do not match, when checking objects: ${objects.map(_.key).mkString(", ")}. This indicates an error in the actual data generated for bulk storage. My checksums are: ${objects
                     .map(_.checksum)
-                    .mkString(", ")}, got: ${consensusChecksums.mkString(", ")}"
+                    .mkString(", ")}, consensus checksums are: ${consensusChecksums.mkString(", ")}"
               )
             }
             consensus
@@ -137,7 +138,10 @@ class BulkStorageCommitFromStaging[T](
         )
         Future
           .sequence(objs.map(copyObjectToCommitted(stagingS3Connection, committedS3Connection)))
-          .map(_ => (ts, objs))
+          .map { _ =>
+            onObjectCommitted(objs)
+            (ts, objs)
+          }
       }
 
   private def deleteFromStaging: Flow[
@@ -180,6 +184,7 @@ object BulkStorageCommitFromStaging {
       appConfig: BulkStorageConfig,
       scanConnection: PeerBftScanConnection,
       loggerFactory: NamedLoggerFactory,
+      onObjectCommitted: Seq[ObjectKeyAndChecksum] => Unit = _ => (),
   )(implicit
       tc: TraceContext,
       ec: ExecutionContextExecutor,
@@ -191,6 +196,7 @@ object BulkStorageCommitFromStaging {
       appConfig,
       scanConnection,
       loggerFactory,
+      onObjectCommitted,
     ).getFlow
   }
 }
