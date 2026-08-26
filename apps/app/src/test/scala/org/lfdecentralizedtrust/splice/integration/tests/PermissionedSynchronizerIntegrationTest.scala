@@ -13,6 +13,7 @@ import org.lfdecentralizedtrust.splice.util.*
 import java.time.Instant
 import java.util.Optional
 import com.digitalasset.canton.data.CantonTimestamp
+import com.digitalasset.canton.logging.SuppressionRule
 
 class PermissionedSynchronizerIntegrationTest
     extends IntegrationTest
@@ -131,33 +132,40 @@ class PermissionedSynchronizerIntegrationTest
     val bobParticipantId = bobValidatorBackend.participantClient.id.toProtoPrimitive
     val suspendTime = env.environment.clock.now.plus(java.time.Duration.ofHours(1)).toInstant
 
-    clue("SVs vote to temporarily suspend Bob") {
-      manuallyUnpermissionValidator(bobParticipantId, Some(suspendTime), revoked = false)
-    }
-
-    clue("Verify Bob's ParticipantSynchronizerPermission is updated with loginAfter") {
-      eventually() {
-        sv1ScanBackend.getParticipantSynchronizerPermission(
-          decentralizedSynchronizerId.toProtoPrimitive,
-          bobParticipantId,
-        ) shouldBe Some(
-          SynchronizerPermissionState(Some(CantonTimestamp.assertFromInstant(suspendTime)))
-        )
+    loggerFactory.suppress(
+      SuppressionRule.Level(
+        org.slf4j.event.Level.WARN
+      )
+    ) {
+      clue("SVs vote to temporarily suspend Bob") {
+        manuallyUnpermissionValidator(bobParticipantId, Some(suspendTime), revoked = false)
       }
-    }
 
-    clue("SVs vote to permanently revoke Bob") {
-      manuallyUnpermissionValidator(bobParticipantId, None, revoked = true)
-    }
-
-    clue("Verify Bob's ParticipantSynchronizerPermission is completely removed") {
-      eventually() {
-        sv1ScanBackend.getParticipantSynchronizerPermission(
-          decentralizedSynchronizerId.toProtoPrimitive,
-          bobParticipantId,
-        ) shouldBe None
+      clue("Verify Bob's ParticipantSynchronizerPermission is updated with loginAfter") {
+        eventually() {
+          sv1ScanBackend.getParticipantSynchronizerPermission(
+            decentralizedSynchronizerId.toProtoPrimitive,
+            bobParticipantId,
+          ) shouldBe Some(
+            SynchronizerPermissionState(Some(CantonTimestamp.assertFromInstant(suspendTime)))
+          )
+        }
       }
+      clue("SVs vote to permanently revoke Bob") {
+        manuallyUnpermissionValidator(bobParticipantId, None, revoked = true)
+      }
+
+      clue("Verify Bob's ParticipantSynchronizerPermission is completely removed") {
+        eventually() {
+          sv1ScanBackend.getParticipantSynchronizerPermission(
+            decentralizedSynchronizerId.toProtoPrimitive,
+            bobParticipantId,
+          ) shouldBe None
+        }
+      }
+
     }
+
     def manuallyUnpermissionValidator(
         participantId: String,
         loginAfter: Option[Instant],
