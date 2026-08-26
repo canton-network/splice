@@ -181,7 +181,7 @@ class TestTokenV2SettlementIntegrationTest
         bobValidatorBackend,
         splitwellValidatorBackend,
         ttAdminValidator,
-      ).reverse.foreach(_.stop())
+      ).foreach(_.stop())
     }
   }
 
