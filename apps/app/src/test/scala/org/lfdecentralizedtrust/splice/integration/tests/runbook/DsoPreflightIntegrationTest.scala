@@ -25,10 +25,7 @@ class DsoPreflightIntegrationTest
       this.getClass.getSimpleName()
     )
 
-  // Note: we cannot fetch DSO info from the SV apps themselves, as their /v1/dso endpoint
-  // requires authorization as SV operator, for which the preflight tests have no credentials.
-  // We probe their public readiness endpoint and read DSO info from their scans instead.
-  "SVs 1-3 + DA-1 are online and reachable via their public HTTP API" in { implicit env =>
+  "SVs 1-3 + DA-1 report ready" in { implicit env =>
     env.svs.remote.foreach(sv =>
       clue(s"Checking SV at ${sv.httpClientConfig.url}") {
         eventuallySucceeds(timeUntilSuccess = 2.minutes) {
