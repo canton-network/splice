@@ -188,7 +188,7 @@ class BulkStorageCommitFromStagingTest
         logEntries =>
           forAtLeast(1, logEntries)(
             _.message should include(
-              "All objects are known to the BFT peers, but the checksums do not match"
+              "Checksums do not match for objects"
             )
           ),
       )

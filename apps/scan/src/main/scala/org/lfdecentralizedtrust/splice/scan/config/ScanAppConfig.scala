@@ -57,7 +57,7 @@ final case class BulkStorageConfig(
       *   this before starting to prune data.
       */
     debugForceStartFromGenesis: Boolean = false,
-    /** A list of objects that this instance should not save to the committed bucket, and instead only
+    /** A list of S3 object keys that this instance should not save to the committed bucket, and instead only
       * delete from staging. To be used only in extreme cases where we decide to accept a BFT disagreement,
       * and have the (minority of) disagreeing instances simply skip the broken objects.
       * Should typically be used in test environments only.
