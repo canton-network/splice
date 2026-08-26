@@ -173,6 +173,17 @@ monitoring:
         # Multiplier applied to a wallet sweep's configured maxBalance to set the alert threshold.
         # 1.5 means the alert fires if the balance is 50% higher than expected.
         tolerance: 1.5
+      globalSynchronizerHealth:
+        # Fraction (0-1) of sequenced confirmation requests that were discarded
+        # (i.e., never processed by the mediator, e.g. due to CometBFT replays)
+        # above which the alert fires.
+        discardedConfirmationRequestsThreshold: 0.2
+        # Fraction (0-1) of confirmation requests that failed (as observed by the
+        # mediator, over the last 30m) above which the alert fires.
+        failedConfirmationRequestsThreshold: 0.1
+        # Fire when TPS (approved confirmation requests per second) over the last
+        # 30m drops below this fraction of the previous 30m.
+        tpsDropThreshold: 0.5
       gcpQuotas:
         # Quota metric names to exclude from all GCP quota alerts.
         # Each entry is matched exactly for quota exceeded.
