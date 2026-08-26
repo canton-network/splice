@@ -52,7 +52,7 @@ final case class BulkStorageConfig(
       * Note that this does not delete any existing data, you usually would want to do that before setting
       * this flag. Also, after restarting the app once with this flag enabled, you'd want to disable it back
       * to avoid having the markers reset on every restart.
-      * TODO(scan-pruning): this makes sense for initial stages of testing&deploying bulk storage, in case of
+      * TODO(#6251): this makes sense for initial stages of testing&deploying bulk storage, in case of
       *   encountered issues, but will not make sense when we start pruning the data from scan. We should remove
       *   this before starting to prune data.
       */
