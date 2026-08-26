@@ -152,6 +152,16 @@ class BulkStorage(
     reader,
     appConfig,
     scanConnection,
+    objs =>
+      objs.foreach { obj =>
+        val encoding = ScanStorageConfig.Encoding.all.toList
+          .collectFirst {
+            case enc if enc.storageKeyRegex("ACS").matches(obj.key) =>
+              enc.key
+          }
+          .getOrElse("unknown")
+        historyMetrics.BulkStorage.incAcsSnapshotObjects(encoding, "committed")
+      },
     loggerFactory,
   )
   val acsCommitted = new AcsSnapshotBulkStorage(
@@ -185,6 +195,16 @@ class BulkStorage(
     reader,
     appConfig,
     scanConnection,
+    objs =>
+      objs.foreach { obj =>
+        val encoding = ScanStorageConfig.Encoding.all.toList
+          .collectFirst {
+            case enc if enc.storageKeyRegex("updates").matches(obj.key) =>
+              enc.key
+          }
+          .getOrElse("unknown")
+        historyMetrics.BulkStorage.incUpdateObjects(encoding, "committed")
+      },
     loggerFactory,
   )
   val updatesCommitted = new UpdateHistoryBulkStorage(
