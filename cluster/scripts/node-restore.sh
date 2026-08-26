@@ -122,7 +122,7 @@ function kill_dead_pods() {
   echo "Found bad pods in $namespace: $bad_pods";
   for pod_name in $bad_pods; do
       echo "Attempting to delete pod $namespace/$pod_name";
-      if kubectl delete pod -n "$namespace" "$pod_name"; then
+      if kubectl delete pod -n "$namespace" "$pod_name" --ignore-not-found=true --timeout=180s; then
           echo "Successfully deleted $namespace/$pod_name";
       else
           echo "Failed to delete $namespace/$pod_name";
