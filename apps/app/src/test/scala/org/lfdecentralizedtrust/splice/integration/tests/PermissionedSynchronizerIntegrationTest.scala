@@ -164,6 +164,8 @@ class PermissionedSynchronizerIntegrationTest
         }
       }
 
+      bobValidatorBackend.stop() // to avoid logs in canton_before_shutdown.clog
+
     }
 
     def manuallyUnpermissionValidator(
