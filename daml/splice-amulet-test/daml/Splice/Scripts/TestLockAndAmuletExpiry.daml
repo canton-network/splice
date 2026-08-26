@@ -38,6 +38,7 @@ scaleAmuletConfig amuletPrice config = AmuletConfig with
   rewardConfig = config.rewardConfig
   transferPreapprovalBaseDuration = config.transferPreapprovalBaseDuration
   minDevelopmentFundMintingDelay = config.minDevelopmentFundMintingDelay
+  amuletSwitchOverTimes = config.amuletSwitchOverTimes
 
 test : Script ()
 test = script do

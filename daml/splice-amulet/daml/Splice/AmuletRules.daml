@@ -1030,6 +1030,7 @@ template AmuletRules
           amuletPrice = validatedRounds.latestUsableRound.amuletPrice
           transferConfig = transferConfigToTransferConfigV2 validatedRounds.latestUsableRound.transferConfigUsd
           rewardCalculationVersion = (.mintingVersion) <$> validatedRounds.latestUsableRound.rewardConfig
+          amuletSwitchOverTimes = config.amuletSwitchOverTimes
         pure AmuletRules_UpdateExternalPartyConfigStatesResult with ..
 
 
@@ -2398,6 +2399,7 @@ bootstrapExternalPartyConfigState AmuletRules{..} openMiningRoundTriple = do
         amuletPrice = validatedRounds.latestUsableRound.amuletPrice
         transferConfig = transferConfig
         rewardCalculationVersion = (.mintingVersion) <$> validatedRounds.latestUsableRound.rewardConfig
+        amuletSwitchOverTimes = config.amuletSwitchOverTimes
       configState1 = configState0 with
         targetArchiveAfter = configState0.targetArchiveAfter `addRelTime` getExternalPartyConfigStateTickDuration config
   create configState0
