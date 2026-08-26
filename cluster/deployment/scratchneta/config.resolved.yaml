@@ -26,6 +26,7 @@ cluster:
       minNodes: 1
       nodeType: 'n4d-standard-8'
 infra:
+  certManagerUseWorkloadIdentity: true
   gkeGateway:
     proxyForIstioHttp: false
   istio:

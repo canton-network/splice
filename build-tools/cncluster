@@ -989,16 +989,23 @@ subcommand_whitelist[cluster_enable_workload_identity]='Enable workload identity
 function subcmd_cluster_enable_workload_identity() {
     if gcloud container clusters describe "${GCP_CLUSTER_NAME}" --format="value(workloadIdentityConfig)" | grep -q "workloadPool"; then
         _info "Workload identity is already enabled for the cluster."
-        return
+    else
+        _info "Enabling workload identity for the cluster."
+        gcloud container clusters update "${GCP_CLUSTER_NAME}" --workload-pool="${CLOUDSDK_CORE_PROJECT}.svc.id.goog"
     fi
 
-    _info "Enabling workload identity for the cluster."
-    gcloud container clusters update "${GCP_CLUSTER_NAME}" --workload-pool="${CLOUDSDK_CORE_PROJECT}.svc.id.goog"
-
-    _info "Enabling GKE metadata on the cn-apps node pool."
-    gcloud container node-pools update cn-apps-pool \
-        --cluster "cn-${GCP_CLUSTER_BASENAME}net" \
-        --workload-metadata=GKE_METADATA
+    local pool current_mode
+    for pool in cn-apps-pool cn-apps-node-pool-hd cn-infra-node-pool gke-node-pool; do
+        if gcloud container node-pools describe "${pool}" --cluster "${GCP_CLUSTER_NAME}" --format="value(name)" &>/dev/null; then
+            current_mode=$(gcloud container node-pools describe "${pool}" --cluster "${GCP_CLUSTER_NAME}" --format="value(config.workloadMetadataConfig.mode)" 2>/dev/null || true)
+            if [[ "${current_mode}" == "GKE_METADATA" ]]; then
+                _info "Workload metadata already GKE_METADATA for ${pool}."
+            else
+                _info "Enabling GKE metadata on node pool ${pool}."
+                gcloud container node-pools update "${pool}" --cluster "${GCP_CLUSTER_NAME}" --workload-metadata=GKE_METADATA
+            fi
+        fi
+    done
 }
 
 subcommand_whitelist[cluster_enable_http_load_balancing]='Enable http load balancing for the cluster.'
