@@ -18,32 +18,45 @@ import {
 interface CopyableUrlProps {
   url: string;
   size: CopyableIdentifierSize;
+  /**
+   * Fill the parent width (proposal-details section). Default keeps the compact
+   * Supporting URL slot used elsewhere (~346px).
+   */
+  fullWidth?: boolean;
   'data-testid': string;
 }
 
-const CopyableUrl: React.FC<CopyableUrlProps> = ({ url, size, 'data-testid': testId }) => {
+const CopyableUrl: React.FC<CopyableUrlProps> = ({
+  url,
+  size,
+  fullWidth = false,
+  'data-testid': testId,
+}) => {
   const sanitizedUrl = sanitizeUrl(url);
   const fontSize = size === 'small' ? '14px' : '16px';
   const scrollRef = useRef<HTMLDivElement>(null);
-  const metrics = useHorizontalScrollMetrics(scrollRef, [sanitizedUrl]);
+  const metrics = useHorizontalScrollMetrics(scrollRef, [sanitizedUrl, fullWidth]);
+  const textMaxWidth = fullWidth ? '100%' : URL_COMPACT_MAX_WIDTH_PX;
 
   return (
     <Box
       className="identifier-scroll-area"
       sx={{
-        display: 'inline-flex',
+        display: fullWidth ? 'flex' : 'inline-flex',
         alignItems: 'center',
         color: 'text.light',
         maxWidth: '100%',
         minWidth: 0,
+        width: fullWidth ? '100%' : undefined,
+        overflow: fullWidth ? 'hidden' : undefined,
       }}
       data-testid={testId}
     >
       <Box
         sx={{
-          flex: '0 1 auto',
+          flex: fullWidth ? '1 1 0%' : '0 1 auto',
           minWidth: 0,
-          maxWidth: URL_COMPACT_MAX_WIDTH_PX,
+          maxWidth: textMaxWidth,
           display: 'flex',
           flexDirection: 'column',
           position: 'relative',
@@ -53,8 +66,9 @@ const CopyableUrl: React.FC<CopyableUrlProps> = ({ url, size, 'data-testid': tes
           ref={scrollRef}
           sx={{
             ...scrollContainerSx,
-            maxWidth: URL_COMPACT_MAX_WIDTH_PX,
+            maxWidth: textMaxWidth,
             width: '100%',
+            ...(fullWidth ? { minWidth: 0 } : {}),
           }}
           data-testid={`${testId}-scroll`}
         >

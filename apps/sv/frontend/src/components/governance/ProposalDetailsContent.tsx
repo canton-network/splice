@@ -44,7 +44,6 @@ import { useDsoInfos } from '../../contexts/SvContext';
 import { DetailItem } from './proposal-details/DetailItem';
 import { CreateUnallocatedUnclaimedActivityRecordSection } from './proposal-details/CreateUnallocatedUnclaimedActivityRecordSection';
 import { CopyableIdentifier, CopyableUrl, MemberIdentifier, VoteStats } from '../beta';
-import { IDENTIFIER_COMPACT_MAX_WIDTH_PX } from '../beta/identifierStyles';
 import { useQuery } from '@tanstack/react-query';
 import { useSvAdminClient } from '../../contexts/SvAdminServiceContext';
 import {
@@ -337,6 +336,7 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
               <CopyableUrl
                 url={proposalDetails.url}
                 size="large"
+                fullWidth
                 data-testid="proposal-details-url"
               />
             }
@@ -349,7 +349,7 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
               <CopyableIdentifier
                 value={contractId}
                 size="large"
-                maxWidth={IDENTIFIER_COMPACT_MAX_WIDTH_PX}
+                fullWidth
                 data-testid="proposal-details-contractid-id"
               />
             }
@@ -365,7 +365,7 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
                 partyId={votingInformation.requester}
                 isYou={false}
                 size="large"
-                maxWidth={IDENTIFIER_COMPACT_MAX_WIDTH_PX}
+                fullWidth
                 data-testid="proposal-details-requester-party-id"
               />
             }
@@ -726,7 +726,7 @@ const OffboardMemberSection = ({ memberPartyId }: OffboardMemberSectionProps) =>
             partyId={memberPartyId}
             isYou={false}
             size="large"
-            maxWidth={IDENTIFIER_COMPACT_MAX_WIDTH_PX}
+            fullWidth
             data-testid="proposal-details-member-party-id"
           />
         }
@@ -914,7 +914,7 @@ const UpdateSvRewardWeightSection = ({
               partyId={svToUpdate}
               isYou={false}
               size="large"
-              maxWidth={IDENTIFIER_COMPACT_MAX_WIDTH_PX}
+              fullWidth
               data-testid="proposal-details-member-party-id"
             />
           }

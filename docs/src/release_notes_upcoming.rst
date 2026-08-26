@@ -18,3 +18,7 @@ release-notes:: Upcoming
 
           This replaces the ``rate-limiting.trusted-client-ip-header`` and
           ``rate-limiting.enable-client-provided-ip-headers`` options, which have been removed.
+
+    - Docker
+
+        - Updated Docker base image to 1.0.13, which updates gRPC health probe to v0.4.55.
