@@ -178,6 +178,18 @@ const MonitoringConfigSchema = z
           // a few packets (less than 1/s) get dropped and getting alerted on it every time can be very noisy.
           droppedSentPacketsThreshold: 30,
         }),
+        globalSynchronizerHealth: z.object({
+          // Fraction (0-1) of sequenced confirmation requests that were discarded
+          // (i.e., never processed by the mediator, e.g. due to CometBFT replays)
+          // above which the alert fires.
+          discardedConfirmationRequestsThreshold: z.number(),
+          // Fraction (0-1) of confirmation requests that failed (as observed by the
+          // mediator, over the last 30m) above which the alert fires.
+          failedConfirmationRequestsThreshold: z.number(),
+          // Fire when TPS (approved confirmation requests per second) over the last
+          // 30m drops below this fraction of the previous 30m.
+          tpsDropThreshold: z.number(),
+        }),
         trafficBasedRewards: z.object({
           featuredAppRightsLimit: z.number(),
           verdictIngestionBatchSizeThreshold: z.number(),

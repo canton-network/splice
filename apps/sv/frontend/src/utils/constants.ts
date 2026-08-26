@@ -4,19 +4,24 @@
 export const PROPOSAL_SUMMARY_TITLE = 'Proposal Summary';
 export const PROPOSAL_REVIEW_TITLE = 'Proposal Review';
 export const PROPOSAL_SUMMARY_SUBTITLE = 'For CIP votes, consider copying the CIP abstract here';
-/** Figma initiate Proposal Summary empty/example prompt (Body M grey105 when empty). */
-export const PROPOSAL_SUMMARY_PLACEHOLDER = 'This is the summary.';
+export const DATE_TIME_PLACEHOLDER = 'YYYY-MM-DD HH:MM';
+export const REASON_PLACEHOLDER = 'Add your reasoning here';
+export const URL_PLACEHOLDER = 'https://example.com';
+/** Figma initiate Proposal Summary empty prompt (Body M grey105 when empty). */
+export const PROPOSAL_SUMMARY_PLACEHOLDER = REASON_PLACEHOLDER;
 export const DEFAULT_PROPOSAL_SUMMARY_MAX_LENGTH = 1024;
 export const THRESHOLD_DEADLINE_SUBTITLE =
   'Proposal remains open only if ⅔ of nodes place a vote before this date-time';
 export const DEFAULT_APP_ACTIVITY_WEIGHT = '1.0';
 
 export const SUPPORTING_URL_LABEL = 'Supporting URL';
-export const SUPPORTING_URL_PLACEHOLDER = 'https://';
+export const SUPPORTING_URL_PLACEHOLDER = URL_PLACEHOLDER;
 export const VOTE_REASON_URL_LABEL = 'Vote Reason URL';
 export const VOTE_REASON_SUMMARY_LABEL = 'Reason';
-/** Figma Your Vote empty Reason prompt (`1013:1869`) — muted `#4F4F4F`. */
-export const VOTE_REASON_PLACEHOLDER = 'Your reason';
+/** Your Vote Reason empty prompt — aligned with #6910. */
+export const VOTE_REASON_PLACEHOLDER = REASON_PLACEHOLDER;
+/** Your Vote URL empty prompt — aligned with #6910. */
+export const VOTE_REASON_URL_PLACEHOLDER = URL_PLACEHOLDER;
 export const VOTE_PROPOSAL_CONTRACT_ID_LABEL = 'Vote proposal contract id';
 export const THRESHOLD_DEADLINE_LABEL = 'Quorum Threshold Deadline';
 export const EFFECTIVE_AT_LABEL = 'Effective At';

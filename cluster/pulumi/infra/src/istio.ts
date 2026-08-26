@@ -20,7 +20,7 @@ import {
   GCP_ZONE,
   getDnsNames,
   HELM_MAX_HISTORY_SIZE,
-  infraAffinityAndTolerations,
+  infraKubernetesScheduling,
   isDevNet,
   isMainNet,
 } from '../../common';
@@ -83,7 +83,7 @@ function configureIstiod(
   const defaultValues = {
     autoscaleMin: 2,
     autoscaleMax: 30,
-    ...infraAffinityAndTolerations,
+    ...infraKubernetesScheduling,
     global: {
       istioNamespace: ingressNs.metadata.name,
       logAsJson: true,
@@ -427,7 +427,7 @@ function configureGatewayService(
             ingressPort('https', 443),
           ].concat(ingressPorts),
         },
-        ...infraAffinityAndTolerations,
+        ...infraKubernetesScheduling,
         // The httpLoadBalancing addon needs to be enabled to use backend service-based network load balancers.
         annotations: {
           'cloud.google.com/l4-rbs': 'enabled',
