@@ -31,6 +31,15 @@ release-notes:: Upcoming
           ``/v0/dso`` endpoint. The scan is configured via the new ``.joinWithKeyOnboarding.sponsorScanUrl`` Helm value.
           SVs who set the ``.joinWithKeyOnboarding`` key config must set it before upgrading.
 
+    - Scan App
+
+        - *Breaking* Scan will no longer return featured app rights as part of the choice context for CC transfers and allocations
+          once ``no-featured-app-choice-context`` has been set in ``svOperationsSwitchOverTimes`` and the switchover time has been reached.
+          This change was made to avoid apps accidentally not complying with the marker guidance set by the Canton foundation. If you
+          really do intend to feature a CC transfer, you can query for the contract through ``/api/scan/v0/featured-apps/{provider_party_id}`` on Scan
+          and add it to the choice context under the ``featured-app-right`` choice context key.
+
+
     - CometBFT
 
         - Increased default resources of watchdog and made it only query for metrics it needs.
