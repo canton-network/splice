@@ -2,7 +2,6 @@ package org.lfdecentralizedtrust.splice.integration.tests.runbook
 
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.TestCommon
 import org.lfdecentralizedtrust.splice.integration.tests.FrontendTestCommon
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.DsoInfo
 import com.digitalasset.canton.topology.PartyId
 import scala.concurrent.duration.*
 
@@ -21,7 +20,7 @@ trait SvUiPreflightIntegrationTestUtil extends TestCommon {
       svUiUrl: String,
       svUsername: String,
       svPassword: String,
-      svInfo: Option[DsoInfo],
+      expectedSvParty: Option[PartyId],
       votedSvParties: Seq[PartyId],
       extraChecks: => Unit = (),
   )(implicit webDriver: WebDriverType) = {
@@ -39,11 +38,10 @@ trait SvUiPreflightIntegrationTestUtil extends TestCommon {
       )(
         s"We see a table with correct info data about the SV",
         _ => {
-          svInfo.foreach(si =>
+          expectedSvParty.foreach(party =>
             inside(findAll(className("general-dso-value-name")).toSeq.take(2)) {
-              case Seq(svUser, svPartyId) =>
-                seleniumText(svUser) should matchText(si.svUser)
-                seleniumText(svPartyId) should matchText(si.svParty.toProtoPrimitive)
+              case Seq(_, svPartyId) =>
+                seleniumText(svPartyId) should matchText(party.toProtoPrimitive)
             }
           )
         },

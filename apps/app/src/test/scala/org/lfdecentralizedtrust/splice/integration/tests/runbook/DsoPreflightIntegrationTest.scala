@@ -2,7 +2,6 @@ package org.lfdecentralizedtrust.splice.integration.tests.runbook
 
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.FrontendIntegrationTest
-import org.lfdecentralizedtrust.splice.integration.tests.auth.PreflightAuthUtil
 
 import scala.concurrent.duration.DurationInt
 
@@ -16,8 +15,7 @@ import io.circe.parser.parse
 class DsoPreflightIntegrationTest
     extends FrontendIntegrationTest("sv", "docs")
     with PreflightIntegrationTestUtil
-    with SvUiPreflightIntegrationTestUtil
-    with PreflightAuthUtil {
+    with SvUiPreflightIntegrationTestUtil {
 
   override lazy val resetRequiredTopologyState: Boolean = false
   override protected def runTokenStandardCliSanityCheck: Boolean = false
@@ -27,11 +25,14 @@ class DsoPreflightIntegrationTest
       this.getClass.getSimpleName()
     )
 
-  "SVs 1-3 + DA-1 are online and reachable via their HTTP API" in { implicit env =>
+  // Note: we cannot fetch DSO info from the SV apps themselves, as their /v1/dso endpoint
+  // requires authorization as SV operator, for which the preflight tests have no credentials.
+  // We probe their public readiness endpoint and read DSO info from their scans instead.
+  "SVs 1-3 + DA-1 are online and reachable via their public HTTP API" in { implicit env =>
     env.svs.remote.foreach(sv =>
       clue(s"Checking SV at ${sv.httpClientConfig.url}") {
         eventuallySucceeds(timeUntilSuccess = 2.minutes) {
-          svClientWithToken(sv.name).getDsoInfo()
+          sv.httpReady shouldBe true
         }
       }
     )
@@ -84,19 +85,21 @@ class DsoPreflightIntegrationTest
       val svUsername = s"admin@${svName}-dev.com";
       // our current practice is to use the same password for all SVs
       val svPassword = sys.env(s"SV_DEV_NET_WEB_UI_PASSWORD")
-      val svInfo = eventuallySucceeds() { svClientWithToken(svName).getDsoInfo() }
+      // Each SV's party is read via its own scan (whose sv_party_id is that SV's party)
+      val svParty = eventuallySucceeds() { scancl(s"${svName}Scan").getDsoInfo().svParty }
 
       val votedSvParties =
-        env.svs.remote
-          .filter(_.name != svName)
-          .map(sv_ => eventuallySucceeds() { svClientWithToken(sv_.name).getDsoInfo().svParty })
+        coreSvIngressNames.keys
+          .filter(_ != svName)
+          .toSeq
+          .map(other => eventuallySucceeds() { scancl(s"${other}Scan").getDsoInfo().svParty })
 
       withFrontEnd("sv") { implicit webDriver =>
         testSvUi(
           svUiUrl,
           svUsername,
           svPassword,
-          Some(svInfo),
+          Some(svParty),
           votedSvParties,
         )
       }
