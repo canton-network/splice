@@ -10,7 +10,6 @@ import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.{Spanning, TraceContext}
 import io.opentelemetry.api.trace.Tracer
 import org.lfdecentralizedtrust.splice.codegen.java.splice
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppRight
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   metadatav1,
   transferinstructionv1,
@@ -79,7 +78,7 @@ class HttpTokenStandardTransferInstructionHandler(
           PartyId.tryFromProtoPrimitive(transferInstr.transfer.sender),
           PartyId.tryFromProtoPrimitive(transferInstr.transfer.receiver),
           body.excludeDebugFields.getOrElse(false),
-        )((optTransferPreapproval, optFeaturedAppRight, externalPartyAmuletRules) => {
+        )((optTransferPreapproval, externalPartyAmuletRules) => {
           val isSelfTransfer = transferInstr.transfer.receiver == transferInstr.transfer.sender
           val kind =
             if (isSelfTransfer) v1.definitions.TransferFactoryWithChoiceContext.TransferKind.Self
@@ -92,8 +91,7 @@ class HttpTokenStandardTransferInstructionHandler(
               kind,
               choiceContext = choiceContextBuilder
                 .addOptionalContracts(
-                  "featured-app-right" -> optFeaturedAppRight,
-                  "transfer-preapproval" -> optTransferPreapproval,
+                  "transfer-preapproval" -> optTransferPreapproval
                 )
                 .disclose(externalPartyAmuletRules.contract)
                 .build(),
@@ -191,7 +189,7 @@ class HttpTokenStandardTransferInstructionHandler(
             TokenStandardAccount.tryGetRegularAccountOwner(transferInstr.transfer.receiver)
           ),
           body.excludeDebugFields.getOrElse(false),
-        )((optTransferPreapproval, optFeaturedAppRight, externalPartyAmuletRules) => {
+        )((optTransferPreapproval, externalPartyAmuletRules) => {
           val isSelfTransfer = transferInstr.transfer.receiver == transferInstr.transfer.sender
           val kind =
             if (isSelfTransfer) v2.definitions.TransferFactoryWithChoiceContext.TransferKind.Self
@@ -204,8 +202,7 @@ class HttpTokenStandardTransferInstructionHandler(
               kind,
               choiceContext = choiceContextBuilder
                 .addOptionalContracts(
-                  "featured-app-right" -> optFeaturedAppRight,
-                  "transfer-preapproval" -> optTransferPreapproval,
+                  "transfer-preapproval" -> optTransferPreapproval
                 )
                 .disclose(externalPartyAmuletRules.contract)
                 .build(),
@@ -282,7 +279,6 @@ class HttpTokenStandardTransferInstructionHandler(
             splice.amuletrules.TransferPreapproval.ContractId,
             splice.amuletrules.TransferPreapproval,
           ]],
-          Option[ContractWithState[FeaturedAppRight.ContractId, FeaturedAppRight]],
           ContractWithState[
             splice.externalpartyamuletrules.ExternalPartyAmuletRules.ContractId,
             splice.externalpartyamuletrules.ExternalPartyAmuletRules,
@@ -294,22 +290,14 @@ class HttpTokenStandardTransferInstructionHandler(
     for {
       choiceContextBuilder <- getAmuletRulesTransferContextV1(excludeDebugFields)
       externalPartyAmuletRules <- store.getExternalPartyAmuletRules()
-      // pre-approval and featured app rights are only provided if they exist and are required
+      // pre-approval is only provided if they exist and are required
       isSelfTransfer = receiver == sender
       optTransferPreapproval <-
         if (isSelfTransfer) Future.successful(None) // no pre-approval required for self-transfers
         else
           store.lookupTransferPreapprovalByParty(receiver)
-      optFeaturedAppRight <- optTransferPreapproval match {
-        case None => Future.successful(None)
-        case Some(preapproval) =>
-          store.lookupFeaturedAppRight(
-            PartyId.tryFromProtoPrimitive(preapproval.payload.provider)
-          )
-      }
     } yield build(
       optTransferPreapproval,
-      optFeaturedAppRight,
       externalPartyAmuletRules,
     )
 
@@ -403,7 +391,6 @@ class HttpTokenStandardTransferInstructionHandler(
         Some(amuletInstr.payload.lockedAmulet),
         Some(amuletInstr.payload.transfer.executeBefore),
         requireLockedAmulet,
-        None,
         store,
         contractFetcher,
         clock,
@@ -430,7 +417,6 @@ class HttpTokenStandardTransferInstructionHandler(
         Some(amuletInstr.payload.lockedAmulet),
         Some(amuletInstr.payload.transfer.executeBefore),
         requireLockedAmulet,
-        None,
         store,
         contractFetcher,
         clock,

@@ -6,7 +6,6 @@ package org.lfdecentralizedtrust.splice.scan.admin.http
 import cats.data.OptionT
 import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.time.Clock
-import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.{Spanning, TraceContext}
 import io.opentelemetry.api.trace.Tracer
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.LockedAmulet
@@ -61,7 +60,6 @@ class HttpTokenStandardAllocationHandler(
         ](
           allocationId,
           requireLockedAmulet = true,
-          canBeFeatured = true,
           synchronizerId =>
             new V1ChoiceContextBuilder(synchronizerId, body.excludeDebugFields.getOrElse(false)),
         )
@@ -84,7 +82,6 @@ class HttpTokenStandardAllocationHandler(
         ](
           allocationId,
           requireLockedAmulet = false,
-          canBeFeatured = false,
           synchronizerId =>
             new V1ChoiceContextBuilder(synchronizerId, body.excludeDebugFields.getOrElse(false)),
         )
@@ -107,7 +104,6 @@ class HttpTokenStandardAllocationHandler(
         ](
           allocationId,
           requireLockedAmulet = false,
-          canBeFeatured = false,
           synchronizerId =>
             new V1ChoiceContextBuilder(synchronizerId, body.excludeDebugFields.getOrElse(false)),
         )
@@ -243,7 +239,6 @@ class HttpTokenStandardAllocationHandler(
   ](
       allocationId: String,
       requireLockedAmulet: Boolean,
-      canBeFeatured: Boolean,
       newBuilder: String => Builder,
   )(implicit
       tc: TraceContext
@@ -271,9 +266,6 @@ class HttpTokenStandardAllocationHandler(
         Some(amuletAlloc.payload.lockedAmulet),
         Some(amuletAlloc.payload.allocation.settlement.settleBefore),
         requireLockedAmulet,
-        Option.when(canBeFeatured)(
-          PartyId.tryFromProtoPrimitive(amuletAlloc.payload.allocation.settlement.executor)
-        ),
         store,
         contractFetcher,
         clock,
@@ -334,8 +326,6 @@ class HttpTokenStandardAllocationHandler(
         lockedAmulet,
         expiry.toScala,
         requireLockedAmulet,
-        featuredProvider =
-          None, // Not required. Featured app rights are used in bulk, and will go once CIP-104 is live
         store,
         contractFetcher,
         clock,
