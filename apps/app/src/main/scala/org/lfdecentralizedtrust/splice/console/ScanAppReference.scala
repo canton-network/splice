@@ -626,6 +626,11 @@ abstract class ScanAppReference(
     }
   }
 
+  def getLatestEventRecordTime(): Option[String] =
+    consoleEnvironment.run {
+      httpCommand(HttpScanAppClient.GetLatestEventRecordTime())
+    }
+
   def getEventById(
       updateId: String,
       damlValueEncoding: Option[definitions.DamlValueEncoding],

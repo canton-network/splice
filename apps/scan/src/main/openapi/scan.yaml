@@ -1643,6 +1643,28 @@ paths:
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
         "500":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
+
+  /v0/events/latest-record-time:
+    get:
+      tags: [external, scan]
+      x-jvm-package: scan
+      operationId: "getLatestEventRecordTime"
+      description: |
+        Returns the latest record time for which /v0/events will be able to return events.
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: string
+        "400":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
+        "404":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
+        "500":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
+
   /v0/events/{update_id}:
     get:
       tags: [external, scan]

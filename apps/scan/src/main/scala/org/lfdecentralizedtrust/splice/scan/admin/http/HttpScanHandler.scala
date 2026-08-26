@@ -963,6 +963,24 @@ class HttpScanHandler(
     }
   }
 
+  override def getLatestEventRecordTime(
+      respond: ScanResource.GetLatestEventRecordTimeResponse.type
+  )()(extracted: TraceContext): Future[ScanResource.GetLatestEventRecordTimeResponse] = {
+    implicit val tc = extracted
+    withSpan(s"$workflowId.getLatestEventRecordTime") { _ => _ =>
+      eventStore.getLatestEventRecordTime(updateHistory.domainMigrationId).map {
+        case Some(timestamp) =>
+          ScanResource.GetLatestEventRecordTimeResponse.OK(
+            ScanHttpEncodings.formatRecordTime(timestamp.toInstant)
+          )
+        case None =>
+          ScanResource.GetLatestEventRecordTimeResponse.NotFound(
+            definitions.ErrorResponse("No events found")
+          )
+      }
+    }
+  }
+
   private def toUpdateV2WithHash(update: UpdateHistoryItem): UpdateHistoryItemV2WithHash =
     update match {
       case UpdateHistoryItem.members.UpdateHistoryReassignment(r) =>
