@@ -11,7 +11,6 @@ import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAp
 import org.lfdecentralizedtrust.splice.util.*
 
 import java.time.Instant
-import scala.concurrent.duration.*
 import java.util.Optional
 import com.digitalasset.canton.data.CantonTimestamp
 
@@ -164,38 +163,42 @@ class PermissionedSynchronizerIntegrationTest
         loginAfter: Option[Instant],
         revoked: Boolean,
     ): Unit = {
-      val dsoParty = sv1Backend.getDsoInfo().dsoParty
+      val action = new ARC_DsoRules(
+        new SRARC_UnpermissionValidator(
+          new DsoRules_UnpermissionValidator(
+            participantId,
+            loginAfter.map(Optional.of(_)).getOrElse(Optional.empty()),
+            java.lang.Boolean.valueOf(revoked),
+          )
+        )
+      )
 
-      Seq(sv1Backend, sv2Backend, sv3Backend).foreach { sv =>
-        eventuallySucceeds(timeUntilSuccess = 40.seconds, maxPollInterval = 1.second) {
-          val svParty = sv.getDsoInfo().svParty
-          val dsoRules = sv.appState.dsoStore.getDsoRules().futureValue
+      val (_, voteRequest) = actAndCheck(
+        s"SV1 creates vote request to unpermission $participantId (revoked=$revoked)",
+        eventuallySucceeds() {
+          sv1Backend.createVoteRequest(
+            sv1Backend.getDsoInfo().svParty.toProtoPrimitive,
+            action,
+            "url",
+            "description",
+            sv1Backend.getDsoInfo().dsoRules.payload.config.voteRequestTimeout,
+            None,
+          )
+        },
+      )(
+        "vote request has been created",
+        _ => sv1Backend.listVoteRequests().filter(_.payload.action == action).head,
+      )
 
-          clue(s"${sv.participantClient.name} votes for UnpermissionValidator(revoked=$revoked)") {
-            sv.appState.svAutomation
-              .connection(
-                org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority.High
-              )
-              .submit(
-                actAs = Seq(svParty),
-                readAs = Seq(dsoParty),
-                update = dsoRules.contractId.exerciseDsoRules_ConfirmAction(
-                  svParty.toProtoPrimitive,
-                  new ARC_DsoRules(
-                    new SRARC_UnpermissionValidator(
-                      new DsoRules_UnpermissionValidator(
-                        participantId,
-                        loginAfter.map(Optional.of(_)).getOrElse(Optional.empty()),
-                        java.lang.Boolean.valueOf(revoked),
-                      )
-                    )
-                  ),
-                ),
-              )
-              .withSynchronizerId(decentralizedSynchronizerId)
-              .noDedup
-              .yieldUnit()
-              .futureValue
+      Seq(sv2Backend, sv3Backend, sv4Backend).foreach { sv =>
+        clue(s"${sv.participantClient.name} accepts the vote request") {
+          eventuallySucceeds() {
+            sv.castVote(
+              voteRequest.contractId,
+              isAccepted = true,
+              "url",
+              "description",
+            )
           }
         }
       }

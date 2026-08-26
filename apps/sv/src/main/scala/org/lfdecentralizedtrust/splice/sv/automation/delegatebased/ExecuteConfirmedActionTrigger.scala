@@ -11,7 +11,6 @@ import org.lfdecentralizedtrust.splice.automation.{
   TaskSuccess,
   TriggerContext,
 }
-import scala.jdk.OptionConverters.*
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.{
   ClosedMiningRound,
   OpenMiningRound,
@@ -273,32 +272,6 @@ class ExecuteConfirmedActionTrigger(
                 rejectAction.dsoRules_RejectValidatorLicenseValue.validatorLicenseRequestCid
               )
               .map(_.isEmpty)
-          case unpermissionAction: SRARC_UnpermissionValidator if config.permissionedSynchronizer =>
-            // MergeUnpermissionValidatorContractsTrigger merges the new contract with any previous contract,
-            // hence we have to consider the merged contract state when calculating isStaleAction
-            val payload = unpermissionAction.dsoRules_UnpermissionValidatorValue
-            val proposedIsRevoked = payload.revoked
-            val proposedLoginAfter = payload.loginAfter.toScala
-
-            store.listValidatorUnpermissions(payload.participantId).map { contracts =>
-              contracts.exists { co =>
-                val existingIsRevoked = co.payload.revoked
-                val existingLoginAfter = co.payload.loginAfter.toScala
-
-                if (proposedIsRevoked) {
-                  existingIsRevoked
-                } else if (existingIsRevoked) {
-                  true
-                } else {
-                  (existingLoginAfter, proposedLoginAfter) match {
-                    case (Some(existing), Some(proposed)) => existing.compareTo(proposed) >= 0
-                    case (Some(_), None) => true
-                    case (None, None) => true
-                    case (None, Some(_)) => false
-                  }
-                }
-              }
-            }
           case action =>
             throw new UnsupportedOperationException(
               show"DsoRules $action is not yet supported"
