@@ -68,21 +68,6 @@ export const coreSvsToDeployBasic = standardSvConfigsBasic
   .slice(0, dsoSize)
   .concat(skipExtraSvs ? [] : extraSvConfigsBasic);
 
-export function shouldIncludeSvRunbookInIngressWhitelists(
-  deploySvRunbook: boolean,
-  approveSvRunbook: boolean
-): boolean {
-  return deploySvRunbook || approveSvRunbook;
-}
-
-const approveSvRunbook = spliceEnvConfig.envFlag('APPROVE_SV_RUNBOOK', false);
-
-export const allSvsForIngressWhitelistingBasic = coreSvsToDeployBasic.concat(
-  shouldIncludeSvRunbookInIngressWhitelists(DeploySvRunbook, approveSvRunbook)
-    ? [svRunbookConfigBasic]
-    : []
-);
-
 export const allSvsToDeployBasic = coreSvsToDeployBasic.concat(
   DeploySvRunbook ? [svRunbookConfigBasic] : []
 );

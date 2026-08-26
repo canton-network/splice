@@ -6,7 +6,7 @@ import {
   DecentralizedSynchronizerUpgradeConfig,
   getDnsNames,
 } from '@canton-network/splice-pulumi-common';
-import { allSvsForIngressWhitelistingBasic } from '@canton-network/splice-pulumi-common-sv/src/svConfigsBasic';
+import { allSvsToDeployBasic } from '@canton-network/splice-pulumi-common-sv/src/svConfigsBasic';
 
 import { loadIPRanges } from './ipRanges';
 import { createIstioIpAllowPolicies, istioIngressSelector } from './policies';
@@ -17,7 +17,7 @@ export function configureSequencerWhitelist(
   const dnsNames = [getDnsNames().cantonDnsName, getDnsNames().daDnsName];
   const migrations = DecentralizedSynchronizerUpgradeConfig.runningMigrations();
 
-  const publicApiHosts = allSvsForIngressWhitelistingBasic.flatMap(sv =>
+  const publicApiHosts = allSvsToDeployBasic.flatMap(sv =>
     migrations.flatMap(migration =>
       dnsNames.flatMap(dns => [
         `sequencer-${migration.id}.${sv.ingressName}.${dns}`,
@@ -25,7 +25,7 @@ export function configureSequencerWhitelist(
       ])
     )
   );
-  const p2pHosts = allSvsForIngressWhitelistingBasic.flatMap(sv =>
+  const p2pHosts = allSvsToDeployBasic.flatMap(sv =>
     migrations
       .filter(migration => migration.sequencer.enableBftSequencer)
       .flatMap(migration =>
