@@ -1657,7 +1657,7 @@ paths:
           content:
             application/json:
               schema:
-                type: string
+                $ref: "#/components/schemas/EventLatestRecordTimeResponse"
         "400":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
         "404":
@@ -4065,6 +4065,16 @@ components:
         app_activity_records:
           $ref: "#/components/schemas/EventHistoryAppActivityRecords"
           nullable: true
+    EventLatestRecordTimeResponse:
+      type: object
+      required:
+        - record_time
+      properties:
+        record_time:
+          description: |
+            The record_time of the latest event.
+          type: string
+          format: date-time
     EventHistoryVerdict:
       type: object
       required:

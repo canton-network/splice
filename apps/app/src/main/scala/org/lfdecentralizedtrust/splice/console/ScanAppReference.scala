@@ -626,7 +626,7 @@ abstract class ScanAppReference(
     }
   }
 
-  def getLatestEventRecordTime(): Option[String] =
+  def getLatestEventRecordTime(): Option[definitions.EventLatestRecordTimeResponse] =
     consoleEnvironment.run {
       httpCommand(HttpScanAppClient.GetLatestEventRecordTime())
     }

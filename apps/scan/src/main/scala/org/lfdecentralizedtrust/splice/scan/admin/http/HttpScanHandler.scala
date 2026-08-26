@@ -971,7 +971,7 @@ class HttpScanHandler(
       eventStore.getLatestEventRecordTime(updateHistory.domainMigrationId).map {
         case Some(timestamp) =>
           ScanResource.GetLatestEventRecordTimeResponse.OK(
-            ScanHttpEncodings.formatRecordTime(timestamp.toInstant)
+            definitions.EventLatestRecordTimeResponse(Codec.encode(timestamp))
           )
         case None =>
           ScanResource.GetLatestEventRecordTimeResponse.NotFound(

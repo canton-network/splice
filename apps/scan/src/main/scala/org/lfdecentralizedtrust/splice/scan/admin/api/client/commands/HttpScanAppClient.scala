@@ -1524,7 +1524,7 @@ object HttpScanAppClient {
   case class GetLatestEventRecordTime()
       extends InternalBaseCommand[
         http.GetLatestEventRecordTimeResponse,
-        Option[String],
+        Option[definitions.EventLatestRecordTimeResponse],
       ] {
     override def submitRequest(
         client: http.ScanClient,
