@@ -19,6 +19,11 @@ release-notes:: Upcoming
           This replaces the ``rate-limiting.trusted-client-ip-header`` and
           ``rate-limiting.enable-client-provided-ip-headers`` options, which have been removed.
 
+        - The endpoints ``/v1/state/acs`` and ``/v1/holdings/state`` are now deprecated
+          with the goal of them being replaced with their V2 counterparts.
+          The only change is the type of the pagination token (``after`` in request, ``next_page_token`` in response),
+          which is now a String instead of a number.
+
     - Docker
 
         - Updated Docker base image to 1.0.13, which updates gRPC health probe to v0.4.55.

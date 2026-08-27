@@ -638,10 +638,14 @@ paths:
 
   /v1/state/acs:
     post:
+      deprecated: true
       tags: [ external, scan ]
       x-jvm-package: scan
       operationId: "getAcsSnapshotAtV1"
       description: |
+        Deprecated. Please use /v2/state/acs instead.
+        The only difference with this endpoint and that one is the type of the `after`/`next_page_token` pagination token.
+
         Returns the ACS in creation date ascending order, paged, for a given migration id and record time.
         Unlike /v0/state/acs, every contract is identified by an (optional) update_id
         (as opposed to the event ID in /v0/state/acs, which was not BFT-safe).
@@ -750,10 +754,14 @@ paths:
 
   /v1/holdings/state:
     post:
+      deprecated: true
       tags: [external, scan]
       x-jvm-package: scan
       operationId: "getHoldingsStateAtV1"
       description: |
+        Deprecated. Please use /v2/state/acs instead.
+        The only difference with this endpoint and that one is the type of the `after`/`next_page_token` pagination token.
+
         Returns the active amulet contracts for a given migration id and record time, in creation date ascending order, paged.
       requestBody:
         required: true
