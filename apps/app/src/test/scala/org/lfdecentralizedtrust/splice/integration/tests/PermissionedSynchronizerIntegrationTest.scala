@@ -134,7 +134,7 @@ class PermissionedSynchronizerIntegrationTest
 
     loggerFactory.suppress(
       SuppressionRule.Level(
-        org.slf4j.event.Level.WARN
+        org.slf4j.event.Level.WARN // because unpermissioning Bob leads to many warnings from sequencer
       )
     ) {
       clue("SVs vote to temporarily suspend Bob") {
