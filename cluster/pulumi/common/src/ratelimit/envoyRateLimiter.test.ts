@@ -262,36 +262,6 @@ test('validateEffectiveRateLimits validates the global per-IP limits', () => {
   ).toThrow('globalPerIpLimits: fillInterval');
 });
 
-test('validateEffectiveRateLimits keeps limited endpoints and drops banned ones', () => {
-  const effective = validateEffectiveRateLimits({
-    ...envoyFilterArgs,
-    rateLimits: {
-      ...envoyFilterArgs.rateLimits,
-      '/api/scan/v1/updates': { name: 'v1-updates', type: 'banned' as const },
-    },
-  });
-
-  expect(Object.keys(effective)).toEqual(['/api/scan/v0/acs']);
-});
-
-test('validateEffectiveRateLimits drops unlimited endpoints so they fall back to the global limits', () => {
-  const unlimited = {
-    '/api/scan/livez': { name: 'livez', type: 'unlimited' as const },
-    '/api/scan/readyz': { name: 'readyz', type: 'unlimited' as const },
-  };
-  const baseline = validateEffectiveRateLimits(envoyFilterArgs);
-  const effective = validateEffectiveRateLimits({
-    ...envoyFilterArgs,
-    rateLimits: { ...envoyFilterArgs.rateLimits, ...unlimited },
-  });
-
-  expect(Object.keys(effective)).toEqual(['/api/scan/v0/acs']);
-  // unlimited endpoints must not contribute any envoy config at all
-  expect(buildRateLimitActions(effective)).toEqual(buildRateLimitActions(baseline));
-  expect(buildRateLimitDescriptors(effective)).toEqual(buildRateLimitDescriptors(baseline));
-  expect(JSON.stringify(buildRateLimitDescriptors(effective))).not.toContain('livez');
-});
-
 test('validateEffectiveRateLimits rejects reserved descriptor names', () => {
   expect(() =>
     validateEffectiveRateLimits({

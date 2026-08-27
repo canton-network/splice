@@ -1533,14 +1533,6 @@
       "inboundPort": 5012,
       "namespace": "sv-1",
       "rateLimits": {
-        "/api/scan/v0/amulet-config-for-round": {
-          "name": "amulet-config-for-round",
-          "type": "banned"
-        },
-        "/api/scan/v1/updates": {
-          "name": "v1-updates",
-          "type": "banned"
-        },
         "/registry/allocation-instruction/v1/allocation-factory": {
           "fillInterval": "60s",
           "maxTokens": 720,
@@ -1719,14 +1711,6 @@
       "inboundPort": 5012,
       "namespace": "sv-da-1",
       "rateLimits": {
-        "/api/scan/v0/amulet-config-for-round": {
-          "name": "amulet-config-for-round",
-          "type": "banned"
-        },
-        "/api/scan/v1/updates": {
-          "name": "v1-updates",
-          "type": "banned"
-        },
         "/registry/allocation-instruction/v1/allocation-factory": {
           "fillInterval": "60s",
           "maxTokens": 720,

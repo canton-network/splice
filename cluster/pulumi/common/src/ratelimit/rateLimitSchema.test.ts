@@ -43,18 +43,6 @@ test('RateLimitSchema keeps per-endpoint limits optional', () => {
   expect(parsed.rateLimits).toBeDefined();
 });
 
-test('RateLimitSchema accepts unlimited and banned endpoints', () => {
-  const config = {
-    ...validConfig,
-    rateLimits: {
-      '/api/scan/livez': { name: 'livez', type: 'unlimited' },
-      '/api/scan/v0/amulet-config-for-round': { name: 'amulet-config-for-round', type: 'banned' },
-    },
-  };
-  const parsed = RateLimitSchema.parse(config);
-  expect(parsed.rateLimits!['/api/scan/livez']).toEqual({ name: 'livez', type: 'unlimited' });
-});
-
 test('RateLimitSchema rejects an unknown endpoint type', () => {
   const config = {
     ...validConfig,

@@ -21,24 +21,10 @@ export const PerIpLimitsSchema = BucketRateLimitSchema.extend({
   overrides: z.record(z.string().min(1), OverrideSchema).optional(),
 });
 
-const BucketMatchedRateLimitSchema = BucketRateLimitSchema.extend({
+export const RateLimitConfigSchema = BucketRateLimitSchema.extend({
   type: z.literal('limited'),
   perIpLimits: PerIpLimitsSchema.optional(),
 });
-
-export const BannedSchema = z.object({
-  type: z.literal('banned'),
-});
-
-export const UnlimitedSchema = z.object({
-  type: z.literal('unlimited'),
-});
-
-export const RateLimitConfigSchema = z.discriminatedUnion('type', [
-  BucketMatchedRateLimitSchema,
-  BannedSchema,
-  UnlimitedSchema,
-]);
 
 export type ExternalRateLimit = z.infer<typeof RateLimitSchema>;
 

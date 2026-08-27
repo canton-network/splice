@@ -20,21 +20,6 @@ interface MatchedLimits extends Limits {
   perIpLimits?: PerIpLimits;
 }
 
-interface Banned {
-  type: 'banned';
-}
-
-interface Unlimited {
-  type: 'unlimited';
-}
-
-type RateLimitConfig = MatchedLimits | Banned | Unlimited;
-
-export interface PathPrefixInfo {
-  pathPrefix: string;
-  isBanned: boolean;
-}
-
 interface LocalLimits<L> {
   [pathPrefix: string]: LocalLimit<L>;
 }
@@ -75,24 +60,17 @@ export interface RateLimitEnvoyFilterArgs extends PerEndpointLimits {
 
 export interface PerEndpointLimits {
   // all the rate limits must be respected, there's an AND relationship between them
-  rateLimits?: LocalLimits<RateLimitConfig>;
+  rateLimits?: LocalLimits<MatchedLimits>;
 }
 
-export function extractPathPrefixes(
-  rateLimits?: PerEndpointLimits['rateLimits']
-): PathPrefixInfo[] {
+export function extractPathPrefixes(rateLimits?: PerEndpointLimits['rateLimits']): string[] {
   if (!rateLimits) {
     return [];
   }
 
-  return Object.entries(rateLimits)
-    .map(([pathPrefix, rl]) => {
-      const isBanned = rl.type === 'banned';
-      return { pathPrefix, isBanned };
-    })
-    .filter(
-      info => info.pathPrefix.startsWith('/api/scan') || info.pathPrefix.startsWith('/registry')
-    );
+  return Object.keys(rateLimits).filter(
+    pathPrefix => pathPrefix.startsWith('/api/scan') || pathPrefix.startsWith('/registry')
+  );
 }
 
 export function validateIpLimits(pathPrefix: string, rateLimit: LocalLimit<MatchedLimits>): void {
@@ -195,18 +173,7 @@ export function validateEffectiveRateLimits(
     );
   }
 
-  // Filter out banned and unlimited entries
-  const effectiveRateLimits = Object.fromEntries(
-    Object.entries(args.rateLimits || {}).filter(
-      (ent): ent is [string, LocalLimit<MatchedLimits>] => {
-        // TODO (#4201): in banned case, implement actual banning with special short-circuit for whitelisted IPs
-        // Currently skipping banned endpoints instead of setting 0/0 limits
-        // in unlimited case, we fall back to the global limits so no descriptor is needed
-        const [, rl] = ent;
-        return rl.type === 'limited';
-      }
-    )
-  );
+  const effectiveRateLimits: LocalLimits<MatchedLimits> = args.rateLimits || {};
 
   Object.entries(effectiveRateLimits).forEach(([pathPrefix, rateLimit]) => {
     validateIpLimits(pathPrefix, rateLimit);

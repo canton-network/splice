@@ -223,12 +223,10 @@ function addDefaultDenyRule(
   );
 }
 
-// Extract un-banned path prefixes and build optimized regex
+// Extract path prefixes and build optimized regex
 function allowedPathsCondition(scanExternalRateLimits: PerEndpointLimits, pathPrefix: string) {
   if (scanExternalRateLimits.rateLimits && !_.isEmpty(scanExternalRateLimits.rateLimits)) {
-    const pathPrefixes = extractPathPrefixes(scanExternalRateLimits.rateLimits)
-      .filter(p => !p.isBanned)
-      .map(p => p.pathPrefix);
+    const pathPrefixes = extractPathPrefixes(scanExternalRateLimits.rateLimits);
 
     const basePrefix = pathPrefix.endsWith('/') ? pathPrefix : `${pathPrefix}/`;
     const dynamicPathRxs = pathPrefixes
