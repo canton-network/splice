@@ -73,3 +73,9 @@ release-notes:: Upcoming
           enabled by ``canton.validator-apps.validator_backend.enable-deprecated-transfer-command-support=true``
           has been fully removed. Migrate to token standard transfers
           and remove the flag.
+
+    - Helm
+
+        - The node pods of the operator charts now accept a ``priorityClassName``, so operators can
+          protect a node from eviction under resource pressure. It is unset by default, which leaves
+          scheduling behaviour unchanged.
