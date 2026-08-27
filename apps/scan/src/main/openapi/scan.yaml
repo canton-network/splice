@@ -759,7 +759,7 @@ paths:
       x-jvm-package: scan
       operationId: "getHoldingsStateAtV1"
       description: |
-        Deprecated. Please use /v2/state/acs instead.
+        Deprecated. Please use /v2/holdings/state instead.
         The only difference with this endpoint and that one is the type of the `after`/`next_page_token` pagination token.
 
         Returns the active amulet contracts for a given migration id and record time, in creation date ascending order, paged.
