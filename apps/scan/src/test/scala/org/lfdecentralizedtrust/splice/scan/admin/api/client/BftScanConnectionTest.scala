@@ -1379,6 +1379,28 @@ class BftScanConnectionTest
         )
         .map(_ => succeed)
     }
+
+    "logs a WARN disagreement when two Oks in the probed subset disagree (n=2)" in {
+      val round = 42L
+      val connections = getMockedConnections(n = 4)
+      makeMockReturnRootHashOk(connections(0), round, "aabb")
+      makeMockReturnRootHashOk(connections(1), round, "ccdd")
+      makeMockReturnRootHashCannotProvide(connections(2), round)
+      makeMockReturnRootHashCannotProvide(connections(3), round)
+      val bft = getBft(connections)
+
+      loggerFactory
+        .assertEventuallyLogsSeq(SuppressionRule.Level(Level.WARN))(
+          bft.getRewardAccountingRootHash(round),
+          logs =>
+            logs.exists(log =>
+              log.level == Level.WARN && log.message.contains(
+                "disagreed with consensus"
+              )
+            ) should be(true),
+        )
+        .map(_ => succeed)
+    }
   }
 
   "BftScanConnection.getRewardAccountingActivityTotals" should {
