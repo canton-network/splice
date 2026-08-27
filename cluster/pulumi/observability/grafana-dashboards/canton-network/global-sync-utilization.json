@@ -636,13 +636,108 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "1 - sum by (namespace, migration_id) (rate(daml_mediator_approved_requests_total{namespace=~\"sv-1\"}[30m])) / sum by (namespace, migration_id)(rate(daml_mediator_requests_total{namespace=~\"sv-1\"}[30m]))",
+          "expr": "1 - sum by (namespace, migration_id) (rate(daml_mediator_approved_requests_total{namespace=~\"sv-1\"}[30m])) / sum by (namespace, migration_id)(rate(daml_mediator_requests_total{namespace=~\"sv-1\", duplicate_reject=\"false\"}[30m]))",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Failed Confirmation Request Rate",
+      "title": "Failed Confirmation Request Rate (excluding duplicate requests)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Confirmation requests with duplicate confirmation request UUID. These get rejected by the mediator.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 28
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.0",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sum by (namespace, migration_id)(rate(daml_mediator_requests_total{namespace=~\"sv-1\", duplicate_reject=\"true\"}[30m]))",
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Duplicate Confirmation Requests/s",
       "type": "timeseries"
     },
     {
@@ -709,8 +804,8 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 12,
-        "y": 28
+        "x": 0,
+        "y": 36
       },
       "id": 9,
       "options": {
@@ -804,7 +899,7 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 0,
+        "x": 12,
         "y": 36
       },
       "id": 10,
