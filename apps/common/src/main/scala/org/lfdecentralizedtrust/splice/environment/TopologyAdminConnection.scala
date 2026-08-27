@@ -198,10 +198,19 @@ abstract class TopologyAdminConnection(
       participantId: ParticipantId,
       permission: ParticipantPermission,
       retryFor: RetryFor,
+      limits: Option[ParticipantSynchronizerLimits] = None,
+      loginAfter: Option[CantonTimestamp] = None,
   )(implicit
       tc: TraceContext,
       ec: ExecutionContext,
   ): Future[TopologyResult[ParticipantSynchronizerPermission]] = {
+    val expectedMapping = ParticipantSynchronizerPermission(
+      synchronizerId = synchronizerId,
+      participantId = participantId,
+      permission = permission,
+      limits = limits,
+      loginAfter = loginAfter,
+    )
     ensureTopologyMappingO(
       TopologyStoreId.Synchronizer(synchronizerId),
       s"ParticipantSynchronizerPermission with $permission for $participantId",
@@ -216,7 +225,7 @@ abstract class TopologyAdminConnection(
           )
           .subflatMap { results =>
             results.headOption match {
-              case Some(result) if result.mapping.permission == permission =>
+              case Some(result) if result.mapping == expectedMapping =>
                 Right(result)
               case other =>
                 Left(other)
@@ -224,17 +233,26 @@ abstract class TopologyAdminConnection(
           },
       update = { _ =>
         Right(
-          ParticipantSynchronizerPermission(
-            synchronizerId = synchronizerId,
-            participantId = participantId,
-            permission = permission,
-            limits = None,
-            loginAfter = None,
-          )
+          expectedMapping
         )
       },
       isProposal = true,
       retryFor = retryFor,
+    )
+  }
+
+  def ensureParticipantSynchronizerPermissionRemoved(
+      synchronizerId: SynchronizerId,
+      participantId: ParticipantId,
+  )(implicit tc: TraceContext, ec: ExecutionContext): Future[Unit] = {
+    ensureTopologyMappingRemoved(
+      s"Remove ParticipantSynchronizerPermission for $participantId on $synchronizerId",
+      synchronizerId,
+      listParticipantSynchronizerPermission(
+        synchronizerId,
+        participantId.filterString,
+      ).map(_.headOption),
+      proposal = true,
     )
   }
 
