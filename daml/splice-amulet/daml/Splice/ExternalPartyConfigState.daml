@@ -3,7 +3,7 @@
 
 module Splice.ExternalPartyConfigState where
 
-import DA.Map
+import DA.TextMap
 
 import Splice.Api.Token.MetadataV1
 import Splice.Api.Token.TransferEventsV2 as TransferEventsV2
@@ -29,7 +29,7 @@ template ExternalPartyConfigState
     transferConfig : TransferConfigV2 Unit.USD -- ^ Transfer config at the time the config state was created.
     targetArchiveAfter : Time -- ^ Lower bound on the time the contract gets archived, not enforced as a strict upper bound.
     rewardCalculationVersion : Optional RewardVersion -- ^ The reward calculation version to use for transactions relying on this config state.
-    amuletSwitchOverTimes : Optional (Map Text Time)
+    amuletSwitchOverTimes : Optional (TextMap Time) -- ^ Timepoints for synchronized switch-overs of amulet functionality both on and off-ledger.
   where
     signatory dso
 

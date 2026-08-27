@@ -5,7 +5,7 @@ module Splice.AmuletConfig where
 
 import DA.Optional
 import DA.Time
-import DA.Map
+import DA.TextMap
 
 import Splice.Fees
 import Splice.DecentralizedSynchronizer
@@ -117,7 +117,8 @@ data AmuletConfig unit = AmuletConfig with
       -- ^ List of blocked parties. They cannot allocate new coupons, and the coupons they allocated cannot be minted either.
     minDevelopmentFundMintingDelay : Optional RelTime
       -- ^ Minimum delay between allocation and minting. Default: 0 days.
-    amuletSwitchOverTimes : Optional (Map Text Time)
+    amuletSwitchOverTimes : Optional (TextMap Time)
+      -- ^ Timepoints for synchronized switch-overs of amulet functionality both on and off-ledger.
   deriving (Eq, Show, Serializable)
 
 getExternalPartyConfigStateTickDuration : AmuletConfig a -> RelTime
