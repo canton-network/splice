@@ -121,7 +121,9 @@ object SvOnboardingConfig {
       developmentFundManager: Option[PartyId] = None,
       initialExternalPartyConfigStateTickDuration: Option[NonNegativeFiniteDuration] = None,
       optValidatorFaucetCap: Option[BigDecimal] = None,
-      initialRewardConfig: Option[InitialRewardConfig] = Some(InitialRewardConfig()),
+      // Networks default to FeaturedAppMarkers (initialRewardConfig = None).
+      // Tests default to TrafficBasedAppRewards via a config transform in ConfigTransforms.defaults();
+      initialRewardConfig: Option[InitialRewardConfig] = None,
   ) extends SvOnboardingConfig
 
   case class JoinWithKey(
@@ -248,7 +250,7 @@ object SvOnboardingConfig {
 }
 
 final case class InitialRewardConfig(
-    mintingVersion: String = "RewardVersion_TrafficBasedAppRewards",
+    mintingVersion: String = "RewardVersion_FeaturedAppMarkers",
     dryRunVersion: Option[String] = None,
     batchSize: Long = 100,
     rewardCouponTimeToLiveMicros: Long = 36L * 60 * 60 * 1000000, // 36 hours

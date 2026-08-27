@@ -206,6 +206,9 @@ object ConfigTransforms {
         _.copy(rewardOperationRoundsCloseBufferDuration = NonNegativeFiniteDuration.ofMillis(100))
       ),
       disableDevelopmentFund(),
+      // Tests default to TrafficBasedAppRewards. Networks (which don't apply
+      // ConfigTransforms.defaults) fall back to the FeaturedAppMarkers default
+      withTrafficBasedAppRewards,
     )
   }
 
@@ -808,6 +811,13 @@ object ConfigTransforms {
       rewardConfig: InitialRewardConfig
   ): ConfigTransform =
     updateAllSvAppFoundDsoConfigs_(c => c.copy(initialRewardConfig = Some(rewardConfig)))
+
+  def withTrafficBasedAppRewards: ConfigTransform =
+    updateAllSvAppFoundDsoConfigs_(c =>
+      c.copy(initialRewardConfig =
+        Some(InitialRewardConfig(mintingVersion = "RewardVersion_TrafficBasedAppRewards"))
+      )
+    )
 
   def withFeaturedAppMarkers: ConfigTransform =
     updateAllSvAppFoundDsoConfigs_(c => c.copy(initialRewardConfig = None))
