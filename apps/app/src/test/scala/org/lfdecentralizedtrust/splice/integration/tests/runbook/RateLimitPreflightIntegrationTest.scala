@@ -31,7 +31,7 @@ class RateLimitPreflightIntegrationTest extends IntegrationTest {
     forAll(Table("scan", env.scans.remote*)) { scanCli =>
       val dsoParty = scanCli.getDsoPartyId()
       rateLimitIsEnforced(
-        30, {
+        20, {
           scanCli.getAcsSnapshot(
             // Dummy party that doesn't exist to avoid creating load
             PartyId.tryCreate(
