@@ -92,11 +92,9 @@ class NonZeroRoundBootstrapBftTimeBasedIntegrationTest
         ]
 
         // The round becoming IssuingMiningRound is DSO-level proof:
-        // under BFT f=1, the SummarizingMiningRoundTrigger on each
-        // SV must obtain reward accounting totals. For the initial
-        // round, only SV1 has local data; other SVs fall back to a
-        // BFT read that filters to scans-with-data (n=1 → f=0 →
-        // single Ok is quorum). If that path failed, fewer than
+        // under BFT f=1, each SV's SummarizingMiningRoundTrigger
+        // must obtain reward-accounting totals via the two-phase
+        // BFT read described above. If that failed, fewer than
         // f+1=2 SVs could submit summaries and the round would not
         // advance.
         val (_, issuingRounds) = sv1ScanBackend.getOpenAndIssuingMiningRounds()

@@ -1023,28 +1023,15 @@ class BftScanConnection(
   ): Future[NonNegativeInt] =
     bftCall(_.getActivePhysicalSynchronizerSerial(), "getActivePhysicalSynchronizerSerial")
 
-  /** This endpoint is special: peers can respond with 'Ok', 'Undetermined'
-    * (still processing for this round), or 'CannotProvide' (lacks the
-    * required app-activity data). Simple equality across all responses
-    * doesn't make sense — an Ok from one peer and 'Undetermined' from
-    * another are not really "disagreement".
-    *
-    * A single-phase BFT read against every open scan would stall
-    * during bootstrap when only one peer has data: with n=4, f=1,
-    * targetSuccess=2, but only sv1 returns Ok. So we use a two-phase
-    * probe-filter-consensus pattern:
-    *
-    *   1. Probe every open scan in parallel; discard Undetermined /
-    *      CannotProvide / network errors (probe failures logged at
-    *      INFO so operators can trace missing contributions).
-    *   2. Filter to scans that returned Ok.
-    *   3. Recompute BFT quorum from that filtered set — `n =
-    *      withData.size`, `f = (n-1)/3`, `targetSuccess = f+1`. A
-    *      lone Ok is quorum for n=1 (short-circuits before the
-    *      bftCall to avoid a redundant round-trip); a 4-of-4 set
-    *      reverts to full BFT (targetSuccess=2).
-    *
-    * If no scan returned Ok, respond Undetermined.
+  /** Bootstrap-safe reward-accounting read using two-phase
+    * probe-filter-consensus. A single-phase BFT read stalls at
+    * bootstrap because only sv1 has data (n=4 → targetSuccess=2, but
+    * only 1 Ok is possible). Instead we probe every open scan first,
+    * discard Undetermined / CannotProvide / network errors (probe
+    * failures logged at INFO), then run BFT consensus over the Ok
+    * subset with `n = withData.size` — a single Ok is quorum for
+    * n=1, full BFT is restored once enough scans catch up. Responds
+    * Undetermined when no scan returned Ok.
     */
   override def getRewardAccountingActivityTotals(roundNumber: Long)(implicit
       ec: ExecutionContext,
@@ -1088,13 +1075,16 @@ class BftScanConnection(
         }
         .map(_.flatten.toMap)
 
+    def okResponse(
+        ok: RewardAccountingActivityTotalsOk
+    ): GetRewardAccountingActivityTotalsResponse =
+      GetRewardAccountingActivityTotalsResponse(ok)
+
     probe.flatMap { withData =>
       if (withData.isEmpty) Future.successful((undetermined, Nil))
       else if (withData.sizeIs == 1) {
         val (scan, ok) = withData.iterator.next()
-        Future.successful(
-          (GetRewardAccountingActivityTotalsResponse(ok), List(scan.url))
-        )
+        Future.successful((okResponse(ok), List(scan.url)))
       } else
         bftCallWithScanUris[RewardAccountingActivityTotalsOk](
           call = scan =>
@@ -1108,7 +1098,7 @@ class BftScanConnection(
         )
           .transformWith {
             case Success((totals, consensusUris)) =>
-              Future.successful((GetRewardAccountingActivityTotalsResponse(totals), consensusUris))
+              Future.successful((okResponse(totals), consensusUris))
             case Failure(_) => Future.successful((undetermined, Nil))
           }
     }
@@ -1421,16 +1411,11 @@ object BftScanConnection {
     def randomSingleCall(connections: ScanConnections): BftCallConfig =
       default(connections).copy(requestsToDo = 1, targetSuccess = 1)
 
-    /** BFT config for a two-phase probe-filter-consensus call: the caller
-      * has already queried every open scan and kept only those that
-      * returned data. `n` is recomputed from that filtered set, so
-      * `f = (n-1)/3` scales with data availability (n=1 → f=0 →
-      * targetSuccess=1; n=4 → f=1 → targetSuccess=2). Reverts to full
-      * BFT as more scans catch up.
-      *
-      * Precondition: callers only invoke this with a non-empty
-      * `withData`. The `n<=0` branch returns a config that
-      * `enoughAvailableScans` rejects cleanly as a defensive default.
+    /** Config for the second phase of a probe-filter-consensus call.
+      * `n = withData.size` is the size of the filtered set; quorum
+      * scales with data availability. Callers must invoke with a
+      * non-empty `withData`; the `n<=0` guard exists so
+      * `enoughAvailableScans` rejects cleanly if that contract slips.
       */
     def forWithDataOnly(
         withData: Seq[SingleScanConnection]
