@@ -5,6 +5,7 @@ import * as k8s from '@pulumi/kubernetes';
 import { config } from '@canton-network/splice-pulumi-common';
 import { svsConfig } from '@canton-network/splice-pulumi-common-sv/src/config';
 
+import { configureSweet } from '../sweet';
 import { configureAuth0 } from './auth0';
 import { configureCloudArmorPolicy } from './cloudArmor';
 import {
@@ -63,6 +64,10 @@ if (useGKEL7Gateway) {
 configureStorage();
 
 configureReloader();
+
+if (infraConfig.enableSweetSecurity) {
+  configureSweet();
+}
 
 installExtraCustomResources();
 
