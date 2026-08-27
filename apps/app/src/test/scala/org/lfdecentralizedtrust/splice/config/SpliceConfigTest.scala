@@ -86,6 +86,72 @@ class SpliceConfigTest extends AsyncWordSpec with BaseTest {
     }
   }
 
+  "rate limiting config" should {
+
+    def perClientIpOf(cfg: SpliceConfig) =
+      cfg.scanApps.values.headOption.value.parameters.rateLimiting.global.perClientIp
+
+    "parse the per client IP CIDR overrides" in {
+      val overwrite = ConfigFactory.parseString(
+        """
+          |canton.scan-apps.sv1Scan.parameters.rate-limiting.global.per-client-ip {
+          |  enabled = true
+          |  limit.rate-per-second = 10
+          |  ip-overrides {
+          |    "10.0.0.0/8" = { rate-per-second = 100 }
+          |    "192.0.2.0/24" = { enabled = false, rate-per-second = 0 }
+          |  }
+          |}
+          """.stripMargin
+      )
+      val loaded =
+        SpliceConfig.loadAndValidate(CantonConfig.mergeConfigs(config, Seq(overwrite))).value
+      val perClientIp = perClientIpOf(loaded)
+      perClientIp.limit.ratePerSecond should be(10d)
+      perClientIp.attributeOverrides.keySet should be(Set("10.0.0.0/8", "192.0.2.0/24"))
+      perClientIp.attributeOverrides("10.0.0.0/8").ratePerSecond should be(100d)
+      perClientIp.attributeOverrides("192.0.2.0/24").enabled should be(false)
+    }
+
+    "reject invalid per client IP CIDR overrides" in {
+      val overwrite = ConfigFactory.parseString(
+        """
+          |canton.scan-apps.sv1Scan.parameters.rate-limiting.rate-limiters.getDsoInfo.per-client-ip {
+          |  ip-overrides {
+          |    "not-an-ip/8" = { rate-per-second = 100 }
+          |  }
+          |}
+          """.stripMargin
+      )
+      SpliceConfig
+        .loadAndValidate(CantonConfig.mergeConfigs(config, Seq(overwrite)))
+        .left
+        .value
+        .toString should include("not-an-ip/8")
+    }
+
+    "reject unknown per client IP keys" in {
+      val overwrite = ConfigFactory.parseString(
+        """
+          |canton.scan-apps.sv1Scan.parameters.rate-limiting.global.per-client-ip {
+          |  attribute-overrides {
+          |    "10.0.0.0/8" = { rate-per-second = 100 }
+          |  }
+          |}
+          """.stripMargin
+      )
+      SpliceConfig
+        .loadAndValidate(CantonConfig.mergeConfigs(config, Seq(overwrite)))
+        .left
+        .value
+        .toString should include("attribute-overrides")
+    }
+
+    "default to no per client IP overrides" in {
+      perClientIpOf(SpliceConfig.loadAndValidate(config).value).attributeOverrides should be(empty)
+    }
+  }
+
   // Shared helper for RewardSharingConfig tests
   private def mkSharingCfg(percentages: BigDecimal*): RewardSharingConfig.BuiltIn =
     RewardSharingConfig.BuiltIn(

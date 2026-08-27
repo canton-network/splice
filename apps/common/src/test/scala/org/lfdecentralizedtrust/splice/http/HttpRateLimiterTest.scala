@@ -16,7 +16,7 @@ import org.apache.pekko.http.scaladsl.model.{
 import org.apache.pekko.http.scaladsl.server.Directives.*
 import org.apache.pekko.http.scaladsl.server.Route
 import org.apache.pekko.http.scaladsl.testkit.ScalatestRouteTest
-import org.lfdecentralizedtrust.splice.config.RateLimitersConfig
+import org.lfdecentralizedtrust.splice.config.{PerClientIpRateLimitConfig, RateLimitersConfig}
 import org.lfdecentralizedtrust.splice.util.{
   PerAttributeRateLimitConfig,
   SpliceRateLimitConfig,
@@ -265,7 +265,7 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
     "apply the global overall limiter across operations" in {
       withRoutes(
         global = SpliceRateLimitConfig(ratePerSecond = 1),
-        globalPerClientIp = PerAttributeRateLimitConfig.Disabled,
+        globalPerClientIp = PerAttributeRateLimitConfig.disabled,
       )("operationA", "operationB") { routes =>
         // exhaust the global budget via operationA
         (1 to 20).map(_ => call(routes("operationA"), ip = Some("1.1.1.1")))
@@ -311,12 +311,12 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
         RateLimitersConfig(
           default = withPerClientIp(
             SpliceRateLimitConfig(ratePerSecond = 1),
-            PerAttributeRateLimitConfig.Disabled,
+            PerAttributeRateLimitConfig.disabled,
           ),
           rateLimiters = Map.empty,
           global = withPerClientIp(
             SpliceRateLimitConfig(ratePerSecond = 1000),
-            PerAttributeRateLimitConfig.Disabled,
+            PerAttributeRateLimitConfig.disabled,
           ),
         ),
         new InMemoryMetricsFactory(),
@@ -434,8 +434,88 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
     }
   }
 
-  private def perClientIp(ratePerSecond: Double): PerAttributeRateLimitConfig =
-    PerAttributeRateLimitConfig(limit = SpliceRateLimitConfig(ratePerSecond = ratePerSecond))
+  "the per client IP CIDR overrides" should {
+
+    "apply the custom limit to clients of a matching network" in {
+      withRoutes(
+        globalPerClientIp = perClientIp(
+          1,
+          cidrOverrides = Map("10.0.0.0/8" -> SpliceRateLimitConfig(ratePerSecond = 5)),
+        )
+      )("testOperation") { routes =>
+        val route = routes("testOperation")
+        // 5 permits (plus guava's deferred payment) for a client of the overridden network
+        (1 to 20)
+          .map(_ => call(route, ip = Some("10.1.2.3")))
+          .count(_ == StatusCodes.OK) should be(6)
+        // every IP of the network gets its own limiter
+        (1 to 20)
+          .map(_ => call(route, ip = Some("10.4.5.6")))
+          .count(_ == StatusCodes.OK) should be(6)
+        // clients outside of the network use the default per client IP limit
+        (1 to 20)
+          .map(_ => call(route, ip = Some("11.1.2.3")))
+          .count(_ == StatusCodes.OK) should be(2)
+      }
+    }
+
+    "exempt clients of a network with a disabled override" in {
+      withRoutes(
+        globalPerClientIp = perClientIp(
+          1,
+          cidrOverrides =
+            Map("10.0.0.0/8" -> SpliceRateLimitConfig(enabled = false, ratePerSecond = 0)),
+        )
+      )("testOperation") { routes =>
+        val route = routes("testOperation")
+        (1 to 20).map(_ => call(route, ip = Some("10.1.2.3"))) should contain only StatusCodes.OK
+        (1 to 20)
+          .map(_ => call(route, ip = Some("11.1.2.3")))
+          .count(_ == StatusCodes.TooManyRequests) should be > 0
+      }
+    }
+
+    "block clients of a network whose override rate is zero" in {
+      withRoutes(
+        globalPerClientIp = perClientIp(
+          1000,
+          cidrOverrides = Map("10.0.0.0/8" -> SpliceRateLimitConfig(ratePerSecond = 0)),
+        )
+      )("testOperation") { routes =>
+        val route = routes("testOperation")
+        (1 to 20).map(_ =>
+          call(route, ip = Some("10.1.2.3"))
+        ) should contain only StatusCodes.TooManyRequests
+        call(route, ip = Some("11.1.2.3")) should be(StatusCodes.OK)
+      }
+    }
+
+    "apply the overrides of the per operation limiter" in {
+      withRoutes(
+        perClientIpOverrides = Map(
+          "limitedOperation" -> perClientIp(
+            1,
+            cidrOverrides = Map("10.0.0.0/8" -> SpliceRateLimitConfig(ratePerSecond = 0)),
+          )
+        )
+      )("limitedOperation", "otherOperation") { routes =>
+        call(routes("limitedOperation"), ip = Some("10.1.2.3")) should be(
+          StatusCodes.TooManyRequests
+        )
+        // a different operation is not affected
+        call(routes("otherOperation"), ip = Some("10.1.2.3")) should be(StatusCodes.OK)
+      }
+    }
+  }
+
+  private def perClientIp(
+      ratePerSecond: Double,
+      cidrOverrides: Map[String, SpliceRateLimitConfig.Simple] = Map.empty,
+  ): PerAttributeRateLimitConfig =
+    PerAttributeRateLimitConfig(
+      limit = SpliceRateLimitConfig(ratePerSecond = ratePerSecond),
+      attributeOverrides = cidrOverrides,
+    )
 
   private def clientIp(
       request: HttpRequest,
@@ -468,23 +548,23 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
       default: SpliceRateLimitConfig = SpliceRateLimitConfig(ratePerSecond = 1000),
       rateLimiters: Map[String, SpliceRateLimitConfig] = Map.empty,
       global: SpliceRateLimitConfig = SpliceRateLimitConfig(ratePerSecond = 1000),
-      globalPerClientIp: PerAttributeRateLimitConfig = PerAttributeRateLimitConfig.Disabled,
+      globalPerClientIp: PerAttributeRateLimitConfig = PerAttributeRateLimitConfig.disabled,
       perClientIpOverrides: Map[String, PerAttributeRateLimitConfig] = Map.empty,
       clientIpHeaders: Seq[String] = RateLimitersConfig.DefaultClientIpHeaders,
   )(operations: String*)(f: HttpRateLimiterTest.Fixture => A): A = {
     // Any operation with a per client IP override needs its own overall limiter entry so that the
     // embedded per client IP limiter is used instead of the `default` one.
-    val perOperationConfigs: Map[String, SpliceRateLimitConfig.WithPerClientIp] =
+    val perOperationConfigs: Map[String, PerClientIpRateLimitConfig] =
       (rateLimiters.keySet ++ perClientIpOverrides.keySet).map { operation =>
         operation -> withPerClientIp(
           rateLimiters.getOrElse(operation, default),
-          perClientIpOverrides.getOrElse(operation, PerAttributeRateLimitConfig.Disabled),
+          perClientIpOverrides.getOrElse(operation, PerAttributeRateLimitConfig.disabled),
         )
       }.toMap
     val metricsFactory = new InMemoryMetricsFactory()
     val rateLimiter = new HttpRateLimiter(
       RateLimitersConfig(
-        default = withPerClientIp(default, PerAttributeRateLimitConfig.Disabled),
+        default = withPerClientIp(default, PerAttributeRateLimitConfig.disabled),
         rateLimiters = perOperationConfigs,
         global = withPerClientIp(global, globalPerClientIp),
         clientIpHeaders = clientIpHeaders,
@@ -507,8 +587,8 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
   private def withPerClientIp(
       overall: SpliceRateLimitConfig,
       perClientIp: PerAttributeRateLimitConfig,
-  ): SpliceRateLimitConfig.WithPerClientIp =
-    SpliceRateLimitConfig.WithPerClientIp(
+  ): PerClientIpRateLimitConfig =
+    PerClientIpRateLimitConfig(
       enabled = overall.enabled,
       ratePerSecond = overall.ratePerSecond,
       sustainedRatePerSecond = overall.sustainedRatePerSecond,

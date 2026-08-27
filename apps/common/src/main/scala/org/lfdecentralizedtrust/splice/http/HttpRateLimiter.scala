@@ -10,6 +10,7 @@ import org.apache.pekko.http.scaladsl.model.{HttpEntity, RemoteAddress, StatusCo
 import org.apache.pekko.http.scaladsl.server.{Directive0, Directive1}
 import org.lfdecentralizedtrust.splice.config.RateLimitersConfig
 import org.lfdecentralizedtrust.splice.util.{
+  IpCidrRateLimits,
   PerAttributeRateLimiter,
   SpliceRateLimiter,
   SpliceRateLimitMetrics,
@@ -56,10 +57,10 @@ class HttpRateLimiter(
       new PerAttributeRateLimiter(
         HttpRateLimiter.GlobalLimiter,
         HttpRateLimiter.ClientIpAttribute,
-        config.global,
         config.global.perClientIp,
         globalMetrics,
         logger,
+        IpCidrRateLimits.matchClientIp,
       ),
     )
   }
@@ -81,10 +82,10 @@ class HttpRateLimiter(
           new PerAttributeRateLimiter(
             operation,
             HttpRateLimiter.ClientIpAttribute,
-            operationConfig,
             operationConfig.perClientIp,
             rateLimiterMetrics,
             logger,
+            IpCidrRateLimits.matchClientIp,
           ),
         )
       },

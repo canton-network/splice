@@ -13,6 +13,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRul
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.svstate.SvNodeState
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
+import org.lfdecentralizedtrust.splice.config.PerClientIpRateLimitConfig
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   updateAutomationConfig,
   ConfigurableApp,
@@ -75,10 +76,9 @@ class ScanIntegrationTest
               // used for the rate limit test
               rateLimiting = config.parameters.rateLimiting.copy(
                 rateLimiters =
-                  config.parameters.rateLimiting.rateLimiters + ("listAnsEntries" -> SpliceRateLimitConfig
-                    .WithPerClientIp(
-                      ratePerSecond = 5
-                    ))
+                  config.parameters.rateLimiting.rateLimiters + ("listAnsEntries" -> PerClientIpRateLimitConfig(
+                    ratePerSecond = 5
+                  ))
               ),
             ),
           )
