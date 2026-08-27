@@ -26,6 +26,7 @@ cluster:
       minNodes: 1
       nodeType: 'n4d-standard-8'
 infra:
+  enableSweetSecurity: true
   gkeGateway:
     proxyForIstioHttp: false
   istio:
