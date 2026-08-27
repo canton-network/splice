@@ -812,10 +812,18 @@ object ConfigTransforms {
   ): ConfigTransform =
     updateAllSvAppFoundDsoConfigs_(c => c.copy(initialRewardConfig = Some(rewardConfig)))
 
+  // Tests mint TBAR without dry-run — the network default enables TBAR dry-run
+  // alongside FeaturedAppMarkers minting, but tests already exercise TBAR
+  // directly so a dry-run would be redundant.
   def withTrafficBasedAppRewards: ConfigTransform =
     updateAllSvAppFoundDsoConfigs_(c =>
       c.copy(initialRewardConfig =
-        Some(InitialRewardConfig(mintingVersion = "RewardVersion_TrafficBasedAppRewards"))
+        Some(
+          InitialRewardConfig(
+            mintingVersion = "RewardVersion_TrafficBasedAppRewards",
+            dryRunVersion = None,
+          )
+        )
       )
     )
 
