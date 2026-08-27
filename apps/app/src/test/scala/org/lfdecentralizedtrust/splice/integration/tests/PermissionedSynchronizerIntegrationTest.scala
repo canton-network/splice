@@ -200,7 +200,7 @@ class PermissionedSynchronizerIntegrationTest
         _ => sv1Backend.listVoteRequests().filter(_.payload.action == action).head,
       )
 
-      Seq(sv2Backend, sv3Backend, sv4Backend).foreach { sv =>
+      Seq(sv2Backend, sv3Backend).foreach { sv =>
         clue(s"${sv.participantClient.name} accepts the vote request") {
           eventuallySucceeds() {
             sv.castVote(
