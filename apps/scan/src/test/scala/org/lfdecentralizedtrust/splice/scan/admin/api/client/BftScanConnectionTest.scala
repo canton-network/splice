@@ -1233,54 +1233,6 @@ class BftScanConnectionTest
 
   "BftScanConnection.getRewardAccountingRootHash" should {
 
-    // n=4 scans -> default BFT threshold requiredNumScanThreshold(4) = f+1 = 2.
-    "reaches consensus when f+1 scans agree on the same hash" in {
-      val round = 42L
-      val connections = getMockedConnections(n = 4)
-      makeMockReturnRootHashOk(connections(0), round, "aabb")
-      when(connections(1).getRewardAccountingRootHash(round))
-        .thenReturn(Future.failed(notFoundFailure), Future.successful(rootHashOk(round, "aabb")))
-      makeMockReturnRootHashUndetermined(connections(2), round)
-      makeMockFail(connections(3), notFoundFailure)
-      val bft = getBft(connections)
-
-      // With n=4, we query only two connections randomly, and even with
-      // retries a single call can fail to reach consensus.
-      def attempt(remaining: Int): Future[(GetRewardAccountingRootHashResponse, List[Uri])] =
-        bft.getRewardAccountingRootHashWithScanUris(round).flatMap {
-          case (ok: GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk, uris) =>
-            Future.successful((ok, uris))
-          case _ if remaining > 1 => attempt(remaining - 1)
-          case other => Future.successful(other)
-        }
-
-      // A call that reaches consensus here always queries a third scan that
-      // disagrees (returns IgnoreResponse or fails), which BftScanConnection
-      // logs at WARN for the reward-read paths. Assert that WARN is produced
-      // and suppress it so it doesn't fail the `sbt checkErrors` log-scan gate.
-      loggerFactory
-        .assertEventuallyLogsSeq(SuppressionRule.Level(Level.WARN))(
-          attempt(100).map { resp =>
-            inside(resp) {
-              case (
-                    GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok),
-                    uris,
-                  ) =>
-                ok.rootHash should be("aabb")
-                ok.roundNumber should be(round)
-                uris.size should be(2)
-            }
-          },
-          logs =>
-            logs.exists(log =>
-              log.level == Level.WARN && log.message.contains(
-                "disagreed with consensus"
-              )
-            ) should be(true),
-        )
-        .map(_ => succeed)
-    }
-
     "returns Undetermined when no quorum agrees on a hash" in {
       val round = 42L
       val connections = getMockedConnections(n = 4)
@@ -1357,66 +1309,79 @@ class BftScanConnectionTest
         )
         .map(_ => succeed)
     }
-  }
 
-  "BftScanConnection.getRewardAccountingActivityTotals" should {
-
-    // n=4 scans -> default BFT threshold requiredNumScanThreshold(4) = f+1 = 2.
-    "reaches consensus when f+1 scans agree on the same totals" in {
+    "returns Ok deterministically when only one scan has the hash (n=1 short-circuit)" in {
       val round = 42L
       val connections = getMockedConnections(n = 4)
-      makeMockReturnActivityTotalsOk(connections(0), round, 100L, 10L, 5L)
-      when(connections(1).getRewardAccountingActivityTotals(round))
-        .thenReturn(
-          Future.failed(notFoundFailure),
-          Future.successful(activityTotalsOk(round, 100L, 10L, 5L)),
-        )
-      makeMockReturnActivityTotalsUndetermined(connections(2), round)
-      makeMockFail(connections(3), notFoundFailure)
+      makeMockReturnRootHashOk(connections(0), round, "aabb")
+      makeMockReturnRootHashCannotProvide(connections(1), round)
+      makeMockReturnRootHashCannotProvide(connections(2), round)
+      makeMockReturnRootHashCannotProvide(connections(3), round)
       val bft = getBft(connections)
 
-      // With n=4, we query only two connections randomly, and even with
-      // retries a single call can fail to reach consensus.
-      def attempt(remaining: Int): Future[(GetRewardAccountingActivityTotalsResponse, List[Uri])] =
-        bft.getRewardAccountingActivityTotalsWithScanUris(round).flatMap {
-          case (
-                ok: GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsOk,
-                uris,
-              ) =>
-            Future.successful((ok, uris))
-          case _ if remaining > 1 => attempt(remaining - 1)
-          case other => Future.successful(other)
-        }
+      for {
+        resp <- bft.getRewardAccountingRootHashWithScanUris(round)
+      } yield inside(resp) {
+        case (
+              GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok),
+              uris,
+            ) =>
+          ok.roundNumber should be(round)
+          ok.rootHash should be("aabb")
+          uris should have size 1
+      }
+    }
 
-      // A call that reaches consensus here always queries a third scan that
-      // disagrees (returns IgnoreResponse or fails), which BftScanConnection
-      // logs at WARN for the reward-read paths. Assert that WARN is produced
-      // and suppress it so it doesn't fail the `sbt checkErrors` log-scan gate.
+    "reaches consensus over the data-holding subset (n=2, f=0)" in {
+      val round = 42L
+      val connections = getMockedConnections(n = 4)
+      makeMockReturnRootHashOk(connections(0), round, "aabb")
+      makeMockReturnRootHashOk(connections(1), round, "aabb")
+      makeMockReturnRootHashCannotProvide(connections(2), round)
+      makeMockReturnRootHashUndetermined(connections(3), round)
+      val bft = getBft(connections)
+
+      for {
+        resp <- bft.getRewardAccountingRootHashWithScanUris(round)
+      } yield inside(resp) {
+        case (
+              GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok),
+              _,
+            ) =>
+          ok.rootHash should be("aabb")
+      }
+    }
+
+    "logs a probe failure at INFO and drops that scan from consensus" in {
+      val round = 42L
+      val connections = getMockedConnections(n = 4)
+      makeMockReturnRootHashOk(connections(0), round, "aabb")
+      when(connections(1).getRewardAccountingRootHash(round))
+        .thenReturn(Future.failed(tcpFailure))
+      makeMockReturnRootHashCannotProvide(connections(2), round)
+      makeMockReturnRootHashCannotProvide(connections(3), round)
+      val bft = getBft(connections)
+
       loggerFactory
-        .assertEventuallyLogsSeq(SuppressionRule.Level(Level.WARN))(
-          attempt(100).map { resp =>
+        .assertLogsSeq(SuppressionRule.LevelAndAbove(Level.INFO))(
+          bft.getRewardAccountingRootHash(round).map { resp =>
             inside(resp) {
-              case (
-                    GetRewardAccountingActivityTotalsResponse.members
-                      .RewardAccountingActivityTotalsOk(ok),
-                    uris,
-                  ) =>
-                ok.roundNumber should be(round)
-                ok.totalAppActivityWeight should be(100L)
-                ok.activePartiesCount should be(10L)
-                ok.activityRecordsCount should be(5L)
-                uris.size should be(2)
+              case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok) =>
+                ok.rootHash should be("aabb")
             }
           },
           logs =>
-            logs.exists(log =>
-              log.level == Level.WARN && log.message.contains(
-                "disagreed with consensus"
-              )
+            logs.exists(l =>
+              l.level == Level.INFO && l.message.contains(
+                "Probe failed for"
+              ) && l.message.contains("getRewardAccountingRootHash")
             ) should be(true),
         )
         .map(_ => succeed)
     }
+  }
+
+  "BftScanConnection.getRewardAccountingActivityTotals" should {
 
     "returns Undetermined when no quorum agrees on the totals" in {
       val round = 42L
@@ -1490,6 +1455,79 @@ class BftScanConnectionTest
               log.level == Level.WARN && log.message.contains(
                 "disagreed with consensus"
               )
+            ) should be(true),
+        )
+        .map(_ => succeed)
+    }
+
+    "returns Ok deterministically when only one scan has data (n=1 short-circuit)" in {
+      val round = 42L
+      val connections = getMockedConnections(n = 4)
+      makeMockReturnActivityTotalsOk(connections(0), round, 100L, 10L, 5L)
+      makeMockReturnActivityTotalsCannotProvide(connections(1), round)
+      makeMockReturnActivityTotalsCannotProvide(connections(2), round)
+      makeMockReturnActivityTotalsCannotProvide(connections(3), round)
+      val bft = getBft(connections)
+
+      for {
+        resp <- bft.getRewardAccountingActivityTotalsWithScanUris(round)
+      } yield inside(resp) {
+        case (
+              GetRewardAccountingActivityTotalsResponse.members
+                .RewardAccountingActivityTotalsOk(ok),
+              uris,
+            ) =>
+          ok.roundNumber should be(round)
+          ok.totalAppActivityWeight should be(100L)
+          uris should have size 1
+      }
+    }
+
+    "reaches consensus over the data-holding subset (n=2, f=0)" in {
+      val round = 42L
+      val connections = getMockedConnections(n = 4)
+      makeMockReturnActivityTotalsOk(connections(0), round, 100L, 10L, 5L)
+      makeMockReturnActivityTotalsOk(connections(1), round, 100L, 10L, 5L)
+      makeMockReturnActivityTotalsCannotProvide(connections(2), round)
+      makeMockReturnActivityTotalsUndetermined(connections(3), round)
+      val bft = getBft(connections)
+
+      for {
+        resp <- bft.getRewardAccountingActivityTotalsWithScanUris(round)
+      } yield inside(resp) {
+        case (
+              GetRewardAccountingActivityTotalsResponse.members
+                .RewardAccountingActivityTotalsOk(ok),
+              _,
+            ) =>
+          ok.totalAppActivityWeight should be(100L)
+      }
+    }
+
+    "logs a probe failure at INFO and drops that scan from consensus" in {
+      val round = 42L
+      val connections = getMockedConnections(n = 4)
+      makeMockReturnActivityTotalsOk(connections(0), round, 100L, 10L, 5L)
+      when(connections(1).getRewardAccountingActivityTotals(round))
+        .thenReturn(Future.failed(tcpFailure))
+      makeMockReturnActivityTotalsCannotProvide(connections(2), round)
+      makeMockReturnActivityTotalsCannotProvide(connections(3), round)
+      val bft = getBft(connections)
+
+      loggerFactory
+        .assertLogsSeq(SuppressionRule.LevelAndAbove(Level.INFO))(
+          bft.getRewardAccountingActivityTotals(round).map { resp =>
+            inside(resp) {
+              case GetRewardAccountingActivityTotalsResponse.members
+                    .RewardAccountingActivityTotalsOk(ok) =>
+                ok.totalAppActivityWeight should be(100L)
+            }
+          },
+          logs =>
+            logs.exists(l =>
+              l.level == Level.INFO && l.message.contains(
+                "Probe failed for"
+              ) && l.message.contains("getRewardAccountingActivityTotals")
             ) should be(true),
         )
         .map(_ => succeed)

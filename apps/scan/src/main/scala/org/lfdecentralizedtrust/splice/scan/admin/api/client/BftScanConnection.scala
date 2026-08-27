@@ -1023,15 +1023,28 @@ class BftScanConnection(
   ): Future[NonNegativeInt] =
     bftCall(_.getActivePhysicalSynchronizerSerial(), "getActivePhysicalSynchronizerSerial")
 
-  /** This is special because in addition to 'Ok' we can receive
-    * 'Undetermined' - This might indicate that scan is yet to process activity totals for this round
-    * 'CannotProvide' - Indicates that scan does not have required app-activity data to provide a response
+  /** This endpoint is special: peers can respond with 'Ok', 'Undetermined'
+    * (still processing for this round), or 'CannotProvide' (lacks the
+    * required app-activity data). Simple equality across all responses
+    * doesn't make sense — an Ok from one peer and 'Undetermined' from
+    * another are not really "disagreement".
     *
-    * So simple equality comparison on responses is not possible, and we treat
-    * the two non-Ok responses as a "no response" by throwing IgnoreResponse so
-    * that this does not cause grouping in executeCall.
+    * A single-phase BFT read against every open scan would stall
+    * during bootstrap when only one peer has data: with n=4, f=1,
+    * targetSuccess=2, but only sv1 returns Ok. So we use a two-phase
+    * probe-filter-consensus pattern:
     *
-    * And if no response could be obtained via bft we respond with 'Undetermined'
+    *   1. Probe every open scan in parallel; discard Undetermined /
+    *      CannotProvide / network errors (probe failures logged at
+    *      INFO so operators can trace missing contributions).
+    *   2. Filter to scans that returned Ok.
+    *   3. Recompute BFT quorum from that filtered set — `n =
+    *      withData.size`, `f = (n-1)/3`, `targetSuccess = f+1`. A
+    *      lone Ok is quorum for n=1 (short-circuits before the
+    *      bftCall to avoid a redundant round-trip); a 4-of-4 set
+    *      reverts to full BFT (targetSuccess=2).
+    *
+    * If no scan returned Ok, respond Undetermined.
     */
   override def getRewardAccountingActivityTotals(roundNumber: Long)(implicit
       ec: ExecutionContext,
@@ -1047,39 +1060,66 @@ class BftScanConnection(
       GetRewardAccountingActivityTotalsResponse(
         RewardAccountingActivityTotalsUndetermined(status = "Undetermined")
       )
-    val callConfig = BftCallConfig.default(scanList.scanConnections)
-    if (!callConfig.enoughAvailableScans) Future.successful((undetermined, Nil))
-    else
-      bftCallWithScanUris[RewardAccountingActivityTotalsOk](
-        call = scan =>
-          scan.getRewardAccountingActivityTotals(roundNumber).flatMap {
-            case GetRewardAccountingActivityTotalsResponse.members
-                  .RewardAccountingActivityTotalsOk(ok) =>
-              Future.successful(ok)
-            case _: GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsUndetermined |
-                _: GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsCannotProvide =>
-              Future.failed(BftScanConnection.IgnoreResponse(scan.url))
-          },
-        endpoint = "getRewardAccountingActivityTotals",
-        callConfig = callConfig,
-        disagreementLogLevel = Level.WARN,
-      )
-        .transformWith {
-          case Success((totals, consensusUris)) =>
-            Future.successful((GetRewardAccountingActivityTotalsResponse(totals), consensusUris))
-          case Failure(_) => Future.successful((undetermined, Nil))
+    val connections = scanList.scanConnections
+
+    val probe: Future[Map[SingleScanConnection, RewardAccountingActivityTotalsOk]] =
+      Future
+        .traverse(connections.open) { scan =>
+          scan
+            .getRewardAccountingActivityTotals(roundNumber)
+            .transform {
+              case Success(
+                    GetRewardAccountingActivityTotalsResponse.members
+                      .RewardAccountingActivityTotalsOk(ok)
+                  ) =>
+                Success(Some(scan -> ok))
+              case Success(
+                    _: GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsUndetermined |
+                    _: GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsCannotProvide
+                  ) =>
+                Success(None)
+              case Failure(e) =>
+                logger.info(
+                  s"Probe failed for ${scan.url} while querying " +
+                    s"getRewardAccountingActivityTotals($roundNumber): ${e.getMessage}"
+                )
+                Success(None)
+            }
         }
+        .map(_.flatten.toMap)
+
+    probe.flatMap { withData =>
+      if (withData.isEmpty) Future.successful((undetermined, Nil))
+      else if (withData.sizeIs == 1) {
+        val (scan, ok) = withData.iterator.next()
+        Future.successful(
+          (GetRewardAccountingActivityTotalsResponse(ok), List(scan.url))
+        )
+      } else
+        bftCallWithScanUris[RewardAccountingActivityTotalsOk](
+          call = scan =>
+            withData.get(scan) match {
+              case Some(data) => Future.successful(data)
+              case None => Future.failed(BftScanConnection.IgnoreResponse(scan.url))
+            },
+          endpoint = "getRewardAccountingActivityTotals",
+          callConfig = BftCallConfig.forWithDataOnly(withData.keys.toSeq),
+          disagreementLogLevel = Level.WARN,
+        )
+          .transformWith {
+            case Success((totals, consensusUris)) =>
+              Future.successful((GetRewardAccountingActivityTotalsResponse(totals), consensusUris))
+            case Failure(_) => Future.successful((undetermined, Nil))
+          }
+    }
   }
 
-  /** This is special because in addition to 'Ok' we can receive
-    * 'Undetermined' - This might indicate that scan is yet to process root hash for this round
-    * 'CannotProvide' - Indicates that scan does not have required app-activity data to provide a response
-    *
-    * So simple equality comparison on responses is not possible, and we treat
-    * the two non-Ok responses as a "no response" by throwing IgnoreResponse so
-    * that this does not cause grouping in executeCall.
-    *
-    * And if no response could be obtained via bft we respond with 'Undetermined'
+  /** See [[getRewardAccountingActivityTotals]] for the two-phase
+    * probe-filter-consensus rationale; the pattern is identical.
+    * Consensus is computed over the returned `rootHash` string only
+    * (not the full Ok payload) so that trivial differences in
+    * `status` / `roundNumber` — which should never differ across
+    * scans in practice — do not defeat consensus.
     */
   override def getRewardAccountingRootHash(roundNumber: Long)(implicit
       ec: ExecutionContext,
@@ -1095,38 +1135,64 @@ class BftScanConnection(
       GetRewardAccountingRootHashResponse(
         RewardAccountingRootHashUndetermined(status = "Undetermined")
       )
-    val callConfig = BftCallConfig.default(scanList.scanConnections)
-    if (!callConfig.enoughAvailableScans) Future.successful((undetermined, Nil))
-    else
-      bftCallWithScanUris[String](
-        call = scan =>
-          scan.getRewardAccountingRootHash(roundNumber).flatMap {
-            case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok) =>
-              Future.successful(ok.rootHash)
-            case _: GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashUndetermined |
-                _: GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashCannotProvide =>
-              Future.failed(BftScanConnection.IgnoreResponse(scan.url))
-          },
-        endpoint = "getRewardAccountingRootHash",
-        callConfig = callConfig,
-        disagreementLogLevel = Level.WARN,
-      )
-        .transformWith {
-          case Success((rootHash, consensusUris)) =>
-            Future.successful(
-              (
-                GetRewardAccountingRootHashResponse(
-                  RewardAccountingRootHashOk(
-                    status = "Ok",
-                    roundNumber = roundNumber,
-                    rootHash = rootHash,
-                  )
-                ),
-                consensusUris.map(_.toString),
-              )
-            )
-          case Failure(_) => Future.successful((undetermined, Nil))
+    val connections = scanList.scanConnections
+
+    val probe: Future[Map[SingleScanConnection, String]] =
+      Future
+        .traverse(connections.open) { scan =>
+          scan
+            .getRewardAccountingRootHash(roundNumber)
+            .transform {
+              case Success(
+                    GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok)
+                  ) =>
+                Success(Some(scan -> ok.rootHash))
+              case Success(
+                    _: GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashUndetermined |
+                    _: GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashCannotProvide
+                  ) =>
+                Success(None)
+              case Failure(e) =>
+                logger.info(
+                  s"Probe failed for ${scan.url} while querying " +
+                    s"getRewardAccountingRootHash($roundNumber): ${e.getMessage}"
+                )
+                Success(None)
+            }
         }
+        .map(_.flatten.toMap)
+
+    def okResponse(rootHash: String): GetRewardAccountingRootHashResponse =
+      GetRewardAccountingRootHashResponse(
+        RewardAccountingRootHashOk(
+          status = "Ok",
+          roundNumber = roundNumber,
+          rootHash = rootHash,
+        )
+      )
+
+    probe.flatMap { withData =>
+      if (withData.isEmpty) Future.successful((undetermined, Nil))
+      else if (withData.sizeIs == 1) {
+        val (scan, rootHash) = withData.iterator.next()
+        Future.successful((okResponse(rootHash), List(scan.url)))
+      } else
+        bftCallWithScanUris[String](
+          call = scan =>
+            withData.get(scan) match {
+              case Some(rootHash) => Future.successful(rootHash)
+              case None => Future.failed(BftScanConnection.IgnoreResponse(scan.url))
+            },
+          endpoint = "getRewardAccountingRootHash",
+          callConfig = BftCallConfig.forWithDataOnly(withData.keys.toSeq),
+          disagreementLogLevel = Level.WARN,
+        )
+          .transformWith {
+            case Success((rootHash, consensusUris)) =>
+              Future.successful((okResponse(rootHash), consensusUris))
+            case Failure(_) => Future.successful((undetermined, Nil))
+          }
+    }
   }
 
   /** The batch contents are verifiable via the hash, so BFT agreement across scans is not
