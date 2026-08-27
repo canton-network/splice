@@ -8,6 +8,7 @@ import DA.Assert
 import DA.Foldable (forA_)
 import DA.List (dedupSort)
 import qualified DA.Map as Map
+import DA.TextMap qualified as TextMap
 import DA.Optional (fromSomeNote)
 import Daml.Script
 import DA.Time
@@ -530,7 +531,11 @@ testTransferPreapprovalExpiry = do
 
 testBootstrapExternalPartyConfigState : Script ()
 testBootstrapExternalPartyConfigState = do
-  (_, dso, (sv1, sv2, sv3, _)) <- initDevNet
+  (app, dso, (sv1, sv2, sv3, _)) <- initDevNet
+  -- set switch-over times so we can check they propagate into the bootstrapped config state
+  now <- getTime
+  let switchOverTimes = TextMap.fromList [("a", now), ("b", addRelTime now (days 1))]
+  updateAmuletConfig app (\c -> c with amuletSwitchOverTimes = Some switchOverTimes)
   -- archive to simulate bootstrapping with an older version
   configStates <- query @ExternalPartyConfigState dso
   submit dso $ forA configStates $ \(cid, _) -> archiveCmd cid
@@ -566,6 +571,7 @@ testBootstrapExternalPartyConfigState = do
 
   configStates <- query @ExternalPartyConfigState dso
   length configStates === 2
+  forA_ configStates $ \(_, cs) -> cs.amuletSwitchOverTimes === Some switchOverTimes
   pure ()
 
 

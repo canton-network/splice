@@ -10,6 +10,7 @@ import qualified DA.Map as Map
 import qualified DA.Set as Set
 import Daml.Script
 import DA.Time
+import DA.TextMap qualified as TextMap
 
 import Splice.Amulet
 import Splice.AmuletRules
@@ -613,6 +614,7 @@ testDsoRulesConfigChange = do
         nextScheduledSynchronizerUpgrade = Some (SynchronizerUpgradeSchedule with
                                                     time = addRelTime now (days 4)
                                                     migrationId = 1)
+        svOperationsSwitchOverTimes = Some (TextMap.fromList [("a", now), ("b", addRelTime now (days 1))])
 
 
   let initialSynchronizerConfig2 = SynchronizerConfig with
@@ -803,18 +805,19 @@ testAmuletRulesConfigChange = do
           [
           ]
 
+  now <- getTime
+
   -- first config that changes half of the parameters
   let newConfig1 = amuletRules.configSchedule.initialValue with
         transferConfig = defaultTransferConfig2
         issuanceCurve = defaultIssuanceCurve2
         tickDuration = seconds 200
         optDevelopmentFundManager = Some fundManager
+        amuletSwitchOverTimes = Some (TextMap.fromList [("a", now), ("b", addRelTime now (days 1))])
 
   -- second config that changes the other half of the parameters
   let newConfig2 = amuletRules.configSchedule.initialValue with
         decentralizedSynchronizer = defaultAmuletDecentralizedSynchronizerConfig2
-
-  now <- getTime
 
   -- creation of two concurrent independent vote requests
   [(amuletRulesCid, amuletRules)] <- query @AmuletRules dso
