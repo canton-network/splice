@@ -43,7 +43,7 @@ jest.mock('@canton-network/splice-pulumi-common', () => ({
   GCP_REGION: 'us-central123',
   GCP_ZONE: 'some-wonderful-place',
   imagePullSecretByNamespaceNameForServiceAccount: () => [],
-  infraAffinityAndTolerations: {},
+  infraKubernetesScheduling: {},
   CloudSqlConfigSchema: z.object({ flags: z.record(z.string(), z.string()).default({}) }),
   installPostgresPasswordSecret: () => {
     return { metadata: { name: 'secret' } };

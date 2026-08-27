@@ -5,7 +5,7 @@ import org.lfdecentralizedtrust.splice.config.ConfigTransforms.updateAllScanAppC
 import org.lfdecentralizedtrust.splice.config.SpliceConfig
 import org.lfdecentralizedtrust.splice.console.ScanAppBackendReference
 import org.lfdecentralizedtrust.splice.http.v0.definitions.DamlValueEncoding.members.CompactJson
-import org.lfdecentralizedtrust.splice.http.v0.definitions.{AcsResponseV1, UpdateHistoryItemV2}
+import org.lfdecentralizedtrust.splice.http.v0.definitions.{AcsResponseV2, UpdateHistoryItemV2}
 import org.lfdecentralizedtrust.splice.http.v0.definitions.UpdateHistoryItemV2.members
 import org.lfdecentralizedtrust.splice.http.v0.definitions.UpdateHistoryReassignment.Event.members as reassignmentMembers
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
@@ -215,14 +215,14 @@ class UpdateHistorySanityCheckPlugin(
   private def getAllSnapshots(
       scan: ScanAppBackendReference,
       before: CantonTimestamp,
-      acc: List[AcsResponseV1],
-  ): List[AcsResponseV1] = {
+      acc: List[AcsResponseV2],
+  ): List[AcsResponseV2] = {
     val acsSnapshotPeriodHours = scanStorageConfigV1.dbAcsSnapshotPeriodHours
     val migrationId = scan.getMigrationId()
     scan.getDateOfMostRecentSnapshotBefore(before, migrationId) match {
       case Some(snapshotDate) =>
         val snapshot = scan
-          .getAcsSnapshotAtV1(
+          .getAcsSnapshotAtV2(
             CantonTimestamp.assertFromInstant(snapshotDate.toInstant),
             migrationId,
             pageSize = 1000,

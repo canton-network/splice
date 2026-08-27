@@ -1072,6 +1072,48 @@ object HttpScanAppClient {
     }
   }
 
+  case class GetAcsSnapshotAtV2(
+      at: java.time.OffsetDateTime,
+      migrationId: Long,
+      recordTimeMatch: Option[definitions.AcsRequestV2.RecordTimeMatch],
+      after: Option[String] = None,
+      pageSize: Int = 100,
+      partyIds: Option[Vector[PartyId]] = None,
+      templates: Option[Vector[PackageQualifiedName]] = None,
+  ) extends InternalBaseCommand[
+        http.GetAcsSnapshotAtV2Response,
+        Option[definitions.AcsResponseV2],
+      ] {
+    override def submitRequest(
+        client: ScanClient,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[Throwable, HttpResponse], http.GetAcsSnapshotAtV2Response] =
+      client.getAcsSnapshotAtV2(
+        definitions.AcsRequestV2(
+          migrationId,
+          at,
+          recordTimeMatch,
+          after,
+          pageSize,
+          partyIds.map(_.map(_.toProtoPrimitive)),
+          templates.map(_.map(_.toString)),
+        ),
+        headers,
+      )
+
+    override protected def handleOk()(implicit
+        decoder: TemplateJsonDecoder
+    ): PartialFunction[http.GetAcsSnapshotAtV2Response, Either[
+      String,
+      Option[definitions.AcsResponseV2],
+    ]] = {
+      case http.GetAcsSnapshotAtV2Response.OK(value) =>
+        Right(Some(value))
+      case http.GetAcsSnapshotAtV2Response.NotFound(_) =>
+        Right(None)
+    }
+  }
+
   case class GetHoldingsStateAt(
       at: java.time.OffsetDateTime,
       migrationId: Long,

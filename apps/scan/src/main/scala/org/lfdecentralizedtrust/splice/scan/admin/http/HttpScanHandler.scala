@@ -67,6 +67,7 @@ import org.lfdecentralizedtrust.splice.http.{
 import org.lfdecentralizedtrust.splice.http.v0.{definitions, scan as v0}
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   AcsRequest,
+  AcsRequestV2,
   BatchListVotesByVoteRequestsRequest,
   CountVoteResultsRequest,
   DamlValueEncoding,
@@ -74,6 +75,7 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   EventHistoryRequest,
   GetBulkObjectChecksumsRequest,
   HoldingsStateRequest,
+  HoldingsStateRequestV2,
   HoldingsSummaryRequest,
   HoldingsSummaryRequestV1,
   ListBulkUpdateHistoryObjectsRequest,
@@ -100,7 +102,10 @@ import org.lfdecentralizedtrust.splice.scan.store.{
 }
 import org.lfdecentralizedtrust.splice.scan.store.AppActivityStore.RoundIngestionStatus
 import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorageReader
-import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.QueryAcsSnapshotResult
+import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{
+  QueryAcsSnapshotPaginationToken,
+  QueryAcsSnapshotResult,
+}
 import org.lfdecentralizedtrust.splice.scan.store.bulk.AcsSnapshotBulkStorage.AcsSnapshotObjects
 import org.lfdecentralizedtrust.splice.scan.store.bulk.UpdateHistoryBulkStorage.UpdateHistoryObjectsResponse
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
@@ -1507,19 +1512,18 @@ class HttpScanHandler(
   }
 
   // Shared between /v0/state/acs and /v1/state/acs. The only difference between them is in `toResponse`.
-  private def acsSnapshotQuery[T](request: AcsRequest, toResponse: QueryAcsSnapshotResult => T)(
-      implicit tc: TraceContext
+  private def acsSnapshotQuery[T](
+      migrationId: Long,
+      recordTime: java.time.OffsetDateTime,
+      recordTimeIsAtOrBefore: Boolean,
+      after: Option[AcsSnapshotStore.QueryAcsSnapshotPaginationToken],
+      pageSize: Int,
+      partyIds: Option[Vector[String]],
+      templates: Option[Vector[String]],
+      toResponse: QueryAcsSnapshotResult => T,
+  )(implicit
+      tc: TraceContext
   ): Future[Either[String, T]] = {
-    val AcsRequest(
-      migrationId,
-      recordTime,
-      recordTimeMatch,
-      after,
-      pageSize,
-      partyIds,
-      templates,
-    ) = request
-
     def exactQuery(recordTimeTs: CantonTimestamp) = snapshotStore
       .queryAcsSnapshot(
         migrationId,
@@ -1544,7 +1548,7 @@ class HttpScanHandler(
     queryWithOptionalAtOrBefore(
       migrationId,
       recordTime,
-      recordTimeMatch.contains(AcsRequest.RecordTimeMatch.AtOrBefore),
+      recordTimeIsAtOrBefore,
       exactQuery,
       toResponse,
     )
@@ -1564,7 +1568,9 @@ class HttpScanHandler(
             event.event,
           )
         ),
-      result.afterToken,
+      result.afterToken.map {
+        case QueryAcsSnapshotPaginationToken.RowIdQueryAcsSnapshotPaginationToken(after) => after
+      },
     )
   }
 
@@ -1582,7 +1588,26 @@ class HttpScanHandler(
             event.event,
           )
         ),
-      result.afterToken,
+      result.afterToken.map {
+        case QueryAcsSnapshotPaginationToken.RowIdQueryAcsSnapshotPaginationToken(after) => after
+      },
+    )
+
+  private def toAcsV2Response(migrationId: Long, result: QueryAcsSnapshotResult)(implicit
+      tc: TraceContext
+  ) =
+    definitions.AcsResponseV2(
+      Codec.encode(result.snapshotRecordTime),
+      migrationId,
+      result.createdEventsInPage
+        .map(event =>
+          CompactJsonScanHttpEncodings().javaToHttpActiveContract(
+            event.eventId,
+            event.recordTime,
+            event.event,
+          )
+        ),
+      result.afterToken.map(_.encodeToBase64),
     )
 
   override def getAcsSnapshotAt(respond: ScanResource.GetAcsSnapshotAtResponse.type)(
@@ -1596,7 +1621,19 @@ class HttpScanHandler(
       )
 
     withSpan(s"$workflowId.getAcsSnapshotAt") { _ => _ =>
-      acsSnapshotQuery(body, toResponse).map {
+      acsSnapshotQuery(
+        migrationId = body.migrationId,
+        recordTime = body.recordTime,
+        recordTimeIsAtOrBefore =
+          body.recordTimeMatch.contains(AcsRequest.RecordTimeMatch.AtOrBefore),
+        after = body.after.map(
+          AcsSnapshotStore.QueryAcsSnapshotPaginationToken.RowIdQueryAcsSnapshotPaginationToken(_)
+        ),
+        pageSize = body.pageSize,
+        partyIds = body.partyIds,
+        templates = body.templates,
+        toResponse = toResponse,
+      ).map {
         case Right(response) => response
         case Left(errorMessage) =>
           ScanResource.GetAcsSnapshotAtResponseNotFound(
@@ -1618,7 +1655,19 @@ class HttpScanHandler(
     }
 
     withSpan(s"$workflowId.getAcsSnapshotAtV1") { _ => _ =>
-      acsSnapshotQuery(body, toResponse).map {
+      acsSnapshotQuery(
+        migrationId = body.migrationId,
+        recordTime = body.recordTime,
+        recordTimeIsAtOrBefore =
+          body.recordTimeMatch.contains(AcsRequest.RecordTimeMatch.AtOrBefore),
+        after = body.after.map(
+          AcsSnapshotStore.QueryAcsSnapshotPaginationToken.RowIdQueryAcsSnapshotPaginationToken(_)
+        ),
+        pageSize = body.pageSize,
+        partyIds = body.partyIds,
+        templates = body.templates,
+        toResponse = toResponse,
+      ).map {
         case Right(response) => response
         case Left(errorMessage) =>
           ScanResource.GetAcsSnapshotAtV1ResponseNotFound(
@@ -1628,21 +1677,50 @@ class HttpScanHandler(
     }
   }
 
+  override def getAcsSnapshotAtV2(respond: ScanResource.GetAcsSnapshotAtV2Response.type)(
+      body: AcsRequestV2
+  )(extracted: TraceContext): Future[ScanResource.GetAcsSnapshotAtV2Response] = {
+    implicit val tc: TraceContext = extracted
+
+    def toResponse(result: QueryAcsSnapshotResult) = {
+      ScanResource.GetAcsSnapshotAtV2ResponseOK(
+        toAcsV2Response(body.migrationId, result)
+      )
+    }
+
+    withSpan(s"$workflowId.getAcsSnapshotAtV1") { _ => _ =>
+      acsSnapshotQuery(
+        migrationId = body.migrationId,
+        recordTime = body.recordTime,
+        recordTimeIsAtOrBefore =
+          body.recordTimeMatch.contains(AcsRequestV2.RecordTimeMatch.AtOrBefore),
+        after =
+          body.after.map(AcsSnapshotStore.QueryAcsSnapshotPaginationToken.tryDecodeFromBase64),
+        pageSize = body.pageSize,
+        partyIds = body.partyIds,
+        templates = body.templates,
+        toResponse = toResponse,
+      ).map {
+        case Right(response) => response
+        case Left(errorMessage) =>
+          ScanResource.GetAcsSnapshotAtV2ResponseNotFound(
+            ErrorResponse(errorMessage)
+          )
+      }
+    }
+  }
+
   private def holdingStateQuery[T](
-      request: HoldingsStateRequest,
+      migrationId: Long,
+      recordTime: java.time.OffsetDateTime,
+      recordTimeIsAtOrBefore: Boolean,
+      after: Option[AcsSnapshotStore.QueryAcsSnapshotPaginationToken],
+      pageSize: Int,
+      ownerPartyIds: Vector[String],
       toResponse: QueryAcsSnapshotResult => T,
   )(implicit
       tc: TraceContext
   ): Future[Either[String, T]] = {
-    val HoldingsStateRequest(
-      migrationId,
-      recordTime,
-      recordTimeMatch,
-      after,
-      pageSize,
-      ownerPartyIds,
-    ) = request
-
     def exactQuery(recordTimeTs: CantonTimestamp) = snapshotStore
       .getHoldingsState(
         migrationId,
@@ -1655,7 +1733,7 @@ class HttpScanHandler(
     queryWithOptionalAtOrBefore(
       migrationId,
       recordTime,
-      recordTimeMatch.contains(HoldingsStateRequest.RecordTimeMatch.AtOrBefore),
+      recordTimeIsAtOrBefore,
       exactQuery,
       toResponse,
     )
@@ -1669,7 +1747,18 @@ class HttpScanHandler(
       ScanResource.GetHoldingsStateAtResponseOK(toAcsV0Response(body.migrationId, result))
 
     withSpan(s"$workflowId.getHoldingsStateAt") { _ => _ =>
-      holdingStateQuery(body, toResponse).map {
+      holdingStateQuery(
+        migrationId = body.migrationId,
+        recordTime = body.recordTime,
+        recordTimeIsAtOrBefore =
+          body.recordTimeMatch.contains(HoldingsStateRequest.RecordTimeMatch.AtOrBefore),
+        after = body.after.map(
+          AcsSnapshotStore.QueryAcsSnapshotPaginationToken.RowIdQueryAcsSnapshotPaginationToken(_)
+        ),
+        pageSize = body.pageSize,
+        ownerPartyIds = body.ownerPartyIds,
+        toResponse = toResponse,
+      ).map {
         case Right(response) => response
         case Left(errorMessage) =>
           ScanResource.GetHoldingsStateAtResponseNotFound(
@@ -1687,10 +1776,49 @@ class HttpScanHandler(
       ScanResource.GetHoldingsStateAtV1ResponseOK(toAcsV1Response(body.migrationId, result))
 
     withSpan(s"$workflowId.getHoldingsStateAtV1") { _ => _ =>
-      holdingStateQuery(body, toResponse).map {
+      holdingStateQuery(
+        migrationId = body.migrationId,
+        recordTime = body.recordTime,
+        recordTimeIsAtOrBefore =
+          body.recordTimeMatch.contains(HoldingsStateRequest.RecordTimeMatch.AtOrBefore),
+        after = body.after.map(
+          AcsSnapshotStore.QueryAcsSnapshotPaginationToken.RowIdQueryAcsSnapshotPaginationToken(_)
+        ),
+        pageSize = body.pageSize,
+        ownerPartyIds = body.ownerPartyIds,
+        toResponse,
+      ).map {
         case Right(response) => response
         case Left(errorMessage) =>
           ScanResource.GetHoldingsStateAtV1ResponseNotFound(
+            ErrorResponse(errorMessage)
+          )
+      }
+    }
+  }
+
+  override def getHoldingsStateAtV2(respond: ScanResource.GetHoldingsStateAtV2Response.type)(
+      body: HoldingsStateRequestV2
+  )(extracted: TraceContext): Future[ScanResource.GetHoldingsStateAtV2Response] = {
+    implicit val tc: TraceContext = extracted
+    def toResponse(result: QueryAcsSnapshotResult) =
+      ScanResource.GetHoldingsStateAtV2ResponseOK(toAcsV2Response(body.migrationId, result))
+
+    withSpan(s"$workflowId.getHoldingsStateAtV1") { _ => _ =>
+      holdingStateQuery(
+        migrationId = body.migrationId,
+        recordTime = body.recordTime,
+        recordTimeIsAtOrBefore =
+          body.recordTimeMatch.contains(HoldingsStateRequestV2.RecordTimeMatch.AtOrBefore),
+        after =
+          body.after.map(AcsSnapshotStore.QueryAcsSnapshotPaginationToken.tryDecodeFromBase64),
+        pageSize = body.pageSize,
+        ownerPartyIds = body.ownerPartyIds,
+        toResponse,
+      ).map {
+        case Right(response) => response
+        case Left(errorMessage) =>
+          ScanResource.GetHoldingsStateAtV2ResponseNotFound(
             ErrorResponse(errorMessage)
           )
       }

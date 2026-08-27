@@ -76,6 +76,7 @@ paths:
     get:
       tags: [sv]
       x-jvm-package: sv_public
+      x-external-audience: none
       operationId: "getCometBftNodeStatus"
       responses:
         "200":
@@ -96,6 +97,7 @@ paths:
     post:
       tags: [sv]
       x-jvm-package: sv_public
+      x-external-audience: none
       operationId: "cometBftJsonRpcRequest"
       requestBody:
         required: true
@@ -393,6 +395,7 @@ paths:
     post:
       tags: [sv]
       x-jvm-package: sv_public
+      x-external-audience: validators
       operationId: "onboardValidator"
       requestBody:
         required: true
@@ -411,6 +414,7 @@ paths:
     post:
       tags: [sv]
       x-jvm-package: sv_public
+      x-external-audience: svs
       operationId: "startSvOnboarding"
       requestBody:
         required: true
@@ -429,6 +433,7 @@ paths:
     get:
       tags: [sv]
       x-jvm-package: sv_public
+      x-external-audience: svs
       operationId: "getSvOnboardingStatus"
       parameters:
         - name: "candidate_party_id_or_name"
@@ -451,6 +456,7 @@ paths:
     post:
       tags: [sv]
       x-jvm-package: sv_public
+      x-external-audience: svs
       operationId: "onboardSvPartyMigrationAuthorize"
       requestBody:
         required: true
@@ -477,6 +483,7 @@ paths:
     post:
       tags: [sv]
       x-jvm-package: sv_public
+      x-external-audience: svs
       operationId: "onboardSvSequencer"
       requestBody:
         required: true
@@ -497,6 +504,7 @@ paths:
     post:
       tags: [sv]
       x-jvm-package: sv_public
+      x-external-audience: validators
       description: "faucet for validator candidates self-service"
       operationId: "devNetOnboardValidatorPrepare"
       responses:
@@ -517,6 +525,7 @@ paths:
       # TODO(DACH-NY/canton-network-internal#2106) Remove in 0.8.0
       deprecated: true
       x-jvm-package: sv_public
+      x-external-audience: validators
       operationId: "getDsoInfo"
       responses:
         "200":
@@ -543,6 +552,7 @@ paths:
     get:
       tags: [sv]
       x-jvm-package: sv_public
+      x-external-audience: svs
       operationId: "getMigrationId"
       description: |
         Returns the synchronizer migration id this SV is currently using.

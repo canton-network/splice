@@ -32,7 +32,3 @@ release-notes:: Upcoming
           (typically the sponsor's) instead of the sponsor SV app's deprecated public
           ``/v0/dso`` endpoint. The scan is configured via the new ``.joinWithKeyOnboarding.sponsorScanUrl`` Helm value.
           SVs who set the ``.joinWithKeyOnboarding`` key config must set it before upgrading.
-
-    - Docker
-
-        - Updated Docker base image to 1.0.13, which updates gRPC health probe to v0.4.55.
