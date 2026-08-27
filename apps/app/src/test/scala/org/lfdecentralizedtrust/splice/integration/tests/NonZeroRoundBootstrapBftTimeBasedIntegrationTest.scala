@@ -57,17 +57,20 @@ class NonZeroRoundBootstrapBftTimeBasedIntegrationTest
     import definitions.GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsOk
     import definitions.GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsCannotProvide
 
+    // Pause the trigger before adding the dummy. Real SVs already
+    // have unlimited traffic by test-body start (SV app init awaits
+    // it via waitForSvToObtainUnlimitedTraffic), so pausing early has
+    // no effect on them. The dummy's participant doesn't exist on the
+    // sequencer, so without this pause the trigger polls indefinitely
+    // logging "does not yet have a traffic state".
+    env.svs.local.foreach(
+      _.dsoAutomation.trigger[SvOnboardingUnlimitedTrafficTrigger].pause().futureValue
+    )
+
     // Add a dummy 5th SV with a fake scan URL BEFORE any round
     // advancement. This raises BFT f from 0 to 1, so the initial
     // round's reward pipeline runs under the higher quorum.
     addDummySvWithFakeScanUrl()
-
-    // The dummy SV's participant doesn't exist on the sequencer, so
-    // this trigger would poll indefinitely logging "does not yet have
-    // a traffic state". Pause it to avoid log noise on CI.
-    env.svs.local.foreach(
-      _.dsoAutomation.trigger[SvOnboardingUnlimitedTrafficTrigger].pause().futureValue
-    )
 
     // With f=1, BFT reads normally need 2 agreeing Ok responses.
     // Only SV1's scan has the initial round's data; the other real
