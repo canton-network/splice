@@ -4060,6 +4060,8 @@ components:
         update_id:
           description: |
             The ID of the transaction update associated with this verdict.
+
+            Verdicts are deduplicated by update_id. Only the first verdict ingested for a given update_id is stored and returned, while a subsequent verdict with the same update_id is dropped.
           type: string
         migration_id:
           description: |
