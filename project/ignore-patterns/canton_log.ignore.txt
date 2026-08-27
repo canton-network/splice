@@ -211,3 +211,12 @@ INTERNAL/Missing package-id.*in package metadata view
 
 # We can get temporarily blacklisted during onboarding triggering a retry for this.
 Now retrying operation 'request current time'
+
+# Ignore synchronizer permission issues in PermissionedSynchronizerIntegrationTest.
+.*ParticipantSynchronizerPermission for participant PAR::bobValidator.*
+.*code=PERMISSION_DENIED, description=Member PAR::bobValidator.*
+.*Member PAR::bobValidator.*access is disabled.*
+.*SYNC_SERVICE_SYNCHRONIZER_DISABLED_US.*Synchronizer 'global' rejected our subscription attempt with permission denied.*
+.*to find ParticipantSynchronizerPermission for participant PAR::bobValidator.*
+.*code=PERMISSION_DENIED, description=Member PAR::bobValidator.*
+.*PERMISSION_DENIED/Authentication token refresh error: Member PAR::bobValidator.*

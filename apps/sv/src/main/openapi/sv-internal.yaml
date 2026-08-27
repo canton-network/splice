@@ -504,6 +504,7 @@ paths:
     post:
       tags: [sv]
       x-jvm-package: sv_public
+      x-external-audience: validators
       description: "faucet for validator candidates to buy member traffic"
       operationId: "devNetBuyMemberTraffic"
       requestBody:

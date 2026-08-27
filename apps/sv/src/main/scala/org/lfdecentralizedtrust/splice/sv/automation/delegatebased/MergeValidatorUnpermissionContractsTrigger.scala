@@ -74,7 +74,7 @@ class MergeValidatorUnpermissionContractsTrigger(
 
       outcome <-
         if (validatorUnpermissions.length > 1) {
-          logger.warn(
+          logger.info(
             s"Participant $participantId has ${validatorUnpermissions.length} ValidatorUnpermission contracts, hence merging them"
           )
           mergeValidatorUnpermissionContracts(
