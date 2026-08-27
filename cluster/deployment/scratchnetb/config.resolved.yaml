@@ -368,6 +368,12 @@ sv:
         /api/scan/v1/updates:
           name: 'v1-updates'
           type: 'banned'
+        /api/scan/v2/holdings:
+          name: 'holdings'
+          type: 'unlimited'
+        /api/scan/v2/state:
+          name: 'state'
+          type: 'unlimited'
         /api/scan/v2/updates:
           name: 'v2-updates'
           type: 'unlimited'
