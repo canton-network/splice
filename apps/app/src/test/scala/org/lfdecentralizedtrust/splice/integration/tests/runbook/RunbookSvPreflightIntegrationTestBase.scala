@@ -76,7 +76,7 @@ abstract class RunbookSvPreflightIntegrationTestBase
   }
 
   "The SV rewards are claimed by the SV, with 33.33% going to validator1" in { implicit env =>
-    val svScanClient = scancl("svTestScan")
+    val svScanClient = scancl("svScan")
     val sv1ScanClient = scancl("sv1Scan")
 
     val dsoInfo = svScanClient.getDsoInfo()
@@ -203,7 +203,7 @@ abstract class RunbookSvPreflightIntegrationTestBase
           ansAcronym,
         )
         clue(s"Reserved ANS name can be looked up via scan") {
-          val svScanClient = scancl("svTestScan")
+          val svScanClient = scancl("svScan")
           eventuallySucceeds(3.minutes) {
             svScanClient.lookupEntryByName(ansName)
           }
@@ -221,7 +221,7 @@ abstract class RunbookSvPreflightIntegrationTestBase
       )(noTracingLogger)
     }
     val svValidatorClient = vc("svTestValidator").copy(token = Some(token))
-    val svScanClient = scancl("svTestScan")
+    val svScanClient = scancl("svScan")
     val sv1ScanClient = scancl("sv1Scan")
     val participantId = clue("Can dump participant identities from SV validator") {
       // retry to guard against badly timed restarts

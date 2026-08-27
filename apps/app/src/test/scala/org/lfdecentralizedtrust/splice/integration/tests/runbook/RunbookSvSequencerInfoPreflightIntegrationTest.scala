@@ -23,7 +23,7 @@ class RunbookSvSequencerInfoPreflightIntegrationTest
 
   "The SV sequencer public url has been published to DsoRules" in { implicit env =>
     val dsoInfo = eventuallySucceeds() {
-      scancl("svTestScan").getDsoInfo()
+      scancl("svScan").getDsoInfo()
     }
     val nodeState: SvNodeState = dsoInfo.svNodeStates.get(dsoInfo.svParty).value.payload
     val domainConfig = nodeState.state.synchronizerNodes.asScala.values.headOption.value
