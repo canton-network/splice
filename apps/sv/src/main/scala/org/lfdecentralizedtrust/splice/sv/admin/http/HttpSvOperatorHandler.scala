@@ -46,7 +46,7 @@ import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvSvStore}
 import org.lfdecentralizedtrust.splice.sv.util.SvUtil.generateRandomOnboardingSecret
 import org.lfdecentralizedtrust.splice.sv.util.Secrets
 import org.lfdecentralizedtrust.splice.sv.{LocalSynchronizerNode, SvApp}
-import org.lfdecentralizedtrust.splice.util.{Codec, Contract, TemplateJsonDecoder}
+import org.lfdecentralizedtrust.splice.util.{Codec, Contract, DsoInfo, TemplateJsonDecoder}
 
 import java.util.Optional
 import scala.concurrent.{blocking, ExecutionContextExecutor, Future}
@@ -131,17 +131,17 @@ class HttpSvOperatorHandler(
         rulesAndStates <- dsoStore.getDsoRulesWithStateWithSvNodeStates()
         dsoRules = rulesAndStates.dsoRules
       } yield r0.GetDsoInfoV1Response.OK(
-        definitions.GetDsoInfoResponse(
+        DsoInfo(
           svUser = config.ledgerApiUser,
-          svPartyId = dsoStore.key.svParty.toProtoPrimitive,
-          dsoPartyId = dsoStore.key.dsoParty.toProtoPrimitive,
+          svParty = dsoStore.key.svParty,
+          dsoParty = dsoStore.key.dsoParty,
           votingThreshold = Thresholds.requiredNumVotes(dsoRules),
-          latestMiningRound = latestOpenMiningRound.toContractWithState.toHttp,
-          amuletRules = amuletRules.toContractWithState.toHttp,
-          dsoRules = dsoRules.toHttp,
-          svNodeStates = rulesAndStates.svNodeStates.values.map(_.toHttp).toVector,
+          latestMiningRound = latestOpenMiningRound.toContractWithState,
+          amuletRules = amuletRules.toContractWithState,
+          dsoRules = dsoRules,
+          svNodeStates = rulesAndStates.svNodeStates,
           initialRound = Some(initialRound),
-        )
+        ).toHttp
       )
     }
   }

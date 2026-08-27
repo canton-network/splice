@@ -219,14 +219,14 @@ class HttpScanHandler(
         rulesAndStates <- store.getDsoRulesWithStateWithSvNodeStates()
         dsoRules = rulesAndStates.dsoRules
       } yield DsoInfo(
-        svUserName,
-        svParty,
-        store.key.dsoParty,
-        Thresholds.requiredNumVotes(dsoRules),
-        latestOpenMiningRound.toContractWithState,
-        amuletRules,
-        dsoRules,
-        rulesAndStates.svNodeStates,
+        svUser = svUserName,
+        svParty = svParty,
+        dsoParty = store.key.dsoParty,
+        votingThreshold = Thresholds.requiredNumVotes(dsoRules),
+        latestMiningRound = latestOpenMiningRound.toContractWithState,
+        amuletRules = amuletRules,
+        dsoRules = dsoRules,
+        svNodeStates = rulesAndStates.svNodeStates,
         initialRound = Some(initialRound),
       ).toHttp
     }

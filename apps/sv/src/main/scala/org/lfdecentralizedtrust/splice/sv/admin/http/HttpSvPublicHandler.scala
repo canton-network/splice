@@ -39,7 +39,7 @@ import org.lfdecentralizedtrust.splice.sv.onboarding.sponsor.DsoPartyMigration
 import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvSvStore}
 import org.lfdecentralizedtrust.splice.sv.util.{Secrets, SvOnboardingToken}
 import org.lfdecentralizedtrust.splice.sv.util.SvUtil.generateRandomOnboardingSecret
-import org.lfdecentralizedtrust.splice.util.{Codec, Contract}
+import org.lfdecentralizedtrust.splice.util.{Codec, Contract, DsoInfo}
 
 import java.util.Base64
 import scala.concurrent.{ExecutionContext, Future}
@@ -368,17 +368,17 @@ class HttpSvPublicHandler(
         amuletRules <- dsoStore.getAssignedAmuletRules()
         rulesAndStates <- dsoStore.getDsoRulesWithStateWithSvNodeStates()
         dsoRules = rulesAndStates.dsoRules
-      } yield definitions.GetDsoInfoResponse(
+      } yield DsoInfo(
         svUser = svUserName,
-        svPartyId = svParty.toProtoPrimitive,
-        dsoPartyId = dsoParty.toProtoPrimitive,
+        svParty = svParty,
+        dsoParty = dsoParty,
         votingThreshold = Thresholds.requiredNumVotes(dsoRules),
-        latestMiningRound = latestOpenMiningRound.toContractWithState.toHttp,
-        amuletRules = amuletRules.toContractWithState.toHttp,
-        dsoRules = dsoRules.toHttp,
-        svNodeStates = rulesAndStates.svNodeStates.values.map(_.toHttp).toVector,
+        latestMiningRound = latestOpenMiningRound.toContractWithState,
+        amuletRules = amuletRules.toContractWithState,
+        dsoRules = dsoRules,
+        svNodeStates = rulesAndStates.svNodeStates,
         initialRound = Some(initialRound),
-      )
+      ).toHttp
     }
   }
 
