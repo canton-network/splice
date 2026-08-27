@@ -908,6 +908,16 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
         latest shouldBe None
       }
     }
+
+    "getLatestEventRecordTime returns None when there is only a loose update" in {
+      for {
+        ctx <- newEventStore()
+        _ <- insertUpdate(ctx.updateHistory, CantonTimestamp.now(), "update1")
+        latest <- ctx.eventStore.getLatestEventRecordTime(domainMigrationId)(traceContext)
+      } yield {
+        latest shouldBe None
+      }
+    }
   }
 
   private def newUpdateHistory(
