@@ -25,7 +25,7 @@ import slick.dbio.DBIO
 import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.{ExecutionContext, Future}
 import cats.data.NonEmptyList
-import org.lfdecentralizedtrust.splice.store.UpdateHistory
+import org.lfdecentralizedtrust.splice.store.{TimestampWithMigrationId, UpdateHistory}
 import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore.AppActivityRecordT
 
 object DbScanVerdictStore {
@@ -237,13 +237,13 @@ object DbScanVerdictStore {
   def apply(
       storage: com.digitalasset.canton.resource.DbStorage,
       updateHistory: UpdateHistory,
-      appActivityRecordStoreO: Option[DbAppActivityRecordStore],
+      appActivityRecordStore: DbAppActivityRecordStore,
       loggerFactory: NamedLoggerFactory,
   )(implicit ec: ExecutionContext): DbScanVerdictStore =
     new DbScanVerdictStore(
       storage,
       updateHistory,
-      appActivityRecordStoreO,
+      appActivityRecordStore,
       loggerFactory,
     )
 }
@@ -251,7 +251,7 @@ object DbScanVerdictStore {
 class DbScanVerdictStore(
     storage: DbStorage,
     updateHistory: UpdateHistory,
-    val appActivityRecordStoreO: Option[DbAppActivityRecordStore],
+    val appActivityRecordStore: DbAppActivityRecordStore,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit
     ec: ExecutionContext
@@ -556,27 +556,23 @@ class DbScanVerdictStore(
       firstActiveRoundO: Option[Long],
       lastArchivedRoundO: Option[Long],
   )(implicit tc: TraceContext): DBIO[Unit] =
-    appActivityRecordStoreO match {
-      case None => DBIO.successful(())
-      case Some(s) =>
-        s.insertAppActivityRecordsDBIO(
-          items,
-          firstRecordTimeMicros,
-          hasTrafficSummaries,
-          firstActiveRoundO,
-          lastArchivedRoundO,
-        )
-    }
+    appActivityRecordStore.insertAppActivityRecordsDBIO(
+      items,
+      firstRecordTimeMicros,
+      hasTrafficSummaries,
+      firstActiveRoundO,
+      lastArchivedRoundO,
+    )
 
   private def afterFilters(
-      afterO: Option[(Long, CantonTimestamp)],
+      afterO: Option[TimestampWithMigrationId],
       includeImportUpdates: Boolean,
   ): NonEmptyList[SQLActionBuilder] = {
     val gt = if (includeImportUpdates) ">=" else ">"
     afterO match {
       case None =>
         NonEmptyList.of(sql"migration_id >= 0 and record_time #$gt ${CantonTimestamp.MinValue}")
-      case Some((afterMigrationId, afterRecordTime)) =>
+      case Some(TimestampWithMigrationId(afterRecordTime, afterMigrationId)) =>
         NonEmptyList.of(
           sql"migration_id = ${afterMigrationId} and record_time > ${afterRecordTime} ",
           sql"migration_id > ${afterMigrationId} and record_time #$gt ${CantonTimestamp.MinValue}",
@@ -619,7 +615,7 @@ class DbScanVerdictStore(
   }
 
   def listVerdicts(
-      afterO: Option[(Long, CantonTimestamp)],
+      afterO: Option[TimestampWithMigrationId],
       includeImportUpdates: Boolean,
       limit: Int,
   )(implicit tc: TraceContext): Future[Seq[VerdictT]] = {

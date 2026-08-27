@@ -23,7 +23,11 @@ import org.apache.pekko.stream.scaladsl.{Sink, Source}
 import org.lfdecentralizedtrust.splice.config.AutomationConfig
 import org.lfdecentralizedtrust.splice.environment.{DarResources, RetryProvider, SpliceMetrics}
 import org.lfdecentralizedtrust.splice.http.v0.definitions as httpApi
-import org.lfdecentralizedtrust.splice.scan.admin.http.CompactJsonScanHttpEncodings
+import org.lfdecentralizedtrust.splice.scan.admin.http.{
+  CompactJsonScanHttpEncodings,
+  ProtobufJsonScanHttpEncodings,
+  ScanHttpEncodings,
+}
 import org.lfdecentralizedtrust.splice.scan.config.{BulkStorageConfig, ScanStorageConfig}
 import org.lfdecentralizedtrust.splice.scan.store.{
   AcsSnapshotStore,
@@ -50,6 +54,7 @@ import org.slf4j.event.Level
 
 import java.time.Instant
 import java.time.temporal.ChronoUnit
+import java.util.concurrent.ConcurrentHashMap
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
 import scala.concurrent.duration.*
@@ -106,49 +111,86 @@ class AcsSnapshotBulkStorageWriterFromDbTest
           )
           .map(_.createdEventsInPage)
       } yield {
-        val objectKeys = s3Objects.contents.asScala.map(_.key()).sorted
-        objectKeys should have length 7
-        objectKeys.foreach(
-          _ should startWith("2026-01-02T00:00:00Z~2026-01-03T00:00:00Z/ACS_")
-        )
-        val objectCountMetrics = metricsFactory.metrics.counters.get(
-          SpliceMetrics.MetricsPrefix :+ "history" :+ "bulk-storage" :+ "object-count"
-        )
-        val numObjectsFromMetric = objectCountMetrics.value
-          .get(MetricsContext.Empty)
-          .value
-          .markers
-          .get(MetricsContext("object_type" -> "ACS_snapshots"))
-          .value
-          .get()
-        numObjectsFromMetric shouldBe 7
-
-        val allContractsFromS3 = objectKeys.flatMap(
-          readUncompressAndDecode(
-            bucketConnection,
-            io.circe.parser.decode[httpApi.ActiveContract],
+        def checkEncoding(encoding: ScanStorageConfig.Encoding) = {
+          /* We hard-code the expected digests to enforce that the persisted data format does not change.
+             These values must not be modified unless there is a conscious decision to change the persisted format,
+             with a migration plan for how to apply it consistently across SVs. */
+          val (encodings, expectedDigests): (ScanHttpEncodings, Seq[String]) =
+            encoding match {
+              case ScanStorageConfig.Encoding.CompactJson =>
+                (
+                  new CompactJsonScanHttpEncodings(identity, identity),
+                  Seq(
+                    "n6CV6dF9zpleq66YiXmCG96hw1BBakp1I8JjC5lf5n0=",
+                    "bJDalSmiVKCk9QSc6sAWdahJNZQqVn51WmkFbQI6wkA=",
+                    "noZU+He8HnCM38MujtpEle4NNGwnE7wN8z96V+HTdK0=",
+                    "rwak+Y4JcInTiEa2yUKf8rjO3RD7ay/D2hmQG4BAa54=",
+                    "YM7SNxHrU3xYyNOjgEqowitAvgsiX1f7tq0pCaD/OhQ=",
+                    "Mb3D2ZOVQclMwuYEqLuTKhGqnUHCio6K61FBTXgt5Vs=",
+                    "+5iW2M9Vz5y9sCtEWyrS3m+EUqnD50dXRVIMQAMSgBY=",
+                  ),
+                )
+              case ScanStorageConfig.Encoding.ProtobufJson =>
+                (
+                  ProtobufJsonScanHttpEncodings,
+                  Seq(
+                    "NDdxcBFCRqz5hXHXqJkD9qqzc1C9t0PWZgHq2F9xsUA=",
+                    "hluFPPWS1V2djExfppU+aiPqYx18s/qxZe83nFjthV0=",
+                    "5D3k/XWBw/OhN5wus7XMuesHKhQwlktDFMFcO9lAI5g=",
+                    "sov3P/ekZ1CRQUPYVMcA7tn2yO4EV+XYtlWc5NF2FP0=",
+                    "tYYPDCgkg/s+dbJD9i6kxBHiMIKq2RB/D0+Fc5gzlAI=",
+                    "CjQBhKAQ+KU7it/OCAkyDtKLNHJmWu2nsU4x1TcT+us=",
+                    "ZonY8bJ5NA2b1Y/gOU2eeUF6lVsQqijKWDjP8kKWvhU=",
+                    "G7eAcDOxoCsxpC9Qwo61IZFUFD0sZnqPf3/dolF9nXQ=",
+                  ),
+                )
+            }
+          val objectKeys = s3Objects.contents.asScala
+            .map(_.key())
+            .sorted
+            .filter(
+              encoding.storageKeyRegex("ACS").matches
+            )
+          objectKeys should have length expectedDigests.length.toLong
+          objectKeys.foreach(
+            _ should startWith(s"2026-01-02T00:00:00Z~2026-01-03T00:00:00Z/ACS_${encoding.key}")
           )
-        )
-        allContracts.map(c =>
-          new CompactJsonScanHttpEncodings(identity, identity)
-            .javaToHttpActiveContract(c.eventId, c.recordTime, c.event)
-        ) should contain theSameElementsInOrderAs allContractsFromS3
+          val objectCountMetrics = metricsFactory.metrics.counters.get(
+            SpliceMetrics.MetricsPrefix :+ "history" :+ "bulk-storage" :+ "object-count"
+          )
+          val numObjectsFromMetric = objectCountMetrics.value
+            .get(MetricsContext.Empty)
+            .value
+            .markers
+            .get(
+              MetricsContext(
+                "object_type" -> "ACS_snapshots",
+                "encoding" -> encoding.key,
+                "bucket" -> "staging",
+              )
+            )
+            .value
+            .get()
+          numObjectsFromMetric shouldBe expectedDigests.length
 
-        /* We hard-code the expected digests to enforce that the persisted data format does not change.
-           These values must not be modified unless there is a conscious decision to change the persisted format,
-           with a migration plan for how to apply it consistently across SVs. */
-        bucketConnection
-          .getChecksums(objectKeys.toSeq)
-          .futureValue
-          .map(_.checksum) should contain theSameElementsInOrderAs Seq(
-          "n6CV6dF9zpleq66YiXmCG96hw1BBakp1I8JjC5lf5n0=",
-          "bJDalSmiVKCk9QSc6sAWdahJNZQqVn51WmkFbQI6wkA=",
-          "noZU+He8HnCM38MujtpEle4NNGwnE7wN8z96V+HTdK0=",
-          "rwak+Y4JcInTiEa2yUKf8rjO3RD7ay/D2hmQG4BAa54=",
-          "YM7SNxHrU3xYyNOjgEqowitAvgsiX1f7tq0pCaD/OhQ=",
-          "Mb3D2ZOVQclMwuYEqLuTKhGqnUHCio6K61FBTXgt5Vs=",
-          "+5iW2M9Vz5y9sCtEWyrS3m+EUqnD50dXRVIMQAMSgBY=",
-        )
+          val allContractsFromS3 = objectKeys.flatMap(
+            readUncompressAndDecode(
+              bucketConnection,
+              io.circe.parser.decode[httpApi.ActiveContract],
+            )
+          )
+          allContracts.map(c =>
+            encodings.javaToHttpActiveContract(c.eventId, c.recordTime, c.event)
+          ) should contain theSameElementsInOrderAs allContractsFromS3
+
+          bucketConnection
+            .getChecksums(objectKeys.toSeq)
+            .futureValue
+            .map(_.checksum) should contain theSameElementsInOrderAs expectedDigests
+        }
+
+        checkEncoding(ScanStorageConfig.Encoding.CompactJson)
+        checkEncoding(ScanStorageConfig.Encoding.ProtobufJson)
       }
     }
 
@@ -223,7 +265,8 @@ class AcsSnapshotBulkStorageWriterFromDbTest
           reader.getCommittedObjectsForAcsSnapshotAtOrBefore(queryTs).futureValue
         getObjectsResult.objects.map(_.key) should contain theSameElementsInOrderAs
           (0 until expectedNumObjects).map(i =>
-            s"$expectedTs~${expectedTs.add(1.days)}/ACS_$i.zstd"
+            s"$expectedTs~${expectedTs
+                .add(1.days)}/${ScanStorageConfig.Encoding.CompactJson.storageKey("ACS", i)}"
           )
         getObjectsResult.objects.map(_.checksum).foreach {
           // We test elsewhere that computed and persisted checksums are correct, so here we just check that they are present and not empty
@@ -403,19 +446,12 @@ class AcsSnapshotBulkStorageWriterFromDbTest
       bucketConnection: S3BucketConnection
   ): S3BucketConnection = {
     val s3BucketConnectionWithErrors = Mockito.spy(bucketConnection)
-    var failureCount = 0
+    val failedKeys = ConcurrentHashMap.newKeySet[String]()
     val _ = doAnswer { (invocation: InvocationOnMock) =>
       val args = invocation.getArguments
       args.toList match {
-        case (key: String) :: _ if key.endsWith("2.zstd") =>
-          if (failureCount < 1) {
-            failureCount += 1
-            throw new RuntimeException(s"Simulated S3 error (#$failureCount)")
-          } else {
-            failureCount = 0
-            logger.debug(s"No Simulated S3 error, resetting failureCount to 0")
-            invocation.callRealMethod().asInstanceOf[s3BucketConnectionWithErrors.AppendWriteObject]
-          }
+        case (key: String) :: _ if key.endsWith("2.zstd") && failedKeys.add(key) =>
+          throw new RuntimeException(s"Simulated S3 error for $key")
         case _ =>
           invocation.callRealMethod().asInstanceOf[s3BucketConnectionWithErrors.AppendWriteObject]
       }

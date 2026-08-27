@@ -13,7 +13,11 @@ import { SetAmuletConfigRulesForm } from '../../../components/forms/SetAmuletCon
 import dayjs from 'dayjs';
 import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 import { server, svUrl } from '../../setup/setup';
-import { PROPOSAL_SUMMARY_SUBTITLE, PROPOSAL_SUMMARY_TITLE } from '../../../utils/constants';
+import {
+  CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE,
+  PROPOSAL_REVIEW_TITLE,
+  PROPOSAL_SUMMARY_SUBTITLE,
+} from '../../../utils/constants';
 
 describe('SV user can', () => {
   test('login and see the SV party ID', async () => {
@@ -45,7 +49,7 @@ describe('Set Amulet Config Rules Form', () => {
     );
 
     expect(screen.getByTestId('set-amulet-config-rules-form')).toBeInTheDocument();
-    expect(screen.getByText('Proposal type')).toBeInTheDocument();
+    expect(screen.getByText(CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE)).toBeInTheDocument();
 
     const actionInput = screen.getByTestId('set-amulet-config-rules-action');
     expect(actionInput).toBeInTheDocument();
@@ -325,7 +329,7 @@ describe('Set Amulet Config Rules Form', () => {
 
     await user.click(submitButton);
 
-    expect(screen.getByText(PROPOSAL_SUMMARY_TITLE)).toBeInTheDocument();
+    expect(screen.getByText(PROPOSAL_REVIEW_TITLE)).toBeInTheDocument();
     expect(screen.queryByText('JSON')).not.toBeInTheDocument();
     expect(screen.getByTestId('json-diff-toggle')).toHaveTextContent('Show JSON');
   });

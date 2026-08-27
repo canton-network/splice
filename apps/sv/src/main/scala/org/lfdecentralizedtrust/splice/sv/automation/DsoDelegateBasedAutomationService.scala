@@ -45,7 +45,7 @@ class DsoDelegateBasedAutomationService(
       : org.lfdecentralizedtrust.splice.sv.automation.DsoDelegateBasedAutomationService.type =
     DsoDelegateBasedAutomationService
 
-  val expiredAmuletIgnoredPartiesStore = new IgnoredPartiesStore(
+  val unavailablePartiesStore = new IgnoredPartiesStore(
     triggerContext.config.ignoredPartyIds
   )
 
@@ -75,7 +75,7 @@ class DsoDelegateBasedAutomationService(
         config,
         triggerContext,
         svTaskContext,
-        expiredAmuletIgnoredPartiesStore,
+        unavailablePartiesStore,
       )
     )
     registerTrigger(
@@ -83,7 +83,7 @@ class DsoDelegateBasedAutomationService(
         config,
         triggerContext,
         svTaskContext,
-        expiredAmuletIgnoredPartiesStore,
+        unavailablePartiesStore,
       )
     )
     registerTrigger(
@@ -92,7 +92,7 @@ class DsoDelegateBasedAutomationService(
         clock,
         triggerContext,
         svTaskContext,
-        expiredAmuletIgnoredPartiesStore,
+        unavailablePartiesStore,
       )
     )
     registerTrigger(
@@ -101,7 +101,7 @@ class DsoDelegateBasedAutomationService(
         clock,
         triggerContext,
         svTaskContext,
-        expiredAmuletIgnoredPartiesStore,
+        unavailablePartiesStore,
       )
     )
     registerTrigger(
@@ -110,7 +110,7 @@ class DsoDelegateBasedAutomationService(
         clock,
         triggerContext,
         svTaskContext,
-        expiredAmuletIgnoredPartiesStore,
+        unavailablePartiesStore,
       )
     )
     registerTrigger(new ExpiredSvOnboardingRequestTrigger(triggerContext, svTaskContext))
@@ -125,7 +125,7 @@ class DsoDelegateBasedAutomationService(
       new ExpireRewardCouponsTrigger(
         triggerContext,
         svTaskContext,
-        expiredAmuletIgnoredPartiesStore,
+        unavailablePartiesStore,
         config,
       )
     )
@@ -136,7 +136,7 @@ class DsoDelegateBasedAutomationService(
         triggerContext,
         svTaskContext,
         config,
-        expiredAmuletIgnoredPartiesStore,
+        unavailablePartiesStore,
       )
     )
     registerTrigger(
@@ -144,7 +144,7 @@ class DsoDelegateBasedAutomationService(
         triggerContext,
         svTaskContext,
         config,
-        expiredAmuletIgnoredPartiesStore,
+        unavailablePartiesStore,
       )
     )
     registerTrigger(
@@ -152,7 +152,7 @@ class DsoDelegateBasedAutomationService(
         triggerContext,
         svTaskContext,
         config,
-        expiredAmuletIgnoredPartiesStore,
+        unavailablePartiesStore,
       )
     )
     registerTrigger(new TerminatedSubscriptionTrigger(triggerContext, svTaskContext))
@@ -176,7 +176,7 @@ class DsoDelegateBasedAutomationService(
         triggerContext,
         svTaskContext,
         config,
-        expiredAmuletIgnoredPartiesStore,
+        unavailablePartiesStore,
       )
     )
 
@@ -213,6 +213,7 @@ class DsoDelegateBasedAutomationService(
         config,
         triggerContext,
         svTaskContext,
+        unavailablePartiesStore,
       )
     )
 
@@ -247,7 +248,7 @@ class DsoDelegateBasedAutomationService(
 
 object DsoDelegateBasedAutomationService extends AutomationServiceCompanion {
   // defined because the service isn't available immediately in sv app state,
-  // but created later by the restart trigger
+  // but created later
   override protected[this] def expectedTriggerClasses: Seq[TriggerClass] = Seq(
     aTrigger[AdvanceOpenMiningRoundTrigger],
     aTrigger[UpdateExternalPartyConfigStateTrigger],

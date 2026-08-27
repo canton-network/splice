@@ -3,40 +3,64 @@
 
 package org.lfdecentralizedtrust.splice.scan.store.bulk
 
+import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.{HasActorSystem, HasExecutionContext}
+import org.apache.pekko.NotUsed
+import org.apache.pekko.http.scaladsl.model.Uri
+import org.lfdecentralizedtrust.splice.config.NetworkAppClientConfig
+import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
+import org.lfdecentralizedtrust.splice.test.HasRetryProvider
 import org.slf4j.event.Level
-import org.apache.pekko.stream.scaladsl.Keep
+import org.apache.pekko.stream.scaladsl.{Flow, Keep}
 import org.apache.pekko.stream.testkit.scaladsl.{TestSink, TestSource}
+import org.lfdecentralizedtrust.splice.environment.SpliceLedgerClient
+import org.lfdecentralizedtrust.splice.http.HttpClient
+import org.lfdecentralizedtrust.splice.http.v0.definitions.GetBulkObjectChecksumsResponse
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.{
+  BftScanConnection,
+  SingleScanConnection,
+}
 import org.lfdecentralizedtrust.splice.scan.config.BulkStorageConfig
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChecksum
 import org.lfdecentralizedtrust.splice.store.{HasS3Mock, StoreTestBase}
 import org.lfdecentralizedtrust.splice.store.db.SplicePostgresTest
+import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
+import org.lfdecentralizedtrust.splice.scan.util.PeerBftScanConnection
 
 import java.security.MessageDigest
 import java.util.Base64
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
+import scala.concurrent.duration.*
 
 class BulkStorageCommitFromStagingTest
     extends StoreTestBase
     with HasExecutionContext
     with HasActorSystem
     with HasS3Mock
-    with SplicePostgresTest {
+    with SplicePostgresTest
+    with HasRetryProvider {
 
   override val initialBuckets = Seq("staging", "committed")
-  val appConfig = BulkStorageConfig()
+  implicit val httpClient: HttpClient = null
+  implicit val templateJsonDecoder: TemplateJsonDecoder = null
 
   "BulkStorageCommitFromStaging" should {
+    val appConfig = BulkStorageConfig(
+      bftCheckEnabled = false
+    )
+
     "successfully move objects from staging to committed S3 bucket" in {
 
       val (stagingS3Connection, committedS3Connection, objsWithDigests) = setupTest
 
-      triggerCopyFlow(stagingS3Connection, committedS3Connection, objsWithDigests)
+      triggerCopyFlowAndAssertCompletion(
+        newCopyFlow(stagingS3Connection, committedS3Connection, objsWithDigests)
+      )
 
       assertObjectsMoved(stagingS3Connection, committedS3Connection, objsWithDigests)
     }
@@ -54,37 +78,299 @@ class BulkStorageCommitFromStagingTest
 
       loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(Level.DEBUG))(
         {
-          triggerCopyFlow(stagingS3Connection, committedS3Connection, objsWithDigests)
+          triggerCopyFlowAndAssertCompletion(
+            newCopyFlow(stagingS3Connection, committedS3Connection, objsWithDigests)
+          )
         },
         logEntries => forExactly(1, logEntries)(_.message should include("Skipping copy")),
       )
 
       assertObjectsMoved(stagingS3Connection, committedS3Connection, objsWithDigests)
     }
+
+    def newCopyFlow(
+        stagingS3Connection: S3BucketConnectionForUnitTests,
+        committedS3Connection: S3BucketConnectionForUnitTests,
+        objsWithDigests: Seq[ObjectKeyAndChecksum],
+    ) = {
+      BulkStorageCommitFromStaging[String](
+        stagingS3Connection,
+        committedS3Connection,
+        _ => Future.successful(objsWithDigests),
+        appConfig,
+        null, // not used when bft reads are disabled
+        loggerFactory,
+      )
+    }
+
   }
 
-  private def triggerCopyFlow(
-      stagingS3Connection: S3BucketConnectionForUnitTests,
-      committedS3Connection: S3BucketConnectionForUnitTests,
-      objsWithDigests: Seq[ObjectKeyAndChecksum],
-  ) = {
-    val flow = BulkStorageCommitFromStaging[String](
-      stagingS3Connection,
-      committedS3Connection,
-      _ => Future.successful(objsWithDigests),
-      appConfig,
-      loggerFactory,
+  "BulkStorageCommitFromStaging with BFT reads enabled" should {
+    val appConfig = BulkStorageConfig(
+      bftRetryInterval = NonNegativeFiniteDuration.ofSeconds(1)
     )
 
+    "successfully move objects from staging to committed S3 bucket when there's full consensus" in {
+      val (stagingS3Connection, committedS3Connection, objsWithDigests) = setupTest
+
+      val mockScanConnections = new MockScanConnections(objsWithDigests)
+      Seq.range(0, 7).foreach { i =>
+        mockScanConnections.scanAgrees(i)
+      }
+
+      val flow = newCopyFlow(
+        stagingS3Connection,
+        committedS3Connection,
+        objsWithDigests,
+        mockScanConnections,
+      )
+
+      triggerCopyFlowAndAssertCompletion(flow)
+
+      assertObjectsMoved(stagingS3Connection, committedS3Connection, objsWithDigests)
+    }
+
+    "wait until all objects are known to the peers, and report disagreement on consensus correctly" in {
+      val (stagingS3Connection, committedS3Connection, objsWithDigests) = setupTest
+
+      val mockScanConnections = new MockScanConnections(objsWithDigests)
+
+      val flow = newCopyFlow(
+        stagingS3Connection,
+        committedS3Connection,
+        objsWithDigests,
+        mockScanConnections,
+      )
+
+      val (pub, sub) = TestSource
+        .probe[String]
+        .via(flow)
+        .toMat(TestSink.probe[String])(Keep.both)
+        .run()
+
+      clue("When one object is not known to the peers, the copy flow should not complete") {
+        Seq.range(0, 2).foreach(i => mockScanConnections.scanAgrees(i))
+        Seq.range(2, 7).foreach(i => mockScanConnections.scanMissingAnObject(i, 1))
+
+        sub.request(1)
+        pub.sendNext("go")
+        sub.expectNoMessage(20.seconds)
+
+        stagingS3Connection.listObjects.futureValue
+          .contents()
+          .asScala should have size objsWithDigests.size.toLong
+        committedS3Connection.listObjects.futureValue.contents().asScala shouldBe empty
+      }
+
+      // errors on mismatching digests continue past the first clue for some time until enough scans are updated to agree on the digests,
+      // so we make the assertion on the logs fairly wide here to avoid the late error logs failing the log checker
+      loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(Level.ERROR))(
+        {
+          clue(
+            "Simulate a majority disagreeing with our digests, the copy flow should not complete and an error should be emitted"
+          ) {
+            Seq.range(2, 7).foreach(i => mockScanConnections.scanDisagreesOnDigest(i, 1))
+            sub.expectNoMessage(20.seconds)
+            stagingS3Connection.listObjects.futureValue
+              .contents()
+              .asScala should have size objsWithDigests.size.toLong
+            committedS3Connection.listObjects.futureValue.contents().asScala shouldBe empty
+
+          }
+
+          clue("Enough scans do agree - the copy flow should complete successfully") {
+            Seq.range(2, 5).foreach(i => mockScanConnections.scanAgrees(i))
+            sub.expectNext(20.seconds, "go")
+            assertObjectsMoved(stagingS3Connection, committedS3Connection, objsWithDigests)
+          }
+
+        },
+        logEntries =>
+          forAtLeast(1, logEntries)(
+            _.message should include(
+              "Checksums do not match for objects"
+            )
+          ),
+      )
+    }
+
+    "ignore digest mismatches for objects listed in debugObjectsToNotCommit and not copy them to the committed bucket" in {
+      val (stagingS3Connection, committedS3Connection, objsWithDigests) = setupTest
+
+      val ignoredObject = objsWithDigests(1)
+
+      val mockScanConnections = new MockScanConnections(objsWithDigests)
+      // all peers disagree with us on the digest of the ignored object only
+      Seq.range(0, 7).foreach(i => mockScanConnections.scanDisagreesOnDigest(i, 1))
+
+      val flow = newCopyFlow(
+        stagingS3Connection,
+        committedS3Connection,
+        objsWithDigests,
+        mockScanConnections,
+        appConfig.copy(debugObjectsToNotCommit = Seq(ignoredObject.key)),
+      )
+
+      loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(Level.ERROR))(
+        {
+          triggerCopyFlowAndAssertCompletion(flow)
+        },
+        logEntries =>
+          forAll(logEntries)(
+            _.message should include("Checksums do not match for objects")
+          ),
+      )
+
+      val expectedCommittedObjects = objsWithDigests.filterNot(_.key == ignoredObject.key)
+
+      clue("All objects have been deleted from staging") {
+        stagingS3Connection.listObjects.futureValue.contents().asScala shouldBe empty
+      }
+      clue("Only the non-ignored objects have been copied to the committed bucket") {
+        committedS3Connection.listObjects.futureValue
+          .contents()
+          .asScala
+          .map(_.key()) should contain theSameElementsAs expectedCommittedObjects.map(_.key)
+      }
+      clue("Checksums of objects in committed S3 bucket match the expected digests") {
+        committedS3Connection
+          .getChecksums(expectedCommittedObjects.map(_.key))
+          .futureValue should contain theSameElementsAs expectedCommittedObjects
+      }
+    }
+
+    class MockScanConnections(
+        objsWithDigests: Seq[ObjectKeyAndChecksum]
+    ) {
+
+      private val singleScanConnections: Seq[SingleScanConnection] = Seq.range(0, 7).map { i =>
+        val mockConn = mock[SingleScanConnection]
+        when(mockConn.config) thenReturn ScanAppClientConfig(
+          NetworkAppClientConfig(
+            Uri(s"http://dummy-admin-$i")
+          )
+        )
+        when(mockConn.url) thenReturn Uri(s"http://scan_$i")
+        mockConn
+      }
+
+      def scanAgrees(idx: Integer): Unit = {
+        when(
+          singleScanConnections(idx)
+            .getBulkObjectChecksums(any[Seq[String]])(any[ExecutionContext], any[TraceContext])
+        )
+          .thenReturn(
+            Future.successful(
+              new GetBulkObjectChecksumsResponse(
+                objsWithDigests
+                  .map(_.checksum)
+                  .map(digest => new GetBulkObjectChecksumsResponse.Checksums(Some(digest)))
+                  .toVector
+              )
+            )
+          )
+        ()
+      }
+
+      def scanDisagreesOnDigest(scanIdx: Integer, objIdx: Integer): Unit = {
+        when(
+          singleScanConnections(scanIdx)
+            .getBulkObjectChecksums(any[Seq[String]])(any[ExecutionContext], any[TraceContext])
+        )
+          .thenReturn(
+            Future.successful(
+              new GetBulkObjectChecksumsResponse(
+                objsWithDigests
+                  .map(_.checksum)
+                  .updated(objIdx, "wrong-digest")
+                  .map(digest => new GetBulkObjectChecksumsResponse.Checksums(Some(digest)))
+                  .toVector
+              )
+            )
+          )
+      }
+
+      def scanMissingAnObject(scanIdx: Integer, objIdx: Integer): Unit = {
+        when(
+          singleScanConnections(scanIdx)
+            .getBulkObjectChecksums(any[Seq[String]])(any[ExecutionContext], any[TraceContext])
+        )
+          .thenReturn(
+            Future.successful(
+              new GetBulkObjectChecksumsResponse(
+                objsWithDigests
+                  .map(_.checksum)
+                  .map(Some(_))
+                  .updated(objIdx, None)
+                  .map(oDigest => new GetBulkObjectChecksumsResponse.Checksums(oDigest))
+                  .toVector
+              )
+            )
+          )
+      }
+
+      private val scanList = new BftScanConnection.AllDsoScansBft(
+        initialScanConnections = singleScanConnections,
+        initialFailedConnections = Map.empty,
+        connectionBuilder = _ => Future.failed(new RuntimeException("Shouldn't be refreshing!")),
+        scanUrlsChangedCallback = _ => Future.unit,
+        getScans = BftScanConnection.Bft.getScansInDsoRules,
+        scansRefreshInterval = NonNegativeFiniteDuration.ofDays(10),
+        retryProvider = testRetryProvider,
+        loggerFactory = loggerFactory,
+      )
+      private val bftConnection = new BftScanConnection(
+        amuletLedgerClient = mock[SpliceLedgerClient],
+        amuletRulesCacheTimeToLive = NonNegativeFiniteDuration.ofSeconds(1),
+        scanList = scanList,
+        clock = wallClock,
+        retryProvider = testRetryProvider,
+        loggerFactory = loggerFactory,
+      )
+      val peerBftConnection: PeerBftScanConnection = mock[PeerBftScanConnection]
+      when(peerBftConnection.connection(any[TraceContext]))
+        .thenReturn(Future.successful(bftConnection))
+    }
+
+    def newCopyFlow(
+        stagingS3Connection: S3BucketConnectionForUnitTests,
+        committedS3Connection: S3BucketConnectionForUnitTests,
+        objsWithDigests: Seq[ObjectKeyAndChecksum],
+        mockScanConnections: MockScanConnections,
+        config: BulkStorageConfig = appConfig,
+    ) = {
+      new BulkStorageCommitFromStaging[String](
+        stagingS3Connection,
+        committedS3Connection,
+        _ => Future.successful(objsWithDigests),
+        config,
+        mockScanConnections.peerBftConnection,
+        loggerFactory,
+      ).getFlow
+    }
+  }
+
+  private def triggerCopyFlowAndAssertCompletion(
+      flow: Flow[String, String, NotUsed]
+  ) = {
     val (pub, sub) = TestSource
       .probe[String]
       .via(flow)
       .toMat(TestSink.probe[String])(Keep.both)
       .run()
 
-    sub.request(1)
-    pub.sendNext("go")
-    sub.expectNext("go")
+    try {
+      sub.request(1)
+      pub.sendNext("go")
+      sub.expectNext("go")
+      pub.sendComplete()
+      sub.expectComplete()
+    } catch {
+      case ex: Throwable =>
+        pub.sendError(ex)
+        sub.cancel()
+        throw ex
+    }
   }
 
   private def assertObjectsMoved(

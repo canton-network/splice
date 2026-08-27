@@ -76,7 +76,8 @@ export function configureCloudArmorPolicy(
 
   // Step 2: Add predefined WAF rules
   if (cac.predefinedWafRules && cac.predefinedWafRules.length > 0) {
-    addPredefinedWafRules(/*securityPolicy, args.predefinedWafRules, cac.allRulesPreviewOnly, ruleOpts*/);
+    addPredefinedWafRules();
+    /*securityPolicy, args.predefinedWafRules, cac.allRulesPreviewOnly, ruleOpts*/
   }
 
   // Step 3: Add IP whitelisting rules

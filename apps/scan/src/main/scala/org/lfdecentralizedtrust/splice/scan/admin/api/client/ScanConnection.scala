@@ -24,10 +24,12 @@ import org.lfdecentralizedtrust.splice.config.UpgradesConfig
 import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
+  GetBulkObjectChecksumsResponse,
   GetDsoInfoResponse,
   GetRewardAccountingActivityTotalsResponse,
   GetRewardAccountingBatchResponse,
   GetRewardAccountingRootHashResponse,
+  HoldingsSummaryRequestV1,
   HoldingsSummaryResponse,
   HoldingsSummaryResponseV1,
   LookupTransferCommandStatusResponse,
@@ -58,7 +60,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
 }
 import org.lfdecentralizedtrust.splice.http.v0.definitions.HoldingsSummaryRequest.RecordTimeMatch
 import org.lfdecentralizedtrust.splice.metrics.ScanConnectionMetrics
-import org.lfdecentralizedtrust.splice.http.v0.definitions.HoldingsSummaryRequestV1
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.jdk.OptionConverters.*
@@ -371,6 +372,10 @@ trait ScanConnection
       tc: TraceContext,
   ): Future[Option[GetRewardAccountingBatchResponse]]
 
+  def getBulkObjectChecksums(objectKeys: Seq[String])(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[GetBulkObjectChecksumsResponse]
 }
 
 object ScanConnection {

@@ -7,21 +7,24 @@ import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.tracing.TraceContext
 import io.grpc.{Status, StatusRuntimeException}
 import org.apache.pekko.NotUsed
-import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.stream.scaladsl.Flow
 import org.lfdecentralizedtrust.splice.scan.config.BulkStorageConfig
+import org.lfdecentralizedtrust.splice.scan.util.PeerBftScanConnection
 import org.lfdecentralizedtrust.splice.store.{S3BucketConnection, TimestampWithMigrationId}
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContextExecutor, Future}
 
 class UpdateHistoryBulkStorageCommitFromStaging(
     stagingS3Connection: S3BucketConnection,
     committedS3Connection: S3BucketConnection,
     bulkStorageReader: BulkStorageReader,
     appConfig: BulkStorageConfig,
+    scanConnection: PeerBftScanConnection,
+    onObjectCommitted: Seq[S3BucketConnection.ObjectKeyAndChecksum] => Unit,
     val loggerFactory: NamedLoggerFactory,
-)(implicit ec: ExecutionContext, actorSystem: ActorSystem)
-    extends UpdateHistoryBulkStorageWriter
+)(implicit
+    ec: ExecutionContextExecutor
+) extends UpdateHistoryBulkStorageWriter
     with NamedLogging {
   override def processSegmentsFlow(implicit
       tc: TraceContext
@@ -39,7 +42,9 @@ class UpdateHistoryBulkStorageCommitFromStaging(
               Seq.empty
           },
       appConfig,
+      scanConnection,
       loggerFactory,
+      onObjectCommitted,
     )
 
   override def getNextSegmentAfter(

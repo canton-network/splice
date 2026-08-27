@@ -7,9 +7,9 @@ import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.logging.SuppressionRule
-import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.topology.transaction.ParticipantPermission
-import com.digitalasset.daml.lf.data.Ref.{PackageName, PackageVersion}
+import com.digitalasset.canton.topology.{ForceFlag, ForceFlags, PartyId}
+import com.digitalasset.daml.lf.data.Ref.{PackageId, PackageName, PackageVersion}
 import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   AppRewardCoupon,
@@ -18,13 +18,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.TransferPreapproval
 import org.lfdecentralizedtrust.splice.codegen.java.splice.ans.{AnsEntry, AnsEntryContext}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.payment.{PaymentAmount, Unit}
-import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.subscriptions.{
-  Subscription,
-  SubscriptionData,
-  SubscriptionIdleState,
-  SubscriptionPayData,
-  SubscriptionRequest,
-}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.subscriptions.*
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   ConfigurableApp,
@@ -37,23 +31,14 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   SpliceTestConsoleEnvironment,
 }
 import org.lfdecentralizedtrust.splice.store.db.DbMultiDomainAcsStore
-import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
-  AdvanceOpenMiningRoundTrigger,
-  ExpireRewardCouponsTrigger,
-  ExpireTransferPreapprovalsTrigger,
-  ExpiredAmuletTrigger,
-  ExpiredAnsEntryTrigger,
-  ExpiredAnsSubscriptionTrigger,
-  ExpiredLockedAmuletTrigger,
-  FeaturedAppActivityMarkerTrigger,
-  UpdateExternalPartyConfigStateTrigger,
-}
+import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.*
 import org.lfdecentralizedtrust.splice.util.*
+import org.lfdecentralizedtrust.splice.validator.automation.ValidatorPackageVettingTrigger
 import org.lfdecentralizedtrust.splice.wallet.automation.SubscriptionReadyForPaymentTrigger
 import org.slf4j.event.Level
 
-import scala.concurrent.duration.*
 import java.time.Duration
+import scala.concurrent.duration.*
 
 abstract class ExpiryWithMinimalVettedPackagesIntegrationTestBase
     extends IntegrationTestWithIsolatedEnvironment
@@ -111,6 +96,8 @@ abstract class ExpiryWithMinimalVettedPackagesIntegrationTestBase
             .withPausedTrigger[ExpireTransferPreapprovalsTrigger]
             .withPausedTrigger[ExpiredAnsEntryTrigger]
             .withPausedTrigger[ExpiredAnsSubscriptionTrigger]
+            .withPausedTrigger[ExpiredAmuletTrigger]
+            .withPausedTrigger[ExpiredLockedAmuletTrigger]
         )(c)
       )
       .addConfigTransforms((_, c) =>
@@ -369,7 +356,7 @@ class ExpiryWithIgnoredAmuletVersionIntegrationTest
       )(
         s"All dust contracts remain because alice's preferred version is in ignoredAmuletVersions",
         _ => {
-          sv1Backend.dsoDelegateBasedAutomation.expiredAmuletIgnoredPartiesStore.getAll should
+          sv1Backend.dsoDelegateBasedAutomation.unavailablePartiesStore.getAll should
             contain(alice)
 
           aliceWalletClient.list().amulets should have length 2L withClue "amulets"
@@ -401,5 +388,65 @@ class ExpiryWithIgnoredAmuletVersionIntegrationTest
           ) should have size 1L withClue "ans subscription"
         },
       )
+  }
+}
+
+/** Tests that expiry triggers ignore parties whose participant has no vetted amulet.
+  * Only Amulet contracts are covered in this test, as the ignore logic is shared across expiry triggers.
+  */
+class ExpiryWithNoVettedAmuletVersionIntegrationTest
+    extends ExpiryWithMinimalVettedPackagesIntegrationTestBase {
+
+  "Amulet expiry ignores parties with no vetted amulet version" in { implicit env =>
+    val alice = setupAliceWithDustAmulets()
+
+    clue("Alice unvets every amulet version") {
+      aliceValidatorBackend.validatorAutomation
+        .trigger[ValidatorPackageVettingTrigger]
+        .pause()
+        .futureValue
+      aliceValidatorBackend.participantClient.topology.vetted_packages.propose_delta(
+        aliceValidatorBackend.participantClient.id,
+        store = decentralizedSynchronizerId,
+        removes = DarResources.amulet.all.map(p => PackageId.assertFromString(p.packageId)),
+        force = ForceFlags(ForceFlag.AllowUnvettedDependencies),
+      )
+      eventually() {
+        val vetted = getVettedPackageIds(
+          aliceValidatorBackend.appState.participantAdminConnection,
+          decentralizedSynchronizerId,
+        ).toSet
+        DarResources.amulet.all.foreach(p => vetted should not contain p.packageId)
+      }
+    }
+
+    loggerFactory.assertLogsSeq(
+      SuppressionRule.forLogger[ExpiredAmuletTrigger] && SuppressionRule.Level(Level.WARN)
+    )(
+      actAndCheck(timeUntilSuccess = 60.seconds)(
+        "Advance 4 rounds and resume the amulet expiry trigger", {
+          (1 to 4).foreach(_ => advanceRoundsByOneTickViaAutomation())
+          updateExternalPartyConfigStatesViaAutomation()
+          updateExternalPartyConfigStatesViaAutomation()
+          env.svs.local.foreach(
+            _.dsoDelegateBasedAutomation.trigger[ExpiredAmuletTrigger].resume()
+          )
+        },
+      )(
+        "Alice is ignored and her dust amulets are not expired",
+        _ => {
+          val ignored = sv1Backend.dsoDelegateBasedAutomation.unavailablePartiesStore.getAll
+          ignored should contain(alice)
+          ignored should not contain dsoParty
+          aliceWalletClient.list().amulets should have length 2L withClue "dust amulets"
+        },
+      ),
+      entries =>
+        forAtLeast(1, entries) { entry =>
+          entry.warningMessage should include("No vetted Amulet version")
+          entry.warningMessage should include(alice.uid.identifier.str)
+          entry.warningMessage should include("ignoring 1 parties")
+        },
+    )
   }
 }

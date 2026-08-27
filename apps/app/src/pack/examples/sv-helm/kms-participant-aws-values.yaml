@@ -23,3 +23,8 @@ additionalEnvVars:
       secretKeyRef:
         name: aws-credentials
         key: secretAccessKey
+  # Session signing keys reduce KMS load and cost on KMS-backed participants by signing
+  # most messages with short-lived in-memory keys instead of calling the KMS each time.
+  # This config setting only works on KMS participants.
+  - name: ADDITIONAL_CONFIG_SESSION_SIGNING_KEYS
+    value: canton.participants.participant.crypto.session-signing-keys.enabled = true

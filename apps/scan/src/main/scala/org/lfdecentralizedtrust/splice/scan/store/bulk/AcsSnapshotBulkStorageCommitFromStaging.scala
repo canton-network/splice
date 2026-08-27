@@ -10,18 +10,22 @@ import org.apache.pekko.NotUsed
 import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.stream.scaladsl.Flow
 import org.lfdecentralizedtrust.splice.scan.config.BulkStorageConfig
+import org.lfdecentralizedtrust.splice.scan.util.PeerBftScanConnection
 import org.lfdecentralizedtrust.splice.store.{S3BucketConnection, TimestampWithMigrationId}
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContextExecutor, Future}
 
 class AcsSnapshotBulkStorageCommitFromStaging(
     stagingS3Connection: S3BucketConnection,
     committedS3Connection: S3BucketConnection,
     bulkStorageReader: BulkStorageReader,
     appConfig: BulkStorageConfig,
+    scanConnection: PeerBftScanConnection,
+    onObjectCommitted: Seq[S3BucketConnection.ObjectKeyAndChecksum] => Unit,
     val loggerFactory: NamedLoggerFactory,
-)(implicit ec: ExecutionContext)
-    extends AcsSnapshotBulkStorageWriter
+)(implicit
+    ec: ExecutionContextExecutor
+) extends AcsSnapshotBulkStorageWriter
     with NamedLogging {
 
   override def getNextSnapshotTimestampAfter(
@@ -55,7 +59,9 @@ class AcsSnapshotBulkStorageCommitFromStaging(
               Seq.empty
           },
       appConfig,
+      scanConnection,
       loggerFactory,
+      onObjectCommitted,
     )
   }
 }

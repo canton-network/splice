@@ -3,7 +3,9 @@
 
 package org.lfdecentralizedtrust.splice.scan.config
 
+import cats.data.NonEmptyList
 import com.digitalasset.canton.data.CantonTimestamp
+import org.lfdecentralizedtrust.splice.http.v0.definitions
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{
   AcsSnapshot,
   IncrementalAcsSnapshot,
@@ -11,6 +13,7 @@ import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{
 
 import java.time.{Duration, Instant, ZoneOffset}
 import java.time.temporal.{ChronoField, ChronoUnit}
+import scala.util.matching.Regex
 
 /** Note that these configurations must be kept consistent between SVs,
   *  so they are not configured via a local config file in Scan. Instead, they must be voted on.
@@ -134,6 +137,26 @@ case class ScanStorageConfig(
       segmentStartTimestamp: CantonTimestamp
   ): String = segmentStartTimestamp.toString
 
+}
+
+object ScanStorageConfig {
+  sealed abstract class Encoding(
+      val key: String,
+      val damlValueEncoding: definitions.DamlValueEncoding,
+  ) {
+    final def storageKey(prefix: String, index: Int): String = s"${prefix}_${key}_$index.zstd"
+
+    final def storageKeyRegex(prefix: String): Regex =
+      (".*" + Regex.quote(prefix) + "_" + Regex.quote(key) + "_\\d+\\.zstd").r
+  }
+  object Encoding {
+    case object CompactJson
+        extends Encoding("compact_json", definitions.DamlValueEncoding.CompactJson)
+    case object ProtobufJson
+        extends Encoding("protobuf_json", definitions.DamlValueEncoding.ProtobufJson)
+
+    lazy val all: NonEmptyList[Encoding] = NonEmptyList.of[Encoding](CompactJson, ProtobufJson)
+  }
 }
 
 object ScanStorageConfigs {

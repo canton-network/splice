@@ -53,7 +53,7 @@ class ExpireRewardCouponsTrigger(
     tracer: Tracer,
 ) extends PollingParallelTaskExecutionTrigger[Task]
     with SvTaskBasedTrigger[Task]
-    with IgnoredAmuletVersionGuard {
+    with IgnoredUnavailablePartiesGuard {
   private val store = svTaskContext.dsoStore
 
   override protected def retrieveTasks()(implicit
@@ -163,11 +163,10 @@ class ExpireRewardCouponsTrigger(
       ValidatorLivenessActivityRecords.getInformeesFromContracts(
         task.batch.validatorLivenessActivityRecords
       )
-    completeWithIgnoredAmuletVersionCheck(
+    completeUnlessAmuletVersionIgnored(
       task.vettedAmuletVersion.toString,
       informees,
-      store.dsoPartyId,
-      enableUnresponsivePartiesAutoIgnore = true,
+      ignoreUnresponsiveParties = true,
     )(completeExpiryTaskAsDsoDelegate(task, controller))
   }
 

@@ -52,7 +52,8 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
     zstdCompressionLevel = 3,
   )
   val appConfig = BulkStorageConfig(
-    snapshotPollingInterval = NonNegativeFiniteDuration.ofSeconds(5)
+    snapshotPollingInterval = NonNegativeFiniteDuration.ofSeconds(5),
+    bftCheckEnabled = false, // bft checks are tested elsewhere
   )
 
   override val initialBuckets: Seq[String] = Seq("staging", "committed")
@@ -104,6 +105,8 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
           committedConnection,
           reader,
           appConfig,
+          null, // not used when bft reads are disabled
+          _ => (),
           loggerFactory,
         )
         val commitService = {
@@ -137,21 +140,25 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
           objectCount: Int,
       ): Unit = {
         (0 until objectCount).foreach { i =>
-          stagingConnection
-            .createObject(
-              s"${bulkStorageTestConfig.getSegmentFolder(ts(day), None)}/ACS_$i.zstd",
-              s"dummy acs snapshot at ${ts(day)} (object $i)".getBytes,
-            )
-            .futureValue
+          ScanStorageConfig.Encoding.all.toList.foreach { encoding =>
+            stagingConnection
+              .createObject(
+                s"${bulkStorageTestConfig.getSegmentFolder(ts(day), None)}/${encoding.storageKey("ACS", i)}",
+                s"dummy acs snapshot at ${ts(day)} (object $i)".getBytes,
+              )
+              .futureValue
+          }
         }
       }
 
       def assertCommittedObjectsForSnapshot(day: Int, expectedCount: Int): Assertion = {
-        val expectedKeys = (0 until expectedCount).map { i =>
-          s"${bulkStorageTestConfig.getSegmentFolder(ts(day), None)}/ACS_$i.zstd"
+        val expectedKeys = (0 until expectedCount).flatMap { i =>
+          ScanStorageConfig.Encoding.all.toList.map { encoding =>
+            s"${bulkStorageTestConfig.getSegmentFolder(ts(day), None)}/${encoding.storageKey("ACS", i)}"
+          }
         }
         reader
-          .getCommittedObjectsForAcsSnapshotAtOrBefore(ts(day))
+          .getCommittedObjectsForAcsSnapshotAtOrBefore(ts(day), ScanStorageConfig.Encoding.all)
           .futureValue
           .objects
           .map(_.key) should contain theSameElementsAs
@@ -215,7 +222,8 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
       committedConnection
         .copyObject(
           "staging",
-          s"${bulkStorageTestConfig.getSegmentFolder(ts(4), None)}/ACS_0.zstd",
+          s"${bulkStorageTestConfig.getSegmentFolder(ts(4), None)}/${ScanStorageConfig.Encoding.CompactJson
+              .storageKey("ACS", 0)}",
         )
         .futureValue
 
@@ -236,12 +244,14 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
         committedConnection
           .copyObject(
             "staging",
-            s"${bulkStorageTestConfig.getSegmentFolder(ts(5), None)}/ACS_$i.zstd",
+            s"${bulkStorageTestConfig
+                .getSegmentFolder(ts(5), None)}/${ScanStorageConfig.Encoding.CompactJson.storageKey("ACS", i)}",
           )
           .futureValue
         stagingConnection
           .deleteObject(
-            s"${bulkStorageTestConfig.getSegmentFolder(ts(5), None)}/ACS_$i.zstd"
+            s"${bulkStorageTestConfig
+                .getSegmentFolder(ts(5), None)}/${ScanStorageConfig.Encoding.CompactJson.storageKey("ACS", i)}"
           )
           .futureValue
       }

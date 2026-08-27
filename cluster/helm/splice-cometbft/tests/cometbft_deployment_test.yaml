@@ -21,6 +21,8 @@ set:
   genesis:
     chainId: "mock-3"
     chainIdSuffix: "1"  # must be a string value
+  watchdog:
+    enabled: false
 tests:
   - it: "deploys a deployment"
     template: deployment.yaml

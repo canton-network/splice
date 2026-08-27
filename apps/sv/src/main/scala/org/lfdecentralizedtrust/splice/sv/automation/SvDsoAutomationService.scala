@@ -7,7 +7,12 @@ import cats.implicits.catsSyntaxOptionId
 import com.daml.grpc.adapter.ExecutionSequencerFactory
 import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.config.ClientConfig
-import com.digitalasset.canton.lifecycle.{AsyncCloseable, AsyncOrSyncCloseable}
+import com.digitalasset.canton.lifecycle.{
+  AsyncCloseable,
+  AsyncOrSyncCloseable,
+  LifeCycle,
+  SyncCloseable,
+}
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.time.{Clock, WallClock}
 import com.digitalasset.canton.topology.SynchronizerId
@@ -47,6 +52,7 @@ import org.lfdecentralizedtrust.splice.sv.automation.SvDsoAutomationService.{
   LocalSequencerClientContext,
 }
 import org.lfdecentralizedtrust.splice.sv.automation.confirmation.*
+import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.SvTaskBasedTrigger
 import org.lfdecentralizedtrust.splice.sv.automation.singlesv.*
 import org.lfdecentralizedtrust.splice.sv.automation.singlesv.offboarding.{
   SvOffboardingMediatorTrigger,
@@ -210,7 +216,10 @@ class SvDsoAutomationService(
     }
 
   override protected def closeAsync(): Seq[AsyncOrSyncCloseable] =
-    super.closeAsync() ++
+    SyncCloseable(
+      "dso-delegate-based-automation",
+      LifeCycle.close(dsoDelegateBasedAutomation)(logger),
+    ) +: (super.closeAsync() ++
       // super.closeAsync() waits for all triggers to close, so we do not need to worry
       // about synchronization when closing the scan connections here.
       ownScanConnectionF
@@ -235,7 +244,7 @@ class SvDsoAutomationService(
             timeouts.shutdownNetwork,
           )
         )
-        .toList
+        .toList)
 
   private val packageVettingService = new PackageVettingLookupService(
     config.packageVettingCache,
@@ -251,19 +260,24 @@ class SvDsoAutomationService(
 
   // notice the absence of UpdateHistory: the history for the dso party is duplicate with Scan
 
-  private[splice] val restartDsoDelegateBasedAutomationTrigger =
-    new RestartDsoDelegateBasedAutomationTrigger(
-      triggerContext,
-      domainTimeSync,
-      dsoStore,
-      connection,
+  private[splice] val dsoDelegateBasedAutomation =
+    new DsoDelegateBasedAutomationService(
       clock,
+      domainTimeSync,
       config,
-      retryProvider,
-      packageVersionSupport,
-      packageVettingService,
+      SvTaskBasedTrigger.Context(
+        dsoStore,
+        connection,
+        config.delegatelessAutomationExpectedTaskDuration,
+        config.delegatelessAutomationExpiredRewardCouponBatchSize,
+        config.delegatelessAutomationExpiredRewardCouponNumBatches,
+        packageVersionSupport,
+        packageVettingService,
+      ),
       () => getOrCreateOwnScanConnection(),
       () => getOrCreatePeerScanConnection(),
+      retryProvider,
+      loggerFactory,
     )
 
   // required for triggers that must run in sim time as well
@@ -563,7 +577,7 @@ class SvDsoAutomationService(
       )
     )
 
-    registerTrigger(restartDsoDelegateBasedAutomationTrigger)
+    dsoDelegateBasedAutomation.start()
 
     registerTrigger(
       new AnsSubscriptionInitialPaymentTrigger(
@@ -618,6 +632,12 @@ class SvDsoAutomationService(
     )
     registerTrigger(
       new AmuletPriceMetricsTrigger(
+        triggerContext,
+        dsoStore,
+      )
+    )
+    registerTrigger(
+      new VoteRequestMetricsTrigger(
         triggerContext,
         dsoStore,
       )
@@ -762,7 +782,6 @@ object SvDsoAutomationService extends AutomationServiceCompanion {
       aTrigger[CalculateRewardsTrigger],
       aTrigger[CalculateRewardsDryRunTrigger],
       aTrigger[ConfirmationMismatchReportTrigger],
-      aTrigger[RestartDsoDelegateBasedAutomationTrigger],
       aTrigger[AnsSubscriptionInitialPaymentTrigger],
       aTrigger[SvPackageVettingTrigger],
       aTrigger[SvOffboardingPartyToParticipantProposalTrigger],
@@ -790,6 +809,7 @@ object SvDsoAutomationService extends AutomationServiceCompanion {
       aTrigger[FollowAmuletConversionRateFeedTrigger],
       aTrigger[CopyVotesTrigger],
       aTrigger[AmuletPriceMetricsTrigger],
+      aTrigger[VoteRequestMetricsTrigger],
       aTrigger[RewardMetricsTrigger],
       aTrigger[CreateBootstrapExternalPartyConfigStateInstructionTrigger],
       aTrigger[LsuTrigger],

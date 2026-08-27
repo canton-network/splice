@@ -10,7 +10,7 @@ import org.lfdecentralizedtrust.splice.scan.store.db.{DbAppActivityRecordStore, 
 import org.lfdecentralizedtrust.splice.store.TreeUpdateWithMigrationId
 import org.lfdecentralizedtrust.splice.store.UpdateHistory
 import com.digitalasset.canton.data.CantonTimestamp
-import org.lfdecentralizedtrust.splice.store.PageLimit
+import org.lfdecentralizedtrust.splice.store.{PageLimit, TimestampWithMigrationId}
 import scala.collection.immutable.SortedMap
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -60,7 +60,7 @@ class ScanEventStore(
   }
 
   def getEvents(
-      afterO: Option[(Long, CantonTimestamp)],
+      afterO: Option[TimestampWithMigrationId],
       currentMigrationId: Long,
       limit: PageLimit,
   )(implicit tc: TraceContext): Future[Seq[Event]] = {
@@ -88,9 +88,9 @@ class ScanEventStore(
         verdictStore.listTransactionViews(v.rowId).map(views => v -> views)
       )
     } yield {
-      val verdictEntries: Iterator[((Long, CantonTimestamp), Verdict)] =
+      val verdictEntries: Iterator[(TimestampWithMigrationId, Verdict)] =
         verdictsWithViews.iterator.map { case (v, views) =>
-          val k = (v.migrationId, v.recordTime)
+          val k = TimestampWithMigrationId(v.recordTime, v.migrationId)
           k -> (v -> views)
         }
 
@@ -100,11 +100,11 @@ class ScanEventStore(
       val mergedSorted = {
         val fromUpdates = filteredUpdates.iterator.foldLeft(
           SortedMap.empty[
-            (Long, CantonTimestamp),
+            TimestampWithMigrationId,
             (Option[Verdict], Option[TreeUpdateWithMigrationId]),
           ]
         ) { case (acc, u) =>
-          val k = (u.migrationId, u.update.update.recordTime)
+          val k = TimestampWithMigrationId(u.update.update.recordTime, u.migrationId)
           acc.updated(k, (None, Some(u)))
         }
         verdictEntries.foldLeft(fromUpdates) { case (acc, (k, v)) =>
@@ -125,10 +125,7 @@ class ScanEventStore(
   def getAppActivityRecords(verdictRowIds: Seq[Long])(implicit
       tc: TraceContext
   ): Future[Map[Long, AppActivityRecordT]] =
-    verdictStore.appActivityRecordStoreO match {
-      case Some(store) => store.getRecordsByVerdictRowIds(verdictRowIds)
-      case None => Future.successful(Map.empty)
-    }
+    verdictStore.appActivityRecordStore.getRecordsByVerdictRowIds(verdictRowIds)
 
   // Get values from in-memory refs, fallsback to DB read
   private def resolveCurrentMigrationCap(
@@ -154,12 +151,12 @@ class ScanEventStore(
 // Filtering logic extracted out for unit testing
 object ScanEventStore {
   def allowF(
-      afterO: Option[(Long, CantonTimestamp)],
+      afterO: Option[TimestampWithMigrationId],
       currentMigrationId: Long,
       currentMigrationCap: CantonTimestamp,
   )(mig: Long, rt: CantonTimestamp): Boolean = {
     afterO match {
-      case Some((afterMig, afterRt)) if mig == afterMig =>
+      case Some(TimestampWithMigrationId(afterRt, afterMig)) if mig == afterMig =>
         if (mig < currentMigrationId) rt > afterRt
         else rt > afterRt && rt <= currentMigrationCap
       case _ if mig < currentMigrationId =>

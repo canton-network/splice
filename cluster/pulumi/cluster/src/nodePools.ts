@@ -1,7 +1,15 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import * as gcp from '@pulumi/gcp';
-import { config, GCP_PROJECT } from '@canton-network/splice-pulumi-common';
+import * as k8s from '@pulumi/kubernetes';
+import * as pulumi from '@pulumi/pulumi';
+import {
+  config,
+  GCP_PROJECT,
+  appsComputeClassName,
+  infraComputeClassName,
+  useComputeClasses,
+} from '@canton-network/splice-pulumi-common';
 
 import { gkeClusterConfig, GkeNodePoolConfig } from './config';
 
@@ -15,75 +23,124 @@ export async function installNodePools(): Promise<void> {
   });
   const nodePoolComputeZone = config.optionalEnv('CLOUDSDK_NODEPOOL_COMPUTE_ZONE');
 
-  installAppsNodePools(cluster, zones.names, [
+  const appPools = installAppsNodePools(cluster, zones.names, [
     gkeClusterConfig.nodePools.apps,
     ...gkeClusterConfig.nodePools.additionalApps,
   ]);
-  installInfraNodePools(cluster, zones.names, nodePoolComputeZone, [
+  const infraPools = installInfraNodePools(cluster, zones.names, nodePoolComputeZone, [
     gkeClusterConfig.nodePools.infra,
     ...gkeClusterConfig.nodePools.additionalInfra,
   ]);
 
-  new gcp.container.NodePool('gke-node-pool', {
-    cluster,
-    nodeConfig: {
-      machineType: 'e2-standard-4',
-      taints: [
-        {
-          effect: 'NO_SCHEDULE',
-          key: 'components.gke.io/gke-managed-components',
-          value: 'true',
-        },
-      ],
-      loggingVariant: 'DEFAULT',
+  new gcp.container.NodePool(
+    'gke-node-pool',
+    {
+      cluster,
+      nodeConfig: {
+        machineType: 'e2-standard-4',
+        taints: [
+          {
+            effect: 'NO_SCHEDULE',
+            key: 'components.gke.io/gke-managed-components',
+            value: 'true',
+          },
+        ],
+        loggingVariant: 'DEFAULT',
+      },
+      nodeLocations: nodePoolComputeZone ? [nodePoolComputeZone] : undefined,
+      initialNodeCount: 1,
+      autoscaling: {
+        minNodeCount: 1,
+        maxNodeCount: 3,
+      },
     },
-    nodeLocations: nodePoolComputeZone ? [nodePoolComputeZone] : undefined,
-    initialNodeCount: 1,
-    autoscaling: {
-      minNodeCount: 1,
-      maxNodeCount: 3,
-    },
-  });
+    {
+      replaceOnChanges: ['nodeConfig.machineType'],
+    }
+  );
+
+  if (useComputeClasses) {
+    installComputeClass(appsComputeClassName, appPools);
+    installComputeClass(infraComputeClassName, infraPools);
+  }
+}
+
+type NodeConfigLabelsAndTaints = Pick<
+  gcp.types.input.container.NodePoolNodeConfig,
+  'labels' | 'taints'
+>;
+
+interface NodePoolWithConfig {
+  pool: gcp.container.NodePool;
+  config: GkeNodePoolConfig;
 }
 
 function installAppsNodePools(
   cluster: string,
   allZones: string[],
   configs: Array<GkeNodePoolConfig>
-): Array<gcp.container.NodePool> {
+): Array<NodePoolWithConfig> {
   const defaultZone = config.optionalEnv('CLOUDSDK_HYPERDISK_NODEPOOL_COMPUTE_ZONE');
   return configs.map((config, index) => {
     const name =
       index === 0
         ? 'cn-apps-node-pool-hd' // for backwards compat
         : `cn-apps-node-pool-${index}-hd`;
-    return new gcp.container.NodePool(name, {
-      cluster,
-      nodeConfig: {
-        machineType: config.nodeType,
-        bootDisk: {
-          diskType: 'hyperdisk-balanced',
-          sizeGb: config.bootDiskSizeGb || 100,
-        },
-        taints: [
-          {
-            effect: 'NO_SCHEDULE',
-            key: 'cn_apps',
-            value: 'true',
+    // With ComputeClasses, we rely on the `cloud.google.com/compute-class` label only.
+    // That label *must* be present for the ComputeClass use the node pool, even
+    // if it's explicitly mentioned in the ComputeClass priorities.
+    const labelsAndTaints: NodeConfigLabelsAndTaints = useComputeClasses
+      ? {
+          taints: [
+            {
+              effect: 'NO_SCHEDULE',
+              key: 'cloud.google.com/compute-class',
+              value: appsComputeClassName,
+            },
+          ],
+          labels: {
+            'cloud.google.com/compute-class': appsComputeClassName,
+            ...config.labels,
           },
-        ],
-        labels: {
-          cn_apps: 'hyperdisk',
+        }
+      : {
+          taints: [
+            {
+              effect: 'NO_SCHEDULE',
+              key: 'cn_apps',
+              value: 'true',
+            },
+          ],
+          labels: {
+            cn_apps: 'hyperdisk',
+            ...config.labels,
+          },
+        };
+    const pool = new gcp.container.NodePool(
+      name,
+      {
+        cluster,
+        nodeConfig: {
+          machineType: config.nodeType,
+          bootDisk: {
+            diskType: 'hyperdisk-balanced',
+            sizeGb: config.bootDiskSizeGb || 100,
+          },
+          ...labelsAndTaints,
+          loggingVariant: 'DEFAULT',
         },
-        loggingVariant: 'DEFAULT',
+        nodeLocations:
+          config.zones === '*'
+            ? allZones
+            : (config.zones ?? (defaultZone !== undefined ? [defaultZone] : undefined)),
+        initialNodeCount: 0,
+        autoscaling: autoscalingConfigOf(config),
       },
-      nodeLocations:
-        config.zones === '*'
-          ? allZones
-          : (config.zones ?? (defaultZone !== undefined ? [defaultZone] : undefined)),
-      initialNodeCount: 0,
-      autoscaling: autoscalingConfigOf(config),
-    });
+      {
+        replaceOnChanges: ['nodeConfig.machineType'],
+      }
+    );
+    return { pool, config };
   });
 }
 
@@ -92,18 +149,31 @@ function installInfraNodePools(
   allZones: string[],
   defaultZone: string | undefined,
   configs: Array<GkeNodePoolConfig>
-): Array<gcp.container.NodePool> {
+): Array<NodePoolWithConfig> {
   return configs.map((config, index) => {
     const name =
       index === 0
         ? 'cn-infra-node-pool' // for backwards compat
         : `cn-infra-node-pool-${index}`;
-    return new gcp.container.NodePool(
-      name,
-      {
-        cluster,
-        nodeConfig: {
-          machineType: config.nodeType,
+
+    // With ComputeClasses, we rely on the `cloud.google.com/compute-class` label only.
+    // That label *must* be present for the ComputeClass use the node pool, even
+    // if it's explicitly mentioned in the ComputeClass priorities.
+    const labelsAndTaints: NodeConfigLabelsAndTaints = useComputeClasses
+      ? {
+          taints: [
+            {
+              effect: 'NO_SCHEDULE',
+              key: 'cloud.google.com/compute-class',
+              value: infraComputeClassName,
+            },
+          ],
+          labels: {
+            'cloud.google.com/compute-class': infraComputeClassName,
+            ...config.labels,
+          },
+        }
+      : {
           taints: [
             {
               effect: 'NO_SCHEDULE',
@@ -114,6 +184,15 @@ function installInfraNodePools(
           labels: {
             cn_infra: 'true',
           },
+        };
+
+    const pool = new gcp.container.NodePool(
+      name,
+      {
+        cluster,
+        nodeConfig: {
+          machineType: config.nodeType,
+          ...labelsAndTaints,
           loggingVariant: 'DEFAULT',
         },
         nodeLocations:
@@ -127,7 +206,45 @@ function installInfraNodePools(
         replaceOnChanges: ['nodeConfig.machineType'],
       }
     );
+    return { pool, config };
   });
+}
+
+function installComputeClass(
+  name: string,
+  pools: NodePoolWithConfig[]
+): k8s.apiextensions.CustomResource {
+  // Group node pools by their configured priority.
+  // Priority defaults to -index (so that the first pool is highest priority, second is next, etc),
+  // and any explicitly set positive priority will be sorted above the defaulted ones.
+  const byPriority = new Map<number, pulumi.Input<string>[]>();
+  pools.forEach(({ pool, config: poolConfig }, index) => {
+    const priority = poolConfig.priority ?? -index;
+    const group = byPriority.get(priority) ?? [];
+    group.push(pool.name);
+    byPriority.set(priority, group);
+  });
+
+  // Sort by descending priority (highest first) and emit one entry per group.
+  const priorities = [...byPriority.entries()]
+    .sort(([a], [b]) => b - a)
+    .map(([, nodepools]) => ({ nodepools }));
+
+  return new k8s.apiextensions.CustomResource(
+    `compute-class-${name}`,
+    {
+      apiVersion: 'cloud.google.com/v1',
+      kind: 'ComputeClass',
+      metadata: { name },
+      spec: {
+        priorities,
+        nodePoolAutoCreation: { enabled: false },
+      },
+    },
+    {
+      dependsOn: pools.map(({ pool }) => pool),
+    }
+  );
 }
 
 function autoscalingConfigOf(config: GkeNodePoolConfig): gcp.container.NodePoolArgs['autoscaling'] {

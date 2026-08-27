@@ -16,7 +16,6 @@ import io.opentelemetry.api.trace.Tracer
 import org.lfdecentralizedtrust.splice.codegen.java.splice.ans as ansCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.subscriptions as subsCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.subscriptions.SubscriptionIdleState_ExpireSubscription
-import org.lfdecentralizedtrust.splice.environment.PackageIdResolver
 import org.lfdecentralizedtrust.splice.store.{IgnoredPartiesStore, PageLimit}
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
@@ -39,7 +38,7 @@ class ExpiredAnsSubscriptionTrigger(
     tracer: Tracer,
 ) extends ScheduledTaskTrigger[SvDsoStore.IdleAnsSubscription]
     with SvTaskBasedTrigger[ScheduledTaskTrigger.ReadyTask[SvDsoStore.IdleAnsSubscription]]
-    with IgnoredAmuletVersionGuard {
+    with IgnoredUnavailablePartiesGuard {
   private val store = svTaskContext.dsoStore
 
   override protected def listReadyTasks(now: CantonTimestamp, limit: Int)(implicit
@@ -47,30 +46,13 @@ class ExpiredAnsSubscriptionTrigger(
   ): Future[Seq[SvDsoStore.IdleAnsSubscription]] =
     store.listExpiredAnsSubscriptions(now, PageLimit.tryCreate(limit), Some(ignoredPartiesStore))
 
-  override protected def completeTaskAsDsoDelegate(
-      task: Task,
-      controller: String,
-  )(implicit tc: TraceContext): Future[TaskOutcome] = {
-    val stakeholders = getStakeholders(task.work.state.payload).toSet
-    svTaskContext.vettingLookupService
-      .lookupVettingState(stakeholders.toSeq, PackageIdResolver.Package.SpliceAmulet)
-      .flatMap {
-        case Some(vettedVersion) =>
-          completeWithIgnoredAmuletVersionCheck(
-            vettedVersion.toString,
-            stakeholders,
-            store.key.dsoParty,
-            enableUnresponsivePartiesAutoIgnore = true,
-          )(completeExpiryTaskAsDsoDelegate(task, controller))
-        case None =>
-          Future.successful(
-            TaskSuccess(
-              s"No vetted SpliceAmulet version for stakeholders $stakeholders of " +
-                s"ANS subscription ${task.work.state.contractId}, skipping."
-            )
-          )
-      }
-  }
+  override protected def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
+      tc: TraceContext
+  ): Future[TaskOutcome] =
+    completeWithVettedAmuletVersion(
+      getStakeholders(task.work.state.payload).toSet,
+      Seq(task.work.state.contractId.contractId),
+    )(completeExpiryTaskAsDsoDelegate(task, controller))
 
   private def completeExpiryTaskAsDsoDelegate(
       task: Task,

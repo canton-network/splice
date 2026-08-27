@@ -22,7 +22,7 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.DamlValueEncoding.mem
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTestWithIsolatedEnvironment
 import org.lfdecentralizedtrust.splice.scan.admin.http.CompactJsonScanHttpEncodings
-import org.lfdecentralizedtrust.splice.scan.config.BulkStorageConfig
+import org.lfdecentralizedtrust.splice.scan.config.{BulkStorageConfig, ScanStorageConfig}
 import org.lfdecentralizedtrust.splice.scan.config.ScanStorageConfigs.scanStorageConfigV1
 import org.lfdecentralizedtrust.splice.store.{HasS3Mock, S3BucketConnectionForTests}
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingState
@@ -71,6 +71,8 @@ class ScanTimeBasedIntegrationTest
               updatesPollingInterval = NonNegativeFiniteDuration.ofSeconds(5),
               staging = Some(s3ConfigMock("staging")),
               committed = Some(s3ConfigMock("committed")),
+              bftCheckEnabled =
+                false, // bft checks don't work with a single scan. The bft functionality is tested in the unit test.
             ),
             publicUrl = Some(Uri("http://foo.bar.com")),
           )
@@ -446,7 +448,8 @@ class ScanTimeBasedIntegrationTest
     val endTime = getLedgerTime
     val lastMidnight = endTime.toInstant.truncatedTo(ChronoUnit.DAYS);
     val nextMidnight = lastMidnight.plus(1, ChronoUnit.DAYS)
-    val expectedAcsSnapshotKey = s"$lastMidnight~$nextMidnight/ACS_0.zstd"
+    val expectedAcsSnapshotKey =
+      s"$lastMidnight~$nextMidnight/${ScanStorageConfig.Encoding.CompactJson.storageKey("ACS", 0)}"
 
     val committedBucketConnection =
       new S3BucketConnectionForTests(s3ConfigMock("committed"), loggerFactory)
@@ -474,7 +477,11 @@ class ScanTimeBasedIntegrationTest
       // at last midnight
       committedS3Objs
         .map(_.key())
-        .filter(_.endsWith(s"~$lastMidnight/updates_0.zstd")) should not be empty
+        .filter(
+          _.endsWith(
+            s"~$lastMidnight/${ScanStorageConfig.Encoding.CompactJson.storageKey("updates", 0)}"
+          )
+        ) should not be empty
 
       // Compare bulk storage data to hot storage data from scan
       // TODO(#4788): for now, bulk storage still uses v0, so we use that here as well

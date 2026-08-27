@@ -8,7 +8,7 @@ import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.tracing.TraceContext
 import org.apache.pekko.stream.scaladsl.{Flow, Source}
 import org.apache.pekko.util.ByteString
-import org.lfdecentralizedtrust.splice.scan.admin.http.CompactJsonScanHttpEncodings
+import org.lfdecentralizedtrust.splice.scan.admin.http.ScanHttpEncodings
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore
 import org.lfdecentralizedtrust.splice.store.{
   HistoryMetrics,
@@ -16,6 +16,7 @@ import org.lfdecentralizedtrust.splice.store.{
   S3BucketConnection,
   TimestampWithMigrationId,
 }
+import org.lfdecentralizedtrust.splice.store.events.SpliceCreatedEvent
 
 import scala.concurrent.Future
 import io.circe.syntax.*
@@ -46,15 +47,10 @@ class SingleAcsSnapshotBulkStorage(
 )(implicit tc: TraceContext, ec: ExecutionContext)
     extends NamedLogging {
 
-  case class AcsSnapshotChunk(
-      chunkBytes: ByteString,
-      numContracts: Int,
-  )
-
   private def getAcsSnapshotChunk(
       timestamp: TimestampWithMigrationId,
       after: Option[Long],
-  ): Future[(Position, AcsSnapshotChunk)] = {
+  ): Future[(Position, Vector[SpliceCreatedEvent])] = {
     for {
       snapshot <- acsSnapshotStore.queryAcsSnapshot(
         timestamp.migrationId,
@@ -64,22 +60,27 @@ class SingleAcsSnapshotBulkStorage(
         Seq.empty,
         Seq.empty,
       )
-    } yield {
-      val encoded = snapshot.createdEventsInPage.map(event =>
-        CompactJsonScanHttpEncodings()
-          .javaToHttpActiveContract(event.eventId, event.recordTime, event.event)
-      )
-      val contractsStr = encoded.map(_.asJson.noSpacesSortKeys).mkString("\n") + "\n"
-      val contractsBytes = ByteString(contractsStr.getBytes(StandardCharsets.UTF_8))
-      logger.debug(
-        s"Read ${encoded.length} contracts from ACS, to a bytestring of size ${contractsBytes.length} bytes"
-      )
-      (
-        snapshot.afterToken.fold(End: Position)(Index(_)),
-        AcsSnapshotChunk(contractsBytes, encoded.length),
-      )
-    }
+    } yield (
+      snapshot.afterToken.fold(End: Position)(Index(_)),
+      snapshot.createdEventsInPage,
+    )
 
+  }
+
+  private def encodeEvents(
+      events: Vector[SpliceCreatedEvent],
+      encoding: ScanStorageConfig.Encoding,
+  ): ByteString = {
+    val encodings = ScanHttpEncodings.fromDamlValueEncoding(encoding.damlValueEncoding)
+    val encoded = events.map(event =>
+      encodings.javaToHttpActiveContract(event.eventId, event.recordTime, event.event)
+    )
+    val contractsStr = encoded.map(_.asJson.noSpacesSortKeys).mkString("\n") + "\n"
+    val contractsBytes = ByteString(contractsStr.getBytes(StandardCharsets.UTF_8))
+    logger.debug(
+      s"Read ${encoded.length} contracts from ACS, to a bytestring of size ${contractsBytes.length} bytes, with encoding ${encoding.key}"
+    )
+    contractsBytes
   }
 
   private def getSource: Source[Seq[String], NotUsed] = {
@@ -89,22 +90,26 @@ class SingleAcsSnapshotBulkStorage(
         case Index(i) => getAcsSnapshotChunk(timestamp, Some(i)).map(Some(_))
         case End => Future.successful(None)
       }
-      .map(chunk => {
-        historyMetrics.BulkStorage.incContractsCount(chunk.numContracts)
-        chunk.chunkBytes
+      .map(events => {
+        historyMetrics.BulkStorage.incContractsCount(events.length)
+        events
       })
       .via(
-        S3ZstdObjects(
-          storageConfig,
-          appConfig,
-          s3Connection,
-          { objIdx =>
-            s"${storageConfig.getSegmentFolder(timestamp.timestamp, None)}/ACS_$objIdx.zstd"
-          },
-          loggerFactory,
+        MultiEncodingBulkStorageFlow(
+          encodeEvents,
+          encoding =>
+            S3ZstdObjects(
+              storageConfig,
+              appConfig,
+              s3Connection,
+              objIdx =>
+                s"${storageConfig.getSegmentFolder(timestamp.timestamp, None)}/${encoding
+                    .storageKey("ACS", objIdx)}",
+              loggerFactory,
+            ),
+          encoding => historyMetrics.BulkStorage.incAcsSnapshotObjects(encoding.key, "staging"),
         )
       )
-      .wireTap(_ => historyMetrics.BulkStorage.incAcsSnapshotObjects())
       .fold(Seq.empty[String])(_ :+ _)
   }
 }

@@ -61,9 +61,6 @@ Trying to re-register template.*
 # TODO(#975): investigate and remove once fixed
 failed with UNKNOWN/channel closed.*SvAppLedgerApiConnectivityIntegrationTest
 
-# This might be logged between the test finishing and shutdown of the nodes (see #8991)
-Noticed an DsoRules epoch change.*DecentralizedSynchronizerMigrationIntegrationTest
-
 # TODO (#825): this only applies to simtime.
 # In simtime tests where the rounds are advanced too quickly, this trigger might not have enough time to receive the coupon.
 # Nevertheless, it is still useful to have the warning in production environments, where this should never happen.
@@ -134,6 +131,10 @@ Simulated S3 error
 
 # Shutdown issues
 Previous channel ManagedChannelImpl.* was garbage collected without being shut down!
+# This is logged by pekko's RestartSource. Ideally we'd prevent it from logging that when shutting down,
+# but it doesn't offer a clean way of doing that. Lowering log level also doesn't seem sensible,
+# as we don't want to miss non-shutdown warnings in production.
+Restarting stream due to failure.*Channel shutdown invoked
 # TODO(#564) - check what's happening here during shutdown
 Timeout 10 seconds expired, but readers are still active. Shutting down forcibly.*LsuIntegrationTest
 
