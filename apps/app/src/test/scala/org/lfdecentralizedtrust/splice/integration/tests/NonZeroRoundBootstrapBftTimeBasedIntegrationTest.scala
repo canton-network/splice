@@ -1,7 +1,6 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.HasExecutionContext
-import com.digitalasset.canton.concurrent.Threading
 import org.lfdecentralizedtrust.splice.codegen.java.splice.cometbft.{
   CometBftConfig,
   CometBftNodeConfig,
@@ -23,7 +22,6 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   IntegrationTestWithIsolatedEnvironment,
   SpliceTestConsoleEnvironment,
 }
-import org.lfdecentralizedtrust.splice.automation.Trigger
 import org.lfdecentralizedtrust.splice.sv.automation.singlesv.onboarding.SvOnboardingUnlimitedTrafficTrigger
 import org.lfdecentralizedtrust.splice.util.{TimeTestUtil, WalletTestUtil}
 
@@ -204,13 +202,6 @@ class NonZeroRoundBootstrapBftTimeBasedIntegrationTest
       },
     )
 
-    // Pause ALL delegate-based triggers to prevent DsoRules contract
-    // churn during the SetSynchronizerNodeConfig submission.
-    // Sleep briefly after pausing to let in-flight commands complete.
-    env.svs.local.foreach(
-      _.dsoDelegateBasedAutomation.triggers[Trigger].foreach(_.pause().futureValue)
-    )
-    Threading.sleep(2000)
     actAndCheck(
       "Set fake scan URL on dummy SV",
       setDummySvScanUrl(dsoParty, dummySvParty),
@@ -221,9 +212,6 @@ class NonZeroRoundBootstrapBftTimeBasedIntegrationTest
         nodeState.payload.state.synchronizerNodes.values.asScala
           .exists(_.scan.isPresent) shouldBe true
       },
-    )
-    env.svs.local.foreach(
-      _.dsoDelegateBasedAutomation.triggers[Trigger].foreach(_.resume())
     )
 
     dummySvParty
