@@ -936,20 +936,25 @@ object AcsSnapshotStore {
           Right(RowIdQueryAcsSnapshotPaginationToken(token))
         ) { case RowIdQueryAcsSnapshotPaginationToken(after) => after }
 
-    def decodeFromBase64(token: String): Either[String, QueryAcsSnapshotPaginationToken] = {
+    def tryDecodeFromBase64(token: String): QueryAcsSnapshotPaginationToken = {
       import cats.implicits.*
 
-      val decodedBytes = java.util.Base64.getDecoder.decode(token)
-      val decodedString = new String(decodedBytes, StandardCharsets.UTF_8)
-      io.circe.parser.decode(decodedString)(codec).leftMap(_ => "Failed to decode pagination token")
-    }
-
-    def tryDecodeFromBase64(token: String): QueryAcsSnapshotPaginationToken = {
-      decodeFromBase64(token) match {
-        case Right(value) => value
-        case Left(error) =>
-          throw io.grpc.Status.INVALID_ARGUMENT.withDescription(error).asRuntimeException()
-      }
+      (for {
+        decodedString <- scala.util
+          .Try {
+            val decodedBytes = java.util.Base64.getDecoder.decode(token)
+            new String(decodedBytes, StandardCharsets.UTF_8)
+          }
+          .toEither
+          .leftMap(_ => "Failed to decode base64 token")
+        decoded <- io.circe.parser.decode(decodedString)(codec).leftMap(_.getMessage)
+      } yield decoded).fold(
+        msg =>
+          throw io.grpc.Status.INVALID_ARGUMENT
+            .withDescription(msg)
+            .asRuntimeException(),
+        identity,
+      )
     }
   }
 
