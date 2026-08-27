@@ -88,6 +88,11 @@ ForkJoinIdlenessExecutorService.*shutdown did not complete gracefully in allotte
 
 Consensus not reached.*BftScanConnection:BftScanConnectionTest.*
 Consensus not reached.*BftScanConnection:ConfigurationProvidedBftScanConnectionIntegrationTest.*
+# TODO (#6502): under TBAR the two reward-accounting BFT reads emit
+# "disagreed with consensus" WARN when peers are still ingesting a round.
+# Scope the ignore to the two triggers that call these reads so real
+# BFT disagreements elsewhere still surface.
+The following Scan URLs disagreed with consensus.*BftScanConnection:.*"span-name":"(SummarizingMiningRoundTrigger|CalculateRewardsTrigger)"
 
 # internal selenium error. Potentially intermittent
 Exception managing firefox: error sending request for url .* http2 error: stream error received: refused stream before processing any application
