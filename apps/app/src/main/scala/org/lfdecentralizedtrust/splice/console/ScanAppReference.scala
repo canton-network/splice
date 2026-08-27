@@ -39,6 +39,7 @@ import org.lfdecentralizedtrust.splice.util.{
   ChoiceContextWithDisclosures,
   Contract,
   ContractWithState,
+  DsoInfo,
   FactoryChoiceWithDisclosures,
   PackageQualifiedName,
   SpliceUtil,
@@ -85,7 +86,7 @@ abstract class ScanAppReference(
       httpCommand(HttpScanAppClient.GetDsoPartyId(List()))
     }
 
-  def getDsoInfo(): HttpScanAppClient.DsoInfo = {
+  def getDsoInfo(): DsoInfo = {
     consoleEnvironment.run {
       httpCommand(HttpScanAppClient.GetDsoInfo(List()))
     }

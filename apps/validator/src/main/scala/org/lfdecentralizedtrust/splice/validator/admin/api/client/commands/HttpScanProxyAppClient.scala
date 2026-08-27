@@ -12,8 +12,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.ans.AnsRules
 import org.apache.pekko.http.scaladsl.model.{HttpHeader, HttpResponse, StatusCodes}
 import org.lfdecentralizedtrust.splice.http.v0.{definitions, scanproxy as scanProxy}
 import org.lfdecentralizedtrust.splice.http.v0.scanproxy.{GetDsoPartyIdResponse, ScanproxyClient}
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient
-import org.lfdecentralizedtrust.splice.util.{Codec, ContractWithState, TemplateJsonDecoder}
+import org.lfdecentralizedtrust.splice.util.{Codec, ContractWithState, DsoInfo, TemplateJsonDecoder}
 import com.digitalasset.canton.topology.PartyId
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.UnclaimedDevelopmentFundCoupon
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.TransferPreapproval
@@ -43,8 +42,7 @@ object HttpScanProxyAppClient {
     }
   }
 
-  case object GetDsoInfo
-      extends ScanProxyBaseCommand[scanProxy.GetDsoInfoResponse, HttpScanAppClient.DsoInfo] {
+  case object GetDsoInfo extends ScanProxyBaseCommand[scanProxy.GetDsoInfoResponse, DsoInfo] {
     override def submitRequest(
         client: ScanproxyClient,
         headers: List[HttpHeader],
@@ -55,9 +53,9 @@ object HttpScanProxyAppClient {
         decoder: TemplateJsonDecoder
     ): PartialFunction[scanProxy.GetDsoInfoResponse, Either[
       String,
-      HttpScanAppClient.DsoInfo,
+      DsoInfo,
     ]] = { case scanProxy.GetDsoInfoResponse.OK(response) =>
-      HttpScanAppClient.decodeDsoInfo(response)
+      DsoInfo.fromHttp(response)
     }
   }
 

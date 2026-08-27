@@ -124,6 +124,7 @@ import org.lfdecentralizedtrust.splice.util.{
   Codec,
   Contract,
   ContractWithState,
+  DsoInfo,
   PackageQualifiedName,
   QualifiedName,
 }
@@ -212,17 +213,17 @@ class HttpScanHandler(
         amuletRules <- store.getAmuletRulesWithState()
         rulesAndStates <- store.getDsoRulesWithStateWithSvNodeStates()
         dsoRules = rulesAndStates.dsoRules
-      } yield definitions.GetDsoInfoResponse(
-        svUser = svUserName,
-        svPartyId = svParty.toProtoPrimitive,
-        dsoPartyId = store.key.dsoParty.toProtoPrimitive,
-        votingThreshold = Thresholds.requiredNumVotes(dsoRules),
-        latestMiningRound = latestOpenMiningRound.toContractWithState.toHttp,
-        amuletRules = amuletRules.toHttp,
-        dsoRules = dsoRules.toHttp,
-        svNodeStates = rulesAndStates.svNodeStates.values.map(_.toHttp).toVector,
+      } yield DsoInfo(
+        svUserName,
+        svParty,
+        store.key.dsoParty,
+        Thresholds.requiredNumVotes(dsoRules),
+        latestOpenMiningRound.toContractWithState,
+        amuletRules,
+        dsoRules,
+        rulesAndStates.svNodeStates,
         initialRound = Some(initialRound),
-      )
+      ).toHttp
     }
   }
 

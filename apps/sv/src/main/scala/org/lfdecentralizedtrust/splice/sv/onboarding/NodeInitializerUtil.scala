@@ -30,7 +30,6 @@ import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerC
 import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import org.lfdecentralizedtrust.splice.store.db.DbAppStore
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.ScanConnection
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient
 import org.lfdecentralizedtrust.splice.sv.LocalSynchronizerNode
 import org.lfdecentralizedtrust.splice.sv.automation.{SvDsoAutomationService, SvSvAutomationService}
 import org.lfdecentralizedtrust.splice.sv.cometbft.{CometBftNode, CometBftRequestSigner}
@@ -41,7 +40,7 @@ import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.{
 }
 import org.lfdecentralizedtrust.splice.sv.config.{SvAppBackendConfig, SvCantonIdentifierConfig}
 import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvStore, SvSvStore}
-import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
+import org.lfdecentralizedtrust.splice.util.{DsoInfo, TemplateJsonDecoder}
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.jdk.CollectionConverters.*
@@ -404,7 +403,7 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
       httpClient: HttpClient,
       templateDecoder: TemplateJsonDecoder,
       mat: Materializer,
-  ): Future[HttpScanAppClient.DsoInfo] =
+  ): Future[DsoInfo] =
     for {
       scanConnection <- ScanConnection.singleUncached(
         joiningConfig.scanClient,
@@ -414,20 +413,7 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
         loggerFactory,
         retryConnectionOnInitialFailure = true,
       )
-      dsoInfo <- scanConnection
-        .getDsoInfo()
-        .map(response =>
-          HttpScanAppClient
-            .decodeDsoInfo(response)
-            .fold(
-              err =>
-                throw Status.INTERNAL
-                  .withDescription(s"Failed to decode DSO info from scan: $err")
-                  .asRuntimeException(),
-              identity,
-            )
-        )
-        .andThen(_ => scanConnection.close())
+      dsoInfo <- scanConnection.getDsoInfo().andThen(_ => scanConnection.close())
     } yield dsoInfo
 
   private def setInitialRoundFromSponsor(
