@@ -10,7 +10,6 @@ import {
 } from '@canton-network/splice-pulumi-common';
 
 export function configureSweet(): k8s.helm.v3.Release {
-  const operatorNs = exactNamespace('sweet-operator', false, false);
   const sweetNs = exactNamespace('sweet', false, false);
 
   const apiKey = gcp.secretmanager.getSecretVersionOutput({
@@ -53,7 +52,7 @@ export function configureSweet(): k8s.helm.v3.Release {
       maxHistory: HELM_MAX_HISTORY_SIZE,
     },
     {
-      dependsOn: [operatorNs.ns, sweetNs.ns],
+      dependsOn: [sweetNs.ns],
     }
 
   );
