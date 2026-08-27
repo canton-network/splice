@@ -87,7 +87,7 @@ abstract class ScanAppReference(
 
   def getDsoInfo(): HttpScanAppClient.DsoInfo = {
     consoleEnvironment.run {
-      httpCommand(HttpScanAppClient.GetDecodedDsoInfo(List()))
+      httpCommand(HttpScanAppClient.GetDsoInfo(List()))
     }
   }
 

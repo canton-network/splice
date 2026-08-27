@@ -273,7 +273,7 @@ object HttpScanAppClient {
       dsoInfo.initialRound,
     )
 
-  case class GetDecodedDsoInfo(headers: List[HttpHeader])
+  case class GetDsoInfo(headers: List[HttpHeader])
       extends InternalBaseCommand[http.GetDsoInfoResponse, DsoInfo] {
 
     override def submitRequest(
