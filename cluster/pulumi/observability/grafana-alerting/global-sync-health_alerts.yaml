@@ -79,7 +79,7 @@ groups:
             datasourceUid: prometheus
             model:
               editorMode: code
-              expr: 1 - sum by (namespace) (rate(daml_mediator_approved_requests_total[30m])) / sum by (namespace) (rate(daml_mediator_requests_total[30m]))
+              expr: 1 - sum by (namespace) (rate(daml_mediator_approved_requests_total[30m])) / sum by (namespace) (rate(daml_mediator_requests_total{duplicate_reject="false"}[30m]))
               instant: true
               intervalMs: 1000
               legendFormat: __auto
