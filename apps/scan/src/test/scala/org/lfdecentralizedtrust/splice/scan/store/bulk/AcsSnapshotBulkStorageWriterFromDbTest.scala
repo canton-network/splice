@@ -355,7 +355,7 @@ class AcsSnapshotBulkStorageWriterFromDbTest
         store.queryAcsSnapshot(
           anyLong,
           any[CantonTimestamp],
-          any[Option[Long]],
+          any[Option[AcsSnapshotStore.QueryAcsSnapshotPaginationToken]],
           any[Limit],
           any[Seq[PartyId]],
           any[Seq[PackageQualifiedName]],
@@ -394,7 +394,12 @@ class AcsSnapshotBulkStorageWriterFromDbTest
                       toCreatedEvent(amt),
                     )
                   }),
-                if (numElems < remaining) Some(after.getOrElse(0L) + numElems) else None,
+                if (numElems < remaining)
+                  Some(
+                    AcsSnapshotStore.QueryAcsSnapshotPaginationToken
+                      .RowIdQueryAcsSnapshotPaginationToken(after.getOrElse(0L) + numElems)
+                  )
+                else None,
               )
               result
             }

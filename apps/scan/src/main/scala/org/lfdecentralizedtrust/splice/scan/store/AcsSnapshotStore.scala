@@ -10,6 +10,7 @@ import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{
   AcsSnapshot,
   IncrementalAcsSnapshot,
   IncrementalAcsSnapshotTable,
+  QueryAcsSnapshotPaginationToken,
   QueryAcsSnapshotResult,
   amuletQualifiedName,
   lockedAmuletQualifiedName,
@@ -19,8 +20,8 @@ import org.lfdecentralizedtrust.splice.store.{HardLimit, Limit, LimitHelpers, Up
 import org.lfdecentralizedtrust.splice.store.db.{
   AcsJdbcTypes,
   AcsQueries,
-  AdvisoryLocks,
   AdvisoryLockIds,
+  AdvisoryLocks,
 }
 import org.lfdecentralizedtrust.splice.util.{Contract, HoldingsSummary, PackageQualifiedName}
 import com.digitalasset.canton.data.CantonTimestamp
@@ -38,6 +39,7 @@ import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInt
 import slick.jdbc.canton.SQLActionBuilder
 import slick.jdbc.{GetResult, JdbcProfile}
 
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.Semaphore
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -241,7 +243,7 @@ class AcsSnapshotStore(
   def queryAcsSnapshot(
       migrationId: Long,
       snapshot: CantonTimestamp,
-      after: Option[Long],
+      after: Option[QueryAcsSnapshotPaginationToken],
       limit: Limit,
       partyIds: Seq[PartyId],
       templates: Seq[PackageQualifiedName],
@@ -267,7 +269,11 @@ class AcsSnapshotStore(
           )
         )
       begin <- after match {
-        case Some(value) if value < snapshot.firstRowId || value > snapshot.lastRowId =>
+        case Some(
+              AcsSnapshotStore.QueryAcsSnapshotPaginationToken.RowIdQueryAcsSnapshotPaginationToken(
+                value
+              )
+            ) if value < snapshot.firstRowId || value > snapshot.lastRowId =>
           Future.failed(
             io.grpc.Status.INVALID_ARGUMENT
               .withDescription(
@@ -275,7 +281,12 @@ class AcsSnapshotStore(
               )
               .asRuntimeException()
           )
-        case Some(value) => Future.successful(value + 1)
+        case Some(
+              AcsSnapshotStore.QueryAcsSnapshotPaginationToken.RowIdQueryAcsSnapshotPaginationToken(
+                value
+              )
+            ) =>
+          Future.successful(value + 1)
         case None => Future.successful(snapshot.firstRowId)
       }
       end = snapshot.lastRowId
@@ -345,7 +356,9 @@ class AcsSnapshotStore(
         migrationId = migrationId,
         snapshotRecordTime = snapshot.snapshotRecordTime,
         createdEventsInPage = eventsInPage,
-        afterToken = afterToken,
+        afterToken = afterToken.map(
+          AcsSnapshotStore.QueryAcsSnapshotPaginationToken.RowIdQueryAcsSnapshotPaginationToken(_)
+        ),
       )
     }
   }
@@ -353,7 +366,7 @@ class AcsSnapshotStore(
   def getHoldingsState(
       migrationId: Long,
       snapshot: CantonTimestamp,
-      after: Option[Long],
+      after: Option[QueryAcsSnapshotPaginationToken],
       limit: Limit,
       partyIds: NonEmptyVector[PartyId],
   )(implicit tc: TraceContext): Future[QueryAcsSnapshotResult] = {
@@ -906,11 +919,45 @@ object AcsSnapshotStore {
     )
   }
 
+  sealed trait QueryAcsSnapshotPaginationToken {
+    def encodeToBase64: String = {
+      val jsonString = QueryAcsSnapshotPaginationToken.codec(this).noSpaces
+      java.util.Base64.getEncoder.encodeToString(jsonString.getBytes(StandardCharsets.UTF_8))
+    }
+  }
+  object QueryAcsSnapshotPaginationToken {
+    case class RowIdQueryAcsSnapshotPaginationToken(after: Long)
+        extends QueryAcsSnapshotPaginationToken
+
+    private val codec: io.circe.Codec[QueryAcsSnapshotPaginationToken] =
+      io.circe.Codec
+        .from(io.circe.Decoder[Long], io.circe.Encoder[Long])
+        .iemap[QueryAcsSnapshotPaginationToken]((token: Long) =>
+          Right(RowIdQueryAcsSnapshotPaginationToken(token))
+        ) { case RowIdQueryAcsSnapshotPaginationToken(after) => after }
+
+    def decodeFromBase64(token: String): Either[String, QueryAcsSnapshotPaginationToken] = {
+      import cats.implicits.*
+
+      val decodedBytes = java.util.Base64.getDecoder.decode(token)
+      val decodedString = new String(decodedBytes, StandardCharsets.UTF_8)
+      io.circe.parser.decode(decodedString)(codec).leftMap(_ => "Failed to decode pagination token")
+    }
+
+    def tryDecodeFromBase64(token: String): QueryAcsSnapshotPaginationToken = {
+      decodeFromBase64(token) match {
+        case Right(value) => value
+        case Left(error) =>
+          throw io.grpc.Status.INVALID_ARGUMENT.withDescription(error).asRuntimeException()
+      }
+    }
+  }
+
   case class QueryAcsSnapshotResult(
       migrationId: Long,
       snapshotRecordTime: CantonTimestamp,
       createdEventsInPage: Vector[SpliceCreatedEvent],
-      afterToken: Option[Long],
+      afterToken: Option[QueryAcsSnapshotPaginationToken],
   )
 
   private val amuletQualifiedName =
