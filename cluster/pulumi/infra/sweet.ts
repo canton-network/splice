@@ -6,12 +6,12 @@ import * as k8s from '@pulumi/kubernetes';
 import {
   HELM_MAX_HISTORY_SIZE,
   exactNamespace,
-  infraAffinityAndTolerations,
+  infraKubernetesScheduling,
 } from '@canton-network/splice-pulumi-common';
 
 export function configureSweet(): k8s.helm.v3.Release {
-  const operatorNs = exactNamespace('sweet-operator', false, true);
-  const sweetNs = exactNamespace('sweet', false, true);
+  const operatorNs = exactNamespace('sweet-operator', false, false);
+  const sweetNs = exactNamespace('sweet', false, false);
 
   const apiKey = gcp.secretmanager.getSecretVersionOutput({
     secret: 'sweet-api-key',
@@ -33,19 +33,19 @@ export function configureSweet(): k8s.helm.v3.Release {
           secret,
         },
         operator: {
-          ...infraAffinityAndTolerations,
+          ...infraKubernetesScheduling,
         },
         frontier: {
           extraValues: {
             informer: {
-              ...infraAffinityAndTolerations,
+              ...infraKubernetesScheduling,
             },
           }
         },
         admiral: {
           extraValues: {
             admirald: {
-              ...infraAffinityAndTolerations,
+              ...infraKubernetesScheduling,
             },
           },
         }

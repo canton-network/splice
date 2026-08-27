@@ -65,7 +65,9 @@ configureStorage();
 
 configureReloader();
 
-configureSweet();
+if (infraConfig.enableSweetSecurity) {
+  configureSweet();
+}
 
 installExtraCustomResources();
 
