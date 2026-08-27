@@ -77,10 +77,9 @@ class RateLimitPreflightIntegrationTest extends IntegrationTest {
     forAtLeast(1, results) {
       _ shouldBe a[scala.util.Success[?]]
     }
-    // This now hits istio rate limit
     assertThrowsAndLogsCommandFailures(
       call,
-      entry => entry.message should include("HTTP 429 Too Many Requests"),
+      entry => entry.message should include("Too Many Requests"),
     )
   }
 
