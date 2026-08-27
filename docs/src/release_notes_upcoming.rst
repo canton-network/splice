@@ -21,7 +21,7 @@ release-notes:: Upcoming
 
     - SV App
 
-        - The public ``/v0/dso`` endpoint is deprecated and will be removed in 0.8.0
+        - The public ``/v0/dso`` endpoint is deprecated and will be removed in 0.9.0
           (see also the release notes for 0.5.5 for the original deprecation notice).
           Use the public ``/v0/dso`` endpoint in the scan app if you need to fetch DSO info
           without SV operator credentials.
