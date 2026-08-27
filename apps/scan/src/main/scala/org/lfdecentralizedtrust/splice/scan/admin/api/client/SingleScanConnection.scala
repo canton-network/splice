@@ -26,6 +26,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.round.{
 import org.lfdecentralizedtrust.splice.codegen.java.splice.ans.AnsRules
 import org.lfdecentralizedtrust.splice.config.UpgradesConfig
 import org.lfdecentralizedtrust.splice.environment.{
+  BaseAppConnection,
   HttpAppConnection,
   RetryProvider,
   SpliceLedgerClient,
@@ -80,7 +81,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
 }
 import io.grpc.Status
 import org.apache.pekko.http.scaladsl.model.{HttpHeader, Uri}
-import org.lfdecentralizedtrust.splice.admin.api.client.commands.HttpCommand
+import org.lfdecentralizedtrust.splice.admin.api.client.commands.{HttpCommand, HttpCommandException}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv1
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv1
@@ -142,9 +143,11 @@ class SingleScanConnection private[client] (
             .runHttpCmd(url, command, headers)
             .andThen {
               case Failure(e) =>
-                MetricsContext.withMetricLabels(("outcome", e.getClass.getSimpleName)) {
-                  implicit ec2 =>
-                    metrics.callPerConnection.mark()(m.merge(ec2))
+                MetricsContext.withMetricLabels(
+                  ("outcome", e.getClass.getSimpleName),
+                  ("http_status", SingleScanConnection.httpStatusLabel(e)),
+                ) { implicit ec2 =>
+                  metrics.callPerConnection.mark()(m.merge(ec2))
                 }
                 timer.stop()(m)
               case Success(_) =>
@@ -1039,6 +1042,18 @@ class SingleScanConnection private[client] (
 }
 
 object SingleScanConnection {
+
+  private[client] def httpStatusLabel(error: Throwable): String =
+    error match {
+      case e: BaseAppConnection.UnexpectedHttpJsonResponse => e.statusCode.intValue.toString
+      case e: BaseAppConnection.UnexpectedHttpMalformedJsonResponse =>
+        e.statusCode.intValue.toString
+      case e: BaseAppConnection.UnexpectedHttpTextResponse => e.statusCode.intValue.toString
+      case e: BaseAppConnection.UnexpectedHttpNonJsonResponse => e.statusCode.intValue.toString
+      case e: HttpCommandException => e.status.intValue.toString
+      case _ => "none"
+    }
+
   def withSingleScanConnection[T](
       scanConfig: ScanAppClientConfig,
       upgradesConfig: UpgradesConfig,
