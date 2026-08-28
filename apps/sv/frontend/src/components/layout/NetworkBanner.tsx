@@ -21,6 +21,7 @@ const NetworkBanner: React.FC = () => {
         position: 'sticky',
         top: 0,
         zIndex: theme => theme.zIndex.appBar,
+        pointerEvents: 'none',
         backgroundColor: networkInstanceNameColor,
         color: 'black',
         height: '50px',
