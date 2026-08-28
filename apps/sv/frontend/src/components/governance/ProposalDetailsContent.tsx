@@ -29,6 +29,7 @@ import {
   PrettyJsonDiff,
   useVotesHooks,
 } from '@canton-network/splice-common-frontend';
+import { sanitizeUrl } from '@canton-network/splice-common-frontend-utils';
 import { Link as RouterLink } from 'react-router';
 import {
   ConfigChange,
@@ -580,58 +581,73 @@ const VoteItem: React.FC<VoteItemProps> = ({
   isClosed,
   isYou = false,
   onEdit,
-}) => (
-  <>
-    <Box
-      sx={{
-        display: 'grid',
-        // Copy + status are fixed tracks. "You" lives in the party-ID track (before the
-        // 8px gap) so it never shifts the copy icon.
-        gridTemplateColumns: `minmax(0, calc(100% - ${VOTE_ROW_FIXED_TRAILING_PX}px)) ${VOTE_ROW_ACCESSORY_GAP_PX}px ${VOTE_ROW_COPY_COL_WIDTH_PX}px ${VOTE_ROW_STATUS_GAP_PX}px ${VOTE_ROW_STATUS_COL_WIDTH_PX}px`,
-        alignItems: 'start',
-        width: '100%',
-        maxWidth: '100%',
-        minWidth: 0,
-        overflow: 'hidden',
-        boxSizing: 'border-box',
-      }}
-      data-testid="proposal-details-vote"
-    >
+}) => {
+  const urlGridRow = comment ? 3 : 2;
+
+  return (
+    <>
       <Box
         sx={{
-          gridColumn: 1,
-          minWidth: 0,
+          display: 'grid',
+          // Copy + status are fixed tracks. "You" lives in the party-ID track (before the
+          // 8px gap) so it never shifts the copy icon.
+          gridTemplateColumns: `minmax(0, calc(100% - ${VOTE_ROW_FIXED_TRAILING_PX}px)) ${VOTE_ROW_ACCESSORY_GAP_PX}px ${VOTE_ROW_COPY_COL_WIDTH_PX}px ${VOTE_ROW_STATUS_GAP_PX}px ${VOTE_ROW_STATUS_COL_WIDTH_PX}px`,
+          alignItems: 'start',
+          width: '100%',
           maxWidth: '100%',
+          minWidth: 0,
           overflow: 'hidden',
+          boxSizing: 'border-box',
         }}
+        data-testid="proposal-details-vote"
       >
-        <Stack
-          direction="row"
-          alignItems="center"
-          spacing={1}
-          sx={{ minWidth: 0, maxWidth: '100%', width: '100%' }}
+        <Box
+          sx={{
+            gridColumn: 1,
+            gridRow: 1,
+            minWidth: 0,
+            maxWidth: '100%',
+            overflow: 'hidden',
+          }}
         >
-          <Box sx={{ flex: '1 1 0%', minWidth: 0, overflow: 'hidden' }}>
-            <CopyableIdentifier
-              value={voter}
-              copyValue={voter}
-              size="large"
-              fullWidth
-              hideCopy
-              data-testid="proposal-details-voter-party-id"
-            />
-          </Box>
-          {isYou && (
-            <Chip
-              label="You"
-              size="small"
-              data-testid="proposal-details-voter-party-id-badge"
-              sx={{ flexShrink: 0 }}
-            />
-          )}
-        </Stack>
+          <Stack
+            direction="row"
+            alignItems="center"
+            spacing={1}
+            sx={{ minWidth: 0, maxWidth: '100%', width: '100%' }}
+          >
+            <Box sx={{ flex: '1 1 0%', minWidth: 0, overflow: 'hidden' }}>
+              <CopyableIdentifier
+                value={voter}
+                copyValue={voter}
+                size="large"
+                fullWidth
+                hideCopy
+                data-testid="proposal-details-voter-party-id"
+              />
+            </Box>
+            {isYou && (
+              <Chip
+                label="You"
+                size="small"
+                data-testid="proposal-details-voter-party-id-badge"
+                sx={{ flexShrink: 0 }}
+              />
+            )}
+          </Stack>
+        </Box>
+
         {comment && (
-          <Box sx={{ mt: 1, minWidth: 0, maxWidth: '100%' }}>
+          <Box
+            sx={{
+              gridColumn: 1,
+              gridRow: 2,
+              mt: 1,
+              minWidth: 0,
+              maxWidth: '100%',
+              overflow: 'hidden',
+            }}
+          >
             <Typography variant="caption" color="text.secondary" display="block" mb={1}>
               {VOTE_REASON_SUMMARY_LABEL}
             </Typography>
@@ -640,73 +656,118 @@ const VoteItem: React.FC<VoteItemProps> = ({
             </Typography>
           </Box>
         )}
+
         {url && (
-          <Box sx={{ mt: 1, minWidth: 0, maxWidth: '100%' }}>
+          <Box
+            sx={{
+              gridColumn: 1,
+              gridRow: urlGridRow,
+              mt: 1,
+              minWidth: 0,
+              maxWidth: '100%',
+              overflow: 'hidden',
+            }}
+          >
             <Typography variant="caption" color="text.secondary" display="block" mb={1}>
               {VOTE_REASON_URL_LABEL}
             </Typography>
-            <CopyableUrl url={url} size="small" data-testid="proposal-details-vote-url" />
+            <CopyableUrl
+              url={url}
+              size="large"
+              fullWidth
+              hideCopy
+              data-testid="proposal-details-vote-url"
+            />
           </Box>
         )}
-      </Box>
 
-      <Box
-        sx={{
-          gridColumn: 3,
-          display: 'flex',
-          justifyContent: 'center',
-          pt: '2px',
-        }}
-      >
-        <IconButton
-          color="secondary"
-          data-testid="proposal-details-voter-party-id-copy-button"
-          sx={{ flexShrink: 0, p: 0.5 }}
-          onClick={e => {
-            e.stopPropagation();
-            e.preventDefault();
-            navigator.clipboard.writeText(voter);
+        <Box
+          sx={{
+            gridColumn: 3,
+            gridRow: 1,
+            display: 'flex',
+            justifyContent: 'center',
+            pt: '2px',
           }}
         >
-          <ContentCopy sx={{ fontSize: '16px' }} />
-        </IconButton>
-      </Box>
-
-      <Box
-        sx={{
-          gridColumn: 5,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'flex-end',
-          gap: 1,
-          pt: '2px',
-        }}
-      >
-        <VoteStats
-          vote={status}
-          noVoteMessage={isClosed ? 'No Vote' : 'Awaiting Response'}
-          data-testid="proposal-details-vote-status"
-        />
-        {onEdit && (
-          <Button
+          <IconButton
             color="secondary"
-            startIcon={<Edit fontSize="small" />}
-            onClick={onEdit}
-            data-testid="your-vote-edit-button"
-            sx={{
-              fontSize: 16,
-              minWidth: 0,
-              px: 0,
+            data-testid="proposal-details-voter-party-id-copy-button"
+            sx={{ flexShrink: 0, p: 0.5 }}
+            onClick={e => {
+              e.stopPropagation();
+              e.preventDefault();
+              navigator.clipboard.writeText(voter);
             }}
           >
-            Edit
-          </Button>
+            <ContentCopy sx={{ fontSize: '16px' }} />
+          </IconButton>
+        </Box>
+
+        {url && (
+          <Box
+            sx={{
+              gridColumn: 3,
+              gridRow: urlGridRow,
+              display: 'flex',
+              justifyContent: 'center',
+              // Align with the URL value row (below the caption + mb).
+              mt: 1,
+              pt: 'calc(1em + 8px + 2px)',
+            }}
+          >
+            <IconButton
+              color="secondary"
+              data-testid="proposal-details-vote-url-copy-button"
+              sx={{ flexShrink: 0, p: 0.5 }}
+              onClick={e => {
+                e.stopPropagation();
+                e.preventDefault();
+                navigator.clipboard.writeText(sanitizeUrl(url));
+              }}
+            >
+              <ContentCopy sx={{ fontSize: '16px' }} />
+            </IconButton>
+          </Box>
         )}
+
+        <Box
+          sx={{
+            gridColumn: 5,
+            gridRow: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'flex-end',
+            gap: 1,
+            pt: '2px',
+          }}
+        >
+          <VoteStats
+            vote={status}
+            noVoteMessage={isClosed ? 'No Vote' : 'Awaiting Response'}
+            data-testid="proposal-details-vote-status"
+          />
+          {onEdit && (
+            <Button
+              color="secondary"
+              startIcon={<Edit fontSize="small" />}
+              onClick={onEdit}
+              data-testid="your-vote-edit-button"
+              sx={{
+                fontSize: 16,
+                minWidth: 0,
+                px: 0,
+              }}
+            >
+              Edit
+            </Button>
+          )}
+        </Box>
       </Box>
-    </Box>
-    <Divider sx={{ borderBottomWidth: 2 }} />
-  </>
-);
+      <Divider sx={{ borderBottomWidth: 2 }} />
+    </>
+  );
+};
 
 interface OffboardMemberSectionProps {
   memberPartyId: string;

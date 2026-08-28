@@ -208,14 +208,16 @@ type IngressPort = {
   port: number;
   targetPort: number;
   protocol: string;
+  appProtocol?: string;
 };
 
-function ingressPort(name: string, port: number): IngressPort {
+function ingressPort(name: string, port: number, appProtocol?: string): IngressPort {
   return {
     name: name,
     port: port,
     targetPort: port,
     protocol: 'TCP',
+    ...(appProtocol ? { appProtocol } : {}),
   };
 }
 
@@ -353,7 +355,7 @@ function configureGatewayService(
   //   These IPs should be provided in externalIPRangesInLB.
   const istioPolicies = configureIstioGatewayPolicies(ingressNs, externalIPRangesInIstio, suffix);
 
-  const { serviceValues, deploymentValues } =
+  const { serviceValues, deploymentValues, port80Protocol } =
     gatewayVariant.type === 'LoadBalancer'
       ? {
           serviceValues: {
@@ -367,6 +369,7 @@ function configureGatewayService(
             externalTrafficPolicy: 'Local',
           },
           deploymentValues: {},
+          port80Protocol: undefined,
         }
       : {
           // Create a ClusterIP Service for the istio ingress so the GKE L7 Gateway can
@@ -383,6 +386,9 @@ function configureGatewayService(
               }),
             },
           },
+          // force HTTP/2 (h2c) between GKE L7 Gateway and istio-ingress for
+          // gRPC routes
+          port80Protocol: 'kubernetes.io/h2c',
         };
 
   const gateway = new k8s.helm.v3.Release(
@@ -417,7 +423,7 @@ function configureGatewayService(
           ...serviceValues,
           ports: [
             ingressPort('status-port', 15021), // istio default
-            ingressPort('http2', 80),
+            ingressPort('http2', 80, port80Protocol),
             ingressPort('https', 443),
           ].concat(ingressPorts),
         },
@@ -506,29 +512,18 @@ function configureGateway(
             },
             ...(withSeparateGcpGateway ? {} : { tls: { httpsRedirect: true } }),
           },
-          withSeparateGcpGateway
-            ? {
-                hosts,
-                // our VirtualServices charts hardcode 443 as port match on http;
-                // without this you get 403 route_not_found in istio
-                port: {
-                  name: 'http-on-443',
-                  number: 443,
-                  protocol: 'HTTP',
-                },
-              }
-            : {
-                hosts,
-                port: {
-                  name: 'https',
-                  number: 443,
-                  protocol: 'HTTPS',
-                },
-                tls: {
-                  mode: 'SIMPLE',
-                  credentialName: `cn-${clusterBasename}net-tls`,
-                },
-              },
+          {
+            hosts,
+            port: {
+              name: 'https',
+              number: 443,
+              protocol: 'HTTPS',
+            },
+            tls: {
+              mode: 'SIMPLE',
+              credentialName: `cn-${clusterBasename}net-tls`,
+            },
+          },
         ],
       },
     },
@@ -606,6 +601,12 @@ function configureDocsAndReleases(
                 prefix: '/cn-release-bundles',
               },
             },
+            {
+              port: 80,
+              uri: {
+                prefix: '/cn-release-bundles',
+              },
+            },
           ],
           route: [
             {
@@ -640,6 +641,9 @@ function configureDocsAndReleases(
               match: [
                 {
                   port: 443,
+                },
+                {
+                  port: 80,
                 },
               ],
               route: [
