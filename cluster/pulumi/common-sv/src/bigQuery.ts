@@ -88,9 +88,9 @@ const replicatedTables: Record<string, ReplicatedTableConfig> = {
     timeType: 'datastream_metadata',
   },
   app_activity_record_store: {
-    primaryKey: 'row_id',
-    datePartitionColumn: 'record_time',
-    timeType: 'micros',
+    primaryKey: 'verdict_row_id',
+    datePartitionColumn: 'source_timestamp',
+    timeType: 'datastream_metadata',
   },
 };
 
@@ -285,7 +285,7 @@ function installDatastream_stag_prod(
         },
         destinationConnectionProfile: destination.name,
       },
-      backfillAll: {},
+      backfillNone: {}, // Addressing issue #6919 - partition overflow problem with backfillAll, so using backfillNone for stag-prod datastream
       ruleSets: tablesToReplicate.map(tableName => ({
         objectFilter: {
           sourceObjectIdentifier: {

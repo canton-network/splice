@@ -48,6 +48,21 @@ final case class BulkStorageConfig(
     staging: Option[S3Config] = None,
     committed: Option[S3Config] = None,
     bftCheckEnabled: Boolean = true,
+    /** When enabled, the app will reset all progress markers thus force recomputing data from genesis.
+      * Note that this does not delete any existing data, you usually would want to do that before setting
+      * this flag. Also, after restarting the app once with this flag enabled, you'd want to disable it back
+      * to avoid having the markers reset on every restart.
+      * TODO(#6251): this makes sense for initial stages of testing&deploying bulk storage, in case of
+      *   encountered issues, but will not make sense when we start pruning the data from scan. We should remove
+      *   this before starting to prune data.
+      */
+    debugForceStartFromGenesis: Boolean = false,
+    /** A list of S3 object keys that this instance should not save to the committed bucket, and instead only
+      * delete from staging. To be used only in extreme cases where we decide to accept a BFT disagreement,
+      * and have the (minority of) disagreeing instances simply skip the broken objects.
+      * Should typically be used in test environments only.
+      */
+    debugObjectsToNotCommit: Seq[String] = Seq.empty,
 )
 
 /** @param miningRoundsCacheTimeToLiveOverride Intended only for testing!

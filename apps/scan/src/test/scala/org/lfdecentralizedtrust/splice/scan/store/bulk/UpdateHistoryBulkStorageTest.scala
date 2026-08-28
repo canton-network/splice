@@ -135,7 +135,13 @@ class UpdateHistoryBulkStorageTest
             .get(MetricsContext.Empty)
             .value
             .markers
-            .get(MetricsContext("object_type" -> "updates", "encoding" -> encoding.key))
+            .get(
+              MetricsContext(
+                "object_type" -> "updates",
+                "encoding" -> encoding.key,
+                "bucket" -> "staging",
+              )
+            )
             .value
             .get()
         numObjectsFromMetric(ScanStorageConfig.Encoding.CompactJson) shouldBe 2
@@ -580,17 +586,15 @@ class UpdateHistoryBulkStorageTest
       val store = mock[UpdateHistory]
       when(
         store.getUpdatesWithoutImportUpdates(
-          any[Option[(Long, CantonTimestamp)]],
+          any[Option[TimestampWithMigrationId]],
           any[Limit],
         )(any[TraceContext])
       ).thenAnswer {
         (
-            afterO: Option[(Long, CantonTimestamp)],
+            afterO: Option[TimestampWithMigrationId],
             limit: Limit,
         ) =>
-          val after = afterO
-            .map(a => TimestampWithMigrationId(a._2, a._1))
-            .getOrElse(TimestampWithMigrationId(CantonTimestamp.MinValue, 0L))
+          val after = afterO.getOrElse(TimestampWithMigrationId(CantonTimestamp.MinValue, 0L))
           Future.successful(
             data
               .filter(update =>

@@ -25,7 +25,7 @@ import slick.dbio.DBIO
 import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.{ExecutionContext, Future}
 import cats.data.NonEmptyList
-import org.lfdecentralizedtrust.splice.store.UpdateHistory
+import org.lfdecentralizedtrust.splice.store.{TimestampWithMigrationId, UpdateHistory}
 import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore.AppActivityRecordT
 
 object DbScanVerdictStore {
@@ -565,14 +565,14 @@ class DbScanVerdictStore(
     )
 
   private def afterFilters(
-      afterO: Option[(Long, CantonTimestamp)],
+      afterO: Option[TimestampWithMigrationId],
       includeImportUpdates: Boolean,
   ): NonEmptyList[SQLActionBuilder] = {
     val gt = if (includeImportUpdates) ">=" else ">"
     afterO match {
       case None =>
         NonEmptyList.of(sql"migration_id >= 0 and record_time #$gt ${CantonTimestamp.MinValue}")
-      case Some((afterMigrationId, afterRecordTime)) =>
+      case Some(TimestampWithMigrationId(afterRecordTime, afterMigrationId)) =>
         NonEmptyList.of(
           sql"migration_id = ${afterMigrationId} and record_time > ${afterRecordTime} ",
           sql"migration_id > ${afterMigrationId} and record_time #$gt ${CantonTimestamp.MinValue}",
@@ -615,7 +615,7 @@ class DbScanVerdictStore(
   }
 
   def listVerdicts(
-      afterO: Option[(Long, CantonTimestamp)],
+      afterO: Option[TimestampWithMigrationId],
       includeImportUpdates: Boolean,
       limit: Int,
   )(implicit tc: TraceContext): Future[Seq[VerdictT]] = {

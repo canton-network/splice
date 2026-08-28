@@ -18,11 +18,11 @@ groups:
               editorMode: code
               expr: |-
                 (max by (namespace, node_name, http_service, limiter, limiter_type) (
-                  splice_rate_limiting_max_limit_per_second
+                  splice_rate_limiting_max_limit_per_second{limiter_type!="per-attribute"}
                 ) * $SPLICE_RATE_LIMITS_USAGE_THRESHOLD)
                 -
                 sum by (namespace, node_name, http_service, limiter, limiter_type) (
-                  rate(splice_rate_limiting_total[$__rate_interval])
+                  rate(splice_rate_limiting_total{limiter_type!="per-attribute"}[$__rate_interval])
                 )
               instant: true
               intervalMs: 1000

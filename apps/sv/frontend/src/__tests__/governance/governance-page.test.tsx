@@ -183,7 +183,7 @@ describe('Governance Page', () => {
 
     await user.click(viewDetailsLink);
 
-    const proposalDetails = screen.getByTestId('proposal-details-title');
+    const proposalDetails = screen.getByTestId('proposal-details-proposal-details');
     expect(proposalDetails).toBeInTheDocument();
   });
 
@@ -201,7 +201,7 @@ describe('Governance Page', () => {
 
     await user.click(viewDetailsLink);
 
-    const proposalDetails = screen.getByTestId('proposal-details-title');
+    const proposalDetails = screen.getByTestId('proposal-details-proposal-details');
     expect(proposalDetails).toBeInTheDocument();
 
     const action = screen.getByTestId('proposal-details-action-value');
@@ -220,6 +220,11 @@ describe('Governance Page', () => {
       'proposal-details-requester-party-id'
     );
     expect(requesterInput).toBeInTheDocument();
+    // Resolve SV display name (e.g. Digital-Asset-2) to full party ID for display + copy.
+    expect(
+      within(votingInformationSection).getByTestId('proposal-details-requester-party-id-value')
+        .textContent
+    ).toMatch(/::/);
 
     const votingClosesIso = within(votingInformationSection).getByTestId(
       'proposal-details-voting-closes-value'

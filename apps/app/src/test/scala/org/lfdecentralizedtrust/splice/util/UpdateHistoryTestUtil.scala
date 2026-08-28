@@ -33,7 +33,12 @@ import org.lfdecentralizedtrust.splice.store.UpdateHistoryTestBase.{
   LostInScanApi,
   LostInStoreIngestion,
 }
-import org.lfdecentralizedtrust.splice.store.{PageLimit, UpdateHistory, UpdateHistoryTestBase}
+import org.lfdecentralizedtrust.splice.store.{
+  PageLimit,
+  TimestampWithMigrationId,
+  UpdateHistory,
+  UpdateHistoryTestBase,
+}
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryResponse
 import com.daml.ledger.api.v2.transaction_filter
 import com.digitalasset.canton.admin.api.client.commands.LedgerApiCommands.UpdateService.{
@@ -115,11 +120,11 @@ trait UpdateHistoryTestUtil extends TestCommon {
     val recordedUpdates = updateHistory
       .getAllUpdates(
         Some(
-          (
-            0L,
+          TimestampWithMigrationId(
             // The after0 argument to getUpdates() is exclusive, so we need to subtract a small value
             // to include the first element
             actualUpdates.head.update.recordTime.addMicros(-1L),
+            0L,
           )
         ),
         PageLimit.tryCreate(actualUpdates.size),
@@ -140,11 +145,11 @@ trait UpdateHistoryTestUtil extends TestCommon {
     val recordedUpdates = updateHistory
       .getAllUpdates(
         Some(
-          (
-            0L,
+          TimestampWithMigrationId(
             // The after0 argument to getUpdates() is exclusive, so we need to subtract a small value
             // to include the first element
             actualUpdates.head.update.recordTime.addMicros(-1L),
+            0L,
           )
         ),
         PageLimit.tryCreate(actualUpdates.size),

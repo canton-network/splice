@@ -86,7 +86,7 @@ export const SelectAction: React.FC = () => {
             }}
             children={field => (
               <Dropdown
-                label="Select proposal type"
+                label="Select Action"
                 placeholder={PLACEHOLDER_TEXT}
                 options={dropdownOptions}
                 value={field.state.value}

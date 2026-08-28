@@ -17,7 +17,17 @@ import {
   validateUrl,
   validateWeight,
 } from './formValidators';
-import { SUPPORTING_URL_LABEL, THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
+import {
+  CREATE_PROPOSAL_LABEL_EFFECTIVE_AT,
+  CREATE_PROPOSAL_LABEL_MEMBER,
+  CREATE_PROPOSAL_LABEL_PROPOSAL_SUMMARY,
+  CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE,
+  CREATE_PROPOSAL_LABEL_SUPPORTING_URL,
+  CREATE_PROPOSAL_LABEL_THRESHOLD_DEADLINE,
+  CREATE_PROPOSAL_LABEL_WEIGHT,
+  SUPPORTING_URL_PLACEHOLDER,
+  THRESHOLD_DEADLINE_SUBTITLE,
+} from '../../utils/constants';
 import {
   createProposalActions,
   formatBasisPoints,
@@ -117,7 +127,12 @@ export const UpdateSvRewardWeightForm: React.FC = _ => {
 
   return (
     <>
-      <FormLayout form={form} id="update-sv-reward-weight-form">
+      <FormLayout
+        form={form}
+        id="update-sv-reward-weight-form"
+        actionName={form.state.values.action}
+        isReviewStep={showConfirmation}
+      >
         {showConfirmation ? (
           <ProposalSummary
             actionName={form.state.values.action}
@@ -135,7 +150,12 @@ export const UpdateSvRewardWeightForm: React.FC = _ => {
         ) : (
           <>
             <form.AppField name="action">
-              {field => <field.ProposalTypeField id="update-sv-reward-weight-action" />}
+              {field => (
+                <field.ProposalTypeField
+                  id="update-sv-reward-weight-action"
+                  title={CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE}
+                />
+              )}
             </form.AppField>
 
             <form.AppField
@@ -149,7 +169,7 @@ export const UpdateSvRewardWeightForm: React.FC = _ => {
             >
               {field => (
                 <field.SelectField
-                  title="Member"
+                  title={CREATE_PROPOSAL_LABEL_MEMBER}
                   options={svOptions}
                   id="update-sv-reward-weight-member"
                   onChange={() => form.resetField('weight')}
@@ -166,7 +186,7 @@ export const UpdateSvRewardWeightForm: React.FC = _ => {
             >
               {field => (
                 <field.TextField
-                  title="Weight"
+                  title={CREATE_PROPOSAL_LABEL_WEIGHT}
                   id="update-sv-reward-weight-weight"
                   subtitle={selectedSv ? `Current Weight: ${currentWeight}` : undefined}
                 />
@@ -182,7 +202,7 @@ export const UpdateSvRewardWeightForm: React.FC = _ => {
             >
               {field => (
                 <field.DateField
-                  title="Quorum Threshold Deadline"
+                  title={CREATE_PROPOSAL_LABEL_THRESHOLD_DEADLINE}
                   description={THRESHOLD_DEADLINE_SUBTITLE}
                   id="update-sv-reward-weight-expiry-date"
                 />
@@ -197,6 +217,7 @@ export const UpdateSvRewardWeightForm: React.FC = _ => {
               }}
               children={_ => (
                 <EffectiveDateField
+                  title={CREATE_PROPOSAL_LABEL_EFFECTIVE_AT}
                   initialEffectiveDate={initialEffectiveDate.format(dateTimeFormatISO)}
                   id="update-sv-reward-weight-effective-date"
                 />
@@ -210,7 +231,12 @@ export const UpdateSvRewardWeightForm: React.FC = _ => {
                 onChange: ({ value }) => validateSummary(value),
               }}
             >
-              {field => <field.ProposalSummaryField id="update-sv-reward-weight-summary" />}
+              {field => (
+                <field.ProposalSummaryField
+                  id="update-sv-reward-weight-summary"
+                  title={CREATE_PROPOSAL_LABEL_PROPOSAL_SUMMARY}
+                />
+              )}
             </form.AppField>
 
             <form.AppField
@@ -221,7 +247,11 @@ export const UpdateSvRewardWeightForm: React.FC = _ => {
               }}
             >
               {field => (
-                <field.TextField title={SUPPORTING_URL_LABEL} id="update-sv-reward-weight-url" />
+                <field.TextField
+                  title={CREATE_PROPOSAL_LABEL_SUPPORTING_URL}
+                  id="update-sv-reward-weight-url"
+                  muiTextFieldProps={{ placeholder: SUPPORTING_URL_PLACEHOLDER }}
+                />
               )}
             </form.AppField>
           </>
