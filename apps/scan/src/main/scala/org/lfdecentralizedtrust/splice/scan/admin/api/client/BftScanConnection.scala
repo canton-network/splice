@@ -382,33 +382,25 @@ class BftScanConnection(
         .map(result => connection -> result)
     )
   } yield {
-    val (withData, withoutData, unknownStatus) =
-      results.foldLeft(
-        (
-          Map.empty[SingleScanConnection, SourceMigrationInfo],
-          Set.empty[SingleScanConnection],
-          Set.empty[SingleScanConnection],
-        )
-      ) { case ((withData, withoutData, unknownStatus), (connection, response)) =>
+    val (withData, other) =
+      results.partitionMap { case (connection, response) =>
         response match {
           case BftScanConnection.SuccessfulResponse(Some(info)) =>
-            (withData + (connection -> info), withoutData, unknownStatus)
+            Left(connection -> info)
           case BftScanConnection.SuccessfulResponse(None) =>
-            (withData, withoutData + connection, unknownStatus)
-          case _: BftScanConnection.HttpFailureResponse[?] =>
-            (withData, withoutData, unknownStatus + connection)
-          case _: BftScanConnection.NonJsonHttpFailureResponse[?] =>
-            (withData, withoutData, unknownStatus + connection)
-          case _: BftScanConnection.TextFailureResponse[?] =>
-            (withData, withoutData, unknownStatus + connection)
-          case _: BftScanConnection.ExceptionFailureResponse[?] =>
-            (withData, withoutData, unknownStatus + connection)
+            Right(Left(connection))
+          case _: BftScanConnection.HttpFailureResponse[?] |
+              _: BftScanConnection.NonJsonHttpFailureResponse[?] |
+              _: BftScanConnection.TextFailureResponse[?] |
+              _: BftScanConnection.ExceptionFailureResponse[?] =>
+            Right(Right(connection))
         }
       }
+    val (withoutData, unknownStatus) = other partitionMap identity
     MigrationInfoResponses(
-      withData,
-      withoutData,
-      unknownStatus,
+      withData.toMap,
+      withoutData.toSet,
+      unknownStatus.toSet,
     )
   }
 
