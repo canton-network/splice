@@ -1631,16 +1631,9 @@
             "key": "cn_apps",
             "operator": "Exists"
           }
-        ],
-        "watchdog": {
-          "enabled": true,
-          "evaluationIntervalSeconds": 900,
-          "mediatorMetricsUrl": "http://global-domain-7-mediator:10013/metrics",
-          "sequencerMetricsUrl": "http://global-domain-7-sequencer:10013/metrics",
-          "threshold": 2
-        }
+        ]
       },
-      "version": "0.7.4"
+      "version": "0.3.20"
     },
     "name": "sv-1-cometbft-global-domain-7",
     "provider": "",
@@ -1750,16 +1743,9 @@
             "key": "cn_apps",
             "operator": "Exists"
           }
-        ],
-        "watchdog": {
-          "enabled": true,
-          "evaluationIntervalSeconds": 900,
-          "mediatorMetricsUrl": "http://global-domain-8-mediator:10013/metrics",
-          "sequencerMetricsUrl": "http://global-domain-8-sequencer:10013/metrics",
-          "threshold": 2
-        }
+        ]
       },
-      "version": "0.7.4"
+      "version": "0.3.20"
     },
     "name": "sv-1-cometbft-global-domain-8",
     "provider": "",
@@ -5004,16 +4990,9 @@
             "key": "cn_apps",
             "operator": "Exists"
           }
-        ],
-        "watchdog": {
-          "enabled": true,
-          "evaluationIntervalSeconds": 900,
-          "mediatorMetricsUrl": "http://global-domain-7-mediator:10013/metrics",
-          "sequencerMetricsUrl": "http://global-domain-7-sequencer:10013/metrics",
-          "threshold": 2
-        }
+        ]
       },
-      "version": "0.7.4"
+      "version": "0.3.20"
     },
     "name": "sv-cometbft-global-domain-7",
     "provider": "",
@@ -5120,16 +5099,9 @@
             "key": "cn_apps",
             "operator": "Exists"
           }
-        ],
-        "watchdog": {
-          "enabled": true,
-          "evaluationIntervalSeconds": 900,
-          "mediatorMetricsUrl": "http://global-domain-8-mediator:10013/metrics",
-          "sequencerMetricsUrl": "http://global-domain-8-sequencer:10013/metrics",
-          "threshold": 2
-        }
+        ]
       },
-      "version": "0.7.4"
+      "version": "0.3.20"
     },
     "name": "sv-cometbft-global-domain-8",
     "provider": "",
@@ -5240,16 +5212,9 @@
             "key": "cn_apps",
             "operator": "Exists"
           }
-        ],
-        "watchdog": {
-          "enabled": true,
-          "evaluationIntervalSeconds": 900,
-          "mediatorMetricsUrl": "http://global-domain-7-mediator:10013/metrics",
-          "sequencerMetricsUrl": "http://global-domain-7-sequencer:10013/metrics",
-          "threshold": 2
-        }
+        ]
       },
-      "version": "0.7.4"
+      "version": "0.3.20"
     },
     "name": "sv-da-1-cometbft-global-domain-7",
     "provider": "",
@@ -5360,16 +5325,9 @@
             "key": "cn_apps",
             "operator": "Exists"
           }
-        ],
-        "watchdog": {
-          "enabled": true,
-          "evaluationIntervalSeconds": 900,
-          "mediatorMetricsUrl": "http://global-domain-8-mediator:10013/metrics",
-          "sequencerMetricsUrl": "http://global-domain-8-sequencer:10013/metrics",
-          "threshold": 2
-        }
+        ]
       },
-      "version": "0.7.4"
+      "version": "0.3.20"
     },
     "name": "sv-da-1-cometbft-global-domain-8",
     "provider": "",
