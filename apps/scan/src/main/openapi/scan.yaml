@@ -4061,7 +4061,8 @@ components:
           description: |
             The ID of the transaction update associated with this verdict.
 
-            Verdicts are deduplicated by update_id. Only the first verdict ingested for a given update_id is stored and returned, while a subsequent verdict with the same update_id is dropped.
+            Verdicts are deduplicated by update_id. Only the first verdict ingested for a given update_id is stored and returned, while a subsequent verdict with the same update_id is rejected.
+            This can happen for example if a sequencer client retries a successful submission. In that case, the retry is rejected as a duplicate, and the events endpoint will only show the successful verdict but not the rejected duplicates.
           type: string
         migration_id:
           description: |
