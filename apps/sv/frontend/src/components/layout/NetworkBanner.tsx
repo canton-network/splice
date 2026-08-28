@@ -18,6 +18,9 @@ const NetworkBanner: React.FC = () => {
       alignItems="center"
       justifyContent="center"
       sx={{
+        position: 'sticky',
+        top: 0,
+        zIndex: theme => theme.zIndex.appBar,
         backgroundColor: networkInstanceNameColor,
         color: 'black',
         height: '50px',
