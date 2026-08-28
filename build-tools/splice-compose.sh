@@ -18,6 +18,9 @@ SV_DIR="${SPLICE_ROOT}/cluster/compose/sv"
 # we want DEBUG logs for our tests
 export LOG_LEVEL=DEBUG
 
+mkdir -p "${SPLICE_ROOT}/log"
+exec > >(tee -a "${SPLICE_ROOT}/log/compose.log") 2>&1
+
 function _export_auth0_env_vars {
 
   if [ -z "$GCP_CLUSTER_BASENAME" ]; then
@@ -58,7 +61,7 @@ function _export_auth0_env_vars {
 function _do_start_validator {
   "${VALIDATOR_DIR}/start.sh" \
     "$@" \
-      | tee -a "${SPLICE_ROOT}/log/compose.log" 2>&1 || _error "Failed to start validator, please check ${SPLICE_ROOT}/log/compose.log for details"
+      || _error "Failed to start validator, please check ${SPLICE_ROOT}/log/compose.log for details"
 
   for c in validator participant nginx; do
     docker logs -f splice-validator-${c}-1 >> "${SPLICE_ROOT}/log/compose-${c}.clog" 2>&1 &
@@ -70,7 +73,7 @@ function _do_start_validator {
     "${VALIDATOR_DIR}/start.sh" \
       "$@" \
       "-w" \
-        | tee -a "${SPLICE_ROOT}/log/compose-wait.log" 2>&1 || _error "Validator failed to become ready"
+        || _error "Validator failed to become ready"
   fi
 
 }
