@@ -30,6 +30,9 @@
     "serviceAccountName": {
       "type": "string"
     },
+    "automountServiceAccountToken": {
+      "type": "boolean"
+    },
     "imageName": {
       "type": "string"
     },

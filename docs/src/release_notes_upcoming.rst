@@ -7,6 +7,16 @@
 
 release-notes:: Upcoming
 
+    - Deployment
+
+        - All Splice Helm charts now set ``automountServiceAccountToken: false`` on the pods they
+          deploy. Splice components do not use the Kubernetes API, so pods no longer receive an
+          API-server credential by default; this reduces the impact of a compromised pod in
+          clusters where permissions are bound to the namespace's ``default`` service account.
+          If your deployment relies on the mounted token, for example through a custom service
+          account set via ``serviceAccountName``, you can restore the previous behavior by setting
+          the new ``automountServiceAccountToken`` Helm value to ``true``.
+
     - SV App
 
         - The public ``/v0/dso`` endpoint is deprecated and will be removed in 0.9.0

@@ -53,6 +53,9 @@
         "serviceAccountName": {
           "type": "string"
         },
+        "automountServiceAccountToken": {
+          "type": "boolean"
+        },
         "imageRepo": {
           "type": "string"
         },
