@@ -105,6 +105,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationi
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv1
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.transferinstructionv2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
+  DsoRules,
   DsoRules_CloseVoteRequestResult,
   VoteRequest,
 }
@@ -198,6 +199,17 @@ class BftScanConnection(
     bftCall(
       _.getDsoInfo(),
       "getDsoInfo",
+    )
+
+  // Consensus over just the DsoRules contract: the full DsoInfo contains
+  // per-scan fields (svUser, svParty) on which scans of different SVs never agree.
+  override def getDsoRules(
+  )(implicit
+      tc: TraceContext
+  ): Future[Contract[DsoRules.ContractId, DsoRules]] =
+    bftCall(
+      _.getDsoInfo().map(_.dsoRules.contract),
+      "getDsoRules",
     )
 
   override def getHoldingsSummaryAt(
