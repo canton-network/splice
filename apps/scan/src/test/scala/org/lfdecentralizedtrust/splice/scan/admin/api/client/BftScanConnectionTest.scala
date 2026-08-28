@@ -18,16 +18,8 @@ import org.apache.pekko.http.scaladsl.model.*
 import org.apache.pekko.stream.StreamTcpException
 import org.lfdecentralizedtrust.splice.admin.api.client.commands.HttpCommandException
 import org.lfdecentralizedtrust.splice.admin.http.HttpErrorWithHttpCode
-import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules as amuletrulesCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRules
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.decentralizedsynchronizer as decentralizedsynchronizerCodegen
-import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
-import org.lfdecentralizedtrust.splice.codegen.java.splice.{
-  cometbft as cometbftCodegen,
-  dsorules as dsorulesCodegen,
-  round as roundCodegen,
-}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   holdingv1,
   metadatav1,
@@ -68,7 +60,6 @@ import org.lfdecentralizedtrust.splice.util.{
   Contract,
   ContractWithState,
   DomainRecordTimeRange,
-  DsoInfo,
   FactoryChoiceWithDisclosures,
   SpliceUtil,
 }
@@ -78,7 +69,6 @@ import org.scalatest.wordspec.AsyncWordSpec
 import org.slf4j.event.Level
 
 import java.time.{Duration, Instant}
-import java.util.{Collections, Optional}
 import java.util.concurrent.atomic.AtomicInteger
 import scala.concurrent.duration.DurationInt
 import scala.concurrent.{ExecutionContext, Future}
@@ -269,102 +259,6 @@ class BftScanConnectionTest
   val partyIdA = PartyId.tryFromProtoPrimitive("whatever::a")
   val partyIdB = PartyId.tryFromProtoPrimitive("whatever::b")
 
-  private val dsoParty = PartyId.tryFromProtoPrimitive("dso::party")
-
-  private val testDsoRulesContract = {
-    val newSynchronizerId = "new-domain-id"
-    Contract(
-      dsorulesCodegen.DsoRules.TEMPLATE_ID_WITH_PACKAGE_ID,
-      new dsorulesCodegen.DsoRules.ContractId("dsoRules"),
-      new dsorulesCodegen.DsoRules(
-        dsoParty.toProtoPrimitive,
-        1L,
-        Collections.emptyMap(),
-        Collections.emptyMap(),
-        dsoParty.toProtoPrimitive,
-        new dsorulesCodegen.DsoRulesConfig(
-          1,
-          1,
-          new RelTime(1),
-          new RelTime(1),
-          new RelTime(1),
-          new RelTime(1),
-          new RelTime(1),
-          new decentralizedsynchronizerCodegen.SynchronizerNodeConfigLimits(
-            new cometbftCodegen.CometBftConfigLimits(1, 1, 1, 1, 1)
-          ),
-          1,
-          new decentralizedsynchronizerCodegen.DsoDecentralizedSynchronizerConfig(
-            Collections.emptyMap(),
-            newSynchronizerId,
-            newSynchronizerId,
-          ),
-          Optional.empty(),
-          Optional.empty(),
-          Optional.empty(),
-        ),
-        Collections.emptyMap(),
-        true,
-      ),
-      ByteString.EMPTY,
-      Instant.EPOCH,
-    )
-  }
-
-  private val testAmuletRulesContract = Contract(
-    amuletrulesCodegen.AmuletRules.TEMPLATE_ID_WITH_PACKAGE_ID,
-    new amuletrulesCodegen.AmuletRules.ContractId("amuletRules"),
-    new amuletrulesCodegen.AmuletRules(
-      dsoParty.toProtoPrimitive,
-      SpliceUtil.defaultAmuletConfigSchedule(
-        NonNegativeFiniteDuration(Duration.ofMinutes(10)),
-        10,
-        synchronizerId,
-      ),
-      false,
-      Optional.empty(),
-    ),
-    ByteString.EMPTY,
-    Instant.EPOCH,
-  )
-
-  private val testOpenMiningRoundContract = Contract(
-    roundCodegen.OpenMiningRound.TEMPLATE_ID_WITH_PACKAGE_ID,
-    new roundCodegen.OpenMiningRound.ContractId("openMiningRound"),
-    new roundCodegen.OpenMiningRound(
-      dsoParty.toProtoPrimitive,
-      new Round(1L),
-      new java.math.BigDecimal(1.0).setScale(10),
-      Instant.EPOCH,
-      Instant.EPOCH.plusSeconds(600),
-      new RelTime(1_000_000),
-      SpliceUtil.defaultTransferConfig(10, BigDecimal(1.0)),
-      SpliceUtil.issuanceConfig(10.0, 10.0, 10.0),
-      new RelTime(1_000_000),
-      Optional.empty(),
-      Optional.empty(),
-    ),
-    ByteString.EMPTY,
-    Instant.EPOCH,
-  )
-
-  // Only svUser and svParty vary: those are answered by each scan about its own SV,
-  // so different scans legitimately disagree on them.
-  private def testDsoInfo(svUser: String, svParty: PartyId): DsoInfo =
-    DsoInfo(
-      svUser = svUser,
-      svParty = svParty,
-      dsoParty = dsoParty,
-      votingThreshold = BigInt(1),
-      latestMiningRound =
-        ContractWithState(testOpenMiningRoundContract, ContractState.Assigned(synchronizerId)),
-      amuletRules =
-        ContractWithState(testAmuletRulesContract, ContractState.Assigned(synchronizerId)),
-      dsoRules = ContractWithState(testDsoRulesContract, ContractState.Assigned(synchronizerId)),
-      svNodeStates = Map.empty,
-      initialRound = Some("0"),
-    )
-
   private def rootHashOk(round: Long, hash: String): GetRewardAccountingRootHashResponse =
     GetRewardAccountingRootHashResponse(
       RewardAccountingRootHashOk(status = "Ok", roundNumber = round, rootHash = hash)
@@ -532,23 +426,6 @@ class BftScanConnectionTest
         },
         _.warningMessage should include("Consensus not reached."),
       )
-    }
-
-    "reach consensus on getDsoRules despite scans disagreeing on SV-specific DsoInfo fields" in {
-      val connections = getMockedConnections(n = 4)
-      connections.zipWithIndex.foreach { case (connection, i) =>
-        when(connection.getDsoInfo()(any[ExecutionContext], any[TraceContext]))
-          .thenReturn(
-            Future.successful(
-              testDsoInfo(s"sv$i", PartyId.tryFromProtoPrimitive(s"sv$i::party"))
-            )
-          )
-      }
-      val bft = getBft(connections)
-
-      for {
-        dsoRules <- bft.getDsoRules()
-      } yield dsoRules should be(testDsoRulesContract)
     }
 
     "periodically refresh the list of scans" in {

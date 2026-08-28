@@ -201,8 +201,6 @@ class BftScanConnection(
       "getDsoInfo",
     )
 
-  // Consensus over just the DsoRules contract: the full DsoInfo contains
-  // per-scan fields (svUser, svParty) on which scans of different SVs never agree.
   override def getDsoRules(
   )(implicit
       tc: TraceContext

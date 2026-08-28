@@ -13,6 +13,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.{
   AmuletRules,
   TransferPreapproval,
 }
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.externalpartyamuletrules.{
   ExternalPartyAmuletRules,
   TransferCommandCounter,
@@ -242,6 +243,13 @@ class SingleScanConnection private[client] (
       config.adminApi.url,
       HttpScanAppClient.GetAmuletRules(cachedAmuletRules),
     )
+  }
+
+  override def getDsoRules(
+  )(implicit
+      tc: TraceContext
+  ): Future[Contract[DsoRules.ContractId, DsoRules]] = {
+    getDsoInfo().map(_.dsoRules.contract)
   }
 
   override def listVoteRequests()(implicit

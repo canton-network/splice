@@ -108,12 +108,7 @@ trait ScanConnection
       tc: TraceContext,
   ): Future[ContractWithState[AmuletRules.ContractId, AmuletRules]]
 
-  def getDsoRules(
-  )(implicit
-      tc: TraceContext
-  ): Future[Contract[DsoRules.ContractId, DsoRules]] = {
-    getDsoInfo().map(_.dsoRules.contract)
-  }
+  def getDsoRules()(implicit tc: TraceContext): Future[Contract[DsoRules.ContractId, DsoRules]]
 
   def getExternalPartyAmuletRules()(implicit
       ec: ExecutionContext,
