@@ -11,7 +11,7 @@ import com.digitalasset.base.error.utils.ErrorDetails
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.lifecycle.{AsyncOrSyncCloseable, SyncCloseable}
-import com.digitalasset.canton.logging.NamedLoggerFactory
+import com.digitalasset.canton.logging.{NamedLoggerFactory, TracedLogger}
 import com.digitalasset.canton.mediator.admin.v30
 import com.digitalasset.canton.sequencing.traffic.TrafficControlErrors
 import com.digitalasset.canton.time.Clock
@@ -63,6 +63,40 @@ object ScanVerdictIngestionService {
       verdictRecordTimes
         .filter(_ >= start)
         .filterNot(summaryTimes.contains)
+  }
+
+  /** Groups a batch of verdicts by update id and returns only the update ids that
+    * appear more than once within the batch.
+    */
+  def findDuplicateUpdateIds(batch: Seq[v30.Verdict]): Map[String, Seq[(v30.Verdict, Int)]] =
+    batch.zipWithIndex.groupBy(_._1.updateId).filter(_._2.size > 1)
+
+  /** True if any verdict in the duplicate groups has an accepted result. */
+  def duplicatesContainAccept(duplicates: Map[String, Seq[(v30.Verdict, Int)]]): Boolean =
+    duplicates.values.flatten.exists { case (v, _) =>
+      v.verdict == v30.VerdictResult.VERDICT_RESULT_ACCEPTED
+    }
+
+  /** Finds and logs when duplicate verdicts exist in a batch.
+    * Logs at WARN level when any duplicate is an accept, otherwise at INFO level.
+    */
+  def logDuplicateUpdateIds(batch: Seq[v30.Verdict], logger: TracedLogger)(implicit
+      tc: TraceContext
+  ): Unit = {
+    val duplicates = findDuplicateUpdateIds(batch)
+    if (duplicates.nonEmpty) {
+      val message = s"Received multiple verdicts with the same update id in the same batch. " +
+        s"Batch: ${batch.size} verdicts with record times ${batch.map(_.getRecordTime).map(CantonTimestamp.tryFromProtoTimestamp).mkString("[", ",", "]")}. " +
+        s"Duplicate verdicts: ${duplicates.values.flatten
+            .map { case (verdict, index) =>
+              s"${index} => ${verdict}"
+            }
+            .mkString("[\n", ",\n", "\n]")}"
+
+      if (duplicatesContainAccept(duplicates))
+        logger.warn(s"$message Duplicate verdicts contains an accept.")
+      else logger.info(message)
+    }
   }
 }
 
@@ -387,22 +421,7 @@ class ScanVerdictIngestionService(
       .batch(math.max(1, config.mediatorVerdictIngestion.batchSize.toLong), Vector(_))(_ :+ _)
       // TODO(DACH-NY/cn-test-failures#8281): Remove once we have figured out why we're getting duplicate data.
       .map(batch => {
-        val duplicates = batch.zipWithIndex
-          .groupBy(_._1.updateId)
-          .filter(_._2.size > 1)
-
-        if (duplicates.nonEmpty) {
-          logger.info(
-            s"Received multiple verdicts with the same update id in the same batch. " +
-              s"Batch: ${batch.size} verdicts with record times ${batch.map(_.getRecordTime).map(CantonTimestamp.tryFromProtoTimestamp).mkString("[", ",", "]")}. " +
-              s"Duplicate verdicts: ${duplicates.values.flatten
-                  .map { case (verdict, index) =>
-                    s"${index} => ${verdict}"
-                  }
-                  .mkString("[\n", ",\n", "\n]")}"
-          )
-        }
-
+        ScanVerdictIngestionService.logDuplicateUpdateIds(batch, logger)
         batch
       })
 

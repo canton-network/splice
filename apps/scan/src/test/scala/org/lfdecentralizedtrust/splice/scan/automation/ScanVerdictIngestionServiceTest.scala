@@ -1,12 +1,23 @@
 package org.lfdecentralizedtrust.splice.scan.automation
 
+import com.digitalasset.canton.BaseTest
 import com.digitalasset.canton.data.CantonTimestamp
-import org.scalatest.matchers.should.Matchers
+import com.digitalasset.canton.logging.SuppressionRule
+import com.digitalasset.canton.mediator.admin.v30
 import org.scalatest.wordspec.AnyWordSpec
+import org.slf4j.event.Level.INFO
 
-class ScanVerdictIngestionServiceTest extends AnyWordSpec with Matchers {
+class ScanVerdictIngestionServiceTest extends AnyWordSpec with BaseTest {
 
   private def ts(micros: Long) = CantonTimestamp.ofEpochMicro(micros)
+
+  private def mkVerdict(updateId: String, accepted: Boolean): v30.Verdict =
+    v30.Verdict.defaultInstance.copy(
+      updateId = updateId,
+      verdict =
+        if (accepted) v30.VerdictResult.VERDICT_RESULT_ACCEPTED
+        else v30.VerdictResult.VERDICT_RESULT_REJECTED,
+    )
 
   "findMissingTrafficSummaries" should {
 
@@ -48,6 +59,81 @@ class ScanVerdictIngestionServiceTest extends AnyWordSpec with Matchers {
         Set.empty,
         Some(300),
       ) shouldBe empty
+    }
+  }
+
+  "findDuplicateUpdateIds" should {
+
+    "return empty when all update ids are distinct" in {
+      ScanVerdictIngestionService.findDuplicateUpdateIds(
+        Seq(mkVerdict("a", true), mkVerdict("b", false))
+      ) shouldBe empty
+    }
+
+    "return only the update ids that appear more than once" in {
+      val result = ScanVerdictIngestionService.findDuplicateUpdateIds(
+        Seq(mkVerdict("a", true), mkVerdict("b", false), mkVerdict("a", false))
+      )
+      result.keySet shouldBe Set("a")
+      result("a").map(_._2) shouldBe Seq(0, 2)
+    }
+  }
+
+  "duplicatesContainAccept" should {
+
+    "return false when no duplicate is an accept" in {
+      val duplicates = ScanVerdictIngestionService.findDuplicateUpdateIds(
+        Seq(mkVerdict("a", false), mkVerdict("a", false))
+      )
+      ScanVerdictIngestionService.duplicatesContainAccept(duplicates) shouldBe false
+    }
+
+    "return true when a duplicate group contains an accept" in {
+      val duplicates = ScanVerdictIngestionService.findDuplicateUpdateIds(
+        Seq(mkVerdict("a", false), mkVerdict("a", true))
+      )
+      ScanVerdictIngestionService.duplicatesContainAccept(duplicates) shouldBe true
+    }
+
+    "ignore an accept that is not part of a duplicate group" in {
+      // "a" is accepted but unique; only "b" is duplicated (both rejected).
+      val duplicates = ScanVerdictIngestionService.findDuplicateUpdateIds(
+        Seq(mkVerdict("a", true), mkVerdict("b", false), mkVerdict("b", false))
+      )
+      ScanVerdictIngestionService.duplicatesContainAccept(duplicates) shouldBe false
+    }
+  }
+
+  "logDuplicateUpdateIds" should {
+
+    "not log when there are no duplicates" in {
+      loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(INFO))(
+        ScanVerdictIngestionService.logDuplicateUpdateIds(
+          Seq(mkVerdict("a", true), mkVerdict("b", true)),
+          logger,
+        ),
+        _ shouldBe empty,
+      )
+    }
+
+    "log at info level when no duplicate is an accept" in {
+      loggerFactory.assertLogs(SuppressionRule.LevelAndAbove(INFO))(
+        ScanVerdictIngestionService.logDuplicateUpdateIds(
+          Seq(mkVerdict("a", false), mkVerdict("a", false)),
+          logger,
+        ),
+        _.infoMessage should include("Duplicate verdicts:"),
+      )
+    }
+
+    "log at warning level when a duplicate is an accept" in {
+      loggerFactory.assertLogs(
+        ScanVerdictIngestionService.logDuplicateUpdateIds(
+          Seq(mkVerdict("a", true), mkVerdict("a", false)),
+          logger,
+        ),
+        _.warningMessage should endWith("Duplicate verdicts contains an accept."),
+      )
     }
   }
 }
