@@ -699,10 +699,10 @@
       {
         "current": {
           "text": [
-            "sv-5"
+            "All"
           ],
           "value": [
-            "sv-5"
+            "$__all"
           ]
         },
         "datasource": {
