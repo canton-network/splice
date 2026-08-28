@@ -46,6 +46,7 @@ export const InfraConfigSchema = z.object({
       })
       .optional(),
     enableGCReaperJob: z.boolean().default(false),
+    certManagerUseWorkloadIdentity: z.boolean().optional(),
     gkeGateway: z.object({
       proxyForIstioHttp: z.boolean(),
     }),
@@ -74,6 +75,8 @@ export type Config = z.infer<typeof InfraConfigSchema>;
 // @ts-ignore
 const fullConfig = InfraConfigSchema.parse(clusterYamlConfig);
 export const enableGCReaperJob = fullConfig.infra.enableGCReaperJob;
+export const certManagerUseWorkloadIdentity =
+  fullConfig.infra.certManagerUseWorkloadIdentity ?? false;
 console.error(
   `Loaded infra config: ${util.inspect(fullConfig, {
     depth: null,

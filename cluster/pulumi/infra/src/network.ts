@@ -19,7 +19,12 @@ import {
 import { infraKubernetesScheduling } from '@canton-network/splice-pulumi-common';
 import { svConfigsBasic } from '@canton-network/splice-pulumi-common-sv/src/svConfigsBasic';
 
-import { gcpDnsProject } from './config';
+import { certManagerUseWorkloadIdentity, gcpDnsProject } from './config';
+
+const useCertManagerWorkloadIdentity = certManagerUseWorkloadIdentity;
+const dns01SaIamAccount = useCertManagerWorkloadIdentity
+  ? config.requireEnv('DNS01_SA_IAM_ACCOUNT')
+  : config.optionalEnv('DNS01_SA_IAM_ACCOUNT') || '';
 
 function ipAddress(addressName: string): gcp.compute.Address {
   return new gcp.compute.Address(addressName, {
@@ -81,6 +86,20 @@ function certManager(certManagerNamespaceName: string): certmanager.CertManager 
     },
   });
 
+  const workloadIdentityArgs: Partial<certmanager.CertManagerArgs> = useCertManagerWorkloadIdentity
+    ? {
+        extraArgs: [
+          '--issuer-ambient-credentials=true',
+          '--cluster-issuer-ambient-credentials=true',
+        ],
+        serviceAccount: {
+          annotations: {
+            'iam.gke.io/gcp-service-account': dns01SaIamAccount,
+          },
+        },
+      }
+    : {};
+
   return new certmanager.CertManager('cert-manager', {
     installCRDs: true,
     helmOptions: {
@@ -103,6 +122,7 @@ function certManager(certManagerNamespaceName: string): certmanager.CertManager 
     startupapicheck: {
       ...infraKubernetesScheduling,
     },
+    ...workloadIdentityArgs,
   });
 }
 
@@ -149,13 +169,17 @@ function clusterCertificate(
           solvers: [
             {
               dns01: {
-                cloudDNS: {
-                  project: 'da-gcp-canton-domain',
-                  serviceAccountSecretRef: {
-                    key: 'key.json',
-                    name: 'clouddns-dns01-solver-svc-acct',
-                  },
-                },
+                cloudDNS: useCertManagerWorkloadIdentity
+                  ? {
+                      project: 'da-gcp-canton-domain',
+                    }
+                  : {
+                      project: 'da-gcp-canton-domain',
+                      serviceAccountSecretRef: {
+                        key: 'key.json',
+                        name: 'clouddns-dns01-solver-svc-acct',
+                      },
+                    },
               },
             },
           ],
@@ -167,30 +191,38 @@ function clusterCertificate(
     }
   );
 
-  const gcpSecretName = config.requireEnv('DNS01_SA_KEY_SECRET');
+  if (useCertManagerWorkloadIdentity) {
+    new gcp.serviceaccount.IAMMember('dns01-solver-workload-identity-user', {
+      serviceAccountId: `projects/${gcpDnsProject}/serviceAccounts/${dns01SaIamAccount}`,
+      role: 'roles/iam.workloadIdentityUser',
+      member: pulumi.interpolate`serviceAccount:${GCP_PROJECT}.svc.id.goog[cert-manager/cert-manager]`,
+    });
+  } else {
+    const gcpSecretName = config.requireEnv('DNS01_SA_KEY_SECRET');
 
-  gcp.secretmanager.SecretVersion.get(
-    'dns01-sa-key-secret',
-    `projects/${GCP_PROJECT}/secrets/${gcpSecretName}/versions/latest`
-  ).secretData.apply(dns01SaKeySecret => {
-    new k8s.core.v1.Secret(
-      'clouddns-dns01-solver-svc-acct',
-      {
-        metadata: {
-          name: 'clouddns-dns01-solver-svc-acct',
-          namespace: ns.metadata.name,
+    gcp.secretmanager.SecretVersion.get(
+      'dns01-sa-key-secret',
+      `projects/${GCP_PROJECT}/secrets/${gcpSecretName}/versions/latest`
+    ).secretData.apply(dns01SaKeySecret => {
+      new k8s.core.v1.Secret(
+        'clouddns-dns01-solver-svc-acct',
+        {
+          metadata: {
+            name: 'clouddns-dns01-solver-svc-acct',
+            namespace: ns.metadata.name,
+          },
+          type: 'Opaque',
+          data: {
+            // TODO(#973): Handle this correctly in dump-config. Currently it gets here with an undefined value.
+            'key.json': btoa(dns01SaKeySecret || 'dns-secret'),
+          },
         },
-        type: 'Opaque',
-        data: {
-          // TODO(#973): Handle this correctly in dump-config. Currently it gets here with an undefined value.
-          'key.json': btoa(dns01SaKeySecret || 'dns-secret'),
-        },
-      },
-      {
-        dependsOn: ns,
-      }
-    );
-  });
+        {
+          dependsOn: ns,
+        }
+      );
+    });
+  }
 
   const certDnsNames = dnsNames
     .map(dnsName =>
