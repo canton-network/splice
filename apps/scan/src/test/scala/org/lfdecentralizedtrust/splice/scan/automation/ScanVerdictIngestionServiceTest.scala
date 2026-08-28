@@ -79,20 +79,27 @@ class ScanVerdictIngestionServiceTest extends AnyWordSpec with BaseTest {
     }
   }
 
-  "duplicatesContainAccept" should {
+  "duplicatesContainSubsequentAccept" should {
 
     "return false when no duplicate is an accept" in {
       val duplicates = ScanVerdictIngestionService.findDuplicateUpdateIds(
         Seq(mkVerdict("a", false), mkVerdict("a", false))
       )
-      ScanVerdictIngestionService.duplicatesContainAccept(duplicates) shouldBe false
+      ScanVerdictIngestionService.duplicatesContainSubsequentAccept(duplicates) shouldBe false
     }
 
-    "return true when a duplicate group contains an accept" in {
+    "return true when a duplicate group contains an accept after another verdict" in {
       val duplicates = ScanVerdictIngestionService.findDuplicateUpdateIds(
         Seq(mkVerdict("a", false), mkVerdict("a", true))
       )
-      ScanVerdictIngestionService.duplicatesContainAccept(duplicates) shouldBe true
+      ScanVerdictIngestionService.duplicatesContainSubsequentAccept(duplicates) shouldBe true
+    }
+
+    "return false when a duplicate group contains an accept before another verdict" in {
+      val duplicates = ScanVerdictIngestionService.findDuplicateUpdateIds(
+        Seq(mkVerdict("a", true), mkVerdict("a", false))
+      )
+      ScanVerdictIngestionService.duplicatesContainSubsequentAccept(duplicates) shouldBe false
     }
 
     "ignore an accept that is not part of a duplicate group" in {
@@ -100,7 +107,7 @@ class ScanVerdictIngestionServiceTest extends AnyWordSpec with BaseTest {
       val duplicates = ScanVerdictIngestionService.findDuplicateUpdateIds(
         Seq(mkVerdict("a", true), mkVerdict("b", false), mkVerdict("b", false))
       )
-      ScanVerdictIngestionService.duplicatesContainAccept(duplicates) shouldBe false
+      ScanVerdictIngestionService.duplicatesContainSubsequentAccept(duplicates) shouldBe false
     }
   }
 
@@ -126,13 +133,23 @@ class ScanVerdictIngestionServiceTest extends AnyWordSpec with BaseTest {
       )
     }
 
-    "log at warning level when a duplicate is an accept" in {
+    "log at warning level when a duplicate is a subsequent accept" in {
       loggerFactory.assertLogs(
+        ScanVerdictIngestionService.logDuplicateUpdateIds(
+          Seq(mkVerdict("a", false), mkVerdict("a", true)),
+          logger,
+        ),
+        _.warningMessage should endWith("Duplicate verdicts contains a subsequent accept."),
+      )
+    }
+
+    "log at info level when a duplicate is not a subsequent accept" in {
+      loggerFactory.assertLogs(SuppressionRule.LevelAndAbove(INFO))(
         ScanVerdictIngestionService.logDuplicateUpdateIds(
           Seq(mkVerdict("a", true), mkVerdict("a", false)),
           logger,
         ),
-        _.warningMessage should endWith("Duplicate verdicts contains an accept."),
+        _.infoMessage should include("Duplicate verdicts:"),
       )
     }
   }

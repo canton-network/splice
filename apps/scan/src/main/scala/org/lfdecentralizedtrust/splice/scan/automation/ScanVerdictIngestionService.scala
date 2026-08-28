@@ -71,10 +71,10 @@ object ScanVerdictIngestionService {
   def findDuplicateUpdateIds(batch: Seq[v30.Verdict]): Map[String, Seq[(v30.Verdict, Int)]] =
     batch.zipWithIndex.groupBy(_._1.updateId).filter(_._2.size > 1)
 
-  /** True if any verdict in the duplicate groups has an accepted result. */
-  def duplicatesContainAccept(duplicates: Map[String, Seq[(v30.Verdict, Int)]]): Boolean =
-    duplicates.values.flatten.exists { case (v, _) =>
-      v.verdict == v30.VerdictResult.VERDICT_RESULT_ACCEPTED
+  /** True if any verdict in the duplicate groups has an accept after another verdict. */
+  def duplicatesContainSubsequentAccept(duplicates: Map[String, Seq[(v30.Verdict, Int)]]): Boolean =
+    duplicates.exists { case (_, group) =>
+      group.drop(1).exists(_._1.verdict == v30.VerdictResult.VERDICT_RESULT_ACCEPTED)
     }
 
   /** Finds and logs when duplicate verdicts exist in a batch.
@@ -93,8 +93,8 @@ object ScanVerdictIngestionService {
             }
             .mkString("[\n", ",\n", "\n]")}"
 
-      if (duplicatesContainAccept(duplicates))
-        logger.warn(s"$message Duplicate verdicts contains an accept.")
+      if (duplicatesContainSubsequentAccept(duplicates))
+        logger.warn(s"$message Duplicate verdicts contains a subsequent accept.")
       else logger.info(message)
     }
   }
