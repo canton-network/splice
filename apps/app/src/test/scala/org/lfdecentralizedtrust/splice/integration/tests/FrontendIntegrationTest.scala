@@ -775,6 +775,7 @@ trait FrontendTestCommon extends TestCommon with WebBrowser with CustomMatchers 
     clue(s"$party selects the date $dateTime") {
       val dateTimePicker = webDriver.findElement(By.id(pickerId))
       eventually() {
+        webDriver.executeScript("arguments[0].scrollIntoView({block: 'center'});", dateTimePicker)
         dateTimePicker.clear()
         dateTimePicker.click()
         // Typing in the "filler" characters can mess up the input badly
