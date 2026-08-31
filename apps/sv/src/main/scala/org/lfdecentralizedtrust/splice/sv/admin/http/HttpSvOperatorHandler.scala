@@ -24,7 +24,7 @@ import org.lfdecentralizedtrust.splice.admin.http.HttpErrorHandler
 import org.lfdecentralizedtrust.splice.auth.ActAsKnownPartyAuthExtractor.ActAsKnownUserRequest
 import org.lfdecentralizedtrust.splice.http.v0.{definitions, sv_operator as v0}
 import org.lfdecentralizedtrust.splice.http.v0.sv_operator.SvOperatorResource as r0
-import org.lfdecentralizedtrust.splice.config.{NetworkAppClientConfig, UpgradesConfig}
+import org.lfdecentralizedtrust.splice.config.{NetworkAppClientConfig, Thresholds, UpgradesConfig}
 import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.http.{
   HttpClient,
@@ -46,7 +46,7 @@ import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvSvStore}
 import org.lfdecentralizedtrust.splice.sv.util.SvUtil.generateRandomOnboardingSecret
 import org.lfdecentralizedtrust.splice.sv.util.Secrets
 import org.lfdecentralizedtrust.splice.sv.{LocalSynchronizerNode, SvApp}
-import org.lfdecentralizedtrust.splice.util.{Codec, Contract, TemplateJsonDecoder}
+import org.lfdecentralizedtrust.splice.util.{Codec, Contract, DsoInfo, TemplateJsonDecoder}
 
 import java.util.Optional
 import scala.concurrent.{blocking, ExecutionContextExecutor, Future}
@@ -63,6 +63,7 @@ class HttpSvOperatorHandler(
     protected val loggerFactory: NamedLoggerFactory,
     upgradesConfig: UpgradesConfig,
     participantAdminConnection: ParticipantAdminConnection,
+    initialRound: String,
 )(implicit
     ec: ExecutionContextExecutor,
     protected val tracer: Tracer,
@@ -112,6 +113,36 @@ class HttpSvOperatorHandler(
           scanConnectionV = Some(f)
           f
       }
+    }
+  }
+
+  /** Intended use: The SV app UI.
+    *
+    * Protection: Requires authorization as SV operator; replaces the public `/v0/dso` endpoint.
+    */
+  override def getDsoInfoV1(
+      respond: r0.GetDsoInfoV1Response.type
+  )()(extracted: ActAsKnownUserRequest): Future[r0.GetDsoInfoV1Response] = {
+    implicit val ActAsKnownUserRequest(traceContext) = extracted
+    withSpan(s"$workflowId.getDsoInfoV1") { _ => _ =>
+      for {
+        latestOpenMiningRound <- dsoStore.getLatestActiveOpenMiningRound()
+        amuletRules <- dsoStore.getAssignedAmuletRules()
+        rulesAndStates <- dsoStore.getDsoRulesWithStateWithSvNodeStates()
+        dsoRules = rulesAndStates.dsoRules
+      } yield r0.GetDsoInfoV1Response.OK(
+        DsoInfo(
+          svUser = config.ledgerApiUser,
+          svParty = dsoStore.key.svParty,
+          dsoParty = dsoStore.key.dsoParty,
+          votingThreshold = Thresholds.requiredNumVotes(dsoRules),
+          latestMiningRound = latestOpenMiningRound.toContractWithState,
+          amuletRules = amuletRules.toContractWithState,
+          dsoRules = dsoRules,
+          svNodeStates = rulesAndStates.svNodeStates,
+          initialRound = Some(initialRound),
+        ).toHttp
+      )
     }
   }
 

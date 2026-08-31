@@ -36,11 +36,13 @@ import org.lfdecentralizedtrust.splice.sv.automation.RewardMetricsTrigger
 import org.lfdecentralizedtrust.splice.sv.automation.confirmation.{
   CalculateRewardsDryRunTrigger,
   CalculateRewardsTrigger,
+  SummarizingMiningRoundTrigger,
 }
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
   ProcessRewardsDryRunTrigger,
   ProcessRewardsTrigger,
 }
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
 import org.lfdecentralizedtrust.splice.scan.automation.RewardComputationTrigger
 import org.lfdecentralizedtrust.splice.sv.config.InitialRewardConfig
 import org.lfdecentralizedtrust.splice.util.{
@@ -352,6 +354,45 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
       confirmMismatchingRootHashIsFlagged(bobParty)
   }
 
+  // sv2's CalculateRewardsTrigger and SummarizingMiningRoundTrigger report the
+  // scan URIs that formed the BFT consensus at INFO. This method captures the
+  // logs emitted while running the 'body' argument and asserts that sv2
+  // obtained both the root-hash and the reward accounting totals for 'round'
+  // via BFT read from sv1 and sv4.
+  private def withExpectedRewardTriggersLogging[A](round: Long)(
+      body: => A
+  ): A = {
+    val bftReadLogs =
+      (SuppressionRule.forLogger[CalculateRewardsTrigger] ||
+        SuppressionRule.forLogger[SummarizingMiningRoundTrigger]) &&
+        SuppressionRule.LevelAndAbove(Level.INFO)
+
+    loggerFactory.assertEventuallyLogsSeq(bftReadLogs)(
+      body,
+      logs => {
+        // sv3 is stopped and sv2's own scan is not part of its peer BFT connection,
+        // so only sv1's and sv4's scans can form the consensus.
+        val expectedScanUris = Set("http://localhost:5012", "http://localhost:5312")
+        def bftReadLogged(subject: String) =
+          forAtLeast(1, logs) { log =>
+            val prefix =
+              s"Obtained the $subject for round $round via BFT read from scans: "
+            log.loggerName should include("SV=sv2")
+            log.message should include(prefix)
+            val scanUris = log.message
+              .substring(log.message.indexOf(prefix) + prefix.length)
+              .stripSuffix(".")
+              .split(", ")
+              .toSeq
+            scanUris.size should be(1)
+            forAll(scanUris)(uri => expectedScanUris should contain(uri))
+          }
+        bftReadLogged("root-hash")
+        bftReadLogged("reward accounting totals")
+      },
+    )
+  }
+
   private def metricValue(
       node: LocalInstanceReference,
       name: String,
@@ -385,99 +426,101 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
       // Pausing this ensures that the root-hash is not calculated while we advance round
       val sv2RewardComputation = sv2ScanBackend.automation.trigger[RewardComputationTrigger]
 
-      // Here we ensure that SV2 has done ingestion of app-activity for the round just closed
-      // But then its AppActivityRecordMetaT is bumped so that it cannot compute the
-      // root-hash for the round.
-      val (calculateRewardsCid, round) = setTriggersWithin(
-        triggersToPauseAtStart = Seq(sv2CalculateRewards, sv2RewardComputation)
-      ) {
-        val round = oldestOpenRound
-        doTransfer(bobParty)
-        // Note: we can't use advanceRoundsToNextRoundOpening here, as it blocks
-        // on summarizing and issuing round to complete, and here the
-        // summarizing round will block until the sv2 provides the round totals
-        // via bft read.
-        advanceTimeAndWaitForRoundOpening
+      val round = oldestOpenRound
+      withExpectedRewardTriggersLogging(round) {
+        // Here we ensure that SV2 has done ingestion of app-activity for the round just closed
+        // But then its AppActivityRecordMetaT is bumped so that it cannot compute the
+        // root-hash for the round.
+        val calculateRewardsCid = setTriggersWithin(
+          triggersToPauseAtStart = Seq(sv2CalculateRewards, sv2RewardComputation)
+        ) {
+          doTransfer(bobParty)
+          // Note: we can't use advanceRoundsToNextRoundOpening here, as it blocks
+          // on summarizing and issuing round to complete, and here the
+          // summarizing round will block until the sv2 provides the round totals
+          // via bft read.
+          advanceTimeAndWaitForRoundOpening
 
-        val (calculateRewardsCid, rootHash) =
-          clue(
-            s"Round $round just closed: its CalculateRewardsV2 exists and sv1 serves root-hash"
-          ) {
-            eventually() {
-              val calc = sv1Backend.appState.dsoStore
-                .listCalculateRewardsV2()
-                .futureValue
-                .filterNot(_.payload.dryRun)
-                .find(_.payload.round.number == round)
-                .value
-              val rootHash = inside(sv1ScanBackend.getRewardAccountingRootHash(round)) {
-                case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(h) =>
-                  h.rootHash
+          val (calculateRewardsCid, rootHash) =
+            clue(
+              s"Round $round just closed: its CalculateRewardsV2 exists and sv1 serves root-hash"
+            ) {
+              eventually() {
+                val calc = sv1Backend.appState.dsoStore
+                  .listCalculateRewardsV2()
+                  .futureValue
+                  .filterNot(_.payload.dryRun)
+                  .find(_.payload.round.number == round)
+                  .value
+                val rootHash = inside(sv1ScanBackend.getRewardAccountingRootHash(round)) {
+                  case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(h) =>
+                    h.rootHash
+                }
+                (calc.contractId, rootHash)
               }
-              (calc.contractId, rootHash)
             }
+
+          clue(s"Only sv1 and sv4 confirm round $round, so it is not yet processed") {
+            eventually() {
+              val startProcessingAction = new ARC_AmuletRules(
+                new CRARC_StartProcessingRewardsV2(
+                  new AmuletRules_StartProcessingRewardsV2(calculateRewardsCid, new Hash(rootHash))
+                )
+              )
+              sv1Backend.appState.dsoStore
+                .listConfirmations(startProcessingAction)
+                .futureValue should have size 2
+            }
+            sv1Backend.appState.dsoStore
+              .listOldestSummarizingMiningRounds()
+              .futureValue
+              .map(_.payload.round.number) should contain(round)
           }
 
-        clue(s"Only sv1 and sv4 confirm round $round, so it is not yet processed") {
-          eventually() {
-            val startProcessingAction = new ARC_AmuletRules(
-              new CRARC_StartProcessingRewardsV2(
-                new AmuletRules_StartProcessingRewardsV2(calculateRewardsCid, new Hash(rootHash))
-              )
-            )
-            sv1Backend.appState.dsoStore
-              .listConfirmations(startProcessingAction)
-              .futureValue should have size 2
-          }
-          sv1Backend.appState.dsoStore
-            .listOldestSummarizingMiningRounds()
-            .futureValue
-            .map(_.payload.round.number) should contain(round)
+          // This is trying to simulate AppActivityRecordMetaT's userVersion bump
+          // albeit in a direct way, to avoid restart of scan app, etc.
+          actAndCheck(
+            s"Reset sv2's earliest-ingested round to $round", {
+              val sv2Db = sv2ScanBackend.appState.storage match {
+                case db: DbStorage => db
+                case other => fail(s"Expected DbStorage")
+              }
+              implicit val closeContext: CloseContext = CloseContext(sv2Db)
+              sv2Db
+                .update_(
+                  sqlu"""update app_activity_record_meta
+                         set earliest_ingested_round = $round,
+                             last_archived_round = null""",
+                  "test.increaseAppActivityMeta_EarliestIngestedRound",
+                )
+                .futureValueUS
+            },
+          )(
+            s"sv2's own scan now answers CannotProvide for round $round",
+            _ =>
+              sv2ScanBackend.getRewardAccountingRootHash(round) shouldBe
+                a[GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashCannotProvide],
+          )
+
+          calculateRewardsCid
         }
 
-        // This is trying to simulate AppActivityRecordMetaT's userVersion bump
-        // albeit in a direct way, to avoid restart of scan app, etc.
-        actAndCheck(
-          s"Reset sv2's earliest-ingested round to $round", {
-            val sv2Db = sv2ScanBackend.appState.storage match {
-              case db: DbStorage => db
-              case other => fail(s"Expected DbStorage")
-            }
-            implicit val closeContext: CloseContext = CloseContext(sv2Db)
-            sv2Db
-              .update_(
-                sqlu"""update app_activity_record_meta
-                       set earliest_ingested_round = $round,
-                           last_archived_round = null""",
-                "test.increaseAppActivityMeta_EarliestIngestedRound",
-              )
-              .futureValueUS
-          },
-        )(
-          s"sv2's own scan now answers CannotProvide for round $round",
-          _ =>
-            sv2ScanBackend.getRewardAccountingRootHash(round) shouldBe
-              a[GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashCannotProvide],
-        )
+        // setTriggersWithin has resumed sv2's CalculateRewardsTrigger. sv3 is stopped and sv2's own
+        // scan CannotProvide, so the deciding 3rd confirmation can only come from sv2 via bft read.
+        clue(s"sv2's own scan still answers CannotProvide for round $round") {
+          sv2ScanBackend.getRewardAccountingRootHash(round) shouldBe
+            a[GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashCannotProvide]
+        }
 
-        (calculateRewardsCid, round)
-      }
-
-      // setTriggersWithin has resumed sv2's CalculateRewardsTrigger. sv3 is stopped and sv2's own
-      // scan CannotProvide, so the deciding 3rd confirmation can only come from sv2 via bft read.
-      clue(s"sv2's own scan still answers CannotProvide for round $round") {
-        sv2ScanBackend.getRewardAccountingRootHash(round) shouldBe
-          a[GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashCannotProvide]
-      }
-
-      clue(
-        s"sv2 reads round $round from the sv1 and sv4, and supplies the 3rd confirmation vote"
-      ) {
-        eventually() {
-          sv1Backend.appState.dsoStore
-            .listCalculateRewardsV2()
-            .futureValue
-            .map(_.contractId) should not contain calculateRewardsCid
+        clue(
+          s"sv2 reads round $round from the sv1 and sv4, and supplies the 3rd confirmation vote"
+        ) {
+          eventually() {
+            sv1Backend.appState.dsoStore
+              .listCalculateRewardsV2()
+              .futureValue
+              .map(_.contractId) should not contain calculateRewardsCid
+          }
         }
       }
 
@@ -515,15 +558,38 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
       }
     } finally {
       otherProcessRewardsTriggers.foreach(_.resume())
-      clue("Restart sv3") {
-        sv3ScanBackend.start()
-        sv3Backend.start()
-        sv3Backend.waitForInitialization(
-          timeout = NonNegativeDuration.tryFromDuration(120.seconds)
-        )
-        sv3ScanBackend.waitForInitialization(
-          timeout = NonNegativeDuration.tryFromDuration(120.seconds)
-        )
+      // On restart, sv3 catches up on the round that was processed while sv3
+      // was down. The reward triggers may fire before that round
+      // advances. sv2's own scan still answers 'CannotProvide' for that round
+      // (its earliest-ingested round was bumped above), so it contributes an
+      // 'IgnoreResponse' to sv3's BFT reads, which 'BftScanConnection' logs at
+      // WARN as "The following Scan URLs disagreed with consensus". These WARNs
+      // are an expected consequence of the 'CannotProvide' scenario under test,
+      // so we suppress them (targeted to 'BftScanConnection' WARNs) to keep the
+      // `sbt checkErrors` log-scan gate green.
+      //
+      // The same supression happens in 'withExpectedRewardTriggersLogging' but
+      //
+      // 1. 'withExpectedRewardTriggersLogging' targets a narrow part of the try
+      //     block and doesn't expand into this finally block, and
+      // 2. 'withExpectedRewardTriggersLogging' has strict expectation about the
+      //     logs when rewards trigger fire. Here triggers may or may not fire
+      //     -- it's a race between sv3 catching up and triggers firing. We
+      //     can't guarantee that triggers fire => can't expect that WARNs will
+      //     appear. So we just supress them instead of expecting them.
+      loggerFactory.suppress(
+        SuppressionRule.forLogger[BftScanConnection] && SuppressionRule.Level(Level.WARN)
+      ) {
+        clue("Restart sv3") {
+          sv3ScanBackend.start()
+          sv3Backend.start()
+          sv3Backend.waitForInitialization(
+            timeout = NonNegativeDuration.tryFromDuration(120.seconds)
+          )
+          sv3ScanBackend.waitForInitialization(
+            timeout = NonNegativeDuration.tryFromDuration(120.seconds)
+          )
+        }
       }
     }
   }

@@ -314,8 +314,12 @@
         },
         "joinWithKeyOnboarding": {
           "type": "object",
+          "required": ["sponsorApiUrl", "sponsorScanUrl"],
           "properties": {
             "sponsorApiUrl": {
+              "type": "string"
+            },
+            "sponsorScanUrl": {
               "type": "string"
             }
           }

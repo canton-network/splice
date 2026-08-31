@@ -19,6 +19,7 @@ import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAp
 import org.lfdecentralizedtrust.splice.util.{
   ChoiceContextWithDisclosures,
   ContractWithState,
+  DsoInfo,
   FactoryChoiceWithDisclosures,
 }
 import org.lfdecentralizedtrust.splice.validator.admin.api.client.commands.*
@@ -360,7 +361,7 @@ abstract class ValidatorAppReference(
       }
     }
 
-    def getDsoInfo(): definitions.GetDsoInfoResponse = {
+    def getDsoInfo(): DsoInfo = {
       consoleEnvironment.run {
         httpCommand(
           HttpScanProxyAppClient.GetDsoInfo

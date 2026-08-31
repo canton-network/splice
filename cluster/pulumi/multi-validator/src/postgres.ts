@@ -3,7 +3,7 @@
 import * as pulumi from '@pulumi/pulumi';
 import {
   activeVersion,
-  appsAffinityAndTolerations,
+  appsKubernetesScheduling,
   CnInput,
   ExactNamespace,
   spliceConfig,
@@ -40,10 +40,10 @@ export function installPostgres(
         pvcTemplateName: 'pg-data-hd',
       },
       resources: config.resources?.postgres,
-      appsAffinityAndTolerations,
+      appsAffinityAndTolerations: appsKubernetesScheduling,
     },
     true, // overrideDbSizeFromValues
-    false, // useInfraAffinityAndTolerations
+    false, // useinfraKubernetesScheduling
     {
       dependsOn,
       ...(spliceConfig.pulumiProjectConfig.replacePostgresStatefulSetOnChanges

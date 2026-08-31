@@ -26,7 +26,12 @@ import {
 import { FormLayout } from './FormLayout';
 import { ProposalSummary } from '../governance/ProposalSummary';
 import { useStore } from '@tanstack/react-form';
-import { DEFAULT_APP_ACTIVITY_WEIGHT, THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
+import {
+  CREATE_PROPOSAL_LABEL_THRESHOLD_DEADLINE,
+  DEFAULT_APP_ACTIVITY_WEIGHT,
+  SUPPORTING_URL_PLACEHOLDER,
+  THRESHOLD_DEADLINE_SUBTITLE,
+} from '../../utils/constants';
 import { EffectiveDateField } from '../form-components/EffectiveDateField';
 import { ProposalSubmissionError } from '../form-components/ProposalSubmissionError';
 
@@ -109,7 +114,12 @@ export const UpdateFeaturedAppForm: React.FC = () => {
 
   return (
     <>
-      <FormLayout form={form} id={`${idPrefix}-form`}>
+      <FormLayout
+        form={form}
+        id={`${idPrefix}-form`}
+        actionName={form.state.values.action}
+        isReviewStep={showConfirmation}
+      >
         {showConfirmation ? (
           <ProposalSummary
             actionName={form.state.values.action}
@@ -204,7 +214,7 @@ export const UpdateFeaturedAppForm: React.FC = () => {
             >
               {field => (
                 <field.DateField
-                  title="Threshold Deadline"
+                  title={CREATE_PROPOSAL_LABEL_THRESHOLD_DEADLINE}
                   description={THRESHOLD_DEADLINE_SUBTITLE}
                   id={`${idPrefix}-expiry-date`}
                 />
@@ -242,7 +252,13 @@ export const UpdateFeaturedAppForm: React.FC = () => {
                 onChange: ({ value }) => validateUrl(value),
               }}
             >
-              {field => <field.TextField title="URL" id={`${idPrefix}-url`} />}
+              {field => (
+                <field.TextField
+                  title="URL"
+                  id={`${idPrefix}-url`}
+                  muiTextFieldProps={{ placeholder: SUPPORTING_URL_PLACEHOLDER }}
+                />
+              )}
             </form.AppField>
           </>
         )}

@@ -6,7 +6,7 @@ import * as pulumi from '@pulumi/pulumi';
 import {
   activeVersion,
   ansDomainPrefix,
-  appsAffinityAndTolerations,
+  appsKubernetesScheduling,
   Auth0Client,
   btoa,
   ChartValues,
@@ -685,6 +685,7 @@ function installSvApp(
   if (config.onboarding.type == 'join-with-key') {
     svValues.joinWithKeyOnboarding = {
       sponsorApiUrl: config.onboarding.sponsorApiUrl,
+      sponsorScanUrl: config.onboarding.sponsorScanUrl,
     };
   }
 
@@ -698,7 +699,7 @@ function installSvApp(
       dependsOn: dependsOn.concat([postgres]).concat(allSynchronizerDependencies),
     },
     undefined,
-    appsAffinityAndTolerations
+    appsKubernetesScheduling
   );
 }
 

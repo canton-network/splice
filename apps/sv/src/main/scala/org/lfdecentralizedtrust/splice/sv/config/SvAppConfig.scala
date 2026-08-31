@@ -49,6 +49,7 @@ import org.lfdecentralizedtrust.splice.environment.{
   PackageVettingLookupService,
 }
 import org.lfdecentralizedtrust.splice.lsu.LsuRollForwardTimestamp
+import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
 import org.lfdecentralizedtrust.splice.sv.SvAppClientConfig
 import org.lfdecentralizedtrust.splice.sv.util.SvUtil
 import org.lfdecentralizedtrust.splice.util.SpliceUtil
@@ -128,6 +129,8 @@ object SvOnboardingConfig {
       svClient: SvAppClientConfig, // an SV that we'll contact to start our onboarding
       publicKey: String, // the key that identifies us together with our name
       privateKey: String, // the private key we use for authenticating ourselves
+      // A scan instance (typically the sponsor's) used to fetch DSO info during onboarding
+      scanClient: ScanAppClientConfig,
   ) extends SvOnboardingConfig
 
   object JoinWithKey
@@ -220,8 +223,8 @@ object SvOnboardingConfig {
   def hideConfidential(config: SvOnboardingConfig): SvOnboardingConfig = {
     val hidden = "****"
     config match {
-      case JoinWithKey(name, svClient, publicKey, _) =>
-        JoinWithKey(name, svClient, publicKey, hidden)
+      case JoinWithKey(name, svClient, publicKey, _, scanClient) =>
+        JoinWithKey(name, svClient, publicKey, hidden, scanClient)
       case other => other
     }
   }

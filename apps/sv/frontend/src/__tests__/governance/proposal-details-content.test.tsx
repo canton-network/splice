@@ -24,7 +24,17 @@ import { ProposalVoteForm } from '../../components/governance/ProposalVoteForm';
 import App from '../../App';
 import { svPartyId } from '../mocks/constants';
 import { Wrapper } from '../helpers';
-import { SUPPORTING_URL_LABEL, VOTE_PROPOSAL_CONTRACT_ID_LABEL } from '../../utils/constants';
+import {
+  EFFECTIVE_AT_LABEL,
+  PROPOSAL_CREATED_LABEL,
+  PROPOSAL_SUMMARY_TITLE,
+  SUPPORTING_URL_LABEL,
+  THRESHOLD_DEADLINE_LABEL,
+  URL_PLACEHOLDER,
+  VOTE_PROPOSAL_CONTRACT_ID_LABEL,
+  VOTE_REASON_PLACEHOLDER,
+  VOTE_REASON_URL_PLACEHOLDER,
+} from '../../utils/constants';
 
 const voteRequest = {
   contractId: 'abc123' as ContractId<VoteRequest>,
@@ -160,15 +170,20 @@ describe('Proposal Details Content', () => {
       </Wrapper>
     );
 
-    const pageTitle = screen.getByTestId('proposal-details-title');
-    expect(pageTitle.textContent).toMatch(/Proposal Details/);
+    expect(screen.getByTestId('proposal-details-title')).toHaveTextContent('Proposal Details');
+    const backToAllVotes = screen.getByTestId('proposal-details-back-to-all-votes');
+    expect(backToAllVotes).toHaveTextContent('Back to all votes');
+    expect(backToAllVotes).toHaveAttribute('href', '/governance/proposals');
+
+    const proposalDetailsSection = screen.getByTestId('proposal-details-proposal-details');
+    expect(proposalDetailsSection).toBeInTheDocument();
+    // Figma starts at Action — no duplicate inner "Proposal Details" heading
+    expect(
+      within(proposalDetailsSection).queryByRole('heading', { name: 'Proposal Details' })
+    ).toBeNull();
 
     const action = screen.getByTestId('proposal-details-action-value');
     expect(action.textContent).toMatch(/Offboard Member/);
-
-    expect(screen.getByTestId('proposal-details-contractid-label').textContent).toBe(
-      VOTE_PROPOSAL_CONTRACT_ID_LABEL
-    );
 
     const offboardSection = screen.getByTestId('proposal-details-offboard-member-section');
     expect(offboardSection).toBeInTheDocument();
@@ -178,7 +193,16 @@ describe('Proposal Details Content', () => {
     );
     expect(memberInput).toBeInTheDocument();
     expect(memberInput.textContent).toBe('sv2');
+    expect(within(offboardSection).getByTestId('proposal-details-member-party-id')).toHaveStyle({
+      width: '100%',
+    });
+    expect(
+      within(offboardSection).getByTestId('proposal-details-member-party-id-scroll')
+    ).toHaveStyle({ overflowX: 'auto', width: '100%' });
 
+    expect(screen.getByTestId('proposal-details-summary-label').textContent).toBe(
+      PROPOSAL_SUMMARY_TITLE
+    );
     const summary = screen.getByTestId('proposal-details-summary-value');
     expect(summary.textContent).toMatch(/Summary of the proposal/);
 
@@ -186,6 +210,32 @@ describe('Proposal Details Content', () => {
 
     const url = screen.getByTestId('proposal-details-url');
     expect(url.textContent).toMatch(/https:\/\/example.com/);
+    expect(url).toHaveStyle({ width: '100%' });
+    expect(screen.getByTestId('proposal-details-url-scroll')).toHaveStyle({
+      overflowX: 'auto',
+      width: '100%',
+    });
+
+    // Figma Offboard details order: Action → Member → Proposal Summary → Supporting URL → Contract ID
+    expect(screen.getByTestId('proposal-details-contractid-label').textContent).toBe(
+      VOTE_PROPOSAL_CONTRACT_ID_LABEL
+    );
+    expect(screen.getByTestId('proposal-details-contractid-id')).toHaveStyle({ width: '100%' });
+    expect(screen.getByTestId('proposal-details-contractid-id-scroll')).toHaveStyle({
+      overflowX: 'auto',
+      width: '100%',
+    });
+    const contractIdLabel = screen.getByTestId('proposal-details-contractid-label');
+    expect(
+      action.compareDocumentPosition(offboardSection) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      offboardSection.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(summary.compareDocumentPosition(url) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      url.compareDocumentPosition(contractIdLabel) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
 
     const votingInformationSection = screen.getByTestId('proposal-details-voting-information');
     expect(votingInformationSection).toBeInTheDocument();
@@ -195,6 +245,26 @@ describe('Proposal Details Content', () => {
     );
     expect(requesterInput).toBeInTheDocument();
     expect(requesterInput.textContent).toBe('sv1');
+    expect(
+      within(votingInformationSection).getByTestId('proposal-details-requester-party-id')
+    ).toHaveStyle({ width: '100%' });
+    expect(
+      within(votingInformationSection).getByTestId('proposal-details-requester-party-id-scroll')
+    ).toHaveStyle({ overflowX: 'auto', width: '100%' });
+
+    expect(screen.getByTestId('proposal-details-created-at-label').textContent).toBe(
+      PROPOSAL_CREATED_LABEL
+    );
+    expect(screen.getByTestId('proposal-details-created-at-value').textContent).toBe(
+      '2025-01-01 13:00'
+    );
+
+    expect(screen.getByTestId('proposal-details-threshold-deadline-label').textContent).toBe(
+      THRESHOLD_DEADLINE_LABEL
+    );
+    expect(screen.getByTestId('proposal-details-effective-at-label').textContent).toBe(
+      EFFECTIVE_AT_LABEL
+    );
 
     const votingClosesIso = within(votingInformationSection).getByTestId(
       'proposal-details-voting-closes-value'
@@ -217,7 +287,12 @@ describe('Proposal Details Content', () => {
 
     expect(screen.getByTestId('your-vote-form')).toBeInTheDocument();
     expect(screen.getByTestId('your-vote-url-input')).toBeInTheDocument();
-    expect(screen.getByTestId('your-vote-reason-input')).toBeInTheDocument();
+    const reasonInput = screen.getByTestId('your-vote-reason-input');
+    expect(reasonInput).toBeInTheDocument();
+    expect(reasonInput.getAttribute('placeholder')).toBe(VOTE_REASON_PLACEHOLDER);
+    expect(screen.getByTestId('your-vote-url-input').getAttribute('placeholder')).toBe(
+      VOTE_REASON_URL_PLACEHOLDER
+    );
     expect(screen.getByTestId('your-vote-accept')).toBeInTheDocument();
     expect(screen.getByTestId('your-vote-reject')).toBeInTheDocument();
   });
@@ -725,6 +800,42 @@ const votesData = [
 ] as ProposalVote[];
 
 describe('Proposal Details > Votes & Voting', () => {
+  test('should render vote URLs at the same column width as SV IDs', () => {
+    const voter = 'sv-party::1220abcdef1234567890abcdef';
+    const url = 'https://example.com/a/long/vote/reason/url/that-exceeds-compact-width';
+
+    render(
+      <Wrapper>
+        <ProposalDetailsContent
+          currentSvPartyId={voteRequest.votingInformation.requester}
+          contractId={voteRequest.contractId}
+          proposalDetails={voteRequest.proposalDetails}
+          votingInformation={voteRequest.votingInformation}
+          votes={[
+            {
+              sv: voter,
+              vote: 'accepted',
+              reason: { url, body: 'Reason' },
+            },
+          ]}
+        />
+      </Wrapper>
+    );
+
+    // Party IDs fill the vote-row text column (no 270px compact cap).
+    expect(screen.getByTestId('proposal-details-voter-party-id')).toHaveStyle({ width: '100%' });
+    // Vote reason URLs match that column width; copy sits in the party-ID copy track.
+    expect(screen.getByTestId('proposal-details-vote-url')).toHaveStyle({ width: '100%' });
+    expect(screen.getByTestId('proposal-details-vote-url-scroll')).toHaveStyle({
+      overflowX: 'auto',
+      width: '100%',
+    });
+    expect(screen.getByTestId('proposal-details-vote-url-copy-button')).toBeInTheDocument();
+    const displayedUrl = screen.getByTestId('proposal-details-vote-url-link');
+    expect(displayedUrl).toHaveAttribute('href', url);
+    expect(displayedUrl.textContent).toBe(url);
+  });
+
   test('should render votes table', () => {
     render(
       <Wrapper>
@@ -753,6 +864,14 @@ describe('Proposal Details > Votes & Voting', () => {
     expect(acceptedVotesTab.getAttribute('aria-selected')).toBe('false');
     expect(rejectedVotesTab.getAttribute('aria-selected')).toBe('false');
     expect(noVoteVotesTab.getAttribute('aria-selected')).toBe('false');
+
+    const voterScroll = screen.getAllByTestId('proposal-details-voter-party-id-scroll');
+    expect(voterScroll.length).toBeGreaterThan(0);
+    expect(voterScroll[0]).toHaveStyle({ overflowX: 'auto' });
+    // Votes rows fill width and scroll — no fixed 270px cap.
+    expect(screen.getAllByTestId('proposal-details-voter-party-id')[0]).toHaveStyle({
+      width: '100%',
+    });
   });
 
   test('should filter votes by tabs', async () => {
@@ -973,9 +1092,11 @@ describe('Proposal Details > Votes & Voting', () => {
 
     const votingFormUrlInput = within(votingForm).getByTestId('your-vote-url-input');
     expect(votingFormUrlInput).toBeInTheDocument();
+    expect(votingFormUrlInput).toHaveAttribute('placeholder', URL_PLACEHOLDER);
 
     const votingFormReasonInput = within(votingForm).getByTestId('your-vote-reason-input');
     expect(votingFormReasonInput).toBeInTheDocument();
+    expect(votingFormReasonInput).toHaveAttribute('placeholder', VOTE_REASON_PLACEHOLDER);
 
     const votingFormAccept = within(votingForm).getByTestId('your-vote-accept');
     expect(votingFormAccept).toBeInTheDocument();
@@ -1026,6 +1147,12 @@ describe('Proposal Details > Votes & Voting', () => {
     expect(acceptButton.textContent).toMatch(/Accept/);
     expect(rejectButton).toBeInTheDocument();
     expect(rejectButton.textContent).toMatch(/Reject/);
+    // Figma / #6912: Reject (left) → Accept (right); primary on the right
+    const voteButtons = within(votingForm).getAllByRole('button');
+    expect(voteButtons.map(b => b.getAttribute('data-testid'))).toEqual([
+      'your-vote-reject',
+      'your-vote-accept',
+    ]);
   });
 
   test('render success message after api returns success', async () => {

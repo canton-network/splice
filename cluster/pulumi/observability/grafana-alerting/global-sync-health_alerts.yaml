@@ -1,0 +1,215 @@
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: global-synchronizer-health
+    folder: canton-network
+    interval: 1m
+    rules:
+      # Confirmation requests that were sequenced but never processed by the mediator
+      # (e.g. dropped due to CometBFT replays). There is no dedicated Canton metric for
+      # discarded events yet, so we approximate it as the difference between sequenced
+      # send-confirmation-request events and requests received by the mediator.
+      - uid: gsh0discarded0cr
+        title: High Rate of Discarded Confirmation Requests
+        condition: discarded fraction threshold exceeded
+        data:
+          - refId: discarded_fraction
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              editorMode: code
+              expr: (sum by (namespace) (rate(daml_sequencer_block_events_total{type="send-confirmation-request"}[10m])) - sum by (namespace) (rate(daml_mediator_requests_total[10m]))) / sum by (namespace) (rate(daml_sequencer_block_events_total{type="send-confirmation-request"}[10m]))
+              instant: true
+              intervalMs: 1000
+              legendFormat: __auto
+              maxDataPoints: 43200
+              range: false
+              refId: discarded_fraction
+          - refId: discarded fraction threshold exceeded
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - $DISCARDED_CONFIRMATION_REQUESTS_THRESHOLD
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - C
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: discarded_fraction
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: discarded fraction threshold exceeded
+              type: threshold
+        dashboardUid: fe8wt04z620aof
+        panelId: 10
+        noDataState: OK
+        execErrState: OK
+        for: 10m
+        annotations:
+          __dashboardUid__: fe8wt04z620aof
+          __panelId__: "10"
+          runbook_url: ""
+          severity: warning
+          summary: "{{ $labels.namespace }} discarded more than $DISCARDED_CONFIRMATION_REQUESTS_THRESHOLD of sequenced confirmation requests over the last 10 minutes"
+          description: 'A significant fraction of sequenced confirmation requests was never processed by the mediator. This typically matches CometBFT replays.'
+        labels: {}
+        isPaused: false
+      # Failure rate of confirmation requests, as observed by the mediator.
+      # Can increase for non-network reasons, but is relatively unlikely to.
+      - uid: gsh0failedcr0rel
+        title: High Failed Confirmation Request Rate
+        condition: failure rate threshold exceeded
+        data:
+          - refId: failure_rate
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              editorMode: code
+              expr: 1 - sum by (namespace) (rate(daml_mediator_approved_requests_total[30m])) / sum by (namespace) (rate(daml_mediator_requests_total{duplicate_reject="false"}[30m]))
+              instant: true
+              intervalMs: 1000
+              legendFormat: __auto
+              maxDataPoints: 43200
+              range: false
+              refId: failure_rate
+          - refId: failure rate threshold exceeded
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - $FAILED_CONFIRMATION_REQUESTS_THRESHOLD
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - C
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: failure_rate
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: failure rate threshold exceeded
+              type: threshold
+        dashboardUid: fe8wt04z620aof
+        panelId: 8
+        noDataState: OK
+        execErrState: OK
+        for: 5m
+        annotations:
+          __dashboardUid__: fe8wt04z620aof
+          __panelId__: "8"
+          runbook_url: ""
+          severity: warning
+          summary: "{{ $labels.namespace }} saw more than $FAILED_CONFIRMATION_REQUESTS_THRESHOLD of confirmation requests fail over the last 30 minutes"
+          description: 'Confirmation requests are failing at a high rate. Can happen for non-network reasons, but is relatively unlikely to.'
+        labels: {}
+        isPaused: false
+      # Overall TPS (approved confirmation requests per second), compared to the
+      # previous 30m window. Can drop for non-network reasons, but a large relative
+      # drop is a strong signal for network issues.
+      - uid: gsh0tps0drop0rel
+        title: Significant TPS Drop
+        condition: tps dropped
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              editorMode: code
+              expr: sum by (namespace) (rate(daml_mediator_approved_requests_total[30m]))
+              instant: true
+              intervalMs: 1000
+              legendFormat: __auto
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              editorMode: code
+              expr: sum by (namespace) (rate(daml_mediator_approved_requests_total[30m] offset 30m))
+              instant: true
+              intervalMs: 1000
+              legendFormat: __auto
+              maxDataPoints: 43200
+              range: false
+              refId: B
+          - refId: C
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                name: Expression
+                type: __expr__
+                uid: __expr__
+              expression: $A < $B * $TPS_DROP_THRESHOLD
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: math
+          - refId: tps dropped
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: []
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: C
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: tps dropped
+              type: threshold
+        dashboardUid: fe8wt04z620aof
+        panelId: 4
+        noDataState: OK
+        execErrState: OK
+        for: 5m
+        annotations:
+          __dashboardUid__: fe8wt04z620aof
+          __panelId__: "4"
+          runbook_url: ""
+          severity: warning
+          summary: "{{ $labels.namespace }} saw TPS drop below $TPS_DROP_THRESHOLD of the previous 30 minute window"
+          description: 'The rate of approved confirmation requests over the last 30m dropped significantly compared to the previous 30m window. Can happen for non-network reasons, but is relatively unlikely to.'
+        labels: {}
+        isPaused: false

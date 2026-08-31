@@ -237,6 +237,9 @@ function validateEffectiveRateLimits(
     const errorParts: string[] = ['Rate limit configuration errors:'];
     if (totalMissing.length > 0) {
       errorParts.push(`- Missing rate limit prefixes for endpoints: ${totalMissing.join(', ')}`);
+      errorParts.push(
+        "If you're adding new endpoints in a Splice PR, add them to cluster/configs/shared/rate-limits."
+      );
     }
     if (totalOrphaned.length > 0) {
       errorParts.push(

@@ -32,7 +32,7 @@ import org.lfdecentralizedtrust.splice.sv.automation.confirmation.{
 }
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.ProcessRewardsTriggerBase
 import org.lfdecentralizedtrust.splice.validator.metrics.TopologyMetrics
-import org.lfdecentralizedtrust.splice.wallet.metrics.AmuletMetrics
+import org.lfdecentralizedtrust.splice.wallet.metrics.{AmuletMetrics, TreasuryMetrics}
 
 final case class GeneratedMetrics(
     common: List[MetricDoc.Item],
@@ -96,6 +96,7 @@ object MetricsDocs {
     generator.reset()
     // validator
     new AmuletMetrics(walletUserParty, generator)
+    new TreasuryMetrics(walletUserParty, generator, () => 0L)
     val topologyMetrics = new TopologyMetrics(generator)
     // force creation of a gauge for a dummy participant
     val _ = topologyMetrics.getNumPartiesPerParticipantGauge(

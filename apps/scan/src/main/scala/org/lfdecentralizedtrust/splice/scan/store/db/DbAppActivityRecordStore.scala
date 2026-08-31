@@ -4,6 +4,7 @@
 package org.lfdecentralizedtrust.splice.scan.store.db
 
 import org.lfdecentralizedtrust.splice.scan.store.AppActivityStore
+import org.lfdecentralizedtrust.splice.scan.store.AppActivityStore.RoundIngestionStatus
 import org.lfdecentralizedtrust.splice.store.UpdateHistory
 import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnlessShutdownToFuture
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
@@ -171,7 +172,7 @@ class DbAppActivityRecordStore(
     * This round may not have all app activity records ingested.
     * Returns None if no app activity records have been ingested, ie meta row does not exist.
     */
-  def earliestIngestedRound()(implicit
+  private[store] def earliestIngestedRound()(implicit
       tc: TraceContext
   ): Future[Option[Long]] = {
     val codeVersion = ingestionVersions.code
@@ -186,6 +187,32 @@ class DbAppActivityRecordStore(
       "appActivity.earliestIngestedRound",
     )
   }
+
+  override def ingestionStatusForRound(roundNumber: Long)(implicit
+      tc: TraceContext
+  ): Future[RoundIngestionStatus] =
+    earliestIngestedRound().map {
+      case Some(earliestIngested) if roundNumber <= earliestIngested =>
+        // We should have data for this round but no root hash exists:
+        // a peer likely does, so delegate.
+        RoundIngestionStatus.CannotProvide
+
+      case Some(_) =>
+        // Meta row present but round is beyond our ingested boundary —
+        // ingestion is still catching up; retry.
+        RoundIngestionStatus.Undetermined
+
+      case None if !isFirstSv =>
+        // Late-joining Scan with no ingestion boundary of its own —
+        // it might seem Undetermined is right, but peers do have one,
+        // so we delegate.
+        RoundIngestionStatus.CannotProvide
+
+      case None =>
+        // firstSV during initial ingestion (brief startup window before
+        // the meta row is inserted) — retry.
+        RoundIngestionStatus.Undetermined
+    }
 
   /** Find the latest round with complete app activity.
     * A round is complete once the verdict ingestion has moved passed its archival.

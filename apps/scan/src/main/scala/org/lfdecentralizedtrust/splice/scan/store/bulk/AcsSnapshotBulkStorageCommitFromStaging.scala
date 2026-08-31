@@ -21,6 +21,7 @@ class AcsSnapshotBulkStorageCommitFromStaging(
     bulkStorageReader: BulkStorageReader,
     appConfig: BulkStorageConfig,
     scanConnection: PeerBftScanConnection,
+    onObjectCommitted: Seq[S3BucketConnection.ObjectKeyAndChecksum] => Unit,
     val loggerFactory: NamedLoggerFactory,
 )(implicit
     ec: ExecutionContextExecutor
@@ -60,6 +61,7 @@ class AcsSnapshotBulkStorageCommitFromStaging(
       appConfig,
       scanConnection,
       loggerFactory,
+      onObjectCommitted,
     )
   }
 }
