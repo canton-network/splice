@@ -295,6 +295,30 @@ class SvDsoAutomationService(
 
   // Triggers that require namespace permissions and the existence of the DsoRules and AmuletRules contracts
   def registerPostOnboardingTriggers(): Unit = {
+    if (config.permissionedSynchronizer) {
+      registerTrigger(
+        new GrantValidatorPermissionTrigger(
+          triggerContext,
+          dsoStore,
+          participantAdminConnection,
+          config.minMemberTrafficToOnboardValidator,
+        )
+      )
+      registerTrigger(
+        new ValidatorLicenseRequestTrigger(
+          triggerContext,
+          dsoStore,
+          connection(SpliceLedgerConnectionPriority.High),
+        )
+      )
+      registerTrigger(
+        new ValidatorUnpermissionTrigger(
+          triggerContext,
+          dsoStore,
+          participantAdminConnection,
+        )
+      )
+    }
     registerTrigger(
       new SvOnboardingRequestTrigger(
         triggerContext,
@@ -302,6 +326,7 @@ class SvDsoAutomationService(
         svStore,
         config,
         connection(SpliceLedgerConnectionPriority.High),
+        packageVersionSupport,
       )
     )
     // Register optional BFT triggers
@@ -792,5 +817,8 @@ object SvDsoAutomationService extends AutomationServiceCompanion {
       aTrigger[LsuTransferTrafficTrigger],
       aTrigger[LsuSequencingTestTrigger],
       aTrigger[ReconcileSequencingParametersTrigger],
+      aTrigger[GrantValidatorPermissionTrigger],
+      aTrigger[ValidatorLicenseRequestTrigger],
+      aTrigger[ValidatorUnpermissionTrigger],
     )
 }

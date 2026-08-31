@@ -534,11 +534,14 @@ class DbScanStore(
             )}
                 and member_traffic_member = ${lengthLimited(memberId.toProtoPrimitive)}
                 and member_traffic_domain = ${lengthLimited(synchronizerId.toProtoPrimitive)}
-             """.as[Long].headOption,
+             """.as[BigDecimal].headOption,
           "getTotalPurchasedMemberTraffic",
         )
         .value
-    } yield sum.getOrElse(0L)
+    } yield sum
+      .flatMap(s => Option(s))
+      .map(s => s.min(BigDecimal(Long.MaxValue)).toLong)
+      .getOrElse(0L)
   }
 
   def lookupSvNodeState(svPartyId: PartyId)(implicit

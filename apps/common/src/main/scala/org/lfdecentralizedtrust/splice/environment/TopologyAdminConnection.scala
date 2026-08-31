@@ -171,6 +171,91 @@ abstract class TopologyAdminConnection(
     ).map(_.map(result => TopologyResult(result.context, result.item)))
   }
 
+  def listParticipantSynchronizerPermission(
+      synchronizerId: SynchronizerId,
+      filterUid: String,
+      topologyTransactionType: TopologyTransactionType = AuthorizedState,
+      timeQuery: TimeQuery = TimeQuery.HeadState,
+  )(implicit
+      tc: TraceContext,
+      ec: ExecutionContext,
+  ): Future[Seq[TopologyResult[ParticipantSynchronizerPermission]]] = {
+    runCommand(
+      TopologyStoreId.Synchronizer(synchronizerId),
+      topologyTransactionType,
+      timeQuery,
+      operation = Some(TopologyChangeOp.Replace),
+    )(baseQuery =>
+      TopologyAdminCommands.Read.ListParticipantSynchronizerPermission(
+        baseQuery,
+        filterUid,
+      )
+    )
+  }
+
+  def ensureParticipantSynchronizerPermission(
+      synchronizerId: SynchronizerId,
+      participantId: ParticipantId,
+      permission: ParticipantPermission,
+      retryFor: RetryFor,
+      limits: Option[ParticipantSynchronizerLimits] = None,
+      loginAfter: Option[CantonTimestamp] = None,
+  )(implicit
+      tc: TraceContext,
+      ec: ExecutionContext,
+  ): Future[TopologyResult[ParticipantSynchronizerPermission]] = {
+    val expectedMapping = ParticipantSynchronizerPermission(
+      synchronizerId = synchronizerId,
+      participantId = participantId,
+      permission = permission,
+      limits = limits,
+      loginAfter = loginAfter,
+    )
+    ensureTopologyMappingO(
+      TopologyStoreId.Synchronizer(synchronizerId),
+      s"ParticipantSynchronizerPermission with $permission for $participantId",
+      topologyType =>
+        EitherT
+          .liftF(
+            listParticipantSynchronizerPermission(
+              synchronizerId,
+              participantId.filterString,
+              topologyType,
+            )
+          )
+          .subflatMap { results =>
+            results.headOption match {
+              case Some(result) if result.mapping == expectedMapping =>
+                Right(result)
+              case other =>
+                Left(other)
+            }
+          },
+      update = { _ =>
+        Right(
+          expectedMapping
+        )
+      },
+      isProposal = true,
+      retryFor = retryFor,
+    )
+  }
+
+  def ensureParticipantSynchronizerPermissionRemoved(
+      synchronizerId: SynchronizerId,
+      participantId: ParticipantId,
+  )(implicit tc: TraceContext, ec: ExecutionContext): Future[Unit] = {
+    ensureTopologyMappingRemoved(
+      s"Remove ParticipantSynchronizerPermission for $participantId on $synchronizerId",
+      synchronizerId,
+      listParticipantSynchronizerPermission(
+        synchronizerId,
+        participantId.filterString,
+      ).map(_.headOption),
+      proposal = true,
+    )
+  }
+
   def listPartyToParticipant(
       store: Option[TopologyStoreId] = None,
       // list only active (non-removed) mappings by default; this matches the Canton console defaults

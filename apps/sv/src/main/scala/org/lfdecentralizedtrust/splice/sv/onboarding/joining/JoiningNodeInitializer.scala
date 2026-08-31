@@ -170,21 +170,70 @@ class JoiningNodeInitializer(
         ),
       )
     )
+
+    def sendOnboardingRequest(svParty: PartyId, dsoPartyId: PartyId): Future[Unit] =
+      joiningConfig match {
+        case Some(SvOnboardingConfig.JoinWithKey(name, _, publicKey, privateKey)) =>
+          SvUtil.keyPairMatches(publicKey, privateKey) match {
+            case Right(privateKey_) =>
+              svConnection.flatMap { case (_, c) =>
+                requestOnboarding(
+                  c,
+                  name,
+                  participantId,
+                  publicKey,
+                  privateKey_,
+                  svParty,
+                  dsoPartyId,
+                )
+              }
+            case Left(reason) =>
+              Future.failed(new RuntimeException(s"Failed parsing provided keys: $reason"))
+          }
+        case _ => Future.unit
+      }
+
     for {
-      (dsoPartyId, registeredGlobalSync) <- (
-        // If we're not onboarded yet, this waits for the sponsoring SV
-        getDsoPartyId(initConnection),
-        // Register domain with manualConnect=true. Confusingly, this still connects the first time.
-        // However, it won't connect if we crash and get here again which is what we're really after.
-        // If the url is unset, we skip this step. This is fine if the node has already initialized its
-        // own sequencer.
-        domainConfigO.traverse(
-          participantAdminConnection.ensureSynchronizerRegisteredWithManualConnect(
-            _,
-            RetryFor.WaitingOnInitDependency,
+      dsoPartyId <- getDsoPartyId(initConnection)
+
+      // If we're not onboarded yet, this waits for the sponsoring SV
+
+      // Register domain with manualConnect=true. Confusingly, this still connects the first time.
+      // However, it won't connect if we crash and get here again which is what we're really after.
+      // If the url is unset, we skip this step. This is fine if the node has already initialized its
+      // own sequencer.
+      registeredGlobalSync <- domainConfigO.traverse(
+        participantAdminConnection.ensureSynchronizerRegisteredWithManualConnect(
+          _,
+          RetryFor.WaitingOnInitDependency,
+        )
+      )
+
+      isBootstrapping = registeredGlobalSync.forall(_.psid.toOption.isEmpty)
+
+      svParty = PartyId(
+        com.digitalasset.canton.topology.UniqueIdentifier
+          .tryCreate(
+            config.svPartyHint.getOrElse(
+              joiningConfig
+                .map(_.name)
+                .getOrElse(
+                  sys.error(
+                    "Cannot setup SV party without either party hint or an onboarding config"
+                  )
+                )
+            ),
+            participantId.uid.namespace,
           )
-        ),
-      ).tupled
+      )
+
+      _ <-
+        if (config.permissionedSynchronizer && isBootstrapping) {
+          sendOnboardingRequest(svParty, dsoPartyId)
+        } else {
+          Future.unit
+        }
+
       psid <- participantAdminConnection
         .getPhysicalSynchronizerId(config.domains.global.alias)
       decentralizedSynchronizerId = psid.logical
@@ -194,6 +243,14 @@ class JoiningNodeInitializer(
         registeredGlobalSync,
         participantId,
       )
+
+      _ <-
+        // even if the participant is initialized, if it doesn't host DSO, we still need to send sendOnboardingRequest
+        // however, when dsoPartyIsAuthorized, then we avoid sending sendOnboardingRequest, to account for cases where sponser sv is down.
+        if (config.permissionedSynchronizer && !isBootstrapping && !dsoPartyIsAuthorized)
+          sendOnboardingRequest(svParty, dsoPartyId)
+        else Future.unit
+
       _ <-
         // do not reconnect if we host the party, as we can be in some LSU stage and the participant cannot reconnect if the new sync is not functional
         if (!dsoPartyIsAuthorized) {
@@ -203,7 +260,8 @@ class JoiningNodeInitializer(
             tolerateUninitializedStore = registeredGlobalSync.exists(_.config.manualConnect),
           )
         } else Future.unit
-      svParty <- SetupUtil.setupSvParty(
+
+      _ <- SetupUtil.setupSvParty(
         initConnection,
         config,
         participantAdminConnection,
@@ -786,13 +844,16 @@ class JoiningNodeInitializer(
         SvUtil.keyPairMatches(publicKey, privateKey) match {
           case Right(privateKey_) =>
             for {
-              _ <- requestOnboarding(
-                svConnection,
-                name,
-                participantId,
-                publicKey,
-                privateKey_,
-              )
+              _ <-
+                if (!config.permissionedSynchronizer) {
+                  requestOnboarding(
+                    svConnection,
+                    name,
+                    participantId,
+                    publicKey,
+                    privateKey_,
+                  )
+                } else { Future.unit }
               _ <- addConfirmedSvToDso()
             } yield ()
           case Left(reason) => sys.error(s"Failed parsing provided keys: $reason")
@@ -1011,6 +1072,38 @@ class JoiningNodeInitializer(
           _.getOrElse(
             sys.error(s"Failed to host DSO party on participant $participantId")
           )
+        )
+    }
+  }
+
+  private def requestOnboarding(
+      svConnection: SvConnection,
+      name: String,
+      participantId: ParticipantId,
+      publicKey: String,
+      privateKey: ECPrivateKey,
+      svParty: PartyId,
+      dsoParty: PartyId,
+  ): Future[Unit] = {
+    SvOnboardingToken(name, publicKey, svParty, participantId, dsoParty).signAndEncode(
+      privateKey
+    ) match {
+      case Right(token) =>
+        logger.info(s"Requesting to be onboarded via the sponsor SV")
+        for {
+          _ <- retryProvider.retry(
+            RetryFor.WaitingOnInitDependency,
+            "request_onboarding",
+            "request onboarding",
+            svConnection.startSvOnboarding(token),
+            logger,
+          )
+        } yield ()
+      case Left(error) =>
+        Future.failed(
+          Status.INTERNAL
+            .withDescription(s"Could not create onboarding token: $error")
+            .asRuntimeException()
         )
     }
   }
