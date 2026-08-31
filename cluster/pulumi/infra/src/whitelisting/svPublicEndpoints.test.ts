@@ -31,7 +31,6 @@ describe('the SV OpenAPI spec', () => {
   test('exposes the expected paths per audience', () => {
     const paths = svPublicIngressPathsByAudience(content);
     expect(paths['validators']).toContain('/api/sv/v0/onboard/validator');
-    expect(paths['validators']).toContain('/api/sv/v0/dso');
     expect(paths['svs']).toContain('/api/sv/v0/migration-id');
     expect(paths['svs']).toContain('/api/sv/v0/onboard/sv/status/*');
     const allPaths = exposedAudiences.flatMap(audience => paths[audience]);
@@ -41,6 +40,8 @@ describe('the SV OpenAPI spec', () => {
     // non-public endpoints must not be whitelisted
     expect(allPaths).not.toContain('/api/sv/v0/admin/sv/votes');
     expect(allPaths).not.toContain('/api/sv/readyz');
+    // deprecated endpoints must not be whitelisted
+    expect(paths['validators']).not.toContain('/api/sv/v0/dso');
   });
 });
 
@@ -101,5 +102,5 @@ test('toIngressPath replaces path parameters with a wildcard', () => {
   expect(toIngressPath('/v0/onboard/sv/status/{candidate_party_id_or_name}')).toBe(
     '/api/sv/v0/onboard/sv/status/*'
   );
-  expect(toIngressPath('/v0/dso')).toBe('/api/sv/v0/dso');
+  expect(toIngressPath('/v0/onboard/validator')).toBe('/api/sv/v0/onboard/validator');
 });

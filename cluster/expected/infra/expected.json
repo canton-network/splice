@@ -2934,7 +2934,6 @@
                   ],
                   "paths": [
                     "/api/sv/v0/devnet/onboard/validator/prepare",
-                    "/api/sv/v0/dso",
                     "/api/sv/v0/onboard/validator"
                   ]
                 }
