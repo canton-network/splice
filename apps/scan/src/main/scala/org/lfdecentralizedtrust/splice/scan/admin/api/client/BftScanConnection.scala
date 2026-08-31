@@ -1405,7 +1405,7 @@ object BftScanConnection {
       BftCallConfig(
         connections = withData,
         requestsToDo = n,
-        targetSuccess = if (n <= 0) 0 else f + 1,
+        targetSuccess = f + 1,
       )
     }
 
