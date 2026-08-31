@@ -1,6 +1,7 @@
 package org.lfdecentralizedtrust.splice.integration.tests.runbook
 
 import com.digitalasset.canton.config.RequireTypes.PositiveInt
+import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.util.FutureInstances.parallelFuture
@@ -13,11 +14,18 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
 import org.scalatest.Assertion
 import org.slf4j.event.Level
 
-import scala.concurrent.{Future, blocking}
+import scala.collection.mutable
+import scala.concurrent.duration.*
+import scala.concurrent.{Await, Future, blocking}
 import scala.util.control.NonFatal
 import scala.util.{Failure, Try}
 
 class RateLimitPreflightIntegrationTest extends IntegrationTest {
+
+  // istio tokens per ip
+  private val istioGlobalPerIpLimit = 1000
+  // istio rate limit response body
+  private val istioRateLimitedBody = "local_rate_limited"
 
   override lazy val resetRequiredTopologyState: Boolean = false
   override protected def runTokenStandardCliSanityCheck: Boolean = false
@@ -55,6 +63,46 @@ class RateLimitPreflightIntegrationTest extends IntegrationTest {
     }
   }
 
+  // Note: this test must come last, as it exhausts the per-IP token bucket of the scan it targets.
+  "Requests exceeding the Istio per-IP limit are rejected by Istio" in { implicit env =>
+    val scanCli = env.scans.remote.head
+    val burstSize = 250
+    val maxBursts = 2 * istioGlobalPerIpLimit / burstSize
+
+    val istioRejections = mutable.ListBuffer.empty[String]
+
+    LazyList
+      .range(1, maxBursts + 1)
+      .find { burst =>
+        clue(s"burst $burst of $burstSize requests against ${scanCli.name}") {
+          // The app's own rate limiter rejects requests as well, we only care about the requests
+          // that Istio rejected before they ever reached the app.
+          loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(Level.ERROR))(
+            collectResponses(
+              burstSize,
+              scanCli.getDsoPartyId(),
+              timeout = 2.minutes,
+            ),
+            entries => {
+              istioRejections ++= entries.map(_.message).filter(_.contains(istioRateLimitedBody))
+              succeed
+            },
+          )
+          istioRejections.nonEmpty
+        }
+      }
+      .discard
+
+    inside(istioRejections.headOption) { case Some(message) =>
+      message should include("429 Too Many Requests")
+    }
+
+    // Wait for the token bucket to refill, so that we don't affect any test running afterwards.
+    eventually(1.minutes) {
+      loggerFactory.suppressErrors(scanCli.getDsoPartyId())
+    }
+  }
+
   def rateLimitIsNotEnforced(limit: Int, call: => Unit)(implicit
       env: SpliceTestConsoleEnvironment
   ): Assertion = {
@@ -66,11 +114,16 @@ class RateLimitPreflightIntegrationTest extends IntegrationTest {
   ): Assertion = {
     val results = loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(Level.ERROR))(
       collectResponses(limit, call),
-      forAll(_)(
-        // This hits the Canton limit on concurrent requests
-        _.message should include(
-          "Reached the limit of concurrent requests for com.digitalasset.canton.admin.participant.v30.ParticipantRepairService/ExportAcs"
-        )
+      forAll(_)(entry =>
+        forAtLeast(
+          1,
+          Seq(
+            // This hits the Canton limit on concurrent requests
+            "Reached the limit of concurrent requests for com.digitalasset.canton.admin.participant.v30.ParticipantRepairService/ExportAcs",
+            // This hits the app's own rate limiter
+            "Too Many Requests",
+          ),
+        )(entry.message should include(_))
       ),
     )
     // Note: failures are expected due to the Canton rate limiter.
@@ -89,23 +142,29 @@ class RateLimitPreflightIntegrationTest extends IntegrationTest {
     } should be(empty)
   }
 
-  private def collectResponses(limit: Int, call: => Unit)(implicit
+  private def collectResponses(
+      limit: Int,
+      call: => Unit,
+      timeout: FiniteDuration = 1.minute,
+  )(implicit
       env: SpliceTestConsoleEnvironment
-  ) = {
+  ): Seq[Try[Unit]] = {
     import env.executionContext
-    MonadUtil
-      .parTraverseWithLimit(PositiveInt.MaxValue)(
-        Seq.fill(limit)(())
-      )(_ => {
-        Future {
-          blocking {
-            Try {
-              call
+    Await.result(
+      MonadUtil
+        .parTraverseWithLimit(PositiveInt.tryCreate(64))(
+          Seq.fill(limit)(())
+        )(_ => {
+          Future {
+            blocking {
+              Try {
+                call
+              }
             }
           }
-        }
-      })
-      .futureValue
+        }),
+      timeout,
+    )
   }
 
 }
