@@ -280,3 +280,8 @@ validators:
     nodeIdentifier: 'validator-runbook'
     partyHint: 'digitalasset-testValidator-1'
     onboardingSecret: 'validatorsecret'
+    # Upstream wallet gateway + portfolio UI
+    walletGateway:
+      enabled: false
+      version: '1.8.1'
+      portfolioVersion: '1.9.0'

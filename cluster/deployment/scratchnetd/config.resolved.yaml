@@ -1894,3 +1894,7 @@ validators:
     nodeIdentifier: 'validator-runbook'
     onboardingSecret: 'validatorsecret'
     partyHint: 'digitalasset-testValidator-1'
+    walletGateway:
+      enabled: false
+      portfolioVersion: '1.9.0'
+      version: '1.8.1'
