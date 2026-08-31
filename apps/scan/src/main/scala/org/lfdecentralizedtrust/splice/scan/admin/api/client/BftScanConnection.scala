@@ -1393,10 +1393,7 @@ object BftScanConnection {
       default(connections).copy(requestsToDo = 1, targetSuccess = 1)
 
     /** Config for the second phase of a probe-filter-consensus call.
-      * `n = withData.size` is the size of the filtered set; quorum
-      * scales with data availability. Callers must invoke with a
-      * non-empty `withData`; the `n<=0` guard exists so
-      * `enoughAvailableScans` rejects cleanly if that contract slips.
+      * `n = withData.size`; quorum scales with data availability.
       */
     def forWithDataOnly(
         withData: Seq[SingleScanConnection]
