@@ -187,13 +187,7 @@ class ScanApp(
         appInitConnection.getInitialRoundFromUserMetadata(config.svUser)
       }
       _ = logger.debug(s"Started with initial round $initialRound")
-      participantAdminConnection = new ParticipantAdminConnection(
-        config.participantClient.adminApi,
-        amuletAppParameters.loggingConfig.api,
-        loggerFactory,
-        nodeMetrics.grpcClientMetrics,
-        retryProvider,
-      )
+      participantAdminConnection = createParticipantAdminConnection()
       participantId <- appInitStep("Get participant id") {
         participantAdminConnection.getParticipantId()
       }
