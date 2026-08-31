@@ -7,7 +7,7 @@ import {
   CLUSTER_HOSTNAME,
   CnInput,
   ExactNamespace,
-  appsAffinityAndTolerations,
+  appsKubernetesScheduling,
   installWalletGatewayAdminSecret,
 } from '@canton-network/splice-pulumi-common';
 
@@ -43,7 +43,7 @@ export async function installWalletGateway(
       namespace: xns.ns.metadata.name,
       values: {
         image: { tag: `v${config.version}` },
-        ...appsAffinityAndTolerations,
+        ...appsKubernetesScheduling,
         oauthSecrets: {
           OAUTH2_ADMIN_CLIENT_SECRET: {
             secretRef: { name: 'wallet-gateway-admin-oauth', key: 'client-secret' },
@@ -145,7 +145,7 @@ export async function installWalletGateway(
       },
       spec: {
         template: {
-          spec: { ...appsAffinityAndTolerations },
+          spec: { ...appsKubernetesScheduling },
         },
       },
     },
