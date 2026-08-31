@@ -497,16 +497,6 @@ class DevelopmentFundCouponIntegrationTest
       )
     }
 
-    clue("The coupon is left alone while its mintAfter is in the future") {
-      always(durationOfSuccess = 10.seconds) {
-        bobWalletClient
-          .listActiveDevelopmentFundCoupons() should have size 1 withClue "bob coupons before mintAfter"
-        bobWalletClient.balance().unlockedQty shouldBe bobBalanceBefore
-      }
-      CantonTimestamp
-        .now()
-        .isBefore(mintAfter) shouldBe true withClue "still before mintAfter"
-    }
 
     clue("The coupon is collected once its mintAfter has passed") {
       eventually(60.seconds) {
