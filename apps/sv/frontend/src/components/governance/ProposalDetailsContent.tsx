@@ -736,13 +736,9 @@ const UnpermissionValidatorSection = ({
       <DetailItem
         label="Participant ID"
         value={
-          <MemberIdentifier
-            partyId={participantId}
-            isYou={false}
-            size="large"
-            fullWidth
-            data-testid="proposal-details-participant-id"
-          />
+          <Typography data-testid="proposal-details-participant-id" sx={{ wordBreak: 'break-all' }}>
+            {participantId}
+          </Typography>
         }
       />
       <DetailItem

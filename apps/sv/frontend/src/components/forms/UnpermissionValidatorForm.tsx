@@ -14,6 +14,7 @@ import {
   validateSummary,
   validateUrl,
   validatePartyId,
+  validateParticipantId,
 } from './formValidators';
 import { FormLayout } from './FormLayout';
 import { useState } from 'react';
@@ -128,8 +129,8 @@ export const UnpermissionValidatorForm: React.FC = () => {
             <form.AppField
               name="participantId"
               validators={{
-                onBlur: ({ value }) => validatePartyId(value),
-                onChange: ({ value }) => validatePartyId(value),
+                onBlur: ({ value }) => validateParticipantId(value),
+                onChange: ({ value }) => validateParticipantId(value),
               }}
             >
               {field => (
