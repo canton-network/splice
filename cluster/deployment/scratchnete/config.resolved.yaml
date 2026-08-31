@@ -1888,6 +1888,10 @@ validator1:
     cron: '0 /10 * * * ?'
     maxDuration: '5m'
     retention: '1h'
+  walletGateway:
+    enabled: true
+    portfolioVersion: '1.9.0'
+    version: '1.8.1'
 validators:
   validator-runbook:
     namespace: 'validator'

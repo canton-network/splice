@@ -21,6 +21,10 @@ validator1:
     maxDuration: "5m"
     retention: "1h" # Keep 1h
   deduplicationDuration: 30m
+  walletGateway:
+    enabled: true
+    version: '1.8.1'
+    portfolioVersion: '1.9.0'
 svs:
   sv-1: !include(scratchnet-sv.yaml) {}
   sv-2: !include(scratchnet-sv.yaml) {}
