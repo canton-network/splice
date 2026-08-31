@@ -12,6 +12,7 @@ import {
   NamespacedAuth0Configs,
 } from './auth0/auth0types';
 import { isMainNet } from './config';
+import { ClusterBasename } from './config/gcpConfig';
 
 // Importing DEFAULT_AUDIENCE from auth0/audiences.ts creates a nightmare of things getting initialized too early, so we just redefine it here
 const DEFAULT_AUDIENCE = 'https://canton.network.global';
@@ -371,7 +372,7 @@ export async function initDumpConfig({
               instances: [
                 {
                   name: 'sv-1-cn-apps-pg-7ca4614',
-                  settings: [{ userLabels: { cluster: 'mock' } }],
+                  settings: [{ userLabels: { cluster: ClusterBasename } }],
                 },
               ],
             };
@@ -396,14 +397,27 @@ export type StackOutputsProvider = (
 ) => Partial<Record<string, any>> | undefined;
 
 export const infraStackOutputsProvider: StackOutputsProvider = (project: string) => {
-  return project === 'infra'
-    ? {
+  switch (project) {
+    case 'canton-network':
+      return {
+        svs: [...Array.from({ length: 16 }, (_, index) => `sv-${index + 1}`), 'sv-da-1'].map(
+          nodeName => ({
+            nodeName,
+            databaseInstanceName: `${nodeName}-cn-apps-pg`,
+            databaseSecretName: `${nodeName}-cn-apps-pg-secret`,
+          })
+        ),
+      };
+    case 'infra':
+      return {
         istioDashboardVersions: '1234',
         auth0: {
           svRunbook: svRunbookAuth0Config,
           cantonNetwork: cantonNetworkAuth0Config,
           mainnet: cantonNetworkAuth0Config,
         } as Auth0ClusterConfig,
-      }
-    : undefined;
+      };
+    default:
+      return undefined;
+  }
 };

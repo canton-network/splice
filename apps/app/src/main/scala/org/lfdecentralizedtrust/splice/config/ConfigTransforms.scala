@@ -206,6 +206,9 @@ object ConfigTransforms {
         _.copy(rewardOperationRoundsCloseBufferDuration = NonNegativeFiniteDuration.ofMillis(100))
       ),
       disableDevelopmentFund(),
+      // Tests default to TrafficBasedAppRewards. Networks (which don't apply
+      // ConfigTransforms.defaults) fall back to the FeaturedAppMarkers default
+      withTrafficBasedAppRewards,
     )
   }
 
@@ -808,6 +811,24 @@ object ConfigTransforms {
       rewardConfig: InitialRewardConfig
   ): ConfigTransform =
     updateAllSvAppFoundDsoConfigs_(c => c.copy(initialRewardConfig = Some(rewardConfig)))
+
+  // Tests mint TBAR without dry-run — the network default enables TBAR dry-run
+  // alongside FeaturedAppMarkers minting, but tests already exercise TBAR
+  // directly so a dry-run would be redundant.
+  def withTrafficBasedAppRewards: ConfigTransform =
+    updateAllSvAppFoundDsoConfigs_(c =>
+      c.copy(initialRewardConfig =
+        Some(
+          InitialRewardConfig(
+            mintingVersion = "RewardVersion_TrafficBasedAppRewards",
+            dryRunVersion = None,
+          )
+        )
+      )
+    )
+
+  def withFeaturedAppMarkers: ConfigTransform =
+    updateAllSvAppFoundDsoConfigs_(c => c.copy(initialRewardConfig = None))
 
   private def portTransform(bump: Int, c: AdminServerConfig): AdminServerConfig =
     c.copy(internalPort = c.internalPort.map(_ + bump))

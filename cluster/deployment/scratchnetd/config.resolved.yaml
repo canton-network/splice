@@ -26,6 +26,7 @@ cluster:
       minNodes: 1
       nodeType: 'n4d-standard-8'
 infra:
+  enableSweetSecurity: true
   gkeGateway:
     proxyForIstioHttp: false
   istio:
@@ -83,6 +84,10 @@ monitoring:
           - 'cloudkms.googleapis.com/external_kms_requests'
         retestWindowSeconds: 600
         rollingWindowSeconds: 600
+      globalSynchronizerHealth:
+        discardedConfirmationRequestsThreshold: 0.2
+        failedConfirmationRequestsThreshold: 0.1
+        tpsDropThreshold: 0.5
       ingestion:
         thresholdEntriesPerBatch: 80
       loadTester:

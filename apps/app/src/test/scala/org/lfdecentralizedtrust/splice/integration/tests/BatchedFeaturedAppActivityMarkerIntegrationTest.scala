@@ -130,14 +130,14 @@ class BatchedFeaturedAppActivityMarkerIntegrationTest
     val amuletVersion =
       sv1ScanBackend.getAmuletRules().payload.configSchedule.initialValue.packageConfig.amulet
     // check that the test actually uses a different version
-    amuletVersion should not be "0.1.15"
-    clue("Bob unvets amulet > 0.1.15") {
+    amuletVersion should not be "0.1.19"
+    clue("Bob unvets amulet > 0.1.19") {
       bobValidatorBackend.validatorAutomation
         .trigger[ValidatorPackageVettingTrigger]
         .pause()
         .futureValue
       val packagesToUnvet = DarResources.amulet.others.filter(
-        _.metadata.version > DarResources.amulet_0_1_15.metadata.version
+        _.metadata.version > DarResources.amulet_0_1_19.metadata.version
       )
       logger.info(s"Unvetting ${packagesToUnvet.map(d => (d.metadata.version, d.packageId))}")
       bobValidatorBackend.participantClient.topology.vetted_packages.propose_delta(
@@ -268,7 +268,7 @@ class BatchedFeaturedAppActivityMarkerIntegrationTest
       ),
       entries => {
         forExactly(1, entries) { line =>
-          line.message should (include("vettedAmuletVersion = 0.1.15") and include("Processing"))
+          line.message should (include("vettedAmuletVersion = 0.1.19") and include("Processing"))
         }
         forAtLeast(1, entries) { line =>
           line.message should (include(

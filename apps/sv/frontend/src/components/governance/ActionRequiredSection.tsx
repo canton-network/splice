@@ -6,7 +6,10 @@ import { East } from '@mui/icons-material';
 import { Alert, Box, Stack, Typography } from '@mui/material';
 import { Link as RouterLink } from 'react-router';
 import { CopyableIdentifier, PageSectionHeader } from '../../components/beta';
-import { VOTE_PROPOSAL_CONTRACT_ID_LABEL } from '../../utils/constants';
+import {
+  CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE,
+  VOTE_PROPOSAL_CONTRACT_ID_LABEL,
+} from '../../utils/constants';
 import React from 'react';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -105,7 +108,7 @@ const ActionCard = (props: ActionCardProps) => {
         data-testid="action-required-card"
       >
         <ActionCardSegment
-          title="PROPOSAL TYPE"
+          title={CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE}
           content={action}
           data-testid="action-required-action"
         />
@@ -211,6 +214,7 @@ const ActionCardSegment: React.FC<ActionCardSegmentProps> = ({
       fontWeight={600}
       variant="subtitle2"
       color="colors.neutral.80"
+      sx={{ textTransform: 'uppercase' }}
       data-testid={`${testId}-title`}
     >
       {title}

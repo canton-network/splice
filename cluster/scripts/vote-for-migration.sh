@@ -29,7 +29,7 @@ echo "Creating vote request for migration id $migration_id"
 
 sv1_token=$(cncluster get_token sv-1 sv)
 
-current_dso_config=$(curl -s --fail-with-body --show-error --retry 10 --retry-delay 10 --retry-all-errors -X GET "https://sv.sv-2.$GCP_CLUSTER_HOSTNAME/api/sv/v0/dso")
+current_dso_config=$(curl -s --fail-with-body --show-error --retry 10 --retry-delay 10 --retry-all-errors -X GET "https://sv.sv-2.$GCP_CLUSTER_HOSTNAME/api/sv/v1/dso" -H "Authorization: Bearer $sv1_token")
 echo "DSO: $current_dso_config"
 current_config=$(echo "$current_dso_config" | jq -r '.dso_rules.contract.payload.config')
 echo "Current config: $current_config"
@@ -125,7 +125,7 @@ until [ $retry_count -gt $MAX_RETRIES ]; do
 
   # disabling exit on error to allow for retries
   set +e
-  new_dso_config=$(curl -s -X GET "https://sv.sv-2.$GCP_CLUSTER_HOSTNAME/api/sv/v0/dso")
+  new_dso_config=$(curl -s -X GET "https://sv.sv-2.$GCP_CLUSTER_HOSTNAME/api/sv/v1/dso" -H "Authorization: Bearer $sv1_token")
   echo "DSO info: $new_dso_config"
   next_migration_id=$(echo "$new_dso_config" | jq -r '.dso_rules.contract.payload.config.nextScheduledSynchronizerUpgrade.migrationId')
   set -e

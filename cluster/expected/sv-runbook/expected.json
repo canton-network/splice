@@ -604,16 +604,6 @@
   },
   {
     "custom": true,
-    "id": "organization/infra/infra.mock",
-    "inputs": {
-      "name": "organization/infra/infra.mock"
-    },
-    "name": "organization/infra/infra.mock",
-    "provider": "",
-    "type": "pulumi:pulumi:StackReference"
-  },
-  {
-    "custom": true,
     "id": "",
     "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-scan",
@@ -1246,7 +1236,8 @@
         "imageRepo": "us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker",
         "initialAmuletPrice": "0.0517",
         "joinWithKeyOnboarding": {
-          "sponsorApiUrl": "https://sv.sv-2.mock.global.canton.network.digitalasset.com"
+          "sponsorApiUrl": "https://sv.sv-2.mock.global.canton.network.digitalasset.com",
+          "sponsorScanUrl": "https://scan.sv-2.mock.global.canton.network.digitalasset.com"
         },
         "logAsyncFlush": false,
         "logLevel": "WARN",

@@ -235,7 +235,7 @@ function allowedPathsCondition(scanExternalRateLimits: PerEndpointLimits, pathPr
 
     // Build regex pattern
     if (dynamicPathRxs.length > 0) {
-      const regexPattern = `${basePrefix}(${dynamicPathRxs.join('|')})`;
+      const regexPattern = `${basePrefix}(?:${dynamicPathRxs.join('|')})`;
       const pathExpr = `request.path.matches(R"^${regexPattern}")`;
 
       // limit from https://docs.cloud.google.com/armor/quotas#limits

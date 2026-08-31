@@ -22,6 +22,9 @@
     "serviceAccountName": {
       "type": "string"
     },
+    "automountServiceAccountToken": {
+      "type": "boolean"
+    },
     "ansWebUi": {
       "type": "object",
       "required": ["imageName"],

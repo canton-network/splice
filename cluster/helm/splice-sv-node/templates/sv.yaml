@@ -61,6 +61,7 @@ spec:
                 _onboarding {
                   type = "join-with-key"
                   sv-client.admin-api.url = "{{ .Values.joinWithKeyOnboarding.sponsorApiUrl }}"
+                  scan-client.admin-api.url = "{{ .Values.joinWithKeyOnboarding.sponsorScanUrl }}"
                 }
             - name: SPLICE_APP_SV_PUBLIC_KEY
               {{- if ((.Values.secretOverrides).svPublicKey) }}

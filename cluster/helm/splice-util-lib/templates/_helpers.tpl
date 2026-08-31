@@ -191,9 +191,10 @@ spec:
   value: {{ .logAsyncFlush | default true | not | quote }}
 {{- end }}
 {{- define "splice-util-lib.service-account" -}}
-{{- if .serviceAccountName -}}
+automountServiceAccountToken: {{ .automountServiceAccountToken | default false }}
+{{- if .serviceAccountName }}
 serviceAccountName: {{ .serviceAccountName }}
-{{- end -}}
+{{- end }}
 {{- end -}}
 # See https://helm.sh/docs/chart_best_practices/labels/#standard-labels
 {{- define "splice-util-lib.standard-labels" -}}
