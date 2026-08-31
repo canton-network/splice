@@ -4,7 +4,7 @@ import * as k8s from '@pulumi/kubernetes';
 import * as _ from 'lodash';
 import {
   activeVersion,
-  appsAffinityAndTolerations,
+  appsKubernetesScheduling,
   ChartValues,
   CLUSTER_BASENAME,
   CLUSTER_HOSTNAME,
@@ -164,7 +164,7 @@ export function installCometBftNode(
       protect: disableProtection ? false : protectCometBft,
     },
     true,
-    appsAffinityAndTolerations
+    appsKubernetesScheduling
   );
   return { rpcServiceName: `${nodeConfig.identifier}-cometbft-rpc`, release };
 }

@@ -94,6 +94,7 @@ class DbAppActivityRecordStore(
     updateHistory: UpdateHistory,
     val ingestionVersions: DbAppActivityRecordStore.IngestionVersions,
     isFirstSv: Boolean,
+    initialRound: Long,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit
     ec: ExecutionContext
@@ -347,16 +348,16 @@ class DbAppActivityRecordStore(
         }
 
     // earliestRound: the oldest round open at the earliest record_time of this batch.
-    // or (-1) on firstSV, as it is expected to have complete data for the first round.
-    val earliestRound = if (isFirstSv) Some(-1L) else firstActiveRoundO
+    // or (initialRound - 1) on firstSV, so earliestRoundWithCompleteAppActivity()
+    // returns initialRound (correct for non-zero-round bootstrap).
+    val earliestRound = if (isFirstSv) Some(initialRound - 1) else firstActiveRoundO
 
     // lastArchived: the highest round archived as of this verdict batch.
     //   - From the caller when available
-    //   - Bootstrapped to 0 on a fresh firstSV because
-    //     lookupLatestArchivedOpenMiningRound may not yet reflect
-    //     round 0's archival due to ingestion delay.
+    //   - Bootstrapped to initialRound on a fresh firstSV so the
+    //     complete-activity window covers the first TBAR round
     val lastArchived = lastArchivedRoundO
-      .orElse(if (isFirstSv) Some(0L) else None)
+      .orElse(if (isFirstSv) Some(initialRound) else None)
 
     for {
       _ <- insertRecords

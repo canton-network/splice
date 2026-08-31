@@ -24,7 +24,14 @@ import org.lfdecentralizedtrust.splice.environment.ledger.api.TreeUpdateOrOffset
 import org.lfdecentralizedtrust.splice.environment.{DarResources, RetryProvider}
 import org.lfdecentralizedtrust.splice.scan.store.ScanRewardsReferenceStore
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanRewardsReferenceStore
-import org.lfdecentralizedtrust.splice.store.{HardLimit, Limit, PageLimit, StoreTestBase, TcsStore}
+import org.lfdecentralizedtrust.splice.store.{
+  HardLimit,
+  Limit,
+  PageLimit,
+  StoreTestBase,
+  TcsStore,
+  TimestampWithMigrationId,
+}
 import org.lfdecentralizedtrust.splice.util.{ResourceTemplateDecoder, TemplateJsonDecoder}
 import slick.jdbc.JdbcProfile
 
@@ -479,10 +486,16 @@ class DbScanRewardsReferenceStoreTest
         result.get(ts(275)) shouldBe None // round4.opensAt before earliest archived_at
         result.get(ts(350)) shouldBe None // round4.opensAt before earliest archived_at
         result.get(ts(375)) shouldBe None // gap: round4 archived, round5 not yet open
-        result(ts(400)) shouldBe (5L, ts(400))
+        result(ts(400)) shouldBe TimestampWithMigrationId(ts(400), 5L)
         result.get(ts(401)) shouldBe None // 401 was not present in request
-        result(ts(450)) shouldBe (5L, ts(400)) // round5 open, round6 not yet open
-        result(ts(550)) shouldBe (5L, ts(400)) // both open, lowest round selected
+        result(ts(450)) shouldBe TimestampWithMigrationId(
+          ts(400),
+          5L,
+        ) // round5 open, round6 not yet open
+        result(ts(550)) shouldBe TimestampWithMigrationId(
+          ts(400),
+          5L,
+        ) // both open, lowest round selected
       }
     }
   }

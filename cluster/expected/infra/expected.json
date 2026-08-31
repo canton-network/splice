@@ -723,6 +723,12 @@
                 "uri": {
                   "prefix": "/cn-release-bundles"
                 }
+              },
+              {
+                "port": 80,
+                "uri": {
+                  "prefix": "/cn-release-bundles"
+                }
               }
             ],
             "route": [
@@ -740,6 +746,9 @@
             "match": [
               {
                 "port": 443
+              },
+              {
+                "port": 80
               }
             ],
             "route": [
@@ -2235,7 +2244,7 @@
       "apiVersion": "security.istio.io/v1beta1",
       "kind": "AuthorizationPolicy",
       "metadata": {
-        "name": "scan-sv-app-ip-whitelist-0",
+        "name": "scan-app-ip-whitelist-0",
         "namespace": "cluster-ingress"
       },
       "spec": {
@@ -2266,17 +2275,11 @@
                 "operation": {
                   "hosts": [
                     "scan.sv-2.mock.network.canton.global",
-                    "sv.sv-2.mock.network.canton.global",
                     "scan.sv-2.mock.global.canton.network.digitalasset.com",
-                    "sv.sv-2.mock.global.canton.network.digitalasset.com",
                     "scan.sv-1.mock.network.canton.global",
-                    "sv.sv-1.mock.network.canton.global",
                     "scan.sv-1.mock.global.canton.network.digitalasset.com",
-                    "sv.sv-1.mock.global.canton.network.digitalasset.com",
                     "scan.sv.mock.network.canton.global",
-                    "sv.sv.mock.network.canton.global",
-                    "scan.sv.mock.global.canton.network.digitalasset.com",
-                    "sv.sv.mock.global.canton.network.digitalasset.com"
+                    "scan.sv.mock.global.canton.network.digitalasset.com"
                   ]
                 }
               }
@@ -2290,7 +2293,7 @@
         }
       }
     },
-    "name": "scan-sv-app-ip-whitelist-0",
+    "name": "scan-app-ip-whitelist-0",
     "provider": "",
     "type": "kubernetes:security.istio.io/v1beta1:AuthorizationPolicy"
   },
@@ -2823,6 +2826,132 @@
     "name": "sv-2-deny-onboard-prepare-endpoint",
     "provider": "",
     "type": "kubernetes:security.istio.io/v1:AuthorizationPolicy"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "security.istio.io/v1beta1",
+      "kind": "AuthorizationPolicy",
+      "metadata": {
+        "name": "sv-app-svs-ip-whitelist-0",
+        "namespace": "cluster-ingress"
+      },
+      "spec": {
+        "action": "ALLOW",
+        "rules": [
+          {
+            "from": [
+              {
+                "source": {
+                  "remoteIpBlocks": [
+                    "<internal IPs>",
+                    "1.2.3.4/32",
+                    "5.6.7.8/32",
+                    "11.12.13.14/32",
+                    "2.3.4.5/32"
+                  ]
+                }
+              }
+            ],
+            "to": [
+              {
+                "operation": {
+                  "hosts": [
+                    "sv.sv-2.mock.network.canton.global",
+                    "sv.sv-2.mock.global.canton.network.digitalasset.com",
+                    "sv.sv-1.mock.network.canton.global",
+                    "sv.sv-1.mock.global.canton.network.digitalasset.com",
+                    "sv.sv.mock.network.canton.global",
+                    "sv.sv.mock.global.canton.network.digitalasset.com"
+                  ],
+                  "paths": [
+                    "/api/sv/v0/migration-id",
+                    "/api/sv/v0/onboard/sv/party-migration/authorize",
+                    "/api/sv/v0/onboard/sv/sequencer",
+                    "/api/sv/v0/onboard/sv/start",
+                    "/api/sv/v0/onboard/sv/status/*"
+                  ]
+                }
+              }
+            ]
+          }
+        ],
+        "selector": {
+          "matchLabels": {
+            "app": "istio-ingress"
+          }
+        }
+      }
+    },
+    "name": "sv-app-svs-ip-whitelist-0",
+    "provider": "",
+    "type": "kubernetes:security.istio.io/v1beta1:AuthorizationPolicy"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "security.istio.io/v1beta1",
+      "kind": "AuthorizationPolicy",
+      "metadata": {
+        "name": "sv-app-validators-ip-whitelist-0",
+        "namespace": "cluster-ingress"
+      },
+      "spec": {
+        "action": "ALLOW",
+        "rules": [
+          {
+            "from": [
+              {
+                "source": {
+                  "remoteIpBlocks": [
+                    "<internal IPs>",
+                    "1.2.3.4/32",
+                    "5.6.7.8/32",
+                    "11.12.13.14/32",
+                    "4.3.2.1/32",
+                    "8.7.6.5/32",
+                    "8.7.6.4/32",
+                    "9.8.7.6/32",
+                    "11.22.33.45/32",
+                    "12.34.56.78/32",
+                    "2.3.4.5/32"
+                  ]
+                }
+              }
+            ],
+            "to": [
+              {
+                "operation": {
+                  "hosts": [
+                    "sv.sv-2.mock.network.canton.global",
+                    "sv.sv-2.mock.global.canton.network.digitalasset.com",
+                    "sv.sv-1.mock.network.canton.global",
+                    "sv.sv-1.mock.global.canton.network.digitalasset.com",
+                    "sv.sv.mock.network.canton.global",
+                    "sv.sv.mock.global.canton.network.digitalasset.com"
+                  ],
+                  "paths": [
+                    "/api/sv/v0/devnet/onboard/validator/prepare",
+                    "/api/sv/v0/dso",
+                    "/api/sv/v0/onboard/validator"
+                  ]
+                }
+              }
+            ]
+          }
+        ],
+        "selector": {
+          "matchLabels": {
+            "app": "istio-ingress"
+          }
+        }
+      }
+    },
+    "name": "sv-app-validators-ip-whitelist-0",
+    "provider": "",
+    "type": "kubernetes:security.istio.io/v1beta1:AuthorizationPolicy"
   },
   {
     "custom": true,

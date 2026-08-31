@@ -5,6 +5,7 @@ import * as k8s from '@pulumi/kubernetes';
 import { config } from '@canton-network/splice-pulumi-common';
 import { svsConfig } from '@canton-network/splice-pulumi-common-sv/src/config';
 
+import { configureSweet } from '../sweet';
 import { configureAuth0 } from './auth0';
 import { configureCloudArmorPolicy } from './cloudArmor';
 import {
@@ -53,7 +54,7 @@ if (useGKEL7Gateway) {
     ingressAddress: network.ingressIp,
     gatewayName: 'cn-gke-l7-gateway',
     backendServiceName: istio.httpServiceName,
-    serviceTarget: { port: 443 }, // see configureGateway for why 443
+    serviceTarget: { port: 80 },
     tlsSecretName: `cn-${clusterBasename}net-tls`,
     securityPolicy: cloudArmorSecurityPolicy,
     istioResource: istio.istioResource,
@@ -63,6 +64,10 @@ if (useGKEL7Gateway) {
 configureStorage();
 
 configureReloader();
+
+if (infraConfig.enableSweetSecurity) {
+  configureSweet();
+}
 
 installExtraCustomResources();
 

@@ -25,11 +25,11 @@ class DsoPreflightIntegrationTest
       this.getClass.getSimpleName()
     )
 
-  "SVs 1-3 + DA-1 are online and reachable via their public HTTP API" in { implicit env =>
+  "SVs 1-3 + DA-1 report ready" in { implicit env =>
     env.svs.remote.foreach(sv =>
       clue(s"Checking SV at ${sv.httpClientConfig.url}") {
         eventuallySucceeds(timeUntilSuccess = 2.minutes) {
-          sv.getDsoInfo()
+          sv.httpReady shouldBe true
         }
       }
     )
@@ -74,7 +74,7 @@ class DsoPreflightIntegrationTest
     }
   }
 
-  "The Web UIs of SVs 1-3 + DA-1 are reachable and working as expected" in { env =>
+  "The Web UIs of SVs 1-3 + DA-1 are reachable and working as expected" in { implicit env =>
     // we put many checks in one test case to reduce testing time (logging in is slow)
     for ((svName, ingressName) <- coreSvIngressNames) {
       val svUiUrl = s"https://sv.${ingressName}.${sys.env("NETWORK_APPS_ADDRESS")}/";
@@ -82,18 +82,21 @@ class DsoPreflightIntegrationTest
       val svUsername = s"admin@${svName}-dev.com";
       // our current practice is to use the same password for all SVs
       val svPassword = sys.env(s"SV_DEV_NET_WEB_UI_PASSWORD")
-      val sv = env.svs.remote.find(sv => sv.name == svName).value
-      val svInfo = eventuallySucceeds() { sv.getDsoInfo() }
+      // Each SV's party is read via its own scan (whose sv_party_id is that SV's party)
+      val svParty = eventuallySucceeds() { scancl(s"${svName}Scan").getDsoInfo().svParty }
 
       val votedSvParties =
-        env.svs.remote.filter(_ != sv).map(sv_ => eventuallySucceeds() { sv_.getDsoInfo().svParty })
+        coreSvIngressNames.keys
+          .filter(_ != svName)
+          .toSeq
+          .map(other => eventuallySucceeds() { scancl(s"${other}Scan").getDsoInfo().svParty })
 
       withFrontEnd("sv") { implicit webDriver =>
         testSvUi(
           svUiUrl,
           svUsername,
           svPassword,
-          Some(svInfo),
+          Some(svParty),
           votedSvParties,
         )
       }

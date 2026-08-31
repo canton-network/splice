@@ -103,7 +103,7 @@ class ScanFrontendTimeBasedIntegrationTest
               }
             contract should be(
               Some(
-                dsoInfo.dsoRules.contract.payload.asObject
+                dsoInfo.dsoRules.contract.toHttp.payload.asObject
                   .valueOrFail("This is definitely an object.")
               )
             )

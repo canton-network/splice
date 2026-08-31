@@ -49,10 +49,13 @@ class SvOnboardingConfigIntegrationTest
 
   "An onboarded SV can initialize even if its onboarding sponsor is down" in { implicit env =>
     startAllSync(
+      // sv1's scan is required for sv2's initial onboarding (but not for restarts, see below)
+      sv1ScanBackend,
       sv1Backend,
       sv2Backend,
     )
-    clue("Stopping SV1 and SV2") {
+    clue("Stopping SV1 (incl. its scan) and SV2") {
+      sv1ScanBackend.stop()
       sv1Backend.stop()
       sv2Backend.stop()
     }

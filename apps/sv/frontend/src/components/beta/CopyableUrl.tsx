@@ -18,32 +18,50 @@ import {
 interface CopyableUrlProps {
   url: string;
   size: CopyableIdentifierSize;
+  /**
+   * Fill the parent width (proposal-details section / Votes row). Default keeps
+   * the compact Supporting URL slot (~346px).
+   */
+  fullWidth?: boolean;
+  /** When true, only the (scrollable) link is rendered — caller places copy. */
+  hideCopy?: boolean;
   'data-testid': string;
 }
 
-const CopyableUrl: React.FC<CopyableUrlProps> = ({ url, size, 'data-testid': testId }) => {
+const CopyableUrl: React.FC<CopyableUrlProps> = ({
+  url,
+  size,
+  fullWidth = false,
+  hideCopy = false,
+  'data-testid': testId,
+}) => {
   const sanitizedUrl = sanitizeUrl(url);
   const fontSize = size === 'small' ? '14px' : '16px';
   const scrollRef = useRef<HTMLDivElement>(null);
-  const metrics = useHorizontalScrollMetrics(scrollRef, [sanitizedUrl]);
+  const metrics = useHorizontalScrollMetrics(scrollRef, [sanitizedUrl, fullWidth, hideCopy]);
+  const textMaxWidth = fullWidth ? '100%' : URL_COMPACT_MAX_WIDTH_PX;
+  const showCopy = !hideCopy;
 
   return (
     <Box
       className="identifier-scroll-area"
       sx={{
-        display: 'inline-flex',
+        display: fullWidth ? (showCopy ? 'flex' : 'block') : showCopy ? 'inline-flex' : 'block',
         alignItems: 'center',
         color: 'text.light',
         maxWidth: '100%',
         minWidth: 0,
+        width: fullWidth || hideCopy ? '100%' : undefined,
+        overflow: fullWidth || hideCopy ? 'hidden' : undefined,
       }}
       data-testid={testId}
     >
       <Box
         sx={{
-          flex: '0 1 auto',
+          flex: fullWidth && showCopy ? '1 1 0%' : showCopy ? '0 1 auto' : undefined,
           minWidth: 0,
-          maxWidth: URL_COMPACT_MAX_WIDTH_PX,
+          maxWidth: textMaxWidth,
+          width: fullWidth || hideCopy ? '100%' : undefined,
           display: 'flex',
           flexDirection: 'column',
           position: 'relative',
@@ -53,8 +71,9 @@ const CopyableUrl: React.FC<CopyableUrlProps> = ({ url, size, 'data-testid': tes
           ref={scrollRef}
           sx={{
             ...scrollContainerSx,
-            maxWidth: URL_COMPACT_MAX_WIDTH_PX,
+            maxWidth: textMaxWidth,
             width: '100%',
+            ...(fullWidth || hideCopy ? { minWidth: 0 } : {}),
           }}
           data-testid={`${testId}-scroll`}
         >
@@ -84,14 +103,16 @@ const CopyableUrl: React.FC<CopyableUrlProps> = ({ url, size, 'data-testid': tes
           </Box>
         )}
       </Box>
-      <IconButton
-        color="secondary"
-        data-testid={`${testId}-copy-button`}
-        sx={{ flexShrink: 0 }}
-        onClick={() => navigator.clipboard.writeText(sanitizedUrl)}
-      >
-        <ContentCopy sx={{ fontSize }} />
-      </IconButton>
+      {showCopy && (
+        <IconButton
+          color="secondary"
+          data-testid={`${testId}-copy-button`}
+          sx={{ flexShrink: 0 }}
+          onClick={() => navigator.clipboard.writeText(sanitizedUrl)}
+        >
+          <ContentCopy sx={{ fontSize }} />
+        </IconButton>
+      )}
     </Box>
   );
 };

@@ -675,6 +675,8 @@ class SvStateManagementIntegrationTest extends SvIntegrationTestBase with Trigge
   "Vote requests expire" in { implicit env =>
     clue("Initialize DSO with 2 SVs") {
       startAllSync(
+        // sv1's scan is required for sv2's onboarding
+        sv1ScanBackend,
         sv1Backend,
         sv2Backend,
       )

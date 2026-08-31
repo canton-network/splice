@@ -60,6 +60,7 @@ export const InfraConfigSchema = z.object({
         initialConnectionWindowSize: z.int(),
       }),
     }),
+    enableSweetSecurity: z.boolean().default(false),
     extraCustomResources: z.object({}).catchall(z.any()).default({}),
   }),
   cloudArmor: CloudArmorConfigSchema,

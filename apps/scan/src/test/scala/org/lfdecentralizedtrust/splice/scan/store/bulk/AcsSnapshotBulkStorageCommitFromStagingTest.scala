@@ -106,6 +106,7 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
           reader,
           appConfig,
           null, // not used when bft reads are disabled
+          _ => (),
           loggerFactory,
         )
         val commitService = {

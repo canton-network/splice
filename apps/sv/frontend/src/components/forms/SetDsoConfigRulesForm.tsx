@@ -155,8 +155,10 @@ export const SetDsoConfigRulesForm: () => JSX.Element = () => {
 
         if (expiryError) return expiryError;
 
-        const syncUpgradeTime = formData.config.nextScheduledSynchronizerUpgradeTime.value;
-        const syncMigrationId = formData.config.nextScheduledSynchronizerUpgradeMigrationId.value;
+        // The config fields are populated from dsoInfo, which may not have loaded yet
+        const syncUpgradeTime = formData.config.nextScheduledSynchronizerUpgradeTime?.value ?? '';
+        const syncMigrationId =
+          formData.config.nextScheduledSynchronizerUpgradeMigrationId?.value ?? '';
         const effectiveDate = formData.common.effectiveDate.effectiveDate;
 
         const synchronizerUpgradeError = validateNextScheduledSynchronizerUpgrade(
@@ -166,12 +168,13 @@ export const SetDsoConfigRulesForm: () => JSX.Element = () => {
         );
         if (synchronizerUpgradeError) return synchronizerUpgradeError;
         const logicalSynchronizerUpgradeError = validateNextScheduledLogicalSynchronizerUpgrade(
-          formData.config.nextScheduledLogicalSynchronizerUpgradeTopologyFreezeTime.value,
-          formData.config.nextScheduledLogicalSynchronizerUpgradeUpgradeTime.value,
+          formData.config.nextScheduledLogicalSynchronizerUpgradeTopologyFreezeTime?.value ?? '',
+          formData.config.nextScheduledLogicalSynchronizerUpgradeUpgradeTime?.value ?? '',
           formData.config.nextScheduledLogicalSynchronizerUpgradeNewPhysicalSynchronizerSerial
-            .value,
+            ?.value ?? '',
           formData.config
-            .nextScheduledLogicalSynchronizerUpgradeNewPhysicalSynchronizerProtocolVersion.value,
+            .nextScheduledLogicalSynchronizerUpgradeNewPhysicalSynchronizerProtocolVersion?.value ??
+            '',
           effectiveDate
         );
         if (logicalSynchronizerUpgradeError) return logicalSynchronizerUpgradeError;

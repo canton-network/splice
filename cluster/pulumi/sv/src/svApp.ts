@@ -1,7 +1,7 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import {
-  appsAffinityAndTolerations,
+  appsKubernetesScheduling,
   ChartValues,
   CnInput,
   daContactPoint,
@@ -138,6 +138,7 @@ export function installSvApp(
   if (config.onboarding.type == 'join-with-key') {
     svValues.joinWithKeyOnboarding = {
       sponsorApiUrl: config.onboarding.sponsorApiUrl,
+      sponsorScanUrl: config.onboarding.sponsorScanUrl,
     };
   }
 
@@ -151,6 +152,6 @@ export function installSvApp(
       dependsOn: dependsOn.concat([postgres]).concat(allSynchronizerDependencies),
     },
     undefined,
-    appsAffinityAndTolerations
+    appsKubernetesScheduling
   );
 }

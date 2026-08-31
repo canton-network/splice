@@ -1740,6 +1740,14 @@
           "name": "v1-updates",
           "type": "banned"
         },
+        "/api/scan/v2/holdings": {
+          "name": "holdings",
+          "type": "unlimited"
+        },
+        "/api/scan/v2/state": {
+          "name": "state",
+          "type": "unlimited"
+        },
         "/api/scan/v2/updates": {
           "name": "v2-updates",
           "type": "unlimited"
@@ -2132,6 +2140,14 @@
         "/api/scan/v1/updates": {
           "name": "v1-updates",
           "type": "banned"
+        },
+        "/api/scan/v2/holdings": {
+          "name": "holdings",
+          "type": "unlimited"
+        },
+        "/api/scan/v2/state": {
+          "name": "state",
+          "type": "unlimited"
         },
         "/api/scan/v2/updates": {
           "name": "v2-updates",
@@ -6678,7 +6694,8 @@
           "initialAmuletPrice": "0.0517",
           "isDevNet": false,
           "joinWithKeyOnboarding": {
-            "sponsorApiUrl": "http://sv-app.sv-1:5014"
+            "sponsorApiUrl": "http://sv-app.sv-1:5014",
+            "sponsorScanUrl": "http://scan-app.sv-1:5012"
           },
           "logAsyncFlush": false,
           "logLevel": "INFO",

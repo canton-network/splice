@@ -79,6 +79,16 @@ class AcsSnapshotBulkStoragePersistentProgress(
     kvProvider.store.readValueAndLogOnDecodingFailure(firstSnapshotKvStoreKey).value
   }
 
+  def reset(implicit
+      tc: TraceContext,
+      ec: ExecutionContext,
+  ): Future[Unit] = {
+    for {
+      _ <- kvProvider.store.deleteKey(latestSnapshotKvStoreKey)
+      _ <- kvProvider.store.deleteKey(firstSnapshotKvStoreKey)
+    } yield {}
+  }
+
   def persistLatestProcessedSnapshotTimestamp(ts: TimestampWithMigrationId)(implicit
       tc: TraceContext,
       ec: ExecutionContext,

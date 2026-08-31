@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import * as k8s from '@pulumi/kubernetes';
 import {
-  infraAffinityAndTolerations,
+  infraKubernetesScheduling,
   standardStorageClassName,
 } from '@canton-network/splice-pulumi-common';
 import { Namespace } from '@pulumi/kubernetes/core/v1';
@@ -56,7 +56,7 @@ export function installDockerRegistryMirror(): k8s.helm.v3.Release {
             },
           },
         },
-        ...infraAffinityAndTolerations,
+        ...infraKubernetesScheduling,
       },
     },
     {
