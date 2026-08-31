@@ -60,7 +60,7 @@ import { installScan } from './scan';
 import { installSvApp } from './svApp';
 import { installValidator } from './validator';
 
-export async function installSvNode(
+export async function installSvApps(
   xns: ExactNamespace,
   staticConfig: StaticSvConfig,
   dynamicConfig: SingleSvConfiguration,

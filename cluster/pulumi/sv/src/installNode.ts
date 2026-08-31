@@ -16,7 +16,7 @@ import {
 } from '@canton-network/splice-pulumi-common-sv';
 
 import { installParticipant } from './participant';
-import { installSvNode } from './sv';
+import { installSvApps } from './sv';
 
 export async function installNode(sv: string, auth0Client: Auth0Client): Promise<void> {
   const staticConfig = findStaticConfigOrFail(sv);
@@ -28,7 +28,7 @@ export async function installNode(sv: string, auth0Client: Auth0Client): Promise
   const ledgerApiUserSecret = installLedgerApiUserSecret(auth0Client, xns, 'sv', 'sv');
   const ledgerApiUserSecretSource = auth0UserNameEnvVarSource('sv', true);
   if (staticConfig.nodeName !== svRunbookConfig.nodeName) {
-    await installSvNode(xns, staticConfig, config, auth0Client, []);
+    await installSvApps(xns, staticConfig, config, auth0Client, []);
   }
   await installParticipant(
     {
