@@ -1401,7 +1401,7 @@ object BftScanConnection {
         withData: Seq[SingleScanConnection]
     ): BftCallConfig = {
       val n = withData.size
-      val f = if (n <= 0) 0 else (n - 1) / 3
+      val f = (n - 1) / 3
       BftCallConfig(
         connections = withData,
         requestsToDo = n,
