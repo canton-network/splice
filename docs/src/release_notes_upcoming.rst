@@ -30,3 +30,7 @@ release-notes:: Upcoming
           (typically the sponsor's) instead of the sponsor SV app's deprecated public
           ``/v0/dso`` endpoint. The scan is configured via the new ``.joinWithKeyOnboarding.sponsorScanUrl`` Helm value.
           SVs who set the ``.joinWithKeyOnboarding`` key config must set it before upgrading.
+
+    - CometBFT
+
+        - Increased default resources of watchdog and made it only query for metrics it needs.
