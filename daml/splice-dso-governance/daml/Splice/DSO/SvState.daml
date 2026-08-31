@@ -6,6 +6,7 @@ module Splice.DSO.SvState where
 
 import Splice.Types
 
+import Splice.Amulet.SvRightOwner
 import Splice.DSO.DecentralizedSynchronizer
 import Splice.Util
 
@@ -17,6 +18,13 @@ data ForSv = ForSv with
     dso : Party
     svName : Text
   deriving (Eq, Show)
+
+instance HasCheckedFetch SvRightOwner ForSv where
+  contractGroupId SvRightOwner{..} =
+    ForSv
+      with
+        dso
+        svName = rightOwnerName
 
 data ForSvNode = ForSvNode with
     dso : Party
@@ -43,7 +51,7 @@ data RewardState = RewardState with
 -- | State of reward collection for a sv identified by their sv name.
 template SvRewardState with
     dso : Party
-    svName : Text
+    svName : Text -- ^ sv right owner name
     state : RewardState
   where
     signatory dso
