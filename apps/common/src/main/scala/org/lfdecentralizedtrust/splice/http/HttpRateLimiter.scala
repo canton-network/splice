@@ -36,6 +36,9 @@ class HttpRateLimiter(
   private val clientIpHeaders: Seq[String] =
     config.clientIpHeaders.map(_.trim).filter(_.nonEmpty)
 
+  private val clientIpKey: Directive1[Option[String]] =
+    HttpRateLimiter.extractClientIpKey(clientIpHeaders)
+
   private def metricsFor(service: String): SpliceRateLimitMetrics =
     metrics.getOrElseUpdate(
       service,
@@ -97,8 +100,7 @@ class HttpRateLimiter(
 
     import org.apache.pekko.http.scaladsl.server.Directives.*
 
-    HttpRateLimiter
-      .extractClientIpKey(clientIpHeaders)
+    clientIpKey
       .flatMap { clientIp =>
         // The per client IP limiters are checked first (and `&&` short-circuits) so that a request
         // rejected because of its own client IP does not consume budget from the shared overall
