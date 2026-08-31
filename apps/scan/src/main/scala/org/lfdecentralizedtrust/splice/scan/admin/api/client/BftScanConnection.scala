@@ -1159,14 +1159,17 @@ class BftScanConnection(
   /** Reach BFT consensus over an already-probed set. A single Ok is
     * quorum for n=1; larger sets defer to `bftCallWithScanUris`
     * with `BftCallConfig.forWithDataOnly`. Returns `undetermined`
-    * with no URIs when the set is empty or consensus fails.
+    * with no URIs only when the set is empty (no peer had data);
+    * a genuine consensus failure among peers-with-data propagates as
+    * `HttpErrorWithHttpCode(BadGateway)` — the same convention as
+    * `getMigrationInfo`.
     *
     * Note: the delegated `bftCallWithScanUris` retries on
     * `ConsensusNotReached`. Because the `call` closure here is a
     * cached lookup, every retry produces byte-identical responses —
     * so a genuine disagreement re-runs `logDisagreements` a bounded
     * number of times before ultimately failing. The extra WARNs are
-    * benign; consumers see the final Undetermined either way.
+    * benign.
     */
   private def consensusOverCache[Response, Value](
       endpoint: String,
@@ -1191,10 +1194,8 @@ class BftScanConnection(
         endpoint = endpoint,
         callConfig = BftCallConfig.forWithDataOnly(withData.keys.toSeq),
         disagreementLogLevel = Level.WARN,
-      ).transformWith {
-        case Success((value, consensusUris)) =>
-          Future.successful((responseFor(value), consensusUris))
-        case Failure(_) => Future.successful((undetermined, Nil))
+      ).map { case (value, consensusUris) =>
+        (responseFor(value), consensusUris)
       }
 }
 trait HasUrl {

@@ -1233,7 +1233,7 @@ class BftScanConnectionTest
 
   "BftScanConnection.getRewardAccountingRootHash" should {
 
-    "returns Undetermined when no quorum agrees on a hash" in {
+    "propagates BadGateway when no quorum agrees on a hash" in {
       val round = 42L
       val connections = getMockedConnections(n = 4)
       connections.zipWithIndex.foreach { case (c, i) =>
@@ -1241,12 +1241,15 @@ class BftScanConnectionTest
       }
       val bft = getBft(connections)
 
-      for {
-        resp <- bft.getRewardAccountingRootHash(round)
-      } yield inside(resp) {
-        case _: GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashUndetermined =>
-          succeed
-      }
+      loggerFactory.assertLogs(
+        for {
+          failure <- bft.getRewardAccountingRootHash(round).failed
+        } yield inside(failure) { case HttpErrorWithHttpCode(code, message) =>
+          code should be(StatusCodes.BadGateway)
+          message should include("Failed to reach consensus from 4 Scan nodes")
+        },
+        _.warningMessage should include("Consensus not reached."),
+      )
     }
 
     "never treats agreement on CannotProvide as consensus" in {
@@ -1405,7 +1408,7 @@ class BftScanConnectionTest
 
   "BftScanConnection.getRewardAccountingActivityTotals" should {
 
-    "returns Undetermined when no quorum agrees on the totals" in {
+    "propagates BadGateway when no quorum agrees on the totals" in {
       val round = 42L
       val connections = getMockedConnections(n = 4)
       connections.zipWithIndex.foreach { case (c, i) =>
@@ -1413,12 +1416,15 @@ class BftScanConnectionTest
       }
       val bft = getBft(connections)
 
-      for {
-        resp <- bft.getRewardAccountingActivityTotals(round)
-      } yield inside(resp) {
-        case _: GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsUndetermined =>
-          succeed
-      }
+      loggerFactory.assertLogs(
+        for {
+          failure <- bft.getRewardAccountingActivityTotals(round).failed
+        } yield inside(failure) { case HttpErrorWithHttpCode(code, message) =>
+          code should be(StatusCodes.BadGateway)
+          message should include("Failed to reach consensus from 4 Scan nodes")
+        },
+        _.warningMessage should include("Consensus not reached."),
+      )
     }
 
     "never treats agreement on CannotProvide as consensus" in {
