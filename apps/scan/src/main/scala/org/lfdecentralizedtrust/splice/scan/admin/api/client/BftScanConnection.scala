@@ -1409,6 +1409,25 @@ object BftScanConnection {
       )
     }
 
+    /** A configuration for a BFT call where some peers cannot provide a response and wish
+      * to be excluded from the consensus. Only peers that successfully respond that they
+      * cannot provide data are excluded, unavailable peers are treated as if responding with disagreeing data.
+      *
+      * A standard BFT call (see [[BftCallConfig.default]]) tolerates up to `f` Byzantine/faulty
+      * peers out of `3f+1` total and thus requires `f+1` matching responses out of `2f+1` requests.
+      *
+      * This method keeps the same fault-tolerance intent as a standard call.
+      * I.e., it still requires `f+1` matching responses, only decreasing that number if it
+      * is lower than the number of peers that did not opt out of consensus.
+      *
+      * E.g., in a network with 4 peers (f=1), it will still require `f+1 = 2` matching responses,
+      * unless only 1 peer has the data and all other peers have opted out.
+      *
+      * Note that keeping the same fault-tolerance intent means that as the number of peers with data decreases,
+      * the BFT call becomes increasingly sensitive to failing or unavailable peers.
+      * In the extreme case, if the number of peers with data is smaller than `f+1`, it will require
+      * ALL peers to successfully respond with the same data.
+      */
     def forAvailableData(
         connections: ScanConnections,
         dataAvailable: SingleScanConnection => Boolean,
