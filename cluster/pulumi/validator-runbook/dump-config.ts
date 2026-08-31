@@ -26,6 +26,7 @@ async function main() {
     uiClientIds: {
       wallet: 'wallet-client-id',
       cns: 'cns-client-id',
+      walletGateway: 'wallet-gateway-client-id',
     },
   };
   const namespacedConfigs: NamespacedAuth0Configs = {};
@@ -41,7 +42,6 @@ async function main() {
 
   await installNode.installNode({
     getSecrets: () => Promise.resolve(secrets),
-    /* eslint-disable @typescript-eslint/no-unused-vars */
     getClientAccessToken: (clientId: string, clientSecret: string, audience: string) =>
       Promise.resolve('access_token'),
     getCfg: () => auth0Cfg,

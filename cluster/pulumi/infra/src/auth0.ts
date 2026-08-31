@@ -454,8 +454,17 @@ function nonMainNetAuth0(clusterBasename: string, dnsNames: string[]): pulumi.Ou
     dnsNames,
     provider
   );
-  const validator1Auth0Config: pulumi.Output<Auth0NamespaceConfig> = validator1UiApp.id.apply(
-    clientId => {
+  const validator1WalletGatewayApp = newWalletGatewayApp(
+    'validator1WalletGatewayApp',
+    'Validator1 Wallet Gateway',
+    'validator1',
+    clusterBasename,
+    dnsNames,
+    provider
+  );
+  const validator1Auth0Config: pulumi.Output<Auth0NamespaceConfig> = pulumi
+    .all([validator1UiApp.id, validator1WalletGatewayApp.id])
+    .apply(([clientId, walletGatewayClientId]) => {
       return {
         audiences: {
           ledgerApi: DEFAULT_AUDIENCE,
@@ -471,10 +480,10 @@ function nonMainNetAuth0(clusterBasename: string, dnsNames: string[]): pulumi.Ou
           wallet: clientId,
           cns: clientId,
           splitwell: clientId,
+          walletGateway: walletGatewayClientId,
         },
       };
-    }
-  );
+    });
 
   const splitwellUiApp = newUiApp(
     'SplitwellUiApp',
@@ -517,6 +526,53 @@ function nonMainNetAuth0(clusterBasename: string, dnsNames: string[]): pulumi.Ou
 
       return baseCfg;
     });
+}
+
+function newWalletGatewayApp(
+  resourceName: string,
+  name: string,
+  ingressName: string,
+  clusterBasename: string,
+  clusterDnsNames: string[],
+  auth0DomainProvider: auth0.Provider
+): auth0.Client {
+  const origins = clusterDnsNames.map(dnsName => `https://walletgateway.${ingressName}.${dnsName}`);
+  // The gateway redirects to /callback/ (trailing slash included; Auth0 exact-matches redirect URIs)
+  const callbacks = origins.map(origin => `${origin}/callback/`);
+
+  const ret = new auth0.Client(
+    resourceName,
+    {
+      name: `${name} (Pulumi managed, ${clusterBasename})`,
+      appType: 'spa',
+      callbacks,
+      allowedOrigins: origins,
+      webOrigins: origins,
+      crossOriginAuth: false,
+      description: ` ** Managed by Pulumi, do not edit manually **\nUsed for the upstream wallet gateway UI login (PKCE)`,
+      oidcConformant: true,
+      grantTypes: ['authorization_code', 'refresh_token'],
+      refreshToken: {
+        rotationType: 'rotating',
+        expirationType: 'expiring',
+        tokenLifetime: 604800, // 7d
+        idleTokenLifetime: 259200, // 3d
+        infiniteTokenLifetime: false,
+        infiniteIdleTokenLifetime: false,
+        leeway: 5,
+      },
+    },
+    { provider: auth0DomainProvider }
+  );
+  new auth0.ClientCredentials(
+    `${resourceName}Credentials`,
+    {
+      clientId: ret.id,
+      authenticationMethod: 'none',
+    },
+    { provider: auth0DomainProvider }
+  );
+  return ret;
 }
 
 function svRunbookAuth0(
@@ -640,32 +696,43 @@ function validatorRunbookAuth0(
     provider,
     ['http://localhost:3001', 'http://ans.localhost']
   );
+  const walletGatewayApp = newWalletGatewayApp(
+    'validatorWalletGatewayApp',
+    'Wallet Gateway',
+    'validator',
+    clusterBasename,
+    dnsNames,
+    provider
+  );
 
-  return pulumi.all([walletUiApp.id, ansUiApp.id]).apply(([walletUiAppId, ansUiAppId]) => {
-    const namespacedConfig: NamespacedAuth0Configs = {
-      validator: {
-        audiences: {
-          ledgerApi: 'https://ledger_api.example.com', // The Ledger API in the validator-test tenant
-          validatorApi: 'https://validator.example.com/api', // The Validator App API in the validator-test tenant
+  return pulumi
+    .all([walletUiApp.id, ansUiApp.id, walletGatewayApp.id])
+    .apply(([walletUiAppId, ansUiAppId, walletGatewayAppId]) => {
+      const namespacedConfig: NamespacedAuth0Configs = {
+        validator: {
+          audiences: {
+            ledgerApi: 'https://ledger_api.example.com', // The Ledger API in the validator-test tenant
+            validatorApi: 'https://validator.example.com/api', // The Validator App API in the validator-test tenant
+          },
+          backendClientIds: {
+            validator: 'cznBUeB70fnpfjaq9TzblwiwjkVyvh5z',
+          },
+          uiClientIds: {
+            wallet: walletUiAppId,
+            cns: ansUiAppId,
+            walletGateway: walletGatewayAppId,
+          },
         },
-        backendClientIds: {
-          validator: 'cznBUeB70fnpfjaq9TzblwiwjkVyvh5z',
-        },
-        uiClientIds: {
-          wallet: walletUiAppId,
-          cns: ansUiAppId,
-        },
-      },
-    };
+      };
 
-    return {
-      namespacedConfigs: namespacedConfig,
-      fixedTokenCacheName: 'auth0-fixed-token-cache-validator-test',
-      auth0Domain: auth0Domain,
-      auth0MgtClientId: auth0MgtClientId,
-      auth0MgtClientSecret: '',
-    };
-  });
+      return {
+        namespacedConfigs: namespacedConfig,
+        fixedTokenCacheName: 'auth0-fixed-token-cache-validator-test',
+        auth0Domain: auth0Domain,
+        auth0MgtClientId: auth0MgtClientId,
+        auth0MgtClientSecret: '',
+      };
+    });
 }
 
 export function configureAuth0(
