@@ -433,7 +433,7 @@ class DevelopmentFundCouponIntegrationTest
     }
   }
 
-  "Delaying the claiming of a development fund coupon until its mintAfter" in { implicit env =>
+  "Minting a development fund coupon once its mintAfter has passed" in { implicit env =>
     onboardWalletUser(aliceValidatorWalletClient, aliceValidatorBackend)
     val sv1UserId = sv1WalletClient.config.ledgerApiUser
     val bobParty = onboardWalletUser(bobWalletClient, bobValidatorBackend)
@@ -442,7 +442,7 @@ class DevelopmentFundCouponIntegrationTest
     val developmentFundCouponAmount = BigDecimal(SpliceUtil.damlDecimal(40.0))
     val expiresAt = CantonTimestamp.now().plus(Duration.ofDays(1))
     val reason = "Bob has contributed to the Daml repo"
-    val mintingDelay = Duration.ofSeconds(30)
+    val mintingDelay = Duration.ofSeconds(10)
 
     val bobUserName = bobWalletClient.config.ledgerApiUser
     val bobMergeAmuletsTrigger =
@@ -451,7 +451,7 @@ class DevelopmentFundCouponIntegrationTest
         .futureValue
         .trigger[CollectRewardsAndMergeAmuletsTrigger]
 
-    archiveExistingUnclaimedDevelopmentFundCoupons()
+    val unclaimedTotalBefore = getUnclaimedDevelopmentFundCouponTotal(sv1ValidatorBackend)
     actAndCheck(
       "Mint one unclaimed development fund coupon", {
         createUnclaimedDevelopmentFundCoupon(
@@ -465,12 +465,12 @@ class DevelopmentFundCouponIntegrationTest
       _ => {
         getUnclaimedDevelopmentFundCouponTotal(
           sv1ValidatorBackend
-        ) shouldBe initialUnclaimedDevelopmentFundCouponAmount
+        ) shouldBe (unclaimedTotalBefore + initialUnclaimedDevelopmentFundCouponAmount)
       },
     )
 
     val bobBalanceBefore = bobWalletClient.balance().unlockedQty
-    val (mintAfter, _) = setTriggersWithin(
+    setTriggersWithin(
       triggersToPauseAtStart = Seq(bobMergeAmuletsTrigger)
     ) {
       actAndCheck(
@@ -497,9 +497,8 @@ class DevelopmentFundCouponIntegrationTest
       )
     }
 
-
     clue("The coupon is collected once its mintAfter has passed") {
-      eventually(60.seconds) {
+      eventually(30.seconds) {
         bobWalletClient
           .listActiveDevelopmentFundCoupons() shouldBe empty withClue "bob coupons after mintAfter"
         bobWalletClient.balance().unlockedQty shouldBe
