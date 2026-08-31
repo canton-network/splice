@@ -466,7 +466,6 @@ class SvApp(
         }
 
       publicHandler = new HttpSvPublicHandler(
-        config.ledgerApiUser,
         svAutomation,
         dsoAutomation,
         isDevNet,
@@ -485,7 +484,6 @@ class SvApp(
           loggerFactory,
         ),
         loggerFactory,
-        initialRound,
       )
 
       operatorHandler = new HttpSvOperatorHandler(
