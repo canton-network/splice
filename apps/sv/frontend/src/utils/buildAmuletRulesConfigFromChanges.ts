@@ -93,11 +93,15 @@ export function buildAmuletRulesConfigFromChanges(
     true
   );
   const transferConfigTokenStandardMaxTTL = getValue('transferConfigTokenStandardMaxTTL', true);
-  const developmentFundManagerBlacklist =
+  const developmentFundManagerBlacklistParties =
     getValue('developmentFundManagerBlacklist', true)
       ?.split(',')
       .map(party => party.trim())
       .filter(party => party !== '') ?? [];
+  const developmentFundManagerBlacklist =
+    developmentFundManagerBlacklistParties.length > 0
+      ? developmentFundManagerBlacklistParties
+      : null;
   const minDevelopmentFundMintingDelay = getValue('minDevelopmentFundMintingDelay', true);
   const rewardConfigMintingVersion = getValue('rewardConfigMintingVersion', true);
   const amuletConfig: AmuletConfig<'USD'> = {
@@ -110,8 +114,6 @@ export function buildAmuletRulesConfigFromChanges(
         ? null
         : { microseconds: externalPartyConfigStateTickDuration },
     transferPreapprovalBaseDuration: null,
-    // The frontend will never send null for developmentFundManagerBlacklist, an empty list is sent as `Some []`
-    // so that we can distinguish DSO that have not upgraded yet (they will have None for the field)
     developmentFundManagerBlacklist,
     minDevelopmentFundMintingDelay:
       minDevelopmentFundMintingDelay === null

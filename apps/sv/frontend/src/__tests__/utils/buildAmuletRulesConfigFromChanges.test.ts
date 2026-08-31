@@ -368,7 +368,7 @@ describe('buildAmuletRulesConfigFromChanges', () => {
     expect(result.minDevelopmentFundMintingDelay).toEqual({ microseconds: '604800000000' });
   });
 
-  test('should map an emptied development fund blacklist to an empty list and the delay to null', () => {
+  test('should map an emptied development fund blacklist and delay to null', () => {
     const changes: ConfigChange[] = [
       {
         fieldName: 'developmentFundManagerBlacklist',
@@ -386,8 +386,23 @@ describe('buildAmuletRulesConfigFromChanges', () => {
 
     const result = buildAmuletRulesConfigFromChanges(changes);
 
-    expect(result.developmentFundManagerBlacklist).toEqual([]);
+    expect(result.developmentFundManagerBlacklist).toBeNull();
     expect(result.minDevelopmentFundMintingDelay).toBeNull();
+  });
+
+  test('should map an absent development fund blacklist to null', () => {
+    const changes: ConfigChange[] = [
+      {
+        fieldName: 'minDevelopmentFundMintingDelay',
+        label: 'Min Development Fund Minting Delay',
+        currentValue: '',
+        newValue: '604800000000',
+      },
+    ];
+
+    const result = buildAmuletRulesConfigFromChanges(changes);
+
+    expect(result.developmentFundManagerBlacklist).toBeNull();
   });
 
   test('should handle issuance curve future values', () => {
