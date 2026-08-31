@@ -80,6 +80,9 @@
           "svNamespace": "validator"
         },
         "imageRepo": "us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker",
+        "ingress": {
+          "walletGateway": false
+        },
         "spliceDomainNames": {
           "nameServiceDomain": "cns"
         },

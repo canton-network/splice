@@ -70,3 +70,43 @@ spec:
             host: ans-web-ui.{{ (.Values.cluster).svNamespace }}.svc.cluster.local
 ---
 {{- end }}
+{{- if .Values.ingress.walletGateway }}
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: wallet-gateway-{{ (.Values.cluster).svNamespace }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  hosts:
+    - "walletgateway.{{ $ingressName }}.{{ (.Values.cluster).hostname }}"
+  gateways:
+    - cluster-ingress/cn-http-gateway
+  http:
+    - match:
+        - port: 443
+      route:
+        - destination:
+            port:
+              number: 3030
+            host: wallet-gateway-wallet-gateway.{{ (.Values.cluster).svNamespace }}.svc.cluster.local
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: portfolio-{{ (.Values.cluster).svNamespace }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  hosts:
+    - "portfolio.{{ $ingressName }}.{{ (.Values.cluster).hostname }}"
+  gateways:
+    - cluster-ingress/cn-http-gateway
+  http:
+    - match:
+        - port: 443
+      route:
+        - destination:
+            port:
+              number: 80
+            host: portfolio-splice-portfolio.{{ (.Values.cluster).svNamespace }}.svc.cluster.local
+---
+{{- end }}

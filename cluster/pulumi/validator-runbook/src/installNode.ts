@@ -44,7 +44,10 @@ import {
   CnChartVersion,
 } from '@canton-network/splice-pulumi-common';
 import { installLoopback } from '@canton-network/splice-pulumi-common-sv';
-import { installParticipant } from '@canton-network/splice-pulumi-common-validator';
+import {
+  installParticipant,
+  installWalletGateway,
+} from '@canton-network/splice-pulumi-common-validator';
 import {
   installPasswordWithParent,
   SplicePostgres,
@@ -110,6 +113,11 @@ export async function installNode(auth0Client: Auth0Client): Promise<void> {
     otherDeps: [],
   });
 
+  const walletGatewayConfig = validatorConfig.walletGateway;
+  if (walletGatewayConfig?.enabled) {
+    await installWalletGateway(auth0Client, xns, walletGatewayConfig, [validator]);
+  }
+
   const ingressImagePullDeps = imagePullSecretByNamespaceName('cluster-ingress');
   installSpliceRunbookHelmChartByNamespaceName(
     xns.ns.metadata.name,
@@ -125,6 +133,9 @@ export async function installNode(auth0Client: Auth0Client): Promise<void> {
         nameServiceDomain: ansDomainPrefix,
       },
       withSvIngress: false,
+      ingress: {
+        walletGateway: walletGatewayConfig?.enabled ?? false,
+      },
     },
     validatorVersion,
     { dependsOn: ingressImagePullDeps.concat([validator]) }

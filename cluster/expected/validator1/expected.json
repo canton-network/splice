@@ -470,7 +470,8 @@
         "imageRepo": "us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker",
         "ingress": {
           "decentralizedSynchronizer": {},
-          "splitwell": true
+          "splitwell": true,
+          "walletGateway": false
         },
         "spliceDomainNames": {
           "nameServiceDomain": "cns"
