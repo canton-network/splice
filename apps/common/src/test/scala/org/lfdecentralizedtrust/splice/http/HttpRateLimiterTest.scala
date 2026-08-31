@@ -28,94 +28,117 @@ import java.net.InetAddress
 
 class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteTest {
 
+  import HttpRateLimiterTest.{IpVersion, IpVersions}
+
   "clientIp" should {
 
-    "prefer X-Forwarded-For" in {
-      clientIp(
-        HttpRequest()
-          .withHeaders(
-            `X-Forwarded-For`(RemoteAddress(InetAddress.getByName("1.1.1.1"))),
-            `X-Real-Ip`(RemoteAddress(InetAddress.getByName("2.2.2.2"))),
-          )
-          .withAttributes(
-            Map(
-              AttributeKeys.remoteAddress -> RemoteAddress(InetAddress.getByName("3.3.3.3"))
+    IpVersions.foreach { v =>
+      s"prefer X-Forwarded-For (${v.name})" in {
+        clientIp(
+          HttpRequest()
+            .withHeaders(
+              `X-Forwarded-For`(remoteAddress(v.address(0))),
+              `X-Real-Ip`(remoteAddress(v.address(1))),
+            )
+            .withAttributes(
+              Map(
+                AttributeKeys.remoteAddress -> remoteAddress(v.address(2))
+              )
+            )
+        ) should be(Some(v.key(0)))
+      }
+
+      s"fall back to X-Real-Ip (${v.name})" in {
+        clientIp(
+          HttpRequest().withHeaders(`X-Real-Ip`(remoteAddress(v.address(1))))
+        ) should be(Some(v.key(1)))
+      }
+
+      s"ignore a non-IP value and fall back to the next header (${v.name})" in {
+        clientIp(
+          HttpRequest()
+            .withHeaders(
+              RawHeader("X-Forwarded-For", "evil.example.com"),
+              `X-Real-Ip`(remoteAddress(v.address(1))),
+            )
+        ) should be(Some(v.key(1)))
+      }
+
+      s"use the first address of a comma separated header value (${v.name})" in {
+        clientIp(
+          HttpRequest().withHeaders(
+            RawHeader(
+              "X-Forwarded-For",
+              s"${v.address(0)}, ${v.address(1)}, ${v.address(2)}",
             )
           )
-      ) should be(Some("1.1.1.1"))
-    }
+        ) should be(Some(v.key(0)))
+      }
 
-    "fall back to X-Real-Ip" in {
-      clientIp(
-        HttpRequest().withHeaders(`X-Real-Ip`(RemoteAddress(InetAddress.getByName("2.2.2.2"))))
-      ) should be(Some("2.2.2.2"))
-    }
-
-    "ignore a non-IP value and fall back to the next header" in {
-      clientIp(
-        HttpRequest()
-          .withHeaders(
-            RawHeader("X-Forwarded-For", "evil.example.com"),
-            `X-Real-Ip`(RemoteAddress(InetAddress.getByName("2.2.2.2"))),
-          )
-      ) should be(Some("2.2.2.2"))
-    }
-
-    "use the first address of a comma separated header value" in {
-      clientIp(
-        HttpRequest().withHeaders(RawHeader("X-Forwarded-For", "1.1.1.1, 2.2.2.2, 3.3.3.3"))
-      ) should be(Some("1.1.1.1"))
-    }
-
-    "use the configured headers in order" in {
-      val request = HttpRequest().withHeaders(
-        RawHeader("X-Envoy-External-Address", "4.4.4.4"),
-        `X-Forwarded-For`(RemoteAddress(InetAddress.getByName("1.1.1.1"))),
-        `X-Real-Ip`(RemoteAddress(InetAddress.getByName("2.2.2.2"))),
-      )
-      clientIp(
-        request,
-        clientIpHeaders = Seq("x-envoy-external-address", "x-forwarded-for"),
-      ) should be(Some("4.4.4.4"))
-      clientIp(
-        request,
-        clientIpHeaders = Seq("x-real-ip", "x-envoy-external-address"),
-      ) should be(Some("2.2.2.2"))
-    }
-
-    "not use headers that are not configured" in {
-      clientIp(
-        HttpRequest().withHeaders(
-          `X-Forwarded-For`(RemoteAddress(InetAddress.getByName("1.1.1.1"))),
-          `X-Real-Ip`(RemoteAddress(InetAddress.getByName("2.2.2.2"))),
-        ),
-        clientIpHeaders = Seq("x-envoy-external-address"),
-      ) should be(None)
-    }
-
-    "match the configured headers case-insensitively" in {
-      clientIp(
-        HttpRequest().withHeaders(RawHeader("X-Envoy-External-Address", "4.4.4.4")),
-        clientIpHeaders = Seq("X-Envoy-External-Address"),
-      ) should be(Some("4.4.4.4"))
-    }
-
-    "not extract any IP when no headers are configured" in {
-      clientIp(
-        HttpRequest().withHeaders(
-          `X-Forwarded-For`(RemoteAddress(InetAddress.getByName("1.1.1.1")))
-        ),
-        clientIpHeaders = Seq.empty,
-      ) should be(None)
-    }
-
-    "not use the remote address of the transport connection" in {
-      // the remote address is not exposed by the server, so it must not be relied upon
-      clientIp(
-        HttpRequest().withAttributes(
-          Map(AttributeKeys.remoteAddress -> RemoteAddress(InetAddress.getByName("3.3.3.3")))
+      s"use the configured headers in order (${v.name})" in {
+        val request = HttpRequest().withHeaders(
+          RawHeader("X-Envoy-External-Address", v.address(3)),
+          `X-Forwarded-For`(remoteAddress(v.address(0))),
+          `X-Real-Ip`(remoteAddress(v.address(1))),
         )
-      ) should be(None)
+        clientIp(
+          request,
+          clientIpHeaders = Seq("x-envoy-external-address", "x-forwarded-for"),
+        ) should be(Some(v.key(3)))
+        clientIp(
+          request,
+          clientIpHeaders = Seq("x-real-ip", "x-envoy-external-address"),
+        ) should be(Some(v.key(1)))
+      }
+
+      s"not use headers that are not configured (${v.name})" in {
+        clientIp(
+          HttpRequest().withHeaders(
+            `X-Forwarded-For`(remoteAddress(v.address(0))),
+            `X-Real-Ip`(remoteAddress(v.address(1))),
+          ),
+          clientIpHeaders = Seq("x-envoy-external-address"),
+        ) should be(None)
+      }
+
+      s"match the configured headers case-insensitively (${v.name})" in {
+        clientIp(
+          HttpRequest().withHeaders(RawHeader("X-Envoy-External-Address", v.address(3))),
+          clientIpHeaders = Seq("X-Envoy-External-Address"),
+        ) should be(Some(v.key(3)))
+      }
+
+      s"not extract any IP when no headers are configured (${v.name})" in {
+        clientIp(
+          HttpRequest().withHeaders(
+            `X-Forwarded-For`(remoteAddress(v.address(0)))
+          ),
+          clientIpHeaders = Seq.empty,
+        ) should be(None)
+      }
+
+      s"not use the remote address of the transport connection (${v.name})" in {
+        // the remote address is not exposed by the server, so it must not be relied upon
+        clientIp(
+          HttpRequest().withAttributes(
+            Map(AttributeKeys.remoteAddress -> remoteAddress(v.address(2)))
+          )
+        ) should be(None)
+      }
+
+      s"apply the same grouping to all client IP sources (${v.name})" in {
+        val expected = Some(v.key(0))
+        clientIp(
+          HttpRequest().withHeaders(RawHeader("X-Envoy-External-Address", v.address(0))),
+          clientIpHeaders = Seq("x-envoy-external-address"),
+        ) should be(expected)
+        clientIp(
+          HttpRequest().withHeaders(`X-Forwarded-For`(remoteAddress(v.address(0))))
+        ) should be(expected)
+        clientIp(
+          HttpRequest().withHeaders(`X-Real-Ip`(remoteAddress(v.address(0))))
+        ) should be(expected)
+      }
     }
 
     "return None if no IP can be determined" in {
@@ -130,6 +153,11 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
 
     "use the full address for IPv4 clients" in {
       clientIpOf("1.2.3.4") should be(Some("1.2.3.4"))
+    }
+
+    "not group IPv4 clients of the same network" in {
+      // a whole IPv4 network is not assigned to a single client, so they are limited individually
+      clientIpOf("1.2.3.4") should not be clientIpOf("1.2.3.5")
     }
 
     "group IPv6 clients by their /64 prefix" in {
@@ -159,47 +187,162 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
       clientIpOf("::ffff:4.3.2.1") should not be clientIpOf("::ffff:1.2.3.4")
     }
 
-    "apply the same grouping to all client IP sources" in {
-      val expected = Some("2001:db8:0:1:0:0:0:0/64")
-      val address = RemoteAddress(InetAddress.getByName("2001:db8:0:1:1:2:3:4"))
-      clientIp(
-        HttpRequest().withHeaders(RawHeader("X-Envoy-External-Address", "2001:db8:0:1:1:2:3:4")),
-        clientIpHeaders = Seq("x-envoy-external-address"),
-      ) should be(expected)
-      clientIp(
-        HttpRequest().withHeaders(`X-Forwarded-For`(address))
-      ) should be(expected)
-      clientIp(
-        HttpRequest().withHeaders(`X-Real-Ip`(address))
-      ) should be(expected)
+    "never use the same key for an IPv4 and an IPv6 client" in {
+      clientIpOf("1.2.3.4") should not be clientIpOf("2001:db8:0:1::1")
     }
   }
 
   "the http rate limiter" should {
 
-    "reject requests of a client IP over the global per client IP limit" in {
-      // the global per client IP limiter is enabled by default
-      withRoutes(
-        globalPerClientIp = perClientIp(1)
-      )("testOperation") { routes =>
-        val route = routes("testOperation")
-        val results = (1 to 20).map(_ => call(route, ip = Some("1.1.1.1")))
-        // 1 request per second per client IP, with 1 permit available from the creation of the
-        // limiter plus guava's deferred payment for the next one => the rest of the burst is rejected
-        results.count(_ == StatusCodes.OK) should be(2)
-        results.count(_ == StatusCodes.TooManyRequests) should be(18)
+    IpVersions.foreach { v =>
+      s"reject requests of a client IP over the global per client IP limit (${v.name})" in {
+        // the global per client IP limiter is enabled by default
+        withRoutes(
+          globalPerClientIp = perClientIp(1)
+        )("testOperation") { routes =>
+          val route = routes("testOperation")
+          val results = (1 to 20).map(_ => call(route, ip = Some(v.address(0))))
+          // 1 request per second per client IP, with 1 permit available from the creation of the
+          // limiter plus guava's deferred payment for the next one => the rest of the burst is rejected
+          results.count(_ == StatusCodes.OK) should be(2)
+          results.count(_ == StatusCodes.TooManyRequests) should be(18)
+        }
       }
-    }
 
-    "not reject requests of other client IPs" in {
-      withRoutes(
-        globalPerClientIp = perClientIp(1)
-      )("testOperation") { routes =>
-        val route = routes("testOperation")
-        (1 to 20)
-          .map(_ => call(route, ip = Some("1.1.1.1")))
-          .count(_ == StatusCodes.TooManyRequests) should be > 0
-        call(route, ip = Some("2.2.2.2")) should be(StatusCodes.OK)
+      s"not reject requests of other client IPs (${v.name})" in {
+        withRoutes(
+          globalPerClientIp = perClientIp(1)
+        )("testOperation") { routes =>
+          val route = routes("testOperation")
+          (1 to 20)
+            .map(_ => call(route, ip = Some(v.address(0))))
+            .count(_ == StatusCodes.TooManyRequests) should be > 0
+          call(route, ip = Some(v.address(1))) should be(StatusCodes.OK)
+        }
+      }
+
+      s"not apply the per client IP limiter if no client IP is known (${v.name})" in {
+        withRoutes(
+          globalPerClientIp = perClientIp(1)
+        )("testOperation") { routes =>
+          val route = routes("testOperation")
+          (1 to 20).map(_ => call(route, ip = None)) should contain only StatusCodes.OK
+          val results = (1 to 20).map(_ => call(route, ip = Some(v.address(0))))
+          results.count(_ == StatusCodes.OK) should be(2)
+          results.count(_ == StatusCodes.TooManyRequests) should be(18)
+        }
+      }
+
+      s"not apply the per client IP limiters if no client IP headers are configured (${v.name})" in {
+        withRoutes(
+          globalPerClientIp = perClientIp(1),
+          perClientIpOverrides = Map("testOperation" -> perClientIp(1)),
+          clientIpHeaders = Seq.empty,
+        )("testOperation") { fixture =>
+          val route = fixture("testOperation")
+          (1 to 20).map(_ =>
+            call(route, ip = Some(v.address(0)))
+          ) should contain only StatusCodes.OK
+          forEvery(Seq("testOperation", HttpRateLimiter.GlobalLimiter)) { limiter =>
+            fixture.requestsRejectedBy(
+              limiter,
+              SpliceRateLimiter.PerAttributeLimiterType,
+            ) should be(0L)
+          }
+        }
+      }
+
+      s"apply the global per client IP limiter across operations (${v.name})" in {
+        // the same client IP is limited regardless of the operation
+        withRoutes(
+          globalPerClientIp = perClientIp(1)
+        )("operationA", "operationB") { routes =>
+          (1 to 20)
+            .map(_ => call(routes("operationA"), ip = Some(v.address(0))))
+            .count(_ == StatusCodes.OK) should be > 0
+          call(routes("operationB"), ip = Some(v.address(0))) should be(
+            StatusCodes.TooManyRequests
+          )
+        }
+      }
+
+      s"apply the global overall limiter across operations (${v.name})" in {
+        withRoutes(
+          global = SpliceRateLimitConfig(ratePerSecond = 1),
+          globalPerClientIp = PerAttributeRateLimitConfig.disabled,
+        )("operationA", "operationB") { routes =>
+          // exhaust the global budget via operationA
+          (1 to 20).map(_ => call(routes("operationA"), ip = Some(v.address(0))))
+          // the global limiter ignores the operation and the client IP, so operationB is rejected too
+          call(routes("operationB"), ip = Some(v.address(1))) should be(
+            StatusCodes.TooManyRequests
+          )
+        }
+      }
+
+      s"not apply the per operation client IP limiter by default (${v.name})" in {
+        // no per client IP limiting configured for operations => requests from a single IP are only
+        // bounded by the (high) overall limiters
+        withRoutes()("testOperation") { routes =>
+          val route = routes("testOperation")
+          (1 to 20).map(_ =>
+            call(route, ip = Some(v.address(0)))
+          ) should contain only StatusCodes.OK
+        }
+      }
+
+      s"apply the per operation client IP limiter when enabled for an operation (${v.name})" in {
+        withRoutes(
+          perClientIpOverrides = Map("limitedOperation" -> perClientIp(1))
+        )("limitedOperation", "otherOperation") { routes =>
+          val results =
+            (1 to 20).map(_ => call(routes("limitedOperation"), ip = Some(v.address(0))))
+          results.count(_ == StatusCodes.OK) should be(2)
+          // a different operation is not affected by the per operation client IP limiter
+          call(routes("otherOperation"), ip = Some(v.address(0))) should be(StatusCodes.OK)
+        }
+      }
+
+      s"apply the per operation overall limiter (${v.name})" in {
+        withRoutes(
+          rateLimiters = Map("limitedOperation" -> SpliceRateLimitConfig(ratePerSecond = 1))
+        )("limitedOperation", "otherOperation") { routes =>
+          val results =
+            (1 to 20).map(_ => call(routes("limitedOperation"), ip = Some(v.address(0))))
+          results.count(_ == StatusCodes.TooManyRequests) should be > 0
+          // a different operation uses a separate overall limiter and is not affected
+          call(routes("otherOperation"), ip = Some(v.address(0))) should be(StatusCodes.OK)
+        }
+      }
+
+      s"use separate per operation limiters for equally named operations of different services (${v.name})" in {
+        val rateLimiter = new HttpRateLimiter(
+          RateLimitersConfig(
+            default = withPerClientIp(
+              SpliceRateLimitConfig(ratePerSecond = 1),
+              PerAttributeRateLimitConfig.disabled,
+            ),
+            rateLimiters = Map.empty,
+            global = withPerClientIp(
+              SpliceRateLimitConfig(ratePerSecond = 1000),
+              PerAttributeRateLimitConfig.disabled,
+            ),
+          ),
+          new InMemoryMetricsFactory(),
+          loggerFactory.getTracedLogger(classOf[HttpRateLimiterTest]),
+        )
+        try {
+          val routeV1 =
+            rateLimiter.withRateLimit("serviceV1")("sharedOperation")(complete(StatusCodes.OK))
+          val routeV2 =
+            rateLimiter.withRateLimit("serviceV2")("sharedOperation")(complete(StatusCodes.OK))
+          (1 to 20)
+            .map(_ => call(routeV1, ip = Some(v.address(0))))
+            .count(_ == StatusCodes.TooManyRequests) should be > 0
+          call(routeV2, ip = Some(v.address(0))) should be(StatusCodes.OK)
+        } finally {
+          rateLimiter.close()
+        }
       }
     }
 
@@ -221,118 +364,27 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
       }
     }
 
-    "not apply the per client IP limiter if no client IP is known" in {
+    "limit an IPv4 client and its IPv4-mapped IPv6 form with the same limiter" in {
       withRoutes(
         globalPerClientIp = perClientIp(1)
       )("testOperation") { routes =>
         val route = routes("testOperation")
-        (1 to 20).map(_ => call(route, ip = None)) should contain only StatusCodes.OK
-        val results = (1 to 20).map(_ => call(route, ip = Some("1.1.1.1")))
-        results.count(_ == StatusCodes.OK) should be(2)
-        results.count(_ == StatusCodes.TooManyRequests) should be(18)
+        (1 to 20)
+          .map(_ => call(route, ip = Some("1.2.3.4")))
+          .count(_ == StatusCodes.TooManyRequests) should be > 0
+        call(route, ip = Some("::ffff:1.2.3.4")) should be(StatusCodes.TooManyRequests)
       }
     }
 
-    "not apply the per client IP limiters if no client IP headers are configured" in {
-      withRoutes(
-        globalPerClientIp = perClientIp(1),
-        perClientIpOverrides = Map("testOperation" -> perClientIp(1)),
-        clientIpHeaders = Seq.empty,
-      )("testOperation") { fixture =>
-        val route = fixture("testOperation")
-        (1 to 20).map(_ => call(route, ip = Some("1.1.1.1"))) should contain only StatusCodes.OK
-        forEvery(Seq("testOperation", HttpRateLimiter.GlobalLimiter)) { limiter =>
-          fixture.requestsRejectedBy(
-            limiter,
-            SpliceRateLimiter.PerAttributeLimiterType,
-          ) should be(0L)
-        }
-      }
-    }
-
-    "apply the global per client IP limiter across operations" in {
-      // the same client IP is limited regardless of the operation
+    "limit IPv4 and IPv6 clients independently" in {
       withRoutes(
         globalPerClientIp = perClientIp(1)
-      )("operationA", "operationB") { routes =>
-        (1 to 20)
-          .map(_ => call(routes("operationA"), ip = Some("1.1.1.1")))
-          .count(_ == StatusCodes.OK) should be > 0
-        call(routes("operationB"), ip = Some("1.1.1.1")) should be(StatusCodes.TooManyRequests)
-      }
-    }
-
-    "apply the global overall limiter across operations" in {
-      withRoutes(
-        global = SpliceRateLimitConfig(ratePerSecond = 1),
-        globalPerClientIp = PerAttributeRateLimitConfig.disabled,
-      )("operationA", "operationB") { routes =>
-        // exhaust the global budget via operationA
-        (1 to 20).map(_ => call(routes("operationA"), ip = Some("1.1.1.1")))
-        // the global limiter ignores the operation and the client IP, so operationB is rejected too
-        call(routes("operationB"), ip = Some("2.2.2.2")) should be(StatusCodes.TooManyRequests)
-      }
-    }
-
-    "not apply the per operation client IP limiter by default" in {
-      // no per client IP limiting configured for operations => requests from a single IP are only
-      // bounded by the (high) overall limiters
-      withRoutes()("testOperation") { routes =>
+      )("testOperation") { routes =>
         val route = routes("testOperation")
-        (1 to 20).map(_ => call(route, ip = Some("1.1.1.1"))) should contain only StatusCodes.OK
-      }
-    }
-
-    "apply the per operation client IP limiter when enabled for an operation" in {
-      withRoutes(
-        perClientIpOverrides = Map("limitedOperation" -> perClientIp(1))
-      )("limitedOperation", "otherOperation") { routes =>
-        val results =
-          (1 to 20).map(_ => call(routes("limitedOperation"), ip = Some("1.1.1.1")))
-        results.count(_ == StatusCodes.OK) should be(2)
-        // a different operation is not affected by the per operation client IP limiter
-        call(routes("otherOperation"), ip = Some("1.1.1.1")) should be(StatusCodes.OK)
-      }
-    }
-
-    "apply the per operation overall limiter" in {
-      withRoutes(
-        rateLimiters = Map("limitedOperation" -> SpliceRateLimitConfig(ratePerSecond = 1))
-      )("limitedOperation", "otherOperation") { routes =>
-        val results = (1 to 20).map(_ => call(routes("limitedOperation"), ip = Some("1.1.1.1")))
-        results.count(_ == StatusCodes.TooManyRequests) should be > 0
-        // a different operation uses a separate overall limiter and is not affected
-        call(routes("otherOperation"), ip = Some("1.1.1.1")) should be(StatusCodes.OK)
-      }
-    }
-
-    "use separate per operation limiters for equally named operations of different services" in {
-      val rateLimiter = new HttpRateLimiter(
-        RateLimitersConfig(
-          default = withPerClientIp(
-            SpliceRateLimitConfig(ratePerSecond = 1),
-            PerAttributeRateLimitConfig.disabled,
-          ),
-          rateLimiters = Map.empty,
-          global = withPerClientIp(
-            SpliceRateLimitConfig(ratePerSecond = 1000),
-            PerAttributeRateLimitConfig.disabled,
-          ),
-        ),
-        new InMemoryMetricsFactory(),
-        loggerFactory.getTracedLogger(classOf[HttpRateLimiterTest]),
-      )
-      try {
-        val routeV1 =
-          rateLimiter.withRateLimit("serviceV1")("sharedOperation")(complete(StatusCodes.OK))
-        val routeV2 =
-          rateLimiter.withRateLimit("serviceV2")("sharedOperation")(complete(StatusCodes.OK))
         (1 to 20)
-          .map(_ => call(routeV1, ip = Some("1.1.1.1")))
+          .map(_ => call(route, ip = Some("1.2.3.4")))
           .count(_ == StatusCodes.TooManyRequests) should be > 0
-        call(routeV2, ip = Some("1.1.1.1")) should be(StatusCodes.OK)
-      } finally {
-        rateLimiter.close()
+        call(route, ip = Some("2001:db8:0:1::1")) should be(StatusCodes.OK)
       }
     }
   }
@@ -351,8 +403,8 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
     val Overall = SpliceRateLimiter.GlobalLimiterType
 
     // Sends a burst of requests from a single client IP and returns how many were accepted.
-    def burst(fixture: HttpRateLimiterTest.Fixture, operation: String): Long = {
-      val results = (1 to Burst).map(_ => call(fixture(operation), ip = Some("1.1.1.1")))
+    def burst(fixture: HttpRateLimiterTest.Fixture, operation: String, ip: String): Long = {
+      val results = (1 to Burst).map(_ => call(fixture(operation), ip = Some(ip)))
       results.count(_ == StatusCodes.TooManyRequests) should be > 0
       results.count(_ == StatusCodes.OK).toLong
     }
@@ -368,145 +420,239 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
         }
       }
 
-    "apply the per operation client IP limiter before the overall limiters" in {
-      withRoutes(
-        rateLimiters = Map("limitedOperation" -> Downstream),
-        global = Downstream,
-        perClientIpOverrides = Map("limitedOperation" -> perClientIp(1)),
-      )("limitedOperation") { fixture =>
-        val accepted = burst(fixture, "limitedOperation")
-        onlySawAcceptedRequests(fixture, accepted)(
-          "limitedOperation" -> Overall,
-          HttpRateLimiter.GlobalLimiter -> Overall,
-        )
+    IpVersions.foreach { v =>
+      s"apply the per operation client IP limiter before the overall limiters (${v.name})" in {
+        withRoutes(
+          rateLimiters = Map("limitedOperation" -> Downstream),
+          global = Downstream,
+          perClientIpOverrides = Map("limitedOperation" -> perClientIp(1)),
+        )("limitedOperation") { fixture =>
+          val accepted = burst(fixture, "limitedOperation", v.address(0))
+          onlySawAcceptedRequests(fixture, accepted)(
+            "limitedOperation" -> Overall,
+            HttpRateLimiter.GlobalLimiter -> Overall,
+          )
+        }
       }
-    }
 
-    "apply the global per client IP limiter before the overall limiters" in {
-      withRoutes(
-        rateLimiters = Map("limitedOperation" -> Downstream),
-        global = Downstream,
-        globalPerClientIp = perClientIp(1),
-      )("limitedOperation") { fixture =>
-        val accepted = burst(fixture, "limitedOperation")
-        onlySawAcceptedRequests(fixture, accepted)(
-          "limitedOperation" -> Overall,
-          HttpRateLimiter.GlobalLimiter -> Overall,
-        )
+      s"apply the global per client IP limiter before the overall limiters (${v.name})" in {
+        withRoutes(
+          rateLimiters = Map("limitedOperation" -> Downstream),
+          global = Downstream,
+          globalPerClientIp = perClientIp(1),
+        )("limitedOperation") { fixture =>
+          val accepted = burst(fixture, "limitedOperation", v.address(0))
+          onlySawAcceptedRequests(fixture, accepted)(
+            "limitedOperation" -> Overall,
+            HttpRateLimiter.GlobalLimiter -> Overall,
+          )
+        }
       }
-    }
 
-    "apply the per operation client IP limiter before the global per client IP limiter" in {
-      withRoutes(
-        globalPerClientIp = perClientIp(1000),
-        perClientIpOverrides = Map("limitedOperation" -> perClientIp(1)),
-      )("limitedOperation") { fixture =>
-        val accepted = burst(fixture, "limitedOperation")
-        onlySawAcceptedRequests(fixture, accepted)(
-          HttpRateLimiter.GlobalLimiter -> PerAttribute
-        )
+      s"apply the per operation client IP limiter before the global per client IP limiter (${v.name})" in {
+        withRoutes(
+          globalPerClientIp = perClientIp(1000),
+          perClientIpOverrides = Map("limitedOperation" -> perClientIp(1)),
+        )("limitedOperation") { fixture =>
+          val accepted = burst(fixture, "limitedOperation", v.address(0))
+          onlySawAcceptedRequests(fixture, accepted)(
+            HttpRateLimiter.GlobalLimiter -> PerAttribute
+          )
+        }
       }
-    }
 
-    "apply the per operation overall limiter before the global overall limiter" in {
-      withRoutes(
-        rateLimiters = Map("limitedOperation" -> Rejecting),
-        global = Downstream,
-      )("limitedOperation") { fixture =>
-        val accepted = burst(fixture, "limitedOperation")
-        onlySawAcceptedRequests(fixture, accepted)(
-          HttpRateLimiter.GlobalLimiter -> Overall
-        )
+      s"apply the per operation overall limiter before the global overall limiter (${v.name})" in {
+        withRoutes(
+          rateLimiters = Map("limitedOperation" -> Rejecting),
+          global = Downstream,
+        )("limitedOperation") { fixture =>
+          val accepted = burst(fixture, "limitedOperation", v.address(0))
+          onlySawAcceptedRequests(fixture, accepted)(
+            HttpRateLimiter.GlobalLimiter -> Overall
+          )
+        }
       }
-    }
 
-    "still reject requests that pass the per client IP limiters but exceed an overall limit" in {
-      withRoutes(
-        global = SpliceRateLimitConfig(ratePerSecond = 2),
-        globalPerClientIp = perClientIp(1000),
-        perClientIpOverrides = Map("testOperation" -> perClientIp(1000)),
-      )("testOperation") { fixture =>
-        // every request is below both per client IP limits, but the overall global limit applies
-        val results = (1 to Burst).map(i => call(fixture("testOperation"), ip = Some(s"1.1.1.$i")))
-        results.count(_ == StatusCodes.OK) should be < Burst
-        results.count(_ == StatusCodes.TooManyRequests) should be > 0
+      s"still reject requests that pass the per client IP limiters but exceed an overall limit (${v.name})" in {
+        withRoutes(
+          global = SpliceRateLimitConfig(ratePerSecond = 2),
+          globalPerClientIp = perClientIp(1000),
+          perClientIpOverrides = Map("testOperation" -> perClientIp(1000)),
+        )("testOperation") { fixture =>
+          // every request is below both per client IP limits, but the overall global limit applies
+          val results =
+            v.distinctClients(Burst).map(ip => call(fixture("testOperation"), ip = Some(ip)))
+          results.count(_ == StatusCodes.OK) should be < Burst
+          results.count(_ == StatusCodes.TooManyRequests) should be > 0
+        }
       }
     }
   }
 
   "the per client IP CIDR overrides" should {
 
-    "apply the custom limit to clients of a matching network" in {
-      withRoutes(
-        globalPerClientIp = perClientIp(
-          1,
-          cidrOverrides = Map("10.0.0.0/8" -> SpliceRateLimitConfig(ratePerSecond = 5)),
-        )
-      )("testOperation") { routes =>
-        val route = routes("testOperation")
-        // 5 permits (plus guava's deferred payment) for a client of the overridden network
-        (1 to 20)
-          .map(_ => call(route, ip = Some("10.1.2.3")))
-          .count(_ == StatusCodes.OK) should be(6)
-        // every IP of the network gets its own limiter
-        (1 to 20)
-          .map(_ => call(route, ip = Some("10.4.5.6")))
-          .count(_ == StatusCodes.OK) should be(6)
-        // clients outside of the network use the default per client IP limit
-        (1 to 20)
-          .map(_ => call(route, ip = Some("11.1.2.3")))
-          .count(_ == StatusCodes.OK) should be(2)
+    IpVersions.foreach { v =>
+      s"apply the custom limit to clients of a matching network (${v.name})" in {
+        withRoutes(
+          globalPerClientIp = perClientIp(
+            1,
+            cidrOverrides = Map(v.network -> SpliceRateLimitConfig(ratePerSecond = 5)),
+          )
+        )("testOperation") { routes =>
+          val route = routes("testOperation")
+          // 5 permits (plus guava's deferred payment) for a client of the overridden network
+          (1 to 20)
+            .map(_ => call(route, ip = Some(v.insideA)))
+            .count(_ == StatusCodes.OK) should be(6)
+          // every client of the network gets its own limiter
+          (1 to 20)
+            .map(_ => call(route, ip = Some(v.insideB)))
+            .count(_ == StatusCodes.OK) should be(6)
+          // clients outside of the network use the default per client IP limit
+          (1 to 20)
+            .map(_ => call(route, ip = Some(v.outside)))
+            .count(_ == StatusCodes.OK) should be(2)
+        }
+      }
+
+      s"exempt clients of a network with a disabled override (${v.name})" in {
+        withRoutes(
+          globalPerClientIp = perClientIp(
+            1,
+            cidrOverrides =
+              Map(v.network -> SpliceRateLimitConfig(enabled = false, ratePerSecond = 0)),
+          )
+        )("testOperation") { routes =>
+          val route = routes("testOperation")
+          (1 to 20).map(_ => call(route, ip = Some(v.insideA))) should contain only StatusCodes.OK
+          (1 to 20)
+            .map(_ => call(route, ip = Some(v.outside)))
+            .count(_ == StatusCodes.TooManyRequests) should be > 0
+        }
+      }
+
+      s"block clients of a network whose override rate is zero (${v.name})" in {
+        withRoutes(
+          globalPerClientIp = perClientIp(
+            1000,
+            cidrOverrides = Map(v.network -> SpliceRateLimitConfig(ratePerSecond = 0)),
+          )
+        )("testOperation") { routes =>
+          val route = routes("testOperation")
+          (1 to 20).map(_ =>
+            call(route, ip = Some(v.insideA))
+          ) should contain only StatusCodes.TooManyRequests
+          call(route, ip = Some(v.outside)) should be(StatusCodes.OK)
+        }
+      }
+
+      s"apply the overrides of the per operation limiter (${v.name})" in {
+        withRoutes(
+          perClientIpOverrides = Map(
+            "limitedOperation" -> perClientIp(
+              1,
+              cidrOverrides = Map(v.network -> SpliceRateLimitConfig(ratePerSecond = 0)),
+            )
+          )
+        )("limitedOperation", "otherOperation") { routes =>
+          call(routes("limitedOperation"), ip = Some(v.insideA)) should be(
+            StatusCodes.TooManyRequests
+          )
+          // a different operation is not affected
+          call(routes("otherOperation"), ip = Some(v.insideA)) should be(StatusCodes.OK)
+        }
+      }
+
+      s"use the most specific of several matching networks (${v.name})" in {
+        withRoutes(
+          globalPerClientIp = perClientIp(
+            1000,
+            cidrOverrides = Map(
+              v.network -> SpliceRateLimitConfig(ratePerSecond = 1000),
+              v.hostOf(v.insideA) -> SpliceRateLimitConfig(ratePerSecond = 0),
+            ),
+          )
+        )("testOperation") { routes =>
+          val route = routes("testOperation")
+          call(route, ip = Some(v.insideA)) should be(StatusCodes.TooManyRequests)
+          // covered by the wider network only
+          call(route, ip = Some(v.insideB)) should be(StatusCodes.OK)
+        }
+      }
+
+      s"not apply an override to clients of the other IP version (${v.name})" in {
+        withRoutes(
+          globalPerClientIp = perClientIp(
+            1000,
+            cidrOverrides = Map(v.network -> SpliceRateLimitConfig(ratePerSecond = 0)),
+          )
+        )("testOperation") { routes =>
+          val route = routes("testOperation")
+          call(route, ip = Some(v.insideA)) should be(StatusCodes.TooManyRequests)
+          // a client of the other IP version is never contained in the configured network
+          call(route, ip = Some(other(v).insideA)) should be(StatusCodes.OK)
+        }
+      }
+
+      s"apply an override matching every address of the IP version (${v.name})" in {
+        withRoutes(
+          globalPerClientIp = perClientIp(
+            1000,
+            cidrOverrides = Map(v.anyNetwork -> SpliceRateLimitConfig(ratePerSecond = 0)),
+          )
+        )("testOperation") { routes =>
+          val route = routes("testOperation")
+          call(route, ip = Some(v.address(0))) should be(StatusCodes.TooManyRequests)
+          call(route, ip = Some(v.outside)) should be(StatusCodes.TooManyRequests)
+          // a zero length prefix of one IP version does not match the other one
+          call(route, ip = Some(other(v).address(0))) should be(StatusCodes.OK)
+        }
       }
     }
 
-    "exempt clients of a network with a disabled override" in {
-      withRoutes(
-        globalPerClientIp = perClientIp(
-          1,
-          cidrOverrides =
-            Map("10.0.0.0/8" -> SpliceRateLimitConfig(enabled = false, ratePerSecond = 0)),
-        )
-      )("testOperation") { routes =>
-        val route = routes("testOperation")
-        (1 to 20).map(_ => call(route, ip = Some("10.1.2.3"))) should contain only StatusCodes.OK
-        (1 to 20)
-          .map(_ => call(route, ip = Some("11.1.2.3")))
-          .count(_ == StatusCodes.TooManyRequests) should be > 0
-      }
-    }
-
-    "block clients of a network whose override rate is zero" in {
+    "match an IPv4-mapped IPv6 client against the plain IPv4 network" in {
       withRoutes(
         globalPerClientIp = perClientIp(
           1000,
           cidrOverrides = Map("10.0.0.0/8" -> SpliceRateLimitConfig(ratePerSecond = 0)),
         )
       )("testOperation") { routes =>
-        val route = routes("testOperation")
-        (1 to 20).map(_ =>
-          call(route, ip = Some("10.1.2.3"))
-        ) should contain only StatusCodes.TooManyRequests
-        call(route, ip = Some("11.1.2.3")) should be(StatusCodes.OK)
+        call(routes("testOperation"), ip = Some("::ffff:10.1.2.3")) should be(
+          StatusCodes.TooManyRequests
+        )
       }
     }
 
-    "apply the overrides of the per operation limiter" in {
+    "apply an IPv6 override to all clients of the covered /64 networks" in {
       withRoutes(
-        perClientIpOverrides = Map(
-          "limitedOperation" -> perClientIp(
-            1,
-            cidrOverrides = Map("10.0.0.0/8" -> SpliceRateLimitConfig(ratePerSecond = 0)),
-          )
+        globalPerClientIp = perClientIp(
+          1000,
+          cidrOverrides = Map("2001:db8:a::/48" -> SpliceRateLimitConfig(ratePerSecond = 0)),
         )
-      )("limitedOperation", "otherOperation") { routes =>
-        call(routes("limitedOperation"), ip = Some("10.1.2.3")) should be(
-          StatusCodes.TooManyRequests
+      )("testOperation") { routes =>
+        val route = routes("testOperation")
+        forEvery(Seq("2001:db8:a::1", "2001:db8:a:1::1", "2001:db8:a:ffff:1:2:3:4")) { ip =>
+          call(route, ip = Some(ip)) should be(StatusCodes.TooManyRequests)
+        }
+        call(route, ip = Some("2001:db8:b:1::1")) should be(StatusCodes.OK)
+      }
+    }
+
+    "not apply an IPv6 override that is more specific than the /64 rate limiting key" in {
+      // clients are grouped into /64s, so an override narrower than that can never match
+      withRoutes(
+        globalPerClientIp = perClientIp(
+          1000,
+          cidrOverrides = Map("2001:db8:a:1:2::/80" -> SpliceRateLimitConfig(ratePerSecond = 0)),
         )
-        // a different operation is not affected
-        call(routes("otherOperation"), ip = Some("10.1.2.3")) should be(StatusCodes.OK)
+      )("testOperation") { routes =>
+        call(routes("testOperation"), ip = Some("2001:db8:a:1:2::1")) should be(StatusCodes.OK)
       }
     }
   }
+
+  private def other(version: IpVersion): IpVersion =
+    if (version == HttpRateLimiterTest.Ipv4) HttpRateLimiterTest.Ipv6 else HttpRateLimiterTest.Ipv4
 
   private def perClientIp(
       ratePerSecond: Double,
@@ -516,6 +662,9 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
       limit = SpliceRateLimitConfig(ratePerSecond = ratePerSecond),
       attributeOverrides = cidrOverrides,
     )
+
+  private def remoteAddress(ip: String): RemoteAddress =
+    RemoteAddress(InetAddress.getByName(ip))
 
   private def clientIp(
       request: HttpRequest,
@@ -537,7 +686,7 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
   private def call(route: Route, ip: Option[String]): StatusCode = {
     val request = ip match {
       case Some(value) =>
-        Get("/") ~> addHeader(`X-Forwarded-For`(RemoteAddress(InetAddress.getByName(value))))
+        Get("/") ~> addHeader(`X-Forwarded-For`(remoteAddress(value)))
       case None => Get("/")
     }
     request ~> route ~> check(status)
@@ -599,6 +748,64 @@ class HttpRateLimiterTest extends AnyWordSpec with BaseTest with ScalatestRouteT
 
 object HttpRateLimiterTest {
   private val NoClientIp = "<none>"
+
+  private[http] final case class IpVersion(
+      name: String,
+      addresses: Seq[String],
+      keys: Seq[String],
+      network: String,
+      insideA: String,
+      insideB: String,
+      outside: String,
+      anyNetwork: String,
+      hostNetwork: String => String,
+      clientTemplate: Int => String,
+  ) {
+    def address(index: Int): String = addresses(index)
+
+    def key(index: Int): String = keys(index)
+
+    def hostOf(address: String): String = hostNetwork(address)
+
+    /** `n` distinct clients, each with its own rate limiting key. */
+    def distinctClients(n: Int): Seq[String] = (1 to n).map(clientTemplate)
+  }
+
+  private[http] val Ipv4: IpVersion = IpVersion(
+    name = "IPv4",
+    addresses = Seq("1.1.1.1", "2.2.2.2", "3.3.3.3", "4.4.4.4"),
+    keys = Seq("1.1.1.1", "2.2.2.2", "3.3.3.3", "4.4.4.4"),
+    network = "10.0.0.0/8",
+    insideA = "10.1.2.3",
+    insideB = "10.4.5.6",
+    outside = "11.1.2.3",
+    anyNetwork = "0.0.0.0/0",
+    // a single IPv4 host is rate limited by its full address
+    hostNetwork = address => s"$address/32",
+    clientTemplate = i => s"1.1.1.$i",
+  )
+
+  private[http] val Ipv6: IpVersion = IpVersion(
+    name = "IPv6",
+    addresses = Seq("2001:db8:1::1", "2001:db8:2::1", "2001:db8:3::1", "2001:db8:4::1"),
+    keys = Seq(
+      "2001:db8:1:0:0:0:0:0/64",
+      "2001:db8:2:0:0:0:0:0/64",
+      "2001:db8:3:0:0:0:0:0/64",
+      "2001:db8:4:0:0:0:0:0/64",
+    ),
+    network = "2001:db8:a::/48",
+    insideA = "2001:db8:a:1::1",
+    insideB = "2001:db8:a:2::1",
+    outside = "2001:db8:b:1::1",
+    anyNetwork = "::/0",
+    // IPv6 clients are grouped by /64, so that is the most specific network that can match one
+    hostNetwork = address => s"$address/64",
+    // distinct /64s, as clients of the same /64 share a limiter
+    clientTemplate = i => s"2001:db8:c:$i::1",
+  )
+
+  private[http] val IpVersions: Seq[IpVersion] = Seq(Ipv4, Ipv6)
 
   /** The routes of the rate limited operations together with the metrics recorded by their rate
     * limiters. Requests are only recorded by the limiters they actually reach, which is what allows

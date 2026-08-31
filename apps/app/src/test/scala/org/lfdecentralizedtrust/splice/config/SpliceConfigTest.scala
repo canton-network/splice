@@ -100,6 +100,11 @@ class SpliceConfigTest extends AsyncWordSpec with BaseTest {
           |  ip-overrides {
           |    "10.0.0.0/8" = { rate-per-second = 100 }
           |    "192.0.2.0/24" = { enabled = false, rate-per-second = 0 }
+          |    "10.1.2.3" = { rate-per-second = 200 }
+          |    "2001:db8::/32" = { rate-per-second = 300 }
+          |    "2001:db8:1::/48" = { enabled = false, rate-per-second = 0 }
+          |    "2001:db8:2:3:4:5:6:7" = { rate-per-second = 400 }
+          |    "::/0" = { rate-per-second = 500 }
           |  }
           |}
           """.stripMargin
@@ -108,26 +113,50 @@ class SpliceConfigTest extends AsyncWordSpec with BaseTest {
         SpliceConfig.loadAndValidate(CantonConfig.mergeConfigs(config, Seq(overwrite))).value
       val perClientIp = perClientIpOf(loaded)
       perClientIp.limit.ratePerSecond should be(10d)
-      perClientIp.attributeOverrides.keySet should be(Set("10.0.0.0/8", "192.0.2.0/24"))
+      perClientIp.attributeOverrides.keySet should be(
+        Set(
+          "10.0.0.0/8",
+          "192.0.2.0/24",
+          "10.1.2.3",
+          "2001:db8::/32",
+          "2001:db8:1::/48",
+          "2001:db8:2:3:4:5:6:7",
+          "::/0",
+        )
+      )
       perClientIp.attributeOverrides("10.0.0.0/8").ratePerSecond should be(100d)
       perClientIp.attributeOverrides("192.0.2.0/24").enabled should be(false)
+      perClientIp.attributeOverrides("10.1.2.3").ratePerSecond should be(200d)
+      perClientIp.attributeOverrides("2001:db8::/32").ratePerSecond should be(300d)
+      perClientIp.attributeOverrides("2001:db8:1::/48").enabled should be(false)
+      perClientIp.attributeOverrides("2001:db8:2:3:4:5:6:7").ratePerSecond should be(400d)
+      perClientIp.attributeOverrides("::/0").ratePerSecond should be(500d)
     }
 
-    "reject invalid per client IP CIDR overrides" in {
-      val overwrite = ConfigFactory.parseString(
-        """
-          |canton.scan-apps.sv1Scan.parameters.rate-limiting.rate-limiters.getDsoInfo.per-client-ip {
-          |  ip-overrides {
-          |    "not-an-ip/8" = { rate-per-second = 100 }
-          |  }
-          |}
+    Seq(
+      "not-an-ip/8",
+      "10.0.0.0/33",
+      "10.0.0.256/8",
+      "2001:db8::/129",
+      "2001:db8:::1/32",
+      "not-an-ip/32",
+    ).foreach { cidr =>
+      s"reject the invalid per client IP CIDR override '$cidr'" in {
+        val overwrite = ConfigFactory.parseString(
+          s"""
+             |canton.scan-apps.sv1Scan.parameters.rate-limiting.rate-limiters.getDsoInfo.per-client-ip {
+             |  ip-overrides {
+             |    "$cidr" = { rate-per-second = 100 }
+             |  }
+             |}
           """.stripMargin
-      )
-      SpliceConfig
-        .loadAndValidate(CantonConfig.mergeConfigs(config, Seq(overwrite)))
-        .left
-        .value
-        .toString should include("not-an-ip/8")
+        )
+        SpliceConfig
+          .loadAndValidate(CantonConfig.mergeConfigs(config, Seq(overwrite)))
+          .left
+          .value
+          .toString should include(cidr)
+      }
     }
 
     "reject unknown per client IP keys" in {
