@@ -88,6 +88,11 @@ ForkJoinIdlenessExecutorService.*shutdown did not complete gracefully in allotte
 
 Consensus not reached.*BftScanConnection:BftScanConnectionTest.*
 Consensus not reached.*BftScanConnection:ConfigurationProvidedBftScanConnectionIntegrationTest.*
+# TODO (#6502): under TBAR the reward-accounting BFT reads' retry loop
+# gives up when no peer can converge to Ok during bootstrap, emitting
+# "Consensus not reached." WARN. Removed once #6392's two-phase probe
+# lands.
+Consensus not reached.*BftScanConnection:TimeBasedTestNetPreviewIntegrationTest.*
 # TODO (#6502): under TBAR the two reward-accounting BFT reads emit
 # "disagreed with consensus" WARN when peers are still ingesting a round.
 # Scope the ignore to the two triggers that call these reads so real
