@@ -248,12 +248,7 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
             <ProposalReviewField
               id="unpermissionParticipantId"
               label="Participant ID"
-              value={
-                <ReviewPartyId
-                  partyId={props.participantId}
-                  data-testid="unpermissionParticipantId-party-id"
-                />
-              }
+              value={props.participantId}
             />
             <ProposalReviewField
               id="unpermissionRevoked"
