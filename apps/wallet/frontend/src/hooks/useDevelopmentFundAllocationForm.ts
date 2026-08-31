@@ -22,7 +22,8 @@ export interface UseDevelopmentFundAllocationFormResult {
   setExpiresAt: (value: Dayjs | null) => void;
   mintAfter: Dayjs | null;
   setMintAfter: (value: Dayjs | null) => void;
-  minMintAfter: Dayjs;
+  minMintAfter: Dayjs | null;
+  isMintAfterRequired: boolean;
   isMintAfterValid: boolean;
   mintAfterError: string | undefined;
   reason: string;
@@ -69,8 +70,12 @@ export const useDevelopmentFundAllocationForm = (): UseDevelopmentFundAllocation
   const minMintingDelayMicros =
     amuletRulesData?.contract.payload.configSchedule.initialValue.minDevelopmentFundMintingDelay
       ?.microseconds;
+  const isMintAfterRequired = minMintingDelayMicros !== undefined;
   const { minMintAfter, defaultMintAfter } = useMemo(() => {
-    const earliest = defaultBaseTime.add(Number(minMintingDelayMicros ?? 0) / 1000, 'millisecond');
+    if (minMintingDelayMicros === undefined) {
+      return { minMintAfter: null, defaultMintAfter: null };
+    }
+    const earliest = defaultBaseTime.add(Number(minMintingDelayMicros) / 1000, 'millisecond');
     return {
       minMintAfter: earliest,
       defaultMintAfter: earliest.add(SUBMISSION_HEADROOM_HOURS, 'hour'),
@@ -96,12 +101,12 @@ export const useDevelopmentFundAllocationForm = (): UseDevelopmentFundAllocation
 
   const mintAfterError = (() => {
     if (mintAfter == null) {
-      return 'Mint after is required';
+      return isMintAfterRequired ? 'Mint after is required' : undefined;
     }
     if (!mintAfter.isValid()) {
       return 'Invalid date';
     }
-    if (mintAfter.isBefore(minMintAfter)) {
+    if (minMintAfter != null && mintAfter.isBefore(minMintAfter)) {
       return `Mint after must be at or after ${minMintAfter.format('MMM D, YYYY hh:mm A')}`;
     }
     if (!mintAfter.isAfter(dayjs())) {
@@ -165,6 +170,7 @@ export const useDevelopmentFundAllocationForm = (): UseDevelopmentFundAllocation
     mintAfter,
     setMintAfter,
     minMintAfter,
+    isMintAfterRequired,
     isMintAfterValid,
     mintAfterError,
     reason,

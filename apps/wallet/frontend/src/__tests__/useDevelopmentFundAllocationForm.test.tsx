@@ -78,13 +78,43 @@ describe('useDevelopmentFundAllocationForm', () => {
   });
 
   // Happy
-  test('treats an absent minting delay as a zero delay and still prefills mintAfter', () => {
+  test('mintAfter is unset by default and optional when no minDevelopmentFundMintingDelay is configured', () => {
     mockMintingDelay(null);
 
     const { result } = renderForm();
     fillRequiredFields(result, dayjs(openedAt).add(2, 'day'));
 
-    expect(result.current.minMintAfter.toISOString()).toBe('2026-01-15T12:00:00.000Z');
+    expect(result.current.isMintAfterRequired).toBe(false);
+    expect(result.current.minMintAfter).toBeNull();
+    expect(result.current.mintAfter).toBeNull();
+    expect(result.current.mintAfterError).toBeUndefined();
+    expect(result.current.isValid).toBe(true);
+  });
+
+  // Happy
+  test('mintAfter is acceptable even when no minDevelopmentFundMintingDelay is configured', () => {
+    mockMintingDelay(null);
+
+    const { result } = renderForm();
+    fillRequiredFields(result, dayjs(openedAt).add(2, 'day'));
+    act(() => result.current.setMintAfter(dayjs(openedAt).add(1, 'day')));
+
+    expect(result.current.isMintAfterRequired).toBe(false);
+    expect(result.current.minMintAfter).toBeNull();
+    expect(result.current.mintAfter?.toISOString()).toBe('2026-01-16T12:00:00.000Z');
+    expect(result.current.mintAfterError).toBeUndefined();
+    expect(result.current.isValid).toBe(true);
+  });
+
+  // Happy
+  test('mintAfter is required and pre-filled when the configured minting delay is zero', () => {
+    mockMintingDelay({ microseconds: '0' });
+
+    const { result } = renderForm();
+    fillRequiredFields(result, dayjs(openedAt).add(2, 'day'));
+
+    expect(result.current.isMintAfterRequired).toBe(true);
+    expect(result.current.minMintAfter?.toISOString()).toBe('2026-01-15T12:00:00.000Z');
     expect(result.current.mintAfter?.toISOString()).toBe('2026-01-15T13:00:00.000Z');
     expect(result.current.mintAfterError).toBeUndefined();
     expect(result.current.isValid).toBe(true);
@@ -97,7 +127,8 @@ describe('useDevelopmentFundAllocationForm', () => {
     const { result } = renderForm();
     fillRequiredFields(result, dayjs(openedAt).add(30, 'day'));
 
-    expect(result.current.minMintAfter.toISOString()).toBe('2026-01-22T12:00:00.000Z');
+    expect(result.current.isMintAfterRequired).toBe(true);
+    expect(result.current.minMintAfter?.toISOString()).toBe('2026-01-22T12:00:00.000Z');
     expect(result.current.mintAfter?.toISOString()).toBe('2026-01-22T13:00:00.000Z');
     expect(result.current.mintAfterError).toBeUndefined();
     expect(result.current.isValid).toBe(true);
@@ -105,7 +136,7 @@ describe('useDevelopmentFundAllocationForm', () => {
 
   // Unhappy
   test('requires a mintAfter after the fund manager clears the field', () => {
-    mockMintingDelay(null);
+    mockMintingDelay({ microseconds: sevenDaysInMicros });
 
     const { result } = renderForm();
     fillRequiredFields(result, dayjs(openedAt).add(2, 'day'));

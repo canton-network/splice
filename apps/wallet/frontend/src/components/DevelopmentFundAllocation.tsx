@@ -33,6 +33,7 @@ const DevelopmentFundAllocation: React.FC = () => {
     mintAfter,
     setMintAfter,
     minMintAfter,
+    isMintAfterRequired,
     mintAfterError,
     reason,
     setReason,
@@ -132,10 +133,10 @@ const DevelopmentFundAllocation: React.FC = () => {
               <Stack spacing={1} sx={{ flex: 1 }}>
                 <Typography variant="h6">Mint After</Typography>
                 <DesktopDateTimePicker
-                  label="Mint After"
+                  label={isMintAfterRequired ? 'Mint After' : 'Mint After (optional)'}
                   value={mintAfter}
                   onChange={newValue => setMintAfter(newValue)}
-                  minDateTime={minMintAfter}
+                  minDateTime={minMintAfter ?? undefined}
                   disabled={disabled}
                   enableAccessibleFieldDOMStructure={false}
                   slotProps={{

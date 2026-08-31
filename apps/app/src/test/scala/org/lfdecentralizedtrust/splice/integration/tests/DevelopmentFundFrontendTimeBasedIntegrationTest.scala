@@ -257,7 +257,7 @@ class DevelopmentFundFrontendTimeBasedIntegrationTest
                   .findElement(
                     org.openqa.selenium.By.id("development-fund-allocation-mint-after")
                   )
-                  .getAttribute("value") should not be empty
+                  .getAttribute("value") shouldBe empty
                 setDateTimeWithoutScroll(
                   "development-fund-allocation-mint-after",
                   mintAfterFormatted,
