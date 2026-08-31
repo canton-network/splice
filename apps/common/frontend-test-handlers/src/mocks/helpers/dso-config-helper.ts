@@ -21,6 +21,7 @@ export function getDsoRulesConfig(
       ? nextScheduledSynchronizerUpgrade
       : null,
     nextScheduledLogicalSynchronizerUpgrade: null,
+    svOperationsSwitchOverTimes: null,
     actionConfirmationTimeout: {
       microseconds: '3600000000',
     },

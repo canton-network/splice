@@ -82,6 +82,7 @@ export function getAmuletRulesConfig(
   baseRateTrafficLimitsBurstWindow: string = '1200000000'
 ): AmuletConfig<USD> {
   return {
+    amuletSwitchOverTimes: null,
     packageConfig: {
       amuletNameService: '0.1.8',
       walletPayments: '0.1.8',
