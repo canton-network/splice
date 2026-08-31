@@ -16,6 +16,12 @@ import type { SetAmuletConfigCompleteFormData } from '../components/forms/SetAmu
 import type { SetDsoConfigCompleteFormData } from '../components/forms/SetDsoConfigRulesForm';
 import type { UpdateSvRewardWeightFormData } from '../components/forms/UpdateSvRewardWeightForm';
 
+export interface UnpermissionValidatorProposal {
+  participantId: string;
+  revoked: boolean;
+  loginAfter?: string;
+}
+
 export interface OffBoardMemberProposal {
   memberToOffboard: string;
 }
@@ -100,6 +106,7 @@ export type Proposal =
   | AmuletRulesConfigProposal
   | DsoRulesConfigProposal
   | UpdateFeatureAppProposal
+  | UnpermissionValidatorProposal
   | undefined;
 
 export type ProposalActionMap = {
@@ -111,6 +118,7 @@ export type ProposalActionMap = {
   CRARC_SetConfig: AmuletRulesConfigProposal;
   SRARC_SetConfig: DsoRulesConfigProposal;
   SRARC_UpdateFeaturedAppRight: UpdateFeatureAppProposal;
+  SRARC_UnpermissionValidator: UnpermissionValidatorProposal;
   // If no proposal type is defined, can use unknown or a specific type:
   CRARC_AddFutureAmuletConfigSchedule: unknown;
 };
@@ -150,7 +158,8 @@ export type SupportedActionTag =
   | 'SRARC_SetConfig'
   | 'SRARC_UpdateSvRewardWeight'
   | 'SRARC_CreateUnallocatedUnclaimedActivityRecord'
-  | 'SRARC_UpdateFeaturedAppRight';
+  | 'SRARC_UpdateFeaturedAppRight'
+  | 'SRARC_UnpermissionValidator';
 
 export type ProposalListingStatus =
   | 'Accepted'
@@ -216,6 +225,12 @@ export interface ProposalMutationArgs {
   action: ActionRequiringConfirmation;
 }
 
+export interface UnpermissionValidatorFormData extends CommonProposalFormData {
+  participantId: string;
+  revoked: boolean;
+  loginAfter: string;
+}
+
 export interface UpdateFeatureAppFormData extends CommonProposalFormData {
   partyId: string;
   rightCid: string;
@@ -227,7 +242,8 @@ export type NonConfigProposalFormData =
   | OffboardSvFormData
   | GrantRevokeFeaturedAppFormData
   | CreateUnallocatedUnclaimedActivityRecordFormData
-  | UpdateFeatureAppFormData;
+  | UpdateFeatureAppFormData
+  | UnpermissionValidatorFormData;
 
 export type ConfigProposalFormData = SetDsoConfigCompleteFormData | SetAmuletConfigCompleteFormData;
 

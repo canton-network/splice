@@ -6,6 +6,8 @@ import { useForm } from '@tanstack/react-form';
 import { useNavigate } from 'react-router';
 import { Dropdown } from '../ui/Dropdown';
 import { createProposalActions } from '../../utils/governance';
+import { useSvConfig } from '../../utils';
+import { useMemo } from 'react';
 
 const CARD_CONTENT_WIDTH = 833;
 const CARD_BG = '#1b1b1b';
@@ -33,15 +35,18 @@ const nextButtonSx = () => ({
   },
 });
 
-const dropdownOptions = createProposalActions.map(action => ({
-  value: action.value,
-  label: action.name,
-  testId: action.value,
-}));
-
 export const SelectAction: React.FC = () => {
   const navigate = useNavigate();
-
+  const svConfig = useSvConfig();
+  const dropdownOptions = useMemo(() => {
+    return createProposalActions
+      .filter(action => svConfig.permissioned || action.value !== 'SRARC_UnpermissionValidator')
+      .map(action => ({
+        value: action.value,
+        label: action.name,
+        testId: action.value,
+      }));
+  }, [svConfig.permissioned]);
   const form = useForm({
     defaultValues: {
       action: '',

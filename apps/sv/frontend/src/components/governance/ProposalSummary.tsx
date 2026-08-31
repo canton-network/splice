@@ -43,6 +43,12 @@ interface BaseProposalSummaryProps {
 type ProposalSummaryProps = BaseProposalSummaryProps &
   (
     | {
+        formType: 'unpermission-validator';
+        participantId: string;
+        revoked: boolean;
+        loginAfter?: string;
+      }
+    | {
         formType: 'sv-reward-weight';
         svRewardWeightMember: string;
         currentWeight: string;
@@ -235,6 +241,33 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
               <ReviewPartyId partyId={props.offboardMember} data-testid="offboardMember-party-id" />
             }
           />
+        )}
+
+        {formType === 'unpermission-validator' && (
+          <>
+            <ProposalReviewField
+              id="unpermissionParticipantId"
+              label="Participant ID"
+              value={
+                <ReviewPartyId
+                  partyId={props.participantId}
+                  data-testid="unpermissionParticipantId-party-id"
+                />
+              }
+            />
+            <ProposalReviewField
+              id="unpermissionRevoked"
+              label="Permanent Revocation"
+              value={props.revoked ? 'Yes' : 'No'}
+            />
+            {!props.revoked && props.loginAfter && (
+              <ProposalReviewField
+                id="unpermissionLoginAfter"
+                label="Login After"
+                value={props.loginAfter}
+              />
+            )}
+          </>
         )}
 
         {formType === 'create-unallocated-unclaimed-activity-record' && (
