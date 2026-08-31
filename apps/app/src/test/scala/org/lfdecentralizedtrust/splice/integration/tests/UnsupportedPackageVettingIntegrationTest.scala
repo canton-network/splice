@@ -192,6 +192,7 @@ class UnsupportedPackageVettingIntegrationTest
           currentConfig.transferPreapprovalBaseDuration,
           currentConfig.developmentFundManagerBlacklist,
           currentConfig.minDevelopmentFundMintingDelay,
+          currentConfig.amuletSwitchOverTimes,
         )
         setAmuletConfig(Seq((None, newAmuletConfig, currentConfig)))
       }

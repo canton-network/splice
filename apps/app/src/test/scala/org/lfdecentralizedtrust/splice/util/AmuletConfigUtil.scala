@@ -68,6 +68,7 @@ trait AmuletConfigUtil extends TestCommon {
       existingAmuletConfig.transferPreapprovalBaseDuration,
       existingAmuletConfig.developmentFundManagerBlacklist,
       existingAmuletConfig.minDevelopmentFundMintingDelay,
+      existingAmuletConfig.amuletSwitchOverTimes,
     )
   }
 

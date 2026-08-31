@@ -198,6 +198,7 @@ export const plannedVoteResult: DsoRules_CloseVoteRequestResult = {
                 transferPreapprovalBaseDuration: null,
                 developmentFundManagerBlacklist: null,
                 minDevelopmentFundMintingDelay: null,
+                amuletSwitchOverTimes: null,
               },
             },
           },
