@@ -265,7 +265,7 @@ trait AppBackendReference extends AppReference with LocalInstanceReference {
       30.seconds,
     )
     RemoteParticipantConfig(
-      participantClientConfig.adminApi,
+      participantClientConfig.adminApi.clientConfig,
       participantClientConfig.ledgerApi.clientConfig,
       token = tokenStrO,
     )

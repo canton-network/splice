@@ -578,7 +578,7 @@ object ConfigTransforms {
         config
           .focus(_.participantClient.ledgerApi.clientConfig.port)
           .modify(setPortPrefix(range))
-          .focus(_.participantClient.adminApi.port)
+          .focus(_.participantClient.adminApi.clientConfig.port)
           .modify(setPortPrefix(range))
           .focus(_.localSynchronizerNodes.current)
           .modify(setSvSynchronizerConfigPortsPrefix(range, _))
@@ -637,7 +637,7 @@ object ConfigTransforms {
         config
           .focus(_.participantClient.ledgerApi.clientConfig.port)
           .modify(setPortPrefix(range))
-          .focus(_.participantClient.adminApi.port)
+          .focus(_.participantClient.adminApi.clientConfig.port)
           .modify(setPortPrefix(range))
           .focus(_.adminApi.internalPort)
           .modify(_.map(setPortPrefix(range)))
@@ -694,7 +694,7 @@ object ConfigTransforms {
         config
           .focus(_.participantClient.ledgerApi.clientConfig.port)
           .modify(setPortPrefix(range))
-          .focus(_.participantClient.adminApi.port)
+          .focus(_.participantClient.adminApi.clientConfig.port)
           .modify(setPortPrefix(range))
           .focus(_.adminApi.internalPort)
           .modify(_.map(setPortPrefix(range)))
@@ -830,7 +830,7 @@ object ConfigTransforms {
       mediator = portTransform(bump, c.mediator),
     )
 
-  private def portTransform(bump: Int, c: LedgerApiClientConfig): LedgerApiClientConfig =
+  private def portTransform(bump: Int, c: ClientConfigWithAuth): ClientConfigWithAuth =
     c.focus(_.clientConfig).modify(portTransform(bump, _))
 
   private def portTransform(
@@ -881,7 +881,7 @@ object ConfigTransforms {
   }
 
   private def updateAllLedgerApiClientConfigs(
-      enableAuth: (String, LedgerApiClientConfig) => LedgerApiClientConfig
+      enableAuth: (String, ClientConfigWithAuth) => ClientConfigWithAuth
   ): ConfigTransform = {
     combineAllTransforms(
       updateAllValidatorConfigs_(c => {
@@ -904,8 +904,8 @@ object ConfigTransforms {
 
   def selfSignedTokenAuthSourceTransform(clockConfig: ClockConfig, secret: String)(
       user: String,
-      c: LedgerApiClientConfig,
-  ): LedgerApiClientConfig = {
+      c: ClientConfigWithAuth,
+  ): ClientConfigWithAuth = {
     val userToken = AuthUtil.LedgerApi.testToken(
       user = user,
       secret = secret,
