@@ -68,7 +68,7 @@ export const UnpermissionValidatorForm: React.FC = () => {
             value: {
               participantId: value.participantId,
               revoked: value.revoked,
-              loginAfter: value.revoked ? null : value.loginAfter,
+              loginAfter: value.revoked ? null : dayjs(value.loginAfter).toISOString(),
             },
           },
         },
