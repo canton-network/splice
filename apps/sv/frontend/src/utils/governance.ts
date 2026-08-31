@@ -246,7 +246,7 @@ function createUnpermissionValidatorProposal(
   return {
     participantId,
     revoked,
-    loginAfter: loginAfter ?? undefined
+    loginAfter: loginAfter ?? undefined,
   };
 }
 
