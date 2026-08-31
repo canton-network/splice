@@ -67,6 +67,14 @@ release-notes:: Upcoming
           that omit ``mintAfter``. Coupons allocated before that vote have no ``mintAfter``.
           A beneficiary can mint those coupons with no delay.
 
+    - Wallet UI
+
+        - The development fund allocation form now has a ``Mint After`` field, which sets the
+          earliest time at which the beneficiary can mint the coupon. When the field is 
+          optional, the coupons are allocated without a mint-after time as before.
+
+        - The development fund coupon list now shows a ``Mint After`` column.
+
     - Validator
 
         - *breaking*: The deprecated ``TransferCommand`` functionality
@@ -74,8 +82,18 @@ release-notes:: Upcoming
           has been fully removed. Migrate to token standard transfers
           and remove the flag.
 
+        - The wallet endpoint ``/v0/wallet/development-fund-coupons/allocate`` accepts an
+          optional ``mintAfter`` field, in epoch microseconds. Callers must set it once the SVs
+          configure a non-zero ``minDevelopmentFundMintingDelay``, otherwise the allocations
+          will be rejected.
+
     - Helm
 
         - The node pods of the operator charts now accept a ``priorityClassName``, so operators can
           protect a node from eviction under resource pressure. It is unset by default, which leaves
           scheduling behaviour unchanged.
+
+    - SV UI
+
+        - The ``AmuletRules_SetConfig`` proposal form can now set
+          ``minDevelopmentFundMintingDelay`` and ``developmentFundManagerBlacklist``.
