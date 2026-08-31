@@ -129,7 +129,7 @@ spec:
                 sleep 2;
             done
       {{- with $priorityClassName }}
-      priorityClassName: {{ . }}
+      priorityClassName: {{ . | quote }}
       {{- end }}
       {{- with $nodeSelector }}
       nodeSelector:

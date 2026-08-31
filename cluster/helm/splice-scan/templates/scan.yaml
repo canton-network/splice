@@ -336,7 +336,7 @@ spec:
                 sleep 2;
               done
       {{- with .Values.priorityClassName }}
-      priorityClassName: {{ . }}
+      priorityClassName: {{ . | quote }}
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
@@ -470,7 +470,7 @@ spec:
           limits:
             memory: 1536Mi
       {{- with .Values.priorityClassName }}
-      priorityClassName: {{ . }}
+      priorityClassName: {{ . | quote }}
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

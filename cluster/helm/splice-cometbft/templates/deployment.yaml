@@ -203,7 +203,7 @@ spec:
             sizeLimit: 1Mi
         {{- end }}
       {{- with $.Values.priorityClassName }}
-      priorityClassName: {{ . }}
+      priorityClassName: {{ . | quote }}
       {{- end }}
       {{- with $.Values.nodeSelector }}
       nodeSelector:

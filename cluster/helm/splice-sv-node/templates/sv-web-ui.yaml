@@ -95,7 +95,7 @@ spec:
             limits:
               memory: 1536Mi
       {{- with .Values.priorityClassName }}
-      priorityClassName: {{ . }}
+      priorityClassName: {{ . | quote }}
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

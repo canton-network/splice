@@ -275,7 +275,7 @@ spec:
               echo "Created empty database ${DB_NAME} on ${DB_HOST}.";
       {{- end }}
       {{- with .Values.priorityClassName }}
-      priorityClassName: {{ . }}
+      priorityClassName: {{ . | quote }}
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

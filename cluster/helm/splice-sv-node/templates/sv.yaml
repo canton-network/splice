@@ -648,7 +648,7 @@ spec:
             claimName: {{ .Release.Name }}-sv-app-pvc
       {{- end }}
       {{- with .Values.priorityClassName }}
-      priorityClassName: {{ . }}
+      priorityClassName: {{ . | quote }}
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
