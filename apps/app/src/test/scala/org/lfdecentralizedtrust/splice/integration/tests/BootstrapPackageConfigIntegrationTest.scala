@@ -243,6 +243,7 @@ class BootstrapPackageConfigIntegrationTest
         amuletConfig.transferPreapprovalBaseDuration,
         amuletConfig.developmentFundManagerBlacklist,
         amuletConfig.minDevelopmentFundMintingDelay,
+        amuletConfig.amuletSwitchOverTimes,
       )
 
       val upgradeAction = new ARC_AmuletRules(
@@ -395,6 +396,7 @@ class BootstrapPackageConfigIntegrationTest
         amuletConfig.transferPreapprovalBaseDuration,
         amuletConfig.developmentFundManagerBlacklist,
         amuletConfig.minDevelopmentFundMintingDelay,
+        amuletConfig.amuletSwitchOverTimes,
       )
 
       val upgradeAction = new ARC_AmuletRules(

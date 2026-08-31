@@ -264,6 +264,7 @@ class AppUpgradeIntegrationTest
             amuletConfig.transferPreapprovalBaseDuration,
             amuletConfig.developmentFundManagerBlacklist,
             amuletConfig.minDevelopmentFundMintingDelay,
+            amuletConfig.amuletSwitchOverTimes,
           )
           val upgradeAction = new ARC_AmuletRules(
             new CRARC_SetConfig(

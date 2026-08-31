@@ -106,6 +106,7 @@ export function buildAmuletRulesConfigFromChanges(
     transferPreapprovalBaseDuration: null,
     developmentFundManagerBlacklist: null,
     minDevelopmentFundMintingDelay: null,
+    amuletSwitchOverTimes: null,
     transferConfig: {
       createFee: { fee: getValue('transferConfigCreateFee', false) },
       holdingFee: { rate: getValue('transferConfigHoldingFeeRate', false) },
