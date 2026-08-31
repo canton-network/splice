@@ -13,7 +13,6 @@ import {
   validateExpiryEffectiveDate,
   validateSummary,
   validateUrl,
-  validatePartyId,
   validateParticipantId,
 } from './formValidators';
 import { FormLayout } from './FormLayout';
