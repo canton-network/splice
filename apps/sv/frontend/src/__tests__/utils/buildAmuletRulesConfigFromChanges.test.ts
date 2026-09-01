@@ -481,3 +481,28 @@ describe('buildAmuletRulesConfigFromChanges', () => {
     });
   });
 });
+
+describe('buildAmuletRulesConfigFromChanges switch-over times', () => {
+  test('is null when there are no entries', () => {
+    expect(buildAmuletRulesConfigFromChanges([]).amuletSwitchOverTimes).toBeNull();
+  });
+
+  test('drops rows with empty keys, leaving null when all are empty', () => {
+    const result = buildAmuletRulesConfigFromChanges(
+      [],
+      [{ key: '  ', time: '2026-09-05T14:30:00Z' }]
+    );
+    expect(result.amuletSwitchOverTimes).toBeNull();
+  });
+
+  test('round-trips a UTC time and keeps only non-empty (trimmed) keys', () => {
+    const result = buildAmuletRulesConfigFromChanges(
+      [],
+      [
+        { key: '  ', time: '2026-09-05T14:30:00Z' },
+        { key: ' amulet-v2 ', time: '2026-09-06T00:00:00Z' },
+      ]
+    );
+    expect(result.amuletSwitchOverTimes).toEqual({ 'amulet-v2': '2026-09-06T00:00:00Z' });
+  });
+});

@@ -8,6 +8,12 @@ import { RelTime } from '@daml.js/daml-stdlib-DA-Time-Types-1.0.0/lib/DA/Time/Ty
 import { IssuanceConfig } from '@daml.js/splice-amulet/lib/Splice/Issuance';
 import { ConfigChange } from './types';
 import { Set as DamlSet } from '@daml.js/daml-stdlib-DA-Set-Types-1.0.0/lib/DA/Set/Types';
+import { SwitchOverEntry } from '../components/forms/formValidators';
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import { nextScheduledSynchronizerUpgradeFormat } from '@canton-network/splice-common-frontend-utils';
+
+dayjs.extend(utc);
 
 function lsToSet<T>(ls: T[]): DamlSet<T> {
   return {
@@ -21,7 +27,8 @@ function lsToSet<T>(ls: T[]): DamlSet<T> {
  * The config changes should have all fields, whether they have been changed or not.
  */
 export function buildAmuletRulesConfigFromChanges(
-  amuletConfigChanges: ConfigChange[]
+  amuletConfigChanges: ConfigChange[],
+  switchOverEntries: SwitchOverEntry[] = []
 ): AmuletConfig<'USD'> {
   const changeMap = new Map<string, string>();
   amuletConfigChanges.forEach(change => {
@@ -104,6 +111,21 @@ export function buildAmuletRulesConfigFromChanges(
       : null;
   const minDevelopmentFundMintingDelay = getValue('minDevelopmentFundMintingDelay', true);
   const rewardConfigMintingVersion = getValue('rewardConfigMintingVersion', true);
+
+  const trimmedSwitchOvers = switchOverEntries
+    .map(e => ({ key: e.key.trim(), time: e.time }))
+    .filter(e => e.key !== '');
+
+  const amuletSwitchOverTimes =
+    trimmedSwitchOvers.length === 0
+      ? null
+      : Object.fromEntries(
+          trimmedSwitchOvers.map(e => [
+            e.key,
+            dayjs(e.time).utc().format(nextScheduledSynchronizerUpgradeFormat),
+          ])
+        );
+
   const amuletConfig: AmuletConfig<'USD'> = {
     tickDuration: { microseconds: getValue('tickDuration', false) },
     transferPreapprovalFee: getValue('transferPreapprovalFee', true),
@@ -119,7 +141,7 @@ export function buildAmuletRulesConfigFromChanges(
       minDevelopmentFundMintingDelay === null
         ? null
         : { microseconds: minDevelopmentFundMintingDelay },
-    amuletSwitchOverTimes: null,
+    amuletSwitchOverTimes: amuletSwitchOverTimes,
     transferConfig: {
       createFee: { fee: getValue('transferConfigCreateFee', false) },
       holdingFee: { rate: getValue('transferConfigHoldingFeeRate', false) },

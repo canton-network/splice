@@ -55,11 +55,17 @@ import {
   validateNextScheduledLogicalSynchronizerUpgrade,
   validateSummary,
   validateUrl,
+  SwitchOverEntry,
 } from './formValidators';
+import { SwitchOverTimesField } from '../form-components/SwitchOverTimesField';
 
 export type SetDsoConfigCompleteFormData = {
   common: CommonProposalFormData;
   config: ConfigFormData;
+  switchOverTimes: {
+    entries: SwitchOverEntry[];
+    allowNonFutureDated: boolean;
+  };
 };
 
 const createProposalAction = createProposalActions.find(a => a.value === 'SRARC_SetConfig');
@@ -76,6 +82,8 @@ export const SetDsoConfigRulesForm: () => JSX.Element = () => {
   const initialEffectiveDate = dayjs(initialExpiration).add(1, 'day');
   const mutation = useProposalMutation();
   const [showConfirmation, setShowConfirmation] = useState(false);
+  const maybeConfig = dsoInfoQuery.data?.dsoRules.payload.config;
+  const dsoConfig = maybeConfig ? maybeConfig : null;
 
   const defaultValues = useMemo((): SetDsoConfigCompleteFormData => {
     if (!dsoInfoQuery.data) {
@@ -91,10 +99,15 @@ export const SetDsoConfigRulesForm: () => JSX.Element = () => {
           summary: '',
         },
         config: {},
+        switchOverTimes: {
+          entries: Object.entries(dsoConfig?.svOperationsSwitchOverTimes ?? {}).map(
+            ([key, time]) => ({ key, time })
+          ),
+          allowNonFutureDated: false,
+        },
       };
     }
 
-    const dsoConfig = dsoInfoQuery.data.dsoRules.payload.config;
     const dsoConfigChanges = buildDsoConfigChanges(dsoConfig, dsoConfig, true);
 
     return {
@@ -115,8 +128,14 @@ export const SetDsoConfigRulesForm: () => JSX.Element = () => {
         };
         return acc;
       }, {} as ConfigFormData),
+      switchOverTimes: {
+        entries: Object.entries(dsoConfig?.svOperationsSwitchOverTimes ?? {}).map(
+          ([key, time]) => ({ key, time })
+        ),
+        allowNonFutureDated: false,
+      },
     };
-  }, [dsoInfoQuery.data, initialExpiration, initialEffectiveDate]);
+  }, [dsoInfoQuery.data, initialExpiration, initialEffectiveDate, dsoConfig]);
 
   const form = useAppForm({
     defaultValues,
@@ -126,7 +145,10 @@ export const SetDsoConfigRulesForm: () => JSX.Element = () => {
       } else {
         const changes = configFormDataToConfigChanges(formData.config, dsoConfigChanges, false);
         const baseConfig = dsoConfig;
-        const newConfig = buildDsoRulesConfigFromChanges(changes);
+        const newConfig = buildDsoRulesConfigFromChanges(
+          changes,
+          form.state.values.switchOverTimes.entries
+        );
         const action: ActionRequiringConfirmation = {
           tag: 'ARC_DsoRules',
           value: {
@@ -199,8 +221,6 @@ export const SetDsoConfigRulesForm: () => JSX.Element = () => {
     },
   });
 
-  const maybeConfig = dsoInfoQuery.data?.dsoRules.payload.config;
-  const dsoConfig = maybeConfig ? maybeConfig : null;
   // passing the config twice here because we initially have no changes
   const dsoConfigChanges = buildDsoConfigChanges(dsoConfig, dsoConfig, true);
 
@@ -211,7 +231,10 @@ export const SetDsoConfigRulesForm: () => JSX.Element = () => {
   const changedFields = changes.filter(c => c.currentValue !== c.newValue);
 
   const baseConfig = dsoConfig;
-  const newConfig = buildDsoRulesConfigFromChanges(changes);
+  const newConfig = buildDsoRulesConfigFromChanges(
+    changes,
+    form.state.values.switchOverTimes.entries
+  );
   const dsoAction: DsoRules_ActionRequiringConfirmation = {
     tag: 'SRARC_SetConfig',
     value: {
@@ -302,6 +325,12 @@ export const SetDsoConfigRulesForm: () => JSX.Element = () => {
                 )}
               </form.AppField>
             ))}
+
+            <SwitchOverTimesField
+              form={form}
+              title="SV operations switch-over times"
+              effectiveDate={form.state.values.common.effectiveDate.effectiveDate}
+            />
 
             <JsonDiffAccordion variant="form">{jsonDiffContent}</JsonDiffAccordion>
           </Box>

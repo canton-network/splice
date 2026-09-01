@@ -134,3 +134,28 @@ describe('buildDsoRulesConfigFromChanges', () => {
     expect(result.voteCooldownTime).toEqual({ microseconds: '300000' });
   });
 });
+
+describe('buildDsoRulesConfigFromChanges switch-over times', () => {
+  it('is null when there are no entries', () => {
+    expect(buildDsoRulesConfigFromChanges([]).svOperationsSwitchOverTimes).toBeNull();
+  });
+
+  it('drops rows with empty keys, leaving null when all are empty', () => {
+    const result = buildDsoRulesConfigFromChanges(
+      [],
+      [{ key: '  ', time: '2026-09-05T14:30:00Z' }]
+    );
+    expect(result.svOperationsSwitchOverTimes).toBeNull();
+  });
+
+  it('round-trips a UTC time and keeps only non-empty (trimmed) keys', () => {
+    const result = buildDsoRulesConfigFromChanges(
+      [],
+      [
+        { key: '  ', time: '2026-09-05T14:30:00Z' },
+        { key: ' amulet-v2 ', time: '2026-09-06T00:00:00Z' },
+      ]
+    );
+    expect(result.svOperationsSwitchOverTimes).toEqual({ 'amulet-v2': '2026-09-06T00:00:00Z' });
+  });
+});

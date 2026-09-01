@@ -269,3 +269,39 @@ export const validateNextScheduledLogicalSynchronizerUpgrade = (
 
   return false;
 };
+
+export type SwitchOverEntry = { key: string; time: string };
+
+export const validateSwitchOverTimes = (
+  entries: SwitchOverEntry[],
+  allowNonFutureDated: boolean,
+  effectiveDate: string | undefined
+): string | false => {
+  if (entries.length === 0) return false;
+
+  const keys = entries.map(e => e.key.trim());
+
+  if (keys.some(k => k === '')) {
+    return 'Switch-over key is required';
+  }
+
+  if (new Set(keys).size !== keys.length) {
+    return 'Switch-over keys must be unique';
+  }
+
+  for (const { key, time } of entries) {
+    const t = dayjs.utc(time);
+    if (!t.isValid()) {
+      return `Invalid time for switch-over "${key.trim()}"`;
+    }
+    // Skip the ">= 1 day after effectivity" check at threshold (no effective date)
+    // or when the operator has opted into non-future-dated times.
+    if (!allowNonFutureDated && effectiveDate) {
+      const minTime = dayjs.utc(effectiveDate).add(1, 'day');
+      if (t.isBefore(minTime)) {
+        return `Switch-over "${key.trim()}" must be at least 1 day after the Effective Date`;
+      }
+    }
+  }
+  return false;
+};
