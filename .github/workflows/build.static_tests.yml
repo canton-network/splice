@@ -22,11 +22,12 @@ jobs:
       image: ${{ inputs.self_hosted && 'us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker/splice-test-ci:0.3.12' || '' }}
     steps:
       - name: Check out repository code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ inputs.commit_sha }}
           submodules: "recursive"
           token: ${{ secrets.GITHUB_TOKEN }}
+          allow-unsafe-pr-checkout: true
 
       - name: Setup Nix
         uses: ./.github/actions/tests/common_test_setup
@@ -77,11 +78,12 @@ jobs:
     steps:
 
       - name: Check out repository code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ inputs.commit_sha }}
           submodules: "recursive"
           token: ${{ secrets.GITHUB_TOKEN }}
+          allow-unsafe-pr-checkout: true
 
       - name: Setup
         id: setup
