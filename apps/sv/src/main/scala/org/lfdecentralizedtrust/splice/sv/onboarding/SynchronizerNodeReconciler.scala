@@ -21,12 +21,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.decentralizedsync
   SequencerIdentityConfig,
   SynchronizerNodeConfig,
 }
-import org.lfdecentralizedtrust.splice.environment.{
-  PackageVersionSupport,
-  RetryFor,
-  RetryProvider,
-  SpliceLedgerConnection,
-}
+import org.lfdecentralizedtrust.splice.environment.{RetryFor, RetryProvider, SpliceLedgerConnection}
 import org.lfdecentralizedtrust.splice.environment.SynchronizerNode.LocalSynchronizerNodes
 import org.lfdecentralizedtrust.splice.store.DsoRulesStore.DsoRulesWithSvNodeState
 import org.lfdecentralizedtrust.splice.sv.config.SvScanConfig
@@ -46,7 +41,6 @@ import scala.jdk.OptionConverters.{RichOption, RichOptional}
 class SynchronizerNodeReconciler(
     dsoStore: SvDsoStore,
     connection: SpliceLedgerConnection,
-    versionSupport: PackageVersionSupport,
     clock: Clock,
     retryProvider: RetryProvider,
     val loggerFactory: NamedLoggerFactory,
@@ -232,70 +226,62 @@ class SynchronizerNodeReconciler(
       ec: ExecutionContext,
       tc: TraceContext,
   ): Future[Option[Map[lang.Long, PhysicalSynchronizerNodeConfig]]] = {
-    versionSupport
-      .supportsPhysicalSynchronizers(Seq(svParty, dsoParty), clock.now)
-      .map(_.supported)
-      .flatMap { hasSupport =>
-        if (hasSupport) {
-          val currentEntryFuture =
-            synchronizerNodes.map(_.current).traverse { currentNode =>
-              val serialOverride = state match {
-                case SynchronizerNodeState.OnboardedAfterDelay => None
-                case SynchronizerNodeState.OnboardedImmediately => None
-                case SynchronizerNodeState.Onboarding(serial) => Some(serial)
-              }
-              buildNodeConfig(currentNode, serialOverride)
-            }
-
-          val legacyEntryFuture =
-            synchronizerNodes.flatMap(_.legacy).traverse { legacyNode =>
-              buildNodeConfig(legacyNode)
-            }
-
-          val additionalLegacyEntriesFuture =
-            MonadUtil.sequentialTraverse(synchronizerNodes.toList.flatMap(_.additionalLegacy)) {
-              legacyNode =>
-                buildNodeConfig(legacyNode)
-            }
-
-          val successorEntryFuture =
-            synchronizerNodes.flatMap(_.successor).flatTraverse { successorNode =>
-              successorNode.sequencerAdminConnection
-                .isNodeInitialized()
-                .attemptT
-                .foldF(
-                  failure =>
-                    currentEntryFuture.map(_.flatMap { case (currentSyncSerial, _) =>
-                      val existingSuccessors =
-                        existingState.map(_.view.filterKeys(_ > currentSyncSerial).toSeq)
-                      logger.info(
-                        s"Failed to get successor status, will keep state with serial > than $currentSyncSerial: $existingSuccessors",
-                        failure,
-                      )
-                      existingSuccessors
-                    }),
-                  {
-                    case true =>
-                      buildNodeConfig(successorNode).map(config => Some(Seq(config)))
-                    case false =>
-                      Future.successful(None)
-                  },
-                )
-            }
-
-          for {
-            currentEntry <- currentEntryFuture
-            legacyEntry <- legacyEntryFuture
-            successorEntry <- successorEntryFuture
-            additionalLegacyEntries <- additionalLegacyEntriesFuture
-          } yield {
-            Some(
-              (legacyEntry.toList ++ currentEntry.toList ++ successorEntry.toList.flatten ++ additionalLegacyEntries).toMap
-            )
-          }
-        } else Future.successful(None)
+    val currentEntryFuture =
+      synchronizerNodes.map(_.current).traverse { currentNode =>
+        val serialOverride = state match {
+          case SynchronizerNodeState.OnboardedAfterDelay => None
+          case SynchronizerNodeState.OnboardedImmediately => None
+          case SynchronizerNodeState.Onboarding(serial) => Some(serial)
+        }
+        buildNodeConfig(currentNode, serialOverride)
       }
 
+    val legacyEntryFuture =
+      synchronizerNodes.flatMap(_.legacy).traverse { legacyNode =>
+        buildNodeConfig(legacyNode)
+      }
+
+    val additionalLegacyEntriesFuture =
+      MonadUtil.sequentialTraverse(synchronizerNodes.toList.flatMap(_.additionalLegacy)) {
+        legacyNode =>
+          buildNodeConfig(legacyNode)
+      }
+
+    val successorEntryFuture =
+      synchronizerNodes.flatMap(_.successor).flatTraverse { successorNode =>
+        successorNode.sequencerAdminConnection
+          .isNodeInitialized()
+          .attemptT
+          .foldF(
+            failure =>
+              currentEntryFuture.map(_.flatMap { case (currentSyncSerial, _) =>
+                val existingSuccessors =
+                  existingState.map(_.view.filterKeys(_ > currentSyncSerial).toSeq)
+                logger.info(
+                  s"Failed to get successor status, will keep state with serial > than $currentSyncSerial: $existingSuccessors",
+                  failure,
+                )
+                existingSuccessors
+              }),
+            {
+              case true =>
+                buildNodeConfig(successorNode).map(config => Some(Seq(config)))
+              case false =>
+                Future.successful(None)
+            },
+          )
+      }
+
+    for {
+      currentEntry <- currentEntryFuture
+      legacyEntry <- legacyEntryFuture
+      successorEntry <- successorEntryFuture
+      additionalLegacyEntries <- additionalLegacyEntriesFuture
+    } yield {
+      Some(
+        (legacyEntry.toList ++ currentEntry.toList ++ successorEntry.toList.flatten ++ additionalLegacyEntries).toMap
+      )
+    }
   }
 
   private def buildNodeConfig(
