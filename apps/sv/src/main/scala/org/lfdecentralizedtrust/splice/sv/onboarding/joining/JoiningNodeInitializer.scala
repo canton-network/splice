@@ -282,7 +282,6 @@ class JoiningNodeInitializer(
             synchronizerNodeReconciler = new SynchronizerNodeReconciler(
               dsoStore,
               connection,
-              packageVersionSupport,
               clock,
               retryProvider,
               loggerFactory,
@@ -914,7 +913,6 @@ class JoiningNodeInitializer(
                 synchronizerNodeReconciler = new SynchronizerNodeReconciler(
                   dsoStore,
                   svStoreWithIngestion.connection(SpliceLedgerConnectionPriority.Low),
-                  packageVersionSupport,
                   clock,
                   retryProvider,
                   loggerFactory,
