@@ -1427,6 +1427,83 @@ class BftScanConnectionTest
         )
         .map(_ => succeed)
     }
+
+    "refuses a lone Ok when unreachable peers push BFT quorum above 1" in {
+      // Mirrors the integration test's dummy-SV scenario: some peers'
+      // connections fail to open (scanConnections.failed > 0), so they
+      // never get probed but still count in `n`. The lone Ok cannot
+      // meet the raised targetSuccess and BadGateway propagates.
+      val round = 42L
+      val connections = getMockedConnections(n = 2)
+      makeMockReturnRootHashOk(connections(0), round, "aabb")
+      makeMockReturnRootHashCannotProvide(connections(1), round)
+      val failedConnections = Map(
+        Uri("https://failed-a.example.com") -> new RuntimeException("Failed"),
+        Uri("https://failed-b.example.com") -> new RuntimeException("Failed"),
+        Uri("https://failed-c.example.com") -> new RuntimeException("Failed"),
+      )
+      val bft = getBft(connections, initialFailedConnections = failedConnections)
+
+      loggerFactory.assertLogs(
+        for { failure <- bft.getRewardAccountingRootHash(round).failed } yield inside(failure) {
+          case HttpErrorWithHttpCode(code, _) =>
+            code should be(StatusCodes.BadGateway)
+        },
+        _.warningMessage should include("BFT guarantees"),
+      )
+    }
+
+    "reaches consensus on a single Ok when other peers give a mix of CannotProvide, Undetermined, and probe failure" in {
+      // Exercises all three probe classifications in one call:
+      //   Ok → WithData, CannotProvide → WithoutData (dropped from n),
+      //   Undetermined → Unavailable, and a probe future failure →
+      //   Unavailable. Single Ok wins because n = 3 (1 withData + 2
+      //   unavailable) keeps f = 0.
+      val round = 42L
+      val connections = getMockedConnections(n = 4)
+      makeMockReturnRootHashOk(connections(0), round, "aabb")
+      makeMockReturnRootHashCannotProvide(connections(1), round)
+      makeMockReturnRootHashUndetermined(connections(2), round)
+      when(connections(3).getRewardAccountingRootHash(round))
+        .thenReturn(Future.failed(tcpFailure))
+      val bft = getBft(connections)
+
+      bft.getRewardAccountingRootHash(round).map { resp =>
+        inside(resp) {
+          case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok) =>
+            ok.rootHash should be("aabb")
+        }
+      }
+    }
+
+    "logs a disagreement WARN for every dissenter, not just those within a 2f+1 sample" in {
+      // At n=7 the raw `forAvailableData` config would sample only
+      // 2f+1 = 5 peers, so dissenting responses beyond that could be
+      // silently ignored. The wrapper overrides `requestsToDo` to
+      // withData.size = 7, so both dissenters (SV5 "ccdd" and SV6
+      // "eeff") surface as separate disagreement WARNs.
+      val round = 42L
+      val connections = getMockedConnections(n = 7)
+      connections.take(5).foreach(makeMockReturnRootHashOk(_, round, "aabb"))
+      makeMockReturnRootHashOk(connections(5), round, "ccdd")
+      makeMockReturnRootHashOk(connections(6), round, "eeff")
+      val bft = getBft(connections)
+
+      loggerFactory
+        .assertEventuallyLogsSeq(SuppressionRule.Level(Level.WARN))(
+          bft.getRewardAccountingRootHash(round).map { resp =>
+            inside(resp) {
+              case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok) =>
+                ok.rootHash should be("aabb")
+            }
+          },
+          logs =>
+            logs.count(l =>
+              l.level == Level.WARN && l.message.contains("disagreed with consensus")
+            ) should be >= 2,
+        )
+        .map(_ => succeed)
+    }
   }
 
   "BftScanConnection.getRewardAccountingActivityTotals" should {
