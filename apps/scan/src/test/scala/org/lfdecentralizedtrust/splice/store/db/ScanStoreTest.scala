@@ -41,7 +41,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.{
 }
 import org.lfdecentralizedtrust.splice.environment.{DarResources, RetryProvider}
 import org.lfdecentralizedtrust.splice.history.*
-import org.lfdecentralizedtrust.splice.scan.store.db.{DbScanStore, DbScanStoreMetrics}
+import org.lfdecentralizedtrust.splice.scan.store.db.{DbScanStore, DbScanStoreMetrics, ScanTables}
 import org.lfdecentralizedtrust.splice.scan.store.*
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.ContractState.Assigned
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingRequirement
@@ -1891,6 +1891,86 @@ class DbScanStoreTest
           .toList should have size 0
         // should have the active acs entry
         storeReingest.listVoteRequests().futureValue.toList should contain(activeVoteRequest)
+      }
+    }
+  }
+
+  "isUserVersionDowngrade" should {
+    "treat None as the lowest version and detect only strict decreases" in {
+      // (configured, maxStoredWithData, expectedIsDowngrade)
+      val cases = Seq(
+        (None, None, false),
+        (None, Some(0L), true), // removed config field vs any stored version
+        (Some(0L), None, false), // no data on disk -> never a downgrade
+        (Some(0L), Some(0L), false), // 0 is a legal value distinct from None
+        (None, Some(5L), true),
+        (Some(3L), Some(5L), true),
+        (Some(5L), Some(5L), false),
+        (Some(5L), Some(3L), false), // upgrade
+        (Some(5L), None, false),
+      )
+      Future.successful {
+        cases.foreach { case (configured, maxStored, expected) =>
+          withClue(s"configured=$configured maxStored=$maxStored: ") {
+            StoreDescriptorStore.isUserVersionDowngrade(configured, maxStored) shouldBe expected
+          }
+        }
+        succeed
+      }
+    }
+  }
+
+  "maxStoredUserVersionWithData" should {
+    val alice = userParty(443)
+    val aliceLicense =
+      validatorLicense(alice, dsoParty, Some(new FaucetState(new Round(0), new Round(1000), 0L)))
+
+    def maxAcsUserVersion(expected: StoreDescriptor): Option[Long] =
+      StoreDescriptorStore
+        .maxStoredUserVersionWithData(storage, ScanTables.acsTableName, expected)
+        .failOnShutdown("test doesn't shutdown")
+        .futureValue
+
+    "return the highest userVersion among descriptors that have committed data" in {
+      for {
+        store <- mkStore()
+        _ <- dummyDomain.create(aliceLicense)(store.multiDomainAcsStore)
+        storeV5 <- mkStore(dsoParty = dsoParty, acsStoreDescriptorUserVersion = Some(5L))
+        _ <- dummyDomain.create(aliceLicense)(storeV5.multiDomainAcsStore)
+      } yield {
+        maxAcsUserVersion(store.acsStoreDescriptor) shouldBe Some(5L)
+      }
+    }
+
+    "ignore a matching descriptor that has no committed data" in {
+      for {
+        store <- mkStore(dsoParty = dsoParty, acsStoreDescriptorUserVersion = Some(3L))
+        _ <- dummyDomain.create(aliceLicense)(store.multiDomainAcsStore)
+        _ <- mkStore(dsoParty = dsoParty, acsStoreDescriptorUserVersion = Some(9L))
+      } yield {
+        maxAcsUserVersion(store.acsStoreDescriptor) shouldBe Some(3L)
+      }
+    }
+
+    "return None when the store has no committed data" in {
+      for {
+        store <- mkStore(dsoParty = dsoParty, acsStoreDescriptorUserVersion = Some(1L))
+      } yield {
+        maxAcsUserVersion(store.acsStoreDescriptor) shouldBe None
+      }
+    }
+
+    "exclude committed data whose descriptor differs in a non-userVersion field" in {
+      for {
+        store <- mkStore()
+        _ <- dummyDomain.create(aliceLicense)(store.multiDomainAcsStore)
+      } yield {
+        maxAcsUserVersion(
+          store.acsStoreDescriptor.copy(participant = mkParticipantId("other-participant"))
+        ) shouldBe None
+        maxAcsUserVersion(
+          store.acsStoreDescriptor.copy(party = userParty(999))
+        ) shouldBe None
       }
     }
   }
