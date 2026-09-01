@@ -8,12 +8,21 @@ import type {
 } from '@daml.js/splice-dso-governance/lib/Splice/DSO/DecentralizedSynchronizer/module';
 import type { DsoRulesConfig } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
 import type { ConfigChange } from './types';
+import { SwitchOverEntry } from '../components/forms/formValidators';
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import { nextScheduledSynchronizerUpgradeFormat } from '@canton-network/splice-common-frontend-utils';
+
+dayjs.extend(utc);
 
 /**
  * Given a list of config changes, build and return a DsoRulesConfig.
  * The config changes should have all fields, whether they have been changed or not.
  */
-export function buildDsoRulesConfigFromChanges(dsoConfigChanges: ConfigChange[]): DsoRulesConfig {
+export function buildDsoRulesConfigFromChanges(
+  dsoConfigChanges: ConfigChange[],
+  switchOverEntries: SwitchOverEntry[] = []
+): DsoRulesConfig {
   // map of field names -> new values for quick lookup
   const changeMap = new Map<string, string>();
 
@@ -53,6 +62,20 @@ export function buildDsoRulesConfigFromChanges(dsoConfigChanges: ConfigChange[])
     true
   );
   const voteCooldownTime = getValue('voteCooldownTime', true);
+
+  const trimmedSwitchOvers = switchOverEntries
+    .map(e => ({ key: e.key.trim(), time: e.time }))
+    .filter(e => e.key !== '');
+
+  const svOperationsSwitchOverTimes =
+    trimmedSwitchOvers.length === 0
+      ? null
+      : Object.fromEntries(
+          trimmedSwitchOvers.map(e => [
+            e.key,
+            dayjs(e.time).utc().format(nextScheduledSynchronizerUpgradeFormat),
+          ])
+        );
 
   const dsoConfig: DsoRulesConfig = {
     numUnclaimedRewardsThreshold: getValue('numUnclaimedRewardsThreshold', false),
@@ -120,7 +143,7 @@ export function buildDsoRulesConfigFromChanges(dsoConfigChanges: ConfigChange[])
             ),
           },
     voteCooldownTime: voteCooldownTime === null ? null : { microseconds: voteCooldownTime },
-    svOperationsSwitchOverTimes: null,
+    svOperationsSwitchOverTimes: svOperationsSwitchOverTimes,
   };
 
   return dsoConfig;
