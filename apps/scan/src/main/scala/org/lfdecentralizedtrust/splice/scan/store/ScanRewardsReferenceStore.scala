@@ -16,12 +16,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.round.OpenMiningRound
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.scan.store.db.ScanRewardsReferenceTables.ScanRewardsReferenceStoreRowData
-import org.lfdecentralizedtrust.splice.store.{
-  AppStore,
-  Limit,
-  MultiDomainAcsStore,
-  TimestampWithMigrationId,
-}
+import org.lfdecentralizedtrust.splice.store.{AppStore, Limit, MultiDomainAcsStore}
 import org.lfdecentralizedtrust.splice.store.db.AcsInterfaceViewRowData
 import org.lfdecentralizedtrust.splice.util.{Contract, TemplateJsonDecoder}
 
@@ -62,7 +57,7 @@ trait ScanRewardsReferenceStore extends AppStore {
     */
   def lookupActiveOpenMiningRounds(
       recordTimes: Seq[CantonTimestamp]
-  )(implicit tc: TraceContext): Future[Map[CantonTimestamp, TimestampWithMigrationId]]
+  )(implicit tc: TraceContext): Future[Map[CantonTimestamp, (Long, CantonTimestamp)]]
 
   def lookupFeaturedAppPartiesAsOf(
       asOf: CantonTimestamp

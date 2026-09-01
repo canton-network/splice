@@ -10,12 +10,7 @@ import com.digitalasset.canton.tracing.TraceContext
 import com.github.blemale.scaffeine.Scaffeine
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.rewardaccountingv2.CalculateRewardsV2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.OpenMiningRound
-import org.lfdecentralizedtrust.splice.store.{
-  Limit,
-  MultiDomainAcsStore,
-  SynchronizerStore,
-  TimestampWithMigrationId,
-}
+import org.lfdecentralizedtrust.splice.store.{Limit, MultiDomainAcsStore, SynchronizerStore}
 import org.lfdecentralizedtrust.splice.util.Contract
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -57,7 +52,7 @@ class CachingScanRewardsReferenceStore private[splice] (
 
   override def lookupActiveOpenMiningRounds(
       recordTimes: Seq[CantonTimestamp]
-  )(implicit tc: TraceContext): Future[Map[CantonTimestamp, TimestampWithMigrationId]] =
+  )(implicit tc: TraceContext): Future[Map[CantonTimestamp, (Long, CantonTimestamp)]] =
     store.lookupActiveOpenMiningRounds(recordTimes)
 
   override def lookupFeaturedAppPartiesAsOf(

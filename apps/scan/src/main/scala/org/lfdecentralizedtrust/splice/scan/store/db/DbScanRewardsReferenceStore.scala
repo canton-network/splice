@@ -17,12 +17,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.round.OpenMiningRound
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.scan.store.ScanRewardsReferenceStore
-import org.lfdecentralizedtrust.splice.store.{
-  Limit,
-  LimitHelpers,
-  TcsStore,
-  TimestampWithMigrationId,
-}
+import org.lfdecentralizedtrust.splice.store.{Limit, LimitHelpers, TcsStore}
 import org.lfdecentralizedtrust.splice.store.db.{
   AcsArchiveConfig,
   AcsQueries,
@@ -108,7 +103,7 @@ class DbScanRewardsReferenceStore(
 
   override def lookupActiveOpenMiningRounds(
       recordTimes: Seq[CantonTimestamp]
-  )(implicit tc: TraceContext): Future[Map[CantonTimestamp, TimestampWithMigrationId]] = {
+  )(implicit tc: TraceContext): Future[Map[CantonTimestamp, (Long, CantonTimestamp)]] = {
     tcsStore.getEarliestArchivedAt().flatMap {
       case None =>
         Future.successful(Map.empty)
@@ -130,10 +125,7 @@ class DbScanRewardsReferenceStore(
                 .flatMap { r =>
                   val opensAt = CantonTimestamp.assertFromInstant(r.contract.payload.opensAt)
                   Option.when(opensAt >= ingestionStart) {
-                    recordTime -> TimestampWithMigrationId(
-                      opensAt,
-                      r.contract.payload.round.number.toLong,
-                    )
+                    recordTime -> (r.contract.payload.round.number.toLong, opensAt)
                   }
                 }
             }.toMap
