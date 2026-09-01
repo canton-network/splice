@@ -1725,8 +1725,9 @@ class BftScanConnectionTest
       val config = BftCallConfig.forWithDataOnly(Seq.empty, unavailable = 0)
       config.connections shouldBe empty
       config.requestsToDo shouldBe 0
-      // n = 0 → f = 0 → targetSuccess = 1, but connections.size (0) < targetSuccess
-      config.targetSuccess shouldBe 1
+      // available = 0 caps targetSuccess to 0; enoughAvailableScans rejects
+      // the zero-targetSuccess config, so callers still short-circuit.
+      config.targetSuccess shouldBe 0
       config.enoughAvailableScans shouldBe false
     }
   }

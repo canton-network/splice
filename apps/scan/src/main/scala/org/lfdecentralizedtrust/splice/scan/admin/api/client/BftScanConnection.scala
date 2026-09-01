@@ -1407,23 +1407,22 @@ object BftScanConnection {
       default(connections).copy(requestsToDo = 1, targetSuccess = 1)
 
     /** Config for the second phase of a probe-filter-consensus call.
-      * `n = withData.size + unavailable`; unavailable peers count in
-      * quorum as if they could have responded with disagreeing data.
-      * `requestsToDo` is just `withData.size` — unavailable peers
-      * have nothing cached to serve.
+      * Adapts `forAvailableData` for the probe-filter-consensus
+      * setting: `withData` is already the probed set, `unavailable`
+      * counts peers whose probe outcome was inconclusive, and
+      * `requestsToDo` is overridden to sample all `withData` peers
+      * (not just `2f+1`) so any disagreement surfaces via
+      * `bftCallWithScanUris`.
       */
     def forWithDataOnly(
         withData: Seq[SingleScanConnection],
         unavailable: Int,
-    ): BftCallConfig = {
-      val n = withData.size + unavailable
-      val f = (n - 1) / 3
-      BftCallConfig(
-        connections = withData,
-        requestsToDo = withData.size,
-        targetSuccess = f + 1,
-      )
-    }
+    )(implicit loggingContext: ErrorLoggingContext): BftCallConfig =
+      forAvailableData(
+        connections = ScanConnections(open = withData, failed = 0),
+        dataAvailable = _ => true,
+        unavailableCount = unavailable,
+      ).copy(requestsToDo = withData.size)
 
     /** A configuration for a BFT call where some peers cannot provide a response and wish
       * to be excluded from the consensus. Only peers that successfully respond that they
