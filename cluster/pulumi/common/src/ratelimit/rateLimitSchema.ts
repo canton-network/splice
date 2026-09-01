@@ -42,7 +42,7 @@ export const defaultGlobalPerIpLimits = {
 
 export const RateLimitSchema = z.object({
   globalLimits: BucketRateLimitSchema.default(defaultGlobalLimits),
-  globalPerIpLimits: BucketRateLimitSchema.default(defaultGlobalPerIpLimits),
+  globalPerIpLimits: PerIpLimitsSchema.default(defaultGlobalPerIpLimits),
   rateLimits: z
     .object({})
     .catchall(

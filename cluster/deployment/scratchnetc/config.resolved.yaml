@@ -1705,6 +1705,8 @@ synchronizerMigration:
       pulumiStacksDir: 'cluster/stacks/prod'
       repoUrl: 'https://github.com/canton-network/splice'
       spliceRoot: 'splice'
+    sequencer:
+      enableBftSequencer: true
     version: 'local'
   frozenMigrationId: 0
   splitSvDeploymentEnabled: true

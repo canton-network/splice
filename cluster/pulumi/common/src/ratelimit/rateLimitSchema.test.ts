@@ -43,6 +43,46 @@ test('RateLimitSchema keeps per-endpoint limits optional', () => {
   expect(parsed.rateLimits).toBeDefined();
 });
 
+test('RateLimitSchema accepts named overrides on the global per-IP limits', () => {
+  const config = {
+    ...validConfig,
+    globalPerIpLimits: {
+      maxTokens: 1000,
+      tokensPerFill: 1000,
+      fillInterval: '60s',
+      overrides: {
+        'multi-validators': {
+          ips: ['192.68.78.51', '192.68.78.52'],
+          maxTokens: 5000,
+          tokensPerFill: 5000,
+          fillInterval: '60s',
+        },
+      },
+    },
+  };
+  expect(() => RateLimitSchema.parse(config)).not.toThrow();
+});
+
+test('RateLimitSchema rejects non-IPv4 addresses in global per-IP overrides', () => {
+  const config = {
+    ...validConfig,
+    globalPerIpLimits: {
+      maxTokens: 1000,
+      tokensPerFill: 1000,
+      fillInterval: '60s',
+      overrides: {
+        'multi-validators': {
+          ips: ['2001:db8::1'],
+          maxTokens: 5000,
+          tokensPerFill: 5000,
+          fillInterval: '60s',
+        },
+      },
+    },
+  };
+  expect(() => RateLimitSchema.parse(config)).toThrow();
+});
+
 test('RateLimitSchema rejects an unknown endpoint type', () => {
   const config = {
     ...validConfig,

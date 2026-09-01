@@ -132,7 +132,15 @@ function configureIstiod(
         // the trusted client IP as determined by envoy (based on numTrustedProxies),
         // this is the header the apps use for per-client-IP rate limiting
         envoy_external_address: '%REQ(X-ENVOY-EXTERNAL-ADDRESS)%',
+        // The address the per-client-IP rate limit buckets are keyed on: envoy's
+        // `masked_remote_address` action masks the downstream remote address (the trusted,
+        // XFF-derived client address) with the configured prefix length, which is /32 for
+        // IPv4 and /128 for IPv6, i.e. the full address without the port.
+        masked_remote_address: '%DOWNSTREAM_REMOTE_ADDRESS_WITHOUT_PORT%',
         // rate limiting fields, will show up in sidecar access logging
+        // the value identifies the limit that rejected the request: `global`, `per_ip` or
+        // `endpoint_per_ip`, i.e. the same names as the `limiter` label on the
+        // envoy_http_local_rate_limit_* metrics, which cannot attribute a single request to a limit
         local_rate_limited: '%RESP(x-local-rate-limit)%',
         rate_limit_limit: '%RESP(x-ratelimit-limit)%',
         rate_limit_remaining: '%RESP(x-ratelimit-remaining)%',
