@@ -72,13 +72,14 @@ class NonZeroRoundBootstrapBftTimeBasedIntegrationTest
     // round's reward pipeline runs under the higher quorum.
     addDummySvWithFakeScanUrl()
 
-    // With f=1, BFT reads normally need 2 agreeing Ok responses.
-    // Only SV1's scan has the initial round's data; the other real
-    // SVs return CannotProvide and the dummy is unreachable. The
-    // reward-accounting BFT calls handle this with a two-phase
-    // probe-filter-consensus: they filter to scans-with-data and
-    // recompute n from that set (n=1 → f=0 → single Ok is quorum),
-    // so the pipeline completes at bootstrap.
+    // With f=1 in the augmented DsoRules, BFT reads normally need
+    // 2 agreeing Ok responses. Only SV1 returns Ok; SV2/3/4 return
+    // CannotProvide (dropped from `n`), and the dummy's connection
+    // fails to open (kept in `n` as possibly-disagreeing via
+    // scanConnections.failed). The two-phase probe-filter-consensus
+    // computes `n = withData.size + unavailable` = 1 + 1 = 2, so
+    // f = 0 and SV1's single Ok is quorum — the pipeline completes
+    // at bootstrap.
     advanceTimeForRewardAutomationToRunForCurrentRound
     actAndCheck(
       "Advance to next round opening",
