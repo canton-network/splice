@@ -257,6 +257,7 @@ runs:
             export OIDC_AUTHORITY_VALIDATOR_AUDIENCE="${{ inputs.auth0_validator_audience }}"
           fi
           if [[ "${{ inputs.is_frontend_test }}" == "true" ]]; then
+            export VITE_DISABLE_QUERY_DEVTOOLS=true
             ./start-frontends.sh ${{ inputs.start_frontend_args }}
           fi
           ${{ inputs.pre_sbt_cmd }}

@@ -37,7 +37,6 @@
     "@canton-network/splice-common-test-utils": "^0.1.0",
     "@canton-network/splice-common-test-vite-utils": "^0.1.0",
     "@tanstack/eslint-plugin-query": "5.91.3",
-    "@tanstack/react-query-devtools": "5.91.2",
     "@testing-library/react": "^16.0.1",
     "@testing-library/user-event": "^14.4.3",
     "@trivago/prettier-plugin-sort-imports": "5.2.2",
