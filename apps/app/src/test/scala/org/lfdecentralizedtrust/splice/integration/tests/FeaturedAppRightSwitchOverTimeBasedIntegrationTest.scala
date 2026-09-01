@@ -59,7 +59,7 @@ class FeaturedAppRightSwitchOverTimeBasedIntegrationTest
           .config
           .svOperationsSwitchOverTimes
           .toScala
-          .map(_.asScala.toMap) shouldBe Some(Map.empty)
+          .map(_.asScala.toMap) shouldBe None
       }
 
       aliceValidatorWalletClient.tap(50.0)
