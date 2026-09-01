@@ -1313,7 +1313,7 @@ class BftScanConnectionTest
         .map(_ => succeed)
     }
 
-    "returns Ok deterministically when only one scan has the hash (n=1 short-circuit)" in {
+    "returns the sole Ok when every other peer explicitly said it has no hash" in {
       val round = 42L
       val connections = getMockedConnections(n = 4)
       makeMockReturnRootHashOk(connections(0), round, "aabb")
@@ -1335,7 +1335,7 @@ class BftScanConnectionTest
       }
     }
 
-    "reaches consensus over the data-holding subset (n=2, f=0)" in {
+    "reaches consensus when two peers agree and the rest explicitly opt out" in {
       val round = 42L
       val connections = getMockedConnections(n = 4)
       makeMockReturnRootHashOk(connections(0), round, "aabb")
@@ -1355,7 +1355,7 @@ class BftScanConnectionTest
       }
     }
 
-    "logs a probe failure at INFO and drops that scan from consensus" in {
+    "logs a probe failure at INFO and keeps the peer in the BFT quorum" in {
       val round = 42L
       val connections = getMockedConnections(n = 4)
       makeMockReturnRootHashOk(connections(0), round, "aabb")
@@ -1406,7 +1406,7 @@ class BftScanConnectionTest
       )
     }
 
-    "logs a WARN disagreement when two Oks in the probed subset disagree (n=2)" in {
+    "logs a WARN when Oks from the probed subset disagree on the payload" in {
       val round = 42L
       val connections = getMockedConnections(n = 4)
       makeMockReturnRootHashOk(connections(0), round, "aabb")
@@ -1588,7 +1588,7 @@ class BftScanConnectionTest
         .map(_ => succeed)
     }
 
-    "returns Ok deterministically when only one scan has data (n=1 short-circuit)" in {
+    "returns the sole Ok when every other peer explicitly said it has no data" in {
       val round = 42L
       val connections = getMockedConnections(n = 4)
       makeMockReturnActivityTotalsOk(connections(0), round, 100L, 10L, 5L)
@@ -1611,7 +1611,7 @@ class BftScanConnectionTest
       }
     }
 
-    "reaches consensus over the data-holding subset (n=2, f=0)" in {
+    "reaches consensus when two peers agree and the rest explicitly opt out" in {
       val round = 42L
       val connections = getMockedConnections(n = 4)
       makeMockReturnActivityTotalsOk(connections(0), round, 100L, 10L, 5L)
@@ -1632,7 +1632,7 @@ class BftScanConnectionTest
       }
     }
 
-    "logs a probe failure at INFO and drops that scan from consensus" in {
+    "logs a probe failure at INFO and keeps the peer in the BFT quorum" in {
       val round = 42L
       val connections = getMockedConnections(n = 4)
       makeMockReturnActivityTotalsOk(connections(0), round, 100L, 10L, 5L)
@@ -1725,7 +1725,7 @@ class BftScanConnectionTest
 
   "BftCallConfig.forWithDataOnly" should {
 
-    "treat a single-scan set as its own quorum (n=1, f=0)" in {
+    "treats a single-scan set as its own quorum" in {
       val withData = getMockedConnections(n = 1)
       val config = BftCallConfig.forWithDataOnly(withData, unavailable = 0)
       config.connections should have size 1
@@ -1734,7 +1734,7 @@ class BftScanConnectionTest
       config.enoughAvailableScans shouldBe true
     }
 
-    "require a single Ok when n=2 (f=0)" in {
+    "requires a single Ok when only two peers participate" in {
       val withData = getMockedConnections(n = 2)
       val config = BftCallConfig.forWithDataOnly(withData, unavailable = 0)
       config.connections should have size 2
@@ -1743,7 +1743,7 @@ class BftScanConnectionTest
       config.enoughAvailableScans shouldBe true
     }
 
-    "require a single Ok when n=3 (f=0)" in {
+    "requires a single Ok when three peers participate" in {
       val withData = getMockedConnections(n = 3)
       val config = BftCallConfig.forWithDataOnly(withData, unavailable = 0)
       config.connections should have size 3
@@ -1752,7 +1752,7 @@ class BftScanConnectionTest
       config.enoughAvailableScans shouldBe true
     }
 
-    "engage BFT (f=1, targetSuccess=2) when n=4" in {
+    "requires BFT quorum of two Oks when four peers participate" in {
       val withData = getMockedConnections(n = 4)
       val config = BftCallConfig.forWithDataOnly(withData, unavailable = 0)
       config.connections should have size 4
@@ -1761,7 +1761,7 @@ class BftScanConnectionTest
       config.enoughAvailableScans shouldBe true
     }
 
-    "keep targetSuccess at 2 for n=5 and n=6 (f=1)" in {
+    "holds BFT quorum at two Oks for five- and six-peer networks" in {
       val forFive = BftCallConfig.forWithDataOnly(getMockedConnections(n = 5), unavailable = 0)
       forFive.targetSuccess shouldBe 2
       forFive.requestsToDo shouldBe 5
@@ -1771,13 +1771,13 @@ class BftScanConnectionTest
       forSix.requestsToDo shouldBe 6
     }
 
-    "raise targetSuccess to 3 when n=7 (f=2)" in {
+    "raises BFT quorum to three Oks once total peers reach seven" in {
       val config = BftCallConfig.forWithDataOnly(getMockedConnections(n = 7), unavailable = 0)
       config.targetSuccess shouldBe 3
       config.requestsToDo shouldBe 7
     }
 
-    "count unavailable peers in n so a lone Ok cannot win against 3 unresponsive peers" in {
+    "refuses a lone Ok when unresponsive peers push the quorum above one" in {
       val withData = getMockedConnections(n = 1)
       val config = BftCallConfig.forWithDataOnly(withData, unavailable = 3)
       // n = 1 + 3 = 4 → f = 1 → targetSuccess = 2
@@ -1788,7 +1788,7 @@ class BftScanConnectionTest
       config.enoughAvailableScans shouldBe false
     }
 
-    "allow n=2 quorum when 2 respond Ok and 2 are unavailable" in {
+    "reaches consensus with two Oks even when two peers are unresponsive" in {
       val withData = getMockedConnections(n = 2)
       val config = BftCallConfig.forWithDataOnly(withData, unavailable = 2)
       // n = 2 + 2 = 4 → f = 1 → targetSuccess = 2, requestsToDo = 2
@@ -1826,7 +1826,7 @@ class BftScanConnectionTest
 
   "BftCallConfig.forAvailableData" should {
 
-    "widen n by unavailableCount so f grows accordingly" in {
+    "widens BFT quorum requirements when unavailable peers are counted" in {
       val open = getMockedConnections(n = 3)
       val connections = BftScanConnection.ScanConnections(open = open, failed = 0)
       // Without unavailableCount: n = 3, f = 0 → targetSuccess = 1.
@@ -1838,7 +1838,7 @@ class BftScanConnectionTest
       config.targetSuccess shouldBe 2
     }
 
-    "preserve behaviour when unavailableCount is 0 (default)" in {
+    "matches raw forAvailableData behaviour when no unavailable peers are declared" in {
       val open = getMockedConnections(n = 4)
       val connections = BftScanConnection.ScanConnections(open = open, failed = 0)
       // n = 4, f = 1 → targetSuccess = 2, requestsToDo = 3.
