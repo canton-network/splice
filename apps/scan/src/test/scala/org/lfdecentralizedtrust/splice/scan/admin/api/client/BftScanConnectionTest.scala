@@ -1730,6 +1730,21 @@ class BftScanConnectionTest
       config.targetSuccess shouldBe 0
       config.enoughAvailableScans shouldBe false
     }
+
+    "sample all withData peers, not just 2f+1 (wrapper override is load-bearing)" in {
+      val withData = getMockedConnections(n = 7)
+      // Raw forAvailableData samples 2f+1 = 5 (f=2 when n=7).
+      val raw = BftCallConfig.forAvailableData(
+        BftScanConnection.ScanConnections(open = withData, failed = 0),
+        _ => true,
+      )
+      raw.requestsToDo shouldBe 5
+      // Wrapper overrides requestsToDo to withData.size so any disagreement
+      // among the pre-probed set surfaces via bftCallWithScanUris.
+      val wrapped = BftCallConfig.forWithDataOnly(withData, unavailable = 0)
+      wrapped.requestsToDo shouldBe 7
+      wrapped.targetSuccess shouldBe raw.targetSuccess
+    }
   }
 
   "BftCallConfig.forAvailableData" should {
