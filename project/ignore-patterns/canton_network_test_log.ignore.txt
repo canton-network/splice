@@ -88,15 +88,6 @@ ForkJoinIdlenessExecutorService.*shutdown did not complete gracefully in allotte
 
 Consensus not reached.*BftScanConnection:BftScanConnectionTest.*
 Consensus not reached.*BftScanConnection:ConfigurationProvidedBftScanConnectionIntegrationTest.*
-# TODO (#6502): under TBAR the reward-accounting BFT reads emit two related
-# WARNs during bootstrap — "Consensus not reached." when the retry loop
-# gives up (no peer can converge to Ok) and "The following Scan URLs
-# disagreed with consensus" when a minority disagrees with the reached
-# consensus. Both are scoped to the two triggers that call these reads so
-# real BFT problems elsewhere still surface. Removed once #6392's two-phase
-# probe lands.
-Consensus not reached.*BftScanConnection:.*"span-name":"(SummarizingMiningRoundTrigger|CalculateRewardsTrigger)"
-The following Scan URLs disagreed with consensus.*BftScanConnection:.*"span-name":"(SummarizingMiningRoundTrigger|CalculateRewardsTrigger)"
 
 # internal selenium error. Potentially intermittent
 Exception managing firefox: error sending request for url .* http2 error: stream error received: refused stream before processing any application
