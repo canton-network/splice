@@ -42,7 +42,7 @@ class FeaturedAppRightSwitchOverTimeBasedIntegrationTest
       .simpleTopology1SvWithSimTime(this.getClass.getSimpleName)
       .addConfigTransform((_, config) =>
         ConfigTransforms.updateAllSvAppFoundDsoConfigs_(
-          _.copy(initialSvOperationsSwitchOverTimes = Map.empty)
+          _.copy(initialSvOperationsSwitchOverTimes = None)
         )(config)
       )
 

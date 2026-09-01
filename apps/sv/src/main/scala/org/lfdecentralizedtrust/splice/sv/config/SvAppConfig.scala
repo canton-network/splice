@@ -126,8 +126,10 @@ object SvOnboardingConfig {
       // dry-run alongside. Tests default to TrafficBasedAppRewards minting (no
       // dry-run) via a config transform in ConfigTransforms.defaults().
       initialRewardConfig: Option[InitialRewardConfig] = Some(InitialRewardConfig()),
-      initialSvOperationsSwitchOverTimes: Map[String, CantonTimestamp] = Map(
-        SwitchOverTimes.NoFeaturedAppChoiceContext -> CantonTimestamp.MinValue
+      initialSvOperationsSwitchOverTimes: Option[Map[String, CantonTimestamp]] = Some(
+        Map(
+          SwitchOverTimes.NoFeaturedAppChoiceContext -> CantonTimestamp.MinValue
+        )
       ),
   ) extends SvOnboardingConfig
 

@@ -77,6 +77,8 @@ abstract class ExpiryWithMinimalVettedPackagesIntegrationTestBase
           ConfigTransforms.updateInitialExternalPartyConfigStateTickDuration(
             NonNegativeFiniteDuration.ofMillis(500)
           )(c),
+        // The validator on the old version otherwise will fail to onboard as we cannot downgrade DsoRules when trying to create their license.
+        (_, c) => ConfigTransforms.withNoSvOperationsSwitchOverTimes(c),
       )
       .addConfigTransforms((_, config) => {
         val aliceVal = InstanceName.tryCreate("aliceValidator")

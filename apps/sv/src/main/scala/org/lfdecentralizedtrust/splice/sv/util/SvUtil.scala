@@ -248,7 +248,7 @@ object SvUtil {
       synchronizerId: SynchronizerId,
       voteCooldownTime: Option[NonNegativeFiniteDuration] = None,
       acsCommitmentReconciliationInterval: PositiveDurationSeconds,
-      switchOverTimes: Map[String, CantonTimestamp],
+      switchOverTimes: Option[Map[String, CantonTimestamp]],
       packageConfig: SvOnboardingConfig.InitialPackageConfig,
   ): DsoRulesConfig = {
     // This runs too early to do a proper topology version check so just check the config here.
@@ -273,9 +273,10 @@ object SvUtil {
       voteCooldownTime.map(t => new RelTime(t.duration.toMicros)).toJava,
       Optional.empty(), // nextScheduledLogicalSynchronizerUpgrade
       // We silently drop a value that is set when it's not supported as making it an error doesn't work well with setting it as the default.
-      Option
-        .when(supportsSwitchoverTimes)(switchOverTimes.view.mapValues(_.toInstant).toMap.asJava)
-        .toJava, // svOperationsSwitchOverTimes
+      switchOverTimes
+        .map(_.view.mapValues(_.toInstant).toMap.asJava)
+        .filter(_ => supportsSwitchoverTimes)
+        .toJava,
     )
   }
 

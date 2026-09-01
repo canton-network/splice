@@ -105,21 +105,24 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
     EnvironmentDefinition
       .simpleTopology1SvWithSimTime(this.getClass.getSimpleName)
       .withNoVettedPackages(implicit env => Seq(aliceValidatorBackend.participantClient))
-      .addConfigTransforms((_, config) => {
-        val aliceValidator = InstanceName.tryCreate("aliceValidator")
-        config.copy(
-          validatorApps = config.validatorApps +
-            (aliceValidator -> config
-              .validatorApps(aliceValidator)
-              .copy(
-                additionalPackagesToUnvet = darsUnvettedOnAliceAtStart
-                  .groupBy(_.metadata.name)
-                  .map { case (name, resources) =>
-                    name -> resources.map(_.metadata.version).toSet
-                  }
-              ))
-        )
-      })
+      .addConfigTransforms(
+        (_, config) => {
+          val aliceValidator = InstanceName.tryCreate("aliceValidator")
+          config.copy(
+            validatorApps = config.validatorApps +
+              (aliceValidator -> config
+                .validatorApps(aliceValidator)
+                .copy(
+                  additionalPackagesToUnvet = darsUnvettedOnAliceAtStart
+                    .groupBy(_.metadata.name)
+                    .map { case (name, resources) =>
+                      name -> resources.map(_.metadata.version).toSet
+                    }
+                ))
+          )
+        },
+        (_, c) => ConfigTransforms.withNoSvOperationsSwitchOverTimes(c),
+      )
       .addConfigTransform((_, config) =>
         updateAutomationConfig(ConfigurableApp.Validator)(
           _.withPausedTrigger[AcceptedTransferOfferTrigger]

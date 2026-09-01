@@ -798,6 +798,9 @@ object ConfigTransforms {
     }
   }
 
+  def withNoSvOperationsSwitchOverTimes: ConfigTransform =
+    updateAllSvAppFoundDsoConfigs_(_.copy(initialSvOperationsSwitchOverTimes = None))
+
   def withValidatorFaucetCap(cap: BigDecimal): ConfigTransform =
     updateAllSvAppFoundDsoConfigs_(c => c.copy(optValidatorFaucetCap = Some(cap)))
 
