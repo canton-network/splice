@@ -1731,4 +1731,29 @@ class BftScanConnectionTest
     }
   }
 
+  "BftCallConfig.forAvailableData" should {
+
+    "widen n by unavailableCount so f grows accordingly" in {
+      val open = getMockedConnections(n = 3)
+      val connections = BftScanConnection.ScanConnections(open = open, failed = 0)
+      // Without unavailableCount: n = 3, f = 0 → targetSuccess = 1.
+      // With unavailableCount = 1: n = 4, f = 1 → targetSuccess = 2, requestsToDo = 3.
+      val config =
+        BftCallConfig.forAvailableData(connections, _ => true, unavailableCount = 1)
+      config.connections should have size 3
+      config.requestsToDo shouldBe 3
+      config.targetSuccess shouldBe 2
+    }
+
+    "preserve behaviour when unavailableCount is 0 (default)" in {
+      val open = getMockedConnections(n = 4)
+      val connections = BftScanConnection.ScanConnections(open = open, failed = 0)
+      // n = 4, f = 1 → targetSuccess = 2, requestsToDo = 3.
+      val config = BftCallConfig.forAvailableData(connections, _ => true)
+      config.connections should have size 4
+      config.requestsToDo shouldBe 3
+      config.targetSuccess shouldBe 2
+    }
+  }
+
 }

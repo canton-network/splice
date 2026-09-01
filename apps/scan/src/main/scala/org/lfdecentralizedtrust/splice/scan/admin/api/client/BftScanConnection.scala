@@ -1443,21 +1443,29 @@ object BftScanConnection {
       * the BFT call becomes increasingly sensitive to failing or unavailable peers.
       * In the extreme case, if the number of peers with data is smaller than `f+1`, it will require
       * ALL peers to successfully respond with the same data.
+      *
+      * `unavailableCount` names peers known to be unavailable outside of `connections.failed`
+      * (e.g. classified as such by an earlier probe round). They count toward `n` — and thus
+      * toward `f` — as possibly-disagreeing peers, but are not sampled or expected to respond.
       */
     def forAvailableData(
         connections: ScanConnections,
         dataAvailable: SingleScanConnection => Boolean,
+        unavailableCount: Int = 0,
     )(implicit loggingContext: ErrorLoggingContext): BftCallConfig = {
-      val f = connections.f
+      val n = connections.open.size + connections.failed + unavailableCount
+      val f = (n - 1) / 3
       val connectionsWithData = connections.open.filter(dataAvailable)
-      val requestsToDo = (2 * f + 1) min (connectionsWithData.size + connections.failed)
-      val targetSuccess = (f + 1) min (connectionsWithData.size + connections.failed)
+      val available = connectionsWithData.size + connections.failed + unavailableCount
+      val requestsToDo = (2 * f + 1) min available
+      val targetSuccess = (f + 1) min available
       if (2 * f + 1 > requestsToDo) {
         loggingContext.debug(
           s"Making a BFT call with a modified config." +
             s" Out of ${connections.open.map(_.url)} connections, only ${connectionsWithData
-                .map(_.url)} have data and ${connections.failed} are failed, " +
-            s"requiring $targetSuccess out of $requestsToDo matching responses."
+                .map(_.url)} have data, ${connections.failed} are failed, " +
+            s"and $unavailableCount are unavailable. " +
+            s"Requiring $targetSuccess out of $requestsToDo matching responses."
         )
       }
       BftCallConfig(
