@@ -137,19 +137,6 @@ trait PackageVersionSupport extends NamedLogging {
       ignoreRedundantCheck = true,
     )
 
-  // TODO(#6388): remove redundant version check
-  def supportsMintingDelegation(parties: Seq[PartyId], now: CantonTimestamp)(implicit
-      tc: TraceContext
-  ): Future[FeatureSupport] =
-    isDarSupported(
-      parties,
-      PackageIdResolver.Package.SpliceWallet,
-      now,
-      DarResources.wallet,
-      DarResources.wallet_0_1_16,
-      ignoreRedundantCheck = true,
-    )
-
   private def isDarSupported(
       parties: Seq[PartyId],
       packageId: PackageIdResolver.Package,

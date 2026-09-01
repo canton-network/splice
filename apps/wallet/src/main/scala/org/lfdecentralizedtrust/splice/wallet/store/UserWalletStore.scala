@@ -841,11 +841,8 @@ object UserWalletStore {
           co.payload.dso == dso && (co.payload.fundManager == endUser || co.payload.beneficiary == endUser)
         )(UserWalletAcsStoreRowData(_)),
         // Minting delegations for user as the delegate
-        mkFilter(mintingDelegationCodegen.MintingDelegationProposal.COMPANION)(
-          co => co.payload.delegation.dso == dso && co.payload.delegation.delegate == endUser,
-          versionGuard = { case (pkgVersionSupport, now) =>
-            (tc) => pkgVersionSupport.supportsMintingDelegation(Seq(key.endUserParty), now)(tc)
-          },
+        mkFilter(mintingDelegationCodegen.MintingDelegationProposal.COMPANION)(co =>
+          co.payload.delegation.dso == dso && co.payload.delegation.delegate == endUser
         )(contract =>
           UserWalletAcsStoreRowData(
             contract,
@@ -853,11 +850,8 @@ object UserWalletStore {
               Some(Timestamp.assertFromInstant(contract.payload.delegation.expiresAt)),
           )
         ),
-        mkFilter(mintingDelegationCodegen.MintingDelegation.COMPANION)(
-          co => co.payload.dso == dso && co.payload.delegate == endUser,
-          versionGuard = { case (pkgVersionSupport, now) =>
-            (tc) => pkgVersionSupport.supportsMintingDelegation(Seq(key.endUserParty), now)(tc)
-          },
+        mkFilter(mintingDelegationCodegen.MintingDelegation.COMPANION)(co =>
+          co.payload.dso == dso && co.payload.delegate == endUser
         )(contract =>
           UserWalletAcsStoreRowData(
             contract,
