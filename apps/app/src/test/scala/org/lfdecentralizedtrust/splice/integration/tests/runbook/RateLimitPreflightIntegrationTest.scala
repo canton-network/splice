@@ -75,7 +75,6 @@ class RateLimitPreflightIntegrationTest extends IntegrationTest {
         istioGlobalPerIpLimit + istioGlobalPerIpLimit / 2,
         scanCli.getDsoPartyId(),
         timeout = 5.minutes,
-        parallelism = 250,
       ),
       entries => {
         istioRejections ++= entries.map(_.message).filter(_.contains(istioRateLimitedBody))
@@ -136,14 +135,13 @@ class RateLimitPreflightIntegrationTest extends IntegrationTest {
       limit: Int,
       call: => Unit,
       timeout: FiniteDuration = 1.minute,
-      parallelism: Int = 64,
   )(implicit
       env: SpliceTestConsoleEnvironment
   ): Seq[Try[Unit]] = {
     import env.executionContext
     Await.result(
       MonadUtil
-        .parTraverseWithLimit(PositiveInt.tryCreate(parallelism))(
+        .parTraverseWithLimit(PositiveInt.tryCreate(32))(
           Seq.fill(limit)(())
         )(_ => {
           Future {
