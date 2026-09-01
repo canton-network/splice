@@ -1026,12 +1026,13 @@ class BftScanConnection(
   /** Bootstrap-safe reward-accounting read using two-phase
     * probe-filter-consensus. A single-phase BFT read stalls at
     * bootstrap because only sv1 has data (n=4 → targetSuccess=2, but
-    * only 1 Ok is possible). Instead we probe every open scan first,
-    * discard Undetermined / CannotProvide / network errors (probe
-    * failures logged at INFO), then run BFT consensus over the Ok
-    * subset with `n = withData.size`. Note the permissive quorum:
-    * with 1 ≤ n ≤ 3 a single Ok wins (f=0), and only n ≥ 4 restores
-    * f ≥ 1. Responds Undetermined when no scan returned Ok.
+    * only 1 Ok is possible). Instead we probe every open scan first
+    * to classify each response as WithData / WithoutData (definite
+    * CannotProvide, dropped from `n`) / Unavailable (probe failure
+    * or Undetermined, kept in `n` as possibly-disagreeing), then run
+    * BFT consensus over the WithData subset with
+    * `n = withData.size + unavailable`. Responds Undetermined when
+    * no scan returned Ok.
     */
   override def getRewardAccountingActivityTotals(roundNumber: Long)(implicit
       ec: ExecutionContext,
