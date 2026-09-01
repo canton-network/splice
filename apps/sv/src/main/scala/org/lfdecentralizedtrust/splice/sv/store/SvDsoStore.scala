@@ -1598,24 +1598,16 @@ object SvDsoStore {
             contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
           )
       },
-      mkFilter(splice.externalpartyconfigstate.ExternalPartyConfigState.COMPANION)(
-        co => co.payload.dso == dso,
-        versionGuard = { case (pkgVersionSupport, now) =>
-          (tc) =>
-            pkgVersionSupport.supports24hSubmissionDelay(Seq(dsoParty), Seq(dsoParty), now)(tc)
-        },
+      mkFilter(splice.externalpartyconfigstate.ExternalPartyConfigState.COMPANION)(co =>
+        co.payload.dso == dso
       ) { contract =>
         DsoAcsStoreRowData(
           contract,
           miningRound = Some(contract.payload.holdingFeesOpenRoundNumber.number),
         )
       },
-      mkFilter(splice.dsorules.BootstrapExternalPartyConfigStateInstruction.COMPANION)(
-        co => co.payload.dso == dso,
-        versionGuard = { case (pkgVersionSupport, now) =>
-          (tc) =>
-            pkgVersionSupport.supports24hSubmissionDelay(Seq(dsoParty), Seq(dsoParty), now)(tc)
-        },
+      mkFilter(splice.dsorules.BootstrapExternalPartyConfigStateInstruction.COMPANION)(co =>
+        co.payload.dso == dso
       ) {
         DsoAcsStoreRowData(_)
       },
