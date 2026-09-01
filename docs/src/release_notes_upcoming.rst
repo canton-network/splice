@@ -70,8 +70,10 @@ release-notes:: Upcoming
     - Wallet UI
 
         - The development fund allocation form now has a ``Mint After`` field, which sets the
-          earliest time at which the beneficiary can mint the coupon. When the field is 
-          optional, the coupons are allocated without a mint-after time as before.
+          earliest time at which the beneficiary can mint the coupon. While
+          the ``minDevelopmentFundMintingDelay`` stays unset in the ``AmuletConfig``, the field is 
+          optional and the coupons are allocated without a mint-after 
+          constraint.
 
         - The development fund coupon list now shows a ``Mint After`` column.
 
