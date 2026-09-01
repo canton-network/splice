@@ -125,20 +125,6 @@ trait PackageVersionSupport extends NamedLogging {
   ): Future[FeatureSupport] = supports24hSubmissionDelay(amuletParties, dsoGovernanceParties, now)
 
   // TODO(#6388): remove redundant version check
-  def supports24hSubmissionDelayDsoGovernance(parties: Seq[PartyId], now: CantonTimestamp)(implicit
-      tc: TraceContext
-  ): Future[FeatureSupport] = {
-    isDarSupported(
-      parties,
-      PackageIdResolver.Package.SpliceDsoGovernance,
-      now,
-      DarResources.dsoGovernance,
-      DarResources.dsoGovernance_0_1_23,
-      ignoreRedundantCheck = true,
-    )
-  }
-
-  // TODO(#6388): remove redundant version check
   def supportsTrafficBasedAppRewards(parties: Seq[PartyId], now: CantonTimestamp)(implicit
       tc: TraceContext
   ): Future[FeatureSupport] =
