@@ -108,18 +108,16 @@ export async function installWalletGateway(
     { dependsOn: dependsOn.concat([xns.ns, adminSecret]) }
   );
 
-  const portfolio = new k8s.helm.v3.Release(
+  new k8s.helm.v3.Release(
     `${ns}-portfolio`,
     {
       name: 'portfolio',
       chart: 'oci://ghcr.io/digital-asset/splice-portfolio/helm/splice-portfolio',
       version: config.portfolioVersion,
       namespace: xns.ns.metadata.name,
-      // The chart has no scheduling values, so the pod only becomes schedulable
-      // after the DeploymentPatch below; waiting here would deadlock
-      skipAwait: true,
       values: {
         image: { tag: `v${config.portfolioVersion}` },
+        ...appsKubernetesScheduling,
         config: {
           amulet: {
             validatorUrl: `https://wallet.${ns}.${CLUSTER_HOSTNAME}/api/validator`,
@@ -133,23 +131,6 @@ export async function installWalletGateway(
       },
     },
     { dependsOn: dependsOn.concat([xns.ns]) }
-  );
-
-  new k8s.apps.v1.DeploymentPatch(
-    `${ns}-portfolio-scheduling`,
-    {
-      metadata: {
-        name: 'portfolio-splice-portfolio',
-        namespace: xns.ns.metadata.name,
-        annotations: { 'pulumi.com/patchForce': 'true' },
-      },
-      spec: {
-        template: {
-          spec: { ...appsKubernetesScheduling },
-        },
-      },
-    },
-    { dependsOn: [portfolio] }
   );
 
   return gateway;

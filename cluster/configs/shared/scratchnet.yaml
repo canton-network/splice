@@ -23,8 +23,8 @@ validator1:
   deduplicationDuration: 30m
   walletGateway:
     enabled: true
-    version: '1.8.1'
-    portfolioVersion: '1.9.0'
+    version: '1.10.0'
+    portfolioVersion: '1.11.0'
 svs:
   sv-1: !include(scratchnet-sv.yaml) {}
   sv-2: !include(scratchnet-sv.yaml) {}

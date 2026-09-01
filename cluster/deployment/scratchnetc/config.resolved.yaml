@@ -1890,8 +1890,8 @@ validator1:
     retention: '1h'
   walletGateway:
     enabled: true
-    portfolioVersion: '1.9.0'
-    version: '1.8.1'
+    portfolioVersion: '1.11.0'
+    version: '1.10.0'
 validators:
   validator-runbook:
     namespace: 'validator'
