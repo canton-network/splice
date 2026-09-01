@@ -1383,6 +1383,29 @@ class BftScanConnectionTest
         .map(_ => succeed)
     }
 
+    "propagates BadGateway when the single Ok cannot meet BFT quorum against Undetermined peers" in {
+      val round = 42L
+      val connections = getMockedConnections(n = 4)
+      makeMockReturnRootHashOk(connections(0), round, "aabb")
+      makeMockReturnRootHashUndetermined(connections(1), round)
+      makeMockReturnRootHashUndetermined(connections(2), round)
+      makeMockReturnRootHashUndetermined(connections(3), round)
+      val bft = getBft(connections)
+
+      // 1 Ok + 3 Undetermined → n = 4, f = 1, targetSuccess = 2, but only
+      // 1 cached response is available. `enoughAvailableScans` rejects,
+      // and the endpoint propagates BadGateway rather than trusting the
+      // lone Ok.
+      loggerFactory.assertLogs(
+        for {
+          failure <- bft.getRewardAccountingRootHash(round).failed
+        } yield inside(failure) { case HttpErrorWithHttpCode(code, _) =>
+          code should be(StatusCodes.BadGateway)
+        },
+        _.warningMessage should include("BFT guarantees"),
+      )
+    }
+
     "logs a WARN disagreement when two Oks in the probed subset disagree (n=2)" in {
       val round = 42L
       val connections = getMockedConnections(n = 4)
@@ -1560,6 +1583,29 @@ class BftScanConnectionTest
         )
         .map(_ => succeed)
     }
+
+    "propagates BadGateway when the single Ok cannot meet BFT quorum against Undetermined peers" in {
+      val round = 42L
+      val connections = getMockedConnections(n = 4)
+      makeMockReturnActivityTotalsOk(connections(0), round, 100L, 10L, 5L)
+      makeMockReturnActivityTotalsUndetermined(connections(1), round)
+      makeMockReturnActivityTotalsUndetermined(connections(2), round)
+      makeMockReturnActivityTotalsUndetermined(connections(3), round)
+      val bft = getBft(connections)
+
+      // 1 Ok + 3 Undetermined → n = 4, f = 1, targetSuccess = 2, but only
+      // 1 cached response is available. `enoughAvailableScans` rejects,
+      // and the endpoint propagates BadGateway rather than trusting the
+      // lone Ok.
+      loggerFactory.assertLogs(
+        for {
+          failure <- bft.getRewardAccountingActivityTotals(round).failed
+        } yield inside(failure) { case HttpErrorWithHttpCode(code, _) =>
+          code should be(StatusCodes.BadGateway)
+        },
+        _.warningMessage should include("BFT guarantees"),
+      )
+    }
   }
 
   "BftScanConnection.getRewardAccountingBatch" should {
@@ -1604,7 +1650,7 @@ class BftScanConnectionTest
 
     "treat a single-scan set as its own quorum (n=1, f=0)" in {
       val withData = getMockedConnections(n = 1)
-      val config = BftCallConfig.forWithDataOnly(withData)
+      val config = BftCallConfig.forWithDataOnly(withData, unavailable = 0)
       config.connections should have size 1
       config.requestsToDo shouldBe 1
       config.targetSuccess shouldBe 1
@@ -1613,7 +1659,7 @@ class BftScanConnectionTest
 
     "require a single Ok when n=2 (f=0)" in {
       val withData = getMockedConnections(n = 2)
-      val config = BftCallConfig.forWithDataOnly(withData)
+      val config = BftCallConfig.forWithDataOnly(withData, unavailable = 0)
       config.connections should have size 2
       config.requestsToDo shouldBe 2
       config.targetSuccess shouldBe 1
@@ -1622,7 +1668,7 @@ class BftScanConnectionTest
 
     "require a single Ok when n=3 (f=0)" in {
       val withData = getMockedConnections(n = 3)
-      val config = BftCallConfig.forWithDataOnly(withData)
+      val config = BftCallConfig.forWithDataOnly(withData, unavailable = 0)
       config.connections should have size 3
       config.requestsToDo shouldBe 3
       config.targetSuccess shouldBe 1
@@ -1631,7 +1677,7 @@ class BftScanConnectionTest
 
     "engage BFT (f=1, targetSuccess=2) when n=4" in {
       val withData = getMockedConnections(n = 4)
-      val config = BftCallConfig.forWithDataOnly(withData)
+      val config = BftCallConfig.forWithDataOnly(withData, unavailable = 0)
       config.connections should have size 4
       config.requestsToDo shouldBe 4
       config.targetSuccess shouldBe 2
@@ -1639,26 +1685,48 @@ class BftScanConnectionTest
     }
 
     "keep targetSuccess at 2 for n=5 and n=6 (f=1)" in {
-      val forFive = BftCallConfig.forWithDataOnly(getMockedConnections(n = 5))
+      val forFive = BftCallConfig.forWithDataOnly(getMockedConnections(n = 5), unavailable = 0)
       forFive.targetSuccess shouldBe 2
       forFive.requestsToDo shouldBe 5
 
-      val forSix = BftCallConfig.forWithDataOnly(getMockedConnections(n = 6))
+      val forSix = BftCallConfig.forWithDataOnly(getMockedConnections(n = 6), unavailable = 0)
       forSix.targetSuccess shouldBe 2
       forSix.requestsToDo shouldBe 6
     }
 
     "raise targetSuccess to 3 when n=7 (f=2)" in {
-      val config = BftCallConfig.forWithDataOnly(getMockedConnections(n = 7))
+      val config = BftCallConfig.forWithDataOnly(getMockedConnections(n = 7), unavailable = 0)
       config.targetSuccess shouldBe 3
       config.requestsToDo shouldBe 7
     }
 
+    "count unavailable peers in n so a lone Ok cannot win against 3 unresponsive peers" in {
+      val withData = getMockedConnections(n = 1)
+      val config = BftCallConfig.forWithDataOnly(withData, unavailable = 3)
+      // n = 1 + 3 = 4 → f = 1 → targetSuccess = 2
+      config.connections should have size 1
+      config.requestsToDo shouldBe 1
+      config.targetSuccess shouldBe 2
+      // Only one cached response, need two matching → enoughAvailableScans is false
+      config.enoughAvailableScans shouldBe false
+    }
+
+    "allow n=2 quorum when 2 respond Ok and 2 are unavailable" in {
+      val withData = getMockedConnections(n = 2)
+      val config = BftCallConfig.forWithDataOnly(withData, unavailable = 2)
+      // n = 2 + 2 = 4 → f = 1 → targetSuccess = 2, requestsToDo = 2
+      config.connections should have size 2
+      config.requestsToDo shouldBe 2
+      config.targetSuccess shouldBe 2
+      config.enoughAvailableScans shouldBe true
+    }
+
     "return a config that enoughAvailableScans rejects when given an empty set" in {
-      val config = BftCallConfig.forWithDataOnly(Seq.empty)
+      val config = BftCallConfig.forWithDataOnly(Seq.empty, unavailable = 0)
       config.connections shouldBe empty
       config.requestsToDo shouldBe 0
-      config.targetSuccess shouldBe 0
+      // n = 0 → f = 0 → targetSuccess = 1, but connections.size (0) < targetSuccess
+      config.targetSuccess shouldBe 1
       config.enoughAvailableScans shouldBe false
     }
   }
