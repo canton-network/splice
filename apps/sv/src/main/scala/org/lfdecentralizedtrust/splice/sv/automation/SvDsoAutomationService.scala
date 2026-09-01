@@ -726,7 +726,6 @@ class SvDsoAutomationService(
   registerTrigger(
     new CreateBootstrapExternalPartyConfigStateInstructionTrigger(
       triggerContext,
-      packageVersionSupport,
       dsoStore,
       connection(SpliceLedgerConnectionPriority.Low),
     )
