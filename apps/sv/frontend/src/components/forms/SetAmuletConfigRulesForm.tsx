@@ -34,6 +34,7 @@ import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils'
 import { buildAmuletConfigChanges } from '../../utils/buildAmuletConfigChanges';
 import { useAppForm } from '../../hooks/form';
 import {
+  SwitchOverEntry,
   validateEffectiveDate,
   validateExpiration,
   validateExpiryEffectiveDate,
@@ -54,10 +55,15 @@ import {
   useVotesHooks,
 } from '@canton-network/splice-common-frontend';
 import { JsonDiffAccordion } from '../governance/JsonDiffAccordion';
+import { SwitchOverTimesField } from '../form-components/SwitchOverTimesField';
 
 export type SetAmuletConfigCompleteFormData = {
   common: CommonProposalFormData;
   config: ConfigFormData;
+  switchOverTimes: {
+    entries: SwitchOverEntry[];
+    allowNonFutureDated: boolean;
+  };
 };
 
 const createProposalAction = createProposalActions.find(a => a.value === 'CRARC_SetConfig');
@@ -74,6 +80,8 @@ export const SetAmuletConfigRulesForm: () => JSX.Element = () => {
     () => buildAmuletRulesPendingConfigFields(dsoProposalsQuery.data),
     [dsoProposalsQuery.data]
   );
+  const maybeConfig = dsoInfoQuery.data?.amuletRules.payload.configSchedule.initialValue;
+  const amuletConfig = maybeConfig ? maybeConfig : null;
 
   const defaultValues = useMemo((): SetAmuletConfigCompleteFormData => {
     if (!dsoInfoQuery.data) {
@@ -89,10 +97,16 @@ export const SetAmuletConfigRulesForm: () => JSX.Element = () => {
           summary: '',
         },
         config: {},
+        switchOverTimes: {
+          entries: Object.entries(amuletConfig?.amuletSwitchOverTimes ?? {}).map(([key, time]) => ({
+            key,
+            time,
+          })),
+          allowNonFutureDated: false,
+        },
       };
     }
 
-    const amuletConfig = dsoInfoQuery.data?.amuletRules.payload.configSchedule.initialValue;
     const amuletConfigChanges = buildAmuletConfigChanges(amuletConfig, amuletConfig, true);
 
     return {
@@ -110,8 +124,15 @@ export const SetAmuletConfigRulesForm: () => JSX.Element = () => {
         acc[field.fieldName] = { fieldName: field.fieldName, value: field.currentValue };
         return acc;
       }, {} as ConfigFormData),
+      switchOverTimes: {
+        entries: Object.entries(amuletConfig?.amuletSwitchOverTimes ?? {}).map(([key, time]) => ({
+          key,
+          time,
+        })),
+        allowNonFutureDated: false,
+      },
     };
-  }, [dsoInfoQuery.data, initialExpiration, initialEffectiveDate]);
+  }, [dsoInfoQuery.data, initialExpiration, initialEffectiveDate, amuletConfig]);
 
   const form = useAppForm({
     defaultValues,
@@ -129,7 +150,10 @@ export const SetAmuletConfigRulesForm: () => JSX.Element = () => {
           false
         );
         const baseConfig = amuletConfig;
-        const newConfig = buildAmuletRulesConfigFromChanges(changes);
+        const newConfig = buildAmuletRulesConfigFromChanges(
+          changes,
+          formData.switchOverTimes.entries
+        );
         const action: ActionRequiringConfirmation = {
           tag: 'ARC_AmuletRules',
           value: {
@@ -174,8 +198,6 @@ export const SetAmuletConfigRulesForm: () => JSX.Element = () => {
     },
   });
 
-  const maybeConfig = dsoInfoQuery.data?.amuletRules.payload.configSchedule.initialValue;
-  const amuletConfig = maybeConfig ? maybeConfig : null;
   // passing the config twice here because we initially have no changes
   const allAmuletConfigChanges = buildAmuletConfigChanges(amuletConfig, amuletConfig, true);
 
@@ -189,7 +211,10 @@ export const SetAmuletConfigRulesForm: () => JSX.Element = () => {
   );
 
   const baseConfig = amuletConfig;
-  const newConfig = buildAmuletRulesConfigFromChanges(changes);
+  const newConfig = buildAmuletRulesConfigFromChanges(
+    changes,
+    form.state.values.switchOverTimes.entries
+  );
   const dsoAction: AmuletRules_ActionRequiringConfirmation = {
     tag: 'CRARC_SetConfig',
     value: {
@@ -284,6 +309,12 @@ export const SetAmuletConfigRulesForm: () => JSX.Element = () => {
                 )}
               </form.AppField>
             ))}
+
+            <SwitchOverTimesField
+              form={form}
+              title="SV operations switch-over times"
+              effectiveDate={form.state.values.common.effectiveDate.effectiveDate}
+            />
 
             <JsonDiffAccordion variant="form">{jsonDiffContent}</JsonDiffAccordion>
           </Box>
