@@ -39,33 +39,22 @@ class UnhideRewardCouponV2Trigger(
 
   override protected def retrieveTasks()(implicit
       tc: TraceContext
-  ): Future[Seq[Task]] = {
-    val now = context.clock.now
-    for {
-      providerParties <- store.listNonObserverRewardCouponsV2ProvidersSample(
+  ): Future[Seq[Task]] =
+    store
+      .listNonObserverRewardCouponsV2ProvidersSample(
         PageLimit.tryCreate(svConfig.delegatelessAutomationUnhideRewardCouponV2SampleSize)
       )
-      supported <- Future.traverse(providerParties) { party =>
-        svTaskContext.packageVersionSupport
-          .supportsTrafficBasedAppRewards(Seq(party), now)
-          .map(support => (party, support.supported))
-      }
-    } yield supported.collect { case (party, true) => Task(party) }
-  }
+      .map(_.map(Task(_)))
 
   override protected def isStaleTask(task: Task)(implicit
       tc: TraceContext
-  ): Future[Boolean] = {
-    val now = context.clock.now
-    for {
-      coupons <- store.listNonObserverRewardCouponsV2ForProvider(
+  ): Future[Boolean] =
+    store
+      .listNonObserverRewardCouponsV2ForProvider(
         task.providerParty,
         PageLimit.tryCreate(1),
       )
-      support <- svTaskContext.packageVersionSupport
-        .supportsTrafficBasedAppRewards(Seq(task.providerParty), now)
-    } yield coupons.isEmpty || !support.supported
-  }
+      .map(_.isEmpty)
 
   override def completeTaskAsDsoDelegate(
       task: Task,
