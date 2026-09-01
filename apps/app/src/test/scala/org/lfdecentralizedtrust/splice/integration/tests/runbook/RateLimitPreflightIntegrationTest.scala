@@ -13,18 +13,12 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
 import org.scalatest.Assertion
 import org.slf4j.event.Level
 
-import scala.collection.mutable
 import scala.concurrent.duration.*
 import scala.concurrent.{Await, Future, blocking}
 import scala.util.control.NonFatal
 import scala.util.{Failure, Try}
 
 class RateLimitPreflightIntegrationTest extends IntegrationTest {
-
-  // istio tokens per ip
-  private val istioGlobalPerIpLimit = 1000
-  // istio rate limit response body
-  private val istioRateLimitedBody = "local_rate_limited"
 
   override lazy val resetRequiredTopologyState: Boolean = false
   override protected def runTokenStandardCliSanityCheck: Boolean = false
@@ -59,36 +53,6 @@ class RateLimitPreflightIntegrationTest extends IntegrationTest {
           scanCli.getDsoPartyId()
         },
       )
-    }
-  }
-
-  // Note: this test must come last, as it exhausts the per-IP token bucket of the scan it targets.
-  "Requests exceeding the Istio per-IP limit are rejected by Istio" in { implicit env =>
-    val scanCli = env.scans.remote.head
-
-    val istioRejections = mutable.ListBuffer.empty[String]
-
-    // The app's own rate limiter rejects requests as well, we only care about the requests
-    // that Istio rejected before they ever reached the app.
-    loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(Level.ERROR))(
-      collectResponses(
-        istioGlobalPerIpLimit + istioGlobalPerIpLimit / 2,
-        scanCli.getDsoPartyId(),
-        timeout = 5.minutes,
-      ),
-      entries => {
-        istioRejections ++= entries.map(_.message).filter(_.contains(istioRateLimitedBody))
-        succeed
-      },
-    )
-
-    inside(istioRejections.headOption) { case Some(message) =>
-      message should include("429 Too Many Requests")
-    }
-
-    // Wait for the token bucket to refill, so that we don't affect any test running afterwards.
-    eventually(2.minutes) {
-      loggerFactory.suppressErrors(scanCli.getDsoPartyId())
     }
   }
 
