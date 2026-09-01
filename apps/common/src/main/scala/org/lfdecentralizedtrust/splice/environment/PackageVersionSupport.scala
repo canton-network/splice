@@ -106,16 +106,6 @@ trait PackageVersionSupport extends NamedLogging {
     )
   }
 
-  // Synonym for supports24hSubmissionDelay as both features were introduced in amulet_0_1_17
-
-  def supportsExpireAmuletAllocations(
-      amuletParties: Seq[PartyId],
-      dsoGovernanceParties: Seq[PartyId],
-      now: CantonTimestamp,
-  )(implicit
-      tc: TraceContext
-  ): Future[FeatureSupport] = supports24hSubmissionDelay(amuletParties, dsoGovernanceParties, now)
-
   private def isDarSupported(
       parties: Seq[PartyId],
       packageId: PackageIdResolver.Package,
