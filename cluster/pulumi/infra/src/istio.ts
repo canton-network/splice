@@ -129,6 +129,9 @@ function configureIstiod(
         upstream_service_time: '%RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%',
         user_agent: '%REQ(USER-AGENT)%',
         x_forwarded_for: '%REQ(X-FORWARDED-FOR)%',
+        // the trusted client IP as determined by envoy (based on numTrustedProxies),
+        // this is the header the apps use for per-client-IP rate limiting
+        envoy_external_address: '%REQ(X-ENVOY-EXTERNAL-ADDRESS)%',
         // rate limiting fields, will show up in sidecar access logging
         local_rate_limited: '%RESP(x-local-rate-limit)%',
         rate_limit_limit: '%RESP(x-ratelimit-limit)%',

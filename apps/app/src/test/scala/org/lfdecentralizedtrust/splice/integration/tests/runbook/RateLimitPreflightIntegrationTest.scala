@@ -1,7 +1,6 @@
 package org.lfdecentralizedtrust.splice.integration.tests.runbook
 
 import com.digitalasset.canton.config.RequireTypes.PositiveInt
-import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.util.FutureInstances.parallelFuture
@@ -66,39 +65,30 @@ class RateLimitPreflightIntegrationTest extends IntegrationTest {
   // Note: this test must come last, as it exhausts the per-IP token bucket of the scan it targets.
   "Requests exceeding the Istio per-IP limit are rejected by Istio" in { implicit env =>
     val scanCli = env.scans.remote.head
-    val burstSize = 250
-    val maxBursts = 2 * istioGlobalPerIpLimit / burstSize
 
     val istioRejections = mutable.ListBuffer.empty[String]
 
-    LazyList
-      .range(1, maxBursts + 1)
-      .find { burst =>
-        clue(s"burst $burst of $burstSize requests against ${scanCli.name}") {
-          // The app's own rate limiter rejects requests as well, we only care about the requests
-          // that Istio rejected before they ever reached the app.
-          loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(Level.ERROR))(
-            collectResponses(
-              burstSize,
-              scanCli.getDsoPartyId(),
-              timeout = 2.minutes,
-            ),
-            entries => {
-              istioRejections ++= entries.map(_.message).filter(_.contains(istioRateLimitedBody))
-              succeed
-            },
-          )
-          istioRejections.nonEmpty
-        }
-      }
-      .discard
+    // The app's own rate limiter rejects requests as well, we only care about the requests
+    // that Istio rejected before they ever reached the app.
+    loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(Level.ERROR))(
+      collectResponses(
+        istioGlobalPerIpLimit + istioGlobalPerIpLimit / 2,
+        scanCli.getDsoPartyId(),
+        timeout = 5.minutes,
+        parallelism = 250,
+      ),
+      entries => {
+        istioRejections ++= entries.map(_.message).filter(_.contains(istioRateLimitedBody))
+        succeed
+      },
+    )
 
     inside(istioRejections.headOption) { case Some(message) =>
       message should include("429 Too Many Requests")
     }
 
     // Wait for the token bucket to refill, so that we don't affect any test running afterwards.
-    eventually(1.minutes) {
+    eventually(2.minutes) {
       loggerFactory.suppressErrors(scanCli.getDsoPartyId())
     }
   }
@@ -146,13 +136,14 @@ class RateLimitPreflightIntegrationTest extends IntegrationTest {
       limit: Int,
       call: => Unit,
       timeout: FiniteDuration = 1.minute,
+      parallelism: Int = 64,
   )(implicit
       env: SpliceTestConsoleEnvironment
   ): Seq[Try[Unit]] = {
     import env.executionContext
     Await.result(
       MonadUtil
-        .parTraverseWithLimit(PositiveInt.tryCreate(64))(
+        .parTraverseWithLimit(PositiveInt.tryCreate(parallelism))(
           Seq.fill(limit)(())
         )(_ => {
           Future {
