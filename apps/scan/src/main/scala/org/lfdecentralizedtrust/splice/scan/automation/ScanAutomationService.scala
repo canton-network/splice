@@ -99,6 +99,7 @@ class ScanAutomationService(
         rewardsReferenceStore,
         verdictStore,
         updateHistory,
+        config.rewardAccountingRetentionPeriod,
         triggerContext,
       )
     )

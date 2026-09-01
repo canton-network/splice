@@ -1,7 +1,7 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.HasExecutionContext
-import com.digitalasset.canton.config.NonNegativeDuration
+import com.digitalasset.canton.config.{NonNegativeDuration, NonNegativeFiniteDuration}
 import com.digitalasset.canton.console.LocalInstanceReference
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.CloseContext
@@ -52,6 +52,7 @@ import org.lfdecentralizedtrust.splice.util.{
   AmuletConfigSchedule,
   AmuletConfigUtil,
   ScanTestUtil,
+  SpliceUtil,
   TimeTestUtil,
   TriggerTestUtil,
   WalletTestUtil,
@@ -85,6 +86,10 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
   // event-history consistency check cannot hold here.
   override protected def runEventHistorySanityCheck: Boolean = false
 
+  // Long enough that advancing a few rounds does not reach it
+  private val rewardAccountingRetentionPeriod: NonNegativeFiniteDuration =
+    NonNegativeFiniteDuration(SpliceUtil.defaultInitialTickDuration.asJava.multipliedBy(10))
+
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
       .simpleTopology4SvsWithSimTime(this.getClass.getSimpleName)
@@ -95,6 +100,11 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
             dryRunVersion = None,
             appRewardCouponThreshold = BigDecimal("0"),
           )
+        )(config)
+      )
+      .addConfigTransform((_, config) =>
+        ConfigTransforms.updateAllScanAppConfigs_(
+          _.copy(rewardAccountingRetentionPeriod = rewardAccountingRetentionPeriod)
         )(config)
       )
       // Prevent wallets from minting RewardCouponV2 before the test
@@ -839,6 +849,28 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
       }
     }
 
+    def confirmPruningMetrics(
+        scan: LocalInstanceReference,
+        atLeastRound: Long,
+        timeUntilSuccess: FiniteDuration = 20.seconds,
+    ): Unit = {
+      def pruningMetricValue(name: String, labels: Map[String, String] = Map.empty): Long =
+        metricValue(scan, s"scan.reward_accounting_pruning.$name", labels)
+
+      eventually(timeUntilSuccess) {
+        pruningMetricValue("pruned_round") should be >= atLeastRound
+        forAll(
+          Seq(
+            "scan_rewards_reference_store_archived",
+            "app_activity_round_totals",
+            "app_reward_round_totals",
+          )
+        ) { table =>
+          pruningMetricValue("deleted_rows", Map("table" -> table)) should be > 0L
+        }
+      }
+    }
+
     // Simulate SV2 scan ingestion lag and confirm that pruning does not happen
     // until the ingestion has caught up.
     val newLowestOpen = pauseScanVerdictIngestionWithin(sv2ScanBackend) {
@@ -850,8 +882,16 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
       // So advancing by 3 rounds is a safe way to achieve this.
       (1 to 3).foreach(_ => advanceRoundsToNextRoundOpening)
 
-      clue(s"sv1 prunes rounds below $newLowestOpen") {
+      clue(s"sv1 retains rounds below $newLowestOpen while within the retention period") {
+        hasUnprunedRewardAccountingDataBelow(sv1Db, sv1HistoryId, newLowestOpen) shouldBe true
+        hasUnprunedArchiveDataForRound(sv1RewardsRefStore, newLowestOpen - 1) shouldBe true
+      }
+
+      advanceTime(rewardAccountingRetentionPeriod.asJava)
+
+      clue(s"sv1 prunes rounds below $newLowestOpen once past the retention period") {
         confirmFullyPruned(sv1Db, sv1HistoryId, sv1RewardsRefStore, newLowestOpen)
+        confirmPruningMetrics(sv1ScanBackend, newLowestOpen - 1)
       }
 
       clue(
@@ -872,6 +912,7 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
         newLowestOpen,
         timeUntilSuccess = 90.seconds,
       )
+      confirmPruningMetrics(sv2ScanBackend, newLowestOpen - 1)
     }
   }
 

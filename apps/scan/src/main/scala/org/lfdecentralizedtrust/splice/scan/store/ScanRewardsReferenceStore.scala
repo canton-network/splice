@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.scan.store
 
+import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.CloseContext
 import com.digitalasset.canton.logging.NamedLoggerFactory
@@ -99,22 +100,83 @@ trait ScanRewardsReferenceStore extends AppStore {
   )(implicit tc: TraceContext): Future[Option[CantonTimestamp]]
 
   /** The lowest round number that may be safe to prune
-    * The criterion is based on the prescence of `OpenMiningRound`,
+    * The criterion is based on the presence of `OpenMiningRound`,
     *  `CalculateRewardsV2`, or `ProcessRewardsV2` for a round in the active table.
     * If all of these contracts for a round are archived then the reward processing is done.
     * In addition we also check that none of these three contracts are active for any lower round.
     */
   def lookupLowestPrunableArchivedRewardRound()(implicit tc: TraceContext): Future[Option[Long]]
 
+  /** The lowest round number that is safe to prune given that verdicts have been
+    * ingested up to `lastIngestedRecordTime`, and that data is retained for at
+    * least `retentionPeriod` before it may be pruned.
+    */
+  def lookupPrunableRewardRound(
+      lastIngestedRecordTime: CantonTimestamp,
+      now: CantonTimestamp,
+      retentionPeriod: NonNegativeFiniteDuration,
+  )(implicit tc: TraceContext): Future[Option[Long]] =
+    lookupLowestPrunableArchivedRewardRound().flatMap {
+      case None => Future.successful(None)
+      case Some(roundNumber) =>
+        // The earliest archived_at row acts as an indicator of the "ingestion
+        // start" of this store, and therefore we need to ensure that we keep at
+        // least one archived row with a record_time lower than the `opensAt` of
+        // the oldest round that is still open as of lastIngestedRecordTime.
+        //
+        // A simple way to ensure this is to compare that `opensAt` with the
+        // archived_at of round roundNumber + 1.
+        for {
+          activeRoundO <- lookupActiveOpenMiningRounds(Seq(lastIngestedRecordTime))
+            .map(_.get(lastIngestedRecordTime))
+          archivedAtNextO <- lookupArchivedAtForOpenMiningRound(roundNumber + 1)
+        } yield (activeRoundO, archivedAtNextO) match {
+          case (Some((activeRoundNumber, activeRoundOpensAt)), Some(archivedAtNext)) =>
+            val retainUntil = now.minus(retentionPeriod.asJava)
+            if (activeRoundOpensAt <= archivedAtNext) {
+              logger.debug(
+                s"Skipping pruning of round $roundNumber as the ingestion's currently active round " +
+                  s"$activeRoundNumber opened at $activeRoundOpensAt, which is not yet past round " +
+                  s"${roundNumber + 1}'s archivedAt ($archivedAtNext)."
+              )
+              None
+            } else if (retainUntil <= archivedAtNext) {
+              // We compare retentionPeriod with archived_at of roundNumber + 1
+              // just to avoid an additional DB lookup of archived_at of roundNumber
+              logger.debug(
+                s"Skipping pruning of round $roundNumber as round ${roundNumber + 1}'s archivedAt " +
+                  s"($archivedAtNext) is still within the retention period."
+              )
+              None
+            } else Some(roundNumber)
+          case (_, None) =>
+            logger.debug(
+              s"Skipping pruning of round $roundNumber as round ${roundNumber + 1} has not archived yet."
+            )
+            None
+          case (None, _) =>
+            // This happens after bootstrapping this store while the round
+            // advancement is lagging, as then the oldest open round as of
+            // lastIngestedRecordTime opened before the store's ingestion start.
+            logger.debug(
+              s"Skipping pruning of round $roundNumber as no active OpenMiningRound could be " +
+                s"resolved as of the last ingested verdict record time ($lastIngestedRecordTime)."
+            )
+            None
+        }
+    }
+
   /** Deletes all rows from the archive table with `archived_at <=` the record_time at
-    * which round's `OpenMiningRound` contract was archived.
+    * which round's `OpenMiningRound` contract was archived, and thereby moves
+    * the ingestion start of this store to the earliest remaining archival.
+    * Fails if there is no such archival, or if the round's archival has not been observed.
     *
     * Here we don't have a lower bound on the `archived_at`, so this API should
     * be used with care, preferably ensuring that the deletion happens one round at a time.
     *
     * Returns number of rows deleted.
     */
-  def pruneArchivedDataForRound(
+  def pruneArchivedUpToRound(
       roundNumber: Long
   )(implicit tc: TraceContext): Future[Long]
 

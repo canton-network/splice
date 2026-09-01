@@ -97,10 +97,10 @@ class CachingScanRewardsReferenceStore private[splice] (
   ): Future[Option[Long]] =
     store.lookupLowestPrunableArchivedRewardRound()
 
-  override def pruneArchivedDataForRound(
+  override def pruneArchivedUpToRound(
       roundNumber: Long
   )(implicit tc: TraceContext): Future[Long] =
-    store.pruneArchivedDataForRound(roundNumber)
+    store.pruneArchivedUpToRound(roundNumber)
 
   override val storeName: String = store.storeName
   override def defaultLimit: Limit = store.defaultLimit

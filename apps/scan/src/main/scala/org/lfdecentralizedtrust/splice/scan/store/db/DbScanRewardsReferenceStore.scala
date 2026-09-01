@@ -270,7 +270,7 @@ class DbScanRewardsReferenceStore(
       case _ => Future.successful(None)
     }
 
-  def lookupArchivedAtForOpenMiningRound(
+  override def lookupArchivedAtForOpenMiningRound(
       roundNumber: Long
   )(implicit tc: TraceContext): Future[Option[CantonTimestamp]] =
     waitUntilInitialized.flatMap { _ =>
@@ -311,7 +311,6 @@ class DbScanRewardsReferenceStore(
                 where archived.store_id = $storeId and archived.migration_id = $migrationId
                   and archived.package_name = ${pqn.packageName}
                   and archived.template_id_qualified_name = ${pqn.qualifiedName}
-                  and archived.round is not null
                   and not exists (
                     select 1
                     from #${ScanRewardsReferenceTables.acsTableName} active
@@ -326,7 +325,7 @@ class DbScanRewardsReferenceStore(
     }
 
   // Returns number of rows deleted
-  def pruneArchivedDataForRound(
+  override def pruneArchivedUpToRound(
       roundNumber: Long
   )(implicit tc: TraceContext): Future[Long] =
     lookupArchivedAtForOpenMiningRound(roundNumber).flatMap {
@@ -336,17 +335,7 @@ class DbScanRewardsReferenceStore(
             s"Cannot prune archived data for round $roundNumber: its OpenMiningRound has not been observed as archived."
           )
         )
-      case Some(uptoInclusive) =>
-        val storeId = multiDomainAcsStore.acsStoreId
-        val migrationId = multiDomainAcsStore.domainMigrationId
-        futureUnlessShutdownToFuture(
-          storage.update(
-            sql"""delete from #${ScanRewardsReferenceTables.archiveTableName}
-                  where store_id = $storeId and migration_id = $migrationId
-                    and archived_at <= $uptoInclusive""".asUpdate,
-            "pruneArchivedDataForRound",
-          )
-        ).map(_.toLong)
+      case Some(uptoInclusive) => tcsStore.pruneArchivedUpTo(uptoInclusive)
     }
 
   override def listActiveCalculateRewardsV2(limit: Limit = defaultLimit)(implicit
