@@ -1635,7 +1635,13 @@ object SvDsoStore {
       ) { contract =>
         DsoAcsStoreRowData(
           contract,
-          // TODO(#5743): use the more precise `expiresAt` time once the minimal `splice-amulet` version contains that field
+          // `AmuletTransferInstruction` has no separate stored expiry:
+          // `executeBefore` is already capped to `tokenStandardMaxTTL` at
+          // creation (see Splice.ExternalPartyAmuletRules), so it *is* the
+          // early expiry:
+          //
+          // transferLifetime = executeBefore - requestedAt
+          // require $ transferLifetime <= tokenStandardMaxTTL
           contractExpiresAt =
             Some(Timestamp.assertFromInstant(contract.payload.transfer.executeBefore)),
         )
@@ -1645,9 +1651,13 @@ object SvDsoStore {
       ) { contract =>
         DsoAcsStoreRowData(
           contract,
-          // TODO(#5743): use the more precise `expiresAt` time once the minimal `splice-amulet` version contains that field
-          contractExpiresAt =
-            Some(Timestamp.assertFromInstant(contract.payload.allocation.settlement.settleBefore)),
+          contractExpiresAt = Some(
+            Timestamp.assertFromInstant(
+              contract.payload.expiresAt.orElse(
+                contract.payload.allocation.settlement.settleBefore
+              )
+            )
+          ),
         )
       },
       mkFilter(splice.amuletallocationv2.AmuletAllocationV2.COMPANION)(

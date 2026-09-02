@@ -119,6 +119,12 @@ release-notes:: Upcoming
           ``cnadmin`` superuser and a ``cantonnet`` database may not be available to create. The SV
           charts are not covered yet and still use the hardcoded values.
 
+        - ``AmuletAllocation`` ingestion by ``SvDsoStore`` now honour the earlier
+          ``expiresAt`` deadline instead of the coarser settlement deadline, so
+          locked amulet is released sooner. This only affects newly ingested
+          contracts; contracts already in the SV store keep their previous expiry
+          unless reingestion is forced via a store version bump.
+
     - SV UI
 
         - The ``AmuletRules_SetConfig`` proposal form can now set

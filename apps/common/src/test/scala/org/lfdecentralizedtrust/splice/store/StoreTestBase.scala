@@ -428,6 +428,7 @@ abstract class StoreTestBase
       requestedAt: Instant,
       allocateBefore: Instant,
       settleBefore: Instant,
+      expiresAt: Option[Instant] = None,
       contractId: String = nextCid(),
   ): Contract[
     AmuletAllocation.ContractId,
@@ -462,7 +463,7 @@ abstract class StoreTestBase
     val template = new AmuletAllocation(
       new LockedAmulet.ContractId(nextCid()),
       allocationSpec,
-      java.util.Optional.empty(),
+      expiresAt.toJava,
     )
 
     contract(
