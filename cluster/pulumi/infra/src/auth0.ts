@@ -457,6 +457,7 @@ function nonMainNetAuth0(clusterBasename: string, dnsNames: string[]): pulumi.Ou
   const validator1WalletGatewayApp = newWalletGatewayApp(
     'validator1WalletGatewayApp',
     'Validator1 Wallet Gateway',
+    'Used for the Wallet Gateway UI login for the standalone Validator1',
     'validator1',
     clusterBasename,
     dnsNames,
@@ -531,6 +532,7 @@ function nonMainNetAuth0(clusterBasename: string, dnsNames: string[]): pulumi.Ou
 function newWalletGatewayApp(
   resourceName: string,
   name: string,
+  description: string,
   ingressName: string,
   clusterBasename: string,
   clusterDnsNames: string[],
@@ -549,7 +551,7 @@ function newWalletGatewayApp(
       allowedOrigins: origins,
       webOrigins: origins,
       crossOriginAuth: false,
-      description: ` ** Managed by Pulumi, do not edit manually **\nUsed for the upstream wallet gateway UI login (PKCE)`,
+      description: ` ** Managed by Pulumi, do not edit manually **\n${description}`,
       oidcConformant: true,
       grantTypes: ['authorization_code', 'refresh_token'],
       refreshToken: {
@@ -699,6 +701,7 @@ function validatorRunbookAuth0(
   const walletGatewayApp = newWalletGatewayApp(
     'validatorWalletGatewayApp',
     'Wallet Gateway',
+    'Used for the Wallet Gateway UI login for the validator runbook',
     'validator',
     clusterBasename,
     dnsNames,

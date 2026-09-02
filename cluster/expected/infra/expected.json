@@ -3675,7 +3675,7 @@
         "https://walletgateway.validator1.mock.global.canton.network.digitalasset.com/callback/"
       ],
       "crossOriginAuth": false,
-      "description": " ** Managed by Pulumi, do not edit manually **\nUsed for the upstream wallet gateway UI login (PKCE)",
+      "description": " ** Managed by Pulumi, do not edit manually **\nUsed for the Wallet Gateway UI login for the standalone Validator1",
       "grantTypes": [
         "authorization_code",
         "refresh_token"
@@ -3786,7 +3786,7 @@
         "https://walletgateway.validator.mock.global.canton.network.digitalasset.com/callback/"
       ],
       "crossOriginAuth": false,
-      "description": " ** Managed by Pulumi, do not edit manually **\nUsed for the upstream wallet gateway UI login (PKCE)",
+      "description": " ** Managed by Pulumi, do not edit manually **\nUsed for the Wallet Gateway UI login for the validator runbook",
       "grantTypes": [
         "authorization_code",
         "refresh_token"
