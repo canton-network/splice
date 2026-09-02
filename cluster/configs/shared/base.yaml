@@ -83,6 +83,10 @@ validator1:
   participant:
     additionalEnvVars:
       - !include(./participant_pruning.yaml)
+  walletGateway:
+    enabled: false
+    version: '1.10.0'
+    portfolioVersion: '1.11.0'
 splitwell:
   participant:
     additionalEnvVars:
