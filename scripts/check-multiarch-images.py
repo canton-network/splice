@@ -28,6 +28,11 @@ IMAGE_SHA256_MAP = {
     "cluster/images/canton-sequencer/Dockerfile": "CANTON_SEQUENCER_IMAGE_SHA256",
 }
 
+# List of file-path regexes. Any digest-pinned image coming from a matching file is skipped by the check.
+IGNORED_FILE_PATTERNS = [
+    re.compile(r"^cluster/images/cometbft/Dockerfile$")
+]
+
 
 def _setup_env() -> None:
     """Export lowercase aliases for Dockerfile ARG references"""
@@ -133,6 +138,13 @@ def _tracked_files_with_digest_refs() -> list[str]:
     return result.stdout.splitlines()
 
 
+def _file_is_ignored(file: str) -> bool:
+    for pattern in IGNORED_FILE_PATTERNS:
+        if pattern.search(file):
+            return True
+    return False
+
+
 def main() -> int:
     _setup_env()
 
@@ -143,6 +155,8 @@ def main() -> int:
     for file in _tracked_dockerfiles():
         path = Path(file)
         if not path.is_file():
+            continue
+        if _file_is_ignored(file):
             continue
         refs = _refs_from_dockerfile(path)
         for ref in refs:
@@ -159,6 +173,8 @@ def main() -> int:
     for file in _tracked_files_with_digest_refs():
         path = Path(file)
         if not path.is_file():
+            continue
+        if _file_is_ignored(file):
             continue
         refs = _refs_from_plain_file(path)
         for ref in refs:
