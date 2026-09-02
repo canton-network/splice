@@ -15,6 +15,8 @@ export const gcpDnsProject = config.requireEnv('GCP_DNS_PROJECT');
 
 const CloudArmorConfigSchema = z.object({
   enabled: z.boolean(),
+  // enables L7 DDOS protection
+  enableAdaptiveProtection: z.boolean().default(false),
   // "preview" is not pulumi preview, but https://cloud.google.com/armor/docs/security-policy-overview#preview_mode
   allRulesPreviewOnly: z.boolean(),
   publicEndpoints: z

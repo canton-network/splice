@@ -1,1 +1,7 @@
-!include($SPLICE_ROOT/cluster/configs/shared/scratchnet.yaml) {}
+!include($SPLICE_ROOT/cluster/configs/shared/scratchnet.yaml)
+cloudArmor:
+  enabled: true
+  enableAdaptiveProtection: true
+  # start in preview mode: rules are evaluated and logged but not enforced.
+  # flip to false to actually enforce the allow list and the default deny.
+  allRulesPreviewOnly: false

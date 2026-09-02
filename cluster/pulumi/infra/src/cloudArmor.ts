@@ -65,6 +65,17 @@ export function configureCloudArmorPolicy(
       name,
       description: `Cloud Armor security policy for ${CLUSTER_BASENAME}`,
       type: 'CLOUD_ARMOR', // attachable to backend service only
+      // Set L7 DDOS protection
+      ...(cac.enableAdaptiveProtection
+        ? {
+            adaptiveProtectionConfig: {
+              layer7DdosDefenseConfig: {
+                enable: true,
+                ruleVisibility: 'STANDARD',
+              },
+            },
+          }
+        : {}),
       // using `rules` to define all rules at once would be fewer Pulumi resources,
       // but the preview would entail changing this array if the rules were changed,
       // making those changes harder to review than with the separate resources

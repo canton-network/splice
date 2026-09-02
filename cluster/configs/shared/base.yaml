@@ -233,6 +233,7 @@ monitoring:
     muteTimeIntervals: [ ]
 cloudArmor:
   enabled: false
+  enableAdaptiveProtection: false
   allRulesPreviewOnly: true
   publicEndpoints:
     publicScan:
