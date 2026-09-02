@@ -13,6 +13,8 @@ validator1:
     additionalEnvVars:
       - name: ADDITIONAL_CONFIG_VALIDATOR1_DUMMY_NAME
         value: ADDITIONAL_CONFIG_VALIDATOR1_DUMMY_NAME
+  walletGateway:
+    enabled: true
 multiValidator:
   postgresPvcSize: '100Gi'
   # Dummy values for testing

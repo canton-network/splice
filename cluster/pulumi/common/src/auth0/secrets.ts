@@ -112,7 +112,7 @@ export async function installWalletGatewayAdminSecret(
     `splice-auth0-secret-${xns.logicalName}-wallet-gateway-admin`,
     {
       metadata: {
-        name: 'wallet-gateway-admin-oauth',
+        name: 'splice-app-wallet-gateway-admin-oauth',
         namespace: xns.ns.metadata.name,
       },
       stringData: {
