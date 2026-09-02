@@ -95,6 +95,12 @@
           "minimum": 0,
           "maximum": 65535
         },
+        "bootstrapDatabaseName": {
+          "type": "string"
+        },
+        "user": {
+          "type": "string"
+        },
         "initImageName": {
           "type": "string"
         },

@@ -31,6 +31,10 @@ metrics:
 
 persistence:
   secretName: "postgres-secrets"
+  # Postgres role the charts connect as, including the pg-init containers (default cnadmin)
+  # user: cnadmin
+  # Database the pg-init container connects to in order to CREATE the target database (default cantonnet)
+  # bootstrapDatabaseName: cantonnet
   port: 5432
   enablePgInitContainer: true
   initImageName: "postgres:14"

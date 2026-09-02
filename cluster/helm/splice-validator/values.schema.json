@@ -365,6 +365,9 @@
             "secretName": {
               "type": "string"
             },
+            "bootstrapDatabaseName": {
+              "type": "string"
+            },
             "initImageName": {
               "type": "string"
             },
