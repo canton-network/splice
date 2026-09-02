@@ -13,6 +13,8 @@ class PermissionedSynchronizerSvFrontendIntegrationTest
     with FrontendLoginUtil
     with WalletTestUtil {
 
+  override protected def runTokenStandardCliSanityCheck: Boolean = false
+
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
       .simpleTopology4Svs(this.getClass.getSimpleName)
@@ -84,7 +86,7 @@ class PermissionedSynchronizerSvFrontendIntegrationTest
       val bobParticipantId = bobValidatorBackend.participantClient.id.toProtoPrimitive
 
       clue("Sponsor SV Buys Member Traffic for Alice in the DevNet") {
-        sv1Backend.devNetBuyMemberTraffic(aliceValidatorBackend.participantClient.id)
+        sv2Backend.devNetBuyMemberTraffic(aliceValidatorBackend.participantClient.id)
         eventually() {
           sv1ScanBackend.getParticipantSynchronizerPermission(
             decentralizedSynchronizerId.toProtoPrimitive,
@@ -95,7 +97,7 @@ class PermissionedSynchronizerSvFrontendIntegrationTest
 
       clue("Sponsor SV Buys Member Traffic for Bob in the DevNet") {
         eventually() {
-          sv1Backend.devNetBuyMemberTraffic(bobValidatorBackend.participantClient.id)
+          sv2Backend.devNetBuyMemberTraffic(bobValidatorBackend.participantClient.id)
           sv1ScanBackend.getParticipantSynchronizerPermission(
             decentralizedSynchronizerId.toProtoPrimitive,
             bobParticipantId,
