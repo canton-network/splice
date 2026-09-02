@@ -272,7 +272,7 @@ object SvUtil {
       Optional.empty(), // nextScheduledSynchronizerUpgrade
       voteCooldownTime.map(t => new RelTime(t.duration.toMicros)).toJava,
       Optional.empty(), // nextScheduledLogicalSynchronizerUpgrade
-      // We silently drop a value that is set when it's not supported as making it an error doesn't work well with setting it as the default.
+      // We silently drop all switchover values when switchover is not supported as making it an error doesn't work well with setting it as the default.
       switchOverTimes
         .map(_.view.mapValues(_.toInstant).toMap.asJava)
         .filter(_ => supportsSwitchoverTimes)
