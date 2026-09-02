@@ -169,6 +169,11 @@ function addIpWhitelistRules(
 /**
  * Adds allow/throttle rules for the publicly reachable API endpoints. Any endpoint
  * without a matching rule here is blocked by the default deny rule.
+ *
+ * Throttling is enforced per source IP. Cloud Armor only ever applies one rate limit
+ * rule per request (first match by priority wins, and conforming requests are allowed
+ * outright), so a global cap cannot be stacked on top of these rules; it is enforced by
+ * envoy instead.
  */
 function addThrottleAndBanRules(
   securityPolicy: CloudArmorPolicy,
@@ -190,16 +195,16 @@ function addThrottleAndBanRules(
         hostPrefixRegex,
         pathPrefix,
         restrictToRateLimitedPaths,
-        throttleAcrossAllEndpointsAllIps,
+        throttleAcrossAllEndpointsPerIp,
       } = singleServiceThrottle;
-      const throttled = throttleAcrossAllEndpointsAllIps !== undefined;
+      const throttled = throttleAcrossAllEndpointsPerIp !== undefined;
       // leave out the rule but consume the priority number if max is 0
       // this makes the pulumi update cleaner if toggling just one service
-      const skipRule = throttled && throttleAcrossAllEndpointsAllIps.maxRequestsBeforeHttp429 === 0;
+      const skipRule = throttled && throttleAcrossAllEndpointsPerIp.maxRequestsBeforeHttp429 === 0;
 
       if (!skipRule) {
         const ruleName = throttled
-          ? `throttle-all-endpoints-all-ips-${confEntryHead}`
+          ? `throttle-all-endpoints-per-ip-${confEntryHead}`
           : `allow-all-endpoints-all-ips-${confEntryHead}`;
         const pathExpr = allowedPathsCondition(
           confEntryHead,
@@ -221,7 +226,7 @@ function addThrottleAndBanRules(
             securityPolicy: securityPolicy.name,
             region: securityPolicy.region,
             description: throttled
-              ? `Throttle rule for all ${confEntryHead} API endpoints`
+              ? `Per source IP throttle rule for all ${confEntryHead} API endpoints`
               : `Allow rule for all ${confEntryHead} API endpoints`,
             priority,
             preview: preview || singleServiceThrottle.rulePreviewOnly,
@@ -234,10 +239,10 @@ function addThrottleAndBanRules(
             ...(throttled
               ? {
                   rateLimitOptions: {
-                    enforceOnKey: 'ALL',
+                    enforceOnKey: 'IP',
                     rateLimitThreshold: {
-                      count: throttleAcrossAllEndpointsAllIps.maxRequestsBeforeHttp429,
-                      intervalSec: throttleAcrossAllEndpointsAllIps.withinIntervalSeconds,
+                      count: throttleAcrossAllEndpointsPerIp.maxRequestsBeforeHttp429,
+                      intervalSec: throttleAcrossAllEndpointsPerIp.withinIntervalSeconds,
                     },
                     conformAction: 'allow',
                     exceedAction: 'deny(429)', // 429 Too Many Requests

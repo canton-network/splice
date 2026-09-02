@@ -45,8 +45,20 @@ const CloudArmorConfigSchema = z.object({
           // are known to the scan/token-registry envoy rate limit config. Must be false
           // for endpoints not covered by those rate limits (e.g. the sequencer).
           restrictToRateLimitedPaths: z.boolean().default(true),
-          // when omitted the endpoint is allowed without any Cloud Armor rate limiting
-          throttleAcrossAllEndpointsAllIps: z
+          // Per source IP throttling across all endpoints under this rule.
+          //
+          // Cloud Armor applies at most one rate limit per request: rules are evaluated
+          // in priority order and the first match wins, and a request under the
+          // threshold of a throttle rule takes its conformAction (always `allow`),
+          // which ends policy evaluation. So a global (enforceOnKey: ALL) rule and a
+          // per IP rule cannot both apply to the same traffic. We rate limit per IP
+          // here, since that is what stops an abusive source at the edge without one
+          // client being able to exhaust a bucket shared with everyone else; the global
+          // cap lives in envoy instead (see sv.scan.externalRateLimits.globalLimits),
+          // which is closer to the backend it protects.
+          //
+          // When omitted the endpoint is allowed without any Cloud Armor rate limiting.
+          throttleAcrossAllEndpointsPerIp: z
             .object({
               withinIntervalSeconds: z
                 .number()
