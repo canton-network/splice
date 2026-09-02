@@ -8,12 +8,7 @@ import type {
 } from '@daml.js/splice-dso-governance/lib/Splice/DSO/DecentralizedSynchronizer/module';
 import type { DsoRulesConfig } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
 import type { ConfigChange } from './types';
-import { SwitchOverEntry } from '../components/forms/formValidators';
-import dayjs from 'dayjs';
-import utc from 'dayjs/plugin/utc';
-import { nextScheduledSynchronizerUpgradeFormat } from '@canton-network/splice-common-frontend-utils';
-
-dayjs.extend(utc);
+import { serializeSwitchOverTimes, SwitchOverEntry } from '../components/forms/formValidators';
 
 /**
  * Given a list of config changes, build and return a DsoRulesConfig.
@@ -63,19 +58,7 @@ export function buildDsoRulesConfigFromChanges(
   );
   const voteCooldownTime = getValue('voteCooldownTime', true);
 
-  const trimmedSwitchOvers = switchOverEntries
-    .map(e => ({ key: e.key.trim(), time: e.time }))
-    .filter(e => e.key !== '');
-
-  const svOperationsSwitchOverTimes =
-    trimmedSwitchOvers.length === 0
-      ? null
-      : Object.fromEntries(
-          trimmedSwitchOvers.map(e => [
-            e.key,
-            dayjs(e.time).utc().format(nextScheduledSynchronizerUpgradeFormat),
-          ])
-        );
+  const svOperationsSwitchOverTimes = serializeSwitchOverTimes(switchOverEntries);
 
   const dsoConfig: DsoRulesConfig = {
     numUnclaimedRewardsThreshold: getValue('numUnclaimedRewardsThreshold', false),

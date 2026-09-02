@@ -35,10 +35,12 @@ import { buildAmuletConfigChanges } from '../../utils/buildAmuletConfigChanges';
 import { useAppForm } from '../../hooks/form';
 import {
   SwitchOverEntry,
+  switchOverTimesChanged,
   validateEffectiveDate,
   validateExpiration,
   validateExpiryEffectiveDate,
   validateSummary,
+  validateSwitchOverTimes,
   validateUrl,
 } from './formValidators';
 import { FormLayout } from './FormLayout';
@@ -174,15 +176,26 @@ export const SetAmuletConfigRulesForm: () => JSX.Element = () => {
 
     validators: {
       onChange: ({ value }) => {
-        return validateExpiryEffectiveDate({
+        const expiryError = validateExpiryEffectiveDate({
           expiration: value.common.expiryDate,
           effectiveDate: value.common.effectiveDate.effectiveDate,
         });
+        if (expiryError) return expiryError;
+
+        return validateSwitchOverTimes(
+          value.switchOverTimes.entries,
+          value.switchOverTimes.allowNonFutureDated,
+          value.common.effectiveDate.effectiveDate
+        );
       },
       onSubmit: ({ value: formData }) => {
         const changes = configFormDataToConfigChanges(formData.config, allAmuletConfigChanges);
+        const switchOverChanged = switchOverTimesChanged(
+          amuletConfig?.amuletSwitchOverTimes,
+          formData.switchOverTimes.entries
+        );
 
-        if (changes.length === 0) {
+        if (changes.length === 0 && !switchOverChanged) {
           return 'Cannot submit a proposal with no configuration changes';
         }
 
