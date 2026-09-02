@@ -56,7 +56,6 @@ import {
   validateNextScheduledLogicalSynchronizerUpgrade,
   validateSummary,
   validateUrl,
-  validateSwitchOverTimes,
   SwitchOverEntry,
 } from './formValidators';
 import { SwitchOverTimesField } from '../form-components/SwitchOverTimesField';
@@ -207,12 +206,7 @@ export const SetDsoConfigRulesForm: () => JSX.Element = () => {
           effectiveDate
         );
         if (logicalSynchronizerUpgradeError) return logicalSynchronizerUpgradeError;
-
-        return validateSwitchOverTimes(
-          formData.switchOverTimes.entries,
-          formData.switchOverTimes.allowNonFutureDated,
-          effectiveDate
-        );
+        return false;
       },
       onSubmit: ({ value: formData }) => {
         const changes = configFormDataToConfigChanges(
