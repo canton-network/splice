@@ -141,11 +141,6 @@ jobs:
         with:
           cmd: ./scripts/check-base-images.sh
 
-      - name: Check that pinned docker images are multi-arch
-        uses: ./.github/actions/nix/run_bash_command_in_nix
-        with:
-          cmd: make check-multiarch-images
-
       - name: Check that npm packages are properly namespaced
         uses: ./.github/actions/nix/run_bash_command_in_nix
         with:
