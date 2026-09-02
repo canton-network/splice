@@ -121,6 +121,7 @@ let
     ammonite
     curl
     dpm-sdk
+    docker
     git
     hub # Github CLI for todo checker
     jq
