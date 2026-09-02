@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import * as k8s from '@pulumi/kubernetes';
 
-import { RateLimitEnvoyFilter } from './envoyRateLimiter';
+import { EndpointValidation, RateLimitEnvoyFilter } from './envoyRateLimiter';
 import { ExternalRateLimit } from './rateLimitSchema';
 
 /**
@@ -36,11 +36,16 @@ function logRateLimitedRequests(namespace: string, app: string): k8s.apiextensio
   });
 }
 
+export interface RateLimitOptions {
+  endpointValidation?: EndpointValidation;
+}
+
 export function installRateLimits(
   namespace: string,
   app: string,
   appPort: number,
-  rateLimit: ExternalRateLimit
+  rateLimit: ExternalRateLimit,
+  options: RateLimitOptions = {}
 ): void {
   new RateLimitEnvoyFilter(`${app}-rate-limit`, {
     namespace: namespace,
@@ -49,6 +54,18 @@ export function installRateLimits(
     globalLimits: rateLimit.globalLimits,
     globalPerIpLimits: rateLimit.globalPerIpLimits,
     rateLimits: rateLimit.rateLimits,
+    endpointValidation: options.endpointValidation,
   });
   logRateLimitedRequests(namespace, app);
+}
+
+export function installSequencerRateLimits(
+  namespace: string,
+  sequencerApp: string,
+  port: number,
+  rateLimit: ExternalRateLimit
+): void {
+  installRateLimits(namespace, sequencerApp, port, rateLimit, {
+    endpointValidation: 'grpc',
+  });
 }

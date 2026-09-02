@@ -25,6 +25,7 @@ import {
   rateLimiterMetricPrefix,
   rateLimiterMetricRelabelings,
   validateEffectiveRateLimits,
+  validateGrpcPathPrefixes,
   validateTokenBuckets,
 } from './envoyRateLimiter';
 
@@ -86,6 +87,42 @@ test('extractPathPrefixes keeps only the externally reachable prefixes', () => {
     })
   ).toEqual(['/api/scan/v0/acs', '/registry/metadata/v1/info']);
   expect(extractPathPrefixes(undefined)).toEqual([]);
+});
+
+test('validateGrpcPathPrefixes accepts gRPC method paths', () => {
+  expect(() =>
+    validateGrpcPathPrefixes({
+      '/com.digitalasset.canton.sequencer.api.v30.SequencerService/': {
+        name: 'sequencer-service',
+        type: 'limited',
+        ...baseLimits,
+      },
+      '/com.digitalasset.canton.sequencer.api.v30.SequencerService/Subscribe': {
+        name: 'sequencer-subscribe',
+        type: 'limited',
+        ...baseLimits,
+      },
+    })
+  ).not.toThrow();
+  expect(() => validateGrpcPathPrefixes(undefined)).not.toThrow();
+});
+
+test('validateGrpcPathPrefixes rejects prefixes that could never match a gRPC request', () => {
+  // HTTP endpoints, a missing leading slash, a service without a package and a bare service name
+  // all fail to match the `/<fully.qualified.Service>/<Method>` path gRPC actually sends, so the
+  // limit would silently never be enforced.
+  [
+    '/api/scan/v0/acs',
+    'com.digitalasset.canton.sequencer.api.v30.SequencerService/',
+    '/SequencerService/Subscribe',
+    '/com.digitalasset.canton.sequencer.api.v30.SequencerService',
+  ].forEach(pathPrefix => {
+    expect(() =>
+      validateGrpcPathPrefixes({
+        [pathPrefix]: { name: 'some-limit', type: 'limited', ...baseLimits },
+      })
+    ).toThrow(/invalid gRPC path prefixes/);
+  });
 });
 
 test('buildEndpointRateLimitDescriptors generates one bucket per endpoint', () => {
