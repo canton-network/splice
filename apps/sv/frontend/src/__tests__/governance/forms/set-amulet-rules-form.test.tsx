@@ -41,7 +41,7 @@ describe('SV user can', () => {
 });
 
 describe('Set Amulet Config Rules Form', () => {
-  test('should render all Set Amulet Config Rules Form components', () => {
+  test('should render all Set Amulet Config Rules Form components', async () => {
     render(
       <Wrapper>
         <SetAmuletConfigRulesForm />
@@ -68,7 +68,7 @@ describe('Set Amulet Config Rules Form', () => {
     expect(urlInput.getAttribute('value')).toBe('');
 
     // Amulet Rules has a lot of fields to process so this can get flakey if not given enough time
-    waitFor(
+    await waitFor(
       () => {
         const configLabels = screen.getAllByTestId('config-label', { exact: false });
         expect(configLabels.length).toBeGreaterThan(65);
