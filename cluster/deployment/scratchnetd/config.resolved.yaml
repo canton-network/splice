@@ -1,15 +1,20 @@
 # This file is generated automatically. Do not edit directly.
 cloudArmor:
-  allRulesPreviewOnly: true
-  enabled: false
+  allRulesPreviewOnly: false
+  enabled: true
   publicEndpoints:
     publicScan:
-      hostname: 'scan.sv-2.scratcha.global.canton.network.digitalasset.com'
+      hostPrefixRegex: 'scan'
       pathPrefix: '/api/scan'
       throttleAcrossAllEndpointsAllIps:
-        maxRequestsBeforeHttp429: 0
+        maxRequestsBeforeHttp429: 20000
         withinIntervalSeconds: 60
+    sequencer:
+      hostPrefixRegex: 'sequencer-[0-9]+|sequencer-p2p-[0-9]+'
+      pathPrefix: '/'
+      restrictToRateLimitedPaths: false
     tokenRegistry:
+      hostPrefixRegex: 'scan'
       pathPrefix: '/registry'
       throttleAcrossAllEndpointsAllIps:
         maxRequestsBeforeHttp429: 200
@@ -28,7 +33,7 @@ cluster:
 infra:
   enableSweetSecurity: true
   gkeGateway:
-    proxyForIstioHttp: false
+    proxyForIstioHttp: true
   istio:
     enableIngressAccessLogging: true
     enablePublicTokenRegistry: true

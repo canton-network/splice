@@ -236,16 +236,26 @@ cloudArmor:
   allRulesPreviewOnly: true
   publicEndpoints:
     publicScan:
-      hostname: scan.sv-2.scratcha.global.canton.network.digitalasset.com
+      hostPrefixRegex: scan
       pathPrefix: /api/scan
       throttleAcrossAllEndpointsAllIps:
         withinIntervalSeconds: 60
-        maxRequestsBeforeHttp429: 0    # Keeps scan completely closed to the public
+        # above the envoy global scan limit (see sv.scan.externalRateLimits), so that
+        # envoy stays the primary limiter and this is only a backstop
+        maxRequestsBeforeHttp429: 20000
     tokenRegistry:
+      # the token registry is served off the scan hosts
+      hostPrefixRegex: scan
       pathPrefix: /registry
       throttleAcrossAllEndpointsAllIps:
         withinIntervalSeconds: 60
         maxRequestsBeforeHttp429: 200
+    sequencer:
+      # sequencer public API and BFT P2P API, served per migration id off their own hosts.
+      # gRPC, and long-lived streams, so we allow rather than throttle here.
+      hostPrefixRegex: sequencer-[0-9]+|sequencer-p2p-[0-9]+
+      pathPrefix: /
+      restrictToRateLimitedPaths: false
 multiValidator:
   postgresPvcSize: '100Gi'
   resources:
