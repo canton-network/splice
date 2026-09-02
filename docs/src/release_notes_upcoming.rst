@@ -7,16 +7,6 @@
 
 release-notes:: Upcoming
 
-    - Deployment
-
-        - All Splice Helm charts now set ``automountServiceAccountToken: false`` on the pods they
-          deploy. Splice components do not use the Kubernetes API, so pods no longer receive an
-          API-server credential by default; this reduces the impact of a compromised pod in
-          clusters where permissions are bound to the namespace's ``default`` service account.
-          If your deployment relies on the mounted token, for example through a custom service
-          account set via ``serviceAccountName``, you can restore the previous behavior by setting
-          the new ``automountServiceAccountToken`` Helm value to ``true``.
-
     - SV App
 
         - The public ``/v0/dso`` endpoint is deprecated and will be removed in 0.9.0
@@ -85,8 +75,8 @@ release-notes:: Upcoming
 
         - The development fund allocation form now has a ``Mint After`` field, which sets the
           earliest time at which the beneficiary can mint the coupon. While
-          the ``minDevelopmentFundMintingDelay`` stays unset in the ``AmuletConfig``, the field is 
-          optional and the coupons are allocated without a mint-after 
+          the ``minDevelopmentFundMintingDelay`` stays unset in the ``AmuletConfig``, the field is
+          optional and the coupons are allocated without a mint-after
           constraint.
 
         - The development fund coupon list now shows a ``Mint After`` column.
@@ -118,6 +108,16 @@ release-notes:: Upcoming
           operators moving off ``splice-postgres`` to a self-provisioned or managed Postgres, where a
           ``cnadmin`` superuser and a ``cantonnet`` database may not be available to create. The SV
           charts are not covered yet and still use the hardcoded values.
+
+        - All Splice Helm charts now set ``automountServiceAccountToken: false`` on the pods they
+          deploy. Splice components do not use the Kubernetes API, so pods no longer receive an
+          API-server credential by default; this reduces the impact of a compromised pod in
+          clusters where permissions are bound to the namespace's ``default`` service account.
+          If your deployment relies on the mounted token, for example through a custom service
+          account set via ``serviceAccountName``, you can restore the previous behavior by setting
+          the new ``automountServiceAccountToken`` Helm value to ``true``.
+
+        - The (long unused) `splice-domain` Helm chart is deprecated and will be removed in 0.9.0.
 
     - SV UI
 

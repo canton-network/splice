@@ -1,6 +1,8 @@
 # Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+# This Helm Chart is DEPRECATED and scheduled for removal.
+
 imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
 imageName: "canton-domain"
 initImageName: "postgres:14"
