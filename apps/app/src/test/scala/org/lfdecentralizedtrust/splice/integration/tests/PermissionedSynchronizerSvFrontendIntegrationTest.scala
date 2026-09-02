@@ -83,18 +83,19 @@ class PermissionedSynchronizerSvFrontendIntegrationTest
       val aliceParticipantId = aliceValidatorBackend.participantClient.id.toProtoPrimitive
       val bobParticipantId = bobValidatorBackend.participantClient.id.toProtoPrimitive
 
-      clue("Sponsor SV Buys Member Traffic for Alice and Bob in the DevNet") {
+      clue("Sponsor SV Buys Member Traffic for Alice in the DevNet") {
         sv1Backend.devNetBuyMemberTraffic(aliceValidatorBackend.participantClient.id)
-        sv1Backend.devNetBuyMemberTraffic(bobValidatorBackend.participantClient.id)
-      }
-
-      clue("Verify Alice and Bob are granted ParticipantSynchronizerPermission") {
         eventually() {
           sv1ScanBackend.getParticipantSynchronizerPermission(
             decentralizedSynchronizerId.toProtoPrimitive,
             aliceParticipantId,
           ) shouldBe Some(SynchronizerPermissionState(None))
+        }
+      }
 
+      clue("Sponsor SV Buys Member Traffic for Bob in the DevNet") {
+        eventually() {
+          sv1Backend.devNetBuyMemberTraffic(bobValidatorBackend.participantClient.id)
           sv1ScanBackend.getParticipantSynchronizerPermission(
             decentralizedSynchronizerId.toProtoPrimitive,
             bobParticipantId,
