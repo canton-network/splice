@@ -57,7 +57,6 @@ splitwell:
     maxDuration: "5m"
     retention: "30d"
 synchronizerMigration:
-  splitSvDeploymentEnabled: true
   frozenMigrationId: 2
   archived:
     - id: 5
