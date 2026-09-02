@@ -35,9 +35,14 @@ release-notes:: Upcoming
 
         - *Breaking* Scan will no longer return featured app rights as part of the choice context for CC transfers and allocations
           once ``no-featured-app-choice-context`` has been set in ``svOperationsSwitchOverTimes`` and the switchover time has been reached.
-          This change was made to avoid apps accidentally not complying with the marker guidance set by the Canton foundation. If you
+          This change was made to avoid apps accidentally not complying with the marker guidance set by the Canton foundation which requires precise control over the markers issued. If you
           really do intend to feature a CC transfer, you can query for the contract through ``/api/scan/v0/featured-apps/{provider_party_id}`` on Scan
           and add it to the choice context under the ``featured-app-right`` choice context key.
+
+          Validators *must* upgrade to 0.8.0 before the SVs vote on
+          setting the ``svOperationsSwitchOverTimes`` field or risk
+          breakage as the ``DsoRules`` contract cannot be downgraded
+          once the field is set.
 
 
     - CometBFT
