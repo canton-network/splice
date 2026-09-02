@@ -4,7 +4,11 @@
 import { describe, it, expect } from 'vitest';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
-import { validateSwitchOverTimes } from '../components/forms/formValidators';
+import {
+  serializeSwitchOverTimes,
+  switchOverTimesChanged,
+  validateSwitchOverTimes,
+} from '../components/forms/formValidators';
 
 dayjs.extend(utc);
 
@@ -62,5 +66,89 @@ describe('validateSwitchOverTimes', () => {
     expect(
       validateSwitchOverTimes([{ key: 'a', time: '2020-01-01T00:00:00Z' }], false, undefined)
     ).toBe(false);
+  });
+});
+
+describe('serializeSwitchOverTimes', () => {
+  it('returns null for no entries', () => {
+    expect(serializeSwitchOverTimes([])).toBeNull();
+  });
+
+  it('drops entries with an empty (or whitespace) key and trims keys', () => {
+    expect(
+      serializeSwitchOverTimes([
+        { key: '  ', time: '2026-09-05T00:00:00Z' },
+        { key: '  a  ', time: '2026-09-06T00:00:00Z' },
+      ])
+    ).toEqual({ a: '2026-09-06T00:00:00Z' });
+  });
+
+  it('returns null when every entry has an empty key', () => {
+    expect(serializeSwitchOverTimes([{ key: '  ', time: '2026-09-05T00:00:00Z' }])).toBeNull();
+  });
+
+  it('normalizes times to the DAML Time format', () => {
+    expect(serializeSwitchOverTimes([{ key: 'a', time: '2026-09-05 12:34' }])).toEqual({
+      a: '2026-09-05T12:34:00Z',
+    });
+  });
+});
+
+describe('switchOverTimesChanged', () => {
+  it('is false when baseline and entries are both empty', () => {
+    expect(switchOverTimesChanged(null, [])).toBe(false);
+    expect(switchOverTimesChanged(undefined, [])).toBe(false);
+    expect(switchOverTimesChanged({}, [])).toBe(false);
+  });
+
+  it('is false when entries equal the baseline', () => {
+    expect(
+      switchOverTimesChanged({ a: '2026-09-05T00:00:00Z' }, [
+        { key: 'a', time: '2026-09-05T00:00:00Z' },
+      ])
+    ).toBe(false);
+  });
+
+  it('is false regardless of entry order (map semantics)', () => {
+    const baseline = { a: '2026-09-05T00:00:00Z', b: '2026-09-06T00:00:00Z' };
+    expect(
+      switchOverTimesChanged(baseline, [
+        { key: 'b', time: '2026-09-06T00:00:00Z' },
+        { key: 'a', time: '2026-09-05T00:00:00Z' },
+      ])
+    ).toBe(false);
+  });
+
+  it('ignores blank-key rows that serialize away', () => {
+    expect(
+      switchOverTimesChanged({ a: '2026-09-05T00:00:00Z' }, [
+        { key: 'a', time: '2026-09-05T00:00:00Z' },
+        { key: '  ', time: '2026-09-07T00:00:00Z' },
+      ])
+    ).toBe(false);
+  });
+
+  it('detects an added entry', () => {
+    expect(switchOverTimesChanged(null, [{ key: 'a', time: '2026-09-05T00:00:00Z' }])).toBe(true);
+  });
+
+  it('detects a removed entry', () => {
+    expect(switchOverTimesChanged({ a: '2026-09-05T00:00:00Z' }, [])).toBe(true);
+  });
+
+  it('detects a changed time for the same key', () => {
+    expect(
+      switchOverTimesChanged({ a: '2026-09-05T00:00:00Z' }, [
+        { key: 'a', time: '2026-09-06T00:00:00Z' },
+      ])
+    ).toBe(true);
+  });
+
+  it('detects a renamed key', () => {
+    expect(
+      switchOverTimesChanged({ a: '2026-09-05T00:00:00Z' }, [
+        { key: 'b', time: '2026-09-05T00:00:00Z' },
+      ])
+    ).toBe(true);
   });
 });
