@@ -11,3 +11,7 @@ release-notes:: Upcoming
 
         - The deprecated (in 0.8.0) public ``/v0/dso`` endpoint has been removed.
           Use the public ``/v0/dso`` endpoint in the scan app if you need to fetch DSO info without SV operator credentials.
+
+    - Helm
+
+        - The deprecated `splice-domain` Helm chart has been removed.
