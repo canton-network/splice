@@ -10,8 +10,8 @@ import {
   ExactNamespace,
   HELM_CHART_TIMEOUT_SEC,
   HELM_MAX_HISTORY_SIZE,
-  activeVersion,
   appsKubernetesScheduling,
+  getNamespaceConfig,
   installWalletGatewayAdminSecret,
   spliceConfig,
 } from '@canton-network/splice-pulumi-common';
@@ -23,17 +23,18 @@ export async function installWalletGateway(
   auth0Client: Auth0Client,
   xns: ExactNamespace,
   config: WalletGatewayConfig,
+  participantAddress: pulumi.Output<string> | string,
+  wgPostgres: postgres.Postgres,
   // The gateway talks to the participant's ledger API on startup, so sequence it after the validator
-  dependsOn: CnInput<pulumi.Resource>[] = [],
-  defaultPostgres?: postgres.Postgres
+  dependsOn: CnInput<pulumi.Resource>[] = []
 ): Promise<pulumi.Resource> {
   if (spliceConfig.pulumiProjectConfig.installDataOnly) {
     return new SplicePlaceholderResource('wallet-gateway');
   }
   const ns = xns.logicalName;
   const auth0Cfg = auth0Client.getCfg();
-  const nsAuth0 = auth0Cfg.namespacedConfigs[ns];
-  if (!nsAuth0?.uiClientIds.walletGateway) {
+  const nsAuth0 = getNamespaceConfig(auth0Cfg, ns);
+  if (!nsAuth0.uiClientIds.walletGateway) {
     throw new Error(`No wallet gateway Auth0 client configured for namespace ${ns}`);
   }
 
@@ -42,18 +43,6 @@ export async function installWalletGateway(
   const scanUrl = config.scanUrl ?? `https://scan.sv-2.${CLUSTER_HOSTNAME}`;
 
   const adminSecret = await installWalletGatewayAdminSecret(auth0Client, xns);
-
-  const wgPostgres =
-    defaultPostgres ||
-    (await postgres.installPostgres(
-      xns,
-      'wallet-gateway-pg',
-      'wallet-gateway-pg',
-      activeVersion,
-      spliceConfig.pulumiProjectConfig.cloudSql,
-      spliceConfig.pulumiProjectConfig.defaultSplicePostgresConfig,
-      true
-    ));
 
   const gateway = new k8s.helm.v3.Release(
     `${ns}-wallet-gateway`,
@@ -65,11 +54,10 @@ export async function installWalletGateway(
       timeout: HELM_CHART_TIMEOUT_SEC,
       maxHistory: HELM_MAX_HISTORY_SIZE,
       values: {
-        image: { tag: `v${config.version}` },
         ...appsKubernetesScheduling,
         oauthSecrets: {
           OAUTH2_ADMIN_CLIENT_SECRET: {
-            secretRef: { name: 'wallet-gateway-admin-oauth', key: 'client-secret' },
+            secretRef: { name: adminSecret.metadata.name, key: 'client-secret' },
           },
         },
         extraEnv: [
@@ -80,7 +68,6 @@ export async function installWalletGateway(
             },
           },
         ],
-        signing: {}, // participant-based signing, no custody drivers
         config: {
           ...(config.logLevel ? { logging: { level: config.logLevel } } : {}),
           kernel: {
@@ -88,6 +75,8 @@ export async function installWalletGateway(
             clientType: 'remote',
             publicUrl,
           },
+          // The chart schema requires all of these; upstream defaults except requestSizeLimit
+          // and trustProxy (one hop: the istio ingress gateway)
           server: {
             port: 3030,
             allowedOrigins: [portfolioUrl],
@@ -133,13 +122,15 @@ export async function installWalletGateway(
                 name: `Splice ${ns}`,
                 description: `Splice ${ns} wallet gateway network`,
                 identityProviderId: 'idp-auth0',
-                ledgerApi: { baseUrl: 'http://participant:7575' },
+                ledgerApi: { baseUrl: pulumi.interpolate`http://${participantAddress}:7575` },
                 auth: {
                   method: 'authorization_code',
                   audience: nsAuth0.audiences.ledgerApi,
                   scope: 'openid daml_ledger_api offline_access',
                   clientId: nsAuth0.uiClientIds.walletGateway,
                 },
+                // Reuses the validator backend client, i.e. the participant admin user, so the
+                // gateway can allocate parties and grant user rights
                 adminAuth: {
                   method: 'client_credentials',
                   audience: nsAuth0.audiences.ledgerApi,
@@ -166,7 +157,6 @@ export async function installWalletGateway(
       timeout: HELM_CHART_TIMEOUT_SEC,
       maxHistory: HELM_MAX_HISTORY_SIZE,
       values: {
-        image: { tag: `v${config.portfolioVersion}` },
         ...appsKubernetesScheduling,
         config: {
           amulet: {

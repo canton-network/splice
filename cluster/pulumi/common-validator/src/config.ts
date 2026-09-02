@@ -88,12 +88,12 @@ export const ParticipantConfigSchema = z.object({
 
 export const WalletGatewayConfigSchema = z.object({
   enabled: z.boolean().default(false),
-  // Upstream chart versions; docker image tags are derived as `v<version>`
+  // Upstream chart versions
   version: z.string(),
   portfolioVersion: z.string(),
   // External scan URL used by the portfolio UI in the browser; defaults to sv-1's scan
   scanUrl: z.string().optional(),
-  logLevel: z.string().optional(),
+  logLevel: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).optional(),
 });
 
 export type WalletGatewayConfig = z.infer<typeof WalletGatewayConfigSchema>;

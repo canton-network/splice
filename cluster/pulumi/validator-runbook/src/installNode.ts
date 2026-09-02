@@ -334,8 +334,9 @@ async function installValidator(
       auth0Client,
       xns,
       validatorConfig.walletGateway,
-      [validatorChart],
-      postgres
+      participantAddress,
+      postgres,
+      [validatorChart]
     );
   }
   return validatorChart;

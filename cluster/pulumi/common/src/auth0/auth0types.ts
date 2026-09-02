@@ -24,7 +24,7 @@ export type Auth0NamespaceUiClientIds = {
   cns: string;
   sv?: string; // Empty for validator-only namespaces
   splitwell?: string;
-  walletGateway?: string; // Only set for namespaces that deploy the upstream wallet gateway
+  walletGateway?: string; // Set for validator namespaces; only used when walletGateway is enabled
 };
 
 export type Auth0NamespaceConfig = {

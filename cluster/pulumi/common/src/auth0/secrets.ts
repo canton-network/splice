@@ -116,7 +116,6 @@ export async function installWalletGatewayAdminSecret(
         namespace: xns.ns.metadata.name,
       },
       stringData: {
-        'client-id': clientSecrets.client_id,
         'client-secret': clientSecrets.client_secret,
       },
     },
