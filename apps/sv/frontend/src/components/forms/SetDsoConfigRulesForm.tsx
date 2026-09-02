@@ -55,7 +55,9 @@ import {
   validateNextScheduledLogicalSynchronizerUpgrade,
   validateSummary,
   validateUrl,
+  validateSwitchOverTimes,
   SwitchOverEntry,
+  switchOverTimesChanged,
 } from './formValidators';
 import { SwitchOverTimesField } from '../form-components/SwitchOverTimesField';
 
@@ -200,12 +202,24 @@ export const SetDsoConfigRulesForm: () => JSX.Element = () => {
           effectiveDate
         );
         if (logicalSynchronizerUpgradeError) return logicalSynchronizerUpgradeError;
+
+        const switchOverError = validateSwitchOverTimes(
+          formData.switchOverTimes.entries,
+          formData.switchOverTimes.allowNonFutureDated,
+          effectiveDate
+        );
+        if (switchOverError) return switchOverError;
+
         return false;
       },
       onSubmit: ({ value: formData }) => {
         const changes = configFormDataToConfigChanges(formData.config, dsoConfigChanges);
+        const switchOverChanged = switchOverTimesChanged(
+          dsoConfig?.svOperationsSwitchOverTimes,
+          formData.switchOverTimes.entries
+        );
 
-        if (changes.length === 0) {
+        if (changes.length === 0 && !switchOverChanged) {
           return 'Cannot submit a proposal with no configuration changes';
         }
 
