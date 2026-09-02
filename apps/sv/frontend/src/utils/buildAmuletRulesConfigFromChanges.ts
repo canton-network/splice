@@ -8,7 +8,7 @@ import { RelTime } from '@daml.js/daml-stdlib-DA-Time-Types-1.0.0/lib/DA/Time/Ty
 import { IssuanceConfig } from '@daml.js/splice-amulet/lib/Splice/Issuance';
 import { ConfigChange } from './types';
 import { Set as DamlSet } from '@daml.js/daml-stdlib-DA-Set-Types-1.0.0/lib/DA/Set/Types';
-import { serializeSwitchOverTimes, SwitchOverEntry } from '../components/forms/formValidators';
+import { configValueToSwitchOverMap } from '../components/forms/formValidators';
 
 function lsToSet<T>(ls: T[]): DamlSet<T> {
   return {
@@ -22,8 +22,7 @@ function lsToSet<T>(ls: T[]): DamlSet<T> {
  * The config changes should have all fields, whether they have been changed or not.
  */
 export function buildAmuletRulesConfigFromChanges(
-  amuletConfigChanges: ConfigChange[],
-  switchOverEntries: SwitchOverEntry[] = []
+  amuletConfigChanges: ConfigChange[]
 ): AmuletConfig<'USD'> {
   const changeMap = new Map<string, string>();
   amuletConfigChanges.forEach(change => {
@@ -107,7 +106,7 @@ export function buildAmuletRulesConfigFromChanges(
   const minDevelopmentFundMintingDelay = getValue('minDevelopmentFundMintingDelay', true);
   const rewardConfigMintingVersion = getValue('rewardConfigMintingVersion', true);
 
-  const amuletSwitchOverTimes = serializeSwitchOverTimes(switchOverEntries);
+  const amuletSwitchOverTimes = configValueToSwitchOverMap(getValue('amuletSwitchOverTimes', true));
 
   const amuletConfig: AmuletConfig<'USD'> = {
     tickDuration: { microseconds: getValue('tickDuration', false) },

@@ -226,6 +226,27 @@ describe('Set DSO Config Rules Form', () => {
     });
   });
 
+  test('shows an error for duplicate switch-over keys', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <Wrapper>
+        <SetDsoConfigRulesForm />
+      </Wrapper>
+    );
+
+    const addButton = screen.getByTestId('switchover-add');
+    await user.click(addButton);
+    await user.click(addButton);
+
+    await user.type(screen.getByTestId('switchover-key-0'), 'amulet-v2');
+    await user.type(screen.getByTestId('switchover-key-1'), 'amulet-v2');
+
+    await waitFor(() => {
+      expect(screen.getByText('Switch-over keys must be unique')).toBeInTheDocument();
+    });
+  });
+
   test('changing config fields should render the current value', async () => {
     const user = userEvent.setup();
 

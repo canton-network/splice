@@ -8,16 +8,13 @@ import type {
 } from '@daml.js/splice-dso-governance/lib/Splice/DSO/DecentralizedSynchronizer/module';
 import type { DsoRulesConfig } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
 import type { ConfigChange } from './types';
-import { serializeSwitchOverTimes, SwitchOverEntry } from '../components/forms/formValidators';
+import { configValueToSwitchOverMap } from '../components/forms/formValidators';
 
 /**
  * Given a list of config changes, build and return a DsoRulesConfig.
  * The config changes should have all fields, whether they have been changed or not.
  */
-export function buildDsoRulesConfigFromChanges(
-  dsoConfigChanges: ConfigChange[],
-  switchOverEntries: SwitchOverEntry[] = []
-): DsoRulesConfig {
+export function buildDsoRulesConfigFromChanges(dsoConfigChanges: ConfigChange[]): DsoRulesConfig {
   // map of field names -> new values for quick lookup
   const changeMap = new Map<string, string>();
 
@@ -58,7 +55,9 @@ export function buildDsoRulesConfigFromChanges(
   );
   const voteCooldownTime = getValue('voteCooldownTime', true);
 
-  const svOperationsSwitchOverTimes = serializeSwitchOverTimes(switchOverEntries);
+  const svOperationsSwitchOverTimes = configValueToSwitchOverMap(
+    getValue('svOperationsSwitchOverTimes', true)
+  );
 
   const dsoConfig: DsoRulesConfig = {
     numUnclaimedRewardsThreshold: getValue('numUnclaimedRewardsThreshold', false),
