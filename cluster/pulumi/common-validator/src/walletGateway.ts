@@ -1,5 +1,6 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+import * as postgres from '@canton-network/splice-pulumi-common/src/postgres';
 import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
 import {
@@ -7,8 +8,10 @@ import {
   CLUSTER_HOSTNAME,
   CnInput,
   ExactNamespace,
+  activeVersion,
   appsKubernetesScheduling,
   installWalletGatewayAdminSecret,
+  spliceConfig,
 } from '@canton-network/splice-pulumi-common';
 
 import { WalletGatewayConfig } from './config';
@@ -18,7 +21,8 @@ export async function installWalletGateway(
   xns: ExactNamespace,
   config: WalletGatewayConfig,
   // The gateway talks to the participant's ledger API on startup, so sequence it after the validator
-  dependsOn: CnInput<pulumi.Resource>[] = []
+  dependsOn: CnInput<pulumi.Resource>[] = [],
+  defaultPostgres?: postgres.Postgres
 ): Promise<pulumi.Resource> {
   const ns = xns.logicalName;
   const auth0Cfg = auth0Client.getCfg();
@@ -29,10 +33,21 @@ export async function installWalletGateway(
 
   const publicUrl = `https://walletgateway.${ns}.${CLUSTER_HOSTNAME}`;
   const portfolioUrl = `https://portfolio.${ns}.${CLUSTER_HOSTNAME}`;
-  // sv-1's scan is exposed under its `sv-2` ingress name (see svConfigsBasic.ts)
   const scanUrl = config.scanUrl ?? `https://scan.sv-2.${CLUSTER_HOSTNAME}`;
 
   const adminSecret = await installWalletGatewayAdminSecret(auth0Client, xns);
+
+  const wgPostgres =
+    defaultPostgres ||
+    (await postgres.installPostgres(
+      xns,
+      'wallet-gateway-pg',
+      'wallet-gateway-pg',
+      activeVersion,
+      spliceConfig.pulumiProjectConfig.cloudSql,
+      spliceConfig.pulumiProjectConfig.defaultSplicePostgresConfig,
+      true
+    ));
 
   const gateway = new k8s.helm.v3.Release(
     `${ns}-wallet-gateway`,
@@ -49,6 +64,14 @@ export async function installWalletGateway(
             secretRef: { name: 'wallet-gateway-admin-oauth', key: 'client-secret' },
           },
         },
+        extraEnv: [
+          {
+            name: 'WG_STORE_PASSWORD',
+            valueFrom: {
+              secretKeyRef: { name: wgPostgres.secretName, key: 'postgresPassword' },
+            },
+          },
+        ],
         signing: {}, // participant-based signing, no custody drivers
         config: {
           ...(config.logLevel ? { logging: { level: config.logLevel } } : {}),
@@ -67,8 +90,26 @@ export async function installWalletGateway(
             trustProxy: 1,
             signingWorker: { pollInterval: 5000 },
           },
-          store: { connection: { type: 'sqlite', database: '/tmp/store.sqlite' } },
-          signingStore: { connection: { type: 'sqlite', database: '/tmp/signing_store.sqlite' } },
+          store: {
+            connection: {
+              type: 'postgres',
+              host: wgPostgres.address,
+              port: 5432,
+              user: wgPostgres.userName,
+              passwordEnv: 'WG_STORE_PASSWORD',
+              database: 'wg_store',
+            },
+          },
+          signingStore: {
+            connection: {
+              type: 'postgres',
+              host: wgPostgres.address,
+              port: 5432,
+              user: wgPostgres.userName,
+              passwordEnv: 'WG_STORE_PASSWORD',
+              database: 'wg_signing_store',
+            },
+          },
           bootstrap: {
             idps: [
               {
@@ -88,8 +129,7 @@ export async function installWalletGateway(
                 auth: {
                   method: 'authorization_code',
                   audience: nsAuth0.audiences.ledgerApi,
-                  // `email` is required: the gateway resolves the user's email via OIDC userinfo
-                  scope: 'openid email profile daml_ledger_api offline_access',
+                  scope: 'openid daml_ledger_api offline_access',
                   clientId: nsAuth0.uiClientIds.walletGateway,
                 },
                 adminAuth: {
@@ -105,7 +145,7 @@ export async function installWalletGateway(
         },
       },
     },
-    { dependsOn: dependsOn.concat([xns.ns, adminSecret]) }
+    { dependsOn: dependsOn.concat([xns.ns, adminSecret, wgPostgres]) }
   );
 
   new k8s.helm.v3.Release(

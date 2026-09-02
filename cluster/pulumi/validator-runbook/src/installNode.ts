@@ -114,9 +114,6 @@ export async function installNode(auth0Client: Auth0Client): Promise<void> {
   });
 
   const walletGatewayConfig = validatorConfig.walletGateway;
-  if (walletGatewayConfig?.enabled) {
-    await installWalletGateway(auth0Client, xns, walletGatewayConfig, [validator]);
-  }
 
   const ingressImagePullDeps = imagePullSecretByNamespaceName('cluster-ingress');
   installSpliceRunbookHelmChartByNamespaceName(
@@ -331,6 +328,15 @@ async function installValidator(
   );
   if (validatorConfig?.partyAllocator.enable) {
     installPartyAllocator(xns, validatorConfig.partyAllocator, [validatorChart]);
+  }
+  if (validatorConfig?.walletGateway?.enabled) {
+    await installWalletGateway(
+      auth0Client,
+      xns,
+      validatorConfig.walletGateway,
+      [validatorChart],
+      postgres
+    );
   }
   return validatorChart;
 }
