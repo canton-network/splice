@@ -8,6 +8,7 @@ name: splice-domain
 type: application
 version: VERSION_NUMBER
 appVersion: VERSION_NUMBER
+deprecated: true
 
 description: Splice Domain
 
