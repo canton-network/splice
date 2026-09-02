@@ -10,9 +10,10 @@ import {
   FormControlLabel,
   IconButton,
   Stack,
+  Tooltip,
   Typography,
 } from '@mui/material';
-import { DeleteOutline } from '@mui/icons-material';
+import { DeleteOutline, InfoOutlined } from '@mui/icons-material';
 import { withForm } from '../../hooks/form';
 import type { SwitchOverEntry } from '../forms/formValidators';
 import type { CommonProposalFormData, ConfigFormData } from '../../utils/types';
@@ -23,6 +24,11 @@ interface SwitchOverCapableFormData {
   switchOverTimes: { entries: SwitchOverEntry[]; allowNonFutureDated: boolean };
 }
 
+const SWITCH_OVER_RULES =
+  'Each key must be unique and non-empty. Each switch-over time must be at least 1 day after the ' +
+  "Effective Date, unless 'Allow non-future-dated switch-over times' is enabled or the proposal " +
+  'takes effect at threshold.';
+
 export const SwitchOverTimesField = withForm({
   defaultValues: {} as SwitchOverCapableFormData, // type carrier only
   props: {
@@ -32,11 +38,21 @@ export const SwitchOverTimesField = withForm({
   render: ({ form, effectiveDate, title }) => {
     const allowNonFutureDated = form.state.values.switchOverTimes.allowNonFutureDated;
     const rowFloor = allowNonFutureDated ? null : dayjs(effectiveDate).add(1, 'day');
-    const defaultNewTime = () => dayjs(effectiveDate).utc().add(1, 'day').format(dateTimeFormatISO);
+    const defaultNewTime = () => dayjs(effectiveDate).add(1, 'day').format(dateTimeFormatISO);
 
     return (
       <Stack spacing={2}>
-        <Typography component="p">{title}</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <Typography component="p">{title}</Typography>
+          <Tooltip title={SWITCH_OVER_RULES}>
+            <InfoOutlined
+              fontSize="small"
+              color="action"
+              data-testid="switchover-rules-info"
+              aria-label={SWITCH_OVER_RULES}
+            />
+          </Tooltip>
+        </Box>
 
         <form.Field name="switchOverTimes.entries" mode="array">
           {arrayField => (

@@ -40,6 +40,7 @@ import {
   configFormDataToConfigChanges,
   createProposalActions,
   getInitialExpiration,
+  withSwitchOverConfigValue,
 } from '../../utils/governance';
 import type { CommonProposalFormData, ConfigFormData } from '../../utils/types';
 import { EffectiveDateField } from '../form-components/EffectiveDateField';
@@ -57,7 +58,6 @@ import {
   validateUrl,
   validateSwitchOverTimes,
   SwitchOverEntry,
-  switchOverTimesChanged,
 } from './formValidators';
 import { SwitchOverTimesField } from '../form-components/SwitchOverTimesField';
 
@@ -145,12 +145,17 @@ export const SetDsoConfigRulesForm: () => JSX.Element = () => {
       if (!showConfirmation) {
         setShowConfirmation(true);
       } else {
-        const changes = configFormDataToConfigChanges(formData.config, dsoConfigChanges, false);
-        const baseConfig = dsoConfig;
-        const newConfig = buildDsoRulesConfigFromChanges(
-          changes,
-          form.state.values.switchOverTimes.entries
+        const changes = configFormDataToConfigChanges(
+          withSwitchOverConfigValue(
+            formData.config,
+            'svOperationsSwitchOverTimes',
+            formData.switchOverTimes.entries
+          ),
+          dsoConfigChanges,
+          false
         );
+        const baseConfig = dsoConfig;
+        const newConfig = buildDsoRulesConfigFromChanges(changes);
         const action: ActionRequiringConfirmation = {
           tag: 'ARC_DsoRules',
           value: {
@@ -203,23 +208,23 @@ export const SetDsoConfigRulesForm: () => JSX.Element = () => {
         );
         if (logicalSynchronizerUpgradeError) return logicalSynchronizerUpgradeError;
 
-        const switchOverError = validateSwitchOverTimes(
+        return validateSwitchOverTimes(
           formData.switchOverTimes.entries,
           formData.switchOverTimes.allowNonFutureDated,
           effectiveDate
         );
-        if (switchOverError) return switchOverError;
-
-        return false;
       },
       onSubmit: ({ value: formData }) => {
-        const changes = configFormDataToConfigChanges(formData.config, dsoConfigChanges);
-        const switchOverChanged = switchOverTimesChanged(
-          dsoConfig?.svOperationsSwitchOverTimes,
-          formData.switchOverTimes.entries
+        const changes = configFormDataToConfigChanges(
+          withSwitchOverConfigValue(
+            formData.config,
+            'svOperationsSwitchOverTimes',
+            formData.switchOverTimes.entries
+          ),
+          dsoConfigChanges
         );
 
-        if (changes.length === 0 && !switchOverChanged) {
+        if (changes.length === 0) {
           return 'Cannot submit a proposal with no configuration changes';
         }
 
@@ -241,14 +246,19 @@ export const SetDsoConfigRulesForm: () => JSX.Element = () => {
   const effectiveDateString = form.state.values.common.effectiveDate.effectiveDate;
   const effectivity = effectiveDateString ? dayjs(effectiveDateString).toDate() : undefined;
 
-  const changes = configFormDataToConfigChanges(form.state.values.config, dsoConfigChanges, false);
+  const changes = configFormDataToConfigChanges(
+    withSwitchOverConfigValue(
+      form.state.values.config,
+      'svOperationsSwitchOverTimes',
+      form.state.values.switchOverTimes.entries
+    ),
+    dsoConfigChanges,
+    false
+  );
   const changedFields = changes.filter(c => c.currentValue !== c.newValue);
 
   const baseConfig = dsoConfig;
-  const newConfig = buildDsoRulesConfigFromChanges(
-    changes,
-    form.state.values.switchOverTimes.entries
-  );
+  const newConfig = buildDsoRulesConfigFromChanges(changes);
   const dsoAction: DsoRules_ActionRequiringConfirmation = {
     tag: 'SRARC_SetConfig',
     value: {
@@ -318,27 +328,29 @@ export const SetDsoConfigRulesForm: () => JSX.Element = () => {
               {CREATE_PROPOSAL_LABEL_CONFIGURATION}
             </Typography>
 
-            {dsoConfigChanges.map(change => (
-              <form.AppField name={`config.${change.fieldName}`} key={change.fieldName}>
-                {field => (
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: CREATE_PROPOSAL_CONFIG_ROW_DIVIDER_GAP,
-                    }}
-                  >
-                    <field.ConfigField
-                      configChange={change}
-                      pendingFieldInfo={pendingConfigFields.find(
-                        f => f.fieldName === change.fieldName
-                      )}
-                      effectiveDate={form.state.values.common.effectiveDate.effectiveDate}
-                    />
-                  </Box>
-                )}
-              </form.AppField>
-            ))}
+            {dsoConfigChanges
+              .filter(change => change.fieldName !== 'svOperationsSwitchOverTimes')
+              .map(change => (
+                <form.AppField name={`config.${change.fieldName}`} key={change.fieldName}>
+                  {field => (
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: CREATE_PROPOSAL_CONFIG_ROW_DIVIDER_GAP,
+                      }}
+                    >
+                      <field.ConfigField
+                        configChange={change}
+                        pendingFieldInfo={pendingConfigFields.find(
+                          f => f.fieldName === change.fieldName
+                        )}
+                        effectiveDate={form.state.values.common.effectiveDate.effectiveDate}
+                      />
+                    </Box>
+                  )}
+                </form.AppField>
+              ))}
 
             <SwitchOverTimesField
               form={form}

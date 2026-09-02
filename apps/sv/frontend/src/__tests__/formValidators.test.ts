@@ -5,8 +5,10 @@ import { describe, it, expect } from 'vitest';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import {
+  configValueToSwitchOverMap,
   serializeSwitchOverTimes,
-  switchOverTimesChanged,
+  switchOverEntriesToConfigValue,
+  switchOverMapToConfigValue,
   validateSwitchOverTimes,
 } from '../components/forms/formValidators';
 
@@ -94,61 +96,54 @@ describe('serializeSwitchOverTimes', () => {
   });
 });
 
-describe('switchOverTimesChanged', () => {
-  it('is false when baseline and entries are both empty', () => {
-    expect(switchOverTimesChanged(null, [])).toBe(false);
-    expect(switchOverTimesChanged(undefined, [])).toBe(false);
-    expect(switchOverTimesChanged({}, [])).toBe(false);
+describe('switch-over config value (serialize / parse)', () => {
+  it('is the empty string for no entries', () => {
+    expect(switchOverEntriesToConfigValue([])).toBe('');
+    expect(switchOverMapToConfigValue(null)).toBe('');
+    expect(switchOverMapToConfigValue({})).toBe('');
   });
 
-  it('is false when entries equal the baseline', () => {
+  it('serializes entries with sorted keys (stable regardless of order)', () => {
+    const a = switchOverEntriesToConfigValue([
+      { key: 'b', time: '2026-09-06T00:00:00Z' },
+      { key: 'a', time: '2026-09-05T00:00:00Z' },
+    ]);
+    const b = switchOverEntriesToConfigValue([
+      { key: 'a', time: '2026-09-05T00:00:00Z' },
+      { key: 'b', time: '2026-09-06T00:00:00Z' },
+    ]);
+    expect(a).toBe(b);
+    expect(a).toBe('{"a":"2026-09-05T00:00:00Z","b":"2026-09-06T00:00:00Z"}');
+  });
+
+  it('produces the same value from entries and from the equivalent map', () => {
+    const map = { a: '2026-09-05T00:00:00Z' };
+    expect(switchOverMapToConfigValue(map)).toBe(
+      switchOverEntriesToConfigValue([{ key: 'a', time: '2026-09-05T00:00:00Z' }])
+    );
+  });
+
+  it('detects change via string inequality: added / removed / changed / renamed', () => {
+    const base = switchOverMapToConfigValue({ a: '2026-09-05T00:00:00Z' });
+    expect(switchOverMapToConfigValue(null)).not.toBe(base); // removed
     expect(
-      switchOverTimesChanged({ a: '2026-09-05T00:00:00Z' }, [
+      switchOverEntriesToConfigValue([
         { key: 'a', time: '2026-09-05T00:00:00Z' },
-      ])
-    ).toBe(false);
-  });
-
-  it('is false regardless of entry order (map semantics)', () => {
-    const baseline = { a: '2026-09-05T00:00:00Z', b: '2026-09-06T00:00:00Z' };
-    expect(
-      switchOverTimesChanged(baseline, [
         { key: 'b', time: '2026-09-06T00:00:00Z' },
-        { key: 'a', time: '2026-09-05T00:00:00Z' },
       ])
-    ).toBe(false);
+    ).not.toBe(base); // added
+    expect(switchOverEntriesToConfigValue([{ key: 'a', time: '2026-09-06T00:00:00Z' }])).not.toBe(
+      base
+    ); // changed time
+    expect(switchOverEntriesToConfigValue([{ key: 'b', time: '2026-09-05T00:00:00Z' }])).not.toBe(
+      base
+    ); // renamed key
   });
 
-  it('ignores blank-key rows that serialize away', () => {
-    expect(
-      switchOverTimesChanged({ a: '2026-09-05T00:00:00Z' }, [
-        { key: 'a', time: '2026-09-05T00:00:00Z' },
-        { key: '  ', time: '2026-09-07T00:00:00Z' },
-      ])
-    ).toBe(false);
-  });
-
-  it('detects an added entry', () => {
-    expect(switchOverTimesChanged(null, [{ key: 'a', time: '2026-09-05T00:00:00Z' }])).toBe(true);
-  });
-
-  it('detects a removed entry', () => {
-    expect(switchOverTimesChanged({ a: '2026-09-05T00:00:00Z' }, [])).toBe(true);
-  });
-
-  it('detects a changed time for the same key', () => {
-    expect(
-      switchOverTimesChanged({ a: '2026-09-05T00:00:00Z' }, [
-        { key: 'a', time: '2026-09-06T00:00:00Z' },
-      ])
-    ).toBe(true);
-  });
-
-  it('detects a renamed key', () => {
-    expect(
-      switchOverTimesChanged({ a: '2026-09-05T00:00:00Z' }, [
-        { key: 'b', time: '2026-09-05T00:00:00Z' },
-      ])
-    ).toBe(true);
+  it('round-trips through configValueToSwitchOverMap', () => {
+    const value = switchOverMapToConfigValue({ a: '2026-09-05T00:00:00Z' });
+    expect(configValueToSwitchOverMap(value)).toEqual({ a: '2026-09-05T00:00:00Z' });
+    expect(configValueToSwitchOverMap('')).toBeNull();
+    expect(configValueToSwitchOverMap(undefined)).toBeNull();
   });
 });
