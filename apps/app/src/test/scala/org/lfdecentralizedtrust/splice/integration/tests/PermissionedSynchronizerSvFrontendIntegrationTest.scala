@@ -11,7 +11,8 @@ class PermissionedSynchronizerSvFrontendIntegrationTest
     with SvTestUtil
     with SvFrontendTestUtil
     with FrontendLoginUtil
-    with WalletTestUtil {
+    with WalletTestUtil
+    with SynchronizerFeesTestUtil {
 
   override protected def runTokenStandardCliSanityCheck: Boolean = false
 
@@ -85,24 +86,47 @@ class PermissionedSynchronizerSvFrontendIntegrationTest
       val aliceParticipantId = aliceValidatorBackend.participantClient.id.toProtoPrimitive
       val bobParticipantId = bobValidatorBackend.participantClient.id.toProtoPrimitive
 
-      clue("Sponsor SV Buys Member Traffic for Alice in the DevNet") {
-        sv2Backend.devNetBuyMemberTraffic(aliceValidatorBackend.participantClient.id)
-        eventually() {
-          sv1ScanBackend.getParticipantSynchronizerPermission(
-            decentralizedSynchronizerId.toProtoPrimitive,
-            aliceParticipantId,
-          ) shouldBe Some(SynchronizerPermissionState(None))
-        }
+      val trafficAmount = Math.max(
+        sv1ScanBackend
+          .getAmuletConfigAsOf(env.environment.clock.now)
+          .decentralizedSynchronizer
+          .fees
+          .minTopupAmount
+          .toLong,
+        1_000_000L,
+      )
+
+      val sv1WalletUserParty = onboardWalletUser(sv1WalletClient, sv1ValidatorBackend)
+      sv1WalletClient.tap(20000)
+
+      clue(
+        s"SV1 buys MemberTraffic for ${aliceValidatorBackend.participantClient.name} && ${bobValidatorBackend.participantClient.name}"
+      ) {
+        createBuyTrafficRequest(
+          validatorApp = sv1ValidatorBackend,
+          buyer = sv1WalletUserParty,
+          memberId = aliceValidatorBackend.participantClient.id.toProtoPrimitive,
+          trafficAmount = trafficAmount,
+          trackingId = s"traffic-for-${aliceValidatorBackend.participantClient.name}",
+        )
+        createBuyTrafficRequest(
+          validatorApp = sv1ValidatorBackend,
+          buyer = sv1WalletUserParty,
+          memberId = bobValidatorBackend.participantClient.id.toProtoPrimitive,
+          trafficAmount = trafficAmount,
+          trackingId = s"traffic-for-${bobValidatorBackend.participantClient.name}",
+        )
       }
 
-      clue("Sponsor SV Buys Member Traffic for Bob in the DevNet") {
-        eventually() {
-          sv2Backend.devNetBuyMemberTraffic(bobValidatorBackend.participantClient.id)
-          sv1ScanBackend.getParticipantSynchronizerPermission(
-            decentralizedSynchronizerId.toProtoPrimitive,
-            bobParticipantId,
-          ) shouldBe Some(SynchronizerPermissionState(None))
-        }
+      eventually() {
+        sv1ScanBackend.getParticipantSynchronizerPermission(
+          decentralizedSynchronizerId.toProtoPrimitive,
+          aliceParticipantId,
+        ) shouldBe Some(SynchronizerPermissionState(None))
+        sv1ScanBackend.getParticipantSynchronizerPermission(
+          decentralizedSynchronizerId.toProtoPrimitive,
+          bobParticipantId,
+        ) shouldBe Some(SynchronizerPermissionState(None))
       }
 
       clue("Alice and Bob Validators start and onboard correctly") {
