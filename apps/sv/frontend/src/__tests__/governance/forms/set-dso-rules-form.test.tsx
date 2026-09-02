@@ -243,7 +243,9 @@ describe('Set DSO Config Rules Form', () => {
     await user.type(screen.getByTestId('switchover-key-1'), 'amulet-v2');
 
     await waitFor(() => {
-      expect(screen.getByText('Switch-over keys must be unique')).toBeInTheDocument();
+      expect(screen.getByTestId('switchover-error')).toHaveTextContent(
+        'Switch-over keys must be unique'
+      );
     });
   });
 
