@@ -254,11 +254,12 @@ cloudArmor:
         # a client legitimately using several registry endpoints at once
         maxRequestsBeforeHttp429: 1000
     sequencer:
-      # sequencer public API and BFT P2P API, served per migration id off their own hosts.
-      # gRPC, and long-lived streams, so we allow rather than throttle here.
-      hostPrefixRegex: sequencer-[0-9]+|sequencer-p2p-[0-9]+
+      hostPrefixRegex: sequencer-[0-9]+
       pathPrefix: /
       restrictToRateLimitedPaths: false
+      throttleAcrossAllEndpointsPerIp:
+        withinIntervalSeconds: 60
+        maxRequestsBeforeHttp429: 20000
 multiValidator:
   postgresPvcSize: '100Gi'
   resources:

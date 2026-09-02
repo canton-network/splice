@@ -10,9 +10,12 @@ cloudArmor:
         maxRequestsBeforeHttp429: 2000
         withinIntervalSeconds: 60
     sequencer:
-      hostPrefixRegex: 'sequencer-[0-9]+|sequencer-p2p-[0-9]+'
+      hostPrefixRegex: 'sequencer-[0-9]+'
       pathPrefix: '/'
       restrictToRateLimitedPaths: false
+      throttleAcrossAllEndpointsPerIp:
+        maxRequestsBeforeHttp429: 20000
+        withinIntervalSeconds: 60
     tokenRegistry:
       hostPrefixRegex: 'scan'
       pathPrefix: '/registry'

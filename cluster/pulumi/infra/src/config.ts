@@ -42,8 +42,9 @@ const CloudArmorConfigSchema = z.object({
           hostPrefixRegex: z.string().optional(),
           pathPrefix: z.string().regex(/^\/[^"]*$/, 'HTTP request path starting with /'),
           // when true, the rule only matches the subset of paths under pathPrefix that
-          // are known to the scan/token-registry envoy rate limit config. Must be false
-          // for endpoints not covered by those rate limits (e.g. the sequencer).
+          // are known. Must be false
+          // for endpoints whose paths are not part of that config (e.g. the sequencer
+          // gRPC APIs).
           restrictToRateLimitedPaths: z.boolean().default(true),
           // Per source IP throttling across all endpoints under this rule.
           //

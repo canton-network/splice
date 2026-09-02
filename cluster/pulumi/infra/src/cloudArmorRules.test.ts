@@ -66,18 +66,19 @@ describe('hostCondition', () => {
     expect(matches('scan.sv-2.scratchd.network.canton.global.evil.com')).toBe(false);
   });
 
-  test('sequencer prefix regex matches all migration ids and both APIs', () => {
+  test('sequencer prefix regex matches all migration ids, but not the P2P API', () => {
     const matches = matchesFromExpr(
-      hostCondition('sequencer', dnsNames, undefined, 'sequencer-[0-9]+|sequencer-p2p-[0-9]+')!
+      hostCondition('sequencer', dnsNames, undefined, 'sequencer-[0-9]+')!
     );
 
     expect(matches('sequencer-0.sv-1.scratchd.network.canton.global')).toBe(true);
     expect(matches('sequencer-12.sv-1.scratchd.network.canton.global')).toBe(true);
-    expect(matches('sequencer-p2p-3.sv-1.scratchd.network.canton.global')).toBe(true);
     expect(matches('sequencer-0.sv-1.scratchd.global.canton.network.digitalasset.com:443')).toBe(
       true
     );
 
+    // the P2P API has no rule of its own: peer SVs are covered by the IP whitelist
+    expect(matches('sequencer-p2p-3.sv-1.scratchd.network.canton.global')).toBe(false);
     expect(matches('sequencer.sv-1.scratchd.network.canton.global')).toBe(false);
     expect(matches('scan.sv-1.scratchd.network.canton.global')).toBe(false);
   });

@@ -16,9 +16,9 @@ import {
 import { loadIPRanges } from './whitelisting/ipRanges';
 
 // Rule number ranges
-const IP_WHITELIST_RULE_MIN = 1000000;
-const THROTTLE_BAN_RULE_MIN = 100000000;
-const THROTTLE_BAN_RULE_MAX = 200000000;
+const IP_WHITELIST_RULE_MIN = 1000010;
+const THROTTLE_BAN_RULE_MIN = 100000010;
+const THROTTLE_BAN_RULE_MAX = 200000010;
 const DEFAULT_DENY_RULE_NUMBER = 2147483647;
 const RULE_SPACING = 100;
 
