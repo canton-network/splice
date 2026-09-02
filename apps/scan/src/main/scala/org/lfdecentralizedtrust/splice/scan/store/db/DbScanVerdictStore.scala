@@ -421,10 +421,22 @@ class DbScanVerdictStore(
 
       for {
         alreadyExisting <- checkExist.map(_.toSet)
-        nonExisting = items.filter(item => !alreadyExisting.contains(item._1.updateId))
-        _ = logger.info(
-          s"Already ingested verdicts: $alreadyExisting. Non-existing: ${nonExisting.map(_._1.updateId)}."
-        )
+        (dropped, nonExisting) = items.partition(item => alreadyExisting.contains(item._1.updateId))
+        droppedAccepts =
+          dropped.filter(_._1.verdictResult == DbScanVerdictStore.VerdictResultDbValue.Accepted)
+        nonExistingMessage = s"Non-existing: ${nonExisting.map(_._1.updateId)}."
+        _ =
+          if (droppedAccepts.nonEmpty)
+            logger.warn(
+              s"Dropping duplicate accepted verdicts: ${droppedAccepts.map(_._1.updateId)}. " +
+                s"All dropped verdicts: ${dropped.map(_._1.updateId)}. $nonExistingMessage"
+            )
+          else if (dropped.nonEmpty)
+            logger.info(
+              s"Dropping duplicate verdicts: ${dropped.map(_._1.updateId)}. $nonExistingMessage"
+            )
+          else
+            logger.info(s"Already ingested verdicts: $alreadyExisting. $nonExistingMessage")
         rowIdMap <-
           if (nonExisting.nonEmpty) {
             DBIO

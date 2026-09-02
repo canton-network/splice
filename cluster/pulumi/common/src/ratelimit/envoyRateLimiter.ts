@@ -132,7 +132,12 @@ export interface RateLimitEnvoyFilterArgs extends PerEndpointLimits {
 
   // consumed by every request, keyed on the client IP, with optional per-IP overrides
   globalPerIpLimits: PerIpLimits;
+
+  // http by default with no validation, gRPC can be configured to validate the configured path prefixes
+  endpointValidation?: EndpointValidation;
 }
+
+export type EndpointValidation = 'http' | 'grpc';
 
 export interface PerEndpointLimits {
   // all the rate limits must be respected, there's an AND relationship between them
@@ -147,6 +152,29 @@ export function extractPathPrefixes(rateLimits?: PerEndpointLimits['rateLimits']
   return Object.keys(rateLimits).filter(
     pathPrefix => pathPrefix.startsWith('/api/scan') || pathPrefix.startsWith('/registry')
   );
+}
+
+/**
+ * Checks that the configured path prefixes can actually match a gRPC request.
+ *
+ * gRPC maps every call onto the HTTP/2 path `/<fully.qualified.Service>/<Method>`, which is what
+ * the route level `header_match` actions match on. A prefix that is not of that shape (e.g. an
+ * HTTP endpoint such as `/api/scan/v0/...`, or a bare service name without the leading slash)
+ * would never match any request, so the limit would silently never be enforced.
+ */
+export function validateGrpcPathPrefixes(rateLimits?: PerEndpointLimits['rateLimits']): void {
+  // `/<service>/` optionally followed by a method name; the service must be a dotted, non-empty
+  // fully qualified protobuf name.
+  const grpcPathPrefix = /^\/[A-Za-z_][\w]*(\.[A-Za-z_][\w]*)+\/[A-Za-z_]?\w*$/;
+  const invalid = Object.keys(rateLimits || {}).filter(
+    pathPrefix => !grpcPathPrefix.test(pathPrefix)
+  );
+  if (invalid.length > 0) {
+    throw new Error(
+      `invalid gRPC path prefixes: ${invalid.join(', ')}; expected '/<fully.qualified.Service>/<Method>' ` +
+        `(a trailing '/' matches every method of the service), otherwise the limit would never match a request`
+    );
+  }
 }
 
 export function validateIpLimits(context: string, perIpLimits?: PerIpLimits): void {
@@ -267,6 +295,10 @@ export function validateEffectiveRateLimits(
     throw new Error(
       `duplicate rate limit names: ${duplicateNames.join(', ')}; every endpoint needs its own name`
     );
+  }
+
+  if (args.endpointValidation === 'grpc') {
+    validateGrpcPathPrefixes(effectiveRateLimits);
   }
 
   validateIpLimits('globalPerIpLimits', args.globalPerIpLimits);

@@ -278,6 +278,10 @@ sv:
         maxTokens: 1000
         tokensPerFill: 1000
         fillInterval: 60s
+  synchronizer:
+    sequencer:
+      externalRateLimits:
+        !include(./rate-limits/sequencer-public-api.yaml)
 validators:
   validator-runbook:
     namespace: validator
