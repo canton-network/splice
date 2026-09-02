@@ -15,8 +15,9 @@ import {
 } from '@mui/material';
 import { DeleteOutline, InfoOutlined } from '@mui/icons-material';
 import { withForm } from '../../hooks/form';
-import type { SwitchOverEntry } from '../forms/formValidators';
+import { validateSwitchOverTimes, type SwitchOverEntry } from '../forms/formValidators';
 import type { CommonProposalFormData, ConfigFormData } from '../../utils/types';
+import { CREATE_PROPOSAL_FIELD_HELPER_SX } from '../../constants/createProposalLayout';
 
 interface SwitchOverCapableFormData {
   common: CommonProposalFormData;
@@ -54,7 +55,16 @@ export const SwitchOverTimesField = withForm({
           </Tooltip>
         </Box>
 
-        <form.Field name="switchOverTimes.entries" mode="array">
+        <form.Field
+          name="switchOverTimes.entries"
+          mode="array"
+          validators={{
+            // Gate submission only; live display is handled by the Subscribe below,
+            // which re-derives the message reactively on any relevant change.
+            onSubmit: ({ value }) =>
+              validateSwitchOverTimes(value, allowNonFutureDated, effectiveDate),
+          }}
+        >
           {arrayField => (
             <Stack spacing={1}>
               {arrayField.state.value.map((_, i) => (
@@ -99,6 +109,28 @@ export const SwitchOverTimesField = withForm({
             </Stack>
           )}
         </form.Field>
+
+        <form.Subscribe
+          selector={state =>
+            validateSwitchOverTimes(
+              state.values.switchOverTimes.entries,
+              state.values.switchOverTimes.allowNonFutureDated,
+              state.values.common.effectiveDate.effectiveDate
+            )
+          }
+        >
+          {error =>
+            error ? (
+              <Typography
+                component="p"
+                data-testid="switchover-error"
+                sx={{ ...CREATE_PROPOSAL_FIELD_HELPER_SX, color: 'error.main' }}
+              >
+                {error}
+              </Typography>
+            ) : null
+          }
+        </form.Subscribe>
 
         <form.AppField name="switchOverTimes.allowNonFutureDated">
           {field => (
