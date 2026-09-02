@@ -25,6 +25,7 @@ import {
   configFormDataToConfigChanges,
   createProposalActions,
   getInitialExpiration,
+  withSwitchOverConfigValue,
 } from '../../utils/governance';
 import { CommonProposalFormData, ConfigFormData } from '../../utils/types';
 import dayjs from 'dayjs';
@@ -35,7 +36,6 @@ import { buildAmuletConfigChanges } from '../../utils/buildAmuletConfigChanges';
 import { useAppForm } from '../../hooks/form';
 import {
   SwitchOverEntry,
-  switchOverTimesChanged,
   validateEffectiveDate,
   validateExpiration,
   validateExpiryEffectiveDate,
@@ -147,15 +147,16 @@ export const SetAmuletConfigRulesForm: () => JSX.Element = () => {
         }
 
         const changes = configFormDataToConfigChanges(
-          formData.config,
+          withSwitchOverConfigValue(
+            formData.config,
+            'amuletSwitchOverTimes',
+            formData.switchOverTimes.entries
+          ),
           allAmuletConfigChanges,
           false
         );
         const baseConfig = amuletConfig;
-        const newConfig = buildAmuletRulesConfigFromChanges(
-          changes,
-          formData.switchOverTimes.entries
-        );
+        const newConfig = buildAmuletRulesConfigFromChanges(changes);
         const action: ActionRequiringConfirmation = {
           tag: 'ARC_AmuletRules',
           value: {
@@ -189,13 +190,16 @@ export const SetAmuletConfigRulesForm: () => JSX.Element = () => {
         );
       },
       onSubmit: ({ value: formData }) => {
-        const changes = configFormDataToConfigChanges(formData.config, allAmuletConfigChanges);
-        const switchOverChanged = switchOverTimesChanged(
-          amuletConfig?.amuletSwitchOverTimes,
-          formData.switchOverTimes.entries
+        const changes = configFormDataToConfigChanges(
+          withSwitchOverConfigValue(
+            formData.config,
+            'amuletSwitchOverTimes',
+            formData.switchOverTimes.entries
+          ),
+          allAmuletConfigChanges
         );
 
-        if (changes.length === 0 && !switchOverChanged) {
+        if (changes.length === 0) {
           return 'Cannot submit a proposal with no configuration changes';
         }
 
@@ -218,16 +222,17 @@ export const SetAmuletConfigRulesForm: () => JSX.Element = () => {
   const effectivity = effectiveDateString ? dayjs(effectiveDateString).toDate() : undefined;
 
   const changes = configFormDataToConfigChanges(
-    form.state.values.config,
+    withSwitchOverConfigValue(
+      form.state.values.config,
+      'amuletSwitchOverTimes',
+      form.state.values.switchOverTimes.entries
+    ),
     allAmuletConfigChanges,
     false
   );
 
   const baseConfig = amuletConfig;
-  const newConfig = buildAmuletRulesConfigFromChanges(
-    changes,
-    form.state.values.switchOverTimes.entries
-  );
+  const newConfig = buildAmuletRulesConfigFromChanges(changes);
   const dsoAction: AmuletRules_ActionRequiringConfirmation = {
     tag: 'CRARC_SetConfig',
     value: {
@@ -271,7 +276,11 @@ export const SetAmuletConfigRulesForm: () => JSX.Element = () => {
           effectiveDate={form.state.values.common.effectiveDate.effectiveDate}
           formType="config-change"
           configFormData={configFormDataToConfigChanges(
-            form.state.values.config,
+            withSwitchOverConfigValue(
+              form.state.values.config,
+              'amuletSwitchOverTimes',
+              form.state.values.switchOverTimes.entries
+            ),
             allAmuletConfigChanges
           )}
           jsonDiff={<JsonDiffAccordion variant="review">{jsonDiffContent}</JsonDiffAccordion>}
@@ -302,30 +311,32 @@ export const SetAmuletConfigRulesForm: () => JSX.Element = () => {
               {CREATE_PROPOSAL_LABEL_CONFIGURATION}
             </Typography>
 
-            {allAmuletConfigChanges.map(change => (
-              <form.AppField name={`config.${change.fieldName}`} key={change.fieldName}>
-                {field => (
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: CREATE_PROPOSAL_CONFIG_ROW_DIVIDER_GAP,
-                    }}
-                  >
-                    <field.ConfigField
-                      configChange={change}
-                      pendingFieldInfo={pendingConfigFields.find(
-                        f => f.fieldName === change.fieldName
-                      )}
-                    />
-                  </Box>
-                )}
-              </form.AppField>
-            ))}
+            {allAmuletConfigChanges
+              .filter(change => change.fieldName !== 'amuletSwitchOverTimes')
+              .map(change => (
+                <form.AppField name={`config.${change.fieldName}`} key={change.fieldName}>
+                  {field => (
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: CREATE_PROPOSAL_CONFIG_ROW_DIVIDER_GAP,
+                      }}
+                    >
+                      <field.ConfigField
+                        configChange={change}
+                        pendingFieldInfo={pendingConfigFields.find(
+                          f => f.fieldName === change.fieldName
+                        )}
+                      />
+                    </Box>
+                  )}
+                </form.AppField>
+              ))}
 
             <SwitchOverTimesField
               form={form}
-              title="SV operations switch-over times"
+              title="Amulet switch-over times"
               effectiveDate={form.state.values.common.effectiveDate.effectiveDate}
             />
 
