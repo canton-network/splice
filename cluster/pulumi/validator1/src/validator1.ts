@@ -134,7 +134,7 @@ export async function installValidator1(
   });
   const walletGatewayConfig = validator1Config?.walletGateway;
   if (walletGatewayConfig?.enabled) {
-    await installWalletGateway(auth0Client, xns, walletGatewayConfig, [], defaultPostgres);
+    await installWalletGateway(auth0Client, xns, walletGatewayConfig, [validator], defaultPostgres);
   }
 
   installIngress(xns, installSplitwell, walletGatewayConfig?.enabled ?? false);

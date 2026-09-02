@@ -1900,5 +1900,5 @@ validators:
     partyHint: 'digitalasset-testValidator-1'
     walletGateway:
       enabled: false
-      portfolioVersion: '1.9.0'
-      version: '1.8.1'
+      portfolioVersion: '1.11.0'
+      version: '1.10.0'

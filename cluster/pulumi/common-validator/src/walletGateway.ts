@@ -8,11 +8,14 @@ import {
   CLUSTER_HOSTNAME,
   CnInput,
   ExactNamespace,
+  HELM_CHART_TIMEOUT_SEC,
+  HELM_MAX_HISTORY_SIZE,
   activeVersion,
   appsKubernetesScheduling,
   installWalletGatewayAdminSecret,
   spliceConfig,
 } from '@canton-network/splice-pulumi-common';
+import { SplicePlaceholderResource } from '@canton-network/splice-pulumi-common/src/pulumiUtilResources';
 
 import { WalletGatewayConfig } from './config';
 
@@ -24,6 +27,9 @@ export async function installWalletGateway(
   dependsOn: CnInput<pulumi.Resource>[] = [],
   defaultPostgres?: postgres.Postgres
 ): Promise<pulumi.Resource> {
+  if (spliceConfig.pulumiProjectConfig.installDataOnly) {
+    return new SplicePlaceholderResource('wallet-gateway');
+  }
   const ns = xns.logicalName;
   const auth0Cfg = auth0Client.getCfg();
   const nsAuth0 = auth0Cfg.namespacedConfigs[ns];
@@ -56,6 +62,8 @@ export async function installWalletGateway(
       chart: 'oci://ghcr.io/digital-asset/wallet-gateway/helm/wallet-gateway',
       version: config.version,
       namespace: xns.ns.metadata.name,
+      timeout: HELM_CHART_TIMEOUT_SEC,
+      maxHistory: HELM_MAX_HISTORY_SIZE,
       values: {
         image: { tag: `v${config.version}` },
         ...appsKubernetesScheduling,
@@ -155,6 +163,8 @@ export async function installWalletGateway(
       chart: 'oci://ghcr.io/digital-asset/splice-portfolio/helm/splice-portfolio',
       version: config.portfolioVersion,
       namespace: xns.ns.metadata.name,
+      timeout: HELM_CHART_TIMEOUT_SEC,
+      maxHistory: HELM_MAX_HISTORY_SIZE,
       values: {
         image: { tag: `v${config.portfolioVersion}` },
         ...appsKubernetesScheduling,
