@@ -13,9 +13,8 @@ import sys
 from pathlib import Path
 from dockerfile_parse import DockerfileParser
 
-# Matches concrete image references that pin a digest, e.g. ubuntu:24.04@sha256:440dcf...
+# Matches concrete image references that pin a digest, e.g. ubuntu:24.04@sha256:<digest>
 # This intentionally does not match references that use variable digests
-# Note: it also does not support registry ports in the image name.
 IMAGE_REF_RE = re.compile(
     r"([a-zA-Z0-9][a-zA-Z0-9._/-]*):([^@\s]+)@sha256:([a-f0-9]{64})"
 )
@@ -28,7 +27,7 @@ IMAGE_SHA256_MAP = {
     "cluster/images/canton-sequencer/Dockerfile": "CANTON_SEQUENCER_IMAGE_SHA256",
 }
 
-# List of file-path regexes. Any digest-pinned image coming from a matching file is skipped by the check.
+# List of file-path regexes. Any digest-pinned image coming from a matching file is skipped by the check
 IGNORED_FILE_PATTERNS = [
     re.compile(r"^cluster/images/cometbft/Dockerfile$"),
     re.compile(r"^cluster/images/splice-test-cometbft/Dockerfile$"),
@@ -88,7 +87,7 @@ def _extract_refs_from_text(text: str) -> set[str]:
 
 def _refs_from_dockerfile(path: Path) -> set[str]:
     """Parse a Dockerfile and resolve any variable references in FROM images."""
-    # Set image_sha256 for this specific Dockerfile before resolving variables.
+    # Set image_sha256 for this specific Dockerfile before resolving variables
     image_sha256 = _image_sha256_for(str(path))
     if image_sha256:
         os.environ["image_sha256"] = image_sha256
@@ -103,7 +102,7 @@ def _refs_from_dockerfile(path: Path) -> set[str]:
         value = instruction["value"]
         # Drop stage aliases: "image:tag AS stage"
         value = re.sub(r"\s+AS\s+\S+$", "", value, flags=re.IGNORECASE)
-        # Resolve $var / ${var} references using environment variables.
+        # Resolve $var / ${var} references using environment variables
         resolved = os.path.expandvars(value)
         refs.update(_extract_refs_from_text(resolved))
     return refs
@@ -153,7 +152,7 @@ def main() -> int:
     checked: set[str] = set()
     failures = 0
 
-    # Dockerfiles may use variable digests (e.g. ARG $cometbft_sha), so parse all of them.
+    # Dockerfiles may use variable digests (e.g. ARG $cometbft_sha), so parse all of them
     for file in _tracked_dockerfiles():
         path = Path(file)
         if not path.is_file():
