@@ -35,8 +35,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRul
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.amuletrules_actionrequiringconfirmation.CRARC_SetConfig
 
 import scala.jdk.CollectionConverters.*
-import java.time.Instant
-import java.time.temporal.ChronoUnit
 import scala.util.Using
 import scala.util.Using.Releasable
 import scala.concurrent.duration.*
@@ -234,12 +232,6 @@ class AppUpgradeIntegrationTest
 
           val amuletRules = sv2ScanBackend.getAmuletRules()
           val amuletConfig = amuletRules.payload.configSchedule.initialValue
-          // Ideally we'd like the config to take effect immediately. However, we
-          // can only schedule configs in the future and this is enforced at the Daml level.
-          // So we pick a date that is far enough in the future that we can complete the voting process
-          // before it is reached but close enough that we don't need to wait for long.
-          // 12 seconds seems to work well empirically.
-          val scheduledTime = Instant.now().plus(12, ChronoUnit.SECONDS)
           val newAmuletConfig = new splice.amuletconfig.AmuletConfig(
             SpliceUtil.defaultTransferConfig(
               amuletConfig.transferConfig.maxNumInputs,
@@ -312,15 +304,19 @@ class AppUpgradeIntegrationTest
             },
           )
 
-          // Ensure that the code below really uses the new version. Locally things can be sufficiently
-          // fast that you otherwise still end up using the old version.
-          env.environment.clock
-            .scheduleAt(
-              _ => (),
-              CantonTimestamp.assertFromInstant(scheduledTime.plus(500, ChronoUnit.MILLIS)),
-            )
-            .unwrap
-            .futureValue
+          clue("SVs have vetted new dso governance version") {
+            eventually() {
+              // dso party vetting only changes once all SVs vetted the package.
+              val preferredPackages =
+                sv1Backend.participantClientWithAdminToken.ledger_api.interactive_submission
+                  .preferred_packages(
+                    Map(DarResources.dsoGovernance_current.metadata.name -> Set(dsoParty))
+                  )
+              val dsoGovernancePackage = preferredPackages.packageReferences.loneElement
+              dsoGovernancePackage.packageName shouldBe DarResources.dsoGovernance_current.metadata.name.toString
+              dsoGovernancePackage.packageVersion shouldBe DarResources.dsoGovernance_current.metadata.version.toString
+            }
+          }
 
           // Vote on a dummy change on amulet rules to ensure it is archived and recreated
           // which indicates the new choice is being used.
