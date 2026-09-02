@@ -49,6 +49,9 @@ persistence:
 # k8s tolerations for all deployed pods (optional)
 # tolerations:
 
+# k8s priorityClassName for all deployed pods (optional)
+# priorityClassName:
+
 extraInitContainers: []
 
 # set to true to disable auth (this is highly insecure)

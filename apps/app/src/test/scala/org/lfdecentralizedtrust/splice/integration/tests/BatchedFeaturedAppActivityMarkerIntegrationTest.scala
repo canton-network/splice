@@ -41,13 +41,16 @@ class BatchedFeaturedAppActivityMarkerIntegrationTest
           _.withPausedTrigger[FeaturedAppActivityMarkerTrigger]
         )(config)
       )
-      .addConfigTransforms((_, config) =>
-        ConfigTransforms.updateAllSvAppConfigs_(
-          _.copy( // Set high batch sizes because we really want to test that everything gets submitted in a single batch
-            delegatelessAutomationFeaturedAppActivityMarkerCatchupThreshold = 500,
-            delegatelessAutomationFeaturedAppActivityMarkerBatchSize = 500,
-          )
-        )(config)
+      .addConfigTransforms(
+        (_, config) =>
+          ConfigTransforms.updateAllSvAppConfigs_(
+            _.copy( // Set high batch sizes because we really want to test that everything gets submitted in a single batch
+              delegatelessAutomationFeaturedAppActivityMarkerCatchupThreshold = 500,
+              delegatelessAutomationFeaturedAppActivityMarkerBatchSize = 500,
+            )
+          )(config),
+        // Disable so downgrades of dso rules don't cause issues with validators where we deliberately unvet versions.
+        (_, c) => ConfigTransforms.withNoSvOperationsSwitchOverTimes(c),
       )
 
   def createBatchedMarkers(

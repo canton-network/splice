@@ -23,7 +23,7 @@ import DA.Optional (isNone)
 import DA.Text qualified as T
 
 data Hash = Hash with value : Text
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- | Compute the hash of a record.
 hashRecord : [Hash] -> Hash

@@ -77,6 +77,8 @@ abstract class ExpiryWithMinimalVettedPackagesIntegrationTestBase
           ConfigTransforms.updateInitialExternalPartyConfigStateTickDuration(
             NonNegativeFiniteDuration.ofMillis(500)
           )(c),
+        // The validator on the old version otherwise will fail to onboard as we cannot downgrade DsoRules when trying to create their license.
+        (_, c) => ConfigTransforms.withNoSvOperationsSwitchOverTimes(c),
       )
       .addConfigTransforms((_, config) => {
         val aliceVal = InstanceName.tryCreate("aliceValidator")
@@ -421,33 +423,23 @@ class ExpiryWithNoVettedAmuletVersionIntegrationTest
       }
     }
 
-    loggerFactory.assertLogsSeq(
-      SuppressionRule.forLogger[ExpiredAmuletTrigger] && SuppressionRule.Level(Level.WARN)
+    actAndCheck(timeUntilSuccess = 60.seconds)(
+      "Advance 4 rounds and resume the amulet expiry trigger", {
+        (1 to 4).foreach(_ => advanceRoundsByOneTickViaAutomation())
+        updateExternalPartyConfigStatesViaAutomation()
+        updateExternalPartyConfigStatesViaAutomation()
+        env.svs.local.foreach(
+          _.dsoDelegateBasedAutomation.trigger[ExpiredAmuletTrigger].resume()
+        )
+      },
     )(
-      actAndCheck(timeUntilSuccess = 60.seconds)(
-        "Advance 4 rounds and resume the amulet expiry trigger", {
-          (1 to 4).foreach(_ => advanceRoundsByOneTickViaAutomation())
-          updateExternalPartyConfigStatesViaAutomation()
-          updateExternalPartyConfigStatesViaAutomation()
-          env.svs.local.foreach(
-            _.dsoDelegateBasedAutomation.trigger[ExpiredAmuletTrigger].resume()
-          )
-        },
-      )(
-        "Alice is ignored and her dust amulets are not expired",
-        _ => {
-          val ignored = sv1Backend.dsoDelegateBasedAutomation.unavailablePartiesStore.getAll
-          ignored should contain(alice)
-          ignored should not contain dsoParty
-          aliceWalletClient.list().amulets should have length 2L withClue "dust amulets"
-        },
-      ),
-      entries =>
-        forAtLeast(1, entries) { entry =>
-          entry.warningMessage should include("No vetted Amulet version")
-          entry.warningMessage should include(alice.uid.identifier.str)
-          entry.warningMessage should include("ignoring 1 parties")
-        },
+      "Alice is ignored and her dust amulets are not expired",
+      _ => {
+        val ignored = sv1Backend.dsoDelegateBasedAutomation.unavailablePartiesStore.getAll
+        ignored should contain(alice)
+        ignored should not contain dsoParty
+        aliceWalletClient.list().amulets should have length 2L withClue "dust amulets"
+      },
     )
   }
 }

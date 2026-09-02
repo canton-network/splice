@@ -44,6 +44,7 @@ data TwoStepTransfer = TwoStepTransfer with
       -- ^ Provider that should be marked as the app provider on the second step.
     allowFeaturing : Bool
       -- ^ Whether the second step can be featured.
+  deriving (Serializable)
 
 -- | Converting a set of holding inputs to inputs for an amulet transfer,
 -- unlocking any expired LockedAmulet holdings on the fly.

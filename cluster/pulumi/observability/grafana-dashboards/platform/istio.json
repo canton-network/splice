@@ -120,7 +120,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Fraction of requests evaluated by the Envoy local rate limit filter that were rejected with HTTP 429, per namespace and pod.",
+      "description": "Fraction of the Envoy local rate limit evaluations that were rejected with HTTP 429, per namespace, pod and limiter. One filter per limit is installed (limiter=global, per_ip, endpoint_per_ip) and every request is evaluated by each of them.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -207,11 +207,11 @@
           },
           "editorMode": "code",
           "exemplar": false,
-          "expr": "sum(rate(envoy_http_local_rate_limiter_http_local_rate_limit_enforced{namespace=~\"$namespace\"}[$__rate_interval])) by (namespace, pod)\n/\nsum(rate(envoy_http_local_rate_limiter_http_local_rate_limit_enabled{namespace=~\"$namespace\"}[$__rate_interval])) by (namespace, pod)",
+          "expr": "sum(rate(envoy_http_local_rate_limit_enforced{namespace=~\"$namespace\"}[$__rate_interval])) by (namespace, pod, limiter)\n/\nsum(rate(envoy_http_local_rate_limit_enabled{namespace=~\"$namespace\"}[$__rate_interval])) by (namespace, pod, limiter)",
           "format": "time_series",
           "instant": false,
           "interval": "",
-          "legendFormat": "{{namespace}} - {{pod}}",
+          "legendFormat": "{{namespace}} - {{pod}} - {{limiter}}",
           "range": true,
           "refId": "A"
         }
@@ -224,7 +224,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Rate of number of requests for which rate limiting was applied (e.g.: 429 returned)",
+      "description": "Rate of number of requests for which rate limiting was applied (e.g.: 429 returned), broken down by the limit that rejected them: global, per_ip (per client IP) and endpoint_per_ip (per endpoint and client IP).",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -306,8 +306,8 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(envoy_http_local_rate_limiter_http_local_rate_limit_enforced{namespace=~\"$namespace\"}[$__rate_interval])) by (namespace, pod)",
-          "legendFormat": "{{namespace}} - {{pod}}",
+          "expr": "sum(rate(envoy_http_local_rate_limit_enforced{namespace=~\"$namespace\"}[$__rate_interval])) by (namespace, pod, limiter)",
+          "legendFormat": "{{namespace}} - {{pod}} - {{limiter}}",
           "range": true,
           "refId": "A"
         }
@@ -402,8 +402,8 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(envoy_http_local_rate_limiter_http_local_rate_limit_rate_limited{namespace=~\"$namespace\"}[$__rate_interval])) by (namespace,job)",
-          "legendFormat": "{{namespace}} - {{job}}",
+          "expr": "sum(rate(envoy_http_local_rate_limit_rate_limited{namespace=~\"$namespace\"}[$__rate_interval])) by (namespace, job, limiter)",
+          "legendFormat": "{{namespace}} - {{job}} - {{limiter}}",
           "range": true,
           "refId": "A"
         }
@@ -498,8 +498,8 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(envoy_http_local_rate_limiter_http_local_rate_limit_enabled{namespace=~\"$namespace\"}[$__rate_interval])) by (namespace, pod)",
-          "legendFormat": "{{namespace}} - {{pod}}",
+          "expr": "sum(rate(envoy_http_local_rate_limit_enabled{namespace=~\"$namespace\"}[$__rate_interval])) by (namespace, pod, limiter)",
+          "legendFormat": "{{namespace}} - {{pod}} - {{limiter}}",
           "range": true,
           "refId": "A"
         }
@@ -594,8 +594,8 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum(rate(envoy_http_local_rate_limiter_http_local_rate_limit_ok{namespace=~\"$namespace\"}[$__rate_interval])) by (namespace, pod)",
-          "legendFormat": "{{namespace}} - {{pod}}",
+          "expr": "sum(rate(envoy_http_local_rate_limit_ok{namespace=~\"$namespace\"}[$__rate_interval])) by (namespace, pod, limiter)",
+          "legendFormat": "{{namespace}} - {{pod}} - {{limiter}}",
           "range": true,
           "refId": "A"
         }

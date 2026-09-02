@@ -215,6 +215,9 @@
     "tolerations": {
       "type": "array"
     },
+    "priorityClassName": {
+      "type": "string"
+    },
     "nodeSelector": {
       "type": "object"
     },

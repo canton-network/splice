@@ -433,6 +433,90 @@ class DevelopmentFundCouponIntegrationTest
     }
   }
 
+  "Minting a development fund coupon once its mintAfter has passed" in { implicit env =>
+    onboardWalletUser(aliceValidatorWalletClient, aliceValidatorBackend)
+    val sv1UserId = sv1WalletClient.config.ledgerApiUser
+    val bobParty = onboardWalletUser(bobWalletClient, bobValidatorBackend)
+    val beneficiary = bobParty
+    val initialUnclaimedDevelopmentFundCouponAmount = BigDecimal(SpliceUtil.damlDecimal(1000))
+    val developmentFundCouponAmount = BigDecimal(SpliceUtil.damlDecimal(40.0))
+    val expiresAt = CantonTimestamp.now().plus(Duration.ofDays(1))
+    val reason = "Bob has contributed to the Daml repo"
+    val mintingDelay = Duration.ofSeconds(10)
+
+    val bobUserName = bobWalletClient.config.ledgerApiUser
+    val bobMergeAmuletsTrigger =
+      bobValidatorBackend
+        .userWalletAutomation(bobUserName)
+        .futureValue
+        .trigger[CollectRewardsAndMergeAmuletsTrigger]
+
+    val unclaimedTotalBefore = getUnclaimedDevelopmentFundCouponTotal(sv1ValidatorBackend)
+    actAndCheck(
+      "Mint one unclaimed development fund coupon", {
+        createUnclaimedDevelopmentFundCoupon(
+          sv1ValidatorBackend.participantClientWithAdminToken,
+          sv1UserId,
+          initialUnclaimedDevelopmentFundCouponAmount,
+        )
+      },
+    )(
+      "The unclaimed development fund coupon is created",
+      _ => {
+        getUnclaimedDevelopmentFundCouponTotal(
+          sv1ValidatorBackend
+        ) shouldBe (unclaimedTotalBefore + initialUnclaimedDevelopmentFundCouponAmount)
+      },
+    )
+
+    val bobBalanceBefore = bobWalletClient.balance().unlockedQty
+    setTriggersWithin(
+      triggersToPauseAtStart = Seq(bobMergeAmuletsTrigger)
+    ) {
+      actAndCheck(
+        "Allocate one development fund coupon that is not mintable yet", {
+          val mintAfter = CantonTimestamp.now().plus(mintingDelay)
+          aliceValidatorWalletClient.allocateDevelopmentFundCoupon(
+            beneficiary,
+            developmentFundCouponAmount,
+            expiresAt,
+            reason,
+            Some(mintAfter),
+          )
+          mintAfter
+        },
+      )(
+        "The coupon is created and carries the requested mintAfter",
+        allocatedMintAfter => {
+          val coupons = bobWalletClient.listActiveDevelopmentFundCoupons()
+          coupons should have size 1 withClue "bob coupons"
+          coupons.head.payload.mintAfter shouldBe java.util.Optional.of(
+            allocatedMintAfter.toInstant
+          )
+        },
+      )
+    }
+
+    clue("The coupon is collected once its mintAfter has passed") {
+      eventually(30.seconds) {
+        bobWalletClient
+          .listActiveDevelopmentFundCoupons() shouldBe empty withClue "bob coupons after mintAfter"
+        bobWalletClient.balance().unlockedQty shouldBe
+          (bobBalanceBefore + developmentFundCouponAmount)
+      }
+    }
+
+    clue("The collected coupon is listed in listDevelopmentFundCouponHistory as claimed") {
+      eventually() {
+        assertListDevelopmentFundCouponHistoryStatuses(
+          bobWalletClient,
+          beneficiary,
+          Seq(httpDef.ArchivedDevelopmentFundCoupon.Status.Claimed -> None),
+        )
+      }
+    }
+  }
+
   "Expiring a development fund coupon" in { implicit env =>
     val sv1UserId = sv1WalletClient.config.ledgerApiUser
     onboardWalletUser(aliceValidatorWalletClient, aliceValidatorBackend)

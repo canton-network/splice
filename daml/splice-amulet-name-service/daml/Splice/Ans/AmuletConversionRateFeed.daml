@@ -24,7 +24,7 @@ data MarkerContext = MarkerContext
   with
     featuredAppRightCid : ContractId Api.FeaturedAppRight
     beneficiaries : [Api.AppRewardBeneficiary]
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 -- | Amulet conversion rate feed published by a given 'publisher'.
 -- Publisher must only create one feed per publisher.
@@ -75,7 +75,9 @@ instance HasCheckedFetch Api.FeaturedAppRightView ForOwner where
   contractGroupId Api.FeaturedAppRightView{..} = ForOwner{dso,owner = provider}
 
 data AmuletConversionRateFeed_ArchiveAsDsoResult = AmuletConversionRateFeed_ArchiveAsDsoResult
+  deriving (Serializable)
 
 data AmuletConversionRateFeed_UpdateResult = AmuletConversionRateFeed_UpdateResult
   with
     cid : ContractId AmuletConversionRateFeed
+  deriving (Serializable)

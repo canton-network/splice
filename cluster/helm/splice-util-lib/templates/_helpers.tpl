@@ -67,6 +67,7 @@ valueFrom:
 {{- $nodeSelector := .nodeSelector }}
 {{- $affinity := .affinity }}
 {{- $tolerations := .tolerations }}
+{{- $priorityClassName := .priorityClassName }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -127,6 +128,9 @@ spec:
                 echo "Waiting for database {{ $persistence.databaseName }}, at hostname {{ $persistence.host }}, port {{ $persistence.port | default 5432 }} to be accessible. Last error: $errmsg"
                 sleep 2;
             done
+      {{- with $priorityClassName }}
+      priorityClassName: {{ . | quote }}
+      {{- end }}
       {{- with $nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
