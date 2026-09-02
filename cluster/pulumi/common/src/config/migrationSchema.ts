@@ -60,7 +60,5 @@ export const SynchronizerMigrationSchema = z
     activeDatabaseId: z.number().optional(),
     attachPvc: z.boolean().default(true),
     frozenMigrationId: z.number(),
-    // TODO(#6719) no longer used, kept for config backwards compat.
-    splitSvDeploymentEnabled: z.boolean().optional(),
   })
   .strict();

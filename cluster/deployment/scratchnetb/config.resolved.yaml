@@ -1761,7 +1761,6 @@ synchronizerMigration:
       enableBftSequencer: true
     version: 'local'
   frozenMigrationId: 0
-  splitSvDeploymentEnabled: true
 validator1:
   deduplicationDuration: '30m'
   logging:
