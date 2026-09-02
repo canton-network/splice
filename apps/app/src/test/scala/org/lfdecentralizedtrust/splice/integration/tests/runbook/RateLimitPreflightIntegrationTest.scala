@@ -17,6 +17,10 @@ import scala.concurrent.duration.*
 import scala.concurrent.{Await, Future, blocking}
 import scala.util.control.NonFatal
 import scala.util.{Failure, Try}
+import org.apache.pekko.http.scaladsl.Http
+import org.apache.pekko.http.scaladsl.client.RequestBuilding.Get
+import org.apache.pekko.http.scaladsl.model.StatusCodes
+import org.apache.pekko.http.scaladsl.model.headers.RawHeader
 
 class RateLimitPreflightIntegrationTest extends IntegrationTest {
 
@@ -53,6 +57,36 @@ class RateLimitPreflightIntegrationTest extends IntegrationTest {
           scanCli.getDsoPartyId()
         },
       )
+    }
+  }
+
+  "Scan per-IP rate limits cannot be bypassed by spoofing X-Forwarded-For" in { implicit env =>
+    import env.{actorSystem, executionContext}
+    registerHttpConnectionPoolsCleanup(env)
+    val perIpLimit = 120
+    val requests = 200
+    val scanCli = env.scans.remote.headOption.value
+    val url = s"${scanCli.httpClientConfig.url}/registry/metadata/v1/info"
+    val statuses = MonadUtil
+      .parTraverseWithLimit(PositiveInt.tryCreate(16))((1 to requests).toSeq) { i =>
+        Http()
+          .singleRequest(
+            Get(url).withHeaders(RawHeader("X-Forwarded-For", s"10.0.0.$i"))
+          )
+          .map { resp =>
+            resp.discardEntityBytes()
+            resp.status
+          }
+      }
+      .futureValue
+    val byStatus = statuses.groupBy(identity).view.mapValues(_.size).toMap
+    val rejected = statuses.count(_ == StatusCodes.TooManyRequests)
+    val accepted = statuses.count(_ == StatusCodes.OK)
+    withClue(s"endpoint must be reachable, got $byStatus: ") {
+      accepted should be > 0
+    }
+    withClue(s"XFF spoofing must not grant a fresh per-IP bucket, got $byStatus: ") {
+      rejected should be >= (requests - perIpLimit)
     }
   }
 
