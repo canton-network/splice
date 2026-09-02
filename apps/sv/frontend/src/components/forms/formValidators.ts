@@ -2,9 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
 import { z } from 'zod';
 import type { EffectivityType } from '../../utils/types';
 import { isValidUrl } from '../../utils/validations';
+import { nextScheduledSynchronizerUpgradeFormat } from '@canton-network/splice-common-frontend-utils';
+
+dayjs.extend(utc);
 
 export const urlSchema = z.string().refine(url => isValidUrl(url), {
   message: 'Invalid URL',
@@ -271,6 +275,45 @@ export const validateNextScheduledLogicalSynchronizerUpgrade = (
 };
 
 export type SwitchOverEntry = { key: string; time: string };
+
+/**
+ * Serialize switch-over entries into the DAML map shape used by the config
+ * builders: trim keys, drop entries with an empty key, normalize each time to
+ * the DAML `Time` format, and collapse to `null` when there is nothing left.
+ * Shared with the builders so change detection matches what is submitted.
+ */
+export const serializeSwitchOverTimes = (
+  entries: SwitchOverEntry[]
+): Record<string, string> | null => {
+  const trimmed = entries.map(e => ({ key: e.key.trim(), time: e.time })).filter(e => e.key !== '');
+
+  return trimmed.length === 0
+    ? null
+    : Object.fromEntries(
+        trimmed.map(e => [
+          e.key,
+          dayjs(e.time).utc().format(nextScheduledSynchronizerUpgradeFormat),
+        ])
+      );
+};
+
+/**
+ * True when the switch-over entries differ from the baseline map. Both sides
+ * are normalized through {@link serializeSwitchOverTimes} so the comparison is
+ * format-safe and order-independent, and treats `null`/absent as no entries.
+ */
+export const switchOverTimesChanged = (
+  baseline: Record<string, string> | null | undefined,
+  entries: SwitchOverEntry[]
+): boolean => {
+  const baselineEntries = Object.entries(baseline ?? {}).map(([key, time]) => ({ key, time }));
+  const a = serializeSwitchOverTimes(baselineEntries) ?? {};
+  const b = serializeSwitchOverTimes(entries) ?? {};
+  const ka = Object.keys(a).sort();
+  const kb = Object.keys(b).sort();
+  if (ka.length !== kb.length) return true;
+  return !ka.every((k, i) => k === kb[i] && a[k] === b[k]);
+};
 
 export const validateSwitchOverTimes = (
   entries: SwitchOverEntry[],
