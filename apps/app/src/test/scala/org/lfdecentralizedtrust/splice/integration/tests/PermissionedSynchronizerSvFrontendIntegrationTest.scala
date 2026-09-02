@@ -80,7 +80,7 @@ class PermissionedSynchronizerSvFrontendIntegrationTest
   }
 
   "SV UIs in permissioned mode" should {
-    "create and confirm unpermission proposals" in { implicit env =>
+    "create and confirm unpermission vote proposals" in { implicit env =>
       initDso()
 
       val aliceParticipantId = aliceValidatorBackend.participantClient.id.toProtoPrimitive
@@ -131,67 +131,88 @@ class PermissionedSynchronizerSvFrontendIntegrationTest
 
       clue("Alice and Bob Validators start and onboard correctly") {
         aliceValidatorBackend.startSync()
-        aliceValidatorBackend.onboardUser("TestUserAlice")
-
         bobValidatorBackend.startSync()
-        bobValidatorBackend.onboardUser("TestUserBob")
       }
 
       aliceValidatorBackend.stop()
       bobValidatorBackend.stop()
 
-      val loginAfterDate = "2099-01-31 00:12"
-
       withFrontEnd("sv1") { implicit webDriver =>
-        go to s"http://localhost:$sv1UIPort/governance"
-        loginOnCurrentPage(sv1UIPort, sv1Backend.config.ledgerApiUser)
-
-        click on id("initiate-proposal-button")
-
-        eventually() {
-          webDriver.findElement(By.id("select-action")).click()
-        }
-        eventually() {
-          webDriver
-            .findElement(By.cssSelector("[data-testid='SRARC_UnpermissionValidator']"))
-            .click()
-        }
-        eventually() {
-          click on id("next-button")
+        clue("Login to sv-1") {
+          go to s"http://localhost:$sv1UIPort/governance"
+          loginOnCurrentPage(sv1UIPort, sv1Backend.config.ledgerApiUser)
         }
 
-        fillOutTextField("unpermission-validator-participant-id", aliceParticipantId)
-        setDateTime("sv1", "unpermission-validator-login-after", loginAfterDate)
+        clue("SV1 creates vote request for temporary suspension of Alice") {
+          eventuallyClickOn(id("initiate-proposal-button"))
 
-        inside(find(id("unpermission-validator-summary"))) { case Some(element) =>
-          element.underlying.sendKeys("Suspend Alice")
-        }
-        inside(find(id("unpermission-validator-url"))) { case Some(element) =>
-          element.underlying.sendKeys("https://example.com")
-        }
+          eventually() {
+            webDriver.findElement(By.id("select-action")).click()
+          }
+          eventually() {
+            webDriver
+              .findElement(By.cssSelector("[data-testid='SRARC_UnpermissionValidator']"))
+              .click()
+          }
+          eventually() {
+            click on id("next-button")
+          }
 
-        eventually() { webDriver.findElement(By.id("submit-button")).click() }
-        eventually() {
-          webDriver.findElement(By.id("submit-button")).getText shouldBe "Submit Proposal"
-        }
-        eventually() { webDriver.findElement(By.id("submit-button")).click() }
+          eventually() {
+            find(id("unpermission-validator-form")) should not be empty
+          }
 
-        eventually() { find(id("initiate-proposal-button")) should not be empty }
+          fillOutTextField("unpermission-validator-participant-id", aliceParticipantId)
+
+          eventually() {
+            val radio = webDriver.findElement(By.cssSelector("input[value='threshold']"))
+            webDriver
+              .asInstanceOf[org.openqa.selenium.JavascriptExecutor]
+              .executeScript("arguments[0].click();", radio)
+          }
+
+          inside(find(id("unpermission-validator-summary"))) { case Some(element) =>
+            element.underlying.sendKeys("Suspend Alice")
+          }
+
+          inside(find(id("unpermission-validator-url"))) { case Some(element) =>
+            element.underlying.sendKeys("https://example.com")
+          }
+
+          eventually() {
+            webDriver.findElement(By.id("submit-button")).click()
+          }
+          eventually() {
+            webDriver.findElement(By.id("submit-button")).getText shouldBe "Submit Proposal"
+          }
+          eventually() {
+            webDriver.findElement(By.id("submit-button")).click()
+          }
+
+          eventually() {
+            find(id("initiate-proposal-button")) should not be empty
+          }
+        }
       }
 
-      val aliceVoteRequest = eventually() {
-        sv1Backend
-          .listVoteRequests()
-          .find(req =>
-            req.payload.action.toValue.toString.contains("SRARC_UnpermissionValidator") &&
-              req.payload.action.toValue.toString.contains(aliceParticipantId)
-          )
-          .value
+      val aliceVoteRequest = clue("Vote Request for Alice is created") {
+
+        eventually() {
+          sv1Backend
+            .listVoteRequests()
+            .find(req =>
+              req.payload.action.toValue.toString.contains("SRARC_UnpermissionValidator") &&
+                req.payload.action.toValue.toString.contains(aliceParticipantId)
+            )
+            .value
+        }
       }
       val aliceRequestId = getTrackingId(aliceVoteRequest).contractId
 
-      withFrontEnd("sv2") { implicit webDriver =>
-        svCastVoteOnActionRequired(sv2UIPort, sv2Backend, aliceRequestId)
+      clue("SV2 Cast Vote using UI") {
+        withFrontEnd("sv2") { implicit webDriver =>
+          svCastVoteOnActionRequired(sv2UIPort, sv2Backend, aliceRequestId)
+        }
       }
 
       clue("SV3 accepts the vote request via backend") {
@@ -213,67 +234,90 @@ class PermissionedSynchronizerSvFrontendIntegrationTest
               aliceParticipantId,
             )
             .value
-          permission.loginAfter.map(_.toInstant) shouldBe Some(
-            java.time.Instant.parse("2099-01-31T00:12:00Z")
-          )
+          permission.loginAfter shouldBe defined
+          permission.loginAfter.value.toInstant.isAfter(java.time.Instant.now()) shouldBe true
         }
       }
 
       withFrontEnd("sv1") { implicit webDriver =>
-        go to s"http://localhost:$sv1UIPort/governance/proposals"
+        clue("Create Vote proposal for bob with permenent revoked") {
 
-        click on id("initiate-proposal-button")
+          go to s"http://localhost:$sv1UIPort/governance"
 
-        eventually() {
-          webDriver.findElement(By.id("select-action")).click()
-        }
-        eventually() {
-          webDriver
-            .findElement(By.cssSelector("[data-testid='SRARC_UnpermissionValidator']"))
-            .click()
-        }
-        eventually() {
-          click on id("next-button")
-        }
+          eventuallyClickOn(id("initiate-proposal-button"))
 
-        fillOutTextField("unpermission-validator-participant-id", bobParticipantId)
+          eventually() {
+            webDriver.findElement(By.id("select-action")).click()
+          }
+          eventually() {
+            webDriver
+              .findElement(By.cssSelector("[data-testid='SRARC_UnpermissionValidator']"))
+              .click()
+          }
+          eventually() {
+            click on id("next-button")
+          }
 
-        eventually() {
-          val checkbox = webDriver.findElement(By.id("unpermission-validator-revoked"))
-          webDriver
-            .asInstanceOf[org.openqa.selenium.JavascriptExecutor]
-            .executeScript("arguments[0].click();", checkbox)
-        }
+          eventually() {
+            find(id("unpermission-validator-form")) should not be empty
+          }
 
-        inside(find(id("unpermission-validator-summary"))) { case Some(element) =>
-          element.underlying.sendKeys("Revoke Bob")
-        }
-        inside(find(id("unpermission-validator-url"))) { case Some(element) =>
-          element.underlying.sendKeys("https://example.com")
-        }
+          fillOutTextField("unpermission-validator-participant-id", bobParticipantId)
 
-        eventually() { webDriver.findElement(By.id("submit-button")).click() }
-        eventually() {
-          webDriver.findElement(By.id("submit-button")).getText shouldBe "Submit Proposal"
-        }
-        eventually() { webDriver.findElement(By.id("submit-button")).click() }
+          eventually() {
+            val radio = webDriver.findElement(By.cssSelector("input[value='threshold']"))
+            webDriver
+              .asInstanceOf[org.openqa.selenium.JavascriptExecutor]
+              .executeScript("arguments[0].click();", radio)
+          }
 
-        eventually() { find(id("initiate-proposal-button")) should not be empty }
+          eventually() {
+            val checkbox = webDriver.findElement(By.id("unpermission-validator-revoked"))
+            webDriver
+              .asInstanceOf[org.openqa.selenium.JavascriptExecutor]
+              .executeScript("arguments[0].click();", checkbox)
+          }
+
+          inside(find(id("unpermission-validator-summary"))) { case Some(element) =>
+            element.underlying.sendKeys("Revoke Bob")
+          }
+          inside(find(id("unpermission-validator-url"))) { case Some(element) =>
+            element.underlying.sendKeys("https://example.com")
+          }
+
+          eventually() {
+            webDriver.findElement(By.id("submit-button")).click()
+          }
+          eventually() {
+            webDriver.findElement(By.id("submit-button")).getText shouldBe "Submit Proposal"
+          }
+          eventually() {
+            webDriver.findElement(By.id("submit-button")).click()
+          }
+
+          eventually() {
+            find(id("initiate-proposal-button")) should not be empty
+          }
+        }
       }
 
-      val bobVoteRequest = eventually() {
-        sv1Backend
-          .listVoteRequests()
-          .find(req =>
-            req.payload.action.toValue.toString.contains("SRARC_UnpermissionValidator") &&
-              req.payload.action.toValue.toString.contains(bobParticipantId)
-          )
-          .value
+      val bobVoteRequest = clue("Vote Request for bob is created") {
+        eventually() {
+          sv1Backend
+            .listVoteRequests()
+            .find(req =>
+              req.payload.action.toValue.toString.contains("SRARC_UnpermissionValidator") &&
+                req.payload.action.toValue.toString.contains(bobParticipantId)
+            )
+            .value
+        }
       }
       val bobRequestId = getTrackingId(bobVoteRequest).contractId
 
-      withFrontEnd("sv2") { implicit webDriver =>
-        svCastVoteOnActionRequired(sv2UIPort, sv2Backend, bobRequestId)
+      clue("SV2 votes for bob revocation using UI") {
+        withFrontEnd("sv2") { implicit webDriver =>
+          svCastVoteOnActionRequired(sv2UIPort, sv2Backend, bobRequestId)
+        }
       }
 
       clue("SV3 accepts the vote request via backend") {
