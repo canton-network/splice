@@ -113,8 +113,6 @@ export async function installNode(auth0Client: Auth0Client): Promise<void> {
     otherDeps: [],
   });
 
-  const walletGatewayConfig = validatorConfig.walletGateway;
-
   const ingressImagePullDeps = imagePullSecretByNamespaceName('cluster-ingress');
   installSpliceRunbookHelmChartByNamespaceName(
     xns.ns.metadata.name,
@@ -131,7 +129,7 @@ export async function installNode(auth0Client: Auth0Client): Promise<void> {
       },
       withSvIngress: false,
       ingress: {
-        walletGateway: walletGatewayConfig?.enabled ?? false,
+        walletGateway: validatorConfig.walletGateway?.enabled ?? false,
       },
     },
     validatorVersion,

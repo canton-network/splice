@@ -10,6 +10,7 @@ import {
   ExactNamespace,
   HELM_CHART_TIMEOUT_SEC,
   HELM_MAX_HISTORY_SIZE,
+  InstalledHelmChart,
   appsKubernetesScheduling,
   getNamespaceConfig,
   installWalletGatewayAdminSecret,
@@ -27,10 +28,7 @@ export async function installWalletGateway(
   wgPostgres: postgres.Postgres,
   // The gateway talks to the participant's ledger API on startup, so sequence it after the validator
   dependsOn: CnInput<pulumi.Resource>[] = []
-): Promise<pulumi.Resource> {
-  if (spliceConfig.pulumiProjectConfig.installDataOnly) {
-    return new SplicePlaceholderResource('wallet-gateway');
-  }
+): Promise<InstalledHelmChart> {
   const ns = xns.logicalName;
   const auth0Cfg = auth0Client.getCfg();
   const nsAuth0 = getNamespaceConfig(auth0Cfg, ns);
@@ -43,6 +41,10 @@ export async function installWalletGateway(
   const scanUrl = config.scanUrl ?? `https://scan.sv-2.${CLUSTER_HOSTNAME}`;
 
   const adminSecret = await installWalletGatewayAdminSecret(auth0Client, xns);
+
+  if (spliceConfig.pulumiProjectConfig.installDataOnly) {
+    return new SplicePlaceholderResource('wallet-gateway');
+  }
 
   const gateway = new k8s.helm.v3.Release(
     `${ns}-wallet-gateway`,
