@@ -41,3 +41,9 @@ release-notes:: Upcoming
           ``SvRewardCoupon`` rewards. An external party that is a beneficiary of SV rewards
           will have those coupons minted on its behalf by its delegate, alongside the other
           reward-coupon types.
+
+    - SV UI
+
+        - The ``AmuletRules_SetConfig`` proposal form can now set ``amuletSwitchOverTimes``.
+
+        - The ``DsoRulesConfig`` proposal form can now set ``svOperationsSwitchOverTimes``.
