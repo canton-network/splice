@@ -278,6 +278,85 @@ class DbScanRewardsReferenceStore(
       case _ => Future.successful(None)
     }
 
+  def lookupArchivedAtForOpenMiningRound(
+      roundNumber: Long
+  )(implicit tc: TraceContext): Future[Option[CantonTimestamp]] =
+    waitUntilInitialized.flatMap { _ =>
+      val storeId = multiDomainAcsStore.acsStoreId
+      val migrationId = multiDomainAcsStore.domainMigrationId
+      val pqn = PackageQualifiedName.fromJavaCodegenCompanion(OpenMiningRound.COMPANION)
+      futureUnlessShutdownToFuture(
+        storage.query(
+          sql"""select acs.archived_at
+                from #${ScanRewardsReferenceTables.archiveTableName} acs
+                where acs.store_id = $storeId
+                  and acs.migration_id = $migrationId
+                  and acs.package_name = ${pqn.packageName}
+                  and acs.template_id_qualified_name = ${pqn.qualifiedName}
+                  and acs.round = $roundNumber
+                limit 1
+           """.as[CantonTimestamp].headOption,
+          "lookupArchivedAtForOpenMiningRound",
+        )
+      )
+    }
+
+  override def lookupLowestPrunableArchivedRewardRound()(implicit
+      tc: TraceContext
+  ): Future[Option[Long]] =
+    waitUntilInitialized.flatMap { _ =>
+      val storeId = multiDomainAcsStore.acsStoreId
+      val migrationId = multiDomainAcsStore.domainMigrationId
+      // It is important to limit the query for the round to OpenMiningRound
+      // as we prune only the contracts <= OpenMiningRound's archived_at
+      // and the db will likely still have other contracts for this round
+      // even after the pruning.
+      val pqn = PackageQualifiedName.fromJavaCodegenCompanion(OpenMiningRound.COMPANION)
+      futureUnlessShutdownToFuture(
+        storage.query(
+          sql"""select min(archived.round)
+                from #${ScanRewardsReferenceTables.archiveTableName} archived
+                where archived.store_id = $storeId and archived.migration_id = $migrationId
+                  and archived.package_name = ${pqn.packageName}
+                  and archived.template_id_qualified_name = ${pqn.qualifiedName}
+                  and archived.round is not null
+                  and not exists (
+                    select 1
+                    from #${ScanRewardsReferenceTables.acsTableName} active
+                    where active.store_id = archived.store_id
+                      and active.migration_id = archived.migration_id
+                      and active.round <= archived.round
+                  )
+           """.as[Option[Long]].head,
+          "lookupLowestPrunableArchivedRewardRound",
+        )
+      )
+    }
+
+  // Returns number of rows deleted
+  def pruneArchivedDataForRound(
+      roundNumber: Long
+  )(implicit tc: TraceContext): Future[Long] =
+    lookupArchivedAtForOpenMiningRound(roundNumber).flatMap {
+      case None =>
+        Future.failed(
+          new IllegalStateException(
+            s"Cannot prune archived data for round $roundNumber: its OpenMiningRound has not been observed as archived."
+          )
+        )
+      case Some(uptoInclusive) =>
+        val storeId = multiDomainAcsStore.acsStoreId
+        val migrationId = multiDomainAcsStore.domainMigrationId
+        futureUnlessShutdownToFuture(
+          storage.update(
+            sql"""delete from #${ScanRewardsReferenceTables.archiveTableName}
+                  where store_id = $storeId and migration_id = $migrationId
+                    and archived_at <= $uptoInclusive""".asUpdate,
+            "pruneArchivedDataForRound",
+          )
+        ).map(_.toLong)
+    }
+
   override def listActiveCalculateRewardsV2(limit: Limit = defaultLimit)(implicit
       tc: TraceContext
   ): Future[Seq[Contract[CalculateRewardsV2.ContractId, CalculateRewardsV2]]] =

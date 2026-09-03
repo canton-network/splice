@@ -92,6 +92,21 @@ class CachingScanRewardsReferenceStore private[splice] (
   ): Future[Seq[Contract[CalculateRewardsV2.ContractId, CalculateRewardsV2]]] =
     store.listActiveCalculateRewardsV2ForRound(roundNumber)
 
+  override def lookupArchivedAtForOpenMiningRound(
+      roundNumber: Long
+  )(implicit tc: TraceContext): Future[Option[CantonTimestamp]] =
+    store.lookupArchivedAtForOpenMiningRound(roundNumber)
+
+  override def lookupLowestPrunableArchivedRewardRound()(implicit
+      tc: TraceContext
+  ): Future[Option[Long]] =
+    store.lookupLowestPrunableArchivedRewardRound()
+
+  override def pruneArchivedDataForRound(
+      roundNumber: Long
+  )(implicit tc: TraceContext): Future[Long] =
+    store.pruneArchivedDataForRound(roundNumber)
+
   override val storeName: String = store.storeName
   override def defaultLimit: Limit = store.defaultLimit
   override lazy val acsContractFilter = store.acsContractFilter
