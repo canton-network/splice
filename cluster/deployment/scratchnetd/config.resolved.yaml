@@ -1,6 +1,7 @@
 # This file is generated automatically. Do not edit directly.
 cloudArmor:
   allRulesPreviewOnly: true
+  enableAdaptiveProtection: false
   enabled: false
   publicEndpoints:
     publicScan:
