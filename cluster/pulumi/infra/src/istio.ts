@@ -773,7 +773,7 @@ function configureSequencerFlowControl(
             '@type': 'type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions',
             use_downstream_protocol_config: {
               http_protocol_options: {},
-              http2_protocol_options: http2ProtocolOptions,
+              http2_protocol_options: http2ProtocolOptions(config),
             },
           },
         },
