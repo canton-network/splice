@@ -25,9 +25,10 @@ trait InternedStringStore {
 object InternedStringStore {
   type InternedId = Long
 
+  // TODO: warmup the cache
   def apply(
       storage: DbStorage,
-      maxSize: Int,
+      maxSize: Long,
       ttl: FiniteDuration,
       loggerFactory: NamedLoggerFactory,
       metricsFactory: LabeledMetricsFactory,
@@ -42,7 +43,7 @@ object InternedStringStore {
 
 class CachedInternedStringsStore(
     underlying: DbInternedStringStore,
-    maxSize: Int,
+    maxSize: Long,
     ttl: FiniteDuration,
     protected val loggerFactory: NamedLoggerFactory,
     metricsFactory: LabeledMetricsFactory,
@@ -74,24 +75,16 @@ class DbInternedStringStore(storage: DbStorage)(implicit ec: ExecutionContext, c
 
   override def getOrIntern(value: String)(implicit tc: TraceContext): Future[InternedId] = {
     storage
-      .querySingle(
-        sqlu"""
+      .query(
+        sql"""
             with new_row as (
               insert into interned_strings (value) values ($value)
               on conflict (value) do nothing returning id
             )
             select id from new_row union all select id from interned_strings where value = $value limit 1;
-          """.as[InternedId],
+          """.as[InternedId].head,
         "intern",
       )
-      .value
-      .map {
-        case None =>
-          throw io.grpc.Status.INTERNAL
-            .withDescription("BUG: It should be impossible for this to return no rows.")
-            .asRuntimeException()
-        case Some(id) => id
-      }
   }
 
 }
