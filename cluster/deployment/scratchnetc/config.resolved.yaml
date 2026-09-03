@@ -32,9 +32,21 @@ infra:
   istio:
     enableIngressAccessLogging: true
     enablePublicTokenRegistry: true
-    sequencerFlowControl:
-      initialConnectionWindowSize: 52428800
-      initialStreamWindowSize: 524288
+    flowControl:
+      internal:
+        initialConnectionWindowSize: 104857600
+        initialStreamWindowSize: 1048576
+        ports:
+          - 5001
+          - 5002
+          - 5007
+          - 5009
+      public:
+        initialConnectionWindowSize: 52428800
+        initialStreamWindowSize: 524288
+        ports:
+          - 5008
+          - 5010
   prometheus:
     retentionDuration: '30d'
     retentionSize: '200GB'
