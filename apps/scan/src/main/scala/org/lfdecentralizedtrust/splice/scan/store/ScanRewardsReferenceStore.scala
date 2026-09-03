@@ -183,22 +183,16 @@ object ScanRewardsReferenceStore {
         mkFilter(splice.dsorules.DsoRules.COMPANION)(co => co.payload.dso == dso) { contract =>
           ScanRewardsReferenceStoreRowData(contract = contract)
         },
-        mkFilter(splice.amulet.rewardaccountingv2.CalculateRewardsV2.COMPANION)(
-          co => co.payload.dso == dso,
-          versionGuard = { case (pkgVersionSupport, now) =>
-            (tc) => pkgVersionSupport.supportsTrafficBasedAppRewards(Seq(key.dsoParty), now)(tc)
-          },
+        mkFilter(splice.amulet.rewardaccountingv2.CalculateRewardsV2.COMPANION)(co =>
+          co.payload.dso == dso
         ) { contract =>
           ScanRewardsReferenceStoreRowData(
             contract = contract,
             round = Some(contract.payload.round.number),
           )
         },
-        mkFilter(splice.amulet.rewardaccountingv2.ProcessRewardsV2.COMPANION)(
-          co => co.payload.dso == dso,
-          versionGuard = { case (pkgVersionSupport, now) =>
-            (tc) => pkgVersionSupport.supportsTrafficBasedAppRewards(Seq(key.dsoParty), now)(tc)
-          },
+        mkFilter(splice.amulet.rewardaccountingv2.ProcessRewardsV2.COMPANION)(co =>
+          co.payload.dso == dso
         ) { contract =>
           ScanRewardsReferenceStoreRowData(
             contract = contract,

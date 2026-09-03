@@ -62,57 +62,26 @@ class ExpiredAmuletTrigger(
   )(implicit
       tc: TraceContext
   ): Future[TaskOutcome] = {
-    val stakeholders = task.work.stakeholders
     for {
       dsoRules <- store.getDsoRules()
-      supports24hSubmissionDelay <- svTaskContext.packageVersionSupport.supports24hSubmissionDelay(
-        stakeholders.toSeq,
-        Seq(store.key.dsoParty),
-        context.clock.now,
+      externalPartyConfigStates <- store.getExternalPartyConfigStatesPair()
+      cmds = task.work.expiredContracts.flatMap(co =>
+        dsoRules
+          .exercise(
+            _.exerciseDsoRules_Amulet_ExpireV2(
+              co.contractId,
+              new splice.amulet.Amulet_ExpireV2(
+                externalPartyConfigStates.oldest.contractId,
+                externalPartyConfigStates.newest.contractId,
+              ),
+              Optional.of(controller),
+            )
+          )
+          .update
+          .commands()
+          .asScala
+          .toSeq
       )
-      cmds <-
-        if (supports24hSubmissionDelay.supported) {
-          store.getExternalPartyConfigStatesPair().map { externalPartyConfigStates =>
-            task.work.expiredContracts.flatMap(co =>
-              dsoRules
-                .exercise(
-                  _.exerciseDsoRules_Amulet_ExpireV2(
-                    co.contractId,
-                    new splice.amulet.Amulet_ExpireV2(
-                      externalPartyConfigStates.oldest.contractId,
-                      externalPartyConfigStates.newest.contractId,
-                    ),
-                    Optional.of(controller),
-                  )
-                )
-                .update
-                .commands()
-                .asScala
-                .toSeq
-            )
-          }
-        } else {
-          store.getLatestActiveOpenMiningRound().map { round =>
-            task.work.expiredContracts.flatMap(co =>
-              dsoRules
-                .exercise(
-                  _.exerciseDsoRules_Amulet_Expire(
-                    co.contractId,
-                    new splice.amulet.Amulet_Expire(
-                      round.contractId
-                    ),
-                    Optional.of(controller),
-                  )
-                )
-                .update
-                .commands()
-                .asScala
-                .toSeq
-            )
-          }
-        }
-      // remove once TAPS use partial information from pass 1 in pass 2 (https://github.com/DACH-NY/canton/issues/31450)
-      preferredPackageIds = supports24hSubmissionDelay.packageIds
       _ <- svTaskContext
         .connection(SpliceLedgerConnectionPriority.AmuletExpiry)
         .submit(
@@ -121,7 +90,6 @@ class ExpiredAmuletTrigger(
           update = cmds,
         )
         .noDedup
-        .withPreferredPackage(preferredPackageIds)
         .withSynchronizerId(dsoRules.domain)
         .yieldUnit()
     } yield TaskSuccess("archived expired amulet")

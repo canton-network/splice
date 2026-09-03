@@ -57,8 +57,9 @@ class ExpireRewardCouponV2Trigger(
   ): Future[TaskOutcome] = {
     val expiredCoupons = task.work.expiredContracts
     // The batch is already split by the amulet version so we skip the whole batch.
-    // The amulet version here is same as supportsTrafficBasedAppRewards.
-    if (task.work.vettedVersion < DarResources.amulet_0_1_19.metadata.version) {
+    // amulet 0.1.19 is the version that introduced RewardCouponV2 claim.
+    val requiredAmuletVersion = DarResources.amulet_0_1_19.metadata.version
+    if (task.work.vettedVersion < requiredAmuletVersion) {
       Future.successful(
         TaskSuccess(
           s"Skipped batch of ${expiredCoupons.size} reward coupons at amulet version ${task.work.vettedVersion}: "
