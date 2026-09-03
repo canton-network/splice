@@ -8,6 +8,7 @@ import { ContractId } from '@daml/types';
 
 import { useSvAdminClient } from '../contexts/SvAdminServiceContext';
 import { useConfigPollInterval } from '../utils';
+import { retryOnRateLimit, retryQuery } from '@canton-network/splice-common-frontend';
 
 export const useVoteRequest = (
   contractId: ContractId<VoteRequest>,
@@ -23,7 +24,7 @@ export const useVoteRequest = (
       const request = await lookupDsoRulesVoteRequest(contractId);
       return Contract.decodeOpenAPI(request.dso_rules_vote_request, VoteRequest);
     },
-    retry,
+    retry: retry ? retryQuery : retryOnRateLimit,
     refetchInterval: poll ? pollInterval : PollingStrategy.NONE,
   });
 };
