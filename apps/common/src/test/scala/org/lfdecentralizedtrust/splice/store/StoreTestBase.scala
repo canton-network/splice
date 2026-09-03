@@ -507,6 +507,7 @@ abstract class StoreTestBase
       provider: PartyId,
       featured: Boolean = false,
       amount: Numeric.Numeric = numeric(1.0),
+      beneficiary: Option[PartyId] = None,
       contractId: String = nextCid(),
   ): Contract[amuletCodegen.AppRewardCoupon.ContractId, amuletCodegen.AppRewardCoupon] =
     contract(
@@ -518,7 +519,7 @@ abstract class StoreTestBase
         featured,
         amount,
         new Round(round),
-        Optional.empty(),
+        beneficiary.map(_.toProtoPrimitive).fold(Optional.empty[String]())(Optional.of),
       ),
     )
 

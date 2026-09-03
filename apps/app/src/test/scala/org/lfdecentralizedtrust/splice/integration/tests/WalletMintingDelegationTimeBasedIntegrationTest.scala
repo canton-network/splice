@@ -4,6 +4,7 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
+import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   Amulet,
   AppRewardCoupon,
@@ -467,6 +468,7 @@ class WalletMintingDelegationTimeBasedIntegrationTest
       balanceBefore shouldBe BigDecimal(0)
 
       val appRewardAmount = BigDecimal(100.0)
+      val appRewardBeneficiaryAmount = BigDecimal(150.0)
       val unclaimedActivityAmount = BigDecimal(200.0)
       val validatorRewardAmount = BigDecimal(500.0)
       val developmentFundAmount = BigDecimal(300.0)
@@ -501,21 +503,20 @@ class WalletMintingDelegationTimeBasedIntegrationTest
 
         // Pause minting delegation trigger to ensure we mint them together
         setTriggersWithin(triggersToPauseAtStart = Seq(externalPartyMintingDelegationTrigger)) {
-          // Create AppRewardCoupon
-          sv1Backend.participantClientWithAdminToken.ledger_api_extensions.commands
-            .submitWithResult(
-              userId = sv1Backend.config.ledgerApiUser,
-              actAs = Seq(dsoParty),
-              readAs = Seq.empty,
-              update = new AppRewardCoupon(
-                dsoParty.toProtoPrimitive,
-                beneficiaryParty.party.toProtoPrimitive,
-                false,
-                appRewardAmount.bigDecimal,
-                issuingRound.round,
-                java.util.Optional.empty(),
-              ).create,
-            )
+          // Create AppRewardCoupon where external party is the provider
+          createAppRewardCoupon(
+            provider = beneficiaryParty.party,
+            amount = appRewardAmount,
+            round = issuingRound.round,
+          )
+
+          // Create AppRewardCoupon where external party is the beneficiary (not the provider)
+          createAppRewardCoupon(
+            provider = aliceParty,
+            amount = appRewardBeneficiaryAmount,
+            round = issuingRound.round,
+            beneficiary = Some(beneficiaryParty.party),
+          )
 
           // Create UnclaimedActivityRecord
           sv1Backend.participantClientWithAdminToken.ledger_api_extensions.commands
@@ -637,7 +638,9 @@ class WalletMintingDelegationTimeBasedIntegrationTest
       val actualIncrease = balanceAfter - balanceBefore
 
       val expectedTotalReward =
-        (appRewardAmount * BigDecimal(issuingRound.issuancePerUnfeaturedAppRewardCoupon)) +
+        ((appRewardAmount + appRewardBeneficiaryAmount) * BigDecimal(
+          issuingRound.issuancePerUnfeaturedAppRewardCoupon
+        )) +
           (BigDecimal(
             issuingRound.optIssuancePerValidatorFaucetCoupon.orElse(java.math.BigDecimal.ZERO)
           )) +
@@ -951,4 +954,27 @@ class WalletMintingDelegationTimeBasedIntegrationTest
         commands = proposal.create.commands.asScala.toSeq,
       )
   }
+
+  private def createAppRewardCoupon(
+      provider: PartyId,
+      amount: BigDecimal,
+      round: Round,
+      beneficiary: Option[PartyId] = None,
+  )(implicit env: SpliceTestConsoleEnvironment): Unit =
+    sv1Backend.participantClientWithAdminToken.ledger_api_extensions.commands
+      .submitWithResult(
+        userId = sv1Backend.config.ledgerApiUser,
+        actAs = Seq(dsoParty),
+        readAs = Seq.empty,
+        update = new AppRewardCoupon(
+          dsoParty.toProtoPrimitive,
+          provider.toProtoPrimitive,
+          false,
+          amount.bigDecimal,
+          round,
+          beneficiary.fold(java.util.Optional.empty[String]())(b =>
+            java.util.Optional.of(b.toProtoPrimitive)
+          ),
+        ).create,
+      )
 }
