@@ -78,113 +78,21 @@ jobs:
 
             core.setOutput('workflow', workflow);
 
-  trigger_test:
+  comment:
+    runs-on: ubuntu-24.04
     needs:
       - get_head
       - determine_test_type
     if: needs.determine_test_type.outputs.workflow != ''
-    uses: ./.github/workflows/cluster_tests.yml
-    secrets: inherit
-    with:
-      workflow: ${{ needs.determine_test_type.outputs.workflow }}
-      sha: ${{ needs.get_head.outputs.sha }}
-
-  result:
-    runs-on: ubuntu-24.04
-    needs:
-      - get_head
-      - determine_test_type
-      - trigger_test
-    if: needs.determine_test_type.outputs.workflow == 'cluster_test'
     steps:
-      - name: parse the result
-        id: parse
-        run: |
-          number=$(echo '${{ needs.trigger_test.outputs.result }}' | jq -r '.number')
-          echo "Deploy scratchnet pipeline triggered for [Commit ${{ needs.get_head.outputs.sha }} in ${{ needs.get_head.outputs.repo }}](https://github.com/${{ github.repository }}/pull/${{ github.event.issue.number }}/files/${{ needs.get_head.outputs.sha }}), please approve it in CircleCI: https://app.circleci.com/pipelines/github/DACH-NY/canton-network-internal/${number}"
-          echo "number=$number" >> "$GITHUB_OUTPUT"
       - name: Comment on the PR
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
-          script : |
+          script: |
+            const prNumber = context.issue.number || ${{ inputs.pr_number }};
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: "Deploy cluster test triggered for [Commit ${{ needs.get_head.outputs.sha }} in ${{ needs.get_head.outputs.repo }}](https://github.com/${{ github.repository }}/pull/${{ github.event.issue.number }}/files/${{ needs.get_head.outputs.sha }}), please contact a Contributor to approve it in CircleCI: https://app.circleci.com/pipelines/github/DACH-NY/canton-network-internal/${{ steps.parse.outputs.number }}"
-            });
-
-  result_hdm:
-    runs-on: ubuntu-24.04
-    needs:
-      - get_head
-      - determine_test_type
-      - trigger_test
-    if: needs.determine_test_type.outputs.workflow == 'hdm_test'
-    steps:
-      - name: parse the result
-        id: parse
-        run: |
-          number=$(echo '${{ needs.trigger_test.outputs.result }}' | jq -r '.number')
-          echo "Deploy scratchnet HDM pipeline triggered for [Commit ${{ needs.get_head.outputs.sha }} in ${{ needs.get_head.outputs.repo }}](https://github.com/${{ github.repository }}/pull/${{ github.event.issue.number }}/files/${{ needs.get_head.outputs.sha }}), please approve it in CircleCI: https://app.circleci.com/pipelines/github/DACH-NY/canton-network-internal/${number}"
-          echo "number=$number" >> "$GITHUB_OUTPUT"
-      - name: Comment on the PR
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          script : |
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: "Deploy HDM pipeline triggered for [Commit ${{ needs.get_head.outputs.sha }} in ${{ needs.get_head.outputs.repo }}](https://github.com/${{ github.repository }}/pull/${{ github.event.issue.number }}/files/${{ needs.get_head.outputs.sha }}), please contact a Contributor to approve it in CircleCI: https://app.circleci.com/pipelines/github/DACH-NY/canton-network-internal/${{ steps.parse.outputs.number }}"
-            });
-
-  result_lsu:
-    runs-on: ubuntu-24.04
-    needs:
-      - get_head
-      - determine_test_type
-      - trigger_test
-    if: needs.determine_test_type.outputs.workflow == 'lsu_test'
-    steps:
-      - name: parse the result
-        id: parse
-        run: |
-          number=$(echo '${{ needs.trigger_test.outputs.result }}' | jq -r '.number')
-          echo "Deploy scratchnet LSU pipeline triggered for [Commit ${{ needs.get_head.outputs.sha }} in ${{ needs.get_head.outputs.repo }}](https://github.com/${{ github.repository }}/pull/${{ github.event.issue.number }}/files/${{ needs.get_head.outputs.sha }}), please approve it in CircleCI: https://app.circleci.com/pipelines/github/DACH-NY/canton-network-internal/${number}"
-          echo "number=$number" >> "$GITHUB_OUTPUT"
-      - name: Comment on the PR
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          script : |
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: "Deploy LSU pipeline triggered for [Commit ${{ needs.get_head.outputs.sha }} in ${{ needs.get_head.outputs.repo }}](https://github.com/${{ github.repository }}/pull/${{ github.event.issue.number }}/files/${{ needs.get_head.outputs.sha }}), please contact a Contributor to approve it in CircleCI: https://app.circleci.com/pipelines/github/DACH-NY/canton-network-internal/${{ steps.parse.outputs.number }}"
-            });
-
-  result_upgrade:
-    runs-on: ubuntu-24.04
-    needs:
-      - get_head
-      - determine_test_type
-      - trigger_test
-    if: needs.determine_test_type.outputs.workflow == 'upgrade_test'
-    steps:
-      - name: parse the result
-        id: parse
-        run: |
-          number=$(echo '${{ needs.trigger_test.outputs.result }}' | jq -r '.number')
-          echo "Deploy scratchnet upgrade pipeline triggered for [Commit ${{ needs.get_head.outputs.sha }} in ${{ needs.get_head.outputs.repo }}](https://github.com/${{ github.repository }}/pull/${{ github.event.issue.number }}/files/${{ needs.get_head.outputs.sha }}), please approve it in CircleCI: https://app.circleci.com/pipelines/github/DACH-NY/canton-network-internal/${number}"
-          echo "number=$number" >> "$GITHUB_OUTPUT"
-      - name: Comment on the PR
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          script : |
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: "Deploy upgrade pipeline triggered for [Commit ${{ needs.get_head.outputs.sha }} in ${{ needs.get_head.outputs.repo }}](https://github.com/${{ github.repository }}/pull/${{ github.event.issue.number }}/files/${{ needs.get_head.outputs.sha }}), please contact a Contributor to approve it in CircleCI: https://app.circleci.com/pipelines/github/DACH-NY/canton-network-internal/${{ steps.parse.outputs.number }}"
+              issue_number: prNumber,
+              body: `A DA internal contributor must manually trigger this cluster test for [commit ${{ needs.get_head.outputs.sha }} in ${{ needs.get_head.outputs.repo }}](https://github.com/${{ github.repository }}/pull/${prNumber}/files/${{ needs.get_head.outputs.sha }}) by running the following command in the appropriate cluster deployment directory:\n\n\`\`\`\ncncluster run_workflow --workflow ${{ needs.determine_test_type.outputs.workflow }} ${{ needs.get_head.outputs.sha }}\n\`\`\``
             });
