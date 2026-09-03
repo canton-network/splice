@@ -35,7 +35,7 @@ spec:
   hosts:
     - "sequencer-p2p-{{ $migrationId }}.{{ $ingressName }}.{{ $cluster.hostname }}"
   gateways:
-    - {{ $.Values.ingress.sequencerP2pGateway | default "cluster-ingress/cn-http-gateway" }}
+    - cluster-ingress/cn-http-gateway
   http:
     - match:
         - port: 443

@@ -3,7 +3,6 @@
 import * as pulumi from '@pulumi/pulumi';
 import { config } from '@canton-network/splice-pulumi-common';
 import { clusterYamlConfig } from '@canton-network/splice-pulumi-common/src/config/config';
-import { SequencerP2pIngressIstioConfigSchema } from '@canton-network/splice-pulumi-common/src/config/sequencerP2pIngressConfig';
 import util from 'node:util';
 import { z } from 'zod';
 
@@ -24,7 +23,6 @@ const cloudArmorMaxRateLimitCount = 1000000;
 
 const CloudArmorLoggingConfigSchema = z.object({
   enabled: z.boolean().default(false),
-  verboseLogging: z.boolean().default(false),
   sampleRate: z.number().min(0).max(1).default(1),
 });
 
@@ -113,7 +111,7 @@ export const InfraConfigSchema = z.object({
     gkeGateway: z.object({
       proxyForIstioHttp: z.boolean(),
     }),
-    istio: SequencerP2pIngressIstioConfigSchema.extend({
+    istio: z.object({
       enableIngressAccessLogging: z.boolean(),
       enableClusterAccessLogging: z.boolean().default(false),
       enablePublicTokenRegistry: z.boolean().default(false),

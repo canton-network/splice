@@ -4,12 +4,11 @@ import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
 import {
   DecentralizedSynchronizerUpgradeConfig,
-  enableDedicatedSequencerP2pIngress,
   getDnsNames,
-  SEQUENCER_P2P_INGRESS_SUFFIX,
 } from '@canton-network/splice-pulumi-common';
 import { allSvsToDeployBasic } from '@canton-network/splice-pulumi-common-sv/src/svConfigsBasic';
 
+import { sequencerP2pHosts } from '../sequencerP2pHosts';
 import { loadIPRanges } from './ipRanges';
 import { createIstioIpAllowPolicies, istioIngressSelector } from './policies';
 
@@ -27,16 +26,7 @@ export function configureSequencerWhitelist(
       ])
     )
   );
-  const p2pHosts = allSvsToDeployBasic.flatMap(sv =>
-    migrations
-      .filter(migration => migration.sequencer.enableBftSequencer)
-      .flatMap(migration =>
-        dnsNames.flatMap(dns => [
-          `sequencer-p2p-${migration.id}.${sv.ingressName}.${dns}`,
-          `sequencer-p2p-${migration.id}.${sv.ingressName}.${dns}:*`,
-        ])
-      )
-  );
+  const p2pHosts = sequencerP2pHosts().flatMap(host => [host, `${host}:*`]);
 
   const policies = [
     createIstioIpAllowPolicies({
@@ -52,9 +42,7 @@ export function configureSequencerWhitelist(
       createIstioIpAllowPolicies({
         namePrefix: 'sequencer-p2p-ip-whitelist',
         namespace: namespace.metadata.name,
-        selector: enableDedicatedSequencerP2pIngress
-          ? { matchLabels: { app: `istio-ingress${SEQUENCER_P2P_INGRESS_SUFFIX}` } }
-          : istioIngressSelector,
+        selector: istioIngressSelector,
         ipRanges: loadIPRanges(true),
         to: [{ operation: { hosts: p2pHosts } }],
       })

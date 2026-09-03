@@ -7,8 +7,6 @@ import * as pulumi from '@pulumi/pulumi';
 import {
   btoa,
   config,
-  DecentralizedSynchronizerUpgradeConfig,
-  enableDedicatedSequencerP2pIngress,
   exactNamespace,
   ExactNamespace,
   GCP_PROJECT,
@@ -34,8 +32,7 @@ function clusterDnsEntries(
   dnsName: string,
   managedZone: string,
   ingressIp: gcp.compute.Address,
-  cometbftIngressIp: gcp.compute.Address,
-  sequencerP2pIngressIp: gcp.compute.Address | undefined
+  cometbftIngressIp: gcp.compute.Address
 ): gcp.dns.RecordSet[] {
   const opts: pulumi.CustomResourceOptions = {
     // for safety we leave dns cleanup to be done manually in prod clusters
@@ -74,56 +71,7 @@ function clusterDnsEntries(
       managedZone: managedZone,
       rrdatas: [cometbftIngressIp.address],
     }),
-    ...sequencerP2pDnsEntries(dnsName, managedZone, ingressIp, sequencerP2pIngressIp, opts),
   ];
-}
-
-/**
- * Points the per-migration sequencer BFT P2P hostnames at the dedicated P2P ingress IP.
- *
- * The P2P hostnames are two labels deep (`sequencer-p2p-<migration>.<sv>.<dnsName>`), and
- * today they resolve through the `*.<dnsName>` wildcard. Per RFC 4592 a wildcard is only
- * used when the queried name has no closer encloser, so adding an explicit record for
- * `sequencer-p2p-<migration>.<sv>.<dnsName>` creates a node at `<sv>.<dnsName>` and would
- * stop the top-level wildcard from answering every *other* name under that SV (scan, the
- * sequencer public API, ...). We therefore also add a `*.<sv>.<dnsName>` wildcard pointing
- * at the shared ingress IP, mirroring the SANs of the cluster certificate.
- */
-function sequencerP2pDnsEntries(
-  dnsName: string,
-  managedZone: string,
-  ingressIp: gcp.compute.Address,
-  sequencerP2pIngressIp: gcp.compute.Address | undefined,
-  opts: pulumi.CustomResourceOptions
-): gcp.dns.RecordSet[] {
-  if (!sequencerP2pIngressIp) {
-    return [];
-  }
-  const record = (name: string, ip: gcp.compute.Address, pulumiName: string) =>
-    new gcp.dns.RecordSet(
-      pulumiName,
-      {
-        name: `${name}.`,
-        ttl: 60,
-        type: 'A',
-        project: gcpDnsProject,
-        managedZone: managedZone,
-        rrdatas: [ip.address],
-      },
-      opts
-    );
-  return svConfigsBasic.flatMap(sv => [
-    record(`*.${sv.ingressName}.${dnsName}`, ingressIp, `${dnsName}-${sv.ingressName}-subdomains`),
-    ...DecentralizedSynchronizerUpgradeConfig.runningMigrations()
-      .filter(migration => migration.sequencer.enableBftSequencer)
-      .map(migration =>
-        record(
-          `sequencer-p2p-${migration.id}.${sv.ingressName}.${dnsName}`,
-          sequencerP2pIngressIp,
-          `${dnsName}-${sv.ingressName}-sequencer-p2p-${migration.id}`
-        )
-      ),
-  ]);
 }
 
 function certManager(certManagerNamespaceName: string): certmanager.CertManager {
@@ -333,7 +281,6 @@ function natGateway(
 class CantonNetwork extends pulumi.ComponentResource {
   ingressIp: gcp.compute.Address;
   cometbftIngressIp: gcp.compute.Address;
-  sequencerP2pIngressIp: gcp.compute.Address | undefined;
   egressIp: gcp.compute.Address;
   ingressNs: ExactNamespace;
   dnsNames: string[];
@@ -352,13 +299,6 @@ class CantonNetwork extends pulumi.ComponentResource {
     // only the SVs to be allowed, we do not hit the limit on number of IPs for this one.
     const cometbftIngressIp = ipAddress(`cn-${clusterName}net-cometbft-ip`);
 
-    // The sequencer BFT P2P API is routed through its own LoadBalancer service so that it
-    // bypasses the L7 ALB and Cloud Armor, both of which bill P2P traffic without adding
-    // protection that mutually authenticated gRPC between known peers benefits from.
-    const sequencerP2pIngressIp = enableDedicatedSequencerP2pIngress
-      ? ipAddress(`cn-${clusterName}net-sequencer-p2p-ip`)
-      : undefined;
-
     const egressIp = ipAddress(`cn-${clusterName}-out`);
 
     const certManagerDeployment = certManager('cert-manager');
@@ -370,16 +310,14 @@ class CantonNetwork extends pulumi.ComponentResource {
       cantonDnsName,
       'canton-global',
       ingressIp,
-      cometbftIngressIp,
-      sequencerP2pIngressIp
+      cometbftIngressIp
     );
 
     const daDnsEntries = clusterDnsEntries(
       daDnsName,
       'prod-networks',
       ingressIp,
-      cometbftIngressIp,
-      sequencerP2pIngressIp
+      cometbftIngressIp
     );
     this.dnsNames = [cantonDnsName, daDnsName];
 
@@ -392,7 +330,6 @@ class CantonNetwork extends pulumi.ComponentResource {
 
     this.ingressIp = ingressIp;
     this.cometbftIngressIp = cometbftIngressIp;
-    this.sequencerP2pIngressIp = sequencerP2pIngressIp;
     this.egressIp = egressIp;
     this.ingressNs = ingressNs;
 
