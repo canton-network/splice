@@ -30,8 +30,8 @@ IMAGE_SHA256_MAP = {
 # List of file-path regexes. Any digest-pinned image coming from a matching file is skipped by the check
 IGNORED_FILE_PATTERNS = [
     re.compile(r"^cluster/images/cometbft/Dockerfile$"),
-    re.compile(r"^cluster/images/splice-test-cometbft/Dockerfile$"),
-    re.compile(r"^cluster/helm/splice-info/values-template.yaml$")
+    re.compile(r"^cluster/images/splice-test-cometbft/Dockerfile$")
+    # to show how it fails re.compile(r"^cluster/helm/splice-info/values-template.yaml$")
 ]
 
 
@@ -51,15 +51,17 @@ def _image_sha256_for(file: str) -> str | None:
     return os.environ.get(key)
 
 
-def _inspect(ref: str) -> bool:
+def _inspect(image: str, digest: str) -> bool:
     """Return True if the digest resolves to a multi-arch manifest list/index.
 
-    Uses `docker buildx imagetools inspect`. For a multi-arch digest
-    `.image.architecture` is null; for a single-arch digest it is set.
+    Uses `skopeo inspect --raw`. A multi-arch digest has a `.manifests` array
+    with at least one entry; a single-arch digest has no `.manifests`.
     """
+    # skopeo does not accept both a tag and a digest, so drop the tag.
+    ref = f"docker://{image}@sha256:{digest}"
     try:
         raw = subprocess.run(
-            ["docker", "buildx", "imagetools", "inspect", ref, "--format", "{{json .}}"],
+            ["skopeo", "inspect", "--raw", "--no-creds", ref],
             check=True,
             capture_output=True,
             text=True,
@@ -69,23 +71,21 @@ def _inspect(ref: str) -> bool:
         return False
 
     try:
-        info = json.loads(raw)
+        manifest = json.loads(raw)
     except json.JSONDecodeError as e:
-        print(f"ERROR: invalid JSON from docker buildx for {ref}: {e}", file=sys.stderr)
+        print(f"ERROR: invalid manifest JSON for {ref}: {e}", file=sys.stderr)
         return False
 
-    return info.get("image", {}).get("architecture") is None
+    manifests = manifest.get("manifests")
+    return isinstance(manifests, list) and len(manifests) > 0
 
 
-def _extract_refs_from_text(text: str) -> set[str]:
-    """Extract full image:tag@sha256:<digest> references from arbitrary text."""
-    return {
-        f"{image}:{tag}@sha256:{digest}"
-        for image, tag, digest in IMAGE_REF_RE.findall(text)
-    }
+def _extract_refs_from_text(text: str) -> set[tuple[str, str, str]]:
+    """Extract (image_name, tag, digest) tuples from arbitrary text."""
+    return set(IMAGE_REF_RE.findall(text))
 
 
-def _refs_from_dockerfile(path: Path) -> set[str]:
+def _refs_from_dockerfile(path: Path) -> set[tuple[str, str, str]]:
     """Parse a Dockerfile and resolve any variable references in FROM images."""
     # Set image_sha256 for this specific Dockerfile before resolving variables
     image_sha256 = _image_sha256_for(str(path))
@@ -94,7 +94,7 @@ def _refs_from_dockerfile(path: Path) -> set[str]:
     elif "image_sha256" in os.environ:
         del os.environ["image_sha256"]
 
-    refs: set[str] = set()
+    refs: set[tuple[str, str, str]] = set()
     parser = DockerfileParser(str(path))
     for instruction in parser.structure:
         if instruction["instruction"] != "FROM":
@@ -108,9 +108,9 @@ def _refs_from_dockerfile(path: Path) -> set[str]:
     return refs
 
 
-def _refs_from_plain_file(path: Path) -> set[str]:
+def _refs_from_plain_file(path: Path) -> set[tuple[str, str, str]]:
     """Scan a non-Dockerfile for digest-pinned image references."""
-    refs: set[str] = set()
+    refs: set[tuple[str, str, str]] = set()
     with open(path, encoding="utf-8", errors="ignore") as f:
         for line in f:
             if line.lstrip().startswith("#"):
@@ -149,46 +149,35 @@ def _file_is_ignored(file: str) -> bool:
 def main() -> int:
     _setup_env()
 
-    checked: set[str] = set()
-    failures = 0
+    # Collect all digest-pinned references and keep the first file they were seen in.
+    # The set semantics of the dict keys give us deduplication for free.
+    refs_by_file: dict[tuple[str, str, str], str] = {}
 
-    # Dockerfiles may use variable digests (e.g. ARG $cometbft_sha), so parse all of them
+    # Dockerfiles may use variable digests (e.g. ARG $cometbft_sha), so parse all of them.
     for file in _tracked_dockerfiles():
         path = Path(file)
-        if not path.is_file():
+        if not path.is_file() or _file_is_ignored(file):
             continue
-        if _file_is_ignored(file):
-            continue
-        refs = _refs_from_dockerfile(path)
-        for ref in refs:
-            if ref in checked:
-                continue
-            checked.add(ref)
-            if _inspect(ref):
-                print(f"OK: {ref} (from {file}) is multi-arch")
-            else:
-                print(f"ERROR: {ref} (from {file}) is not pinned to a multi-arch digest")
-                failures += 1
+        for ref in _refs_from_dockerfile(path):
+            refs_by_file.setdefault(ref, file)
 
     # Other files only need to be inspected if they contain a concrete digest reference.
     for file in _tracked_files_with_digest_refs():
         path = Path(file)
-        if not path.is_file():
+        if not path.is_file() or _file_is_ignored(file):
             continue
-        if _file_is_ignored(file):
-            continue
-        refs = _refs_from_plain_file(path)
-        for ref in refs:
-            if ref in checked:
-                continue
-            checked.add(ref)
+        for ref in _refs_from_plain_file(path):
+            refs_by_file.setdefault(ref, file)
 
-            print(f"Inspecting {ref} (from {file})")
-            if _inspect(ref):
-                print(f"  OK: {ref} is multi-arch")
-            else:
-                print(f"ERROR: {ref} (from {file}) is not pinned to a multi-arch digest")
-                failures += 1
+    failures = 0
+    for (image, tag, digest), file in refs_by_file.items():
+        ref = f"{image}:{tag}@sha256:{digest}"
+        print(f"Inspecting {ref} (from {file})")
+        if _inspect(image, digest):
+            print(f"  OK: {ref} is multi-arch")
+        else:
+            print(f"ERROR: {ref} (from {file}) is not pinned to a multi-arch digest")
+            failures += 1
 
     if failures > 0:
         print(f"FAIL: {failures} image(s) are not pinned to multi-arch digests")

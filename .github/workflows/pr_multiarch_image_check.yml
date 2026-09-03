@@ -12,7 +12,7 @@ jobs:
   check_multiarch_images:
     name: Check that pinned Docker images are multi-arch
     # Only run for PRs from the same repo (not forks), because the check needs
-    # self-hosted runners with docker proxy access.
+    # self-hosted runners with registry access.
     if: github.event.pull_request.head.repo.full_name == github.event.pull_request.base.repo.full_name
     runs-on: self-hosted-k8s-x-small
     timeout-minutes: 15
@@ -37,4 +37,4 @@ jobs:
       - name: Check that pinned docker images are multi-arch
         uses: ./.github/actions/nix/run_bash_command_in_nix
         with:
-          cmd: make check-multiarch-images
+          cmd: ./scripts/check-multiarch-images.py
