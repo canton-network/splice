@@ -63,5 +63,5 @@ groups:
           summary: Envoy is rate limiting requests in {{ $labels.namespace }} on pod {{ $labels.pod }} ({{ $labels.limiter }} limit).
         labels:
           "": ""
-          gcloud_filter: resource.labels.namespace_name=%22cluster-ingress%22%0AjsonPayload.response_code=429
+          gcloud_filter: resource.labels.namespace_name=%22cluster-ingress%22%0A%28jsonPayload.response_code=429%20OR%20jsonPayload.grpc_status=%22ResourceExhausted%22%29
         isPaused: false

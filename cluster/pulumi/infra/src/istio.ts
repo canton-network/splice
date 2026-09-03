@@ -122,6 +122,10 @@ function configureIstiod(
         requested_server_name: '%REQUESTED_SERVER_NAME%',
         response_code: '%RESPONSE_CODE%',
         response_code_details: '%RESPONSE_CODE_DETAILS%',
+        // gRPC calls always end with HTTP 200, the outcome is in the gRPC status: a rate limited
+        // call is reported as `ResourceExhausted` (see `rate_limited_as_resource_exhausted`),
+        // whereas a rate limited HTTP request is reported as response_code 429
+        grpc_status: '%GRPC_STATUS(CAMEL_STRING)%',
         response_flags: '%RESPONSE_FLAGS%',
         start_time: '%START_TIME%',
         upstream_cluster: '%UPSTREAM_CLUSTER%',

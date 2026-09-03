@@ -1532,7 +1532,6 @@
     "id": "",
     "inputs": {
       "appLabel": "global-domain-10-sequencer",
-      "endpointValidation": "grpc",
       "globalLimits": {
         "fillInterval": "60s",
         "maxTokens": 200000,
@@ -1545,6 +1544,7 @@
       },
       "inboundPort": 5008,
       "namespace": "sv-1",
+      "protocol": "grpc",
       "rateLimits": {
         "/com.digitalasset.canton.sequencer.api.v30.SequencerAuthenticationService/": {
           "fillInterval": "60s",
@@ -1605,7 +1605,6 @@
     "id": "",
     "inputs": {
       "appLabel": "global-domain-7-sequencer",
-      "endpointValidation": "grpc",
       "globalLimits": {
         "fillInterval": "60s",
         "maxTokens": 200000,
@@ -1618,6 +1617,7 @@
       },
       "inboundPort": 5008,
       "namespace": "sv-1",
+      "protocol": "grpc",
       "rateLimits": {
         "/com.digitalasset.canton.sequencer.api.v30.SequencerAuthenticationService/": {
           "fillInterval": "60s",
@@ -1678,7 +1678,6 @@
     "id": "",
     "inputs": {
       "appLabel": "global-domain-8-sequencer",
-      "endpointValidation": "grpc",
       "globalLimits": {
         "fillInterval": "60s",
         "maxTokens": 200000,
@@ -1691,6 +1690,7 @@
       },
       "inboundPort": 5008,
       "namespace": "sv-1",
+      "protocol": "grpc",
       "rateLimits": {
         "/com.digitalasset.canton.sequencer.api.v30.SequencerAuthenticationService/": {
           "fillInterval": "60s",
@@ -1751,7 +1751,6 @@
     "id": "",
     "inputs": {
       "appLabel": "global-domain-9-sequencer",
-      "endpointValidation": "grpc",
       "globalLimits": {
         "fillInterval": "60s",
         "maxTokens": 200000,
@@ -1764,6 +1763,7 @@
       },
       "inboundPort": 5008,
       "namespace": "sv-1",
+      "protocol": "grpc",
       "rateLimits": {
         "/com.digitalasset.canton.sequencer.api.v30.SequencerAuthenticationService/": {
           "fillInterval": "60s",
@@ -1824,7 +1824,6 @@
     "id": "",
     "inputs": {
       "appLabel": "global-domain-10-sequencer",
-      "endpointValidation": "grpc",
       "globalLimits": {
         "fillInterval": "60s",
         "maxTokens": 200000,
@@ -1837,6 +1836,7 @@
       },
       "inboundPort": 5008,
       "namespace": "sv-da-1",
+      "protocol": "grpc",
       "rateLimits": {
         "/com.digitalasset.canton.sequencer.api.v30.SequencerAuthenticationService/": {
           "fillInterval": "60s",
@@ -1897,7 +1897,6 @@
     "id": "",
     "inputs": {
       "appLabel": "global-domain-7-sequencer",
-      "endpointValidation": "grpc",
       "globalLimits": {
         "fillInterval": "60s",
         "maxTokens": 200000,
@@ -1910,6 +1909,7 @@
       },
       "inboundPort": 5008,
       "namespace": "sv-da-1",
+      "protocol": "grpc",
       "rateLimits": {
         "/com.digitalasset.canton.sequencer.api.v30.SequencerAuthenticationService/": {
           "fillInterval": "60s",
@@ -1970,7 +1970,6 @@
     "id": "",
     "inputs": {
       "appLabel": "global-domain-8-sequencer",
-      "endpointValidation": "grpc",
       "globalLimits": {
         "fillInterval": "60s",
         "maxTokens": 200000,
@@ -1983,6 +1982,7 @@
       },
       "inboundPort": 5008,
       "namespace": "sv-da-1",
+      "protocol": "grpc",
       "rateLimits": {
         "/com.digitalasset.canton.sequencer.api.v30.SequencerAuthenticationService/": {
           "fillInterval": "60s",
@@ -2043,7 +2043,6 @@
     "id": "",
     "inputs": {
       "appLabel": "global-domain-9-sequencer",
-      "endpointValidation": "grpc",
       "globalLimits": {
         "fillInterval": "60s",
         "maxTokens": 200000,
@@ -2056,6 +2055,7 @@
       },
       "inboundPort": 5008,
       "namespace": "sv-da-1",
+      "protocol": "grpc",
       "rateLimits": {
         "/com.digitalasset.canton.sequencer.api.v30.SequencerAuthenticationService/": {
           "fillInterval": "60s",
@@ -2116,7 +2116,6 @@
     "id": "",
     "inputs": {
       "appLabel": "global-domain-10-sequencer",
-      "endpointValidation": "grpc",
       "globalLimits": {
         "fillInterval": "60s",
         "maxTokens": 200000,
@@ -2129,6 +2128,7 @@
       },
       "inboundPort": 5008,
       "namespace": "sv",
+      "protocol": "grpc",
       "rateLimits": {
         "/com.digitalasset.canton.sequencer.api.v30.SequencerAuthenticationService/": {
           "fillInterval": "60s",
@@ -2189,7 +2189,6 @@
     "id": "",
     "inputs": {
       "appLabel": "global-domain-7-sequencer",
-      "endpointValidation": "grpc",
       "globalLimits": {
         "fillInterval": "60s",
         "maxTokens": 200000,
@@ -2202,6 +2201,7 @@
       },
       "inboundPort": 5008,
       "namespace": "sv",
+      "protocol": "grpc",
       "rateLimits": {
         "/com.digitalasset.canton.sequencer.api.v30.SequencerAuthenticationService/": {
           "fillInterval": "60s",
@@ -2262,7 +2262,6 @@
     "id": "",
     "inputs": {
       "appLabel": "global-domain-8-sequencer",
-      "endpointValidation": "grpc",
       "globalLimits": {
         "fillInterval": "60s",
         "maxTokens": 200000,
@@ -2275,6 +2274,7 @@
       },
       "inboundPort": 5008,
       "namespace": "sv",
+      "protocol": "grpc",
       "rateLimits": {
         "/com.digitalasset.canton.sequencer.api.v30.SequencerAuthenticationService/": {
           "fillInterval": "60s",
@@ -2335,7 +2335,6 @@
     "id": "",
     "inputs": {
       "appLabel": "global-domain-9-sequencer",
-      "endpointValidation": "grpc",
       "globalLimits": {
         "fillInterval": "60s",
         "maxTokens": 200000,
@@ -2348,6 +2347,7 @@
       },
       "inboundPort": 5008,
       "namespace": "sv",
+      "protocol": "grpc",
       "rateLimits": {
         "/com.digitalasset.canton.sequencer.api.v30.SequencerAuthenticationService/": {
           "fillInterval": "60s",
@@ -2795,7 +2795,7 @@
         "accessLogging": [
           {
             "filter": {
-              "expression": "response.code == 429"
+              "expression": "response.grpc_status == 8"
             },
             "providers": [
               {
@@ -2839,7 +2839,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -2868,7 +2869,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -2897,7 +2899,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -2926,7 +2929,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -3170,6 +3174,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -3259,6 +3264,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -3360,6 +3366,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -3409,6 +3416,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -3592,7 +3600,7 @@
         "accessLogging": [
           {
             "filter": {
-              "expression": "response.code == 429"
+              "expression": "response.grpc_status == 8"
             },
             "providers": [
               {
@@ -3636,7 +3644,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -3665,7 +3674,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -3694,7 +3704,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -3723,7 +3734,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -3967,6 +3979,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -4056,6 +4069,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -4157,6 +4171,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -4206,6 +4221,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -4385,7 +4401,7 @@
         "accessLogging": [
           {
             "filter": {
-              "expression": "response.code == 429"
+              "expression": "response.grpc_status == 8"
             },
             "providers": [
               {
@@ -4429,7 +4445,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -4458,7 +4475,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -4487,7 +4505,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -4516,7 +4535,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -4760,6 +4780,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -4849,6 +4870,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -4950,6 +4972,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -4999,6 +5022,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -5178,7 +5202,7 @@
         "accessLogging": [
           {
             "filter": {
-              "expression": "response.code == 429"
+              "expression": "response.grpc_status == 8"
             },
             "providers": [
               {
@@ -5222,7 +5246,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -5251,7 +5276,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -5280,7 +5306,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -5309,7 +5336,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -5553,6 +5581,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -5642,6 +5671,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -5743,6 +5773,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -5792,6 +5823,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -9059,7 +9091,7 @@
         "accessLogging": [
           {
             "filter": {
-              "expression": "response.code == 429"
+              "expression": "response.grpc_status == 8"
             },
             "providers": [
               {
@@ -9103,7 +9135,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -9132,7 +9165,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -9161,7 +9195,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -9190,7 +9225,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -9434,6 +9470,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -9523,6 +9560,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -9624,6 +9662,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -9673,6 +9712,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -9856,7 +9896,7 @@
         "accessLogging": [
           {
             "filter": {
-              "expression": "response.code == 429"
+              "expression": "response.grpc_status == 8"
             },
             "providers": [
               {
@@ -9900,7 +9940,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -9929,7 +9970,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -9958,7 +10000,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -9987,7 +10030,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -10231,6 +10275,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -10320,6 +10365,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -10421,6 +10467,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -10470,6 +10517,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -10649,7 +10697,7 @@
         "accessLogging": [
           {
             "filter": {
-              "expression": "response.code == 429"
+              "expression": "response.grpc_status == 8"
             },
             "providers": [
               {
@@ -10693,7 +10741,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -10722,7 +10771,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -10751,7 +10801,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -10780,7 +10831,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -11024,6 +11076,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -11113,6 +11166,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -11214,6 +11268,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -11263,6 +11318,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -11442,7 +11498,7 @@
         "accessLogging": [
           {
             "filter": {
-              "expression": "response.code == 429"
+              "expression": "response.grpc_status == 8"
             },
             "providers": [
               {
@@ -11486,7 +11542,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -11515,7 +11572,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -11544,7 +11602,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -11573,7 +11632,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -11817,6 +11877,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -11906,6 +11967,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -12007,6 +12069,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -12056,6 +12119,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -14581,7 +14645,7 @@
         "accessLogging": [
           {
             "filter": {
-              "expression": "response.code == 429"
+              "expression": "response.grpc_status == 8"
             },
             "providers": [
               {
@@ -14625,7 +14689,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -14654,7 +14719,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -14683,7 +14749,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -14712,7 +14779,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -14956,6 +15024,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -15045,6 +15114,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -15146,6 +15216,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -15195,6 +15266,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -15378,7 +15450,7 @@
         "accessLogging": [
           {
             "filter": {
-              "expression": "response.code == 429"
+              "expression": "response.grpc_status == 8"
             },
             "providers": [
               {
@@ -15422,7 +15494,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -15451,7 +15524,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -15480,7 +15554,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -15509,7 +15584,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -15753,6 +15829,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -15842,6 +15919,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -15943,6 +16021,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -15992,6 +16071,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -16171,7 +16251,7 @@
         "accessLogging": [
           {
             "filter": {
-              "expression": "response.code == 429"
+              "expression": "response.grpc_status == 8"
             },
             "providers": [
               {
@@ -16215,7 +16295,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -16244,7 +16325,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -16273,7 +16355,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -16302,7 +16385,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -16546,6 +16630,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -16635,6 +16720,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -16736,6 +16822,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -16785,6 +16872,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -16964,7 +17052,7 @@
         "accessLogging": [
           {
             "filter": {
-              "expression": "response.code == 429"
+              "expression": "response.grpc_status == 8"
             },
             "providers": [
               {
@@ -17008,7 +17096,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -17037,7 +17126,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -17066,7 +17156,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -17095,7 +17186,8 @@
                       "name": "envoy.filters.http.router"
                     }
                   }
-                }
+                },
+                "portNumber": 5008
               }
             },
             "patch": {
@@ -17339,6 +17431,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -17428,6 +17521,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -17529,6 +17623,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
@@ -17578,6 +17673,7 @@
                       "runtime_key": "local_rate_limit_enforced"
                     },
                     "max_dynamic_descriptors": 10000,
+                    "rate_limited_as_resource_exhausted": true,
                     "response_headers_to_add": [
                       {
                         "append_action": "OVERWRITE_IF_EXISTS_OR_ADD",
