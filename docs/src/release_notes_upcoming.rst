@@ -7,6 +7,20 @@
 
 release-notes:: Upcoming
 
+    - Postgres image in Compose, LocalNet & splice-postgres Helm chart
+
+        - The default ``imageName`` of the postgres in ``splice-postgres`` has changed
+          from ``imageName: "postgres:14"`` to ``imageName: "postgres:14.24-trixie"``.
+          The image for Postgres 14 has been based on Debian Trixie since 14.18, released on 2025-05-08.
+          If you were somehow using an older or non-trixie version of the postgres image,
+          you might encounter `locale issues <https://wiki.postgresql.org/wiki/Locale_data_changes>`_.
+          In that case you should use a compatible version of the image you're using.
+          Two related reminders:
+
+              - Postgres 14 is reaching end-of-life in November 2026, so you should plan to upgrade to Postgres 18.
+              
+              - The ``splice-postgres`` chart is deprecated since Splice 0.6.13, so you should use something else.
+
     - SV App
 
         - The public ``/v0/dso`` endpoint is deprecated and will be removed in 0.9.0
