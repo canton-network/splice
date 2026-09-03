@@ -4,7 +4,6 @@ cloudArmor:
   enabled: true
   logging:
     enabled: true
-    verboseLogging: true
   publicEndpoints:
     publicScan:
       hostPrefixRegex: 'scan'

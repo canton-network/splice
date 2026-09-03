@@ -73,14 +73,23 @@ export function configureCloudArmorPolicy(
       name,
       description: `Cloud Armor security policy for ${CLUSTER_BASENAME}`,
       type: 'CLOUD_ARMOR', // attachable to backend service only
-      advancedOptionsConfig: {
-        logLevel: cac.logging.verboseLogging ? 'VERBOSE' : 'NORMAL',
-      },
       // using `rules` to define all rules at once would be fewer Pulumi resources,
       // but the preview would entail changing this array if the rules were changed,
       // making those changes harder to review than with the separate resources
     },
-    opts
+    {
+      ...opts,
+      // All rules are managed as separate PolicyRule resources below, which use the
+      // per-rule addRule/patchRule/removeRule endpoints. The policy resource itself
+      // still reads the full rule list back from GCP, so a refresh imports the rules
+      // into this resource's inputs and Pulumi then wants to "update" the policy.
+      // That update is a PATCH on the parent policy which always carries the whole
+      // rule list, and GCP rejects it once the policy is attached to a load balancer
+      // backend and contains a deny rule:
+      //   Error 400: HTTP references are not supported for security policies with deny rules.
+      // Ignoring `rules` here keeps the parent policy free of spurious updates.
+      ignoreChanges: [...(opts?.ignoreChanges ?? []), 'rules'],
+    }
   );
 
   const ruleOpts = { ...opts, parent: securityPolicy, deletedWith: securityPolicy };

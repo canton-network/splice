@@ -23,7 +23,6 @@ const cloudArmorMaxRateLimitCount = 1000000;
 
 const CloudArmorLoggingConfigSchema = z.object({
   enabled: z.boolean().default(false),
-  verboseLogging: z.boolean().default(false),
   sampleRate: z.number().min(0).max(1).default(1),
 });
 

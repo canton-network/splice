@@ -8,6 +8,7 @@ import {
 } from '@canton-network/splice-pulumi-common';
 import { allSvsToDeployBasic } from '@canton-network/splice-pulumi-common-sv/src/svConfigsBasic';
 
+import { sequencerP2pHosts } from '../sequencerP2pHosts';
 import { loadIPRanges } from './ipRanges';
 import { createIstioIpAllowPolicies, istioIngressSelector } from './policies';
 
@@ -25,16 +26,7 @@ export function configureSequencerWhitelist(
       ])
     )
   );
-  const p2pHosts = allSvsToDeployBasic.flatMap(sv =>
-    migrations
-      .filter(migration => migration.sequencer.enableBftSequencer)
-      .flatMap(migration =>
-        dnsNames.flatMap(dns => [
-          `sequencer-p2p-${migration.id}.${sv.ingressName}.${dns}`,
-          `sequencer-p2p-${migration.id}.${sv.ingressName}.${dns}:*`,
-        ])
-      )
-  );
+  const p2pHosts = sequencerP2pHosts().flatMap(host => [host, `${host}:*`]);
 
   const policies = [
     createIstioIpAllowPolicies({
