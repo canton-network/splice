@@ -6,6 +6,7 @@ import * as pulumi from '@pulumi/pulumi';
 import { CLUSTER_BASENAME, ExactNamespace } from '@canton-network/splice-pulumi-common';
 
 import { CloudArmorPolicy } from './cloudArmor';
+import { CloudArmorLoggingConfig } from './config';
 
 /*
 Any cluster that uses this must first run
@@ -47,6 +48,8 @@ interface L7GatewayConfig {
   istioResource: pulumi.Resource;
   // the Cloud Armor policy to attach
   securityPolicy?: CloudArmorPolicy;
+  // LB backend service request logging, controlled via the cloudArmor.logging config
+  backendLogging?: CloudArmorLoggingConfig;
   // if provided, an HTTPS listener will be created on port 443 that
   // terminates TLS using this secret
   tlsSecretName?: pulumi.Input<string>;
@@ -163,6 +166,17 @@ function attachCloudArmorToLBBackend(
       },
       spec: {
         default: {
+          // backend service request logging must be enabled for Cloud Armor
+          // rule decisions to show up in Cloud Logging
+          ...(config.backendLogging?.enabled
+            ? {
+                logging: {
+                  enabled: true,
+                  // rate out of 1'000'000, converted from the 0.0-1.0 config fraction
+                  sampleRate: Math.round(config.backendLogging.sampleRate * 1000000),
+                },
+              }
+            : {}),
           // if global vs regional is mismatched you'll see
           // SetSecurityPolicy: Invalid value for field 'resource': '{  "securityPolicy": "https://www.googleapis.com/compute/beta/projects/da-cn-scratchnet/regions/us-c...'. The given security policy does not exist
           securityPolicy: policy.name.apply(name => {

@@ -4,15 +4,23 @@ cloudArmor:
   enabled: false
   publicEndpoints:
     publicScan:
-      hostname: 'scan.sv-2.scratcha.global.canton.network.digitalasset.com'
+      hostPrefixRegex: 'scan'
       pathPrefix: '/api/scan'
-      throttleAcrossAllEndpointsAllIps:
-        maxRequestsBeforeHttp429: 0
+      throttleAcrossAllEndpointsPerIp:
+        maxRequestsBeforeHttp429: 2000
+        withinIntervalSeconds: 60
+    sequencer:
+      hostPrefixRegex: 'sequencer-[0-9]+'
+      pathPrefix: '/'
+      restrictToRateLimitedPaths: false
+      throttleAcrossAllEndpointsPerIp:
+        maxRequestsBeforeHttp429: 20000
         withinIntervalSeconds: 60
     tokenRegistry:
+      hostPrefixRegex: 'scan'
       pathPrefix: '/registry'
-      throttleAcrossAllEndpointsAllIps:
-        maxRequestsBeforeHttp429: 200
+      throttleAcrossAllEndpointsPerIp:
+        maxRequestsBeforeHttp429: 1000
         withinIntervalSeconds: 60
 cluster:
   nodePools:
