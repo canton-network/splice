@@ -13,10 +13,13 @@
 # with `kubectl logs`, extracts the config from them and writes one `.conf`
 # file per node.
 #
-# If a pod has been running for a long time, the config line may have rotated
-# out of the Kubernetes log buffer. In that case the script offers to delete
-# the pod (once) so that its Deployment/StatefulSet recreates it and the config
-# gets logged again. Deleting a pod causes a short downtime of that node.
+# If a node has been running for a long time, the config line may have rotated
+# out of the Kubernetes log buffer. In that case the script offers to restart
+# the node's Deployment (once) so that the config gets logged again. This
+# causes a short downtime of that node. The restart is done via
+# `kubectl rollout restart`; since all Splice Helm charts use the `Recreate`
+# strategy, the old pod is fully stopped before the new one starts, so there
+# are never two instances of a node running at the same time.
 #
 # Requirements: bash, kubectl (configured for the target cluster), jq, grep,
 # sed, and `zip` if --zip is used.
@@ -27,8 +30,8 @@
 #   --out DIR   Directory to write the config files to.
 #               Default: ./node-configs-NAMESPACE-<UTC timestamp>
 #   --zip       Additionally create DIR.zip with all collected configs.
-#   --yes       Do not ask before deleting a pod whose logs no longer contain
-#               the config; delete it right away.
+#   --yes       Do not ask before restarting a node whose logs no longer
+#               contain the config; restart it right away.
 
 set -euo pipefail
 
@@ -72,14 +75,29 @@ fi
 # Helpers
 # ---------------------------------------------------------------------------
 
+# The container images (without registry and tag) of the nodes we collect
+# configs from. Everything else in the namespace (postgres, cometbft, web UIs,
+# ...) is skipped.
+node_images=(
+  canton-participant
+  canton-sequencer
+  canton-cometbft-sequencer
+  canton-mediator
+  sv-app
+  validator-app
+  scan-app
+  splitwell-app
+)
+
 # The markers with which the two kinds of nodes start their config log message.
 canton_marker="Starting up with resolved config"
 splice_marker="SpliceEnvironment with config = {"
 
-# extract_config POD CONTAINER
+# extract_config DEPLOYMENT CONTAINER
 #
-# Prints the resolved config found in the logs of the given container, or
-# nothing (and returns non-zero) if the logs do not contain it.
+# Prints the resolved config found in the logs of the given container of the
+# deployment's pod, or nothing (and returns non-zero) if the logs do not
+# contain it.
 #
 # Log lines are JSON objects with the config embedded in the "message" field
 # (with "\n" escapes). We grep for the marker first so that jq only ever sees
@@ -88,9 +106,9 @@ splice_marker="SpliceEnvironment with config = {"
 # strip the marker line itself (and, for Splice apps, the closing "}" that
 # wraps the config) so that only the HOCON config remains.
 extract_config() {
-  local pod="$1" container="$2"
+  local deployment="$1" container="$2"
   local line
-  line="$(kubectl logs -n "$namespace" "$pod" -c "$container" --tail=-1 \
+  line="$(kubectl logs -n "$namespace" "deployment/$deployment" -c "$container" --tail=-1 \
     | grep -F -e "\"message\":\"${canton_marker}" -e "\"message\":\"${splice_marker}" \
     | tail -n 1 || true)"
   if [[ -z "$line" ]]; then
@@ -105,35 +123,34 @@ extract_config() {
   fi
 }
 
-# restart_and_extract POD CONTAINER APP
+# restart_and_extract DEPLOYMENT CONTAINER
 #
-# Deletes the pod, waits for its replacement (found via the shared `app`
-# label) to log its config, and prints that config. Returns non-zero on
-# timeout.
+# Restarts the deployment, waits for the new pod to log its config, and prints
+# that config. Returns non-zero on timeout.
+#
+# Note that `kubectl rollout restart` records the restart time as an
+# annotation on the deployment's pod template. Helm/Pulumi will overwrite that
+# annotation again on the next deploy; it has no other effect.
 restart_and_extract() {
-  local pod="$1" container="$2" app="$3"
+  local deployment="$1" container="$2"
   local timeout_seconds=300 interval_seconds=5 waited=0
-  local new_pod config
+  local config
 
-  echo "  Deleting pod $pod ..." >&2
-  kubectl delete pod -n "$namespace" "$pod" --wait=false >/dev/null
+  echo "  Restarting deployment $deployment ..." >&2
+  kubectl rollout restart -n "$namespace" "deployment/$deployment" >/dev/null
 
   while [[ $waited -lt $timeout_seconds ]]; do
     sleep "$interval_seconds"
     waited=$((waited + interval_seconds))
-    # Find the replacement pod: same app label, different name.
-    new_pod="$(kubectl get pods -n "$namespace" -l "app=${app}" -o name 2>/dev/null \
-      | sed 's#^pod/##' | grep -v -x -F "$pod" | head -n 1 || true)"
-    if [[ -z "$new_pod" ]]; then
-      continue
-    fi
-    if config="$(extract_config "$new_pod" "$container" 2>/dev/null)"; then
-      echo "  Replacement pod $new_pod logged its config after ${waited}s." >&2
+    # While the old pod is still shutting down, or before the new pod exists,
+    # this either fails or finds no config; we just keep polling.
+    if config="$(extract_config "$deployment" "$container" 2>/dev/null)"; then
+      echo "  New pod logged its config after ${waited}s." >&2
       printf '%s\n' "$config"
       return 0
     fi
   done
-  echo "  Timed out after ${timeout_seconds}s waiting for a replacement of $pod to log its config." >&2
+  echo "  Timed out after ${timeout_seconds}s waiting for $deployment to log its config." >&2
   return 1
 }
 
@@ -144,72 +161,71 @@ restart_and_extract() {
 mkdir -p "$out_dir"
 echo "Collecting node configs from namespace '$namespace' into '$out_dir'"
 
-# List all pods with their main container. We only care about containers
-# running a Canton image (canton-participant, canton-sequencer, ...) or a
-# Splice app image (sv-app, validator-app, scan-app, ...); everything else
-# (postgres, cometbft, web UIs, ...) is skipped. For each such container we
-# print: pod name, container name, the pod's `app` label, and whether the pod
-# is managed by a controller (only then is it safe to delete it).
-pods="$(kubectl get pods -n "$namespace" -o json | jq -r '
+# List all deployments with their containers, as lines of
+# "<deployment> <container> <image without registry and tag>".
+all_containers="$(kubectl get deployments -n "$namespace" -o json | jq -r '
   .items[]
-  | . as $pod
-  | .spec.containers[]
-  | (.image | split("/") | last | split("@")[0] | split(":")[0]) as $image
-  | select($image | test("^canton-") or test("-app$"))
-  | [
-      $pod.metadata.name,
-      .name,
-      ($pod.metadata.labels.app // $pod.metadata.name),
-      (($pod.metadata.ownerReferences // []) | length > 0)
-    ]
+  | .metadata.name as $deployment
+  | .spec.template.spec.containers[]
+  | [$deployment, .name, (.image | split("/") | last | split("@")[0] | split(":")[0])]
   | @tsv
 ')"
 
-if [[ -z "$pods" ]]; then
-  echo "No Canton or Splice node pods found in namespace '$namespace'." >&2
+# Keep only the node containers (see node_images above).
+nodes=""
+skipped=()
+while IFS=$'\t' read -r deployment container image; do
+  [[ -z "$deployment" ]] && continue
+  if printf '%s\n' "${node_images[@]}" | grep -q -x -F "$image"; then
+    nodes+="${deployment}	${container}"$'\n'
+  else
+    skipped+=("$deployment ($image)")
+  fi
+done <<<"$all_containers"
+
+if [[ ${#skipped[@]} -gt 0 ]]; then
+  echo "Skipping deployments that are not Canton or Splice nodes: ${skipped[*]}"
+fi
+if [[ -z "$nodes" ]]; then
+  echo "No Canton or Splice node deployments found in namespace '$namespace'." >&2
   exit 1
 fi
 
 collected=()
 failed=()
 
-# The pod list is read from file descriptor 3 so that stdin stays available for
-# the interactive confirmation prompt below.
-while IFS=$'\t' read -r -u 3 pod container app has_owner; do
-  echo "* $app (pod $pod, container $container)"
-  target="$out_dir/$app.conf"
+# The node list is read from file descriptor 3 so that stdin stays available
+# for the interactive confirmation prompt below.
+while IFS=$'\t' read -r -u 3 deployment container; do
+  [[ -z "$deployment" ]] && continue
+  echo "* $deployment (container $container)"
+  target="$out_dir/$deployment.conf"
 
-  if config="$(extract_config "$pod" "$container")"; then
+  if config="$(extract_config "$deployment" "$container")"; then
     printf '%s\n' "$config" > "$target"
     echo "  Saved to $target"
-    collected+=("$app")
+    collected+=("$deployment")
     continue
   fi
 
-  echo "  Logs of $pod no longer contain the startup config."
-  if [[ "$has_owner" != "true" ]]; then
-    echo "  Pod is not managed by a controller and would not be recreated; skipping." >&2
-    failed+=("$app")
-    continue
-  fi
-
+  echo "  Logs of $deployment no longer contain the startup config."
   if ! $assume_yes; then
-    read -r -p "  Delete the pod so that it restarts and logs its config again? This causes a short downtime. [y/N] " answer
+    read -r -p "  Restart the deployment so that the config gets logged again? This causes a short downtime. [y/N] " answer
     if [[ "$answer" != [yY] ]]; then
-      echo "  Skipping $app."
-      failed+=("$app")
+      echo "  Skipping $deployment."
+      failed+=("$deployment")
       continue
     fi
   fi
 
-  if config="$(restart_and_extract "$pod" "$container" "$app")"; then
+  if config="$(restart_and_extract "$deployment" "$container")"; then
     printf '%s\n' "$config" > "$target"
     echo "  Saved to $target"
-    collected+=("$app")
+    collected+=("$deployment")
   else
-    failed+=("$app")
+    failed+=("$deployment")
   fi
-done 3<<<"$pods"
+done 3<<<"$nodes"
 
 echo
 echo "Collected ${#collected[@]} config(s) in '$out_dir': ${collected[*]:-}"
