@@ -205,12 +205,12 @@ abstract class StoreIngestionPerformanceTest(
       ),
       metric(
         "update_rate_per_sec",
-        "Ingested updates per second (wall-clock)",
+        "Ingested updates per second",
         metrics.updatesPerSec,
       ),
       metric(
         "event_rate_per_sec",
-        "Ingested events per second (wall-clock)",
+        "Ingested events per second",
         metrics.eventsPerSec,
       ),
       metric("total_time_ns", "Total ingestion time in nanoseconds", metrics.totalTimeNs),
