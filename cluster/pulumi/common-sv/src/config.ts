@@ -130,6 +130,11 @@ export const SvConfigSchema = z.object({
           skipInitialization: z.boolean().default(false),
           // This can be used on clusters like CILR where we usually would expect to skip initialization but the sv runbook gets reset periodically.
           forceSvRunbookInitialization: z.boolean().default(false),
+          sequencer: z
+            .object({
+              externalRateLimits: RateLimitSchema,
+            })
+            .optional(),
         })
         .optional(),
     })

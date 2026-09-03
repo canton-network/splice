@@ -86,17 +86,20 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
       for {
         ctx <- newEventStore()
         _ <- insertVerdict(ctx.verdictStore, "update1", CantonTimestamp.MinValue.plusSeconds(1L))
-        _ <- ctx.verdictStore.insertVerdictAndTransactionViews(
-          Seq(
-            // won't be reinserted
-            mkVerdict(ctx.verdictStore, "update1", CantonTimestamp.MinValue.plusSeconds(1L)) -> (
-              (_: Long) => Seq.empty
-            ),
-            // will be inserted
-            mkVerdict(ctx.verdictStore, "update2", CantonTimestamp.MinValue.plusSeconds(2L)) -> (
-              (_: Long) => Seq.empty
-            ),
-          )
+        _ <- loggerFactory.assertLogs(
+          ctx.verdictStore.insertVerdictAndTransactionViews(
+            Seq(
+              // won't be reinserted
+              mkVerdict(ctx.verdictStore, "update1", CantonTimestamp.MinValue.plusSeconds(1L)) -> (
+                (_: Long) => Seq.empty
+              ),
+              // will be inserted
+              mkVerdict(ctx.verdictStore, "update2", CantonTimestamp.MinValue.plusSeconds(2L)) -> (
+                (_: Long) => Seq.empty
+              ),
+            )
+          ),
+          _.warningMessage should startWith("Dropping duplicate accepted verdicts"),
         )
         result <- ctx.verdictStore.listVerdicts(None, includeImportUpdates = false, 10)
       } yield {

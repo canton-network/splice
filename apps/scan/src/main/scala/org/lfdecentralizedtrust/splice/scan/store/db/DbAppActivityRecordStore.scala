@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.scan.store.db
 
+import com.daml.nonempty.NonEmpty
 import org.lfdecentralizedtrust.splice.scan.store.AppActivityStore
 import org.lfdecentralizedtrust.splice.scan.store.AppActivityStore.RoundIngestionStatus
 import org.lfdecentralizedtrust.splice.store.UpdateHistory
@@ -287,22 +288,24 @@ class DbAppActivityRecordStore(
   def getRecordsByVerdictRowIds(
       verdictRowIds: Seq[Long]
   )(implicit tc: TraceContext): Future[Map[Long, AppActivityRecordT]] = {
-    if (verdictRowIds.isEmpty) Future.successful(Map.empty)
-    else {
-      startedIngestingAt.flatMap {
-        case None => Future.successful(Map.empty)
-        case Some(_) =>
-          storage
-            .query(
-              (sql"""
-              select verdict_row_id, round_number, app_provider_parties, app_activity_weights
-              from #${Tables.appActivityRecords}
-              where history_id = $historyId and """ ++ inClause("verdict_row_id", verdictRowIds))
-                .as[AppActivityRecordT],
-              "appActivity.getRecordsByVerdictRowIds",
-            )
-            .map(rows => rows.map(r => r.verdictRowId -> r).toMap)
-      }
+    NonEmpty.from(verdictRowIds) match {
+      case None => Future.successful(Map.empty)
+      case Some(verdictRowIds) =>
+        startedIngestingAt.flatMap {
+          case None => Future.successful(Map.empty)
+          case Some(_) =>
+            storage
+              .query(
+                (sql"""
+                select verdict_row_id, round_number, app_provider_parties, app_activity_weights
+                from #${Tables.appActivityRecords}
+                where history_id = $historyId and """ ++ DbStorage
+                  .toInClause("verdict_row_id", verdictRowIds))
+                  .as[AppActivityRecordT],
+                "appActivity.getRecordsByVerdictRowIds",
+              )
+              .map(rows => rows.map(r => r.verdictRowId -> r).toMap)
+        }
     }
   }
 

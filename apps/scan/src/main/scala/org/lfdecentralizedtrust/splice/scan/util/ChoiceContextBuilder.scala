@@ -8,6 +8,7 @@ import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.metadatav1
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.metadatav1.AnyContract
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round
@@ -17,6 +18,7 @@ import org.lfdecentralizedtrust.splice.util.{
   AmuletConfigSchedule,
   Contract,
   ContractWithState,
+  SwitchOverTimes,
   TokenStandardMetadata,
 }
 
@@ -94,6 +96,22 @@ abstract class ChoiceContextBuilder[DisclosedContract, ChoiceContext, Self](
   def addBool(contextKey: String, value: Boolean): Self = {
     contextEntries.addOne(contextKey -> new metadatav1.anyvalue.AV_Bool(value))
     this
+  }
+
+  def addFeaturedAppRight(
+      clock: Clock,
+      dsoRules: DsoRules,
+      optFeaturedAppRight: Option[
+        ContractWithState[amulet.FeaturedAppRight.ContractId, amulet.FeaturedAppRight]
+      ],
+  ): Self = {
+    if (SwitchOverTimes.omitFeaturedAppRightInChoiceContext(clock, dsoRules)) {
+      this
+    } else {
+      addOptionalContract(
+        "featured-app-right" -> optFeaturedAppRight.map(_.contract)
+      )
+    }
   }
 
   def build(): ChoiceContext
@@ -184,6 +202,7 @@ object ChoiceContextBuilder {
           provider
         )
       )
+      dsoRules <- store.getDsoRules()
     } yield {
       if (optLockedAmulet.isEmpty) {
         // the locked amulet did expire and was unlocked
@@ -205,7 +224,7 @@ object ChoiceContextBuilder {
         choiceContextBuilder
           // the choice implementation should only attempt to expire the lock if it exists
           .addBool(TokenStandardMetadata.expireLockKey, optLockedAmulet.isDefined)
-          .addOptionalContract("featured-app-right", featuredAppRightO.map(_.contract))
+          .addFeaturedAppRight(clock, dsoRules.payload, featuredAppRightO)
           .build()
       }
     }

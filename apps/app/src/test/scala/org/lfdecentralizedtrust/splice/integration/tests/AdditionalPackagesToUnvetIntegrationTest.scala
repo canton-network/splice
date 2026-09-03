@@ -159,6 +159,10 @@ class DowngradeSvPackagesIntegrationTest extends AdditionalPackagesToUnvetIntegr
 class UnvetAllSupportedPackagesIntegrationTest
     extends AdditionalPackagesToUnvetIntegrationTestBase {
 
+  override def environmentDefinition = super.environmentDefinition.addConfigTransform((_, c) =>
+    ConfigTransforms.withNoSvOperationsSwitchOverTimes(c)
+  )
+
   private val minimalPackageVersions = DarResourcesUtil.minimalPackageVersions
   private val nonMinimalSupportedPackageVersions =
     DarResourcesUtil.supportedPackageVersions.filterNot(minimalPackageVersions.contains(_))

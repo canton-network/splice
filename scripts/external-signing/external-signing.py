@@ -379,31 +379,6 @@ def parse_cli_args():
     parser_setup_transfer_preapproval.add_argument("--key-directory", required=True)
     parser_setup_transfer_preapproval.add_argument("--key-name", required=True)
 
-    parser_transfer_preapproval_send = subparsers.add_parser(
-        "transfer-preapproval-send",
-        help="Initiate a pre-approved transfer",
-    )
-    parser_transfer_preapproval_send.set_defaults(
-        handler=handle_transfer_preapproval_send
-    )
-    parser_transfer_preapproval_send.add_argument(
-        "--validator-url",
-        help="Address of Validator API",
-        required=True
-    )
-
-    parser_transfer_preapproval_send.add_argument(
-        "--scan-url",
-        help="Address of Scan API",
-        required=True
-    )
-    parser_transfer_preapproval_send.add_argument("--sender-party-id", required=True)
-    parser_transfer_preapproval_send.add_argument("--receiver-party-id", required=True)
-    parser_transfer_preapproval_send.add_argument("--amount", required=True)
-    parser_transfer_preapproval_send.add_argument("--nonce", required=True)
-    parser_transfer_preapproval_send.add_argument("--key-directory", required=True)
-    parser_transfer_preapproval_send.add_argument("--key-name", required=True)
-
     return parser.parse_args()
 
 
@@ -419,10 +394,6 @@ async def main():
     async with aiohttp.ClientSession(headers=headers) as session:
         if args.subcommand == "generate-key-pair":
             await args.handler(args)
-        elif args.subcommand == 'transfer-preapproval-send':
-            validator_client = ValidatorClient(session, args.validator_url)
-            scan_client = ScanClient(session, args.scan_url)
-            await args.handler(args, validator_client, scan_client)
         else:
             validator_client = ValidatorClient(session, args.validator_url)
             await args.handler(args, validator_client)

@@ -1,7 +1,6 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
-import com.digitalasset.daml.lf.data.Ref.PackageVersion
-import com.daml.ledger.javaapi.data.CreatedEvent
+import com.daml.ledger.javaapi.data.{CreatedEvent, ExercisedEvent}
 import com.digitalasset.canton.admin.api.client.data.TemplateId
 import com.digitalasset.canton.HasExecutionContext
 import com.digitalasset.canton.topology.PartyId
@@ -12,7 +11,6 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   metadatav1,
 }
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
-import org.lfdecentralizedtrust.splice.environment.DarResources
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   IntegrationTestWithIsolatedEnvironment,
@@ -20,7 +18,6 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
 }
 import org.lfdecentralizedtrust.splice.util.{
   ChoiceContextWithDisclosures,
-  JavaDecodeUtil,
   TriggerTestUtil,
   WalletTestUtil,
 }
@@ -28,10 +25,7 @@ import org.lfdecentralizedtrust.splice.util.{
 import scala.jdk.CollectionConverters.*
 import scala.util.Random
 import com.digitalasset.canton.util.ShowUtil.*
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
-  AppRewardCoupon,
-  FeaturedAppActivityMarker,
-}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{FeaturedAppActivityMarker}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletallocation as amuletallocationCodegen
 import org.lfdecentralizedtrust.splice.console.WalletAppClientReference
 import org.lfdecentralizedtrust.splice.integration.tests.TokenStandardTest.CreateAllocationRequestResult
@@ -39,6 +33,7 @@ import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
 import org.lfdecentralizedtrust.splice.wallet.admin.api.client.commands.HttpWalletAppClient
 
 @org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceTokenTestTradingApp_1_0_0
+@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceDsoGovernance_0_1_29
 class TokenStandardAllocationIntegrationTest
     extends IntegrationTestWithIsolatedEnvironment
     with HasExecutionContext
@@ -184,30 +179,14 @@ class TokenStandardAllocationIntegrationTest
           }
         }
         val events = tree.getEventsById().asScala.values
-        forExactly(1, events) {
-          inside(_) { case c: CreatedEvent =>
-            if (
-              PackageVersion.assertFromString(
-                sv1ScanBackend
-                  .getAmuletRules()
-                  .payload
-                  .configSchedule
-                  .initialValue
-                  .packageConfig
-                  .amulet
-              ) >= DarResources.amulet_0_1_17.metadata.version
-            ) {
-              val decoded = JavaDecodeUtil
-                .decodeCreated(FeaturedAppActivityMarker.COMPANION)(c)
-                .value
-              decoded.data.provider shouldBe allocatedOtcTrade.venueParty.toProtoPrimitive
-            } else {
-              val decoded = JavaDecodeUtil
-                .decodeCreated(AppRewardCoupon.COMPANION)(c)
-                .value
-              decoded.data.featured shouldBe true
-              decoded.data.provider shouldBe allocatedOtcTrade.venueParty.toProtoPrimitive
-            }
+        forAll(events) {
+          inside(_) {
+            case c: CreatedEvent =>
+              Seq(
+                FeaturedAppActivityMarker.TEMPLATE_ID,
+                FeaturedAppActivityMarker.TEMPLATE_ID,
+              ) shouldNot contain(c.getTemplateId)
+            case _: ExercisedEvent => succeed
           }
         }
       },

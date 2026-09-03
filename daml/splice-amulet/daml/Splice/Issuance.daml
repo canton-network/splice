@@ -27,7 +27,7 @@ data IssuanceConfig = IssuanceConfig with
       -- Introduced as part of CIP-0003. Will default to 0.00 USD once CIP-0096 becomes effective.
     optDevelopmentFundPercentage : Optional Decimal
       -- ^ Percentage of each mint emission allocated to the Development Fund under CIP-0082.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- | Getter with the right default value for the validator faucet cap.
 -- Use this consistently instead of accessing the field directly.
@@ -61,7 +61,7 @@ data OpenMiningRoundSummary = OpenMiningRoundSummary with
     totalSvRewardWeight : Int
     optTotalValidatorFaucetCoupons : Optional Int
       -- ^ Introduced as part of CIP-3.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 getTotalValidatorFaucetCoupons : OpenMiningRoundSummary -> Int
 getTotalValidatorFaucetCoupons = fromOptional 0 . (.optTotalValidatorFaucetCoupons)
@@ -79,7 +79,7 @@ data IssuingRoundParameters = IssuingRoundParameters with
     optAmuletsToIssueToDevelopmentFund : Optional Decimal
       -- ^ Note: Made optional as the addition of this field is checked by the upgrade checker
       -- on package upload because `IssuingRoundParameters` is serializable.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 validateOpenMiningRoundSummary : CanAssert m => OpenMiningRoundSummary -> m ()
 validateOpenMiningRoundSummary summary = do
@@ -156,6 +156,7 @@ data IssuanceTranche = IssuanceTranche with
   rewardsToIssue : Decimal -- ^ Total amulets to issue as rewards in this tranche
   issuancePerCoupon : Decimal -- ^ Issuence per reward coupon for this tranche
   unclaimedRewards : Decimal -- ^ Amulets to issue in this tranche that were not claimed
+    deriving (Serializable)
 
 -- | `computeIssuanceTranche rewardsToIssue capPerCoupon totalCoupons`
 --

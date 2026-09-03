@@ -80,7 +80,7 @@ data BurnMintOutput = BurnMintOutput
     context : ChoiceContext
       -- ^ Context specific to this output which can be used to support locking
       -- or other registry-specific features.
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 -- | The result of calling the `BurnMintFactory_BurnMint` choice.
 data BurnMintFactory_BurnMintResult = BurnMintFactory_BurnMintResult
@@ -88,7 +88,7 @@ data BurnMintFactory_BurnMintResult = BurnMintFactory_BurnMintResult
     outputCids : [ContractId Holding]
       -- ^ The holdings created by the choice.
       -- Must contain exactly the outputs specified in the choice argument in the same order.
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 -- | The view of a `BurnMintFactory`.
 data BurnMintFactoryView = BurnMintFactoryView
@@ -98,4 +98,4 @@ data BurnMintFactoryView = BurnMintFactoryView
        -- for which this burnt-mint factory can be used.
      meta : Metadata
        -- ^ Additional metadata specific to the burn-mint factory, used for extensibility.
-   deriving (Show, Eq)
+   deriving (Show, Eq, Serializable)

@@ -365,6 +365,9 @@
             "secretName": {
               "type": "string"
             },
+            "bootstrapDatabaseName": {
+              "type": "string"
+            },
             "initImageName": {
               "type": "string"
             },
@@ -420,6 +423,9 @@
         },
         "tolerations": {
           "type": "array"
+        },
+        "priorityClassName": {
+          "type": "string"
         },
         "auth": {
           "type": "object",

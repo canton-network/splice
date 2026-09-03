@@ -3,7 +3,7 @@
 
 sdk-version: 3.5.2
 name: splice-token-test-dummy-holding
-version: 0.0.4
+version: 0.0.5
 source: daml
 dependencies:
   - daml-prim
@@ -14,6 +14,7 @@ data-dependencies:
   - ../../../daml/dars/splice-api-token-allocation-v1-1.0.0.dar
   - ../../../daml/dars/splice-api-token-allocation-request-v1-1.0.0.dar
 build-options:
+  - --explicit-serializable=yes
   - --target=2.1
 codegen:
   java:

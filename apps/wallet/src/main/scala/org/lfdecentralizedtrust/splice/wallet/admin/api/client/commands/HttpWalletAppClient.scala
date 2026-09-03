@@ -1616,6 +1616,7 @@ object HttpWalletAppClient {
       amount: BigDecimal,
       expiresAt: CantonTimestamp,
       reason: String,
+      mintAfter: Option[CantonTimestamp] = None,
   ) extends InternalBaseCommand[
         http.AllocateDevelopmentFundCouponResponse,
         definitions.AllocateDevelopmentFundCouponResponse,
@@ -1632,6 +1633,7 @@ object HttpWalletAppClient {
         Codec.encode(amount),
         Codec.encode(expiresAt),
         reason,
+        mintAfter.map(Codec.encode(_)),
       ),
       headers = headers,
     )

@@ -119,6 +119,8 @@ class DevelopmentFundFrontendTimeBasedIntegrationTest
 
       val futureExpiresAtFormatted =
         formatDateTimeForUI(latestTime.plus(Duration.ofDays(365 * 30)))
+      val mintAfterInstant = latestTime.plus(Duration.ofDays(10))
+      val mintAfterFormatted = formatDateTimeForUI(mintAfterInstant)
 
       // ===================================================================
       // Section: Create coupons for user_1, change DFM, and verify transition
@@ -250,6 +252,16 @@ class DevelopmentFundFrontendTimeBasedIntegrationTest
                   "development-fund-allocation-expires-at",
                   futureExpiresAtFormatted,
                 )
+                waitForQuery(id("development-fund-allocation-mint-after"))
+                webDriver
+                  .findElement(
+                    org.openqa.selenium.By.id("development-fund-allocation-mint-after")
+                  )
+                  .getAttribute("value") shouldBe empty
+                setDateTimeWithoutScroll(
+                  "development-fund-allocation-mint-after",
+                  mintAfterFormatted,
+                )
                 eventuallyClickOn(id("development-fund-allocation-reason"))
                 textArea(id("development-fund-allocation-reason")).underlying.sendKeys(
                   "Coupon 3 - stays active"
@@ -257,13 +269,31 @@ class DevelopmentFundFrontendTimeBasedIntegrationTest
                 eventuallyClickOn(id("development-fund-allocation-submit-button"))
               },
             )(
-              "Coupon 3 is allocated",
+              "Coupon 3 is allocated carrying the mint delay entered in the form",
               _ => {
                 eventually() {
-                  aliceWalletClient.listActiveDevelopmentFundCoupons() should have size 1
+                  val coupons = aliceWalletClient.listActiveDevelopmentFundCoupons()
+                  coupons should have size 1
+                  val couponMintAfter = coupons.head.payload.mintAfter.toScala.value
+                  couponMintAfter.isAfter(
+                    mintAfterInstant.minus(Duration.ofDays(1))
+                  ) shouldBe true withClue "mintAfter lower bound"
+                  couponMintAfter.isBefore(
+                    mintAfterInstant.plus(Duration.ofDays(1))
+                  ) shouldBe true withClue "mintAfter upper bound"
                 }
               },
             )
+
+            clue("Check: the active coupon row renders its Mint After") {
+              eventually() {
+                val mintAfterCells =
+                  findAll(cssSelector("#active-coupons-table tbody tr td:nth-child(5)")).toSeq
+                mintAfterCells should have size 1
+                mintAfterCells.head.text should fullyMatch regex
+                  """[A-Z][a-z]{2} \d{1,2}, \d{4} \d{2}:\d{2} [AP]M"""
+              }
+            }
           }
         }
 
@@ -374,7 +404,7 @@ class DevelopmentFundFrontendTimeBasedIntegrationTest
             clue("Check: user_2's Active List is empty") {
               eventually() {
                 val emptyStateCell = find(
-                  cssSelector("#active-coupons-table tbody tr td[colspan='6']")
+                  cssSelector("#active-coupons-table tbody tr td[colspan='7']")
                 )
                 emptyStateCell.isDefined shouldBe true
                 emptyStateCell.value.text should include("No development fund allocations found")
@@ -446,6 +476,9 @@ class DevelopmentFundFrontendTimeBasedIntegrationTest
       existingConfig.externalPartyConfigStateTickDuration,
       existingConfig.rewardConfig,
       existingConfig.transferPreapprovalBaseDuration,
+      existingConfig.developmentFundManagerBlacklist,
+      existingConfig.minDevelopmentFundMintingDelay,
+      existingConfig.amuletSwitchOverTimes,
     )
 
     val action = new ARC_AmuletRules(
