@@ -561,6 +561,7 @@ class TxLogBackfillingStoreTest
       participantId,
       party,
       backfillingRequired,
+      internedStringStore(storage),
       loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = true,

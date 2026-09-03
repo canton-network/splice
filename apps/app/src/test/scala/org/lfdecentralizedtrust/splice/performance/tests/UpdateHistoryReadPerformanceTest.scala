@@ -11,20 +11,15 @@ import com.typesafe.config.Config
 import org.apache.pekko.actor.ActorSystem
 import org.lfdecentralizedtrust.splice.config.{IngestionConfig, SpliceConfig}
 import org.lfdecentralizedtrust.splice.http.v0.definitions.DamlValueEncoding
-import org.lfdecentralizedtrust.splice.scan.admin.http.{
-  ExternalHashInclusionPolicy,
-  ScanHttpEncodings,
-}
+import org.lfdecentralizedtrust.splice.scan.admin.http.{ExternalHashInclusionPolicy, ScanHttpEncodings}
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppBackendConfig
-import org.lfdecentralizedtrust.splice.store.{
-  HistoryMetrics,
-  TreeUpdateWithMigrationId,
-  UpdateHistory,
-}
+import org.lfdecentralizedtrust.splice.store.db.InternedStringStore
+import org.lfdecentralizedtrust.splice.store.{HistoryMetrics, TreeUpdateWithMigrationId, UpdateHistory}
 import pureconfig.ConfigReader
 import pureconfig.generic.semiauto.deriveReader
 
 import java.nio.file.Path
+import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future}
 
 /** Read performance test for UpdateHistory.
@@ -59,6 +54,13 @@ class UpdateHistoryReadPerformanceTest(
       participantId = mkParticipantId(this.getClass.getSimpleName),
       updateStreamParty = dsoParty,
       backfillingRequired = UpdateHistory.BackfillingRequirement.BackfillingNotRequired,
+      internedStringStore = InternedStringStore(
+        storage,
+        10_000L,
+        FiniteDuration(1, "hour"),
+        loggerFactory,
+        NoOpMetricsFactory,
+      ),
       loggerFactory = loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = false,

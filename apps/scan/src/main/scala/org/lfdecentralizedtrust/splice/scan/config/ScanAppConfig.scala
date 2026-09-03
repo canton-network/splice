@@ -197,6 +197,10 @@ final case class ScanCacheConfig(
       ttl = NonNegativeFiniteDuration.ofMinutes(1),
       maxSize = 1000,
     ),
+    internedStrings: CacheConfig = CacheConfig(
+      ttl = NonNegativeFiniteDuration.ofDays(365L),
+      maxSize = 10000,
+    ),
 )
 
 final case class CacheConfig(
