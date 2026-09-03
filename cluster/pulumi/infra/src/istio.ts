@@ -10,6 +10,7 @@ import {
 import { cometBFTExternalPort } from '@canton-network/splice-pulumi-common-sv/src/synchronizer/cometbftConfig';
 import { rateLimitResponseHeaders } from '@canton-network/splice-pulumi-common/src/ratelimit/rateLimitHeaders';
 import { mergeWith } from 'lodash';
+import { z } from 'zod';
 
 import {
   CLUSTER_HOSTNAME,
@@ -24,7 +25,7 @@ import {
   isDevNet,
   isMainNet,
 } from '../../common';
-import { clusterBasename, infraConfig } from './config';
+import { clusterBasename, flowControlConfigSchema, infraConfig } from './config';
 import { configureIstioGatewayPolicies, installAppWhitelisting } from './whitelisting';
 import { loadInternalWhitelistedIps, loadIPRanges } from './whitelisting/ipRanges';
 import { configurePublicInfo } from './whitelisting/publicInfo';
@@ -730,10 +731,6 @@ function configureSequencerHighPerformanceGrpcDestinationRule(
   });
 }
 
-// Ports of the http2 servers that we apply the upstream flow control config to:
-// the sequencer public API and the sequencer BFT P2P API.
-const sequencerFlowControlUpstreamPorts = [5008, 5010];
-
 // Istio proxies lots of client connections over relatively few connections. If one of the client connections gets stuck
 // (e.g. because the client died) buffers will fill up and eventually istio will stop sending connection-level window updates
 // to the sequencer and trigger netty flow control. This surfaces as requests that send back response headers but then nothing else until the client times out.
@@ -746,17 +743,16 @@ const sequencerFlowControlUpstreamPorts = [5008, 5010];
 function configureSequencerFlowControl(
   ingressNs: k8s.core.v1.Namespace
 ): k8s.apiextensions.CustomResource {
-  const http2ProtocolOptions = {
-    initial_stream_window_size: infraConfig.istio.sequencerFlowControl.initialStreamWindowSize,
-    initial_connection_window_size:
-      infraConfig.istio.sequencerFlowControl.initialConnectionWindowSize,
+  const http2ProtocolOptions = (config: z.infer<typeof flowControlConfigSchema>) => ({
+    initial_stream_window_size: config.initialStreamWindowSize,
+    initial_connection_window_size: config.initialConnectionWindowSize,
     connection_keepalive: {
       interval: '30s',
       timeout: '5s',
     },
-  };
-  // istio -> upstream (aka sequencer)
-  const upstreamPatch = (portNumber: number) => ({
+  });
+  // istio sidecar of upstream -> upstream (e.g. sequencer)
+  const upstreamPatch = (portNumber: number, config: z.infer<typeof flowControlConfigSchema>) => ({
     applyTo: 'CLUSTER',
     match: {
       cluster: {
@@ -784,13 +780,13 @@ function configureSequencerFlowControl(
     apiVersion: 'networking.istio.io/v1alpha3',
     kind: 'EnvoyFilter',
     metadata: {
-      name: 'sequencer-flow-control',
+      name: 'flow-control',
       namespace: ingressNs.metadata.name,
     },
     spec: {
       configPatches: [
         {
-          // downstream (aka participant) -> istio
+          // downstream client (e.g. participant) -> istio sidecar of upstream (e.g. sequencer)
           applyTo: 'NETWORK_FILTER',
           match: {
             context: 'SIDECAR_INBOUND',
@@ -808,12 +804,20 @@ function configureSequencerFlowControl(
               typed_config: {
                 '@type':
                   'type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager',
-                http2_protocol_options: http2ProtocolOptions,
+                // This applies to both internal and public so we apply the more conservative internal limit
+                http2_protocol_options: http2ProtocolOptions(
+                  infraConfig.istio.flowControl.internal
+                ),
               },
             },
           },
         },
-        ...sequencerFlowControlUpstreamPorts.map(upstreamPatch),
+        ...infraConfig.istio.flowControl.public.ports.map(p =>
+          upstreamPatch(p, infraConfig.istio.flowControl.public)
+        ),
+        ...infraConfig.istio.flowControl.internal.ports.map(p =>
+          upstreamPatch(p, infraConfig.istio.flowControl.internal)
+        ),
       ],
     },
   });
