@@ -201,7 +201,6 @@ abstract class InStackDecentralizedSynchronizerNode
       installSequencerRateLimits(
         this.xns.logicalName,
         `${this.name}-sequencer`,
-        5008,
         sequencerRateLimits
       );
     }

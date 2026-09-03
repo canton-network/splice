@@ -25,7 +25,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Rate of HTTP 429 (Too Many Requests) responses per second, broken down by the namespace reporting the request and the destination service receiving it.",
+      "description": "Rate of rejected requests per second, broken down by the namespace reporting the request and the destination service receiving it. Rejections are HTTP 429 (Too Many Requests) responses, or, for gRPC calls (e.g. the sequencer API), RESOURCE_EXHAUSTED (grpc_response_status 8) responses, which envoy returns with HTTP 200.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -106,7 +106,7 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "sum by(namespace, destination_service) (rate(istio_requests_total{response_code=\"429\", namespace=~\"$namespace\"}[$__rate_interval]))",
+          "expr": "sum by(namespace, destination_service) (rate(istio_requests_total{response_code=\"429\", namespace=~\"$namespace\"}[$__rate_interval])) + sum by(namespace, destination_service) (rate(istio_requests_total{grpc_response_status=\"8\", namespace=~\"$namespace\"}[$__rate_interval]))",
           "legendFormat": "__auto",
           "range": true,
           "refId": "A"
@@ -120,7 +120,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Fraction of the Envoy local rate limit evaluations that were rejected with HTTP 429, per namespace, pod and limiter. One filter per limit is installed (limiter=global, per_ip, endpoint_per_ip) and every request is evaluated by each of them.",
+      "description": "Fraction of the Envoy local rate limit evaluations that were rejected (HTTP 429, or gRPC RESOURCE_EXHAUSTED for gRPC APIs such as the sequencer), per namespace, pod and limiter. One filter per limit is installed (limiter=global, per_ip, endpoint_per_ip) and every request is evaluated by each of them.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -224,7 +224,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Rate of number of requests for which rate limiting was applied (e.g.: 429 returned), broken down by the limit that rejected them: global, per_ip (per client IP) and endpoint_per_ip (per endpoint and client IP).",
+      "description": "Rate of number of requests for which rate limiting was applied (HTTP 429, or gRPC RESOURCE_EXHAUSTED for gRPC APIs such as the sequencer), broken down by the limit that rejected them: global, per_ip (per client IP) and endpoint_per_ip (per endpoint and client IP).",
       "fieldConfig": {
         "defaults": {
           "color": {
