@@ -56,6 +56,11 @@ export function getDnsNames(): { daDnsName: string; cantonDnsName: string } {
 
 export const CLUSTER_NAME = `cn-${CLUSTER_BASENAME}net`;
 
+// Name of the Cloud Armor security policy created for this cluster (see
+// cluster/pulumi/infra/src/cloudArmor.ts). Shared so that alerts can be scoped to
+// exactly the policy of this cluster.
+export const CLOUD_ARMOR_POLICY_NAME = `waf-whitelist-throttle-ban-${CLUSTER_BASENAME}`;
+
 export const sequencerTokenExpirationTime: string | undefined = config.optionalEnv(
   'SEQUENCER_TOKEN_EXPIRATION_TIME'
 );

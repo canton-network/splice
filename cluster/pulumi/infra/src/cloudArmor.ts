@@ -3,7 +3,11 @@
 import * as gcp from '@pulumi/gcp';
 import * as pulumi from '@pulumi/pulumi';
 import * as _ from 'lodash';
-import { CLUSTER_BASENAME, getDnsNames } from '@canton-network/splice-pulumi-common';
+import {
+  CLOUD_ARMOR_POLICY_NAME,
+  CLUSTER_BASENAME,
+  getDnsNames,
+} from '@canton-network/splice-pulumi-common';
 import { PerEndpointLimits } from '@canton-network/splice-pulumi-common/src/ratelimit/envoyRateLimiter';
 
 import * as config from './config';
@@ -66,7 +70,7 @@ export function configureCloudArmorPolicy(
   }
 
   // Step 1: Create the security policy
-  const name = `waf-whitelist-throttle-ban-${CLUSTER_BASENAME}`;
+  const name = CLOUD_ARMOR_POLICY_NAME;
   const securityPolicy = new CloudArmorPolicy(
     name,
     {
