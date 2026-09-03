@@ -85,8 +85,8 @@ release-notes:: Upcoming
 
         - The development fund allocation form now has a ``Mint After`` field, which sets the
           earliest time at which the beneficiary can mint the coupon. While
-          the ``minDevelopmentFundMintingDelay`` stays unset in the ``AmuletConfig``, the field is 
-          optional and the coupons are allocated without a mint-after 
+          the ``minDevelopmentFundMintingDelay`` stays unset in the ``AmuletConfig``, the field is
+          optional and the coupons are allocated without a mint-after
           constraint.
 
         - The development fund coupon list now shows a ``Mint After`` column.
@@ -123,3 +123,7 @@ release-notes:: Upcoming
 
         - The ``AmuletRules_SetConfig`` proposal form can now set
           ``minDevelopmentFundMintingDelay`` and ``developmentFundManagerBlacklist``.
+
+        - The ``AmuletRules_SetConfig`` proposal form can now set ``amuletSwitchOverTimes``.
+
+        - The ``DsoRulesConfig`` proposal form can now set ``svOperationsSwitchOverTimes``.
