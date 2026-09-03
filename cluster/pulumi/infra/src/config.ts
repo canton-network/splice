@@ -37,6 +37,11 @@ const CloudArmorConfigSchema = z.object({
     )
     .default({}),
 });
+export const flowControlConfigSchema = z.object({
+  initialStreamWindowSize: z.int(),
+  initialConnectionWindowSize: z.int(),
+  ports: z.array(z.number().int().positive()),
+});
 export const InfraConfigSchema = z.object({
   infra: z.object({
     ipWhitelisting: z
@@ -55,9 +60,11 @@ export const InfraConfigSchema = z.object({
       enablePublicTokenRegistry: z.boolean().default(false),
       enableGeneralIpWhitelist: z.boolean().default(false),
       istiodValues: z.object({}).catchall(z.any()).default({}),
-      sequencerFlowControl: z.object({
-        initialStreamWindowSize: z.int(),
-        initialConnectionWindowSize: z.int(),
+      flowControl: z.object({
+        // public APIs like the sequencer
+        public: flowControlConfigSchema,
+        // internal APIs like the participant
+        internal: flowControlConfigSchema,
       }),
     }),
     extraCustomResources: z.object({}).catchall(z.any()).default({}),
