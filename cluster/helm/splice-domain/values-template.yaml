@@ -24,6 +24,10 @@ mediator:
   persistence:
     host: postgres.sv-1.svc.cluster.local
     secretName: "postgres-secrets"
+    # Postgres role the charts connect as, including the pg-init containers (default cnadmin)
+    # user: cnadmin
+    # Database the pg-init container connects to in order to CREATE the target database (default cantonnet)
+    # bootstrapDatabaseName: cantonnet
     # Optional: Provide raw strings to override the default Kubernetes secret injection.
     # This is useful for integrating with external secret management tools.
     # Note: Ensure you have the appropriate mutating webhook/injector installed in your cluster.
@@ -34,6 +38,10 @@ sequencer:
   persistence:
     host: postgres.sv-1.svc.cluster.local
     secretName: "postgres-secrets"
+    # Postgres role the charts connect as, including the pg-init containers (default cnadmin)
+    # user: cnadmin
+    # Database the pg-init container connects to in order to CREATE the target database (default cantonnet)
+    # bootstrapDatabaseName: cantonnet
 #    secretOverrides:
 #      postgresPassword: ""
 

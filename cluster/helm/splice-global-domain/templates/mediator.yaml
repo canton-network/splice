@@ -62,6 +62,10 @@ spec:
           value: {{ .Values.mediator.persistence.host }}
         - name: CANTON_DOMAIN_POSTGRES_PORT
           value: {{ .Values.mediator.persistence.port | quote }}
+        {{- with .Values.mediator.persistence.user }}
+        - name: CANTON_DOMAIN_POSTGRES_USER
+          value: {{ . | quote }}
+        {{- end }}
         - name: CANTON_DOMAIN_POSTGRES_PASSWORD
           {{- if ((.Values.mediator.persistence).secretOverrides).postgresPassword }}
           value: {{ .Values.mediator.persistence.secretOverrides.postgresPassword | quote }}
@@ -146,7 +150,7 @@ spec:
             - 'bash'
             - '-c'
             - |
-              until errmsg=$(psql -h {{ .Values.mediator.persistence.host }} -p {{ .Values.mediator.persistence.port }} --username=cnadmin --dbname=cantonnet -c 'create database {{ .Values.mediator.persistence.databaseName }}' 2>&1); do
+              until errmsg=$(psql -h {{ .Values.mediator.persistence.host }} -p {{ .Values.mediator.persistence.port }} --username={{ .Values.mediator.persistence.user | default "cnadmin" }} --dbname={{ .Values.mediator.persistence.bootstrapDatabaseName | default "cantonnet" }} -c 'create database {{ .Values.mediator.persistence.databaseName }}' 2>&1); do
                 if [[ $errmsg == *"already exists"* ]]; then
                   echo "Database {{ .Values.mediator.persistence.databaseName }} already exists. Done."
                   break

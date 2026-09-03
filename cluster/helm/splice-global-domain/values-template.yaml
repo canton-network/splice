@@ -26,6 +26,10 @@ sequencer:
   persistence:
     host: postgres.sv-1.svc.cluster.local
     secretName: "postgres-secrets"
+    # Postgres role the charts connect as, including the pg-init containers (default cnadmin)
+    # user: cnadmin
+    # Database the pg-init container connects to in order to CREATE the target database (default cantonnet)
+    # bootstrapDatabaseName: cantonnet
     databaseName: cantonnet_sequencer
     port: 5432
     initImageName: "postgres:14"
@@ -44,6 +48,10 @@ mediator:
   persistence:
     host: postgres.sv-1.svc.cluster.local
     secretName: "postgres-secrets"
+    # Postgres role the charts connect as, including the pg-init containers (default cnadmin)
+    # user: cnadmin
+    # Database the pg-init container connects to in order to CREATE the target database (default cantonnet)
+    # bootstrapDatabaseName: cantonnet
     databaseName: cantonnet_mediator
     port: 5432
     initImageName: "postgres:14"

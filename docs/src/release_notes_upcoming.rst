@@ -99,15 +99,15 @@ release-notes:: Upcoming
           protect a node from eviction under resource pressure. It is unset by default, which leaves
           scheduling behaviour unchanged.
 
-        - The Postgres role and bootstrap database used by the validator and participant charts are
-          no longer hardcoded. ``persistence.user`` and ``persistence.bootstrapDatabaseName`` are now
-          honoured by the ``pg-init`` and wait containers, by the Postgres exporter sidecar, and — for
-          the participant — by the Canton node itself, which previously always connected as
-          ``cnadmin`` regardless of the configured value. They default to ``cnadmin`` and
-          ``cantonnet``, so rendered output is unchanged unless you set them. This matters for
-          operators moving off ``splice-postgres`` to a self-provisioned or managed Postgres, where a
-          ``cnadmin`` superuser and a ``cantonnet`` database may not be available to create. The SV
-          charts are not covered yet and still use the hardcoded values.
+        - The Postgres role and bootstrap database are no longer hardcoded in any of the operator
+          charts. ``persistence.user`` and ``persistence.bootstrapDatabaseName`` are now honoured by
+          the ``pg-init`` and wait containers, by the Postgres exporter sidecar, and — for the
+          participant, domain, mediator and sequencer — by the Canton node itself, which previously
+          always connected as ``cnadmin`` regardless of the configured value. They default to
+          ``cnadmin`` and ``cantonnet``, so rendered output is unchanged unless you set them. This
+          matters for operators moving off ``splice-postgres`` to a self-provisioned or managed
+          Postgres, where a ``cnadmin`` superuser and a ``cantonnet`` database may not be available
+          to create.
 
         - All Splice Helm charts now set ``automountServiceAccountToken: false`` on the pods they
           deploy. Splice components do not use the Kubernetes API, so pods no longer receive an

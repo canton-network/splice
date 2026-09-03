@@ -327,3 +327,29 @@ tests:
     asserts:
       - notExists:
           path: spec.template.spec.priorityClassName
+
+  - it: "passes mediator persistence.user to the canton node itself"
+    set:
+      mediator:
+        persistence:
+          user: appuser
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CANTON_DOMAIN_POSTGRES_USER
+            value: appuser
+
+  - it: "omits the canton node DB user when mediator persistence.user is unset"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          any: true
+          content:
+            name: CANTON_DOMAIN_POSTGRES_USER

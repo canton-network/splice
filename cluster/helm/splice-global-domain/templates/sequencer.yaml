@@ -58,6 +58,10 @@ spec:
               value: {{ .Values.sequencer.persistence.host }}
             - name: CANTON_DOMAIN_POSTGRES_PORT
               value: {{ .Values.sequencer.persistence.port | quote }}
+            {{- with .Values.sequencer.persistence.user }}
+            - name: CANTON_DOMAIN_POSTGRES_USER
+              value: {{ . | quote }}
+            {{- end }}
             - name: CANTON_DOMAIN_POSTGRES_PASSWORD
               {{- if ((.Values.sequencer.persistence).secretOverrides).postgresPassword }}
               value: {{ .Values.sequencer.persistence.secretOverrides.postgresPassword | quote }}
@@ -218,7 +222,7 @@ spec:
             - 'bash'
             - '-c'
             - |
-              until errmsg=$(psql -h {{ .Values.sequencer.persistence.host }} -p {{ .Values.sequencer.persistence.port }} --username=cnadmin --dbname=cantonnet -c 'create database {{ .Values.sequencer.persistence.databaseName }}' 2>&1); do
+              until errmsg=$(psql -h {{ .Values.sequencer.persistence.host }} -p {{ .Values.sequencer.persistence.port }} --username={{ .Values.sequencer.persistence.user | default "cnadmin" }} --dbname={{ .Values.sequencer.persistence.bootstrapDatabaseName | default "cantonnet" }} -c 'create database {{ .Values.sequencer.persistence.databaseName }}' 2>&1); do
                 if [[ $errmsg == *"already exists"* ]]; then
                   echo "Database {{ .Values.sequencer.persistence.databaseName }} already exists. Done."
                   break
@@ -232,6 +236,7 @@ spec:
         {{- $dbHost := $p.host | default .Values.sequencer.persistence.host }}
         {{- $dbPort := $p.port | default .Values.sequencer.persistence.port }}
         {{- $dbUser := $p.user | default "cnadmin" }}
+        {{- $dbBootstrap := $p.bootstrapDatabaseName | default (.Values.sequencer.persistence).bootstrapDatabaseName | default "cantonnet" }}
         {{- $dbName := $p.databaseName | default .Values.sequencer.persistence.databaseName }}
         {{- $dbSecret := $p.secretName | default .Values.sequencer.persistence.secretName }}
         - name: pg-init-bft-driver
@@ -261,17 +266,18 @@ spec:
               DB_PORT="{{ $dbPort }}"
               DB_USER="{{ $dbUser }}"
               DB_NAME="{{ $dbName }}"
+              DB_BOOTSTRAP="{{ $dbBootstrap }}"
 
               echo "Waiting for postgres ${DB_HOST}:${DB_PORT} to become reachable...";
-              until psql -h "$DB_HOST" -p "$DB_PORT" --username="$DB_USER" --dbname=cantonnet -tAc 'SELECT 1' >/dev/null 2>&1; do
+              until psql -h "$DB_HOST" -p "$DB_PORT" --username="$DB_USER" --dbname="$DB_BOOTSTRAP" -tAc 'SELECT 1' >/dev/null 2>&1; do
                 sleep 2;
               done
 
-              if [ "$(psql -h "$DB_HOST" -p "$DB_PORT" --username="$DB_USER" --dbname=cantonnet -tAc "SELECT 1 FROM pg_database WHERE datname = '${DB_NAME}'")" = "1" ]; then
+              if [ "$(psql -h "$DB_HOST" -p "$DB_PORT" --username="$DB_USER" --dbname="$DB_BOOTSTRAP" -tAc "SELECT 1 FROM pg_database WHERE datname = '${DB_NAME}'")" = "1" ]; then
                 echo "Database ${DB_NAME} already exists on ${DB_HOST}. Done.";
                 exit 0;
               fi
-              psql -v ON_ERROR_STOP=1 -h "$DB_HOST" -p "$DB_PORT" --username="$DB_USER" --dbname=cantonnet -c "CREATE DATABASE \"${DB_NAME}\"";
+              psql -v ON_ERROR_STOP=1 -h "$DB_HOST" -p "$DB_PORT" --username="$DB_USER" --dbname="$DB_BOOTSTRAP" -c "CREATE DATABASE \"${DB_NAME}\"";
               echo "Created empty database ${DB_NAME} on ${DB_HOST}.";
       {{- end }}
       {{- with .Values.priorityClassName }}
