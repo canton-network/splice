@@ -21,6 +21,7 @@ import {
   installSvAppSecrets,
   installValidatorOnboardingSecret,
   isDevNet,
+  sequencerP2pIstioGateway,
   svCometBftGovernanceKeyFromSecret,
   svCometBftGovernanceKeySecret,
   SvIdKey,
@@ -300,6 +301,7 @@ export async function installSvApps(
     {
       withSvIngress: true,
       ingress: {
+        sequencerP2pGateway: sequencerP2pIstioGateway,
         decentralizedSynchronizer: {
           migrationIds: DecentralizedSynchronizerUpgradeConfig.runningMigrations().map(x =>
             x.id.toString()

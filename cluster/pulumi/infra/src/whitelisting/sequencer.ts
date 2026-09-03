@@ -4,7 +4,9 @@ import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
 import {
   DecentralizedSynchronizerUpgradeConfig,
+  enableDedicatedSequencerP2pIngress,
   getDnsNames,
+  SEQUENCER_P2P_INGRESS_SUFFIX,
 } from '@canton-network/splice-pulumi-common';
 import { allSvsToDeployBasic } from '@canton-network/splice-pulumi-common-sv/src/svConfigsBasic';
 
@@ -50,7 +52,9 @@ export function configureSequencerWhitelist(
       createIstioIpAllowPolicies({
         namePrefix: 'sequencer-p2p-ip-whitelist',
         namespace: namespace.metadata.name,
-        selector: istioIngressSelector,
+        selector: enableDedicatedSequencerP2pIngress
+          ? { matchLabels: { app: `istio-ingress${SEQUENCER_P2P_INGRESS_SUFFIX}` } }
+          : istioIngressSelector,
         ipRanges: loadIPRanges(true),
         to: [{ operation: { hosts: p2pHosts } }],
       })

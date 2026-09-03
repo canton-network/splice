@@ -51,6 +51,7 @@ import {
   clusterNetwork,
   CnChartVersion,
   envoyClientIpHeaderEnvVar,
+  sequencerP2pIstioGateway,
 } from '@canton-network/splice-pulumi-common';
 import {
   approvedSvIdentities,
@@ -170,6 +171,7 @@ export async function installNode(
         nameServiceDomain: ansDomainPrefix,
       },
       ingress: {
+        sequencerP2pGateway: sequencerP2pIstioGateway,
         decentralizedSynchronizer: {
           migrationIds: decentralizedSynchronizerMigrationConfig
             .runningMigrations()

@@ -2242,7 +2242,8 @@
               "7",
               "10"
             ]
-          }
+          },
+          "sequencerP2pGateway": "cluster-ingress/cn-sequencer-p2p-gateway"
         },
         "rateLimit": {
           "scan": {
@@ -4799,7 +4800,8 @@
               "7",
               "10"
             ]
-          }
+          },
+          "sequencerP2pGateway": "cluster-ingress/cn-sequencer-p2p-gateway"
         },
         "rateLimit": {
           "scan": {

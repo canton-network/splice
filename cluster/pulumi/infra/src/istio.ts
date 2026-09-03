@@ -16,6 +16,7 @@ import {
   CLUSTER_HOSTNAME,
   CLUSTER_NAME,
   DecentralizedSynchronizerUpgradeConfig,
+  enableDedicatedSequencerP2pIngress,
   ExactNamespace,
   GCP_PROJECT,
   GCP_ZONE,
@@ -24,6 +25,8 @@ import {
   infraKubernetesScheduling,
   isDevNet,
   isMainNet,
+  SEQUENCER_P2P_INGRESS_SUFFIX,
+  SEQUENCER_P2P_ISTIO_GATEWAY_NAME,
 } from '../../common';
 import { clusterBasename, flowControlConfigSchema, infraConfig } from './config';
 import { configureIstioGatewayPolicies, installAppWhitelisting } from './whitelisting';
@@ -254,11 +257,7 @@ Changes that do not improve things at all:
 // Note that despite the helm chart name being "gateway", this does not actually
 // deploy an istio "gateway" resource, but rather the istio-ingress LoadBalancer
 // service and the istio-ingress pod.
-function configureInternalGatewayService(
-  ingressNs: k8s.core.v1.Namespace,
-  ingress: { ip: pulumi.Output<string>; viaGKEL7: false } | { viaGKEL7: true },
-  istiod: k8s.helm.v3.Release
-) {
+function generalGatewayIPRanges(): pulumi.Output<string[]> {
   const cluster = gcp.container.getCluster({
     name: CLUSTER_NAME,
     project: GCP_PROJECT,
@@ -270,14 +269,21 @@ function configureInternalGatewayService(
   const gcpInternalIPRanges = cluster.then(c =>
     c.nodePools.map(p => p.networkConfigs.map(c => c.podIpv4CidrBlock)).flat()
   );
-  const gatewayIPRanges = infraConfig.istio.enableGeneralIpWhitelist
+  return infraConfig.istio.enableGeneralIpWhitelist
     ? pulumi.all([loadIPRanges(), gcpInternalIPRanges]).apply(([a, b]) => a.concat(b))
     : pulumi
         .all([loadInternalWhitelistedIps(), gcpInternalIPRanges])
         .apply(([a, b]) => a.concat(b));
+}
+
+function configureInternalGatewayService(
+  ingressNs: k8s.core.v1.Namespace,
+  ingress: { ip: pulumi.Output<string>; viaGKEL7: false } | { viaGKEL7: true },
+  istiod: k8s.helm.v3.Release
+) {
   return configureGatewayService(
     ingressNs,
-    gatewayIPRanges,
+    generalGatewayIPRanges(),
     ingress.viaGKEL7
       ? { type: 'ClusterIP' }
       : {
@@ -287,7 +293,7 @@ function configureInternalGatewayService(
         },
     [
       ingressPort('grpc-cd-pub-api', 5008),
-      ingressPort('grpc-cs-p2p-api', 5010),
+      ...(enableDedicatedSequencerP2pIngress ? [] : [ingressPort('grpc-cs-p2p-api', 5010)]),
       ingressPort('grpc-svcp-adm', 5002),
       ingressPort('grpc-svcp-lg', 5001),
       ingressPort('svcp-metrics', 10013),
@@ -305,6 +311,25 @@ function configureInternalGatewayService(
     ],
     istiod,
     ''
+  );
+}
+
+function configureSequencerP2pGatewayService(
+  ingressNs: k8s.core.v1.Namespace,
+  ingressIp: pulumi.Output<string>,
+  istiod: k8s.helm.v3.Release
+) {
+  const externalIPRanges = loadIPRanges(true);
+  return configureGatewayService(
+    ingressNs,
+    // Mirror the shared ingress: a deny-all plus the general IP whitelist (or the
+    // internal whitelist only, when the general whitelist is disabled). The
+    // sequencer P2P specific whitelist is added by configureSequencerWhitelist.
+    generalGatewayIPRanges(),
+    { type: 'LoadBalancer', ingressIp, externalIPRangesInLB: externalIPRanges },
+    [ingressPort('grpc-cs-p2p-api', 5010)],
+    istiod,
+    SEQUENCER_P2P_INGRESS_SUFFIX
   );
 }
 
@@ -496,6 +521,7 @@ function configureGateway(
   ingressNs: ExactNamespace,
   gwSvc: k8s.helm.v3.Release,
   cometBftSvc: k8s.helm.v3.Release | undefined,
+  sequencerP2pSvc: k8s.helm.v3.Release | undefined,
   withSeparateGcpGateway: boolean
 ): k8s.apiextensions.CustomResource[] {
   const hosts = [
@@ -597,7 +623,55 @@ function configureGateway(
       dependsOn: cometBftSvc ? [cometBftSvc] : [],
     }
   );
-  return [httpGw, appsGw];
+  const sequencerP2pGw = sequencerP2pSvc
+    ? [
+        new k8s.apiextensions.CustomResource(
+          SEQUENCER_P2P_ISTIO_GATEWAY_NAME,
+          {
+            apiVersion: 'networking.istio.io/v1alpha3',
+            kind: 'Gateway',
+            metadata: {
+              name: SEQUENCER_P2P_ISTIO_GATEWAY_NAME,
+              namespace: ingressNs.ns.metadata.name,
+            },
+            spec: {
+              selector: {
+                app: `istio-ingress${SEQUENCER_P2P_INGRESS_SUFFIX}`,
+                istio: `ingress${SEQUENCER_P2P_INGRESS_SUFFIX}`,
+              },
+              servers: [
+                {
+                  hosts,
+                  port: {
+                    name: 'http',
+                    number: 80,
+                    protocol: 'HTTP',
+                  },
+                  tls: { httpsRedirect: true },
+                },
+                {
+                  hosts,
+                  port: {
+                    name: 'https',
+                    number: 443,
+                    protocol: 'HTTPS',
+                  },
+                  tls: {
+                    mode: 'SIMPLE',
+                    credentialName: `cn-${clusterBasename}net-tls`,
+                  },
+                },
+              ],
+            },
+          },
+          {
+            dependsOn: [sequencerP2pSvc],
+          }
+        ),
+      ]
+    : [];
+
+  return [httpGw, appsGw, ...sequencerP2pGw];
 }
 
 function configureDocsAndReleases(
@@ -873,6 +947,7 @@ export function configureIstio(
   ingressNs: ExactNamespace,
   ingressIp: pulumi.Output<string>,
   cometBftIngressIp: pulumi.Output<string>,
+  sequencerP2pIngressIp: pulumi.Output<string> | undefined,
   expectGKEL7Gateway: boolean
 ): ConfiguredIstio {
   const nsName = 'istio-system';
@@ -891,7 +966,16 @@ export function configureIstio(
   const cometBftSvc = DecentralizedSynchronizerUpgradeConfig.usesCometbft()
     ? configureCometBFTGatewayService(ingressNs.ns, cometBftIngressIp, istiod)
     : undefined;
-  const gateways = configureGateway(ingressNs, gwSvc, cometBftSvc, expectGKEL7Gateway);
+  const sequencerP2pSvc = sequencerP2pIngressIp
+    ? configureSequencerP2pGatewayService(ingressNs.ns, sequencerP2pIngressIp, istiod)
+    : undefined;
+  const gateways = configureGateway(
+    ingressNs,
+    gwSvc,
+    cometBftSvc,
+    sequencerP2pSvc,
+    expectGKEL7Gateway
+  );
   const docsAndReleases = configureDocsAndReleases(true, gateways);
   const publicInfo = configurePublicInfo(ingressNs.ns);
 

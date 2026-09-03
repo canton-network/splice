@@ -28,6 +28,7 @@ export * from './config/migrationSchema';
 export * from './pruning';
 export * from './config/loadTesterConfig';
 export * from './config/networkWideConfig';
+export * from './config/sequencerP2pIngressConfig';
 export * from './ratelimit';
 export * from './config/config';
 export * from './storage/storageClass';

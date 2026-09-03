@@ -10,6 +10,9 @@ ingress:
   scan: true
   sequencer: true
   splitwell: false
+  # istio Gateway the sequencer BFT P2P VirtualServices bind to. Set to
+  # cluster-ingress/cn-sequencer-p2p-gateway when P2P is served by its own ingress.
+  sequencerP2pGateway: "cluster-ingress/cn-http-gateway"
   decentralizedSynchronizer:
     migrationIds: ["0"]
 spliceDomainNames:

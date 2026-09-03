@@ -45,6 +45,7 @@ const istio = configureIstio(
   network.ingressNs,
   ingressIp,
   network.cometbftIngressIp.address,
+  network.sequencerP2pIngressIp?.address,
   useGKEL7Gateway
 );
 
