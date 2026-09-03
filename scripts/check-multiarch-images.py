@@ -29,9 +29,7 @@ IMAGE_SHA256_MAP = {
 
 # List of file-path regexes. Any digest-pinned image coming from a matching file is skipped by the check
 IGNORED_FILE_PATTERNS = [
-    # re.compile(r"^cluster/images/cometbft/Dockerfile$"),
-    # re.compile(r"^cluster/images/splice-test-cometbft/Dockerfile$")
-    # to show how it fails re.compile(r"^cluster/helm/splice-info/values-template.yaml$")
+    re.compile(r"^cluster/images/cometbft/Dockerfile$")
 ]
 
 
