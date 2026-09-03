@@ -16,8 +16,8 @@ release-notes:: Upcoming
           you might encounter `locale issues <https://wiki.postgresql.org/wiki/Locale_data_changes>`_.
           In that case you should use a compatible version of the image you're using.
           Two related reminders:
-            - Postgres 14 is reaching end-of-life in November 2026, so you should plan to upgrade to Postgres 18.
-            - The ``splice-postgres`` chart is deprecated since Splice 0.6.13, so you should use something else.
+              - Postgres 14 is reaching end-of-life in November 2026, so you should plan to upgrade to Postgres 18.
+              - The ``splice-postgres`` chart is deprecated since Splice 0.6.13, so you should use something else.
 
     - SV App
 
