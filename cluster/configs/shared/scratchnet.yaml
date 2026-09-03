@@ -23,6 +23,10 @@ validator1:
   deduplicationDuration: 30m
   walletGateway:
     enabled: true
+validators:
+  validator-runbook:
+    walletGateway:
+      enabled: true
 svs:
   sv-1: !include(scratchnet-sv.yaml) {}
   sv-2: !include(scratchnet-sv.yaml) {}

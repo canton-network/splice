@@ -132,19 +132,20 @@ export async function installValidator1(
     version: activeVersion,
     additionalEnvVars: validator1Config?.validatorApp?.additionalEnvVars,
   });
-  const walletGatewayConfig = validator1Config?.walletGateway;
-  if (walletGatewayConfig?.enabled) {
+  const walletGatewayConfig = validator1Config.walletGateway;
+  if (walletGatewayConfig.enabled) {
     await installWalletGateway(
       auth0Client,
       xns,
       walletGatewayConfig,
       participant.participantAddress,
       validatorPostgres,
+      validator1Config?.logging?.level,
       [validator]
     );
   }
 
-  installIngress(xns, installSplitwell, walletGatewayConfig?.enabled ?? false);
+  installIngress(xns, installSplitwell, walletGatewayConfig.enabled);
 
   if (installSplitwell) {
     installSpliceHelmChart(

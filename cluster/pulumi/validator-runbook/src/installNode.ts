@@ -129,7 +129,7 @@ export async function installNode(auth0Client: Auth0Client): Promise<void> {
       },
       withSvIngress: false,
       ingress: {
-        walletGateway: validatorConfig.walletGateway?.enabled ?? false,
+        walletGateway: validatorConfig.walletGateway.enabled,
       },
     },
     validatorVersion,
@@ -327,13 +327,14 @@ async function installValidator(
   if (validatorConfig?.partyAllocator.enable) {
     installPartyAllocator(xns, validatorConfig.partyAllocator, [validatorChart]);
   }
-  if (validatorConfig?.walletGateway?.enabled) {
+  if (validatorConfig.walletGateway.enabled) {
     await installWalletGateway(
       auth0Client,
       xns,
       validatorConfig.walletGateway,
       participantAddress,
       postgres,
+      validatorConfig.logging.level,
       [validatorChart]
     );
   }

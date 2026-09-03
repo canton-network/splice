@@ -3665,6 +3665,10 @@
     "custom": true,
     "id": "",
     "inputs": {
+      "allowedLogoutUrls": [
+        "https://walletgateway.validator1.mock.network.canton.global",
+        "https://walletgateway.validator1.mock.global.canton.network.digitalasset.com"
+      ],
       "allowedOrigins": [
         "https://walletgateway.validator1.mock.network.canton.global",
         "https://walletgateway.validator1.mock.global.canton.network.digitalasset.com"
@@ -3678,6 +3682,7 @@
       "description": " ** Managed by Pulumi, do not edit manually **\nUsed for the Wallet Gateway UI login for the standalone Validator1",
       "grantTypes": [
         "authorization_code",
+        "implicit",
         "refresh_token"
       ],
       "name": "Validator1 Wallet Gateway (Pulumi managed, test-stack)",
@@ -3776,6 +3781,10 @@
     "custom": true,
     "id": "",
     "inputs": {
+      "allowedLogoutUrls": [
+        "https://walletgateway.validator.mock.network.canton.global",
+        "https://walletgateway.validator.mock.global.canton.network.digitalasset.com"
+      ],
       "allowedOrigins": [
         "https://walletgateway.validator.mock.network.canton.global",
         "https://walletgateway.validator.mock.global.canton.network.digitalasset.com"
@@ -3789,6 +3798,7 @@
       "description": " ** Managed by Pulumi, do not edit manually **\nUsed for the Wallet Gateway UI login for the validator runbook",
       "grantTypes": [
         "authorization_code",
+        "implicit",
         "refresh_token"
       ],
       "name": "Wallet Gateway (Pulumi managed, test-stack)",

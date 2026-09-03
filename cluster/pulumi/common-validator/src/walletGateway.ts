@@ -11,6 +11,7 @@ import {
   HELM_CHART_TIMEOUT_SEC,
   HELM_MAX_HISTORY_SIZE,
   InstalledHelmChart,
+  LogLevel,
   appsKubernetesScheduling,
   getNamespaceConfig,
   installWalletGatewayAdminSecret,
@@ -26,6 +27,7 @@ export async function installWalletGateway(
   config: WalletGatewayConfig,
   participantAddress: pulumi.Output<string> | string,
   wgPostgres: postgres.Postgres,
+  logLevel: LogLevel | undefined,
   // The gateway talks to the participant's ledger API on startup, so sequence it after the validator
   dependsOn: CnInput<pulumi.Resource>[] = []
 ): Promise<InstalledHelmChart> {
@@ -38,7 +40,7 @@ export async function installWalletGateway(
 
   const publicUrl = `https://walletgateway.${ns}.${CLUSTER_HOSTNAME}`;
   const portfolioUrl = `https://portfolio.${ns}.${CLUSTER_HOSTNAME}`;
-  const scanUrl = config.scanUrl ?? `https://scan.sv-2.${CLUSTER_HOSTNAME}`;
+  const scanUrl = `https://scan.sv-2.${CLUSTER_HOSTNAME}`;
 
   const adminSecret = await installWalletGatewayAdminSecret(auth0Client, xns);
 
@@ -71,7 +73,7 @@ export async function installWalletGateway(
           },
         ],
         config: {
-          ...(config.logLevel ? { logging: { level: config.logLevel } } : {}),
+          ...(logLevel ? { logging: { level: logLevel.toLowerCase() } } : {}),
           kernel: {
             id: `splice-${ns}`,
             clientType: 'remote',
@@ -146,7 +148,7 @@ export async function installWalletGateway(
         },
       },
     },
-    { dependsOn: dependsOn.concat([xns.ns, adminSecret, wgPostgres]) }
+    { dependsOn }
   );
 
   new k8s.helm.v3.Release(
@@ -172,7 +174,7 @@ export async function installWalletGateway(
         },
       },
     },
-    { dependsOn: dependsOn.concat([xns.ns]) }
+    { dependsOn }
   );
 
   return gateway;

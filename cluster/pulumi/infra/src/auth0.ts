@@ -195,37 +195,30 @@ function newM2MApp(
   return ret;
 }
 
-function newUiApp(
-  resourceName: string,
-  name: string,
-  description: string,
-  urlPrefixes: string[],
-  ingressName: string,
-  clusterBasename: string,
-  clusterDnsNames: string[],
-  auth0DomainProvider: auth0.Provider,
-  extraUrls: string[] = []
-): auth0.Client {
-  const urls = urlPrefixes
-    .map(prefix => {
-      return clusterDnsNames.map(dnsName => {
-        return `https://${prefix}.${ingressName}.${dnsName}`;
-      });
-    })
-    .flat()
-    .concat(extraUrls);
+interface SpaClientArgs {
+  name: string;
+  description: string;
+  clusterBasename: string;
+  origins: string[];
+  callbacks: string[];
+}
 
+function newSpaClient(
+  resourceName: string,
+  args: SpaClientArgs,
+  auth0DomainProvider: auth0.Provider
+): auth0.Client {
   const ret = new auth0.Client(
     resourceName,
     {
-      name: `${name} (Pulumi managed, ${clusterBasename})`,
+      name: `${args.name} (Pulumi managed, ${args.clusterBasename})`,
       appType: 'spa',
-      callbacks: urls,
-      allowedOrigins: urls,
-      allowedLogoutUrls: urls,
-      webOrigins: urls,
+      callbacks: args.callbacks,
+      allowedOrigins: args.origins,
+      allowedLogoutUrls: args.origins,
+      webOrigins: args.origins,
       crossOriginAuth: false,
-      description: ` ** Managed by Pulumi, do not edit manually **\n${description}`,
+      description: ` ** Managed by Pulumi, do not edit manually **\n${args.description}`,
       oidcConformant: true,
       grantTypes: ['authorization_code', 'implicit', 'refresh_token'],
       refreshToken: {
@@ -252,6 +245,39 @@ function newUiApp(
     { provider: auth0DomainProvider }
   );
   return ret;
+}
+
+function newUiApp(
+  resourceName: string,
+  name: string,
+  description: string,
+  urlPrefixes: string[],
+  ingressName: string,
+  clusterBasename: string,
+  clusterDnsNames: string[],
+  auth0DomainProvider: auth0.Provider,
+  extraUrls: string[] = []
+): auth0.Client {
+  const urls = urlPrefixes
+    .map(prefix => {
+      return clusterDnsNames.map(dnsName => {
+        return `https://${prefix}.${ingressName}.${dnsName}`;
+      });
+    })
+    .flat()
+    .concat(extraUrls);
+
+  return newSpaClient(
+    resourceName,
+    {
+      name,
+      description,
+      clusterBasename,
+      origins: urls,
+      callbacks: urls,
+    },
+    auth0DomainProvider
+  );
 }
 
 interface BackendAuth0Params {
@@ -539,42 +565,19 @@ function newWalletGatewayApp(
   auth0DomainProvider: auth0.Provider
 ): auth0.Client {
   const origins = clusterDnsNames.map(dnsName => `https://walletgateway.${ingressName}.${dnsName}`);
-  // The gateway redirects to /callback/ (trailing slash included; Auth0 exact-matches redirect URIs)
-  const callbacks = origins.map(origin => `${origin}/callback/`);
 
-  const ret = new auth0.Client(
+  return newSpaClient(
     resourceName,
     {
-      name: `${name} (Pulumi managed, ${clusterBasename})`,
-      appType: 'spa',
-      callbacks,
-      allowedOrigins: origins,
-      webOrigins: origins,
-      crossOriginAuth: false,
-      description: ` ** Managed by Pulumi, do not edit manually **\n${description}`,
-      oidcConformant: true,
-      grantTypes: ['authorization_code', 'refresh_token'],
-      refreshToken: {
-        rotationType: 'rotating',
-        expirationType: 'expiring',
-        tokenLifetime: 604800, // 7d
-        idleTokenLifetime: 259200, // 3d
-        infiniteTokenLifetime: false,
-        infiniteIdleTokenLifetime: false,
-        leeway: 5,
-      },
+      name,
+      description,
+      clusterBasename,
+      origins,
+      // The gateway completes the login on /callback/ (with the trailing slash) rather than on the origin.
+      callbacks: origins.map(origin => `${origin}/callback/`),
     },
-    { provider: auth0DomainProvider }
+    auth0DomainProvider
   );
-  new auth0.ClientCredentials(
-    `${resourceName}Credentials`,
-    {
-      clientId: ret.id,
-      authenticationMethod: 'none',
-    },
-    { provider: auth0DomainProvider }
-  );
-  return ret;
 }
 
 function svRunbookAuth0(

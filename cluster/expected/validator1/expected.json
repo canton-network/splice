@@ -1310,6 +1310,9 @@
             "id": "splice-validator1",
             "publicUrl": "https://walletgateway.validator1.mock.global.canton.network.digitalasset.com"
           },
+          "logging": {
+            "level": "debug"
+          },
           "server": {
             "allowedOrigins": [
               "https://portfolio.validator1.mock.global.canton.network.digitalasset.com"

@@ -83,14 +83,12 @@ validator1:
   participant:
     additionalEnvVars:
       - !include(./participant_pruning.yaml)
-  walletGateway:
-    enabled: false
-    version: '1.10.0'
-    portfolioVersion: '1.11.0'
+  walletGateway: !include(./wallet_gateway.yaml) {}
 splitwell:
   participant:
     additionalEnvVars:
       - !include(./participant_pruning.yaml)
+  walletGateway: !include(./wallet_gateway.yaml) {}
 # initial round used only on fresh initialization or resets
 # first SV bootstraps the network with it, other SVs learn it via their sponsors
 initialRound: 0
@@ -284,7 +282,4 @@ validators:
     nodeIdentifier: 'validator-runbook'
     partyHint: 'digitalasset-testValidator-1'
     onboardingSecret: 'validatorsecret'
-    walletGateway:
-      enabled: false
-      version: '1.10.0'
-      portfolioVersion: '1.11.0'
+    walletGateway: !include(./wallet_gateway.yaml) {}

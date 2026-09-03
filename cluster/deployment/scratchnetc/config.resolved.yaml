@@ -201,6 +201,10 @@ splitwell:
     additionalEnvVars:
       - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
         value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
+  walletGateway:
+    enabled: false
+    portfolioVersion: '1.11.0'
+    version: '1.10.0'
 sv:
   scan:
     externalRateLimits:
@@ -1899,6 +1903,6 @@ validators:
     onboardingSecret: 'validatorsecret'
     partyHint: 'digitalasset-testValidator-1'
     walletGateway:
-      enabled: false
+      enabled: true
       portfolioVersion: '1.11.0'
       version: '1.10.0'

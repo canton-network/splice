@@ -87,13 +87,10 @@ export const ParticipantConfigSchema = z.object({
 });
 
 export const WalletGatewayConfigSchema = z.object({
-  enabled: z.boolean().default(false),
+  enabled: z.boolean(),
   // Upstream chart versions
   version: z.string(),
   portfolioVersion: z.string(),
-  // External scan URL used by the portfolio UI in the browser; defaults to sv-1's scan
-  scanUrl: z.string().optional(),
-  logLevel: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).optional(),
 });
 
 export type WalletGatewayConfig = z.infer<typeof WalletGatewayConfigSchema>;
@@ -122,7 +119,7 @@ export const ValidatorNodeConfigSchema = z.object({
   participant: ParticipantConfigSchema.prefault({}),
   validatorApp: ValidatorAppConfigSchema.optional(),
   disableAuth: z.boolean().default(false), // Note that this is currently ignored everywhere except for validator1, where it is used for testing only
-  walletGateway: WalletGatewayConfigSchema.optional(),
+  walletGateway: WalletGatewayConfigSchema,
 });
 export const PartyAllocatorConfigSchema = z.object({
   enable: z.boolean(),
