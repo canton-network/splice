@@ -17,9 +17,7 @@
 # out of the Kubernetes log buffer. In that case the script offers to restart
 # the node's Deployment (once) so that the config gets logged again. This
 # causes a short downtime of that node. The restart is done via
-# `kubectl rollout restart`; since all Splice Helm charts use the `Recreate`
-# strategy, the old pod is fully stopped before the new one starts, so there
-# are never two instances of a node running at the same time.
+# `kubectl rollout restart`.
 #
 # Requirements: bash, kubectl (configured for the target cluster), jq, grep,
 # sed, and `zip` if --zip is used.
@@ -75,9 +73,8 @@ fi
 # Helpers
 # ---------------------------------------------------------------------------
 
-# The container images (without registry and tag) of the nodes we collect
-# configs from. Everything else in the namespace (postgres, cometbft, web UIs,
-# ...) is skipped.
+# The container images of the nodes we collect configs from. Everything else in
+# the namespace (postgres, cometbft, web UIs, ...) is skipped.
 node_images=(
   canton-participant
   canton-sequencer
