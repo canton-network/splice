@@ -34,6 +34,47 @@ IGNORED_FILE_PATTERNS = [
 ]
 
 
+def main() -> int:
+    _setup_env()
+
+    # Collect all digest-pinned references and keep the first file they were seen in.
+    # The set semantics of the dict keys give us deduplication for free.
+    refs_by_file: dict[tuple[str, str, str], str] = {}
+
+    # Dockerfiles may use variable digests (e.g. ARG $cometbft_sha), so parse all of them.
+    for file in _tracked_dockerfiles():
+        path = Path(file)
+        if not path.is_file() or _file_is_ignored(file):
+            continue
+        for ref in _refs_from_dockerfile(path):
+            refs_by_file.setdefault(ref, file)
+
+    # Other files only need to be inspected if they contain a concrete digest reference.
+    for file in _tracked_files_with_digest_refs():
+        path = Path(file)
+        if not path.is_file() or _file_is_ignored(file):
+            continue
+        for ref in _refs_from_plain_file(path):
+            refs_by_file.setdefault(ref, file)
+
+    failures = 0
+    for (image, tag, digest), file in refs_by_file.items():
+        ref = f"{image}:{tag}@sha256:{digest}"
+        print(f"Inspecting {ref} (from {file})")
+        if _inspect(image, digest):
+            print(f"  OK: {ref} is multi-arch")
+        else:
+            print(f"ERROR: {ref} (from {file}) is not pinned to a multi-arch digest")
+            failures += 1
+
+    if failures > 0:
+        print(f"FAIL: {failures} image(s) are not pinned to multi-arch digests")
+        return 1
+
+    print("OK: all pinned images are multi-arch")
+    return 0
+
+
 def _setup_env() -> None:
     """Export lowercase aliases for Dockerfile ARG references"""
     os.environ.setdefault("canton_version", os.environ.get("CANTON_VERSION", ""))
@@ -143,47 +184,6 @@ def _file_is_ignored(file: str) -> bool:
         if pattern.search(file):
             return True
     return False
-
-
-def main() -> int:
-    _setup_env()
-
-    # Collect all digest-pinned references and keep the first file they were seen in.
-    # The set semantics of the dict keys give us deduplication for free.
-    refs_by_file: dict[tuple[str, str, str], str] = {}
-
-    # Dockerfiles may use variable digests (e.g. ARG $cometbft_sha), so parse all of them.
-    for file in _tracked_dockerfiles():
-        path = Path(file)
-        if not path.is_file() or _file_is_ignored(file):
-            continue
-        for ref in _refs_from_dockerfile(path):
-            refs_by_file.setdefault(ref, file)
-
-    # Other files only need to be inspected if they contain a concrete digest reference.
-    for file in _tracked_files_with_digest_refs():
-        path = Path(file)
-        if not path.is_file() or _file_is_ignored(file):
-            continue
-        for ref in _refs_from_plain_file(path):
-            refs_by_file.setdefault(ref, file)
-
-    failures = 0
-    for (image, tag, digest), file in refs_by_file.items():
-        ref = f"{image}:{tag}@sha256:{digest}"
-        print(f"Inspecting {ref} (from {file})")
-        if _inspect(image, digest):
-            print(f"  OK: {ref} is multi-arch")
-        else:
-            print(f"ERROR: {ref} (from {file}) is not pinned to a multi-arch digest")
-            failures += 1
-
-    if failures > 0:
-        print(f"FAIL: {failures} image(s) are not pinned to multi-arch digests")
-        return 1
-
-    print("OK: all pinned images are multi-arch")
-    return 0
 
 
 if __name__ == "__main__":
