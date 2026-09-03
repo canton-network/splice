@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.scan.store.db
 
+import com.daml.nonempty.NonEmpty
 import org.lfdecentralizedtrust.splice.scan.rewards.{RewardComputationInputs, RewardIssuanceParams}
 import org.lfdecentralizedtrust.splice.scan.store.ScanAppRewardsStore
 import org.lfdecentralizedtrust.splice.store.UpdateHistory
@@ -615,15 +616,16 @@ class DbScanAppRewardsStore(
   override def roundsWithComputedRewards(rounds: Seq[Long])(implicit
       tc: TraceContext
   ): Future[Set[Long]] = {
-    if (rounds.isEmpty) Future.successful(Set.empty)
-    else {
-      runQuery(
-        (sql"""select round_number from #${Tables.appRewardRootHashes}
-               where history_id = $historyId
-                 and """ ++ inClause("round_number", rounds)).toActionBuilder
-          .as[Long],
-        "appRewards.roundsWithComputedRewards",
-      ).map(_.toSet)
+    NonEmpty.from(rounds) match {
+      case None => Future.successful(Set.empty)
+      case Some(rounds) =>
+        runQuery(
+          (sql"""select round_number from #${Tables.appRewardRootHashes}
+                 where history_id = $historyId
+                   and """ ++ DbStorage.toInClause("round_number", rounds)).toActionBuilder
+            .as[Long],
+          "appRewards.roundsWithComputedRewards",
+        ).map(_.toSet)
     }
   }
 
