@@ -782,7 +782,6 @@ class ValidatorApp(
         config.parameters.enabledFeatures,
         config.additionalPackagesToUnvet,
         config.domains.global.alias,
-        config.enableDeprecatedTransferCommandSupport,
         loggerFactory,
         packageVersionSupport,
       )
@@ -866,7 +865,6 @@ class ValidatorApp(
           getAmuletRulesDomain = scanConnection.getAmuletRulesDomain,
           scanConnection = scanConnection,
           participantAdminConnection,
-          packageVersionSupport,
           config,
           clock,
           retryProvider = retryProvider,

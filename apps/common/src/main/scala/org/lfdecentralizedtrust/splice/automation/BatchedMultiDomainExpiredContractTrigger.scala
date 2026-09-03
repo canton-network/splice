@@ -49,8 +49,7 @@ abstract class BatchedMultiDomainExpiredContractTrigger[
   protected def ignorePartiesWithoutVettedAmulet(
       informees: Set[PartyId],
       contractIds: Seq[String],
-      logAsWarning: Boolean,
-  )(implicit tc: TraceContext): String
+  ): String
 
   override final protected def listReadyTasks(now: CantonTimestamp, limit: Int)(implicit
       tc: TraceContext
@@ -79,7 +78,6 @@ abstract class BatchedMultiDomainExpiredContractTrigger[
             ignorePartiesWithoutVettedAmulet(
               stakeholders,
               contracts.flatten.map(_.contractId.contractId),
-              logAsWarning = true,
             ).discard
             Seq.empty
         }

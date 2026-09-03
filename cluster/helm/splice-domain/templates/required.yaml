@@ -1,6 +1,8 @@
 # Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
+# This Helm Chart is DEPRECATED and scheduled for removal.
+
 {{ $_ := required ".Release.Name is required." .Release.Name }}
 {{ $_ := required ".Release.Namespace is required." .Release.Namespace }}
 

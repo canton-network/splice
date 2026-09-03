@@ -13,7 +13,8 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
 import org.scalatest.Assertion
 import org.slf4j.event.Level
 
-import scala.concurrent.{Future, blocking}
+import scala.concurrent.duration.*
+import scala.concurrent.{Await, Future, blocking}
 import scala.util.control.NonFatal
 import scala.util.{Failure, Try}
 
@@ -31,7 +32,7 @@ class RateLimitPreflightIntegrationTest extends IntegrationTest {
     forAll(Table("scan", env.scans.remote*)) { scanCli =>
       val dsoParty = scanCli.getDsoPartyId()
       rateLimitIsEnforced(
-        10, {
+        20, {
           scanCli.getAcsSnapshot(
             // Dummy party that doesn't exist to avoid creating load
             PartyId.tryCreate(
@@ -66,21 +67,25 @@ class RateLimitPreflightIntegrationTest extends IntegrationTest {
   ): Assertion = {
     val results = loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(Level.ERROR))(
       collectResponses(limit, call),
-      forAll(_)(
-        // This hits the Canton limit on concurrent requests
-        _.message should include(
-          "Reached the limit of concurrent requests for com.digitalasset.canton.admin.participant.v30.ParticipantRepairService/ExportAcs"
-        )
+      forAll(_)(entry =>
+        forAtLeast(
+          1,
+          Seq(
+            // This hits the Canton limit on concurrent requests
+            "Reached the limit of concurrent requests for com.digitalasset.canton.admin.participant.v30.ParticipantRepairService/ExportAcs",
+            // This hits the app's own rate limiter
+            "Too Many Requests",
+          ),
+        )(entry.message should include(_))
       ),
     )
     // Note: failures are expected due to the Canton rate limiter.
     forAtLeast(1, results) {
       _ shouldBe a[scala.util.Success[?]]
     }
-    // This now hits istio rate limit
     assertThrowsAndLogsCommandFailures(
       call,
-      entry => entry.message should include("HTTP 429 Too Many Requests"),
+      entry => entry.message should include("Too Many Requests"),
     )
   }
 
@@ -90,23 +95,29 @@ class RateLimitPreflightIntegrationTest extends IntegrationTest {
     } should be(empty)
   }
 
-  private def collectResponses(limit: Int, call: => Unit)(implicit
+  private def collectResponses(
+      limit: Int,
+      call: => Unit,
+      timeout: FiniteDuration = 1.minute,
+  )(implicit
       env: SpliceTestConsoleEnvironment
-  ) = {
+  ): Seq[Try[Unit]] = {
     import env.executionContext
-    MonadUtil
-      .parTraverseWithLimit(PositiveInt.MaxValue)(
-        Seq.fill(limit)(())
-      )(_ => {
-        Future {
-          blocking {
-            Try {
-              call
+    Await.result(
+      MonadUtil
+        .parTraverseWithLimit(PositiveInt.tryCreate(32))(
+          Seq.fill(limit)(())
+        )(_ => {
+          Future {
+            blocking {
+              Try {
+                call
+              }
             }
           }
-        }
-      })
-      .futureValue
+        }),
+      timeout,
+    )
   }
 
 }

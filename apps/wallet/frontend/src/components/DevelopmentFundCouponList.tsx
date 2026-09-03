@@ -125,6 +125,7 @@ const ActiveCouponsTable: React.FC = () => {
                   <TableCell>Beneficiary</TableCell>
                   <TableCell>Amount</TableCell>
                   <TableCell>Expires At</TableCell>
+                  <TableCell>Mint After</TableCell>
                   <TableCell>Allocation Reason</TableCell>
                   <TableCell>Actions</TableCell>
                 </TableRow>
@@ -132,7 +133,7 @@ const ActiveCouponsTable: React.FC = () => {
               <TableBody>
                 {coupons.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} align="center">
+                    <TableCell colSpan={7} align="center">
                       <Typography variant="body2" color="text.secondary">
                         No development fund allocations found
                       </Typography>
@@ -152,6 +153,15 @@ const ActiveCouponsTable: React.FC = () => {
                       </TableCell>
                       <TableCell>
                         <DateDisplay datetime={coupon.expiresAt} format="MMM d, yyyy hh:mm a" />
+                      </TableCell>
+                      <TableCell>
+                        {coupon.mintAfter ? (
+                          <DateDisplay datetime={coupon.mintAfter} format="MMM d, yyyy hh:mm a" />
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">
+                            -
+                          </Typography>
+                        )}
                       </TableCell>
                       <TableCell>{coupon.reason}</TableCell>
                       <TableCell>

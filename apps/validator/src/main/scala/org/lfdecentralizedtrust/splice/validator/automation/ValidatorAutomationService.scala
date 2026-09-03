@@ -76,7 +76,6 @@ class ValidatorAutomationService(
     enabledFeatures: EnabledFeaturesConfig,
     additionalPackagesToUnvet: Map[PackageName, Set[PackageVersion]],
     globalSynchronizerAlias: SynchronizerAlias,
-    enableDeprecatedTransferCommandSupport: Boolean,
     override protected val loggerFactory: NamedLoggerFactory,
     packageVersionSupport: PackageVersionSupport,
 )(implicit
@@ -196,18 +195,6 @@ class ValidatorAutomationService(
           domainMigrationId,
         )
       )
-
-    if (enableDeprecatedTransferCommandSupport) {
-      registerTrigger(
-        new TransferCommandSendTrigger(
-          triggerContext,
-          scanConnection,
-          store,
-          walletManager.externalPartyWalletManager,
-          connection(SpliceLedgerConnectionPriority.Medium),
-        )
-      )
-    }
   }
 
   backupDumpConfig.foreach(config =>

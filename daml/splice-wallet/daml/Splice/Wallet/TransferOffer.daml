@@ -16,25 +16,32 @@ import Splice.Util
 import Splice.Wallet.Payment
 
 data TransferOffer_AcceptResult = TransferOffer_AcceptResult with
-  acceptedTransferOffer : ContractId AcceptedTransferOffer
+    acceptedTransferOffer : ContractId AcceptedTransferOffer
+  deriving (Serializable)
 
 data TransferOffer_RejectResult = TransferOffer_RejectResult with
-  trackingInfo : TransferOfferTrackingInfo
+    trackingInfo : TransferOfferTrackingInfo
+  deriving (Serializable)
 
 data TransferOffer_WithdrawResult = TransferOffer_WithdrawResult with
-  trackingInfo : TransferOfferTrackingInfo
+    trackingInfo : TransferOfferTrackingInfo
+  deriving (Serializable)
 
 data TransferOffer_ExpireResult = TransferOffer_ExpireResult with
-  trackingInfo : TransferOfferTrackingInfo
+    trackingInfo : TransferOfferTrackingInfo
+  deriving (Serializable)
 
 data AcceptedTransferOffer_WithdrawResult = AcceptedTransferOffer_WithdrawResult with
-  trackingInfo : TransferOfferTrackingInfo
+    trackingInfo : TransferOfferTrackingInfo
+  deriving (Serializable)
 
 data AcceptedTransferOffer_AbortResult = AcceptedTransferOffer_AbortResult with
-  trackingInfo : TransferOfferTrackingInfo
+    trackingInfo : TransferOfferTrackingInfo
+  deriving (Serializable)
 
 data AcceptedTransferOffer_ExpireResult = AcceptedTransferOffer_ExpireResult with
-  trackingInfo : TransferOfferTrackingInfo
+    trackingInfo : TransferOfferTrackingInfo
+  deriving (Serializable)
 
 
 template TransferOffer
@@ -98,12 +105,13 @@ data TransferOfferTrackingInfo = TransferOfferTrackingInfo {
   trackingId : Text; -- used to deduplicate requests and query for the status
   sender : Party; -- used in UserWalletTxLogParser's filterByParty
   receiver : Party -- used in UserWalletTxLogParser's filterByParty
-} deriving (Eq, Show)
+} deriving (Eq, Show, Serializable)
 
 data AcceptedTransferOffer_CompleteResult = AcceptedTransferOffer_CompleteResult with
-  transferResult: TransferResult
-  trackingInfo : TransferOfferTrackingInfo
-  senderChangeAmulet : Optional (ContractId Amulet)
+    transferResult: TransferResult
+    trackingInfo : TransferOfferTrackingInfo
+    senderChangeAmulet : Optional (ContractId Amulet)
+  deriving (Serializable)
 
 
 

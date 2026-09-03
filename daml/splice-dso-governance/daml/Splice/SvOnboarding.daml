@@ -8,8 +8,10 @@ import Splice.Types
 import Splice.Util
 
 data SvOnboardingRequest_ExpireResult = SvOnboardingRequest_ExpireResult
+  deriving (Serializable)
 
 data SvOnboardingConfirmed_ExpireResult = SvOnboardingConfirmed_ExpireResult
+  deriving (Serializable)
 
 -- | Template used by the SVs to collect confirmations for the onboarding of an SV candidate.
 -- The existence of this contract triggers SV automation that creates confirmation contracts for

@@ -15,7 +15,6 @@ import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId.Synchronizer
 import com.digitalasset.canton.topology.store.TimeQuery
 import com.digitalasset.canton.topology.transaction.TopologyChangeOp
-import com.digitalasset.canton.util.HexString
 import com.digitalasset.canton.version.ProtocolVersion
 import monocle.macros.syntax.lens.*
 import org.lfdecentralizedtrust.splice.config.{
@@ -52,6 +51,7 @@ import scala.collection.parallel.CollectionConverters.seqIsParallelizable
 import scala.concurrent.duration.DurationInt
 import scala.jdk.CollectionConverters.MapHasAsScala
 import scala.jdk.OptionConverters.RichOptional
+import org.lfdecentralizedtrust.tokenstandard.transferinstruction
 
 @org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceDsoGovernance_0_1_24
 class LsuIntegrationTest
@@ -64,7 +64,8 @@ class LsuIntegrationTest
     with HasExecutionContext
     with SynchronizerFeesTestUtil
     with LsuTestUtil
-    with TryValues {
+    with TryValues
+    with TokenStandardTest {
 
   override protected def runEventHistorySanityCheck: Boolean = false
   override protected lazy val resetRequiredTopologyState: Boolean = false
@@ -219,7 +220,6 @@ class LsuIntegrationTest
       .withSvBftSequencerConnectionDisabled()
       .withAmuletPrice(walletAmuletPrice)
       .withManualStart
-      .withTransferCommandSupport
 
   override def walletAmuletPrice: java.math.BigDecimal = SpliceUtil.damlDecimal(1.0)
 
@@ -705,42 +705,24 @@ class LsuIntegrationTest
         aliceValidatorBackend
           .getExternalPartyBalance(externalPartyOnboarding.party)
           .totalUnlockedCoin shouldBe "40.0000000000"
-        val prepareSend =
-          aliceValidatorBackend.prepareTransferPreapprovalSend(
-            externalPartyOnboarding.party,
+
+        actAndCheck(
+          "external party transfer 10 cc",
+          executeTransferViaTokenStandard(
+            aliceValidatorBackend.participantClientWithAdminToken,
+            externalPartyOnboarding.richPartyId,
             aliceValidatorBackend.getValidatorPartyId(),
-            BigDecimal(10.0),
-            CantonTimestamp.now().plus(Duration.ofHours(24)),
-            0L,
-            Some("transfer-command-description"),
-          )
-        actAndCheck(timeUntilSuccess = 1.minute)(
-          "Submit signed TransferCommand creation",
-          aliceValidatorBackend.submitTransferPreapprovalSend(
-            externalPartyOnboarding.party,
-            prepareSend.transaction,
-            HexString.toHexString(
-              crypto
-                .signBytes(
-                  HexString.parseToByteString(prepareSend.txHash).value,
-                  externalPartyOnboarding.privateKey.asInstanceOf[SigningPrivateKey],
-                  usage = SigningKeyUsage.ProtocolOnly,
-                )
-                .value
-                .toProtoV30
-                .signature
-            ),
-            publicKeyAsHexString(externalPartyOnboarding.publicKey),
+            BigDecimal("10.0"),
+            transferinstruction.v1.definitions.TransferFactoryWithChoiceContext.TransferKind.Direct,
           ),
         )(
-          "validator automation completes transfer",
-          _ => {
+          "external party's balance decreases by 10 cc",
+          _ =>
             BigDecimal(
               aliceValidatorBackend
                 .getExternalPartyBalance(externalPartyOnboarding.party)
                 .totalUnlockedCoin
-            ) should be(BigDecimal(30))
-          },
+            ) should be(BigDecimal(30)),
         )
       }
 

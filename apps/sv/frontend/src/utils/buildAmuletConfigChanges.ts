@@ -47,6 +47,19 @@ export function buildAmuletConfigChanges(
       newValue: after?.optDevelopmentFundManager || '',
     },
     {
+      fieldName: 'developmentFundManagerBlacklist',
+      label: 'Blacklisted development fund managers (comma-separated party ids)',
+      currentValue: before?.developmentFundManagerBlacklist?.join(', ') || '',
+      newValue: after?.developmentFundManagerBlacklist?.join(', ') || '',
+    },
+    {
+      fieldName: 'minDevelopmentFundMintingDelay',
+      label:
+        'Minimum delay between allocating and minting a development fund coupon in microseconds',
+      currentValue: before?.minDevelopmentFundMintingDelay?.microseconds || '',
+      newValue: after?.minDevelopmentFundMintingDelay?.microseconds || '',
+    },
+    {
       fieldName: 'transferConfigCreateFee',
       label: 'Fee per created output contract in a transfer',
       currentValue: before?.transferConfig.createFee.fee || '',

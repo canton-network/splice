@@ -16,29 +16,37 @@ data FaucetState = FaucetState with
     firstReceivedFor : Round -- ^ The first round for which a coupon was received.
     lastReceivedFor : Round -- ^ The last round for which a coupon was received.
     numCouponsMissed : Int -- ^ The number of rounds for which no coupon was received.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 data ValidatorLicense_ReceiveFaucetCouponResult = ValidatorLicense_ReceiveFaucetCouponResult with
     licenseCid : ContractId ValidatorLicense
     couponCid : ContractId ValidatorFaucetCoupon
+  deriving (Serializable)
 
 data ValidatorLicense_RecordValidatorLivenessActivityResult = ValidatorLicense_RecordValidatorLivenessActivityResult with
     licenseCid : ContractId ValidatorLicense
     couponCid : ContractId ValidatorLivenessActivityRecord
+  deriving (Serializable)
 
 data ValidatorLicense_WithdrawResult = ValidatorLicense_WithdrawResult
+  deriving (Serializable)
 
 data ValidatorLicense_CancelResult = ValidatorLicense_CancelResult
+  deriving (Serializable)
 
 data ValidatorLicense_UpdateMetadataResult = ValidatorLicense_UpdateMetadataResult with
-  licenseCid : ContractId ValidatorLicense
+    licenseCid : ContractId ValidatorLicense
+  deriving (Serializable)
 
 data ValidatorLicense_ReportActiveResult = ValidatorLicense_ReportActiveResult with
-  licenseCid : ContractId ValidatorLicense
+    licenseCid : ContractId ValidatorLicense
+  deriving (Serializable)
 
 data ValidatorFaucetCoupon_DsoExpireResult = ValidatorFaucetCoupon_DsoExpireResult
+  deriving (Serializable)
 
 data ValidatorLivenessActivityRecord_DsoExpireResult = ValidatorLivenessActivityRecord_DsoExpireResult
+  deriving (Serializable)
 
 data ValidatorLicenseMetadata = ValidatorLicenseMetadata
   with
@@ -46,7 +54,7 @@ data ValidatorLicenseMetadata = ValidatorLicenseMetadata
     version : Text  -- ^ The version the validator is currently on
     contactPoint : Text -- ^ A contact point that can be used to reach the operator of the validator in case there are issues with the validator.
       -- This can be an email address or a slack user name.
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 -- | The existence of a validator license is what makes a validator an (onboarded) validator.
 template ValidatorLicense with
