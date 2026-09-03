@@ -10,7 +10,7 @@ import org.lfdecentralizedtrust.splice.environment.ledger.api.{
   TransactionTreeUpdate,
   TreeUpdateOrOffsetCheckpoint,
 }
-import org.lfdecentralizedtrust.splice.store.TreeUpdateWithMigrationId
+import org.lfdecentralizedtrust.splice.store.{IngestedEvents, TreeUpdateWithMigrationId}
 
 import cats.data.NonEmptyList
 import io.circe.Json
@@ -105,8 +105,10 @@ abstract class StoreIngestionPerformanceTest(
     var maxHeapBytes = BigDecimal(0)
 
     // count events in a single update
-    def eventsIn(u: TreeUpdateOrOffsetCheckpoint.Update): Int = u.update match {
-      case TransactionTreeUpdate(tree) => tree.getEvents.size
+    def eventsCount(u: TreeUpdateOrOffsetCheckpoint.Update): Int = u.update match {
+      case TransactionTreeUpdate(tree) =>
+        val counts = IngestedEvents.eventCount(Seq(tree))
+        (counts.numCreatedEvents + counts.numExercisedEvents).toInt
       case _ => 0
     }
 
@@ -123,7 +125,7 @@ abstract class StoreIngestionPerformanceTest(
       .zipWithIndex
       .runWith(Sink.foreachAsync(parallelism = 1) { case (batch, index) =>
         logger.info(s"Ingesting batch $index of ${batch.length} elements")
-        val batchEventCount = batch.iterator.map(eventsIn).sum
+        val batchEventCount = batch.iterator.map(eventsCount).sum
         val wallBefore = System.nanoTime()
         val cpuBefore = getProcessCpuTimeNs
         store.ingestionSink
@@ -198,7 +200,7 @@ abstract class StoreIngestionPerformanceTest(
       ),
       metric(
         "total_events",
-        "Total number of top-level events across all ingested updates",
+        "Total number of created + exercised/archived events across all ingested updates ",
         BigDecimal(metrics.totalEvents),
       ),
       metric(
