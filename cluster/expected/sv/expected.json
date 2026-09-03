@@ -3838,7 +3838,7 @@
           },
           {
             "name": "ADDITIONAL_CONFIG_SCAN_RATE_LIMITS",
-            "value": "canton.scan-apps.scan-app.parameters.rate-limiting = {\"global\":{\"rate-per-second\":400,\"sustained-rate-per-second\":200,\"per-client-ip\":{\"enabled\":true,\"limit\":{\"rate-per-second\":100,\"sustained-rate-per-second\":50}}}}\n"
+            "value": "canton.scan-apps.scan-app.parameters.rate-limiting = {\"global\":{\"rate-per-second\":400,\"sustained-rate-per-second\":200,\"per-client-ip\":{\"enabled\":true,\"limit\":{\"rate-per-second\":100,\"sustained-rate-per-second\":50}}}}"
           }
         ],
         "additionalJvmOptions": "-Dcom.sun.management.jmxremote=true -Dcom.sun.management.jmxremote.port=9010 -Dcom.sun.management.jmxremote.rmi.port=9010 -Dcom.sun.management.jmxremote.local.only=false -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Djava.rmi.server.hostname=127.0.0.1 -DcustomScanAppJvmFlag",
@@ -6428,7 +6428,7 @@
           },
           {
             "name": "ADDITIONAL_CONFIG_SCAN_RATE_LIMITS",
-            "value": "canton.scan-apps.scan-app.parameters.rate-limiting = {\"global\":{\"rate-per-second\":400,\"sustained-rate-per-second\":200,\"per-client-ip\":{\"enabled\":true,\"limit\":{\"rate-per-second\":100,\"sustained-rate-per-second\":50}}}}\n"
+            "value": "canton.scan-apps.scan-app.parameters.rate-limiting = {\"global\":{\"rate-per-second\":400,\"sustained-rate-per-second\":200,\"per-client-ip\":{\"enabled\":true,\"limit\":{\"rate-per-second\":100,\"sustained-rate-per-second\":50}}}}"
           }
         ],
         "additionalJvmOptions": "-Dcom.sun.management.jmxremote=true -Dcom.sun.management.jmxremote.port=9010 -Dcom.sun.management.jmxremote.rmi.port=9010 -Dcom.sun.management.jmxremote.local.only=false -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Djava.rmi.server.hostname=127.0.0.1 -DcustomScanAppJvmFlag",

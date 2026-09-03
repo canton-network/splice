@@ -23,25 +23,6 @@ release-notes:: Upcoming
 
     - Scan App
 
-        - .. warning::
-
-             **Action required for SV operators:** set the app level rate limits of the Scan API
-             from the ``splice-rate-limits.json`` published for each network in the private configs
-             repo.
-
-             Operators must set
-             ``ADDITIONAL_CONFIG_SCAN_RATE_LIMITS`` on the scan container via the ``additionalEnvVars`` value of the ``splice-scan`` chart. s:
-
-             .. code-block:: yaml
-
-                additionalEnvVars:
-                  - name: ADDITIONAL_CONFIG_SCAN_RATE_LIMITS
-                    value: |
-                      canton.scan-apps.scan-app.parameters.rate-limiting.global = < valuesFromFile.scan >
-
-             Only the values you set are overridden; everything else keeps the default shipped with
-             the app. Repeat this whenever a new ``splice-rate-limits.json`` is published.
-
         - *Breaking* Scan will no longer return featured app rights as part of the choice context for CC transfers and allocations
           once ``no-featured-app-choice-context`` has been set in ``svOperationsSwitchOverTimes`` and the switchover time has been reached.
           This change was made to avoid apps accidentally not complying with the marker guidance set by the Canton foundation which requires precise control over the markers issued. If you
