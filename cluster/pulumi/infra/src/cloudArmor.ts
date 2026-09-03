@@ -73,6 +73,9 @@ export function configureCloudArmorPolicy(
       name,
       description: `Cloud Armor security policy for ${CLUSTER_BASENAME}`,
       type: 'CLOUD_ARMOR', // attachable to backend service only
+      advancedOptionsConfig: {
+        logLevel: cac.logging.verboseLogging ? 'VERBOSE' : 'NORMAL',
+      },
       // using `rules` to define all rules at once would be fewer Pulumi resources,
       // but the preview would entail changing this array if the rules were changed,
       // making those changes harder to review than with the separate resources

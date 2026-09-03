@@ -21,10 +21,19 @@ const cloudArmorIntervalSeconds = [
 // https://cloud.google.com/armor/docs/rate-limiting-overview: threshold count max
 const cloudArmorMaxRateLimitCount = 1000000;
 
+const CloudArmorLoggingConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  verboseLogging: z.boolean().default(false),
+  sampleRate: z.number().min(0).max(1).default(1),
+});
+
+export type CloudArmorLoggingConfig = z.infer<typeof CloudArmorLoggingConfigSchema>;
+
 const CloudArmorConfigSchema = z.object({
   enabled: z.boolean(),
   // "preview" is not pulumi preview, but https://cloud.google.com/armor/docs/security-policy-overview#preview_mode
   allRulesPreviewOnly: z.boolean(),
+  logging: CloudArmorLoggingConfigSchema.prefault({}),
   publicEndpoints: z
     .object({})
     .catchall(

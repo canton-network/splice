@@ -5,6 +5,7 @@ infra:
     proxyForIstioHttp: true
 cloudArmor:
   enabled: true
-  # start in preview mode: rules are evaluated and logged but not enforced.
-  # flip to false to actually enforce the allow list and the default deny.
   allRulesPreviewOnly: false
+  logging:
+    enabled: true
+    verboseLogging: true
