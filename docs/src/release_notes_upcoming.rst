@@ -6,3 +6,8 @@
 .. NOTE: add your upcoming release notes below this line. They are included in the `release_notes.rst`.
 
 release-notes:: Upcoming
+
+    - Scan App
+
+        - Added a new public ``/v0/events/latest-record-time`` endpoint that returns the latest
+          record time for which ``/v0/events`` will be able to return events.

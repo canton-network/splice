@@ -867,6 +867,57 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
         allow(mig2, recordTs3) shouldBe false // > after and > cap
       }
     }
+
+    "getLatestEventRecordTime returns the record time of the last event getEvents returns" in {
+      for {
+        ctx <- newEventStore()
+        // update + verdict at ts1
+        ts1 = CantonTimestamp.now()
+        tx1 <- insertUpdate(ctx.updateHistory, ts1, "update1")
+        _ <- insertVerdict(ctx.verdictStore, tx1.getUpdateId, ts1)
+
+        // update + verdict at ts2
+        ts2 = ts1.plusSeconds(1)
+        tx2 <- insertUpdate(ctx.updateHistory, ts2, "update2")
+        _ <- insertVerdict(ctx.verdictStore, tx2.getUpdateId, ts2)
+
+        // loose update at ts3 must be filtered out of getEvents
+        ts3 = ts2.plusSeconds(1)
+        _ <- insertUpdate(ctx.updateHistory, ts3, "update-loose")
+
+        events <- fetchEvents(ctx.eventStore, None, domainMigrationId, pageLimit)
+        latest <- ctx.eventStore.getLatestEventRecordTime(domainMigrationId)(traceContext)
+      } yield {
+        // getEvents caps at ts2, the ts3 loose update is excluded
+        events.nonEmpty shouldBe true
+        val lastReturnedRt = events.last._1
+          .map(_._1.recordTime)
+          .orElse(events.last._2.map(_.update.update.recordTime))
+          .value
+        lastReturnedRt shouldBe ts2
+
+        latest shouldBe Some(lastReturnedRt)
+      }
+    }
+
+    "getLatestEventRecordTime returns None when there are no events" in {
+      for {
+        ctx <- newEventStore()
+        latest <- ctx.eventStore.getLatestEventRecordTime(domainMigrationId)(traceContext)
+      } yield {
+        latest shouldBe None
+      }
+    }
+
+    "getLatestEventRecordTime returns None when there is only a loose update" in {
+      for {
+        ctx <- newEventStore()
+        _ <- insertUpdate(ctx.updateHistory, CantonTimestamp.now(), "update1")
+        latest <- ctx.eventStore.getLatestEventRecordTime(domainMigrationId)(traceContext)
+      } yield {
+        latest shouldBe None
+      }
+    }
   }
 
   private def newUpdateHistory(

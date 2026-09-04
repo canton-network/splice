@@ -122,6 +122,15 @@ class ScanEventStore(
     }
   }
 
+  def getLatestEventRecordTime(
+      currentMigrationId: Long
+  )(implicit tc: TraceContext): Future[Option[CantonTimestamp]] =
+    resolveCurrentMigrationCap(
+      verdictStore.lastIngestedRecordTime,
+      updateHistory.lastIngestedRecordTime,
+      currentMigrationId,
+    ).map(ts => if (ts == CantonTimestamp.MinValue) None else Some(ts))
+
   def getAppActivityRecords(verdictRowIds: Seq[Long])(implicit
       tc: TraceContext
   ): Future[Map[Long, AppActivityRecordT]] =
