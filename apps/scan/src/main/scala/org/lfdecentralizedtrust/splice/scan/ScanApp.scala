@@ -216,7 +216,7 @@ class ScanApp(
         config.acsStoreDescriptorUserVersion,
         config.txLogStoreDescriptorUserVersion,
       )
-      internedStringStore = InternedStringStore(
+      internedStringStore <- InternedStringStore.createAndWarmupCache(
         storage,
         config.cache.internedStrings.maxSize,
         config.cache.internedStrings.ttl.underlying,

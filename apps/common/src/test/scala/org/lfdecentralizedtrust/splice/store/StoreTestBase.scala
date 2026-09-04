@@ -124,7 +124,7 @@ abstract class StoreTestBase
   protected val maliciousPackageId = "maliciouspackageid"
 
   protected def internedStringStore(storage: DbStorage)(implicit close: CloseContext) =
-    InternedStringStore(
+    InternedStringStore.createWithoutWarmup(
       storage,
       10_000L,
       FiniteDuration(1, "minute"),
