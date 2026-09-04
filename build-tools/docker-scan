@@ -5,6 +5,10 @@ set -euo pipefail
 script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 source "${script_dir}/lib/libcli.source"
 
+# Each invocation of this script uses its own ports, tmp directories and shared
+# directories so that parallel scans (make docker-scan -j4) do not interfere
+# with each other.
+BASE_PORT=9000
 
 function get_top_base_layer() {
   base_image=$(cat<<EOF | python -
@@ -38,24 +42,44 @@ function do_scan() {
   local index="$4"
   local extra_arg="${5:-}"
 
+  local tmp_dir="/tmp/blackduck-docker-scan/${index}"
+  local shared_dir="${tmp_dir}/shared"
+  local image_dir="${shared_dir}/${image_name}"
+  mkdir -p "${image_dir}"
+  export DETECT_JAR_DOWNLOAD_DIR="${tmp_dir}/detect_jars"
+
+  # Ensure the image is available locally. On K8s runners the image is not
+  # built in the same job, so we need to pull it from the registry first.
+  docker pull --platform linux/amd64 "$image"
+
+  # Convert the image to a single-platform OCI archive. Docker Inspector
+  # cannot handle the multi-platform manifest list produced by docker save.
+  skopeo copy \
+    --override-os linux --override-arch amd64 \
+    --insecure-policy \
+    "docker-daemon:${image}" \
+    "oci-archive:${image_dir}/image.tar"
+  chmod a+r "${image_dir}/image.tar"
+
   # We blindly retry on failures, as we've seen unexplained failures in the scans that we couldn't resolve.
   success=0
   for i in {1..10}; do
     set +e
-    # Run a full scan, including the base image
     bash <(curl -s https://detect.blackduck.com/detect10.sh) \
       --blackduck.url=https://digitalasset.blackducksoftware.com/ \
       --blackduck.api.token="$BLACKDUCK_HUBDETECT_TOKEN" \
-      --detect.docker.image="$image" \
+      --detect.docker.tar="${image_dir}/image.tar" \
+      --detect.docker.path.required=false \
+      --detect.docker.passthrough.shared.dir.path.local="${shared_dir}/" \
+      --detect.docker.passthrough.imageinspector.service.port.alpine=$((BASE_PORT + (index*3) + 0)) \
+      --detect.docker.passthrough.imageinspector.service.port.centos=$((BASE_PORT + (index*3) + 1)) \
+      --detect.docker.passthrough.imageinspector.service.port.ubuntu=$((BASE_PORT + (index*3) + 2)) \
       --detect.tools=DOCKER,SIGNATURE_SCAN \
       --detect.tools.excluded=BINARY_SCAN \
       --detect.project.name="DACH-NY_canton-network-internal_images-${image_name}" \
       --detect.project.version.name="${version}" \
-      --detect.docker.passthrough.imageinspector.service.port.alpine=$((BASE_PORT + (index*3) + 0)) \
-      --detect.docker.passthrough.imageinspector.service.port.centos=$((BASE_PORT + (index*3) + 1)) \
-      --detect.docker.passthrough.imageinspector.service.port.ubuntu=$((BASE_PORT + (index*3) + 2)) \
-      --detect.output.path="${TMP_DIR}/output" \
-      --detect.tools.output.path="${TMP_DIR}/tool_output" \
+      --detect.output.path="${tmp_dir}/output" \
+      --detect.tools.output.path="${tmp_dir}/tool_output" \
       "${extra_arg}"
 
     res=$?
@@ -81,16 +105,10 @@ image="$(<target/image-tag)"
 image_name="$(basename "$(pwd)")"
 image_version="$(get-snapshot-version)"
 
-
 # Compute a unique index per image name, to be used for tmp directories and port numbers,
 # as otherwise blackduck is unhappy with parallelism
 # shellcheck disable=SC2012,SC2010
 index=$(ls .. | grep -nx "${image_name}" | sed 's/:.*//')
-
-BASE_PORT=9000
-TMP_DIR="/tmp/blackduck-docker-scan/${index}"
-mkdir -p "${TMP_DIR}"
-export DETECT_JAR_DOWNLOAD_DIR="${TMP_DIR}/detect_jars"
 
 # <version>-full is used to scan the full image, including the base image.
 do_scan "$image" "$image_name" "$image_version"-full "$index"
