@@ -32,7 +32,6 @@ import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
   ExpireRewardCouponV2Trigger,
   UnhideRewardCouponV2Trigger,
 }
-import org.lfdecentralizedtrust.splice.sv.config.InitialRewardConfig
 import org.lfdecentralizedtrust.splice.util.{
   ChoiceContextWithDisclosures,
   TimeTestUtil,
@@ -104,29 +103,23 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
     EnvironmentDefinition
       .simpleTopology1SvWithSimTime(this.getClass.getSimpleName)
       .withNoVettedPackages(implicit env => Seq(aliceValidatorBackend.participantClient))
-      .addConfigTransforms((_, config) => {
-        val aliceValidator = InstanceName.tryCreate("aliceValidator")
-        config.copy(
-          validatorApps = config.validatorApps +
-            (aliceValidator -> config
-              .validatorApps(aliceValidator)
-              .copy(
-                additionalPackagesToUnvet = darsUnvettedOnAliceAtStart
-                  .groupBy(_.metadata.name)
-                  .map { case (name, resources) =>
-                    name -> resources.map(_.metadata.version).toSet
-                  }
-              ))
-        )
-      })
-      .addConfigTransform((_, config) =>
-        ConfigTransforms.withRewardConfig(
-          InitialRewardConfig(
-            mintingVersion = "RewardVersion_TrafficBasedAppRewards",
-            dryRunVersion = None,
-            appRewardCouponThreshold = BigDecimal("0"),
+      .addConfigTransforms(
+        (_, config) => {
+          val aliceValidator = InstanceName.tryCreate("aliceValidator")
+          config.copy(
+            validatorApps = config.validatorApps +
+              (aliceValidator -> config
+                .validatorApps(aliceValidator)
+                .copy(
+                  additionalPackagesToUnvet = darsUnvettedOnAliceAtStart
+                    .groupBy(_.metadata.name)
+                    .map { case (name, resources) =>
+                      name -> resources.map(_.metadata.version).toSet
+                    }
+                ))
           )
-        )(config)
+        },
+        (_, c) => ConfigTransforms.withNoSvOperationsSwitchOverTimes(c),
       )
       .addConfigTransform((_, config) =>
         updateAutomationConfig(ConfigurableApp.Validator)(
@@ -469,6 +462,7 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
         },
       )
     }
+
   }
 
   private def vettedPackagesOnSv1View(

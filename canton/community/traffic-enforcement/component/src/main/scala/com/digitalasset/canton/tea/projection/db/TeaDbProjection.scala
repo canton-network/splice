@@ -18,7 +18,7 @@ import com.typesafe.config.{Config, ConfigFactory}
 import org.apache.pekko.Done
 import org.apache.pekko.actor.typed.{ActorSystem, Behavior}
 import org.apache.pekko.projection.slick.{SlickHandler, SlickProjection}
-import org.apache.pekko.projection.{HandlerRecoveryStrategy, ProjectionBehavior, ProjectionId}
+import org.apache.pekko.projection.{ProjectionBehavior, ProjectionId}
 import org.apache.pekko.stream.scaladsl.Source
 import slick.basic.DatabaseConfig
 import slick.dbio.DBIO
@@ -74,10 +74,7 @@ private[projection] class TeaDbProjection(
         handler = () => eventHandler(projectionId),
       )
       .withStatusObserver(loggingObserver)
-      .withRecoveryStrategy(
-        HandlerRecoveryStrategy
-          .retryAndFail(config.maxRetries.value, config.retryDelay.asFiniteApproximation)
-      )
+    // Removed retry strategy in splice as it doesn't compile against the new canton library version and this code isn't actually used.
   }
 
   // Event handler for projection events

@@ -1,0 +1,49 @@
+# Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
+suite: "postgres identity"
+templates:
+  - validator.yaml
+set:
+  # Things we need just to pass the schema
+  nodeIdentifier: "helm-mock-1-validator"
+  validatorPartyHint: "helm-mock-1"
+  validatorWalletUser: "mock-wallet-user-id"
+  topup:
+    enabled: false
+  auth:
+    jwksUrl: "https://mock.com/.well-known/jwks.json"
+    audience: "mock_audience"
+  spliceInstanceNames:
+    networkName: MockNet
+    networkFaviconUrl: https://mock.net/favicon.ico
+    amuletName: Mocklet
+    amuletNameAcronym: MCK
+    nameServiceName: Mock Name Service
+    nameServiceNameAcronym: MNS
+tests:
+  - it: "defaults the pg-init role and bootstrap database to cnadmin/cantonnet"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "--username=cnadmin --dbname=cantonnet"
+
+  - it: "uses persistence.user and persistence.bootstrapDatabaseName when set"
+    set:
+      persistence:
+        user: appuser
+        bootstrapDatabaseName: postgres
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "--username=appuser --dbname=postgres"
+      - notMatchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "--username=cnadmin|--dbname=cantonnet\\b"

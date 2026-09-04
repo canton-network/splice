@@ -39,6 +39,8 @@ import qualified DA.Set as Set
 import DA.Map (Map)
 import qualified DA.Map as Map
 import DA.List()
+import DA.TextMap (TextMap)
+import DA.TextMap qualified as TextMap
 
 -- | Require that a contract-id refers to a specific contract.
 requireMatchingContract : (Eq t, Show t, HasFetch t) => ContractId t -> t -> Update ()
@@ -230,6 +232,28 @@ instance (Ord k, Patchable v) => Patchable (Map k v) where
         new
         base
       keysToRemove = mapDifference new base
+
+textMapDifference : TextMap a -> TextMap a -> TextMap Text
+textMapDifference = TextMap.merge (\_ _ -> None) (\k _ -> Some k) (\_ _ _ -> None)
+
+instance (Patchable a) => Patchable (TextMap a) where
+  patch new base current =
+    TextMap.union toAdd (TextMap.filterWithKey (\key _ -> not (TextMap.member key keysToRemove)) current)
+    where
+      toAdd = TextMap.merge
+        -- Keys only in `new`: Add them to the result
+        (\_ value -> Some value)
+        -- Keys only in `base`: Remove them from the result (i.e., return `None`)
+        (\_key _ -> None)
+        -- Keys in both `new` and `base`: Use `patch` to merge with `base`
+        (\key newValue baseValue ->
+          case TextMap.lookup key current of
+            None -> None -- Value got removed by concurrent request
+            Some currentValue -> Some (patch newValue baseValue currentValue)
+        )
+        new
+        base
+      keysToRemove = textMapDifference new base
 
 instance Patchable a => Patchable (Optional a) where
   patch new base current =

@@ -1,0 +1,69 @@
+# Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# yaml-language-server: $schema=https://raw.githubusercontent.com/helm-unittest/helm-unittest/main/schema/helm-testsuite.json
+suite: "postgres identity"
+templates:
+  - participant.yaml
+set:
+  # Things we need just to pass the schema
+  persistence:
+    host: mock-pg-host
+    schema: participant
+  auth:
+    jwksUrl: "https://mock.com/.well-known/jwks.json"
+    targetAudience: "mock_audience"
+tests:
+  - it: "defaults the pg-init role and bootstrap database to cnadmin/cantonnet"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "--username=cnadmin --dbname=cantonnet"
+
+  - it: "uses persistence.user and persistence.bootstrapDatabaseName when set"
+    set:
+      persistence:
+        host: mock-pg-host
+        schema: participant
+        user: appuser
+        bootstrapDatabaseName: postgres
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - matchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "--username=appuser --dbname=postgres"
+      - notMatchRegex:
+          path: spec.template.spec.initContainers[0].command[2]
+          pattern: "--username=cnadmin|--dbname=cantonnet\\b"
+
+  - it: "passes persistence.user to the canton node itself, not just the init container"
+    set:
+      persistence:
+        host: mock-pg-host
+        schema: participant
+        user: appuser
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: CANTON_PARTICIPANT_POSTGRES_USER
+            value: appuser
+
+  - it: "omits the canton node DB user when persistence.user is unset"
+    documentSelector:
+      path: kind
+      value: Deployment
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          any: true
+          content:
+            name: CANTON_PARTICIPANT_POSTGRES_USER

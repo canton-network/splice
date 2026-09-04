@@ -67,14 +67,10 @@ trait IgnoredUnavailablePartiesGuard extends NamedLogging {
   protected def ignorePartiesWithoutVettedAmulet(
       informees: Set[PartyId],
       contractIds: Seq[String],
-      logAsWarning: Boolean = false,
-  )(implicit tc: TraceContext): String = {
+  ): String = {
     val toIgnore = withoutDsoParty(informees)
     ignoredPartiesStore.addAll(toIgnore)
-    val msg =
-      s"No vetted Amulet version for $contractIds; ignoring ${toIgnore.size} parties: $toIgnore"
-    if (logAsWarning) logger.warn(msg)
-    msg
+    s"No vetted Amulet version for $contractIds; ignoring ${toIgnore.size} parties: $toIgnore"
   }
 
   private def recoverUnresponsiveParties(

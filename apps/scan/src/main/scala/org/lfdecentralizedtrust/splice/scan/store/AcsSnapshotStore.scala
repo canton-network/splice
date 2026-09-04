@@ -5,6 +5,7 @@ package org.lfdecentralizedtrust.splice.scan.store
 
 import cats.data.NonEmptyVector
 import com.daml.ledger.javaapi.data.CreatedEvent
+import com.daml.nonempty.NonEmpty
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{Amulet, LockedAmulet}
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{
   AcsSnapshot,
@@ -290,18 +291,18 @@ class AcsSnapshotStore(
         case None => Future.successful(snapshot.firstRowId)
       }
       end = snapshot.lastRowId
-      partyIdsFilter = partyIds match {
-        case Nil =>
+      partyIdsFilter = NonEmpty.from(partyIds) match {
+        case None =>
           // This expression is always true (scan only processes data where the DSO is stakeholder).
           // It is included to make sure the query plan uses the right index (acs_snapshot_data_all_filters)
           sql"and stakeholder = ${dsoParty}"
-        case partyIds =>
-          (sql" and " ++ inClause("stakeholder", partyIds)).toActionBuilder
+        case Some(partyIds) =>
+          (sql" and " ++ DbStorage.toInClause("stakeholder", partyIds)).toActionBuilder
       }
-      templatesFilter = templates match {
-        case Nil => sql""
-        case _ =>
-          (sql" and " ++ inClause(
+      templatesFilter = NonEmpty.from(templates) match {
+        case None => sql""
+        case Some(templates) =>
+          (sql" and " ++ DbStorage.toInClause(
             "template_id",
             templates.map(t =>
               lengthLimited(

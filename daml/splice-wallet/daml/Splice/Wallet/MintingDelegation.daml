@@ -128,30 +128,30 @@ template MintingDelegation
 data MintingDelegationProposal_AcceptResult = MintingDelegationProposal_AcceptResult
   with
     mintingDelegationCid : ContractId MintingDelegation
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 data MintingDelegationProposal_RejectResult = MintingDelegationProposal_RejectResult {}
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 data MintingDelegationProposal_WithdrawResult = MintingDelegationProposal_WithdrawResult {}
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 data MintingDelegation_RejectResult = MintingDelegation_RejectResult {}
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 data MintingDelegation_WithdrawResult = MintingDelegation_WithdrawResult {}
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 data MintingDelegation_MintResult = MintingDelegation_MintResult
   with
     transferResult : TransferResult
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 data MintingDelegation_AssignAndMintResult = MintingDelegation_AssignAndMintResult
   with
     assignResult : Api.RewardAssignmentV1.RewardCoupon_AssignBeneficiariesResult
     transferResult : TransferResult
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 instance HasCheckedFetch MintingDelegation ForOwner where
   contractGroupId MintingDelegation{beneficiary, dso} = ForOwner with owner = beneficiary; dso

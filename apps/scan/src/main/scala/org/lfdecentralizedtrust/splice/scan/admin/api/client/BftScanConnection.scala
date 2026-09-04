@@ -382,20 +382,25 @@ class BftScanConnection(
         .map(result => connection -> result)
     )
   } yield {
-    val withData = results.collect {
-      case (connection, BftScanConnection.SuccessfulResponse(Some(info))) => connection -> info
-    }.toMap
-    val withoutData = results.collect {
-      case (connection, BftScanConnection.SuccessfulResponse(None)) => connection
-    }.toSet
-    val unknownStatus = results.collect {
-      case (connection, BftScanConnection.HttpFailureResponse(_, _)) => connection
-      case (connection, BftScanConnection.ExceptionFailureResponse(_)) => connection
-    }.toSet
+    val (withData, other) =
+      results.partitionMap { case (connection, response) =>
+        response match {
+          case BftScanConnection.SuccessfulResponse(Some(info)) =>
+            Left(connection -> info)
+          case BftScanConnection.SuccessfulResponse(None) =>
+            Right(Left(connection))
+          case _: BftScanConnection.HttpFailureResponse[?] |
+              _: BftScanConnection.NonJsonHttpFailureResponse[?] |
+              _: BftScanConnection.TextFailureResponse[?] |
+              _: BftScanConnection.ExceptionFailureResponse[?] =>
+            Right(Right(connection))
+        }
+      }
+    val (withoutData, unknownStatus) = other partitionMap identity
     MigrationInfoResponses(
-      withData,
-      withoutData,
-      unknownStatus,
+      withData.toMap,
+      withoutData.toSet,
+      unknownStatus.toSet,
     )
   }
 

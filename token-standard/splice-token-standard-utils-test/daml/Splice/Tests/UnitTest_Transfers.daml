@@ -185,6 +185,7 @@ data TestEnv = TestEnv with
   now : Time
   transferV2 : V2.Transfer
   dummyCid : ContractId ()
+    deriving (Serializable)
 
 setupTest : Script TestEnv
 setupTest = do

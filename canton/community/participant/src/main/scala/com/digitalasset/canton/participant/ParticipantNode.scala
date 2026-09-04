@@ -597,21 +597,24 @@ class ParticipantNodeBootstrap(
           loggerFactory,
         )
 
-        trafficEnforcementBackendContainerO = Option.when(config.trafficEnforcement.enabled)(
-          new LifeCycleContainer(
-            stateName = "traffic-enforcement-backend",
-            create = () =>
-              FutureUnlessShutdown.pure(
-                TrafficEnforcementBackend(
-                  trafficEnforcementServerConfig =
-                    config.trafficEnforcement.trafficEnforcementServer,
-                  processingTimeout = timeouts,
-                  loggerFactory = loggerFactory,
-                )
-              ),
-            loggerFactory = loggerFactory,
-          )
-        )
+        trafficEnforcementBackendContainerO: Option[LifeCycleContainer[TrafficEnforcementBackend]] =
+          None
+        // stubbed in splice
+        // Option.when(config.trafficEnforcement.enabled)(
+        //   new LifeCycleContainer(
+        //     stateName = "traffic-enforcement-backend",
+        //     create = () =>
+        //       FutureUnlessShutdown.pure(
+        //         TrafficEnforcementBackend(
+        //           trafficEnforcementServerConfig =
+        //             config.trafficEnforcement.trafficEnforcementServer,
+        //           processingTimeout = timeouts,
+        //           loggerFactory = loggerFactory,
+        //         )
+        //       ),
+        //     loggerFactory = loggerFactory,
+        //   )
+        // )
 
         _ <- trafficEnforcementBackendContainerO.traverseTap { trafficEnforcementBackendContainer =>
           // only initialize traffic enforcement backend if participant is becoming active
