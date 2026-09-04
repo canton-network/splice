@@ -110,8 +110,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "min by(namespace)((splice_history_bulk_storage_latest_acs_snapshot{namespace=~\"$namespace\"} >-62135596800000) / 1000.0)",
-          "legendFormat": "{{namespace}} ACS Snapshots",
+          "expr": "min by(namespace)((splice_history_bulk_storage_latest_acs_snapshot_staging{namespace=~\"$namespace\"} >-62135596800000) / 1000.0)",
+          "legendFormat": "{{namespace}} ACS Snapshots - Staging",
           "range": true,
           "refId": "A"
         },
@@ -121,14 +121,479 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "min by(namespace)((splice_history_bulk_storage_latest_updates_segment{namespace=~\"$namespace\"} >-62135596800000) / 1000.0)",
+          "expr": "min by(namespace)((splice_history_bulk_storage_latest_updates_segment_staging{namespace=~\"$namespace\"} >-62135596800000) / 1000.0)",
           "instant": false,
-          "legendFormat": "{{namespace}} Updates",
+          "legendFormat": "{{namespace}} Updates - Staging",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "min by(namespace)((splice_history_bulk_storage_latest_acs_snapshot_committed{namespace=~\"$namespace\"} >-62135596800000) / 1000.0)",
+          "legendFormat": "{{namespace}} ACS Snapshots - Committed",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "min by(namespace)((splice_history_bulk_storage_latest_updates_segment_committed{namespace=~\"$namespace\"} >-62135596800000) / 1000.0)",
+          "instant": false,
+          "legendFormat": "{{namespace}} Updates - Committed",
+          "range": true,
+          "refId": "D"
+        }
+      ],
+      "title": "Last record time stored",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Rate (compared to wallclock time) at which the latest persisted record time is advancing",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "avg_over_time((deriv(splice_history_bulk_storage_latest_acs_snapshot_staging{namespace=~\"$namespace\"}[$__rate_interval]) / 1000000)[1h:])",
+          "legendFormat": "{{namespace}} ACS Snapshots - Staging",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "avg_over_time((deriv(splice_history_bulk_storage_latest_updates_segment_staging{namespace=~\"$namespace\"}[$__rate_interval]) / 1000000)[1h:])",
+          "instant": false,
+          "legendFormat": "{{namespace}} Updates - Staging",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "avg_over_time((deriv(splice_history_bulk_storage_latest_acs_snapshot_committed{namespace=~\"$namespace\"}[$__rate_interval]) / 1000000)[1h:])",
+          "legendFormat": "{{namespace}} ACS Snapshots - Committed",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "avg_over_time((deriv(splice_history_bulk_storage_latest_updates_segment_committed{namespace=~\"$namespace\"}[$__rate_interval]) / 1000000)[1h:])",
+          "instant": false,
+          "legendFormat": "{{namespace}} Updates - Committed",
+          "range": true,
+          "refId": "D"
+        }
+      ],
+      "title": "Catchup rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Counts items from Scan DB processed into the staging bucket",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.0",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "splice_history_bulk_storage_updates_count{namespace=~\"$namespace\"}",
+          "legendFormat": "Updates {{namespace}}",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "splice_history_bulk_storage_contracts_count{namespace=~\"$namespace\"}",
+          "instant": false,
+          "legendFormat": "ACS contracts {{namespace}}",
           "range": true,
           "refId": "B"
         }
       ],
-      "title": "Last record time stored",
+      "title": "Processed items",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "Counts items from Scan DB processed into the staging bucket",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.0",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "rate(splice_history_bulk_storage_updates_count{namespace=~\"$namespace\"}[$__rate_interval])",
+          "legendFormat": "Updates {{namespace}}",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "rate(splice_history_bulk_storage_contracts_count{namespace=~\"$namespace\"}[$__rate_interval])",
+          "instant": false,
+          "legendFormat": "ACS contracts {{namespace}}",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Rate of processing items",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.0",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "splice_history_bulk_storage_object_count{namespace=~\"$namespace\"}",
+          "legendFormat": "{{namespace}} {{object_type}} {{encoding}} - {{bucket}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Num S3 objects stored",
       "type": "timeseries"
     },
     {
@@ -196,9 +661,9 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 0
+        "y": 16
       },
-      "id": 2,
+      "id": 6,
       "options": {
         "legend": {
           "calcs": [],
@@ -216,13 +681,13 @@
       "targets": [
         {
           "editorMode": "code",
-          "expr": "splice_history_bulk_storage_object_count{namespace=~\"$namespace\"}",
-          "legendFormat": "{{namespace}} {{object_type}}",
+          "expr": "avg_over_time(rate(splice_history_bulk_storage_object_count{namespace=~\"$namespace\"}[$__rate_interval])[1h:])",
+          "legendFormat": "{{namespace}} {{object_type}} {{encoding}} - {{bucket}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Num S3 objects stored",
+      "title": "S3 objects storage rate",
       "type": "timeseries"
     }
   ],
@@ -262,13 +727,13 @@
     ]
   },
   "time": {
-    "from": "now-2d",
+    "from": "now-12h",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
   "title": "Bulk Storage",
   "uid": "cnxl9bn",
-  "version": 3,
+  "version": 13,
   "weekStart": ""
 }
