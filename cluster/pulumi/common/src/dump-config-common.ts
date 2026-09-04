@@ -132,6 +132,7 @@ const validator1Auth0Config: Auth0NamespaceConfig = {
     wallet: 'validator1-wallet-ui-client-id',
     cns: 'validator1-cns-ui-client-id',
     splitwell: 'validator1-splitwell-ui-client-id',
+    walletGateway: 'validator1-wallet-gateway-ui-client-id',
   },
 };
 
