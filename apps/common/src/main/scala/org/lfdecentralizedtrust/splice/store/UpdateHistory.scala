@@ -521,7 +521,7 @@ class UpdateHistory(
     val safeObservers = event.createdEvent.getObservers.asScala.toSeq.map(lengthLimited)
     metrics.UpdateHistory.assignments.mark()
     for {
-      _ <- DBIO.from(internTemplateId(templateId))
+      _ <- DBIO.from(internEventStrings(templateId, event.createdEvent.getPackageName, None))
       result <- sqlu"""
       insert into update_history_assignments(
         history_id,update_id,record_time,
@@ -641,7 +641,7 @@ class UpdateHistory(
     val safeDomainId = lengthLimited(tree.getSynchronizerId)
 
     for {
-      _ <- DBIO.from(internTemplateId(templateId))
+      _ <- DBIO.from(internEventStrings(templateId, event.getPackageName, None))
       result <- sqlu"""
       insert into update_history_creates(
         history_id, event_id, update_row_id,
@@ -664,12 +664,21 @@ class UpdateHistory(
   }
 
   // This does not need to be transactional with the rest of the transactions in UpdateHistory
-  private def internTemplateId(identifier: Identifier)(implicit tc: TraceContext): Future[Unit] = {
+  private def internEventStrings(
+      identifier: Identifier,
+      packageName: String,
+      choiceName: Option[String],
+  )(implicit
+      tc: TraceContext
+  ): Future[Unit] = {
+    import cats.implicits.*
     // TODO (#6257): use the returned ids in the partitioned table
     for {
       _ <- internedStringStore.getOrIntern(identifier.getPackageId)
       _ <- internedStringStore.getOrIntern(identifier.getModuleName)
       _ <- internedStringStore.getOrIntern(identifier.getEntityName)
+      _ <- internedStringStore.getOrIntern(packageName)
+      _ <- choiceName.traverse(internedStringStore.getOrIntern)
     } yield ()
   }
 
@@ -710,7 +719,7 @@ class UpdateHistory(
     val safeDomainId = lengthLimited(tree.getSynchronizerId)
 
     for {
-      _ <- DBIO.from(internTemplateId(templateId))
+      _ <- DBIO.from(internEventStrings(templateId, event.getPackageName, Some(event.getChoice)))
       result <- sqlu"""
       insert into update_history_exercises(
         history_id, event_id, update_row_id,
