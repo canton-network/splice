@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { useForm } from '@tanstack/react-form';
+import { retryOnRateLimit } from '@canton-network/splice-common-frontend';
 import { z } from 'zod';
 import { useSvAdminClient } from '../../contexts/SvAdminServiceContext';
 import { useMutation, UseMutationResult } from '@tanstack/react-query';
@@ -36,12 +37,13 @@ export const ProposalVoteForm: React.FC<ProposalVoteFormProps> = props => {
   const { castVote } = useSvAdminClient();
   const yourVote = votes.find(vote => vote.sv === currentSvPartyId);
 
-  const castVoteMutation: UseMutationResult<void, string, CastVoteArgs> = useMutation({
+  const castVoteMutation: UseMutationResult<void, Error, CastVoteArgs> = useMutation({
     mutationKey: ['castVote', voteRequestContractId],
     mutationFn: async ({ accepted, url, reason }) => {
       return castVote(voteRequestContractId, accepted, url, reason);
     },
     onMutate: () => onSubmissionStart?.(),
+    retry: retryOnRateLimit,
   });
 
   const form = useForm({

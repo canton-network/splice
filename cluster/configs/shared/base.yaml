@@ -242,16 +242,30 @@ cloudArmor:
   allRulesPreviewOnly: true
   publicEndpoints:
     publicScan:
-      hostname: scan.sv-2.scratcha.global.canton.network.digitalasset.com
+      hostPrefixRegex: scan
       pathPrefix: /api/scan
-      throttleAcrossAllEndpointsAllIps:
+      throttleAcrossAllEndpointsPerIp:
         withinIntervalSeconds: 60
-        maxRequestsBeforeHttp429: 0    # Keeps scan completely closed to the public
+        # above the envoy per-IP scan limit (see sv.scan.externalRateLimits.globalPerIpLimits),
+        # so that envoy stays the primary limiter and this is only a backstop that drops
+        # abusive sources at the GCP edge
+        maxRequestsBeforeHttp429: 2000
     tokenRegistry:
+      # the token registry is served off the scan hosts
+      hostPrefixRegex: scan
       pathPrefix: /registry
-      throttleAcrossAllEndpointsAllIps:
+      throttleAcrossAllEndpointsPerIp:
         withinIntervalSeconds: 60
-        maxRequestsBeforeHttp429: 200
+        # above the largest per-endpoint envoy perIpLimits under /registry, with room for
+        # a client legitimately using several registry endpoints at once
+        maxRequestsBeforeHttp429: 1000
+    sequencer:
+      hostPrefixRegex: sequencer-[0-9]+
+      pathPrefix: /
+      restrictToRateLimitedPaths: false
+      throttleAcrossAllEndpointsPerIp:
+        withinIntervalSeconds: 60
+        maxRequestsBeforeHttp429: 20000
 multiValidator:
   postgresPvcSize: '100Gi'
   resources:

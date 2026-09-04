@@ -71,31 +71,7 @@ spec:
             - name: CANTON_SEQUENCER_POSTGRES_DB
               value: {{ .Values.sequencer.persistence.databaseName }}
         {{- end }}
-        {{- if eq .Values.sequencer.driver.type "postgres"}}
-            - name: ADDITIONAL_CONFIG_SEQUENCER_DRIVER_REFERENCE
-              value: |
-                canton.sequencers.sequencer.sequencer {
-                  config {
-                    storage = ${_storage}
-                    storage.config.properties.serverName = ${?SEQUENCER_DRIVER_DATABASE_ADDRESS}
-                    storage.config.properties.password = ${?SEQUENCER_DRIVER_DATABASE_PASSWORD}
-                    storage.config.properties.currentSchema = "sequencer_driver"
-                    storage.config.properties.databaseName = ${?CANTON_SEQUENCER_POSTGRES_DB}
-                  }
-                  type = "reference"
-                }
-            - name: SEQUENCER_DRIVER_DATABASE_ADDRESS
-              value: {{ .Values.sequencer.driver.address }}
-            - name: SEQUENCER_DRIVER_DATABASE_PASSWORD
-              {{- if ((.Values.sequencer.persistence).secretOverrides).postgresPassword }}
-              value: {{ .Values.sequencer.persistence.secretOverrides.postgresPassword | quote }}
-              {{- else }}
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.sequencer.persistence.secretName }}
-                  key: postgresPassword
-            {{- end }}
-        {{- else if eq .Values.sequencer.driver.type "cometbft"}}
+        {{- if eq .Values.sequencer.driver.type "cometbft"}}
             - name: ADDITIONAL_CONFIG_SEQUENCER_DRIVER_COMETBFT
               value: |
                 canton.sequencers.sequencer.sequencer {

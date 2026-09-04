@@ -1552,8 +1552,8 @@
           "name": "sequencer-authentication",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 10,
-            "tokensPerFill": 10
+            "maxTokens": 100,
+            "tokensPerFill": 100
           },
           "tokensPerFill": 10000,
           "type": "limited"
@@ -1564,8 +1564,8 @@
           "name": "sequencer-connect",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 30,
-            "tokensPerFill": 30
+            "maxTokens": 100,
+            "tokensPerFill": 100
           },
           "tokensPerFill": 10000,
           "type": "limited"
@@ -1588,8 +1588,8 @@
           "name": "sequencer-subscribe",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 30,
-            "tokensPerFill": 30
+            "maxTokens": 100,
+            "tokensPerFill": 100
           },
           "tokensPerFill": 10000,
           "type": "limited"
@@ -1625,8 +1625,8 @@
           "name": "sequencer-authentication",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 10,
-            "tokensPerFill": 10
+            "maxTokens": 100,
+            "tokensPerFill": 100
           },
           "tokensPerFill": 10000,
           "type": "limited"
@@ -1637,8 +1637,8 @@
           "name": "sequencer-connect",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 30,
-            "tokensPerFill": 30
+            "maxTokens": 100,
+            "tokensPerFill": 100
           },
           "tokensPerFill": 10000,
           "type": "limited"
@@ -1661,8 +1661,8 @@
           "name": "sequencer-subscribe",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 30,
-            "tokensPerFill": 30
+            "maxTokens": 100,
+            "tokensPerFill": 100
           },
           "tokensPerFill": 10000,
           "type": "limited"
@@ -1698,8 +1698,8 @@
           "name": "sequencer-authentication",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 10,
-            "tokensPerFill": 10
+            "maxTokens": 100,
+            "tokensPerFill": 100
           },
           "tokensPerFill": 10000,
           "type": "limited"
@@ -1710,8 +1710,8 @@
           "name": "sequencer-connect",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 30,
-            "tokensPerFill": 30
+            "maxTokens": 100,
+            "tokensPerFill": 100
           },
           "tokensPerFill": 10000,
           "type": "limited"
@@ -1734,8 +1734,8 @@
           "name": "sequencer-subscribe",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 30,
-            "tokensPerFill": 30
+            "maxTokens": 100,
+            "tokensPerFill": 100
           },
           "tokensPerFill": 10000,
           "type": "limited"
@@ -1771,8 +1771,8 @@
           "name": "sequencer-authentication",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 10,
-            "tokensPerFill": 10
+            "maxTokens": 100,
+            "tokensPerFill": 100
           },
           "tokensPerFill": 10000,
           "type": "limited"
@@ -1783,8 +1783,8 @@
           "name": "sequencer-connect",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 30,
-            "tokensPerFill": 30
+            "maxTokens": 100,
+            "tokensPerFill": 100
           },
           "tokensPerFill": 10000,
           "type": "limited"
@@ -1807,8 +1807,8 @@
           "name": "sequencer-subscribe",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 30,
-            "tokensPerFill": 30
+            "maxTokens": 100,
+            "tokensPerFill": 100
           },
           "tokensPerFill": 10000,
           "type": "limited"
@@ -1844,8 +1844,8 @@
           "name": "sequencer-authentication",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 10,
-            "tokensPerFill": 10
+            "maxTokens": 100,
+            "tokensPerFill": 100
           },
           "tokensPerFill": 10000,
           "type": "limited"
@@ -1856,8 +1856,8 @@
           "name": "sequencer-connect",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 30,
-            "tokensPerFill": 30
+            "maxTokens": 100,
+            "tokensPerFill": 100
           },
           "tokensPerFill": 10000,
           "type": "limited"
@@ -1880,8 +1880,8 @@
           "name": "sequencer-subscribe",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 30,
-            "tokensPerFill": 30
+            "maxTokens": 100,
+            "tokensPerFill": 100
           },
           "tokensPerFill": 10000,
           "type": "limited"
@@ -1917,8 +1917,8 @@
           "name": "sequencer-authentication",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 10,
-            "tokensPerFill": 10
+            "maxTokens": 100,
+            "tokensPerFill": 100
           },
           "tokensPerFill": 10000,
           "type": "limited"
@@ -1929,8 +1929,8 @@
           "name": "sequencer-connect",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 30,
-            "tokensPerFill": 30
+            "maxTokens": 100,
+            "tokensPerFill": 100
           },
           "tokensPerFill": 10000,
           "type": "limited"
@@ -1953,8 +1953,8 @@
           "name": "sequencer-subscribe",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 30,
-            "tokensPerFill": 30
+            "maxTokens": 100,
+            "tokensPerFill": 100
           },
           "tokensPerFill": 10000,
           "type": "limited"
@@ -1990,8 +1990,8 @@
           "name": "sequencer-authentication",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 10,
-            "tokensPerFill": 10
+            "maxTokens": 100,
+            "tokensPerFill": 100
           },
           "tokensPerFill": 10000,
           "type": "limited"
@@ -2002,8 +2002,8 @@
           "name": "sequencer-connect",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 30,
-            "tokensPerFill": 30
+            "maxTokens": 100,
+            "tokensPerFill": 100
           },
           "tokensPerFill": 10000,
           "type": "limited"
@@ -2026,8 +2026,8 @@
           "name": "sequencer-subscribe",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 30,
-            "tokensPerFill": 30
+            "maxTokens": 100,
+            "tokensPerFill": 100
           },
           "tokensPerFill": 10000,
           "type": "limited"
@@ -2063,8 +2063,8 @@
           "name": "sequencer-authentication",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 10,
-            "tokensPerFill": 10
+            "maxTokens": 100,
+            "tokensPerFill": 100
           },
           "tokensPerFill": 10000,
           "type": "limited"
@@ -2075,8 +2075,8 @@
           "name": "sequencer-connect",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 30,
-            "tokensPerFill": 30
+            "maxTokens": 100,
+            "tokensPerFill": 100
           },
           "tokensPerFill": 10000,
           "type": "limited"
@@ -2099,8 +2099,8 @@
           "name": "sequencer-subscribe",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 30,
-            "tokensPerFill": 30
+            "maxTokens": 100,
+            "tokensPerFill": 100
           },
           "tokensPerFill": 10000,
           "type": "limited"
@@ -2136,8 +2136,8 @@
           "name": "sequencer-authentication",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 10,
-            "tokensPerFill": 10
+            "maxTokens": 100,
+            "tokensPerFill": 100
           },
           "tokensPerFill": 10000,
           "type": "limited"
@@ -2148,8 +2148,8 @@
           "name": "sequencer-connect",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 30,
-            "tokensPerFill": 30
+            "maxTokens": 100,
+            "tokensPerFill": 100
           },
           "tokensPerFill": 10000,
           "type": "limited"
@@ -2172,8 +2172,8 @@
           "name": "sequencer-subscribe",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 30,
-            "tokensPerFill": 30
+            "maxTokens": 100,
+            "tokensPerFill": 100
           },
           "tokensPerFill": 10000,
           "type": "limited"
@@ -2209,8 +2209,8 @@
           "name": "sequencer-authentication",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 10,
-            "tokensPerFill": 10
+            "maxTokens": 100,
+            "tokensPerFill": 100
           },
           "tokensPerFill": 10000,
           "type": "limited"
@@ -2221,8 +2221,8 @@
           "name": "sequencer-connect",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 30,
-            "tokensPerFill": 30
+            "maxTokens": 100,
+            "tokensPerFill": 100
           },
           "tokensPerFill": 10000,
           "type": "limited"
@@ -2245,8 +2245,8 @@
           "name": "sequencer-subscribe",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 30,
-            "tokensPerFill": 30
+            "maxTokens": 100,
+            "tokensPerFill": 100
           },
           "tokensPerFill": 10000,
           "type": "limited"
@@ -2282,8 +2282,8 @@
           "name": "sequencer-authentication",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 10,
-            "tokensPerFill": 10
+            "maxTokens": 100,
+            "tokensPerFill": 100
           },
           "tokensPerFill": 10000,
           "type": "limited"
@@ -2294,8 +2294,8 @@
           "name": "sequencer-connect",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 30,
-            "tokensPerFill": 30
+            "maxTokens": 100,
+            "tokensPerFill": 100
           },
           "tokensPerFill": 10000,
           "type": "limited"
@@ -2318,8 +2318,8 @@
           "name": "sequencer-subscribe",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 30,
-            "tokensPerFill": 30
+            "maxTokens": 100,
+            "tokensPerFill": 100
           },
           "tokensPerFill": 10000,
           "type": "limited"
@@ -2355,8 +2355,8 @@
           "name": "sequencer-authentication",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 10,
-            "tokensPerFill": 10
+            "maxTokens": 100,
+            "tokensPerFill": 100
           },
           "tokensPerFill": 10000,
           "type": "limited"
@@ -2367,8 +2367,8 @@
           "name": "sequencer-connect",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 30,
-            "tokensPerFill": 30
+            "maxTokens": 100,
+            "tokensPerFill": 100
           },
           "tokensPerFill": 10000,
           "type": "limited"
@@ -2391,8 +2391,8 @@
           "name": "sequencer-subscribe",
           "perIpLimits": {
             "fillInterval": "60s",
-            "maxTokens": 30,
-            "tokensPerFill": 30
+            "maxTokens": 100,
+            "tokensPerFill": 100
           },
           "tokensPerFill": 10000,
           "type": "limited"
@@ -3297,8 +3297,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 30,
-                          "tokens_per_fill": 30
+                          "max_tokens": 100,
+                          "tokens_per_fill": 100
                         }
                       },
                       {
@@ -3313,8 +3313,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 10,
-                          "tokens_per_fill": 10
+                          "max_tokens": 100,
+                          "tokens_per_fill": 100
                         }
                       },
                       {
@@ -3329,8 +3329,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 30,
-                          "tokens_per_fill": 30
+                          "max_tokens": 100,
+                          "tokens_per_fill": 100
                         }
                       },
                       {
@@ -4102,8 +4102,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 30,
-                          "tokens_per_fill": 30
+                          "max_tokens": 100,
+                          "tokens_per_fill": 100
                         }
                       },
                       {
@@ -4118,8 +4118,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 10,
-                          "tokens_per_fill": 10
+                          "max_tokens": 100,
+                          "tokens_per_fill": 100
                         }
                       },
                       {
@@ -4134,8 +4134,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 30,
-                          "tokens_per_fill": 30
+                          "max_tokens": 100,
+                          "tokens_per_fill": 100
                         }
                       },
                       {
@@ -4903,8 +4903,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 30,
-                          "tokens_per_fill": 30
+                          "max_tokens": 100,
+                          "tokens_per_fill": 100
                         }
                       },
                       {
@@ -4919,8 +4919,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 10,
-                          "tokens_per_fill": 10
+                          "max_tokens": 100,
+                          "tokens_per_fill": 100
                         }
                       },
                       {
@@ -4935,8 +4935,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 30,
-                          "tokens_per_fill": 30
+                          "max_tokens": 100,
+                          "tokens_per_fill": 100
                         }
                       },
                       {
@@ -5704,8 +5704,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 30,
-                          "tokens_per_fill": 30
+                          "max_tokens": 100,
+                          "tokens_per_fill": 100
                         }
                       },
                       {
@@ -5720,8 +5720,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 10,
-                          "tokens_per_fill": 10
+                          "max_tokens": 100,
+                          "tokens_per_fill": 100
                         }
                       },
                       {
@@ -5736,8 +5736,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 30,
-                          "tokens_per_fill": 30
+                          "max_tokens": 100,
+                          "tokens_per_fill": 100
                         }
                       },
                       {
@@ -9593,8 +9593,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 30,
-                          "tokens_per_fill": 30
+                          "max_tokens": 100,
+                          "tokens_per_fill": 100
                         }
                       },
                       {
@@ -9609,8 +9609,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 10,
-                          "tokens_per_fill": 10
+                          "max_tokens": 100,
+                          "tokens_per_fill": 100
                         }
                       },
                       {
@@ -9625,8 +9625,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 30,
-                          "tokens_per_fill": 30
+                          "max_tokens": 100,
+                          "tokens_per_fill": 100
                         }
                       },
                       {
@@ -10398,8 +10398,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 30,
-                          "tokens_per_fill": 30
+                          "max_tokens": 100,
+                          "tokens_per_fill": 100
                         }
                       },
                       {
@@ -10414,8 +10414,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 10,
-                          "tokens_per_fill": 10
+                          "max_tokens": 100,
+                          "tokens_per_fill": 100
                         }
                       },
                       {
@@ -10430,8 +10430,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 30,
-                          "tokens_per_fill": 30
+                          "max_tokens": 100,
+                          "tokens_per_fill": 100
                         }
                       },
                       {
@@ -11199,8 +11199,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 30,
-                          "tokens_per_fill": 30
+                          "max_tokens": 100,
+                          "tokens_per_fill": 100
                         }
                       },
                       {
@@ -11215,8 +11215,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 10,
-                          "tokens_per_fill": 10
+                          "max_tokens": 100,
+                          "tokens_per_fill": 100
                         }
                       },
                       {
@@ -11231,8 +11231,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 30,
-                          "tokens_per_fill": 30
+                          "max_tokens": 100,
+                          "tokens_per_fill": 100
                         }
                       },
                       {
@@ -12000,8 +12000,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 30,
-                          "tokens_per_fill": 30
+                          "max_tokens": 100,
+                          "tokens_per_fill": 100
                         }
                       },
                       {
@@ -12016,8 +12016,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 10,
-                          "tokens_per_fill": 10
+                          "max_tokens": 100,
+                          "tokens_per_fill": 100
                         }
                       },
                       {
@@ -12032,8 +12032,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 30,
-                          "tokens_per_fill": 30
+                          "max_tokens": 100,
+                          "tokens_per_fill": 100
                         }
                       },
                       {
@@ -15147,8 +15147,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 30,
-                          "tokens_per_fill": 30
+                          "max_tokens": 100,
+                          "tokens_per_fill": 100
                         }
                       },
                       {
@@ -15163,8 +15163,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 10,
-                          "tokens_per_fill": 10
+                          "max_tokens": 100,
+                          "tokens_per_fill": 100
                         }
                       },
                       {
@@ -15179,8 +15179,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 30,
-                          "tokens_per_fill": 30
+                          "max_tokens": 100,
+                          "tokens_per_fill": 100
                         }
                       },
                       {
@@ -15952,8 +15952,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 30,
-                          "tokens_per_fill": 30
+                          "max_tokens": 100,
+                          "tokens_per_fill": 100
                         }
                       },
                       {
@@ -15968,8 +15968,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 10,
-                          "tokens_per_fill": 10
+                          "max_tokens": 100,
+                          "tokens_per_fill": 100
                         }
                       },
                       {
@@ -15984,8 +15984,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 30,
-                          "tokens_per_fill": 30
+                          "max_tokens": 100,
+                          "tokens_per_fill": 100
                         }
                       },
                       {
@@ -16753,8 +16753,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 30,
-                          "tokens_per_fill": 30
+                          "max_tokens": 100,
+                          "tokens_per_fill": 100
                         }
                       },
                       {
@@ -16769,8 +16769,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 10,
-                          "tokens_per_fill": 10
+                          "max_tokens": 100,
+                          "tokens_per_fill": 100
                         }
                       },
                       {
@@ -16785,8 +16785,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 30,
-                          "tokens_per_fill": 30
+                          "max_tokens": 100,
+                          "tokens_per_fill": 100
                         }
                       },
                       {
@@ -17554,8 +17554,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 30,
-                          "tokens_per_fill": 30
+                          "max_tokens": 100,
+                          "tokens_per_fill": 100
                         }
                       },
                       {
@@ -17570,8 +17570,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 10,
-                          "tokens_per_fill": 10
+                          "max_tokens": 100,
+                          "tokens_per_fill": 100
                         }
                       },
                       {
@@ -17586,8 +17586,8 @@
                         ],
                         "token_bucket": {
                           "fill_interval": "60s",
-                          "max_tokens": 30,
-                          "tokens_per_fill": 30
+                          "max_tokens": 100,
+                          "tokens_per_fill": 100
                         }
                       },
                       {

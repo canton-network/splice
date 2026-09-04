@@ -1,18 +1,28 @@
 # This file is generated automatically. Do not edit directly.
 cloudArmor:
-  allRulesPreviewOnly: true
-  enabled: false
+  allRulesPreviewOnly: false
+  enabled: true
+  logging:
+    enabled: true
   publicEndpoints:
     publicScan:
-      hostname: 'scan.sv-2.scratcha.global.canton.network.digitalasset.com'
+      hostPrefixRegex: 'scan'
       pathPrefix: '/api/scan'
-      throttleAcrossAllEndpointsAllIps:
-        maxRequestsBeforeHttp429: 0
+      throttleAcrossAllEndpointsPerIp:
+        maxRequestsBeforeHttp429: 2000
+        withinIntervalSeconds: 60
+    sequencer:
+      hostPrefixRegex: 'sequencer-[0-9]+'
+      pathPrefix: '/'
+      restrictToRateLimitedPaths: false
+      throttleAcrossAllEndpointsPerIp:
+        maxRequestsBeforeHttp429: 20000
         withinIntervalSeconds: 60
     tokenRegistry:
+      hostPrefixRegex: 'scan'
       pathPrefix: '/registry'
-      throttleAcrossAllEndpointsAllIps:
-        maxRequestsBeforeHttp429: 200
+      throttleAcrossAllEndpointsPerIp:
+        maxRequestsBeforeHttp429: 1000
         withinIntervalSeconds: 60
 cluster:
   nodePools:
@@ -28,7 +38,7 @@ cluster:
 infra:
   enableSweetSecurity: true
   gkeGateway:
-    proxyForIstioHttp: false
+    proxyForIstioHttp: true
   istio:
     enableIngressAccessLogging: true
     enablePublicTokenRegistry: true
@@ -363,8 +373,8 @@ sv:
             name: 'sequencer-authentication'
             perIpLimits:
               fillInterval: '60s'
-              maxTokens: 10
-              tokensPerFill: 10
+              maxTokens: 100
+              tokensPerFill: 100
             tokensPerFill: 10000
             type: 'limited'
           /com.digitalasset.canton.sequencer.api.v30.SequencerConnectService/:
@@ -373,8 +383,8 @@ sv:
             name: 'sequencer-connect'
             perIpLimits:
               fillInterval: '60s'
-              maxTokens: 30
-              tokensPerFill: 30
+              maxTokens: 100
+              tokensPerFill: 100
             tokensPerFill: 10000
             type: 'limited'
           /com.digitalasset.canton.sequencer.api.v30.SequencerService/DownloadTopologyStateForInit:
@@ -393,8 +403,8 @@ sv:
             name: 'sequencer-subscribe'
             perIpLimits:
               fillInterval: '60s'
-              maxTokens: 30
-              tokensPerFill: 30
+              maxTokens: 100
+              tokensPerFill: 100
             tokensPerFill: 10000
             type: 'limited'
 svs:

@@ -15,8 +15,8 @@ rateLimits:
     tokensPerFill: 10000
     fillInterval: 60s
     perIpLimits:
-      maxTokens: 30
-      tokensPerFill: 30
+      maxTokens: 100
+      tokensPerFill: 100
       fillInterval: 60s
 
   # Token challenge/refresh. Tokens are long lived, so clients hit this rarely.
@@ -27,8 +27,8 @@ rateLimits:
     tokensPerFill: 10000
     fillInterval: 60s
     perIpLimits:
-      maxTokens: 10
-      tokensPerFill: 10
+      maxTokens: 100
+      tokensPerFill: 100
       fillInterval: 60s
 
   # Subscriptions are long lived streams; only opening one consumes a token.
@@ -39,8 +39,8 @@ rateLimits:
     tokensPerFill: 10000
     fillInterval: 60s
     perIpLimits:
-      maxTokens: 30
-      tokensPerFill: 30
+      maxTokens: 100
+      tokensPerFill: 100
       fillInterval: 60s
 
   # Onboarding only. Also covers DownloadTopologyStateForInitHash.

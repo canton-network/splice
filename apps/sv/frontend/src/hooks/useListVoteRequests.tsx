@@ -13,6 +13,7 @@ import { useEffect, useRef } from 'react';
 import { useSvAdminClient } from '../contexts/SvAdminServiceContext';
 import { useConfigPollInterval } from '../utils';
 import { shouldContinueVoteHistorySearch } from '../utils/proposalSearch';
+import { retryOnRateLimit, retryQuery } from '@canton-network/splice-common-frontend';
 
 const PAGINATED_VOTE_RESULTS_QUERY_KEY = 'paginatedVoteRequestResults';
 const PAGINATED_VOTE_RESULTS_PAGE_SIZE = 500;
@@ -69,7 +70,7 @@ export const useListVoteRequestResult = (
       );
       return List(DsoRules_CloseVoteRequestResult).decoder.runWithException(dso_rules_vote_results);
     },
-    retry,
+    retry: retry ? retryQuery : retryOnRateLimit,
   });
 };
 
