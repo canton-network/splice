@@ -120,7 +120,7 @@ jobs:
       - name: Run Tests
         uses: ./.github/actions/tests/scala_test
         with:
-          cache_version: 9
+          cache_version: 10
           start_canton_options: -F -w
           test_suite_name: ${{ inputs.test_name }}
           test_names: ${{ needs.split_tests.outputs.test_names }}
