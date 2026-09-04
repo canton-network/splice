@@ -1312,6 +1312,7 @@ class DbAppActivityRecordStoreTest
       submittingParties = Seq.empty,
       transactionRootViews = Seq.empty,
       trafficSummaryO = None,
+      roundNumber = None,
     )
 
   private val noViews: Long => Seq[DbScanVerdictStore.TransactionViewT] = _ => Seq.empty
