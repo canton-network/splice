@@ -66,4 +66,3 @@ class InternedStringStoreTest extends StoreTestBase with SplicePostgresTest {
     } yield ()
   }
 }
-
