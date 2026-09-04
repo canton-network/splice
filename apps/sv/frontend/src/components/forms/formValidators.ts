@@ -325,13 +325,26 @@ export const SWITCH_OVER_FIELD_NAMES = [
 export const isSwitchOverField = (fieldName: string): boolean =>
   (SWITCH_OVER_FIELD_NAMES as readonly string[]).includes(fieldName);
 
-// Parse a config value into sorted key -> human-readable UTC rows for display; [] when empty.
+// Shown in place of a switch-over time that is empty or an unset placeholder.
+export const SWITCH_OVER_UNSET_LABEL = 'Not set';
+
+// A DAML `Time` min-bound (year 1, i.e. 0001-01-01) is used as an "unset" placeholder for
+// switch-over times; it is not a real, user-meaningful timepoint.
+export const isDamlMinBoundTime = (time: string | null | undefined): boolean => {
+  if (!time) return false;
+  const t = dayjs.utc(time);
+  return t.isValid() && t.year() <= 1;
+};
+
+// Parse a config value into sorted key -> human-readable UTC rows for display. Min-bound
+// placeholders are dropped entirely; [] is returned when nothing meaningful is left.
 export const switchOverConfigValueToDisplayEntries = (
   value: string | null | undefined
 ): { key: string; time: string }[] => {
   const map = configValueToSwitchOverMap(value);
   if (!map) return [];
   return Object.entries(map)
+    .filter(([, time]) => !isDamlMinBoundTime(time))
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([key, time]) => {
       const t = dayjs.utc(time);
@@ -339,14 +352,27 @@ export const switchOverConfigValueToDisplayEntries = (
     });
 };
 
+// Editor rows to render for the switch-over field: min-bound placeholders are hidden but
+// kept in form state so they round-trip on submit. Original array indices are preserved
+// for field names and row removal.
+export const visibleSwitchOverRows = (
+  entries: SwitchOverEntry[]
+): { entry: SwitchOverEntry; index: number }[] =>
+  entries
+    .map((entry, index) => ({ entry, index }))
+    .filter(({ entry }) => !isDamlMinBoundTime(entry.time));
+
 export const validateSwitchOverTimes = (
   entries: SwitchOverEntry[],
   allowNonFutureDated: boolean,
   effectiveDate: string | undefined
 ): string | false => {
-  if (entries.length === 0) return false;
+  // Min-bound placeholders are treated as unset and excluded from validation entirely
+  // (they are preserved in form state but not shown as editable rows).
+  const active = entries.filter(e => !isDamlMinBoundTime(e.time));
+  if (active.length === 0) return false;
 
-  const keys = entries.map(e => e.key.trim());
+  const keys = active.map(e => e.key.trim());
 
   if (keys.some(k => k === '')) {
     return 'Switch-over key is required';
@@ -356,7 +382,7 @@ export const validateSwitchOverTimes = (
     return 'Switch-over keys must be unique';
   }
 
-  for (const { key, time } of entries) {
+  for (const { key, time } of active) {
     // Times are stored as local wall-clock strings (dateTimeFormatISO), matching the
     // DateField picker and the effective date; parse them in the same (local) frame.
     // The builder converts to a UTC DAML Time on submit.
