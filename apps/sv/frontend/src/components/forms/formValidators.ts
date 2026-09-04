@@ -276,12 +276,7 @@ export const validateNextScheduledLogicalSynchronizerUpgrade = (
 
 export type SwitchOverEntry = { key: string; time: string };
 
-/**
- * Serialize switch-over entries into the DAML map shape used by the config
- * builders: trim keys, drop entries with an empty key, normalize each time to
- * the DAML `Time` format, and collapse to `null` when there is nothing left.
- * Shared with the builders so change detection matches what is submitted.
- */
+// Trim keys, drop empty-key entries, normalize times to the DAML `Time` format; null when empty.
 export const serializeSwitchOverTimes = (
   entries: SwitchOverEntry[]
 ): Record<string, string> | null => {
@@ -297,13 +292,7 @@ export const serializeSwitchOverTimes = (
       );
 };
 
-/**
- * Canonical string form of switch-over entries, used as the value of the
- * `svOperationsSwitchOverTimes` / `amuletSwitchOverTimes` config field so the
- * map flows through the normal ConfigChange change-detection pipeline. Keys are
- * sorted so the string is stable regardless of entry order; empty maps become
- * the empty string (i.e. "no change" relative to an unset field).
- */
+// Stable sorted-key JSON string used as the ConfigChange value; '' for an empty map.
 export const switchOverEntriesToConfigValue = (entries: SwitchOverEntry[]): string => {
   const normalized = serializeSwitchOverTimes(entries) ?? {};
   const sorted = Object.fromEntries(
@@ -312,26 +301,42 @@ export const switchOverEntriesToConfigValue = (entries: SwitchOverEntry[]): stri
   return Object.keys(sorted).length === 0 ? '' : JSON.stringify(sorted);
 };
 
-/**
- * Same canonical string as {@link switchOverEntriesToConfigValue}, but derived
- * from a baseline DAML switch-over map (as read off a config). Normalizing both
- * sides through the same path keeps the baseline/current comparison format-safe.
- */
+// Same config value as switchOverEntriesToConfigValue, from a baseline DAML map.
 export const switchOverMapToConfigValue = (
   map: Record<string, string> | null | undefined
 ): string =>
   switchOverEntriesToConfigValue(Object.entries(map ?? {}).map(([key, time]) => ({ key, time })));
 
-/**
- * Inverse of {@link switchOverEntriesToConfigValue}: parse the config field
- * value back into a DAML switch-over map (or `null` when empty).
- */
+// Parse the config value back into a DAML switch-over map (null when empty).
 export const configValueToSwitchOverMap = (
   value: string | null | undefined
 ): Record<string, string> | null => {
   if (!value) return null;
   const parsed = JSON.parse(value) as Record<string, string>;
   return Object.keys(parsed).length === 0 ? null : parsed;
+};
+
+// Config field names whose value is a serialized switch-over map.
+export const SWITCH_OVER_FIELD_NAMES = [
+  'svOperationsSwitchOverTimes',
+  'amuletSwitchOverTimes',
+] as const;
+
+export const isSwitchOverField = (fieldName: string): boolean =>
+  (SWITCH_OVER_FIELD_NAMES as readonly string[]).includes(fieldName);
+
+// Parse a config value into sorted key -> human-readable UTC rows for display; [] when empty.
+export const switchOverConfigValueToDisplayEntries = (
+  value: string | null | undefined
+): { key: string; time: string }[] => {
+  const map = configValueToSwitchOverMap(value);
+  if (!map) return [];
+  return Object.entries(map)
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([key, time]) => {
+      const t = dayjs.utc(time);
+      return { key, time: t.isValid() ? `${t.format('YYYY-MM-DD HH:mm')} UTC` : time };
+    });
 };
 
 export const validateSwitchOverTimes = (

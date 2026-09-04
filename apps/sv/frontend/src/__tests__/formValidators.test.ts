@@ -6,7 +6,9 @@ import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import {
   configValueToSwitchOverMap,
+  isSwitchOverField,
   serializeSwitchOverTimes,
+  switchOverConfigValueToDisplayEntries,
   switchOverEntriesToConfigValue,
   switchOverMapToConfigValue,
   validateSwitchOverTimes,
@@ -90,8 +92,10 @@ describe('serializeSwitchOverTimes', () => {
   });
 
   it('normalizes times to the DAML Time format', () => {
-    expect(serializeSwitchOverTimes([{ key: 'a', time: '2026-09-05 12:34' }])).toEqual({
-      a: '2026-09-05T12:34:00Z',
+    // Use an input with an explicit offset so the expected UTC value is fixed
+    // regardless of the ambient timezone the test suite runs in.
+    expect(serializeSwitchOverTimes([{ key: 'a', time: '2026-09-05T12:34:00+02:00' }])).toEqual({
+      a: '2026-09-05T10:34:00Z',
     });
   });
 });
@@ -145,5 +149,30 @@ describe('switch-over config value (serialize / parse)', () => {
     expect(configValueToSwitchOverMap(value)).toEqual({ a: '2026-09-05T00:00:00Z' });
     expect(configValueToSwitchOverMap('')).toBeNull();
     expect(configValueToSwitchOverMap(undefined)).toBeNull();
+  });
+});
+
+describe('switch-over display helpers', () => {
+  it('identifies switch-over config fields', () => {
+    expect(isSwitchOverField('svOperationsSwitchOverTimes')).toBe(true);
+    expect(isSwitchOverField('amuletSwitchOverTimes')).toBe(true);
+    expect(isSwitchOverField('voteCooldownTime')).toBe(false);
+  });
+
+  it('returns no display entries for empty / unset values', () => {
+    expect(switchOverConfigValueToDisplayEntries('')).toEqual([]);
+    expect(switchOverConfigValueToDisplayEntries(null)).toEqual([]);
+    expect(switchOverConfigValueToDisplayEntries(undefined)).toEqual([]);
+  });
+
+  it('renders sorted key -> human-readable UTC rows', () => {
+    const value = switchOverEntriesToConfigValue([
+      { key: 'b', time: '2026-09-06T08:00:00Z' },
+      { key: 'a', time: '2026-09-05T12:34:00Z' },
+    ]);
+    expect(switchOverConfigValueToDisplayEntries(value)).toEqual([
+      { key: 'a', time: '2026-09-05 12:34 UTC' },
+      { key: 'b', time: '2026-09-06 08:00 UTC' },
+    ]);
   });
 });
