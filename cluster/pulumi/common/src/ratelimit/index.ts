@@ -4,3 +4,5 @@ export * from './rateLimitSchema';
 export * from './rateLimitHeaders';
 export * from './envoyRateLimiter';
 export * from './rateLimit';
+export * from './spliceRateLimitsConfig';
+export * from './spliceRateLimits';

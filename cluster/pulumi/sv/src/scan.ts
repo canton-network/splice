@@ -24,6 +24,7 @@ import { SvConfig, svsConfig } from '@canton-network/splice-pulumi-common-sv/src
 import { spliceConfig } from '@canton-network/splice-pulumi-common/src/config/config';
 import { Postgres } from '@canton-network/splice-pulumi-common/src/postgres';
 import { installRateLimits } from '@canton-network/splice-pulumi-common/src/ratelimit/rateLimit';
+import { scanRateLimitEnvVars } from '@canton-network/splice-pulumi-common/src/ratelimit/spliceRateLimits';
 import { Resource } from '@pulumi/pulumi';
 
 import { persistenceConfig } from './persistence';
@@ -99,9 +100,9 @@ export function installScan(
     logLevel: config.logging?.appsLogLevel,
     apiRequestLogLevel: config.logging?.apiRequestLogLevel,
     logAsyncFlush: config.logging?.appsAsync,
-    additionalEnvVars: (config.scanApp?.additionalEnvVars || []).concat([
-      envoyClientIpHeaderEnvVar('canton.scan-apps.scan-app'),
-    ]),
+    additionalEnvVars: (config.scanApp?.additionalEnvVars || [])
+      .concat([envoyClientIpHeaderEnvVar('canton.scan-apps.scan-app')])
+      .concat(scanRateLimitEnvVars()),
     resources: config.scanApp?.resources,
     ...(config.bulkStorageBuckets
       ? {

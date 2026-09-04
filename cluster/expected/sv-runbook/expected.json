@@ -617,6 +617,10 @@
           {
             "name": "ADDITIONAL_CONFIG_CLIENT_IP_HEADERS",
             "value": "canton.scan-apps.scan-app.parameters.rate-limiting.client-ip-headers = [\"x-envoy-external-address\"]\n"
+          },
+          {
+            "name": "ADDITIONAL_CONFIG_SCAN_RATE_LIMITS",
+            "value": "canton.scan-apps.scan-app.parameters.rate-limiting = {\"global\":{\"rate-per-second\":400,\"sustained-rate-per-second\":200,\"per-client-ip\":{\"enabled\":true,\"limit\":{\"rate-per-second\":100,\"sustained-rate-per-second\":50}}}}"
           }
         ],
         "affinity": {
