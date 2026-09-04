@@ -3,10 +3,37 @@
 
 export const SCAN_RATE_LIMITS_ENV_VAR = 'ADDITIONAL_CONFIG_SCAN_RATE_LIMITS';
 
+export interface EnvVar {
+  name: string;
+  value: string;
+}
+
+export interface SimpleRateLimit {
+  enabled?: boolean;
+  'rate-per-second'?: number;
+  'sustained-rate-per-second'?: number;
+  'sustained-window-seconds'?: number;
+}
+
+export interface PerClientIpRateLimit {
+  enabled?: boolean;
+  limit?: SimpleRateLimit;
+  'max-attribute-values'?: number;
+  'ip-overrides'?: Record<string, SimpleRateLimit>;
+}
+
+export interface ScanRateLimits {
+  global?: SimpleRateLimit & { 'per-client-ip'?: PerClientIpRateLimit };
+}
+
+export interface SpliceRateLimits {
+  scan?: ScanRateLimits;
+}
+
 export function scanRateLimitEnvVarsFor(
-  rateLimits: unknown,
+  rateLimits: ScanRateLimits | undefined,
   appConfigPath: string = 'canton.scan-apps.scan-app'
-): { name: string; value: string }[] {
+): EnvVar[] {
   return rateLimits
     ? [
         {

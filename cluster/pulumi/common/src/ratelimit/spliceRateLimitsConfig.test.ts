@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 import { expect, test } from '@jest/globals';
 
-import { scanRateLimitEnvVarsFor } from './spliceRateLimitsConfig';
+import { ScanRateLimits, scanRateLimitEnvVarsFor } from './spliceRateLimitsConfig';
 
 test('passes the published limits through unchanged, so that they override the app defaults', () => {
-  const published = {
+  const published: ScanRateLimits = {
     global: {
       enabled: true,
       'rate-per-second': 777,
