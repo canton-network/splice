@@ -47,13 +47,13 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   MigrationSchedule,
   RewardAccountingActivityTotalsOk,
   RewardAccountingActivityTotalsUndetermined,
-  RewardAccountingRootHashOk,
-  RewardAccountingRootHashUndetermined,
 }
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection.{
   BftCallConfig,
+  ConnectionsWithProbeVerdicts,
   ConsensusNotReached,
   ConsensusNotReachedRetryable,
+  ProbeVerdict,
   ScanConnections,
   ScanList,
 }
@@ -1091,42 +1091,56 @@ class BftScanConnection(
       ec: ExecutionContext,
       tc: TraceContext,
   ): Future[(GetRewardAccountingRootHashResponse, List[Uri])] = {
-    val undetermined =
-      GetRewardAccountingRootHashResponse(
-        RewardAccountingRootHashUndetermined(status = "Undetermined")
-      )
-    val callConfig = BftCallConfig.default(scanList.scanConnections)
-    if (!callConfig.enoughAvailableScans) Future.successful((undetermined, Nil))
-    else
-      bftCallWithScanUris[String](
+    import GetRewardAccountingRootHashResponse.members as RHR
+
+    // Optimization: transform `Undetermined` and `CannotProvide`
+    // responses to failed responses, so that they do not form consensus.
+    // Returning `Undetermined` or `CannotProvide` would also be ok, but the
+    // outer retry in the caller of this method (`CalculateRewardsTrigger`) is
+    // slower and more noisy than the retry in `bftCallWithScanUris`.
+    def getRewardAccountingRootHashForConsensus(
+        scan: SingleScanConnection
+    ): Future[GetRewardAccountingRootHashResponse] =
+      scan.getRewardAccountingRootHash(roundNumber).transform {
+        case Success(RHR.RewardAccountingRootHashUndetermined(_)) |
+            Success(RHR.RewardAccountingRootHashCannotProvide(_)) =>
+          Failure(BftScanConnection.IgnoreResponse(scan.url))
+        case r => r
+      }
+
+    for {
+      // Phase 1: ask all scans whether they wish to opt out of consensus
+      // because they will never be able to provide a response.
+      // Note: This phase is not retried, so if enough scans fail to opt out due to network issues,
+      // we might run into situations where the second phase will never be able to reach consensus.
+      // Scans only opt out for a brief period after onboarding, so this should not be a problem in practice.
+      connectionsWithResponses <- ConnectionsWithProbeVerdicts.fromCall(
+        scanList.scanConnections,
+        _.getRewardAccountingRootHash(roundNumber),
+      ) {
+        case Success(RHR.RewardAccountingRootHashCannotProvide(_)) => ProbeVerdict.WithoutData
+        case Success(r @ RHR.RewardAccountingRootHashOk(_)) => ProbeVerdict.WithData(r)
+        case Success(RHR.RewardAccountingRootHashUndetermined(_)) => ProbeVerdict.Unavailable
+        case Failure(_) => ProbeVerdict.Unavailable
+      }
+
+      callConfig = BftCallConfig.forOptionalResponses(connectionsWithResponses)
+
+      // Phase 2: do a regular BFT call with the remaining scans
+      result <- bftCallWithScanUris(
+        // Optimization: reuse the OK responses we already have from the first phase
         call = scan =>
-          scan.getRewardAccountingRootHash(roundNumber).flatMap {
-            case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok) =>
-              Future.successful(ok.rootHash)
-            case _: GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashUndetermined |
-                _: GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashCannotProvide =>
-              Future.failed(BftScanConnection.IgnoreResponse(scan.url))
-          },
+          connectionsWithResponses.responses
+            .get(scan)
+            .fold(getRewardAccountingRootHashForConsensus(scan)) {
+              case ProbeVerdict.WithData(ok) => Future.successful(ok)
+              case _ => getRewardAccountingRootHashForConsensus(scan)
+            },
         endpoint = "getRewardAccountingRootHash",
         callConfig = callConfig,
         disagreementLogLevel = Level.WARN,
       )
-        .transformWith {
-          case Success((rootHash, consensusUris)) =>
-            Future.successful(
-              (
-                GetRewardAccountingRootHashResponse(
-                  RewardAccountingRootHashOk(
-                    status = "Ok",
-                    roundNumber = roundNumber,
-                    rootHash = rootHash,
-                  )
-                ),
-                consensusUris.map(_.toString),
-              )
-            )
-          case Failure(_) => Future.successful((undetermined, Nil))
-        }
+    } yield result
   }
 
   /** The batch contents are verifiable via the hash, so BFT agreement across scans is not
@@ -1355,6 +1369,37 @@ object BftScanConnection {
     def randomSingleCall(connections: ScanConnections): BftCallConfig =
       default(connections).copy(requestsToDo = 1, targetSuccess = 1)
 
+    def forOptionalResponses[T](
+        connectionsWithProbeVerdicts: ConnectionsWithProbeVerdicts[T]
+    )(implicit loggingContext: ErrorLoggingContext): BftCallConfig = {
+      // Filter out connections that wish to be excluded from consensus
+      val connectionsForConsensus =
+        connectionsWithProbeVerdicts.responses.toList.collect {
+          case (c, ProbeVerdict.WithData(_)) => c
+          case (c, ProbeVerdict.Unavailable) => c
+        }
+      if (connectionsForConsensus.size < connectionsWithProbeVerdicts.responses.size) {
+        val abstainingConnections =
+          connectionsWithProbeVerdicts.responses.keySet -- connectionsForConsensus
+        loggingContext.info(
+          s"Making a BFT call with a modified config, because some connections are abstaining." +
+            s" Connections ${abstainingConnections.map(_.url)} are abstaining from consensus, " +
+            s" proceeding with the remaining ${connectionsForConsensus.map(_.url)} connections."
+        )
+      }
+
+      // Compute thresholds from the remaining connections
+      val n = connectionsForConsensus.size + connectionsWithProbeVerdicts.failed
+      val f = (n - 1) / 3 max 0
+
+      BftCallConfig(
+        connections = connectionsForConsensus,
+        // Play it safe wrt availability in case we have no fault tolerance.
+        requestsToDo = if (f == 0) connectionsForConsensus.size else 2 * f + 1,
+        targetSuccess = f + 1,
+      )
+    }
+
     def forAvailableData(
         connections: ScanConnections,
         dataAvailable: SingleScanConnection => Boolean,
@@ -1377,6 +1422,32 @@ object BftScanConnection {
         targetSuccess = targetSuccess,
       )
     }
+  }
+
+  /** Stores the result of the first phase of a 2-phase BFT call,
+    * where we first ask all scans if they want to opt out of the consensus.
+    *
+    * @param responses  Responses for all connections that were tried.
+    * @param failed     Number of connections for which no attempt was made to call,
+    *                   i.e., those in ScanConnections.failed.
+    */
+  case class ConnectionsWithProbeVerdicts[T](
+      responses: Map[SingleScanConnection, ProbeVerdict[T]],
+      failed: Int,
+  )
+  object ConnectionsWithProbeVerdicts {
+    def fromCall[T](connections: ScanConnections, call: SingleScanConnection => Future[T])(
+        verdict: Try[T] => ProbeVerdict[T]
+    )(implicit ec: ExecutionContext): Future[ConnectionsWithProbeVerdicts[T]] = for {
+      responses <- Future.traverse(connections.open)(connection =>
+        call(connection)
+          .transformWith(r => Future.successful(verdict(r)))
+          .map(result => connection -> result)
+      )
+    } yield ConnectionsWithProbeVerdicts(
+      responses.toMap,
+      connections.failed,
+    )
   }
 
   case class ScanConnections(
@@ -2184,6 +2255,18 @@ object BftScanConnection {
   private case class TextFailureResponse[+T](status: StatusCode, content: String)
       extends ScanResponse[T]
   private case class ExceptionFailureResponse[+T](error: Throwable) extends ScanResponse[T]
+
+  /** Classification of a probe response for two-phase BFT reads.
+    * `WithData` = usable data.
+    * `WithoutData` = definite "cannot provide" (dropped from quorum).
+    * `Unavailable` = no response or still processing (kept in quorum as possibly disagreeing).
+    */
+  sealed trait ProbeVerdict[+V] extends Product with Serializable
+  object ProbeVerdict {
+    final case class WithData[V](value: V) extends ProbeVerdict[V]
+    case object WithoutData extends ProbeVerdict[Nothing]
+    case object Unavailable extends ProbeVerdict[Nothing]
+  }
 
   class ConsensusNotReached(
       numRequests: Int,
