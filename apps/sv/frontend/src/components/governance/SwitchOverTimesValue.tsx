@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Box, Typography } from '@mui/material';
-import { switchOverConfigValueToDisplayEntries } from '../forms/formValidators';
+import {
+  SWITCH_OVER_UNSET_LABEL,
+  switchOverConfigValueToDisplayEntries,
+} from '../forms/formValidators';
 
 interface SwitchOverTimesValueProps {
   value: string | null | undefined;
@@ -19,7 +22,7 @@ export const SwitchOverTimesValue: React.FC<SwitchOverTimesValueProps> = ({
   if (entries.length === 0) {
     return (
       <Typography variant="body2" fontFamily="monospace" data-testid={testId}>
-        Not set
+        {SWITCH_OVER_UNSET_LABEL}
       </Typography>
     );
   }
