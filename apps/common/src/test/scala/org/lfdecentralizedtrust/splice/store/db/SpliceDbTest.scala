@@ -103,7 +103,8 @@ trait SpliceDbTest extends DbTest with BeforeAndAfterAll { this: Suite =>
                 acs_incremental_snapshot_data_next,
                 acs_incremental_snapshot_data_backfill,
                 acs_incremental_snapshot,
-                dso_unavailable_parties
+                dso_unavailable_parties,
+                interned_strings
             RESTART IDENTITY CASCADE""".asUpdate
           _ <- debugPrintPgActivity()
         } yield (),

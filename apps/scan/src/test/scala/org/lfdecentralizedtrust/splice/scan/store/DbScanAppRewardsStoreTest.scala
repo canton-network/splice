@@ -1214,6 +1214,7 @@ class DbScanAppRewardsStoreTest
       participantId,
       dsoParty,
       BackfillingRequirement.BackfillingNotRequired,
+      internedStringStore(storage),
       loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = false,

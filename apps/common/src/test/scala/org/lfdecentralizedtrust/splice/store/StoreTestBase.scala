@@ -13,6 +13,7 @@ import com.daml.ledger.javaapi.data.{
   Unit as damlUnit,
   Value as damlValue,
 }
+import com.daml.metrics.api.noop.NoOpMetricsFactory
 import com.digitalasset.canton.config.CantonRequireTypes.String3
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.logging.{LogEntry, NamedLogging, SuppressionRule}
@@ -34,9 +35,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.{
   schedule as scheduleCodegen,
   validatorlicense as validatorLicenseCodegen,
 }
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
-  rewardaccountingv2 as rewardAccountingCodegen
-}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.rewardaccountingv2 as rewardAccountingCodegen
 import org.lfdecentralizedtrust.splice.environment.{BaseLedgerConnection, DarResource, DarResources}
 import org.lfdecentralizedtrust.splice.environment.ledger.api.{
   ActiveContract,
@@ -57,6 +56,8 @@ import org.lfdecentralizedtrust.splice.util.{
 }
 import com.digitalasset.canton.{BaseTest, HasActorSystem, HasExecutionContext}
 import com.digitalasset.canton.data.CantonTimestamp
+import com.digitalasset.canton.lifecycle.CloseContext
+import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.topology.{ParticipantId, PartyId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.daml.lf.data.Numeric
@@ -93,11 +94,11 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.LockedAmulet
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletallocation.AmuletAllocation
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv1.{
   AllocationSpecification,
+  Reference,
   SettlementInfo,
   TransferLeg,
-  Reference,
 }
-import org.lfdecentralizedtrust.splice.store.db.TxLogRowData
+import org.lfdecentralizedtrust.splice.store.db.{InternedStringStore, TxLogRowData}
 import org.scalatest.wordspec.AsyncWordSpec
 import org.slf4j.event.Level
 
@@ -106,6 +107,7 @@ import java.time.temporal.ChronoUnit
 import java.time.{Duration, Instant}
 import java.util
 import java.util.Optional
+import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{Future, blocking}
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
@@ -120,6 +122,15 @@ abstract class StoreTestBase
   protected val upgradedAppRewardCouponPackageId = "upgradedpackageid"
   protected val dummyHoldingPackageId = DummyHolding.TEMPLATE_ID.getPackageId
   protected val maliciousPackageId = "maliciouspackageid"
+
+  protected def internedStringStore(storage: DbStorage)(implicit close: CloseContext) =
+    InternedStringStore.createWithoutWarmup(
+      storage,
+      10_000L,
+      FiniteDuration(1, "minute"),
+      loggerFactory,
+      NoOpMetricsFactory,
+    )
 
   // Looks up the package name from the package ID in dars.lock, to avoid having to parse all DARs just to find this mapping
   // TODO(#3937): this is quite hacky. What we should really do is just auto-generate DarResources instead of deriving it from DARs at runtime.

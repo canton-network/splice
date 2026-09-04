@@ -246,6 +246,7 @@ abstract class UpdateHistoryTestBase
       participantId,
       updateStreamParty,
       backfillingRequired,
+      internedStringStore(storage),
       loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = true,
