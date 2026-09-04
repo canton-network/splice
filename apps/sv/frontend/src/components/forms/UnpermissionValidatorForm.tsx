@@ -54,7 +54,7 @@ export const UnpermissionValidatorForm: React.FC = () => {
     summary: '',
     participantId: '',
     revoked: false,
-    loginAfter: dayjs().add(1, 'day').format(dateTimeFormatISO),
+    loginAfter: dayjs().add(10, 'day').format(dateTimeFormatISO),
   };
 
   const form = useAppForm({
@@ -155,7 +155,7 @@ export const UnpermissionValidatorForm: React.FC = () => {
                     label={<Typography fontWeight="bold">Permanent Revocation</Typography>}
                   />
                   <Typography variant="body2" color="text.secondary" sx={{ ml: 4, mt: -0.5 }}>
-                    If checked, the validator is permanently unpermissioned.
+                    If checked, the validator needs an sv vote to repermission.
                   </Typography>
                 </FormGroup>
               )}
