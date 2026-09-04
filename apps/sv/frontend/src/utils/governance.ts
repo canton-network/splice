@@ -36,6 +36,10 @@ import type {
 } from '../utils/types';
 import { buildAmuletConfigChanges } from './buildAmuletConfigChanges';
 import { buildDsoConfigChanges } from './buildDsoConfigChanges';
+import {
+  switchOverEntriesToConfigValue,
+  type SwitchOverEntry,
+} from '../components/forms/formValidators';
 import { AmuletRules_SetConfig } from '@daml.js/splice-amulet/lib/Splice/AmuletRules';
 import { AmuletConfig } from '@daml.js/splice-amulet/lib/Splice/AmuletConfig';
 import { Optional } from '@daml/types';
@@ -347,6 +351,24 @@ export function configFormDataToConfigChanges(
   return onlyChangedFields
     ? changes.filter(change => change.currentValue !== change.newValue)
     : changes;
+}
+
+/**
+ * Mirror the switch-over map editor's entries into the config field of the given
+ * name, so switch-over times participate in {@link configFormDataToConfigChanges}
+ * like any other config field (change detection, review summary, reconstruction).
+ * The entries slice remains the editable source of truth; this derives the flat
+ * config value from it at read time.
+ */
+export function withSwitchOverConfigValue(
+  config: ConfigFormData,
+  fieldName: string,
+  entries: SwitchOverEntry[]
+): ConfigFormData {
+  return {
+    ...config,
+    [fieldName]: { fieldName, value: switchOverEntriesToConfigValue(entries) },
+  };
 }
 
 export function formatBasisPoints(value: string): string {

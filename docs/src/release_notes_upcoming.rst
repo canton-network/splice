@@ -137,3 +137,7 @@ release-notes:: Upcoming
 
         - The ``AmuletRules_SetConfig`` proposal form can now set
           ``minDevelopmentFundMintingDelay`` and ``developmentFundManagerBlacklist``.
+
+        - The ``AmuletRules_SetConfig`` proposal form can now set ``amuletSwitchOverTimes``.
+
+        - The ``DsoRulesConfig`` proposal form can now set ``svOperationsSwitchOverTimes``.
