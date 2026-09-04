@@ -80,14 +80,19 @@ class DbInternedStringStore(storage: DbStorage)(implicit ec: ExecutionContext, c
     storage
       .query(
         sql"""
-            with new_row as (
-              insert into interned_strings (value) values ($value)
-              on conflict (value) do nothing returning id
-            )
-            select id from new_row union all select id from interned_strings where value = $value limit 1;
-          """.as[InternedId].head,
+            insert into interned_strings (value) values ($value)
+            on conflict (value) do nothing returning id;
+          """.as[InternedId].headOption,
         "intern",
       )
+      .flatMap {
+        case None =>
+          storage.query(
+            sql"select id from interned_strings where value = $value".as[InternedId].head,
+            "getInternedId",
+          )
+        case Some(id) => Future.successful(id)
+      }
   }
 
 }
