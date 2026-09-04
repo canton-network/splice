@@ -672,7 +672,7 @@ class UpdateHistory(
       tc: TraceContext
   ): Future[Unit] = {
     import cats.implicits.*
-    // TODO (#6257): use the returned ids in the partitioned table
+    // TODO (#6312): use the returned ids in the partitioned table
     for {
       _ <- internedStringStore.getOrIntern(identifier.getPackageId)
       _ <- internedStringStore.getOrIntern(identifier.getModuleName)
