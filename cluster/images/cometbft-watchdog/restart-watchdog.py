@@ -14,7 +14,7 @@ import time
 import urllib.error
 import urllib.request
 
-# Rate of confirmation requests accepted by the sequencer.
+# Rate of confirmation requests accepted by the sequencer
 SEQUENCER_METRIC = "daml_sequencer_block_events_total"
 SEQUENCER_LABELS = {"type": "send-confirmation-request"}
 # Rate of confirmation requests processed by the mediator (approved and rejected).
