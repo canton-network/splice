@@ -82,3 +82,6 @@ docs/src/deployment/observability/metrics_reference.rst
 /.vagrant/
 /vagrant-nix-cache/
 lnav*work
+
+# VS Code
+.vscode/

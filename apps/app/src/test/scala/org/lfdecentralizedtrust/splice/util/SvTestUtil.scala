@@ -328,6 +328,7 @@ trait SvTestUtil extends TestCommon {
     domainUpgradeSchedule.toJava,
     dsoRulesConfig.voteCooldownTime,
     dsoRulesConfig.nextScheduledLogicalSynchronizerUpgrade,
+    dsoRulesConfig.svOperationsSwitchOverTimes,
   )
 
   private def updateNextScheduledLogicalSynchronizerUpgrade(
@@ -347,6 +348,7 @@ trait SvTestUtil extends TestCommon {
     dsoRulesConfig.nextScheduledSynchronizerUpgrade,
     dsoRulesConfig.voteCooldownTime,
     schedule.toJava,
+    dsoRulesConfig.svOperationsSwitchOverTimes,
   )
 
   def computeAmuletsToIssueToSvs(

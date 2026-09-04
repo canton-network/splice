@@ -10,6 +10,7 @@ import org.apache.pekko.http.scaladsl.model.{HttpEntity, RemoteAddress, StatusCo
 import org.apache.pekko.http.scaladsl.server.{Directive0, Directive1}
 import org.lfdecentralizedtrust.splice.config.RateLimitersConfig
 import org.lfdecentralizedtrust.splice.util.{
+  IpCidrRateLimits,
   PerAttributeRateLimiter,
   SpliceRateLimiter,
   SpliceRateLimitMetrics,
@@ -35,6 +36,9 @@ class HttpRateLimiter(
   private val clientIpHeaders: Seq[String] =
     config.clientIpHeaders.map(_.trim).filter(_.nonEmpty)
 
+  private val clientIpKey: Directive1[Option[String]] =
+    HttpRateLimiter.extractClientIpKey(clientIpHeaders)
+
   private def metricsFor(service: String): SpliceRateLimitMetrics =
     metrics.getOrElseUpdate(
       service,
@@ -56,10 +60,10 @@ class HttpRateLimiter(
       new PerAttributeRateLimiter(
         HttpRateLimiter.GlobalLimiter,
         HttpRateLimiter.ClientIpAttribute,
-        config.global,
         config.global.perClientIp,
         globalMetrics,
         logger,
+        IpCidrRateLimits.matchClientIp,
       ),
     )
   }
@@ -81,10 +85,10 @@ class HttpRateLimiter(
           new PerAttributeRateLimiter(
             operation,
             HttpRateLimiter.ClientIpAttribute,
-            operationConfig,
             operationConfig.perClientIp,
             rateLimiterMetrics,
             logger,
+            IpCidrRateLimits.matchClientIp,
           ),
         )
       },
@@ -96,8 +100,7 @@ class HttpRateLimiter(
 
     import org.apache.pekko.http.scaladsl.server.Directives.*
 
-    HttpRateLimiter
-      .extractClientIpKey(clientIpHeaders)
+    clientIpKey
       .flatMap { clientIp =>
         // The per client IP limiters are checked first (and `&&` short-circuits) so that a request
         // rejected because of its own client IP does not consume budget from the shared overall

@@ -18,6 +18,27 @@ SV_DIR="${SPLICE_ROOT}/cluster/compose/sv"
 # we want DEBUG logs for our tests
 export LOG_LEVEL=DEBUG
 
+mkdir -p "${SPLICE_ROOT}/log"
+exec > >(tee -a "${SPLICE_ROOT}/log/compose.log") 2>&1
+
+function _dump_postgres_logs {
+  local c
+  for c in splice-validator-postgres-splice-1 splice-sv-postgres-splice-sv-1; do
+    if docker container inspect "$c" > /dev/null 2>&1; then
+      _info "Dumping postgres logs for $c"
+      docker logs "$c" > "${SPLICE_ROOT}/log/compose-postgres-${c}.clog" 2>&1 || true
+    fi
+  done
+}
+
+# Dump postgres logs whenever the script exits with a non-zero code
+function _on_error_exit {
+  if [ "$1" -ne 0 ]; then
+    _dump_postgres_logs
+  fi
+}
+trap '_on_error_exit $?' EXIT
+
 function _export_auth0_env_vars {
 
   if [ -z "$GCP_CLUSTER_BASENAME" ]; then
@@ -58,7 +79,7 @@ function _export_auth0_env_vars {
 function _do_start_validator {
   "${VALIDATOR_DIR}/start.sh" \
     "$@" \
-      | tee -a "${SPLICE_ROOT}/log/compose.log" 2>&1 || _error "Failed to start validator, please check ${SPLICE_ROOT}/log/compose.log for details"
+      || _error "Failed to start validator, please check ${SPLICE_ROOT}/log/compose.log for details"
 
   for c in validator participant nginx; do
     docker logs -f splice-validator-${c}-1 >> "${SPLICE_ROOT}/log/compose-${c}.clog" 2>&1 &
@@ -70,7 +91,7 @@ function _do_start_validator {
     "${VALIDATOR_DIR}/start.sh" \
       "$@" \
       "-w" \
-        | tee -a "${SPLICE_ROOT}/log/compose-wait.log" 2>&1 || _error "Validator failed to become ready"
+        || _error "Validator failed to become ready"
   fi
 
 }

@@ -28,6 +28,7 @@ data TestEnv = TestEnv with
   admin : Party
   reqCidV1 : ContractId V1.AllocationRequest
   reqCidV2 : ContractId V2.AllocationRequest
+    deriving (Serializable)
 
 
 test_allocationRequestV1_Reject : Script ()

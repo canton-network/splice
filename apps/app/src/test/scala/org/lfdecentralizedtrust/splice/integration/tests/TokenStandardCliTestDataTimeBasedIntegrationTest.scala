@@ -51,7 +51,7 @@ import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   updateAllScanAppConfigs_,
   updateAutomationConfig,
 }
-import org.lfdecentralizedtrust.splice.config.RateLimitersConfig
+import org.lfdecentralizedtrust.splice.config.{PerClientIpRateLimitConfig, RateLimitersConfig}
 import org.lfdecentralizedtrust.splice.console.LedgerApiExtensions.RichPartyId
 import org.lfdecentralizedtrust.splice.http.v0.definitions.TransferInstructionResultOutput.members
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
@@ -65,12 +65,7 @@ import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
   ExpiredAmuletAllocationV2Trigger,
   ExpiredAmuletTransferInstructionTrigger,
 }
-import org.lfdecentralizedtrust.splice.util.{
-  SpliceRateLimitConfig,
-  TimeTestUtil,
-  TriggerTestUtil,
-  WalletTestUtil,
-}
+import org.lfdecentralizedtrust.splice.util.{TimeTestUtil, TriggerTestUtil, WalletTestUtil}
 import org.lfdecentralizedtrust.splice.wallet.admin.api.client.commands.HttpWalletAppClient
 import org.lfdecentralizedtrust.splice.wallet.automation.CollectRewardsAndMergeAmuletsTrigger
 import org.lfdecentralizedtrust.tokenstandard.transferinstruction
@@ -145,9 +140,9 @@ class TokenStandardCliTestDataTimeBasedIntegrationTest
           config.copy(parameters =
             config.parameters.copy(rateLimiting =
               RateLimitersConfig(
-                default = SpliceRateLimitConfig.WithPerClientIp(enabled = false, 1),
+                default = PerClientIpRateLimitConfig(enabled = false, 1),
                 rateLimiters = Map.empty,
-                global = SpliceRateLimitConfig.WithPerClientIp(enabled = false, 1),
+                global = PerClientIpRateLimitConfig(enabled = false, 1),
               )
             )
           )

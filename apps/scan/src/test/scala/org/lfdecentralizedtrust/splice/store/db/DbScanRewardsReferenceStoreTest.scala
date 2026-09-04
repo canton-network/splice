@@ -542,6 +542,7 @@ class DbScanRewardsReferenceStoreTest
         Optional.empty(),
         Optional.empty(),
         Optional.empty(),
+        Optional.empty(),
       ),
       Collections.emptyMap(),
       true,

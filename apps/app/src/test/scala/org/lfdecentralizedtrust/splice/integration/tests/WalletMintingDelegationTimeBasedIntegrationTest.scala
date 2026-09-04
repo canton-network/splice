@@ -470,7 +470,9 @@ class WalletMintingDelegationTimeBasedIntegrationTest
       val unclaimedActivityAmount = BigDecimal(200.0)
       val validatorRewardAmount = BigDecimal(500.0)
       val developmentFundAmount = BigDecimal(300.0)
+      val delayedDevelopmentFundAmount = BigDecimal(400.0)
       val rewardCouponV2Amount = BigDecimal(1000.0)
+      val mintDelay = Duration.ofHours(24)
 
       // For ValidatorRewardCoupon, we need ValidatorRight for beneficiary
       aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.commands
@@ -557,7 +559,7 @@ class WalletMintingDelegationTimeBasedIntegrationTest
               ).create,
             )
 
-          // Create DevelopmentFundCoupon
+          // Create a DevelopmentFundCoupon that is mintable immediately
           sv1Backend.participantClientWithAdminToken.ledger_api_extensions.commands
             .submitWithResult(
               userId = sv1Backend.config.ledgerApiUser,
@@ -570,6 +572,24 @@ class WalletMintingDelegationTimeBasedIntegrationTest
                 developmentFundAmount.bigDecimal,
                 env.environment.clock.now.plus(Duration.ofDays(1)).toInstant,
                 "test development fund coupon",
+                java.util.Optional.empty(), // mintAfter
+              ).create,
+            )
+
+          // Create a second DevelopmentFundCoupon with a mintAfter delay
+          sv1Backend.participantClientWithAdminToken.ledger_api_extensions.commands
+            .submitWithResult(
+              userId = sv1Backend.config.ledgerApiUser,
+              actAs = Seq(dsoParty),
+              readAs = Seq.empty,
+              update = new DevelopmentFundCoupon(
+                dsoParty.toProtoPrimitive,
+                beneficiaryParty.party.toProtoPrimitive,
+                dsoParty.toProtoPrimitive, // fundManager = dso
+                delayedDevelopmentFundAmount.bigDecimal,
+                env.environment.clock.now.plus(Duration.ofDays(30)).toInstant,
+                "delayed test development fund coupon",
+                java.util.Optional.of(env.environment.clock.now.plus(mintDelay).toInstant),
               ).create,
             )
 
@@ -587,7 +607,7 @@ class WalletMintingDelegationTimeBasedIntegrationTest
         val (_, issuingRoundsAfter) = sv1ScanBackend.getOpenAndIssuingMiningRounds()
         val issuingRoundsMap = issuingRoundsAfter.view.map(r => r.payload.round -> r.payload).toMap
 
-        clue("All reward contracts should be consumed") {
+        clue("All reward contracts except the delayed development fund coupon should be consumed") {
           eventually() {
             externalPartyWallet.store
               .listUnclaimedActivityRecords()
@@ -601,9 +621,10 @@ class WalletMintingDelegationTimeBasedIntegrationTest
             externalPartyWallet.store
               .listSortedLivenessActivityRecords(issuingRoundsMap)
               .futureValue shouldBe empty withClue "LivenessActivityRecord"
-            externalPartyWallet.store
-              .listDevelopmentFundCoupons()
-              .futureValue shouldBe empty withClue "DevelopmentFundCoupon"
+            inside(externalPartyWallet.store.listDevelopmentFundCoupons().futureValue) {
+              case Seq(remaining) =>
+                remaining.payload.reason shouldBe "delayed test development fund coupon"
+            }
             externalPartyWallet.store
               .listRewardCouponsV2(includeUnassigned = true, includeAssigned = true)
               .futureValue shouldBe empty withClue "RewardCouponV2"
@@ -626,6 +647,20 @@ class WalletMintingDelegationTimeBasedIntegrationTest
           rewardCouponV2Amount
 
       actualIncrease shouldBe expectedTotalReward
+
+      actAndCheck(
+        "Advance past the delayed coupon's mintAfter",
+        advanceTime(mintDelay.plus(Duration.ofHours(1))),
+      )(
+        "The delayed development fund coupon is collected",
+        _ => {
+          advanceTime(Duration.ofSeconds(1))
+          externalPartyWallet.store
+            .listDevelopmentFundCoupons()
+            .futureValue shouldBe empty withClue "DevelopmentFundCoupon after mintAfter"
+          getBalance() shouldBe balanceAfter + delayedDevelopmentFundAmount
+        },
+      )
 
       // Test merge behavior at 2x limit
       def getAmuletCount() = {

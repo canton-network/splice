@@ -255,6 +255,7 @@ data TestContext = TestContext with
   amuletRulesCid : ContractId AmuletRules
   amountToMint : Decimal
   unclaimedRewardAmounts : [Decimal]
+    deriving (Serializable)
 
 allocateMustFail : ContractId UnallocatedUnclaimedActivityRecord -> TestContext -> Script ()
 allocateMustFail unallocatedUnclaimedActivityRecordCid TestContext{..} = do

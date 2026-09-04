@@ -36,16 +36,16 @@ data ExternalPartyAmuletRules_ExpireAmuletAllocationInput = ExternalPartyAmuletR
   with
     allocationCid : ContractId AmuletAllocation
     expireLock : Bool
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 data ExternalPartyAmuletRules_ExpireAmuletAllocationsResult = ExternalPartyAmuletRules_ExpireAmuletAllocationsResult
   with
     results : [AmuletAllocation_DsoExpireResult]
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 data ExternalPartyAmuletRules_ExpireAmuletAllocationsV2Result = ExternalPartyAmuletRules_ExpireAmuletAllocationsV2Result {}
   -- intentionally no results to save storage space in Scan
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- | Rules contract that can be used in transactions that require signatures
 -- from an external party. This is intended to get archived and recreated as rarely as possible
@@ -197,7 +197,7 @@ template ExternalPartyAmuletRules
 data ExternalPartyAmuletRules_CreateTransferCommandResult = ExternalPartyAmuletRules_CreateTransferCommandResult
   with
     transferCommandCid : ContractId TransferCommand
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 -- | A contract tracking the number of completed TransferCommands per sender,
 -- which is used to determine the nonces used in TransferCommands for deduplication.
@@ -313,26 +313,26 @@ data TransferCommand_SendResult = TransferCommand_SendResult
     result : TransferCommandResult
     sender : Party -- Returned to simplify tx log parsing
     nonce : Int -- Returned to simplify tx log parsing
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 data TransferCommandResult
   = TransferCommandResultFailure with
       reason : InvalidTransferReason
   | TransferCommandResultSuccess with
       result : TransferResult
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 data TransferCommand_WithdrawResult = TransferCommand_WithdrawResult
   with
     sender : Party -- Returned to simplify tx log parsing
     nonce : Int -- Returned to simplify tx log parsing
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 data TransferCommand_ExpireResult = TransferCommand_ExpireResult
   with
     sender : Party -- Returned to simplify tx log parsing
     nonce : Int -- Returned to simplify tx log parsing
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 
 -- Token standard transfer factory

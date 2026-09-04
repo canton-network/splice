@@ -8,7 +8,7 @@
 # https://docs.canton.network/global-synchronizer/production-operations/validator-postgres-migration
 
 imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
-imageName: "postgres:14"
+imageName: "postgres:14.24-trixie"
 
 resources:
   limits:

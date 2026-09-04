@@ -6,6 +6,7 @@ import * as pulumi from '@pulumi/pulumi';
 import { CLUSTER_BASENAME, ExactNamespace } from '@canton-network/splice-pulumi-common';
 
 import { CloudArmorPolicy } from './cloudArmor';
+import { CloudArmorLoggingConfig } from './config';
 
 /*
 Any cluster that uses this must first run
@@ -47,9 +48,16 @@ interface L7GatewayConfig {
   istioResource: pulumi.Resource;
   // the Cloud Armor policy to attach
   securityPolicy?: CloudArmorPolicy;
+  // LB backend service request logging, controlled via the cloudArmor.logging config
+  backendLogging?: CloudArmorLoggingConfig;
   // if provided, an HTTPS listener will be created on port 443 that
   // terminates TLS using this secret
   tlsSecretName?: pulumi.Input<string>;
+  // hostnames that must not be evaluated by Cloud Armor. They are routed to a
+  // second k8s Service in front of the same istio ingress pods, which the GKE
+  // controller turns into its own GCP backend service, and only that backend
+  // service is left without a security policy.
+  cloudArmorExemptHostnames?: string[];
 }
 
 const httpListenerName = 'listen-http';
@@ -129,29 +137,35 @@ type BackendTargetRef = {
   namespace: pulumi.Input<string>;
 };
 
-function backendTargetRef(config: L7GatewayConfig): BackendTargetRef {
+function backendTargetRef(
+  config: L7GatewayConfig,
+  // must be the name of the Service set up by the gateway
+  // *that is the backend of the L7 ALB gateway for which this is configured*.
+  // For a classic istio gateway this is the same as the 'name' set on the gateway helm chart;
+  // for a k8s istio gateway this is <gateway-name>-istio.
+  // Can be identified by the apiVersion of the Gateway k8s resource
+  serviceName: pulumi.Input<string> = config.backendServiceName
+): BackendTargetRef {
   return {
     group: '',
     kind: 'Service',
-    // must be the name of the Service set up by the gateway
-    // *that is the backend of the L7 ALB gateway for which this is configured*.
-    // For a classic istio gateway this is the same as the 'name' set on the gateway helm chart;
-    // for a k8s istio gateway this is <gateway-name>-istio.
-    // Can be identified by the apiVersion of the Gateway k8s resource
-    name: config.backendServiceName,
+    name: serviceName,
     namespace: config.ingressNs.ns.metadata.name,
   };
 }
 
 /**
- * Creates a GCPBackendPolicy for Cloud Armor integration
+ * Creates a GCPBackendPolicy for backend request logging and, if a policy is given,
+ * Cloud Armor integration. Omitting the policy leaves the backend service without a
+ * security policy, so requests routed to it are not evaluated by Cloud Armor.
  */
-function attachCloudArmorToLBBackend(
-  policy: CloudArmorPolicy,
+function attachBackendPolicy(
+  policy: CloudArmorPolicy | undefined,
   config: L7GatewayConfig,
-  gateway: k8s.apiextensions.CustomResource
+  gateway: k8s.apiextensions.CustomResource,
+  policyName: string,
+  serviceName: pulumi.Input<string> = config.backendServiceName
 ): k8s.apiextensions.CustomResource {
-  const policyName = `${config.gatewayName}-cloud-armor-link`;
   return new k8s.apiextensions.CustomResource(
     policyName,
     {
@@ -163,20 +177,35 @@ function attachCloudArmorToLBBackend(
       },
       spec: {
         default: {
+          // backend service request logging must be enabled for Cloud Armor
+          // rule decisions to show up in Cloud Logging
+          ...(config.backendLogging?.enabled
+            ? {
+                logging: {
+                  enabled: true,
+                  // rate out of 1'000'000, converted from the 0.0-1.0 config fraction
+                  sampleRate: Math.round(config.backendLogging.sampleRate * 1000000),
+                },
+              }
+            : {}),
           // if global vs regional is mismatched you'll see
           // SetSecurityPolicy: Invalid value for field 'resource': '{  "securityPolicy": "https://www.googleapis.com/compute/beta/projects/da-cn-scratchnet/regions/us-c...'. The given security policy does not exist
-          securityPolicy: policy.name.apply(name => {
-            console.assert(
-              !name.includes('/'),
-              `${name} should be just the name, not a full resource path`
-            );
-            return name;
-          }),
+          ...(policy
+            ? {
+                securityPolicy: policy.name.apply(name => {
+                  console.assert(
+                    !name.includes('/'),
+                    `${name} should be just the name, not a full resource path`
+                  );
+                  return name;
+                }),
+              }
+            : {}),
         },
-        targetRef: backendTargetRef(config),
+        targetRef: backendTargetRef(config, serviceName),
       },
     },
-    { parent: gateway, dependsOn: [policy] }
+    { parent: gateway, dependsOn: policy ? [policy] : [] }
   );
 }
 
@@ -186,9 +215,10 @@ function attachCloudArmorToLBBackend(
  */
 function createHealthCheckPolicy(
   config: L7GatewayConfig,
-  gateway: k8s.apiextensions.CustomResource
+  gateway: k8s.apiextensions.CustomResource,
+  policyName: string = `${config.gatewayName}-healthcheck`,
+  serviceName: pulumi.Input<string> = config.backendServiceName
 ): k8s.apiextensions.CustomResource {
-  const policyName = `${config.gatewayName}-healthcheck`;
   return new k8s.apiextensions.CustomResource(
     policyName,
     {
@@ -209,11 +239,100 @@ function createHealthCheckPolicy(
             },
           },
         },
-        targetRef: backendTargetRef(config),
+        targetRef: backendTargetRef(config, serviceName),
       },
     },
     { parent: gateway }
   );
+}
+
+/**
+ * The parentRef for routes serving actual traffic: the https listener when TLS is
+ * terminated at the gateway, the gateway itself otherwise.
+ */
+function mainRouteParentRef(config: L7GatewayConfig) {
+  return {
+    name: config.gatewayName,
+    namespace: config.ingressNs.ns.metadata.name,
+    ...(config.tlsSecretName ? { sectionName: httpsListenerName } : {}),
+  };
+}
+
+/**
+ * Routes the Cloud Armor exempt hostnames to their own k8s Service in front of the same
+ * istio ingress pods.
+ *
+ * The GKE Gateway controller creates one GCP backend service per (Service, port) pair
+ * referenced by a route, and Cloud Armor is attached per backend service via
+ * GCPBackendPolicy. Adding a second Service with the same pod selector therefore gives
+ * these hostnames a backend service that has no security policy attached, without
+ * needing a separate IP, DNS records, certificate SANs or istio ingress deployment.
+ *
+ * Gateway API precedence puts routes with matching hostnames ahead of the hostname-less
+ * catch-all route, so these hosts are served by this route rather than the main one.
+ */
+function createCloudArmorExemptBackend(
+  config: L7GatewayConfig,
+  gateway: k8s.apiextensions.CustomResource,
+  hostnames: string[]
+): void {
+  const name = `${config.gatewayName}-no-cloud-armor`;
+  const service = new k8s.core.v1.Service(
+    name,
+    {
+      metadata: {
+        name,
+        namespace: config.ingressNs.ns.metadata.name,
+      },
+      spec: {
+        type: 'ClusterIP',
+        selector: { app: 'istio-ingress' },
+        ports: [
+          {
+            name: 'http2',
+            port: config.serviceTarget.port,
+            targetPort: config.serviceTarget.port,
+            // force HTTP/2 (h2c) between the L7 gateway and istio-ingress, as the
+            // exempt traffic is gRPC
+            appProtocol: 'kubernetes.io/h2c',
+          },
+        ],
+      },
+    },
+    { parent: gateway, dependsOn: [config.istioResource] }
+  );
+
+  new k8s.apiextensions.CustomResource(
+    `${name}-route`,
+    {
+      apiVersion: 'gateway.networking.k8s.io/v1',
+      kind: 'HTTPRoute',
+      metadata: {
+        name: `${name}-route`,
+        namespace: config.ingressNs.ns.metadata.name,
+      },
+      spec: {
+        parentRefs: [mainRouteParentRef(config)],
+        hostnames,
+        rules: [
+          {
+            backendRefs: [
+              {
+                name: service.metadata.name,
+                namespace: config.ingressNs.ns.metadata.name,
+                port: config.serviceTarget.port,
+              },
+            ],
+          },
+        ],
+      },
+    },
+    { parent: gateway, dependsOn: [service] }
+  );
+
+  createHealthCheckPolicy(config, gateway, `${name}-healthcheck`, service.metadata.name);
+  // deliberately no security policy: that is the whole point of this backend
+  attachBackendPolicy(undefined, config, gateway, `${name}-backend-policy`, service.metadata.name);
 }
 
 /**
@@ -228,8 +347,6 @@ function createHTTPRoute(config: L7GatewayConfig, gateway: k8s.apiextensions.Cus
   };
 
   const routeOpts = { parent: gateway };
-
-  let sectionExtension: { sectionName: typeof httpsListenerName } | Record<string, never> = {};
 
   // if we terminate TLS, make an extra redirect route and limit the main route
   // to the https listener
@@ -274,8 +391,6 @@ function createHTTPRoute(config: L7GatewayConfig, gateway: k8s.apiextensions.Cus
       },
       routeOpts
     );
-
-    sectionExtension = { sectionName: httpsListenerName };
   }
 
   // Main route, limited to https listener if enabled
@@ -289,12 +404,7 @@ function createHTTPRoute(config: L7GatewayConfig, gateway: k8s.apiextensions.Cus
         namespace: config.ingressNs.ns.metadata.name,
       },
       spec: {
-        parentRefs: [
-          {
-            ...parentRef,
-            ...sectionExtension,
-          },
-        ],
+        parentRefs: [mainRouteParentRef(config)],
         rules: [
           {
             // default match, prefix path `/`
@@ -380,10 +490,19 @@ export function configureGKEL7Gateway(config: L7GatewayConfig): {
   const gateway = createL7Gateway(config);
 
   if (config.securityPolicy) {
-    attachCloudArmorToLBBackend(config.securityPolicy, config, gateway);
+    attachBackendPolicy(
+      config.securityPolicy,
+      config,
+      gateway,
+      `${config.gatewayName}-cloud-armor-link`
+    );
   }
 
   createHealthCheckPolicy(config, gateway);
+
+  if (config.cloudArmorExemptHostnames?.length) {
+    createCloudArmorExemptBackend(config, gateway, config.cloudArmorExemptHostnames);
+  }
 
   const sslPolicy = createSSLPolicy(config);
   attachTLSPolicyToGateway(config, gateway, sslPolicy);
