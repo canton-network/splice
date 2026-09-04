@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import userEvent from '@testing-library/user-event';
 import { SvConfigProvider } from '../../../utils';
 import App from '../../../App';
@@ -288,10 +288,57 @@ describe('Unpermission Validator Form', () => {
     expect(screen.getByText('Login After')).toBeInTheDocument();
   });
 
+  test('should show error on form if submission fails', async () => {
+    const createVoteRequestMock = vi.fn();
+    server.use(
+      http.post(`${svUrl}/v0/admin/sv/voterequest/create`, () => {
+        createVoteRequestMock();
+        return HttpResponse.json({ error: 'Service Unavailable' }, { status: 503 });
+      })
+    );
+
+    const user = userEvent.setup();
+
+    render(
+      <Wrapper>
+        <UnpermissionValidatorForm />
+      </Wrapper>
+    );
+
+    const actionInput = screen.getByTestId('unpermission-validator-action');
+
+    const participantInput = screen.getByTestId('unpermission-validator-participant-id');
+    await user.type(participantInput, 'PAR::alice::1234567890');
+
+    const summaryInput = screen.getByTestId('unpermission-validator-summary');
+    await user.type(summaryInput, 'Summary of the proposal');
+
+    const urlInput = screen.getByTestId('unpermission-validator-url');
+    await user.type(urlInput, 'https://example.com');
+
+    const submitButton = screen.getByTestId('submit-button');
+    await user.click(actionInput);
+
+    await waitFor(async () => {
+      expect(submitButton.getAttribute('disabled')).toBeNull();
+    });
+
+    await user.click(submitButton); //review proposal
+    await user.click(submitButton); //submit proposal
+
+    expect(screen.getByTestId('proposal-submission-error')).toBeInTheDocument();
+    expect(screen.getByText(/Submission failed/)).toBeInTheDocument();
+    expect(screen.getByText(/Service Unavailable/)).toBeInTheDocument();
+
+    expect(createVoteRequestMock).toHaveBeenCalledOnce();
+  });
+
   test('should redirect to governance page after successful submission', async () => {
+    const createVoteRequestMock = vi.fn();
     let requestBody = '';
     server.use(
       http.post(`${svUrl}/v0/admin/sv/voterequest/create`, async ({ request }) => {
+        createVoteRequestMock();
         requestBody = await request.text();
         return HttpResponse.json({});
       })
@@ -330,6 +377,8 @@ describe('Unpermission Validator Form', () => {
     await user.click(submitButton); //submit proposal
 
     await screen.findByText('Successfully submitted the proposal');
+
+    expect(createVoteRequestMock).toHaveBeenCalledOnce();
 
     // Verify the correct API payload was sent
     expect(requestBody).toContain('"participantId":"PAR::alice::1234567890"');

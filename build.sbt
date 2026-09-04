@@ -2452,7 +2452,7 @@ updateTestConfigForParallelRuns := {
   def isPreflightIntegrationTest(name: String): Boolean = name.contains("PreflightIntegrationTest")
   def isEnterpriseIntegrationTest(name: String): Boolean = name.contains("Enterprise")
   def isPermissionedSynchronizerTest(name: String): Boolean =
-    name.contains("PermissionedSynchronizer") && !isFrontEndTest(name)
+    name.contains("PermissionedSynchronizer")
   def isIntegrationTest(name: String): Boolean =
     name.contains("org.lfdecentralizedtrust.splice.integration.tests") || name.contains(
       "IntegrationTest"
