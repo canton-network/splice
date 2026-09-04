@@ -50,7 +50,7 @@ class UpdateHistoryIngestionPerformanceTest(
       participantId = mkParticipantId(this.getClass.getSimpleName),
       updateStreamParty = dsoParty,
       backfillingRequired = UpdateHistory.BackfillingRequirement.BackfillingNotRequired,
-      internedStringStore = InternedStringStore(
+      internedStringStore = InternedStringStore.createWithoutWarmup(
         storage,
         10_000L,
         FiniteDuration(1, "hour"),

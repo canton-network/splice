@@ -1,5 +1,6 @@
 package org.lfdecentralizedtrust.splice.store.db
 
+import com.daml.metrics.api.noop.NoOpMetricsFactory
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.tracing.TraceContext
@@ -7,6 +8,7 @@ import org.lfdecentralizedtrust.splice.store.StoreTestBase
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 
 import scala.concurrent.Future
+import scala.concurrent.duration.FiniteDuration
 
 class InternedStringStoreTest extends StoreTestBase with SplicePostgresTest {
 
@@ -47,10 +49,28 @@ class InternedStringStoreTest extends StoreTestBase with SplicePostgresTest {
     }
 
     "handle concurrent interning of the same value without cache" in {
-      val store = new DbInternedStringStore(storage)
+      val store = new InternedStringStore.DbInternedStringStore(storage, loggerFactory)
       for {
         ids <- Future.sequence((1 to 20).map(_ => store.getOrIntern("concurrent-db-value")))
       } yield ids.distinct should have size 1
+    }
+
+    "warmup populates the cache with existing interned values" in {
+      // Emulate that a previous instance loads the DB, and then we warmup from there
+      val previousStore = new InternedStringStore.DbInternedStringStore(storage, loggerFactory)
+      for {
+        expectedId <- previousStore.getOrIntern("seed")
+        warmedStore <- InternedStringStore.createAndWarmupCache(
+          storage,
+          10_000L,
+          FiniteDuration(1, "minute"),
+          loggerFactory,
+          NoOpMetricsFactory,
+        )
+        // Remove from DB, but it should still be in the cache
+        _ <- cleanDb(storage) failOnShutdownToAbortException ("This shouldn't happen")
+        idAfterTruncate <- warmedStore.getOrIntern("seed")
+      } yield idAfterTruncate shouldBe expectedId
     }
   }
 

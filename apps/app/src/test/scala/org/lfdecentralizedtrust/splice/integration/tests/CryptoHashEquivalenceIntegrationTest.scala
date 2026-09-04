@@ -139,7 +139,7 @@ class CryptoHashEquivalenceIntegrationTest extends IntegrationTest with WalletTe
         participantId,
         svParty,
         BackfillingRequirement.BackfillingNotRequired,
-        InternedStringStore(
+        InternedStringStore.createWithoutWarmup(
           storage,
           10_000L,
           FiniteDuration(1, "minute"),
