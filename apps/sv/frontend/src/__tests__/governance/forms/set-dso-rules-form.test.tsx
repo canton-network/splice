@@ -489,57 +489,39 @@ describe('Set DSO Config Rules Form', () => {
     }
   );
 
-  // REPRO (currently FAILING): switch-over array field permanently stuck-disabled.
-  //
-  // The `switchOverTimes.entries` array field has only an `onSubmit` validator. A failed
-  // Review click sets its `onSubmit` error; fixing a nested `entries[i].key` edits the
-  // CHILD field, which never re-validates the parent array field (`setFieldValue` only
-  // validates the changed field), so the onSubmit error never clears -> `canSubmit` stays
-  // false -> the now-disabled button can't be clicked to re-run submit validation.
-  //
-  // Desired behaviour: once the row is valid, the button re-enables.
-  // test.fails: locks a known bug (currently failing on purpose). Remove `.fails` once fixed.
-  test.fails(
-    're-enables submit after fixing an invalid switch-over row (onSubmit-slot staleness)',
-    async () => {
-      const user = userEvent.setup();
+  // A1 fix: switch-over validation gates via a self-clearing onChange (re-run on nested
+  // edits via per-row listeners), so an invalid row disables submit and fixing it
+  // re-enables submit — no permanent stuck.
+  test('re-enables submit after fixing an invalid switch-over row', async () => {
+    const user = userEvent.setup();
 
-      render(
-        <Wrapper>
-          <SetDsoConfigRulesForm />
-        </Wrapper>
-      );
+    render(
+      <Wrapper>
+        <SetDsoConfigRulesForm />
+      </Wrapper>
+    );
 
-      const summaryInput = screen.getByTestId('set-dso-config-rules-summary');
-      await user.type(summaryInput, 'Summary of the proposal');
+    const summaryInput = screen.getByTestId('set-dso-config-rules-summary');
+    await user.type(summaryInput, 'Summary of the proposal');
 
-      const urlInput = screen.getByTestId('set-dso-config-rules-url');
-      await user.type(urlInput, 'https://valid.com');
+    const urlInput = screen.getByTestId('set-dso-config-rules-url');
+    await user.type(urlInput, 'https://valid.com');
 
-      // A freshly-added switch-over row has an empty key, which is invalid.
-      await user.click(screen.getByTestId('switchover-add'));
-      await waitFor(() =>
-        expect(screen.getByTestId('switchover-error')).toHaveTextContent(
-          'Switch-over key is required'
-        )
-      );
+    // A freshly-added switch-over row has an empty key, which is invalid -> submit disables.
+    await user.click(screen.getByTestId('switchover-add'));
+    await waitFor(() =>
+      expect(screen.getByTestId('switchover-error')).toHaveTextContent(
+        'Switch-over key is required'
+      )
+    );
+    const submitButton = screen.getByTestId('submit-button');
+    await waitFor(() => expect(submitButton).toBeDisabled());
 
-      // Attempt Review -> sets the array field's onSubmit error and disables submit.
-      const submitButton = screen.getByTestId('submit-button');
-      await user.click(submitButton);
-      await waitFor(() => expect(submitButton).toBeDisabled());
-
-      // Fix the row by filling the key (edits the child field, not the array field).
-      await user.type(screen.getByTestId('switchover-key-0'), 'amulet-v2');
-
-      // The inline (reactive) error clears...
-      await waitFor(() => expect(screen.queryByTestId('switchover-error')).not.toBeInTheDocument());
-
-      // ...but desired: submit re-enables. Currently the stale onSubmit slot keeps it
-      // disabled, so this fails.
-      await waitFor(() => expect(submitButton).not.toBeDisabled());
-    }
-  );
+    // Fixing the row (a nested child edit) re-validates the array field and re-enables submit.
+    await user.type(screen.getByTestId('switchover-key-0'), 'amulet-v2');
+    await waitFor(() => expect(screen.queryByTestId('switchover-error')).not.toBeInTheDocument());
+    await waitFor(() => expect(submitButton).not.toBeDisabled());
+  });
 
   test('should render diffs if changes to config values were made', async () => {
     const user = userEvent.setup();

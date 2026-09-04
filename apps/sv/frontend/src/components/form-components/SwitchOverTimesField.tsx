@@ -63,17 +63,28 @@ export const SwitchOverTimesField = withForm({
           name="switchOverTimes.entries"
           mode="array"
           validators={{
-            // Gate submission only; live display is handled by the Subscribe below,
-            // which re-derives the message reactively on any relevant change.
-            onSubmit: ({ value }) =>
-              validateSwitchOverTimes(value, allowNonFutureDated, effectiveDate),
+            // Gate via onChange (self-clearing), not onSubmit (stays stale on nested
+            // edits). Re-runs: onChangeListenTo for deps + per-row listeners for edits.
+            onChange: () =>
+              validateSwitchOverTimes(
+                form.state.values.switchOverTimes.entries,
+                form.state.values.switchOverTimes.allowNonFutureDated,
+                form.state.values.common.effectiveDate.effectiveDate
+              ),
+            onChangeListenTo: ['common.effectiveDate', 'switchOverTimes.allowNonFutureDated'],
           }}
         >
           {arrayField => (
             <Stack spacing={1}>
               {visibleSwitchOverRows(arrayField.state.value).map(({ index: i }) => (
                 <Box key={i} sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
-                  <form.AppField name={`switchOverTimes.entries[${i}].key`}>
+                  <form.AppField
+                    name={`switchOverTimes.entries[${i}].key`}
+                    listeners={{
+                      // Re-validate the parent array field so the submit gate self-heals.
+                      onChange: () => form.validateField('switchOverTimes.entries', 'change'),
+                    }}
+                  >
                     {field => (
                       <field.TextField
                         id={`switchover-key-${i}`}
@@ -83,7 +94,12 @@ export const SwitchOverTimesField = withForm({
                     )}
                   </form.AppField>
 
-                  <form.AppField name={`switchOverTimes.entries[${i}].time`}>
+                  <form.AppField
+                    name={`switchOverTimes.entries[${i}].time`}
+                    listeners={{
+                      onChange: () => form.validateField('switchOverTimes.entries', 'change'),
+                    }}
+                  >
                     {field => (
                       <field.DateField
                         id={`switchover-time-${i}`}
