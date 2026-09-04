@@ -15,7 +15,11 @@ import {
 } from '@mui/material';
 import { DeleteOutline, InfoOutlined } from '@mui/icons-material';
 import { withForm } from '../../hooks/form';
-import { validateSwitchOverTimes, type SwitchOverEntry } from '../forms/formValidators';
+import {
+  validateSwitchOverTimes,
+  visibleSwitchOverRows,
+  type SwitchOverEntry,
+} from '../forms/formValidators';
 import type { CommonProposalFormData, ConfigFormData } from '../../utils/types';
 import { CREATE_PROPOSAL_FIELD_HELPER_SX } from '../../constants/createProposalLayout';
 
@@ -67,7 +71,7 @@ export const SwitchOverTimesField = withForm({
         >
           {arrayField => (
             <Stack spacing={1}>
-              {arrayField.state.value.map((_, i) => (
+              {visibleSwitchOverRows(arrayField.state.value).map(({ index: i }) => (
                 <Box key={i} sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
                   <form.AppField name={`switchOverTimes.entries[${i}].key`}>
                     {field => (

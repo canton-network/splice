@@ -12,6 +12,7 @@ import {
   switchOverEntriesToConfigValue,
   switchOverMapToConfigValue,
   validateSwitchOverTimes,
+  visibleSwitchOverRows,
 } from '../components/forms/formValidators';
 
 dayjs.extend(utc);
@@ -69,6 +70,16 @@ describe('validateSwitchOverTimes', () => {
   it('skips the 1-day check at threshold (no effective date)', () => {
     expect(
       validateSwitchOverTimes([{ key: 'a', time: '2020-01-01T00:00:00Z' }], false, undefined)
+    ).toBe(false);
+  });
+
+  it('treats a min-bound (0001-01-01) time as unset and does not error', () => {
+    expect(
+      validateSwitchOverTimes(
+        [{ key: 'no-featured-app-choice-context', time: '0001-01-01T00:00:00Z' }],
+        false,
+        eff
+      )
     ).toBe(false);
   });
 });
@@ -144,6 +155,15 @@ describe('switch-over config value (serialize / parse)', () => {
     ); // renamed key
   });
 
+  it('serializes a min-bound entry identically from entries and map (no spurious change)', () => {
+    const map = { 'no-featured-app-choice-context': '0001-01-01T00:00:00Z' };
+    expect(switchOverMapToConfigValue(map)).toBe(
+      switchOverEntriesToConfigValue([
+        { key: 'no-featured-app-choice-context', time: '0001-01-01T00:00:00Z' },
+      ])
+    );
+  });
+
   it('round-trips through configValueToSwitchOverMap', () => {
     const value = switchOverMapToConfigValue({ a: '2026-09-05T00:00:00Z' });
     expect(configValueToSwitchOverMap(value)).toEqual({ a: '2026-09-05T00:00:00Z' });
@@ -174,5 +194,28 @@ describe('switch-over display helpers', () => {
       { key: 'a', time: '2026-09-05 12:34 UTC' },
       { key: 'b', time: '2026-09-06 08:00 UTC' },
     ]);
+  });
+
+  // comment #3: a min-bound DAML Time (0001-01-01) is a placeholder, not a real
+  // switch-over time; it must not render at all (no raw epoch, no leftover key).
+  it('drops min-bound (0001-01-01) placeholder entries from the display', () => {
+    const value = '{"no-featured-app-choice-context":"0001-01-01T00:00:00Z"}';
+    expect(switchOverConfigValueToDisplayEntries(value)).toEqual([]);
+  });
+
+  it('shows only real entries and drops min-bound ones', () => {
+    const value =
+      '{"no-featured-app-choice-context":"0001-01-01T00:00:00Z","amulet-v2":"2026-09-10T08:00:00Z"}';
+    expect(switchOverConfigValueToDisplayEntries(value)).toEqual([
+      { key: 'amulet-v2', time: '2026-09-10 08:00 UTC' },
+    ]);
+  });
+
+  it('hides min-bound editor rows but preserves their array index', () => {
+    const entries = [
+      { key: 'no-featured-app-choice-context', time: '0001-01-01T00:00:00Z' },
+      { key: 'amulet-v2', time: '2026-09-10T08:00:00Z' },
+    ];
+    expect(visibleSwitchOverRows(entries)).toEqual([{ entry: entries[1], index: 1 }]);
   });
 });

@@ -399,6 +399,148 @@ describe('Set DSO Config Rules Form', () => {
     await screen.findByText('Successfully submitted the proposal');
   });
 
+  // REPRO (currently FAILING): submit-gate bypass for invalid field values.
+  //
+  // The submit button is gated on `canSubmit`, and `handleSubmit` only runs
+  // `validateAllFields('submit')` over *mounted* fields. Config value fields have no
+  // validators at all, so an obviously-invalid config value (here, a non-numeric string
+  // in a numeric field) is accepted with no error and the form advances to the
+  // review/confirmation ("lock") step.
+  //
+  // Desired behaviour: the invalid value is rejected and the form stays on the edit
+  // step. When the gate is fixed to validate the full form value, this test should pass.
+  // test.fails: locks a known bug (currently failing on purpose). Remove `.fails` once fixed.
+  test.fails(
+    'does not advance an invalid config value to the review step (submit-gate bypass)',
+    async () => {
+      const user = userEvent.setup();
+
+      render(
+        <Wrapper>
+          <SetDsoConfigRulesForm />
+        </Wrapper>
+      );
+
+      const summaryInput = screen.getByTestId('set-dso-config-rules-summary');
+      await user.type(summaryInput, 'Summary of the proposal');
+
+      const urlInput = screen.getByTestId('set-dso-config-rules-url');
+      await user.type(urlInput, 'https://example.com');
+
+      // Numeric config field set to a non-numeric (invalid) value. Nothing validates it.
+      const numericConfig = await screen.findByTestId('config-field-numUnclaimedRewardsThreshold');
+      await user.clear(numericConfig);
+      await user.type(numericConfig, 'not-a-number');
+
+      const actionInput = screen.getByTestId('set-dso-config-rules-action');
+      await user.click(actionInput); // trigger blur/validation
+
+      const submitButton = screen.getByTestId('submit-button');
+      await waitFor(() => {
+        expect(submitButton.getAttribute('disabled')).not.toBeInTheDocument();
+      });
+
+      await user.click(submitButton); // "Review Proposal"
+
+      // Desired: the invalid value is rejected and the form does not advance to the
+      // review ("lock") step. Currently it advances with no error, so this fails.
+      expect(screen.queryByText('Proposal Review')).not.toBeInTheDocument();
+    }
+  );
+
+  // REPRO (currently FAILING): stuck-disabled submit after fixing an input (onBlur slot).
+  //
+  // TanStack keeps field errors in per-cause slots (onChange/onBlur/onSubmit) and clears
+  // only the slot whose cause+field just re-validated. A blur writes the error into the
+  // `onBlur` slot; fixing by typing re-runs only the `onChange` validator, which clears
+  // the `onChange` slot but leaves the stale `onBlur` error -> the field stays invalid ->
+  // `canSubmit` stays false -> the submit button never re-enables.
+  //
+  // Desired behaviour: once the value is valid, the button re-enables.
+  // test.fails: locks a known bug (currently failing on purpose). Remove `.fails` once fixed.
+  test.fails(
+    're-enables submit after an invalid value is fixed without re-blurring (onBlur-slot staleness)',
+    async () => {
+      const user = userEvent.setup();
+
+      render(
+        <Wrapper>
+          <SetDsoConfigRulesForm />
+        </Wrapper>
+      );
+
+      const summaryInput = screen.getByTestId('set-dso-config-rules-summary');
+      await user.type(summaryInput, 'Summary of the proposal');
+
+      const urlInput = screen.getByTestId('set-dso-config-rules-url');
+      await user.type(urlInput, 'not-a-url'); // invalid -> onChange slot error
+      await user.click(summaryInput); // blur the url field -> onBlur slot error
+
+      const submitButton = screen.getByTestId('submit-button');
+      await waitFor(() => expect(submitButton).toBeDisabled());
+
+      // Fix by typing a valid URL, without re-blurring.
+      await user.clear(urlInput);
+      await user.type(urlInput, 'https://valid.com');
+
+      // Desired: the field is valid now, so submit re-enables. Currently the stale onBlur
+      // slot keeps it disabled, so this fails.
+      await waitFor(() => expect(submitButton).not.toBeDisabled());
+    }
+  );
+
+  // REPRO (currently FAILING): switch-over array field permanently stuck-disabled.
+  //
+  // The `switchOverTimes.entries` array field has only an `onSubmit` validator. A failed
+  // Review click sets its `onSubmit` error; fixing a nested `entries[i].key` edits the
+  // CHILD field, which never re-validates the parent array field (`setFieldValue` only
+  // validates the changed field), so the onSubmit error never clears -> `canSubmit` stays
+  // false -> the now-disabled button can't be clicked to re-run submit validation.
+  //
+  // Desired behaviour: once the row is valid, the button re-enables.
+  // test.fails: locks a known bug (currently failing on purpose). Remove `.fails` once fixed.
+  test.fails(
+    're-enables submit after fixing an invalid switch-over row (onSubmit-slot staleness)',
+    async () => {
+      const user = userEvent.setup();
+
+      render(
+        <Wrapper>
+          <SetDsoConfigRulesForm />
+        </Wrapper>
+      );
+
+      const summaryInput = screen.getByTestId('set-dso-config-rules-summary');
+      await user.type(summaryInput, 'Summary of the proposal');
+
+      const urlInput = screen.getByTestId('set-dso-config-rules-url');
+      await user.type(urlInput, 'https://valid.com');
+
+      // A freshly-added switch-over row has an empty key, which is invalid.
+      await user.click(screen.getByTestId('switchover-add'));
+      await waitFor(() =>
+        expect(screen.getByTestId('switchover-error')).toHaveTextContent(
+          'Switch-over key is required'
+        )
+      );
+
+      // Attempt Review -> sets the array field's onSubmit error and disables submit.
+      const submitButton = screen.getByTestId('submit-button');
+      await user.click(submitButton);
+      await waitFor(() => expect(submitButton).toBeDisabled());
+
+      // Fix the row by filling the key (edits the child field, not the array field).
+      await user.type(screen.getByTestId('switchover-key-0'), 'amulet-v2');
+
+      // The inline (reactive) error clears...
+      await waitFor(() => expect(screen.queryByTestId('switchover-error')).not.toBeInTheDocument());
+
+      // ...but desired: submit re-enables. Currently the stale onSubmit slot keeps it
+      // disabled, so this fails.
+      await waitFor(() => expect(submitButton).not.toBeDisabled());
+    }
+  );
+
   test('should render diffs if changes to config values were made', async () => {
     const user = userEvent.setup();
 
