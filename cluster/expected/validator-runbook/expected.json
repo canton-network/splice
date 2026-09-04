@@ -541,6 +541,14 @@
           "name": "cn-mocknet"
         },
         "config": {
+          "auth": {
+            "audience": "${SPLICE_APP_VALIDATOR_LEDGER_API_AUTH_AUDIENCE}",
+            "clientId": "${SPLICE_APP_VALIDATOR_LEDGER_API_AUTH_CLIENT_ID}",
+            "clientSecret": "${SPLICE_APP_VALIDATOR_LEDGER_API_AUTH_CLIENT_SECRET}",
+            "scope": "${SPLICE_APP_VALIDATOR_LEDGER_API_AUTH_SCOPE}",
+            "type": "client-credentials",
+            "wellKnownConfigUrl": "${SPLICE_APP_VALIDATOR_LEDGER_API_AUTH_URL}"
+          },
           "jsonLedgerApiUrl": "http://participant:7575",
           "keyDirectory": "/keys",
           "maxParties": 1234,
@@ -548,7 +556,6 @@
           "preapprovalRetries": 9876,
           "preapprovalRetryDelayMs": 42,
           "scanApiUrl": "http://scan-app.sv-1:5012",
-          "token": "${SPLICE_APP_VALIDATOR_LEDGER_API_AUTH_TOKEN}",
           "userId": "${SPLICE_APP_VALIDATOR_LEDGER_API_AUTH_USER_NAME}",
           "validatorApiUrl": "http://validator-app:5003"
         },
