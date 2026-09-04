@@ -50,6 +50,7 @@ org.lfdecentralizedtrust.splice.store.db.DbSvDsoStoreTest
 org.lfdecentralizedtrust.splice.store.db.DbSvSvStoreTest
 org.lfdecentralizedtrust.splice.store.db.DbTcsStoreTest
 org.lfdecentralizedtrust.splice.store.db.DbUserWalletStoreTest
+org.lfdecentralizedtrust.splice.store.db.InternedStringStoreTest
 org.lfdecentralizedtrust.splice.store.db.SpliceStorageMultiLockTest
 org.lfdecentralizedtrust.splice.sv.automation.VoteRequestMetricsTriggerTest
 org.lfdecentralizedtrust.splice.sv.cometbft.CometBftNodeTest
