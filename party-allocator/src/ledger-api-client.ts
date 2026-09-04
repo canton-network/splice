@@ -24,13 +24,14 @@ import {
 import { AsyncLocalStorage } from "node:async_hooks";
 import * as crypto from "node:crypto";
 import { logger } from "./logger.js";
+import { TokenSource } from "./auth.js";
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export class LedgerApiClient {
   private api: DefaultApi;
   private als: AsyncLocalStorage<{ url: string | undefined }>;
-  constructor(url: string, token: string) {
+  constructor(url: string, tokenSource: TokenSource) {
     this.als = new AsyncLocalStorage<{ url: string }>();
     this.api = new DefaultApi(
       createConfiguration({
@@ -38,7 +39,7 @@ export class LedgerApiClient {
         authMethods: {
           default: new HttpAuthAuthentication({
             getToken(): Promise<string> | string {
-              return Promise.resolve(token);
+              return Promise.resolve(tokenSource.getToken());
             },
           }),
         },
