@@ -1805,6 +1805,10 @@ paths:
           schema:
             type: string
             format: date-time
+        - name: "daml_value_encoding"
+          in: "query"
+          schema:
+            $ref: "#/components/schemas/DamlValueEncoding"
       responses:
         "200":
           description: ok
@@ -4299,6 +4303,8 @@ components:
           format: int32
           minimum: 1
           maximum: 1000
+        daml_value_encoding:
+          $ref: "#/components/schemas/DamlValueEncoding"
 
     ListBulkUpdateHistoryObjectsResponse:
       type: object

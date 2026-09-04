@@ -890,11 +890,12 @@ abstract class ScanAppReference(
 
   @Help.Summary("List all objects in bulk storage for an ACS snapshot")
   def getBulkAcsSnapshot(
-      timestamp: CantonTimestamp
+      timestamp: CantonTimestamp,
+      damlValueEncoding: Option[definitions.DamlValueEncoding],
   ): definitions.ListBulkAcsSnapshotObjectsResponse =
     consoleEnvironment.run {
       httpCommand(
-        HttpScanAppClient.GetBulkAcsSnapshot(timestamp)
+        HttpScanAppClient.GetBulkAcsSnapshot(timestamp, damlValueEncoding)
       )
     }
 
@@ -904,6 +905,7 @@ abstract class ScanAppReference(
       endTimestamp: CantonTimestamp,
       nextPageToken: Option[String],
       limit: Int,
+      damlValueEncoding: Option[definitions.DamlValueEncoding],
   ): definitions.ListBulkUpdateHistoryObjectsResponse =
     consoleEnvironment.run {
       httpCommand(
@@ -912,6 +914,7 @@ abstract class ScanAppReference(
           endTimestamp,
           nextPageToken,
           limit,
+          damlValueEncoding,
         )
       )
     }

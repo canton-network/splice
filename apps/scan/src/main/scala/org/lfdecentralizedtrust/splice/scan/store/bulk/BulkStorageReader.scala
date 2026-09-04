@@ -30,8 +30,7 @@ class BulkStorageReader(
 
   def getCommittedObjectsForAcsSnapshotAtOrBefore(
       atOrBeforeTimestamp: CantonTimestamp,
-      storageEncodings: NonEmptyList[ScanStorageConfig.Encoding] =
-        NonEmptyList.one(ScanStorageConfig.Encoding.CompactJson),
+      storageEncodings: NonEmptyList[ScanStorageConfig.Encoding],
   )(implicit tc: TraceContext, ec: ExecutionContext): Future[AcsSnapshotObjects] = {
     for {
       snapshotTs <-
@@ -125,8 +124,7 @@ class BulkStorageReader(
       atOrBeforeRecordTime: CantonTimestamp,
       limit: PageLimit,
       nextPageTokenO: Option[String],
-      storageEncodings: NonEmptyList[ScanStorageConfig.Encoding] =
-        NonEmptyList.one(ScanStorageConfig.Encoding.CompactJson),
+      storageEncodings: NonEmptyList[ScanStorageConfig.Encoding],
   )(implicit tc: TraceContext, ec: ExecutionContext): Future[UpdateHistoryObjectsResponse] =
     getUpdatesBetweenDatesFromBucket(
       afterRecordTime,
