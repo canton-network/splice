@@ -22,8 +22,25 @@ template ValidatorUnpermission
   where
     signatory dso
 
+    choice ValidatorUnpermission_Archive : ()
+      controller dso
+      do return ()
+
+-- | ValidatorRepermission contract is created to
+-- restore of a validator's permissions on the synchronizer.
+-- It is created when SVs successfully vote to repermission a validator.
+template ValidatorRepermission
+  with
+    dso : Party
+    participantId : Text
+  where
+    signatory dso
+
 -- instances
 ------------
 
 instance HasCheckedFetch ValidatorUnpermission ForDso where
   contractGroupId ValidatorUnpermission{..} = ForDso with dso
+
+instance HasCheckedFetch ValidatorRepermission ForDso where
+  contractGroupId ValidatorRepermission{..} = ForDso with dso

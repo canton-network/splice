@@ -129,6 +129,8 @@ data DsoRules_ActionRequiringConfirmation
       -- ^ Voted action to reject a validator license request.
   | SRARC_UnpermissionValidator DsoRules_UnpermissionValidator
       -- ^ Voted action to update a validator's unpermission state.
+  | SRARC_RepermissionValidator DsoRules_RepermissionValidator
+      -- ^ Voted action to restore a validator's permissions.
   deriving (Eq, Show)
 
 data AnsEntryContext_ActionRequiringConfirmation
@@ -230,6 +232,9 @@ data DsoRules_MergeValidatorUnpermissionResult = DsoRules_MergeValidatorUnpermis
 
 data DsoRules_UnpermissionValidatorResult = DsoRules_UnpermissionValidatorResult with
     validatorUnpermissionCid : ContractId ValidatorUnpermission
+
+data DsoRules_RepermissionValidatorResult = DsoRules_RepermissionValidatorResult with
+    validatorRepermissionCid : ContractId ValidatorRepermission
 
 data DsoRules_RejectValidatorLicenseResult = DsoRules_RejectValidatorLicenseResult {}
 
@@ -1124,6 +1129,22 @@ template DsoRules with
 
         return DsoRules_MergeValidatorUnpermissionResult  with ..
 
+    nonconsuming choice DsoRules_RepermissionValidator : DsoRules_RepermissionValidatorResult
+      with
+        validatorUnpermissionCid : ContractId ValidatorUnpermission
+      controller dso
+      do
+        unpermission <- fetchChecked (ForDso with dso) validatorUnpermissionCid
+
+        exercise validatorUnpermissionCid ValidatorUnpermission_Archive
+
+        validatorRepermissionCid <- create ValidatorRepermission with
+          dso
+          participantId = unpermission.participantId
+
+        return DsoRules_RepermissionValidatorResult with ..
+
+
     nonconsuming choice DsoRules_GrantValidatorLicense : DsoRules_GrantValidatorLicenseResult
       with
         validatorLicenseRequestCid : ContractId ValidatorLicenseRequest
@@ -1957,6 +1978,7 @@ executeActionRequiringConfirmation dso dsoRulesCid amuletRulesCid act = case act
       SRARC_GrantValidatorLicense choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_RejectValidatorLicense choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_UnpermissionValidator choiceArg -> void $ exercise dsoRulesCid choiceArg
+      SRARC_RepermissionValidator choiceArg -> void $ exercise dsoRulesCid choiceArg
   ARC_AnsEntryContext with .. -> do
     void $ fetchChecked (ForDso with dso) ansEntryContextCid
     case ansEntryContextAction of
