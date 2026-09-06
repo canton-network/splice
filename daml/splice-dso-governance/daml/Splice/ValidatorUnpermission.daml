@@ -6,6 +6,8 @@ module Splice.ValidatorUnpermission where
 import Splice.Util
 import Splice.Types (ForDso(..))
 
+data ValidatorUnpermission_ArchiveResult = ValidatorUnpermission_ArchiveResult {}
+
 -- | ValidatorUnpermission contract is created to manage
 -- the validator's permissions on the synchronizer.
 -- It is created lazily when SVs successfully vote to restrict a validator's permissions.
@@ -22,12 +24,12 @@ template ValidatorUnpermission
   where
     signatory dso
 
-    choice ValidatorUnpermission_Archive : ()
+    choice ValidatorUnpermission_Archive : ValidatorUnpermission_ArchiveResult
       controller dso
-      do return ()
+      do return ValidatorUnpermission_ArchiveResult
 
 -- | ValidatorRepermission contract is created to
--- restore of a validator's permissions on the synchronizer.
+-- restore validator's permissions on the synchronizer.
 -- It is created when SVs successfully vote to repermission a validator.
 template ValidatorRepermission
   with
