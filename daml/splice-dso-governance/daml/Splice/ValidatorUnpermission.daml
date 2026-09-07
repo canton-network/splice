@@ -7,6 +7,7 @@ import Splice.Util
 import Splice.Types (ForDso(..))
 
 data ValidatorUnpermission_ArchiveResult = ValidatorUnpermission_ArchiveResult {}
+data ValidatorRepermission_ArchiveResult = ValidatorRepermission_ArchiveResult {}
 
 -- | ValidatorUnpermission contract is created to manage
 -- the validator's permissions on the synchronizer.
@@ -37,6 +38,10 @@ template ValidatorRepermission
     participantId : Text
   where
     signatory dso
+
+    choice ValidatorRepermission_Archive : ValidatorRepermission_ArchiveResult
+      controller dso
+      do return ValidatorRepermission_ArchiveResult
 
 -- instances
 ------------

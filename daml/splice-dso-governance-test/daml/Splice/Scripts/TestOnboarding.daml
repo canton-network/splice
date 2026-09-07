@@ -826,7 +826,20 @@ testValidatorUnpermissionWorkflow = do
   -- Verify the Repermission contract is actively created
   repermissions <- queryFilter @ValidatorRepermission dso (\u -> u.participantId == participantId)
   length repermissions === 1
-  let (_, rep1) = head repermissions
+  let (rep1Cid, rep1) = head repermissions
   rep1.participantId === participantId
+
+  -- Automation triggers the archiving of the Repermission contract
+  forA_ [sv1, sv2, sv3] $ \sv ->
+    submit (actAs sv <> readAs dso) $ exerciseCmd dsoRulesCid DsoRules_ConfirmAction with
+      confirmer = sv
+      action = ARC_DsoRules with
+        dsoAction = SRARC_ArchiveValidatorRepermission $ DsoRules_ArchiveValidatorRepermission with
+          validatorRepermissionCid = rep1Cid
+
+  executeAllConfirmedActions app
+
+  repermissionsAfterArchive <- queryFilter @ValidatorRepermission dso (\u -> u.participantId == participantId)
+  length repermissionsAfterArchive === 0
 
   pure ()

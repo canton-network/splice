@@ -131,6 +131,8 @@ data DsoRules_ActionRequiringConfirmation
       -- ^ Voted action to update a validator's unpermission state.
   | SRARC_RepermissionValidator DsoRules_RepermissionValidator
       -- ^ Voted action to restore a validator's permissions.
+  | SRARC_ArchiveValidatorRepermission DsoRules_ArchiveValidatorRepermission
+      -- ^ Voted action by automation to archive a processed repermission.
   deriving (Eq, Show)
 
 data AnsEntryContext_ActionRequiringConfirmation
@@ -235,6 +237,8 @@ data DsoRules_UnpermissionValidatorResult = DsoRules_UnpermissionValidatorResult
 
 data DsoRules_RepermissionValidatorResult = DsoRules_RepermissionValidatorResult with
     validatorRepermissionCid : ContractId ValidatorRepermission
+
+data DsoRules_ArchiveValidatorRepermissionResult = DsoRules_ArchiveValidatorRepermissionResult {}
 
 data DsoRules_RejectValidatorLicenseResult = DsoRules_RejectValidatorLicenseResult {}
 
@@ -1144,6 +1148,14 @@ template DsoRules with
 
         return DsoRules_RepermissionValidatorResult with ..
 
+    nonconsuming choice DsoRules_ArchiveValidatorRepermission : DsoRules_ArchiveValidatorRepermissionResult
+      with
+        validatorRepermissionCid : ContractId ValidatorRepermission
+      controller dso
+      do
+        _ <- fetchChecked (ForDso with dso) validatorRepermissionCid
+        _ <- exercise validatorRepermissionCid ValidatorRepermission_Archive
+        return DsoRules_ArchiveValidatorRepermissionResult {}
 
     nonconsuming choice DsoRules_GrantValidatorLicense : DsoRules_GrantValidatorLicenseResult
       with
@@ -1979,6 +1991,7 @@ executeActionRequiringConfirmation dso dsoRulesCid amuletRulesCid act = case act
       SRARC_RejectValidatorLicense choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_UnpermissionValidator choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_RepermissionValidator choiceArg -> void $ exercise dsoRulesCid choiceArg
+      SRARC_ArchiveValidatorRepermission choiceArg -> void $ exercise dsoRulesCid choiceArg
   ARC_AnsEntryContext with .. -> do
     void $ fetchChecked (ForDso with dso) ansEntryContextCid
     case ansEntryContextAction of
