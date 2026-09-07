@@ -559,7 +559,7 @@ trait FrontendTestCommon extends TestCommon with WebBrowser with CustomMatchers 
     }
   }
 
-  private def assertAuth0LoginFormVisible()(implicit
+  protected def assertAuth0LoginFormVisible()(implicit
       webDriver: WebDriverType
   ) = {
     find(tagName("h1")) should not be None
@@ -670,6 +670,16 @@ trait FrontendTestCommon extends TestCommon with WebBrowser with CustomMatchers 
       _ => assertAuth0LoginFormVisible(),
     )
 
+    submitAuth0LoginForm(username, password, assertCompleted)
+  }
+
+  protected def submitAuth0LoginForm(
+      username: String,
+      password: String,
+      assertCompleted: () => org.scalatest.Assertion,
+  )(implicit
+      webDriver: WebDriverType
+  ) = {
     val (_, needsAuthorization) = silentActAndCheck(
       "Auth0 login: Fill out and submit login form", {
         emailField(id("username")).value = username
@@ -698,6 +708,114 @@ trait FrontendTestCommon extends TestCommon with WebBrowser with CustomMatchers 
         _ => assertCompleted(),
       )
     }
+  }
+
+  // A set of "deep" function necessary to interactions with Shadow DOM
+  // Currently used only by Wallet Gateway and Portfolio UI preflight tests
+  protected def findDeep(
+      selector: String,
+      withText: Option[String] = None,
+      visibleOnly: Boolean = true,
+  )(implicit
+      webDriver: WebDriverType
+  ): Option[WebElement] = {
+    val script =
+      """
+      const selector = arguments[0];
+      const text = arguments[1];
+      const visibleOnly = arguments[2];
+      // checkVisibility is false for content the page keeps in the DOM but does not render yet (e.g. unslotted)
+      const matches = (el) =>
+        (text === null || (el.textContent || '').trim().includes(text)) &&
+        (!visibleOnly || el.checkVisibility({ opacityProperty: true, visibilityProperty: true }));
+      const visit = (root) => {
+        for (const el of root.querySelectorAll(selector)) {
+          if (matches(el)) return el;
+        }
+        for (const el of root.querySelectorAll('*')) {
+          if (el.shadowRoot) {
+            const found = visit(el.shadowRoot);
+            if (found) return found;
+          }
+        }
+        return null;
+      };
+      return visit(document);
+      """
+    Option(webDriver.executeScript(script, selector, withText.orNull, Boolean.box(visibleOnly)))
+      .map(_.asInstanceOf[WebElement])
+  }
+
+  protected def eventuallyFindDeep(
+      selector: String,
+      withText: Option[String] = None,
+      timeUntilSuccess: FiniteDuration = 20.seconds,
+  )(implicit webDriver: WebDriverType): WebElement =
+    eventually(timeUntilSuccess) {
+      findDeep(selector, withText).valueOrFail(
+        s"No element matching '$selector'${withText.fold("")(t => s" with text '$t'")} found in the page or its shadow roots"
+      )
+    }
+
+  protected def clickDeep(
+      selector: String,
+      withText: Option[String] = None,
+      timeUntilSuccess: FiniteDuration = 20.seconds,
+  )(implicit webDriver: WebDriverType): Unit =
+    eventually(timeUntilSuccess) {
+      val element = findDeep(selector, withText).valueOrFail(
+        s"No visible element matching '$selector'${withText.fold("")(t => s" with text '$t'")} to click"
+      )
+      element.isDisplayed shouldBe true withClue "element to click is displayed"
+      webDriver.executeScript(
+        "arguments[0].scrollIntoView({block: 'center'}); arguments[0].click();",
+        element,
+      )
+    }
+
+  protected def setDeepValue(element: WebElement, value: String)(implicit
+      webDriver: WebDriverType
+  ): Unit =
+    webDriver.executeScript(
+      """
+      arguments[0].focus();
+      arguments[0].value = arguments[1];
+      arguments[0].dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+      arguments[0].dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+      """,
+      element,
+      value,
+    )
+
+  protected def selectDeepByVisibleText(select: WebElement, text: String)(implicit
+      webDriver: WebDriverType
+  ): Unit = {
+    val options = new org.openqa.selenium.support.ui.Select(select).getOptions.asScala
+    val option = options
+      .find(_.getText.trim == text)
+      .valueOrFail(s"option '$text' in ${options.map(_.getText.trim).mkString("[", ", ", "]")}")
+    setDeepValue(select, option.getAttribute("value"))
+  }
+
+  protected def waitForNewWindow(
+      before: Set[String],
+      timeUntilSuccess: FiniteDuration = 20.seconds,
+  )(implicit
+      webDriver: WebDriverType
+  ): String =
+    eventually(timeUntilSuccess) {
+      (windowHandles -- before).toSeq match {
+        case Seq(handle) => handle
+        case Seq() => fail("No new window was opened")
+        case handles => fail(s"Expected exactly one new window, found ${handles.size}")
+      }
+    }
+
+  protected def inWindow[T](handle: String)(f: => T)(implicit webDriver: WebDriverType): T = {
+    val previous = webDriver.getWindowHandle
+    webDriver.switchTo().window(handle)
+    try f
+    finally if (windowHandles.contains(previous)) webDriver.switchTo().window(previous)
   }
 
   protected def setAnsField(textField: TextField, input: String, expectedPartyId: String) = {
