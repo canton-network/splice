@@ -51,6 +51,12 @@ export type CloudArmorAlertsConfig = z.infer<typeof CloudArmorAlertsConfigSchema
 const CloudArmorConfigSchema = z.object({
   enabled: z.boolean().default(false),
   allRulesPreviewOnly: z.boolean().default(false),
+  wafRules: z
+    .object({
+      enabled: z.boolean().default(true),
+      previewOnly: z.boolean().default(true),
+    })
+    .prefault({}),
 });
 
 export const cloudArmorConfig = CloudArmorConfigSchema.parse(clusterSubConfig('cloudArmor'));

@@ -28,11 +28,20 @@ const CloudArmorLoggingConfigSchema = z.object({
 
 export type CloudArmorLoggingConfig = z.infer<typeof CloudArmorLoggingConfigSchema>;
 
+const CloudArmorWafRulesConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  // The preconfigured WAF rules deny by default, but are kept in Cloud Armor preview
+  // mode so they only produce logs and alerts. That gives us attack detection and the
+  // data to spot false positives before we let them block real traffic.
+  previewOnly: z.boolean().default(true),
+});
+
 const CloudArmorConfigSchema = z.object({
   enabled: z.boolean(),
   // "preview" is not pulumi preview, but https://cloud.google.com/armor/docs/security-policy-overview#preview_mode
   allRulesPreviewOnly: z.boolean(),
   logging: CloudArmorLoggingConfigSchema.prefault({}),
+  wafRules: CloudArmorWafRulesConfigSchema.prefault({}),
   publicEndpoints: z
     .object({})
     .catchall(
