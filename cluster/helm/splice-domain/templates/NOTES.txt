@@ -1,3 +1,0 @@
-Splice Ledger Domain
-
-This Helm Chart is DEPRECATED and scheduled for removal.

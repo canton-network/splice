@@ -32,7 +32,7 @@ jobs:
         id: setup
         uses: ./.github/actions/tests/common_test_setup
         with:
-          cache_version: 8
+          cache_version: 10
           test_name: daml_test
 
       - name: Run Daml tests
