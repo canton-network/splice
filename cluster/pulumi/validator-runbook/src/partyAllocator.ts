@@ -53,7 +53,7 @@ export function installPartyAllocator(
         name: 'party-allocator-keys-hd-pvc',
       },
     },
-    activeVersion,
+    config.version || activeVersion,
     { dependsOn }
   );
 }
