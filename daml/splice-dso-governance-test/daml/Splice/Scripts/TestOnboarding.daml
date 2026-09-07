@@ -19,6 +19,7 @@ import Splice.DsoRules
 import Splice.DSO.DecentralizedSynchronizer
 import Splice.SvOnboarding
 import Splice.ValidatorUnpermission
+import Splice.ValidatorRepermission
 
 import Splice.Scripts.DsoTestUtils
 import Splice.Testing.Registries.AmuletRegistry (getActiveOpenRoundsSorted)

@@ -28,6 +28,7 @@ import Splice.Round
 import Splice.Types
 import Splice.ValidatorLicense
 import Splice.ValidatorUnpermission
+import Splice.ValidatorRepermission
 import Splice.Wallet.Subscriptions
 import Splice.DecentralizedSynchronizer (MemberTraffic(..))
 
