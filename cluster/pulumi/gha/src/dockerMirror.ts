@@ -57,7 +57,7 @@ export function installDockerRegistryMirror(): k8s.helm.v3.Release {
         configData: {
           // Protection against https://github.com/distribution/distribution/issues/2966
           cache: {
-            blobdescriptor: ''
+            blobdescriptor: '',
           },
           // Enable blob/manifest deletion so the proxy's built-in TTL-based
           // scheduler can remove expired cached content.
