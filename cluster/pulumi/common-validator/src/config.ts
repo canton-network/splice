@@ -8,6 +8,7 @@ import {
   LogLevelSchema,
 } from '@canton-network/splice-pulumi-common/src/config';
 import { clusterSubConfig } from '@canton-network/splice-pulumi-common/src/config/config';
+import { CnChartVersionSchema } from '@canton-network/splice-pulumi-common/src/config/versionSchema';
 import { z } from 'zod';
 
 export const SynchronizerConfigSchema = z.union([
@@ -128,6 +129,7 @@ export const PartyAllocatorConfigSchema = z.object({
   preapprovalRetries: z.number().default(120),
   preapprovalRetryDelayMs: z.number().default(1000),
   pvcSize: z.string().optional(),
+  version: CnChartVersionSchema.optional(),
 });
 export type PartyAllocatorConfig = z.infer<typeof PartyAllocatorConfigSchema>;
 
