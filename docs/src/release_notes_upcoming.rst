@@ -41,3 +41,6 @@ release-notes:: Upcoming
           ``SvRewardCoupon`` rewards. An external party that is a beneficiary of SV rewards
           will have those coupons minted on its behalf by its delegate, alongside the other
           reward-coupon types.
+
+        - Fixed a bug where the minting delegation automation for an external party did not collect
+          ``AppRewardCoupon`` rewards where the external party was the beneficiary but not the provider.
