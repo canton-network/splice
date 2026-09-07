@@ -5,7 +5,6 @@ app_charts := \
 	splice-cluster-ingress-runbook \
 	splice-cometbft \
 	cn-docs \
-	splice-domain \
 	splice-global-domain \
 	splice-istio-gateway \
 	splice-load-tester \

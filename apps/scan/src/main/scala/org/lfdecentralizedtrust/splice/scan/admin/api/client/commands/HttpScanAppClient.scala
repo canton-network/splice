@@ -1521,6 +1521,25 @@ object HttpScanAppClient {
     }
   }
 
+  case class GetLatestEventRecordTime()
+      extends InternalBaseCommand[
+        http.GetLatestEventRecordTimeResponse,
+        Option[definitions.EventLatestRecordTimeResponse],
+      ] {
+    override def submitRequest(
+        client: http.ScanClient,
+        headers: List[HttpHeader],
+    ): EitherT[Future, Either[Throwable, HttpResponse], http.GetLatestEventRecordTimeResponse] =
+      client.getLatestEventRecordTime()
+
+    override def handleOk()(implicit decoder: TemplateJsonDecoder) = {
+      case http.GetLatestEventRecordTimeResponse.OK(response) =>
+        Right(Some(response))
+      case http.GetLatestEventRecordTimeResponse.NotFound(_) =>
+        Right(None)
+    }
+  }
+
   case class GetEventById(
       updateId: String,
       damlValueEncoding: Option[definitions.DamlValueEncoding],

@@ -34,7 +34,7 @@ import com.digitalasset.canton.sequencer.admin.v30.{
 import com.digitalasset.canton.synchronizer.sequencer.SequencerSnapshot
 import com.digitalasset.canton.synchronizer.sequencer.admin.grpc.InitializeSequencerResponse
 import com.digitalasset.canton.topology.MediatorGroup.MediatorGroupIndex
-import com.digitalasset.canton.topology.SequencerId
+import com.digitalasset.canton.topology.{SequencerId, SynchronizerId}
 import com.digitalasset.canton.version.ProtocolVersion
 import com.google.protobuf.ByteString
 
@@ -222,6 +222,7 @@ class SequencerAdministration(node: SequencerReference) extends ConsoleCommandGr
       |""")
   def initialize_from_lsu_predecessor(
       inputFile: String,
+      synchronizerId: SynchronizerId,
       synchronizerParameters: StaticSynchronizerParameters,
       ignorePsidCheck: Boolean = false,
       waitForReady: Boolean = true,
@@ -236,6 +237,7 @@ class SequencerAdministration(node: SequencerReference) extends ConsoleCommandGr
           ),
           synchronizerParameters.toInternal,
           ignorePsidCheck = ignorePsidCheck,
+          synchronizerId = synchronizerId,
         )
       )
     }

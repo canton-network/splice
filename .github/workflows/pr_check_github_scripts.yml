@@ -15,7 +15,7 @@ jobs:
     - name: Set up Nix
       uses: ./.github/actions/nix/setup_nix
       with:
-        cache_version: 9
+        cache_version: 10
     - name: Check github scripts
       uses: ./.github/actions/nix/run_bash_command_in_nix
       with:

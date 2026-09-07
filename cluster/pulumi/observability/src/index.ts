@@ -60,7 +60,8 @@ if (enableAlerts && !clusterIsResetPeriodically) {
       installCloudArmorAlerts(
         notificationChannel,
         monitoringConfig.alerting.alerts.cloudArmor,
-        cloudArmorConfig.allRulesPreviewOnly
+        cloudArmorConfig.allRulesPreviewOnly ||
+          (cloudArmorConfig.wafRules.enabled && cloudArmorConfig.wafRules.previewOnly)
       );
     }
   }

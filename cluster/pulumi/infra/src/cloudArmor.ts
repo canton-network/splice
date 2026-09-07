@@ -16,10 +16,13 @@ import {
   hostCondition,
   ipWhitelistRuleChunks,
   matchExpression,
+  WAF_RULE_GROUPS,
+  wafRuleExpression,
 } from './cloudArmorRules';
 import { loadIPRanges } from './whitelisting/ipRanges';
 
 // Rule number ranges
+const WAF_RULE_MIN = 10;
 const IP_WHITELIST_RULE_MIN = 1000010;
 const THROTTLE_BAN_RULE_MIN = 100000010;
 const THROTTLE_BAN_RULE_MAX = 200000010;
@@ -33,19 +36,9 @@ export interface ApiEndpoint {
   hostname: string;
 }
 
-export type CloudArmorConfig = config.CloudArmorConfig & {
-  predefinedWafRules?: PredefinedWafRule[];
-};
+export type CloudArmorConfig = config.CloudArmorConfig;
 
 type ThrottleConfig = CloudArmorConfig['publicEndpoints'];
-
-export interface PredefinedWafRule {
-  name: string;
-  action: 'allow' | 'deny' | 'throttle';
-  priority?: number;
-  preview?: boolean;
-  sensitivityLevel?: 'off' | 'low' | 'medium' | 'high';
-}
 
 // Regional and Global policies and rules use different types/constructors; most
 // of our pulumi code doesn't care about the difference so can use this alias
@@ -99,9 +92,8 @@ export function configureCloudArmorPolicy(
   const ruleOpts = { ...opts, parent: securityPolicy, deletedWith: securityPolicy };
 
   // Step 2: Add predefined WAF rules
-  if (cac.predefinedWafRules && cac.predefinedWafRules.length > 0) {
-    addPredefinedWafRules();
-    /*securityPolicy, args.predefinedWafRules, cac.allRulesPreviewOnly, ruleOpts*/
+  if (cac.wafRules.enabled) {
+    addWafRules(securityPolicy, cac.allRulesPreviewOnly || cac.wafRules.previewOnly, ruleOpts);
   }
 
   // Step 3: Add IP whitelisting rules
@@ -125,16 +117,42 @@ export function configureCloudArmorPolicy(
 }
 
 /**
- * Adds predefined WAF rules to a security policy
+ * Adds the preconfigured (OWASP CRS based) WAF rules to a security policy.
+ *
+ * They sit at the lowest priority numbers, so they are evaluated before the IP
+ * whitelist and endpoint rules: an attack payload should be caught no matter which
+ * host, path or source IP it comes from.
  */
-function addPredefinedWafRules(): void {
-  /*
-  securityPolicy: Policy,
-  rules: PredefinedWafRule[],
+function addWafRules(
+  securityPolicy: CloudArmorPolicy,
   preview: boolean,
   opts: pulumi.ResourceOptions
-     */
-  // TODO (DACH-NY/canton-network-internal#406) implement
+): void {
+  WAF_RULE_GROUPS.forEach((group, i) => {
+    const priority = WAF_RULE_MIN + i * RULE_SPACING;
+    if (priority >= IP_WHITELIST_RULE_MIN) {
+      throw new Error(`WAF rule priority ${priority} overlaps the IP whitelist priority range`);
+    }
+    new PolicyRule(
+      group.name,
+      {
+        securityPolicy: securityPolicy.name,
+        region: securityPolicy.region,
+        description: group.description,
+        priority,
+        preview,
+        // plain `deny` (403), matching the default rule: the regional policy API is
+        // the one place that accepts a status code only on rate limit exceedActions
+        action: 'deny',
+        match: {
+          expr: {
+            expression: wafRuleExpression(group),
+          },
+        },
+      },
+      opts
+    );
+  });
 }
 
 /**
