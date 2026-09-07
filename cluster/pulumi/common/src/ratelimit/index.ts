@@ -3,3 +3,4 @@
 export * from './rateLimitSchema';
 export * from './rateLimitHeaders';
 export * from './envoyRateLimiter';
+export * from './rateLimit';

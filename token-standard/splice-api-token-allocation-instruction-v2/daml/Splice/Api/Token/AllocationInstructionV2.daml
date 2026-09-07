@@ -24,7 +24,7 @@ data AllocationInstructionAction
       AIA_Custom with
         id : Text
           -- ^ Identifier of the action. Namespaced analogously to metadata keys.
-    deriving (Show, Eq, Ord)
+    deriving (Show, Eq, Ord, Serializable)
 
 -- | View for `AllocationInstruction`.
 data AllocationInstructionView = AllocationInstructionView with
@@ -71,7 +71,7 @@ data AllocationInstructionView = AllocationInstructionView with
     meta : Metadata
       -- ^ Additional metadata specific to the allocation instruction, used for
       -- extensibility; e.g., more detailed status information.
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 -- | An interface for tracking the status of an allocation instruction,
 -- i.e., a request to a registry app to create an allocation.
@@ -133,7 +133,7 @@ data AllocationFactoryView = AllocationFactoryView with
       -- for which this allocation factory can be used.
     meta : Metadata
       -- ^ Additional metadata specific to the allocation factory, used for extensibility.
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 -- | Contracts implementing `AllocationFactory` are retrieved from the registry app and are
 -- used by the wallet to create allocation instructions (or allocations directly).
@@ -203,7 +203,7 @@ data AllocationInstructionResult = AllocationInstructionResult with
       -- updating multiple allocation instructions in a single Daml transaction.
     meta : Metadata
       -- ^ Additional metadata specific to the allocation instruction, used for extensibility; e.g., fees charged.
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 -- | The output of instructing an allocation or advancing the state of an allocation instruction.
 data AllocationInstructionResult_Output
@@ -220,4 +220,4 @@ data AllocationInstructionResult_Output
   | AllocationInstructionResult_Failed
       -- ^ Use this result to communicate that the creation of the allocation did not succeed and
       -- all holdings reserved for funding the allocation have been released.
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)

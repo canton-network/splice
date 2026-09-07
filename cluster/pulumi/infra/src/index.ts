@@ -21,6 +21,7 @@ import { configureIstio, istioVersion } from './istio';
 import { deployGCPodReaper } from './maintenance';
 import { configureNetwork } from './network';
 import { configureReloader } from './reloader';
+import { sequencerP2pHosts } from './sequencerP2pHosts';
 import { configureStorage } from './storage';
 
 const network = configureNetwork(clusterBasename, clusterBaseDomain);
@@ -57,6 +58,11 @@ if (useGKEL7Gateway) {
     serviceTarget: { port: 80 },
     tlsSecretName: `cn-${clusterBasename}net-tls`,
     securityPolicy: cloudArmorSecurityPolicy,
+    backendLogging: cloudArmorConfig.logging,
+    // The sequencer BFT P2P API is mutually authenticated gRPC between known peers, so
+    // Cloud Armor adds no protection there while billing every P2P request. Route it to
+    // a backend service without a security policy attached.
+    cloudArmorExemptHostnames: sequencerP2pHosts(),
     istioResource: istio.istioResource,
   });
 }

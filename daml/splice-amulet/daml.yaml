@@ -6,7 +6,7 @@
 sdk-version: 3.5.2
 name: splice-amulet
 source: daml
-version: 0.1.22
+version: 0.1.23
 dependencies:
   - daml-prim
   - daml-stdlib
@@ -27,6 +27,7 @@ data-dependencies:
   - ../dars/splice-api-featured-app-v2-1.0.0.dar
   - ../splice-api-reward-assignment-v1/.daml/dist/splice-api-reward-assignment-v1-current.dar
 build-options:
+  - --explicit-serializable=yes
   - --ghc-option=-Wunused-binds
   - --ghc-option=-Wunused-matches
   - --target=2.1

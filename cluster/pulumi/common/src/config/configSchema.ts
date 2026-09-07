@@ -15,7 +15,7 @@ const PulumiProjectConfigSchema = z.object({
   cloudSql: CloudSqlConfigSchema,
   defaultSplicePostgresConfig: SplicePostgresSchema.default({
     deployment: 'docker-image',
-    postgresImage: 'postgres:18',
+    postgresImage: 'postgres:18-trixie',
   }),
   allowDowngrade: z.boolean(),
   replacePostgresStatefulSetOnChanges: z.boolean().default(false),

@@ -64,6 +64,7 @@ import org.lfdecentralizedtrust.splice.wallet.UserWalletManager
 import org.lfdecentralizedtrust.splice.wallet.config.TreasuryConfig
 import org.lfdecentralizedtrust.splice.wallet.metrics.TreasuryMetrics
 import org.lfdecentralizedtrust.splice.wallet.store.UserWalletStore
+import org.lfdecentralizedtrust.splice.wallet.util.DevelopmentFundCouponUtil
 import org.lfdecentralizedtrust.splice.wallet.treasury.TreasuryService.*
 import com.digitalasset.base.error.utils.ErrorDetails
 import com.digitalasset.base.error.utils.ErrorDetails.ErrorInfoDetail
@@ -1296,9 +1297,10 @@ class TreasuryService(
       tc: TraceContext
   ): Future[(BigDecimal, Seq[(BigDecimal, InputDevelopmentFundCoupon)])] =
     for {
-      developmentFundCouponsInputs <- userStore.listDevelopmentFundCoupons(
-        PageLimit.tryCreate(maxNumInputs)
-      )
+      allDevelopmentFundCoupons <- userStore.listDevelopmentFundCoupons()
+      developmentFundCouponsInputs = allDevelopmentFundCoupons
+        .filter(DevelopmentFundCouponUtil.isMintable(_, clock.now.toInstant))
+        .take(maxNumInputs)
       developmentFundCouponsQuantity = developmentFundCouponsInputs
         .map(coupon => scala.math.BigDecimal(coupon.payload.amount))
         .sum

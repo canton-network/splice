@@ -45,17 +45,17 @@ template CalculateRewardsV2 with
 data MintingAllowance = MintingAllowance with
     provider : Party
     amount : Decimal
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 type MintingAllowances = [MintingAllowance]
 
 data Batch
   = BatchOfBatches [CryptoHash.Hash]
   | BatchOfMintingAllowances MintingAllowances
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 data ProcessRewardsV2_ProcessBatchResult = ProcessRewardsV2_ProcessBatchResult {}
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- | State contract tracking outstanding processing of rewards for a given round and batch hash.
 template ProcessRewardsV2 with

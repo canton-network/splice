@@ -21,35 +21,37 @@ export const PerIpLimitsSchema = BucketRateLimitSchema.extend({
   overrides: z.record(z.string().min(1), OverrideSchema).optional(),
 });
 
-const BucketMatchedRateLimitSchema = BucketRateLimitSchema.extend({
+export const RateLimitConfigSchema = BucketRateLimitSchema.extend({
   type: z.literal('limited'),
   perIpLimits: PerIpLimitsSchema.optional(),
 });
 
-export const BannedSchema = z.object({
-  type: z.literal('banned'),
-});
-
-export const UnlimitedSchema = z.object({
-  type: z.literal('unlimited'),
-});
-
-export const RateLimitConfigSchema = z.discriminatedUnion('type', [
-  BucketMatchedRateLimitSchema,
-  BannedSchema,
-  UnlimitedSchema,
-]);
-
 export type ExternalRateLimit = z.infer<typeof RateLimitSchema>;
 
+export const defaultGlobalLimits = {
+  maxTokens: 10000,
+  tokensPerFill: 10000,
+  fillInterval: '60s',
+};
+
+export const defaultGlobalPerIpLimits = {
+  maxTokens: 1000,
+  tokensPerFill: 1000,
+  fillInterval: '60s',
+};
+
 export const RateLimitSchema = z.object({
-  globalLimits: BucketRateLimitSchema,
-  rateLimits: z.object({}).catchall(
-    z.intersection(
-      z.object({
-        name: z.string(),
-      }),
-      RateLimitConfigSchema
+  globalLimits: BucketRateLimitSchema.default(defaultGlobalLimits),
+  globalPerIpLimits: PerIpLimitsSchema.default(defaultGlobalPerIpLimits),
+  rateLimits: z
+    .object({})
+    .catchall(
+      z.intersection(
+        z.object({
+          name: z.string(),
+        }),
+        RateLimitConfigSchema
+      )
     )
-  ),
+    .optional(),
 });

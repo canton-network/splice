@@ -97,6 +97,9 @@ metrics:
 # k8s tolerations for all deployed pods (optional)
 # tolerations:
 
+# k8s priorityClassName for all deployed pods (optional)
+# priorityClassName:
+
 enableAntiAffinity: true
 
 logLevel: info
@@ -128,10 +131,10 @@ watchdog:
   imageName: "cometbft-watchdog"
   resources:
     limits:
-      memory: 128Mi
+      memory: 512Mi
     requests:
-      cpu: 0.05
-      memory: 64Mi
+      cpu: 0.5
+      memory: 256Mi
 
 securityContexts:
   pod:

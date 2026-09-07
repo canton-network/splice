@@ -26,7 +26,7 @@ data DsoDecentralizedSynchronizerConfig = DsoDecentralizedSynchronizerConfig wit
       -- ^ The last allocated synchronizer Id.
     activeSynchronizerId: Text
       -- ^ The synchronizer to be used for managing standard DSO and Amulet workflows.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- | The DSO-level configuration of a synchronizer. This contains the shared parameters
 -- of the synchronizer.
@@ -39,7 +39,7 @@ data SynchronizerConfig = SynchronizerConfig with
     acsCommitmentReconciliationInterval : Optional Int
       -- ^ Participants connected to the decentralized synchronizer exchange ACS commitment messages
       -- every reconciliation interval seconds.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- | The state of a synchronizer.
 data SynchronizerState
@@ -58,7 +58,7 @@ data SynchronizerState
   | ExtSynchronizerState
       -- ^ Extension constructor to work around the current lack of upgrading for variants in Daml 3.0.
       -- Will serve as the default value in a containing record in case of an extension.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 
 -- SV-level configuration
@@ -71,13 +71,13 @@ data SequencerIdentityConfig = SequencerIdentityConfig with
     availableAfter : Optional Time
       -- ^ Any participant should subscribe this sequencer after this time.
       -- ^ If not set the sequencer is not yet accessible
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- | Connection config for a sequencer.
 data SequencerConnectionConfig = SequencerConnectionConfig with
     url : Text
       -- ^ The public accessible url of the sequencer.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- | Config for a sequencer.
 data SequencerConfig = SequencerConfig with
@@ -90,7 +90,7 @@ data SequencerConfig = SequencerConfig with
     availableAfter : Optional Time
       -- ^ Any participant should subscribe this sequencer after this time.
       -- ^ If not set the sequencer is not yet accessible
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- | Config for a legacy sequencer, i.e., a migration id that is still up but paused. This is useful to allow validators to catch up.
 data LegacySequencerConfig = LegacySequencerConfig with
@@ -100,26 +100,26 @@ data LegacySequencerConfig = LegacySequencerConfig with
       -- ^ The id of the sequencer.
     url : Text
       -- ^ The public accessible url of the sequencer.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- | Config for a mediator.
 data MediatorConfig = MediatorConfig with
     mediatorId : Text
       -- ^ The id of the mediator.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- | Config for a Scan instance.
 data ScanConfig = ScanConfig with
     publicUrl : Text
       -- ^ The publicly accessible URL of the Scan instance.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 data PhysicalSynchronizerNodeConfig = PhysicalSynchronizerNodeConfig with
 
     sequencer : Optional SequencerConnectionConfig
       -- ^ The configuration of this sv's optional local sequencer.
 
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- | A map from synchronizer-ids to the configuration of a sv's node for this synchronizer.
 type SynchronizerNodeConfigMap = Map.Map Text SynchronizerNodeConfig
@@ -151,14 +151,14 @@ data SynchronizerNodeConfig = SynchronizerNodeConfig with
     physicalSynchronizers: Optional PhysicalSynchronizerNodeConfigMap
       -- ^ The synchronizer node configs for the currently running physical synchronizers.
 
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 noSynchronizerNodes : SynchronizerNodeConfigMap
 noSynchronizerNodes = Map.empty
 
 data SynchronizerNodeConfigLimits = SynchronizerNodeConfigLimits with
     cometBft : CometBftConfigLimits
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 
 -- default values

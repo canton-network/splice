@@ -25,11 +25,17 @@ infra:
   istio:
     enableIngressAccessLogging: true
     enablePublicTokenRegistry: true
-    sequencerFlowControl:
+    flowControl:
       # See https://github.com/DACH-NY/canton-network-internal/issues/4901
       # The values are somewhat arbitrary so more fine tuning may be appropriate.
-      initialStreamWindowSize: 524288        # 512 KiB max per stream
-      initialConnectionWindowSize: 52428800  # 50 MiB max per connection
+      public:
+        initialStreamWindowSize: 524288        # 512 KiB max per stream
+        initialConnectionWindowSize: 52428800  # 50 MiB max per connection
+        ports: [5008, 5010]                    # sequencer public api, canton bft
+      internal:
+        initialStreamWindowSize: 1048576        # 1 MiB max per stream
+        initialConnectionWindowSize: 104857600  # 100 MiB max per connection
+        ports: [5001, 5002, 5007, 5009]         #  ledger API, participant admin API, mediator admin API, sequencer admin API
 # configs specific for the pulumi project
 # will be applied to all the stacks in the project
 pulumiProjectConfig:
@@ -236,16 +242,30 @@ cloudArmor:
   allRulesPreviewOnly: true
   publicEndpoints:
     publicScan:
-      hostname: scan.sv-2.scratcha.global.canton.network.digitalasset.com
+      hostPrefixRegex: scan
       pathPrefix: /api/scan
-      throttleAcrossAllEndpointsAllIps:
+      throttleAcrossAllEndpointsPerIp:
         withinIntervalSeconds: 60
-        maxRequestsBeforeHttp429: 0    # Keeps scan completely closed to the public
+        # above the envoy per-IP scan limit (see sv.scan.externalRateLimits.globalPerIpLimits),
+        # so that envoy stays the primary limiter and this is only a backstop that drops
+        # abusive sources at the GCP edge
+        maxRequestsBeforeHttp429: 2000
     tokenRegistry:
+      # the token registry is served off the scan hosts
+      hostPrefixRegex: scan
       pathPrefix: /registry
-      throttleAcrossAllEndpointsAllIps:
+      throttleAcrossAllEndpointsPerIp:
         withinIntervalSeconds: 60
-        maxRequestsBeforeHttp429: 200
+        # above the largest per-endpoint envoy perIpLimits under /registry, with room for
+        # a client legitimately using several registry endpoints at once
+        maxRequestsBeforeHttp429: 1000
+    sequencer:
+      hostPrefixRegex: sequencer-[0-9]+
+      pathPrefix: /
+      restrictToRateLimitedPaths: false
+      throttleAcrossAllEndpointsPerIp:
+        withinIntervalSeconds: 60
+        maxRequestsBeforeHttp429: 20000
 multiValidator:
   postgresPvcSize: '100Gi'
   resources:
@@ -269,11 +289,19 @@ multiValidator:
 sv:
   scan:
     externalRateLimits:
-      !include(./rate-limits/v0-acs.yaml;./rate-limits/unlimited.yaml;./rate-limits/public-banned.yaml;./rate-limits/token-registry.yaml)
+      !include(./rate-limits/token-registry.yaml)
       globalLimits:
-        maxTokens: 2147483647
-        tokensPerFill: 2147483647
+        maxTokens: 10000
+        tokensPerFill: 10000
         fillInterval: 60s
+      globalPerIpLimits:
+        maxTokens: 1000
+        tokensPerFill: 1000
+        fillInterval: 60s
+  synchronizer:
+    sequencer:
+      externalRateLimits:
+        !include(./rate-limits/sequencer-public-api.yaml)
 validators:
   validator-runbook:
     namespace: validator

@@ -1940,7 +1940,7 @@
         "meshConfig": {
           "accessLogEncoding": "JSON",
           "accessLogFile": "",
-          "accessLogFormat": "{\"trace_id\":\"%REQ(traceparent)%\",\"authority\":\"%REQ(:AUTHORITY)%\",\"bytes_received\":\"%BYTES_RECEIVED%\",\"bytes_sent\":\"%BYTES_SENT%\",\"downstream_local_address\":\"%DOWNSTREAM_LOCAL_ADDRESS%\",\"downstream_remote_address\":\"%DOWNSTREAM_REMOTE_ADDRESS%\",\"duration\":\"%DURATION%\",\"method\":\"%REQ(:METHOD)%\",\"path\":\"%REQ(X-ENVOY-ORIGINAL-PATH?:PATH)%\",\"protocol\":\"%PROTOCOL%\",\"request_id\":\"%REQ(X-REQUEST-ID)%\",\"requested_server_name\":\"%REQUESTED_SERVER_NAME%\",\"response_code\":\"%RESPONSE_CODE%\",\"response_code_details\":\"%RESPONSE_CODE_DETAILS%\",\"response_flags\":\"%RESPONSE_FLAGS%\",\"start_time\":\"%START_TIME%\",\"upstream_cluster\":\"%UPSTREAM_CLUSTER%\",\"upstream_host\":\"%UPSTREAM_HOST%\",\"upstream_local_address\":\"%UPSTREAM_LOCAL_ADDRESS%\",\"upstream_service_time\":\"%RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%\",\"user_agent\":\"%REQ(USER-AGENT)%\",\"x_forwarded_for\":\"%REQ(X-FORWARDED-FOR)%\",\"local_rate_limited\":\"%RESP(x-local-rate-limit)%\",\"rate_limit_limit\":\"%RESP(x-ratelimit-limit)%\",\"rate_limit_remaining\":\"%RESP(x-ratelimit-remaining)%\",\"rate_limit_reset\":\"%RESP(x-ratelimit-reset)%\"}",
+          "accessLogFormat": "{\"trace_id\":\"%REQ(traceparent)%\",\"authority\":\"%REQ(:AUTHORITY)%\",\"bytes_received\":\"%BYTES_RECEIVED%\",\"bytes_sent\":\"%BYTES_SENT%\",\"downstream_local_address\":\"%DOWNSTREAM_LOCAL_ADDRESS%\",\"downstream_remote_address\":\"%DOWNSTREAM_REMOTE_ADDRESS%\",\"duration\":\"%DURATION%\",\"method\":\"%REQ(:METHOD)%\",\"path\":\"%REQ(X-ENVOY-ORIGINAL-PATH?:PATH)%\",\"protocol\":\"%PROTOCOL%\",\"request_id\":\"%REQ(X-REQUEST-ID)%\",\"requested_server_name\":\"%REQUESTED_SERVER_NAME%\",\"response_code\":\"%RESPONSE_CODE%\",\"response_code_details\":\"%RESPONSE_CODE_DETAILS%\",\"grpc_status\":\"%GRPC_STATUS(CAMEL_STRING)%\",\"response_flags\":\"%RESPONSE_FLAGS%\",\"start_time\":\"%START_TIME%\",\"upstream_cluster\":\"%UPSTREAM_CLUSTER%\",\"upstream_host\":\"%UPSTREAM_HOST%\",\"upstream_local_address\":\"%UPSTREAM_LOCAL_ADDRESS%\",\"upstream_service_time\":\"%RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%\",\"user_agent\":\"%REQ(USER-AGENT)%\",\"x_forwarded_for\":\"%REQ(X-FORWARDED-FOR)%\",\"envoy_external_address\":\"%REQ(X-ENVOY-EXTERNAL-ADDRESS)%\",\"masked_remote_address\":\"%DOWNSTREAM_REMOTE_ADDRESS_WITHOUT_PORT%\",\"local_rate_limited\":\"%RESP(x-local-rate-limit)%\",\"rate_limit_limit\":\"%RESP(x-ratelimit-limit)%\",\"rate_limit_remaining\":\"%RESP(x-ratelimit-remaining)%\",\"rate_limit_reset\":\"%RESP(x-ratelimit-reset)%\"}",
           "defaultConfig": {
             "gatewayTopology": {
               "numTrustedProxies": 0
@@ -2304,7 +2304,7 @@
       "apiVersion": "networking.istio.io/v1alpha3",
       "kind": "EnvoyFilter",
       "metadata": {
-        "name": "sequencer-flow-control",
+        "name": "flow-control",
         "namespace": "cluster-ingress"
       },
       "spec": {
@@ -2331,8 +2331,8 @@
                       "interval": "30s",
                       "timeout": "5s"
                     },
-                    "initial_connection_window_size": 52428800,
-                    "initial_stream_window_size": 524288
+                    "initial_connection_window_size": 104857600,
+                    "initial_stream_window_size": 1048576
                   }
                 }
               }
@@ -2388,6 +2388,122 @@
                         },
                         "initial_connection_window_size": 52428800,
                         "initial_stream_window_size": 524288
+                      },
+                      "http_protocol_options": {}
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "applyTo": "CLUSTER",
+            "match": {
+              "cluster": {
+                "portNumber": 5001
+              }
+            },
+            "patch": {
+              "operation": "MERGE",
+              "value": {
+                "typed_extension_protocol_options": {
+                  "envoy.extensions.upstreams.http.v3.HttpProtocolOptions": {
+                    "@type": "type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions",
+                    "use_downstream_protocol_config": {
+                      "http2_protocol_options": {
+                        "connection_keepalive": {
+                          "interval": "30s",
+                          "timeout": "5s"
+                        },
+                        "initial_connection_window_size": 104857600,
+                        "initial_stream_window_size": 1048576
+                      },
+                      "http_protocol_options": {}
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "applyTo": "CLUSTER",
+            "match": {
+              "cluster": {
+                "portNumber": 5002
+              }
+            },
+            "patch": {
+              "operation": "MERGE",
+              "value": {
+                "typed_extension_protocol_options": {
+                  "envoy.extensions.upstreams.http.v3.HttpProtocolOptions": {
+                    "@type": "type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions",
+                    "use_downstream_protocol_config": {
+                      "http2_protocol_options": {
+                        "connection_keepalive": {
+                          "interval": "30s",
+                          "timeout": "5s"
+                        },
+                        "initial_connection_window_size": 104857600,
+                        "initial_stream_window_size": 1048576
+                      },
+                      "http_protocol_options": {}
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "applyTo": "CLUSTER",
+            "match": {
+              "cluster": {
+                "portNumber": 5007
+              }
+            },
+            "patch": {
+              "operation": "MERGE",
+              "value": {
+                "typed_extension_protocol_options": {
+                  "envoy.extensions.upstreams.http.v3.HttpProtocolOptions": {
+                    "@type": "type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions",
+                    "use_downstream_protocol_config": {
+                      "http2_protocol_options": {
+                        "connection_keepalive": {
+                          "interval": "30s",
+                          "timeout": "5s"
+                        },
+                        "initial_connection_window_size": 104857600,
+                        "initial_stream_window_size": 1048576
+                      },
+                      "http_protocol_options": {}
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "applyTo": "CLUSTER",
+            "match": {
+              "cluster": {
+                "portNumber": 5009
+              }
+            },
+            "patch": {
+              "operation": "MERGE",
+              "value": {
+                "typed_extension_protocol_options": {
+                  "envoy.extensions.upstreams.http.v3.HttpProtocolOptions": {
+                    "@type": "type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions",
+                    "use_downstream_protocol_config": {
+                      "http2_protocol_options": {
+                        "connection_keepalive": {
+                          "interval": "30s",
+                          "timeout": "5s"
+                        },
+                        "initial_connection_window_size": 104857600,
+                        "initial_stream_window_size": 1048576
                       },
                       "http_protocol_options": {}
                     }

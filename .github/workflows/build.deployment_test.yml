@@ -25,7 +25,7 @@ jobs:
       - name: Setup
         uses: ./.github/actions/tests/common_test_setup
         with:
-          cache_version: 9
+          cache_version: 10
           test_name: deployment_test
           with_sbt: false
 
@@ -40,6 +40,11 @@ jobs:
           cmd_retry_count: 5 # Retry in case of dependency download errors
           cmd: make cluster/pulumi/test
           cmd_before_retry: git reset --hard # revert changes before retrying, because make cluster/pulumi/test actually "fixes" the test pulumi files in-place
+      
+      - name: Check that pinned docker images are multi-arch
+        uses: ./.github/actions/nix/run_bash_command_in_nix
+        with:
+          cmd: ./scripts/check-multiarch-images.py
 
       - name: Report Failures on Slack & Github
         if: failure() && (github.event_name == 'push' || github.event_name == 'schedule')

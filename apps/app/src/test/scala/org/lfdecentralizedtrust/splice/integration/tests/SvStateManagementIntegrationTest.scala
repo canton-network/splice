@@ -397,6 +397,7 @@ class SvStateManagementIntegrationTest extends SvIntegrationTestBase with Trigge
           sv1Backend.getDsoInfo().dsoRules.payload.config.nextScheduledSynchronizerUpgrade,
           sv1Backend.getDsoInfo().dsoRules.payload.config.voteCooldownTime,
           sv1Backend.getDsoInfo().dsoRules.payload.config.nextScheduledLogicalSynchronizerUpgrade,
+          sv1Backend.getDsoInfo().dsoRules.payload.config.svOperationsSwitchOverTimes,
         )
 
         val action: ActionRequiringConfirmation =
@@ -506,6 +507,9 @@ class SvStateManagementIntegrationTest extends SvIntegrationTestBase with Trigge
       initialConfig.externalPartyConfigStateTickDuration,
       initialConfig.rewardConfig,
       initialConfig.transferPreapprovalBaseDuration,
+      initialConfig.developmentFundManagerBlacklist,
+      initialConfig.minDevelopmentFundMintingDelay,
+      initialConfig.amuletSwitchOverTimes,
     )
 
     val (_, voteRequestCid) = actAndCheck(

@@ -19,11 +19,11 @@ groups:
                 type: prometheus
                 uid: prometheus
               editorMode: code
-              expr: sum(rate(envoy_http_local_rate_limiter_http_local_rate_limit_enforced{namespace=~"sv.*"}[$__rate_interval])) by (namespace, pod)
+              expr: sum(rate(envoy_http_local_rate_limit_enforced{namespace=~"sv.*"}[$__rate_interval])) by (namespace, pod, limiter)
               instant: true
               interval: ""
               intervalMs: 30000
-              legendFormat: '{{namespace}} - {{pod}}'
+              legendFormat: '{{namespace}} - {{pod}} - {{limiter}}'
               maxDataPoints: 43200
               range: false
               refId: A
@@ -59,9 +59,9 @@ groups:
         annotations:
           runbook_url: ""
           severity: warning
-          description: Envoy local rate limiting is active, requests are being rejected. Check the "Istio Rate Limiting" dashboard.
-          summary: Envoy is rate limiting requests in {{ $labels.namespace }} on pod {{ $labels.pod }}.
+          description: Envoy local rate limiting is active, requests are being rejected. The limiter label tells which limit rejected them (global, per_ip, endpoint_per_ip); the sidecar access log of a rejected request reports the same limit in the local_rate_limited field. Check the "Istio Rate Limiting" dashboard.
+          summary: Envoy is rate limiting requests in {{ $labels.namespace }} on pod {{ $labels.pod }} ({{ $labels.limiter }} limit).
         labels:
           "": ""
-          gcloud_filter: resource.labels.namespace_name=%22cluster-ingress%22%0AjsonPayload.response_code=429
+          gcloud_filter: resource.labels.namespace_name=%22cluster-ingress%22%0A%28jsonPayload.response_code=429%20OR%20jsonPayload.grpc_status=%22ResourceExhausted%22%29
         isPaused: false

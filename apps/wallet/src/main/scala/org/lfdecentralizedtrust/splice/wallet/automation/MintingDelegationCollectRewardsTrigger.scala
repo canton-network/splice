@@ -53,6 +53,7 @@ import org.lfdecentralizedtrust.splice.util.{
 }
 import org.lfdecentralizedtrust.splice.wallet.config.RewardSharingConfig
 import org.lfdecentralizedtrust.splice.wallet.store.ExternalPartyWalletStore
+import org.lfdecentralizedtrust.splice.wallet.util.DevelopmentFundCouponUtil
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.util.ShowUtil.*
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
@@ -361,13 +362,16 @@ class MintingDelegationCollectRewardsTrigger(
         limit = HardLimit.tryCreate(rewardSharingConfig.batchSize),
       )
       unclaimedActivityRecords <- store.listUnclaimedActivityRecords()
-      developmentFundCoupons <- store.listDevelopmentFundCoupons()
+      allDevelopmentFundCoupons <- store.listDevelopmentFundCoupons()
+      mintableDevelopmentFundCoupons = allDevelopmentFundCoupons.filter(
+        DevelopmentFundCouponUtil.isMintable(_, context.clock.now.toInstant)
+      )
     } yield CouponsData(
       livenessActivityRecordsWithQuantity.map(_._1),
       validatorRewardCoupons,
       appRewardCouponsWithQuantity.map(_._1),
       unclaimedActivityRecords,
-      developmentFundCoupons,
+      mintableDevelopmentFundCoupons,
       rewardCouponsV2.map(_.contract),
     )
   }

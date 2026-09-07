@@ -2220,6 +2220,11 @@ components:
           format: int64
         reason:
           type: string
+        mintAfter:
+          type: integer
+          format: int64
+          description: |
+            Earliest time at which the beneficiary may mint the coupon, in epoch microseconds.
 
     AllocateDevelopmentFundCouponResponse:
       type: object

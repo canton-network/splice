@@ -11,7 +11,7 @@ import {
   ExactNamespace,
 } from '@canton-network/splice-pulumi-common';
 
-import { allSvsToDeploy, coreSvsToDeploy } from './svConfigs';
+import { coreSvsToDeploy, svRunbookConfig } from './svConfigs';
 import { cometBFTExternalPort } from './synchronizer/cometbftConfig';
 
 export function installSvLoopback(namespace: ExactNamespace, cometbft: boolean): pulumi.Resource[] {
@@ -66,7 +66,9 @@ export function installLoopback(
     { dependsOn: [namespace.ns] }
   );
 
-  const svHosts = allSvsToDeploy
+  // always excplitly include the runbook to avoid issues where the loopback will not work
+  const svHosts = coreSvsToDeploy
+    .concat([svRunbookConfig])
     .map(sv => [`${sv.ingressName}.${clusterHostname}`, `*.${sv.ingressName}.${clusterHostname}`])
     .flat();
   const allHosts = [

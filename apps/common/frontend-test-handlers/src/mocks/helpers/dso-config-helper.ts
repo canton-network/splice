@@ -21,6 +21,7 @@ export function getDsoRulesConfig(
       ? nextScheduledSynchronizerUpgrade
       : null,
     nextScheduledLogicalSynchronizerUpgrade: null,
+    svOperationsSwitchOverTimes: null,
     actionConfirmationTimeout: {
       microseconds: '3600000000',
     },
@@ -224,6 +225,9 @@ export function getExpectedDsoRulesConfigDiffsHTML(
 }</pre></div></li><li class="jsondiffpatch-unchanged"
       data-key="nextScheduledLogicalSynchronizerUpgrade"><div
         class="jsondiffpatch-property-name">nextScheduledLogicalSynchronizerUpgrade</div><div
+        class="jsondiffpatch-value"><pre>null</pre></div></li><li
+      class="jsondiffpatch-unchanged" data-key="svOperationsSwitchOverTimes"><div
+        class="jsondiffpatch-property-name">svOperationsSwitchOverTimes</div><div
         class="jsondiffpatch-value"><pre>null</pre></div></li></ul></div>
 `;
 
@@ -325,6 +329,9 @@ export function getExpectedDsoRulesConfigDiffsHTML(
 }</pre></div></li><li class="jsondiffpatch-unchanged"
       data-key="nextScheduledLogicalSynchronizerUpgrade"><div
         class="jsondiffpatch-property-name">nextScheduledLogicalSynchronizerUpgrade</div><div
+        class="jsondiffpatch-value"><pre>null</pre></div></li><li
+      class="jsondiffpatch-unchanged" data-key="svOperationsSwitchOverTimes"><div
+        class="jsondiffpatch-property-name">svOperationsSwitchOverTimes</div><div
         class="jsondiffpatch-value"><pre>null</pre></div></li></ul></div>
 `;
 
