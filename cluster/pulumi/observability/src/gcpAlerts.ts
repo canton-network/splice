@@ -564,7 +564,7 @@ export function installCloudSqlTxIdUtilizationAlert(
 export function installCloudArmorAlerts(
   notificationChannel: gcp.monitoring.NotificationChannel,
   cloudArmorAlertsConfig: CloudArmorAlertsConfig,
-  allRulesPreviewOnly: boolean
+  hasPreviewOnlyRules: boolean
 ): void {
   const { deniedRequestsThreshold } = cloudArmorAlertsConfig;
   // Scoped to the policy of this cluster; other clusters in the same GCP project
@@ -612,17 +612,18 @@ export function installCloudArmorAlerts(
       subject: enforcedDisplayName,
       content: [
         `Requests to **${CLUSTER_BASENAME}** were denied by the Cloud Armor security policy \`${CLOUD_ARMOR_POLICY_NAME}\`.`,
-        'This is either an abusive client being blocked at the GCP edge, or legitimate traffic that our rules (IP whitelist, per endpoint throttles, default deny) reject by mistake.',
+        'This is either an abusive client being blocked at the GCP edge, or legitimate traffic that our rules (WAF signatures, IP whitelist, per endpoint throttles, default deny) reject by mistake.',
         'Check the Cloud Armor request logs of the load balancer to see which rule matched.',
       ].join('\n\n'),
       mimeType: 'text/markdown',
     },
     conditions: [
       deniedCondition(enforcedDisplayName, 'networksecurity.googleapis.com/https/request_count'),
-      // With all rules in preview mode nothing is actually denied, so we also alert on
-      // the requests the rules would have denied; that is the only signal available
-      // while rolling the policy out.
-      ...(allRulesPreviewOnly
+      // Rules in preview mode do not actually deny anything, so we also alert on the
+      // requests they would have denied; for the WAF rules that previewed signal is
+      // exactly the attack detection we want, and while rolling the whole policy out
+      // it is the only signal available.
+      ...(hasPreviewOnlyRules
         ? [
             deniedCondition(
               previewedDisplayName,
