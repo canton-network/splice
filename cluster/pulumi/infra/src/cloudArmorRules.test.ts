@@ -7,9 +7,12 @@ import {
   hostCondition,
   ipWhitelistRuleChunks,
   matchExpression,
+  MAX_EXPRESSION_LENGTH,
   MAX_IPS_PER_RULE,
   MAX_IP_WHITELIST_RULES,
   MAX_SUBEXPRESSION_LENGTH,
+  WAF_RULE_GROUPS,
+  wafRuleExpression,
 } from './cloudArmorRules';
 
 const dnsNames = [
@@ -192,5 +195,51 @@ describe('ipWhitelistRuleChunks', () => {
     expect(() => ipWhitelistRuleChunks(ips(50), 2)).toThrow(
       /would overlap the throttle rule priority range/
     );
+  });
+});
+
+describe('wafRuleExpression', () => {
+  const expressions = WAF_RULE_GROUPS.map(wafRuleExpression);
+
+  test('matches the tuning validated on the DA-1 SV and DA-Wallet validator', () => {
+    expect(expressions).toEqual([
+      "evaluatePreconfiguredWaf('rce-v33-stable', {'sensitivity': 1, 'opt_out_rule_ids': ['owasp-crs-v030301-id932110-rce', 'owasp-crs-v030301-id932115-rce', 'owasp-crs-v030301-id932120-rce', 'owasp-crs-v030301-id932140-rce']}) || " +
+        "evaluatePreconfiguredWaf('lfi-v33-stable', {'sensitivity': 1, 'opt_out_rule_ids': ['owasp-crs-v030301-id930110-lfi']})",
+      "evaluatePreconfiguredWaf('cve-canary', {'sensitivity': 1}) || " +
+        "evaluatePreconfiguredWaf('protocolattack-v33-stable', {'sensitivity': 1, 'opt_out_rule_ids': ['owasp-crs-v030301-id921110-protocolattack', 'owasp-crs-v030301-id921150-protocolattack', 'owasp-crs-v030301-id921151-protocolattack', 'owasp-crs-v030301-id921170-protocolattack']}) || " +
+        "evaluatePreconfiguredWaf('nodejs-v33-stable', {'sensitivity': 1}) || " +
+        "evaluatePreconfiguredWaf('xss-v33-stable', {'sensitivity': 1, 'opt_out_rule_ids': ['owasp-crs-v030301-id941100-xss', 'owasp-crs-v030301-id941120-xss', 'owasp-crs-v030301-id941190-xss', 'owasp-crs-v030301-id941200-xss', 'owasp-crs-v030301-id941210-xss', 'owasp-crs-v030301-id941220-xss', 'owasp-crs-v030301-id941230-xss', 'owasp-crs-v030301-id941240-xss', 'owasp-crs-v030301-id941250-xss', 'owasp-crs-v030301-id941260-xss', 'owasp-crs-v030301-id941270-xss', 'owasp-crs-v030301-id941280-xss', 'owasp-crs-v030301-id941290-xss', 'owasp-crs-v030301-id941300-xss']})",
+      "evaluatePreconfiguredWaf('sqli-v33-stable', {'sensitivity': 1, 'opt_out_rule_ids': ['owasp-crs-v030301-id942190-sqli', 'owasp-crs-v030301-id942240-sqli', 'owasp-crs-v030301-id942270-sqli', 'owasp-crs-v030301-id942290-sqli', 'owasp-crs-v030301-id942320-sqli', 'owasp-crs-v030301-id942350-sqli', 'owasp-crs-v030301-id942500-sqli']}) || " +
+        "evaluatePreconfiguredWaf('sessionfixation-v33-stable', {'sensitivity': 1}) || " +
+        "evaluatePreconfiguredWaf('java-v33-stable', {'sensitivity': 1})",
+    ]);
+  });
+
+  test('stays within the Cloud Armor expression length limits', () => {
+    expressions.forEach(expr => {
+      expect(expr.length).toBeLessThanOrEqual(MAX_EXPRESSION_LENGTH);
+      expr.split(' || ').forEach(sub => {
+        expect(sub.length).toBeLessThanOrEqual(MAX_SUBEXPRESSION_LENGTH);
+      });
+    });
+  });
+
+  test('has unique rule names', () => {
+    const names = WAF_RULE_GROUPS.map(g => g.name);
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  test('throws when a group exceeds the expression length limit', () => {
+    expect(() =>
+      wafRuleExpression({
+        name: 'too-long',
+        description: 'too long',
+        signatures: Array.from({ length: 10 }, () => ({
+          name: 'sqli-v33-stable',
+          sensitivity: 1,
+          optOutRuleIds: Array.from({ length: 10 }, (_unused, i) => `9421${i}0`),
+        })),
+      })
+    ).toThrow(new RegExp(`exceeds the ${MAX_EXPRESSION_LENGTH} character limit`));
   });
 });
