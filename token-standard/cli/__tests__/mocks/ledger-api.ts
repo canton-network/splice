@@ -31,7 +31,7 @@ export const buildLedgerApiMock = (ledgerUrl: string): HttpHandler[] => [
       allDivulgedContractsPrunedUpToInclusive: 0,
     });
   }),
-  http.post(`${ledgerUrl}/v2/updates/flats`, () => {
+  http.post(`${ledgerUrl}/v2/updates`, () => {
     return HttpResponse.json(txs);
   }),
   http.post(`${ledgerUrl}/v2/events/events-by-contract-id`, async (req) => {

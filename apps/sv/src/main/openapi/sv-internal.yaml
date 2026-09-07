@@ -518,22 +518,6 @@ paths:
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
         "501":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/501"
-  /v0/dso:
-    get:
-      tags: [sv]
-      # Deprecated in favor of /v1/dso, which requires authorization as SV operator.
-      # TODO(DACH-NY/canton-network-internal#2106) Remove in 0.8.0
-      deprecated: true
-      x-jvm-package: sv_public
-      x-external-audience: validators
-      operationId: "getDsoInfo"
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema:
-                "$ref": "../../../../common/src/main/openapi/common-internal.yaml#/components/schemas/GetDsoInfoResponse"
 
   /v1/dso:
     get:
