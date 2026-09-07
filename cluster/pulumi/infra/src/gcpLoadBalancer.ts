@@ -3,6 +3,7 @@
 import * as gcp from '@pulumi/gcp';
 import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
+import * as _ from 'lodash';
 import { CLUSTER_BASENAME, ExactNamespace } from '@canton-network/splice-pulumi-common';
 
 import { CloudArmorPolicy } from './cloudArmor';
@@ -62,6 +63,9 @@ interface L7GatewayConfig {
 
 const httpListenerName = 'listen-http';
 const httpsListenerName = 'listen-https';
+
+// enforced by the HTTPRoute CRD: spec.hostnames must have at most 16 items
+const MAX_HOSTNAMES_PER_HTTP_ROUTE = 16;
 
 /**
  * Creates a GKE L7 Gateway
@@ -302,33 +306,40 @@ function createCloudArmorExemptBackend(
     { parent: gateway, dependsOn: [config.istioResource] }
   );
 
-  new k8s.apiextensions.CustomResource(
-    `${name}-route`,
-    {
-      apiVersion: 'gateway.networking.k8s.io/v1',
-      kind: 'HTTPRoute',
-      metadata: {
-        name: `${name}-route`,
-        namespace: config.ingressNs.ns.metadata.name,
+  // the HTTPRoute CRD caps spec.hostnames at 16 entries, so spread them over as many
+  // routes as needed; they all point at the same backend service
+  _.chunk(hostnames, MAX_HOSTNAMES_PER_HTTP_ROUTE).forEach((hostnameChunk, i) => {
+    // keep the first route's name stable, so that clusters that fit into a single
+    // route are not forced to replace it
+    const routeName = i === 0 ? `${name}-route` : `${name}-route-${i}`;
+    new k8s.apiextensions.CustomResource(
+      routeName,
+      {
+        apiVersion: 'gateway.networking.k8s.io/v1',
+        kind: 'HTTPRoute',
+        metadata: {
+          name: routeName,
+          namespace: config.ingressNs.ns.metadata.name,
+        },
+        spec: {
+          parentRefs: [mainRouteParentRef(config)],
+          hostnames: hostnameChunk,
+          rules: [
+            {
+              backendRefs: [
+                {
+                  name: service.metadata.name,
+                  namespace: config.ingressNs.ns.metadata.name,
+                  port: config.serviceTarget.port,
+                },
+              ],
+            },
+          ],
+        },
       },
-      spec: {
-        parentRefs: [mainRouteParentRef(config)],
-        hostnames,
-        rules: [
-          {
-            backendRefs: [
-              {
-                name: service.metadata.name,
-                namespace: config.ingressNs.ns.metadata.name,
-                port: config.serviceTarget.port,
-              },
-            ],
-          },
-        ],
-      },
-    },
-    { parent: gateway, dependsOn: [service] }
-  );
+      { parent: gateway, dependsOn: [service] }
+    );
+  });
 
   createHealthCheckPolicy(config, gateway, `${name}-healthcheck`, service.metadata.name);
   // deliberately no security policy: that is the whole point of this backend
