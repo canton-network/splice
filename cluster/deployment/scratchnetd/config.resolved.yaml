@@ -77,6 +77,8 @@ monitoring:
         updateLatencyThresholdSeconds: 3
       cantonBft:
         mempoolMaxSizeThreshold: 100
+      cloudArmor:
+        deniedRequestsThreshold: 0
       cloudSql:
         maintenance: false
       cometbft:

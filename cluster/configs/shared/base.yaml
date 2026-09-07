@@ -190,6 +190,10 @@ monitoring:
         # Fire when TPS (approved confirmation requests per second) over the last
         # 30m drops below this fraction of the previous 30m.
         tpsDropThreshold: 0.5
+      cloudArmor:
+        # Number of requests denied by Cloud Armor within a 5 minute window above which
+        # the alert fires. Only used if cloudArmor.enabled is true.
+        deniedRequestsThreshold: 0
       gcpQuotas:
         # Quota metric names to exclude from all GCP quota alerts.
         # Each entry is matched exactly for quota exceeded.
