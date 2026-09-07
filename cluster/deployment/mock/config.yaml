@@ -446,6 +446,7 @@ validators:
       parallelism: 321
       preapprovalRetries: 9876
       preapprovalRetryDelayMs: 42
+      version: '1.2.3'
     participantPruningSchedule:
       cron: "0 /10 * * * ?" # Run every 10min
       maxDuration: "5m"
