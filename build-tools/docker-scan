@@ -5,10 +5,67 @@ set -euo pipefail
 script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 source "${script_dir}/lib/libcli.source"
 
-# Each invocation of this script uses its own ports, tmp directories and shared
-# directories so that parallel scans (make docker-scan -j4) do not interfere
-# with each other.
-BASE_PORT=9000
+# Each invocation of this script starts its own Black Duck imageinspector
+# services on dedicated ports and uses its own shared/tmp directories so that
+# parallel scans (make docker-scan -j4) do not interfere with each other.
+
+function cleanup_imageinspectors() {
+  local index="$1"
+  for distro in alpine centos ubuntu; do
+    docker rm -f "blackduck-imageinspector-${distro}-${index}" >/dev/null 2>&1 || true
+  done
+}
+
+function start_imageinspector() {
+  local distro="$1"
+  local port="$2"
+  local index="$3"
+  local shared_dir="$4"
+  local alpine_port="$5"
+  local centos_port="$6"
+  local ubuntu_port="$7"
+
+  local name="blackduck-imageinspector-${distro}-${index}"
+  local shared_dir_container="/opt/blackduck/blackduck-imageinspector/shared"
+
+  docker rm -f "$name" >/dev/null 2>&1 || true
+  docker run -d \
+    --name "$name" \
+    -p "${port}:8082" \
+    -v "${shared_dir}:${shared_dir_container}" \
+    "blackducksoftware/blackduck-imageinspector-${distro}:6.2.1" \
+    java -jar /opt/blackduck/blackduck-imageinspector/blackduck-imageinspector.jar \
+      --server.port=8082 \
+      --current.linux.distro="$distro" \
+      --inspector.url.alpine="http://localhost:${alpine_port}" \
+      --inspector.url.centos="http://localhost:${centos_port}" \
+      --inspector.url.ubuntu="http://localhost:${ubuntu_port}"
+}
+
+function wait_for_imageinspector() {
+  local distro="$1"
+  local port="$2"
+  local index="$3"
+  local name="blackduck-imageinspector-${distro}-${index}"
+
+  echo "Waiting for imageinspector $distro (index $index) service on port $port..."
+  for i in $(seq 1 60); do
+    set +e
+    health_output=$(curl -sf "http://localhost:${port}/health" 2>&1)
+    health_rc=$?
+    set -e
+    if [ "$health_rc" -eq 0 ] && echo "$health_output" | grep -q '"status":"UP"'; then
+      echo "imageinspector $distro (index $index) is ready"
+      return 0
+    fi
+    if [ "$i" -eq 60 ]; then
+      echo "Timed out waiting for imageinspector $distro (index $index)" >&2
+      docker logs "$name" >&2 || true
+      exit 1
+    fi
+    sleep 2
+  done
+}
 
 function get_top_base_layer() {
   base_image=$(cat<<EOF | python -
@@ -40,7 +97,8 @@ function do_scan() {
   local image_name="$2"
   local version="$3"
   local index="$4"
-  local extra_arg="${5:-}"
+  local ubuntu_port="$5"
+  local extra_arg="${6:-}"
 
   local tmp_dir="/tmp/blackduck-docker-scan/${index}"
   local shared_dir="${tmp_dir}/shared"
@@ -70,16 +128,15 @@ function do_scan() {
       --blackduck.api.token="$BLACKDUCK_HUBDETECT_TOKEN" \
       --detect.docker.tar="${image_dir}/image.tar" \
       --detect.docker.path.required=false \
+      --detect.docker.passthrough.imageinspector.service.url="http://localhost:${ubuntu_port}" \
+      --detect.docker.passthrough.imageinspector.service.start=false \
       --detect.docker.passthrough.shared.dir.path.local="${shared_dir}/" \
-      --detect.docker.passthrough.imageinspector.service.port.alpine=$((BASE_PORT + (index*3) + 0)) \
-      --detect.docker.passthrough.imageinspector.service.port.centos=$((BASE_PORT + (index*3) + 1)) \
-      --detect.docker.passthrough.imageinspector.service.port.ubuntu=$((BASE_PORT + (index*3) + 2)) \
       --detect.tools=DOCKER,SIGNATURE_SCAN \
       --detect.tools.excluded=BINARY_SCAN \
       --detect.project.name="DACH-NY_canton-network-internal_images-${image_name}" \
       --detect.project.version.name="${version}" \
-      --detect.output.path="${tmp_dir}/output" \
-      --detect.tools.output.path="${tmp_dir}/tool_output" \
+      --detect.output.path="${image_dir}/output" \
+      --detect.tools.output.path="${image_dir}/tool_output" \
       "${extra_arg}"
 
     res=$?
@@ -110,9 +167,30 @@ image_version="$(get-snapshot-version)"
 # shellcheck disable=SC2012,SC2010
 index=$(ls .. | grep -nx "${image_name}" | sed 's/:.*//')
 
+# Dedicated ports for this image's imageinspector services.
+# The base ports (9009/9010/9011) match the pre-started services in the GitHub Actions job.
+alpine_port=$((9009 + index*3))
+centos_port=$((9010 + index*3))
+ubuntu_port=$((9011 + index*3))
+
+tmp_dir="/tmp/blackduck-docker-scan/${index}"
+shared_dir="${tmp_dir}/shared"
+mkdir -p "${shared_dir}"
+
+# Ensure imageinspector containers are cleaned up on exit.
+trap 'cleanup_imageinspectors "$index"' EXIT
+
+start_imageinspector alpine "$alpine_port" "$index" "$shared_dir" "$alpine_port" "$centos_port" "$ubuntu_port"
+start_imageinspector centos "$centos_port" "$index" "$shared_dir" "$alpine_port" "$centos_port" "$ubuntu_port"
+start_imageinspector ubuntu "$ubuntu_port" "$index" "$shared_dir" "$alpine_port" "$centos_port" "$ubuntu_port"
+
+wait_for_imageinspector alpine "$alpine_port" "$index"
+wait_for_imageinspector centos "$centos_port" "$index"
+wait_for_imageinspector ubuntu "$ubuntu_port" "$index"
+
 # <version>-full is used to scan the full image, including the base image.
-do_scan "$image" "$image_name" "$image_version"-full "$index"
+do_scan "$image" "$image_name" "$image_version"-full "$index" "$ubuntu_port"
 
 # <version> is used to scan only the layers added by this image, on top of the base image.
 top_base_layer=$(get_top_base_layer)
-do_scan "$image" "$image_name" "$image_version" "$index" "--detect.docker.platform.top.layer.id=$top_base_layer"
+do_scan "$image" "$image_name" "$image_version" "$index" "$ubuntu_port" "--detect.docker.platform.top.layer.id=$top_base_layer"
