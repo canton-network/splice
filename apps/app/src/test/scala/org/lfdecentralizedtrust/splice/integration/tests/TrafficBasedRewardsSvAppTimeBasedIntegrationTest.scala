@@ -45,7 +45,10 @@ import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
   ProcessRewardsTrigger,
 }
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
-import org.lfdecentralizedtrust.splice.scan.automation.RewardComputationTrigger
+import org.lfdecentralizedtrust.splice.scan.automation.{
+  PruneRewardAccountingTrigger,
+  RewardComputationTrigger,
+}
 import org.lfdecentralizedtrust.splice.scan.store.ScanRewardsReferenceStore
 import org.lfdecentralizedtrust.splice.sv.config.InitialRewardConfig
 import org.lfdecentralizedtrust.splice.util.{
@@ -59,7 +62,8 @@ import org.lfdecentralizedtrust.splice.util.{
 }
 import org.slf4j.event.Level
 
-import scala.concurrent.duration.{DurationInt, FiniteDuration}
+import scala.annotation.tailrec
+import scala.concurrent.duration.DurationInt
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 
 // This test focuses on the SV app side triggers testing
@@ -798,6 +802,8 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
     val sv2HistoryId = sv2ScanBackend.appState.eventStore.updateHistory.historyId
     val sv1RewardsRefStore = sv1ScanBackend.appState.rewardsReferenceStore
     val sv2RewardsRefStore = sv2ScanBackend.appState.rewardsReferenceStore
+    val sv1PruneTrigger = sv1ScanBackend.automation.trigger[PruneRewardAccountingTrigger]
+    val sv2PruneTrigger = sv2ScanBackend.automation.trigger[PruneRewardAccountingTrigger]
 
     def hasUnprunedRewardAccountingDataBelow(
         db: DbStorage,
@@ -834,30 +840,34 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
     ): Boolean =
       store.lookupArchivedAtForOpenMiningRound(roundNumber).futureValue.isDefined
 
+    // The trigger prunes at most one round per invocation, so it is run until it
+    // reports that there is nothing left to prune.
+    def pruneUntilNothingLeftToPrune(trigger: PruneRewardAccountingTrigger): Unit = {
+      @tailrec def go(runs: Int): Unit = {
+        runs should be < 30
+        if (trigger.runOnce().futureValue) go(runs + 1) else ()
+      }
+      go(0)
+    }
+
     def confirmFullyPruned(
         db: DbStorage,
         historyId: Long,
         store: ScanRewardsReferenceStore,
         upperExclusive: Long,
-        timeUntilSuccess: FiniteDuration = 20.seconds,
     ): Unit = {
-      eventually(timeUntilSuccess) {
-        hasUnprunedRewardAccountingDataBelow(db, historyId, upperExclusive) shouldBe false
-      }
-      eventually(timeUntilSuccess) {
-        hasUnprunedArchiveDataForRound(store, upperExclusive - 1) shouldBe false
-      }
+      hasUnprunedRewardAccountingDataBelow(db, historyId, upperExclusive) shouldBe false
+      hasUnprunedArchiveDataForRound(store, upperExclusive - 1) shouldBe false
     }
 
     def confirmPruningMetrics(
         scan: LocalInstanceReference,
         atLeastRound: Long,
-        timeUntilSuccess: FiniteDuration = 20.seconds,
     ): Unit = {
       def pruningMetricValue(name: String, labels: Map[String, String] = Map.empty): Long =
         metricValue(scan, s"scan.reward_accounting_pruning.$name", labels)
 
-      eventually(timeUntilSuccess) {
+      eventually() {
         pruningMetricValue("pruned_round") should be >= atLeastRound
         forAll(
           Seq(
@@ -871,48 +881,55 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
       }
     }
 
-    // Simulate SV2 scan ingestion lag and confirm that pruning does not happen
-    // until the ingestion has caught up.
-    val newLowestOpen = pauseScanVerdictIngestionWithin(sv2ScanBackend) {
-      advanceRoundsToNextRoundOpening
-      val newLowestOpen = oldestOpenRound
+    setTriggersWithin(triggersToPauseAtStart = Seq(sv1PruneTrigger, sv2PruneTrigger)) {
+      // Simulate SV2 scan ingestion lag and confirm that pruning does not happen
+      // until the ingestion has caught up.
+      val newLowestOpen = pauseScanVerdictIngestionWithin(sv2ScanBackend) {
+        advanceRoundsToNextRoundOpening
+        val newLowestOpen = oldestOpenRound
 
-      // We need the archived_at of newLowestOpen + 1 to be lower than the
-      // the active open round's openAt.
-      // So advancing by 3 rounds is a safe way to achieve this.
-      (1 to 3).foreach(_ => advanceRoundsToNextRoundOpening)
+        // We need the archived_at of newLowestOpen + 1 to be lower than the
+        // the active open round's openAt.
+        // So advancing by 3 rounds is a safe way to achieve this.
+        (1 to 3).foreach(_ => advanceRoundsToNextRoundOpening)
 
-      clue(s"sv1 retains rounds below $newLowestOpen while within the retention period") {
-        hasUnprunedRewardAccountingDataBelow(sv1Db, sv1HistoryId, newLowestOpen) shouldBe true
-        hasUnprunedArchiveDataForRound(sv1RewardsRefStore, newLowestOpen - 1) shouldBe true
+        clue(s"sv1 retains rounds below $newLowestOpen while within the retention period") {
+          pruneUntilNothingLeftToPrune(sv1PruneTrigger)
+          hasUnprunedRewardAccountingDataBelow(sv1Db, sv1HistoryId, newLowestOpen) shouldBe true
+          hasUnprunedArchiveDataForRound(sv1RewardsRefStore, newLowestOpen - 1) shouldBe true
+        }
+
+        advanceTime(rewardAccountingRetentionPeriod.asJava)
+
+        clue(s"sv1 prunes rounds below $newLowestOpen once past the retention period") {
+          // Retried, as a round only becomes prunable once the reference store has
+          // ingested the archival of all of its reward-accounting contracts.
+          eventually() {
+            pruneUntilNothingLeftToPrune(sv1PruneTrigger)
+            confirmFullyPruned(sv1Db, sv1HistoryId, sv1RewardsRefStore, newLowestOpen)
+          }
+          confirmPruningMetrics(sv1ScanBackend, newLowestOpen - 1)
+        }
+
+        clue(
+          s"sv2 does not prune rounds below $newLowestOpen while its verdict ingestion is paused"
+        ) {
+          pruneUntilNothingLeftToPrune(sv2PruneTrigger)
+          hasUnprunedArchiveDataForRound(sv2RewardsRefStore, newLowestOpen - 1) shouldBe true
+        }
+
+        newLowestOpen
       }
 
-      advanceTime(rewardAccountingRetentionPeriod.asJava)
-
-      clue(s"sv1 prunes rounds below $newLowestOpen once past the retention period") {
-        confirmFullyPruned(sv1Db, sv1HistoryId, sv1RewardsRefStore, newLowestOpen)
-        confirmPruningMetrics(sv1ScanBackend, newLowestOpen - 1)
+      clue(s"sv2 eventually prunes data once verdict ingestion resumes") {
+        // Because of the delay in catchup of the verdict ingestion
+        // this can occasionally take longer than the default 20s eventually window
+        eventually(90.seconds) {
+          pruneUntilNothingLeftToPrune(sv2PruneTrigger)
+          confirmFullyPruned(sv2Db, sv2HistoryId, sv2RewardsRefStore, newLowestOpen)
+        }
+        confirmPruningMetrics(sv2ScanBackend, newLowestOpen - 1)
       }
-
-      clue(
-        s"sv2 does not prune rounds below $newLowestOpen while its verdict ingestion is paused"
-      ) {
-        hasUnprunedArchiveDataForRound(sv2RewardsRefStore, newLowestOpen - 1) shouldBe true
-      }
-
-      newLowestOpen
-    }
-
-    clue(s"sv2 eventually prunes data once verdict ingestion resumes") {
-      // This can occasionally take longer than the default 20s eventually window
-      confirmFullyPruned(
-        sv2Db,
-        sv2HistoryId,
-        sv2RewardsRefStore,
-        newLowestOpen,
-        timeUntilSuccess = 90.seconds,
-      )
-      confirmPruningMetrics(sv2ScanBackend, newLowestOpen - 1)
     }
   }
 
