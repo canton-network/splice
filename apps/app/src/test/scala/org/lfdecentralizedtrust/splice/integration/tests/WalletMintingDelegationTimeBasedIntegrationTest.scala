@@ -9,6 +9,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   AppRewardCoupon,
   DevelopmentFundCoupon,
   RewardCouponV2,
+  SvRewardCoupon,
   UnclaimedActivityRecord,
   ValidatorRewardCoupon,
   ValidatorRight,
@@ -400,7 +401,7 @@ class WalletMintingDelegationTimeBasedIntegrationTest
     "collect rewards for all coupons owned by the beneficiary" in { implicit env =>
       // This test verifies that MintingDelegationCollectRewardsTrigger collects
       // ValidatorRewardCoupons, AppRewardCoupons, ValidatorLivenessActivityRecords,
-      // and UnclaimedActivityRecords.
+      // UnclaimedActivityRecords, and SvRewardCoupons.
 
       // Use alice (regular user) as the delegate
       val aliceParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
@@ -472,6 +473,7 @@ class WalletMintingDelegationTimeBasedIntegrationTest
       val developmentFundAmount = BigDecimal(300.0)
       val delayedDevelopmentFundAmount = BigDecimal(400.0)
       val rewardCouponV2Amount = BigDecimal(1000.0)
+      val svRewardWeight = 5L
       val mintDelay = Duration.ofHours(24)
 
       // For ValidatorRewardCoupon, we need ValidatorRight for beneficiary
@@ -559,6 +561,21 @@ class WalletMintingDelegationTimeBasedIntegrationTest
               ).create,
             )
 
+          // Create SvRewardCoupon (sv field is not validated on redemption)
+          sv1Backend.participantClientWithAdminToken.ledger_api_extensions.commands
+            .submitWithResult(
+              userId = sv1Backend.config.ledgerApiUser,
+              actAs = Seq(dsoParty),
+              readAs = Seq.empty,
+              update = new SvRewardCoupon(
+                dsoParty.toProtoPrimitive,
+                dsoParty.toProtoPrimitive, // sv
+                beneficiaryParty.party.toProtoPrimitive,
+                issuingRound.round,
+                svRewardWeight,
+              ).create,
+            )
+
           // Create a DevelopmentFundCoupon that is mintable immediately
           sv1Backend.participantClientWithAdminToken.ledger_api_extensions.commands
             .submitWithResult(
@@ -628,6 +645,9 @@ class WalletMintingDelegationTimeBasedIntegrationTest
             externalPartyWallet.store
               .listRewardCouponsV2(includeUnassigned = true, includeAssigned = true)
               .futureValue shouldBe empty withClue "RewardCouponV2"
+            externalPartyWallet.store
+              .listSortedSvRewardCoupons(issuingRoundsMap)
+              .futureValue shouldBe empty withClue "SvRewardCoupon"
           }
         }
       }
@@ -642,6 +662,7 @@ class WalletMintingDelegationTimeBasedIntegrationTest
             issuingRound.optIssuancePerValidatorFaucetCoupon.orElse(java.math.BigDecimal.ZERO)
           )) +
           (validatorRewardAmount * BigDecimal(issuingRound.issuancePerValidatorRewardCoupon)) +
+          (BigDecimal(svRewardWeight) * BigDecimal(issuingRound.issuancePerSvRewardCoupon)) +
           unclaimedActivityAmount +
           developmentFundAmount +
           rewardCouponV2Amount
