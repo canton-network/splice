@@ -70,7 +70,7 @@ class ValidatorRepermissionTrigger(
             synchronizerId = SynchronizerId.tryFromString(
               dsoRules.payload.config.decentralizedSynchronizer.activeSynchronizerId
             )
-            
+
             _ <- participantAdminConnection.ensureParticipantSynchronizerPermission(
               synchronizerId = synchronizerId,
               participantId = participantId,
