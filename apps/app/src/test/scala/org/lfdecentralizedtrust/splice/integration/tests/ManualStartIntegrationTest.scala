@@ -6,6 +6,7 @@ import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.config.{FullClientConfig, PositiveDurationSeconds}
 import com.digitalasset.canton.config.RequireTypes.{NonNegativeInt, PositiveInt}
 import com.digitalasset.canton.crypto.{SigningKeyUsage, SigningPublicKey}
+import com.digitalasset.canton.participant.ledger.api.JwtTokenUtilities
 import com.digitalasset.canton.topology.{
   MediatorId,
   Member,
@@ -15,6 +16,7 @@ import com.digitalasset.canton.topology.{
   SequencerId,
   UniqueIdentifier,
 }
+import org.lfdecentralizedtrust.splice.auth.AuthToken
 import org.lfdecentralizedtrust.splice.config.{ConfigTransforms, PruningConfig, SpliceBackendConfig}
 import org.lfdecentralizedtrust.splice.console.AppBackendReference
 import org.lfdecentralizedtrust.splice.environment.*
@@ -29,6 +31,7 @@ import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.FoundDso
 import org.lfdecentralizedtrust.splice.util.{StandaloneCanton, TriggerTestUtil, WalletTestUtil}
 
 import java.util.UUID
+import scala.concurrent.Future
 import scala.concurrent.duration.DurationInt
 
 class ManualStartIntegrationTest
@@ -147,6 +150,7 @@ class ManualStartIntegrationTest
         extraParticipantsConfigFileNames = Seq(
           "standalone-participant-extra.conf",
           "standalone-participant-sv1-reduced-max-dedup-duration.conf",
+          "participant-admin-api-auth.conf",
         ),
         extraParticipantsEnvMap = Map(
           "EXTRA_PARTICIPANT_ADMIN_USER" -> aliceValidatorBackend.config.ledgerApiUser,
@@ -422,11 +426,26 @@ class ManualStartIntegrationTest
     import env.executionContext
     val loggerFactoryWithKey = loggerFactory.append("participant", name)
     new ParticipantAdminConnection(
-      FullClientConfig(port = config.participantClient.adminApi.port),
+      FullClientConfig(port = config.participantClient.adminApi.clientConfig.port),
       env.environment.config.monitoring.logging.api,
       loggerFactoryWithKey,
       grpcClientMetrics,
       retryProvider,
+      getToken = name match {
+        case "sv1" =>
+          () =>
+            Future.successful(
+              Some(
+                AuthToken(
+                  JwtTokenUtilities.buildUnsafeToken(
+                    secret = "test",
+                    scope = Some("test-scope"),
+                  )
+                )
+              )
+            )
+        case _ => () => Future.successful(None)
+      },
     )
   }
 }
