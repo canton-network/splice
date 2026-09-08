@@ -47,6 +47,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.svonboarding.{
   SvOnboardingRequest,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
+import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorrepermission.ValidatorRepermission
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorunpermission.ValidatorUnpermission
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.payment.{PaymentAmount, Unit}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.subscriptions.*
@@ -787,6 +788,30 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
           resultFullyFiltered.map(_.contract) should contain theSameElementsAs Seq(visibleCid)
         }
       }
+    }
+
+    "listValidatorRepermissions" should {
+
+      "list all contracts matching the participantId" in {
+        val good1 = validatorRepermission("participant1")
+        val good2 = validatorRepermission("participant1")
+
+        val badParticipant1 = validatorRepermission("wrong-participant")
+        val badParticipant2 = validatorRepermission("another-wrong-participant")
+
+        for {
+          store <- mkStore()
+          _ <- MonadUtil.sequentialTraverse(
+            Seq(good1, good2, badParticipant1, badParticipant2)
+          )(
+            dummyDomain.create(_)(store.multiDomainAcsStore)
+          )
+          result <- store.listValidatorRepermissions(
+            "participant1"
+          )(traceContext)
+        } yield result should contain theSameElementsAs Seq(good1, good2)
+      }
+
     }
 
     "listValidatorUnpermissions" should {
@@ -2220,6 +2245,20 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
     contract(
       MemberTraffic.TEMPLATE_ID_WITH_PACKAGE_ID,
       new MemberTraffic.ContractId(nextCid()),
+      template,
+    )
+  }
+
+  protected def validatorRepermission(
+      participantId: String
+  ) = {
+    val template = new ValidatorRepermission(
+      dsoParty.toProtoPrimitive,
+      participantId,
+    )
+    contract(
+      ValidatorRepermission.TEMPLATE_ID_WITH_PACKAGE_ID,
+      new ValidatorRepermission.ContractId(nextCid()),
       template,
     )
   }
