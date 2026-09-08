@@ -31,8 +31,18 @@ val baseBranch = {
   }
 }
 val runningInCI = sys.env.contains("CI")
-val releaseLineStr = "release-line"
-val onReleaseLine = baseBranch.exists(_.contains(releaseLineStr)) || branch.contains(releaseLineStr)
+// Release-line branches follow the naming convention `release-line-<major>.<minor>.<patch>`
+// matching the exact contents of the LATEST_RELEASE file (e.g. release-line-0.8.0).
+// See .github/actions/scripts/common_setup.sh, which fetches
+// `refs/heads/release-line-${latest_release}` with no fallback and hard-fails
+// if that exact branch does not exist. Matching must be exact/anchored:
+// a substring check (previously `.contains("release-line")`) would let a PR
+// fully bypass the TODO/FIXME checker (including FIXMEs, which are otherwise
+// hard-blocked) just by naming its branch e.g. `feature/release-line-bypass`.
+val releaseLineRegex = "^release-line-[0-9]+\\.[0-9]+\\.[0-9]+$".r
+val onReleaseLine =
+  baseBranch.exists(b => releaseLineRegex.matches(b.strip())) ||
+    releaseLineRegex.matches(branch)
 val disableTodoChecker = onReleaseLine && runningInCI
 
 if (disableTodoChecker) {
