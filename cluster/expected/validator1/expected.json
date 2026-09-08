@@ -863,14 +863,14 @@
         },
         "config": {
           "amulet": {
-            "registry": "https://scan.sv-2.mock.global.canton.network.digitalasset.com/registry/",
+            "registry": "https://scan.sv-2.mock.global.canton.network.digitalasset.com",
             "validatorUrl": "https://wallet.validator1.mock.global.canton.network.digitalasset.com/api/validator"
           },
           "token": {
             "registries": [
               {
                 "name": "Amulet registry",
-                "url": "https://scan.sv-2.mock.global.canton.network.digitalasset.com/registry/"
+                "url": "https://scan.sv-2.mock.global.canton.network.digitalasset.com"
               }
             ],
             "validatorUrl": "https://wallet.validator1.mock.global.canton.network.digitalasset.com/api/validator"
