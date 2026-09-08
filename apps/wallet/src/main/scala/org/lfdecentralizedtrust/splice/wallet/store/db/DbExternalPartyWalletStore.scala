@@ -3,7 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.wallet.store.db
 
-import org.lfdecentralizedtrust.splice.codegen.java.splice.{amulet as amuletCodegen}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet as amuletCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense as validatorCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.IssuingMiningRound
 import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
@@ -25,7 +25,9 @@ import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.ShowUtil.*
 import com.digitalasset.canton.topology.ParticipantId
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.SvRewardCoupon
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
+import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 
 import scala.concurrent.*
 import scala.jdk.OptionConverters.*
@@ -119,4 +121,16 @@ class DbExternalPartyWalletStore(
     limit,
   )
 
+  override def listSortedSvRewardCoupons(
+      issuingRoundsMap: Map[Round, IssuingMiningRound],
+      limit: Limit = defaultLimit,
+  )(implicit tc: TraceContext): Future[
+    Seq[(Contract[SvRewardCoupon.ContractId, SvRewardCoupon], BigDecimal)]
+  ] = listSortedRewardCoupons(
+    amuletCodegen.SvRewardCoupon.COMPANION,
+    issuingRoundsMap,
+    r => Some(BigDecimal(r.issuancePerSvRewardCoupon)),
+    limit,
+    ccValue = sql"rti.issuance * acs.reward_coupon_weight",
+  )
 }
