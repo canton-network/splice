@@ -1,6 +1,9 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import { expect, test, describe } from '@jest/globals';
+import fs from 'fs';
+import yaml from 'js-yaml';
+import path from 'path';
 
 import {
   allowedPathsCondition,
@@ -11,8 +14,8 @@ import {
   MAX_IPS_PER_RULE,
   MAX_IP_WHITELIST_RULES,
   MAX_SUBEXPRESSION_LENGTH,
-  WAF_RULE_GROUPS,
   wafRuleExpression,
+  WafRuleGroupsSchema,
 } from './cloudArmorRules';
 
 const dnsNames = [
@@ -199,7 +202,15 @@ describe('ipWhitelistRuleChunks', () => {
 });
 
 describe('wafRuleExpression', () => {
-  const expressions = WAF_RULE_GROUPS.map(wafRuleExpression);
+  const wafRuleGroups = WafRuleGroupsSchema.parse(
+    yaml.load(
+      fs.readFileSync(
+        path.resolve(__dirname, '../../../configs/shared/cloud-armor-waf-rules.yaml'),
+        'utf8'
+      )
+    )
+  );
+  const expressions = wafRuleGroups.map(wafRuleExpression);
 
   test('matches the tuning validated on the DA-1 SV and DA-Wallet validator', () => {
     expect(expressions).toEqual([
@@ -225,7 +236,7 @@ describe('wafRuleExpression', () => {
   });
 
   test('has unique rule names', () => {
-    const names = WAF_RULE_GROUPS.map(g => g.name);
+    const names = wafRuleGroups.map(g => g.name);
     expect(new Set(names).size).toBe(names.length);
   });
 

@@ -5,6 +5,7 @@ import {
   extractPathPrefixes,
   PerEndpointLimits,
 } from '@canton-network/splice-pulumi-common/src/ratelimit/envoyRateLimiter';
+import { z } from 'zod';
 
 // limits from https://cloud.google.com/armor/quotas#limits, in which a
 // "subexpression" is an arg to && or ||
@@ -47,97 +48,41 @@ export function ipWhitelistRuleChunks(ipRanges: string[], availablePriorities: n
   return chunks;
 }
 
+const OWASP_CRS_VERSION = 'v030301';
+
 /**
  * One of Cloud Armor's preconfigured WAF rule sets (see
  * https://cloud.google.com/armor/docs/waf-rules), with the individual OWASP CRS
  * signatures we opt out of.
  */
-interface WafSignature {
+const WafSignatureSchema = z.object({
   // preconfigured rule set name, e.g. 'sqli-v33-stable'
-  name: string;
+  name: z.string(),
   // https://cloud.google.com/armor/docs/rule-tuning#sensitivity_levels: 1 only
   // evaluates the paranoia level 1 signatures, which are the ones least prone to
   // false positives.
-  sensitivity: number;
+  sensitivity: z.number().int().min(0).max(4),
   // numeric OWASP CRS ids of the signatures to skip, e.g. '942190' for
   // 'owasp-crs-v030301-id942190-sqli'. These are the signatures that produced false
   // positives on our own traffic.
-  optOutRuleIds?: string[];
-}
+  optOutRuleIds: z.array(z.string().regex(/^[0-9]+$/, 'numeric OWASP CRS id')).default([]),
+});
 
-export interface WafRuleGroup {
-  name: string;
-  description: string;
-  signatures: WafSignature[];
-}
+export const WafRuleGroupSchema = z.object({
+  name: z.string().min(1),
+  description: z.string(),
+  signatures: z.array(WafSignatureSchema).min(1),
+});
 
-const OWASP_CRS_VERSION = 'v030301';
+export const WafRuleGroupsSchema = z
+  .array(WafRuleGroupSchema)
+  .refine(
+    groups => new Set(groups.map(g => g.name)).size === groups.length,
+    'WAF rule group names must be unique, they are used as the Cloud Armor rule names'
+  );
 
-/**
- * The WAF signatures we evaluate, grouped into as few rules as the Cloud Armor
- * expression length limits allow, since every rule consumes a priority slot and is
- * evaluated separately.
- */
-export const WAF_RULE_GROUPS: WafRuleGroup[] = [
-  {
-    name: 'waf-rce-lfi',
-    description: 'WAF: remote code execution and local file inclusion',
-    signatures: [
-      {
-        name: 'rce-v33-stable',
-        sensitivity: 1,
-        optOutRuleIds: ['932110', '932115', '932120', '932140'],
-      },
-      { name: 'lfi-v33-stable', sensitivity: 1, optOutRuleIds: ['930110'] },
-    ],
-  },
-  {
-    name: 'waf-cve-protocolattack-nodejs-xss',
-    description: 'WAF: CVE canary, protocol attacks, Node.js injection and XSS',
-    signatures: [
-      { name: 'cve-canary', sensitivity: 1 },
-      {
-        name: 'protocolattack-v33-stable',
-        sensitivity: 1,
-        optOutRuleIds: ['921110', '921150', '921151', '921170'],
-      },
-      { name: 'nodejs-v33-stable', sensitivity: 1 },
-      {
-        name: 'xss-v33-stable',
-        sensitivity: 1,
-        optOutRuleIds: [
-          '941100',
-          '941120',
-          '941190',
-          '941200',
-          '941210',
-          '941220',
-          '941230',
-          '941240',
-          '941250',
-          '941260',
-          '941270',
-          '941280',
-          '941290',
-          '941300',
-        ],
-      },
-    ],
-  },
-  {
-    name: 'waf-sqli-sessionfixation-java',
-    description: 'WAF: SQL injection, session fixation and Java attacks',
-    signatures: [
-      {
-        name: 'sqli-v33-stable',
-        sensitivity: 1,
-        optOutRuleIds: ['942190', '942240', '942270', '942290', '942320', '942350', '942500'],
-      },
-      { name: 'sessionfixation-v33-stable', sensitivity: 1 },
-      { name: 'java-v33-stable', sensitivity: 1 },
-    ],
-  },
-];
+type WafSignature = z.infer<typeof WafSignatureSchema>;
+export type WafRuleGroup = z.infer<typeof WafRuleGroupSchema>;
 
 /**
  * Expands a numeric OWASP CRS id into the full opt-out rule id Cloud Armor expects,

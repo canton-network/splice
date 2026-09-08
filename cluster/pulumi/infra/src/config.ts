@@ -6,6 +6,8 @@ import { clusterYamlConfig } from '@canton-network/splice-pulumi-common/src/conf
 import util from 'node:util';
 import { z } from 'zod';
 
+import { WafRuleGroupsSchema } from './cloudArmorRules';
+
 export const clusterBasename = pulumi.getStack().replace(/.*[.]/, '');
 
 export const clusterHostname = config.requireEnv('GCP_CLUSTER_HOSTNAME');
@@ -30,6 +32,7 @@ export type CloudArmorLoggingConfig = z.infer<typeof CloudArmorLoggingConfigSche
 
 const CloudArmorWafRulesConfigSchema = z.object({
   enabled: z.boolean().default(true),
+  groups: WafRuleGroupsSchema.default([]),
   // The preconfigured WAF rules deny by default, but are kept in Cloud Armor preview
   // mode so they only produce logs and alerts. That gives us attack detection and the
   // data to spot false positives before we let them block real traffic.
