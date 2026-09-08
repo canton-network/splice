@@ -13,6 +13,7 @@ import com.digitalasset.canton.topology.PartyId
 import java.time.Duration
 import java.util.Optional
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.cryptohash.Hash
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.rewardaccountingv2.CalculateRewardsV2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletconfig.{
   AmuletConfig,
   RewardConfig,
@@ -36,6 +37,7 @@ import org.lfdecentralizedtrust.splice.sv.automation.RewardMetricsTrigger
 import org.lfdecentralizedtrust.splice.sv.automation.confirmation.{
   CalculateRewardsDryRunTrigger,
   CalculateRewardsTrigger,
+  ConfirmationMismatchReportTrigger,
   SummarizingMiningRoundTrigger,
 }
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
@@ -607,6 +609,8 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
       honestBackends.map(_.dsoAutomation.trigger[CalculateRewardsTrigger]) ++
         honestBackends.map(_.dsoAutomation.trigger[CalculateRewardsDryRunTrigger])
     val sv2RewardComputation = sv2ScanBackend.automation.trigger[RewardComputationTrigger]
+    val confirmationMismatchTriggers =
+      allBackends.map(_.dsoAutomation.trigger[ConfirmationMismatchReportTrigger])
 
     val round = oldestOpenRound
     val sv2Db = sv2ScanBackend.appState.storage match {
@@ -615,128 +619,141 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
     }
     implicit val closeContext: CloseContext = CloseContext(sv2Db)
 
-    val (calculateRewardsCid, dryRunCalculateRewardsCid) =
-      setTriggersWithin(triggersToPauseAtStart = honestConfirmationTriggers) {
+    var calculateRewardsCid: Option[CalculateRewardsV2.ContractId] = None
+    var dryRunCalculateRewardsCid: Option[CalculateRewardsV2.ContractId] = None
 
-        setTriggersWithin(triggersToPauseAtStart = Seq(sv2RewardComputation)) {
-          doTransfer(bobParty)
-          advanceRoundsToNextRoundOpening
-          doTransfer(bobParty)
+    loggerFactory.assertEventuallyLogsSeq(SuppressionRule.Level(Level.WARN))(
+      {
+        val (cid, dryRunCid) =
+          setTriggersWithin(triggersToPauseAtStart = honestConfirmationTriggers) {
 
-          val sv2HistoryId = sv2ScanBackend.appState.eventStore.updateHistory.historyId
-          clue(s"sv2 has ingested activity for round ${round + 1}") {
-            eventually() {
-              val ingestedRound1Count = sv2Db
-                .querySingle(
-                  sql"""select count(*) from app_activity_record_store
+            setTriggersWithin(triggersToPauseAtStart = Seq(sv2RewardComputation)) {
+              doTransfer(bobParty)
+              advanceRoundsToNextRoundOpening
+              doTransfer(bobParty)
+
+              val sv2HistoryId = sv2ScanBackend.appState.eventStore.updateHistory.historyId
+              clue(s"sv2 has ingested activity for round ${round + 1}") {
+                eventually() {
+                  val ingestedRound1Count = sv2Db
+                    .querySingle(
+                      sql"""select count(*) from app_activity_record_store
                       where round_number = ${round + 1} and history_id = $sv2HistoryId"""
-                    .as[Int]
-                    .headOption,
-                  "test.countIngestedAppActivityRecords",
-                )
-                .value
-                .futureValueUS
-              ingestedRound1Count.value should be > 0
-            }
-          }
+                        .as[Int]
+                        .headOption,
+                      "test.countIngestedAppActivityRecords",
+                    )
+                    .value
+                    .futureValueUS
+                  ingestedRound1Count.value should be > 0
+                }
+              }
 
-          clue(s"Perturb sv2's app activity weights for round $round") {
-            sv2Db
-              .update_(
-                sqlu"""update app_activity_record_store
+              clue(s"Perturb sv2's app activity weights for round $round") {
+                sv2Db
+                  .update_(
+                    sqlu"""update app_activity_record_store
                      set app_activity_weights = array(
                        select weight * 1.1
                        from unnest(app_activity_weights) with ordinality as t(weight, ord)
                        order by ord
                      )
                      where round_number = $round and history_id = $sv2HistoryId""",
-                "test.perturbAppActivityWeights",
+                    "test.perturbAppActivityWeights",
+                  )
+                  .futureValueUS
+              }
+            }
+
+            // sv2's reward computation has resumed.
+            // honestBackends must have processed the root-hash, as they were not paused
+            val (calculateRewardsCid, dryRunCalculateRewardsCid, correctRootHash) =
+              clue(
+                s"Round $round's CalculateRewardsV2 contracts exist, and rootHash processed by sv1"
+              ) {
+                eventually() {
+                  val v2s = sv1Backend.appState.dsoStore
+                    .listCalculateRewardsV2()
+                    .futureValue
+                    .filter(_.payload.round.number == round)
+                  val regularCid = v2s.find(c => !c.payload.dryRun).value.contractId
+                  val dryRunCid = v2s.find(_.payload.dryRun).value.contractId
+                  val rootHash = inside(sv1ScanBackend.getRewardAccountingRootHash(round)) {
+                    case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(
+                          h
+                        ) =>
+                      h.rootHash
+                  }
+                  (regularCid, dryRunCid, rootHash)
+                }
+              }
+
+            val sv2RootHash =
+              clue(
+                s"sv2's own scan computes a root-hash for round $round that differs from the honest one"
+              ) {
+                eventually() {
+                  val hash = inside(sv2ScanBackend.getRewardAccountingRootHash(round)) {
+                    case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(
+                          h
+                        ) =>
+                      h.rootHash
+                  }
+                  hash should not equal correctRootHash
+                  hash
+                }
+              }
+            val sv2ConfirmationAction = new ARC_AmuletRules(
+              new CRARC_StartProcessingRewardsV2(
+                new AmuletRules_StartProcessingRewardsV2(calculateRewardsCid, new Hash(sv2RootHash))
               )
-              .futureValueUS
-          }
-        }
-
-        // sv2's reward computation has resumed.
-        // honestBackends must have processed the root-hash, as they were not paused
-        val (calculateRewardsCid, dryRunCalculateRewardsCid, correctRootHash) =
-          clue(
-            s"Round $round's CalculateRewardsV2 contracts exist, and rootHash processed by sv1"
-          ) {
-            eventually() {
-              val v2s = sv1Backend.appState.dsoStore
-                .listCalculateRewardsV2()
-                .futureValue
-                .filter(_.payload.round.number == round)
-              val regularCid = v2s.find(c => !c.payload.dryRun).value.contractId
-              val dryRunCid = v2s.find(_.payload.dryRun).value.contractId
-              val rootHash = inside(sv1ScanBackend.getRewardAccountingRootHash(round)) {
-                case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(h) =>
-                  h.rootHash
-              }
-              (regularCid, dryRunCid, rootHash)
-            }
-          }
-
-        val sv2RootHash =
-          clue(
-            s"sv2's own scan computes a root-hash for round $round that differs from the honest one"
-          ) {
-            eventually() {
-              val hash = inside(sv2ScanBackend.getRewardAccountingRootHash(round)) {
-                case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(h) =>
-                  h.rootHash
-              }
-              hash should not equal correctRootHash
-              hash
-            }
-          }
-        val sv2ConfirmationAction = new ARC_AmuletRules(
-          new CRARC_StartProcessingRewardsV2(
-            new AmuletRules_StartProcessingRewardsV2(calculateRewardsCid, new Hash(sv2RootHash))
-          )
-        )
-        val sv2DryRunConfirmationAction = new ARC_AmuletRules(
-          new CRARC_StartProcessingRewardsV2(
-            new AmuletRules_StartProcessingRewardsV2(
-              dryRunCalculateRewardsCid,
-              new Hash(sv2RootHash),
             )
-          )
-        )
+            val sv2DryRunConfirmationAction = new ARC_AmuletRules(
+              new CRARC_StartProcessingRewardsV2(
+                new AmuletRules_StartProcessingRewardsV2(
+                  dryRunCalculateRewardsCid,
+                  new Hash(sv2RootHash),
+                )
+              )
+            )
 
-        clue(s"sv2 has cast confirmations for round $round") {
-          eventually() {
-            sv1Backend.appState.dsoStore
-              .listConfirmations(sv2ConfirmationAction)
-              .futureValue should have size 1
-            sv1Backend.appState.dsoStore
-              .listConfirmations(sv2DryRunConfirmationAction)
-              .futureValue should have size 1
+            clue(s"sv2 has cast confirmations for round $round") {
+              eventually() {
+                sv1Backend.appState.dsoStore
+                  .listConfirmations(sv2ConfirmationAction)
+                  .futureValue should have size 1
+                sv1Backend.appState.dsoStore
+                  .listConfirmations(sv2DryRunConfirmationAction)
+                  .futureValue should have size 1
+              }
+            }
+
+            (calculateRewardsCid, dryRunCalculateRewardsCid)
           }
-        }
 
-        (calculateRewardsCid, dryRunCalculateRewardsCid)
-      }
+        calculateRewardsCid = Some(cid)
+        dryRunCalculateRewardsCid = Some(dryRunCid)
 
-    // honestConfirmationTriggers have resumed, and we should observe mismatch in confirmations
-    loggerFactory.assertEventuallyLogsSeq(SuppressionRule.Level(Level.WARN))(
-      {
+        // honestConfirmationTriggers have resumed, and we should observe mismatch in confirmations
         clue("the honest majority processes both CalculateRewardsV2") {
           eventually() {
             val remaining = sv1Backend.appState.dsoStore
               .listCalculateRewardsV2()
               .futureValue
               .map(_.contractId)
-            remaining should not contain calculateRewardsCid
-            remaining should not contain dryRunCalculateRewardsCid
+            remaining should not contain cid
+            remaining should not contain dryRunCid
           }
         }
+
+        // Pause here so no further mismatch reports are logged past this point causing flake.
+        confirmationMismatchTriggers.foreach(_.pause().futureValue)
       },
       logs => {
         // Every SV's ConfirmationMismatchReportTrigger flags sv2's mismatch in confirmation, for both
         // the regular and the dry-run round.
         forAll(allBackends) { sv =>
-          forAll(Seq(calculateRewardsCid, dryRunCalculateRewardsCid)) { cid =>
+          forAll(Seq(calculateRewardsCid.value, dryRunCalculateRewardsCid.value)) { cid =>
             forAtLeast(1, logs) { entry =>
               entry.loggerName should include(s"SV=${sv.name}")
               entry.warningMessage should (include(
