@@ -1,9 +1,15 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.HasExecutionContext
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules_UnpermissionValidator
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
+  DsoRules_RepermissionValidator,
+  DsoRules_UnpermissionValidator,
+}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_UnpermissionValidator
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.{
+  SRARC_RepermissionValidator,
+  SRARC_UnpermissionValidator,
+}
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTest
@@ -13,6 +19,7 @@ import org.lfdecentralizedtrust.splice.util.*
 import java.time.Instant
 import java.util.Optional
 import com.digitalasset.canton.data.CantonTimestamp
+import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorunpermission.ValidatorUnpermission
 import org.lfdecentralizedtrust.splice.integration.plugins.TokenStandardCliSanityCheckPlugin
 
 class PermissionedSynchronizerIntegrationTest
@@ -173,6 +180,26 @@ class PermissionedSynchronizerIntegrationTest
       }
     }
 
+    clue("SVs vote to repermission Bob") {
+      manuallyRepermissionValidator(
+        sv1Backend.listValidatorUnpermissions(bobParticipantId).head.contractId
+      )
+    }
+
+    clue("Verify Bob's ParticipantSynchronizerPermission is restored by automation") {
+      eventually() {
+        sv1ScanBackend.getParticipantSynchronizerPermission(
+          decentralizedSynchronizerId.toProtoPrimitive,
+          bobParticipantId,
+        ) shouldBe Some(SynchronizerPermissionState(None))
+      }
+    }
+
+    clue("Verify Bob can operate again by onboarding a user") {
+      bobValidatorBackend.startSync()
+      bobValidatorBackend.onboardUser("TestUserBob2")
+    }
+
     def manuallyUnpermissionValidator(
         participantId: String,
         loginAfter: Option[Instant],
@@ -190,6 +217,46 @@ class PermissionedSynchronizerIntegrationTest
 
       val (_, voteRequest) = actAndCheck(
         s"SV1 creates vote request to unpermission $participantId (revoked=$revoked)",
+        eventuallySucceeds() {
+          sv1Backend.createVoteRequest(
+            sv1Backend.getDsoInfo().svParty.toProtoPrimitive,
+            action,
+            "url",
+            "description",
+            sv1Backend.getDsoInfo().dsoRules.payload.config.voteRequestTimeout,
+            None,
+          )
+        },
+      )(
+        "vote request has been created",
+        _ => sv1Backend.listVoteRequests().filter(_.payload.action == action).head,
+      )
+
+      Seq(sv2Backend, sv3Backend).foreach { sv =>
+        clue(s"${sv.participantClient.name} accepts the vote request") {
+          eventuallySucceeds() {
+            sv.castVote(
+              voteRequest.contractId,
+              isAccepted = true,
+              "url",
+              "description",
+            )
+          }
+        }
+      }
+    }
+
+    def manuallyRepermissionValidator(
+        unpermissionCid: ValidatorUnpermission.ContractId
+    ): Unit = {
+      val action = new ARC_DsoRules(
+        new SRARC_RepermissionValidator(
+          new DsoRules_RepermissionValidator(unpermissionCid)
+        )
+      )
+
+      val (_, voteRequest) = actAndCheck(
+        s"SV1 creates vote request to repermission validator",
         eventuallySucceeds() {
           sv1Backend.createVoteRequest(
             sv1Backend.getDsoInfo().svParty.toProtoPrimitive,
