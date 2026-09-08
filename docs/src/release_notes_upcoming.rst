@@ -25,3 +25,10 @@ release-notes:: Upcoming
 
         - Added a new public ``/v0/events/latest-record-time`` endpoint that returns the latest
           record time for which ``/v0/events`` will be able to return events.
+
+    - Validator App
+
+        - The minting-delegation reward collection for external parties now also collects
+          ``SvRewardCoupon`` rewards. An external party that is a beneficiary of SV rewards
+          will have those coupons minted on its behalf by its delegate, alongside the other
+          reward-coupon types.
