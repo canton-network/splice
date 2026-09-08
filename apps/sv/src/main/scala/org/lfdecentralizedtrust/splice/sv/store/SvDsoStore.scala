@@ -53,6 +53,7 @@ import com.digitalasset.canton.util.MonadUtil
 import com.digitalasset.canton.util.ShowUtil.*
 import io.grpc.Status
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorunpermission.ValidatorUnpermission
+import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorrepermission.ValidatorRepermission
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 
 import scala.concurrent.duration.FiniteDuration
@@ -1688,6 +1689,17 @@ object SvDsoStore {
         )
       },
       mkFilter(ValidatorUnpermission.COMPANION)(
+        co => co.payload.dso == dso,
+        versionGuard = { case (pkgVersionSupport, now) =>
+          (tc) => pkgVersionSupport.supportsPermissionedSynchronizer(Seq(dsoParty), now)(tc)
+        },
+      ) { contract =>
+        DsoAcsStoreRowData(
+          contract,
+          participantId = Some(contract.payload.participantId),
+        )
+      },
+      mkFilter(ValidatorRepermission.COMPANION)(
         co => co.payload.dso == dso,
         versionGuard = { case (pkgVersionSupport, now) =>
           (tc) => pkgVersionSupport.supportsPermissionedSynchronizer(Seq(dsoParty), now)(tc)
