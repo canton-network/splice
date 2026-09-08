@@ -27,8 +27,10 @@ for ignored_file in "${ignored_files[@]}"; do
   command+=(":!$ignored_file")
 done
 
-## Ignore matches of comment lines
-ignore_comments=('grep' '-v' '-E' '^.*\.daml:[0-9]*:\s*--')
+## Ignore matches that appear inside Daml comments
+## The negative lookahead '(?:(?!--).)*' makes sure no '--' comes before the match
+## so we skip both full comment lines and end-of-line comments
+ignore_comments=('grep' '-P' '^(?:(?!--).)*(exercise.*_Fetch|fetch|archive)\b')
 
 
 if "${command[@]}" | "${ignore_comments[@]}" &> /dev/null ; then
