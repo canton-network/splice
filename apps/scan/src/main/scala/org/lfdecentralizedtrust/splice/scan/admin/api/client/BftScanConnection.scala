@@ -1426,6 +1426,49 @@ object BftScanConnection {
       )
     }
 
+    /** BFT config for the second phase of a probe-filter-consensus call.
+      * Peers with `ProbeVerdict.WithoutData` (explicit "cannot provide")
+      * are filtered out; peers with `WithData` (cached response) and
+      * `Unavailable` (probe timed out or returned inconclusive) both
+      * participate in consensus. Unavailable peers are re-queried live in
+      * the second phase, giving `bftCallWithScanUris`'s retry loop a chance
+      * to catch peers that recover during a transient outage.
+      *
+      * `n = connectionsForConsensus.size + scanConnections.failed`;
+      * `requestsToDo` respects `2f+1` when we have fault tolerance,
+      * otherwise falls back to sampling every peer that participates.
+      */
+    def forOptionalResponses[T](
+        connectionsWithProbeVerdicts: ConnectionsWithProbeVerdicts[T]
+    )(implicit loggingContext: ErrorLoggingContext): BftCallConfig = {
+      // Filter out connections that wish to be excluded from consensus
+      val connectionsForConsensus =
+        connectionsWithProbeVerdicts.responses.toList.collect {
+          case (c, ProbeVerdict.WithData(_)) => c
+          case (c, ProbeVerdict.Unavailable) => c
+        }
+      if (connectionsForConsensus.size < connectionsWithProbeVerdicts.responses.size) {
+        val abstainingConnections =
+          connectionsWithProbeVerdicts.responses.keySet -- connectionsForConsensus
+        loggingContext.info(
+          s"Making a BFT call with a modified config, because some connections are abstaining." +
+            s" Connections ${abstainingConnections.map(_.url)} are abstaining from consensus, " +
+            s" proceeding with the remaining ${connectionsForConsensus.map(_.url)} connections."
+        )
+      }
+
+      // Compute thresholds from the remaining connections
+      val n = connectionsForConsensus.size + connectionsWithProbeVerdicts.failed
+      val f = (n - 1) / 3 max 0
+
+      BftCallConfig(
+        connections = connectionsForConsensus,
+        // Play it safe wrt availability in case we have no fault tolerance.
+        requestsToDo = if (f == 0) connectionsForConsensus.size else 2 * f + 1,
+        targetSuccess = f + 1,
+      )
+    }
+
     /** A configuration for a BFT call where some peers cannot provide a response and wish
       * to be excluded from the consensus. Only peers that successfully respond that they
       * cannot provide data are excluded, unavailable peers are treated as if responding with disagreeing data.
@@ -2283,6 +2326,37 @@ object BftScanConnection {
       withData: Map[SingleScanConnection, V],
       unavailable: Set[SingleScanConnection],
   )
+
+  /** Result of the first phase of a two-phase BFT call, where every open scan
+    * is probed to classify what it can contribute to consensus.
+    *
+    * @param responses  One verdict per open connection: [[ProbeVerdict.WithData]]
+    *                   for cached responses, [[ProbeVerdict.WithoutData]] for
+    *                   explicit opt-outs, [[ProbeVerdict.Unavailable]] for probes
+    *                   that failed or returned inconclusive.
+    * @param failed     Number of scan connections that could not be opened at
+    *                   the transport layer (from `ScanConnections.failed`);
+    *                   never probed.
+    */
+  case class ConnectionsWithProbeVerdicts[T](
+      responses: Map[SingleScanConnection, ProbeVerdict[T]],
+      failed: Int,
+  )
+  object ConnectionsWithProbeVerdicts {
+    def fromCall[T](connections: ScanConnections, call: SingleScanConnection => Future[T])(
+        verdict: Try[T] => ProbeVerdict[T]
+    )(implicit ec: ExecutionContext): Future[ConnectionsWithProbeVerdicts[T]] =
+      for {
+        responses <- Future.traverse(connections.open)(connection =>
+          call(connection)
+            .transformWith(r => Future.successful(verdict(r)))
+            .map(result => connection -> result)
+        )
+      } yield ConnectionsWithProbeVerdicts(
+        responses.toMap,
+        connections.failed,
+      )
+  }
 
   private sealed trait ScanResponse[+T]
   private case class SuccessfulResponse[+T](response: T) extends ScanResponse[T]
