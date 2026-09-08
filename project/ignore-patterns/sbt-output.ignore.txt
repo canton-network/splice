@@ -70,7 +70,7 @@ npm error
 .*o.o.codegen.TemplateManager - writing file .*JsCantonError.ts
 
 # Output by guardrail if the yaml file changes because we cache the previous generated code
-^.\[31mWarning:.\[0m$
+^Warning:$
 .*contained different content than was expected.*
 
 # This suffix is used to mark ignored errors reported by check-logs.sh as part of our sbt build.
