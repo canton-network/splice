@@ -91,6 +91,8 @@ const MonitoringConfigSchema = z
     grafanaPostgres: SplicePostgresSchema.default({ deployment: 'legacy-helm-chart' }),
     alerting: z.object({
       enableNoDataAlerts: z.boolean(),
+      // routes more alerts than just "mining rounds are not advancing" to #team-canton-network-high-prio-prod-alerts
+      enableExtraHighPrioAlerts: z.boolean().default(false),
       alerts: z.object({
         pruning: z.object({
           participantRetentionDays: z.number(),

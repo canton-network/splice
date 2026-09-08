@@ -39,7 +39,6 @@ import {
   clusterIsResetPeriodically,
   enableAlertEmailToSupportTeam,
   enableAlerts,
-  enableExtraHighPrioAlerts,
   enableMiningRoundAlert,
   enablePrometheusAlerts,
   grafanaSmtpHost,
@@ -934,7 +933,7 @@ function createGrafanaAlerting(namespace: Input<string>) {
                   teamLabel: 'canton-network',
                   subtitle: 'internal SVs 5m',
                   uid: 'adlmhpz5iv4sgc',
-                  priority: enableExtraHighPrioAlerts ? 'high' : 'medium',
+                  priority: monitoringConfig.alerting.enableExtraHighPrioAlerts ? 'high' : 'medium',
                 },
                 {
                   reportPublisherFormula: '=~"Digital-Asset-1|Digital-Asset-2|DA-Helm-Test-Node"',
@@ -1009,7 +1008,10 @@ function createGrafanaAlerting(namespace: Input<string>) {
                 '$TPS_DROP_THRESHOLD',
                 monitoringConfig.alerting.alerts.globalSynchronizerHealth.tpsDropThreshold.toString()
               )
-              .replaceAll('$PRIORITY', enableExtraHighPrioAlerts ? 'high' : 'medium'),
+              .replaceAll(
+                '$PRIORITY',
+                monitoringConfig.alerting.enableExtraHighPrioAlerts ? 'high' : 'medium'
+              ),
             'extra_k8s_alerts.yaml': readGrafanaAlertingFile('extra_k8s_alerts.yaml'),
             'sequencer_rate_limit_alerts.yaml': readGrafanaAlertingFile(
               'sequencer_rate_limit_alerts.yaml'

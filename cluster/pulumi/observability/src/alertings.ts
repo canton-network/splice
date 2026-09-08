@@ -13,9 +13,6 @@ export const enableAlertEmailToSupportTeam =
 export const supportTeamEmail = config.optionalEnv('SUPPORT_TEAM_EMAIL');
 export const grafanaSmtpHost = config.optionalEnv('GRAFANA_SMTP_HOST');
 
-// routes more alerts than just "mining rounds are not advancing" to #team-canton-network-high-prio-prod-alerts
-export const enableExtraHighPrioAlerts = config.envFlag('ENABLE_EXTRA_HIGH_PRIO_ALERTS', false);
-
 export function slackToken(): string {
   return config.requireEnv('SLACK_ACCESS_TOKEN');
 }
