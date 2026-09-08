@@ -46,6 +46,7 @@ import com.digitalasset.canton.util.ShowUtil.*
 import com.digitalasset.canton.util.StampedLockWithHandle
 import io.opentelemetry.api.trace.Tracer
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.ValidatorLicenseRequest
+import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorrepermission.ValidatorRepermission
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 
 import java.util.Optional
@@ -270,6 +271,12 @@ class ExecuteConfirmedActionTrigger(
             store.multiDomainAcsStore
               .lookupContractById(ValidatorLicenseRequest.COMPANION)(
                 rejectAction.dsoRules_RejectValidatorLicenseValue.validatorLicenseRequestCid
+              )
+              .map(_.isEmpty)
+          case archiveAction: SRARC_ArchiveValidatorRepermission =>
+            store.multiDomainAcsStore
+              .lookupContractById(ValidatorRepermission.COMPANION)(
+                archiveAction.dsoRules_ArchiveValidatorRepermissionValue.validatorRepermissionCid
               )
               .map(_.isEmpty)
           case action =>

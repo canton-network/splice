@@ -792,24 +792,21 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
 
     "listValidatorRepermissions" should {
 
-      "list all contracts matching the participantId" in {
-        val good1 = validatorRepermission("participant1")
-        val good2 = validatorRepermission("participant1")
-
-        val badParticipant1 = validatorRepermission("wrong-participant")
-        val badParticipant2 = validatorRepermission("another-wrong-participant")
+      "list all active contracts" in {
+        val p1 = validatorRepermission("participant1")
+        val p2 = validatorRepermission("participant1")
+        val p3 = validatorRepermission("participant3")
+        val p4 = validatorRepermission("participant4")
 
         for {
           store <- mkStore()
           _ <- MonadUtil.sequentialTraverse(
-            Seq(good1, good2, badParticipant1, badParticipant2)
+            Seq(p1, p2, p3, p4)
           )(
             dummyDomain.create(_)(store.multiDomainAcsStore)
           )
-          result <- store.listValidatorRepermissions(
-            "participant1"
-          )(traceContext)
-        } yield result should contain theSameElementsAs Seq(good1, good2)
+          result <- store.listValidatorRepermissions()(traceContext)
+        } yield result should contain theSameElementsAs Seq(p1, p2, p3, p4)
       }
 
     }

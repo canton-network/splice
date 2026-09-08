@@ -318,6 +318,14 @@ class SvDsoAutomationService(
           participantAdminConnection,
         )
       )
+      registerTrigger(
+        new ValidatorRepermissionTrigger(
+          triggerContext,
+          dsoStore,
+          participantAdminConnection,
+          connection(SpliceLedgerConnectionPriority.High),
+        )
+      )
     }
     registerTrigger(
       new SvOnboardingRequestTrigger(
@@ -820,5 +828,6 @@ object SvDsoAutomationService extends AutomationServiceCompanion {
       aTrigger[GrantValidatorPermissionTrigger],
       aTrigger[ValidatorLicenseRequestTrigger],
       aTrigger[ValidatorUnpermissionTrigger],
+      aTrigger[ValidatorRepermissionTrigger],
     )
 }

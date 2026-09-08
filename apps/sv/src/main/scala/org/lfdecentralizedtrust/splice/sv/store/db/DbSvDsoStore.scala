@@ -142,8 +142,7 @@ class DbSvDsoStore(
   private def acsStoreId: AcsStoreId = multiDomainAcsStore.acsStoreId
 
   override def listValidatorRepermissions(
-      participantId: String,
-      limit: Limit = defaultLimit,
+      limit: Limit = defaultLimit
   )(implicit
       tc: TraceContext
   ): Future[Seq[Contract[ValidatorRepermission.ContractId, ValidatorRepermission]]] =
@@ -155,7 +154,6 @@ class DbSvDsoStore(
             acsStoreId,
             domainMigrationId,
             ValidatorRepermission.COMPANION,
-            where = sql"""participant_id = ${lengthLimited(participantId)}""",
             orderLimit = sql"""limit ${sqlLimit(limit)}""",
           ),
           "listValidatorRepermissions",
