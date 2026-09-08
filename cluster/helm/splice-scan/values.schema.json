@@ -249,6 +249,7 @@
         },
         "synchronizers": {
           "type": "object",
+          "additionalProperties": false,
           "required": [
             "current"
           ],
@@ -349,6 +350,7 @@
         },
         "cantonBft": {
           "type": "object",
+          "additionalProperties": false,
           "required": ["p2pUrl"],
           "properties": {
             "p2pUrl": {

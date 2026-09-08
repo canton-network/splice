@@ -54,6 +54,7 @@
     },
     "synchronizer": {
       "type": "object",
+      "additionalProperties": false,
       "description": "Configuration parameters for the sequencer connections.",
       "properties": {
         "connectionType": {
@@ -85,6 +86,7 @@
     },
     "scanClient": {
       "type": "object",
+      "additionalProperties": false,
       "description": "Configuration parameters for the scan client.",
       "properties": {
         "scanType": {
