@@ -155,6 +155,8 @@ spec:
           readinessProbe:
             grpc:
               port: 5061
+              # TODO(#7159) Revert back to actual readiness probe.
+              service: liveness
             initialDelaySeconds: 5
             periodSeconds: 5
             failureThreshold: 3
