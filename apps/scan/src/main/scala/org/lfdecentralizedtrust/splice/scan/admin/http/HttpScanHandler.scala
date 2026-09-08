@@ -1528,15 +1528,40 @@ class HttpScanHandler(
     val recordTimeTs = Codec.tryDecode(Codec.OffsetDateTime)(recordTime)
     if (recordTimeIsAtOrBefore) {
       val snapshotQueryResult = for {
-        recordTime <- OptionT(getRecordTimeAtOrBefore(migrationId, recordTimeTs))
-        snapshotQueryResult <- OptionT.liftF(exactQuery(recordTime))
+        resolvedRecordTime <- OptionT(getRecordTimeAtOrBefore(migrationId, recordTimeTs))
+        _ = logSnapshotAccess(labels, resolvedRecordTime)
+        snapshotQueryResult <- OptionT.liftF(exactQuery(resolvedRecordTime))
       } yield snapshotQueryResult
       snapshotQueryResult.fold[Either[String, T]](
         Left(s"No snapshots found before $recordTime")
       )(res => Right(toResponse(res)))
     } else {
+      logSnapshotAccess(labels, recordTimeTs)
       exactQuery(recordTimeTs).map(res => Right(toResponse(res)))
     }
+  }
+
+  private def logSnapshotAccess(
+      labels: SnapshotQueryLabels,
+      servedRecordTime: CantonTimestamp,
+  )(implicit tc: TraceContext): Unit = {
+    val servedInstant = servedRecordTime.toInstant
+    val age = java.time.Duration.between(servedInstant, clock.now.toInstant)
+    val requestedSnapshotAge =
+      if (age.compareTo(java.time.Duration.ofHours(3)) <= 0) "less_equal_3h"
+      else if (age.compareTo(java.time.Duration.ofHours(24)) <= 0) "less_equal_24h"
+      else if (age.compareTo(java.time.Duration.ofDays(7)) <= 0) "less_equal_7d"
+      else "greater_than_7d"
+    val slotStartHour = (servedInstant.atOffset(java.time.ZoneOffset.UTC).getHour / 3) * 3
+    val snapshotSlot = f"$slotStartHour%02d:00"
+    logger.debug(
+      s"snapshot_access" +
+        s" operation=${labels.operation}" +
+        s" record_time_match=${if (labels.atOrBefore) "at_or_before" else "exact"}" +
+        s" served_record_time=$servedRecordTime" +
+        s" requested_snapshot_age=$requestedSnapshotAge" +
+        s" snapshot_slot=$snapshotSlot"
+    )
   }
 
   // Shared between /v0/state/acs and /v1/state/acs. The only difference between them is in `toResponse`.
