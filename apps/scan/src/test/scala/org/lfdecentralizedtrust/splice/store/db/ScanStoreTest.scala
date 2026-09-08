@@ -191,6 +191,43 @@ abstract class ScanStoreTest
       }
     }
 
+    "ingest GovernanceLocks of the DSO and skip those of other parties" in {
+      val wanted = governanceLock(userParty(1), amount = BigDecimal(10))
+      val unwanted = governanceLock(userParty(2), amount = BigDecimal(20), dso = userParty(3))
+      for {
+        store <- mkStore()
+        _ <- dummyDomain.create(wanted)(store.multiDomainAcsStore)
+        _ <- dummyDomain.create(unwanted)(store.multiDomainAcsStore)
+        result <- store.multiDomainAcsStore.listContracts(
+          splice.governancelock.GovernanceLock.COMPANION
+        )
+      } yield {
+        result.map(_.contractId) should contain theSameElementsAs Seq(wanted.contractId)
+      }
+    }
+
+    "ingest VestingLocks of the DSO and skip those of other parties" in {
+      val endTime = Instant.now().plusSeconds(3600).truncatedTo(ChronoUnit.MICROS)
+      val wanted = vestingLock(userParty(1), vestingAmount = BigDecimal(10), endTime = endTime)
+      val unwanted =
+        vestingLock(
+          userParty(2),
+          vestingAmount = BigDecimal(20),
+          endTime = endTime,
+          dso = userParty(3),
+        )
+      for {
+        store <- mkStore()
+        _ <- dummyDomain.create(wanted)(store.multiDomainAcsStore)
+        _ <- dummyDomain.create(unwanted)(store.multiDomainAcsStore)
+        result <- store.multiDomainAcsStore.listContracts(
+          splice.governancelock.VestingLock.COMPANION
+        )
+      } yield {
+        result.map(_.contractId) should contain theSameElementsAs Seq(wanted.contractId)
+      }
+    }
+
     "lookupTransferPreapprovalByParty" should {
       "return the TransferPreapproval contract signed by the specified party if available" in {
         val wanted = transferPreapproval(userParty(1), providerParty(1), time(0), time(1))
