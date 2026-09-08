@@ -1206,6 +1206,13 @@ trait SvDsoStore
       tc: TraceContext
   ): Future[Seq[Contract[ValidatorUnpermission.ContractId, ValidatorUnpermission]]]
 
+  def listValidatorRepermissions(
+      participantId: String,
+      limit: Limit = defaultLimit,
+  )(implicit
+      tc: TraceContext
+  ): Future[Seq[Contract[ValidatorRepermission.ContractId, ValidatorRepermission]]]
+
 }
 
 object SvDsoStore {
