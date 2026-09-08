@@ -70,20 +70,12 @@ class ValidatorRepermissionTrigger(
             synchronizerId = SynchronizerId.tryFromString(
               dsoRules.payload.config.decentralizedSynchronizer.activeSynchronizerId
             )
-
-            existingMappings <- participantAdminConnection
-              .listParticipantSynchronizerPermission(
-                synchronizerId,
-                participantId.filterString,
-              )
-
+            
             _ <- participantAdminConnection.ensureParticipantSynchronizerPermission(
               synchronizerId = synchronizerId,
               participantId = participantId,
               permission = Submission,
               retryFor = RetryFor.Automation,
-              limits = existingMappings.headOption.flatMap(_.mapping.limits),
-              loginAfter = None,
             )
 
             action = new ARC_DsoRules(
