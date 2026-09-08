@@ -39,6 +39,7 @@ import {
   clusterIsResetPeriodically,
   enableAlertEmailToSupportTeam,
   enableAlerts,
+  enableExtraHighPrioAlerts,
   enableMiningRoundAlert,
   enablePrometheusAlerts,
   grafanaSmtpHost,
@@ -933,6 +934,7 @@ function createGrafanaAlerting(namespace: Input<string>) {
                   teamLabel: 'canton-network',
                   subtitle: 'internal SVs 5m',
                   uid: 'adlmhpz5iv4sgc',
+                  priority: enableExtraHighPrioAlerts ? 'high' : 'medium',
                 },
                 {
                   reportPublisherFormula: '=~"Digital-Asset-1|Digital-Asset-2|DA-Helm-Test-Node"',
@@ -1006,7 +1008,8 @@ function createGrafanaAlerting(namespace: Input<string>) {
               .replaceAll(
                 '$TPS_DROP_THRESHOLD',
                 monitoringConfig.alerting.alerts.globalSynchronizerHealth.tpsDropThreshold.toString()
-              ),
+              )
+              .replaceAll('$PRIORITY', enableExtraHighPrioAlerts ? 'high' : 'medium'),
             'extra_k8s_alerts.yaml': readGrafanaAlertingFile('extra_k8s_alerts.yaml'),
             'sequencer_rate_limit_alerts.yaml': readGrafanaAlertingFile(
               'sequencer_rate_limit_alerts.yaml'
@@ -1150,6 +1153,7 @@ interface AlertRulesConfig {
   uid?: RulesUID;
   ownerPrefixRegex?: string;
   maxBalanceThreshold?: string;
+  priority?: 'high' | 'medium' | 'low';
 }
 
 interface GrafanaRule {
@@ -1192,7 +1196,8 @@ function readAndSetAlertRulesGrafanaAlertingFile(file: string, rules: AlertRules
       .replaceAll('$SUB_TITLE', rule.subtitle ?? 'NOT_REPLACED')
       .replaceAll('$RULE_UID', rule.uid ?? 'NOT_REPLACED')
       .replaceAll('$OWNER_PREFIX_REGEX', rule.ownerPrefixRegex ?? 'NOT_REPLACED')
-      .replaceAll('$MAX_BALANCE_THRESHOLD', rule.maxBalanceThreshold ?? 'NOT_REPLACED');
+      .replaceAll('$MAX_BALANCE_THRESHOLD', rule.maxBalanceThreshold ?? 'NOT_REPLACED')
+      .replaceAll('$PRIORITY', rule.priority ?? 'medium');
     return yaml.load(newRuleString) as GrafanaRule;
   });
   const newFileContent = yaml.dump(content);
