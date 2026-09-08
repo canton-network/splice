@@ -175,7 +175,8 @@ object ExternalPartyWalletStore {
       Map(
         mkFilter(AppRewardCoupon.COMPANION) { co =>
           co.payload.dso == dso &&
-          co.payload.provider == externalParty
+          (co.payload.provider == externalParty && co.payload.beneficiary.isEmpty ||
+            co.payload.beneficiary == java.util.Optional.of(externalParty))
         }(co =>
           ExternalPartyWalletAcsStoreRowData(co, rewardCouponRound = Some(co.payload.round.number))
         ),
