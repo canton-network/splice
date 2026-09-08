@@ -167,6 +167,12 @@ class PermissionedSynchronizerIntegrationTest
       }
     }
 
+    clue("Wait for SV automation to merge Bob's ValidatorUnpermission contracts") {
+      eventually() {
+        sv1Backend.listValidatorUnpermissions(bobParticipantId) should have size 1
+      }
+    }
+
     def manuallyUnpermissionValidator(
         participantId: String,
         loginAfter: Option[Instant],
