@@ -79,10 +79,6 @@ class InternedStringStoreTest extends StoreTestBase with SplicePostgresTest {
   )(implicit traceContext: TraceContext): FutureUnlessShutdown[?] = {
     for {
       _ <- resetAllAppTables(storage)
-      _ <- storage.queryAndUpdate(
-        sqlu"truncate interned_strings",
-        "truncateInternedStrings",
-      )
     } yield ()
   }
 }
