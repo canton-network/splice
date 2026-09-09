@@ -98,5 +98,6 @@ groups:
           runbook_url: ""
           summary: Status report creation time lag too high
         labels:
-          "team": $TEAM_LABEL
+          team: $TEAM_LABEL
+          priority: $PRIORITY
         isPaused: false
