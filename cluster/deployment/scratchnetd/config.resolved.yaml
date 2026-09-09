@@ -25,6 +25,7 @@ cloudArmor:
         maxRequestsBeforeHttp429: 1000
         withinIntervalSeconds: 60
   wafRules:
+    enabled: true
     groups:
       - description: 'WAF: remote code execution and local file inclusion'
         name: 'waf-rce-lfi'
@@ -88,6 +89,7 @@ cloudArmor:
             sensitivity: 1
           - name: 'java-v33-stable'
             sensitivity: 1
+    previewOnly: false
 cluster:
   nodePools:
     apps:
