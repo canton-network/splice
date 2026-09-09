@@ -49,6 +49,10 @@ type ProposalSummaryProps = BaseProposalSummaryProps &
         loginAfter?: string;
       }
     | {
+        formType: 'repermission-validator';
+        participantId: string;
+      }
+    | {
         formType: 'sv-reward-weight';
         svRewardWeightMember: string;
         currentWeight: string;
@@ -240,6 +244,14 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
             value={
               <ReviewPartyId partyId={props.offboardMember} data-testid="offboardMember-party-id" />
             }
+          />
+        )}
+
+        {formType === 'repermission-validator' && (
+          <ProposalReviewField
+            id="repermissionParticipantId"
+            label="Participant ID"
+            value={props.participantId}
           />
         )}
 
