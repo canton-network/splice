@@ -65,6 +65,7 @@ import com.digitalasset.canton.resource.DbStorage.Implicits.BuilderChain.toSQLAc
 import com.digitalasset.canton.topology.{Member, ParticipantId, PartyId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
 import io.grpc.Status
+import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorrepermission.ValidatorRepermission
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorunpermission.ValidatorUnpermission
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import slick.jdbc.GetResult
@@ -139,6 +140,25 @@ class DbSvDsoStore(
   import multiDomainAcsStore.waitUntilAcsIngested
 
   private def acsStoreId: AcsStoreId = multiDomainAcsStore.acsStoreId
+
+  override def listValidatorRepermissions(
+      limit: Limit = defaultLimit
+  )(implicit
+      tc: TraceContext
+  ): Future[Seq[Contract[ValidatorRepermission.ContractId, ValidatorRepermission]]] =
+    for {
+      result <- storage
+        .query(
+          selectFromAcsTable(
+            DsoTables.acsTableName,
+            acsStoreId,
+            domainMigrationId,
+            ValidatorRepermission.COMPANION,
+            orderLimit = sql"""limit ${sqlLimit(limit)}""",
+          ),
+          "listValidatorRepermissions",
+        )
+    } yield result.map(contractFromRow(ValidatorRepermission.COMPANION)(_))
 
   def listValidatorUnpermissions(
       participantId: String,

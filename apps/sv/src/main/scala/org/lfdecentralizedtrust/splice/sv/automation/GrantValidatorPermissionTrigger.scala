@@ -60,9 +60,12 @@ class GrantValidatorPermissionTrigger(
 
           for {
             totalPurchasedTraffic <- store.getTotalPurchasedMemberTraffic(memberId, synchronizerId)
+            unpermissions <- store.listValidatorUnpermissions(payload.memberId)
 
             _ <-
-              if (totalPurchasedTraffic >= minMemberTrafficToOnboardValidator) {
+              if (
+                totalPurchasedTraffic >= minMemberTrafficToOnboardValidator && unpermissions.isEmpty
+              ) {
                 participantAdminConnection.ensureParticipantSynchronizerPermission(
                   synchronizerId = synchronizerId,
                   participantId = participantId,
@@ -73,7 +76,11 @@ class GrantValidatorPermissionTrigger(
                 Future.unit
               }
           } yield {
-            if (totalPurchasedTraffic >= minMemberTrafficToOnboardValidator) {
+            if (unpermissions.nonEmpty) {
+              TaskSuccess(
+                s"Skipped Submission permission for participant $participantId because a ValidatorUnpermission contract exists."
+              )
+            } else if (totalPurchasedTraffic >= minMemberTrafficToOnboardValidator) {
               TaskSuccess(
                 s"Granted Submission permission for participant $participantId (Total Purchased: $totalPurchasedTraffic >= Threshold: $minMemberTrafficToOnboardValidator)"
               )

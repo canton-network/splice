@@ -47,6 +47,29 @@ paths:
                 "$ref": "#/components/schemas/PrepareValidatorOnboardingResponse"
         "500":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
+  /v0/admin/validator/unpermissions/{participant_id}:
+    get:
+      tags: [sv]
+      x-jvm-package: sv_operator
+      operationId: "listValidatorUnpermissions"
+      parameters:
+        - name: "participant_id"
+          in: "path"
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListValidatorUnpermissionsResponse"
+        "400":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
+        "500":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
+
   /v0/admin/validator/licenses:
     get:
       tags: [sv]
@@ -1241,6 +1264,16 @@ components:
       properties:
         featured_app_right:
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/Contract"
+
+    ListValidatorUnpermissionsResponse:
+      type: object
+      required:
+        - unpermissions
+      properties:
+        unpermissions:
+          type: array
+          items:
+            $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/schemas/Contract"
 
     ListFeaturedAppRightsByProviderResponse:
       description: |

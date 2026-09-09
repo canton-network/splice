@@ -47,6 +47,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.svonboarding.{
   SvOnboardingRequest,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
+import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorrepermission.ValidatorRepermission
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorunpermission.ValidatorUnpermission
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.payment.{PaymentAmount, Unit}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.subscriptions.*
@@ -787,6 +788,27 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
           resultFullyFiltered.map(_.contract) should contain theSameElementsAs Seq(visibleCid)
         }
       }
+    }
+
+    "listValidatorRepermissions" should {
+
+      "list all active contracts" in {
+        val p1 = validatorRepermission("participant1")
+        val p2 = validatorRepermission("participant1")
+        val p3 = validatorRepermission("participant3")
+        val p4 = validatorRepermission("participant4")
+
+        for {
+          store <- mkStore()
+          _ <- MonadUtil.sequentialTraverse(
+            Seq(p1, p2, p3, p4)
+          )(
+            dummyDomain.create(_)(store.multiDomainAcsStore)
+          )
+          result <- store.listValidatorRepermissions()(traceContext)
+        } yield result should contain theSameElementsAs Seq(p1, p2, p3, p4)
+      }
+
     }
 
     "listValidatorUnpermissions" should {
@@ -2220,6 +2242,20 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
     contract(
       MemberTraffic.TEMPLATE_ID_WITH_PACKAGE_ID,
       new MemberTraffic.ContractId(nextCid()),
+      template,
+    )
+  }
+
+  protected def validatorRepermission(
+      participantId: String
+  ) = {
+    val template = new ValidatorRepermission(
+      dsoParty.toProtoPrimitive,
+      participantId,
+    )
+    contract(
+      ValidatorRepermission.TEMPLATE_ID_WITH_PACKAGE_ID,
+      new ValidatorRepermission.ContractId(nextCid()),
       template,
     )
   }

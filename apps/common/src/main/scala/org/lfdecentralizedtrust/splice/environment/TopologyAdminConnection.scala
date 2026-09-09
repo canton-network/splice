@@ -176,6 +176,7 @@ abstract class TopologyAdminConnection(
       filterUid: String,
       topologyTransactionType: TopologyTransactionType = AuthorizedState,
       timeQuery: TimeQuery = TimeQuery.HeadState,
+      operation: Option[TopologyChangeOp] = Some(TopologyChangeOp.Replace),
   )(implicit
       tc: TraceContext,
       ec: ExecutionContext,
@@ -184,7 +185,7 @@ abstract class TopologyAdminConnection(
       TopologyStoreId.Synchronizer(synchronizerId),
       topologyTransactionType,
       timeQuery,
-      operation = Some(TopologyChangeOp.Replace),
+      operation = operation,
     )(baseQuery =>
       TopologyAdminCommands.Read.ListParticipantSynchronizerPermission(
         baseQuery,
@@ -221,6 +222,7 @@ abstract class TopologyAdminConnection(
               synchronizerId,
               participantId.filterString,
               topologyType,
+              operation = None,
             )
           )
           .subflatMap { results =>

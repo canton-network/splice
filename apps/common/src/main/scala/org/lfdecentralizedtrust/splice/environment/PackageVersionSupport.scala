@@ -47,7 +47,7 @@ trait PackageVersionSupport extends NamedLogging {
       PackageIdResolver.Package.SpliceDsoGovernance,
       now,
       DarResources.dsoGovernance,
-      DarResources.dsoGovernance_0_1_29,
+      DarResources.dsoGovernance_0_1_30,
     )
   }
 
