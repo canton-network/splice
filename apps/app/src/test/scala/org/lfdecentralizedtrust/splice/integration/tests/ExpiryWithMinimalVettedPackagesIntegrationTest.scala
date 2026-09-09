@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.integration.tests
 
+import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.discard.Implicits.DiscardOps
@@ -359,7 +360,9 @@ class ExpiryWithIgnoredAmuletVersionIntegrationTest
       )(
         s"All dust contracts remain because alice's preferred version is in ignoredAmuletVersions",
         _ => {
-          sv1Backend.dsoDelegateBasedAutomation.unavailablePartiesStore.getAll should
+          sv1Backend.dsoDelegateBasedAutomation.unavailablePartiesStore
+            .listParties()(TraceContext.empty)
+            .futureValue should
             contain(alice)
 
           aliceWalletClient.list().amulets should have length 2L withClue "amulets"
@@ -435,7 +438,9 @@ class ExpiryWithNoVettedAmuletVersionIntegrationTest
     )(
       "Alice is ignored and her dust amulets are not expired",
       _ => {
-        val ignored = sv1Backend.dsoDelegateBasedAutomation.unavailablePartiesStore.getAll
+        val ignored = sv1Backend.dsoDelegateBasedAutomation.unavailablePartiesStore
+          .listParties()(TraceContext.empty)
+          .futureValue
         ignored should contain(alice)
         ignored should not contain dsoParty
         aliceWalletClient.list().amulets should have length 2L withClue "dust amulets"

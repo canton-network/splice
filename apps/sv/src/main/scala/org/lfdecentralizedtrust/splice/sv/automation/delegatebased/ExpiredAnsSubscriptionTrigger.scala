@@ -16,7 +16,7 @@ import io.opentelemetry.api.trace.Tracer
 import org.lfdecentralizedtrust.splice.codegen.java.splice.ans as ansCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.subscriptions as subsCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.subscriptions.SubscriptionIdleState_ExpireSubscription
-import org.lfdecentralizedtrust.splice.store.{IgnoredPartiesStore, PageLimit}
+import org.lfdecentralizedtrust.splice.store.{UnavailablePartiesStore, PageLimit}
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
 import org.lfdecentralizedtrust.splice.sv.util.ContractStakeholders
@@ -31,20 +31,24 @@ class ExpiredAnsSubscriptionTrigger(
     override protected val context: TriggerContext,
     override protected val svTaskContext: SvTaskBasedTrigger.Context,
     override protected val svConfig: SvAppBackendConfig,
-    override protected val ignoredPartiesStore: IgnoredPartiesStore,
+    override protected val unavailablePartiesStore: UnavailablePartiesStore,
 )(implicit
     override val ec: ExecutionContext,
     mat: Materializer,
     tracer: Tracer,
 ) extends ScheduledTaskTrigger[SvDsoStore.IdleAnsSubscription]
     with SvTaskBasedTrigger[ScheduledTaskTrigger.ReadyTask[SvDsoStore.IdleAnsSubscription]]
-    with IgnoredUnavailablePartiesGuard {
+    with UnavailablePartiesGuard {
   private val store = svTaskContext.dsoStore
 
   override protected def listReadyTasks(now: CantonTimestamp, limit: Int)(implicit
       tc: TraceContext
   ): Future[Seq[SvDsoStore.IdleAnsSubscription]] =
-    store.listExpiredAnsSubscriptions(now, PageLimit.tryCreate(limit), Some(ignoredPartiesStore))
+    store.listExpiredAnsSubscriptions(
+      now,
+      PageLimit.tryCreate(limit),
+      Some(unavailablePartiesStore),
+    )
 
   override protected def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit
       tc: TraceContext

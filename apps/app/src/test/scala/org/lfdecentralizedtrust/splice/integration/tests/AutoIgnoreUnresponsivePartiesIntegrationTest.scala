@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.integration.tests
 
+import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.topology.transaction.ParticipantPermission
@@ -191,7 +192,9 @@ class AutoIgnoreUnresponsivePartiesIntegrationTest
       )(
         "Alice is added to the ignored parties store after mediator timeout",
         _ => {
-          sv1Backend.dsoDelegateBasedAutomation.unavailablePartiesStore.getAll should contain(
+          sv1Backend.dsoDelegateBasedAutomation.unavailablePartiesStore
+            .listParties()(TraceContext.empty)
+            .futureValue should contain(
             aliceParty
           )
         },
