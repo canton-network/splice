@@ -72,6 +72,8 @@ import org.apache.pekko.stream.Materializer
 import org.apache.pekko.stream.scaladsl.Source
 import org.lfdecentralizedtrust.splice.environment.BaseLedgerConnection
 
+import scala.annotation.unused
+
 /** Stores all original daml updates visible to `updateStreamParty`.
   *
   * ==Related triggers==
@@ -96,7 +98,7 @@ class UpdateHistory(
     participantId: ParticipantId,
     val updateStreamParty: PartyId,
     val backfillingRequired: BackfillingRequirement,
-    internedStringStore: InternedStringStore,
+    @unused internedStringStore: InternedStringStore,
     override protected val loggerFactory: NamedLoggerFactory,
     enableissue12777Workaround: Boolean,
     enableImportUpdateBackfill: Boolean,
@@ -665,23 +667,24 @@ class UpdateHistory(
 
   // This does not need to be transactional with the rest of the transactions in UpdateHistory
   private def internEventStrings(
-      identifier: Identifier,
-      packageName: String,
-      choiceName: Option[String],
+      @unused identifier: Identifier,
+      @unused packageName: String,
+      @unused choiceName: Option[String],
   )(implicit
-      tc: TraceContext
+      @unused tc: TraceContext
   ) = {
-    import cats.implicits.*
+    // import cats.implicits.*
     // TODO (#6312): use the returned ids in the partitioned table
     // This wraps a future: this is fine, this doesn't have to be transactional with the rest of UpdateHistory
     // and most of the time it will be fetching from cache anyway.
-    DBIO.from(scala.concurrent.blocking(for {
+    /*DBIO.from(scala.concurrent.blocking(for {
       _ <- internedStringStore.getOrIntern(identifier.getPackageId)
       _ <- internedStringStore.getOrIntern(identifier.getModuleName)
       _ <- internedStringStore.getOrIntern(identifier.getEntityName)
       _ <- internedStringStore.getOrIntern(packageName)
       _ <- choiceName.traverse(internedStringStore.getOrIntern)
-    } yield ()))
+    } yield ()))*/
+    DBIO.successful(())
   }
 
   private def insertExerciseEventRow(
