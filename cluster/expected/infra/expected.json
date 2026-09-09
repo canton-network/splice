@@ -4133,7 +4133,7 @@
         "enforceOnKey": "IP",
         "exceedAction": "deny(429)",
         "rateLimitThreshold": {
-          "count": 2000,
+          "count": 10000,
           "intervalSec": 60
         }
       },
@@ -4179,7 +4179,7 @@
       "description": "Per source IP throttle rule for all tokenRegistry API endpoints",
       "match": {
         "expr": {
-          "expression": "request.path.lower().urlDecode().matches(R\"^/registry/(?:allocations/v1|metadata/v1/info|metadata/v1/instruments|allocation-instruction/v1/allocation-factory|transfer-instruction/v1|transfer-instruction/v1/transfer-factory|allocation/v2/settlement-factory|allocations/v2|allocation-instruction/v2/allocation-factory|allocation-instruction/v2|transfer-instruction/v2/transfer-factory|transfer-instruction/v2)\") && request.headers['host'].lower().matches(R\"^(?:scan)\\.[\\w-]+\\.(?:mock\\.network\\.canton\\.global|mock\\.global\\.canton\\.network\\.digitalasset\\.com)(?::[0-9]+)?$\")"
+          "expression": "request.path.lower().urlDecode().startsWith(R\"/registry\") && request.headers['host'].lower().matches(R\"^(?:scan)\\.[\\w-]+\\.(?:mock\\.network\\.canton\\.global|mock\\.global\\.canton\\.network\\.digitalasset\\.com)(?::[0-9]+)?$\")"
         }
       },
       "preview": true,
@@ -4189,7 +4189,7 @@
         "enforceOnKey": "IP",
         "exceedAction": "deny(429)",
         "rateLimitThreshold": {
-          "count": 1000,
+          "count": 10000,
           "intervalSec": 60
         }
       },
