@@ -141,9 +141,7 @@ function addWafRules(
         description: group.description,
         priority,
         preview,
-        // plain `deny` (403), matching the default rule: the regional policy API is
-        // the one place that accepts a status code only on rate limit exceedActions
-        action: 'deny',
+        action: 'deny(403)',
         match: {
           expr: {
             expression: wafRuleExpression(group),
@@ -319,7 +317,7 @@ function addDefaultDenyRule(
       // we assume that if you want all rules in preview, you *also* still want to
       // allow all traffic.
       preview: false,
-      action: preview ? 'allow' : 'deny',
+      action: preview ? 'allow' : 'deny(403)',
       match: {
         versionedExpr: 'SRC_IPS_V1',
         config: {

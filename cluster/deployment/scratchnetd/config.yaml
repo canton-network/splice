@@ -6,5 +6,8 @@ infra:
 cloudArmor:
   enabled: true
   allRulesPreviewOnly: false
+  wafRules:
+    enabled: true
+    previewOnly: false
   logging:
     enabled: true
