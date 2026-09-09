@@ -931,6 +931,7 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
       participantId,
       dsoParty,
       BackfillingRequirement.BackfillingNotRequired,
+      internedStringStore(storage),
       loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = true,
