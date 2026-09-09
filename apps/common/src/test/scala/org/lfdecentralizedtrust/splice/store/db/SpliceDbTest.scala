@@ -3,6 +3,7 @@ package org.lfdecentralizedtrust.splice.store.db
 import com.digitalasset.canton.BaseTest
 import com.digitalasset.canton.config.DbConfig.Postgres
 import com.digitalasset.canton.config.DbParametersConfig
+import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.store.db.DbStorageSetup.DbBasicConfig
@@ -164,7 +165,10 @@ trait SplicePostgresTest extends SpliceDbTest { this: Suite =>
   ): com.digitalasset.canton.config.DbConfig.Postgres =
     Postgres(
       basicConfig.toPostgresConfig,
-      parameters = DbParametersConfig(unsafeCleanOnValidationError = true),
+      parameters = DbParametersConfig(
+        unsafeCleanOnValidationError = true,
+        maxConnections = Some(PositiveInt.tryCreate(30)),
+      ),
     )
 
   override protected def createSetup(): DbStorageSetup =
