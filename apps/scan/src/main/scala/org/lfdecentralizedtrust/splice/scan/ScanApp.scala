@@ -81,8 +81,9 @@ import org.lfdecentralizedtrust.splice.scan.store.db.{
   DbAppActivityRecordStore,
   DbScanAppRewardsStore,
   DbScanVerdictStore,
+  ScanTables,
 }
-import org.lfdecentralizedtrust.splice.store.db.DbAppStore
+import org.lfdecentralizedtrust.splice.store.db.{DbAppStore, StoreDescriptorStore}
 import org.lfdecentralizedtrust.splice.store.{
   ChoiceContextContractFetcher,
   PageLimit,
@@ -94,8 +95,8 @@ import org.lfdecentralizedtrust.splice.util.HasHealth
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import cats.implicits.*
-
 import org.apache.pekko.stream.Materializer
+import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.FutureUnlessShutdownOps
 
 /** Class representing a Scan app instance.
   *
@@ -217,6 +218,37 @@ class ScanApp(
         config.acsStoreDescriptorUserVersion,
         config.txLogStoreDescriptorUserVersion,
       )
+      _ <- appInitStep("Check store user-version downgrade") {
+        for {
+          acsMax <- StoreDescriptorStore
+            .maxStoredUserVersionWithData(
+              storage,
+              ScanTables.acsTableName,
+              store.acsStoreDescriptor,
+            )
+            .toFuture
+          txLogMax <- StoreDescriptorStore
+            .maxStoredUserVersionWithData(
+              storage,
+              ScanTables.txLogTableName,
+              store.txLogStoreDescriptor,
+            )
+            .toFuture
+        } yield {
+          exitIfDowngrade(
+            ScanTables.acsTableName,
+            "acs-store-descriptor-user-version",
+            config.acsStoreDescriptorUserVersion,
+            acsMax,
+          )
+          exitIfDowngrade(
+            ScanTables.txLogTableName,
+            "tx-log-store-descriptor-user-version",
+            config.txLogStoreDescriptorUserVersion,
+            txLogMax,
+          )
+        }
+      }
       updateHistory = new UpdateHistory(
         storage,
         domainMigrationId,
@@ -602,6 +634,23 @@ class ScanApp(
 
   protected[this] override def automationServices(st: ScanApp.State) =
     Seq(st.automation, st.verdictAutomation)
+
+  private def exitIfDowngrade(
+      tableName: String,
+      configFieldName: String,
+      configured: Option[Long],
+      maxStoredWithData: Option[Long],
+      exitOnDowngrade: Boolean = true,
+  )(implicit tc: TraceContext): Unit =
+    if (StoreDescriptorStore.isUserVersionDowngrade(configured, maxStoredWithData)) {
+      logger.error(
+        s"Store user-version downgrade detected for table '$tableName': " +
+          s"configured=$configured, highest with committed data=$maxStoredWithData. " +
+          s"You likely removed or lowered the '$configFieldName' field in the scan app config. " +
+          s"Shutting down to prevent silently orphaning data."
+      )
+      if (exitOnDowngrade) sys.exit(1)
+    }
 }
 
 object ScanApp {
