@@ -23,7 +23,7 @@ export interface UnpermissionValidatorProposal {
 }
 
 export interface RepermissionValidatorProposal {
-  participantId: string;
+  unpermissionCid: string;
 }
 
 export interface OffBoardMemberProposal {
