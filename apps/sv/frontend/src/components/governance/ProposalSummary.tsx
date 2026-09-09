@@ -13,6 +13,7 @@ import {
   THRESHOLD_DEADLINE_SUBTITLE,
 } from '../../utils/constants';
 import type { ConfigChange } from '../../utils/types';
+import { formatDatetimeWithOffset } from '../../utils/dateFormat';
 import { ConfigValuesChanges } from './ConfigValuesChanges';
 import { ProposalReviewField } from './ProposalReviewField';
 
@@ -247,7 +248,11 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
               }
             />
             <ProposalReviewField id="amount" label="Amount" value={props.amount} />
-            <ProposalReviewField id="expiresAt" label="Must Mint Before" value={props.expiresAt} />
+            <ProposalReviewField
+              id="expiresAt"
+              label="Must Mint Before"
+              value={formatDatetimeWithOffset(props.expiresAt)}
+            />
           </>
         )}
 
@@ -255,13 +260,13 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
           id="expiryDate"
           label={THRESHOLD_DEADLINE_LABEL}
           subtitle={THRESHOLD_DEADLINE_SUBTITLE}
-          value={expiryDate}
+          value={formatDatetimeWithOffset(expiryDate)}
         />
 
         <ProposalReviewField
           id="effectiveDate"
           label={EFFECTIVE_AT_LABEL}
-          value={effectiveDate ? effectiveDate : 'Threshold'}
+          value={effectiveDate ? formatDatetimeWithOffset(effectiveDate) : 'Threshold'}
         />
 
         <ProposalReviewField id="summary" label="Proposal Summary" value={summary} />
