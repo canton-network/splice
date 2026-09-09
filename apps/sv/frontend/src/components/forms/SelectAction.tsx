@@ -41,7 +41,12 @@ export const SelectAction: React.FC = () => {
   const isPermissioned = svConfig?.permissioned ?? false;
   const dropdownOptions = useMemo(() => {
     return createProposalActions
-      .filter(action => isPermissioned || action.value !== 'SRARC_UnpermissionValidator')
+      .filter(
+        action =>
+          isPermissioned ||
+          (action.value !== 'SRARC_UnpermissionValidator' &&
+            action.value !== 'SRARC_RepermissionValidator')
+      )
       .map(action => ({
         value: action.value,
         label: action.name,
