@@ -60,10 +60,12 @@ class ValidatorRepermissionTrigger(
     ParticipantId
       .fromProtoPrimitive(payload.participantId, "participantId")
       .fold(
-        err =>
+        err => {
+          logger.warn(s"Skipping ValidatorRepermission with invalid participantId: $err")
           Future.successful(
             TaskSuccess(s"Skipping ValidatorRepermission with invalid participantId: $err")
-          ),
+          )
+        },
         participantId => {
           for {
             dsoRules <- store.getDsoRules()

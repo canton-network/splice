@@ -19,6 +19,7 @@ import org.lfdecentralizedtrust.splice.util.*
 import java.time.Instant
 import java.util.Optional
 import com.digitalasset.canton.data.CantonTimestamp
+import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorrepermission.ValidatorRepermission
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorunpermission.ValidatorUnpermission
 import org.lfdecentralizedtrust.splice.integration.plugins.TokenStandardCliSanityCheckPlugin
 
@@ -192,6 +193,16 @@ class PermissionedSynchronizerIntegrationTest
           decentralizedSynchronizerId.toProtoPrimitive,
           bobParticipantId,
         ) shouldBe Some(SynchronizerPermissionState(None))
+      }
+    }
+
+    clue("Verify ValidatorRepermission contract is archived by automation") {
+      eventually() {
+        sv1Backend.participantClientWithAdminToken.ledger_api_extensions.acs
+          .filterJava(ValidatorRepermission.COMPANION)(
+            sv1Backend.getDsoInfo().dsoParty,
+            co => co.data.participantId == bobParticipantId,
+          ) shouldBe empty
       }
     }
 
