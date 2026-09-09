@@ -521,7 +521,7 @@ class UpdateHistory(
     val safeObservers = event.createdEvent.getObservers.asScala.toSeq.map(lengthLimited)
     metrics.UpdateHistory.assignments.mark()
     for {
-      _ <- DBIO.from(internEventStrings(templateId, event.createdEvent.getPackageName, None))
+      _ <- internEventStrings(templateId, event.createdEvent.getPackageName, None)
       result <- sqlu"""
       insert into update_history_assignments(
         history_id,update_id,record_time,
@@ -641,7 +641,7 @@ class UpdateHistory(
     val safeDomainId = lengthLimited(tree.getSynchronizerId)
 
     for {
-      _ <- DBIO.from(internEventStrings(templateId, event.getPackageName, None))
+      _ <- internEventStrings(templateId, event.getPackageName, None)
       result <- sqlu"""
       insert into update_history_creates(
         history_id, event_id, update_row_id,
@@ -670,16 +670,18 @@ class UpdateHistory(
       choiceName: Option[String],
   )(implicit
       tc: TraceContext
-  ): Future[Unit] = {
+  ) = {
     import cats.implicits.*
     // TODO (#6312): use the returned ids in the partitioned table
-    for {
+    // This wraps a future: this is fine, this doesn't have to be transactional with the rest of UpdateHistory
+    // and most of the time it will be fetching from cache anyway.
+    DBIO.from(scala.concurrent.blocking(for {
       _ <- internedStringStore.getOrIntern(identifier.getPackageId)
       _ <- internedStringStore.getOrIntern(identifier.getModuleName)
       _ <- internedStringStore.getOrIntern(identifier.getEntityName)
       _ <- internedStringStore.getOrIntern(packageName)
       _ <- choiceName.traverse(internedStringStore.getOrIntern)
-    } yield ()
+    } yield ()))
   }
 
   private def insertExerciseEventRow(
@@ -719,7 +721,7 @@ class UpdateHistory(
     val safeDomainId = lengthLimited(tree.getSynchronizerId)
 
     for {
-      _ <- DBIO.from(internEventStrings(templateId, event.getPackageName, Some(event.getChoice)))
+      _ <- internEventStrings(templateId, event.getPackageName, Some(event.getChoice))
       result <- sqlu"""
       insert into update_history_exercises(
         history_id, event_id, update_row_id,
