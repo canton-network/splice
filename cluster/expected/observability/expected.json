@@ -48,6 +48,85 @@
     "custom": true,
     "id": "",
     "inputs": {
+      "alertStrategy": {
+        "autoClose": "3600s",
+        "notificationChannelStrategies": [
+          {
+            "notificationChannelNames": [
+              null
+            ],
+            "renotifyInterval": "14400s"
+          }
+        ]
+      },
+      "combiner": "OR",
+      "conditions": [
+        {
+          "conditionThreshold": {
+            "aggregations": [
+              {
+                "alignmentPeriod": "300s",
+                "crossSeriesReducer": "REDUCE_SUM",
+                "groupByFields": [
+                  "metric.label.backend_target_name"
+                ],
+                "perSeriesAligner": "ALIGN_SUM"
+              }
+            ],
+            "comparison": "COMPARISON_GT",
+            "duration": "0s",
+            "filter": "resource.type=\"network_security_policy\" AND resource.label.policy_name=\"waf-whitelist-throttle-ban-mock\" AND metric.type=\"networksecurity.googleapis.com/https/request_count\" AND metric.label.blocked=\"true\"",
+            "thresholdValue": 0,
+            "trigger": {
+              "count": 1
+            }
+          },
+          "displayName": "Cloud Armor denied requests in mock"
+        },
+        {
+          "conditionThreshold": {
+            "aggregations": [
+              {
+                "alignmentPeriod": "300s",
+                "crossSeriesReducer": "REDUCE_SUM",
+                "groupByFields": [
+                  "metric.label.backend_target_name"
+                ],
+                "perSeriesAligner": "ALIGN_SUM"
+              }
+            ],
+            "comparison": "COMPARISON_GT",
+            "duration": "0s",
+            "filter": "resource.type=\"network_security_policy\" AND resource.label.policy_name=\"waf-whitelist-throttle-ban-mock\" AND metric.type=\"networksecurity.googleapis.com/https/previewed_request_count\" AND metric.label.blocked=\"true\"",
+            "thresholdValue": 0,
+            "trigger": {
+              "count": 1
+            }
+          },
+          "displayName": "Cloud Armor would deny requests in mock"
+        }
+      ],
+      "displayName": "Cloud Armor denied requests in mock",
+      "documentation": {
+        "content": "Requests to **mock** were denied by the Cloud Armor security policy `waf-whitelist-throttle-ban-mock`.\n\nThis is either an abusive client being blocked at the GCP edge, or legitimate traffic that our rules (WAF signatures, IP whitelist, per endpoint throttles, default deny) reject by mistake.\n\nCheck the Cloud Armor request logs of the load balancer to see which rule matched.",
+        "mimeType": "text/markdown",
+        "subject": "Cloud Armor denied requests in mock"
+      },
+      "notificationChannels": [
+        null
+      ],
+      "userLabels": {
+        "cluster": "mock"
+      }
+    },
+    "name": "cloudArmorDeniedRequestsAlert",
+    "provider": "",
+    "type": "gcp:monitoring/alertPolicy:AlertPolicy"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
       "apiVersion": "v1",
       "data": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
