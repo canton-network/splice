@@ -24,6 +24,9 @@ cloudArmor:
       throttleAcrossAllEndpointsPerIp:
         maxRequestsBeforeHttp429: 1000
         withinIntervalSeconds: 60
+  wafRules:
+    enabled: true
+    previewOnly: false
 cluster:
   nodePools:
     apps:
