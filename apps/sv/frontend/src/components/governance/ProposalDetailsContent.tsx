@@ -230,6 +230,12 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
             <OffboardMemberSection memberPartyId={proposalDetails.proposal.memberToOffboard} />
           )}
 
+          {proposalDetails.action === 'SRARC_RepermissionValidator' && (
+            <RepermissionValidatorSection
+              unpermissionCid={proposalDetails.proposal.unpermissionCid}
+            />
+          )}
+
           {proposalDetails.action === 'SRARC_UnpermissionValidator' && (
             <UnpermissionValidatorSection
               participantId={proposalDetails.proposal.participantId}
@@ -755,6 +761,32 @@ const UnpermissionValidatorSection = ({
           valueId="proposal-details-login-after-value"
         />
       )}
+    </Box>
+  );
+};
+
+interface RepermissionValidatorSectionProps {
+  unpermissionCid: string;
+}
+
+const RepermissionValidatorSection = ({ unpermissionCid }: RepermissionValidatorSectionProps) => {
+  return (
+    <Box
+      id="proposal-details-repermission-validator-section"
+      data-testid="proposal-details-repermission-validator-section"
+      sx={{ display: 'contents' }}
+    >
+      <DetailItem
+        label="Validator Unpermission Contract ID"
+        value={
+          <CopyableIdentifier
+            value={unpermissionCid}
+            size="large"
+            data-testid="proposal-details-repermission-unpermission-cid"
+          />
+        }
+        labelId="proposal-details-repermission-unpermission-cid-label"
+      />
     </Box>
   );
 };
