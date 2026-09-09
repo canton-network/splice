@@ -7,7 +7,7 @@ cloudArmor:
       hostPrefixRegex: 'scan'
       pathPrefix: '/api/scan'
       throttleAcrossAllEndpointsPerIp:
-        maxRequestsBeforeHttp429: 2000
+        maxRequestsBeforeHttp429: 10000
         withinIntervalSeconds: 60
     sequencer:
       hostPrefixRegex: 'sequencer-[0-9]+'
@@ -20,7 +20,7 @@ cloudArmor:
       hostPrefixRegex: 'scan'
       pathPrefix: '/registry'
       throttleAcrossAllEndpointsPerIp:
-        maxRequestsBeforeHttp429: 1000
+        maxRequestsBeforeHttp429: 10000
         withinIntervalSeconds: 60
   wafRules:
     groups:
@@ -295,134 +295,13 @@ sv:
   scan:
     externalRateLimits:
       globalLimits:
-        fillInterval: '60s'
-        maxTokens: 10000
+        fillInterval: '10s'
+        maxTokens: 60000
         tokensPerFill: 10000
       globalPerIpLimits:
-        fillInterval: '60s'
-        maxTokens: 1000
+        fillInterval: '10s'
+        maxTokens: 6000
         tokensPerFill: 1000
-      rateLimits:
-        /registry/allocation-instruction/v1/allocation-factory:
-          fillInterval: '60s'
-          maxTokens: 720
-          name: 'registry-allocation-factory'
-          perIpLimits:
-            fillInterval: '60s'
-            maxTokens: 120
-            tokensPerFill: 120
-          tokensPerFill: 720
-          type: 'limited'
-        /registry/allocation-instruction/v2:
-          fillInterval: '60s'
-          maxTokens: 720
-          name: 'registry-allocation-instruction-v2'
-          perIpLimits:
-            fillInterval: '60s'
-            maxTokens: 120
-            tokensPerFill: 120
-          tokensPerFill: 720
-          type: 'limited'
-        /registry/allocation-instruction/v2/allocation-factory:
-          fillInterval: '60s'
-          maxTokens: 720
-          name: 'registry-allocation-factory-v2'
-          perIpLimits:
-            fillInterval: '60s'
-            maxTokens: 120
-            tokensPerFill: 120
-          tokensPerFill: 720
-          type: 'limited'
-        /registry/allocation/v2/settlement-factory:
-          fillInterval: '60s'
-          maxTokens: 720
-          name: 'registry-settlement-factory-v2'
-          perIpLimits:
-            fillInterval: '60s'
-            maxTokens: 120
-            tokensPerFill: 120
-          tokensPerFill: 720
-          type: 'limited'
-        /registry/allocations/v1:
-          fillInterval: '60s'
-          maxTokens: 720
-          name: 'registry-allocations'
-          perIpLimits:
-            fillInterval: '60s'
-            maxTokens: 120
-            tokensPerFill: 120
-          tokensPerFill: 720
-          type: 'limited'
-        /registry/allocations/v2:
-          fillInterval: '60s'
-          maxTokens: 720
-          name: 'registry-allocations-v2'
-          perIpLimits:
-            fillInterval: '60s'
-            maxTokens: 120
-            tokensPerFill: 120
-          tokensPerFill: 720
-          type: 'limited'
-        /registry/metadata/v1/info:
-          fillInterval: '60s'
-          maxTokens: 720
-          name: 'registry-metadata-info'
-          perIpLimits:
-            fillInterval: '60s'
-            maxTokens: 120
-            tokensPerFill: 120
-          tokensPerFill: 720
-          type: 'limited'
-        /registry/metadata/v1/instruments:
-          fillInterval: '60s'
-          maxTokens: 720
-          name: 'registry-metadata-instruments'
-          perIpLimits:
-            fillInterval: '60s'
-            maxTokens: 120
-            tokensPerFill: 120
-          tokensPerFill: 720
-          type: 'limited'
-        /registry/transfer-instruction/v1:
-          fillInterval: '60s'
-          maxTokens: 720
-          name: 'registry-transfer-instruction'
-          perIpLimits:
-            fillInterval: '60s'
-            maxTokens: 120
-            tokensPerFill: 120
-          tokensPerFill: 720
-          type: 'limited'
-        /registry/transfer-instruction/v1/transfer-factory:
-          fillInterval: '60s'
-          maxTokens: 1440
-          name: 'registry-transfer-factory'
-          perIpLimits:
-            fillInterval: '60s'
-            maxTokens: 240
-            tokensPerFill: 240
-          tokensPerFill: 1440
-          type: 'limited'
-        /registry/transfer-instruction/v2:
-          fillInterval: '60s'
-          maxTokens: 720
-          name: 'registry-transfer-instruction-v2'
-          perIpLimits:
-            fillInterval: '60s'
-            maxTokens: 120
-            tokensPerFill: 120
-          tokensPerFill: 720
-          type: 'limited'
-        /registry/transfer-instruction/v2/transfer-factory:
-          fillInterval: '60s'
-          maxTokens: 720
-          name: 'registry-transfer-factory-v2'
-          perIpLimits:
-            fillInterval: '60s'
-            maxTokens: 120
-            tokensPerFill: 120
-          tokensPerFill: 720
-          type: 'limited'
   synchronizer:
     sequencer:
       externalRateLimits:
