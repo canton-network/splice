@@ -27,7 +27,6 @@ import com.digitalasset.canton.util.ShowUtil.*
 import com.digitalasset.canton.topology.ParticipantId
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.SvRewardCoupon
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
-import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 
 import scala.concurrent.*
 import scala.jdk.OptionConverters.*
@@ -126,11 +125,25 @@ class DbExternalPartyWalletStore(
       limit: Limit = defaultLimit,
   )(implicit tc: TraceContext): Future[
     Seq[(Contract[SvRewardCoupon.ContractId, SvRewardCoupon], BigDecimal)]
-  ] = listSortedRewardCoupons(
-    amuletCodegen.SvRewardCoupon.COMPANION,
-    issuingRoundsMap,
-    r => Some(BigDecimal(r.issuancePerSvRewardCoupon)),
-    limit,
-    ccValue = sql"rti.issuance * acs.reward_coupon_weight",
-  )
+  ] =
+    for {
+      coupons <- multiDomainAcsStore.listContracts(amuletCodegen.SvRewardCoupon.COMPANION)
+    } yield applyLimit(
+      "listSortedRewardCoupons",
+      limit,
+      coupons
+        .flatMap { c =>
+          issuingRoundsMap.get(c.payload.round).map { i =>
+            val quantity =
+              BigDecimal(c.payload.weight.longValue) * BigDecimal(i.issuancePerSvRewardCoupon)
+            (c.contract, quantity)
+          }
+        }
+        .sorted(
+          Ordering[(Long, BigDecimal)].on(
+            (x: (Contract[SvRewardCoupon.ContractId, SvRewardCoupon], BigDecimal)) =>
+              (x._1.payload.round.number, -x._2)
+          )
+        ),
+    )
 }

@@ -253,13 +253,7 @@ object ExternalPartyWalletStore {
         mkFilter(SvRewardCoupon.COMPANION) { co =>
           co.payload.dso == dso &&
           co.payload.beneficiary == externalParty
-        }(co =>
-          ExternalPartyWalletAcsStoreRowData(
-            co,
-            rewardCouponRound = Some(co.payload.round.number),
-            rewardCouponWeight = Some(co.payload.weight),
-          )
-        ),
+        }(ExternalPartyWalletAcsStoreRowData(_)),
       ),
     )
   }

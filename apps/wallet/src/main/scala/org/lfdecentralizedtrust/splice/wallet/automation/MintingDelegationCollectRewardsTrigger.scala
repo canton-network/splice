@@ -429,7 +429,7 @@ class MintingDelegationCollectRewardsTrigger(
       new InputSvRewardCoupon(coupon.contractId): TransferInput
     }
 
-    val allInputs = livenessInputs ++ validatorCouponInputs  ++ svRewardCouponInputs ++
+    val allInputs = livenessInputs ++ validatorCouponInputs ++ svRewardCouponInputs ++
       appCouponInputs ++ rewardCouponV2Inputs ++ unclaimedActivityRecordInputs ++
       developmentFundCouponInputs ++ amuletInputs
     allInputs.take(maxNumInputs)

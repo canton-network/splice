@@ -70,15 +70,11 @@ object WalletTables extends AcsTables {
       contract: Contract[?, ?],
       override val contractExpiresAt: Option[Timestamp] = None,
       rewardCouponRound: Option[Long] = None,
-      rewardCouponWeight: Option[Long] = None,
   ) extends AcsRowData.AcsRowDataFromContract {
     override def indexColumns: Seq[(String, IndexColumnValue[?])] = Seq(
       ExternalPartyWalletAcsStoreRowData.IndexColumns.reward_coupon_round -> IndexColumnValue(
         rewardCouponRound
-      ),
-      ExternalPartyWalletAcsStoreRowData.IndexColumns.reward_coupon_weight -> IndexColumnValue(
-        rewardCouponWeight
-      ),
+      )
     )
   }
   object ExternalPartyWalletAcsStoreRowData {
@@ -88,8 +84,7 @@ object WalletTables extends AcsTables {
       }
     private object IndexColumns {
       val reward_coupon_round = "reward_coupon_round"
-      val reward_coupon_weight = "reward_coupon_weight"
-      val All: Seq[String] = Seq(reward_coupon_round, reward_coupon_weight)
+      val All: Seq[String] = Seq(reward_coupon_round)
     }
   }
 
