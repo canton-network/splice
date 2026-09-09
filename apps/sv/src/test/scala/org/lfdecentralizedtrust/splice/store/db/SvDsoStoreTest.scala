@@ -153,6 +153,47 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
         QueryResult(acsOffset, _)
       )
     )
+    "listExpiredVestingLocks" should {
+
+      "return locks past their endTime, and never those of another DSO" in {
+        val dsoLock =
+          vestingLock(userParty(1), vestingAmount = BigDecimal(10), endTime = time(2).toInstant)
+        val laterDsoLock =
+          vestingLock(userParty(2), vestingAmount = BigDecimal(20), endTime = time(4).toInstant)
+        // 'dso' party of 'otherDsoLock' is different than the one used in
+        // 'mkStore()' below. Thus, 'otherDsoLock' should never be ingested and
+        // must not be discoverable using listExpiredVestingLocks even than time
+        // is greater than 'otherDsoLock(endTime)'.
+        val otherDsoLock = vestingLock(
+          userParty(3),
+          vestingAmount = BigDecimal(30),
+          endTime = time(2).toInstant,
+          dso = userParty(4),
+        )
+        for {
+          store <- mkStore()
+          _ <- MonadUtil.sequentialTraverse(Seq(dsoLock, laterDsoLock, otherDsoLock))(
+            dummyDomain.create(_)(store.multiDomainAcsStore)
+          )
+        } yield {
+          def cidsAt(t: CantonTimestamp) = store
+            .listExpiredVestingLocks(t, PageLimit.tryCreate(10))(TraceContext.empty)
+            .futureValue
+            .map(_.contract.contractId)
+
+          cidsAt(time(1)) should be(empty)
+          // 'contract_expires_at < now' is strict: a lock is not expired at its own endTime.
+          cidsAt(time(2)) should be(empty)
+          cidsAt(time(3)) should contain theSameElementsAs Seq(dsoLock.contractId)
+          cidsAt(time(5)) should contain theSameElementsAs Seq(
+            dsoLock.contractId,
+            laterDsoLock.contractId,
+          )
+        }
+      }
+
+    }
+
     "lookupSvOnboardingConfirmedByParty" should {
       offsetFreeLookupTest(
         create = svOnboardingConfirmed("good", userParty(1), "good-pid"),
