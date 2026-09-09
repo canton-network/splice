@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import * as k8s from '@pulumi/kubernetes';
 import {
+  DockerConfig,
   infraKubernetesScheduling,
   standardStorageClassName,
 } from '@canton-network/splice-pulumi-common';
@@ -13,6 +14,9 @@ export function installDockerRegistryMirror(): k8s.helm.v3.Release {
       name: 'docker-mirror',
     },
   });
+
+  // Expected GCP secret format: {"username": "<dockerhub-user>", "password": "<PAT>"}
+  const dockerHubCredentials = DockerConfig.fetchCredentialsFromSecret('docker-mirror-credentials');
 
   return new k8s.helm.v3.Release(
     'docker-registry-mirror',
@@ -40,6 +44,10 @@ export function installDockerRegistryMirror(): k8s.helm.v3.Release {
         proxy: {
           // Configure the registry to act as a read-through cache for the Docker Hub.
           enabled: true,
+          // Docker Hub credentials used by the mirror when pulling from upstream,
+          // so that we get authenticated (and thus higher) rate limits.
+          username: dockerHubCredentials.username,
+          password: dockerHubCredentials.password,
         },
         persistence: {
           storageClass: standardStorageClassName,
@@ -47,12 +55,16 @@ export function installDockerRegistryMirror(): k8s.helm.v3.Release {
           size: '20Gi',
         },
         configData: {
-          // Enable blob/manifest deletion so the proxy's built-in TTL-based
-          // scheduler can remove expired cached content.
-          // See: https://distribution.github.io/distribution/recipes/mirror/
           storage: {
+            // Enable blob/manifest deletion so the proxy's built-in TTL-based
+            // scheduler can remove expired cached content.
+            // See: https://distribution.github.io/distribution/recipes/mirror/
             delete: {
               enabled: true,
+            },
+            // Protection against https://github.com/distribution/distribution/issues/2966
+            cache: {
+              blobdescriptor: '',
             },
           },
         },

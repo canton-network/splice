@@ -16,8 +16,8 @@ import {
   hostCondition,
   ipWhitelistRuleChunks,
   matchExpression,
-  WAF_RULE_GROUPS,
   wafRuleExpression,
+  WafRuleGroup,
 } from './cloudArmorRules';
 import { loadIPRanges } from './whitelisting/ipRanges';
 
@@ -93,7 +93,12 @@ export function configureCloudArmorPolicy(
 
   // Step 2: Add predefined WAF rules
   if (cac.wafRules.enabled) {
-    addWafRules(securityPolicy, cac.allRulesPreviewOnly || cac.wafRules.previewOnly, ruleOpts);
+    addWafRules(
+      securityPolicy,
+      cac.wafRules.groups,
+      cac.allRulesPreviewOnly || cac.wafRules.previewOnly,
+      ruleOpts
+    );
   }
 
   // Step 3: Add IP whitelisting rules
@@ -125,10 +130,11 @@ export function configureCloudArmorPolicy(
  */
 function addWafRules(
   securityPolicy: CloudArmorPolicy,
+  groups: WafRuleGroup[],
   preview: boolean,
   opts: pulumi.ResourceOptions
 ): void {
-  WAF_RULE_GROUPS.forEach((group, i) => {
+  groups.forEach((group, i) => {
     const priority = WAF_RULE_MIN + i * RULE_SPACING;
     if (priority >= IP_WHITELIST_RULE_MIN) {
       throw new Error(`WAF rule priority ${priority} overlaps the IP whitelist priority range`);
