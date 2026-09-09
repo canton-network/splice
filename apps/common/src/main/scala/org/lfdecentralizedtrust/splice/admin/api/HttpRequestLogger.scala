@@ -10,7 +10,7 @@ import com.digitalasset.canton.config.ApiLoggingConfig
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.ShowUtil.*
-import org.lfdecentralizedtrust.splice.http.ClientIpDirectives
+import org.lfdecentralizedtrust.splice.http.{ClientIpDirectives, HttpRateLimiter}
 
 object HttpRequestLogger {
   def apply(
@@ -89,7 +89,10 @@ final class HttpRequestLogger(
         }
         logger.trace(msg(s"headers: ${ctx.request.headers.toString.limit(maxMetadataSize)}"))
         mapResponse { response =>
-          logger.debug(msg(s"Responding with status code: ${response.status}"))
+          val rateLimited = response
+            .attribute(HttpRateLimiter.RejectedByRateLimiter)
+            .fold("")(limiter => s", rejected by the '$limiter' rate limiter")
+          logger.debug(msg(s"Responding with status code: ${response.status}$rateLimited"))
           if (messagePayloads) {
             response.entity match {
               // Only logging strict messages which are already in memory, not attempting to log streams
