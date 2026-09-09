@@ -1021,6 +1021,10 @@ function createGrafanaAlerting(namespace: Input<string>) {
                 monitoringConfig.alerting.alerts.sequencerRateLimits.rejectionRateThreshold.toString()
               )
               .replaceAll(
+                '$SEQUENCER_RATE_LIMIT_REJECTION_RATE_PRIORITY',
+                monitoringConfig.alerting.enableExtraHighPrioAlerts ? 'high' : 'medium'
+              )
+              .replaceAll(
                 '$SEQUENCER_RATE_LIMIT_CIRCUIT_BREAKER_STATE_THRESHOLD',
                 monitoringConfig.alerting.alerts.sequencerRateLimits.circuitBreakerStateThreshold.toString()
               ),
