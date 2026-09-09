@@ -144,6 +144,7 @@ pulumiProjectConfig:
 monitoring:
   alerting:
     enableNoDataAlerts: true
+    enableExtraHighPrioAlerts: true
     alerts:
       cloudSql:
         maintenance: true

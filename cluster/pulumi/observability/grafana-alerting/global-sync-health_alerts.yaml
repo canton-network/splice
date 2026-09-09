@@ -64,7 +64,9 @@ groups:
           severity: warning
           summary: "{{ $labels.namespace }} discarded more than $DISCARDED_CONFIRMATION_REQUESTS_THRESHOLD of sequenced confirmation requests over the last 10 minutes"
           description: 'A significant fraction of sequenced confirmation requests was never processed by the mediator. This typically matches CometBFT replays.'
-        labels: {}
+        labels:
+          # if high => alert on #team-canton-network-high-prio-prod-alerts
+          priority: $PRIORITY
         isPaused: false
       # Failure rate of confirmation requests, as observed by the mediator.
       # Can increase for non-network reasons, but is relatively unlikely to.
@@ -123,7 +125,7 @@ groups:
           severity: warning
           summary: "{{ $labels.namespace }} saw more than $FAILED_CONFIRMATION_REQUESTS_THRESHOLD of confirmation requests fail over the last 30 minutes"
           description: 'Confirmation requests are failing at a high rate. Can happen for non-network reasons, but is relatively unlikely to.'
-        labels: {}
+        labels: {} # Too prone to false positives for higher priority
         isPaused: false
       # Overall TPS (approved confirmation requests per second), compared to the
       # previous 30m window. Can drop for non-network reasons, but a large relative
@@ -211,5 +213,9 @@ groups:
           severity: warning
           summary: "{{ $labels.namespace }} saw TPS drop below $TPS_DROP_THRESHOLD of the previous 30 minute window"
           description: 'The rate of approved confirmation requests over the last 30m dropped significantly compared to the previous 30m window. Can happen for non-network reasons, but is relatively unlikely to.'
-        labels: {}
+        labels:
+          # if high => alert on #team-canton-network-high-prio-prod-alerts
+          priority: $PRIORITY
+          # send an email to support too (if we're sending emails on this cluster)
+          teamLabel: da
         isPaused: false
