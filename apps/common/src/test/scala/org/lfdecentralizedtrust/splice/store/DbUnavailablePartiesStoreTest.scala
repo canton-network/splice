@@ -56,17 +56,17 @@ class DbUnavailablePartiesStoreTest
       "be a no-op for an empty sequence" in {
         for {
           store <- mkStore()
-          _ <- store.addParties(Seq.empty, atSeconds(0))
-          parties <- store.listParties(atSeconds(0))
+          _ <- store.addPartiesAt(Seq.empty, atSeconds(0))
+          parties <- store.listPartiesAt(atSeconds(0))
         } yield parties shouldBe empty
       }
 
       "ignores new parties for the base duration" in {
         for {
           store <- mkStore()
-          _ <- store.addParties(Seq(userParty(1), userParty(2)), atSeconds(0))
-          justBefore <- store.listParties(atSeconds(1) - 1)
-          atExpiry <- store.listParties(atSeconds(1))
+          _ <- store.addPartiesAt(Seq(userParty(1), userParty(2)), atSeconds(0))
+          justBefore <- store.listPartiesAt(atSeconds(1) - 1)
+          atExpiry <- store.listPartiesAt(atSeconds(1))
         } yield {
           justBefore should contain theSameElementsAs Seq(userParty(1), userParty(2))
           atExpiry shouldBe empty
@@ -76,13 +76,13 @@ class DbUnavailablePartiesStoreTest
       "double the ignore duration when a party is re-added later" in {
         for {
           store <- mkStore()
-          _ <- store.addParties(Seq(userParty(1)), atSeconds(0)) // expires at 1s
-          _ <- store.addParties(
+          _ <- store.addPartiesAt(Seq(userParty(1)), atSeconds(0)) // expires at 1s
+          _ <- store.addPartiesAt(
             Seq(userParty(1)),
             atSeconds(1),
           ) // should bump ignore duration to 2s => expires at 3s
-          justBefore <- store.listParties(atSeconds(3) - 1)
-          atExpiry <- store.listParties(atSeconds(3))
+          justBefore <- store.listPartiesAt(atSeconds(3) - 1)
+          atExpiry <- store.listPartiesAt(atSeconds(3))
         } yield {
           justBefore should contain(userParty(1))
           atExpiry shouldBe empty
@@ -93,10 +93,10 @@ class DbUnavailablePartiesStoreTest
         val midWindow = atSeconds(1) / 2
         for {
           store <- mkStore()
-          _ <- store.addParties(Seq(userParty(1)), atSeconds(0)) // expires at 1s
-          _ <- store.addParties(Seq(userParty(1)), midWindow) // already ignored => no-op
-          justBefore <- store.listParties(atSeconds(1) - 1)
-          atExpiry <- store.listParties(atSeconds(1))
+          _ <- store.addPartiesAt(Seq(userParty(1)), atSeconds(0)) // expires at 1s
+          _ <- store.addPartiesAt(Seq(userParty(1)), midWindow) // already ignored => no-op
+          justBefore <- store.listPartiesAt(atSeconds(1) - 1)
+          atExpiry <- store.listPartiesAt(atSeconds(1))
         } yield {
           justBefore should contain(userParty(1))
           atExpiry shouldBe empty
@@ -108,10 +108,10 @@ class DbUnavailablePartiesStoreTest
           store <- mkStore()
           // 0s => 1s, 1s => 2s, 3s => 4s, 7s => 4s (capped), 11s => 4s (capped) => expires at 15s
           _ <- MonadUtil.sequentialTraverse(Seq(0L, 1L, 3L, 7L, 11L))(n =>
-            store.addParties(Seq(userParty(1)), atSeconds(n))
+            store.addPartiesAt(Seq(userParty(1)), atSeconds(n))
           )
-          justBefore <- store.listParties(atSeconds(15) - 1)
-          atExpiry <- store.listParties(atSeconds(15))
+          justBefore <- store.listPartiesAt(atSeconds(15) - 1)
+          atExpiry <- store.listPartiesAt(atSeconds(15))
         } yield {
           justBefore should contain(userParty(1))
           atExpiry shouldBe empty
@@ -123,10 +123,10 @@ class DbUnavailablePartiesStoreTest
           store <- mkStore()
           // DbStorage.update may retry the statement, which must not double the duration:
           // the expiry must stay at 1s, not move to 2s
-          _ <- store.addParties(Seq(userParty(1)), atSeconds(0))
-          _ <- store.addParties(Seq(userParty(1)), atSeconds(0))
-          justBefore <- store.listParties(atSeconds(1) - 1)
-          atExpiry <- store.listParties(atSeconds(1))
+          _ <- store.addPartiesAt(Seq(userParty(1)), atSeconds(0))
+          _ <- store.addPartiesAt(Seq(userParty(1)), atSeconds(0))
+          justBefore <- store.listPartiesAt(atSeconds(1) - 1)
+          atExpiry <- store.listPartiesAt(atSeconds(1))
         } yield {
           justBefore should contain(userParty(1))
           atExpiry shouldBe empty
@@ -136,11 +136,11 @@ class DbUnavailablePartiesStoreTest
       "restart the expiry window from the latest marking" in {
         for {
           store <- mkStore()
-          _ <- store.addParties(Seq(userParty(1)), atSeconds(0)) // 1s => expires at 1s
-          _ <- store.addParties(Seq(userParty(1)), atSeconds(2)) // 2s from 2s => expires at 4s
-          atOldExpiry <- store.listParties(atSeconds(1))
-          justBefore <- store.listParties(atSeconds(4) - 1)
-          atExpiry <- store.listParties(atSeconds(4))
+          _ <- store.addPartiesAt(Seq(userParty(1)), atSeconds(0)) // 1s => expires at 1s
+          _ <- store.addPartiesAt(Seq(userParty(1)), atSeconds(2)) // 2s from 2s => expires at 4s
+          atOldExpiry <- store.listPartiesAt(atSeconds(1))
+          justBefore <- store.listPartiesAt(atSeconds(4) - 1)
+          atExpiry <- store.listPartiesAt(atSeconds(4))
         } yield {
           atOldExpiry should contain(userParty(1))
           justBefore should contain(userParty(1))
@@ -151,9 +151,9 @@ class DbUnavailablePartiesStoreTest
       "deduplicate parties within a single call" in {
         for {
           store <- mkStore()
-          _ <- store.addParties(Seq(userParty(1), userParty(1)), atSeconds(0))
-          justBefore <- store.listParties(atSeconds(1) - 1)
-          atExpiry <- store.listParties(atSeconds(1))
+          _ <- store.addPartiesAt(Seq(userParty(1), userParty(1)), atSeconds(0))
+          justBefore <- store.listPartiesAt(atSeconds(1) - 1)
+          atExpiry <- store.listPartiesAt(atSeconds(1))
         } yield {
           justBefore should contain(userParty(1))
           atExpiry shouldBe empty
@@ -163,13 +163,13 @@ class DbUnavailablePartiesStoreTest
       "apply the insert and the doubling branch independently within one call" in {
         for {
           store <- mkStore()
-          _ <- store.addParties(Seq(userParty(1)), atSeconds(0)) // expires at 1s
+          _ <- store.addPartiesAt(Seq(userParty(1)), atSeconds(0)) // expires at 1s
           // party 1's window has just elapsed => doubles to 2s => expires at 3s
           // party 2 is new => base duration => expires at 2s
-          _ <- store.addParties(Seq(userParty(1), userParty(2)), atSeconds(1))
-          beforeParty2Expiry <- store.listParties(atSeconds(2) - 1)
-          atParty2Expiry <- store.listParties(atSeconds(2))
-          atParty1Expiry <- store.listParties(atSeconds(3))
+          _ <- store.addPartiesAt(Seq(userParty(1), userParty(2)), atSeconds(1))
+          beforeParty2Expiry <- store.listPartiesAt(atSeconds(2) - 1)
+          atParty2Expiry <- store.listPartiesAt(atSeconds(2))
+          atParty1Expiry <- store.listPartiesAt(atSeconds(3))
         } yield {
           beforeParty2Expiry should contain theSameElementsAs Seq(userParty(1), userParty(2))
           atParty2Expiry should contain theSameElementsAs Seq(userParty(1))
@@ -180,12 +180,12 @@ class DbUnavailablePartiesStoreTest
       "keep the later expiry when a marking arrives out of order" in {
         for {
           store <- mkStore()
-          _ <- store.addParties(Seq(userParty(1)), atSeconds(2)) // 1s => expires at 3s
+          _ <- store.addPartiesAt(Seq(userParty(1)), atSeconds(2)) // 1s => expires at 3s
           // had the stale marking landed, updated_at would rewind to 0s and the duration
           // would double to 2s, expiring at 2s instead
-          _ <- store.addParties(Seq(userParty(1)), atSeconds(0))
-          atRewoundExpiry <- store.listParties(atSeconds(2))
-          atExpiry <- store.listParties(atSeconds(3))
+          _ <- store.addPartiesAt(Seq(userParty(1)), atSeconds(0))
+          atRewoundExpiry <- store.listPartiesAt(atSeconds(2))
+          atExpiry <- store.listPartiesAt(atSeconds(3))
         } yield {
           atRewoundExpiry should contain(userParty(1))
           atExpiry shouldBe empty
@@ -199,9 +199,9 @@ class DbUnavailablePartiesStoreTest
       "remove only the given parties" in {
         for {
           store <- mkStore()
-          _ <- store.addParties(Seq(userParty(1), userParty(2), userParty(3)), atSeconds(0))
+          _ <- store.addPartiesAt(Seq(userParty(1), userParty(2), userParty(3)), atSeconds(0))
           deleted <- store.removeParties(Seq(userParty(1), userParty(3)))
-          parties <- store.listParties(atSeconds(0))
+          parties <- store.listPartiesAt(atSeconds(0))
         } yield {
           deleted shouldBe 2
           parties should contain theSameElementsAs Seq(userParty(2))
@@ -211,9 +211,9 @@ class DbUnavailablePartiesStoreTest
       "be a no-op for unknown parties" in {
         for {
           store <- mkStore()
-          _ <- store.addParties(Seq(userParty(1)), atSeconds(0))
+          _ <- store.addPartiesAt(Seq(userParty(1)), atSeconds(0))
           deleted <- store.removeParties(Seq(userParty(99)))
-          parties <- store.listParties(atSeconds(0))
+          parties <- store.listPartiesAt(atSeconds(0))
         } yield {
           deleted shouldBe 0
           parties should contain(userParty(1))
@@ -223,9 +223,9 @@ class DbUnavailablePartiesStoreTest
       "be a no-op for an empty sequence" in {
         for {
           store <- mkStore()
-          _ <- store.addParties(Seq(userParty(1)), atSeconds(0))
+          _ <- store.addPartiesAt(Seq(userParty(1)), atSeconds(0))
           deleted <- store.removeParties(Seq.empty)
-          parties <- store.listParties(atSeconds(0))
+          parties <- store.listPartiesAt(atSeconds(0))
         } yield {
           deleted shouldBe 0
           parties should contain(userParty(1))
@@ -235,13 +235,13 @@ class DbUnavailablePartiesStoreTest
       "reset the backoff, so a re-added party starts from the base duration again" in {
         for {
           store <- mkStore()
-          _ <- store.addParties(Seq(userParty(1)), atSeconds(0)) // 1s => expires at 1s
-          _ <- store.addParties(Seq(userParty(1)), atSeconds(1)) // 2s => expires at 3s
+          _ <- store.addPartiesAt(Seq(userParty(1)), atSeconds(0)) // 1s => expires at 1s
+          _ <- store.addPartiesAt(Seq(userParty(1)), atSeconds(1)) // 2s => expires at 3s
           deleted <- store.removeParties(Seq(userParty(1)))
-          afterRemoval <- store.listParties(atSeconds(1))
-          _ <- store.addParties(Seq(userParty(1)), atSeconds(3))
-          justBefore <- store.listParties(atSeconds(4) - 1)
-          atExpiry <- store.listParties(atSeconds(4))
+          afterRemoval <- store.listPartiesAt(atSeconds(1))
+          _ <- store.addPartiesAt(Seq(userParty(1)), atSeconds(3))
+          justBefore <- store.listPartiesAt(atSeconds(4) - 1)
+          atExpiry <- store.listPartiesAt(atSeconds(4))
         } yield {
           deleted shouldBe 1
           afterRemoval shouldBe empty
@@ -254,9 +254,9 @@ class DbUnavailablePartiesStoreTest
         for {
           store1 <- mkStore(storeDescriptor)
           store2 <- mkStore(storeDescriptor2)
-          _ <- store1.addParties(Seq(userParty(1)), atSeconds(0))
+          _ <- store1.addPartiesAt(Seq(userParty(1)), atSeconds(0))
           deleted <- store2.removeParties(Seq(userParty(1)))
-          parties <- store1.listParties(atSeconds(0))
+          parties <- store1.listPartiesAt(atSeconds(0))
         } yield {
           deleted shouldBe 1
           parties shouldBe empty
@@ -269,9 +269,9 @@ class DbUnavailablePartiesStoreTest
       "remove every party recorded at or below the given store id" in {
         for {
           store <- mkStore()
-          _ <- store.addParties(Seq(userParty(1), userParty(2)), atSeconds(0))
+          _ <- store.addPartiesAt(Seq(userParty(1), userParty(2)), atSeconds(0))
           deleted <- store.removePartiesUpToStoreId(store.storeId.toLong)
-          parties <- store.listParties(atSeconds(0))
+          parties <- store.listPartiesAt(atSeconds(0))
         } yield {
           deleted shouldBe 2
           parties shouldBe empty
@@ -283,10 +283,10 @@ class DbUnavailablePartiesStoreTest
           store1 <- mkStore(storeDescriptor)
           store2 <- mkStore(storeDescriptor2)
           _ = store1.storeId should be < store2.storeId
-          _ <- store1.addParties(Seq(userParty(1)), atSeconds(0))
-          _ <- store2.addParties(Seq(userParty(2)), atSeconds(0))
+          _ <- store1.addPartiesAt(Seq(userParty(1)), atSeconds(0))
+          _ <- store2.addPartiesAt(Seq(userParty(2)), atSeconds(0))
           deleted <- store1.removePartiesUpToStoreId(store1.storeId.toLong)
-          remaining <- store2.listParties(atSeconds(0))
+          remaining <- store2.listPartiesAt(atSeconds(0))
         } yield {
           deleted shouldBe 1
           remaining should contain theSameElementsAs Seq(userParty(2))
@@ -299,9 +299,9 @@ class DbUnavailablePartiesStoreTest
       "only return entries whose ignore window has not elapsed" in {
         for {
           store <- mkStore()
-          _ <- store.addParties(Seq(userParty(1)), atSeconds(0)) // expires at 1s
-          _ <- store.addParties(Seq(userParty(2)), atSeconds(1)) // expires at 2s
-          parties <- store.listParties(atSeconds(1))
+          _ <- store.addPartiesAt(Seq(userParty(1)), atSeconds(0)) // expires at 1s
+          _ <- store.addPartiesAt(Seq(userParty(2)), atSeconds(1)) // expires at 2s
+          parties <- store.listPartiesAt(atSeconds(1))
         } yield {
           parties should contain theSameElementsAs Seq(userParty(2))
         }
@@ -311,10 +311,10 @@ class DbUnavailablePartiesStoreTest
         for {
           store1 <- mkStore(storeDescriptor)
           store2 <- mkStore(storeDescriptor2)
-          _ <- store1.addParties(Seq(userParty(1)), atSeconds(0))
-          _ <- store2.addParties(Seq(userParty(2)), atSeconds(0))
-          parties1 <- store1.listParties(atSeconds(0))
-          parties2 <- store2.listParties(atSeconds(0))
+          _ <- store1.addPartiesAt(Seq(userParty(1)), atSeconds(0))
+          _ <- store2.addPartiesAt(Seq(userParty(2)), atSeconds(0))
+          parties1 <- store1.listPartiesAt(atSeconds(0))
+          parties2 <- store2.listPartiesAt(atSeconds(0))
         } yield {
           parties1 should contain theSameElementsAs Seq(userParty(1), userParty(2))
           parties2 should contain theSameElementsAs Seq(userParty(1), userParty(2))
