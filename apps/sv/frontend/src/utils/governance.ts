@@ -14,7 +14,8 @@ import type {
   VoteRequestOutcome,
 } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
 import type { DsoInfo } from '@canton-network/splice-common-frontend';
-import { type Contract, dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
+import { type Contract } from '@canton-network/splice-common-frontend-utils';
+import { formatDatetimeWithOffset } from './dateFormat';
 import dayjs, { type Dayjs } from 'dayjs';
 import type {
   AmuletRulesConfigProposal,
@@ -165,11 +166,11 @@ export function buildVoteHistoryData(
             getGovernanceActionTag(vr.request.action) as SupportedActionTag
           ],
         description: vr.request.reason.body,
-        votingThresholdDeadline: dayjs(vr.request.voteBefore).format(dateTimeFormatISO),
+        votingThresholdDeadline: formatDatetimeWithOffset(vr.request.voteBefore),
         voteTakesEffect:
           (vr.outcome.tag === 'VRO_Accepted' &&
-            dayjs(vr.outcome.value.effectiveAt).format(dateTimeFormatISO)) ||
-          dayjs(vr.completedAt).format(dateTimeFormatISO),
+            formatDatetimeWithOffset(vr.outcome.value.effectiveAt)) ||
+          formatDatetimeWithOffset(vr.completedAt),
         yourVote: computeYourVote(votes, svPartyId),
         status: getVoteResultStatus(vr.outcome),
         voteStats: computeVoteStats(votes),
@@ -388,7 +389,7 @@ export function buildPendingConfigFields(
         pendingValue: change.newValue as string,
         proposalCid: proposal.contractId,
         effectiveDate: proposal.payload.targetEffectiveAt
-          ? dayjs(proposal.payload.targetEffectiveAt).format(dateTimeFormatISO)
+          ? formatDatetimeWithOffset(proposal.payload.targetEffectiveAt)
           : 'Threshold',
       }));
     });
@@ -417,7 +418,7 @@ export function buildAmuletRulesPendingConfigFields(
         pendingValue: change.newValue as string,
         proposalCid: proposal.contractId,
         effectiveDate: proposal.payload.targetEffectiveAt
-          ? dayjs(proposal.payload.targetEffectiveAt).format(dateTimeFormatISO)
+          ? formatDatetimeWithOffset(proposal.payload.targetEffectiveAt)
           : 'Threshold',
       }));
     });
