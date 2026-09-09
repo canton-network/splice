@@ -1,0 +1,131 @@
+# Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+configs:
+  wallet-gateway-config:
+    content: |
+      {
+        "kernel": {
+          "id": "splice-compose-validator",
+          "clientType": "remote",
+          "publicUrl": "http://walletgateway.localhost"
+        },
+        "server": {
+          "port": 3030,
+          "allowedOrigins": ["http://portfolio.localhost"],
+          "dappPath": "/api/v0/dapp",
+          "userPath": "/api/v0/user",
+          "requestSizeLimit": "5mb",
+          "requestRateLimit": 10000,
+          "trustProxy": 1,
+          "signingWorker": { "pollInterval": 5000 }
+        },
+        "store": {
+          "connection": {
+            "type": "postgres",
+            "host": "${SPLICE_DB_SERVER}",
+            "port": ${SPLICE_DB_PORT},
+            "user": "${SPLICE_DB_USER}",
+            "passwordEnv": "WG_STORE_PASSWORD",
+            "database": "wallet_gateway_store"
+          }
+        },
+        "signingStore": {
+          "connection": {
+            "type": "postgres",
+            "host": "${SPLICE_DB_SERVER}",
+            "port": ${SPLICE_DB_PORT},
+            "user": "${SPLICE_DB_USER}",
+            "passwordEnv": "WG_STORE_PASSWORD",
+            "database": "wallet_gateway_signing_store"
+          }
+        },
+        "bootstrap": {
+          "idps": [
+            {
+              "id": "idp-self-signed",
+              "type": "self_signed",
+              "issuer": "self-signed"
+            }
+          ],
+          "networks": [
+            {
+              "id": "canton:splice-compose-validator",
+              "name": "Splice validator",
+              "description": "Docker Compose validator (no authentication)",
+              "identityProviderId": "idp-self-signed",
+              "ledgerApi": { "baseUrl": "http://participant:7575" },
+              "auth": {
+                "method": "self_signed",
+                "issuer": "self-signed",
+                "audience": "${VALIDATOR_AUTH_AUDIENCE}",
+                "scope": "daml_ledger_api",
+                "clientId": "wallet-user",
+                "clientSecret": "unsafe"
+              },
+              "adminAuth": {
+                "method": "self_signed",
+                "issuer": "self-signed",
+                "audience": "${VALIDATOR_AUTH_AUDIENCE}",
+                "scope": "daml_ledger_api",
+                "clientId": "ledger-api-user",
+                "clientSecret": "unsafe"
+              }
+            }
+          ]
+        }
+      }
+
+  portfolio-config:
+    content: |
+      {
+        "amulet": {
+          "validatorUrl": "http://wallet.localhost/api/validator",
+          "registry": "${WALLET_GATEWAY_SCAN_ADDRESS}"
+        },
+        "token": {
+          "validatorUrl": "http://wallet.localhost/api/validator",
+          "registries": [
+            { "url": "${WALLET_GATEWAY_SCAN_ADDRESS}", "name": "Amulet registry" }
+          ]
+        }
+      }
+
+services:
+  postgres-splice:
+    environment:
+      - CREATE_DATABASE_wallet_gateway_store=wallet_gateway_store
+      - CREATE_DATABASE_wallet_gateway_signing_store=wallet_gateway_signing_store
+
+  wallet-gateway:
+    image: "${WALLET_GATEWAY_IMAGE_REPO}wallet-gateway:v${WALLET_GATEWAY_VERSION}"
+    environment:
+      - WG_STORE_PASSWORD=${SPLICE_DB_PASSWORD}
+    configs:
+      - source: wallet-gateway-config
+        target: /app/config.json
+    depends_on:
+      postgres-splice:
+        condition: service_healthy
+      # The gateway talks to the participant's ledger API on startup
+      validator:
+        condition: service_started
+    restart: always
+    networks:
+      - ${DOCKER_NETWORK:-splice_validator}
+
+  portfolio:
+    image: "${PORTFOLIO_IMAGE_REPO}splice-portfolio:v${PORTFOLIO_VERSION}"
+    configs:
+      - source: portfolio-config
+        target: /usr/share/nginx/html/config.json
+    restart: always
+    networks:
+      - ${DOCKER_NETWORK:-splice_validator}
+
+  nginx:
+    volumes:
+      - ./nginx-vhosts/wallet-gateway.conf:/etc/nginx/vhosts/wallet-gateway.conf
+    depends_on:
+      - wallet-gateway
+      - portfolio
