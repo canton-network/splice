@@ -2,6 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Box, Typography } from '@mui/material';
+import {
+  CREATE_PROPOSAL_FIELD_BODY_SX,
+  CREATE_PROPOSAL_FIELD_LABEL_SX,
+} from '../../constants/createProposalLayout';
 import { useFieldContext } from '../../hooks/formContext';
 
 export interface ProposalTypeFieldProps {
@@ -15,11 +19,16 @@ export const ProposalTypeField: React.FC<ProposalTypeFieldProps> = props => {
 
   return (
     <Box>
-      <Typography variant="h6" id={`${id}-title`} data-testid={`${id}-title`} gutterBottom>
+      <Typography
+        component="p"
+        id={`${id}-title`}
+        data-testid={`${id}-title`}
+        sx={{ ...CREATE_PROPOSAL_FIELD_LABEL_SX, mb: 1 }}
+      >
         {title}
       </Typography>
 
-      <Typography variant="h4" id={id} data-testid={id}>
+      <Typography component="p" id={id} data-testid={id} sx={CREATE_PROPOSAL_FIELD_BODY_SX}>
         {field.state.value}
       </Typography>
     </Box>

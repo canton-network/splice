@@ -1895,6 +1895,7 @@ abstract class UserWalletStoreTest extends TransferInputStoreTest with HasExecut
           expiresAt.toInstant,
           reason,
           fundManager.toProtoPrimitive,
+          Optional.empty(), // mintAfter
         ).toValue,
         new amuletRulesCodegen.AmuletRules_AllocateDevelopmentFundCouponResult(
           contractId,
@@ -1931,6 +1932,7 @@ abstract class UserWalletStoreTest extends TransferInputStoreTest with HasExecut
         damlDecimal(amount),
         expiresAt.toInstant,
         reason,
+        Optional.empty(), // mintAfter
       ),
     )
   }

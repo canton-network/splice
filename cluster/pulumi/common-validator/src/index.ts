@@ -7,3 +7,4 @@ export * from './backup';
 export * from './sweep';
 export * from './config';
 export * from './splitwellDars';
+export * from './walletGateway';

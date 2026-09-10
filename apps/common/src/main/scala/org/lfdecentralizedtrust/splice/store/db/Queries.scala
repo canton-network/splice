@@ -26,17 +26,6 @@ trait Queries extends JdbcTypes {
       .getOrElse(SQLActionBuilderChain(sql""))
   }
 
-  /*
-   * TODO(#3900) move to use toInClause when canton fork has it: https://github.com/canton-network/splice/issues/3900
-   */
-  protected def inClause[V: ClassTag](
-      field: String,
-      seq: Iterable[V],
-  )(implicit
-      arraySetParameter: SetParameter[Array[V]]
-  ): SQLActionBuilder =
-    sql" #$field = ANY(${seq.toArray[V]})"
-
   protected def notInClause[V: ClassTag](
       field: String,
       seq: Iterable[V],

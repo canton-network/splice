@@ -593,8 +593,9 @@ export const dsoInfo = {
   ],
 };
 
-export function dsoInfoHandler(baseUrl: string): HttpHandler {
-  return http.get(`${baseUrl}/v0/dso`, () => {
+// The scan app serves DSO info at /v0/dso, the SV app at /v1/dso.
+export function dsoInfoHandler(baseUrl: string, path: string = '/v0/dso'): HttpHandler {
+  return http.get(`${baseUrl}${path}`, () => {
     return HttpResponse.json(dsoInfo);
   });
 }

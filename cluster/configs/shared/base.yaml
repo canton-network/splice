@@ -25,11 +25,17 @@ infra:
   istio:
     enableIngressAccessLogging: true
     enablePublicTokenRegistry: true
-    sequencerFlowControl:
+    flowControl:
       # See https://github.com/DACH-NY/canton-network-internal/issues/4901
       # The values are somewhat arbitrary so more fine tuning may be appropriate.
-      initialStreamWindowSize: 524288        # 512 KiB max per stream
-      initialConnectionWindowSize: 52428800  # 50 MiB max per connection
+      public:
+        initialStreamWindowSize: 524288        # 512 KiB max per stream
+        initialConnectionWindowSize: 52428800  # 50 MiB max per connection
+        ports: [5008, 5010]                    # sequencer public api, canton bft
+      internal:
+        initialStreamWindowSize: 1048576        # 1 MiB max per stream
+        initialConnectionWindowSize: 104857600  # 100 MiB max per connection
+        ports: [5001, 5002, 5007, 5009]         #  ledger API, participant admin API, mediator admin API, sequencer admin API
 # configs specific for the pulumi project
 # will be applied to all the stacks in the project
 pulumiProjectConfig:
@@ -83,10 +89,12 @@ validator1:
   participant:
     additionalEnvVars:
       - !include(./participant_pruning.yaml)
+  walletGateway: !include(./wallet_gateway.yaml) {}
 splitwell:
   participant:
     additionalEnvVars:
       - !include(./participant_pruning.yaml)
+  walletGateway: !include(./wallet_gateway.yaml) {}
 # initial round used only on fresh initialization or resets
 # first SV bootstraps the network with it, other SVs learn it via their sponsors
 initialRound: 0
@@ -123,6 +131,10 @@ monitoring:
       dsoMissedConfirmations:
         threshold: 0 # alert as soon as there's any confirmation missing
         windowMinutes: 10
+      spliceRateLimits:
+        usageThreshold: 0.8
+        rejectionCountThreshold: 10
+        excludedLimiters: []
       cloudSql:
         maintenance: false
       cometbft:
@@ -169,6 +181,21 @@ monitoring:
         # Multiplier applied to a wallet sweep's configured maxBalance to set the alert threshold.
         # 1.5 means the alert fires if the balance is 50% higher than expected.
         tolerance: 1.5
+      globalSynchronizerHealth:
+        # Fraction (0-1) of sequenced confirmation requests that were discarded
+        # (i.e., never processed by the mediator, e.g. due to CometBFT replays)
+        # above which the alert fires.
+        discardedConfirmationRequestsThreshold: 0.2
+        # Fraction (0-1) of confirmation requests that failed (as observed by the
+        # mediator, over the last 30m) above which the alert fires.
+        failedConfirmationRequestsThreshold: 0.1
+        # Fire when TPS (approved confirmation requests per second) over the last
+        # 30m drops below this fraction of the previous 30m.
+        tpsDropThreshold: 0.5
+      cloudArmor:
+        # Number of requests denied by Cloud Armor within a 5 minute window above which
+        # the alert fires. Only used if cloudArmor.enabled is true.
+        deniedRequestsThreshold: 0
       gcpQuotas:
         # Quota metric names to exclude from all GCP quota alerts.
         # Each entry is matched exactly for quota exceeded.
@@ -221,16 +248,29 @@ cloudArmor:
   allRulesPreviewOnly: true
   publicEndpoints:
     publicScan:
-      hostname: scan.sv-2.scratcha.global.canton.network.digitalasset.com
+      hostPrefixRegex: scan
       pathPrefix: /api/scan
-      throttleAcrossAllEndpointsAllIps:
+      throttleAcrossAllEndpointsPerIp:
         withinIntervalSeconds: 60
-        maxRequestsBeforeHttp429: 0    # Keeps scan completely closed to the public
+        maxRequestsBeforeHttp429: 10000
     tokenRegistry:
+      # the token registry is served off the scan hosts
+      hostPrefixRegex: scan
       pathPrefix: /registry
-      throttleAcrossAllEndpointsAllIps:
+      throttleAcrossAllEndpointsPerIp:
         withinIntervalSeconds: 60
-        maxRequestsBeforeHttp429: 200
+        # above the largest per-endpoint envoy perIpLimits under /registry, with room for
+        # a client legitimately using several registry endpoints at once
+        maxRequestsBeforeHttp429: 10000
+    sequencer:
+      hostPrefixRegex: sequencer-[0-9]+
+      pathPrefix: /
+      restrictToRateLimitedPaths: false
+      throttleAcrossAllEndpointsPerIp:
+        withinIntervalSeconds: 60
+        maxRequestsBeforeHttp429: 20000
+  wafRules:
+    groups: !include(./cloud-armor-waf-rules.yaml)
 multiValidator:
   postgresPvcSize: '100Gi'
   resources:
@@ -254,14 +294,22 @@ multiValidator:
 sv:
   scan:
     externalRateLimits:
-      !include(./rate-limits/v0-acs.yaml;./rate-limits/unlimited.yaml;./rate-limits/public-banned.yaml;./rate-limits/token-registry.yaml)
       globalLimits:
-        maxTokens: 2147483647
-        tokensPerFill: 2147483647
-        fillInterval: 60s
+        maxTokens: 60000
+        tokensPerFill: 10000
+        fillInterval: 10s
+      globalPerIpLimits:
+        maxTokens: 6000
+        tokensPerFill: 1000
+        fillInterval: 10s
+  synchronizer:
+    sequencer:
+      externalRateLimits:
+        !include(./rate-limits/sequencer-public-api.yaml)
 validators:
   validator-runbook:
     namespace: validator
     nodeIdentifier: 'validator-runbook'
     partyHint: 'digitalasset-testValidator-1'
     onboardingSecret: 'validatorsecret'
+    walletGateway: !include(./wallet_gateway.yaml) {}

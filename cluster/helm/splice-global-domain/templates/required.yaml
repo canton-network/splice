@@ -11,10 +11,7 @@
 {{ $_ := required ".Values.mediator.persistence.host  is required." .Values.mediator.persistence.host }}
 {{ $_ := required ".Values.mediator.persistence.secretName  is required" .Values.mediator.persistence.secretName }}
 {{ $_ := required ".Values.sequencer.driver.type is required." (.Values.sequencer.driver).type }}
-{{- if eq .Values.sequencer.driver.type "postgres"}}
-{{ $_ := required ".Values.sequencer.driver.address is required." (.Values.sequencer.driver).address }}
-{{ $_ := required ".Values.sequencer.driver.password is required." (.Values.sequencer.driver).password }}
-{{- else if eq .Values.sequencer.driver.type "cometbft"}}
+{{- if eq .Values.sequencer.driver.type "cometbft"}}
 {{ $_ := required ".Values.sequencer.driver.host is required." (.Values.sequencer.driver).host }}
 {{ $_ := required ".Values.sequencer.driver.port is required." (.Values.sequencer.driver).port }}
   {{- else if eq .Values.sequencer.driver.type "cantonbft"}}

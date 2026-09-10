@@ -96,7 +96,7 @@ def parse_samples(text, metric, required_labels, source):
 def scrape(url, metric, required_labels, timeout):
     try:
         request = urllib.request.Request(
-            url, headers={"Accept": "text/plain"}
+            f"{url}?name[]={metric}", headers={"Accept": "text/plain"}
         )
         with urllib.request.urlopen(request, timeout=timeout) as response:
             charset = response.headers.get_content_charset() or "utf-8"

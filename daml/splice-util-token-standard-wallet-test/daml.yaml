@@ -4,7 +4,7 @@
 sdk-version: 3.5.2
 name: splice-util-token-standard-wallet-test
 source: daml
-version: 1.0.10
+version: 1.0.11
 dependencies:
   - daml-prim
   - daml-stdlib
@@ -33,6 +33,7 @@ data-dependencies:
   - ../../token-standard/examples/splice-test-token-v2/.daml/dist/splice-test-token-v2-current.dar
 
 build-options:
+  - --explicit-serializable=yes
   - --ghc-option=-Wunused-binds
   - --ghc-option=-Wunused-matches
   - --target=2.1

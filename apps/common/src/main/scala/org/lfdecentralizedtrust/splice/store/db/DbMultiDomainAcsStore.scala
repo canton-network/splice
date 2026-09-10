@@ -55,7 +55,7 @@ import org.lfdecentralizedtrust.splice.store.db.AcsQueries.{
 }
 import org.lfdecentralizedtrust.splice.store.db.AcsTables.ContractStateRowData
 import AsUpdateReturning.*
-import com.daml.nonempty.NonEmpty
+import com.daml.nonempty.{NonEmpty, NonEmptyUtil}
 import com.digitalasset.canton.data.CantonTimestamp
 import com.daml.metrics.api.MetricHandle.LabeledMetricsFactory
 import com.digitalasset.canton.resource.DbStorage.SQLActionBuilderChain
@@ -218,22 +218,24 @@ final class DbMultiDomainAcsStore[TXE](
       companionClass: ContractCompanion[C, TCid, T],
       traceContext: TraceContext,
   ): Future[Seq[ContractWithState[TCid, T]]] = {
-    if (ids.isEmpty) Future.successful(Seq.empty)
-    else {
-      waitUntilAcsIngested {
-        storage
-          .query( // index: acs_store_template_sid_mid_cid
-            selectFromAcsTableWithState(
-              acsTableName,
-              acsStoreId,
-              domainMigrationId,
-              companion,
-              additionalWhere = (sql"and " ++ inClause("acs.contract_id", ids)).toActionBuilder,
-            ),
-            "lookupContractsById",
-          )
-          .map(result => result.map(contractWithStateFromRow(companion)(_)))
-      }
+    NonEmpty.from(ids) match {
+      case None => Future.successful(Seq.empty)
+      case Some(ids) =>
+        waitUntilAcsIngested {
+          storage
+            .query( // index: acs_store_template_sid_mid_cid
+              selectFromAcsTableWithState(
+                acsTableName,
+                acsStoreId,
+                domainMigrationId,
+                companion,
+                additionalWhere =
+                  (sql"and " ++ DbStorage.toInClause("acs.contract_id", ids)).toActionBuilder,
+              ),
+              "lookupContractsById",
+            )
+            .map(result => result.map(contractWithStateFromRow(companion)(_)))
+        }
     }
   }
 
@@ -287,25 +289,26 @@ final class DbMultiDomainAcsStore[TXE](
   def containsArchived(ids: Seq[ContractId[?]])(implicit
       traceContext: TraceContext
   ): Future[Boolean] = waitUntilAcsIngested {
-    if (ids.isEmpty) Future.successful(false)
-    else {
-      val expectedCount = ids.size
-      storage
-        .query(
-          (sql"""
-         select count(1)
-         from #$acsTableName acs
-         where acs.store_id = $acsStoreId
-         and acs.migration_id = $domainMigrationId
-         and """ ++ inClause("acs.contract_id", ids) ++ sql"""
-         """).toActionBuilder
-            .as[Int]
-            .head,
-          "containsArchived",
-        )
-        .map { count =>
-          count != expectedCount
-        }
+    NonEmpty.from(ids) match {
+      case None => Future.successful(false)
+      case Some(ids) =>
+        val expectedCount = ids.size
+        storage
+          .query(
+            (sql"""
+           select count(1)
+           from #$acsTableName acs
+           where acs.store_id = $acsStoreId
+           and acs.migration_id = $domainMigrationId
+           and """ ++ DbStorage.toInClause("acs.contract_id", ids) ++ sql"""
+           """).toActionBuilder
+              .as[Int]
+              .head,
+            "containsArchived",
+          )
+          .map { count =>
+            count != expectedCount
+          }
     }
   }
 
@@ -1725,18 +1728,21 @@ final class DbMultiDomainAcsStore[TXE](
     private def checkIncompleteReassignments(
         contractIds: Seq[String]
     ): DBIOAction[Set[String], NoStream, Effect.Read] = {
-      if (contractIds.isEmpty) DBIO.successful(Set.empty)
-      else {
-        DBIO
-          .sequence(contractIds.grouped(ingestionConfig.maxLookupsPerStatement).map { contractIds =>
-            (sql"""
-           select distinct contract_id from incomplete_reassignments
-           where store_id = $acsStoreId and migration_id = $domainMigrationId and """ ++ inClause(
-              "contract_id",
-              contractIds.map(lengthLimited),
-            )).toActionBuilder.as[String].map(_.toSet)
-          })
-          .map(_.foldLeft(Set.empty[String])(_ ++ _))
+      NonEmpty.from(contractIds) match {
+        case None => DBIO.successful(Set.empty)
+        case Some(contractIds) =>
+          DBIO
+            .sequence(contractIds.grouped(ingestionConfig.maxLookupsPerStatement).map {
+              contractIds =>
+                (sql"""
+             select distinct contract_id from incomplete_reassignments
+             where store_id = $acsStoreId and migration_id = $domainMigrationId and """ ++ DbStorage
+                  .toInClause(
+                    "contract_id",
+                    NonEmptyUtil.fromUnsafe(contractIds.map(lengthLimited)),
+                  )).toActionBuilder.as[String].map(_.toSet)
+            })
+            .map(_.foldLeft(Set.empty[String])(_ ++ _))
       }
     }
 
@@ -1929,53 +1935,54 @@ final class DbMultiDomainAcsStore[TXE](
     }
 
     private def doDeleteContracts(deletes: Seq[Delete], summary: MutableIngestionSummary) = {
-      if (deletes.isEmpty) DBIO.successful(())
-      else {
-        DBIO.sequence(deletes.grouped(ingestionConfig.maxDeletesPerStatement).map { deletes =>
-          val performDeleteSql = acsArchiveConfigOpt match {
-            case Some(AcsArchiveConfig(archiveTableName, baseColumns)) =>
-              val valuesPairs = deletes.map { d =>
-                val cid = lengthLimited(d.evt.getContractId)
-                val archivedAt = CantonTimestamp.assertFromInstant(d.recordTime).toMicros
-                sql"($cid, $archivedAt)"
-              }
-              val valuesClause = sqlCommaSeparated(valuesPairs)
-              (sql"""
-                WITH deleted AS (
-                  DELETE FROM #$acsTableName
-                  USING (VALUES """ ++ valuesClause ++ sql""") AS at(cid, archived_at)
-                  WHERE store_id = $acsStoreId
-                    AND migration_id = $domainMigrationId
-                    AND #$acsTableName.contract_id = at.cid
-                  RETURNING #$baseColumns, at.archived_at
-                )
-                INSERT INTO #$archiveTableName (#$baseColumns, archived_at)
-                SELECT * FROM deleted
-                RETURNING contract_id
-              """).toActionBuilder.as[String]
-            case None =>
-              val contractIds = deletes.map(d => lengthLimited(d.evt.getContractId))
-              (sql"""DELETE FROM #$acsTableName
-                  WHERE store_id = $acsStoreId
-                    AND migration_id = $domainMigrationId
-                    AND """ ++ inClause(
-                "contract_id",
-                contractIds,
-              ) ++ sql" RETURNING contract_id").toActionBuilder
-                .as[String]
-          }
+      NonEmpty.from(deletes) match {
+        case None => DBIO.successful(())
+        case Some(deletes) =>
+          DBIO.sequence(deletes.grouped(ingestionConfig.maxDeletesPerStatement).map { deletes =>
+            val performDeleteSql = acsArchiveConfigOpt match {
+              case Some(AcsArchiveConfig(archiveTableName, baseColumns)) =>
+                val valuesPairs = deletes.map { d =>
+                  val cid = lengthLimited(d.evt.getContractId)
+                  val archivedAt = CantonTimestamp.assertFromInstant(d.recordTime).toMicros
+                  sql"($cid, $archivedAt)"
+                }
+                val valuesClause = sqlCommaSeparated(valuesPairs)
+                (sql"""
+                  WITH deleted AS (
+                    DELETE FROM #$acsTableName
+                    USING (VALUES """ ++ valuesClause ++ sql""") AS at(cid, archived_at)
+                    WHERE store_id = $acsStoreId
+                      AND migration_id = $domainMigrationId
+                      AND #$acsTableName.contract_id = at.cid
+                    RETURNING #$baseColumns, at.archived_at
+                  )
+                  INSERT INTO #$archiveTableName (#$baseColumns, archived_at)
+                  SELECT * FROM deleted
+                  RETURNING contract_id
+                """).toActionBuilder.as[String]
+              case None =>
+                val contractIds = deletes.map(d => lengthLimited(d.evt.getContractId))
+                (sql"""DELETE FROM #$acsTableName
+                    WHERE store_id = $acsStoreId
+                      AND migration_id = $domainMigrationId
+                      AND """ ++ DbStorage.toInClause(
+                  "contract_id",
+                  NonEmptyUtil.fromUnsafe(contractIds),
+                ) ++ sql" RETURNING contract_id").toActionBuilder
+                  .as[String]
+            }
 
-          performDeleteSql.map { deletedCids =>
-            val deletedCidSet = deletedCids.toSet
-            val ingestedArchivedEvents =
-              deletes.filter(d => deletedCidSet.contains(d.evt.getContractId)).map(_.evt)
-            summary.ingestedArchivedEvents.addAll(ingestedArchivedEvents)
-            // there were no contracts with some id. This can happen because:
-            // `contractFilter.mightContain` in `getIngestionWork` can return true for a template,
-            // but that might still satisfy some other filter, so the contract was never inserted
-            summary.numFilteredArchivedEvents += (deletes.length - deletedCids.size)
-          }
-        })
+            performDeleteSql.map { deletedCids =>
+              val deletedCidSet = deletedCids.toSet
+              val ingestedArchivedEvents =
+                deletes.filter(d => deletedCidSet.contains(d.evt.getContractId)).map(_.evt)
+              summary.ingestedArchivedEvents.addAll(ingestedArchivedEvents)
+              // there were no contracts with some id. This can happen because:
+              // `contractFilter.mightContain` in `getIngestionWork` can return true for a template,
+              // but that might still satisfy some other filter, so the contract was never inserted
+              summary.numFilteredArchivedEvents += (deletes.length - deletedCids.size)
+            }
+          })
       }
     }
 

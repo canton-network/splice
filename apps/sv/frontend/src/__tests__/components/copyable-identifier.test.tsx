@@ -27,26 +27,80 @@ describe('CopyableIdentifier', () => {
     expect(screen.getByTestId('contract-id-scroll')).toHaveStyle({ overflowX: 'auto' });
   });
 
-  test('shows a scroll track below the identifier when content overflows', async () => {
+  test('keeps the copy button adjacent to short identifiers', () => {
+    render(
+      <div style={{ width: 800 }}>
+        <CopyableIdentifier value="Digital-Asset-Eng-2" size="large" data-testid="short-id" />
+      </div>
+    );
+
+    expect(screen.getByTestId('short-id')).toHaveStyle({
+      display: 'inline-flex',
+      width: 'fit-content',
+    });
+  });
+
+  test('compact scroll keeps #1785 scrolling at the Figma width', async () => {
     render(
       <NarrowContainer>
-        <CopyableIdentifier value={LONG_CONTRACT_ID} size="small" data-testid="contract-id" />
+        <CopyableIdentifier
+          value={LONG_CONTRACT_ID}
+          size="large"
+          maxWidth={270}
+          data-testid="contract-id"
+        />
       </NarrowContainer>
     );
 
     const scroll = screen.getByTestId('contract-id-scroll');
+    expect(scroll).toHaveStyle({ overflowX: 'auto', maxWidth: '270px' });
+    expect(screen.getByTestId('contract-id-value')).toHaveTextContent(LONG_CONTRACT_ID);
+
     Object.defineProperty(scroll, 'scrollWidth', { configurable: true, value: 400 });
     Object.defineProperty(scroll, 'clientWidth', { configurable: true, value: 100 });
+    Object.defineProperty(scroll, 'scrollLeft', { configurable: true, value: 0 });
     fireEvent.scroll(scroll);
 
     await waitFor(() => {
+      expect(screen.queryByTestId('contract-id-ellipsis-cue')).not.toBeInTheDocument();
       expect(screen.getByTestId('contract-id-scroll-track')).toBeInTheDocument();
     });
+  });
 
-    expect(screen.getByTestId('contract-id-scroll-track')).toHaveStyle({
-      opacity: '0',
-      height: '0px',
+  test('fullWidth fills the parent and keeps scrolling', () => {
+    render(
+      <div style={{ width: 200 }}>
+        <CopyableIdentifier
+          value={LONG_CONTRACT_ID}
+          size="large"
+          fullWidth
+          data-testid="contract-id"
+        />
+      </div>
+    );
+
+    expect(screen.getByTestId('contract-id')).toHaveStyle({ width: '100%', display: 'flex' });
+    expect(screen.getByTestId('contract-id-scroll')).toHaveStyle({ overflowX: 'auto' });
+    expect(screen.getByTestId('contract-id-value')).toHaveTextContent(LONG_CONTRACT_ID);
+  });
+
+  test('trims long identifiers to the Figma ellipsis width without a narrow parent', () => {
+    render(
+      <CopyableIdentifier
+        value={LONG_CONTRACT_ID}
+        size="large"
+        overflow="ellipsis"
+        data-testid="contract-id"
+      />
+    );
+
+    expect(screen.getByTestId('contract-id-value')).toHaveTextContent(LONG_CONTRACT_ID);
+    expect(screen.getByTestId('contract-id-value')).toHaveAttribute('title', LONG_CONTRACT_ID);
+    expect(screen.getByTestId('contract-id-ellipsis')).toHaveStyle({
+      overflow: 'hidden',
+      maxWidth: '270px',
     });
+    expect(screen.getByTestId('contract-id-value')).toHaveStyle({ textOverflow: 'ellipsis' });
   });
 });
 
@@ -59,6 +113,26 @@ describe('MemberIdentifier', () => {
     expect(screen.getByTestId('member-value')).toHaveTextContent(LONG_PARTY_ID);
     expect(screen.getByTestId('member-value')).not.toHaveTextContent('...');
     expect(screen.getByTestId('member-scroll')).toHaveStyle({ overflowX: 'auto' });
+  });
+
+  test('supports ellipsis overflow for compact layouts', () => {
+    render(
+      <NarrowContainer>
+        <MemberIdentifier
+          partyId={LONG_PARTY_ID}
+          isYou={false}
+          size="large"
+          overflow="ellipsis"
+          data-testid="member"
+        />
+      </NarrowContainer>
+    );
+
+    expect(screen.getByTestId('member-value')).toHaveTextContent(LONG_PARTY_ID);
+    expect(screen.getByTestId('member-value')).toHaveAttribute('title', LONG_PARTY_ID);
+    expect(screen.getByTestId('member-ellipsis')).toHaveStyle({ overflow: 'hidden' });
+    expect(screen.getByTestId('member-value')).toHaveStyle({ textOverflow: 'ellipsis' });
+    expect(screen.queryByTestId('member-scroll')).not.toBeInTheDocument();
   });
 });
 

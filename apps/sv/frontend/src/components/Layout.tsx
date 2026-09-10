@@ -59,7 +59,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   }
 
   const navLinks: SvNavLinkItem[] = [
-    { name: 'Global Synchronizer Information', path: '/dso' },
+    { name: 'Global Synchronizer Information', path: '/dso', alsoActiveFor: ['/'] },
     {
       name: 'Governance',
       path: '/governance',

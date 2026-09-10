@@ -37,6 +37,30 @@ const NatPortUsageConfigSchema = z.object({
 
 export type NatPortUsageConfig = z.infer<typeof NatPortUsageConfigSchema>;
 
+const CloudArmorAlertsConfigSchema = z.object({
+  // Number of requests denied by Cloud Armor within the rolling window above which the
+  // alert fires.
+  deniedRequestsThreshold: z.number().min(0),
+});
+
+export type CloudArmorAlertsConfig = z.infer<typeof CloudArmorAlertsConfigSchema>;
+
+// Subset of the Cloud Armor config (owned by the infra stack, see
+// cluster/pulumi/infra/src/config.ts) that the alerts need. Parsed leniently, as the
+// infra stack is the one validating the full config.
+const CloudArmorConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  allRulesPreviewOnly: z.boolean().default(false),
+  wafRules: z
+    .object({
+      enabled: z.boolean().default(true),
+      previewOnly: z.boolean().default(true),
+    })
+    .prefault({}),
+});
+
+export const cloudArmorConfig = CloudArmorConfigSchema.parse(clusterSubConfig('cloudArmor'));
+
 const MuteTimeWindowSchema = z.object({
   times: z.array(
     z.object({
@@ -67,6 +91,8 @@ const MonitoringConfigSchema = z
     grafanaPostgres: SplicePostgresSchema.default({ deployment: 'legacy-helm-chart' }),
     alerting: z.object({
       enableNoDataAlerts: z.boolean(),
+      // routes more alerts than just "mining rounds are not advancing" to #team-canton-network-high-prio-prod-alerts
+      enableExtraHighPrioAlerts: z.boolean().default(false),
       alerts: z.object({
         pruning: z.object({
           participantRetentionDays: z.number(),
@@ -101,6 +127,13 @@ const MonitoringConfigSchema = z
           // Rolling window (in minutes) over which the DSO party missed confirmation
           // rate is computed.
           windowMinutes: z.number(),
+        }),
+        spliceRateLimits: z.object({
+          // Fraction (0-1) of a rate limiter's configured maximum rate above which the alert fires
+          usageThreshold: z.number(),
+          // Rejected requests per second, above which the rejection alert fires
+          rejectionCountThreshold: z.number(),
+          excludedLimiters: z.array(z.string()).default([]),
         }),
         cloudSql: z.object({
           maintenance: z.boolean(),
@@ -165,11 +198,24 @@ const MonitoringConfigSchema = z
           tolerance: z.number(),
         }),
         gcpQuotas: GcpQuotasConfigSchema,
+        cloudArmor: CloudArmorAlertsConfigSchema.default({ deniedRequestsThreshold: 0 }),
         natPortUsage: NatPortUsageConfigSchema.default({
           thresholdPercent: 80,
           // `default 30` because every once in a while (likely due to dynamic port allocation),
           // a few packets (less than 1/s) get dropped and getting alerted on it every time can be very noisy.
           droppedSentPacketsThreshold: 30,
+        }),
+        globalSynchronizerHealth: z.object({
+          // Fraction (0-1) of sequenced confirmation requests that were discarded
+          // (i.e., never processed by the mediator, e.g. due to CometBFT replays)
+          // above which the alert fires.
+          discardedConfirmationRequestsThreshold: z.number(),
+          // Fraction (0-1) of confirmation requests that failed (as observed by the
+          // mediator, over the last 30m) above which the alert fires.
+          failedConfirmationRequestsThreshold: z.number(),
+          // Fire when TPS (approved confirmation requests per second) over the last
+          // 30m drops below this fraction of the previous 30m.
+          tpsDropThreshold: z.number(),
         }),
         trafficBasedRewards: z.object({
           featuredAppRightsLimit: z.number(),

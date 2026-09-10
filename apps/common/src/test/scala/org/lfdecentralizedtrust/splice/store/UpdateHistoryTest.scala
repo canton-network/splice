@@ -424,7 +424,10 @@ class UpdateHistoryTest extends UpdateHistoryTestBase {
             store
               .getAllUpdates(
                 after.map { case (migrationId, recordTime) =>
-                  (migrationId, CantonTimestamp.assertFromInstant(recordTime))
+                  TimestampWithMigrationId(
+                    CantonTimestamp.assertFromInstant(recordTime),
+                    migrationId,
+                  )
                 },
                 PageLimit.tryCreate(1),
               )

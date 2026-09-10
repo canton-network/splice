@@ -1214,6 +1214,7 @@ class DbScanAppRewardsStoreTest
       participantId,
       dsoParty,
       BackfillingRequirement.BackfillingNotRequired,
+      internedStringStore(storage),
       loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = false,
@@ -1225,6 +1226,7 @@ class DbScanAppRewardsStoreTest
         updateHistory,
         DbAppActivityRecordStore.IngestionVersions(1, 0),
         isFirstSv,
+        initialRound = 0L,
         loggerFactory,
       )
       val store = new DbScanAppRewardsStore(

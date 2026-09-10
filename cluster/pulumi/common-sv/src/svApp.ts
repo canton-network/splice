@@ -5,6 +5,7 @@ import {
   CLUSTER_HOSTNAME,
   DecentralizedSynchronizerMigrationConfig,
   EnvVarConfig,
+  envoyClientIpHeaderEnvVar,
   MigrationInfo,
   pvcSuffix,
   standardStorageClassName,
@@ -109,7 +110,8 @@ export function valuesForSvApp(
     .concat(bftSequencerConnectionEnvVars)
     .concat(mediatorPruningConfig)
     .concat(cantonBftPruningConfig)
-    .concat(additionalPackagesToUnvetConfig);
+    .concat(additionalPackagesToUnvetConfig)
+    .concat([envoyClientIpHeaderEnvVar('canton.sv-apps.sv')]);
 
   const synchronizerValues: { synchronizers: object } = {
     synchronizers: {

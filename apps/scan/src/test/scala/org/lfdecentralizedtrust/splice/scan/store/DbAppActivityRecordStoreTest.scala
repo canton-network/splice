@@ -7,6 +7,7 @@ import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
+import org.lfdecentralizedtrust.splice.scan.store.AppActivityStore.RoundIngestionStatus
 import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore
 import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore.*
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanVerdictStore
@@ -411,6 +412,101 @@ class DbAppActivityRecordStoreTest
         countAfter shouldBe 0L
       }
     }
+
+    "drop a rejected verdict that's a duplicate of a prior accept" in {
+      val updateId = "update-dupe-reject-after-accept"
+      val ts1 = CantonTimestamp.now()
+      val ts2 = ts1.plusSeconds(1L)
+      for {
+        (appStore, verdictStore) <- newStores()
+        accepted = mkVerdict(
+          verdictStore,
+          updateId,
+          ts1,
+          DbScanVerdictStore.VerdictResultDbValue.Accepted,
+        )
+        rejected = mkVerdict(
+          verdictStore,
+          updateId,
+          ts2,
+          DbScanVerdictStore.VerdictResultDbValue.Rejected,
+        )
+        // First batch with the accepted verdict and its activity record
+        _ <- verdictStore.insertVerdictsWithAppActivityRecords(
+          NonEmptyList.of(accepted -> noViews),
+          Seq(ts1 -> mkRecord(0L, 10L, Seq("app1::provider"), Seq(100L))),
+          hasTrafficSummaries = true,
+          firstActiveRoundO = Some(10L),
+          lastArchivedRoundO = Some(9L),
+        )
+        countAfterBatch1 <- countRecords()
+        // A later batch with a rejection for the same update_id
+        _ <- verdictStore.insertVerdictsWithAppActivityRecords(
+          NonEmptyList.of(rejected -> noViews),
+          Seq(ts2 -> mkRecord(0L, 11L, Seq("app2::provider"), Seq(200L))),
+          hasTrafficSummaries = true,
+          firstActiveRoundO = Some(11L),
+          lastArchivedRoundO = Some(10L),
+        )
+        v <- verdictStore.getVerdictByUpdateId(updateId)
+        countAfterBatch2 <- countRecords()
+      } yield {
+        v shouldBe defined
+        v.value.verdictResult shouldBe DbScanVerdictStore.VerdictResultDbValue.Accepted
+        v.value.recordTime shouldBe ts1
+        // The rejection's activity record was dropped along with the verdict
+        countAfterBatch2 shouldBe countAfterBatch1
+      }
+    }
+
+    "drop and warn of an accepted verdict that's a duplicate of a prior rejection" in {
+      val updateId = "update-dupe-accept-after-reject"
+      val ts1 = CantonTimestamp.now()
+      val ts2 = ts1.plusSeconds(1L)
+      for {
+        (appStore, verdictStore) <- newStores()
+        rejected = mkVerdict(
+          verdictStore,
+          updateId,
+          ts1,
+          DbScanVerdictStore.VerdictResultDbValue.Rejected,
+        )
+        accepted = mkVerdict(
+          verdictStore,
+          updateId,
+          ts2,
+          DbScanVerdictStore.VerdictResultDbValue.Accepted,
+        )
+        // First batch with the rejection and its activity record
+        _ <- verdictStore.insertVerdictsWithAppActivityRecords(
+          NonEmptyList.of(rejected -> noViews),
+          Seq(ts1 -> mkRecord(0L, 10L, Seq("app1::provider"), Seq(100L))),
+          hasTrafficSummaries = true,
+          firstActiveRoundO = Some(10L),
+          lastArchivedRoundO = Some(9L),
+        )
+        countAfterBatch1 <- countRecords()
+        // A later batch with an accept for the same update_id
+        _ <- loggerFactory.assertLogs(
+          verdictStore.insertVerdictsWithAppActivityRecords(
+            NonEmptyList.of(accepted -> noViews),
+            Seq(ts2 -> mkRecord(0L, 11L, Seq("app2::provider"), Seq(200L))),
+            hasTrafficSummaries = true,
+            firstActiveRoundO = Some(11L),
+            lastArchivedRoundO = Some(10L),
+          ),
+          _.warningMessage should startWith("Dropping duplicate accepted verdicts"),
+        )
+        v <- verdictStore.getVerdictByUpdateId(updateId)
+        countAfterBatch2 <- countRecords()
+      } yield {
+        v shouldBe defined
+        v.value.verdictResult shouldBe DbScanVerdictStore.VerdictResultDbValue.Rejected
+        v.value.recordTime shouldBe ts1
+        // The accept's activity record was dropped along with the verdict
+        countAfterBatch2 shouldBe countAfterBatch1
+      }
+    }
   }
 
   "earliestRoundWithCompleteAppActivity" should {
@@ -653,6 +749,51 @@ class DbAppActivityRecordStoreTest
         result <- store1.earliestIngestedRound()
       } yield {
         result shouldBe None
+      }
+    }
+  }
+
+  "ingestionStatusForRound" should {
+
+    "return CannotProvide when meta row absent and isFirstSv=false" in {
+      for {
+        (store, _) <- newStore(isFirstSv = false)
+        result <- store.ingestionStatusForRound(5L)
+      } yield {
+        result shouldBe RoundIngestionStatus.CannotProvide
+      }
+    }
+
+    "return Undetermined when meta row absent and isFirstSv=true" in {
+      for {
+        (store, _) <- newStore(isFirstSv = true)
+        result <- store.ingestionStatusForRound(5L)
+      } yield {
+        result shouldBe RoundIngestionStatus.Undetermined
+      }
+    }
+
+    "return CannotProvide when meta row present and roundNumber <= earliestIngested" in {
+      for {
+        (store, _) <- newStore()
+        baseTs = CantonTimestamp.now()
+        _ <- store.insertActivityRecordMetaForTesting(1, 0, baseTs.toMicros, 10L, Some(11L))
+        atBoundary <- store.ingestionStatusForRound(10L)
+        below <- store.ingestionStatusForRound(5L)
+      } yield {
+        atBoundary shouldBe RoundIngestionStatus.CannotProvide
+        below shouldBe RoundIngestionStatus.CannotProvide
+      }
+    }
+
+    "return Undetermined when meta row present and roundNumber > earliestIngested" in {
+      for {
+        (store, _) <- newStore()
+        baseTs = CantonTimestamp.now()
+        _ <- store.insertActivityRecordMetaForTesting(1, 0, baseTs.toMicros, 10L, Some(11L))
+        result <- store.ingestionStatusForRound(15L)
+      } yield {
+        result shouldBe RoundIngestionStatus.Undetermined
       }
     }
   }
@@ -1096,6 +1237,7 @@ class DbAppActivityRecordStoreTest
       participantId,
       dsoParty,
       BackfillingRequirement.BackfillingNotRequired,
+      internedStringStore(storage),
       loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = false,
@@ -1107,6 +1249,7 @@ class DbAppActivityRecordStoreTest
         updateHistory,
         versions,
         isFirstSv,
+        initialRound = 0L,
         loggerFactory,
       )
       (store, updateHistory.historyId)
@@ -1127,6 +1270,7 @@ class DbAppActivityRecordStoreTest
       participantId,
       dsoParty,
       BackfillingRequirement.BackfillingNotRequired,
+      internedStringStore(storage),
       loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = false,
@@ -1138,6 +1282,7 @@ class DbAppActivityRecordStoreTest
         updateHistory,
         DbAppActivityRecordStore.IngestionVersions(1, 0),
         isFirstSv,
+        initialRound = 0L,
         loggerFactory,
       )
       val verdictStore = new DbScanVerdictStore(
@@ -1154,6 +1299,7 @@ class DbAppActivityRecordStoreTest
       verdictStore: DbScanVerdictStore,
       updateId: String,
       recordTs: CantonTimestamp,
+      verdictResult: Short = DbScanVerdictStore.VerdictResultDbValue.Accepted,
   ): verdictStore.VerdictT =
     new verdictStore.VerdictT(
       rowId = 0L,
@@ -1162,7 +1308,7 @@ class DbAppActivityRecordStoreTest
       recordTime = recordTs,
       finalizationTime = recordTs,
       submittingParticipantUid = "participant1",
-      verdictResult = DbScanVerdictStore.VerdictResultDbValue.Accepted,
+      verdictResult = verdictResult,
       mediatorGroup = 0,
       updateId = updateId,
       submittingParties = Seq.empty,

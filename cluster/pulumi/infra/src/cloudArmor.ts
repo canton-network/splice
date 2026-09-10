@@ -3,14 +3,29 @@
 import * as gcp from '@pulumi/gcp';
 import * as pulumi from '@pulumi/pulumi';
 import * as _ from 'lodash';
-import { CLUSTER_BASENAME, extractPathPrefixes } from '@canton-network/splice-pulumi-common';
+import {
+  CLOUD_ARMOR_POLICY_NAME,
+  CLUSTER_BASENAME,
+  getDnsNames,
+} from '@canton-network/splice-pulumi-common';
 import { PerEndpointLimits } from '@canton-network/splice-pulumi-common/src/ratelimit/envoyRateLimiter';
 
 import * as config from './config';
+import {
+  allowedPathsCondition,
+  hostCondition,
+  ipWhitelistRuleChunks,
+  matchExpression,
+  wafRuleExpression,
+  WafRuleGroup,
+} from './cloudArmorRules';
+import { loadIPRanges } from './whitelisting/ipRanges';
 
 // Rule number ranges
-const THROTTLE_BAN_RULE_MIN = 100000000;
-const THROTTLE_BAN_RULE_MAX = 200000000;
+const WAF_RULE_MIN = 10;
+const IP_WHITELIST_RULE_MIN = 1000010;
+const THROTTLE_BAN_RULE_MIN = 100000010;
+const THROTTLE_BAN_RULE_MAX = 200000010;
 const DEFAULT_DENY_RULE_NUMBER = 2147483647;
 const RULE_SPACING = 100;
 
@@ -21,19 +36,9 @@ export interface ApiEndpoint {
   hostname: string;
 }
 
-export type CloudArmorConfig = config.CloudArmorConfig & {
-  predefinedWafRules?: PredefinedWafRule[];
-};
+export type CloudArmorConfig = config.CloudArmorConfig;
 
 type ThrottleConfig = CloudArmorConfig['publicEndpoints'];
-
-export interface PredefinedWafRule {
-  name: string;
-  action: 'allow' | 'deny' | 'throttle';
-  priority?: number;
-  preview?: boolean;
-  sensitivityLevel?: 'off' | 'low' | 'medium' | 'high';
-}
 
 // Regional and Global policies and rules use different types/constructors; most
 // of our pulumi code doesn't care about the difference so can use this alias
@@ -58,7 +63,7 @@ export function configureCloudArmorPolicy(
   }
 
   // Step 1: Create the security policy
-  const name = `waf-whitelist-throttle-ban-${CLUSTER_BASENAME}`;
+  const name = CLOUD_ARMOR_POLICY_NAME;
   const securityPolicy = new CloudArmorPolicy(
     name,
     {
@@ -69,20 +74,35 @@ export function configureCloudArmorPolicy(
       // but the preview would entail changing this array if the rules were changed,
       // making those changes harder to review than with the separate resources
     },
-    opts
+    {
+      ...opts,
+      // All rules are managed as separate PolicyRule resources below, which use the
+      // per-rule addRule/patchRule/removeRule endpoints. The policy resource itself
+      // still reads the full rule list back from GCP, so a refresh imports the rules
+      // into this resource's inputs and Pulumi then wants to "update" the policy.
+      // That update is a PATCH on the parent policy which always carries the whole
+      // rule list, and GCP rejects it once the policy is attached to a load balancer
+      // backend and contains a deny rule:
+      //   Error 400: HTTP references are not supported for security policies with deny rules.
+      // Ignoring `rules` here keeps the parent policy free of spurious updates.
+      ignoreChanges: [...(opts?.ignoreChanges ?? []), 'rules'],
+    }
   );
 
   const ruleOpts = { ...opts, parent: securityPolicy, deletedWith: securityPolicy };
 
   // Step 2: Add predefined WAF rules
-  if (cac.predefinedWafRules && cac.predefinedWafRules.length > 0) {
-    addPredefinedWafRules(
-      /*securityPolicy, args.predefinedWafRules, cac.allRulesPreviewOnly, ruleOpts*/
+  if (cac.wafRules.enabled) {
+    addWafRules(
+      securityPolicy,
+      cac.wafRules.groups,
+      cac.allRulesPreviewOnly || cac.wafRules.previewOnly,
+      ruleOpts
     );
   }
 
   // Step 3: Add IP whitelisting rules
-  addIpWhitelistRules(/*securityPolicy, cac.allRulesPreviewOnly, ruleOpts*/);
+  addIpWhitelistRules(securityPolicy, cac.allRulesPreviewOnly, ruleOpts);
 
   // Step 4: Add throttling/banning rules for specific API endpoints
   if (cac.publicEndpoints && !_.isEmpty(cac.publicEndpoints)) {
@@ -102,32 +122,96 @@ export function configureCloudArmorPolicy(
 }
 
 /**
- * Adds predefined WAF rules to a security policy
+ * Adds the preconfigured (OWASP CRS based) WAF rules to a security policy.
+ *
+ * They sit at the lowest priority numbers, so they are evaluated before the IP
+ * whitelist and endpoint rules: an attack payload should be caught no matter which
+ * host, path or source IP it comes from.
  */
-function addPredefinedWafRules(): void {
-  /*
-  securityPolicy: Policy,
-  rules: PredefinedWafRule[],
+function addWafRules(
+  securityPolicy: CloudArmorPolicy,
+  groups: WafRuleGroup[],
   preview: boolean,
   opts: pulumi.ResourceOptions
-     */
-  // TODO (DACH-NY/canton-network-internal#406) implement
+): void {
+  groups.forEach((group, i) => {
+    const priority = WAF_RULE_MIN + i * RULE_SPACING;
+    if (priority >= IP_WHITELIST_RULE_MIN) {
+      throw new Error(`WAF rule priority ${priority} overlaps the IP whitelist priority range`);
+    }
+    new PolicyRule(
+      group.name,
+      {
+        securityPolicy: securityPolicy.name,
+        region: securityPolicy.region,
+        description: group.description,
+        priority,
+        preview,
+        action: 'deny(403)',
+        match: {
+          expr: {
+            expression: wafRuleExpression(group),
+          },
+        },
+      },
+      opts
+    );
+  });
 }
 
 /**
- * Adds IP whitelisting rules to a security policy
+ * Allows the internal and SV whitelisted source IPs to reach any host and path.
+ *
+ * These rules sit at a lower priority number than the public endpoint rules, so they
+ * are evaluated first: whitelisted traffic is allowed outright and never throttled.
+ *
+ * Without them, everything served through the L7 gateway that is not listed in
+ * `publicEndpoints` (grafana, prometheus, alertmanager, the SV and wallet UIs, docs,
+ * /version, ...) would be dropped by the default deny rule. Cloud Armor runs in front
+ * of istio and knows nothing about the istio AuthorizationPolicy whitelisting, which
+ * still applies afterwards for the fine grained per-host rules.
  */
-function addIpWhitelistRules(): void {
-  /*
-  securityPolicy: Policy,
+function addIpWhitelistRules(
+  securityPolicy: CloudArmorPolicy,
   preview: boolean,
   opts: pulumi.ResourceOptions
-     */
-  // TODO (DACH-NY/canton-network-internal#1250) implement
+): void {
+  // only the internal and SV whitelists, not the full set of external ranges
+  loadIPRanges(true).apply(ranges => {
+    const chunks = ipWhitelistRuleChunks(ranges, THROTTLE_BAN_RULE_MIN - IP_WHITELIST_RULE_MIN);
+
+    return chunks.map(
+      (chunk, i) =>
+        new PolicyRule(
+          `ip-whitelist-${i}`,
+          {
+            securityPolicy: securityPolicy.name,
+            region: securityPolicy.region,
+            description: `Allow whitelisted source IPs (${i + 1} of ${chunks.length})`,
+            priority: IP_WHITELIST_RULE_MIN + i,
+            preview,
+            action: 'allow',
+            match: {
+              versionedExpr: 'SRC_IPS_V1',
+              config: {
+                srcIpRanges: chunk,
+              },
+            },
+          },
+          opts
+        )
+    );
+  });
 }
 
 /**
- * Adds throttle and ban rules for API endpoints to a security policy
+ * Adds allow/throttle rules for the publicly reachable API endpoints. Any endpoint
+ * without a matching rule here is blocked by the default deny rule.
+ *
+ * Throttling is enforced per source IP. Cloud Armor only ever applies one rate limit
+ * rule per request (first match by priority wins, and conforming requests are allowed
+ * outright), so a global cap cannot be stacked on top of these rules; it is enforced by
+ * envoy instead.
  */
 function addThrottleAndBanRules(
   securityPolicy: CloudArmorPolicy,
@@ -144,41 +228,65 @@ function addThrottleAndBanRules(
         );
       }
 
-      const { hostname, pathPrefix, throttleAcrossAllEndpointsAllIps } = singleServiceThrottle;
+      const {
+        hostname,
+        hostPrefixRegex,
+        pathPrefix,
+        restrictToRateLimitedPaths,
+        throttleAcrossAllEndpointsPerIp,
+      } = singleServiceThrottle;
+      const throttled = throttleAcrossAllEndpointsPerIp !== undefined;
       // leave out the rule but consume the priority number if max is 0
       // this makes the pulumi update cleaner if toggling just one service
-      if (throttleAcrossAllEndpointsAllIps.maxRequestsBeforeHttp429 > 0) {
-        const ruleName = `throttle-all-endpoints-all-ips-${confEntryHead}`;
-        const hostnameRegex = hostname
-          ? _.escapeRegExp(hostname)
-          : `scan\\.[\\w-]+\\.${_.escapeRegExp(config.clusterHostname)}`;
-        const pathExpr = allowedPathsCondition(scanExternalRateLimits, pathPrefix);
-        const hostExpr = `request.headers['host'].matches(R"^${hostnameRegex}(?::[0-9]+)?$")`;
-        const matchExpr = `${pathExpr} && ${hostExpr}`;
+      const skipRule = throttled && throttleAcrossAllEndpointsPerIp.maxRequestsBeforeHttp429 === 0;
+
+      if (!skipRule) {
+        const ruleName = throttled
+          ? `throttle-all-endpoints-per-ip-${confEntryHead}`
+          : `allow-all-endpoints-all-ips-${confEntryHead}`;
+        const pathExpr = allowedPathsCondition(
+          confEntryHead,
+          scanExternalRateLimits,
+          pathPrefix,
+          restrictToRateLimitedPaths
+        );
+        const hostExpr = hostCondition(
+          confEntryHead,
+          [getDnsNames().cantonDnsName, getDnsNames().daDnsName],
+          hostname,
+          hostPrefixRegex
+        );
+        const matchExpr = matchExpression(confEntryHead, pathExpr, hostExpr);
 
         new PolicyRule(
           ruleName,
           {
             securityPolicy: securityPolicy.name,
             region: securityPolicy.region,
-            description: `Throttle rule for all ${confEntryHead} API endpoints`,
+            description: throttled
+              ? `Per source IP throttle rule for all ${confEntryHead} API endpoints`
+              : `Allow rule for all ${confEntryHead} API endpoints`,
             priority,
             preview: preview || singleServiceThrottle.rulePreviewOnly,
-            action: 'throttle',
+            action: throttled ? 'throttle' : 'allow',
             match: {
               expr: {
                 expression: matchExpr,
               },
             },
-            rateLimitOptions: {
-              enforceOnKey: 'ALL',
-              rateLimitThreshold: {
-                count: throttleAcrossAllEndpointsAllIps.maxRequestsBeforeHttp429,
-                intervalSec: throttleAcrossAllEndpointsAllIps.withinIntervalSeconds,
-              },
-              conformAction: 'allow',
-              exceedAction: 'deny(429)', // 429 Too Many Requests
-            },
+            ...(throttled
+              ? {
+                  rateLimitOptions: {
+                    enforceOnKey: 'IP',
+                    rateLimitThreshold: {
+                      count: throttleAcrossAllEndpointsPerIp.maxRequestsBeforeHttp429,
+                      intervalSec: throttleAcrossAllEndpointsPerIp.withinIntervalSeconds,
+                    },
+                    conformAction: 'allow',
+                    exceedAction: 'deny(429)', // 429 Too Many Requests
+                  },
+                }
+              : {}),
           },
           opts
         );
@@ -197,22 +305,25 @@ function addDefaultDenyRule(
   preview: boolean,
   opts: pulumi.ResourceOptions
 ): void {
-  // when you create a SecurityPolicy it has a default allow rule; we assume
-  // that if you want all rules in preview, you *also* still want to allow
-  // all traffic
-  if (preview) {
-    return;
-  }
+  // The default rule is created together with the policy and cannot be added or
+  // removed, only patched (the GCP provider turns a create at this priority into a
+  // patch, and skips the delete). So we always declare it: dropping the resource when
+  // `preview` is set would leave whatever action was last applied in place, i.e. a
+  // previously enforced deny would silently keep denying.
   new PolicyRule(
     'default-deny',
     {
       securityPolicy: securityPolicy.name,
       region: securityPolicy.region,
-      description: 'Default rule to deny all other traffic',
+      description: preview
+        ? 'Default rule allowing all other traffic, as all rules are in preview mode'
+        : 'Default rule to deny all other traffic',
       priority: DEFAULT_DENY_RULE_NUMBER,
-      // default rule cannot be in preview mode; google API gives 400 if you try
+      // default rule cannot be in preview mode; google API gives 400 if you try.
+      // we assume that if you want all rules in preview, you *also* still want to
+      // allow all traffic.
       preview: false,
-      action: 'deny',
+      action: preview ? 'allow' : 'deny(403)',
       match: {
         versionedExpr: 'SRC_IPS_V1',
         config: {
@@ -222,41 +333,4 @@ function addDefaultDenyRule(
     },
     opts
   );
-}
-
-// Extract un-banned path prefixes and build optimized regex
-function allowedPathsCondition(scanExternalRateLimits: PerEndpointLimits, pathPrefix: string) {
-  if (scanExternalRateLimits.rateLimits && !_.isEmpty(scanExternalRateLimits.rateLimits)) {
-    const pathPrefixes = extractPathPrefixes(scanExternalRateLimits.rateLimits)
-      .filter(p => !p.isBanned)
-      .map(p => p.pathPrefix);
-
-    const basePrefix = pathPrefix.endsWith('/') ? pathPrefix : `${pathPrefix}/`;
-    const dynamicPathRxs = pathPrefixes
-      .filter(p => p.startsWith(basePrefix))
-      .map(p => _.escapeRegExp(p.substring(basePrefix.length)));
-
-    // Build regex pattern
-    if (dynamicPathRxs.length > 0) {
-      const regexPattern = `${basePrefix}(${dynamicPathRxs.join('|')})`;
-      const pathExpr = `request.path.matches(R"^${regexPattern}")`;
-
-      // limit from https://docs.cloud.google.com/armor/quotas#limits
-      // in which a "subexpression" is an arg to && or ||
-      if (pathExpr.length > 1024) {
-        throw new Error(
-          `Cloud Armor path expression exceeds 1024 character limit (current: ${pathExpr.length}). ` +
-            `Consider grouping path prefixes more aggressively.`
-        );
-      }
-
-      return pathExpr;
-    } else {
-      // Fallback to simple prefix matching if no paths were resolved
-      return `request.path.startsWith(R"${pathPrefix}")`;
-    }
-  } else {
-    // No rate limits specified, use simple prefix matching
-    return `request.path.startsWith(R"${pathPrefix}")`;
-  }
 }

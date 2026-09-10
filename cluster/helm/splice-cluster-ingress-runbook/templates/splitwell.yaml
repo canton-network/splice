@@ -18,6 +18,9 @@ spec:
         - port: 443
           uri:
             prefix: "/api/json-api/"
+        - port: 80
+          uri:
+            prefix: "/api/json-api/"
       route:
         - destination:
             port:
@@ -27,6 +30,7 @@ spec:
         uri: "/"
     - match:
         - port: 443
+        - port: 80
       route:
         - destination:
             port:

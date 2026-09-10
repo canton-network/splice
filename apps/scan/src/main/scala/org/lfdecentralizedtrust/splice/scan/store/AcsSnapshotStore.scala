@@ -5,6 +5,7 @@ package org.lfdecentralizedtrust.splice.scan.store
 
 import cats.data.NonEmptyVector
 import com.daml.ledger.javaapi.data.{CreatedEvent, Identifier}
+import com.daml.nonempty.NonEmpty
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{Amulet, LockedAmulet}
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{
   AcsSnapshot,
@@ -12,13 +13,19 @@ import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{
   IncrementalAcsSnapshotTable,
   LegacyAcsSnapshot,
   PerTableAcsSnapshot,
+  QueryAcsSnapshotPaginationToken,
   QueryAcsSnapshotResult,
   amuletQualifiedName,
   lockedAmuletQualifiedName,
 }
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.SelectFromCreateEvents
 import org.lfdecentralizedtrust.splice.store.{HardLimit, Limit, LimitHelpers, UpdateHistory}
-import org.lfdecentralizedtrust.splice.store.db.{AdvisoryLocks}
+import org.lfdecentralizedtrust.splice.store.db.{
+  AcsJdbcTypes,
+  AcsQueries,
+  AdvisoryLockIds,
+  AdvisoryLocks,
+}
 import org.lfdecentralizedtrust.splice.util.{Contract, HoldingsSummary, PackageQualifiedName}
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.{CloseContext, FutureUnlessShutdown}
@@ -38,6 +45,7 @@ import slick.dbio.{DBIO, DBIOAction, Effect, NoStream}
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 import slick.jdbc.{GetResult, JdbcProfile}
 
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.Semaphore
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
@@ -264,7 +272,7 @@ class AcsSnapshotStore(
   def queryAcsSnapshot(
       migrationId: Long,
       snapshot: CantonTimestamp,
-      after: Option[Long],
+      after: Option[QueryAcsSnapshotPaginationToken],
       limit: Limit,
       partyIds: Seq[PartyId],
       templates: Seq[PackageQualifiedName],
@@ -300,10 +308,12 @@ class AcsSnapshotStore(
         applyLimitOrFail("queryAcsSnapshot", limit, events.map(_._2))
       val afterToken = if (eventsInPage.size == limit.limit) events.lastOption.map(_._1) else None
       QueryAcsSnapshotResult(
-        migrationId = snapshot.migrationId,
+        migrationId = migrationId,
         snapshotRecordTime = snapshot.snapshotRecordTime,
         createdEventsInPage = eventsInPage,
-        afterToken = afterToken,
+        afterToken = afterToken.map(
+          AcsSnapshotStore.QueryAcsSnapshotPaginationToken.RowIdQueryAcsSnapshotPaginationToken(_)
+        ),
       )
     }
   }
@@ -419,7 +429,11 @@ class AcsSnapshotStore(
   )(implicit tc: TraceContext): Future[Vector[(Long, SpliceCreatedEvent)]] = {
     for {
       begin <- after match {
-        case Some(value) if value < snapshot.firstRowId || value > snapshot.lastRowId =>
+        case Some(
+              AcsSnapshotStore.QueryAcsSnapshotPaginationToken.RowIdQueryAcsSnapshotPaginationToken(
+                value
+              )
+            ) if value < snapshot.firstRowId || value > snapshot.lastRowId =>
           Future.failed(
             io.grpc.Status.INVALID_ARGUMENT
               .withDescription(
@@ -427,7 +441,12 @@ class AcsSnapshotStore(
               )
               .asRuntimeException()
           )
-        case Some(value) => Future.successful(value + 1)
+        case Some(
+              AcsSnapshotStore.QueryAcsSnapshotPaginationToken.RowIdQueryAcsSnapshotPaginationToken(
+                value
+              )
+            ) =>
+          Future.successful(value + 1)
         case None => Future.successful(snapshot.firstRowId)
       }
       end = snapshot.lastRowId
@@ -472,32 +491,33 @@ class AcsSnapshotStore(
     } yield events.map { case (rowId, select) => rowId -> select.toCreatedEvent }
   }
 
-  private def stakeholdersFilter(partyIds: Seq[PartyId]) = partyIds match {
-    case Nil =>
+  private def stakeholdersFilter(partyIds: Seq[PartyId]) = NonEmpty.from(partyIds) match {
+    case None =>
       // This expression is always true (scan only processes data where the DSO is stakeholder).
       // It is included to make sure the query plan uses the right index (acs_snapshot_data_all_filters)
-      sql" stakeholder = $dsoParty"
-    case partyIds =>
-      inClause("stakeholder", partyIds)
+      sql"and stakeholder = ${dsoParty}"
+    case Some(partyIds) =>
+      (sql" and " ++ DbStorage.toInClause("stakeholder", partyIds)).toActionBuilder
   }
 
-  private def templatesFilter(templates: Seq[PackageQualifiedName]) = templates match {
-    case Nil => sql""
-    case _ =>
-      (sql" and " ++ inClause(
-        "template_id",
-        templates.map(t =>
-          lengthLimited(
-            s"${t.packageName}:${t.qualifiedName.moduleName}:${t.qualifiedName.entityName}"
-          )
-        ),
-      )).toActionBuilder
-  }
+  private def templatesFilter(templates: Seq[PackageQualifiedName]) =
+    NonEmpty.from(templates) match {
+      case None => sql""
+      case Some(templates) =>
+        (sql" and " ++ DbStorage.toInClause(
+          "template_id",
+          templates.map(t =>
+            lengthLimited(
+              s"${t.packageName}:${t.qualifiedName.moduleName}:${t.qualifiedName.entityName}"
+            )
+          ),
+        )).toActionBuilder
+    }
 
   def getHoldingsState(
       migrationId: Long,
       snapshot: CantonTimestamp,
-      after: Option[Long],
+      after: Option[QueryAcsSnapshotPaginationToken],
       limit: Limit,
       partyIds: NonEmptyVector[PartyId],
   )(implicit tc: TraceContext): Future[QueryAcsSnapshotResult] = {
@@ -1287,11 +1307,50 @@ object AcsSnapshotStore {
     }
   }
 
+  sealed trait QueryAcsSnapshotPaginationToken {
+    def encodeToBase64: String = {
+      val jsonString = QueryAcsSnapshotPaginationToken.codec(this).noSpaces
+      java.util.Base64.getEncoder.encodeToString(jsonString.getBytes(StandardCharsets.UTF_8))
+    }
+  }
+  object QueryAcsSnapshotPaginationToken {
+    case class RowIdQueryAcsSnapshotPaginationToken(after: Long)
+        extends QueryAcsSnapshotPaginationToken
+
+    private val codec: io.circe.Codec[QueryAcsSnapshotPaginationToken] =
+      io.circe.Codec
+        .from(io.circe.Decoder[Long], io.circe.Encoder[Long])
+        .iemap[QueryAcsSnapshotPaginationToken]((token: Long) =>
+          Right(RowIdQueryAcsSnapshotPaginationToken(token))
+        ) { case RowIdQueryAcsSnapshotPaginationToken(after) => after }
+
+    def tryDecodeFromBase64(token: String): QueryAcsSnapshotPaginationToken = {
+      import cats.implicits.*
+
+      (for {
+        decodedString <- scala.util
+          .Try {
+            val decodedBytes = java.util.Base64.getDecoder.decode(token)
+            new String(decodedBytes, StandardCharsets.UTF_8)
+          }
+          .toEither
+          .leftMap(_ => "Failed to decode base64 token")
+        decoded <- io.circe.parser.decode(decodedString)(codec).leftMap(_.getMessage)
+      } yield decoded).fold(
+        msg =>
+          throw io.grpc.Status.INVALID_ARGUMENT
+            .withDescription(msg)
+            .asRuntimeException(),
+        identity,
+      )
+    }
+  }
+
   case class QueryAcsSnapshotResult(
       migrationId: Long,
       snapshotRecordTime: CantonTimestamp,
       createdEventsInPage: Vector[SpliceCreatedEvent],
-      afterToken: Option[Long],
+      afterToken: Option[QueryAcsSnapshotPaginationToken],
   )
 
   private val amuletQualifiedName =

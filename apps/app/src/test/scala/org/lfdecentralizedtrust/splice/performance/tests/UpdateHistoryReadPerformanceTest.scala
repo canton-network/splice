@@ -16,6 +16,7 @@ import org.lfdecentralizedtrust.splice.scan.admin.http.{
   ScanHttpEncodings,
 }
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppBackendConfig
+import org.lfdecentralizedtrust.splice.store.db.InternedStringStore
 import org.lfdecentralizedtrust.splice.store.{
   HistoryMetrics,
   TreeUpdateWithMigrationId,
@@ -25,6 +26,7 @@ import pureconfig.ConfigReader
 import pureconfig.generic.semiauto.deriveReader
 
 import java.nio.file.Path
+import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future}
 
 /** Read performance test for UpdateHistory.
@@ -59,6 +61,13 @@ class UpdateHistoryReadPerformanceTest(
       participantId = mkParticipantId(this.getClass.getSimpleName),
       updateStreamParty = dsoParty,
       backfillingRequired = UpdateHistory.BackfillingRequirement.BackfillingNotRequired,
+      internedStringStore = InternedStringStore.createWithoutWarmup(
+        storage,
+        10_000L,
+        FiniteDuration(1, "hour"),
+        loggerFactory,
+        NoOpMetricsFactory,
+      ),
       loggerFactory = loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = false,

@@ -2,7 +2,6 @@ package org.lfdecentralizedtrust.splice.integration.tests
 
 import org.lfdecentralizedtrust.splice.auth.AuthUtil
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet as amuletCodegen
-import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.payment as walletCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.transferpreapproval.TransferPreapprovalProposal
 import org.lfdecentralizedtrust.splice.http.v0.definitions.TapRequest
@@ -12,11 +11,7 @@ import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.BracketSynchronous.bracket
 import org.lfdecentralizedtrust.splice.integration.tests.WalletTxLogTestUtil
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.ContractState
-import org.lfdecentralizedtrust.splice.util.{
-  SpliceUtil,
-  WalletTestUtil,
-  JavaDecodeUtil as DecodeUtil,
-}
+import org.lfdecentralizedtrust.splice.util.{WalletTestUtil, JavaDecodeUtil as DecodeUtil}
 import org.lfdecentralizedtrust.splice.validator.automation.AcceptTransferPreapprovalProposalTrigger
 import org.lfdecentralizedtrust.splice.wallet.admin.api.client.commands.HttpWalletAppClient.CreateTransferPreapprovalResponse
 import org.lfdecentralizedtrust.splice.wallet.store.{
@@ -60,31 +55,29 @@ class WalletIntegrationTest
 
   "A wallet" should {
 
-    // TODO (#2336): unignore this test
-    "tap stupid amount" ignore { implicit env =>
+    val tapLimit = 100000000
+
+    s"tap $tapLimit amount" in { implicit env =>
       import com.digitalasset.daml.lf.data.Numeric
       val aliceParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
       val round = sv1ScanBackend.getLatestOpenMiningRound(env.environment.clock.now)
       val price = round.contract.payload.amuletPrice
       val decimalScale = Numeric.Scale.assertFromInt(10)
-      // We subtract one to allow some slack in back/forth conversions from CC to USD. Otherwise,
-      // the command gets rejected by the participant and we test nothing.
-      val maxDecimal = Numeric
-        .subtract(Numeric.maxValue(decimalScale), Numeric.assertFromBigDecimal(decimalScale, 1))
-        .value
       val maxUsd = Numeric
-        .multiply(decimalScale, maxDecimal, Numeric.assertFromBigDecimal(decimalScale, price))
+        .multiply(
+          decimalScale,
+          Numeric.assertFromBigDecimal(decimalScale, tapLimit),
+          Numeric.assertFromBigDecimal(decimalScale, price),
+        )
         .value
       // Integration test that the tap goes through
       aliceWalletClient.tap(maxUsd)
       val amulet = aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
         .filterJava(amuletCodegen.Amulet.COMPANION)(aliceParty, _ => true)
         .loneElement
-      // Unit test that expiry does the right thing
-      SpliceUtil.amuletExpiresAt(amulet.data) shouldBe new Round(Long.MaxValue)
-      // Test that the USD/CC conversions get us to the max Decimal value ignoring decimal points
+      // Test that the USD/CC conversions get us to the limit ignoring decimal points
       amulet.data.amount.initialAmount.setScale(0, java.math.RoundingMode.DOWN) shouldBe Numeric
-        .maxValue(decimalScale)
+        .assertFromBigDecimal(decimalScale, tapLimit)
         .setScale(0, java.math.RoundingMode.DOWN)
     }
 

@@ -46,9 +46,9 @@ Splice maintainers may use the following GitHub issue labels to highlight issues
 Note that not all `good first issue`s are also `help wanted`; some may require access to infrastructure (CI, test deployments) that is not openly available.
 
 If you are planning to work on an issue please assign yourself to it (if you are able to) or leave a comment, to
-avoid duplicate work across contributors. If the issue is not new, it is also a good idea to reach out to the
-core contributors before working on it, to check how relevant it still is, and whether it is something worth
-working on.
+avoid duplicate work across contributors.
+
+For any contribution, first check with a maintainer on an issue (either an existing one or a new one) that this makes sense to work on. Contributions that have not gotten explicit agreement from a maintainer on an issue beforehand may be closed without further comment.
 
 ## Opening PRs
 
@@ -322,4 +322,3 @@ grant write permissions to the main Splice repo.
 - CI assumes the branch for the latest release line, so after every Splice release (assuming you rebase/merge the fork's main to Splice main),
   you will need to pull the corresponding release-line from splice and push it to the fork. In the future we might change CI to pull the release
   line from main Splice rather than look for it in the fork, but as of now, it assumes it exists in the same repo on which it is running.
-

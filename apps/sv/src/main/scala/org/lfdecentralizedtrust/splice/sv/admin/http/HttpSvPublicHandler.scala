@@ -47,7 +47,6 @@ import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 
 class HttpSvPublicHandler(
-    svUserName: String,
     svStoreWithIngestion: AppStoreWithIngestion[SvSvStore],
     dsoStoreWithIngestion: AppStoreWithIngestion[SvDsoStore],
     isDevNet: Boolean,
@@ -58,7 +57,6 @@ class HttpSvPublicHandler(
     retryProvider: RetryProvider,
     dsoPartyMigration: DsoPartyMigration,
     protected val loggerFactory: NamedLoggerFactory,
-    initialRound: String,
 )(implicit
     ec: ExecutionContext,
     protected val tracer: Tracer,
@@ -351,35 +349,6 @@ class HttpSvPublicHandler(
           )
         )
       }
-    }
-  }
-
-  /** Intended use: The SV app UI.
-    *
-    * Protection: None for backwards compatibility reasons
-    * TODO(DACH-NY/canton-network-internal#2106): Move to HttpSvOperatorHandler
-    */
-  override def getDsoInfo(
-      respond: r0.GetDsoInfoResponse.type
-  )()(extracted: TraceContext): Future[r0.GetDsoInfoResponse] = {
-    implicit val traceContext: TraceContext = extracted
-    withSpan(s"$workflowId.getDsoInfo") { _ => _ =>
-      for {
-        latestOpenMiningRound <- dsoStore.getLatestActiveOpenMiningRound()
-        amuletRules <- dsoStore.getAssignedAmuletRules()
-        rulesAndStates <- dsoStore.getDsoRulesWithStateWithSvNodeStates()
-        dsoRules = rulesAndStates.dsoRules
-      } yield definitions.GetDsoInfoResponse(
-        svUser = svUserName,
-        svPartyId = svParty.toProtoPrimitive,
-        dsoPartyId = dsoParty.toProtoPrimitive,
-        votingThreshold = Thresholds.requiredNumVotes(dsoRules),
-        latestMiningRound = latestOpenMiningRound.toContractWithState.toHttp,
-        amuletRules = amuletRules.toContractWithState.toHttp,
-        dsoRules = dsoRules.toHttp,
-        svNodeStates = rulesAndStates.svNodeStates.values.map(_.toHttp).toVector,
-        initialRound = Some(initialRound),
-      )
     }
   }
 

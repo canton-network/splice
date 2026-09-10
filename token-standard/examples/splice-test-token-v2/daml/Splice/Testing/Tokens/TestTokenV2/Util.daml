@@ -51,6 +51,7 @@ getEventLogFromContext context = coerceInterfaceContractId <$> getTokenRulesFrom
 ----------------------
 
 data CallSource = CalledFromV1 | CalledFromV2
+  deriving (Serializable)
 
 archiveIfCalledFromV2 : HasArchive t => CallSource -> Optional (ContractId t) -> Update ()
 archiveIfCalledFromV2 CalledFromV2 (Some cid) = archive cid

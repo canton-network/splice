@@ -49,56 +49,69 @@ data SubscriptionData = SubscriptionData
     provider : Party -- ^ The app provider.
     dso : Party
     description : Text
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 subscriptionSignatories : SubscriptionData -> [Party]
 subscriptionSignatories SubscriptionData{sender, receiver, provider} = [sender, receiver, provider]
 
 data Subscription_ArchiveResult = Subscription_ArchiveResult with
-  terminatedSubscription : ContractId TerminatedSubscription
+    terminatedSubscription : ContractId TerminatedSubscription
+  deriving (Serializable)
 
 data SubscriptionRequest_AcceptAndMakePaymentResult = SubscriptionRequest_AcceptAndMakePaymentResult with
-  subscriptionPayment : ContractId SubscriptionInitialPayment
-  senderChange : Optional (ContractId Amulet)
+    subscriptionPayment : ContractId SubscriptionInitialPayment
+    senderChange : Optional (ContractId Amulet)
+  deriving (Serializable)
 
 data SubscriptionRequest_WithdrawResult = SubscriptionRequest_WithdrawResult with
-  terminatedSubscription : ContractId TerminatedSubscription
+    terminatedSubscription : ContractId TerminatedSubscription
+  deriving (Serializable)
 
 data SubscriptionRequest_RejectResult = SubscriptionRequest_RejectResult with
-  terminatedSubscription : ContractId TerminatedSubscription
+    terminatedSubscription : ContractId TerminatedSubscription
+  deriving (Serializable)
 
 data SubscriptionInitialPayment_CollectResult = SubscriptionInitialPayment_CollectResult with
-  subscription : ContractId Subscription
-  subscriptionState : ContractId SubscriptionIdleState
-  amulet : ContractId Amulet
+    subscription : ContractId Subscription
+    subscriptionState : ContractId SubscriptionIdleState
+    amulet : ContractId Amulet
+  deriving (Serializable)
 
 data SubscriptionInitialPayment_RejectResult = SubscriptionInitialPayment_RejectResult with
-  amuletSum : AmuletCreateSummary (ContractId Amulet)
+    amuletSum : AmuletCreateSummary (ContractId Amulet)
+  deriving (Serializable)
 
 data SubscriptionInitialPayment_ExpireResult = SubscriptionInitialPayment_ExpireResult with
-  amuletSum : AmuletCreateSummary (ContractId Amulet)
+    amuletSum : AmuletCreateSummary (ContractId Amulet)
+  deriving (Serializable)
 
 data SubscriptionIdleState_ExpireSubscriptionResult = SubscriptionIdleState_ExpireSubscriptionResult with
-  terminatedSubscription : ContractId TerminatedSubscription
+    terminatedSubscription : ContractId TerminatedSubscription
+  deriving (Serializable)
 
 data SubscriptionIdleState_CancelSubscriptionResult = SubscriptionIdleState_CancelSubscriptionResult with
-  terminatedSubscription : ContractId TerminatedSubscription
+    terminatedSubscription : ContractId TerminatedSubscription
+  deriving (Serializable)
 
 data SubscriptionIdleState_MakePaymentResult = SubscriptionIdleState_MakePaymentResult with
-  subscriptionPayment : ContractId SubscriptionPayment
-  senderChange : Optional (ContractId Amulet)
+    subscriptionPayment : ContractId SubscriptionPayment
+    senderChange : Optional (ContractId Amulet)
+  deriving (Serializable)
 
 data SubscriptionPayment_CollectResult = SubscriptionPayment_CollectResult with
-  subscriptionState : ContractId SubscriptionIdleState
-  amulet : ContractId Amulet
+    subscriptionState : ContractId SubscriptionIdleState
+    amulet : ContractId Amulet
+  deriving (Serializable)
 
 data SubscriptionPayment_RejectResult = SubscriptionPayment_RejectResult with
-  subscriptionState : ContractId SubscriptionIdleState
-  amuletSum : AmuletCreateSummary (ContractId Amulet)
+    subscriptionState : ContractId SubscriptionIdleState
+    amuletSum : AmuletCreateSummary (ContractId Amulet)
+  deriving (Serializable)
 
 data SubscriptionPayment_ExpireResult = SubscriptionPayment_ExpireResult with
-  subscriptionState : ContractId SubscriptionIdleState
-  amuletSum : AmuletCreateSummary (ContractId Amulet)
+    subscriptionState : ContractId SubscriptionIdleState
+    amuletSum : AmuletCreateSummary (ContractId Amulet)
+  deriving (Serializable)
 
 -- | Main subscription object.
 
@@ -136,7 +149,7 @@ data SubscriptionPayData = SubscriptionPayData
     paymentAmount : PaymentAmount -- ^ What amount of amulet is due on each interval.
     paymentInterval : RelTime -- ^ At which intervals payments should be made.
     paymentDuration : RelTime -- ^ The time available to the sender to initiate a payment; they can initiate the payment this much before the end of the current interval.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- for ensure assertions
 payDataIsValid: SubscriptionPayData -> Bool

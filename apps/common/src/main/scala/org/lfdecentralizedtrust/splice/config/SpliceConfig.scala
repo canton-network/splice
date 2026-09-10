@@ -25,6 +25,7 @@ abstract class SpliceBackendConfig extends LocalNodeConfig {
 
   def participantClient: BaseParticipantClientConfig
   def automation: AutomationConfig
+  def parameters: SpliceParametersConfig
 
 }
 

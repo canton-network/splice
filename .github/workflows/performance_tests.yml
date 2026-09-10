@@ -34,7 +34,7 @@ jobs:
         id: setup
         uses: ./.github/actions/tests/common_test_setup
         with:
-          cache_version: 9
+          cache_version: 10
           test_name: ingestion_performance_tests
 
       # Authenticate to GCP for read access to GCS
@@ -137,7 +137,7 @@ jobs:
         id: setup
         uses: ./.github/actions/tests/common_test_setup
         with:
-          cache_version: 9
+          cache_version: 10
           test_name: read_performance_tests
 
       # Authenticate to GCP for read access to GCS

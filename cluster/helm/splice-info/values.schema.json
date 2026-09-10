@@ -65,6 +65,9 @@
     "serviceAccountName": {
       "type": "string"
     },
+    "automountServiceAccountToken": {
+      "type": "boolean"
+    },
     "nginxImage": {
       "type": "string",
       "description": "The Docker image to use for Nginx. Defaults to 'nginx:latest' if not present."

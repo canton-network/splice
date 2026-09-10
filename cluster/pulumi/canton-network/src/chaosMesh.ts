@@ -2,12 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 import * as k8s from '@pulumi/kubernetes';
 import {
-  appsAffinityAndTolerations,
+  appsKubernetesScheduling,
   clusterYamlConfig,
   DecentralizedSynchronizerUpgradeConfig,
   GCP_PROJECT,
   HELM_MAX_HISTORY_SIZE,
-  infraAffinityAndTolerations,
+  infraAndAppsKubernetesSchedulingForDaemonSets,
+  infraKubernetesScheduling,
 } from '@canton-network/splice-pulumi-common';
 import { Resource } from '@pulumi/pulumi';
 import { z } from 'zod';
@@ -211,35 +212,18 @@ export const installChaosMesh = ({ dependsOn }: ChaosMeshArguments): k8s.helm.v3
       },
       values: {
         controllerManager: {
-          ...infraAffinityAndTolerations,
+          ...infraKubernetesScheduling,
         },
         chaosDaemon: {
-          ...infraAffinityAndTolerations,
-          // the chaos-daemon needs to run on the apps nodes to be able to inject latency
-          tolerations: [
-            ...infraAffinityAndTolerations.tolerations,
-            ...appsAffinityAndTolerations.tolerations,
-          ],
-          affinity: {
-            nodeAffinity: {
-              requiredDuringSchedulingIgnoredDuringExecution: {
-                nodeSelectorTerms: [
-                  ...infraAffinityAndTolerations.affinity.nodeAffinity
-                    .requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms,
-                  ...appsAffinityAndTolerations.affinity.nodeAffinity
-                    .requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms,
-                ],
-              },
-            },
-          },
+          ...infraAndAppsKubernetesSchedulingForDaemonSets,
           runtime: 'containerd',
           socketPath: '/run/containerd/containerd.sock',
         },
         dashboard: {
-          ...infraAffinityAndTolerations,
+          ...infraKubernetesScheduling,
         },
         dnsServer: {
-          ...infraAffinityAndTolerations,
+          ...infraKubernetesScheduling,
         },
         maxHistory: HELM_MAX_HISTORY_SIZE,
       },

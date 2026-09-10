@@ -18,7 +18,6 @@ import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.admin.api.client.GrpcClientMetrics
 import org.lfdecentralizedtrust.splice.config.{
   EnabledFeaturesConfig,
-  NetworkAppClientConfig,
   SpliceInstanceNamesConfig,
   UpgradesConfig,
 }
@@ -30,8 +29,8 @@ import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import org.lfdecentralizedtrust.splice.store.db.DbAppStore
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.ScanConnection
 import org.lfdecentralizedtrust.splice.sv.LocalSynchronizerNode
-import org.lfdecentralizedtrust.splice.sv.admin.api.client.SvConnection
 import org.lfdecentralizedtrust.splice.sv.automation.{SvDsoAutomationService, SvSvAutomationService}
 import org.lfdecentralizedtrust.splice.sv.cometbft.{CometBftNode, CometBftRequestSigner}
 import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.{
@@ -41,7 +40,7 @@ import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.{
 }
 import org.lfdecentralizedtrust.splice.sv.config.{SvAppBackendConfig, SvCantonIdentifierConfig}
 import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvStore, SvSvStore}
-import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
+import org.lfdecentralizedtrust.splice.util.{DsoInfo, TemplateJsonDecoder}
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.jdk.CollectionConverters.*
@@ -382,21 +381,43 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
       mat: Materializer,
   ): Future[Long] =
     for {
-      initialRound <- {
-        val sponsorConfig = joiningConfig.svClient.adminApi
-        retryProvider.getValueWithRetries(
-          RetryFor.InitializingClientCalls,
-          "initial_round_from_sponsor",
-          s"Initial Round from sponsoring SV ${joiningConfig.svClient.adminApi}",
-          setInitialRoundFromSponsor(sponsorConfig, upgradesConfig),
-          logger,
-        )
-      }
+      initialRound <- retryProvider.getValueWithRetries(
+        RetryFor.InitializingClientCalls,
+        "initial_round_from_sponsor",
+        s"Initial Round from sponsoring SV ${joiningConfig.svClient.adminApi}",
+        setInitialRoundFromSponsor(joiningConfig, upgradesConfig),
+        logger,
+      )
       _ <- setInitialRound(connection, initialRound.toLong)
     } yield initialRound.toLong
 
+  /** Fetch the DSO info a joining SV needs from its sponsor, via the configured scan instance
+    * (typically the sponsor's).
+    */
+  protected def getDsoInfoFromSponsor(
+      joiningConfig: JoinWithKey,
+      upgradesConfig: UpgradesConfig,
+  )(implicit
+      tc: TraceContext,
+      ece: ExecutionContextExecutor,
+      httpClient: HttpClient,
+      templateDecoder: TemplateJsonDecoder,
+      mat: Materializer,
+  ): Future[DsoInfo] =
+    for {
+      scanConnection <- ScanConnection.singleUncached(
+        joiningConfig.scanClient,
+        upgradesConfig,
+        clock,
+        retryProvider,
+        loggerFactory,
+        retryConnectionOnInitialFailure = true,
+      )
+      dsoInfo <- scanConnection.getDsoInfo().andThen(_ => scanConnection.close())
+    } yield dsoInfo
+
   private def setInitialRoundFromSponsor(
-      sponsorConfig: NetworkAppClientConfig,
+      joiningConfig: JoinWithKey,
       upgradesConfig: UpgradesConfig,
   )(implicit
       tc: TraceContext,
@@ -405,18 +426,9 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
       templateDecoder: TemplateJsonDecoder,
       mat: Materializer,
   ): Future[String] =
-    SvConnection(
-      sponsorConfig,
-      upgradesConfig,
-      retryProvider,
-      loggerFactory,
-    ).flatMap { svConnection =>
-      svConnection
-        .getDsoInfo()
-        // the sponsor might use the old api, in this case initial round has to be 0
-        .map(_.initialRound.getOrElse("0"))
-        .andThen(_ => svConnection.close())
-    }
+    getDsoInfoFromSponsor(joiningConfig, upgradesConfig)
+      // the sponsor might use an old api version that does not return it, in this case the initial round has to be 0
+      .map(_.initialRound.getOrElse("0"))
 
   private def isOnboardedInDecentralizedNamespace(
       svcStore: SvDsoStore
