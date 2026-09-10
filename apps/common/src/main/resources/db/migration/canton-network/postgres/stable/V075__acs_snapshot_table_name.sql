@@ -1,3 +1,6 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
 alter table acs_snapshot
   -- the name 'table_name' is not reserved, but it is a PostgreSQL keyword, so we use a different name to avoid confusion
   add column data_table_name text default null,
