@@ -50,6 +50,7 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   IntegrationTest,
   SpliceTestConsoleEnvironment,
 }
+import org.lfdecentralizedtrust.splice.integration.tests.TokenStandardV2TestUtil.ExpectedTrafficCost
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.AdvanceOpenMiningRoundTrigger
 import org.lfdecentralizedtrust.splice.sv.config.ExpectedValidatorOnboardingConfig
 import org.lfdecentralizedtrust.splice.util.*
@@ -121,7 +122,9 @@ class TestTokenV2SettlementIntegrationTest
                   .copy(internalPort = Some(aliceValidatorLocal.adminApi.port + 22_000)),
                 onboarding =
                   aliceValidatorLocal.onboarding.map(_.copy(secret = "aliceExtraValidator")),
-                validatorPartyHint = Some(s"testtoken-validator-${scala.util.Random.nextInt().abs}"),
+                // party hint has a fixed length, which the measured traffic costs depend on.
+                validatorPartyHint =
+                  Some(f"testtoken-validator-${scala.util.Random.nextInt(1000000)}%06d"),
               )),
           walletAppClients = config.walletAppClients + (
             InstanceName.tryCreate("aliceValidatorLocalWallet") -> {
@@ -799,30 +802,18 @@ class TestTokenV2SettlementIntegrationTest
           },
         )
 
-        val events = Seq(
-          createTradeTx -> "Create Trade",
-          createAllocationRequestsTx -> "Create Allocation Requests",
-          aliceAllocateTx -> "Alice Allocations",
-          bobAllocateTx -> "Bob Allocations",
-          settleTradeTx -> "Settle Trade",
-        ).map { case (tx, name) =>
-          val updateId = tx.getUpdateId
-          name -> clue(s"Checking traffic & activity records for '$name'") {
-            eventually() {
-              inside(sv1ScanBackend.getEventById(updateId, None)) {
-                case Some(
-                      item @ EventHistoryItem(
-                        _,
-                        Some(_),
-                        Some(_),
-                        Some(_),
-                      )
-                    ) =>
-                  EventHistoryItem.encodeEventHistoryItem(item)
-              }
-            }
-          }
-        }
+        val events = checkTrafficCosts(
+          Seq(
+            createTradeTx.getUpdateId -> ExpectedTrafficCost("Create Trade", 0),
+            createAllocationRequestsTx.getUpdateId -> ExpectedTrafficCost(
+              "Create Allocation Requests",
+              0,
+            ),
+            aliceAllocateTx.getUpdateId -> ExpectedTrafficCost("Alice Allocations", 0),
+            bobAllocateTx.getUpdateId -> ExpectedTrafficCost("Bob Allocations", 0),
+            settleTradeTx.getUpdateId -> ExpectedTrafficCost("Settle Trade", 0),
+          )
+        ).map { case (action, item) => action -> EventHistoryItem.encodeEventHistoryItem(item) }
         val json = io.circe.JsonObject(events*)
         val savePath =
           java.io.File.createTempFile("test_token_v2_settlement_results", ".json").toPath
