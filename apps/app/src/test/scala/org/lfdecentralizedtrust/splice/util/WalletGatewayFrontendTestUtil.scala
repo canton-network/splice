@@ -2,92 +2,41 @@ package org.lfdecentralizedtrust.splice.util
 
 import org.lfdecentralizedtrust.splice.integration.tests.FrontendTestCommon
 
-import java.net.URI
-import java.net.http.{HttpClient, HttpRequest, HttpResponse}
-import java.time.Duration
 import scala.concurrent.duration.*
-import scala.util.Try
 
 trait WalletGatewayFrontendTestUtil extends WalletFrontendTestUtil { self: FrontendTestCommon =>
 
   import WalletGatewayFrontendTestUtil.*
   import ShadowDom.*
 
-  protected def validatorName: String
+  protected def walletGatewayUrl: String
+  protected def portfolioUrl: String
+  protected def walletGatewayNetworkName: String
 
-  protected lazy val walletUiUrl =
-    s"https://wallet.${validatorName}.${sys.env("NETWORK_APPS_ADDRESS")}/"
-  protected lazy val walletGatewayUrl =
-    s"https://walletgateway.${validatorName}.${sys.env("NETWORK_APPS_ADDRESS")}/"
-  protected lazy val portfolioUrl =
-    s"https://portfolio.${validatorName}.${sys.env("NETWORK_APPS_ADDRESS")}/"
   protected lazy val walletGatewayDappUrl = s"${walletGatewayUrl}api/v0/dapp"
-  protected lazy val walletGatewayNetworkName = s"Splice ${validatorName}"
 
-  protected def isWalletGatewayDeployed: Boolean = {
-    val client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()
-    val request = HttpRequest
-      .newBuilder(URI.create(walletGatewayUrl))
-      .timeout(Duration.ofSeconds(10))
-      .GET()
-      .build()
-    Try(client.send(request, HttpResponse.BodyHandlers.discarding()).statusCode()).toOption
-      .contains(200)
-  }
+  // How a user logs in on the gateway's login page differs per deployment (Auth0 vs. self-signed tokens)
+  protected def loginToWalletGatewayInCurrentWindow()(implicit webDriver: WebDriverType): Unit
 
-  protected def onboardUserToValidatorWallet(user: Auth0User)(implicit
-      webDriver: WebDriverType
-  ): Unit = {
-    // The gateway only allocates parties for an existing ledger user, which the wallet onboarding creates
-    clue(s"Onboarding ${user.email} to the validator wallet at $walletUiUrl") {
-      completeAuth0LoginWithAuthorization(
-        walletUiUrl,
-        user.email,
-        user.password,
-        () =>
-          (find(id("onboard-button")).isDefined || find(
-            className("party-id")
-          ).isDefined) shouldBe true withClue "wallet UI onboarding page",
-      )
-      onboardUserAfterLogin()
-    }
-  }
-
-  private def loginToWalletGatewayInCurrentWindow(
-      user: Auth0User
+  protected def submitWalletGatewayLoginForm(
+      clientId: Option[String]
   )(implicit webDriver: WebDriverType): Unit = {
-    clue(s"Logging in to wallet gateway as ${user.email}") {
-      actAndCheck(timeUntilSuccess = 1.minute)(
-        "Select the network and connect", {
-          // The select stays disabled until the gateway has fetched its networks
-          eventually(1.minute) {
-            val select = findDeep(Selectors.Gateway.networkSelect).valueOrFail("network select")
-            select.isEnabled shouldBe true withClue "network select enabled (networks loaded)"
-            selectDeepByVisibleText(select, walletGatewayNetworkName)
-          }
-          clickDeep(Selectors.Gateway.connectButton)
-        },
-      )(
-        "Auth0 login form or the parties page is visible",
-        _ => {
-          if (!onGatewayPartiesPage) assertAuth0LoginFormVisible()
-        },
-      )
-      if (!onGatewayPartiesPage) {
-        submitAuth0LoginForm(
-          user.email,
-          user.password,
-          () => onGatewayPartiesPage shouldBe true withClue "gateway parties page",
-        )
-      }
-      waitForGatewayPartiesPage()
+    // The select stays disabled until the gateway has fetched its networks
+    eventually(1.minute) {
+      val select = findDeep(Selectors.Gateway.networkSelect).valueOrFail("network select")
+      select.isEnabled shouldBe true withClue "network select enabled (networks loaded)"
+      selectDeepByVisibleText(select, walletGatewayNetworkName)
     }
+    clientId.foreach { id =>
+      setDeepValue(eventuallyFindDeep(Selectors.Gateway.clientIdInput), id)
+    }
+    clickDeep(Selectors.Gateway.connectButton)
   }
 
-  private def onGatewayPartiesPage(implicit webDriver: WebDriverType): Boolean =
+  protected def onGatewayPartiesPage(implicit webDriver: WebDriverType): Boolean =
     currentUrl.contains("/parties")
 
-  private def waitForGatewayPartiesPage()(implicit webDriver: WebDriverType): Unit =
+  protected def waitForGatewayPartiesPage()(implicit webDriver: WebDriverType): Unit =
     eventually(1.minute) {
       onGatewayPartiesPage shouldBe true withClue s"URL is the parties page: $currentUrl"
       findDeep(Selectors.Gateway.newPartyButton)
@@ -126,9 +75,7 @@ trait WalletGatewayFrontendTestUtil extends WalletFrontendTestUtil { self: Front
     }
   }
 
-  protected def connectPortfolioToWalletGateway(
-      user: Auth0User
-  )(implicit webDriver: WebDriverType): String = {
+  protected def connectPortfolioToWalletGateway()(implicit webDriver: WebDriverType): String = {
     val mainWindow = webDriver.getWindowHandle
     clue("Connecting the portfolio to the wallet gateway") {
       // The gateway is not in the picker's built-in list, so its dApp URL is entered as a custom wallet
@@ -153,7 +100,7 @@ trait WalletGatewayFrontendTestUtil extends WalletFrontendTestUtil { self: Front
           ).isDefined) shouldBe true withClue "gateway login form or connected status"
         }
         if (findDeep(Selectors.Gateway.connectedStatus).isEmpty) {
-          loginToWalletGatewayInCurrentWindow(user)
+          loginToWalletGatewayInCurrentWindow()
         }
         eventually(1.minute) {
           findDeep(
@@ -192,13 +139,11 @@ trait WalletGatewayFrontendTestUtil extends WalletFrontendTestUtil { self: Front
       }
     }
 
-  protected def loginAndLogoutFromWalletGateway(user: Auth0User)(implicit
-      webDriver: WebDriverType
-  ): Unit =
+  protected def loginAndLogoutFromWalletGateway()(implicit webDriver: WebDriverType): Unit =
     clue("Logging in and out of the wallet gateway directly") {
       // Gateway sessions are per dApp origin, so this is a new (redirect-only, thanks to Auth0 SSO) login
       go to walletGatewayUrl
-      loginToWalletGatewayInCurrentWindow(user)
+      loginToWalletGatewayInCurrentWindow()
       clickDeep(Selectors.Gateway.menuButton)
       actAndCheck(timeUntilSuccess = 1.minute)(
         "Click logout",
@@ -295,6 +240,7 @@ object WalletGatewayFrontendTestUtil {
     object Gateway {
       // Login page (`wg-login-form`)
       val networkSelect = "select#network-select"
+      val clientIdInput = "input#client-id"
       val connectButton = "button[type='submit']"
       // Header menu (`app-header`)
       val menuButton = "button.page-trigger"
