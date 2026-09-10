@@ -1258,54 +1258,48 @@ class BftCallExecutorTest
 
     "propagates BadGateway when every peer returns CannotProvide" in {
       // All 4 peers opt out via CannotProvide → connectionsForConsensus is empty
-      // → enoughAvailableScans = false → BadGateway.
+      // → enoughAvailableScans = false → BadGateway. The "not enough scans"
+      // message is logged at INFO (not WARN) for reward-accounting endpoints
+      // where this is expected during bootstrap.
       val round = 42L
       val connections = getMockedConnections(n = 4)
       connections.foreach(makeMockReturnRootHashCannotProvide(_, round))
       val bft = getBft(connections)
 
-      loggerFactory.assertLogs(
-        for {
-          failure <- bft.getRewardAccountingRootHash(round).failed
-        } yield inside(failure) { case HttpErrorWithHttpCode(code, _) =>
-          code should be(StatusCodes.BadGateway)
-        },
-        _.warningMessage should include("BFT guarantees"),
-      )
+      for {
+        failure <- bft.getRewardAccountingRootHash(round).failed
+      } yield inside(failure) { case HttpErrorWithHttpCode(code, _) =>
+        code should be(StatusCodes.BadGateway)
+      }
     }
 
     "propagates BadGateway when every peer returns Undetermined" in {
       // All 4 Undetermined → probe classifies each as Unavailable → all kept
       // in `n` (n=4, f=1, targetSuccess=2) but none contributes a cached
       // response → 0 WithData scans to sample → enoughAvailableScans=false
-      // → BadGateway.
+      // → BadGateway. "Not enough scans" is logged at INFO for these endpoints.
       val round = 42L
       val connections = getMockedConnections(n = 4)
       connections.foreach(makeMockReturnRootHashUndetermined(_, round))
       val bft = getBft(connections)
 
-      loggerFactory.assertLogs(
-        for {
-          failure <- bft.getRewardAccountingRootHash(round).failed
-        } yield inside(failure) { case HttpErrorWithHttpCode(code, _) =>
-          code should be(StatusCodes.BadGateway)
-        },
-        _.warningMessage should include("BFT guarantees"),
-      )
+      for {
+        failure <- bft.getRewardAccountingRootHash(round).failed
+      } yield inside(failure) { case HttpErrorWithHttpCode(code, _) =>
+        code should be(StatusCodes.BadGateway)
+      }
     }
 
     "propagates BadGateway when there are no peer scans" in {
       // Empty scan list → no probes → connectionsForConsensus empty → BadGateway.
+      // "Not enough scans" is logged at INFO for these endpoints.
       val bft = getBft(Seq.empty)
 
-      loggerFactory.assertLogs(
-        for {
-          failure <- bft.getRewardAccountingRootHash(1L).failed
-        } yield inside(failure) { case HttpErrorWithHttpCode(code, _) =>
-          code should be(StatusCodes.BadGateway)
-        },
-        _.warningMessage should include("BFT guarantees"),
-      )
+      for {
+        failure <- bft.getRewardAccountingRootHash(1L).failed
+      } yield inside(failure) { case HttpErrorWithHttpCode(code, _) =>
+        code should be(StatusCodes.BadGateway)
+      }
     }
 
     "logs disagreements at WARN level" in {
@@ -1408,14 +1402,11 @@ class BftCallExecutorTest
       makeMockReturnRootHashUndetermined(connections(3), round)
       val bft = getBft(connections)
 
-      loggerFactory.assertLogs(
-        for {
-          failure <- bft.getRewardAccountingRootHash(round).failed
-        } yield inside(failure) { case HttpErrorWithHttpCode(code, _) =>
-          code should be(StatusCodes.BadGateway)
-        },
-        _.warningMessage should include("BFT guarantees"),
-      )
+      for {
+        failure <- bft.getRewardAccountingRootHash(round).failed
+      } yield inside(failure) { case HttpErrorWithHttpCode(code, _) =>
+        code should be(StatusCodes.BadGateway)
+      }
     }
 
     "logs a WARN when Oks from the probed subset disagree on the payload" in {
@@ -1445,6 +1436,7 @@ class BftCallExecutorTest
       // connections fail to open (scanConnections.failed > 0), so they
       // never get probed but still count in `n`. The lone Ok cannot
       // meet the raised targetSuccess and BadGateway propagates.
+      // "Not enough scans" is logged at INFO for these endpoints.
       val round = 42L
       val connections = getMockedConnections(n = 2)
       makeMockReturnRootHashOk(connections(0), round, "aabb")
@@ -1456,13 +1448,10 @@ class BftCallExecutorTest
       )
       val bft = getBft(connections, initialFailedConnections = failedConnections)
 
-      loggerFactory.assertLogs(
-        for { failure <- bft.getRewardAccountingRootHash(round).failed } yield inside(failure) {
-          case HttpErrorWithHttpCode(code, _) =>
-            code should be(StatusCodes.BadGateway)
-        },
-        _.warningMessage should include("BFT guarantees"),
-      )
+      for { failure <- bft.getRewardAccountingRootHash(round).failed } yield inside(failure) {
+        case HttpErrorWithHttpCode(code, _) =>
+          code should be(StatusCodes.BadGateway)
+      }
     }
 
     "reaches consensus on a single Ok when other peers give a mix of CannotProvide, Undetermined, and probe failure" in {
@@ -1515,54 +1504,47 @@ class BftCallExecutorTest
 
     "propagates BadGateway when every peer returns CannotProvide" in {
       // All 4 peers opt out via CannotProvide → connectionsForConsensus is empty
-      // → enoughAvailableScans = false → BadGateway.
+      // → enoughAvailableScans = false → BadGateway. "Not enough scans" is
+      // logged at INFO for these endpoints.
       val round = 42L
       val connections = getMockedConnections(n = 4)
       connections.foreach(makeMockReturnActivityTotalsCannotProvide(_, round))
       val bft = getBft(connections)
 
-      loggerFactory.assertLogs(
-        for {
-          failure <- bft.getRewardAccountingActivityTotals(round).failed
-        } yield inside(failure) { case HttpErrorWithHttpCode(code, _) =>
-          code should be(StatusCodes.BadGateway)
-        },
-        _.warningMessage should include("BFT guarantees"),
-      )
+      for {
+        failure <- bft.getRewardAccountingActivityTotals(round).failed
+      } yield inside(failure) { case HttpErrorWithHttpCode(code, _) =>
+        code should be(StatusCodes.BadGateway)
+      }
     }
 
     "propagates BadGateway when every peer returns Undetermined" in {
       // All 4 Undetermined → probe classifies each as Unavailable → all kept
       // in `n` (n=4, f=1, targetSuccess=2) but none contributes a cached
       // response → 0 WithData scans to sample → enoughAvailableScans=false
-      // → BadGateway.
+      // → BadGateway. "Not enough scans" is logged at INFO for these endpoints.
       val round = 42L
       val connections = getMockedConnections(n = 4)
       connections.foreach(makeMockReturnActivityTotalsUndetermined(_, round))
       val bft = getBft(connections)
 
-      loggerFactory.assertLogs(
-        for {
-          failure <- bft.getRewardAccountingActivityTotals(round).failed
-        } yield inside(failure) { case HttpErrorWithHttpCode(code, _) =>
-          code should be(StatusCodes.BadGateway)
-        },
-        _.warningMessage should include("BFT guarantees"),
-      )
+      for {
+        failure <- bft.getRewardAccountingActivityTotals(round).failed
+      } yield inside(failure) { case HttpErrorWithHttpCode(code, _) =>
+        code should be(StatusCodes.BadGateway)
+      }
     }
 
     "propagates BadGateway when there are no peer scans" in {
       // Empty scan list → no probes → connectionsForConsensus empty → BadGateway.
+      // "Not enough scans" is logged at INFO for these endpoints.
       val bft = getBft(Seq.empty)
 
-      loggerFactory.assertLogs(
-        for {
-          failure <- bft.getRewardAccountingActivityTotals(1L).failed
-        } yield inside(failure) { case HttpErrorWithHttpCode(code, _) =>
-          code should be(StatusCodes.BadGateway)
-        },
-        _.warningMessage should include("BFT guarantees"),
-      )
+      for {
+        failure <- bft.getRewardAccountingActivityTotals(1L).failed
+      } yield inside(failure) { case HttpErrorWithHttpCode(code, _) =>
+        code should be(StatusCodes.BadGateway)
+      }
     }
 
     "logs disagreements at WARN level" in {
@@ -1668,14 +1650,11 @@ class BftCallExecutorTest
       makeMockReturnActivityTotalsUndetermined(connections(3), round)
       val bft = getBft(connections)
 
-      loggerFactory.assertLogs(
-        for {
-          failure <- bft.getRewardAccountingActivityTotals(round).failed
-        } yield inside(failure) { case HttpErrorWithHttpCode(code, _) =>
-          code should be(StatusCodes.BadGateway)
-        },
-        _.warningMessage should include("BFT guarantees"),
-      )
+      for {
+        failure <- bft.getRewardAccountingActivityTotals(round).failed
+      } yield inside(failure) { case HttpErrorWithHttpCode(code, _) =>
+        code should be(StatusCodes.BadGateway)
+      }
     }
   }
 

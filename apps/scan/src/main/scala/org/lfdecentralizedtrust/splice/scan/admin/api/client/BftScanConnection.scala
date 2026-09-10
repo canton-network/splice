@@ -98,7 +98,7 @@ import org.slf4j.event.Level
 import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.control.{NoStackTrace, NonFatal}
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 
@@ -909,6 +909,10 @@ class BftScanConnection(
       endpoint = endpoint,
       callConfig = callConfig,
       disagreementLogLevel = Level.WARN,
+      // "Not enough scans" here means the probe didn't gather enough cached
+      // responses to satisfy BFT quorum — benign during bootstrap or transient
+      // peer unavailability. The caller sees HTTP 502 and retries.
+      notEnoughScansLogLevel = Level.INFO,
     )
   }
 
@@ -945,7 +949,6 @@ class BftScanConnection(
       consensusFailureLogLevel = Level.DEBUG,
     )
 
-
   private def bftCall[T](
       call: SingleScanConnection => Future[T],
       endpoint: String,
@@ -960,6 +963,7 @@ class BftScanConnection(
     endpoint,
     callConfig,
     consensusFailureLogLevel,
+    notEnoughScansLogLevel = consensusFailureLogLevel,
     shortenResponsesForLog = shortenResponsesForLog,
   )
     .map(_._1)
@@ -970,6 +974,7 @@ class BftScanConnection(
       callConfig: BftCallConfig,
       consensusFailureLogLevel: Level = Level.WARN,
       disagreementLogLevel: Level = Level.INFO,
+      notEnoughScansLogLevel: Level,
       shortenResponsesForLog: T => Any = identity[T],
   )(implicit
       ec: ExecutionContext,
@@ -985,6 +990,7 @@ class BftScanConnection(
       callConfig,
       consensusFailureLogLevel,
       disagreementLogLevel,
+      notEnoughScansLogLevel,
       shortenResponsesForLog,
     )
   }
