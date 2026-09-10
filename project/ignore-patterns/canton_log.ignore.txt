@@ -104,6 +104,11 @@ Failed to submit transaction due to Error\(RequestFailed\(No connection availabl
 The operation 'insert block' has failed with an exception
 Now retrying operation 'insert block'
 
+# Synchronizer connect waits for the indexer to drain; the 0.2s retry loop escalates INFO->WARN after ~2s under CI load.
+The operation 'Ensure no processing for synchronizer .* has failed with an exception.*c\.d\.c\.p\.i\.IndexerState
+Now retrying operation 'Ensure no processing for synchronizer .*c\.d\.c\.p\.i\.IndexerState
+Still uncommitted activity for synchronizer .*c\.d\.c\.p\.i\.IndexerState
+
 # TODO(tech-debt): Remove these once we're on Canton 3.4
 Failed to send commitment message batch for period.*RequestInvalid\(Unregistered recipients:.*Set\(PAR::(?:alice-validatorLocalForValidatorReonboardingIT|da-ComposeValidator-1)
 Failed to send commitment message batch for period CommitmentPeriod.*RequestRefused\(UnknownRecipients
