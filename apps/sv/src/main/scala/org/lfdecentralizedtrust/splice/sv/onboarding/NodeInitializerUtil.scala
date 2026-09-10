@@ -221,6 +221,7 @@ trait NodeInitializerUtil extends NamedLogging with Spanning with SynchronizerNo
           // for now ignore forever
           NonNegativeFiniteDuration.ofDays(365 * 100),
           NonNegativeFiniteDuration.ofDays(365 * 100),
+          clock,
           loggerFactory,
         )
       }

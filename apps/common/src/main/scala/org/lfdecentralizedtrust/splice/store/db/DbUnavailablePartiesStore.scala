@@ -4,11 +4,11 @@
 package org.lfdecentralizedtrust.splice.store.db
 
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
-import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.lifecycle.CloseContext
 import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.resource.DbStorage
+import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
 import org.lfdecentralizedtrust.splice.store.UnavailablePartiesStore
@@ -23,6 +23,7 @@ class DbUnavailablePartiesStore(
     val storeId: Int,
     baseDuration: NonNegativeFiniteDuration,
     maxIgnoreDuration: NonNegativeFiniteDuration,
+    clock: Clock,
     val loggerFactory: NamedLoggerFactory,
 )(implicit
     val ec: ExecutionContext,
@@ -38,10 +39,10 @@ class DbUnavailablePartiesStore(
   private val maxMicros = maxIgnoreDuration.underlying.toMicros
 
   override def addParties(parties: Seq[PartyId])(implicit tc: TraceContext): Future[Unit] =
-    addPartiesAt(parties, CantonTimestamp.now().toMicros)
+    addPartiesAt(parties, clock.now.toMicros)
 
   override def listParties()(implicit tc: TraceContext): Future[Seq[PartyId]] =
-    listPartiesAt(CantonTimestamp.now().toMicros)
+    listPartiesAt(clock.now.toMicros)
 
   /** Adds or updates parties only outside the ignore window.
     *  a. For new parties, it sets updated_at to now and the ignore_duration to base_duration.
@@ -108,6 +109,7 @@ object DbUnavailablePartiesStore {
       storage: DbStorage,
       baseDuration: NonNegativeFiniteDuration,
       maxIgnoreDuration: NonNegativeFiniteDuration,
+      clock: Clock,
       loggerFactory: NamedLoggerFactory,
   )(implicit
       ec: ExecutionContext,
@@ -123,6 +125,7 @@ object DbUnavailablePartiesStore {
           storeId,
           baseDuration,
           maxIgnoreDuration,
+          clock,
           loggerFactory,
         )
       )

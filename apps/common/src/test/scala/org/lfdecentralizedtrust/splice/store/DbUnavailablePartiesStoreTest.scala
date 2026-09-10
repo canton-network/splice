@@ -46,6 +46,7 @@ class DbUnavailablePartiesStoreTest
       storage,
       baseDuration,
       maxIgnoreDuration,
+      wallClock,
       loggerFactory,
     )
 
