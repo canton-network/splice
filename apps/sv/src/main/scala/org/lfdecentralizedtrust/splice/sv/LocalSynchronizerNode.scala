@@ -30,6 +30,7 @@ import com.digitalasset.canton.topology.transaction.TopologyMapping.Code.{
 }
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.ShowUtil.*
+import com.digitalasset.canton.version.ProtocolVersion
 import io.grpc.Status
 import org.apache.pekko.http.scaladsl.model.StatusCodes
 import org.apache.pekko.stream.Materializer
@@ -90,7 +91,11 @@ class LocalSynchronizerNode(
     config.sequencer.pruning
 
   def staticSynchronizerParameters(serial: NonNegativeInt): StaticSynchronizerParameters = {
-    SynchronizerParametersConfig(synchronizerLimits = config.synchronizerLimits.map(_.toInternal))
+    SynchronizerParametersConfig(synchronizerLimits =
+      config.synchronizerLimits
+        .map(_.toInternal)
+        .filter(_ => config.protocolVersion >= ProtocolVersion.v36)
+    )
       .toStaticSynchronizerParameters(
         CryptoConfig(provider = CryptoProvider.Jce),
         config.protocolVersion,

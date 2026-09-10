@@ -550,6 +550,9 @@ class LsuIntegrationTest
           clue(s"check ${backend.name} initialized sequencer from synchronizer predecessor") {
             eventuallySucceeds(3.minutes) {
               upgradeSequencerClient.physical_synchronizer_id shouldBe successorPsid
+              upgradeSequencerClient.synchronizer_parameters.static
+                .get()
+                .synchronizerLimits shouldBe SvSynchronizerNodeConfig.defaultSynchronizerLimits
             }
           }
 
