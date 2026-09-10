@@ -158,7 +158,6 @@ export const RepermissionValidatorForm: React.FC = () => {
                 onChange: ({ value }) => validateParticipantId(value),
                 onChangeAsyncDebounceMs: 500,
                 onChangeAsync: ({ value }) => validateParticipantAndContracts(value),
-                onBlurAsync: ({ value }) => validateParticipantAndContracts(value),
               }}
             >
               {field => (
