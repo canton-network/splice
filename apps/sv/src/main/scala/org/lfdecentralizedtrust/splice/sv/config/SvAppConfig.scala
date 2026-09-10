@@ -12,6 +12,7 @@ import com.digitalasset.canton.admin.api.client.data.{
   SequencerConnectionPoolDelays,
   SubmissionRequestAmplification,
   SynchronizerLimits,
+  TransactionProtocolLimits,
 }
 import com.digitalasset.canton.config.*
 import com.digitalasset.canton.config.RequireTypes.{
@@ -662,8 +663,29 @@ final case class SvSynchronizerNodeConfig(
     topologyChangeDelayDuration: NonNegativeFiniteDuration =
       NonNegativeFiniteDuration.ofMillis(250),
     // TODO(##7162) Set sensible defaults here once Canton comes up with some magic numbers.
-    synchronizerLimits: Option[SynchronizerLimits] = None,
+    synchronizerLimits: Option[SynchronizerLimits] = Some(
+      SvSynchronizerNodeConfig.defaultSynchronizerLimits
+    ),
 )
+
+object SvSynchronizerNodeConfig {
+  // Default values as recommended by Canton. Check with the Canton team before changing them.
+  val defaultSynchronizerLimits = SynchronizerLimits(
+    transactionProtocolLimits = TransactionProtocolLimits(
+      maxActAs = PositiveInt.tryCreate(1000),
+      maxEnvelopes = PositiveInt.tryCreate(10_000),
+      maxRecipientsPerBatch = PositiveInt.tryCreate(10_000),
+      maxRecipientsTrees = PositiveInt.tryCreate(10_000),
+      maxRecipientsPerRecipientsTreeLevel = PositiveInt.tryCreate(10_000),
+      maxChildrenPerRecipientsTreeLevel = PositiveInt.tryCreate(10_000),
+      maxRecipientsPerEnvelope = PositiveInt.tryCreate(10_000),
+      maxRecipientsTreeDepth = PositiveInt.tryCreate(100),
+      maxTransactionRootViews = PositiveInt.tryCreate(1_000_000),
+      maxTransactionSubViews = PositiveInt.tryCreate(10_000_000),
+      maxTransactionTreeDepth = PositiveInt.MaxValue,
+    )
+  )
+}
 
 final case class SvSynchronizerNodesConfig(
     current: SvSynchronizerNodeConfig,
