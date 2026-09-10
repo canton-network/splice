@@ -90,7 +90,7 @@ class LocalSynchronizerNode(
     config.sequencer.pruning
 
   def staticSynchronizerParameters(serial: NonNegativeInt): StaticSynchronizerParameters = {
-    SynchronizerParametersConfig()
+    SynchronizerParametersConfig(synchronizerLimits = config.synchronizerLimits.map(_.toInternal))
       .toStaticSynchronizerParameters(
         CryptoConfig(provider = CryptoProvider.Jce),
         config.protocolVersion,

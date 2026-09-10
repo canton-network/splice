@@ -11,6 +11,7 @@ import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.admin.api.client.data.{
   SequencerConnectionPoolDelays,
   SubmissionRequestAmplification,
+  SynchronizerLimits,
 }
 import com.digitalasset.canton.config.*
 import com.digitalasset.canton.config.RequireTypes.{
@@ -658,7 +659,10 @@ final case class SvSynchronizerNodeConfig(
     protocolVersion: ProtocolVersion = ProtocolVersion.v35,
     serial: Option[NonNegativeInt],
     // We want to be able to override this for simtime tests
-    topologyChangeDelayDuration: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofMillis(250),
+    topologyChangeDelayDuration: NonNegativeFiniteDuration =
+      NonNegativeFiniteDuration.ofMillis(250),
+    // TODO(##7162) Set sensible defaults here once Canton comes up with some magic numbers.
+    synchronizerLimits: Option[SynchronizerLimits] = None,
 )
 
 final case class SvSynchronizerNodesConfig(
