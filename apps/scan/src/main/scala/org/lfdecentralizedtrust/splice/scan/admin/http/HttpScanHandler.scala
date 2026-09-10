@@ -93,6 +93,12 @@ import org.lfdecentralizedtrust.splice.scan.ScanSynchronizerNode
 import org.lfdecentralizedtrust.splice.scan.admin.http.ScanHttpEncodings.updateV1ToUpdateV2
 import org.lfdecentralizedtrust.splice.scan.config.{CantonBftPeerConfig, ScanRollForwardLsuConfig}
 import org.lfdecentralizedtrust.splice.scan.dso.DsoAnsResolver
+import org.lfdecentralizedtrust.splice.scan.metrics.ScanHttpApiMetrics
+import org.lfdecentralizedtrust.splice.scan.metrics.ScanHttpApiMetrics.{
+  AsOfRound,
+  Presence,
+  SnapshotQueryLabels,
+}
 import org.lfdecentralizedtrust.splice.scan.store.{
   AcsSnapshotStore,
   AppActivityStore,
@@ -161,6 +167,7 @@ class HttpScanHandler(
     snapshotStore: AcsSnapshotStore,
     eventStore: ScanEventStore,
     bulkStorage: Option[BulkStorageReader],
+    scanApiMetrics: ScanHttpApiMetrics,
     dsoAnsResolver: DsoAnsResolver,
     miningRoundsCacheTimeToLiveOverride: Option[NonNegativeFiniteDuration],
     enableForcedAcsSnapshots: Boolean,
@@ -1514,23 +1521,52 @@ class HttpScanHandler(
       recordTimeIsAtOrBefore: Boolean,
       exactQuery: CantonTimestamp => Future[S],
       toResponse: S => T,
+      labels: SnapshotQueryLabels,
   )(implicit tc: TraceContext): Future[Either[String, T]] = {
+    // Track use of optional filters.
+    scanApiMetrics.snapshotQueryRequests.inc()(labels.context)
     val recordTimeTs = Codec.tryDecode(Codec.OffsetDateTime)(recordTime)
     if (recordTimeIsAtOrBefore) {
       val snapshotQueryResult = for {
-        recordTime <- OptionT(getRecordTimeAtOrBefore(migrationId, recordTimeTs))
-        snapshotQueryResult <- OptionT.liftF(exactQuery(recordTime))
+        resolvedRecordTime <- OptionT(getRecordTimeAtOrBefore(migrationId, recordTimeTs))
+        _ = logSnapshotAccess(labels, resolvedRecordTime)
+        snapshotQueryResult <- OptionT.liftF(exactQuery(resolvedRecordTime))
       } yield snapshotQueryResult
       snapshotQueryResult.fold[Either[String, T]](
         Left(s"No snapshots found before $recordTime")
       )(res => Right(toResponse(res)))
     } else {
+      logSnapshotAccess(labels, recordTimeTs)
       exactQuery(recordTimeTs).map(res => Right(toResponse(res)))
     }
   }
 
+  private def logSnapshotAccess(
+      labels: SnapshotQueryLabels,
+      servedRecordTime: CantonTimestamp,
+  )(implicit tc: TraceContext): Unit = {
+    val servedInstant = servedRecordTime.toInstant
+    val age = java.time.Duration.between(servedInstant, clock.now.toInstant)
+    val requestedSnapshotAge =
+      if (age.compareTo(java.time.Duration.ofHours(3)) <= 0) "less_equal_3h"
+      else if (age.compareTo(java.time.Duration.ofHours(24)) <= 0) "less_equal_24h"
+      else if (age.compareTo(java.time.Duration.ofDays(7)) <= 0) "less_equal_7d"
+      else "greater_than_7d"
+    val slotStartHour = (servedInstant.atOffset(java.time.ZoneOffset.UTC).getHour / 3) * 3
+    val snapshotSlot = f"$slotStartHour%02d:00"
+    logger.debug(
+      s"snapshot_access" +
+        s" operation=${labels.operation}" +
+        s" record_time_match=${if (labels.atOrBefore) "at_or_before" else "exact"}" +
+        s" served_record_time=$servedRecordTime" +
+        s" requested_snapshot_age=$requestedSnapshotAge" +
+        s" snapshot_slot=$snapshotSlot"
+    )
+  }
+
   // Shared between /v0/state/acs and /v1/state/acs. The only difference between them is in `toResponse`.
   private def acsSnapshotQuery[T](
+      operation: String,
       migrationId: Long,
       recordTime: java.time.OffsetDateTime,
       recordTimeIsAtOrBefore: Boolean,
@@ -1569,6 +1605,13 @@ class HttpScanHandler(
       recordTimeIsAtOrBefore,
       exactQuery,
       toResponse,
+      SnapshotQueryLabels(
+        operation = operation,
+        partyFilter = Presence(partyIds.exists(_.nonEmpty)),
+        templateFilter = Presence(templates.exists(_.nonEmpty)),
+        atOrBefore = recordTimeIsAtOrBefore,
+        asOfRound = AsOfRound.NotApplicable,
+      ),
     )
 
   }
@@ -1637,9 +1680,10 @@ class HttpScanHandler(
       ScanResource.GetAcsSnapshotAtResponseOK(
         toAcsV0Response(body.migrationId, result)
       )
-
-    withSpan(s"$workflowId.getAcsSnapshotAt") { _ => _ =>
+    val opId = "getAcsSnapshotAt"
+    withSpan(s"$workflowId.$opId") { _ => _ =>
       acsSnapshotQuery(
+        operation = opId,
         migrationId = body.migrationId,
         recordTime = body.recordTime,
         recordTimeIsAtOrBefore =
@@ -1671,9 +1715,10 @@ class HttpScanHandler(
         toAcsV1Response(body.migrationId, result)
       )
     }
-
-    withSpan(s"$workflowId.getAcsSnapshotAtV1") { _ => _ =>
+    val opId = "getAcsSnapshotAtV1"
+    withSpan(s"$workflowId.$opId") { _ => _ =>
       acsSnapshotQuery(
+        operation = opId,
         migrationId = body.migrationId,
         recordTime = body.recordTime,
         recordTimeIsAtOrBefore =
@@ -1705,9 +1750,10 @@ class HttpScanHandler(
         toAcsV2Response(body.migrationId, result)
       )
     }
-
-    withSpan(s"$workflowId.getAcsSnapshotAtV1") { _ => _ =>
+    val opId = "getAcsSnapshotAtV2"
+    withSpan(s"$workflowId.$opId") { _ => _ =>
       acsSnapshotQuery(
+        operation = opId,
         migrationId = body.migrationId,
         recordTime = body.recordTime,
         recordTimeIsAtOrBefore =
@@ -1729,6 +1775,7 @@ class HttpScanHandler(
   }
 
   private def holdingStateQuery[T](
+      operation: String,
       migrationId: Long,
       recordTime: java.time.OffsetDateTime,
       recordTimeIsAtOrBefore: Boolean,
@@ -1754,6 +1801,15 @@ class HttpScanHandler(
       recordTimeIsAtOrBefore,
       exactQuery,
       toResponse,
+      SnapshotQueryLabels(
+        operation = operation,
+        // owner_party_ids is required on holdings/state.
+        partyFilter = Presence.Present,
+        // fixed to holding templates.
+        templateFilter = Presence.NotApplicable,
+        atOrBefore = recordTimeIsAtOrBefore,
+        asOfRound = AsOfRound.NotApplicable,
+      ),
     )
   }
 
@@ -1763,9 +1819,10 @@ class HttpScanHandler(
     implicit val tc: TraceContext = extracted
     def toResponse(result: QueryAcsSnapshotResult) =
       ScanResource.GetHoldingsStateAtResponseOK(toAcsV0Response(body.migrationId, result))
-
-    withSpan(s"$workflowId.getHoldingsStateAt") { _ => _ =>
+    val opId = "getHoldingsStateAt"
+    withSpan(s"$workflowId.$opId") { _ => _ =>
       holdingStateQuery(
+        operation = opId,
         migrationId = body.migrationId,
         recordTime = body.recordTime,
         recordTimeIsAtOrBefore =
@@ -1792,9 +1849,10 @@ class HttpScanHandler(
     implicit val tc: TraceContext = extracted
     def toResponse(result: QueryAcsSnapshotResult) =
       ScanResource.GetHoldingsStateAtV1ResponseOK(toAcsV1Response(body.migrationId, result))
-
-    withSpan(s"$workflowId.getHoldingsStateAtV1") { _ => _ =>
+    val opId = "getHoldingsStateAtV1"
+    withSpan(s"$workflowId.$opId") { _ => _ =>
       holdingStateQuery(
+        operation = opId,
         migrationId = body.migrationId,
         recordTime = body.recordTime,
         recordTimeIsAtOrBefore =
@@ -1821,9 +1879,10 @@ class HttpScanHandler(
     implicit val tc: TraceContext = extracted
     def toResponse(result: QueryAcsSnapshotResult) =
       ScanResource.GetHoldingsStateAtV2ResponseOK(toAcsV2Response(body.migrationId, result))
-
-    withSpan(s"$workflowId.getHoldingsStateAtV1") { _ => _ =>
+    val opId = "getHoldingsStateAtV2"
+    withSpan(s"$workflowId.$opId") { _ => _ =>
       holdingStateQuery(
+        operation = opId,
         migrationId = body.migrationId,
         recordTime = body.recordTime,
         recordTimeIsAtOrBefore =
@@ -1909,6 +1968,13 @@ class HttpScanHandler(
         recordTimeMatch.contains(HoldingsSummaryRequest.RecordTimeMatch.AtOrBefore),
         exactQuery,
         toResponse,
+        SnapshotQueryLabels(
+          operation = "getHoldingsSummaryAt",
+          partyFilter = Presence.Present,
+          templateFilter = Presence.NotApplicable,
+          atOrBefore = recordTimeMatch.contains(HoldingsSummaryRequest.RecordTimeMatch.AtOrBefore),
+          asOfRound = if (asOfRound.isDefined) AsOfRound.Explicit else AsOfRound.Default,
+        ),
       ).map {
         case Right(response) => response
         case Left(errorMessage) =>
@@ -1969,6 +2035,15 @@ class HttpScanHandler(
         recordTimeMatch.contains(HoldingsSummaryRequestV1.RecordTimeMatch.AtOrBefore),
         exactQuery,
         toResponse,
+        SnapshotQueryLabels(
+          operation = "getHoldingsSummaryAtV1",
+          partyFilter = Presence.Present,
+          templateFilter = Presence.NotApplicable,
+          atOrBefore =
+            recordTimeMatch.contains(HoldingsSummaryRequestV1.RecordTimeMatch.AtOrBefore),
+          // v1 has no as_of_round field.
+          asOfRound = AsOfRound.NotApplicable,
+        ),
       ).map {
         case Right(response) => response
         case Left(errorMessage) =>

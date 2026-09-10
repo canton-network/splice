@@ -109,7 +109,7 @@ class ScanApp(
     val loggerFactory: NamedLoggerFactory,
     tracerProvider: TracerProvider,
     futureSupervisor: FutureSupervisor,
-    nodeMetrics: ScanAppMetrics,
+    scanAppMetrics: ScanAppMetrics,
     adminRoutes: AdminRoutes,
 )(implicit
     ac: ActorSystem,
@@ -123,7 +123,7 @@ class ScanApp(
       loggerFactory,
       tracerProvider,
       futureSupervisor,
-      nodeMetrics,
+      scanAppMetrics,
     ) {
 
   override def packagesForJsonDecoding =
@@ -140,13 +140,13 @@ class ScanApp(
         syncConfig.sequencer,
         amuletAppParameters.loggingConfig.api,
         loggerFactory,
-        nodeMetrics.grpcClientMetrics,
+        scanAppMetrics.grpcClientMetrics,
         retryProvider,
       ),
       new SequencerTrafficClient(
         syncConfig.sequencer,
         retryProvider,
-        nodeMetrics.grpcClientMetrics,
+        scanAppMetrics.grpcClientMetrics,
         loggerFactory,
       ),
     )
@@ -172,7 +172,7 @@ class ScanApp(
             syncConfig.sequencer,
             amuletAppParameters.loggingConfig.api,
             loggerFactory,
-            nodeMetrics.grpcClientMetrics,
+            scanAppMetrics.grpcClientMetrics,
             retryProvider,
           ) -> bftConfig
         }
@@ -190,7 +190,7 @@ class ScanApp(
         config.participantClient.adminApi,
         amuletAppParameters.loggingConfig.api,
         loggerFactory,
-        nodeMetrics.grpcClientMetrics,
+        scanAppMetrics.grpcClientMetrics,
         retryProvider,
       )
       participantId <- appInitStep("Get participant id") {
@@ -210,7 +210,7 @@ class ScanApp(
         domainMigrationId,
         participantId,
         config.cache,
-        nodeMetrics.dbScanStore,
+        scanAppMetrics.dbScanStore,
         config.automation.ingestion,
         config.parameters.defaultLimit,
         config.acsStoreDescriptorUserVersion,
@@ -234,7 +234,7 @@ class ScanApp(
         loggerFactory,
         enableissue12777Workaround = true,
         enableImportUpdateBackfill = config.updateHistoryBackfillImportUpdatesEnabled,
-        nodeMetrics.dbScanStore.history,
+        scanAppMetrics.dbScanStore.history,
       )
       acsSnapshotStore = AcsSnapshotStore(
         storage,
@@ -386,11 +386,11 @@ class ScanApp(
         clock,
         retryProvider,
         loggerFactory,
-        nodeMetrics.grpcClientMetrics,
+        scanAppMetrics.grpcClientMetrics,
         scanVerdictStore,
         domainMigrationId,
         synchronizerId,
-        nodeMetrics.verdictIngestion,
+        scanAppMetrics.verdictIngestion,
         rewardsReferenceStore,
       )
       scanHandler = new HttpScanHandler(
@@ -406,6 +406,7 @@ class ScanApp(
         acsSnapshotStore,
         scanEventStore,
         bulkStorage.map(_.reader),
+        scanAppMetrics.httpApi,
         dsoAnsResolver,
         config.miningRoundsCacheTimeToLiveOverride,
         config.enableForcedAcsSnapshots,
@@ -460,7 +461,7 @@ class ScanApp(
       )
       httpRateLimiter = new HttpRateLimiter(
         config.parameters.rateLimiting,
-        nodeMetrics.openTelemetryMetricsFactory,
+        scanAppMetrics.openTelemetryMetricsFactory,
         loggerFactory.getTracedLogger(classOf[HttpRateLimiter]),
       )
       route = cors(
@@ -469,7 +470,7 @@ class ScanApp(
         withTraceContext { traceContext =>
           {
             def buildRouteForOperation(operation: String, httpService: String) = {
-              nodeMetrics.httpServerMetrics
+              scanAppMetrics.httpServerMetrics
                 .withMetrics(httpService)(operation)
                 .tflatMap(_ =>
                   // rate limit after the metrics to capture the result in the http metrics
