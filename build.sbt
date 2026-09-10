@@ -2435,6 +2435,11 @@ lazy val `apps-app`: Project =
       assembly / assemblyJarName := "splice-node.jar",
       // include historic dars in the jar
       Compile / unmanagedResourceDirectories += { file(file(".").absolutePath) / "daml/dars" },
+      // scalafix walks classDirectory but is only ordered after compile, not copyResources, so a
+      // DAR copy can land mid-walk and delete the .tmp it stages through, failing scalafix with
+      // "Unable to load symbol table". Ordering compile after copyResources avoids the overlap.
+      Compile / compile := (Compile / compile).dependsOn(Compile / copyResources).value,
+      Test / compile := (Test / compile).dependsOn(Test / copyResources).value,
     )
 
 // https://tanin.nanakorn.com/technical/2018/09/10/parallelise-tests-in-sbt-on-circle-ci.html
