@@ -25,3 +25,8 @@ release-notes:: Upcoming
 
         - Added a new public ``/v0/events/latest-record-time`` endpoint that returns the latest
           record time for which ``/v0/events`` will be able to return events.
+
+    - Validator app
+
+        - Fixed a bug where the minting delegation automation for an external party did not collect
+          ``AppRewardCoupon`` rewards where the external party was the beneficiary but not the provider.
