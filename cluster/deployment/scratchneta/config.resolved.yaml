@@ -362,6 +362,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters {\n  blacklist-leader-selection-policy-config {\n      how-long-to-blacklist {\n          # Reduced from the default of 250 by 4x to match the increase in 4x in segment length.\n          maximum-epoch-blacklisted=62\n          type=linear\n      }\n      how-many-can-we-blacklist=num-faults-tolerated\n  }\n  # Increased by 4x as there is a synchronization point at the end of each epoch which can be expensive.\n  segment-length=40\n  max-requests-in-batch=32\n  max-batches-per-block-proposal=16\n  pbft-view-change-timeout=\"5 seconds\"\n  pbft-view-change-timeout-step=\"2 seconds\"\n  pbft-view-change-timeout-upper-bound=\"30 seconds\"\n  stricter-detection-of-requests-potentially-changing-ordering-topology=true\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -434,6 +437,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters {\n  blacklist-leader-selection-policy-config {\n      how-long-to-blacklist {\n          # Reduced from the default of 250 by 4x to match the increase in 4x in segment length.\n          maximum-epoch-blacklisted=62\n          type=linear\n      }\n      how-many-can-we-blacklist=num-faults-tolerated\n  }\n  # Increased by 4x as there is a synchronization point at the end of each epoch which can be expensive.\n  segment-length=40\n  max-requests-in-batch=32\n  max-batches-per-block-proposal=16\n  pbft-view-change-timeout=\"5 seconds\"\n  pbft-view-change-timeout-step=\"2 seconds\"\n  pbft-view-change-timeout-upper-bound=\"30 seconds\"\n  stricter-detection-of-requests-potentially-changing-ordering-topology=true\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -509,6 +515,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters {\n  blacklist-leader-selection-policy-config {\n      how-long-to-blacklist {\n          # Reduced from the default of 250 by 4x to match the increase in 4x in segment length.\n          maximum-epoch-blacklisted=62\n          type=linear\n      }\n      how-many-can-we-blacklist=num-faults-tolerated\n  }\n  # Increased by 4x as there is a synchronization point at the end of each epoch which can be expensive.\n  segment-length=40\n  max-requests-in-batch=32\n  max-batches-per-block-proposal=16\n  pbft-view-change-timeout=\"5 seconds\"\n  pbft-view-change-timeout-step=\"2 seconds\"\n  pbft-view-change-timeout-upper-bound=\"30 seconds\"\n  stricter-detection-of-requests-potentially-changing-ordering-topology=true\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -581,6 +590,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters {\n  blacklist-leader-selection-policy-config {\n      how-long-to-blacklist {\n          # Reduced from the default of 250 by 4x to match the increase in 4x in segment length.\n          maximum-epoch-blacklisted=62\n          type=linear\n      }\n      how-many-can-we-blacklist=num-faults-tolerated\n  }\n  # Increased by 4x as there is a synchronization point at the end of each epoch which can be expensive.\n  segment-length=40\n  max-requests-in-batch=32\n  max-batches-per-block-proposal=16\n  pbft-view-change-timeout=\"5 seconds\"\n  pbft-view-change-timeout-step=\"2 seconds\"\n  pbft-view-change-timeout-upper-bound=\"30 seconds\"\n  stricter-detection-of-requests-potentially-changing-ordering-topology=true\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -653,6 +665,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters {\n  blacklist-leader-selection-policy-config {\n      how-long-to-blacklist {\n          # Reduced from the default of 250 by 4x to match the increase in 4x in segment length.\n          maximum-epoch-blacklisted=62\n          type=linear\n      }\n      how-many-can-we-blacklist=num-faults-tolerated\n  }\n  # Increased by 4x as there is a synchronization point at the end of each epoch which can be expensive.\n  segment-length=40\n  max-requests-in-batch=32\n  max-batches-per-block-proposal=16\n  pbft-view-change-timeout=\"5 seconds\"\n  pbft-view-change-timeout-step=\"2 seconds\"\n  pbft-view-change-timeout-upper-bound=\"30 seconds\"\n  stricter-detection-of-requests-potentially-changing-ordering-topology=true\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -725,6 +740,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters {\n  blacklist-leader-selection-policy-config {\n      how-long-to-blacklist {\n          # Reduced from the default of 250 by 4x to match the increase in 4x in segment length.\n          maximum-epoch-blacklisted=62\n          type=linear\n      }\n      how-many-can-we-blacklist=num-faults-tolerated\n  }\n  # Increased by 4x as there is a synchronization point at the end of each epoch which can be expensive.\n  segment-length=40\n  max-requests-in-batch=32\n  max-batches-per-block-proposal=16\n  pbft-view-change-timeout=\"5 seconds\"\n  pbft-view-change-timeout-step=\"2 seconds\"\n  pbft-view-change-timeout-upper-bound=\"30 seconds\"\n  stricter-detection-of-requests-potentially-changing-ordering-topology=true\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -797,6 +815,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters {\n  blacklist-leader-selection-policy-config {\n      how-long-to-blacklist {\n          # Reduced from the default of 250 by 4x to match the increase in 4x in segment length.\n          maximum-epoch-blacklisted=62\n          type=linear\n      }\n      how-many-can-we-blacklist=num-faults-tolerated\n  }\n  # Increased by 4x as there is a synchronization point at the end of each epoch which can be expensive.\n  segment-length=40\n  max-requests-in-batch=32\n  max-batches-per-block-proposal=16\n  pbft-view-change-timeout=\"5 seconds\"\n  pbft-view-change-timeout-step=\"2 seconds\"\n  pbft-view-change-timeout-upper-bound=\"30 seconds\"\n  stricter-detection-of-requests-potentially-changing-ordering-topology=true\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -869,6 +890,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters {\n  blacklist-leader-selection-policy-config {\n      how-long-to-blacklist {\n          # Reduced from the default of 250 by 4x to match the increase in 4x in segment length.\n          maximum-epoch-blacklisted=62\n          type=linear\n      }\n      how-many-can-we-blacklist=num-faults-tolerated\n  }\n  # Increased by 4x as there is a synchronization point at the end of each epoch which can be expensive.\n  segment-length=40\n  max-requests-in-batch=32\n  max-batches-per-block-proposal=16\n  pbft-view-change-timeout=\"5 seconds\"\n  pbft-view-change-timeout-step=\"2 seconds\"\n  pbft-view-change-timeout-upper-bound=\"30 seconds\"\n  stricter-detection-of-requests-potentially-changing-ordering-topology=true\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -941,6 +965,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters {\n  blacklist-leader-selection-policy-config {\n      how-long-to-blacklist {\n          # Reduced from the default of 250 by 4x to match the increase in 4x in segment length.\n          maximum-epoch-blacklisted=62\n          type=linear\n      }\n      how-many-can-we-blacklist=num-faults-tolerated\n  }\n  # Increased by 4x as there is a synchronization point at the end of each epoch which can be expensive.\n  segment-length=40\n  max-requests-in-batch=32\n  max-batches-per-block-proposal=16\n  pbft-view-change-timeout=\"5 seconds\"\n  pbft-view-change-timeout-step=\"2 seconds\"\n  pbft-view-change-timeout-upper-bound=\"30 seconds\"\n  stricter-detection-of-requests-potentially-changing-ordering-topology=true\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -1013,6 +1040,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters {\n  blacklist-leader-selection-policy-config {\n      how-long-to-blacklist {\n          # Reduced from the default of 250 by 4x to match the increase in 4x in segment length.\n          maximum-epoch-blacklisted=62\n          type=linear\n      }\n      how-many-can-we-blacklist=num-faults-tolerated\n  }\n  # Increased by 4x as there is a synchronization point at the end of each epoch which can be expensive.\n  segment-length=40\n  max-requests-in-batch=32\n  max-batches-per-block-proposal=16\n  pbft-view-change-timeout=\"5 seconds\"\n  pbft-view-change-timeout-step=\"2 seconds\"\n  pbft-view-change-timeout-upper-bound=\"30 seconds\"\n  stricter-detection-of-requests-potentially-changing-ordering-topology=true\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -1085,6 +1115,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters {\n  blacklist-leader-selection-policy-config {\n      how-long-to-blacklist {\n          # Reduced from the default of 250 by 4x to match the increase in 4x in segment length.\n          maximum-epoch-blacklisted=62\n          type=linear\n      }\n      how-many-can-we-blacklist=num-faults-tolerated\n  }\n  # Increased by 4x as there is a synchronization point at the end of each epoch which can be expensive.\n  segment-length=40\n  max-requests-in-batch=32\n  max-batches-per-block-proposal=16\n  pbft-view-change-timeout=\"5 seconds\"\n  pbft-view-change-timeout-step=\"2 seconds\"\n  pbft-view-change-timeout-upper-bound=\"30 seconds\"\n  stricter-detection-of-requests-potentially-changing-ordering-topology=true\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -1157,6 +1190,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters {\n  blacklist-leader-selection-policy-config {\n      how-long-to-blacklist {\n          # Reduced from the default of 250 by 4x to match the increase in 4x in segment length.\n          maximum-epoch-blacklisted=62\n          type=linear\n      }\n      how-many-can-we-blacklist=num-faults-tolerated\n  }\n  # Increased by 4x as there is a synchronization point at the end of each epoch which can be expensive.\n  segment-length=40\n  max-requests-in-batch=32\n  max-batches-per-block-proposal=16\n  pbft-view-change-timeout=\"5 seconds\"\n  pbft-view-change-timeout-step=\"2 seconds\"\n  pbft-view-change-timeout-upper-bound=\"30 seconds\"\n  stricter-detection-of-requests-potentially-changing-ordering-topology=true\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -1229,6 +1265,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters {\n  blacklist-leader-selection-policy-config {\n      how-long-to-blacklist {\n          # Reduced from the default of 250 by 4x to match the increase in 4x in segment length.\n          maximum-epoch-blacklisted=62\n          type=linear\n      }\n      how-many-can-we-blacklist=num-faults-tolerated\n  }\n  # Increased by 4x as there is a synchronization point at the end of each epoch which can be expensive.\n  segment-length=40\n  max-requests-in-batch=32\n  max-batches-per-block-proposal=16\n  pbft-view-change-timeout=\"5 seconds\"\n  pbft-view-change-timeout-step=\"2 seconds\"\n  pbft-view-change-timeout-upper-bound=\"30 seconds\"\n  stricter-detection-of-requests-potentially-changing-ordering-topology=true\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -1301,6 +1340,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters {\n  blacklist-leader-selection-policy-config {\n      how-long-to-blacklist {\n          # Reduced from the default of 250 by 4x to match the increase in 4x in segment length.\n          maximum-epoch-blacklisted=62\n          type=linear\n      }\n      how-many-can-we-blacklist=num-faults-tolerated\n  }\n  # Increased by 4x as there is a synchronization point at the end of each epoch which can be expensive.\n  segment-length=40\n  max-requests-in-batch=32\n  max-batches-per-block-proposal=16\n  pbft-view-change-timeout=\"5 seconds\"\n  pbft-view-change-timeout-step=\"2 seconds\"\n  pbft-view-change-timeout-upper-bound=\"30 seconds\"\n  stricter-detection-of-requests-potentially-changing-ordering-topology=true\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -1373,6 +1415,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters {\n  blacklist-leader-selection-policy-config {\n      how-long-to-blacklist {\n          # Reduced from the default of 250 by 4x to match the increase in 4x in segment length.\n          maximum-epoch-blacklisted=62\n          type=linear\n      }\n      how-many-can-we-blacklist=num-faults-tolerated\n  }\n  # Increased by 4x as there is a synchronization point at the end of each epoch which can be expensive.\n  segment-length=40\n  max-requests-in-batch=32\n  max-batches-per-block-proposal=16\n  pbft-view-change-timeout=\"5 seconds\"\n  pbft-view-change-timeout-step=\"2 seconds\"\n  pbft-view-change-timeout-upper-bound=\"30 seconds\"\n  stricter-detection-of-requests-potentially-changing-ordering-topology=true\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -1445,6 +1490,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters {\n  blacklist-leader-selection-policy-config {\n      how-long-to-blacklist {\n          # Reduced from the default of 250 by 4x to match the increase in 4x in segment length.\n          maximum-epoch-blacklisted=62\n          type=linear\n      }\n      how-many-can-we-blacklist=num-faults-tolerated\n  }\n  # Increased by 4x as there is a synchronization point at the end of each epoch which can be expensive.\n  segment-length=40\n  max-requests-in-batch=32\n  max-batches-per-block-proposal=16\n  pbft-view-change-timeout=\"5 seconds\"\n  pbft-view-change-timeout-step=\"2 seconds\"\n  pbft-view-change-timeout-upper-bound=\"30 seconds\"\n  stricter-detection-of-requests-potentially-changing-ordering-topology=true\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -1517,6 +1565,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters {\n  blacklist-leader-selection-policy-config {\n      how-long-to-blacklist {\n          # Reduced from the default of 250 by 4x to match the increase in 4x in segment length.\n          maximum-epoch-blacklisted=62\n          type=linear\n      }\n      how-many-can-we-blacklist=num-faults-tolerated\n  }\n  # Increased by 4x as there is a synchronization point at the end of each epoch which can be expensive.\n  segment-length=40\n  max-requests-in-batch=32\n  max-batches-per-block-proposal=16\n  pbft-view-change-timeout=\"5 seconds\"\n  pbft-view-change-timeout-step=\"2 seconds\"\n  pbft-view-change-timeout-upper-bound=\"30 seconds\"\n  stricter-detection-of-requests-potentially-changing-ordering-topology=true\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -1593,6 +1644,9 @@ svs:
           memory: '2Gi'
     subdomain: 'sv-1'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters {\n  blacklist-leader-selection-policy-config {\n      how-long-to-blacklist {\n          # Reduced from the default of 250 by 4x to match the increase in 4x in segment length.\n          maximum-epoch-blacklisted=62\n          type=linear\n      }\n      how-many-can-we-blacklist=num-faults-tolerated\n  }\n  # Increased by 4x as there is a synchronization point at the end of each epoch which can be expensive.\n  segment-length=40\n  max-requests-in-batch=32\n  max-batches-per-block-proposal=16\n  pbft-view-change-timeout=\"5 seconds\"\n  pbft-view-change-timeout-step=\"2 seconds\"\n  pbft-view-change-timeout-upper-bound=\"30 seconds\"\n  stricter-detection-of-requests-potentially-changing-ordering-topology=true\n}\n"
       auth0:
         clientId: 'bxjt0vzLyRG2rk2fapXfOzH5lzK4mrl7'
       resources:
