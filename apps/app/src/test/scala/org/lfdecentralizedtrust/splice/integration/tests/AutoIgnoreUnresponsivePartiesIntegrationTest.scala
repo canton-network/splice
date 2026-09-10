@@ -222,9 +222,26 @@ abstract class AutoIgnoreUnresponsivePartiesIntegrationTestBase
 class AutoIgnoreUnresponsivePartiesInMemoryIntegrationTest
     extends AutoIgnoreUnresponsivePartiesIntegrationTestBase {
   override protected val enablePersistedUnavailableParties: Boolean = false
+
+  "Ignored parties don't survive an SV app restart" in { implicit env =>
+    sv1Backend.stop()
+    sv1Backend.startSync()
+    sv1Backend.dsoDelegateBasedAutomation.unavailablePartiesStore
+      .listParties()(TraceContext.empty)
+      .futureValue shouldBe empty
+  }
 }
 
 class AutoIgnoreUnresponsivePartiesWithPersistenceIntegrationTest
     extends AutoIgnoreUnresponsivePartiesIntegrationTestBase {
+
   override protected val enablePersistedUnavailableParties: Boolean = true
+
+  "Ignored parties survive an SV app restart" in { implicit env =>
+    sv1Backend.stop()
+    sv1Backend.startSync()
+    sv1Backend.dsoDelegateBasedAutomation.unavailablePartiesStore
+      .listParties()(TraceContext.empty)
+      .futureValue should not be empty
+  }
 }
