@@ -695,14 +695,19 @@ class WalletMintingDelegationTimeBasedIntegrationTest
         val currentCount = getAmuletCount()
         val mergeLimit = DefaultAmuletMergeLimit
 
-        // Transfer enough amulets to reach exactly 2x the merge limit
+        // Transfer enough amulets to reach exactly 2x the merge limit.
+        // Pause the validator's own collect-and-merge trigger during the
+        // transfers so it cannot archive a sender input amulet mid-send,
+        // which would reject the transfer with INACTIVE_CONTRACTS.
         val amuletsNeededFor2x = (2 * mergeLimit) - currentCount
-        (1 to amuletsNeededFor2x).foreach { i =>
-          aliceValidatorWalletClient.transferPreapprovalSend(
-            beneficiaryParty.party,
-            10.0,
-            s"transfer-$i",
-          )
+        setTriggersWithin(triggersToPauseAtStart = Seq(validatorRewardTrigger)) {
+          (1 to amuletsNeededFor2x).foreach { i =>
+            aliceValidatorWalletClient.transferPreapprovalSend(
+              beneficiaryParty.party,
+              10.0,
+              s"transfer-$i",
+            )
+          }
         }
 
         clue(s"Verify amulets merged to mergeLimit") {
