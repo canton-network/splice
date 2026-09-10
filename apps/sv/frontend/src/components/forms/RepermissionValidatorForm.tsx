@@ -71,7 +71,10 @@ export const RepermissionValidatorForm: React.FC = () => {
         return 'Multiple unpermission contracts found. Please wait for SV automation to merge them.';
       }
       return undefined;
-    } catch (_) {
+    } catch (error: unknown) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw error;
+      }
       return 'Failed to verify participant ID on ledger.';
     }
   };
