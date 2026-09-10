@@ -32,6 +32,7 @@ import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
   ExpireRewardCouponV2Trigger,
   UnhideRewardCouponV2Trigger,
 }
+import org.lfdecentralizedtrust.splice.sv.config.InitialRewardConfig
 import org.lfdecentralizedtrust.splice.util.{
   ChoiceContextWithDisclosures,
   TimeTestUtil,
@@ -56,6 +57,10 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
     with HasExecutionContext
     with WalletTestUtil
     with TimeTestUtil {
+
+  // Short TTL so expiring reward coupons only requires advancing time by a few ticks
+  // thus preventing flakes caused due to round automation never able to catch up.
+  private val rewardCouponTtl = 30.minutes
 
   // Version where V2 was introduced, or the current minimum initialization version if higher
   private val minV2AmuletVersion =
@@ -132,6 +137,15 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
         )(config)
       )
       .addConfigTransform((_, config) =>
+        ConfigTransforms.withRewardConfig(
+          InitialRewardConfig(
+            mintingVersion = "RewardVersion_TrafficBasedAppRewards",
+            dryRunVersion = None,
+            rewardCouponTimeToLiveMicros = rewardCouponTtl.toMicros,
+          )
+        )(config)
+      )
+      .addConfigTransform((_, config) =>
         ConfigTransforms.updateAllSvAppConfigs_(svConfig =>
           svConfig.copy(
             packageVettingCache = svConfig.packageVettingCache.copy(
@@ -199,7 +213,7 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
 
       actAndCheck(
         "Advance past the coupon TTL while Alice is unvetted",
-        advanceTime(Duration.ofHours(37)),
+        advanceTime(Duration.ofMinutes(rewardCouponTtl.toMinutes + 10)),
       )(
         "ExpireRewardCouponV2Trigger archives Alice's hidden and Bob's coupons while she is unvetted",
         _ => sv1Backend.appState.dsoStore.listRewardCouponsV2().futureValue shouldBe empty,
@@ -426,7 +440,7 @@ class UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest
 
       actAndCheck(
         "Advance past the coupon TTL",
-        advanceTime(Duration.ofHours(37)),
+        advanceTime(Duration.ofMinutes(rewardCouponTtl.toMinutes + 10)),
       )(
         "ExpireRewardCouponV2Trigger ignores Alice coupons",
         _ => {
