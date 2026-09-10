@@ -21,6 +21,7 @@ import Splice.Amulet
 import Splice.Amulet.RewardAccountingV2 qualified as RewardAccountingV2
 import Splice.AmuletRules
 import Splice.ExternalPartyAmuletRules
+import Splice.GovernanceLock
 import Splice.TokenStandard.Utils qualified as TSU
 
 import Splice.ExternalPartyConfigState
@@ -346,6 +347,9 @@ data DsoRules_MergeUnclaimedDevelopmentFundCouponsResult = DsoRules_MergeUnclaim
 
 data DsoRules_ExpireDevelopmentFundCouponResult = DsoRules_ExpireDevelopmentFundCouponResult with
     result : DevelopmentFundCoupon_DsoExpireResult
+  deriving (Serializable)
+
+data DsoRules_VestingLock_ExpireVestingLockResult = DsoRules_VestingLock_ExpireVestingLockResult with
   deriving (Serializable)
 
 data DsoRules_MiningRound_CloseResult = DsoRules_MiningRound_CloseResult with
@@ -1608,6 +1612,18 @@ template DsoRules with
         _ <- getAndValidateSvParty this (Some sv)
         result <- exercise developmentFundCouponCid DevelopmentFundCoupon_DsoExpire
         pure $ DsoRules_ExpireDevelopmentFundCouponResult with result
+
+    nonconsuming choice DsoRules_VestingLock_ExpireVestingLock : DsoRules_VestingLock_ExpireVestingLockResult
+      -- ^ Expires a fully vested `VestingLock`, so that SVs can garbage-collect
+      -- locks that nobody has bothered to withdraw.
+      with
+        vestingLockCid : ContractId VestingLock
+        sv : Party
+      controller sv
+      do
+        _ <- getAndValidateSvParty this (Some sv)
+        exercise vestingLockCid VestingLock_DsoExpire
+        pure $ DsoRules_VestingLock_ExpireVestingLockResult
 
     nonconsuming choice DsoRules_MiningRound_Close : DsoRules_MiningRound_CloseResult
       with
