@@ -500,9 +500,9 @@ class AcsSnapshotStore(
     case None =>
       // This expression is always true (scan only processes data where the DSO is stakeholder).
       // It is included to make sure the query plan uses the right index (acs_snapshot_data_all_filters)
-      sql"and stakeholder = ${dsoParty}"
+      sql" stakeholder = ${dsoParty}"
     case Some(partyIds) =>
-      (sql" and " ++ DbStorage.toInClause("stakeholder", partyIds)).toActionBuilder
+      DbStorage.toInClause("stakeholder", partyIds)
   }
 
   private def templatesFilter(templates: Seq[PackageQualifiedName]) =
