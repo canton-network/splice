@@ -3,7 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.wallet.store.db
 
-import org.lfdecentralizedtrust.splice.codegen.java.splice.{amulet as amuletCodegen}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet as amuletCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense as validatorCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.round.IssuingMiningRound
 import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
@@ -25,6 +25,7 @@ import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.ShowUtil.*
 import com.digitalasset.canton.topology.ParticipantId
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.SvRewardCoupon
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 
 import scala.concurrent.*
@@ -119,4 +120,30 @@ class DbExternalPartyWalletStore(
     limit,
   )
 
+  override def listSortedSvRewardCoupons(
+      issuingRoundsMap: Map[Round, IssuingMiningRound],
+      limit: Limit = defaultLimit,
+  )(implicit tc: TraceContext): Future[
+    Seq[(Contract[SvRewardCoupon.ContractId, SvRewardCoupon], BigDecimal)]
+  ] =
+    for {
+      coupons <- multiDomainAcsStore.listContracts(amuletCodegen.SvRewardCoupon.COMPANION)
+    } yield applyLimit(
+      "listSortedRewardCoupons",
+      limit,
+      coupons
+        .flatMap { c =>
+          issuingRoundsMap.get(c.payload.round).map { i =>
+            val quantity =
+              BigDecimal(c.payload.weight.longValue) * BigDecimal(i.issuancePerSvRewardCoupon)
+            (c.contract, quantity)
+          }
+        }
+        .sorted(
+          Ordering[(Long, BigDecimal)].on(
+            (x: (Contract[SvRewardCoupon.ContractId, SvRewardCoupon], BigDecimal)) =>
+              (x._1.payload.round.number, -x._2)
+          )
+        ),
+    )
 }
