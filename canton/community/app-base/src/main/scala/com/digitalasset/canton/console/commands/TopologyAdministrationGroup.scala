@@ -32,6 +32,9 @@ import com.digitalasset.canton.console.{
   Help,
   Helpful,
   InstanceReference,
+  MediatorReference,
+  ParticipantReference,
+  SequencerReference,
 }
 import com.digitalasset.canton.console.CommandErrors.GenericCommandError
 import com.digitalasset.canton.crypto.*
@@ -97,6 +100,59 @@ class TopologyAdministrationGroup(
   /** run a topology change command */
   private[console] def runAdminCommand[T](grpcCommand: => GrpcAdminCommand[?, ?, T]): T =
     consoleEnvironment.run(adminCommand(grpcCommand))
+
+  private def resolveTargetProtocolVersion(synchronizerId: SynchronizerId): ProtocolVersion =
+    instance match {
+      case sequencer: SequencerReference => resolveSequencerProtocolVersion(sequencer)
+      case mediator: MediatorReference => resolveMediatorProtocolVersion(mediator)
+      case participant: ParticipantReference =>
+        resolveParticipantProtocolVersion(participant, synchronizerId)
+      case other =>
+        consoleEnvironment.raiseError(
+          s"Cannot determine protocol version for unsupported node type `${other.getClass.getSimpleName}`."
+        )
+    }
+
+  private def resolveSequencerProtocolVersion(sequencer: SequencerReference): ProtocolVersion =
+    sequencer.physical_synchronizer_id.protocolVersion
+
+  private def resolveMediatorProtocolVersion(mediator: MediatorReference): ProtocolVersion =
+    mediator.health.status.successOption
+      .map(_.protocolVersion)
+      .getOrElse(
+        consoleEnvironment.raiseError(
+          s"Cannot determine protocol version from mediator `${mediator.name}` health status."
+        )
+      )
+
+  /** Resolves the protocol version for a participant by taking the physical synchronizer id of the
+    * active connection for the given logical synchronizer id.
+    *
+    * Fails if the participant has no active connection for the logical synchronizer id, or if
+    * multiple active connections match.
+    */
+  private def resolveParticipantProtocolVersion(
+      participant: ParticipantReference,
+      synchronizerId: SynchronizerId,
+  ): ProtocolVersion = {
+    val matchingPhysicalSynchronizerIds = participant.synchronizers
+      .list_registered()
+      .flatMap { case (_, knownPsid, _) => knownPsid.toOption }
+      .filter(_.logical == synchronizerId)
+
+    matchingPhysicalSynchronizerIds match {
+      case Seq(physicalSynchronizerId) => physicalSynchronizerId.protocolVersion
+      case Seq() =>
+        consoleEnvironment.raiseError(
+          s"Synchronizer `$synchronizerId` is not registered on participant `${participant.name}`, cannot determine protocol version."
+        )
+      case many =>
+        consoleEnvironment.raiseError(
+          s"Found multiple registered physical synchronizers for `$synchronizerId` on participant `${participant.name}`: ${many
+              .mkString(", ")}."
+        )
+    }
+  }
 
   @Help.Summary("Initialize the node with a unique identifier")
   @Help.Description(
@@ -3275,10 +3331,14 @@ class TopologyAdministrationGroup(
           consoleEnvironment.commandTimeouts.bounded
         ),
         force: ForceFlags = ForceFlags.none,
+        protocolVersion: Option[ProtocolVersion] = None,
     ): SignedTopologyTransaction[TopologyChangeOp, SynchronizerParametersState] = { // TODO(#15815): Don't expose internal TopologyMapping and TopologyChangeOp classes
 
+      val targetProtocolVersion =
+        protocolVersion.getOrElse(resolveTargetProtocolVersion(synchronizerId))
+
       val parametersInternal =
-        parameters.toInternal.valueOr(err =>
+        parameters.toInternal(targetProtocolVersion).valueOr(err =>
           consoleEnvironment.raiseError(s"Cannot convert parameters to internal format: $err")
         )
 
