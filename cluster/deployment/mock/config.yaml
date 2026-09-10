@@ -41,7 +41,7 @@ sv:
   scan:
     externalRateLimits:
       rateLimits:
-        /registry/metadata/v1/info:
+        /registry/:
           perIpLimits:
             overrides:
               test:
