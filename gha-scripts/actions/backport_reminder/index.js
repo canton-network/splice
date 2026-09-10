@@ -19636,6 +19636,9 @@ var spliceRepo = {
   owner: "canton-network",
   repo: "splice"
 };
+function isSpliceRepo(context3) {
+  return context3.repo.owner === spliceRepo.owner && context3.repo.repo === spliceRepo.repo;
+}
 async function findLatestReleaseBranchesUpTo(github, oldestReleaseBranch) {
   const branches = [];
   for await (const branch of iterateReleaseLineBranches(github)) {
@@ -22038,8 +22041,8 @@ async function addBackportReminderComment(github, context3, prNumber2, lookupPro
   console.log(`base branch: ${baseBranch}`);
   console.log(`Determining relevant release branches for backporting...`);
   const [relevantReleaseBranches, explanation] = lookupProdClusterConfigs2 ? await getRelevantReleaseBranchesFromProdClusters(github, context3) : [await findNLatestReleaseBranches(github, 4), void 0];
-  const backportBranchCandidates = ["main", ...relevantReleaseBranches];
-  const backportBranches = backportBranchCandidates.filter((branch) => branch !== baseBranch);
+  const backportBranchCandidates = ["main", ...alwaysIncludedBranches(context3), ...relevantReleaseBranches];
+  const backportBranches = [...new Set(backportBranchCandidates)].filter((branch) => branch !== baseBranch);
   console.log(`Adding backport reminder comment to PR #${prNumber2}...`);
   await github.rest.issues.createComment({
     issue_number: prNumber2,
@@ -22047,6 +22050,9 @@ async function addBackportReminderComment(github, context3, prNumber2, lookupPro
     repo: context3.repo.repo,
     body: formatBackportReminderComment(baseBranch, backportBranches, explanation)
   });
+}
+function alwaysIncludedBranches(context3) {
+  return isSpliceRepo(context3) ? ["release-line-0.8.x"] : [];
 }
 async function getRelevantReleaseBranchesFromProdClusters(github, context3) {
   const prodClusters = ["devnet", "testnet", "mainnet"];
