@@ -1,6 +1,3 @@
-# Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
-# SPDX-License-Identifier: Apache-2.0
-
 configs:
   wallet-gateway-config:
     content: |
@@ -43,33 +40,31 @@ configs:
         "bootstrap": {
           "idps": [
             {
-              "id": "idp-self-signed",
-              "type": "self_signed",
-              "issuer": "self-signed"
+              "id": "idp-oidc",
+              "type": "oauth",
+              "issuer": "${AUTH_ISSUER:-${AUTH_URL}/}",
+              "configUrl": "${AUTH_WELLKNOWN_URL}"
             }
           ],
           "networks": [
             {
               "id": "canton:splice-compose-validator",
               "name": "Splice validator",
-              "description": "Docker Compose validator (no authentication)",
-              "identityProviderId": "idp-self-signed",
+              "description": "Docker Compose validator",
+              "identityProviderId": "idp-oidc",
               "ledgerApi": { "baseUrl": "http://participant:7575" },
               "auth": {
-                "method": "self_signed",
-                "issuer": "self-signed",
-                "audience": "${VALIDATOR_AUTH_AUDIENCE}",
-                "scope": "daml_ledger_api",
-                "clientId": "wallet-user",
-                "clientSecret": "unsafe"
+                "method": "authorization_code",
+                "audience": "${LEDGER_API_AUTH_AUDIENCE}",
+                "scope": "openid offline_access${LEDGER_API_AUTH_SCOPE:+ ${LEDGER_API_AUTH_SCOPE}}",
+                "clientId": "${WALLET_GATEWAY_UI_CLIENT_ID}"
               },
               "adminAuth": {
-                "method": "self_signed",
-                "issuer": "self-signed",
-                "audience": "${VALIDATOR_AUTH_AUDIENCE}",
-                "scope": "daml_ledger_api",
-                "clientId": "ledger-api-user",
-                "clientSecret": "unsafe"
+                "method": "client_credentials",
+                "audience": "${LEDGER_API_AUTH_AUDIENCE}",
+                "scope": "${LEDGER_API_AUTH_SCOPE}",
+                "clientId": "${VALIDATOR_AUTH_CLIENT_ID}",
+                "clientSecretEnv": "WG_ADMIN_CLIENT_SECRET"
               }
             }
           ]
@@ -101,6 +96,9 @@ services:
     image: "${WALLET_GATEWAY_IMAGE_REPO}wallet-gateway:v${WALLET_GATEWAY_VERSION}"
     environment:
       - WG_STORE_PASSWORD=${SPLICE_DB_PASSWORD}
+      # Reuses the validator backend client (the participant admin user), so the gateway can
+      # allocate parties and grant user rights
+      - WG_ADMIN_CLIENT_SECRET=${VALIDATOR_AUTH_CLIENT_SECRET}
     configs:
       - source: wallet-gateway-config
         target: /app/config.json

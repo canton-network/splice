@@ -40,7 +40,7 @@ function usage() {
   echo "  -S <comma_separated_sv_names>: Comma-separated list of SV names for bft-custom mode."
   echo "  -T <threshold>: Consensus threshold integer for bft-custom mode."
   echo "  -k: Disable the safety check that refuses to create a new participant database when another participant database already exists."
-  echo "  -g: Also deploy the Canton Wallet Gateway and the Portfolio UI (reachable at http://walletgateway.localhost and http://portfolio.localhost). Currently only supported without authentication (-a)."
+  echo "  -g: Also deploy the Canton Wallet Gateway and the Portfolio UI (reachable at http://walletgateway.localhost and http://portfolio.localhost). With -a, also requires WALLET_GATEWAY_UI_CLIENT_ID to be set in .env."
 
   echo ""
   echo "Testing flags:"
@@ -332,6 +332,9 @@ if [ $bft_custom -eq 1 ]; then
 fi
 if [ $wallet_gateway -eq 1 ]; then
   extra_compose_files+=("-f" "${script_dir}/compose-wallet-gateway.yaml")
+  if [ $auth -ne 1 ]; then
+    extra_compose_files+=("-f" "${script_dir}/compose-wallet-gateway-disable-auth.yaml")
+  fi
   # The Portfolio UI runs in the browser, so it needs a Scan URL reachable from the host
   WALLET_GATEWAY_SCAN_ADDRESS="${host_scan_address:-${SCAN_ADDRESS}}"
   export WALLET_GATEWAY_SCAN_ADDRESS
