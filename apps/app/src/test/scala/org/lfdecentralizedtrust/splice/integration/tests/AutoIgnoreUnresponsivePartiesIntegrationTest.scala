@@ -27,7 +27,7 @@ import org.slf4j.event.Level
 import java.time.Duration
 import scala.concurrent.duration.*
 
-class AutoIgnoreUnresponsivePartiesIntegrationTest
+abstract class AutoIgnoreUnresponsivePartiesIntegrationTestBase
     extends IntegrationTest
     with WalletTestUtil
     with TimeTestUtil
@@ -35,6 +35,8 @@ class AutoIgnoreUnresponsivePartiesIntegrationTest
 
   override protected def runTokenStandardCliSanityCheck: Boolean = false
   override protected def runUpdateHistorySanityCheck: Boolean = false
+
+  protected val enablePersistedUnavailableParties: Boolean
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
@@ -64,6 +66,16 @@ class AutoIgnoreUnresponsivePartiesIntegrationTest
       .addConfigTransforms((_, c) =>
         ConfigTransforms.updateAllSvAppConfigs_(
           _.copy(delegatelessAutomationExpiredAmuletBatchSize = 2)
+        )(c)
+      )
+      .addConfigTransforms((_, c) =>
+        ConfigTransforms.updateAllSvAppConfigs_(conf =>
+          conf.copy(parameters =
+            conf.parameters.copy(enabledFeatures =
+              conf.parameters.enabledFeatures
+                .copy(enablePersistedUnavailableParties = enablePersistedUnavailableParties)
+            )
+          )
         )(c)
       )
 
@@ -205,4 +217,14 @@ class AutoIgnoreUnresponsivePartiesIntegrationTest
         aliceValidatorBackend.participantClient.synchronizers.reconnect_all()
       }
   }
+}
+
+class AutoIgnoreUnresponsivePartiesInMemoryIntegrationTest
+    extends AutoIgnoreUnresponsivePartiesIntegrationTestBase {
+  override protected val enablePersistedUnavailableParties: Boolean = false
+}
+
+class AutoIgnoreUnresponsivePartiesWithPersistenceIntegrationTest
+    extends AutoIgnoreUnresponsivePartiesIntegrationTestBase {
+  override protected val enablePersistedUnavailableParties: Boolean = true
 }
