@@ -338,19 +338,6 @@ class SequencerAdminConnection(
     )
   }
 
-  /** This is used for initializing the sequencer after hard domain migrations.
-    */
-  def initializeFromGenesisState(
-      genesisState: Seq[ByteString],
-      domainParameters: StaticSynchronizerParameters,
-  )(implicit traceContext: TraceContext): Future[InitializeSequencerResponse] =
-    runCmd(
-      SequencerAdminCommands.InitializeFromGenesisStateV2(
-        genesisState,
-        domainParameters,
-      )
-    )
-
   def initializeFromOnboardingState(
       onboardingState: ByteString
   )(implicit traceContext: TraceContext): Future[InitializeSequencerResponse] =
