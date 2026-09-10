@@ -47,8 +47,6 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   MigrationSchedule,
   RewardAccountingActivityTotalsOk,
   RewardAccountingActivityTotalsUndetermined,
-  RewardAccountingRootHashOk,
-  RewardAccountingRootHashUndetermined,
 }
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection.{
   BftCallConfig,
@@ -1064,12 +1062,15 @@ class BftScanConnection(
     }.flatMap(consensusOverCache(endpoint, _, undetermined, okResponse))
   }
 
-  /** See [[getRewardAccountingActivityTotals]] for the two-phase
-    * probe-filter-consensus rationale; the pattern is identical.
-    * Consensus is computed over the returned `rootHash` string only
-    * (not the full Ok payload) so that trivial differences in
-    * `status` / `roundNumber` — which should never differ across
-    * scans in practice — do not defeat consensus.
+  /** Bootstrap-safe reward-accounting read using two-phase
+    * probe-filter-consensus. Phase 1 asks every open scan whether it
+    * can contribute to consensus; phase 2 runs a regular BFT call
+    * across peers that can (`WithData`) or might still be able to
+    * (`Unavailable`), reusing cached Ok responses from phase 1.
+    * Undetermined and CannotProvide responses are transformed to
+    * failures so they never form a consensus. Consensus failures
+    * propagate as `HttpErrorWithHttpCode(BadGateway)` — same
+    * convention as `getMigrationInfo`.
     */
   override def getRewardAccountingRootHash(roundNumber: Long)(implicit
       ec: ExecutionContext,
@@ -1081,27 +1082,74 @@ class BftScanConnection(
       ec: ExecutionContext,
       tc: TraceContext,
   ): Future[(GetRewardAccountingRootHashResponse, List[Uri])] = {
-    val undetermined =
-      GetRewardAccountingRootHashResponse(
-        RewardAccountingRootHashUndetermined(status = "Undetermined")
+    import GetRewardAccountingRootHashResponse.members as RHR
+
+    // Optimization: transform `Undetermined` and `CannotProvide`
+    // responses to failed responses, so that they do not form consensus.
+    // Returning `Undetermined` or `CannotProvide` would also be ok, but the
+    // outer retry in the caller of this method (`SummarizingMiningRoundTrigger`)
+    // is slower and more noisy than the retry in `bftCallWithScanUris`.
+    def getRewardAccountingRootHashForConsensus(
+        scan: SingleScanConnection
+    ): Future[GetRewardAccountingRootHashResponse] =
+      scan.getRewardAccountingRootHash(roundNumber).transform {
+        case Success(RHR.RewardAccountingRootHashUndetermined(_)) |
+            Success(RHR.RewardAccountingRootHashCannotProvide(_)) =>
+          Failure(BftScanConnection.IgnoreResponse(scan.url))
+        case r => r
+      }
+
+    for {
+      connectionsWithResponses <- BftScanConnection.ConnectionsWithProbeVerdicts.fromCall(
+        scanList.scanConnections,
+        _.getRewardAccountingRootHash(roundNumber),
+      ) {
+        case Success(RHR.RewardAccountingRootHashCannotProvide(_)) =>
+          BftScanConnection.ProbeVerdict.WithoutData
+        case Success(r @ RHR.RewardAccountingRootHashOk(_)) =>
+          BftScanConnection.ProbeVerdict.WithData(r)
+        case Success(RHR.RewardAccountingRootHashUndetermined(_)) =>
+          BftScanConnection.ProbeVerdict.Unavailable
+        case Failure(_) => BftScanConnection.ProbeVerdict.Unavailable
+      }
+      result <- consensusOverProbe(
+        connectionsWithResponses,
+        "getRewardAccountingRootHash",
+        getRewardAccountingRootHashForConsensus,
       )
-    val endpoint = "getRewardAccountingRootHash"
-    def okResponse(rootHash: String): GetRewardAccountingRootHashResponse =
-      GetRewardAccountingRootHashResponse(
-        RewardAccountingRootHashOk(
-          status = "Ok",
-          roundNumber = roundNumber,
-          rootHash = rootHash,
-        )
-      )
-    probeScans(endpoint, roundNumber, _.getRewardAccountingRootHash(roundNumber)) {
-      case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok) =>
-        BftScanConnection.ProbeVerdict.WithData(ok.rootHash)
-      case _: GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashCannotProvide =>
-        BftScanConnection.ProbeVerdict.WithoutData
-      case _: GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashUndetermined =>
-        BftScanConnection.ProbeVerdict.Unavailable
-    }.flatMap(consensusOverCache(endpoint, _, undetermined, okResponse))
+    } yield result
+  }
+
+  /** Second phase of a two-phase probe-filter-consensus call. Runs a BFT
+    * call over the probed set: `WithData` responses cached in the probe
+    * are reused; `Unavailable` peers are re-queried live via `liveCall`
+    * so `bftCallWithScanUris`'s retry loop can catch peers that recover
+    * during a transient outage. `WithoutData` peers are filtered out by
+    * `forOptionalResponses`.
+    *
+    * Note: `bftCallWithScanUris` retries on `ConsensusNotReached`; retries
+    * that only re-read cached responses produce byte-identical results,
+    * so the extra WARNs on a genuine disagreement are benign.
+    */
+  private def consensusOverProbe[T](
+      connectionsWithResponses: BftScanConnection.ConnectionsWithProbeVerdicts[T],
+      endpoint: String,
+      liveCall: SingleScanConnection => Future[T],
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[(T, List[Uri])] = {
+    val callConfig = BftCallConfig.forOptionalResponses(connectionsWithResponses)
+    bftCallWithScanUris[T](
+      call = scan =>
+        connectionsWithResponses.responses.get(scan).fold(liveCall(scan)) {
+          case BftScanConnection.ProbeVerdict.WithData(cached) => Future.successful(cached)
+          case _ => liveCall(scan)
+        },
+      endpoint = endpoint,
+      callConfig = callConfig,
+      disagreementLogLevel = Level.WARN,
+    )
   }
 
   /** The batch contents are verifiable via the hash, so BFT agreement across scans is not
