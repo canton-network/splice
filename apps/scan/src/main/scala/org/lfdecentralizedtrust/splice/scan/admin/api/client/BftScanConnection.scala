@@ -915,6 +915,7 @@ class BftScanConnection(
     endpoint,
     callConfig,
     consensusFailureLogLevel,
+    notEnoughScansLogLevel = consensusFailureLogLevel,
     shortenResponsesForLog = shortenResponsesForLog,
   )
     .map(_._1)
@@ -925,6 +926,7 @@ class BftScanConnection(
       callConfig: BftCallConfig,
       consensusFailureLogLevel: Level = Level.WARN,
       disagreementLogLevel: Level = Level.INFO,
+      notEnoughScansLogLevel: Level,
       shortenResponsesForLog: T => Any = identity[T],
   )(implicit
       ec: ExecutionContext,
@@ -951,7 +953,7 @@ class BftScanConnection(
           s"(out of $totalNumber configured ones), which are fewer than the necessary " +
           s"${callConfig.targetSuccess} to achieve BFT guarantees."
       val exception = HttpErrorWithHttpCode(StatusCodes.BadGateway, msg)
-      LoggerUtil.logThrowableAtLevel(consensusFailureLogLevel, msg, exception)
+      LoggerUtil.logThrowableAtLevel(notEnoughScansLogLevel, msg, exception)
       markBftCall("not_enough_scans")
       Future.failed(exception)
     } else {
@@ -1133,6 +1135,10 @@ class BftScanConnection(
       endpoint = endpoint,
       callConfig = callConfig,
       disagreementLogLevel = Level.WARN,
+      // "Not enough scans" here means the probe didn't gather enough cached
+      // responses to satisfy BFT quorum — benign during bootstrap or transient
+      // peer unavailability. The caller sees HTTP 502 and retries.
+      notEnoughScansLogLevel = Level.INFO,
     )
   }
 
