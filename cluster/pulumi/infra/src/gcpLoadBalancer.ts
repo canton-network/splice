@@ -5,6 +5,7 @@ import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
 import * as _ from 'lodash';
 import { CLUSTER_BASENAME, ExactNamespace } from '@canton-network/splice-pulumi-common';
+import { local } from '@pulumi/command';
 
 import { CloudArmorPolicy } from './cloudArmor';
 import { CloudArmorLoggingConfig } from './config';
@@ -196,13 +197,15 @@ function attachBackendPolicy(
           // SetSecurityPolicy: Invalid value for field 'resource': '{  "securityPolicy": "https://www.googleapis.com/compute/beta/projects/da-cn-scratchnet/regions/us-c...'. The given security policy does not exist
           ...(policy
             ? {
-                securityPolicy: policy.name.apply(name => {
-                  console.assert(
-                    !name.includes('/'),
-                    `${name} should be just the name, not a full resource path`
-                  );
-                  return name;
-                }),
+                securityPolicy: policy
+                  ? policy.name.apply(name => {
+                      console.assert(
+                        !name.includes('/'),
+                        `${name} should be just the name, not a full resource path`
+                      );
+                      return name;
+                    })
+                  : '',
               }
             : {}),
         },
@@ -500,12 +503,37 @@ export function configureGKEL7Gateway(config: L7GatewayConfig): {
 } {
   const gateway = createL7Gateway(config);
 
+  // always created a backend policy to detach Cloud Armor from the backend service
+  const cloudArmorLink = attachBackendPolicy(
+    config.securityPolicy,
+    config,
+    gateway,
+    `${config.gatewayName}-cloud-armor-link`
+  );
+
   if (config.securityPolicy) {
-    attachBackendPolicy(
-      config.securityPolicy,
-      config,
-      gateway,
-      `${config.gatewayName}-cloud-armor-link`
+    // The GKE Gateway controller applies the GCPBackendPolicy asynchronously, so the
+    // security policy can still be attached when Pulumi gets to deleting it, failing
+    // with resourceInUseByAnotherResource. Pulumi deletes a resource only after its
+    // dependents are updated or deleted, so this resource's delete step runs after the
+    // link CR has been updated to securityPolicy: '' and before the policy is deleted.
+    // It blocks until GCP reports no backend service referencing the policy.
+    new local.Command(
+      `${config.gatewayName}-cloud-armor-detach-wait`,
+      {
+        create: 'true',
+        delete: config.securityPolicy.name.apply(
+          policyName => `set -eu
+            for _ in $(seq 1 60); do
+              attached=$(gcloud compute backend-services list --filter="securityPolicy~${policyName}$" --format="value(name)")
+              if [ -z "$attached" ]; then exit 0; fi
+              sleep 10
+            done
+            echo "backend services still reference ${policyName}: $attached" >&2
+            exit 1`
+        ),
+      },
+      { parent: gateway, dependsOn: [config.securityPolicy, cloudArmorLink] }
     );
   }
 
