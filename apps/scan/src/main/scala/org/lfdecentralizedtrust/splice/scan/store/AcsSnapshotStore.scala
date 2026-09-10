@@ -20,12 +20,7 @@ import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{
 }
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.SelectFromCreateEvents
 import org.lfdecentralizedtrust.splice.store.{HardLimit, Limit, LimitHelpers, UpdateHistory}
-import org.lfdecentralizedtrust.splice.store.db.{
-  AcsJdbcTypes,
-  AcsQueries,
-  AdvisoryLockIds,
-  AdvisoryLocks,
-}
+import org.lfdecentralizedtrust.splice.store.db.AdvisoryLocks
 import org.lfdecentralizedtrust.splice.util.{Contract, HoldingsSummary, PackageQualifiedName}
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.{CloseContext, FutureUnlessShutdown}
@@ -311,25 +306,28 @@ class AcsSnapshotStore(
         migrationId = migrationId,
         snapshotRecordTime = snapshot.snapshotRecordTime,
         createdEventsInPage = eventsInPage,
-        afterToken = afterToken.map(
-          AcsSnapshotStore.QueryAcsSnapshotPaginationToken.RowIdQueryAcsSnapshotPaginationToken(_)
-        ),
+        afterToken = afterToken,
       )
     }
   }
 
   private def querySnapshotInOwnTable(
       snapshot: PerTableAcsSnapshot,
-      after: Option[Long],
+      after: Option[QueryAcsSnapshotPaginationToken],
       limit: Limit,
       partyIds: Seq[PartyId],
       templates: Seq[PackageQualifiedName],
-  )(implicit tc: TraceContext): Future[Vector[(Long, SpliceCreatedEvent)]] = {
+  )(implicit
+      tc: TraceContext
+  ): Future[Vector[(QueryAcsSnapshotPaginationToken, SpliceCreatedEvent)]] = {
     val createsTableName =
       AcsTableDDL.acsSnapshotCreatesTableName(historyId, snapshot.snapshotRecordTime)
     val stakeholdersTableName =
       AcsTableDDL.acsSnapshotStakeholdersTableName(historyId, snapshot.snapshotRecordTime)
-    val afterFilter = after.fold(sql"")(after => sql" and s.row_id > $after")
+    val afterFilter = after.fold(sql"") {
+      case QueryAcsSnapshotPaginationToken.RowIdQueryAcsSnapshotPaginationToken(after) =>
+        sql" and s.row_id > $after"
+    }
     storage
       .query(
         (sql"""
@@ -391,7 +389,8 @@ class AcsSnapshotStore(
             ) =>
           val templateIdPackageQualifiedName =
             PackageQualifiedName.assertFromString(rawTemplateIdPackageQualifiedName)
-          rowId -> SpliceCreatedEvent(
+          QueryAcsSnapshotPaginationToken
+            .RowIdQueryAcsSnapshotPaginationToken(rowId) -> SpliceCreatedEvent(
             eventId = eventId,
             recordTime = recordTime,
             new CreatedEvent(
@@ -422,11 +421,13 @@ class AcsSnapshotStore(
 
   private def queryLegacyTable(
       snapshot: LegacyAcsSnapshot,
-      after: Option[Long],
+      after: Option[QueryAcsSnapshotPaginationToken],
       limit: Limit,
       partyIds: Seq[PartyId],
       templates: Seq[PackageQualifiedName],
-  )(implicit tc: TraceContext): Future[Vector[(Long, SpliceCreatedEvent)]] = {
+  )(implicit
+      tc: TraceContext
+  ): Future[Vector[(QueryAcsSnapshotPaginationToken, SpliceCreatedEvent)]] = {
     for {
       begin <- after match {
         case Some(
@@ -488,7 +489,11 @@ class AcsSnapshotStore(
             .as[(Long, SelectFromCreateEvents)],
           "queryAcsSnapshot.getCreatedEvents",
         )
-    } yield events.map { case (rowId, select) => rowId -> select.toCreatedEvent }
+    } yield events.map { case (rowId, select) =>
+      QueryAcsSnapshotPaginationToken.RowIdQueryAcsSnapshotPaginationToken(
+        rowId
+      ) -> select.toCreatedEvent
+    }
   }
 
   private def stakeholdersFilter(partyIds: Seq[PartyId]) = NonEmpty.from(partyIds) match {
