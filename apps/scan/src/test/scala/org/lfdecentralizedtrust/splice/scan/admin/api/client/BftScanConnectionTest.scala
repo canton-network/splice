@@ -46,7 +46,7 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   RewardAccountingRootHashUndetermined,
 }
 
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection.{Bft, BftCallConfig}
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection.Bft
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.{
   DomainScans,
   DsoScan,
@@ -1497,34 +1497,6 @@ class BftScanConnectionTest
       }
     }
 
-    "logs a disagreement WARN for every dissenter, not just those within a 2f+1 sample" in {
-      // At n=7 the raw `forAvailableData` config would sample only
-      // 2f+1 = 5 peers, so dissenting responses beyond that could be
-      // silently ignored. The wrapper overrides `requestsToDo` to
-      // withData.size = 7, so both dissenters (SV5 "ccdd" and SV6
-      // "eeff") surface as separate disagreement WARNs.
-      val round = 42L
-      val connections = getMockedConnections(n = 7)
-      connections.take(5).foreach(makeMockReturnRootHashOk(_, round, "aabb"))
-      makeMockReturnRootHashOk(connections(5), round, "ccdd")
-      makeMockReturnRootHashOk(connections(6), round, "eeff")
-      val bft = getBft(connections)
-
-      loggerFactory
-        .assertEventuallyLogsSeq(SuppressionRule.Level(Level.WARN))(
-          bft.getRewardAccountingRootHash(round).map { resp =>
-            inside(resp) {
-              case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok) =>
-                ok.rootHash should be("aabb")
-            }
-          },
-          logs =>
-            logs.count(l =>
-              l.level == Level.WARN && l.message.contains("disagreed with consensus")
-            ) should be >= 2,
-        )
-        .map(_ => succeed)
-    }
   }
 
   "BftScanConnection.getRewardAccountingActivityTotals" should {
@@ -1537,54 +1509,69 @@ class BftScanConnectionTest
       }
       val bft = getBft(connections)
 
+      // n=4, f=1 → requestsToDo=2f+1=3, targetSuccess=2. All 3 sampled peers
+      // return different totals → no consensus → BadGateway.
       loggerFactory.assertLogs(
         for {
           failure <- bft.getRewardAccountingActivityTotals(round).failed
         } yield inside(failure) { case HttpErrorWithHttpCode(code, message) =>
           code should be(StatusCodes.BadGateway)
-          message should include("Failed to reach consensus from 4 Scan nodes")
+          message should include("Failed to reach consensus from 3 Scan nodes")
         },
         _.warningMessage should include("Consensus not reached."),
       )
     }
 
-    "never treats agreement on CannotProvide as consensus" in {
+    "propagates BadGateway when every peer returns CannotProvide" in {
+      // All 4 peers opt out via CannotProvide → connectionsForConsensus is empty
+      // → enoughAvailableScans = false → BadGateway.
       val round = 42L
       val connections = getMockedConnections(n = 4)
       connections.foreach(makeMockReturnActivityTotalsCannotProvide(_, round))
       val bft = getBft(connections)
 
-      for {
-        resp <- bft.getRewardAccountingActivityTotals(round)
-      } yield inside(resp) {
-        case _: GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsUndetermined =>
-          succeed
-      }
+      loggerFactory.assertLogs(
+        for {
+          failure <- bft.getRewardAccountingActivityTotals(round).failed
+        } yield inside(failure) { case HttpErrorWithHttpCode(code, _) =>
+          code should be(StatusCodes.BadGateway)
+        },
+        _.warningMessage should include("BFT guarantees"),
+      )
     }
 
-    "never treats agreement on Undetermined as consensus" in {
+    "propagates BadGateway when every peer returns Undetermined" in {
+      // All 4 Undetermined → probe classifies each as Unavailable → all kept
+      // in `n` for retry. Live re-query in phase 2 still returns Undetermined
+      // which is transformed to IgnoreResponse → no successful responses →
+      // ConsensusNotReached → BadGateway.
       val round = 42L
       val connections = getMockedConnections(n = 4)
       connections.foreach(makeMockReturnActivityTotalsUndetermined(_, round))
       val bft = getBft(connections)
 
-      for {
-        resp <- bft.getRewardAccountingActivityTotals(round)
-      } yield inside(resp) {
-        case _: GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsUndetermined =>
-          succeed
-      }
+      loggerFactory.assertLogs(
+        for {
+          failure <- bft.getRewardAccountingActivityTotals(round).failed
+        } yield inside(failure) { case HttpErrorWithHttpCode(code, _) =>
+          code should be(StatusCodes.BadGateway)
+        },
+        _.warningMessage should include("Consensus not reached."),
+      )
     }
 
-    "returns Undetermined when there are no peer scans" in {
+    "propagates BadGateway when there are no peer scans" in {
+      // Empty scan list → no probes → connectionsForConsensus empty → BadGateway.
       val bft = getBft(Seq.empty)
 
-      for {
-        resp <- bft.getRewardAccountingActivityTotals(1L)
-      } yield inside(resp) {
-        case _: GetRewardAccountingActivityTotalsResponse.members.RewardAccountingActivityTotalsUndetermined =>
-          succeed
-      }
+      loggerFactory.assertLogs(
+        for {
+          failure <- bft.getRewardAccountingActivityTotals(1L).failed
+        } yield inside(failure) { case HttpErrorWithHttpCode(code, _) =>
+          code should be(StatusCodes.BadGateway)
+        },
+        _.warningMessage should include("BFT guarantees"),
+      )
     }
 
     "logs disagreements at WARN level" in {
@@ -1653,7 +1640,14 @@ class BftScanConnectionTest
       }
     }
 
-    "logs a probe failure at INFO and keeps the peer in the BFT quorum" in {
+    "reaches consensus despite a peer whose probe fails" in {
+      // SV0 returns Ok (cached in phase 1). SV1's probe fails with a
+      // transport error → classified as Unavailable → kept in `n` and
+      // re-queried in phase 2, where the transport error stays a Failure.
+      // SV2/SV3 opt out via CannotProvide → dropped from `n`.
+      // n = 2 (WithData + Unavailable), f = 0, targetSuccess = 1: SV0's
+      // Ok wins via the ignore-exception path. SV1's failure is logged
+      // as a WARN disagreement.
       val round = 42L
       val connections = getMockedConnections(n = 4)
       makeMockReturnActivityTotalsOk(connections(0), round, 100L, 10L, 5L)
@@ -1664,7 +1658,7 @@ class BftScanConnectionTest
       val bft = getBft(connections)
 
       loggerFactory
-        .assertLogsSeq(SuppressionRule.LevelAndAbove(Level.INFO))(
+        .assertEventuallyLogsSeq(SuppressionRule.Level(Level.WARN))(
           bft.getRewardAccountingActivityTotals(round).map { resp =>
             inside(resp) {
               case GetRewardAccountingActivityTotalsResponse.members
@@ -1674,15 +1668,18 @@ class BftScanConnectionTest
           },
           logs =>
             logs.exists(l =>
-              l.level == Level.INFO && l.message.contains(
-                "Probe failed for"
-              ) && l.message.contains("getRewardAccountingActivityTotals")
+              l.level == Level.WARN && l.message.contains("disagreed with consensus")
             ) should be(true),
         )
         .map(_ => succeed)
     }
 
-    "propagates BadGateway when the single Ok cannot meet BFT quorum against Undetermined peers" in {
+    "propagates BadGateway when a lone Ok cannot meet BFT quorum against Undetermined peers" in {
+      // 1 Ok + 3 Undetermined → probe classifies as {WithData, Unavailable*3}
+      // → all 4 kept in `n` (Unavailable stays for retry). n = 4, f = 1,
+      // targetSuccess = 2. Second phase re-queries Undetermined peers live;
+      // each still returns Undetermined → transformed to IgnoreResponse.
+      // No 2 Ok agree → ConsensusNotReached → BadGateway.
       val round = 42L
       val connections = getMockedConnections(n = 4)
       makeMockReturnActivityTotalsOk(connections(0), round, 100L, 10L, 5L)
@@ -1691,17 +1688,13 @@ class BftScanConnectionTest
       makeMockReturnActivityTotalsUndetermined(connections(3), round)
       val bft = getBft(connections)
 
-      // 1 Ok + 3 Undetermined → n = 4, f = 1, targetSuccess = 2, but only
-      // 1 cached response is available. `enoughAvailableScans` rejects,
-      // and the endpoint propagates BadGateway rather than trusting the
-      // lone Ok.
       loggerFactory.assertLogs(
         for {
           failure <- bft.getRewardAccountingActivityTotals(round).failed
         } yield inside(failure) { case HttpErrorWithHttpCode(code, _) =>
           code should be(StatusCodes.BadGateway)
         },
-        _.warningMessage should include("BFT guarantees"),
+        _.warningMessage should include("Consensus not reached."),
       )
     }
   }
@@ -1741,91 +1734,6 @@ class BftScanConnectionTest
         // So if the caller attempts 100 times, we should hit a batch with very high probability.
         resp <- attempt(100)
       } yield resp should be(Some(rewardAccountingBatchResponse))
-    }
-  }
-
-  "BftCallConfig.forWithDataOnly" should {
-
-    "treats a single-scan set as its own quorum" in {
-      val withData = getMockedConnections(n = 1)
-      val config = BftCallConfig.forWithDataOnly(withData, unavailable = 0)
-      config.connections should have size 1
-      config.requestsToDo shouldBe 1
-      config.targetSuccess shouldBe 1
-      config.enoughAvailableScans shouldBe true
-    }
-
-    "requires a single Ok when only two peers participate" in {
-      val withData = getMockedConnections(n = 2)
-      val config = BftCallConfig.forWithDataOnly(withData, unavailable = 0)
-      config.connections should have size 2
-      config.requestsToDo shouldBe 2
-      config.targetSuccess shouldBe 1
-      config.enoughAvailableScans shouldBe true
-    }
-
-    "requires a single Ok when three peers participate" in {
-      val withData = getMockedConnections(n = 3)
-      val config = BftCallConfig.forWithDataOnly(withData, unavailable = 0)
-      config.connections should have size 3
-      config.requestsToDo shouldBe 3
-      config.targetSuccess shouldBe 1
-      config.enoughAvailableScans shouldBe true
-    }
-
-    "requires BFT quorum of two Oks when four peers participate" in {
-      val withData = getMockedConnections(n = 4)
-      val config = BftCallConfig.forWithDataOnly(withData, unavailable = 0)
-      config.connections should have size 4
-      config.requestsToDo shouldBe 4
-      config.targetSuccess shouldBe 2
-      config.enoughAvailableScans shouldBe true
-    }
-
-    "holds BFT quorum at two Oks for five- and six-peer networks" in {
-      val forFive = BftCallConfig.forWithDataOnly(getMockedConnections(n = 5), unavailable = 0)
-      forFive.targetSuccess shouldBe 2
-      forFive.requestsToDo shouldBe 5
-
-      val forSix = BftCallConfig.forWithDataOnly(getMockedConnections(n = 6), unavailable = 0)
-      forSix.targetSuccess shouldBe 2
-      forSix.requestsToDo shouldBe 6
-    }
-
-    "raises BFT quorum to three Oks once total peers reach seven" in {
-      val config = BftCallConfig.forWithDataOnly(getMockedConnections(n = 7), unavailable = 0)
-      config.targetSuccess shouldBe 3
-      config.requestsToDo shouldBe 7
-    }
-
-    "refuses a lone Ok when unresponsive peers push the quorum above one" in {
-      val withData = getMockedConnections(n = 1)
-      val config = BftCallConfig.forWithDataOnly(withData, unavailable = 3)
-      // n = 1 + 3 = 4 → f = 1 → targetSuccess = 2
-      config.connections should have size 1
-      config.requestsToDo shouldBe 1
-      config.targetSuccess shouldBe 2
-      // Only one cached response, need two matching → enoughAvailableScans is false
-      config.enoughAvailableScans shouldBe false
-    }
-
-    "reaches consensus with two Oks even when two peers are unresponsive" in {
-      val withData = getMockedConnections(n = 2)
-      val config = BftCallConfig.forWithDataOnly(withData, unavailable = 2)
-      // n = 2 + 2 = 4 → f = 1 → targetSuccess = 2, requestsToDo = 2
-      config.connections should have size 2
-      config.requestsToDo shouldBe 2
-      config.targetSuccess shouldBe 2
-      config.enoughAvailableScans shouldBe true
-    }
-
-    "return a config that enoughAvailableScans rejects when given an empty set" in {
-      val config = BftCallConfig.forWithDataOnly(Seq.empty, unavailable = 0)
-      config.connections shouldBe empty
-      config.requestsToDo shouldBe 0
-      // n = 0 → f = 0 → targetSuccess = 1, but connections.size (0) < targetSuccess
-      config.targetSuccess shouldBe 1
-      config.enoughAvailableScans shouldBe false
     }
   }
 
