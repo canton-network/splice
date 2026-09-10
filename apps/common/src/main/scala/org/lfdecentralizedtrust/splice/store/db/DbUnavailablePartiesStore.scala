@@ -8,6 +8,7 @@ import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.lifecycle.CloseContext
 import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.resource.DbStorage
+import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
 import org.lfdecentralizedtrust.splice.store.UnavailablePartiesStore
@@ -22,6 +23,7 @@ class DbUnavailablePartiesStore(
     val storeId: Int,
     baseDuration: NonNegativeFiniteDuration,
     maxIgnoreDuration: NonNegativeFiniteDuration,
+    clock: Clock,
     val loggerFactory: NamedLoggerFactory,
 )(implicit
     val ec: ExecutionContext,
@@ -36,11 +38,17 @@ class DbUnavailablePartiesStore(
   private val baseMicros = baseDuration.underlying.toMicros
   private val maxMicros = maxIgnoreDuration.underlying.toMicros
 
+  override def addParties(parties: Seq[PartyId])(implicit tc: TraceContext): Future[Unit] =
+    addPartiesAt(parties, clock.now.toMicros)
+
+  override def listParties()(implicit tc: TraceContext): Future[Seq[PartyId]] =
+    listPartiesAt(clock.now.toMicros)
+
   /** Adds or updates parties only outside the ignore window.
     *  a. For new parties, it sets updated_at to now and the ignore_duration to base_duration.
     *  b. For existing parties, it updates updated_at to now and doubles the ignore_duration (up to max_ignore_duration)
     */
-  def addParties(parties: Seq[PartyId], nowMicros: Long)(implicit
+  private[splice] def addPartiesAt(parties: Seq[PartyId], nowMicros: Long)(implicit
       tc: TraceContext
   ): Future[Unit] =
     if (parties.isEmpty) Future.unit
@@ -83,15 +91,16 @@ class DbUnavailablePartiesStore(
       "removePartiesUpToStoreId",
     )
 
-  // List all parties for which updated_at + ignore_duration > now.
-  def listParties(nowMicros: Long)(implicit tc: TraceContext): Future[Seq[PartyId]] =
+  // List all parties for which updated_at + ignore_duration > nowMicros.
+  private[splice] def listPartiesAt(nowMicros: Long)(implicit
+      tc: TraceContext
+  ): Future[Seq[PartyId]] =
     storage.query(
       sql"""select party
             from dso_unavailable_parties
             where updated_at + ignore_duration > $nowMicros""".as[PartyId],
       "listParties",
     )
-
 }
 
 object DbUnavailablePartiesStore {
@@ -100,6 +109,7 @@ object DbUnavailablePartiesStore {
       storage: DbStorage,
       baseDuration: NonNegativeFiniteDuration,
       maxIgnoreDuration: NonNegativeFiniteDuration,
+      clock: Clock,
       loggerFactory: NamedLoggerFactory,
   )(implicit
       ec: ExecutionContext,
@@ -115,6 +125,7 @@ object DbUnavailablePartiesStore {
           storeId,
           baseDuration,
           maxIgnoreDuration,
+          clock,
           loggerFactory,
         )
       )

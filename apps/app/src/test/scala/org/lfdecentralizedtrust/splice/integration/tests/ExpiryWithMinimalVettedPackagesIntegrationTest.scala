@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.integration.tests
 
+import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.discard.Implicits.DiscardOps
@@ -65,6 +66,8 @@ abstract class ExpiryWithMinimalVettedPackagesIntegrationTestBase
       .filterNot(DarResourcesUtil.minimalPackageVersions.contains(_))
   )
 
+  protected val enablePersistedUnavailableParties: Boolean
+
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
       .simpleTopology1Sv(this.getClass.getSimpleName)
@@ -116,6 +119,16 @@ abstract class ExpiryWithMinimalVettedPackagesIntegrationTestBase
       .addConfigTransforms((_, c) =>
         ConfigTransforms.updateAllSvAppConfigs_(
           _.copy(ignoredAmuletVersions = ignoredAmuletVersions)
+        )(c)
+      )
+      .addConfigTransforms((_, c) =>
+        ConfigTransforms.updateAllSvAppConfigs_(conf =>
+          conf.copy(parameters =
+            conf.parameters.copy(enabledFeatures =
+              conf.parameters.enabledFeatures
+                .copy(enablePersistedUnavailableParties = enablePersistedUnavailableParties)
+            )
+          )
         )(c)
       )
 
@@ -238,6 +251,8 @@ abstract class ExpiryWithMinimalVettedPackagesIntegrationTestBase
 class AmuletExpiryV1FallbackIntegrationTest
     extends ExpiryWithMinimalVettedPackagesIntegrationTestBase {
 
+  override protected val enablePersistedUnavailableParties: Boolean = true
+
   "Amulet expiry falls back to V1 choices when alice's validator has not vetted splice-amulet 0.1.17" in {
     implicit env =>
       setupAliceWithDustAmulets()
@@ -266,6 +281,8 @@ class AmuletExpiryV1FallbackIntegrationTest
   */
 class ExpiryWithIgnoredAmuletVersionIntegrationTest
     extends ExpiryWithMinimalVettedPackagesIntegrationTestBase {
+
+  override protected val enablePersistedUnavailableParties: Boolean = false
 
   // Amulet version 0.1.19 is just below the minimumInitialization version.
   override val ignoredAmuletVersions: Set[String] = Set(
@@ -359,7 +376,9 @@ class ExpiryWithIgnoredAmuletVersionIntegrationTest
       )(
         s"All dust contracts remain because alice's preferred version is in ignoredAmuletVersions",
         _ => {
-          sv1Backend.dsoDelegateBasedAutomation.unavailablePartiesStore.getAll should
+          sv1Backend.dsoDelegateBasedAutomation.unavailablePartiesStore
+            .listParties()(TraceContext.empty)
+            .futureValue should
             contain(alice)
 
           aliceWalletClient.list().amulets should have length 2L withClue "amulets"
@@ -400,6 +419,8 @@ class ExpiryWithIgnoredAmuletVersionIntegrationTest
 class ExpiryWithNoVettedAmuletVersionIntegrationTest
     extends ExpiryWithMinimalVettedPackagesIntegrationTestBase {
 
+  override protected val enablePersistedUnavailableParties: Boolean = true
+
   "Amulet expiry ignores parties with no vetted amulet version" in { implicit env =>
     val alice = setupAliceWithDustAmulets()
 
@@ -435,7 +456,9 @@ class ExpiryWithNoVettedAmuletVersionIntegrationTest
     )(
       "Alice is ignored and her dust amulets are not expired",
       _ => {
-        val ignored = sv1Backend.dsoDelegateBasedAutomation.unavailablePartiesStore.getAll
+        val ignored = sv1Backend.dsoDelegateBasedAutomation.unavailablePartiesStore
+          .listParties()(TraceContext.empty)
+          .futureValue
         ignored should contain(alice)
         ignored should not contain dsoParty
         aliceWalletClient.list().amulets should have length 2L withClue "dust amulets"

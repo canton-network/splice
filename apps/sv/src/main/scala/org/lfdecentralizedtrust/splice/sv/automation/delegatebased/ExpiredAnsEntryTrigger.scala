@@ -17,13 +17,13 @@ import org.lfdecentralizedtrust.splice.sv.util.ContractStakeholders
 import java.util.Optional
 import scala.concurrent.{ExecutionContext, Future}
 import ExpiredAnsEntryTrigger.{Task, getStakeholders}
-import org.lfdecentralizedtrust.splice.store.IgnoredPartiesStore
+import org.lfdecentralizedtrust.splice.store.UnavailablePartiesStore
 
 class ExpiredAnsEntryTrigger(
     override protected val context: TriggerContext,
     override protected val svTaskContext: SvTaskBasedTrigger.Context,
     override protected val svConfig: SvAppBackendConfig,
-    override protected val ignoredPartiesStore: IgnoredPartiesStore,
+    override protected val unavailablePartiesStore: UnavailablePartiesStore,
 )(implicit
     override val ec: ExecutionContext,
     mat: Materializer,
@@ -33,14 +33,14 @@ class ExpiredAnsEntryTrigger(
       splice.ans.AnsEntry,
     ](
       svTaskContext.dsoStore.multiDomainAcsStore,
-      svTaskContext.dsoStore.listExpiredAnsEntries(Some(ignoredPartiesStore)),
+      svTaskContext.dsoStore.listExpiredAnsEntries(Some(unavailablePartiesStore)),
       splice.ans.AnsEntry.COMPANION,
     )
     with SvTaskBasedTrigger[ScheduledTaskTrigger.ReadyTask[AssignedContract[
       splice.ans.AnsEntry.ContractId,
       splice.ans.AnsEntry,
     ]]]
-    with IgnoredUnavailablePartiesGuard {
+    with UnavailablePartiesGuard {
 
   private val store = svTaskContext.dsoStore
 

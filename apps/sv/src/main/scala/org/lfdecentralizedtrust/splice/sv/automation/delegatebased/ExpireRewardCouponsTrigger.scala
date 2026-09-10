@@ -26,7 +26,7 @@ import com.digitalasset.canton.util.MonadUtil
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
-import org.lfdecentralizedtrust.splice.store.{IgnoredPartiesStore, PageLimit}
+import org.lfdecentralizedtrust.splice.store.{UnavailablePartiesStore, PageLimit}
 import org.lfdecentralizedtrust.splice.codegen.java.splice
 
 import java.util.Optional
@@ -45,7 +45,7 @@ import org.lfdecentralizedtrust.splice.sv.util.ContractStakeholders
 class ExpireRewardCouponsTrigger(
     override protected val context: TriggerContext,
     override protected val svTaskContext: SvTaskBasedTrigger.Context,
-    override protected val ignoredPartiesStore: IgnoredPartiesStore,
+    override protected val unavailablePartiesStore: UnavailablePartiesStore,
     override protected val svConfig: SvAppBackendConfig,
 )(implicit
     override val ec: ExecutionContext,
@@ -53,7 +53,7 @@ class ExpireRewardCouponsTrigger(
     tracer: Tracer,
 ) extends PollingParallelTaskExecutionTrigger[Task]
     with SvTaskBasedTrigger[Task]
-    with IgnoredUnavailablePartiesGuard {
+    with UnavailablePartiesGuard {
   private val store = svTaskContext.dsoStore
 
   override protected def retrieveTasks()(implicit
@@ -64,7 +64,7 @@ class ExpireRewardCouponsTrigger(
       .getExpiredCouponsInBatchesPerRoundAndCouponType(
         dsoRules.domain,
         context.config.enableExpireValidatorFaucet,
-        Some(ignoredPartiesStore),
+        Some(unavailablePartiesStore),
         batchSize =
           PageLimit.tryCreate(svTaskContext.delegatelessAutomationExpiredRewardCouponBatchSize),
         numBatches =

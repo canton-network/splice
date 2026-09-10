@@ -16,13 +16,13 @@ import org.lfdecentralizedtrust.splice.sv.util.ContractStakeholders
 import java.util.Optional
 import scala.concurrent.{ExecutionContext, Future}
 import ExpireTransferPreapprovalsTrigger.{Task, getStakeholders}
-import org.lfdecentralizedtrust.splice.store.IgnoredPartiesStore
+import org.lfdecentralizedtrust.splice.store.UnavailablePartiesStore
 
 class ExpireTransferPreapprovalsTrigger(
     override protected val context: TriggerContext,
     override protected val svTaskContext: SvTaskBasedTrigger.Context,
     override protected val svConfig: SvAppBackendConfig,
-    override protected val ignoredPartiesStore: IgnoredPartiesStore,
+    override protected val unavailablePartiesStore: UnavailablePartiesStore,
 )(implicit
     override val ec: ExecutionContext,
     mat: Materializer,
@@ -32,14 +32,14 @@ class ExpireTransferPreapprovalsTrigger(
       TransferPreapproval,
     ](
       svTaskContext.dsoStore.multiDomainAcsStore,
-      svTaskContext.dsoStore.listExpiredTransferPreapprovals(Some(ignoredPartiesStore)),
+      svTaskContext.dsoStore.listExpiredTransferPreapprovals(Some(unavailablePartiesStore)),
       TransferPreapproval.COMPANION,
     )
     with SvTaskBasedTrigger[ScheduledTaskTrigger.ReadyTask[AssignedContract[
       TransferPreapproval.ContractId,
       TransferPreapproval,
     ]]]
-    with IgnoredUnavailablePartiesGuard {
+    with UnavailablePartiesGuard {
 
   private val store = svTaskContext.dsoStore
 

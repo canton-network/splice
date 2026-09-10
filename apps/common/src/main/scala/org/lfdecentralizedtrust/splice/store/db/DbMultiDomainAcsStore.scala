@@ -37,7 +37,7 @@ import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.lifecycle.{CloseContext, FutureUnlessShutdown}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.resource.DbStorage
-import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
+import com.digitalasset.canton.topology.SynchronizerId
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.ShowUtil.showPretty
 
@@ -384,22 +384,22 @@ final class DbMultiDomainAcsStore[TXE](
     T
   ], T <: Template](
       companion: C,
-      ignoredPartiesStore: Option[IgnoredPartiesStore] = None,
+      unavailablePartiesStore: Option[UnavailablePartiesStore] = None,
       ignoredPartyFields: Seq[String] = Seq.empty,
   )(implicit
       companionClass: ContractCompanion[C, TCid, T]
   ): ListExpiredContracts[TCid, T] = { (now, limit) => implicit traceContext =>
-    val ignoredParties = ignoredPartiesStore.fold(Set.empty[PartyId])(_.getAll)
-    val ignoredPartiesFilter: SQLActionBuilder =
-      if (ignoredParties.isEmpty || ignoredPartyFields.isEmpty) sql""
-      else
-        ignoredPartyFields.foldLeft(sql"") { (acc, field) =>
-          (acc ++ sql" and " ++ notInClause(
-            s"acs.create_arguments->>'$field'",
-            ignoredParties,
-          )).toActionBuilder
-        }
     for {
+      ignoredParties <- UnavailablePartiesStore.listParties(unavailablePartiesStore)
+      ignoredPartiesFilter: SQLActionBuilder =
+        if (ignoredParties.isEmpty || ignoredPartyFields.isEmpty) sql""
+        else
+          ignoredPartyFields.foldLeft(sql"") { (acc, field) =>
+            (acc ++ sql" and " ++ notInClause(
+              s"acs.create_arguments->>'$field'",
+              ignoredParties,
+            )).toActionBuilder
+          }
       _ <- waitUntilAcsIngested()
       result <- storage
         .query( // index: acs_store_template_sid_mid_tid_ce

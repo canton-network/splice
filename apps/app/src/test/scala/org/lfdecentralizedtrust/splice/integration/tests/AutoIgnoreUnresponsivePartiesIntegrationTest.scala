@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.integration.tests
 
+import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.topology.transaction.ParticipantPermission
@@ -26,7 +27,7 @@ import org.slf4j.event.Level
 import java.time.Duration
 import scala.concurrent.duration.*
 
-class AutoIgnoreUnresponsivePartiesIntegrationTest
+abstract class AutoIgnoreUnresponsivePartiesIntegrationTestBase
     extends IntegrationTest
     with WalletTestUtil
     with TimeTestUtil
@@ -34,6 +35,8 @@ class AutoIgnoreUnresponsivePartiesIntegrationTest
 
   override protected def runTokenStandardCliSanityCheck: Boolean = false
   override protected def runUpdateHistorySanityCheck: Boolean = false
+
+  protected val enablePersistedUnavailableParties: Boolean
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
@@ -63,6 +66,16 @@ class AutoIgnoreUnresponsivePartiesIntegrationTest
       .addConfigTransforms((_, c) =>
         ConfigTransforms.updateAllSvAppConfigs_(
           _.copy(delegatelessAutomationExpiredAmuletBatchSize = 2)
+        )(c)
+      )
+      .addConfigTransforms((_, c) =>
+        ConfigTransforms.updateAllSvAppConfigs_(conf =>
+          conf.copy(parameters =
+            conf.parameters.copy(enabledFeatures =
+              conf.parameters.enabledFeatures
+                .copy(enablePersistedUnavailableParties = enablePersistedUnavailableParties)
+            )
+          )
         )(c)
       )
 
@@ -191,7 +204,9 @@ class AutoIgnoreUnresponsivePartiesIntegrationTest
       )(
         "Alice is added to the ignored parties store after mediator timeout",
         _ => {
-          sv1Backend.dsoDelegateBasedAutomation.unavailablePartiesStore.getAll should contain(
+          sv1Backend.dsoDelegateBasedAutomation.unavailablePartiesStore
+            .listParties()(TraceContext.empty)
+            .futureValue should contain(
             aliceParty
           )
         },
@@ -201,5 +216,32 @@ class AutoIgnoreUnresponsivePartiesIntegrationTest
       clue("Reconnect alice's participant") {
         aliceValidatorBackend.participantClient.synchronizers.reconnect_all()
       }
+  }
+}
+
+class AutoIgnoreUnresponsivePartiesInMemoryIntegrationTest
+    extends AutoIgnoreUnresponsivePartiesIntegrationTestBase {
+  override protected val enablePersistedUnavailableParties: Boolean = false
+
+  "Ignored parties don't survive an SV app restart" in { implicit env =>
+    sv1Backend.stop()
+    sv1Backend.startSync()
+    sv1Backend.dsoDelegateBasedAutomation.unavailablePartiesStore
+      .listParties()(TraceContext.empty)
+      .futureValue shouldBe empty
+  }
+}
+
+class AutoIgnoreUnresponsivePartiesWithPersistenceIntegrationTest
+    extends AutoIgnoreUnresponsivePartiesIntegrationTestBase {
+
+  override protected val enablePersistedUnavailableParties: Boolean = true
+
+  "Ignored parties survive an SV app restart" in { implicit env =>
+    sv1Backend.stop()
+    sv1Backend.startSync()
+    sv1Backend.dsoDelegateBasedAutomation.unavailablePartiesStore
+      .listParties()(TraceContext.empty)
+      .futureValue should not be empty
   }
 }
