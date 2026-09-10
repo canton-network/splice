@@ -67,6 +67,10 @@ class UpdateHistoryBulkStoragePersistentProgress(
         )
       })
   }
+
+  def reset(implicit tc: TraceContext): Future[Unit] = {
+    kvProvider.store.deleteKey(kvStoreKey)
+  }
 }
 
 /** An abstract class for pipelines that process update history for bulk storage.

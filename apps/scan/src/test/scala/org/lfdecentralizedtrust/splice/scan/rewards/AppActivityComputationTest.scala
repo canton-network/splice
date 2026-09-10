@@ -11,6 +11,7 @@ import com.google.protobuf.timestamp.Timestamp as ProtoTimestamp
 import com.google.protobuf.ByteString
 import org.lfdecentralizedtrust.splice.scan.store.ScanRewardsReferenceStore
 import org.lfdecentralizedtrust.splice.scan.store.db.{DbAppActivityRecordStore, DbScanVerdictStore}
+import org.lfdecentralizedtrust.splice.store.TimestampWithMigrationId
 import org.scalatest.wordspec.AnyWordSpec
 
 import scala.concurrent.Future
@@ -219,7 +220,7 @@ class AppActivityComputationTest extends AnyWordSpec with BaseTest {
     val store = mock[ScanRewardsReferenceStore]
     when(store.lookupActiveOpenMiningRounds(any[Seq[CantonTimestamp]])(any[TraceContext]))
       .thenAnswer { (times: Seq[CantonTimestamp]) =>
-        Future.successful(times.map(_ -> (0L, roundOpensAt)).toMap)
+        Future.successful(times.map(_ -> TimestampWithMigrationId(roundOpensAt, 0L)).toMap)
       }
     when(store.lookupFeaturedAppPartiesAsOf(any[CantonTimestamp])(any[TraceContext]))
       .thenReturn(Future.successful(featuredWeights))

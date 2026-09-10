@@ -62,7 +62,7 @@ describe('Governance Page Sorting', () => {
     });
   });
 
-  describe('Inflight Votes Section', () => {
+  describe('In-flight Proposals Section', () => {
     const baseData: Omit<
       ProposalListingData,
       'actionName' | 'contractId' | 'voteTakesEffect' | 'votingThresholdDeadline' | 'voteStats'
@@ -120,7 +120,7 @@ describe('Governance Page Sorting', () => {
       render(
         <MemoryRouter>
           <ProposalListingSection
-            sectionTitle="Inflight Votes"
+            sectionTitle="In-flight Proposals"
             data={unsortedRequests}
             noDataMessage="No data"
             uniqueId="inflight-votes"

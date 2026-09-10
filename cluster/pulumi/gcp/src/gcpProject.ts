@@ -72,6 +72,18 @@ class GcpProject extends pulumi.ComponentResource {
       opts
     );
 
+    // Cloud Armor is billed per project via a tier. We only use features available in
+    // the Standard tier (IP whitelisting, rate limiting, preconfigured WAF rules), so
+    // pin the project to it rather than an Enterprise tier.
+    new gcp.compute.ProjectCloudArmorTier(
+      'cloud-armor-tier',
+      {
+        project: gcpProjectId,
+        cloudArmorTier: 'CA_STANDARD',
+      },
+      opts
+    );
+
     // Source SV identities from a pre-existing project (i.e. devnet)
     // Note: this should be fine when ran against devnet itself...
     //  - But since we can automate this now, we might want to simply generate new SV secrets per project

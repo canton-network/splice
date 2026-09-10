@@ -15,19 +15,19 @@ data RecV1 = RecV1
   with
     a : Int
     b : Text
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 data RecV1' = RecV1'
   with
     a : Int
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 data RecV2 = RecV2
   with
     a : Int
     b : Text
     c : Optional Int
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 data RecV3 = RecV3
   with
@@ -35,7 +35,7 @@ data RecV3 = RecV3
     b : Text
     c : Optional Int
     d : Optional Int
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 instance Hashable RecV1 where
   hash r = hashRecord [hash r.a , hash r.b]
@@ -70,7 +70,7 @@ data Payload = Payload
   with
     x : Int
     y : Text
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 
 --------------------------------------------------------------------------------
@@ -80,7 +80,7 @@ data Payload = Payload
 data VarV1
   = V1 with payload : Payload
   | V2 with payload : Payload
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 instance Hashable VarV1 where
   hash v =
@@ -111,7 +111,7 @@ data VarV2
         payload : Payload
         c : Optional Int
         d : Optional Int
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 instance Hashable VarV2 where
   hash v =

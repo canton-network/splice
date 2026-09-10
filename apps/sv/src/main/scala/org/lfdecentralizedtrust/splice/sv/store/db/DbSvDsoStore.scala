@@ -7,6 +7,7 @@ import cats.data.OptionT
 import cats.implicits.*
 import com.daml.ledger.javaapi.data as javab
 import com.daml.ledger.javaapi.data.codegen.ContractId
+import com.daml.nonempty.NonEmpty
 import org.lfdecentralizedtrust.splice.automation.MultiDomainExpiredContractTrigger.ListExpiredContracts
 import org.lfdecentralizedtrust.splice.codegen.java.splice
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.*
@@ -923,48 +924,52 @@ class DbSvDsoStore(
         ]],
     )
   ] = {
-    if (rounds.isEmpty)
-      Future.successful((Seq.empty, Seq.empty))
-    else {
-      val roundsClause = inClause("mining_round", rounds)
-      val calculateRewardsF = storage
-        .query(
-          selectFromAcsTableWithState(
-            DsoTables.acsTableName,
-            acsStoreId,
-            domainMigrationId,
-            splice.amulet.rewardaccountingv2.CalculateRewardsV2.COMPANION,
-            additionalWhere = (sql" and " ++ roundsClause).toActionBuilder,
-          ),
-          "listDryRunCalculateRewardsV2ByRounds",
-        )
-        .map(
-          _.map(
-            assignedContractFromRow(splice.amulet.rewardaccountingv2.CalculateRewardsV2.COMPANION)(
-              _
-            )
-          ).filter(_.payload.dryRun)
-        )
-      val processRewardsF = storage
-        .query(
-          selectFromAcsTableWithState(
-            DsoTables.acsTableName,
-            acsStoreId,
-            domainMigrationId,
-            splice.amulet.rewardaccountingv2.ProcessRewardsV2.COMPANION,
-            additionalWhere = (sql" and " ++ roundsClause).toActionBuilder,
-          ),
-          "listDryRunProcessRewardsV2ByRounds",
-        )
-        .map(
-          _.map(
-            assignedContractFromRow(splice.amulet.rewardaccountingv2.ProcessRewardsV2.COMPANION)(_)
-          ).filter(_.payload.dryRun)
-        )
-      for {
-        calculateRewards <- calculateRewardsF
-        processRewards <- processRewardsF
-      } yield (calculateRewards, processRewards)
+    NonEmpty.from(rounds) match {
+      case None => Future.successful((Seq.empty, Seq.empty))
+      case Some(rounds) =>
+        val roundsClause = DbStorage.toInClause("mining_round", rounds)
+        val calculateRewardsF = storage
+          .query(
+            selectFromAcsTableWithState(
+              DsoTables.acsTableName,
+              acsStoreId,
+              domainMigrationId,
+              splice.amulet.rewardaccountingv2.CalculateRewardsV2.COMPANION,
+              additionalWhere = (sql" and " ++ roundsClause).toActionBuilder,
+            ),
+            "listDryRunCalculateRewardsV2ByRounds",
+          )
+          .map(
+            _.map(
+              assignedContractFromRow(
+                splice.amulet.rewardaccountingv2.CalculateRewardsV2.COMPANION
+              )(
+                _
+              )
+            ).filter(_.payload.dryRun)
+          )
+        val processRewardsF = storage
+          .query(
+            selectFromAcsTableWithState(
+              DsoTables.acsTableName,
+              acsStoreId,
+              domainMigrationId,
+              splice.amulet.rewardaccountingv2.ProcessRewardsV2.COMPANION,
+              additionalWhere = (sql" and " ++ roundsClause).toActionBuilder,
+            ),
+            "listDryRunProcessRewardsV2ByRounds",
+          )
+          .map(
+            _.map(
+              assignedContractFromRow(splice.amulet.rewardaccountingv2.ProcessRewardsV2.COMPANION)(
+                _
+              )
+            ).filter(_.payload.dryRun)
+          )
+        for {
+          calculateRewards <- calculateRewardsF
+          processRewards <- processRewardsF
+        } yield (calculateRewards, processRewards)
     }
   }
 
@@ -1563,29 +1568,33 @@ class DbSvDsoStore(
       tc: TraceContext
   ): Future[Seq[Contract[AmuletPriceVote.ContractId, AmuletPriceVote]]] = waitUntilAcsIngested {
     import scala.jdk.CollectionConverters.*
-    for {
-      dsoRules <- getDsoRules()
-      voterParties = inClause(
-        "voter",
-        dsoRules.payload.svs.asScala
-          .map { case (party, _) =>
-            lengthLimited(party)
-          },
-      )
-      result <- storage
-        .query(
-          selectFromAcsTable(
-            DsoTables.acsTableName,
-            acsStoreId,
-            domainMigrationId,
-            AmuletPriceVote.COMPANION,
-            where = voterParties,
-            orderLimit = sql"""limit ${sqlLimit(limit)}""",
-          ),
-          "listSvAmuletPriceVotes",
-        )
-      limited = applyLimit("listSvAmuletPriceVotes", limit, result)
-    } yield limited.map(contractFromRow(AmuletPriceVote.COMPANION)(_)).distinctBy(_.payload.sv)
+    getDsoRules().flatMap(dsoRules =>
+      NonEmpty.from(
+        dsoRules.payload.svs.asScala.toMap.map { case (party, _) => lengthLimited(party) }
+      ) match {
+        case None => Future.successful(Seq.empty)
+        case Some(voters) =>
+          for {
+            dsoRules <- getDsoRules()
+            voterParties = DbStorage.toInClause("voter", voters)
+            result <- storage
+              .query(
+                selectFromAcsTable(
+                  DsoTables.acsTableName,
+                  acsStoreId,
+                  domainMigrationId,
+                  AmuletPriceVote.COMPANION,
+                  where = voterParties,
+                  orderLimit = sql"""limit ${sqlLimit(limit)}""",
+                ),
+                "listSvAmuletPriceVotes",
+              )
+            limited = applyLimit("listSvAmuletPriceVotes", limit, result)
+          } yield limited
+            .map(contractFromRow(AmuletPriceVote.COMPANION)(_))
+            .distinctBy(_.payload.sv)
+      }
+    )
   }
 
   override protected def lookupSvOnboardingRequestByCandidatePartyWithOffset(
@@ -1705,22 +1714,26 @@ class DbSvDsoStore(
   )(implicit
       tc: TraceContext
   ): Future[Seq[Contract[VoteRequest.ContractId, VoteRequest]]] = waitUntilAcsIngested {
-    for {
-      result <- storage
-        .query(
-          listVoteRequestsByTrackingCidQuery(
-            acsTableName = DsoTables.acsTableName,
-            acsStoreId = acsStoreId,
-            domainMigrationId = domainMigrationId,
-            trackingCidColumnName = "vote_request_tracking_cid",
-            trackingCids = trackingCids,
-            limit = limit,
-          ),
-          "listVoteRequestsByTrackingCid",
-        )
-      records = applyLimit("listVoteRequestsByTrackingCid", limit, result)
-    } yield records
-      .map(contractFromRow(VoteRequest.COMPANION)(_))
+    NonEmpty.from(trackingCids) match {
+      case None => Future.successful(Seq.empty)
+      case Some(trackingCids) =>
+        for {
+          result <- storage
+            .query(
+              listVoteRequestsByTrackingCidQuery(
+                acsTableName = DsoTables.acsTableName,
+                acsStoreId = acsStoreId,
+                domainMigrationId = domainMigrationId,
+                trackingCidColumnName = "vote_request_tracking_cid",
+                trackingCids = trackingCids,
+                limit = limit,
+              ),
+              "listVoteRequestsByTrackingCid",
+            )
+          records = applyLimit("listVoteRequestsByTrackingCid", limit, result)
+        } yield records
+          .map(contractFromRow(VoteRequest.COMPANION)(_))
+    }
   }
 
   override def lookupVoteByThisSvAndVoteRequestWithOffset(voteRequestCid: VoteRequest.ContractId)(
@@ -1959,27 +1972,27 @@ class DbSvDsoStore(
   )(implicit tc: TraceContext): Future[
     Seq[Contract[splice.round.ClosedMiningRound.ContractId, splice.round.ClosedMiningRound]]
   ] = {
-    if (roundNumbers.isEmpty)
-      Future.successful(Seq.empty)
-    else {
-      val roundNumbersClause = inClause("mining_round", roundNumbers)
-      waitUntilAcsIngested {
-        for {
-          result <- storage
-            .query(
-              selectFromAcsTable(
-                DsoTables.acsTableName,
-                acsStoreId,
-                domainMigrationId,
-                ClosedMiningRound.COMPANION,
-                where =
-                  (sql"""assigned_domain = $synchronizerId AND """ ++ roundNumbersClause).toActionBuilder,
-                orderLimit = sql"""limit ${sqlLimit(limit)}""",
-              ),
-              "listClosedRounds",
-            )
-        } yield result.map(contractFromRow(ClosedMiningRound.COMPANION)(_))
-      }
+    NonEmpty.from(roundNumbers) match {
+      case None => Future.successful(Seq.empty)
+      case Some(roundNumbers) =>
+        val roundNumbersClause = DbStorage.toInClause("mining_round", roundNumbers)
+        waitUntilAcsIngested {
+          for {
+            result <- storage
+              .query(
+                selectFromAcsTable(
+                  DsoTables.acsTableName,
+                  acsStoreId,
+                  domainMigrationId,
+                  ClosedMiningRound.COMPANION,
+                  where =
+                    (sql"""assigned_domain = $synchronizerId AND """ ++ roundNumbersClause).toActionBuilder,
+                  orderLimit = sql"""limit ${sqlLimit(limit)}""",
+                ),
+                "listClosedRounds",
+              )
+          } yield result.map(contractFromRow(ClosedMiningRound.COMPANION)(_))
+        }
     }
   }
 

@@ -13,15 +13,11 @@ import com.daml.nonempty.NonEmpty
 import com.digitalasset.canton.admin.api.client.commands.TopologyAdminCommands.Write.GenerateTransactions
 import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.crypto.*
-import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.canton.topology.transaction.*
-import com.digitalasset.canton.util.HexString
 import org.lfdecentralizedtrust.splice.util.WalletTestUtil
 
 import java.nio.file.Files
-import java.time.Duration
-import scala.concurrent.duration.*
 
 @org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_9
 class RecoverExternalPartyIntegrationTest
@@ -31,7 +27,7 @@ class RecoverExternalPartyIntegrationTest
     with WalletTestUtil {
 
   override def environmentDefinition: EnvironmentDefinition =
-    EnvironmentDefinition.simpleTopology1Sv(this.getClass.getSimpleName).withTransferCommandSupport
+    EnvironmentDefinition.simpleTopology1Sv(this.getClass.getSimpleName)
 
   override protected lazy val sanityChecksIgnoredRootCreates = Seq(
     ValidatorRewardCoupon.TEMPLATE_ID_WITH_PACKAGE_ID
@@ -208,43 +204,23 @@ class RecoverExternalPartyIntegrationTest
     }
 
     // Check that alice can transfer through bob's node
-    val prepareSend =
-      bobValidatorBackend.prepareTransferPreapprovalSend(
-        aliceParty,
+    actAndCheck(
+      "alice transfer 1000 cc to bob's validator",
+      executeTransferViaTokenStandard(
+        bobValidatorBackend.participantClientWithAdminToken,
+        onboarding.richPartyId,
         bobValidatorBackend.getValidatorUserInfo().primaryParty,
         BigDecimal(1000.0),
-        CantonTimestamp.now().plus(Duration.ofHours(24)),
-        0L,
-        Some("transfer-command-description"),
-        verboseHashing = true,
-      )
-    val (updateId, _) = actAndCheck(timeUntilSuccess = 60.seconds)(
-      "Submit signed TransferCommand creation",
-      bobValidatorBackend.submitTransferPreapprovalSend(
-        aliceParty,
-        prepareSend.transaction,
-        HexString.toHexString(
-          crypto(env.executionContext)
-            .signBytes(
-              HexString.parseToByteString(prepareSend.txHash).value,
-              alicePrivateKey.asInstanceOf[SigningPrivateKey],
-              usage = SigningKeyUsage.ProtocolOnly,
-            )
-            .value
-            .toProtoV30
-            .signature
-        ),
-        publicKeyAsHexString(alicePublicKey),
+        transferinstruction.v1.definitions.TransferFactoryWithChoiceContext.TransferKind.Direct,
       ),
     )(
-      "validator automation completes transfer",
-      _ => {
+      "alice balance decreases",
+      _ =>
         BigDecimal(
           bobValidatorBackend
             .getExternalPartyBalance(aliceParty)
             .totalUnlockedCoin
-        ) should be(BigDecimal(1000))
-      },
+        ) should be(BigDecimal(1000)),
     )
   }
 

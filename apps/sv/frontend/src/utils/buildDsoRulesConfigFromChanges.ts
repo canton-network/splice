@@ -120,6 +120,7 @@ export function buildDsoRulesConfigFromChanges(dsoConfigChanges: ConfigChange[])
             ),
           },
     voteCooldownTime: voteCooldownTime === null ? null : { microseconds: voteCooldownTime },
+    svOperationsSwitchOverTimes: null,
   };
 
   return dsoConfig;

@@ -70,6 +70,9 @@ object PackageIdResolver {
       // Batched markers
       case SpliceUtilBatchedMarkers =>
         DarResources.utilBatchedMarkers.latest.metadata.version.toString()
+      // Reward assignment
+      case SpliceApiRewardAssignmentV1 =>
+        DarResources.apiRewardAssignmentV1.latest.metadata.version.toString()
     }
     PackageVersion.assertFromString(version)
   }
@@ -129,6 +132,7 @@ object PackageIdResolver {
     final case object SpliceWallet extends Package
     final case object SpliceWalletPayments extends Package
     final case object SpliceUtilBatchedMarkers extends Package
+    final case object SpliceApiRewardAssignmentV1 extends Package
   }
 
   val validatorPackages = Set(

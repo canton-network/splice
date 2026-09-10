@@ -50,6 +50,7 @@ import {
   externalIpRangesFile,
   clusterNetwork,
   CnChartVersion,
+  envoyClientIpHeaderEnvVar,
 } from '@canton-network/splice-pulumi-common';
 import {
   approvedSvIdentities,
@@ -71,6 +72,7 @@ import { CloudPostgres, SplicePostgres } from '@canton-network/splice-pulumi-com
 import { createHash } from 'node:crypto';
 
 import { installRateLimits } from '../../common/src/ratelimit/rateLimit';
+import { scanRateLimitEnvVars } from '../../common/src/ratelimit/spliceRateLimits';
 import { SvAppConfig, ValidatorAppConfig } from './config';
 import { installPostgres } from './postgres';
 
@@ -419,6 +421,9 @@ async function installSvAndValidator(
       enable: true,
     },
     ...synchronizerValues,
+    additionalEnvVars: (defaultScanValues.additionalEnvVars || [])
+      .concat([envoyClientIpHeaderEnvVar('canton.scan-apps.scan-app')])
+      .concat(scanRateLimitEnvVars()),
     resources: svConfig.scanApp?.resources,
     pvc: persistentHeapDumpsPvc(),
   };

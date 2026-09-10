@@ -3,6 +3,7 @@
 import * as gcp from '@pulumi/gcp';
 import * as pulumi from '@pulumi/pulumi';
 import {
+  CLOUD_ARMOR_POLICY_NAME,
   CLUSTER_BASENAME,
   CLUSTER_NAME,
   conditionalString,
@@ -10,7 +11,12 @@ import {
 } from '@canton-network/splice-pulumi-common';
 
 import { slackAlertNotificationChannel, slackToken } from './alertings';
-import { type GcpQuotaAlertsConfig, monitoringConfig, type NatPortUsageConfig } from './config';
+import {
+  type CloudArmorAlertsConfig,
+  type GcpQuotaAlertsConfig,
+  monitoringConfig,
+  type NatPortUsageConfig,
+} from './config';
 
 const enableChaosMesh = config.envFlag('ENABLE_CHAOS_MESH');
 
@@ -551,6 +557,80 @@ export function installCloudSqlTxIdUtilizationAlert(
           thresholdValue: 0.8,
         },
       },
+    ],
+  });
+}
+
+export function installCloudArmorAlerts(
+  notificationChannel: gcp.monitoring.NotificationChannel,
+  cloudArmorAlertsConfig: CloudArmorAlertsConfig,
+  hasPreviewOnlyRules: boolean
+): void {
+  const { deniedRequestsThreshold } = cloudArmorAlertsConfig;
+  // Scoped to the policy of this cluster; other clusters in the same GCP project
+  // report to the same metric.
+  const policyFilter = `resource.type="network_security_policy" AND resource.label.policy_name="${CLOUD_ARMOR_POLICY_NAME}"`;
+
+  const aggregations = [
+    {
+      alignmentPeriod: '300s',
+      crossSeriesReducer: 'REDUCE_SUM',
+      groupByFields: ['metric.label.backend_target_name'],
+      perSeriesAligner: 'ALIGN_SUM',
+    },
+  ];
+
+  const deniedCondition = (
+    displayName: string,
+    metricType: string
+  ): gcp.types.input.monitoring.AlertPolicyCondition => ({
+    displayName,
+    conditionThreshold: {
+      aggregations,
+      comparison: 'COMPARISON_GT',
+      duration: '0s',
+      filter: assertFilterLength(
+        `${policyFilter} AND metric.type="${metricType}" AND metric.label.blocked="true"`
+      ),
+      thresholdValue: deniedRequestsThreshold,
+      trigger: {
+        count: 1,
+      },
+    },
+  });
+
+  const enforcedDisplayName = `Cloud Armor denied requests in ${CLUSTER_BASENAME}`;
+  const previewedDisplayName = `Cloud Armor would deny requests in ${CLUSTER_BASENAME}`;
+
+  new gcp.monitoring.AlertPolicy('cloudArmorDeniedRequestsAlert', {
+    alertStrategy: getAlertStrategy(notificationChannel),
+    combiner: 'OR',
+    notificationChannels: [notificationChannel.name],
+    userLabels: { cluster: CLUSTER_BASENAME },
+    displayName: enforcedDisplayName,
+    documentation: {
+      subject: enforcedDisplayName,
+      content: [
+        `Requests to **${CLUSTER_BASENAME}** were denied by the Cloud Armor security policy \`${CLOUD_ARMOR_POLICY_NAME}\`.`,
+        'This is either an abusive client being blocked at the GCP edge, or legitimate traffic that our rules (WAF signatures, IP whitelist, per endpoint throttles, default deny) reject by mistake.',
+        'Check the Cloud Armor request logs of the load balancer to see which rule matched.',
+      ].join('\n\n'),
+      mimeType: 'text/markdown',
+    },
+    conditions: [
+      deniedCondition(enforcedDisplayName, 'networksecurity.googleapis.com/https/request_count'),
+      // Rules in preview mode do not actually deny anything, so we also alert on the
+      // requests they would have denied; for the WAF rules that previewed signal is
+      // exactly the attack detection we want, and while rolling the whole policy out
+      // it is the only signal available.
+      ...(hasPreviewOnlyRules
+        ? [
+            deniedCondition(
+              previewedDisplayName,
+              'networksecurity.googleapis.com/https/previewed_request_count'
+            ),
+          ]
+        : []),
     ],
   });
 }

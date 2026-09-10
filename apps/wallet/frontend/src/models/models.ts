@@ -138,6 +138,7 @@ export interface DevelopmentFundCoupon {
   beneficiary: string;
   amount: BigNumber;
   expiresAt: Date;
+  mintAfter?: Date;
   reason: string;
   withdrawalReason?: string;
 }

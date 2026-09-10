@@ -9,6 +9,7 @@ import org.lfdecentralizedtrust.splice.store.{
   HistoryMetrics,
   PageLimit,
   StoreTestBase,
+  TimestampWithMigrationId,
   UpdateHistory,
 }
 import org.lfdecentralizedtrust.splice.scan.store.db.{DbAppActivityRecordStore, DbScanVerdictStore}
@@ -85,17 +86,20 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
       for {
         ctx <- newEventStore()
         _ <- insertVerdict(ctx.verdictStore, "update1", CantonTimestamp.MinValue.plusSeconds(1L))
-        _ <- ctx.verdictStore.insertVerdictAndTransactionViews(
-          Seq(
-            // won't be reinserted
-            mkVerdict(ctx.verdictStore, "update1", CantonTimestamp.MinValue.plusSeconds(1L)) -> (
-              (_: Long) => Seq.empty
-            ),
-            // will be inserted
-            mkVerdict(ctx.verdictStore, "update2", CantonTimestamp.MinValue.plusSeconds(2L)) -> (
-              (_: Long) => Seq.empty
-            ),
-          )
+        _ <- loggerFactory.assertLogs(
+          ctx.verdictStore.insertVerdictAndTransactionViews(
+            Seq(
+              // won't be reinserted
+              mkVerdict(ctx.verdictStore, "update1", CantonTimestamp.MinValue.plusSeconds(1L)) -> (
+                (_: Long) => Seq.empty
+              ),
+              // will be inserted
+              mkVerdict(ctx.verdictStore, "update2", CantonTimestamp.MinValue.plusSeconds(2L)) -> (
+                (_: Long) => Seq.empty
+              ),
+            )
+          ),
+          _.warningMessage should startWith("Dropping duplicate accepted verdicts"),
         )
         result <- ctx.verdictStore.listVerdicts(None, includeImportUpdates = false, 10)
       } yield {
@@ -122,14 +126,14 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
         // Fetch with cursor
         events2 <- fetchEvents(
           ctx.eventStore,
-          Some((domainMigrationId, recordTs1.minusSeconds(1))),
+          Some(TimestampWithMigrationId(recordTs1.minusSeconds(1), domainMigrationId)),
           domainMigrationId,
           pageLimit,
         )
         // Fetch after recordTs1
         events3 <- fetchEvents(
           ctx.eventStore,
-          Some((domainMigrationId, recordTs1)),
+          Some(TimestampWithMigrationId(recordTs1, domainMigrationId)),
           domainMigrationId,
           pageLimit,
         )
@@ -169,14 +173,14 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
         // Fetch with cursor
         events2 <- fetchEvents(
           ctx.eventStore,
-          Some((domainMigrationId, recordTs1.minusSeconds(1))),
+          Some(TimestampWithMigrationId(recordTs1.minusSeconds(1), domainMigrationId)),
           domainMigrationId,
           pageLimit,
         )
         // Fetch after recordTs1
         events3 <- fetchEvents(
           ctx.eventStore,
-          Some((domainMigrationId, recordTs1)),
+          Some(TimestampWithMigrationId(recordTs1, domainMigrationId)),
           domainMigrationId,
           pageLimit,
         )
@@ -218,14 +222,14 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
         // Fetch with cursor
         events2 <- fetchEvents(
           ctx.eventStore,
-          Some((domainMigrationId, recordTs1.minusSeconds(1))),
+          Some(TimestampWithMigrationId(recordTs1.minusSeconds(1), domainMigrationId)),
           domainMigrationId,
           pageLimit,
         )
         // Fetch after recordTs1
         events3 <- fetchEvents(
           ctx.eventStore,
-          Some((domainMigrationId, recordTs1)),
+          Some(TimestampWithMigrationId(recordTs1, domainMigrationId)),
           domainMigrationId,
           pageLimit,
         )
@@ -267,12 +271,17 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
         events <- fetchEvents(ctx1.eventStore, None, mig1, pageLimit)
         events2 <- fetchEvents(
           ctx1.eventStore,
-          Some((mig0, recordTs1.minusSeconds(1))),
+          Some(TimestampWithMigrationId(recordTs1.minusSeconds(1), mig0)),
           mig1,
           pageLimit,
         )
         // after recordTs1
-        events3 <- fetchEvents(ctx1.eventStore, Some((mig0, recordTs1)), mig1, pageLimit)
+        events3 <- fetchEvents(
+          ctx1.eventStore,
+          Some(TimestampWithMigrationId(recordTs1, mig0)),
+          mig1,
+          pageLimit,
+        )
         // Fetch by id works across migrationIds
         e1 <- ctx1.eventStore.getEventByUpdateId(updateId1, domainMigrationId)
         e2 <- ctx1.eventStore.getEventByUpdateId(updateId2, domainMigrationId)
@@ -429,14 +438,14 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
         // Fetch with cursor
         events2 <- fetchEvents(
           ctx.eventStore,
-          Some((domainMigrationId, recordTs1.minusSeconds(1))),
+          Some(TimestampWithMigrationId(recordTs1.minusSeconds(1), domainMigrationId)),
           domainMigrationId,
           pageLimit,
         )
         // Fetch after latest verdict
         events3 <- fetchEvents(
           ctx.eventStore,
-          Some((domainMigrationId, recordTs2)),
+          Some(TimestampWithMigrationId(recordTs2, domainMigrationId)),
           domainMigrationId,
           pageLimit,
         )
@@ -474,14 +483,14 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
         // Fetch with cursor
         events2 <- fetchEvents(
           ctx.eventStore,
-          Some((domainMigrationId, recordTs1.minusSeconds(1))),
+          Some(TimestampWithMigrationId(recordTs1.minusSeconds(1), domainMigrationId)),
           domainMigrationId,
           pageLimit,
         )
         // Fetch after latest assignment
         events3 <- fetchEvents(
           ctx.eventStore,
-          Some((domainMigrationId, recordTs2)),
+          Some(TimestampWithMigrationId(recordTs2, domainMigrationId)),
           domainMigrationId,
           pageLimit,
         )
@@ -518,14 +527,14 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
         // Fetch with cursor
         events2 <- fetchEvents(
           ctx.eventStore,
-          Some((domainMigrationId, recordTs1.minusSeconds(1))),
+          Some(TimestampWithMigrationId(recordTs1.minusSeconds(1), domainMigrationId)),
           domainMigrationId,
           pageLimit,
         )
         // Fetch after latest verdict
         events3 <- fetchEvents(
           ctx.eventStore,
-          Some((domainMigrationId, recordTs2)),
+          Some(TimestampWithMigrationId(recordTs2, domainMigrationId)),
           domainMigrationId,
           pageLimit,
         )
@@ -564,14 +573,14 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
         // Fetch with cursor
         events2 <- fetchEvents(
           ctx.eventStore,
-          Some((domainMigrationId, recordTs1.minusSeconds(1))),
+          Some(TimestampWithMigrationId(recordTs1.minusSeconds(1), domainMigrationId)),
           domainMigrationId,
           pageLimit,
         )
         // Fetch after latest unassignment
         events3 <- fetchEvents(
           ctx.eventStore,
-          Some((domainMigrationId, recordTs2)),
+          Some(TimestampWithMigrationId(recordTs2, domainMigrationId)),
           domainMigrationId,
           pageLimit,
         )
@@ -813,7 +822,7 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
 
       {
         val allow = ScanEventStore.allowF(
-          afterO = Some((mig0, recordTs1)),
+          afterO = Some(TimestampWithMigrationId(recordTs1, mig0)),
           currentMigrationId = mig1,
           currentMigrationCap = capMin,
         )
@@ -824,7 +833,7 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
 
       {
         val allow = ScanEventStore.allowF(
-          afterO = Some((mig0, recordTs1)),
+          afterO = Some(TimestampWithMigrationId(recordTs1, mig0)),
           currentMigrationId = mig1,
           currentMigrationCap = cap3,
         )
@@ -838,7 +847,7 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
 
       {
         val allow = ScanEventStore.allowF(
-          afterO = Some((mig1, recordTs2)),
+          afterO = Some(TimestampWithMigrationId(recordTs2, mig1)),
           currentMigrationId = mig1,
           currentMigrationCap = cap3,
         )
@@ -849,13 +858,64 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
 
       {
         val allow = ScanEventStore.allowF(
-          afterO = Some((mig2, recordTs2)),
+          afterO = Some(TimestampWithMigrationId(recordTs2, mig2)),
           currentMigrationId = mig2,
           currentMigrationCap = cap2,
         )
         allow(mig1, recordTs3) shouldBe true // prior migration is always allowed
         allow(mig2, recordTs2) shouldBe false // equal to after
         allow(mig2, recordTs3) shouldBe false // > after and > cap
+      }
+    }
+
+    "getLatestEventRecordTime returns the record time of the last event getEvents returns" in {
+      for {
+        ctx <- newEventStore()
+        // update + verdict at ts1
+        ts1 = CantonTimestamp.now()
+        tx1 <- insertUpdate(ctx.updateHistory, ts1, "update1")
+        _ <- insertVerdict(ctx.verdictStore, tx1.getUpdateId, ts1)
+
+        // update + verdict at ts2
+        ts2 = ts1.plusSeconds(1)
+        tx2 <- insertUpdate(ctx.updateHistory, ts2, "update2")
+        _ <- insertVerdict(ctx.verdictStore, tx2.getUpdateId, ts2)
+
+        // loose update at ts3 must be filtered out of getEvents
+        ts3 = ts2.plusSeconds(1)
+        _ <- insertUpdate(ctx.updateHistory, ts3, "update-loose")
+
+        events <- fetchEvents(ctx.eventStore, None, domainMigrationId, pageLimit)
+        latest <- ctx.eventStore.getLatestEventRecordTime(domainMigrationId)(traceContext)
+      } yield {
+        // getEvents caps at ts2, the ts3 loose update is excluded
+        events.nonEmpty shouldBe true
+        val lastReturnedRt = events.last._1
+          .map(_._1.recordTime)
+          .orElse(events.last._2.map(_.update.update.recordTime))
+          .value
+        lastReturnedRt shouldBe ts2
+
+        latest shouldBe Some(lastReturnedRt)
+      }
+    }
+
+    "getLatestEventRecordTime returns None when there are no events" in {
+      for {
+        ctx <- newEventStore()
+        latest <- ctx.eventStore.getLatestEventRecordTime(domainMigrationId)(traceContext)
+      } yield {
+        latest shouldBe None
+      }
+    }
+
+    "getLatestEventRecordTime returns None when there is only a loose update" in {
+      for {
+        ctx <- newEventStore()
+        _ <- insertUpdate(ctx.updateHistory, CantonTimestamp.now(), "update1")
+        latest <- ctx.eventStore.getLatestEventRecordTime(domainMigrationId)(traceContext)
+      } yield {
+        latest shouldBe None
       }
     }
   }
@@ -871,6 +931,7 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
       participantId,
       dsoParty,
       BackfillingRequirement.BackfillingNotRequired,
+      internedStringStore(storage),
       loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = true,
@@ -888,6 +949,7 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
         updateHistory,
         DbAppActivityRecordStore.IngestionVersions(1, 0),
         false,
+        initialRound = 0L,
         loggerFactory,
       ),
       loggerFactory,
@@ -1042,7 +1104,7 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
 
   private def fetchEvents(
       es: ScanEventStore,
-      afterO: Option[(Long, CantonTimestamp)],
+      afterO: Option[TimestampWithMigrationId],
       currentMigrationId: Long,
       limit: PageLimit,
   ): Future[Seq[ScanEventStore#Event]] = {

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, test } from 'vitest';
+import { beforeAll, describe, expect, test } from 'vitest';
 import { MemoryRouter } from 'react-router';
 import { ThemeProvider } from '@emotion/react';
 import { theme } from '../../../../../common/frontend/lib/theme';
@@ -50,6 +50,12 @@ async function checkActionSelection(actionName: string, actionValue: string, tes
   expect(actionInput.textContent).toBe(action!.name);
 }
 
+// The SV app's /v1/dso endpoint requires authentication, so log in before rendering
+// (matches the UserProvider's session-restore path for test auth).
+beforeAll(() => {
+  window.sessionStorage.setItem('canton.network.wallet.userid', 'sv1');
+});
+
 describe('Create Proposal', () => {
   test('Does not render the form while dsoInfo is pending, then lands on +7d default', async () => {
     let releaseDso!: () => void;
@@ -58,7 +64,7 @@ describe('Create Proposal', () => {
     });
 
     server.use(
-      http.get(`${svUrl}/v0/dso`, async () => {
+      http.get(`${svUrl}/v1/dso`, async () => {
         await dsoReady;
         return HttpResponse.json(dsoInfo);
       })

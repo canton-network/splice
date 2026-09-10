@@ -355,7 +355,7 @@ tests:
 
   - it: "allows overriding sequencer base database password with raw strings"
     set:
-      sequencer.driver.type: "postgres"
+      sequencer.driver.type: "cantonbft"
       sequencer.driver.address: "mock-driver-address"
       sequencer.persistence.secretOverrides.postgresPassword: "vault:kv/data/sequencer/postgres-password"
     documentSelector:
@@ -364,9 +364,6 @@ tests:
     asserts:
       - matchRegex:
           path: spec.template.spec.containers[?(@.name=='sequencer')].env[?(@.name=='CANTON_DOMAIN_POSTGRES_PASSWORD')].value
-          pattern: "vault:kv/data/sequencer/postgres-password"
-      - matchRegex:
-          path: spec.template.spec.containers[?(@.name=='sequencer')].env[?(@.name=='SEQUENCER_DRIVER_DATABASE_PASSWORD')].value
           pattern: "vault:kv/data/sequencer/postgres-password"
       - matchRegex:
           path: spec.template.spec.initContainers[?(@.name=='pg-init')].env[?(@.name=='PGPASSWORD')].value

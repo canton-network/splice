@@ -33,7 +33,7 @@ object Position {
 
   case object End extends Position
 
-  final case class Index(value: Long) extends Position
+  final case class Index(value: AcsSnapshotStore.QueryAcsSnapshotPaginationToken) extends Position
 }
 
 class SingleAcsSnapshotBulkStorage(
@@ -49,7 +49,7 @@ class SingleAcsSnapshotBulkStorage(
 
   private def getAcsSnapshotChunk(
       timestamp: TimestampWithMigrationId,
-      after: Option[Long],
+      after: Option[AcsSnapshotStore.QueryAcsSnapshotPaginationToken],
   ): Future[(Position, Vector[SpliceCreatedEvent])] = {
     for {
       snapshot <- acsSnapshotStore.queryAcsSnapshot(
@@ -107,7 +107,7 @@ class SingleAcsSnapshotBulkStorage(
                     .storageKey("ACS", objIdx)}",
               loggerFactory,
             ),
-          encoding => historyMetrics.BulkStorage.incAcsSnapshotObjects(encoding.key),
+          encoding => historyMetrics.BulkStorage.incAcsSnapshotObjects(encoding.key, "staging"),
         )
       )
       .fold(Seq.empty[String])(_ :+ _)

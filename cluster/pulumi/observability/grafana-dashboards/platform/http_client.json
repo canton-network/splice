@@ -18,7 +18,6 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
-  "id": 15005,
   "links": [],
   "panels": [
     {
@@ -55,6 +54,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -83,8 +83,8 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 11,
-        "w": 15,
+        "h": 9,
+        "w": 24,
         "x": 0,
         "y": 0
       },
@@ -96,7 +96,9 @@
           ],
           "displayMode": "table",
           "placement": "right",
-          "showLegend": true
+          "showLegend": true,
+          "sortBy": "Last *",
+          "sortDesc": true
         },
         "tooltip": {
           "hideZeros": false,
@@ -104,7 +106,7 @@
           "sort": "desc"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "datasource": {
@@ -116,7 +118,7 @@
           "expr": "histogram_count(rate(daml_http_client_requests_duration_seconds{namespace=~\"$namespace\", job=~\"$job\", operation=~\"$operation\", status_code=~\"2.*\"}[$__rate_interval]))",
           "fullMetaSearch": false,
           "includeNullMetadata": false,
-          "legendFormat": "{{namespace}} {{job}} {{http_client}} {{operation}} {{status_code}}",
+          "legendFormat": "{{namespace}} {{job}} {{target_host}} {{http_client}} {{operation}} {{status_code}}",
           "range": true,
           "refId": "A",
           "useBackend": false
@@ -159,99 +161,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 11,
-        "w": 9,
-        "x": 15,
-        "y": 0
-      },
-      "id": 2,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "pluginVersion": "12.1.1",
-      "targets": [
-        {
-          "editorMode": "code",
-          "expr": "histogram_count(rate(daml_http_client_requests_duration_seconds{namespace=~\"$namespace\", job=~\"$job\", operation=~\"$operation\", status_code!~\"2.*\"}[$__rate_interval]))",
-          "legendFormat": "{{namespace}} {{job}} {{http_client}} {{operation}} {{status_code}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Errors",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -283,7 +193,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 11
+        "y": 9
       },
       "id": 4,
       "options": {
@@ -301,12 +211,12 @@
           "sort": "desc"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "editorMode": "code",
           "expr": "histogram_quantile($percentile, rate(daml_http_client_requests_duration_seconds{namespace=~\"$namespace\", job=~\"$job\", http_client=~\"$http_client\", operation=~\"$operation\"}[$__rate_interval]))",
-          "legendFormat": "{{namespace}} {{job}} {{http_client}} {{operation}} {{status_code}}",
+          "legendFormat": "{{namespace}} {{job}} {{target_host}} {{http_client}} {{operation}} {{status_code}}",
           "range": true,
           "refId": "A"
         }
@@ -348,6 +258,228 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 15,
+        "x": 0,
+        "y": 17
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.4.0",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "histogram_count(rate(daml_http_client_requests_duration_seconds{namespace=~\"$namespace\", job=~\"$job\", operation=~\"$operation\", status_code!~\"2.*\"}[$__rate_interval]))",
+          "legendFormat": "{{namespace}} {{job}} {{http_client}} {{target_host}} {{operation}} {{status}} {{status_code}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Errors",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "status_code"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 125
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "target_host"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 375
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 9,
+        "x": 15,
+        "y": 17
+      },
+      "id": 5,
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Value"
+          }
+        ]
+      },
+      "pluginVersion": "12.4.0",
+      "targets": [
+        {
+          "editorMode": "builder",
+          "exemplar": false,
+          "expr": "sum by(namespace, job, http_client, operation, status_code, target_host) (histogram_count(increase(daml_http_client_requests_duration_seconds{namespace=~\"$namespace\", job=~\"$job\", operation=~\"$operation\", status_code!~\"2.*\"}[$__range])))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Errors",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "endpoint": true,
+              "instance": true
+            },
+            "includeByName": {},
+            "indexByName": {
+              "Time": 2,
+              "Value": 15,
+              "endpoint": 3,
+              "http_client": 4,
+              "instance": 5,
+              "job": 1,
+              "namespace": 0,
+              "node_name": 6,
+              "node_type": 7,
+              "operation": 8,
+              "otel_scope_name": 9,
+              "pod": 10,
+              "service": 11,
+              "status": 12,
+              "status_code": 13,
+              "target_host": 14
+            },
+            "renameByName": {}
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -378,7 +510,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 19
+        "y": 28
       },
       "id": 3,
       "options": {
@@ -396,12 +528,12 @@
           "sort": "desc"
         }
       },
-      "pluginVersion": "12.1.1",
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "editorMode": "code",
           "expr": "daml_http_client_requests_inflight{namespace=~\"$namespace\", job=~\"$job\", http_client=~\"$http_client\", operation=~\"$operation\"}\n",
-          "legendFormat": "{{namespace}} {{job}} {{http_client}} {{operation}} {{status_code}}",
+          "legendFormat": "{{namespace}} {{job}} {{target_host}} {{http_client}} {{operation}} {{status_code}}",
           "range": true,
           "refId": "A"
         }
@@ -411,7 +543,7 @@
     }
   ],
   "preload": false,
-  "schemaVersion": 41,
+  "schemaVersion": 42,
   "tags": [],
   "templating": {
     "list": [
@@ -437,13 +569,18 @@
         },
         "refresh": 1,
         "regex": "",
+        "regexApplyTo": "value",
         "type": "query"
       },
       {
         "allowCustomValue": false,
         "current": {
-          "text": "All",
-          "value": "$__all"
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
         },
         "definition": "label_values(daml_http_client_requests_duration_seconds{namespace=~\"$namespace\"},job)",
         "description": "",
@@ -458,13 +595,18 @@
         },
         "refresh": 1,
         "regex": "",
+        "regexApplyTo": "value",
         "type": "query"
       },
       {
         "allowCustomValue": false,
         "current": {
-          "text": "All",
-          "value": "$__all"
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
         },
         "definition": "label_values(daml_http_client_requests_duration_seconds{namespace=~\"$namespace\", job=~\"$job\", http_client=~\"$http_client\"},operation)",
         "description": "",
@@ -479,6 +621,7 @@
         },
         "refresh": 1,
         "regex": "",
+        "regexApplyTo": "value",
         "type": "query"
       },
       {
@@ -500,6 +643,7 @@
         },
         "refresh": 1,
         "regex": "",
+        "regexApplyTo": "value",
         "type": "query"
       },
       {
@@ -508,35 +652,31 @@
           "value": "0.9"
         },
         "name": "percentile",
-        "options": [
-          {
-            "selected": true,
-            "text": "0.9",
-            "value": "0.9"
-          },
-          {
-            "selected": false,
-            "text": "0.95",
-            "value": "0.95"
-          },
-          {
-            "selected": false,
-            "text": "0.99",
-            "value": "0.99"
-          }
-        ],
+        "options": [],
         "query": "0.9,0.95,0.99",
-        "type": "custom"
+        "type": "custom",
+        "valuesFormat": "csv"
+      },
+      {
+        "baseFilters": [],
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "filters": [],
+        "name": "filter",
+        "type": "adhoc"
       }
     ]
   },
   "time": {
-    "from": "now-12h",
+    "from": "now-15m",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
   "title": "Http Client",
   "uid": "a8a3113a-bccf-4728-b752-dd7a5d6f9bda",
-  "version": 3
+  "version": 3,
+  "weekStart": ""
 }

@@ -16,13 +16,13 @@ import Splice.Util
 data ForSv = ForSv with
     dso : Party
     svName : Text
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 data ForSvNode = ForSvNode with
     dso : Party
     sv : Party
     svName : Text
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 
 -- Reward collection
@@ -38,7 +38,7 @@ data RewardState = RewardState with
     numRoundsCollected : Int -- ^ Number of rounds for which they collected coupons.
     lastRoundCollected : Round -- ^ Last round for which they collected reward coupons.
     numCouponsIssued : Int -- ^ Number of SV reward coupons issued by them for their beneficiaries.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- | State of reward collection for a sv identified by their sv name.
 template SvRewardState with
@@ -55,7 +55,7 @@ template SvRewardState with
 data NodeState = NodeState with
     synchronizerNodes : SynchronizerNodeConfigMap
       -- ^ The config for a synchronizer's CometBFT, sequencer, mediator and scan nodes under control of an SV party.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- | State of a node managed by an SV operator party.
 --
@@ -90,7 +90,7 @@ data SvStatus = SvStatus with
       -- ^ The latest synchronizer time observed on the participant at the time of submission
     latestOpenRound : Round
       -- ^ The maximum round number of the OpenMiningRound contracts at the time of submission
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- | A singleton contract per SV party that is used to regularly submit status reports.
 --

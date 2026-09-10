@@ -5,6 +5,7 @@ import * as k8s from '@pulumi/kubernetes';
 import { config } from '@canton-network/splice-pulumi-common';
 import { svsConfig } from '@canton-network/splice-pulumi-common-sv/src/config';
 
+import { configureSweet } from '../sweet';
 import { configureAuth0 } from './auth0';
 import { configureCloudArmorPolicy } from './cloudArmor';
 import {
@@ -20,6 +21,7 @@ import { configureIstio, istioVersion } from './istio';
 import { deployGCPodReaper } from './maintenance';
 import { configureNetwork } from './network';
 import { configureReloader } from './reloader';
+import { sequencerP2pHosts } from './sequencerP2pHosts';
 import { configureStorage } from './storage';
 
 const network = configureNetwork(clusterBasename, clusterBaseDomain);
@@ -53,9 +55,14 @@ if (useGKEL7Gateway) {
     ingressAddress: network.ingressIp,
     gatewayName: 'cn-gke-l7-gateway',
     backendServiceName: istio.httpServiceName,
-    serviceTarget: { port: 443 }, // see configureGateway for why 443
+    serviceTarget: { port: 80 },
     tlsSecretName: `cn-${clusterBasename}net-tls`,
     securityPolicy: cloudArmorSecurityPolicy,
+    backendLogging: cloudArmorConfig.logging,
+    // The sequencer BFT P2P API is mutually authenticated gRPC between known peers, so
+    // Cloud Armor adds no protection there while billing every P2P request. Route it to
+    // a backend service without a security policy attached.
+    cloudArmorExemptHostnames: sequencerP2pHosts(),
     istioResource: istio.istioResource,
   });
 }
@@ -63,6 +70,10 @@ if (useGKEL7Gateway) {
 configureStorage();
 
 configureReloader();
+
+if (infraConfig.enableSweetSecurity) {
+  configureSweet();
+}
 
 installExtraCustomResources();
 

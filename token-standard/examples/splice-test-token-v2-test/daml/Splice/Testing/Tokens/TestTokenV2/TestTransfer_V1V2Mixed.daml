@@ -43,7 +43,7 @@ data TestCase = TestCase with
     bobAccount : V2.Account
     bobAccountConfig : Optional TestTokenV2.AccountConfig
     aliceToBobMeta : Metadata
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 mkBasicAccountTestCase : Party -> Script TestCase
 mkBasicAccountTestCase _admin = do

@@ -297,3 +297,33 @@ tests:
             capabilities:
               drop:
                 - ALL
+
+  - it: "propagates priorityClassName to the postgres-metrics deployment"
+    set:
+      enablePostgresMetrics: true
+      priorityClassName: high-priority
+      mediator:
+        persistence:
+          postgresName: mediator-pg
+          databaseName: mediator_db
+    documentSelector:
+      path: spec.template.metadata.labels.app
+      value: pge-mediator-pg-mediator-db
+    asserts:
+      - equal:
+          path: spec.template.spec.priorityClassName
+          value: high-priority
+
+  - it: "omits priorityClassName on the postgres-metrics deployment when unset"
+    set:
+      enablePostgresMetrics: true
+      mediator:
+        persistence:
+          postgresName: mediator-pg
+          databaseName: mediator_db
+    documentSelector:
+      path: spec.template.metadata.labels.app
+      value: pge-mediator-pg-mediator-db
+    asserts:
+      - notExists:
+          path: spec.template.spec.priorityClassName

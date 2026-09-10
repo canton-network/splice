@@ -360,7 +360,32 @@
             ]
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 100
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Time"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 200
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
@@ -371,6 +396,7 @@
       "id": 32,
       "options": {
         "cellHeight": "sm",
+        "enablePagination": true,
         "showHeader": true
       },
       "pluginVersion": "12.4.0",
@@ -378,7 +404,8 @@
         {
           "editorMode": "code",
           "exemplar": false,
-          "expr": "max by (namespace)(splice_scan_reward_computation_reward_coupons_v2_hidden_coupons{namespace=~\"$namespace\"})",
+          "expr": "max by (party)(splice_reward_coupons_v2_hidden_coupons{namespace=~\"$namespace\"})",
+          "format": "table",
           "instant": true,
           "legendFormat": "__auto",
           "range": false,
@@ -386,6 +413,31 @@
         }
       ],
       "title": "Parties with hidden coupons",
+      "transformations": [
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "desc": true,
+                "field": "Value"
+              }
+            ]
+          }
+        },
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "names": [
+                "party",
+                "Value"
+              ]
+            }
+          }
+        }
+      ],
       "type": "table"
     },
     {
@@ -1149,9 +1201,7 @@
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": [
-            "median"
-          ],
+          "calcs": ["median"],
           "fields": "",
           "values": false
         },
@@ -1210,9 +1260,7 @@
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -1271,9 +1319,7 @@
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },
@@ -1332,9 +1378,7 @@
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
+          "calcs": ["lastNotNull"],
           "fields": "",
           "values": false
         },

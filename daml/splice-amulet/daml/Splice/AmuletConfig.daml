@@ -5,6 +5,7 @@ module Splice.AmuletConfig where
 
 import DA.Optional
 import DA.Time
+import DA.TextMap
 
 import Splice.Fees
 import Splice.DecentralizedSynchronizer
@@ -13,9 +14,9 @@ import Splice.Schedule
 import Splice.Util
 
 -- TODO(#14972): Get rid of the unused Amulet data type
-data Amulet = Amulet deriving (Show, Eq)
+data Amulet = Amulet deriving (Show, Eq, Serializable)
 -- ^ Deprecated type for specifying amounts and fees in units of Amulet. Use Splice.Amulet.Amulet directly instead.
-data USD = USD deriving (Show, Eq)
+data USD = USD deriving (Show, Eq, Serializable)
 
 -- | Configuration determining the fees and limits for Amulet transfers granted by
 -- the AmuletRules.
@@ -32,7 +33,7 @@ data TransferConfig unit = TransferConfig with
     maxNumLockHolders : Int -- ^ Maximum number of lock holders allowed for a locked amulet.
     tokenStandardMaxTTL : Optional RelTime
       -- ^ Maximum time to live for token standard state contracts (allocations and transfer instructions).  Defaults to 90 days.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 transferConfigToTransferConfigV2 : TransferConfig unit -> TransferConfigV2 unit
 transferConfigToTransferConfigV2 tc = TransferConfigV2 with
@@ -49,7 +50,7 @@ data TransferConfigV2 unit = TransferConfigV2 with
     maxNumOutputs : Int
     maxNumLockHolders : Int
     tokenStandardMaxTTL : Optional RelTime
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- | Get the TTL for token standard state contracts, falling back to a default if not specified.
 getTokenStandardMaxTTL : TransferConfigV2 unit -> RelTime
@@ -65,7 +66,7 @@ data RewardVersion
       -- ^ Version of app rewards pre CIP-104
   | RewardVersion_TrafficBasedAppRewards
       -- ^ Traffic-based app rewards as introduced in CIP-104
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 useTrafficBasedAppRewards : Optional RewardVersion -> Bool
 useTrafficBasedAppRewards rv = case rv of
@@ -85,7 +86,7 @@ data RewardConfig = RewardConfig with
     appRewardCouponThreshold : Decimal -- ^ Threshold for minting reward coupons, in USD.
     -- This threshold is not enforced in daml, but it must be used while building the Merkle-tree
     -- to ignore minting allowances lower than this value.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 
 -- Full AmuletConfig
@@ -112,10 +113,19 @@ data AmuletConfig unit = AmuletConfig with
     rewardConfig : Optional RewardConfig
       -- ^ Configuration for the reward accounting and calculation. If None, then on-ledger reward tracking is used.
     transferPreapprovalBaseDuration : Optional RelTime -- ^ Base duration of a transfer pre-approval granted for free on creation and renewal. Default: 90 days.
-  deriving (Eq, Show)
+    developmentFundManagerBlacklist : Optional [Party]
+      -- ^ List of blocked parties. They cannot allocate new coupons, and the coupons they allocated cannot be minted either.
+    minDevelopmentFundMintingDelay : Optional RelTime
+      -- ^ Minimum delay between allocation and minting. Default: 0 days.
+    amuletSwitchOverTimes : Optional (TextMap Time)
+      -- ^ Timepoints for synchronized switch-overs of amulet functionality both on and off-ledger.
+  deriving (Eq, Show, Serializable)
 
 getExternalPartyConfigStateTickDuration : AmuletConfig a -> RelTime
 getExternalPartyConfigStateTickDuration config = fromOptional (hours 24) config.externalPartyConfigStateTickDuration
+
+getDevelopmentFundManagerBlacklist : AmuletConfig unit -> [Party]
+getDevelopmentFundManagerBlacklist config = fromOptional [] config.developmentFundManagerBlacklist
 
 -- | $1/year specified as a daily rate
 defaultTransferPreapprovalFee : Decimal
@@ -139,7 +149,10 @@ validAmuletConfig AmuletConfig
     , tickDuration
     , packageConfig
     , transferPreapprovalFee
-    , featuredAppActivityMarkerAmount}
+    , featuredAppActivityMarkerAmount
+    , rewardConfig
+    , minDevelopmentFundMintingDelay
+    }
   =
     validTransferConfig transferConfig &&
     validIssuanceCurve issuanceCurve &&
@@ -148,7 +161,9 @@ validAmuletConfig AmuletConfig
     validPackageConfig packageConfig &&
     optional True (>= 0.0) transferPreapprovalFee &&
     optional True (>= 0.0) featuredAppActivityMarkerAmount &&
-    featuredAppActivityMarkerAmount == Some transferConfig.extraFeaturedAppRewardAmount
+    featuredAppActivityMarkerAmount == Some transferConfig.extraFeaturedAppRewardAmount &&
+    optional True validRewardConfig rewardConfig &&
+    optional True (>= days 0) minDevelopmentFundMintingDelay
 
 validTransferConfig : TransferConfig unit -> Bool
 validTransferConfig TransferConfig
@@ -164,7 +179,6 @@ validTransferConfig TransferConfig
   =
     createFee == FixedFee 0.0 &&
     lockHolderFee == FixedFee 0.0 &&
-    lockHolderFee == FixedFee 0.0 &&
     transferFee.initialRate == 0.0 &&
     -- TODO(#4424) Enforce `null transferFee.steps`
     all (\(_step, rate) -> rate == 0.0) transferFee.steps &&
@@ -173,6 +187,17 @@ validTransferConfig TransferConfig
     maxNumInputs >= 1 &&
     maxNumOutputs >= 1 &&
     maxNumLockHolders >= 0
+
+validRewardConfig : RewardConfig -> Bool
+validRewardConfig (RewardConfig
+  _mintingVersion
+  _dryRunVersion
+  batchSize
+  rewardCouponTimeToLive
+  appRewardCouponThreshold) =
+    batchSize > 0 &&
+    rewardCouponTimeToLive > hours 0 &&
+    appRewardCouponThreshold >= 0.0
 
 -- | The package config defines for each daml package (identified by name)
 -- the package version that should be used for command submissions
@@ -185,7 +210,7 @@ data PackageConfig = PackageConfig
     validatorLifecycle : Text
     wallet : Text
     walletPayments : Text
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 -- | Package configs are not constrained at the Daml level to maximize flexibility.
 -- In particular, empty packages versions might be used in the future to indicate that
@@ -206,9 +231,13 @@ instance Patchable (AmuletConfig USD) where
     transferPreapprovalFee = patch new.transferPreapprovalFee base.transferPreapprovalFee current.transferPreapprovalFee
     featuredAppActivityMarkerAmount = patch new.featuredAppActivityMarkerAmount base.featuredAppActivityMarkerAmount current.featuredAppActivityMarkerAmount
     optDevelopmentFundManager = patch new.optDevelopmentFundManager base.optDevelopmentFundManager current.optDevelopmentFundManager
+    developmentFundManagerBlacklist =
+      patchScalar new.developmentFundManagerBlacklist base.developmentFundManagerBlacklist current.developmentFundManagerBlacklist
     externalPartyConfigStateTickDuration = patch new.externalPartyConfigStateTickDuration base.externalPartyConfigStateTickDuration current.externalPartyConfigStateTickDuration
     rewardConfig = patch new.rewardConfig base.rewardConfig current.rewardConfig
     transferPreapprovalBaseDuration = patch new.transferPreapprovalBaseDuration base.transferPreapprovalBaseDuration current.transferPreapprovalBaseDuration
+    minDevelopmentFundMintingDelay = patch new.minDevelopmentFundMintingDelay base.minDevelopmentFundMintingDelay current.minDevelopmentFundMintingDelay
+    amuletSwitchOverTimes = patch new.amuletSwitchOverTimes base.amuletSwitchOverTimes current.amuletSwitchOverTimes
 
 instance Patchable RewardConfig where
   patch new base current = RewardConfig with

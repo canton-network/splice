@@ -1,0 +1,53 @@
+name: Monthly Schedule
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Splice version, e.g. 0.8"
+        required: true
+        type: string
+
+      month:
+        description: "Month in YYYY-MM format, e.g. 2026-08"
+        required: true
+        type: string
+
+      dry_run:
+        description: "Dry run only — do not modify Monday"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  create-schedule:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+
+      - name: Create monthly schedule
+        env:
+          MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
+          MONDAY_BOARD_ID: ${{ secrets.MONDAY_BOARD_ID }}
+        shell: bash
+        run: |
+          ARGS=(
+            "${{ inputs.version }}"
+            "${{ inputs.month }}"
+          )
+
+          if [[ "${{ inputs.dry_run }}" == "true" ]]; then
+            ARGS+=("--dry-run")
+          fi
+
+          python3 scripts/monthly-schedule.py "${ARGS[@]}"

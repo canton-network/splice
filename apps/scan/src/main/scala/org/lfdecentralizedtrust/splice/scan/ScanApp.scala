@@ -82,7 +82,7 @@ import org.lfdecentralizedtrust.splice.scan.store.db.{
   DbScanAppRewardsStore,
   DbScanVerdictStore,
 }
-import org.lfdecentralizedtrust.splice.store.db.DbAppStore
+import org.lfdecentralizedtrust.splice.store.db.{DbAppStore, InternedStringStore}
 import org.lfdecentralizedtrust.splice.store.{
   ChoiceContextContractFetcher,
   PageLimit,
@@ -94,7 +94,6 @@ import org.lfdecentralizedtrust.splice.util.HasHealth
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import cats.implicits.*
-
 import org.apache.pekko.stream.Materializer
 
 /** Class representing a Scan app instance.
@@ -217,6 +216,13 @@ class ScanApp(
         config.acsStoreDescriptorUserVersion,
         config.txLogStoreDescriptorUserVersion,
       )
+      internedStringStore <- InternedStringStore.createAndWarmupCache(
+        storage,
+        config.cache.internedStrings.maxSize,
+        config.cache.internedStrings.ttl.underlying,
+        loggerFactory,
+        retryProvider.metricsFactory,
+      )
       updateHistory = new UpdateHistory(
         storage,
         domainMigrationId,
@@ -224,6 +230,7 @@ class ScanApp(
         participantId,
         store.acsContractFilter.ingestionFilter.primaryParty,
         BackfillingRequirement.NeedsBackfilling,
+        internedStringStore,
         loggerFactory,
         enableissue12777Workaround = true,
         enableImportUpdateBackfill = config.updateHistoryBackfillImportUpdatesEnabled,
@@ -254,24 +261,26 @@ class ScanApp(
       )
       kvStore <- ScanKeyValueStore(dsoParty, participantId, storage, loggerFactory)
       kvProvider = new ScanKeyValueProvider(kvStore, loggerFactory)
-      bulkStorage = (config.bulkStorage.staging, config.bulkStorage.committed).tupled.map(_ =>
-        BulkStorage(
-          scanStorageConfigV1,
-          config.bulkStorage,
-          acsSnapshotStore,
-          updateHistory,
-          currentMigrationId = domainMigrationId,
-          kvProvider,
-          retryProvider.metricsFactory,
-          config.automation,
-          backoffClock = new WallClock(retryProvider.timeouts, loggerFactory),
-          store,
-          svName,
-          ledgerClient,
-          amuletAppParameters.upgradesConfig,
-          retryProvider,
-          loggerFactory,
-        )
+      bulkStorage <- (config.bulkStorage.staging, config.bulkStorage.committed).tupled.traverse(_ =>
+        appInitStep("Initialize bulk storage") {
+          BulkStorage(
+            scanStorageConfigV1,
+            config.bulkStorage,
+            acsSnapshotStore,
+            updateHistory,
+            currentMigrationId = domainMigrationId,
+            kvProvider,
+            retryProvider.metricsFactory,
+            config.automation,
+            backoffClock = new WallClock(retryProvider.timeouts, loggerFactory),
+            store,
+            svName,
+            ledgerClient,
+            amuletAppParameters.upgradesConfig,
+            retryProvider,
+            loggerFactory,
+          )
+        }
       )
       appActivityRecordStore = new DbAppActivityRecordStore(
         storage,
@@ -281,6 +290,7 @@ class ScanApp(
           config.activityIngestionUserVersion.fold(0)(_.toInt),
         ),
         config.isFirstSv,
+        initialRound.toLong,
         loggerFactory,
       )
       appRewardsStore = new DbScanAppRewardsStore(

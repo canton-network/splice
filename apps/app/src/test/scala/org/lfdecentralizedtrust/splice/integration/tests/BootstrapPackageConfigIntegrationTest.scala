@@ -241,6 +241,9 @@ class BootstrapPackageConfigIntegrationTest
         amuletConfig.externalPartyConfigStateTickDuration,
         amuletConfig.rewardConfig,
         amuletConfig.transferPreapprovalBaseDuration,
+        amuletConfig.developmentFundManagerBlacklist,
+        amuletConfig.minDevelopmentFundMintingDelay,
+        amuletConfig.amuletSwitchOverTimes,
       )
 
       val upgradeAction = new ARC_AmuletRules(
@@ -391,6 +394,9 @@ class BootstrapPackageConfigIntegrationTest
         amuletConfig.externalPartyConfigStateTickDuration,
         amuletConfig.rewardConfig,
         amuletConfig.transferPreapprovalBaseDuration,
+        amuletConfig.developmentFundManagerBlacklist,
+        amuletConfig.minDevelopmentFundMintingDelay,
+        amuletConfig.amuletSwitchOverTimes,
       )
 
       val upgradeAction = new ARC_AmuletRules(
@@ -477,12 +483,12 @@ class BootstrapPackageConfigIntegrationTest
           )
         )
         .filter(_.metadata.version <= bootstrapPackage.metadata.version)
-      expectedToBeVettedVersions.foreach { expectedVettedVersion =>
+      forEvery(expectedToBeVettedVersions) { expectedVettedVersion =>
         val newVettedPackage = vettingState.packages
           .find(_.packageId == expectedVettedVersion.packageId)
-          .value
-        newVettedPackage.validFromInclusive should (
-          equal(scheduledTimeO) or equal(scheduledTime1) or equal(scheduledTime2)
+          .value withClue "newVettedPackage"
+        Seq(scheduledTimeO, scheduledTime1, scheduledTime2) should contain(
+          newVettedPackage.validFromInclusive
         )
       }
     }

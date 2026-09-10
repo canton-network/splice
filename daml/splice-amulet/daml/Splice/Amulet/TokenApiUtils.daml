@@ -139,7 +139,7 @@ data TxKind
   | TxKind_Burn
   | TxKind_Mint
   | TxKind_ExpireDust
-  deriving (Eq) -- intentionally no Show to avoid SCU contraints on code changes
+  deriving (Eq, Serializable) 
 
 -- helper instances: defined here as they are not part of the API
 instance Semigroup Metadata  where

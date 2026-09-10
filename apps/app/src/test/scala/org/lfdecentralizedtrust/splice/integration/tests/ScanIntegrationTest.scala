@@ -13,6 +13,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRul
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.svstate.SvNodeState
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
+import org.lfdecentralizedtrust.splice.config.PerClientIpRateLimitConfig
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   updateAutomationConfig,
   ConfigurableApp,
@@ -23,7 +24,6 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   SpliceTestConsoleEnvironment,
 }
 import org.lfdecentralizedtrust.splice.scan.config.CantonBftPeerConfig
-import org.lfdecentralizedtrust.splice.sv.admin.api.client.commands.HttpSvPublicAppClient
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
   AdvanceOpenMiningRoundTrigger,
   ExpireIssuingMiningRoundTrigger,
@@ -76,10 +76,9 @@ class ScanIntegrationTest
               // used for the rate limit test
               rateLimiting = config.parameters.rateLimiting.copy(
                 rateLimiters =
-                  config.parameters.rateLimiting.rateLimiters + ("listAnsEntries" -> SpliceRateLimitConfig
-                    .WithPerClientIp(
-                      ratePerSecond = 5
-                    ))
+                  config.parameters.rateLimiting.rateLimiters + ("listAnsEntries" -> PerClientIpRateLimitConfig(
+                    ratePerSecond = 5
+                  ))
               ),
             ),
           )
@@ -102,46 +101,30 @@ class ScanIntegrationTest
 
   "return dso info same as the sv app" in { implicit env =>
     val scan = sv1ScanBackend.getDsoInfo()
-    inside(sv1Backend.getDsoInfo()) {
-      case HttpSvPublicAppClient.DsoInfo(
-            svUser,
-            svParty,
-            dsoParty,
-            votingThreshold,
-            latestMiningRound,
-            amuletRules,
-            dsoRules,
-            svNodeStates,
-            _,
-          ) =>
-        scan.svUser should be(svUser)
-        scan.svPartyId should be(svParty.toProtoPrimitive)
-        scan.dsoPartyId should be(dsoParty.toProtoPrimitive)
-        scan.votingThreshold should be(votingThreshold)
-        scan.latestMiningRound should be(latestMiningRound.toHttp)
-        scan.amuletRules should be(amuletRules.toHttp)
-        scan.dsoRules should be(dsoRules.toHttp)
-        scan.svNodeStates should be(svNodeStates.map(_._2.toHttp))
-    }
+    val svDsoInfo = sv1Backend.getDsoInfo()
+    scan shouldBe svDsoInfo
+    val dsoParty = scan.dsoParty
     clue("Returns physical synchronizer id") {
       sv1ScanBackend.getActivePhysicalSynchronizerSerial() shouldBe NonNegativeInt.zero
     }
     // sanity checks
-    scan.dsoRules.contract.contractId should be(
+    scan.dsoRules.contract.contractId.contractId should be(
       sv1Backend.participantClient.ledger_api_extensions.acs
         .filterJava(DsoRules.COMPANION)(dsoParty)
         .loneElement
         .id
         .contractId
     )
-    scan.amuletRules.contract.contractId should be(
+    scan.amuletRules.contract.contractId.contractId should be(
       sv1Backend.participantClient.ledger_api_extensions.acs
         .filterJava(AmuletRules.COMPANION)(dsoParty)
         .loneElement
         .id
         .contractId
     )
-    scan.svNodeStates.map(_.contract.contractId) should be(
+    scan.svNodeStates.values.map(
+      _.contract.contractId.contractId
+    ) should contain theSameElementsAs (
       sv1Backend.participantClient.ledger_api_extensions.acs
         .filterJava(SvNodeState.COMPANION)(dsoParty)
         .map(_.id.contractId)

@@ -229,16 +229,6 @@
   },
   {
     "custom": true,
-    "id": "organization/infra/infra.mock",
-    "inputs": {
-      "name": "organization/infra/infra.mock"
-    },
-    "name": "organization/infra/infra.mock",
-    "provider": "",
-    "type": "pulumi:pulumi:StackReference"
-  },
-  {
-    "custom": true,
     "id": "",
     "inputs": {
       "apiVersion": "v1",
@@ -631,6 +621,7 @@
         "deletionProtectionEnabled": true,
         "edition": "ENTERPRISE",
         "insightsConfig": {
+          "enhancedQueryInsightsEnabled": false,
           "queryInsightsEnabled": true
         },
         "ipConfiguration": {
@@ -925,6 +916,7 @@
         "deletionProtectionEnabled": true,
         "edition": "ENTERPRISE",
         "insightsConfig": {
+          "enhancedQueryInsightsEnabled": false,
           "queryInsightsEnabled": true
         },
         "ipConfiguration": {
@@ -1054,6 +1046,7 @@
         "deletionProtectionEnabled": true,
         "edition": "ENTERPRISE",
         "insightsConfig": {
+          "enhancedQueryInsightsEnabled": false,
           "queryInsightsEnabled": true
         },
         "ipConfiguration": {

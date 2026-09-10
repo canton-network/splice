@@ -3,7 +3,9 @@
 
 package org.lfdecentralizedtrust.splice.scan.store.db
 
+import com.daml.nonempty.NonEmpty
 import org.lfdecentralizedtrust.splice.scan.store.AppActivityStore
+import org.lfdecentralizedtrust.splice.scan.store.AppActivityStore.RoundIngestionStatus
 import org.lfdecentralizedtrust.splice.store.UpdateHistory
 import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnlessShutdownToFuture
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
@@ -93,6 +95,7 @@ class DbAppActivityRecordStore(
     updateHistory: UpdateHistory,
     val ingestionVersions: DbAppActivityRecordStore.IngestionVersions,
     isFirstSv: Boolean,
+    initialRound: Long,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit
     ec: ExecutionContext
@@ -171,7 +174,7 @@ class DbAppActivityRecordStore(
     * This round may not have all app activity records ingested.
     * Returns None if no app activity records have been ingested, ie meta row does not exist.
     */
-  def earliestIngestedRound()(implicit
+  private[store] def earliestIngestedRound()(implicit
       tc: TraceContext
   ): Future[Option[Long]] = {
     val codeVersion = ingestionVersions.code
@@ -186,6 +189,32 @@ class DbAppActivityRecordStore(
       "appActivity.earliestIngestedRound",
     )
   }
+
+  override def ingestionStatusForRound(roundNumber: Long)(implicit
+      tc: TraceContext
+  ): Future[RoundIngestionStatus] =
+    earliestIngestedRound().map {
+      case Some(earliestIngested) if roundNumber <= earliestIngested =>
+        // We should have data for this round but no root hash exists:
+        // a peer likely does, so delegate.
+        RoundIngestionStatus.CannotProvide
+
+      case Some(_) =>
+        // Meta row present but round is beyond our ingested boundary —
+        // ingestion is still catching up; retry.
+        RoundIngestionStatus.Undetermined
+
+      case None if !isFirstSv =>
+        // Late-joining Scan with no ingestion boundary of its own —
+        // it might seem Undetermined is right, but peers do have one,
+        // so we delegate.
+        RoundIngestionStatus.CannotProvide
+
+      case None =>
+        // firstSV during initial ingestion (brief startup window before
+        // the meta row is inserted) — retry.
+        RoundIngestionStatus.Undetermined
+    }
 
   /** Find the latest round with complete app activity.
     * A round is complete once the verdict ingestion has moved passed its archival.
@@ -259,22 +288,24 @@ class DbAppActivityRecordStore(
   def getRecordsByVerdictRowIds(
       verdictRowIds: Seq[Long]
   )(implicit tc: TraceContext): Future[Map[Long, AppActivityRecordT]] = {
-    if (verdictRowIds.isEmpty) Future.successful(Map.empty)
-    else {
-      startedIngestingAt.flatMap {
-        case None => Future.successful(Map.empty)
-        case Some(_) =>
-          storage
-            .query(
-              (sql"""
-              select verdict_row_id, round_number, app_provider_parties, app_activity_weights
-              from #${Tables.appActivityRecords}
-              where history_id = $historyId and """ ++ inClause("verdict_row_id", verdictRowIds))
-                .as[AppActivityRecordT],
-              "appActivity.getRecordsByVerdictRowIds",
-            )
-            .map(rows => rows.map(r => r.verdictRowId -> r).toMap)
-      }
+    NonEmpty.from(verdictRowIds) match {
+      case None => Future.successful(Map.empty)
+      case Some(verdictRowIds) =>
+        startedIngestingAt.flatMap {
+          case None => Future.successful(Map.empty)
+          case Some(_) =>
+            storage
+              .query(
+                (sql"""
+                select verdict_row_id, round_number, app_provider_parties, app_activity_weights
+                from #${Tables.appActivityRecords}
+                where history_id = $historyId and """ ++ DbStorage
+                  .toInClause("verdict_row_id", verdictRowIds))
+                  .as[AppActivityRecordT],
+                "appActivity.getRecordsByVerdictRowIds",
+              )
+              .map(rows => rows.map(r => r.verdictRowId -> r).toMap)
+        }
     }
   }
 
@@ -320,16 +351,16 @@ class DbAppActivityRecordStore(
         }
 
     // earliestRound: the oldest round open at the earliest record_time of this batch.
-    // or (-1) on firstSV, as it is expected to have complete data for the first round.
-    val earliestRound = if (isFirstSv) Some(-1L) else firstActiveRoundO
+    // or (initialRound - 1) on firstSV, so earliestRoundWithCompleteAppActivity()
+    // returns initialRound (correct for non-zero-round bootstrap).
+    val earliestRound = if (isFirstSv) Some(initialRound - 1) else firstActiveRoundO
 
     // lastArchived: the highest round archived as of this verdict batch.
     //   - From the caller when available
-    //   - Bootstrapped to 0 on a fresh firstSV because
-    //     lookupLatestArchivedOpenMiningRound may not yet reflect
-    //     round 0's archival due to ingestion delay.
+    //   - Bootstrapped to initialRound on a fresh firstSV so the
+    //     complete-activity window covers the first TBAR round
     val lastArchived = lastArchivedRoundO
-      .orElse(if (isFirstSv) Some(0L) else None)
+      .orElse(if (isFirstSv) Some(initialRound) else None)
 
     for {
       _ <- insertRecords

@@ -20,6 +20,9 @@ class BootstrapTest extends IntegrationTestWithIsolatedEnvironment {
         this.getClass.getSimpleName,
       )
       .clearConfigTransforms()
+      // clearConfigTransforms skips ConfigTransforms.defaults, so we re-apply
+      // the TBAR configuration explicitly here
+      .addConfigTransform((_, config) => ConfigTransforms.withTrafficBasedAppRewards(config))
       .addConfigTransforms((_, config) =>
         ConfigTransforms.withPausedSvDomainComponentsOffboardingTriggers()(config)
       )

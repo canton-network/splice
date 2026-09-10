@@ -48,7 +48,7 @@ data Transfer = Transfer with
       -- deliberate contention on holdings to prevent duplicate transfers.
     meta : Metadata
       -- ^ Metadata.
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 -- | The result of instructing a transfer or advancing the state of a transfer instruction.
 data TransferInstructionResult = TransferInstructionResult with
@@ -60,7 +60,7 @@ data TransferInstructionResult = TransferInstructionResult with
       -- in a single Daml transaction.
     meta : Metadata
       -- ^ Additional metadata specific to the transfer instruction, used for extensibility; e.g., fees charged.
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 -- | The output of instructing a transfer or advancing the state of a transfer instruction.
 data TransferInstructionResult_Output
@@ -81,7 +81,7 @@ data TransferInstructionResult_Output
   | TransferInstructionResult_Failed
       -- ^ Use this result to communicate that the transfer did not succeed and all holdings (minus fees)
       -- have been returned to the sender.
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 
 -- TransferInstruction
@@ -97,7 +97,7 @@ data TransferInstructionAction
       TIA_Custom with
         id : Text
           -- ^ Identifier of the action. Namespaced analogously to metadata keys.
-    deriving (Show, Eq, Ord)
+    deriving (Show, Eq, Ord, Serializable)
 
 -- | View for `TransferInstruction`.
 data TransferInstructionView = TransferInstructionView with
@@ -132,7 +132,7 @@ data TransferInstructionView = TransferInstructionView with
       -- will require appropriate, registry-specific delegation contracts to be in place.
     meta : Metadata
       -- ^ Additional metadata specific to the transfer instruction, used for extensibility; e.g., more detailed status information.
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 -- | An interface for tracking the status of a transfer instruction,
 -- i.e., a request to a registry app to execute a transfer.
@@ -266,4 +266,4 @@ data TransferFactoryView = TransferFactoryView
       -- which this transfer factory can be used.
     meta : Metadata
       -- ^ Additional metadata specific to the transfer factory, used for extensibility.
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)

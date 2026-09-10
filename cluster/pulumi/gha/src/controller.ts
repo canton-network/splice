@@ -3,7 +3,7 @@
 import * as k8s from '@pulumi/kubernetes';
 import {
   HELM_MAX_HISTORY_SIZE,
-  infraAffinityAndTolerations,
+  infraKubernetesScheduling,
 } from '@canton-network/splice-pulumi-common';
 import { Namespace } from '@pulumi/kubernetes/core/v1';
 
@@ -22,7 +22,7 @@ export function installController(repo: string, runnersNamespaceName: string): k
     version: ghaConfig.runnerScaleSetVersion,
     namespace: controllerNamespace.metadata.name,
     values: {
-      ...infraAffinityAndTolerations,
+      ...infraKubernetesScheduling,
       maxHistory: HELM_MAX_HISTORY_SIZE,
       flags: {
         logFormat: 'json',

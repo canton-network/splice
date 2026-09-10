@@ -34,11 +34,7 @@ import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.admin.api.client.GrpcClientMetrics
 import org.lfdecentralizedtrust.splice.codegen.java.splice.svonboarding.SvOnboardingConfirmed
-import org.lfdecentralizedtrust.splice.config.{
-  NetworkAppClientConfig,
-  SpliceInstanceNamesConfig,
-  UpgradesConfig,
-}
+import org.lfdecentralizedtrust.splice.config.{SpliceInstanceNamesConfig, UpgradesConfig}
 import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.{
   TopologySnapshot,
@@ -215,11 +211,11 @@ class JoiningNodeInitializer(
       storeKey = SvStore.Key(svParty, dsoPartyId)
       // We need to vet early so the packages are uploaded when we try to use template
       // filters in the ACS queries in the store.
-      _ <- joiningConfig.traverse_ { _ =>
+      _ <- joiningConfig.traverse_ { conf =>
         if (!dsoPartyIsAuthorized) {
           // If the DSO party has already been authorized we should be far enough to not need this step and deliberately avoid it
           // to make sure we don't introduce a dependency on the sponsoring SV.
-          svConnection.flatMap { case (_, c) => vetThroughSponsor(c) }
+          vetThroughSponsor(conf)
         } else Future.unit
       }
       domainMigrationId <- resolveDomainMigrationId(migrationIdFromSponsorSv())
@@ -413,13 +409,13 @@ class JoiningNodeInitializer(
     }
   }
 
-  private def vetThroughSponsor(svConnection: SvConnection): Future[Unit] = {
+  private def vetThroughSponsor(joiningConfig: SvOnboardingConfig.JoinWithKey): Future[Unit] = {
     logger.info("Vetting packages based on state from sponsor")
     for {
       // This is not a BFT read: That's acceptable because
       // we will only vet packages that have been statically compiled into the app.
       // At most, we can be tricked into vetting a package a bit too early.
-      dsoInfo <- svConnection.getDsoInfo()
+      dsoInfo <- getDsoInfoFromSponsor(joiningConfig, upgradesConfig)
       amuletRules = dsoInfo.amuletRules
       synchronizerId = SynchronizerId.tryFromString(
         amuletRules.payload.configSchedule.initialValue.decentralizedSynchronizer.activeSynchronizer
@@ -786,7 +782,7 @@ class JoiningNodeInitializer(
           svConnection: SvConnection,
           joiningConfig: SvOnboardingConfig.JoinWithKey,
       ): Future[Unit] = {
-        val SvOnboardingConfig.JoinWithKey(name, _, publicKey, privateKey) = joiningConfig
+        val SvOnboardingConfig.JoinWithKey(name, _, publicKey, privateKey, _) = joiningConfig
         SvUtil.keyPairMatches(publicKey, privateKey) match {
           case Right(privateKey_) =>
             for {
@@ -882,7 +878,7 @@ class JoiningNodeInitializer(
         synchronizerId: SynchronizerId,
     ): Future[SvDsoAutomationService] = {
       joiningConfig match {
-        case SvOnboardingConfig.JoinWithKey(name, _, publicKey, privateKey) =>
+        case SvOnboardingConfig.JoinWithKey(name, _, publicKey, privateKey, _) =>
           SvUtil.keyPairMatches(publicKey, privateKey) match {
             case Right(privateKey_) =>
               for {
@@ -1024,34 +1020,27 @@ class JoiningNodeInitializer(
     dsoParty <- dsoPartyFromMetadata
       .fold(
         {
-          val sponsorConfig = joiningConfig
+          val conf = joiningConfig
             .getOrElse(
               sys.error(
                 "An onboarding config is required to get the DSO party ID from a sponsoring SV; exiting."
               )
             )
-            .svClient
-            .adminApi
           retryProvider.getValueWithRetries(
             RetryFor.WaitingOnInitDependency,
             "dso_party_from_sponsor",
             "DSO party ID from sponsoring SV",
-            getDsoPartyIdFromSponsor(sponsorConfig),
+            getDsoPartyIdFromSponsor(conf),
             logger,
           )
         }
       )(Future.successful)
   } yield dsoParty
 
-  private def getDsoPartyIdFromSponsor(sponsorConfig: NetworkAppClientConfig): Future[PartyId] =
-    SvConnection(
-      sponsorConfig,
-      upgradesConfig,
-      retryProvider,
-      loggerFactory,
-    ).flatMap { svConnection =>
-      svConnection.getDsoInfo().map(_.dsoParty).andThen(_ => svConnection.close())
-    }
+  private def getDsoPartyIdFromSponsor(
+      joiningConfig: SvOnboardingConfig.JoinWithKey
+  ): Future[PartyId] =
+    getDsoInfoFromSponsor(joiningConfig, upgradesConfig).map(_.dsoParty)
 
   private def waitForDsoSvRole(dsoStore: SvDsoStore): Future[Unit] = {
     val svParty = dsoStore.key.svParty

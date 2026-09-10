@@ -4,16 +4,88 @@ cloudArmor:
   enabled: false
   publicEndpoints:
     publicScan:
-      hostname: 'scan.sv-2.scratcha.global.canton.network.digitalasset.com'
+      hostPrefixRegex: 'scan'
       pathPrefix: '/api/scan'
-      throttleAcrossAllEndpointsAllIps:
-        maxRequestsBeforeHttp429: 0
+      throttleAcrossAllEndpointsPerIp:
+        maxRequestsBeforeHttp429: 10000
+        withinIntervalSeconds: 60
+    sequencer:
+      hostPrefixRegex: 'sequencer-[0-9]+'
+      pathPrefix: '/'
+      restrictToRateLimitedPaths: false
+      throttleAcrossAllEndpointsPerIp:
+        maxRequestsBeforeHttp429: 20000
         withinIntervalSeconds: 60
     tokenRegistry:
+      hostPrefixRegex: 'scan'
       pathPrefix: '/registry'
-      throttleAcrossAllEndpointsAllIps:
-        maxRequestsBeforeHttp429: 200
+      throttleAcrossAllEndpointsPerIp:
+        maxRequestsBeforeHttp429: 10000
         withinIntervalSeconds: 60
+  wafRules:
+    groups:
+      - description: 'WAF: remote code execution and local file inclusion'
+        name: 'waf-rce-lfi'
+        signatures:
+          - name: 'rce-v33-stable'
+            optOutRuleIds:
+              - '932110'
+              - '932115'
+              - '932120'
+              - '932140'
+            sensitivity: 1
+          - name: 'lfi-v33-stable'
+            optOutRuleIds:
+              - '930110'
+            sensitivity: 1
+      - description: 'WAF: CVE canary, protocol attacks, Node.js injection and XSS'
+        name: 'waf-cve-protocolattack-nodejs-xss'
+        signatures:
+          - name: 'cve-canary'
+            sensitivity: 1
+          - name: 'protocolattack-v33-stable'
+            optOutRuleIds:
+              - '921110'
+              - '921150'
+              - '921151'
+              - '921170'
+            sensitivity: 1
+          - name: 'nodejs-v33-stable'
+            sensitivity: 1
+          - name: 'xss-v33-stable'
+            optOutRuleIds:
+              - '941100'
+              - '941120'
+              - '941190'
+              - '941200'
+              - '941210'
+              - '941220'
+              - '941230'
+              - '941240'
+              - '941250'
+              - '941260'
+              - '941270'
+              - '941280'
+              - '941290'
+              - '941300'
+            sensitivity: 1
+      - description: 'WAF: SQL injection, session fixation and Java attacks'
+        name: 'waf-sqli-sessionfixation-java'
+        signatures:
+          - name: 'sqli-v33-stable'
+            optOutRuleIds:
+              - '942190'
+              - '942240'
+              - '942270'
+              - '942290'
+              - '942320'
+              - '942350'
+              - '942500'
+            sensitivity: 1
+          - name: 'sessionfixation-v33-stable'
+            sensitivity: 1
+          - name: 'java-v33-stable'
+            sensitivity: 1
 cluster:
   nodePools:
     apps:
@@ -26,14 +98,27 @@ cluster:
       minNodes: 1
       nodeType: 'n4d-standard-8'
 infra:
+  enableSweetSecurity: true
   gkeGateway:
     proxyForIstioHttp: false
   istio:
     enableIngressAccessLogging: true
     enablePublicTokenRegistry: true
-    sequencerFlowControl:
-      initialConnectionWindowSize: 52428800
-      initialStreamWindowSize: 524288
+    flowControl:
+      internal:
+        initialConnectionWindowSize: 104857600
+        initialStreamWindowSize: 1048576
+        ports:
+          - 5001
+          - 5002
+          - 5007
+          - 5009
+      public:
+        initialConnectionWindowSize: 52428800
+        initialStreamWindowSize: 524288
+        ports:
+          - 5008
+          - 5010
   prometheus:
     retentionDuration: '30d'
     retentionSize: '200GB'
@@ -54,6 +139,8 @@ monitoring:
         updateLatencyThresholdSeconds: 3
       cantonBft:
         mempoolMaxSizeThreshold: 100
+      cloudArmor:
+        deniedRequestsThreshold: 0
       cloudSql:
         maintenance: false
       cometbft:
@@ -83,6 +170,10 @@ monitoring:
           - 'cloudkms.googleapis.com/external_kms_requests'
         retestWindowSeconds: 600
         rollingWindowSeconds: 600
+      globalSynchronizerHealth:
+        discardedConfirmationRequestsThreshold: 0.2
+        failedConfirmationRequestsThreshold: 0.1
+        tpsDropThreshold: 0.5
       ingestion:
         thresholdEntriesPerBatch: 80
       loadTester:
@@ -106,6 +197,10 @@ monitoring:
       sequencerRateLimits:
         circuitBreakerStateThreshold: 0.5
         rejectionRateThreshold: 0
+      spliceRateLimits:
+        excludedLimiters: []
+        rejectionCountThreshold: 10
+        usageThreshold: 0.8
       trafficBasedRewards:
         featuredAppRightsLimit: 10000
         verdictIngestionBatchSizePendingPeriodMinutes: 60
@@ -192,300 +287,73 @@ splitwell:
     additionalEnvVars:
       - name: 'ADDITIONAL_CONFIG_PARTICIPANT_PRUNING'
         value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
+  walletGateway:
+    enabled: false
+    portfolioVersion: '1.11.0'
+    version: '1.10.0'
 sv:
   scan:
     externalRateLimits:
       globalLimits:
-        fillInterval: '60s'
-        maxTokens: 2147483647
-        tokensPerFill: 2147483647
-      rateLimits:
-        /api/scan/livez:
-          name: 'livez'
-          type: 'unlimited'
-        /api/scan/readyz:
-          name: 'readyz'
-          type: 'unlimited'
-        /api/scan/status:
-          name: 'status'
-          type: 'unlimited'
-        /api/scan/v0/acs:
+        fillInterval: '10s'
+        maxTokens: 60000
+        tokensPerFill: 10000
+      globalPerIpLimits:
+        fillInterval: '10s'
+        maxTokens: 6000
+        tokensPerFill: 1000
+  synchronizer:
+    sequencer:
+      externalRateLimits:
+        globalLimits:
           fillInterval: '60s'
-          maxTokens: 500
-          name: 'acs'
-          perIpLimits:
-            fillInterval: '60s'
-            maxTokens: 10
-            tokensPerFill: 5
-          tokensPerFill: 500
-          type: 'limited'
-        /api/scan/v0/active-synchronizer-serial:
-          name: 'activeSynchronizerSerial'
-          type: 'unlimited'
-        /api/scan/v0/admin/sv/previous-sv-reward-weight:
-          name: 'sv-previous-sv-reward-weight'
-          type: 'unlimited'
-        /api/scan/v0/admin/sv/voterequests:
-          name: 'sv-voterequests'
-          type: 'unlimited'
-        /api/scan/v0/admin/sv/voteresults:
-          name: 'sv-voteresults'
-          type: 'unlimited'
-        /api/scan/v0/admin/validator:
-          name: 'validator-licenses'
-          type: 'unlimited'
-        /api/scan/v0/amulet-config-for-round:
-          name: 'amulet-config-for-round'
-          type: 'banned'
-        /api/scan/v0/amulet-price:
-          name: 'amulet-price-votes'
-          type: 'unlimited'
-        /api/scan/v0/amulet-rules:
-          name: 'amulet-rules'
-          type: 'unlimited'
-        /api/scan/v0/ans-entries:
-          name: 'ans-entries'
-          type: 'unlimited'
-        /api/scan/v0/ans-rules:
-          name: 'ans-rules'
-          type: 'unlimited'
-        /api/scan/v0/backfilling:
-          name: 'backfilling'
-          type: 'unlimited'
-        /api/scan/v0/closed-rounds:
-          name: 'closed-rounds'
-          type: 'unlimited'
-        /api/scan/v0/domains:
-          name: 'domains'
-          type: 'unlimited'
-        /api/scan/v0/dso:
-          name: 'dso-info'
-          type: 'unlimited'
-        /api/scan/v0/dso-party-id:
-          name: 'dso-party-id'
-          type: 'unlimited'
-        /api/scan/v0/dso-sequencers:
-          name: 'dso-sequencers'
-          type: 'unlimited'
-        /api/scan/v0/events:
-          name: 'events'
-          type: 'unlimited'
-        /api/scan/v0/external-party-amulet-rules:
-          name: 'external-party-amulet-rules'
-          type: 'unlimited'
-        /api/scan/v0/feature-support:
-          name: 'feature-support'
-          type: 'unlimited'
-        /api/scan/v0/featured-apps:
-          name: 'featured-apps'
-          type: 'unlimited'
-        /api/scan/v0/history/bulk/acs:
-          name: 'listBulkAcsSnapshotObjects'
-          type: 'unlimited'
-        /api/scan/v0/history/bulk/checksums:
-          name: 'getBulkHistoryChecksums'
-          type: 'unlimited'
-        /api/scan/v0/history/bulk/updates:
-          name: 'listBulkUpdateHistoryObjects'
-          type: 'unlimited'
-        /api/scan/v0/holdings:
-          name: 'holdings'
-          type: 'unlimited'
-        /api/scan/v0/internal/reward-accounting-process:
-          name: 'reward-accounting-process'
-          type: 'unlimited'
-        /api/scan/v0/lsu:
-          name: 'lsu'
-          type: 'unlimited'
-        /api/scan/v0/migrations:
-          name: 'migrations-schedule'
-          type: 'unlimited'
-        /api/scan/v0/open-and-issuing-mining-rounds:
-          name: 'open-and-issuing-mining-rounds'
-          type: 'unlimited'
-        /api/scan/v0/roll-forward-lsu:
-          name: 'rollForwardLsu'
-          type: 'unlimited'
-        /api/scan/v0/scans:
-          name: 'scans'
-          type: 'unlimited'
-        /api/scan/v0/splice-instance-names:
-          name: 'splice-instance-names'
-          type: 'unlimited'
-        /api/scan/v0/state:
-          name: 'state'
-          type: 'unlimited'
-        /api/scan/v0/sv-bft-sequencers:
-          name: 'bft-sequencers'
-          type: 'unlimited'
-        /api/scan/v0/synchronizer-bootstrapping-transactions:
-          name: 'synchronizer-bootstrapping-transactions'
-          type: 'unlimited'
-        /api/scan/v0/synchronizer-identities:
-          name: 'synchronizer-identities'
-          type: 'unlimited'
-        /api/scan/v0/transfer-command:
-          name: 'transfer-command-status'
-          type: 'unlimited'
-        /api/scan/v0/transfer-command-counter:
-          name: 'transfer-command-counter'
-          type: 'unlimited'
-        /api/scan/v0/transfer-preapprovals:
-          name: 'transfer-preapprovals'
-          type: 'unlimited'
-        /api/scan/v0/unclaimed-development-fund-coupons:
-          name: 'unclaimed-development-fund-coupons'
-          type: 'unlimited'
-        /api/scan/v0/updates:
-          name: 'v0-updates'
-          type: 'unlimited'
-        /api/scan/v0/validators:
-          name: 'validators'
-          type: 'unlimited'
-        /api/scan/v0/voterequest:
-          name: 'voterequest'
-          type: 'unlimited'
-        /api/scan/v0/voterequests:
-          name: 'voterequests'
-          type: 'unlimited'
-        /api/scan/v1/domains:
-          name: 'domains-v1'
-          type: 'unlimited'
-        /api/scan/v1/holdings:
-          name: 'holdings'
-          type: 'unlimited'
-        /api/scan/v1/state:
-          name: 'state'
-          type: 'unlimited'
-        /api/scan/v1/updates:
-          name: 'v1-updates'
-          type: 'banned'
-        /api/scan/v2/updates:
-          name: 'v2-updates'
-          type: 'unlimited'
-        /api/scan/version:
-          name: 'version'
-          type: 'unlimited'
-        /registry/allocation-instruction/v1/allocation-factory:
+          maxTokens: 200000
+          tokensPerFill: 200000
+        globalPerIpLimits:
           fillInterval: '60s'
-          maxTokens: 720
-          name: 'registry-allocation-factory'
-          perIpLimits:
+          maxTokens: 10000
+          tokensPerFill: 10000
+        rateLimits:
+          /com.digitalasset.canton.sequencer.api.v30.SequencerAuthenticationService/:
             fillInterval: '60s'
-            maxTokens: 120
-            tokensPerFill: 120
-          tokensPerFill: 720
-          type: 'limited'
-        /registry/allocation-instruction/v2:
-          fillInterval: '60s'
-          maxTokens: 720
-          name: 'registry-allocation-instruction-v2'
-          perIpLimits:
+            maxTokens: 10000
+            name: 'sequencer-authentication'
+            perIpLimits:
+              fillInterval: '60s'
+              maxTokens: 100
+              tokensPerFill: 100
+            tokensPerFill: 10000
+            type: 'limited'
+          /com.digitalasset.canton.sequencer.api.v30.SequencerConnectService/:
             fillInterval: '60s'
-            maxTokens: 120
-            tokensPerFill: 120
-          tokensPerFill: 720
-          type: 'limited'
-        /registry/allocation-instruction/v2/allocation-factory:
-          fillInterval: '60s'
-          maxTokens: 720
-          name: 'registry-allocation-factory-v2'
-          perIpLimits:
+            maxTokens: 10000
+            name: 'sequencer-connect'
+            perIpLimits:
+              fillInterval: '60s'
+              maxTokens: 100
+              tokensPerFill: 100
+            tokensPerFill: 10000
+            type: 'limited'
+          /com.digitalasset.canton.sequencer.api.v30.SequencerService/DownloadTopologyStateForInit:
             fillInterval: '60s'
-            maxTokens: 120
-            tokensPerFill: 120
-          tokensPerFill: 720
-          type: 'limited'
-        /registry/allocation/v2/settlement-factory:
-          fillInterval: '60s'
-          maxTokens: 720
-          name: 'registry-settlement-factory-v2'
-          perIpLimits:
+            maxTokens: 600
+            name: 'sequencer-download-topology-state-for-init'
+            perIpLimits:
+              fillInterval: '60s'
+              maxTokens: 20
+              tokensPerFill: 20
+            tokensPerFill: 600
+            type: 'limited'
+          /com.digitalasset.canton.sequencer.api.v30.SequencerService/Subscribe:
             fillInterval: '60s'
-            maxTokens: 120
-            tokensPerFill: 120
-          tokensPerFill: 720
-          type: 'limited'
-        /registry/allocations/v1:
-          fillInterval: '60s'
-          maxTokens: 720
-          name: 'registry-allocations'
-          perIpLimits:
-            fillInterval: '60s'
-            maxTokens: 120
-            tokensPerFill: 120
-          tokensPerFill: 720
-          type: 'limited'
-        /registry/allocations/v2:
-          fillInterval: '60s'
-          maxTokens: 720
-          name: 'registry-allocations-v2'
-          perIpLimits:
-            fillInterval: '60s'
-            maxTokens: 120
-            tokensPerFill: 120
-          tokensPerFill: 720
-          type: 'limited'
-        /registry/metadata/v1/info:
-          fillInterval: '60s'
-          maxTokens: 720
-          name: 'registry-metadata-info'
-          perIpLimits:
-            fillInterval: '60s'
-            maxTokens: 120
-            tokensPerFill: 120
-          tokensPerFill: 720
-          type: 'limited'
-        /registry/metadata/v1/instruments:
-          fillInterval: '60s'
-          maxTokens: 720
-          name: 'registry-metadata-instruments'
-          perIpLimits:
-            fillInterval: '60s'
-            maxTokens: 120
-            tokensPerFill: 120
-          tokensPerFill: 720
-          type: 'limited'
-        /registry/transfer-instruction/v1:
-          fillInterval: '60s'
-          maxTokens: 720
-          name: 'registry-transfer-instruction'
-          perIpLimits:
-            fillInterval: '60s'
-            maxTokens: 120
-            tokensPerFill: 120
-          tokensPerFill: 720
-          type: 'limited'
-        /registry/transfer-instruction/v1/transfer-factory:
-          fillInterval: '60s'
-          maxTokens: 730
-          name: 'registry-transfer-factory'
-          perIpLimits:
-            fillInterval: '60s'
-            maxTokens: 120
-            tokensPerFill: 120
-          tokensPerFill: 730
-          type: 'limited'
-        /registry/transfer-instruction/v2:
-          fillInterval: '60s'
-          maxTokens: 720
-          name: 'registry-transfer-instruction-v2'
-          perIpLimits:
-            fillInterval: '60s'
-            maxTokens: 120
-            tokensPerFill: 120
-          tokensPerFill: 720
-          type: 'limited'
-        /registry/transfer-instruction/v2/transfer-factory:
-          fillInterval: '60s'
-          maxTokens: 720
-          name: 'registry-transfer-factory-v2'
-          perIpLimits:
-            fillInterval: '60s'
-            maxTokens: 120
-            tokensPerFill: 120
-          tokensPerFill: 720
-          type: 'limited'
+            maxTokens: 10000
+            name: 'sequencer-subscribe'
+            perIpLimits:
+              fillInterval: '60s'
+              maxTokens: 100
+              tokensPerFill: 100
+            tokensPerFill: 10000
+            type: 'limited'
 svs:
   sv:
     cometbft:
@@ -1858,9 +1726,10 @@ synchronizerMigration:
       pulumiStacksDir: 'cluster/stacks/prod'
       repoUrl: 'https://github.com/canton-network/splice'
       spliceRoot: 'splice'
+    sequencer:
+      enableBftSequencer: true
     version: 'local'
   frozenMigrationId: 0
-  splitSvDeploymentEnabled: true
 validator1:
   deduplicationDuration: '30m'
   logging:
@@ -1873,9 +1742,17 @@ validator1:
     cron: '0 /10 * * * ?'
     maxDuration: '5m'
     retention: '1h'
+  walletGateway:
+    enabled: true
+    portfolioVersion: '1.11.0'
+    version: '1.10.0'
 validators:
   validator-runbook:
     namespace: 'validator'
     nodeIdentifier: 'validator-runbook'
     onboardingSecret: 'validatorsecret'
     partyHint: 'digitalasset-testValidator-1'
+    walletGateway:
+      enabled: true
+      portfolioVersion: '1.11.0'
+      version: '1.10.0'

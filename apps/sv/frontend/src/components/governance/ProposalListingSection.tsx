@@ -18,7 +18,11 @@ import { VoteRequest } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules'
 import { ContractId } from '@daml/types';
 import { useNavigate } from 'react-router';
 import { CopyableIdentifier, PageSectionHeader, VoteStats } from '../../components/beta';
-import { VOTE_PROPOSAL_CONTRACT_ID_LABEL } from '../../utils/constants';
+import {
+  CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE,
+  THRESHOLD_DEADLINE_LABEL,
+  VOTE_PROPOSAL_CONTRACT_ID_LABEL,
+} from '../../utils/constants';
 import { ProposalListingData, ProposalListingStatus, YourVoteStatus } from '../../utils/types';
 import { InfoOutlined } from '@mui/icons-material';
 import dayjs from 'dayjs';
@@ -33,6 +37,8 @@ interface ProposalListingSectionProps {
   noDataMessage: string;
   uniqueId: string;
   badgeCount?: number;
+  isLoading?: boolean;
+  loadingMessage?: string;
   showThresholdDeadline?: boolean;
   showVoteStats?: boolean;
   showStatus?: boolean;
@@ -60,7 +66,7 @@ const sortProposals = (
     return data.toSorted((a, b) => dayjs(b.voteTakesEffect).diff(dayjs(a.voteTakesEffect)));
   }
 
-  // For effectiveAtAsc (Inflight Votes):
+  // For effectiveAtAsc (In-flight Proposals):
   // Threshold items first (by votes desc, then deadline asc), then dated items (by effective date asc)
   return data
     .toSorted((a, b) => dayjs(a.votingThresholdDeadline).diff(dayjs(b.votingThresholdDeadline)))
@@ -127,11 +133,11 @@ const TableHeader: React.FC<TableHeaderProps> = ({
   showVoteStats,
 }) => (
   <>
-    <TableCell sx={governanceTableHeadCellSx}>PROPOSAL TYPE</TableCell>
+    <TableCell sx={governanceTableHeadCellSx}>{CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE}</TableCell>
     <TableCell sx={governanceTableHeadCellSx}>{VOTE_PROPOSAL_CONTRACT_ID_LABEL}</TableCell>
     {showThresholdDeadline ? (
       <>
-        <TableCell sx={governanceTableHeadCellSx}>THRESHOLD DEADLINE</TableCell>
+        <TableCell sx={governanceTableHeadCellSx}>{THRESHOLD_DEADLINE_LABEL}</TableCell>
         <TableCell sx={governanceTableHeadCellSx}>SUBMITTED BY</TableCell>
         <TableCell sx={governanceTableHeadCellSx}>EFFECTIVE AT</TableCell>
       </>
@@ -154,6 +160,8 @@ export const ProposalListingSection: React.FC<ProposalListingSectionProps> = pro
     noDataMessage,
     uniqueId,
     badgeCount,
+    isLoading,
+    loadingMessage = 'Searching…',
     showThresholdDeadline,
     showVoteStats,
     showStatus,
@@ -189,7 +197,11 @@ export const ProposalListingSection: React.FC<ProposalListingSectionProps> = pro
       />
 
       {sortedData.length === 0 && !hasNextPage ? (
-        <InfoBox info={noDataMessage} data-testid={`${uniqueId}-section-info`} />
+        isLoading ? (
+          <LoadingBox message={loadingMessage} data-testid={`${uniqueId}-section-loading`} />
+        ) : (
+          <InfoBox info={noDataMessage} data-testid={`${uniqueId}-section-info`} />
+        )
       ) : (
         <>
           <TableContainer data-testid={`${uniqueId}-section-table`}>
@@ -291,6 +303,28 @@ const InfoBox: React.FC<InfoBoxProps> = ({ info, 'data-testid': testId }) => {
       <InfoOutlined color="secondary" fontSize="small" />
       <Typography fontWeight="bold" fontSize={14}>
         {info}
+      </Typography>
+    </Stack>
+  );
+};
+
+interface LoadingBoxProps {
+  message: string;
+  'data-testid': string;
+}
+
+const LoadingBox: React.FC<LoadingBoxProps> = ({ message, 'data-testid': testId }) => {
+  return (
+    <Stack
+      gap={1.5}
+      direction="row"
+      alignItems="center"
+      sx={{ width: 'max-content', p: 2 }}
+      data-testid={testId}
+    >
+      <CircularProgress size={20} />
+      <Typography fontSize={14} color="text.secondary">
+        {message}
       </Typography>
     </Stack>
   );

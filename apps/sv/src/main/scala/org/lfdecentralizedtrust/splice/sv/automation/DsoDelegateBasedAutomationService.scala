@@ -235,7 +235,7 @@ class DsoDelegateBasedAutomationService(
 
 object DsoDelegateBasedAutomationService extends AutomationServiceCompanion {
   // defined because the service isn't available immediately in sv app state,
-  // but created later by the restart trigger
+  // but created later
   override protected[this] def expectedTriggerClasses: Seq[TriggerClass] = Seq(
     aTrigger[AdvanceOpenMiningRoundTrigger],
     aTrigger[UpdateExternalPartyConfigStateTrigger],

@@ -510,6 +510,7 @@ data TestEnv = TestEnv with
 
   dummyCid : ContractId ()
   dummyCid1 : ContractId ()
+    deriving (Serializable)
 
 
 setupTest : Script TestEnv

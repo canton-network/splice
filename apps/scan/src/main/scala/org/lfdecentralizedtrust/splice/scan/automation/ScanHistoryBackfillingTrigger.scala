@@ -26,6 +26,7 @@ import org.lfdecentralizedtrust.splice.store.{
   HistoryMetrics,
   ImportUpdatesBackfilling,
   PageLimit,
+  TimestampWithMigrationId,
   TreeUpdateWithMigrationId,
   UpdateHistory,
 }
@@ -85,7 +86,7 @@ class ScanHistoryBackfillingTrigger(
     */
   @SuppressWarnings(Array("org.wartremover.warts.Var"))
   @volatile
-  private var findHistoryStartAfter: Option[(Long, CantonTimestamp)] = None
+  private var findHistoryStartAfter: Option[TimestampWithMigrationId] = None
 
   @SuppressWarnings(Array("org.wartremover.warts.Var"))
   @volatile
@@ -214,7 +215,8 @@ class ScanHistoryBackfillingTrigger(
           PageLimit.tryCreate(batchSize),
         )
         _ = updates.lastOption.foreach(u =>
-          findHistoryStartAfter = Some(u.migrationId -> u.update.update.recordTime)
+          findHistoryStartAfter =
+            Some(TimestampWithMigrationId(u.update.update.recordTime, u.migrationId))
         )
         result <-
           if (updates.isEmpty) {
@@ -311,7 +313,7 @@ class ScanHistoryBackfillingTrigger(
 object ScanHistoryBackfillingTrigger {
   sealed trait Task extends PrettyPrinting
   final case class InitializeBackfillingTask(
-      after: Option[(Long, CantonTimestamp)]
+      after: Option[TimestampWithMigrationId]
   ) extends Task {
     override def pretty: Pretty[this.type] =
       prettyOfClass(param("after", _.after))

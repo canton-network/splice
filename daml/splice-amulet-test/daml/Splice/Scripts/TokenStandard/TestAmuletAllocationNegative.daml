@@ -453,6 +453,7 @@ data SettleTestEnv = SettleTestEnv with
   aliceAllocCid : ContractId V2.Allocation
   bobAllocCid : ContractId V2.Allocation
   bobAllocationV2 : V2.AllocationSpecification
+    deriving (Serializable)
 
 test_settleBatchV2_wrongActor : Script ()
 test_settleBatchV2_wrongActor = test_settleBatchV2_generic $ \SettleTestEnv {..} TestEnv {..} -> do

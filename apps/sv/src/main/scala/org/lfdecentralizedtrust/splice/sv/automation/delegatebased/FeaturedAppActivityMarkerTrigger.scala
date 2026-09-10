@@ -112,7 +112,6 @@ class FeaturedAppActivityMarkerTrigger(
             ignorePartiesWithoutVettedAmulet(
               getInformeesFromContracts(markers.flatten),
               markers.flatten.map(_.contractId.contractId),
-              logAsWarning = true,
             ).discard
             Seq.empty
         }

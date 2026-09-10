@@ -6,6 +6,7 @@ import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
+import com.digitalasset.canton.util.MonadUtil
 import com.digitalasset.canton.{HasActorSystem, HasExecutionContext, SynchronizerAlias}
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.environment.{DarResources, RetryProvider}
@@ -102,6 +103,56 @@ abstract class ExternalPartyWalletStoreTest
         }
       }
 
+    }
+
+    "listSortedSvRewardCoupons" should {
+      "return correct results, sorted, filtered by beneficiary" in {
+        for {
+          store <- mkStore(externalParty1)
+          // per round n: two coupons for externalParty1 with weights n and 2n
+          _ <- MonadUtil.sequentialTraverse(1 to 4)(n =>
+            for {
+              _ <- dummyDomain.create(
+                svRewardCoupon(
+                  round = n,
+                  sv = validator,
+                  beneficiary = externalParty1,
+                  weight = n.toLong,
+                ),
+                createdEventSignatories = Seq(dsoParty),
+                createdEventObservers = Seq(externalParty1),
+              )(store.multiDomainAcsStore)
+              _ <- dummyDomain.create(
+                svRewardCoupon(
+                  round = n,
+                  sv = validator,
+                  beneficiary = externalParty1,
+                  weight = 2L * n,
+                ),
+                createdEventSignatories = Seq(dsoParty),
+                createdEventObservers = Seq(externalParty1),
+              )(store.multiDomainAcsStore)
+            } yield ()
+          )
+          // a coupon for a DIFFERENT beneficiary — must NOT be returned (the #7141 filter point)
+          _ <- dummyDomain.create(
+            svRewardCoupon(round = 2, sv = validator, beneficiary = externalParty2, weight = 99L),
+            createdEventSignatories = Seq(dsoParty),
+            createdEventObservers = Seq(externalParty2),
+          )(store.multiDomainAcsStore)
+        } yield {
+          store.listSortedSvRewardCoupons(Map.empty).futureValue shouldBe empty
+          val rounds = (2 to 4).map(n => issuingMiningRound(dsoParty, n.toLong))
+          store
+            .listSortedSvRewardCoupons(rounds.map(r => r.payload.round -> r.payload).toMap)
+            .futureValue
+            .map(_._1.payload.weight.toLong) should contain theSameElementsInOrderAs Seq(
+            4L, 2L, // round 2 (99L for externalParty2 excluded)
+            6L, 3L, // round 3
+            8L, 4L, // round 4
+          )
+        }
+      }
     }
   }
 

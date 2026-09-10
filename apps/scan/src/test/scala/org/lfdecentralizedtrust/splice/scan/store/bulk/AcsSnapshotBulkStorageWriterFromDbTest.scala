@@ -162,7 +162,13 @@ class AcsSnapshotBulkStorageWriterFromDbTest
             .get(MetricsContext.Empty)
             .value
             .markers
-            .get(MetricsContext("object_type" -> "ACS_snapshots", "encoding" -> encoding.key))
+            .get(
+              MetricsContext(
+                "object_type" -> "ACS_snapshots",
+                "encoding" -> encoding.key,
+                "bucket" -> "staging",
+              )
+            )
             .value
             .get()
           numObjectsFromMetric shouldBe expectedDigests.length
@@ -349,7 +355,7 @@ class AcsSnapshotBulkStorageWriterFromDbTest
         store.queryAcsSnapshot(
           anyLong,
           any[CantonTimestamp],
-          any[Option[Long]],
+          any[Option[AcsSnapshotStore.QueryAcsSnapshotPaginationToken]],
           any[Limit],
           any[Seq[PartyId]],
           any[Seq[PackageQualifiedName]],
@@ -358,14 +364,22 @@ class AcsSnapshotBulkStorageWriterFromDbTest
         (
             migration: Long,
             timestamp: CantonTimestamp,
-            after: Option[Long],
+            after: Option[AcsSnapshotStore.QueryAcsSnapshotPaginationToken],
             limit: Limit,
             _: Seq[PartyId],
             _: Seq[PackageQualifiedName],
         ) =>
           if (snapshots.contains(timestamp)) {
             Future {
-              val remaining = snapshotSize - after.getOrElse(0L)
+              val afterAsLong = after match {
+                case Some(
+                      AcsSnapshotStore.QueryAcsSnapshotPaginationToken
+                        .RowIdQueryAcsSnapshotPaginationToken(value)
+                    ) =>
+                  value
+                case None => 0L
+              }
+              val remaining = snapshotSize - afterAsLong
               val numElems = math.min(limit.limit.toLong, remaining)
               val result = QueryAcsSnapshotResult(
                 migration,
@@ -373,7 +387,7 @@ class AcsSnapshotBulkStorageWriterFromDbTest
                 Vector
                   .range(0, numElems)
                   .map(i => {
-                    val idx = i + after.getOrElse(0L)
+                    val idx = i + afterAsLong
                     val amt = amulet(
                       partyId,
                       BigDecimal(idx),
@@ -388,7 +402,12 @@ class AcsSnapshotBulkStorageWriterFromDbTest
                       toCreatedEvent(amt),
                     )
                   }),
-                if (numElems < remaining) Some(after.getOrElse(0L) + numElems) else None,
+                if (numElems < remaining)
+                  Some(
+                    AcsSnapshotStore.QueryAcsSnapshotPaginationToken
+                      .RowIdQueryAcsSnapshotPaginationToken(afterAsLong + numElems)
+                  )
+                else None,
               )
               result
             }
