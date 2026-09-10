@@ -3662,41 +3662,6 @@ components:
           type: integer
           format: int64
 
-    SynchronizerIdentities:
-      type: object
-      required:
-        - sequencer_id
-        - sequencer_identity_transactions
-        - mediator_id
-        - mediator_identity_transactions
-      properties:
-        sequencer_id:
-          type: string
-        sequencer_identity_transactions:
-          type: array
-          items:
-            type: string
-        mediator_id:
-          type: string
-        mediator_identity_transactions:
-          type: array
-          items:
-            type: string
-
-    SynchronizerBootstrappingTransactions:
-      type: object
-      required:
-        - domain_parameters
-        - sequencer_domain_state
-        - mediator_domain_state
-      properties:
-        domain_parameters:
-          type: string
-        sequencer_domain_state:
-          type: string
-        mediator_domain_state:
-          type: string
-
     GetMigrationInfoRequest:
       type: object
       required:
