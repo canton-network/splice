@@ -1040,22 +1040,6 @@ class BftScanConnection(
       tc: TraceContext,
   ): Future[(GetRewardAccountingActivityTotalsResponse, List[Uri])] = {
     import GetRewardAccountingActivityTotalsResponse.members as RAT
-
-    // Optimization: transform `Undetermined` and `CannotProvide`
-    // responses to failed responses, so that they do not form consensus.
-    // Returning `Undetermined` or `CannotProvide` would also be ok, but the
-    // outer retry in the caller of this method (`SummarizingMiningRoundTrigger`)
-    // is slower and more noisy than the retry in `bftCallWithScanUris`.
-    def getRewardAccountingActivityTotalsForConsensus(
-        scan: SingleScanConnection
-    ): Future[GetRewardAccountingActivityTotalsResponse] =
-      scan.getRewardAccountingActivityTotals(roundNumber).transform {
-        case Success(RAT.RewardAccountingActivityTotalsUndetermined(_)) |
-            Success(RAT.RewardAccountingActivityTotalsCannotProvide(_)) =>
-          Failure(BftScanConnection.IgnoreResponse(scan.url))
-        case r => r
-      }
-
     for {
       connectionsWithResponses <- BftScanConnection.ConnectionsWithProbeVerdicts.fromCall(
         scanList.scanConnections,
@@ -1072,7 +1056,6 @@ class BftScanConnection(
       result <- consensusOverProbe(
         connectionsWithResponses,
         "getRewardAccountingActivityTotals",
-        getRewardAccountingActivityTotalsForConsensus,
       )
     } yield result
   }
@@ -1098,22 +1081,6 @@ class BftScanConnection(
       tc: TraceContext,
   ): Future[(GetRewardAccountingRootHashResponse, List[Uri])] = {
     import GetRewardAccountingRootHashResponse.members as RHR
-
-    // Optimization: transform `Undetermined` and `CannotProvide`
-    // responses to failed responses, so that they do not form consensus.
-    // Returning `Undetermined` or `CannotProvide` would also be ok, but the
-    // outer retry in the caller of this method (`SummarizingMiningRoundTrigger`)
-    // is slower and more noisy than the retry in `bftCallWithScanUris`.
-    def getRewardAccountingRootHashForConsensus(
-        scan: SingleScanConnection
-    ): Future[GetRewardAccountingRootHashResponse] =
-      scan.getRewardAccountingRootHash(roundNumber).transform {
-        case Success(RHR.RewardAccountingRootHashUndetermined(_)) |
-            Success(RHR.RewardAccountingRootHashCannotProvide(_)) =>
-          Failure(BftScanConnection.IgnoreResponse(scan.url))
-        case r => r
-      }
-
     for {
       connectionsWithResponses <- BftScanConnection.ConnectionsWithProbeVerdicts.fromCall(
         scanList.scanConnections,
@@ -1127,39 +1094,41 @@ class BftScanConnection(
           BftScanConnection.ProbeVerdict.Unavailable
         case Failure(_) => BftScanConnection.ProbeVerdict.Unavailable
       }
-      result <- consensusOverProbe(
-        connectionsWithResponses,
-        "getRewardAccountingRootHash",
-        getRewardAccountingRootHashForConsensus,
-      )
+      result <- consensusOverProbe(connectionsWithResponses, "getRewardAccountingRootHash")
     } yield result
   }
 
   /** Second phase of a two-phase probe-filter-consensus call. Runs a BFT
-    * call over the probed set: `WithData` responses cached in the probe
-    * are reused; `Unavailable` peers are re-queried live via `liveCall`
-    * so `bftCallWithScanUris`'s retry loop can catch peers that recover
-    * during a transient outage. `WithoutData` peers are filtered out by
-    * `forOptionalResponses`.
+    * call over the `WithData` subset of the probe result, replaying the
+    * cached responses. `WithoutData` peers are dropped from `n` by
+    * `forOptionalResponses`; `Unavailable` peers count in `n` but are
+    * not re-queried — the retry-through-Unavailable path was found to
+    * leak `IgnoreResponse` failures into caller triggers when many
+    * peers stay unavailable, so this phase now sticks to cached data.
     *
     * Note: `bftCallWithScanUris` retries on `ConsensusNotReached`; retries
-    * that only re-read cached responses produce byte-identical results,
-    * so the extra WARNs on a genuine disagreement are benign.
+    * against the cache produce byte-identical results, so the extra
+    * WARNs on a genuine disagreement are benign.
     */
   private def consensusOverProbe[T](
       connectionsWithResponses: BftScanConnection.ConnectionsWithProbeVerdicts[T],
       endpoint: String,
-      liveCall: SingleScanConnection => Future[T],
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
   ): Future[(T, List[Uri])] = {
     val callConfig = BftCallConfig.forOptionalResponses(connectionsWithResponses)
+    val cache: Map[SingleScanConnection, T] =
+      connectionsWithResponses.responses.collect {
+        case (c, BftScanConnection.ProbeVerdict.WithData(v)) => c -> v
+      }
     bftCallWithScanUris[T](
       call = scan =>
-        connectionsWithResponses.responses.get(scan).fold(liveCall(scan)) {
-          case BftScanConnection.ProbeVerdict.WithData(cached) => Future.successful(cached)
-          case _ => liveCall(scan)
+        cache.get(scan) match {
+          case Some(cached) => Future.successful(cached)
+          case None =>
+            // Defensive: forOptionalResponses only samples WithData scans.
+            Future.failed(BftScanConnection.IgnoreResponse(scan.url))
         },
       endpoint = endpoint,
       callConfig = callConfig,
@@ -1396,43 +1365,43 @@ object BftScanConnection {
 
     /** BFT config for the second phase of a probe-filter-consensus call.
       * Peers with `ProbeVerdict.WithoutData` (explicit "cannot provide")
-      * are filtered out; peers with `WithData` (cached response) and
-      * `Unavailable` (probe timed out or returned inconclusive) both
-      * participate in consensus. Unavailable peers are re-queried live in
-      * the second phase, giving `bftCallWithScanUris`'s retry loop a chance
-      * to catch peers that recover during a transient outage.
+      * are dropped from `n` — they opted out. Peers with `Unavailable`
+      * (probe timed out or returned inconclusive) count toward `n` (so
+      * `f` and `targetSuccess` reflect the possibility they could have
+      * disagreed), but are NOT sampled in the second phase — only
+      * `WithData` peers have cached responses to contribute.
       *
-      * `n = connectionsForConsensus.size + scanConnections.failed`;
-      * `requestsToDo` respects `2f+1` when we have fault tolerance,
-      * otherwise falls back to sampling every peer that participates.
+      * `n = withData.size + unavailable + scanConnections.failed`.
+      * `requestsToDo = withData.size` because every sampled peer has
+      * a cached response; there is nothing to fetch live.
       */
     def forOptionalResponses[T](
         connectionsWithProbeVerdicts: ConnectionsWithProbeVerdicts[T]
     )(implicit loggingContext: ErrorLoggingContext): BftCallConfig = {
-      // Filter out connections that wish to be excluded from consensus
-      val connectionsForConsensus =
-        connectionsWithProbeVerdicts.responses.toList.collect {
-          case (c, ProbeVerdict.WithData(_)) => c
-          case (c, ProbeVerdict.Unavailable) => c
-        }
-      if (connectionsForConsensus.size < connectionsWithProbeVerdicts.responses.size) {
-        val abstainingConnections =
-          connectionsWithProbeVerdicts.responses.keySet -- connectionsForConsensus
+      val withData = connectionsWithProbeVerdicts.responses.toList.collect {
+        case (c, ProbeVerdict.WithData(_)) => c
+      }
+      val unavailable = connectionsWithProbeVerdicts.responses.count {
+        case (_, ProbeVerdict.Unavailable) => true
+        case _ => false
+      }
+      val abstaining = connectionsWithProbeVerdicts.responses.collect {
+        case (c, ProbeVerdict.WithoutData) => c.url
+      }.toSet
+      if (abstaining.nonEmpty) {
         loggingContext.info(
           s"Making a BFT call with a modified config, because some connections are abstaining." +
-            s" Connections ${abstainingConnections.map(_.url)} are abstaining from consensus, " +
-            s" proceeding with the remaining ${connectionsForConsensus.map(_.url)} connections."
+            s" Connections ${abstaining} are abstaining from consensus, " +
+            s" proceeding with the remaining ${withData.map(_.url)} connections."
         )
       }
 
-      // Compute thresholds from the remaining connections
-      val n = connectionsForConsensus.size + connectionsWithProbeVerdicts.failed
+      val n = withData.size + unavailable + connectionsWithProbeVerdicts.failed
       val f = (n - 1) / 3 max 0
 
       BftCallConfig(
-        connections = connectionsForConsensus,
-        // Play it safe wrt availability in case we have no fault tolerance.
-        requestsToDo = if (f == 0) connectionsForConsensus.size else 2 * f + 1,
+        connections = withData,
+        requestsToDo = withData.size,
         targetSuccess = f + 1,
       )
     }

@@ -1241,14 +1241,14 @@ class BftScanConnectionTest
       }
       val bft = getBft(connections)
 
-      // n=4, f=1 → requestsToDo=2f+1=3, targetSuccess=2. All 3 sampled peers
-      // return different hashes → no consensus → BadGateway.
+      // n=4, f=1, targetSuccess=2. All 4 WithData peers are sampled from cache;
+      // each returns a distinct hash → no consensus → BadGateway.
       loggerFactory.assertLogs(
         for {
           failure <- bft.getRewardAccountingRootHash(round).failed
         } yield inside(failure) { case HttpErrorWithHttpCode(code, message) =>
           code should be(StatusCodes.BadGateway)
-          message should include("Failed to reach consensus from 3 Scan nodes")
+          message should include("Failed to reach consensus from 4 Scan nodes")
         },
         _.warningMessage should include("Consensus not reached."),
       )
@@ -1274,9 +1274,9 @@ class BftScanConnectionTest
 
     "propagates BadGateway when every peer returns Undetermined" in {
       // All 4 Undetermined → probe classifies each as Unavailable → all kept
-      // in `n` for retry. Live re-query in phase 2 still returns Undetermined
-      // which is transformed to IgnoreResponse → no successful responses →
-      // ConsensusNotReached → BadGateway.
+      // in `n` (n=4, f=1, targetSuccess=2) but none contributes a cached
+      // response → 0 WithData scans to sample → enoughAvailableScans=false
+      // → BadGateway.
       val round = 42L
       val connections = getMockedConnections(n = 4)
       connections.foreach(makeMockReturnRootHashUndetermined(_, round))
@@ -1288,7 +1288,7 @@ class BftScanConnectionTest
         } yield inside(failure) { case HttpErrorWithHttpCode(code, _) =>
           code should be(StatusCodes.BadGateway)
         },
-        _.warningMessage should include("Consensus not reached."),
+        _.warningMessage should include("BFT guarantees"),
       )
     }
 
@@ -1372,12 +1372,10 @@ class BftScanConnectionTest
 
     "reaches consensus despite a peer whose probe fails" in {
       // SV0 returns Ok (cached in phase 1). SV1's probe fails with a
-      // transport error → classified as Unavailable → kept in `n` and
-      // re-queried in phase 2, where the transport error stays a Failure.
-      // SV2/SV3 opt out via CannotProvide → dropped from `n`.
-      // n = 2 (WithData + Unavailable), f = 0, targetSuccess = 1: SV0's
-      // Ok wins via the ignore-exception path. SV1's failure is logged
-      // as a WARN disagreement.
+      // transport error → classified as Unavailable (counted in `n` but
+      // NOT re-queried in phase 2). SV2/SV3 opt out via CannotProvide →
+      // dropped from `n`. n = 1 + 1 = 2, f = 0, targetSuccess = 1: SV0's
+      // cached Ok is the only response required, no consensus WARN.
       val round = 42L
       val connections = getMockedConnections(n = 4)
       makeMockReturnRootHashOk(connections(0), round, "aabb")
@@ -1387,28 +1385,19 @@ class BftScanConnectionTest
       makeMockReturnRootHashCannotProvide(connections(3), round)
       val bft = getBft(connections)
 
-      loggerFactory
-        .assertEventuallyLogsSeq(SuppressionRule.Level(Level.WARN))(
-          bft.getRewardAccountingRootHash(round).map { resp =>
-            inside(resp) {
-              case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok) =>
-                ok.rootHash should be("aabb")
-            }
-          },
-          logs =>
-            logs.exists(l =>
-              l.level == Level.WARN && l.message.contains("disagreed with consensus")
-            ) should be(true),
-        )
-        .map(_ => succeed)
+      bft.getRewardAccountingRootHash(round).map { resp =>
+        inside(resp) {
+          case GetRewardAccountingRootHashResponse.members.RewardAccountingRootHashOk(ok) =>
+            ok.rootHash should be("aabb")
+        }
+      }
     }
 
     "propagates BadGateway when a lone Ok cannot meet BFT quorum against Undetermined peers" in {
-      // 1 Ok + 3 Undetermined → probe classifies as {WithData, Unavailable*3}
-      // → all 4 kept in `n` (Unavailable stays for retry). n = 4, f = 1,
-      // targetSuccess = 2. Second phase re-queries Undetermined peers live;
-      // each still returns Undetermined → transformed to IgnoreResponse.
-      // No 2 Ok agree → ConsensusNotReached → BadGateway.
+      // 1 Ok + 3 Undetermined → probe classifies as {WithData, Unavailable*3}.
+      // Unavailable peers count in `n`: n=4, f=1, targetSuccess=2. Only SV0
+      // (WithData) has a cached response → connections=[SV0] with
+      // requestsToDo=1. `enoughAvailableScans` sees 1 < 2 → BadGateway.
       val round = 42L
       val connections = getMockedConnections(n = 4)
       makeMockReturnRootHashOk(connections(0), round, "aabb")
@@ -1423,7 +1412,7 @@ class BftScanConnectionTest
         } yield inside(failure) { case HttpErrorWithHttpCode(code, _) =>
           code should be(StatusCodes.BadGateway)
         },
-        _.warningMessage should include("Consensus not reached."),
+        _.warningMessage should include("BFT guarantees"),
       )
     }
 
@@ -1509,14 +1498,14 @@ class BftScanConnectionTest
       }
       val bft = getBft(connections)
 
-      // n=4, f=1 → requestsToDo=2f+1=3, targetSuccess=2. All 3 sampled peers
-      // return different totals → no consensus → BadGateway.
+      // n=4, f=1, targetSuccess=2. All 4 WithData peers are sampled from cache;
+      // each returns distinct totals → no consensus → BadGateway.
       loggerFactory.assertLogs(
         for {
           failure <- bft.getRewardAccountingActivityTotals(round).failed
         } yield inside(failure) { case HttpErrorWithHttpCode(code, message) =>
           code should be(StatusCodes.BadGateway)
-          message should include("Failed to reach consensus from 3 Scan nodes")
+          message should include("Failed to reach consensus from 4 Scan nodes")
         },
         _.warningMessage should include("Consensus not reached."),
       )
@@ -1542,9 +1531,9 @@ class BftScanConnectionTest
 
     "propagates BadGateway when every peer returns Undetermined" in {
       // All 4 Undetermined → probe classifies each as Unavailable → all kept
-      // in `n` for retry. Live re-query in phase 2 still returns Undetermined
-      // which is transformed to IgnoreResponse → no successful responses →
-      // ConsensusNotReached → BadGateway.
+      // in `n` (n=4, f=1, targetSuccess=2) but none contributes a cached
+      // response → 0 WithData scans to sample → enoughAvailableScans=false
+      // → BadGateway.
       val round = 42L
       val connections = getMockedConnections(n = 4)
       connections.foreach(makeMockReturnActivityTotalsUndetermined(_, round))
@@ -1556,7 +1545,7 @@ class BftScanConnectionTest
         } yield inside(failure) { case HttpErrorWithHttpCode(code, _) =>
           code should be(StatusCodes.BadGateway)
         },
-        _.warningMessage should include("Consensus not reached."),
+        _.warningMessage should include("BFT guarantees"),
       )
     }
 
@@ -1642,12 +1631,10 @@ class BftScanConnectionTest
 
     "reaches consensus despite a peer whose probe fails" in {
       // SV0 returns Ok (cached in phase 1). SV1's probe fails with a
-      // transport error → classified as Unavailable → kept in `n` and
-      // re-queried in phase 2, where the transport error stays a Failure.
-      // SV2/SV3 opt out via CannotProvide → dropped from `n`.
-      // n = 2 (WithData + Unavailable), f = 0, targetSuccess = 1: SV0's
-      // Ok wins via the ignore-exception path. SV1's failure is logged
-      // as a WARN disagreement.
+      // transport error → classified as Unavailable (counted in `n` but
+      // NOT re-queried in phase 2). SV2/SV3 opt out via CannotProvide →
+      // dropped from `n`. n = 1 + 1 = 2, f = 0, targetSuccess = 1: SV0's
+      // cached Ok is the only response required, no consensus WARN.
       val round = 42L
       val connections = getMockedConnections(n = 4)
       makeMockReturnActivityTotalsOk(connections(0), round, 100L, 10L, 5L)
@@ -1657,29 +1644,20 @@ class BftScanConnectionTest
       makeMockReturnActivityTotalsCannotProvide(connections(3), round)
       val bft = getBft(connections)
 
-      loggerFactory
-        .assertEventuallyLogsSeq(SuppressionRule.Level(Level.WARN))(
-          bft.getRewardAccountingActivityTotals(round).map { resp =>
-            inside(resp) {
-              case GetRewardAccountingActivityTotalsResponse.members
-                    .RewardAccountingActivityTotalsOk(ok) =>
-                ok.totalAppActivityWeight should be(100L)
-            }
-          },
-          logs =>
-            logs.exists(l =>
-              l.level == Level.WARN && l.message.contains("disagreed with consensus")
-            ) should be(true),
-        )
-        .map(_ => succeed)
+      bft.getRewardAccountingActivityTotals(round).map { resp =>
+        inside(resp) {
+          case GetRewardAccountingActivityTotalsResponse.members
+                .RewardAccountingActivityTotalsOk(ok) =>
+            ok.totalAppActivityWeight should be(100L)
+        }
+      }
     }
 
     "propagates BadGateway when a lone Ok cannot meet BFT quorum against Undetermined peers" in {
-      // 1 Ok + 3 Undetermined → probe classifies as {WithData, Unavailable*3}
-      // → all 4 kept in `n` (Unavailable stays for retry). n = 4, f = 1,
-      // targetSuccess = 2. Second phase re-queries Undetermined peers live;
-      // each still returns Undetermined → transformed to IgnoreResponse.
-      // No 2 Ok agree → ConsensusNotReached → BadGateway.
+      // 1 Ok + 3 Undetermined → probe classifies as {WithData, Unavailable*3}.
+      // Unavailable peers count in `n`: n=4, f=1, targetSuccess=2. Only SV0
+      // (WithData) has a cached response → connections=[SV0] with
+      // requestsToDo=1. `enoughAvailableScans` sees 1 < 2 → BadGateway.
       val round = 42L
       val connections = getMockedConnections(n = 4)
       makeMockReturnActivityTotalsOk(connections(0), round, 100L, 10L, 5L)
@@ -1694,7 +1672,7 @@ class BftScanConnectionTest
         } yield inside(failure) { case HttpErrorWithHttpCode(code, _) =>
           code should be(StatusCodes.BadGateway)
         },
-        _.warningMessage should include("Consensus not reached."),
+        _.warningMessage should include("BFT guarantees"),
       )
     }
   }
