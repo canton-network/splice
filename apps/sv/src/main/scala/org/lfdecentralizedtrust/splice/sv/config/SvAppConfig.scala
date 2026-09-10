@@ -344,14 +344,19 @@ final case class SvParticipantClientConfig(
 ) extends BaseParticipantClientConfig(adminApi, ledgerApi)
 
 final case class BftSequencingParameters(
-    pbftViewChangeTimeout: PositiveFiniteDuration,
-    segmentLength: PositiveLong,
-    blacklistLeaderSelectionPolicyConfig: BlacklistLeaderSelectionPolicyConfig,
-    maxRequestsInBatch: Short,
-    maxBatchesPerBlockProposal: Short,
-    pbftViewChangeTimeoutStep: NonNegativeFiniteDuration,
-    pbftViewChangeTimeoutUpperBound: NonNegativeFiniteDuration,
-    stricterDetectionOfRequestsPotentiallyChangingOrderingTopology: Boolean,
+    pbftViewChangeTimeout: PositiveFiniteDuration =
+      BftSequencingParameters.default.pbftViewChangeTimeout,
+    segmentLength: PositiveLong = BftSequencingParameters.default.segmentLength,
+    blacklistLeaderSelectionPolicyConfig: BlacklistLeaderSelectionPolicyConfig =
+      BftSequencingParameters.default.blacklistLeaderSelectionPolicyConfig,
+    maxRequestsInBatch: Short = BftSequencingParameters.default.maxRequestsInBatch,
+    maxBatchesPerBlockProposal: Short = BftSequencingParameters.default.maxBatchesPerBlockProposal,
+    pbftViewChangeTimeoutStep: NonNegativeFiniteDuration =
+      BftSequencingParameters.default.pbftViewChangeTimeoutStep,
+    pbftViewChangeTimeoutUpperBound: NonNegativeFiniteDuration =
+      BftSequencingParameters.default.pbftViewChangeTimeoutUpperBound,
+    stricterDetectionOfRequestsPotentiallyChangingOrderingTopology: Boolean =
+      BftSequencingParameters.default.stricterDetectionOfRequestsPotentiallyChangingOrderingTopology,
 ) {
   import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.topology.SequencingParameters
   def toInternal(protocolVersion: ProtocolVersion): SequencingParameters =

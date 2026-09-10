@@ -15,23 +15,9 @@ svApp:
     # complaining that all the other keys are missing
     - name: ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING
       value: |
-        canton.sv-apps.sv.canton-bft-sequencing-parameters {
-          blacklist-leader-selection-policy-config {
-              how-long-to-blacklist {
-                  # Reduced from the default of 250 by 4x to match the increase in 4x in segment length.
-                  maximum-epoch-blacklisted=62
-                  type=linear
-              }
-              how-many-can-we-blacklist=num-faults-tolerated
-          }
-          # Increased by 4x as there is a synchronization point at the end of each epoch which can be expensive.
-          segment-length=40
-          max-requests-in-batch=32
-          max-batches-per-block-proposal=16
-          pbft-view-change-timeout="5 seconds"
-          pbft-view-change-timeout-step="2 seconds"
-          pbft-view-change-timeout-upper-bound="30 seconds"
-          stricter-detection-of-requests-potentially-changing-ordering-topology=true
+        canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config.how-long-to-blacklist {
+          type=linear
+          maximum-epoch-blacklisted=62
         }
 
 scanApp:
