@@ -1402,6 +1402,7 @@ class AcsSnapshotStoreTest
       mkParticipantId(participantId),
       dsoParty,
       backfillingRequired,
+      internedStringStore(storage),
       loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = true,

@@ -23,7 +23,7 @@ SRCDIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 source "$SRCDIR"/io-utils.sh
 
 read_sbt_output() {
-  grep -v -E "$@" "$SBT_OUTPUT_FILE"
+  sed $'s/\e\\[[0-9;]*m//g' "$SBT_OUTPUT_FILE" | grep -v -E "$@"
 }
 
 filter_errors() {

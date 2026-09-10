@@ -42,16 +42,14 @@ sv:
     skipInitialization: true
   scan:
     externalRateLimits:
-      rateLimits:
-        /registry/metadata/v1/info:
-          perIpLimits:
-            overrides:
-              test:
-                ips:
-                  - 192.68.78.50
-                maxTokens: 250
-                tokensPerFill: 250
-                fillInterval: 60s
+      globalPerIpLimits:
+        overrides:
+          test:
+            ips:
+              - 192.68.78.50
+            maxTokens: 250
+            tokensPerFill: 250
+            fillInterval: 60s
 splitwell:
   maxDarVersion: '0.1.8'
   participantPruningSchedule:
@@ -144,6 +142,7 @@ pulumiProjectConfig:
 monitoring:
   alerting:
     enableNoDataAlerts: true
+    enableExtraHighPrioAlerts: true
     alerts:
       cloudSql:
         maintenance: true
@@ -280,6 +279,8 @@ svs:
       cantonLogLevel: INFO
       apiRequestLogLevel: DEBUG
 infra:
+  gkeGateway:
+    proxyForIstioHttp: true
   ipWhitelisting:
     extraWhitelistedIngress:
       - 1.2.3.4/32
@@ -472,3 +473,7 @@ validators:
     namespace: validator
     partyHint: 'extra-validator'
     walletGateway: !include(../../configs/shared/wallet_gateway.yaml) {}
+cloudArmor:
+  enabled: true
+  logging:
+    enabled: true

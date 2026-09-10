@@ -345,14 +345,48 @@ final case class BftSequencingParameters(
     pbftViewChangeTimeout: PositiveFiniteDuration,
     segmentLength: PositiveLong,
     blacklistLeaderSelectionPolicyConfig: BlacklistLeaderSelectionPolicyConfig,
+    maxRequestsInBatch: Short,
+    maxBatchesPerBlockProposal: Short,
+    pbftViewChangeTimeoutStep: NonNegativeFiniteDuration,
+    pbftViewChangeTimeoutUpperBound: NonNegativeFiniteDuration,
+    stricterDetectionOfRequestsPotentiallyChangingOrderingTopology: Boolean,
 ) {
   import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.topology.SequencingParameters
   def toInternal(protocolVersion: ProtocolVersion): SequencingParameters =
     SequencingParameters.create(
-      pbftViewChangeTimeout.toInternal,
-      SequencingParameters.SegmentLength(segmentLength),
-      blacklistLeaderSelectionPolicyConfig,
+      pbftViewChangeTimeout = pbftViewChangeTimeout.toInternal,
+      segmentLength = SequencingParameters.SegmentLength(segmentLength),
+      blacklistLeaderSelectionPolicyConfig = blacklistLeaderSelectionPolicyConfig,
+      maxRequestsInBatch = maxRequestsInBatch,
+      maxBatchesPerBlockProposal = maxBatchesPerBlockProposal,
+      pbftViewChangeTimeoutStep = pbftViewChangeTimeoutStep,
+      pbftViewChangeTimeoutUpperBound = pbftViewChangeTimeoutUpperBound,
+      stricterDetectionOfRequestsPotentiallyChangingOrderingTopology =
+        stricterDetectionOfRequestsPotentiallyChangingOrderingTopology,
     )(protocolVersion)
+}
+
+object BftSequencingParameters {
+  val default =
+    BftSequencingParameters(
+      pbftViewChangeTimeout = PositiveFiniteDuration.ofSeconds(5),
+      // increased from default as epoch changes are synchronization points which can slow things down.
+      segmentLength =
+        PositiveLong.tryCreate(SequencingParameters.DefaultSegmentLength.length.value * 4),
+      blacklistLeaderSelectionPolicyConfig =
+        SequencingParameters.DefaultLeaderSelectionPolicyConfig.copy(
+          howLongToBlacklist = BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.Exponential(
+            initialValue = 1L,
+            // Reduced by 4 to compensate for increased segmentLength.
+            maximumEpochBlacklisted = Some(250L / 4L),
+          )
+        ),
+      maxRequestsInBatch = SequencingParameters.DefaultMaxRequestsInBatch,
+      maxBatchesPerBlockProposal = SequencingParameters.DefaultMaxBatchesPerProposal,
+      pbftViewChangeTimeoutStep = SequencingParameters.DefaultPbftViewChangeTimeoutStep,
+      pbftViewChangeTimeoutUpperBound = SequencingParameters.DefaultPbftViewChangeTimeoutUpperBound,
+      stricterDetectionOfRequestsPotentiallyChangingOrderingTopology = true,
+    )
 }
 
 case class SvAppBackendConfig(
@@ -476,21 +510,7 @@ case class SvAppBackendConfig(
     useInternalSequencerApi: Boolean = false,
     ignoredAmuletVersions: Set[String] = Set.empty,
     cantonBftSequencingParameters: Option[BftSequencingParameters] = Some(
-      BftSequencingParameters(
-        pbftViewChangeTimeout = PositiveFiniteDuration.ofSeconds(5),
-        // increased from default as epoch changes are synchronization points which can slow things down.
-        segmentLength =
-          PositiveLong.tryCreate(SequencingParameters.DefaultSegmentLength.length.value * 4),
-        blacklistLeaderSelectionPolicyConfig =
-          SequencingParameters.DefaultLeaderSelectionPolicyConfig.copy(
-            howLongToBlacklist =
-              BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.Exponential(
-                initialValue = 1L,
-                // Reduced by 4 to compensate for increased segmentLength.
-                maximumEpochBlacklisted = Some(250L / 4L),
-              )
-          ),
-      )
+      BftSequencingParameters.default
     ),
     // Set to false to disable the DB-level exclusive lock that prevents two SV instances
     // from running concurrently against the same database.  Only disable for migration scenarios

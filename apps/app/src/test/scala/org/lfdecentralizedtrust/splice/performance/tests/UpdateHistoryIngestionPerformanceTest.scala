@@ -9,12 +9,14 @@ import com.digitalasset.canton.topology.PartyId
 import com.typesafe.config.Config
 import org.apache.pekko.actor.ActorSystem
 import org.lfdecentralizedtrust.splice.config.{IngestionConfig, SpliceConfig}
+import org.lfdecentralizedtrust.splice.store.db.InternedStringStore
 import org.lfdecentralizedtrust.splice.store.{HistoryMetrics, UpdateHistory}
 import pureconfig.ConfigReader
 import pureconfig.generic.semiauto.deriveReader
 
 import java.nio.file.Path
 import scala.concurrent.ExecutionContext
+import scala.concurrent.duration.FiniteDuration
 
 class UpdateHistoryIngestionPerformanceTest(
     dsoParty: PartyId,
@@ -48,6 +50,13 @@ class UpdateHistoryIngestionPerformanceTest(
       participantId = mkParticipantId(this.getClass.getSimpleName),
       updateStreamParty = dsoParty,
       backfillingRequired = UpdateHistory.BackfillingRequirement.BackfillingNotRequired,
+      internedStringStore = InternedStringStore.createWithoutWarmup(
+        storage,
+        10_000L,
+        FiniteDuration(1, "hour"),
+        loggerFactory,
+        NoOpMetricsFactory,
+      ),
       loggerFactory = loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = false,

@@ -7,7 +7,7 @@ cloudArmor:
       hostPrefixRegex: 'scan'
       pathPrefix: '/api/scan'
       throttleAcrossAllEndpointsPerIp:
-        maxRequestsBeforeHttp429: 2000
+        maxRequestsBeforeHttp429: 10000
         withinIntervalSeconds: 60
     sequencer:
       hostPrefixRegex: 'sequencer-[0-9]+'
@@ -20,8 +20,72 @@ cloudArmor:
       hostPrefixRegex: 'scan'
       pathPrefix: '/registry'
       throttleAcrossAllEndpointsPerIp:
-        maxRequestsBeforeHttp429: 1000
+        maxRequestsBeforeHttp429: 10000
         withinIntervalSeconds: 60
+  wafRules:
+    groups:
+      - description: 'WAF: remote code execution and local file inclusion'
+        name: 'waf-rce-lfi'
+        signatures:
+          - name: 'rce-v33-stable'
+            optOutRuleIds:
+              - '932110'
+              - '932115'
+              - '932120'
+              - '932140'
+            sensitivity: 1
+          - name: 'lfi-v33-stable'
+            optOutRuleIds:
+              - '930110'
+            sensitivity: 1
+      - description: 'WAF: CVE canary, protocol attacks, Node.js injection and XSS'
+        name: 'waf-cve-protocolattack-nodejs-xss'
+        signatures:
+          - name: 'cve-canary'
+            sensitivity: 1
+          - name: 'protocolattack-v33-stable'
+            optOutRuleIds:
+              - '921110'
+              - '921150'
+              - '921151'
+              - '921170'
+            sensitivity: 1
+          - name: 'nodejs-v33-stable'
+            sensitivity: 1
+          - name: 'xss-v33-stable'
+            optOutRuleIds:
+              - '941100'
+              - '941120'
+              - '941190'
+              - '941200'
+              - '941210'
+              - '941220'
+              - '941230'
+              - '941240'
+              - '941250'
+              - '941260'
+              - '941270'
+              - '941280'
+              - '941290'
+              - '941300'
+            sensitivity: 1
+      - description: 'WAF: SQL injection, session fixation and Java attacks'
+        name: 'waf-sqli-sessionfixation-java'
+        signatures:
+          - name: 'sqli-v33-stable'
+            optOutRuleIds:
+              - '942190'
+              - '942240'
+              - '942270'
+              - '942290'
+              - '942320'
+              - '942350'
+              - '942500'
+            sensitivity: 1
+          - name: 'sessionfixation-v33-stable'
+            sensitivity: 1
+          - name: 'java-v33-stable'
+            sensitivity: 1
 cluster:
   nodePools:
     apps:
@@ -231,134 +295,13 @@ sv:
   scan:
     externalRateLimits:
       globalLimits:
-        fillInterval: '60s'
-        maxTokens: 10000
+        fillInterval: '10s'
+        maxTokens: 60000
         tokensPerFill: 10000
       globalPerIpLimits:
-        fillInterval: '60s'
-        maxTokens: 1000
+        fillInterval: '10s'
+        maxTokens: 6000
         tokensPerFill: 1000
-      rateLimits:
-        /registry/allocation-instruction/v1/allocation-factory:
-          fillInterval: '60s'
-          maxTokens: 720
-          name: 'registry-allocation-factory'
-          perIpLimits:
-            fillInterval: '60s'
-            maxTokens: 120
-            tokensPerFill: 120
-          tokensPerFill: 720
-          type: 'limited'
-        /registry/allocation-instruction/v2:
-          fillInterval: '60s'
-          maxTokens: 720
-          name: 'registry-allocation-instruction-v2'
-          perIpLimits:
-            fillInterval: '60s'
-            maxTokens: 120
-            tokensPerFill: 120
-          tokensPerFill: 720
-          type: 'limited'
-        /registry/allocation-instruction/v2/allocation-factory:
-          fillInterval: '60s'
-          maxTokens: 720
-          name: 'registry-allocation-factory-v2'
-          perIpLimits:
-            fillInterval: '60s'
-            maxTokens: 120
-            tokensPerFill: 120
-          tokensPerFill: 720
-          type: 'limited'
-        /registry/allocation/v2/settlement-factory:
-          fillInterval: '60s'
-          maxTokens: 720
-          name: 'registry-settlement-factory-v2'
-          perIpLimits:
-            fillInterval: '60s'
-            maxTokens: 120
-            tokensPerFill: 120
-          tokensPerFill: 720
-          type: 'limited'
-        /registry/allocations/v1:
-          fillInterval: '60s'
-          maxTokens: 720
-          name: 'registry-allocations'
-          perIpLimits:
-            fillInterval: '60s'
-            maxTokens: 120
-            tokensPerFill: 120
-          tokensPerFill: 720
-          type: 'limited'
-        /registry/allocations/v2:
-          fillInterval: '60s'
-          maxTokens: 720
-          name: 'registry-allocations-v2'
-          perIpLimits:
-            fillInterval: '60s'
-            maxTokens: 120
-            tokensPerFill: 120
-          tokensPerFill: 720
-          type: 'limited'
-        /registry/metadata/v1/info:
-          fillInterval: '60s'
-          maxTokens: 720
-          name: 'registry-metadata-info'
-          perIpLimits:
-            fillInterval: '60s'
-            maxTokens: 120
-            tokensPerFill: 120
-          tokensPerFill: 720
-          type: 'limited'
-        /registry/metadata/v1/instruments:
-          fillInterval: '60s'
-          maxTokens: 720
-          name: 'registry-metadata-instruments'
-          perIpLimits:
-            fillInterval: '60s'
-            maxTokens: 120
-            tokensPerFill: 120
-          tokensPerFill: 720
-          type: 'limited'
-        /registry/transfer-instruction/v1:
-          fillInterval: '60s'
-          maxTokens: 720
-          name: 'registry-transfer-instruction'
-          perIpLimits:
-            fillInterval: '60s'
-            maxTokens: 120
-            tokensPerFill: 120
-          tokensPerFill: 720
-          type: 'limited'
-        /registry/transfer-instruction/v1/transfer-factory:
-          fillInterval: '60s'
-          maxTokens: 1440
-          name: 'registry-transfer-factory'
-          perIpLimits:
-            fillInterval: '60s'
-            maxTokens: 240
-            tokensPerFill: 240
-          tokensPerFill: 1440
-          type: 'limited'
-        /registry/transfer-instruction/v2:
-          fillInterval: '60s'
-          maxTokens: 720
-          name: 'registry-transfer-instruction-v2'
-          perIpLimits:
-            fillInterval: '60s'
-            maxTokens: 120
-            tokensPerFill: 120
-          tokensPerFill: 720
-          type: 'limited'
-        /registry/transfer-instruction/v2/transfer-factory:
-          fillInterval: '60s'
-          maxTokens: 720
-          name: 'registry-transfer-factory-v2'
-          perIpLimits:
-            fillInterval: '60s'
-            maxTokens: 120
-            tokensPerFill: 120
-          tokensPerFill: 720
-          type: 'limited'
   synchronizer:
     sequencer:
       externalRateLimits:
