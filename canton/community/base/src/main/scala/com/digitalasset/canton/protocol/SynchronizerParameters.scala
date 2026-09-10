@@ -220,14 +220,18 @@ object StaticSynchronizerParameters
 
   // Splice: Inlined from ProtoValidation.validateLength
   private def validateLength[E](
-    seq: Seq[E],
-    field: String,
-    maxLength: Int,
+      seq: Seq[E],
+      field: String,
+      maxLength: Int,
   ): ParsingResult[Seq[E]] =
-    Either.cond(seq.length <= maxLength, seq, InvariantViolation(
+    Either.cond(
+      seq.length <= maxLength,
+      seq,
+      InvariantViolation(
         field,
         s"repeated field has ${seq.size} elements, exceeding the maximum of $maxLength",
-      ))
+      ),
+    )
 
   // Splice: Copied from Canton, still a placeholder even in Canton.
   private val MaxCollectionSize: Int = Int.MaxValue
@@ -256,7 +260,6 @@ object StaticSynchronizerParameters
       enableTransparencyChecks,
       topologyChangeDelayP,
     ) = synchronizerParametersP
-
 
     for {
       requiredSigningSpecsP <- requiredSigningSpecsOP.toRight(
@@ -331,7 +334,6 @@ object StaticSynchronizerParameters
       topologyChangeDelayP,
       synchronizerLimitsP,
     ) = synchronizerParametersP
-
 
     for {
       requiredSigningSpecsP <- requiredSigningSpecsOP.toRight(

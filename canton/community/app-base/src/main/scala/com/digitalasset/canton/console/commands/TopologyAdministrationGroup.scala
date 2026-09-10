@@ -3338,9 +3338,11 @@ class TopologyAdministrationGroup(
         protocolVersion.getOrElse(resolveTargetProtocolVersion(synchronizerId))
 
       val parametersInternal =
-        parameters.toInternal(targetProtocolVersion).valueOr(err =>
-          consoleEnvironment.raiseError(s"Cannot convert parameters to internal format: $err")
-        )
+        parameters
+          .toInternal(targetProtocolVersion)
+          .valueOr(err =>
+            consoleEnvironment.raiseError(s"Cannot convert parameters to internal format: $err")
+          )
 
       runAdminCommand(
         TopologyAdminCommands.Write.Propose(
