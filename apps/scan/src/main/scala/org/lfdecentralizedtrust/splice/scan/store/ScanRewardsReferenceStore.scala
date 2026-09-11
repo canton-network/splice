@@ -149,11 +149,6 @@ trait ScanRewardsReferenceStore extends AppStore {
               )
               None
             } else Some(roundNumber)
-          case (_, None) =>
-            logger.debug(
-              s"Skipping pruning of round $roundNumber as round ${roundNumber + 1} has not archived yet."
-            )
-            None
           case (None, _) =>
             // This happens after bootstrapping this store while the round
             // advancement is lagging, as then the oldest open round as of
@@ -161,6 +156,15 @@ trait ScanRewardsReferenceStore extends AppStore {
             logger.debug(
               s"Skipping pruning of round $roundNumber as no active OpenMiningRound could be " +
                 s"resolved as of the last ingested verdict record time ($lastIngestedRecordTime)."
+            )
+            None
+          case (_, None) =>
+            // We can't have lookupActiveOpenMiningRounds resolve an activeRoundO
+            // while the roundNumber is the lowest prunable round in store, and the roundNumber + 1 has not archived
+            // as the roundNumber + 1 must have opened before roundNumber - 1 was archived.
+            logger.warn(
+              s"This should never happen. Skipping pruning of round $roundNumber as round ${roundNumber + 1} has not archived yet " +
+                s"even though an active OpenMiningRound resolved as of $lastIngestedRecordTime."
             )
             None
         }
