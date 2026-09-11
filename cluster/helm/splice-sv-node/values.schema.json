@@ -254,6 +254,7 @@
         },
         "domain": {
           "type": "object",
+          "additionalProperties": false,
           "required": [
             "sequencerPublicUrl",
             "sequencerAddress",
@@ -271,6 +272,7 @@
             },
             "sequencerPruningConfig": {
               "type": "object",
+              "additionalProperties": false,
               "properties": {
                 "enabled": {
                   "type": "boolean"
@@ -654,6 +656,7 @@
         },
         "sequencerPruningConfig": {
           "type": "object",
+          "additionalProperties": false,
           "properties": {
             "enabled": {
               "type": "boolean"
@@ -671,6 +674,7 @@
         },
         "cometBFT": {
           "type": "object",
+          "additionalProperties": false,
           "required": ["enabled"],
           "properties": {
             "enabled": {
