@@ -74,8 +74,10 @@ class AppActivityComputation(
         DbScanVerdictStore.TrafficSummaryT,
         v30.Verdict,
         Option[DbAppActivityRecordStore.AppActivityRecordT],
+        Option[Long],
     )
   ]] = {
+    val allTimes = summariesWithVerdicts.collect { case (s, _) => s.sequencingTime }
     val tagged = summariesWithVerdicts.map { case (summary, verdict) =>
       val isEligible =
         if (verdict.verdict != v30.VerdictResult.VERDICT_RESULT_ACCEPTED) false
@@ -92,62 +94,58 @@ class AppActivityComputation(
       (summary, verdict, isEligible)
     }
 
-    val eligibleTimes = tagged.collect { case (s, _, true) => s.sequencingTime }
-
-    if (eligibleTimes.isEmpty) {
-      Future.successful(summariesWithVerdicts.map { case (s, v) => (s, v, None) })
-    } else {
-      for {
-        roundInfoByTime <- rewardsReferenceStore.lookupActiveOpenMiningRounds(eligibleTimes)
-
-        results <- Future.traverse(tagged) {
-          case (summary, verdict, false) =>
-            Future.successful((summary, verdict, None))
-          case (summary, verdict, true) =>
-            roundInfoByTime.get(summary.sequencingTime) match {
-              case Some(TimestampWithMigrationId(roundOpensAt, roundNumber)) =>
-                for {
-                  featuredAppWeights <- rewardsReferenceStore.lookupFeaturedAppPartiesAsOf(
-                    roundOpensAt
-                  )
-                  svParticipantIds <- rewardsReferenceStore.lookupSvParticipantIdsAsOf(
-                    roundOpensAt
-                  )
-                } yield {
-                  if (svParticipantIds.isEmpty) {
-                    // We should never hit this; as we have round info in store and must have DsoRules also
-                    logger.error(
-                      s"No DsoRules data found as of roundOpensAt=$roundOpensAt, skipping activity record computation for sequencingTime=${summary.sequencingTime}"
-                    )
-                    (summary, verdict, None)
-                  } else if (svParticipantIds.contains(verdict.submittingParticipantUid)) {
-                    // SV-submitted transactions don't burn traffic, so they
-                    // must not contribute to app activity.
-                    (summary, verdict, None)
-                  } else {
-                    (
-                      summary,
-                      verdict,
-                      computeForSingleVerdict(summary, verdict, roundNumber, featuredAppWeights),
-                    )
-                  }
-                }
-              case None =>
-                // Skip activity record computation as we don't have the necessary round data ingested.
-                // This can happen for freshly onboarded SVs if the reward
-                // reference store does not have the data for any of the
-                // sequencingTime(s) in this batch.
-                // OTOH this cannot happen after ingestion starts because
-                // lookupActiveOpenMiningRounds blocks until the reference store
-                // has caught up to all the sequencingTime(s) in this batch.
-                logger.debug(
-                  s"No round data found for sequencingTime=${summary.sequencingTime}, skipping activity record computation"
+    for {
+      roundInfoByTime <- rewardsReferenceStore.lookupActiveOpenMiningRounds(allTimes)
+      results <- Future.traverse(tagged) {
+        case (summary, verdict, false) =>
+          Future.successful(
+            (summary, verdict, None, roundInfoByTime.get(summary.sequencingTime).map(_.migrationId))
+          )
+        case (summary, verdict, true) =>
+          roundInfoByTime.get(summary.sequencingTime) match {
+            case Some(TimestampWithMigrationId(roundOpensAt, roundNumber)) =>
+              for {
+                featuredAppWeights <- rewardsReferenceStore.lookupFeaturedAppPartiesAsOf(
+                  roundOpensAt
                 )
-                Future.successful((summary, verdict, None))
-            }
-        }
-      } yield results
-    }
+                svParticipantIds <- rewardsReferenceStore.lookupSvParticipantIdsAsOf(
+                  roundOpensAt
+                )
+              } yield {
+                if (svParticipantIds.isEmpty) {
+                  // We should never hit this; as we have round info in store and must have DsoRules also
+                  logger.error(
+                    s"No DsoRules data found as of roundOpensAt=$roundOpensAt, skipping activity record computation for sequencingTime=${summary.sequencingTime}"
+                  )
+                  (summary, verdict, None, Some(roundNumber))
+                } else if (svParticipantIds.contains(verdict.submittingParticipantUid)) {
+                  // SV-submitted transactions don't burn traffic, so they
+                  // must not contribute to app activity.
+                  (summary, verdict, None, Some(roundNumber))
+                } else {
+                  (
+                    summary,
+                    verdict,
+                    computeForSingleVerdict(summary, verdict, roundNumber, featuredAppWeights),
+                    Some(roundNumber),
+                  )
+                }
+              }
+            case None =>
+              // Skip activity record computation as we don't have the necessary round data ingested.
+              // This can happen for freshly onboarded SVs if the reward
+              // reference store does not have the data for any of the
+              // sequencingTime(s) in this batch.
+              // OTOH this cannot happen after ingestion starts because
+              // lookupActiveOpenMiningRounds blocks until the reference store
+              // has caught up to all the sequencingTime(s) in this batch.
+              logger.debug(
+                s"No round data found for sequencingTime=${summary.sequencingTime}, skipping activity record computation"
+              )
+              Future.successful((summary, verdict, None, None))
+          }
+      }
+    } yield results
   }
 
   private def computeForSingleVerdict(
