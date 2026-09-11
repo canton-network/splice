@@ -1,7 +1,7 @@
 # This file is generated automatically. Do not edit directly.
 cloudArmor:
   allRulesPreviewOnly: false
-  enabled: true
+  enabled: false
   logging:
     enabled: true
   publicEndpoints:
@@ -104,7 +104,7 @@ cluster:
 infra:
   enableSweetSecurity: true
   gkeGateway:
-    proxyForIstioHttp: true
+    proxyForIstioHttp: false
   istio:
     enableIngressAccessLogging: true
     enablePublicTokenRegistry: true
