@@ -91,7 +91,12 @@ export function configureCloudArmorPolicy(
     }
   );
 
-  const ruleOpts = { ...opts, parent: securityPolicy, deletedWith: securityPolicy };
+  const ruleOpts = {
+    ...opts,
+    parent: securityPolicy,
+    deletedWith: securityPolicy,
+    deleteBeforeReplace: true,
+  };
 
   // Step 2: Add predefined WAF rules
   if (cac.wafRules.enabled) {
