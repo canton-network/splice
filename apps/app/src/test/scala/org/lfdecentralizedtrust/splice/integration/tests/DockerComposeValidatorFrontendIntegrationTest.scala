@@ -36,14 +36,15 @@ class DockerComposeValidatorFrontendIntegrationTest
   override protected val portfolioUrl = "http://portfolio.localhost/"
   override protected val walletGatewayNetworkName = "Splice validator"
   // Ledger user logging in to the gateway. Without authentication, the gateway issues self-signed tokens
-  // for whatever client ID is entered on its login page.
+  // for whatever client ID is entered on its login page, given the network's client secret.
   val walletGatewayUser = "charlie"
+  val walletGatewayClientSecret = "unsafe" // see compose-wallet-gateway-disable-auth.yaml
 
   override protected def loginToWalletGatewayInCurrentWindow()(implicit
       webDriver: WebDriverType
   ): Unit = {
     clue(s"Logging in to the wallet gateway as $walletGatewayUser") {
-      submitWalletGatewayLoginForm(Some(walletGatewayUser))
+      submitWalletGatewayLoginForm(Some((walletGatewayUser, walletGatewayClientSecret)))
       waitForGatewayPartiesPage()
     }
   }
