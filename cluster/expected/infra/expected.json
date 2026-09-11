@@ -4517,63 +4517,6 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "action": "deny(403)",
-      "description": "WAF: CVE canary, protocol attacks, Node.js injection and XSS",
-      "match": {
-        "expr": {
-          "expression": "evaluatePreconfiguredWaf('cve-canary', {'sensitivity': 1}) || evaluatePreconfiguredWaf('protocolattack-v33-stable', {'sensitivity': 1, 'opt_out_rule_ids': ['owasp-crs-v030301-id921110-protocolattack', 'owasp-crs-v030301-id921150-protocolattack', 'owasp-crs-v030301-id921151-protocolattack', 'owasp-crs-v030301-id921170-protocolattack']}) || evaluatePreconfiguredWaf('nodejs-v33-stable', {'sensitivity': 1}) || evaluatePreconfiguredWaf('xss-v33-stable', {'sensitivity': 1, 'opt_out_rule_ids': ['owasp-crs-v030301-id941100-xss', 'owasp-crs-v030301-id941120-xss', 'owasp-crs-v030301-id941190-xss', 'owasp-crs-v030301-id941200-xss', 'owasp-crs-v030301-id941210-xss', 'owasp-crs-v030301-id941220-xss', 'owasp-crs-v030301-id941230-xss', 'owasp-crs-v030301-id941240-xss', 'owasp-crs-v030301-id941250-xss', 'owasp-crs-v030301-id941260-xss', 'owasp-crs-v030301-id941270-xss', 'owasp-crs-v030301-id941280-xss', 'owasp-crs-v030301-id941290-xss', 'owasp-crs-v030301-id941300-xss']})"
-        }
-      },
-      "preview": true,
-      "priority": 110,
-      "securityPolicy": "waf-whitelist-throttle-ban-mock"
-    },
-    "name": "waf-cve-protocolattack-nodejs-xss",
-    "provider": "",
-    "type": "gcp:compute/regionSecurityPolicyRule:RegionSecurityPolicyRule"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "action": "deny(403)",
-      "description": "WAF: remote code execution and local file inclusion",
-      "match": {
-        "expr": {
-          "expression": "evaluatePreconfiguredWaf('rce-v33-stable', {'sensitivity': 1, 'opt_out_rule_ids': ['owasp-crs-v030301-id932110-rce', 'owasp-crs-v030301-id932115-rce', 'owasp-crs-v030301-id932120-rce', 'owasp-crs-v030301-id932140-rce']}) || evaluatePreconfiguredWaf('lfi-v33-stable', {'sensitivity': 1, 'opt_out_rule_ids': ['owasp-crs-v030301-id930110-lfi']})"
-        }
-      },
-      "preview": true,
-      "priority": 10,
-      "securityPolicy": "waf-whitelist-throttle-ban-mock"
-    },
-    "name": "waf-rce-lfi",
-    "provider": "",
-    "type": "gcp:compute/regionSecurityPolicyRule:RegionSecurityPolicyRule"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "action": "deny(403)",
-      "description": "WAF: SQL injection, session fixation and Java attacks",
-      "match": {
-        "expr": {
-          "expression": "evaluatePreconfiguredWaf('sqli-v33-stable', {'sensitivity': 1, 'opt_out_rule_ids': ['owasp-crs-v030301-id942190-sqli', 'owasp-crs-v030301-id942240-sqli', 'owasp-crs-v030301-id942270-sqli', 'owasp-crs-v030301-id942290-sqli', 'owasp-crs-v030301-id942320-sqli', 'owasp-crs-v030301-id942350-sqli', 'owasp-crs-v030301-id942500-sqli']}) || evaluatePreconfiguredWaf('sessionfixation-v33-stable', {'sensitivity': 1}) || evaluatePreconfiguredWaf('java-v33-stable', {'sensitivity': 1})"
-        }
-      },
-      "preview": true,
-      "priority": 210,
-      "securityPolicy": "waf-whitelist-throttle-ban-mock"
-    },
-    "name": "waf-sqli-sessionfixation-java",
-    "provider": "",
-    "type": "gcp:compute/regionSecurityPolicyRule:RegionSecurityPolicyRule"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
       "description": "Cloud Armor security policy for mock",
       "name": "waf-whitelist-throttle-ban-mock",
       "type": "CLOUD_ARMOR"

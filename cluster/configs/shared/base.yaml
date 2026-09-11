@@ -267,8 +267,6 @@ cloudArmor:
       throttleAcrossAllEndpointsPerIp:
         withinIntervalSeconds: 60
         maxRequestsBeforeHttp429: 20000
-  wafRules:
-    groups: !include(./cloud-armor-waf-rules.yaml)
 multiValidator:
   postgresPvcSize: '100Gi'
   resources:

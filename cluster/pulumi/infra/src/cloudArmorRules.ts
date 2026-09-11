@@ -48,7 +48,13 @@ export function ipWhitelistRuleChunks(ipRanges: string[], availablePriorities: n
   return chunks;
 }
 
-const OWASP_CRS_VERSION = 'v030301';
+// the OWASP CRS version behind each Cloud Armor rule set generation, see
+// https://cloud.google.com/armor/docs/waf-rules. It is part of the opt-out rule ids,
+// and there is no way to derive it from the rule set name.
+const OWASP_CRS_VERSIONS: Record<string, string> = {
+  v33: 'v030301',
+  v422: 'v042200',
+};
 
 /**
  * One of Cloud Armor's preconfigured WAF rule sets (see
@@ -56,14 +62,14 @@ const OWASP_CRS_VERSION = 'v030301';
  * signatures we opt out of.
  */
 const WafSignatureSchema = z.object({
-  // preconfigured rule set name, e.g. 'sqli-v33-stable'
+  // preconfigured rule set name, e.g. 'sqli-v422-stable'
   name: z.string(),
   // https://cloud.google.com/armor/docs/rule-tuning#sensitivity_levels: 1 only
   // evaluates the paranoia level 1 signatures, which are the ones least prone to
-  // false positives.
-  sensitivity: z.number().int().min(0).max(4),
+  // false positives. If unset, Cloud Armor's default (all levels) applies.
+  sensitivity: z.number().int().min(0).max(4).optional(),
   // numeric OWASP CRS ids of the signatures to skip, e.g. '942190' for
-  // 'owasp-crs-v030301-id942190-sqli'. These are the signatures that produced false
+  // 'owasp-crs-v042200-id942190-sqli'. These are the signatures that produced false
   // positives on our own traffic.
   optOutRuleIds: z.array(z.string().regex(/^[0-9]+$/, 'numeric OWASP CRS id')).default([]),
 });
@@ -86,16 +92,28 @@ export type WafRuleGroup = z.infer<typeof WafRuleGroupSchema>;
 
 /**
  * Expands a numeric OWASP CRS id into the full opt-out rule id Cloud Armor expects,
- * e.g. ('sqli-v33-stable', '942190') -> 'owasp-crs-v030301-id942190-sqli'.
+ * e.g. ('sqli-v422-stable', '942190') -> 'owasp-crs-v042200-id942190-sqli'.
  */
 function optOutRuleId(signatureName: string, crsId: string): string {
-  const category = signatureName.replace(/-v\d+-stable$/, '');
-  return `owasp-crs-${OWASP_CRS_VERSION}-id${crsId}-${category}`;
+  const match = /^(.*)-(v\d+)-stable$/.exec(signatureName);
+  if (!match) {
+    throw new Error(
+      `Cannot expand opt-out rule id ${crsId}: ${signatureName} is not a versioned OWASP CRS rule set`
+    );
+  }
+  const [, category, generation] = match;
+  const crsVersion = OWASP_CRS_VERSIONS[generation];
+  if (!crsVersion) {
+    throw new Error(
+      `Unknown OWASP CRS version for rule set ${signatureName}, add ${generation} to OWASP_CRS_VERSIONS`
+    );
+  }
+  return `owasp-crs-${crsVersion}-id${crsId}-${category}`;
 }
 
 function wafSignatureCondition(context: string, signature: WafSignature): string {
   const options = [
-    `'sensitivity': ${signature.sensitivity}`,
+    ...(signature.sensitivity !== undefined ? [`'sensitivity': ${signature.sensitivity}`] : []),
     ...(signature.optOutRuleIds && signature.optOutRuleIds.length > 0
       ? [
           `'opt_out_rule_ids': [${signature.optOutRuleIds

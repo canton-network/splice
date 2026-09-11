@@ -26,69 +26,6 @@ cloudArmor:
         withinIntervalSeconds: 60
   wafRules:
     enabled: true
-    groups:
-      - description: 'WAF: remote code execution and local file inclusion'
-        name: 'waf-rce-lfi'
-        signatures:
-          - name: 'rce-v33-stable'
-            optOutRuleIds:
-              - '932110'
-              - '932115'
-              - '932120'
-              - '932140'
-            sensitivity: 1
-          - name: 'lfi-v33-stable'
-            optOutRuleIds:
-              - '930110'
-            sensitivity: 1
-      - description: 'WAF: CVE canary, protocol attacks, Node.js injection and XSS'
-        name: 'waf-cve-protocolattack-nodejs-xss'
-        signatures:
-          - name: 'cve-canary'
-            sensitivity: 1
-          - name: 'protocolattack-v33-stable'
-            optOutRuleIds:
-              - '921110'
-              - '921150'
-              - '921151'
-              - '921170'
-            sensitivity: 1
-          - name: 'nodejs-v33-stable'
-            sensitivity: 1
-          - name: 'xss-v33-stable'
-            optOutRuleIds:
-              - '941100'
-              - '941120'
-              - '941190'
-              - '941200'
-              - '941210'
-              - '941220'
-              - '941230'
-              - '941240'
-              - '941250'
-              - '941260'
-              - '941270'
-              - '941280'
-              - '941290'
-              - '941300'
-            sensitivity: 1
-      - description: 'WAF: SQL injection, session fixation and Java attacks'
-        name: 'waf-sqli-sessionfixation-java'
-        signatures:
-          - name: 'sqli-v33-stable'
-            optOutRuleIds:
-              - '942190'
-              - '942240'
-              - '942270'
-              - '942290'
-              - '942320'
-              - '942350'
-              - '942500'
-            sensitivity: 1
-          - name: 'sessionfixation-v33-stable'
-            sensitivity: 1
-          - name: 'java-v33-stable'
-            sensitivity: 1
     previewOnly: false
 cluster:
   nodePools:

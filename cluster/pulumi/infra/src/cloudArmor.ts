@@ -5,6 +5,8 @@ import * as pulumi from '@pulumi/pulumi';
 import * as _ from 'lodash';
 import {
   CLOUD_ARMOR_POLICY_NAME,
+  CLOUD_ARMOR_WAF_RULE_MAX_PRIORITY,
+  CLOUD_ARMOR_WAF_RULE_MIN_PRIORITY,
   CLUSTER_BASENAME,
   getDnsNames,
 } from '@canton-network/splice-pulumi-common';
@@ -22,8 +24,8 @@ import {
 import { loadIPRanges } from './whitelisting/ipRanges';
 
 // Rule number ranges
-const WAF_RULE_MIN = 10;
-const IP_WHITELIST_RULE_MIN = 1000010;
+const WAF_RULE_MIN = CLOUD_ARMOR_WAF_RULE_MIN_PRIORITY;
+const IP_WHITELIST_RULE_MIN = CLOUD_ARMOR_WAF_RULE_MAX_PRIORITY;
 const THROTTLE_BAN_RULE_MIN = 100000010;
 const THROTTLE_BAN_RULE_MAX = 200000010;
 const DEFAULT_DENY_RULE_NUMBER = 2147483647;
@@ -89,7 +91,12 @@ export function configureCloudArmorPolicy(
     }
   );
 
-  const ruleOpts = { ...opts, parent: securityPolicy, deletedWith: securityPolicy };
+  const ruleOpts = {
+    ...opts,
+    parent: securityPolicy,
+    deletedWith: securityPolicy,
+    deleteBeforeReplace: true,
+  };
 
   // Step 2: Add predefined WAF rules
   if (cac.wafRules.enabled) {
@@ -147,7 +154,7 @@ function addWafRules(
         description: group.description,
         priority,
         preview,
-        action: 'deny(403)',
+        action: 'deny(502)',
         match: {
           expr: {
             expression: wafRuleExpression(group),
