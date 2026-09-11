@@ -884,7 +884,7 @@
           }
         ]
       },
-      "version": "1.11.0"
+      "version": "1.12.2"
     },
     "name": "validator1-portfolio",
     "provider": "",
@@ -1373,7 +1373,7 @@
           }
         ]
       },
-      "version": "1.10.0"
+      "version": "1.11.1"
     },
     "name": "validator1-wallet-gateway",
     "provider": "",

@@ -293,8 +293,8 @@ splitwell:
         value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
   walletGateway:
     enabled: false
-    portfolioVersion: '1.11.0'
-    version: '1.10.0'
+    portfolioVersion: '1.12.2'
+    version: '1.11.1'
 sv:
   scan:
     externalRateLimits:
@@ -1748,8 +1748,8 @@ validator1:
     retention: '1h'
   walletGateway:
     enabled: true
-    portfolioVersion: '1.11.0'
-    version: '1.10.0'
+    portfolioVersion: '1.12.2'
+    version: '1.11.1'
 validators:
   validator-runbook:
     namespace: 'validator'
@@ -1758,5 +1758,5 @@ validators:
     partyHint: 'digitalasset-testValidator-1'
     walletGateway:
       enabled: true
-      portfolioVersion: '1.11.0'
-      version: '1.10.0'
+      portfolioVersion: '1.12.2'
+      version: '1.11.1'
