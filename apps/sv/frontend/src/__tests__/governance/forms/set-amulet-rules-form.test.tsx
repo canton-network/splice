@@ -91,45 +91,41 @@ describe('Set Amulet Config Rules Form', () => {
     expect(screen.getByTestId('json-diffs-details')).not.toBeVisible();
   });
 
-  test(
-    'should render errors when submit button is clicked on new form',
-    async () => {
-      const user = userEvent.setup();
+  test('should render errors when submit button is clicked on new form', async () => {
+    const user = userEvent.setup();
 
-      render(
-        <Wrapper>
-          <SetAmuletConfigRulesForm />
-        </Wrapper>
-      );
+    render(
+      <Wrapper>
+        <SetAmuletConfigRulesForm />
+      </Wrapper>
+    );
 
-      const actionInput = screen.getByTestId('set-amulet-config-rules-action');
-      const submitButton = screen.getByTestId('submit-button');
-      expect(submitButton).toBeInTheDocument();
+    const actionInput = screen.getByTestId('set-amulet-config-rules-action');
+    const submitButton = screen.getByTestId('submit-button');
+    expect(submitButton).toBeInTheDocument();
 
-      await user.click(submitButton);
-      expect(submitButton.getAttribute('disabled')).not.toBeNull();
-      await expect(async () => await user.click(submitButton)).rejects.toThrowError(
-        /Unable to perform pointer interaction/
-      );
+    await user.click(submitButton);
+    expect(submitButton.getAttribute('disabled')).not.toBeNull();
+    await expect(async () => await user.click(submitButton)).rejects.toThrowError(
+      /Unable to perform pointer interaction/
+    );
 
-      expect(screen.getByText('Summary is required')).toBeInTheDocument();
-      expect(screen.getByText('Invalid URL')).toBeInTheDocument();
+    expect(screen.getByText('Summary is required')).toBeInTheDocument();
+    expect(screen.getByText('Invalid URL')).toBeInTheDocument();
 
-      // completing the form should reenable the submit button
-      const summaryInput = screen.getByTestId('set-amulet-config-rules-summary');
-      expect(summaryInput).toBeInTheDocument();
-      await user.type(summaryInput, 'Summary of the proposal');
+    // completing the form should reenable the submit button
+    const summaryInput = screen.getByTestId('set-amulet-config-rules-summary');
+    expect(summaryInput).toBeInTheDocument();
+    await user.type(summaryInput, 'Summary of the proposal');
 
-      const urlInput = screen.getByTestId('set-amulet-config-rules-url');
-      expect(urlInput).toBeInTheDocument();
-      await user.type(urlInput, 'https://example.com');
+    const urlInput = screen.getByTestId('set-amulet-config-rules-url');
+    expect(urlInput).toBeInTheDocument();
+    await user.type(urlInput, 'https://example.com');
 
-      await user.click(actionInput); // using this to trigger the onBlur event which triggers the validation
+    await user.click(actionInput); // using this to trigger the onBlur event which triggers the validation
 
-      await waitFor(() => expect(submitButton.getAttribute('disabled')).toBeNull());
-    },
-    { timeout: 10000 }
-  );
+    await waitFor(() => expect(submitButton.getAttribute('disabled')).toBeNull());
+  });
 
   test('expiry date must be in the future', async () => {
     render(
@@ -334,7 +330,7 @@ describe('Set Amulet Config Rules Form', () => {
     expect(screen.getByTestId('json-diff-toggle')).toHaveTextContent('Show JSON');
   });
 
-  test('should show error on form if submission fails', { timeout: 10000 }, async () => {
+  test('should show error on form if submission fails', async () => {
     server.use(
       http.post(`${svUrl}/v0/admin/sv/voterequest/create`, () => {
         return HttpResponse.json({ error: 'Service Unavailable' }, { status: 503 });
