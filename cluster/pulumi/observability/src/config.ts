@@ -51,6 +51,13 @@ export type CloudArmorAlertsConfig = z.infer<typeof CloudArmorAlertsConfigSchema
 const CloudArmorConfigSchema = z.object({
   enabled: z.boolean().default(false),
   allRulesPreviewOnly: z.boolean().default(false),
+  // Cloud Armor rule decisions are only logged if the load balancer backend request
+  // logging is enabled, which the WAF log based alert depends on.
+  logging: z
+    .object({
+      enabled: z.boolean().default(false),
+    })
+    .prefault({}),
   wafRules: z
     .object({
       enabled: z.boolean().default(true),
@@ -58,6 +65,8 @@ const CloudArmorConfigSchema = z.object({
     })
     .prefault({}),
 });
+
+export type CloudArmorConfig = z.infer<typeof CloudArmorConfigSchema>;
 
 export const cloudArmorConfig = CloudArmorConfigSchema.parse(clusterSubConfig('cloudArmor'));
 
@@ -198,7 +207,7 @@ const MonitoringConfigSchema = z
           tolerance: z.number(),
         }),
         gcpQuotas: GcpQuotasConfigSchema,
-        cloudArmor: CloudArmorAlertsConfigSchema.default({ deniedRequestsThreshold: 0 }),
+        cloudArmor: CloudArmorAlertsConfigSchema.prefault({ deniedRequestsThreshold: 0 }),
         natPortUsage: NatPortUsageConfigSchema.default({
           thresholdPercent: 80,
           // `default 30` because every once in a while (likely due to dynamic port allocation),

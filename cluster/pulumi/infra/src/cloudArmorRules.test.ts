@@ -203,26 +203,22 @@ describe('ipWhitelistRuleChunks', () => {
 
 describe('wafRuleExpression', () => {
   const wafRuleGroups = WafRuleGroupsSchema.parse(
-    yaml.load(
-      fs.readFileSync(
-        path.resolve(__dirname, '../../../configs/shared/cloud-armor-waf-rules.yaml'),
-        'utf8'
-      )
-    )
+    yaml.load(fs.readFileSync(path.resolve(__dirname, 'cloudArmorRules.test.yaml'), 'utf8'))
   );
   const expressions = wafRuleGroups.map(wafRuleExpression);
 
   test('matches the tuning validated on the DA-1 SV and DA-Wallet validator', () => {
     expect(expressions).toEqual([
-      "evaluatePreconfiguredWaf('rce-v33-stable', {'sensitivity': 1, 'opt_out_rule_ids': ['owasp-crs-v030301-id932110-rce', 'owasp-crs-v030301-id932115-rce', 'owasp-crs-v030301-id932120-rce', 'owasp-crs-v030301-id932140-rce']}) || " +
-        "evaluatePreconfiguredWaf('lfi-v33-stable', {'sensitivity': 1, 'opt_out_rule_ids': ['owasp-crs-v030301-id930110-lfi']})",
-      "evaluatePreconfiguredWaf('cve-canary', {'sensitivity': 1}) || " +
-        "evaluatePreconfiguredWaf('protocolattack-v33-stable', {'sensitivity': 1, 'opt_out_rule_ids': ['owasp-crs-v030301-id921110-protocolattack', 'owasp-crs-v030301-id921150-protocolattack', 'owasp-crs-v030301-id921151-protocolattack', 'owasp-crs-v030301-id921170-protocolattack']}) || " +
-        "evaluatePreconfiguredWaf('nodejs-v33-stable', {'sensitivity': 1}) || " +
-        "evaluatePreconfiguredWaf('xss-v33-stable', {'sensitivity': 1, 'opt_out_rule_ids': ['owasp-crs-v030301-id941100-xss', 'owasp-crs-v030301-id941120-xss', 'owasp-crs-v030301-id941190-xss', 'owasp-crs-v030301-id941200-xss', 'owasp-crs-v030301-id941210-xss', 'owasp-crs-v030301-id941220-xss', 'owasp-crs-v030301-id941230-xss', 'owasp-crs-v030301-id941240-xss', 'owasp-crs-v030301-id941250-xss', 'owasp-crs-v030301-id941260-xss', 'owasp-crs-v030301-id941270-xss', 'owasp-crs-v030301-id941280-xss', 'owasp-crs-v030301-id941290-xss', 'owasp-crs-v030301-id941300-xss']})",
-      "evaluatePreconfiguredWaf('sqli-v33-stable', {'sensitivity': 1, 'opt_out_rule_ids': ['owasp-crs-v030301-id942190-sqli', 'owasp-crs-v030301-id942240-sqli', 'owasp-crs-v030301-id942270-sqli', 'owasp-crs-v030301-id942290-sqli', 'owasp-crs-v030301-id942320-sqli', 'owasp-crs-v030301-id942350-sqli', 'owasp-crs-v030301-id942500-sqli']}) || " +
-        "evaluatePreconfiguredWaf('sessionfixation-v33-stable', {'sensitivity': 1}) || " +
-        "evaluatePreconfiguredWaf('java-v33-stable', {'sensitivity': 1})",
+      "evaluatePreconfiguredWaf('sqli-v422-stable', {'sensitivity': 1, 'opt_out_rule_ids': ['owasp-crs-v042200-id942100-sqli', 'owasp-crs-v042200-id942190-sqli', 'owasp-crs-v042200-id942240-sqli', 'owasp-crs-v042200-id942270-sqli', 'owasp-crs-v042200-id942290-sqli', 'owasp-crs-v042200-id942320-sqli', 'owasp-crs-v042200-id942350-sqli', 'owasp-crs-v042200-id942500-sqli', 'owasp-crs-v042200-id942560-sqli']}) || " +
+        "evaluatePreconfiguredWaf('sessionfixation-v422-stable', {'sensitivity': 1}) || " +
+        "evaluatePreconfiguredWaf('generic-v422-stable', {'opt_out_rule_ids': ['owasp-crs-v042200-id934150-generic', 'owasp-crs-v042200-id934170-generic']})",
+      "evaluatePreconfiguredWaf('xss-v422-stable', {'sensitivity': 1, 'opt_out_rule_ids': ['owasp-crs-v042200-id941100-xss', 'owasp-crs-v042200-id941190-xss', 'owasp-crs-v042200-id941200-xss', 'owasp-crs-v042200-id941210-xss', 'owasp-crs-v042200-id941220-xss', 'owasp-crs-v042200-id941230-xss', 'owasp-crs-v042200-id941240-xss', 'owasp-crs-v042200-id941250-xss', 'owasp-crs-v042200-id941260-xss', 'owasp-crs-v042200-id941270-xss', 'owasp-crs-v042200-id941280-xss', 'owasp-crs-v042200-id941290-xss', 'owasp-crs-v042200-id941300-xss']}) || " +
+        "evaluatePreconfiguredWaf('lfi-v422-stable', {'sensitivity': 1, 'opt_out_rule_ids': ['owasp-crs-v042200-id930110-lfi']}) || " +
+        "evaluatePreconfiguredWaf('rce-v422-stable', {'sensitivity': 1, 'opt_out_rule_ids': ['owasp-crs-v042200-id932120-rce', 'owasp-crs-v042200-id932125-rce', 'owasp-crs-v042200-id932140-rce', 'owasp-crs-v042200-id932370-rce', 'owasp-crs-v042200-id932380-rce']})",
+      "evaluatePreconfiguredWaf('protocolattack-v422-stable', {'sensitivity': 1, 'opt_out_rule_ids': ['owasp-crs-v042200-id921110-protocolattack', 'owasp-crs-v042200-id921150-protocolattack']}) || " +
+        "evaluatePreconfiguredWaf('java-v422-stable', {'sensitivity': 1}) || " +
+        "evaluatePreconfiguredWaf('cve-canary', {'sensitivity': 1}) || " +
+        "evaluatePreconfiguredWaf('nodejs-v33-stable', {'sensitivity': 1})",
     ]);
   });
 

@@ -4,6 +4,8 @@ import * as gcp from '@pulumi/gcp';
 import * as pulumi from '@pulumi/pulumi';
 import {
   CLOUD_ARMOR_POLICY_NAME,
+  CLOUD_ARMOR_WAF_RULE_MAX_PRIORITY,
+  CLOUD_ARMOR_WAF_RULE_MIN_PRIORITY,
   CLUSTER_BASENAME,
   CLUSTER_NAME,
   conditionalString,
@@ -13,6 +15,7 @@ import {
 import { slackAlertNotificationChannel, slackToken } from './alertings';
 import {
   type CloudArmorAlertsConfig,
+  type CloudArmorConfig,
   type GcpQuotaAlertsConfig,
   monitoringConfig,
   type NatPortUsageConfig,
@@ -63,6 +66,25 @@ function getAlertStrategy(notificationChannel: gcp.monitoring.NotificationChanne
         renotifyInterval: `${4 * 60 * 60}s`, // 4 hours
       },
     ],
+  };
+}
+
+type AlertPolicyBaseArgs = Pick<
+  gcp.monitoring.AlertPolicyArgs,
+  'alertStrategy' | 'combiner' | 'notificationChannels' | 'userLabels'
+>;
+
+// Arguments shared by all our alert policies: same notification channel, same
+// strategy, and the cluster label that alert routing filters on.
+function getAlertPolicyBaseArgs(
+  notificationChannel: gcp.monitoring.NotificationChannel
+): AlertPolicyBaseArgs {
+  return {
+    alertStrategy: getAlertStrategy(notificationChannel),
+    combiner: 'OR',
+    notificationChannels: [notificationChannel.name],
+    userLabels: { cluster: CLUSTER_BASENAME },
+    // severity: 'SEVERITY_UNSPECIFIED', // "Policy Severity Level"
   };
 }
 
@@ -331,16 +353,7 @@ export function installGcpQuotaAlerts(
   const rollingWindowDuration = `${rollingWindowSeconds}s`;
   const retestWindowDuration = `${retestWindowSeconds}s`;
 
-  const baseArgs: Pick<
-    gcp.monitoring.AlertPolicyArgs,
-    'alertStrategy' | 'combiner' | 'notificationChannels' | 'userLabels'
-  > = {
-    alertStrategy: getAlertStrategy(notificationChannel),
-    combiner: 'OR',
-    notificationChannels: [notificationChannel.name],
-    userLabels: { cluster: CLUSTER_BASENAME },
-    // severity: 'SEVERITY_UNSPECIFIED', // "Policy Severity Level"
-  };
+  const baseArgs = getAlertPolicyBaseArgs(notificationChannel);
 
   new gcp.monitoring.AlertPolicy('quotaExceededAlert', {
     ...baseArgs,
@@ -450,15 +463,7 @@ export function installNatAlerts(
   notificationChannel: gcp.monitoring.NotificationChannel,
   natConfig: NatPortUsageConfig
 ): void {
-  const baseArgs: Pick<
-    gcp.monitoring.AlertPolicyArgs,
-    'alertStrategy' | 'combiner' | 'notificationChannels' | 'userLabels'
-  > = {
-    alertStrategy: getAlertStrategy(notificationChannel),
-    combiner: 'OR',
-    notificationChannels: [notificationChannel.name],
-    userLabels: { cluster: CLUSTER_BASENAME },
-  };
+  const baseArgs = getAlertPolicyBaseArgs(notificationChannel);
 
   const prometheusDefaults = {
     duration: '0s',
@@ -564,9 +569,12 @@ export function installCloudSqlTxIdUtilizationAlert(
 export function installCloudArmorAlerts(
   notificationChannel: gcp.monitoring.NotificationChannel,
   cloudArmorAlertsConfig: CloudArmorAlertsConfig,
-  hasPreviewOnlyRules: boolean
+  cloudArmorConfig: CloudArmorConfig
 ): void {
   const { deniedRequestsThreshold } = cloudArmorAlertsConfig;
+  const hasPreviewOnlyRules =
+    cloudArmorConfig.allRulesPreviewOnly ||
+    (cloudArmorConfig.wafRules.enabled && cloudArmorConfig.wafRules.previewOnly);
   // Scoped to the policy of this cluster; other clusters in the same GCP project
   // report to the same metric.
   const policyFilter = `resource.type="network_security_policy" AND resource.label.policy_name="${CLOUD_ARMOR_POLICY_NAME}"`;
@@ -602,11 +610,10 @@ export function installCloudArmorAlerts(
   const enforcedDisplayName = `Cloud Armor denied requests in ${CLUSTER_BASENAME}`;
   const previewedDisplayName = `Cloud Armor would deny requests in ${CLUSTER_BASENAME}`;
 
+  const baseArgs = getAlertPolicyBaseArgs(notificationChannel);
+
   new gcp.monitoring.AlertPolicy('cloudArmorDeniedRequestsAlert', {
-    alertStrategy: getAlertStrategy(notificationChannel),
-    combiner: 'OR',
-    notificationChannels: [notificationChannel.name],
-    userLabels: { cluster: CLUSTER_BASENAME },
+    ...baseArgs,
     displayName: enforcedDisplayName,
     documentation: {
       subject: enforcedDisplayName,
@@ -631,6 +638,92 @@ export function installCloudArmorAlerts(
             ),
           ]
         : []),
+    ],
+  });
+
+  // The Cloud Armor metrics only expose whether a request was blocked, not which rule
+  // blocked it, so a WAF specific alert has to go through the load balancer request logs.
+  if (cloudArmorConfig.wafRules.enabled && cloudArmorConfig.logging.enabled) {
+    installCloudArmorWafAlert(notificationChannel, baseArgs);
+  }
+}
+
+/**
+ * Alerts on requests rejected by one of the preconfigured (OWASP CRS based) WAF rules,
+ * as opposed to the IP whitelist, the per endpoint throttles or the default deny rule.
+ *
+ * Cloud Armor metrics have no label for the rule that matched, so this is a log matching
+ * alert over the load balancer request logs, which do report the security policy name,
+ * the outcome and the priority of the matching rule. Every WAF match is worth looking at
+ * individually (it is either an attack or a false positive signature match), so this
+ * alerts on the log entries directly instead of counting them into a log based metric:
+ * that way the offending request ends up in the notification.
+ *
+ * Requires the backend request logging of the load balancer to be enabled
+ * (`cloudArmor.logging.enabled`), otherwise Cloud Armor decisions never reach Cloud
+ * Logging.
+ */
+function installCloudArmorWafAlert(
+  notificationChannel: gcp.monitoring.NotificationChannel,
+  baseArgs: AlertPolicyBaseArgs
+): void {
+  // Rules in preview mode are reported under previewSecurityPolicy and do not actually
+  // reject anything; for the WAF rules that previewed signal is exactly the attack
+  // detection we want, so both are matched.
+  const matchedWafRule = (field: string) =>
+    [
+      `jsonPayload.${field}.name="${CLOUD_ARMOR_POLICY_NAME}"`,
+      `jsonPayload.${field}.outcome="DENY"`,
+      `jsonPayload.${field}.priority>=${CLOUD_ARMOR_WAF_RULE_MIN_PRIORITY}`,
+      `jsonPayload.${field}.priority<${CLOUD_ARMOR_WAF_RULE_MAX_PRIORITY}`,
+    ].join(' AND ');
+
+  // The gateway is fronted by a regional external application load balancer, whose
+  // request logs use `http_external_regional_lb_rule`; `http_load_balancer` is accepted
+  // as well so the alert keeps working if the gateway ever becomes global.
+  const filter =
+    ensureTrailingNewline(`resource.type=("http_external_regional_lb_rule" OR "http_load_balancer")
+((${matchedWafRule('enforcedSecurityPolicy')}) OR (${matchedWafRule('previewSecurityPolicy')}))`);
+
+  const displayName = `Cloud Armor WAF rule rejections in ${CLUSTER_BASENAME}`;
+  new gcp.monitoring.AlertPolicy('cloudArmorWafRejectionsAlert', {
+    ...baseArgs,
+    alertStrategy: {
+      ...getAlertStrategy(notificationChannel),
+      // Log matching conditions cannot be aggregated into a threshold, so the
+      // notification rate limit is what keeps a flood of matches down to one alert per
+      // period. It is required by GCP for log matching policies.
+      notificationRateLimit: {
+        period: '300s',
+      },
+    },
+    displayName,
+    documentation: {
+      subject: displayName,
+      content: [
+        `A request to **${CLUSTER_BASENAME}** matched a WAF (OWASP CRS) rule of the Cloud Armor security policy \`${CLOUD_ARMOR_POLICY_NAME}\`.`,
+        'Unlike the generic Cloud Armor alert, this one fires only on attack signature matches (SQL injection, XSS, RCE, ...), not on IP whitelist, throttle or default deny rejections. WAF rules in preview mode are included: they only log, they do not reject.',
+        'Rule priority: `${log.extracted_label.enforced_rule_priority}` enforced / `${log.extracted_label.previewed_rule_priority}` previewed.',
+        'Request: `${log.extracted_label.request_method} ${log.extracted_label.request_url}` from `${log.extracted_label.remote_ip}` (`${log.extracted_label.user_agent}`).',
+        'Check the matching signature id in the `preconfiguredExprIds` field of the log entry to tell an actual attack apart from a false positive on legitimate traffic.',
+      ].join('\n\n'),
+      mimeType: 'text/markdown',
+    },
+    conditions: [
+      {
+        displayName,
+        conditionMatchedLog: {
+          filter,
+          labelExtractors: {
+            enforced_rule_priority: 'EXTRACT(jsonPayload.enforcedSecurityPolicy.priority)',
+            previewed_rule_priority: 'EXTRACT(jsonPayload.previewSecurityPolicy.priority)',
+            remote_ip: 'EXTRACT(httpRequest.remoteIp)',
+            request_method: 'EXTRACT(httpRequest.requestMethod)',
+            request_url: 'EXTRACT(httpRequest.requestUrl)',
+            user_agent: 'EXTRACT(httpRequest.userAgent)',
+          },
+        },
+      },
     ],
   });
 }

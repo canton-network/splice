@@ -127,6 +127,58 @@
     "custom": true,
     "id": "",
     "inputs": {
+      "alertStrategy": {
+        "autoClose": "3600s",
+        "notificationChannelStrategies": [
+          {
+            "notificationChannelNames": [
+              null
+            ],
+            "renotifyInterval": "14400s"
+          }
+        ],
+        "notificationRateLimit": {
+          "period": "300s"
+        }
+      },
+      "combiner": "OR",
+      "conditions": [
+        {
+          "conditionMatchedLog": {
+            "filter": "resource.type=(\"http_external_regional_lb_rule\" OR \"http_load_balancer\")\n((jsonPayload.enforcedSecurityPolicy.name=\"waf-whitelist-throttle-ban-mock\" AND jsonPayload.enforcedSecurityPolicy.outcome=\"DENY\" AND jsonPayload.enforcedSecurityPolicy.priority>=10 AND jsonPayload.enforcedSecurityPolicy.priority<1000010) OR (jsonPayload.previewSecurityPolicy.name=\"waf-whitelist-throttle-ban-mock\" AND jsonPayload.previewSecurityPolicy.outcome=\"DENY\" AND jsonPayload.previewSecurityPolicy.priority>=10 AND jsonPayload.previewSecurityPolicy.priority<1000010))\n",
+            "labelExtractors": {
+              "enforced_rule_priority": "EXTRACT(jsonPayload.enforcedSecurityPolicy.priority)",
+              "previewed_rule_priority": "EXTRACT(jsonPayload.previewSecurityPolicy.priority)",
+              "remote_ip": "EXTRACT(httpRequest.remoteIp)",
+              "request_method": "EXTRACT(httpRequest.requestMethod)",
+              "request_url": "EXTRACT(httpRequest.requestUrl)",
+              "user_agent": "EXTRACT(httpRequest.userAgent)"
+            }
+          },
+          "displayName": "Cloud Armor WAF rule rejections in mock"
+        }
+      ],
+      "displayName": "Cloud Armor WAF rule rejections in mock",
+      "documentation": {
+        "content": "A request to **mock** matched a WAF (OWASP CRS) rule of the Cloud Armor security policy `waf-whitelist-throttle-ban-mock`.\n\nUnlike the generic Cloud Armor alert, this one fires only on attack signature matches (SQL injection, XSS, RCE, ...), not on IP whitelist, throttle or default deny rejections. WAF rules in preview mode are included: they only log, they do not reject.\n\nRule priority: `${log.extracted_label.enforced_rule_priority}` enforced / `${log.extracted_label.previewed_rule_priority}` previewed.\n\nRequest: `${log.extracted_label.request_method} ${log.extracted_label.request_url}` from `${log.extracted_label.remote_ip}` (`${log.extracted_label.user_agent}`).\n\nCheck the matching signature id in the `preconfiguredExprIds` field of the log entry to tell an actual attack apart from a false positive on legitimate traffic.",
+        "mimeType": "text/markdown",
+        "subject": "Cloud Armor WAF rule rejections in mock"
+      },
+      "notificationChannels": [
+        null
+      ],
+      "userLabels": {
+        "cluster": "mock"
+      }
+    },
+    "name": "cloudArmorWafRejectionsAlert",
+    "provider": "",
+    "type": "gcp:monitoring/alertPolicy:AlertPolicy"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
       "apiVersion": "v1",
       "data": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
