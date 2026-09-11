@@ -708,7 +708,7 @@ class SvFrontendIntegrationTest
               element.text should matchText("1")
             }
             inside(find(id("vote-request-modal-expires-at"))) { case Some(element) =>
-              element.text.startsWith(expirationDate) shouldBe true
+              element.text should startWith(expirationDate)
             }
             inside(find(id("vote-request-modal-effective-at"))) { case Some(element) =>
               if (effectiveAtThreshold) {
