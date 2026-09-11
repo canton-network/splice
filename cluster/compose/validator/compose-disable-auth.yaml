@@ -2,7 +2,18 @@ services:
   participant:
     environment:
       - CANTON_PARTICIPANT_ADMIN_USER_NAME=ledger-api-user
-      - ADDITIONAL_CONFIG_DISABLE_AUTH=canton.participants.participant.ledger-api.auth-services=[]
+      # Unauthenticated requests keep full access (wildcard), while tokens signed with the shared
+      # "unsafe" secret identify their user, which the wallet gateway relies on
+      - |
+        ADDITIONAL_CONFIG_DISABLE_AUTH=
+          canton.participants.participant.ledger-api.auth-services = [
+            {
+              type = unsafe-jwt-hmac-256
+              secret = "unsafe"
+              target-audience = "${LEDGER_API_AUTH_AUDIENCE}"
+            },
+            { type = wildcard }
+          ]
 
   validator:
     environment:
