@@ -128,7 +128,7 @@ describe('Repermission Validator Form', () => {
     const user = userEvent.setup();
 
     server.use(
-      http.get(/\/v0\/admin\/validator\/unpermissions\/.*/, () => {
+      http.get(`${svUrl}/v0/admin/validator/unpermissions/:participant_id`, () => {
         return HttpResponse.json({
           unpermissions: [],
         });
@@ -160,7 +160,7 @@ describe('Repermission Validator Form', () => {
     const user = userEvent.setup();
 
     server.use(
-      http.get(/\/v0\/admin\/validator\/unpermissions\/.*/, () => {
+      http.get(`${svUrl}/v0/admin/validator/unpermissions/:participant_id`, () => {
         return HttpResponse.json({
           unpermissions: [{ contract_id: '00abcd123400' }, { contract_id: '00efgh567800' }],
         });
@@ -255,7 +255,7 @@ describe('Repermission Validator Form', () => {
     const user = userEvent.setup();
 
     server.use(
-      http.get(/\/v0\/admin\/validator\/unpermissions\/.*/, () => {
+      http.get(`${svUrl}/v0/admin/validator/unpermissions/:participant_id`, () => {
         return HttpResponse.json({
           unpermissions: [{ contract_id: '00abcd1234' }],
         });
@@ -299,7 +299,7 @@ describe('Repermission Validator Form', () => {
     const createVoteRequestMock = vi.fn();
 
     server.use(
-      http.get(/\/v0\/admin\/validator\/unpermissions\/.*/, () => {
+      http.get(`${svUrl}/v0/admin/validator/unpermissions/:participant_id`, () => {
         return HttpResponse.json({
           unpermissions: [{ contract_id: '00abcd1234' }],
         });
@@ -352,7 +352,7 @@ describe('Repermission Validator Form', () => {
     let requestBody = '';
 
     server.use(
-      http.get(/\/v0\/admin\/validator\/unpermissions\/.*/, () => {
+      http.get(`${svUrl}/v0/admin/validator/unpermissions/:participant_id`, () => {
         return HttpResponse.json({
           unpermissions: [{ contract_id: '00abcd1234' }],
         });
