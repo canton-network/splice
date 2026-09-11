@@ -9,7 +9,6 @@ import org.lfdecentralizedtrust.splice.util.Auth0Util.WithAuth0Support
 import java.net.URI
 import java.net.http.{HttpClient, HttpRequest, HttpResponse}
 import java.time.Duration
-import scala.concurrent.duration.*
 import scala.util.{Random, Try}
 import scala.util.control.NonFatal
 
@@ -70,25 +69,7 @@ abstract class WalletGatewayPreflightIntegrationTestBase
       webDriver: WebDriverType
   ): Unit = {
     val user = auth0User.value
-    clue(s"Logging in to wallet gateway as ${user.email}") {
-      actAndCheck(timeUntilSuccess = 1.minute)(
-        "Select the network and connect",
-        submitWalletGatewayLoginForm(None),
-      )(
-        "Auth0 login form or the parties page is visible",
-        _ => {
-          if (!onGatewayPartiesPage) assertAuth0LoginFormVisible()
-        },
-      )
-      if (!onGatewayPartiesPage) {
-        submitAuth0LoginForm(
-          user.email,
-          user.password,
-          () => onGatewayPartiesPage shouldBe true withClue "gateway parties page",
-        )
-      }
-      waitForGatewayPartiesPage()
-    }
+    loginToWalletGatewayViaAuth0(user.email, user.password)
   }
 
   override def beforeEach() = {

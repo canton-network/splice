@@ -141,10 +141,24 @@ class DockerComposeValidatorFrontendIntegrationTest
           _ => seleniumText(find(id("logged-in-user"))) should not be "",
         )
         tapAmulets(aliceTap)
-        clue("Onboard the wallet gateway user through the wallet UI") {
-          loginOnCurrentPage(80, walletGatewayUser, "wallet.localhost")
-          onboardUserAfterLogin()
-        }
+        // Wait for the onboard button: right after switching users the page still shows Alice's party ID
+        actAndCheck(
+          "Login as the wallet gateway user",
+          loginOnCurrentPage(80, walletGatewayUser, "wallet.localhost"),
+        )(
+          "The wallet gateway user can onboard",
+          _ =>
+            find(
+              id("onboard-button")
+            ).value.text should not be empty withClue "'Onboard yourself' button",
+        )
+        actAndCheck(
+          "Onboard the wallet gateway user",
+          eventuallyClickOn(id("onboard-button")),
+        )(
+          "The wallet gateway user is logged in",
+          _ => seleniumText(find(id("logged-in-user"))) should not be "",
+        )
         clue("Use the portfolio UI through the wallet gateway") {
           val mainWindow = webDriver.getWindowHandle
           val gatewayWalletHint =
@@ -402,6 +416,12 @@ class DockerComposeValidatorFrontendIntegrationTest
           validatorUserPassword,
           () => seleniumText(find(id("logged-in-user"))) should startWith(partyHint),
         )
+
+        clue("Log in and out of the wallet gateway via auth0") {
+          go to walletGatewayUrl
+          loginToWalletGatewayViaAuth0("admin@compose-validator.com", validatorUserPassword)
+          logoutFromWalletGateway()
+        }
       }
 
     }
