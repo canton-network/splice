@@ -3408,7 +3408,8 @@ object HttpScanAppClient {
   }
 
   case class GetBulkObjectChecksums(
-      objectKeys: Seq[String]
+      requiredCatchupTimestamp: CantonTimestamp,
+      objectKeys: Seq[String],
   ) extends InternalBaseCommand[
         http.GetBulkObjectChecksumsResponse,
         definitions.GetBulkObjectChecksumsResponse,
@@ -3418,7 +3419,10 @@ object HttpScanAppClient {
         headers: List[HttpHeader],
     ): EitherT[Future, Either[Throwable, HttpResponse], GetBulkObjectChecksumsResponse] =
       client.getBulkObjectChecksums(
-        definitions.GetBulkObjectChecksumsRequest(objectKeys.toVector),
+        definitions.GetBulkObjectChecksumsRequest(
+          requiredCatchupTimestamp.toInstant.atOffset(java.time.ZoneOffset.UTC),
+          objectKeys.toVector,
+        ),
         headers,
       )
 

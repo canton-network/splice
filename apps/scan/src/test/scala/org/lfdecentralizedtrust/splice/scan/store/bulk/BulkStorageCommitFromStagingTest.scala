@@ -4,6 +4,7 @@
 package org.lfdecentralizedtrust.splice.scan.store.bulk
 
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
+import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.resource.DbStorage
@@ -20,10 +21,7 @@ import org.apache.pekko.stream.testkit.scaladsl.{TestSink, TestSource}
 import org.lfdecentralizedtrust.splice.environment.SpliceLedgerClient
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.http.v0.definitions.GetBulkObjectChecksumsResponse
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.{
-  BftScanConnection,
-  SingleScanConnection,
-}
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.{BftScanConnection, SingleScanConnection}
 import org.lfdecentralizedtrust.splice.scan.config.BulkStorageConfig
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChecksum
 import org.lfdecentralizedtrust.splice.store.{HasS3Mock, StoreTestBase}
@@ -97,6 +95,7 @@ class BulkStorageCommitFromStagingTest
         stagingS3Connection,
         committedS3Connection,
         _ => Future.successful(objsWithDigests),
+        _ => CantonTimestamp.MinValue,
         appConfig,
         null, // not used when bft reads are disabled
         loggerFactory,
@@ -257,7 +256,7 @@ class BulkStorageCommitFromStagingTest
       def scanAgrees(idx: Integer): Unit = {
         when(
           singleScanConnections(idx)
-            .getBulkObjectChecksums(any[Seq[String]])(any[ExecutionContext], any[TraceContext])
+            .getBulkObjectChecksums(any[CantonTimestamp], any[Seq[String]])(any[ExecutionContext], any[TraceContext])
         )
           .thenReturn(
             Future.successful(
@@ -275,7 +274,7 @@ class BulkStorageCommitFromStagingTest
       def scanDisagreesOnDigest(scanIdx: Integer, objIdx: Integer): Unit = {
         when(
           singleScanConnections(scanIdx)
-            .getBulkObjectChecksums(any[Seq[String]])(any[ExecutionContext], any[TraceContext])
+            .getBulkObjectChecksums(any[CantonTimestamp], any[Seq[String]])(any[ExecutionContext], any[TraceContext])
         )
           .thenReturn(
             Future.successful(
@@ -293,7 +292,7 @@ class BulkStorageCommitFromStagingTest
       def scanMissingAnObject(scanIdx: Integer, objIdx: Integer): Unit = {
         when(
           singleScanConnections(scanIdx)
-            .getBulkObjectChecksums(any[Seq[String]])(any[ExecutionContext], any[TraceContext])
+            .getBulkObjectChecksums(any[CantonTimestamp], any[Seq[String]])(any[ExecutionContext], any[TraceContext])
         )
           .thenReturn(
             Future.successful(
@@ -343,6 +342,7 @@ class BulkStorageCommitFromStagingTest
         stagingS3Connection,
         committedS3Connection,
         _ => Future.successful(objsWithDigests),
+        _ => CantonTimestamp.MinValue,
         config,
         mockScanConnections.peerBftConnection,
         loggerFactory,

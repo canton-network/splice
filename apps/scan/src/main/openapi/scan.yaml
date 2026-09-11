@@ -4353,8 +4353,15 @@ components:
     GetBulkObjectChecksumsRequest:
       type: object
       required:
+        - required_catchup_timestamp
         - object_keys
       properties:
+        required_catchup_timestamp:
+          description: |
+            If bulk storage is not caught up to this timestamp, the request must fail with a 404 error.
+            This is to differentiate between "The data is not available yet" and "The data is not available at all".
+          type: string
+          format: date-time
         object_keys:
           description: |
             The list of keys of the bulk storage objects for which checksums are requested.
@@ -4369,7 +4376,8 @@ components:
       properties:
         checksums:
           description: |
-            The list of checksums for the requested bulk storage objects (in the same order as the object_keys).
+            The list of (optional) checksums for the requested bulk storage objects (in the same order as the object_keys),
+            where `None` values indicate objects that do not exist.
           type: array
           items:
             type: object

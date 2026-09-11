@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.scan.store.bulk
 
+import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.tracing.TraceContext
 import org.apache.pekko.NotUsed
@@ -22,6 +23,7 @@ class BulkStorageCommitFromStaging[T](
     stagingS3Connection: S3BucketConnection,
     committedS3Connection: S3BucketConnection,
     getObjects: T => Future[Seq[ObjectKeyAndChecksum]],
+    getRequiredCatchupTimestamp: T => CantonTimestamp,
     appConfig: BulkStorageConfig,
     scanConnection: PeerBftScanConnection,
     override val loggerFactory: NamedLoggerFactory,
@@ -32,7 +34,8 @@ class BulkStorageCommitFromStaging[T](
 ) extends NamedLogging {
 
   private def checkBftForObjects(
-      objects: Seq[ObjectKeyAndChecksum]
+      requiredCatchupTimestamp: CantonTimestamp,
+      objects: Seq[ObjectKeyAndChecksum],
   ): Future[Boolean] = {
     logger.debug(
       s"Checking BFT agreement for objects: ${objects.map(_.key).mkString(", ")}"
@@ -40,8 +43,10 @@ class BulkStorageCommitFromStaging[T](
     if (appConfig.bftCheckEnabled) {
       for {
         connection <- scanConnection.connection
-        bft <- connection.getBulkObjectChecksums(objects.map(_.key)).map(Some(_)).recoverWith {
-          case ex @ HttpErrorWithHttpCode(code, _) =>
+        bft <- connection
+          .getBulkObjectChecksums(requiredCatchupTimestamp, objects.map(_.key))
+          .map(Some(_))
+          .recoverWith { case ex @ HttpErrorWithHttpCode(code, _) =>
             if (code == StatusCodes.BadGateway) {
               logger.debug(
                 s"Consensus on checksums for objects ${objects.map(_.key).mkString(", ")} not reached. Assuming that this is because not all peers have processed the objects yet."
@@ -50,7 +55,7 @@ class BulkStorageCommitFromStaging[T](
             } else {
               throw ex
             }
-        }
+          }
       } yield {
         bft match {
           case Some(bftChecksums) =>
@@ -146,7 +151,9 @@ class BulkStorageCommitFromStaging[T](
     Flow[(T, Seq[ObjectKeyAndChecksum])].flatMapConcat { case (t, obj) =>
       Source
         .repeat(obj)
-        .mapAsync(parallelism = 1)(obj => checkBftForObjects(obj).map(result => (obj, result)))
+        .mapAsync(parallelism = 1)(obj =>
+          checkBftForObjects(getRequiredCatchupTimestamp(t), obj).map(result => (obj, result))
+        )
         .flatMapConcat {
           case (obj, true) =>
             logger.debug(
@@ -245,6 +252,7 @@ object BulkStorageCommitFromStaging {
       stagingS3Connection: S3BucketConnection,
       committedS3Connection: S3BucketConnection,
       getStagingObjects: T => Future[Seq[ObjectKeyAndChecksum]],
+      getRequiredCatchupTimestamp: T => CantonTimestamp,
       appConfig: BulkStorageConfig,
       scanConnection: PeerBftScanConnection,
       loggerFactory: NamedLoggerFactory,
@@ -257,6 +265,7 @@ object BulkStorageCommitFromStaging {
       stagingS3Connection,
       committedS3Connection,
       getStagingObjects,
+      getRequiredCatchupTimestamp,
       appConfig,
       scanConnection,
       loggerFactory,

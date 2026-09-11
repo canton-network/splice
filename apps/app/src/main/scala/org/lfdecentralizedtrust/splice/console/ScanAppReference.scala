@@ -925,11 +925,12 @@ abstract class ScanAppReference(
     "Get checksums for a list of bulk storage objects (using both staging and committed objects)"
   )
   def getBulkObjectChecksums(
-      objectKeys: Seq[String]
+      requiredCatchupTimestamp: CantonTimestamp,
+      objectKeys: Seq[String],
   ): definitions.GetBulkObjectChecksumsResponse =
     consoleEnvironment.run {
       httpCommand(
-        HttpScanAppClient.GetBulkObjectChecksums(objectKeys)
+        HttpScanAppClient.GetBulkObjectChecksums(requiredCatchupTimestamp, objectKeys)
       )
     }
 
