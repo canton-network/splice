@@ -397,7 +397,6 @@ describe('Repermission Validator Form', () => {
     await screen.findByText('Successfully submitted the proposal');
 
     expect(createVoteRequestMock).toHaveBeenCalledOnce();
-
     expect(requestBody).toContain('"validatorUnpermissionCid":"00abcd1234"');
   });
 });
