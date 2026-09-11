@@ -11,6 +11,7 @@ import scala.util.Try
 trait WalletGatewayFrontendTestUtil extends WalletFrontendTestUtil { self: FrontendTestCommon =>
 
   import WalletGatewayFrontendTestUtil.*
+  import ShadowDom.*
 
   protected def validatorName: String
 
