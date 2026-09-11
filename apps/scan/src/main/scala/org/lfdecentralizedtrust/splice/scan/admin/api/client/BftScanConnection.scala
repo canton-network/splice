@@ -1153,10 +1153,11 @@ class BftScanConnection(
   }
 
   override def getBulkObjectChecksums(
-      objectKeys: Seq[String]
+      requiredCatchupTimestamp: CantonTimestamp,
+      objectKeys: Seq[String],
   )(implicit ec: ExecutionContext, tc: TraceContext): Future[GetBulkObjectChecksumsResponse] =
     bftCall(
-      _.getBulkObjectChecksums(objectKeys),
+      _.getBulkObjectChecksums(requiredCatchupTimestamp, objectKeys),
       "getBulkObjectChecksums",
       consensusFailureLogLevel = Level.DEBUG,
     )

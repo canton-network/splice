@@ -2846,7 +2846,19 @@ class HttpScanHandler(
             .asRuntimeException()
         )
       ) { bulkStorage =>
-        bulkStorage.getObjectChecksums(body.objectKeys).map { checksums =>
+        for {
+          progress <- bulkStorage.getStagingProgressTimestamp()
+          _ = if (
+            progress < CantonTimestamp.tryFromInstant(body.requiredCatchupTimestamp.toInstant)
+          ) {
+            throw Status.NOT_FOUND
+              .withDescription(
+                s"Bulk storage is not caught up to the required timestamp ${body.requiredCatchupTimestamp}. Current progress: $progress"
+              )
+              .asRuntimeException()
+          }
+          checksums <- bulkStorage.getObjectChecksums(body.objectKeys)
+        } yield {
           ScanResource.GetBulkObjectChecksumsResponse.OK(
             definitions.GetBulkObjectChecksumsResponse(
               checksums.map(definitions.GetBulkObjectChecksumsResponse.Checksums(_)).toVector
