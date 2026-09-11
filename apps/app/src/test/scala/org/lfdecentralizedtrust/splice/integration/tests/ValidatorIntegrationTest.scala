@@ -749,6 +749,9 @@ class ValidatorIntegrationTest extends IntegrationTestWithIsolatedEnvironment wi
       )
     )
 
+    implicit val sys = env.actorSystem
+    implicit val ec = env.executionContext
+
     val scanProxyUrl =
       s"http://${aliceValidatorBackend.config.adminApi.address}:${aliceValidatorBackend.config.adminApi.port.unwrap}/api/validator/v0/scan-proxy"
     val send: HttpRequest => Future[HttpResponse] = Http().singleRequest(_)
