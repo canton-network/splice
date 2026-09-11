@@ -147,6 +147,7 @@ import org.lfdecentralizedtrust.splice.util.{
   DsoInfo,
   PackageQualifiedName,
   QualifiedName,
+  SwitchOverTimes,
 }
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
 
@@ -849,6 +850,7 @@ class HttpScanHandler(
       updateO: Option[TreeUpdateWithMigrationId],
       appAndAssetActivityRecordO: Option[AppAndAssetActivityRecordT],
       encoding: definitions.DamlValueEncoding,
+      includeRound: Boolean,
   )(implicit tc: TraceContext): definitions.EventHistoryItem = {
     val encodedUpdateV2 = updateO.map(
       ScanHttpEncodings.encodeUpdateV2(
@@ -860,7 +862,7 @@ class HttpScanHandler(
       )
     )
     val verdictEncoded = verdictWithViewsO.map { case (v, views) =>
-      ScanHttpEncodings.encodeVerdict(v, views)
+      ScanHttpEncodings.encodeVerdict(v, views, includeRound)
     }
     val trafficSummaryEncoded = verdictWithViewsO.flatMap { case (v, _) =>
       v.trafficSummaryO.map(ScanHttpEncodings.encodeTrafficSummary)
@@ -886,6 +888,7 @@ class HttpScanHandler(
   ): Future[Either[definitions.ErrorResponse, definitions.EventHistoryItem]] = {
     implicit val tc = extracted
     for {
+      dsoRules <- store.lookupDsoRules()
       eventO <- eventStore.getEventByUpdateId(
         updateId,
         updateHistory.domainMigrationId,
@@ -897,6 +900,8 @@ class HttpScanHandler(
           )
         case Some((verdictWithViewsO, updateO)) =>
           val verdictRowIdO = verdictWithViewsO.map { case (v, _) => v.rowId }
+          val includeRound =
+            dsoRules.exists(c => SwitchOverTimes.alwaysServeVerdictRoundNumber(clock, c.payload))
           for {
             appAndAssetActivityRecordO <- verdictRowIdO match {
               case Some(rowId) =>
@@ -909,6 +914,7 @@ class HttpScanHandler(
               updateO,
               appAndAssetActivityRecordO,
               encoding,
+              includeRound,
             )
           )
       }
@@ -947,6 +953,7 @@ class HttpScanHandler(
 
     confirmBackfillingIsCompleteThen(updateHistory) {
       for {
+        dsoRules <- store.lookupDsoRules()
         events <- eventStore.getEvents(
           afterO = afterO,
           currentMigrationId = updateHistory.domainMigrationId,
@@ -956,6 +963,8 @@ class HttpScanHandler(
           verdictWithViewsO.map { case (v, _) => v.rowId }
         }
         appAndAssetActivityRecordMap <- eventStore.getAppAndAssetActivityRecords(verdictRowIds)
+        includeRound =
+          dsoRules.exists(c => SwitchOverTimes.alwaysServeVerdictRoundNumber(clock, c.payload))
       } yield events.map { case (verdictWithViewsO, updateO) =>
         val appAndAssetActivityRecordForEvent = verdictWithViewsO.flatMap { case (v, _) =>
           appAndAssetActivityRecordMap.get(v.rowId)
@@ -965,6 +974,7 @@ class HttpScanHandler(
           updateO,
           appAndAssetActivityRecordForEvent,
           encoding,
+          includeRound,
         )
       }.toVector
     }
