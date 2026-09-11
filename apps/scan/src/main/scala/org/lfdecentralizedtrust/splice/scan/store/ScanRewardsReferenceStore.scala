@@ -133,19 +133,19 @@ trait ScanRewardsReferenceStore extends AppStore {
         } yield (activeRoundO, archivedAtNextO) match {
           case (Some((activeRoundNumber, activeRoundOpensAt)), Some(archivedAtNext)) =>
             val retainUntil = now.minus(retentionPeriod.asJava)
-            if (activeRoundOpensAt <= archivedAtNext) {
-              logger.debug(
-                s"Skipping pruning of round $roundNumber as the ingestion's currently active round " +
-                  s"$activeRoundNumber opened at $activeRoundOpensAt, which is not yet past round " +
-                  s"${roundNumber + 1}'s archivedAt ($archivedAtNext)."
-              )
-              None
-            } else if (retainUntil <= archivedAtNext) {
+            if (retainUntil <= archivedAtNext) {
               // We compare retentionPeriod with archived_at of roundNumber + 1
               // just to avoid an additional DB lookup of archived_at of roundNumber
               logger.debug(
                 s"Skipping pruning of round $roundNumber as round ${roundNumber + 1}'s archivedAt " +
                   s"($archivedAtNext) is still within the retention period."
+              )
+              None
+            } else if (activeRoundOpensAt <= archivedAtNext) {
+              logger.debug(
+                s"Skipping pruning of round $roundNumber as the ingestion's currently active round " +
+                  s"$activeRoundNumber opened at $activeRoundOpensAt, which is not yet past round " +
+                  s"${roundNumber + 1}'s archivedAt ($archivedAtNext)."
               )
               None
             } else Some(roundNumber)
