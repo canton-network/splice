@@ -21,7 +21,10 @@ import org.apache.pekko.stream.testkit.scaladsl.{TestSink, TestSource}
 import org.lfdecentralizedtrust.splice.environment.SpliceLedgerClient
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.http.v0.definitions.GetBulkObjectChecksumsResponse
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.{BftScanConnection, SingleScanConnection}
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.{
+  BftScanConnection,
+  SingleScanConnection,
+}
 import org.lfdecentralizedtrust.splice.scan.config.BulkStorageConfig
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChecksum
 import org.lfdecentralizedtrust.splice.store.{HasS3Mock, StoreTestBase}
@@ -256,7 +259,10 @@ class BulkStorageCommitFromStagingTest
       def scanAgrees(idx: Integer): Unit = {
         when(
           singleScanConnections(idx)
-            .getBulkObjectChecksums(any[CantonTimestamp], any[Seq[String]])(any[ExecutionContext], any[TraceContext])
+            .getBulkObjectChecksums(any[CantonTimestamp], any[Seq[String]])(
+              any[ExecutionContext],
+              any[TraceContext],
+            )
         )
           .thenReturn(
             Future.successful(
@@ -274,7 +280,10 @@ class BulkStorageCommitFromStagingTest
       def scanDisagreesOnDigest(scanIdx: Integer, objIdx: Integer): Unit = {
         when(
           singleScanConnections(scanIdx)
-            .getBulkObjectChecksums(any[CantonTimestamp], any[Seq[String]])(any[ExecutionContext], any[TraceContext])
+            .getBulkObjectChecksums(any[CantonTimestamp], any[Seq[String]])(
+              any[ExecutionContext],
+              any[TraceContext],
+            )
         )
           .thenReturn(
             Future.successful(
@@ -292,7 +301,10 @@ class BulkStorageCommitFromStagingTest
       def scanMissingAnObject(scanIdx: Integer, objIdx: Integer): Unit = {
         when(
           singleScanConnections(scanIdx)
-            .getBulkObjectChecksums(any[CantonTimestamp], any[Seq[String]])(any[ExecutionContext], any[TraceContext])
+            .getBulkObjectChecksums(any[CantonTimestamp], any[Seq[String]])(
+              any[ExecutionContext],
+              any[TraceContext],
+            )
         )
           .thenReturn(
             Future.successful(
