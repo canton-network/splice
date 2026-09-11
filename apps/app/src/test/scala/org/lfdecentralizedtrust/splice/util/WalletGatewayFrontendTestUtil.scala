@@ -141,19 +141,48 @@ trait WalletGatewayFrontendTestUtil extends WalletFrontendTestUtil { self: Front
       }
     }
 
+  // Login on a gateway network backed by an Auth0 IdP. With an Auth0 SSO session in the browser the
+  // redirect completes without showing the login form.
+  protected def loginToWalletGatewayViaAuth0(email: String, password: String)(implicit
+      webDriver: WebDriverType
+  ): Unit =
+    clue(s"Logging in to the wallet gateway via Auth0 as $email") {
+      actAndCheck(timeUntilSuccess = 1.minute)(
+        "Select the network and connect",
+        submitWalletGatewayLoginForm(None),
+      )(
+        "Auth0 login form or the parties page is visible",
+        _ => {
+          if (!onGatewayPartiesPage) assertAuth0LoginFormVisible()
+        },
+      )
+      if (!onGatewayPartiesPage) {
+        submitAuth0LoginForm(
+          email,
+          password,
+          () => onGatewayPartiesPage shouldBe true withClue "gateway parties page",
+        )
+      }
+      waitForGatewayPartiesPage()
+    }
+
+  protected def logoutFromWalletGateway()(implicit webDriver: WebDriverType): Unit = {
+    clickDeep(Selectors.Gateway.menuButton)
+    actAndCheck(timeUntilSuccess = 1.minute)(
+      "Click logout",
+      clickDeep(Selectors.Gateway.menuItem, Some(Selectors.Gateway.logoutMenuItemText)),
+    )(
+      "Login page is visible",
+      _ => currentUrl should include("/login"),
+    )
+  }
+
   protected def loginAndLogoutFromWalletGateway()(implicit webDriver: WebDriverType): Unit =
     clue("Logging in and out of the wallet gateway directly") {
       // Gateway sessions are per dApp origin, so this is a new (redirect-only, thanks to Auth0 SSO) login
       go to walletGatewayUrl
       loginToWalletGatewayInCurrentWindow()
-      clickDeep(Selectors.Gateway.menuButton)
-      actAndCheck(timeUntilSuccess = 1.minute)(
-        "Click logout",
-        clickDeep(Selectors.Gateway.menuItem, Some(Selectors.Gateway.logoutMenuItemText)),
-      )(
-        "Login page is visible",
-        _ => currentUrl should include("/login"),
-      )
+      logoutFromWalletGateway()
     }
 
   protected def tapInPortfolio(amount: BigDecimal, partyHint: String)(implicit

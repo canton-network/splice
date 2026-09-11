@@ -24,7 +24,7 @@ configs:
             "port": ${SPLICE_DB_PORT},
             "user": "${SPLICE_DB_USER}",
             "passwordEnv": "WG_STORE_PASSWORD",
-            "database": "wallet_gateway_store"
+            "database": "wallet_gateway_store_disable_auth"
           }
         },
         "signingStore": {
@@ -34,7 +34,7 @@ configs:
             "port": ${SPLICE_DB_PORT},
             "user": "${SPLICE_DB_USER}",
             "passwordEnv": "WG_STORE_PASSWORD",
-            "database": "wallet_gateway_signing_store"
+            "database": "wallet_gateway_signing_store_disable_auth"
           }
         },
         "bootstrap": {
@@ -72,3 +72,11 @@ configs:
           ]
         }
       }
+
+services:
+  # The gateway only bootstraps its IdPs and networks into an empty store, so switching auth modes on
+  # an existing deployment needs a store of its own
+  postgres-splice:
+    environment:
+      - CREATE_DATABASE_wallet_gateway_store_disable_auth=wallet_gateway_store_disable_auth
+      - CREATE_DATABASE_wallet_gateway_signing_store_disable_auth=wallet_gateway_signing_store_disable_auth
