@@ -821,6 +821,48 @@ class DbScanRewardsReferenceStoreTest
           _ = prunableRound shouldBe Some(3L)
         } yield succeed
       }
+
+      // Right after bootstrapping, only a single OpenMiningRound has been archived, so
+      // there is no archival for the next round yet. The active round cannot resolve
+      // either, as the next round opened before the store's ingestion start.
+      "skip after bootstrap while only a single round has been archived" in {
+        val store = mkStore()
+        def omr(round: Long, createdAt: Long, opensAt: Long) =
+          openMiningRound(
+            dsoParty,
+            round = round,
+            amuletPrice = 1.0,
+            opensAt = ts(opensAt).toInstant,
+          )
+            .copy(createdAt = ts(createdAt).toInstant)
+        // Round n is archived (and round n+3 created) when round n+2 opens, so
+        // round 2 was archived at t=200 together with round 5's creation. The store
+        // bootstraps after that, with rounds 3, 4 and 5 open in the initial ACS.
+        val omr3 = omr(3, createdAt = 0, opensAt = 100)
+        val omr4 = omr(4, createdAt = 100, opensAt = 200)
+        val omr5 = omr(5, createdAt = 200, opensAt = 300)
+        val omr6 = omr(6, createdAt = 300, opensAt = 400)
+        val acsStore = store.multiDomainAcsStore
+        for {
+          _ <- initWithAcs(
+            Seq(omr3, omr4, omr5).map(StoreTestBase.AcsImportEntry(_, sync1, 0L))
+          )(acsStore)
+          _ <- sync1.create(omr6, recordTime = ts(300).toInstant)(acsStore)
+          _ <- sync1.archive(omr3, recordTime = ts(300).toInstant)(acsStore)
+          _ <- advanceRecordTime(store, ts(350))
+
+          lowestPrunable <- store.lookupLowestPrunableArchivedRewardRound()
+          _ = lowestPrunable shouldBe Some(3L)
+          archivedAt4 <- store.lookupArchivedAtForOpenMiningRound(4)
+          _ = archivedAt4 shouldBe None
+          // Round 4 opened at t=200, before the ingestion start at t=300
+          active <- store.lookupActiveOpenMiningRounds(Seq(ts(350)))
+          _ = active shouldBe empty
+
+          result <- store.lookupPrunableRewardRound(ts(350), timeAfterAllRounds, noRetention)
+          _ = result shouldBe None
+        } yield succeed
+      }
     }
 
     "lookupActiveOpenMiningRounds" in {
