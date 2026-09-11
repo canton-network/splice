@@ -710,7 +710,7 @@ class ScanHttpEncodingsTest extends StoreTestBase with TestEssentials with Match
 
     val viewsIn = Seq(view2, view0, view1, view6, view4, view5, view3)
 
-    val encodedVerdict = ScanHttpEncodings.encodeVerdict(verdictBase, viewsIn)
+    val encodedVerdict = ScanHttpEncodings.encodeVerdict(verdictBase, viewsIn, includeRound = false)
 
     encodedVerdict.updateId shouldBe verdictBase.updateId
     encodedVerdict.migrationId shouldBe verdictBase.migrationId
@@ -793,6 +793,7 @@ class ScanHttpEncodingsTest extends StoreTestBase with TestEssentials with Match
       ScanHttpEncodings.encodeVerdict(
         verdictBase.copy(verdictResult = VerdictResultDbValue.Accepted),
         viewsIn,
+        includeRound = false,
       )
     encodedAccepted.verdictResult shouldBe httpApi.VerdictResult.VerdictResultAccepted
 
@@ -800,6 +801,7 @@ class ScanHttpEncodingsTest extends StoreTestBase with TestEssentials with Match
       ScanHttpEncodings.encodeVerdict(
         verdictBase.copy(verdictResult = VerdictResultDbValue.Rejected),
         viewsIn,
+        includeRound = false,
       )
     encodedRejected.verdictResult shouldBe httpApi.VerdictResult.VerdictResultRejected
   }
