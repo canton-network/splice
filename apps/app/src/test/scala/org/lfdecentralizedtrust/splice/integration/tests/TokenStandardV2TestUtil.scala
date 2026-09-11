@@ -12,6 +12,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.apps.tradingappv2
 import org.lfdecentralizedtrust.splice.console.ParticipantClientReference
+import org.lfdecentralizedtrust.splice.http.v0.definitions.EventHistoryItem
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   SpliceTestConsoleEnvironment,
   TestCommon,
@@ -24,7 +25,24 @@ import java.util.{Optional, UUID}
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 
+object TokenStandardV2TestUtil {
+
+  final case class ExpectedTrafficCost(
+      action: String,
+      lastMeasured: Long,
+      tolerancePercent: Int = 5,
+  ) {
+    def lowerBound: Long = Math.floorDiv(lastMeasured * (100 - tolerancePercent), 100)
+    def upperBound: Long = Math.floorDiv(lastMeasured * (100 + tolerancePercent), 100)
+    def isWithinBounds(measured: Long): Boolean =
+      measured >= lowerBound && measured <= upperBound
+  }
+
+}
+
 trait TokenStandardV2TestUtil extends TestCommon {
+
+  import TokenStandardV2TestUtil.ExpectedTrafficCost
 
   protected val amuletInstrumentIdName = "Amulet"
 
@@ -40,6 +58,68 @@ trait TokenStandardV2TestUtil extends TestCommon {
       java.util.Optional.empty(),
       "",
     )
+
+  private def trafficCostReport(
+      measurements: Seq[(ExpectedTrafficCost, Long)]
+  ): String = {
+    val actionMaxLength = measurements.map(_._1.action.length).maxOption.getOrElse(0)
+    val rows = measurements.map { case (expected, measured) =>
+      val delta =
+        if (expected.lastMeasured == 0) "n/a"
+        else
+          f"${(measured - expected.lastMeasured) * 100.0 / expected.lastMeasured}%+.2f%%"
+      val verdict = if (expected.isWithinBounds(measured)) "ok" else "out of bounds"
+      s"  ${expected.action.padTo(actionMaxLength, ' ')}  expected=${expected.lastMeasured}  " +
+        s"measured=$measured  delta=$delta  " +
+        s"bounds=[${expected.lowerBound}, ${expected.upperBound}]  $verdict"
+    }
+    val newExpectations = measurements.map { case (expected, measured) =>
+      s"""    ExpectedTrafficCost("${expected.action}", $measured),"""
+    }
+    (Seq("Traffic cost check per action, in bytes:") ++ rows ++
+      Seq("New expected costs matching this run:") ++ newExpectations).mkString("\n")
+  }
+
+  def checkTrafficCosts(
+      actions: Seq[(String, ExpectedTrafficCost)]
+  )(implicit env: SpliceTestConsoleEnvironment): Seq[(String, EventHistoryItem)] = {
+    val events = actions.map { case (updateId, expected) =>
+      expected -> clue(s"Checking traffic & activity records for '${expected.action}'") {
+        eventually() {
+          inside(sv1ScanBackend.getEventById(updateId, None)) {
+            case Some(
+                  item @ EventHistoryItem(
+                    _,
+                    Some(_),
+                    Some(_),
+                    Some(_),
+                  )
+                ) =>
+              item
+          }
+        }
+      }
+    }
+
+    val measurements = events.map { case (expected, item) =>
+      expected -> item.trafficSummary
+        .getOrElse(fail(s"No traffic summary for '${expected.action}'"))
+        .totalTrafficCost
+    }
+    logger.info(trafficCostReport(measurements))
+
+    val drifted = measurements.filterNot { case (expected, measured) =>
+      expected.isWithinBounds(measured)
+    }
+    if (drifted.nonEmpty) {
+      fail(
+        s"Traffic cost drifted for ${drifted.map(_._1.action).mkString(", ")}\n" +
+          trafficCostReport(measurements)
+      )
+    }
+
+    events.map { case (expected, item) => expected.action -> item }
+  }
 
   def createAllocationRequestV2ViaOTCTrade(
       aliceParty: PartyId,
