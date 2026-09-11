@@ -802,16 +802,17 @@ class TestTokenV2SettlementIntegrationTest
           },
         )
 
+        // The reference traffic costs were recorded by running this test on Canton 3.6.0
         val events = checkTrafficCosts(
           Seq(
-            createTradeTx.getUpdateId -> ExpectedTrafficCost("Create Trade", 0),
+            createTradeTx.getUpdateId -> ExpectedTrafficCost("Create Trade", 3202),
             createAllocationRequestsTx.getUpdateId -> ExpectedTrafficCost(
               "Create Allocation Requests",
-              0,
+              8676,
             ),
-            aliceAllocateTx.getUpdateId -> ExpectedTrafficCost("Alice Allocations", 0),
-            bobAllocateTx.getUpdateId -> ExpectedTrafficCost("Bob Allocations", 0),
-            settleTradeTx.getUpdateId -> ExpectedTrafficCost("Settle Trade", 0),
+            aliceAllocateTx.getUpdateId -> ExpectedTrafficCost("Alice Allocations", 14795),
+            bobAllocateTx.getUpdateId -> ExpectedTrafficCost("Bob Allocations", 17333),
+            settleTradeTx.getUpdateId -> ExpectedTrafficCost("Settle Trade", 22460),
           )
         ).map { case (action, item) => action -> EventHistoryItem.encodeEventHistoryItem(item) }
         val json = io.circe.JsonObject(events*)
