@@ -257,7 +257,8 @@ Changes that do not improve things at all:
 function configureInternalGatewayService(
   ingressNs: k8s.core.v1.Namespace,
   ingress: { ip: pulumi.Output<string>; viaGKEL7: false } | { viaGKEL7: true },
-  istiod: k8s.helm.v3.Release
+  istiod: k8s.helm.v3.Release,
+  extraDependencies: pulumi.Resource[] = []
 ) {
   const cluster = gcp.container.getCluster({
     name: CLUSTER_NAME,
@@ -304,7 +305,8 @@ function configureInternalGatewayService(
       ingressPort('sw-lg-gw', 6201),
     ],
     istiod,
-    ''
+    '',
+    extraDependencies
   );
 }
 
@@ -360,7 +362,8 @@ function configureGatewayService(
   gatewayVariant: IstioGatewayVariant,
   ingressPorts: IngressPort[],
   istiod: k8s.helm.v3.Release,
-  suffix: string
+  suffix: string,
+  extraDependencies: pulumi.Resource[] = []
 ) {
   // We limit source IPs in two ways:
   // - For most traffic, we use istio instead of through loadBalancerSourceRanges as the latter has a size limit.
@@ -459,7 +462,7 @@ function configureGatewayService(
             const base: pulumi.Resource[] = [ingressNs, istiod];
             return base.concat(policies);
           })
-        : [ingressNs, istiod],
+        : [ingressNs, istiod, ...extraDependencies],
     }
   );
   if (infraConfig.istio.enableIngressAccessLogging) {
@@ -873,7 +876,8 @@ export function configureIstio(
   ingressNs: ExactNamespace,
   ingressIp: pulumi.Output<string>,
   cometBftIngressIp: pulumi.Output<string>,
-  expectGKEL7Gateway: boolean
+  expectGKEL7Gateway: boolean,
+  extraIngressDependencies: pulumi.Resource[] = []
 ): ConfiguredIstio {
   const nsName = 'istio-system';
   const istioSystemNs = new k8s.core.v1.Namespace(nsName, {
@@ -886,7 +890,8 @@ export function configureIstio(
   const gwSvc = configureInternalGatewayService(
     ingressNs.ns,
     expectGKEL7Gateway ? { viaGKEL7: true } : { viaGKEL7: false, ip: ingressIp },
-    istiod
+    istiod,
+    extraIngressDependencies
   );
   const cometBftSvc = DecentralizedSynchronizerUpgradeConfig.usesCometbft()
     ? configureCometBFTGatewayService(ingressNs.ns, cometBftIngressIp, istiod)

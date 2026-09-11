@@ -104,7 +104,7 @@ cluster:
 infra:
   enableSweetSecurity: true
   gkeGateway:
-    proxyForIstioHttp: true
+    proxyForIstioHttp: false
   istio:
     enableIngressAccessLogging: true
     enablePublicTokenRegistry: true

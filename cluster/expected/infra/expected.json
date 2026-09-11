@@ -1111,17 +1111,6 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "create": "true",
-      "delete": "set -eu\n            for _ in $(seq 1 60); do\n              attached=$(gcloud compute backend-services list --filter=\"securityPolicy~waf-whitelist-throttle-ban-mock$\" --format=\"value(name)\")\n              if [ -z \"$attached\" ]; then exit 0; fi\n              sleep 10\n            done\n            echo \"backend services still reference waf-whitelist-throttle-ban-mock: $attached\" >&2\n            exit 1"
-    },
-    "name": "cn-gke-l7-gateway-cloud-armor-detach-wait",
-    "provider": "",
-    "type": "command:local:Command"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
       "apiVersion": "networking.gke.io/v1",
       "kind": "GCPBackendPolicy",
       "metadata": {

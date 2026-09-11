@@ -511,32 +511,6 @@ export function configureGKEL7Gateway(config: L7GatewayConfig): {
     `${config.gatewayName}-cloud-armor-link`
   );
 
-  if (config.securityPolicy) {
-    // The GKE Gateway controller applies the GCPBackendPolicy asynchronously, so the
-    // security policy can still be attached when Pulumi gets to deleting it, failing
-    // with resourceInUseByAnotherResource. Pulumi deletes a resource only after its
-    // dependents are updated or deleted, so this resource's delete step runs after the
-    // link CR has been updated to securityPolicy: '' and before the policy is deleted.
-    // It blocks until GCP reports no backend service referencing the policy.
-    new local.Command(
-      `${config.gatewayName}-cloud-armor-detach-wait`,
-      {
-        create: 'true',
-        delete: config.securityPolicy.name.apply(
-          policyName => `set -eu
-            for _ in $(seq 1 60); do
-              attached=$(gcloud compute backend-services list --filter="securityPolicy~${policyName}$" --format="value(name)")
-              if [ -z "$attached" ]; then exit 0; fi
-              sleep 10
-            done
-            echo "backend services still reference ${policyName}: $attached" >&2
-            exit 1`
-        ),
-      },
-      { parent: gateway, dependsOn: [config.securityPolicy, cloudArmorLink] }
-    );
-  }
-
   createHealthCheckPolicy(config, gateway);
 
   if (config.cloudArmorExemptHostnames?.length) {

@@ -2,7 +2,7 @@
 infra:
   gkeGateway:
     # required for Cloud Armor to be attached to anything
-    proxyForIstioHttp: true
+    proxyForIstioHttp: false
 cloudArmor:
   enabled: false
   allRulesPreviewOnly: false
