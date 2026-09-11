@@ -10,6 +10,10 @@ inputs:
   load_cache_hit:
     description: "Cache hit from the restore Daml artifacts job (should be the cache_hit output from the restore Daml artifacts job)"
     required: true
+  use_pigz:
+    description: "Whether to use pigz for (de)compression (falls back to gzip when false)"
+    required: false
+    default: 'true'
 
 runs:
   using: "composite"
@@ -18,8 +22,13 @@ runs:
       if: ${{ ! fromJson(inputs.load_cache_hit) }}
       shell: bash
       run: |
+        if [[ "${{ inputs.use_pigz }}" == "true" ]]; then
+          TAR_COMPRESS_FLAG="--use-compress-program=pigz"
+        else
+          TAR_COMPRESS_FLAG="--gzip"
+        fi
         mkdir -p /tmp/daml
-        find ${{ inputs.splice_root }} -type d -name ".daml" | tar --use-compress-program=pigz -cf /tmp/daml/daml.tar.gz -T -
+        find ${{ inputs.splice_root }} -type d -name ".daml" | tar "$TAR_COMPRESS_FLAG" -cf /tmp/daml/daml.tar.gz -T -
     - name: Not archiving Daml artifacts
       if: ${{ fromJson(inputs.load_cache_hit) }}
       shell: bash
