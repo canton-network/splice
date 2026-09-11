@@ -26,6 +26,11 @@ release-notes:: Upcoming
         - Added a new public ``/v0/events/latest-record-time`` endpoint that returns the latest
           record time for which ``/v0/events`` will be able to return events.
 
+        - Added an automation to prune the DB tables having the temporary data used
+          by the verdict ingestion service and the traffic-based app reward calculations.
+
+          The default retention period is 1 week for this automation, after which the data will be removed from the DB.
+
     - Validator App
 
         - The minting-delegation reward collection for external parties now also collects
