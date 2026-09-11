@@ -8,3 +8,7 @@
 release-notes:: Upcoming
 
  - bump base image to full-1.0.14
+
+ - Validator App
+
+  - Fix a bug where the Scan proxy was missing Token Standard V2 endpoints for allocation-instruction and transfer-instruction.
