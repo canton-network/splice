@@ -10,6 +10,7 @@ import org.lfdecentralizedtrust.splice.util.{
   AnsFrontendTestUtil,
   FrontendLoginUtil,
   WalletFrontendTestUtil,
+  WalletGatewayFrontendTestUtil,
 }
 
 import java.lang.ProcessBuilder
@@ -22,12 +23,31 @@ class DockerComposeValidatorFrontendIntegrationTest
     extends FrontendIntegrationTestWithIsolatedEnvironment("frontend")
     with FrontendLoginUtil
     with WalletFrontendTestUtil
-    with AnsFrontendTestUtil {
+    with AnsFrontendTestUtil
+    with WalletGatewayFrontendTestUtil {
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition.simpleTopology1Sv(this.getClass.getSimpleName)
 
   val testDumpDir: Path = Paths.get("apps/app/src/test/resources/dumps")
   val partyHint = "da-ComposeValidator-1"
+
+  // The wallet gateway and portfolio UI deployed by `start.sh -g` (see compose-wallet-gateway.yaml)
+  override protected val walletGatewayUrl = "http://walletgateway.localhost/"
+  override protected val portfolioUrl = "http://portfolio.localhost/"
+  override protected val walletGatewayNetworkName = "Splice validator"
+  // Ledger user logging in to the gateway. Without authentication, the gateway issues self-signed tokens
+  // for whatever client ID is entered on its login page, given the network's client secret.
+  val walletGatewayUser = "charlie"
+  val walletGatewayClientSecret = "unsafe" // see compose-wallet-gateway-disable-auth.yaml
+
+  override protected def loginToWalletGatewayInCurrentWindow()(implicit
+      webDriver: WebDriverType
+  ): Unit = {
+    clue(s"Logging in to the wallet gateway as $walletGatewayUser") {
+      submitWalletGatewayLoginForm(Some((walletGatewayUser, walletGatewayClientSecret)))
+      waitForGatewayPartiesPage()
+    }
+  }
 
   def startComposeValidator(
       extraClue: String = "",
@@ -42,6 +62,7 @@ class DockerComposeValidatorFrontendIntegrationTest
       "-p",
       partyHint,
       "-b",
+      "-g",
     ) ++ startFlags).asJava
     val builder = new ProcessBuilder(command)
     extraEnv.foreach { case (k, v) => builder.environment().put(k, v) }
@@ -120,6 +141,41 @@ class DockerComposeValidatorFrontendIntegrationTest
           _ => seleniumText(find(id("logged-in-user"))) should not be "",
         )
         tapAmulets(aliceTap)
+        // Wait for the onboard button: right after switching users the page still shows Alice's party ID
+        actAndCheck(
+          "Login as the wallet gateway user",
+          loginOnCurrentPage(80, walletGatewayUser, "wallet.localhost"),
+        )(
+          "The wallet gateway user can onboard",
+          _ =>
+            find(
+              id("onboard-button")
+            ).value.text should not be empty withClue "'Onboard yourself' button",
+        )
+        actAndCheck(
+          "Onboard the wallet gateway user",
+          eventuallyClickOn(id("onboard-button")),
+        )(
+          "The wallet gateway user is logged in",
+          _ => seleniumText(find(id("logged-in-user"))) should not be "",
+        )
+        clue("Use the portfolio UI through the wallet gateway") {
+          val mainWindow = webDriver.getWindowHandle
+          val gatewayWalletHint =
+            s"$walletGatewayUser-gateway-${scala.util.Random.alphanumeric.take(8).mkString.toLowerCase}"
+          go to s"${portfolioUrl}connect"
+          val gatewayWindow = connectPortfolioToWalletGateway()
+          val gatewayPartyId =
+            createPrimaryParticipantWalletInGateway(gatewayWindow, gatewayWalletHint)
+          logger.info(s"Created wallet $gatewayPartyId on the gateway")
+          waitForPortfolioWallet(gatewayWalletHint)
+          tapInPortfolio(BigDecimal(100), gatewayWalletHint)
+          assertPortfolioShowsPositiveBalance()
+
+          webDriver.switchTo().window(gatewayWindow)
+          webDriver.close()
+          webDriver.switchTo().window(mainWindow)
+        }
         val ansName =
           s"alice_${(new scala.util.Random).nextInt().toHexString}.unverified.$ansAcronym"
         reserveAnsNameFor(
@@ -360,6 +416,12 @@ class DockerComposeValidatorFrontendIntegrationTest
           validatorUserPassword,
           () => seleniumText(find(id("logged-in-user"))) should startWith(partyHint),
         )
+
+        clue("Log in and out of the wallet gateway via auth0") {
+          go to walletGatewayUrl
+          loginToWalletGatewayViaAuth0("admin@compose-validator.com", validatorUserPassword)
+          logoutFromWalletGateway()
+        }
       }
 
     }
