@@ -55,7 +55,7 @@ configs:
               "auth": {
                 "method": "self_signed",
                 "issuer": "self-signed",
-                "audience": "${VALIDATOR_AUTH_AUDIENCE}",
+                "audience": "${LEDGER_API_AUTH_AUDIENCE}",
                 "scope": "daml_ledger_api",
                 "clientId": "wallet-user",
                 "clientSecret": "unsafe"
@@ -63,7 +63,7 @@ configs:
               "adminAuth": {
                 "method": "self_signed",
                 "issuer": "self-signed",
-                "audience": "${VALIDATOR_AUTH_AUDIENCE}",
+                "audience": "${LEDGER_API_AUTH_AUDIENCE}",
                 "scope": "daml_ledger_api",
                 "clientId": "ledger-api-user",
                 "clientSecret": "unsafe"
