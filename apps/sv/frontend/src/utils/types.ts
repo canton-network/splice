@@ -22,6 +22,10 @@ export interface UnpermissionValidatorProposal {
   loginAfter?: string;
 }
 
+export interface RepermissionValidatorProposal {
+  unpermissionCid: string;
+}
+
 export interface OffBoardMemberProposal {
   memberToOffboard: string;
 }
@@ -107,6 +111,7 @@ export type Proposal =
   | DsoRulesConfigProposal
   | UpdateFeatureAppProposal
   | UnpermissionValidatorProposal
+  | RepermissionValidatorProposal
   | undefined;
 
 export type ProposalActionMap = {
@@ -119,6 +124,7 @@ export type ProposalActionMap = {
   SRARC_SetConfig: DsoRulesConfigProposal;
   SRARC_UpdateFeaturedAppRight: UpdateFeatureAppProposal;
   SRARC_UnpermissionValidator: UnpermissionValidatorProposal;
+  SRARC_RepermissionValidator: RepermissionValidatorProposal;
   // If no proposal type is defined, can use unknown or a specific type:
   CRARC_AddFutureAmuletConfigSchedule: unknown;
 };
@@ -159,7 +165,8 @@ export type SupportedActionTag =
   | 'SRARC_UpdateSvRewardWeight'
   | 'SRARC_CreateUnallocatedUnclaimedActivityRecord'
   | 'SRARC_UpdateFeaturedAppRight'
-  | 'SRARC_UnpermissionValidator';
+  | 'SRARC_UnpermissionValidator'
+  | 'SRARC_RepermissionValidator';
 
 export type ProposalListingStatus =
   | 'Accepted'
@@ -231,6 +238,10 @@ export interface UnpermissionValidatorFormData extends CommonProposalFormData {
   loginAfter: string;
 }
 
+export interface RepermissionValidatorFormData extends CommonProposalFormData {
+  participantId: string;
+}
+
 export interface UpdateFeatureAppFormData extends CommonProposalFormData {
   partyId: string;
   rightCid: string;
@@ -243,7 +254,8 @@ export type NonConfigProposalFormData =
   | GrantRevokeFeaturedAppFormData
   | CreateUnallocatedUnclaimedActivityRecordFormData
   | UpdateFeatureAppFormData
-  | UnpermissionValidatorFormData;
+  | UnpermissionValidatorFormData
+  | RepermissionValidatorFormData;
 
 export type ConfigProposalFormData = SetDsoConfigCompleteFormData | SetAmuletConfigCompleteFormData;
 
