@@ -18,8 +18,9 @@ trait WalletGatewayFrontendTestUtil extends WalletFrontendTestUtil { self: Front
   // How a user logs in on the gateway's login page differs per deployment (Auth0 vs. self-signed tokens)
   protected def loginToWalletGatewayInCurrentWindow()(implicit webDriver: WebDriverType): Unit
 
+  // `credentials` = (client ID, client secret) for self-signed networks; Auth0 networks take none
   protected def submitWalletGatewayLoginForm(
-      clientId: Option[String]
+      credentials: Option[(String, String)]
   )(implicit webDriver: WebDriverType): Unit = {
     // The select stays disabled until the gateway has fetched its networks
     eventually(1.minute) {
@@ -27,8 +28,9 @@ trait WalletGatewayFrontendTestUtil extends WalletFrontendTestUtil { self: Front
       select.isEnabled shouldBe true withClue "network select enabled (networks loaded)"
       selectDeepByVisibleText(select, walletGatewayNetworkName)
     }
-    clientId.foreach { id =>
-      setDeepValue(eventuallyFindDeep(Selectors.Gateway.clientIdInput), id)
+    credentials.foreach { case (clientId, clientSecret) =>
+      setDeepValue(eventuallyFindDeep(Selectors.Gateway.clientIdInput), clientId)
+      setDeepValue(eventuallyFindDeep(Selectors.Gateway.clientSecretInput), clientSecret)
     }
     clickDeep(Selectors.Gateway.connectButton)
   }
@@ -241,6 +243,7 @@ object WalletGatewayFrontendTestUtil {
       // Login page (`wg-login-form`)
       val networkSelect = "select#network-select"
       val clientIdInput = "input#client-id"
+      val clientSecretInput = "input#client-secret"
       val connectButton = "button[type='submit']"
       // Header menu (`app-header`)
       val menuButton = "button.page-trigger"
