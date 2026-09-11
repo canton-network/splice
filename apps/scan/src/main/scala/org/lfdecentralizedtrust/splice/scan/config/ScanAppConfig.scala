@@ -81,6 +81,9 @@ case class ScanAppBackendConfig(
     // Max rounding error tolerated wrt actual total of minting allowances
     // and the per-round minting allowance from the CC whitepaper.
     rewardMintingAllowanceTolerance: BigDecimal = BigDecimal(0.1),
+    // Reward-accounting data is retained for this duration and may get pruned afterwards.
+    rewardAccountingRetentionPeriod: NonNegativeFiniteDuration =
+      NonNegativeFiniteDuration.ofDays(7),
     miningRoundsCacheTimeToLiveOverride: Option[NonNegativeFiniteDuration] = None,
     enableForcedAcsSnapshots: Boolean = false,
     // The migration id is normally read from the DB (the highest known migration id in the

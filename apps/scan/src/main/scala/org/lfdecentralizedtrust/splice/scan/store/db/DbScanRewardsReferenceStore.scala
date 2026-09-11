@@ -17,12 +17,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.round.OpenMiningRound
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.scan.store.ScanRewardsReferenceStore
-import org.lfdecentralizedtrust.splice.store.{
-  Limit,
-  LimitHelpers,
-  TcsStore,
-  TimestampWithMigrationId,
-}
+import org.lfdecentralizedtrust.splice.store.{Limit, LimitHelpers, TcsStore}
 import org.lfdecentralizedtrust.splice.store.db.{
   AcsArchiveConfig,
   AcsQueries,
@@ -108,7 +103,7 @@ class DbScanRewardsReferenceStore(
 
   override def lookupActiveOpenMiningRounds(
       recordTimes: Seq[CantonTimestamp]
-  )(implicit tc: TraceContext): Future[Map[CantonTimestamp, TimestampWithMigrationId]] = {
+  )(implicit tc: TraceContext): Future[Map[CantonTimestamp, (Long, CantonTimestamp)]] = {
     tcsStore.getEarliestArchivedAt().flatMap {
       case None =>
         Future.successful(Map.empty)
@@ -130,10 +125,7 @@ class DbScanRewardsReferenceStore(
                 .flatMap { r =>
                   val opensAt = CantonTimestamp.assertFromInstant(r.contract.payload.opensAt)
                   Option.when(opensAt >= ingestionStart) {
-                    recordTime -> TimestampWithMigrationId(
-                      opensAt,
-                      r.contract.payload.round.number.toLong,
-                    )
+                    recordTime -> (r.contract.payload.round.number.toLong, opensAt)
                   }
                 }
             }.toMap
@@ -276,6 +268,74 @@ class DbScanRewardsReferenceStore(
           )
         }
       case _ => Future.successful(None)
+    }
+
+  override def lookupArchivedAtForOpenMiningRound(
+      roundNumber: Long
+  )(implicit tc: TraceContext): Future[Option[CantonTimestamp]] =
+    waitUntilInitialized.flatMap { _ =>
+      val storeId = multiDomainAcsStore.acsStoreId
+      val migrationId = multiDomainAcsStore.domainMigrationId
+      val pqn = PackageQualifiedName.fromJavaCodegenCompanion(OpenMiningRound.COMPANION)
+      futureUnlessShutdownToFuture(
+        storage.query(
+          sql"""select acs.archived_at
+                from #${ScanRewardsReferenceTables.archiveTableName} acs
+                where acs.store_id = $storeId
+                  and acs.migration_id = $migrationId
+                  and acs.package_name = ${pqn.packageName}
+                  and acs.template_id_qualified_name = ${pqn.qualifiedName}
+                  and acs.round = $roundNumber
+                limit 1
+           """.as[CantonTimestamp].headOption,
+          "lookupArchivedAtForOpenMiningRound",
+        )
+      )
+    }
+
+  override def lookupLowestPrunableArchivedRewardRound()(implicit
+      tc: TraceContext
+  ): Future[Option[Long]] =
+    waitUntilInitialized.flatMap { _ =>
+      val storeId = multiDomainAcsStore.acsStoreId
+      val migrationId = multiDomainAcsStore.domainMigrationId
+      // It is important to limit the query for the round to OpenMiningRound
+      // as we prune only the contracts <= OpenMiningRound's archived_at
+      // and the db will likely still have other contracts for this round
+      // even after the pruning.
+      val pqn = PackageQualifiedName.fromJavaCodegenCompanion(OpenMiningRound.COMPANION)
+      futureUnlessShutdownToFuture(
+        storage.query(
+          sql"""select min(archived.round)
+                from #${ScanRewardsReferenceTables.archiveTableName} archived
+                where archived.store_id = $storeId and archived.migration_id = $migrationId
+                  and archived.package_name = ${pqn.packageName}
+                  and archived.template_id_qualified_name = ${pqn.qualifiedName}
+                  and not exists (
+                    select 1
+                    from #${ScanRewardsReferenceTables.acsTableName} active
+                    where active.store_id = archived.store_id
+                      and active.migration_id = archived.migration_id
+                      and active.round <= archived.round
+                  )
+           """.as[Option[Long]].head,
+          "lookupLowestPrunableArchivedRewardRound",
+        )
+      )
+    }
+
+  // Returns number of rows deleted
+  override def pruneArchivedUpToRound(
+      roundNumber: Long
+  )(implicit tc: TraceContext): Future[Long] =
+    lookupArchivedAtForOpenMiningRound(roundNumber).flatMap {
+      case None =>
+        Future.failed(
+          new IllegalStateException(
+            s"Cannot prune archived data for round $roundNumber: its OpenMiningRound has not been observed as archived."
+          )
+        )
+      case Some(uptoInclusive) => tcsStore.pruneArchivedUpTo(uptoInclusive)
     }
 
   override def listActiveCalculateRewardsV2(limit: Limit = defaultLimit)(implicit
