@@ -69,40 +69,6 @@ trait PackageVersionSupport extends NamedLogging {
     )
   }
 
-  // TODO(#6388): remove redundant version check
-  def supportsConvertFeaturedAppActivityMarkerObservers(
-      parties: Seq[PartyId],
-      now: CantonTimestamp,
-  )(implicit tc: TraceContext): Future[FeatureSupport] =
-    isDarSupported(
-      parties,
-      PackageIdResolver.Package.SpliceAmulet,
-      now,
-      DarResources.amulet,
-      DarResources.amulet_0_1_16,
-      ignoreRedundantCheck = true,
-    )
-
-  // TODO(#6388): remove redundant version check
-  def supports24hSubmissionDelay(
-      amuletParties: Seq[PartyId],
-      dsoGovernanceParties: Seq[PartyId],
-      now: CantonTimestamp,
-  )(implicit
-      tc: TraceContext
-  ): Future[FeatureSupport] = {
-    isDarSupported(
-      Seq(
-        PackageIdResolver.Package.SpliceDsoGovernance -> dsoGovernanceParties,
-        PackageIdResolver.Package.SpliceAmulet -> amuletParties,
-      ),
-      now,
-      DarResources.amulet,
-      DarResources.amulet_0_1_17,
-      ignoreRedundantCheck = true,
-    )
-  }
-
   def supportsAmuletAllocationV2(
       parties: Seq[PartyId],
       now: CantonTimestamp,
@@ -119,79 +85,6 @@ trait PackageVersionSupport extends NamedLogging {
       ignoreRedundantCheck = false,
     )
   }
-
-  // Synonym for supports24hSubmissionDelay as both features were introduced in amulet_0_1_17
-
-  def supportsExpireTransferInstructions(
-      amuletParties: Seq[PartyId],
-      dsoGovernanceParties: Seq[PartyId],
-      now: CantonTimestamp,
-  )(implicit
-      tc: TraceContext
-  ): Future[FeatureSupport] = supports24hSubmissionDelay(amuletParties, dsoGovernanceParties, now)
-
-  def supportsExpireAmuletAllocations(
-      amuletParties: Seq[PartyId],
-      dsoGovernanceParties: Seq[PartyId],
-      now: CantonTimestamp,
-  )(implicit
-      tc: TraceContext
-  ): Future[FeatureSupport] = supports24hSubmissionDelay(amuletParties, dsoGovernanceParties, now)
-
-  // TODO(#6388): remove redundant version check
-  def supports24hSubmissionDelayDsoGovernance(parties: Seq[PartyId], now: CantonTimestamp)(implicit
-      tc: TraceContext
-  ): Future[FeatureSupport] = {
-    isDarSupported(
-      parties,
-      PackageIdResolver.Package.SpliceDsoGovernance,
-      now,
-      DarResources.dsoGovernance,
-      DarResources.dsoGovernance_0_1_23,
-      ignoreRedundantCheck = true,
-    )
-  }
-
-  // TODO(#6388): remove redundant version check
-  // TODO(#564) - ensure the right version is used
-  def supportsPhysicalSynchronizers(parties: Seq[PartyId], now: CantonTimestamp)(implicit
-      tc: TraceContext
-  ): Future[FeatureSupport] = {
-    isDarSupported(
-      parties,
-      PackageIdResolver.Package.SpliceDsoGovernance,
-      now,
-      DarResources.dsoGovernance,
-      DarResources.dsoGovernance_0_1_24,
-      ignoreRedundantCheck = true,
-    )
-  }
-
-  // TODO(#6388): remove redundant version check
-  def supportsTrafficBasedAppRewards(parties: Seq[PartyId], now: CantonTimestamp)(implicit
-      tc: TraceContext
-  ): Future[FeatureSupport] =
-    isDarSupported(
-      parties,
-      PackageIdResolver.Package.SpliceAmulet,
-      now,
-      DarResources.amulet,
-      DarResources.amulet_0_1_19,
-      ignoreRedundantCheck = true,
-    )
-
-  // TODO(#6388): remove redundant version check
-  def supportsMintingDelegation(parties: Seq[PartyId], now: CantonTimestamp)(implicit
-      tc: TraceContext
-  ): Future[FeatureSupport] =
-    isDarSupported(
-      parties,
-      PackageIdResolver.Package.SpliceWallet,
-      now,
-      DarResources.wallet,
-      DarResources.wallet_0_1_16,
-      ignoreRedundantCheck = true,
-    )
 
   private def isDarSupported(
       parties: Seq[PartyId],
