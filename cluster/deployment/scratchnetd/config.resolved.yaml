@@ -418,6 +418,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config.how-long-to-blacklist {\n  type=linear\n  maximum-epoch-blacklisted=62\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -493,6 +496,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config.how-long-to-blacklist {\n  type=linear\n  maximum-epoch-blacklisted=62\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -568,6 +574,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config.how-long-to-blacklist {\n  type=linear\n  maximum-epoch-blacklisted=62\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -643,6 +652,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config.how-long-to-blacklist {\n  type=linear\n  maximum-epoch-blacklisted=62\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -718,6 +730,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config.how-long-to-blacklist {\n  type=linear\n  maximum-epoch-blacklisted=62\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -793,6 +808,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config.how-long-to-blacklist {\n  type=linear\n  maximum-epoch-blacklisted=62\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -868,6 +886,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config.how-long-to-blacklist {\n  type=linear\n  maximum-epoch-blacklisted=62\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -943,6 +964,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config.how-long-to-blacklist {\n  type=linear\n  maximum-epoch-blacklisted=62\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -1018,6 +1042,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config.how-long-to-blacklist {\n  type=linear\n  maximum-epoch-blacklisted=62\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -1093,6 +1120,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config.how-long-to-blacklist {\n  type=linear\n  maximum-epoch-blacklisted=62\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -1168,6 +1198,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config.how-long-to-blacklist {\n  type=linear\n  maximum-epoch-blacklisted=62\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -1243,6 +1276,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config.how-long-to-blacklist {\n  type=linear\n  maximum-epoch-blacklisted=62\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -1318,6 +1354,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config.how-long-to-blacklist {\n  type=linear\n  maximum-epoch-blacklisted=62\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -1393,6 +1432,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config.how-long-to-blacklist {\n  type=linear\n  maximum-epoch-blacklisted=62\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -1468,6 +1510,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config.how-long-to-blacklist {\n  type=linear\n  maximum-epoch-blacklisted=62\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -1543,6 +1588,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config.how-long-to-blacklist {\n  type=linear\n  maximum-epoch-blacklisted=62\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -1618,6 +1666,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config.how-long-to-blacklist {\n  type=linear\n  maximum-epoch-blacklisted=62\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -1697,6 +1748,9 @@ svs:
           memory: '2Gi'
     subdomain: 'sv-1'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config.how-long-to-blacklist {\n  type=linear\n  maximum-epoch-blacklisted=62\n}\n"
       auth0:
         clientId: 'bxjt0vzLyRG2rk2fapXfOzH5lzK4mrl7'
       resources:
