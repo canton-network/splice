@@ -436,6 +436,7 @@ class TestTokenV2SettlementIntegrationTest
               .list()
               .amulets
               .map(_.contract.contractId.toInterface(holdingv2.Holding.INTERFACE))
+            aliceAmulets should have size 1
             val amuletSpec = aliceAllocationRequest.contract.payload.allocations.asScala
               .filter(_.admin == dsoParty.toProtoPrimitive)
               .loneElement
@@ -715,6 +716,7 @@ class TestTokenV2SettlementIntegrationTest
               val bobUsdcHoldings = getHoldings(bobParty, bobValidatorBackend)
                 .map(_.contractId)
                 .map(id => new holdingv2.Holding.ContractId(id))
+              bobUsdcHoldings should have size 2
               val usdcContext = registry.getContext(
                 bobUsdcHoldings
               )
