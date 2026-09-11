@@ -7,6 +7,10 @@ inputs:
   splice_root:
     description: "Path to splice repo"
     default: ${{ github.repository == 'DACH-NY/canton-network-internal' && 'splice' || '.' }}
+  use_pigz:
+    description: "Whether to use pigz for (de)compression (falls back to gzip when false)"
+    required: false
+    default: 'true'
 outputs:
   cache_hit:
     description: "Cache hit"
@@ -28,9 +32,14 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
+        if [[ "${{ inputs.use_pigz }}" == "true" ]]; then
+          TAR_COMPRESS_FLAG="--use-compress-program=pigz"
+        else
+          TAR_COMPRESS_FLAG="--gzip"
+        fi
         if [[ -e /tmp/classes/classes.tar.gz ]]; then
           pushd ${{ inputs.splice_root }}
-          tar --use-compress-program=pigz -xf /tmp/classes/classes.tar.gz
+          tar "$TAR_COMPRESS_FLAG" -xf /tmp/classes/classes.tar.gz
           # For some reason, the reset below may change file modification times stamps, if we don't run `git status`.
           git status
           # Reset changes to files under version control.
