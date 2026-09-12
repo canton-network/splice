@@ -179,6 +179,14 @@ class DockerComposeValidatorFrontendIntegrationTest
           }
           webDriver.switchTo().window(mainWindow)
         }
+        // The CNS UI hands the payment off to the wallet, which is still logged in as the gateway user
+        actAndCheck(
+          "Log back in as alice",
+          login(80, "alice", "wallet.localhost"),
+        )(
+          "Alice is logged in",
+          _ => seleniumText(find(id("logged-in-user"))) should startWith("alice"),
+        )
         val ansName =
           s"alice_${(new scala.util.Random).nextInt().toHexString}.unverified.$ansAcronym"
         reserveAnsNameFor(
