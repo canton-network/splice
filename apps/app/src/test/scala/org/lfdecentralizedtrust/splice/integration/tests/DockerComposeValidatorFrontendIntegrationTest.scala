@@ -172,8 +172,11 @@ class DockerComposeValidatorFrontendIntegrationTest
           tapInPortfolio(BigDecimal(100), gatewayWalletHint)
           assertPortfolioShowsPositiveBalance()
 
-          webDriver.switchTo().window(gatewayWindow)
-          webDriver.close()
+          // The tap approval reuses the gateway popup and closes it
+          if (windowHandles.contains(gatewayWindow)) {
+            webDriver.switchTo().window(gatewayWindow)
+            webDriver.close()
+          }
           webDriver.switchTo().window(mainWindow)
         }
         val ansName =
