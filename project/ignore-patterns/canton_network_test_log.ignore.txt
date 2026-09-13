@@ -113,6 +113,9 @@ Splice unsafe shutdown future
 # SV UI polls cometbft status endpoint even when there's no cometBFT (we have this in the full network docker compose test)
 .*CometBFT is not configured for this app.*
 
+# The portfolio UI warns about the plain-HTTP validator URL used by the docker compose deployment
+Using a non-TLS validator endpoint\. This is acceptable only in trusted environments
+
 Failed to connect to scan of Digital-Asset-Eng-3.*AppUpgradeIntegrationTest
 
 # Ignore scan issues in disaster recovery tests as we don't start scan there
