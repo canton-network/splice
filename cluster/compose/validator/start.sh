@@ -11,6 +11,15 @@ function _error_msg(){
   echo -e "\e[1;31mERROR: $@\e[0m" >&2
 }
 
+# value of a variable as docker compose resolves it: the environment wins over .env
+function _env_var(){
+  if [ -n "${!1+x}" ]; then
+    echo "${!1}"
+  else
+    grep -E "^$1=" "${script_dir}/.env" | tail -n1 | cut -d= -f2- | tr -d '"'
+  fi
+}
+
 # issue a user friendly green informational message
 function _info(){
   local first_line="INFO: "
@@ -40,7 +49,7 @@ function usage() {
   echo "  -S <comma_separated_sv_names>: Comma-separated list of SV names for bft-custom mode."
   echo "  -T <threshold>: Consensus threshold integer for bft-custom mode."
   echo "  -k: Disable the safety check that refuses to create a new participant database when another participant database already exists."
-  echo "  -g: Also deploy the Canton Wallet Gateway and the Portfolio UI (reachable at http://walletgateway.localhost and http://portfolio.localhost). With -a, also requires WALLET_GATEWAY_UI_CLIENT_ID to be set in .env."
+  echo "  -g: Also deploy the Canton Wallet Gateway and the Portfolio UI (reachable at http://walletgateway.localhost and http://portfolio.localhost). Requires LEDGER_API_AUTH_AUDIENCE and VALIDATOR_AUTH_AUDIENCE to be equal, and with -a also WALLET_GATEWAY_UI_CLIENT_ID to be set in .env."
 
   echo ""
   echo "Testing flags:"
@@ -331,6 +340,11 @@ if [ $bft_custom -eq 1 ]; then
   extra_compose_files+=("-f" "${script_dir}/compose-bft-custom.yaml")
 fi
 if [ $wallet_gateway -eq 1 ]; then
+  # The portfolio UI calls the validator API with the gateway's ledger API tokens
+  if [ "$(_env_var LEDGER_API_AUTH_AUDIENCE)" != "$(_env_var VALIDATOR_AUTH_AUDIENCE)" ]; then
+    _error_msg "LEDGER_API_AUTH_AUDIENCE and VALIDATOR_AUTH_AUDIENCE must be equal when deploying the wallet gateway with -g"
+    exit 1
+  fi
   extra_compose_files+=("-f" "${script_dir}/compose-wallet-gateway.yaml")
   if [ $auth -ne 1 ]; then
     extra_compose_files+=("-f" "${script_dir}/compose-wallet-gateway-disable-auth.yaml")
