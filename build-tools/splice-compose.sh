@@ -74,7 +74,8 @@ function _export_auth0_env_vars {
   export LEDGER_API_AUTH_AUDIENCE
   WALLET_ADMIN_USER=$(auth0 users search --query email:"admin@compose-validator.com" --json 2>/dev/null | jq -r '.[].user_id')
   export WALLET_ADMIN_USER
-  VALIDATOR_AUTH_AUDIENCE="https://validator.example.com/api"
+  # Must equal LEDGER_API_AUTH_AUDIENCE for the portfolio UI to reach the validator API
+  VALIDATOR_AUTH_AUDIENCE="https://ledger_api.example.com"
   export VALIDATOR_AUTH_AUDIENCE
 }
 
