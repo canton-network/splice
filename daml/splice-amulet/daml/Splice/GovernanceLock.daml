@@ -224,10 +224,6 @@ template VestingLock
       -- relocks it with `expiresAt = endTime`, so at the instant the vesting
       -- period completes its time-lock has expired and wallets already treat it
       -- as a liquid holding.
-      --
-      -- This choice doesn't return anything because an SV trigger that
-      -- cleans up expired vesting locks doesn't care to do anything with the
-      -- now unlocked `lockedAmulet`.
       controller dso
       do
         assertDeadlineExceeded "VestingLock.endTime" endTime
@@ -239,6 +235,10 @@ template VestingLock
 
 data VestingLock_DsoExpireResult
   = VestingLock_DsoExpireResult
+    -- ^
+    -- The `VestingLock_DsoExpireResult` choice doesn't return anything because
+    -- an SV trigger that cleans up expired vesting locks doesn't care to do
+    -- anything with the now unlocked `lockedAmulet`.
   deriving (Serializable)
 
 data VestingLock_WithdrawResult
