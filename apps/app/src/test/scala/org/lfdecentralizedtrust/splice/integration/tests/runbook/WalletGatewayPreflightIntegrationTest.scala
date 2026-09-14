@@ -52,9 +52,14 @@ abstract class WalletGatewayPreflightIntegrationTestBase
 
   "run through the wallet gateway and portfolio UIs against the cluster validator" in { _ =>
     // The gateway is only enabled on some clusters (`walletGateway.enabled` in the cluster config)
-    if (!isWalletGatewayDeployed) {
-      cancel(s"No wallet gateway is deployed at $walletGatewayUrl, skipping")
+    if (isWalletGatewayDeployed) {
+      runThroughWalletGatewayAndPortfolio()
+    } else {
+      logger.info(s"No wallet gateway is deployed at $walletGatewayUrl, skipping")
     }
+  }
+
+  private def runThroughWalletGatewayAndPortfolio(): Unit = {
     val user = auth0User.value
     val partyHint = s"wg-preflight-${Random.alphanumeric.take(8).mkString.toLowerCase}"
 
