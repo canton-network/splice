@@ -20,20 +20,20 @@ rsync -av --delete --exclude version.sbt --exclude community-build.sbt --exclude
     --exclude 'base/contextualized-logging' --exclude 'base/crypto' \
     --exclude 'base/daml-jwt' --exclude 'base/daml-tls' \
     --exclude 'base/errors' --exclude 'base/util-external' \
-    --exclude '*/community/lib/Blake2b' \
-    --exclude '*/community/lib/google-common-protos-scala' \
-    --exclude '*/community/lib/magnolify' \
-    --exclude '*/community/lib/scalatest' \
-    --exclude '*/community/lib/slick' \
-    --exclude '*/community/lib/wartremover-annotations' \
-    --exclude 'community/bindings-java' --exclude "*/community/transcode" \
-    --exclude '*/community/kms-driver-api' \
-    --exclude '*/community/ledger-api-scala' --exclude "*/ledger-api-proto" \
+    --exclude 'community/lib/Blake2b' \
+    --exclude 'community/lib/google-common-protos-scala' \
+    --exclude 'community/lib/magnolify' \
+    --exclude 'community/lib/scalatest' \
+    --exclude 'community/lib/slick' \
+    --exclude 'community/lib/wartremover-annotations' \
+    --exclude 'community/bindings-java' --exclude "community/transcode" \
+    --exclude 'community/kms-driver-api' \
+    --exclude 'community/ledger-api-scala' --exclude "**/ledger-api-proto" \
     --exclude '*/canton-community-app/test/scala/*/integration/tests' \
-    --exclude '*/community/ledger/ledger-api-core' \
-    --exclude '*/canton/community/model-based-testing-drivers' \
-    --exclude '*/canton/community/model-based-testing-generators' \
-    --exclude '*/canton/community/model-based-testing-integration-tests' \
+    --exclude 'community/ledger/ledger-api-core' \
+    --exclude 'community/model-based-testing-drivers' \
+    --exclude 'community/model-based-testing-generators' \
+    --exclude 'community/model-based-testing-integration-tests' \
     "$1/" \
     canton/
 # remove any broken symlinks after the copy
