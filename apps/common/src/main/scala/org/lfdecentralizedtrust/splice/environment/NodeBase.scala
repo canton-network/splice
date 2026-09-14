@@ -295,6 +295,11 @@ abstract class NodeBase[State <: AutoCloseable & HasHealth](
       }
   }
 
+  // For integration tests: lets a local backend reference report a failed initialization by cause
+  // instead of only timing out on the health endpoint.
+  private[splice] def initializationFailure: Option[Throwable] =
+    initializeF.value.collect { case Failure(e) => e }
+
   private[splice] def getState = initializeF.value match {
     case Some(Success(state)) => Some(state)
     case _ => None

@@ -60,6 +60,12 @@ trait AppReference extends InstanceReference {
 
   override val name: String
 
+  /** In-process backend references override this to report a node whose initialization has failed,
+    * so a test fails fast with the cause instead of timing out on the health endpoint. Remote
+    * references (e.g. preflight) have no local node and keep the default.
+    */
+  protected def localInitializationFailure: Option[Throwable] = None
+
   override implicit val consoleEnvironment: ConsoleEnvironment = spliceConsoleEnvironment
   implicit val spliceConsoleEnvironment: SpliceConsoleEnvironment
 
@@ -189,23 +195,34 @@ trait HttpAppReference extends AppReference with HttpCommandRunner {
   override def waitForInitialization(
       timeout: NonNegativeDuration = defaultHealthStatusTimeout,
       maxBackoff: NonNegativeDuration = defaultHealthStatusMaxBackoff,
-  ): Unit =
+  ): Unit = {
     try {
       ConsoleMacros.utils.retry_until_true(
         timeout,
         maxBackoff,
       )(
-        httpHealth.successOption.exists(_.active)
+        localInitializationFailure.isDefined || httpHealth.successOption.exists(_.active)
       )
     } catch {
       case NonFatal(e) =>
         noTracingLogger.error(s"Timeout while waiting for initialization of ${name}", e)
         throw e
     }
+    localInitializationFailure.foreach(e =>
+      throw new IllegalStateException(s"Initialization of ${name} failed", e)
+    )
+  }
 }
 
 trait AppBackendReference extends AppReference with LocalInstanceReference {
   override def config: SpliceBackendConfig
+
+  override protected def localInitializationFailure: Option[Throwable] =
+    nodes
+      .getRunning(this.name)
+      .flatMap(_.getNode)
+      .collect { case n: NodeBase[?] => n.initializationFailure }
+      .flatten
 
   @Help.Summary("Start node and wait for initialization to complete")
   def startSync(): Unit = {
