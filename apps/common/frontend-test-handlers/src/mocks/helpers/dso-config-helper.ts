@@ -62,6 +62,8 @@ export function getDsoRulesConfig(
     voteCooldownTime: {
       microseconds: '60000000', // 1 minute
     },
+    minMemberTrafficToOnboardValidator: '100000',
+    devNetPublicSetupTrafficAmount: '10000000',
   };
 }
 
@@ -224,7 +226,13 @@ export function getExpectedDsoRulesConfigDiffsHTML(
 }</pre></div></li><li class="jsondiffpatch-unchanged"
       data-key="nextScheduledLogicalSynchronizerUpgrade"><div
         class="jsondiffpatch-property-name">nextScheduledLogicalSynchronizerUpgrade</div><div
-        class="jsondiffpatch-value"><pre>null</pre></div></li></ul></div>
+        class="jsondiffpatch-value"><pre>null</pre></div></li><li
+      class="jsondiffpatch-unchanged" data-key="minMemberTrafficToOnboardValidator"><div
+        class="jsondiffpatch-property-name">minMemberTrafficToOnboardValidator</div><div
+        class="jsondiffpatch-value"><pre>"100000"</pre></div></li><li
+      class="jsondiffpatch-unchanged" data-key="devNetPublicSetupTrafficAmount"><div
+        class="jsondiffpatch-property-name">devNetPublicSetupTrafficAmount</div><div
+        class="jsondiffpatch-value"><pre>"10000000"</pre></div></li></ul></div>
 `;
 
   const voteResultDiff = `
@@ -325,7 +333,13 @@ export function getExpectedDsoRulesConfigDiffsHTML(
 }</pre></div></li><li class="jsondiffpatch-unchanged"
       data-key="nextScheduledLogicalSynchronizerUpgrade"><div
         class="jsondiffpatch-property-name">nextScheduledLogicalSynchronizerUpgrade</div><div
-        class="jsondiffpatch-value"><pre>null</pre></div></li></ul></div>
+        class="jsondiffpatch-value"><pre>null</pre></div></li><li
+      class="jsondiffpatch-unchanged" data-key="minMemberTrafficToOnboardValidator"><div
+        class="jsondiffpatch-property-name">minMemberTrafficToOnboardValidator</div><div
+        class="jsondiffpatch-value"><pre>"100000"</pre></div></li><li
+      class="jsondiffpatch-unchanged" data-key="devNetPublicSetupTrafficAmount"><div
+        class="jsondiffpatch-property-name">devNetPublicSetupTrafficAmount</div><div
+        class="jsondiffpatch-value"><pre>"10000000"</pre></div></li></ul></div>
 `;
 
   return isVoteResult ? voteResultDiff : voteRequestDiff;

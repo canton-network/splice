@@ -133,4 +133,32 @@ describe('buildDsoRulesConfigFromChanges', () => {
 
     expect(result.voteCooldownTime).toEqual({ microseconds: '300000' });
   });
+
+  it('should handle minMemberTrafficToOnboardValidator and devNetPublicSetupTrafficAmount when not provided', () => {
+    const changes: ConfigChange[] = [];
+    const result = buildDsoRulesConfigFromChanges(changes);
+    expect(result.minMemberTrafficToOnboardValidator).toBeNull();
+    expect(result.devNetPublicSetupTrafficAmount).toBeNull();
+  });
+
+  it('should handle minMemberTrafficToOnboardValidator and devNetPublicSetupTrafficAmount when provided', () => {
+    const changes: ConfigChange[] = [
+      {
+        fieldName: 'minMemberTrafficToOnboardValidator',
+        label: 'Min Member Traffic',
+        currentValue: '',
+        newValue: '150000',
+      },
+      {
+        fieldName: 'devNetPublicSetupTrafficAmount',
+        label: 'DevNet Setup Traffic',
+        currentValue: '',
+        newValue: '25000000',
+      },
+    ];
+    const result = buildDsoRulesConfigFromChanges(changes);
+
+    expect(result.minMemberTrafficToOnboardValidator).toBe('150000');
+    expect(result.devNetPublicSetupTrafficAmount).toBe('25000000');
+  });
 });

@@ -397,6 +397,8 @@ class SvStateManagementIntegrationTest extends SvIntegrationTestBase with Trigge
           sv1Backend.getDsoInfo().dsoRules.payload.config.nextScheduledSynchronizerUpgrade,
           sv1Backend.getDsoInfo().dsoRules.payload.config.voteCooldownTime,
           sv1Backend.getDsoInfo().dsoRules.payload.config.nextScheduledLogicalSynchronizerUpgrade,
+          sv1Backend.getDsoInfo().dsoRules.payload.config.minMemberTrafficToOnboardValidator,
+          sv1Backend.getDsoInfo().dsoRules.payload.config.devNetPublicSetupTrafficAmount,
         )
 
         val action: ActionRequiringConfirmation =

@@ -346,7 +346,9 @@ object SpliceUtil {
     ), // decentralizedSynchronizerConfig
     Optional.empty(), // nextScheduledSynchronizerUpgrade
     Optional.empty(), // voteCooldownTime
-    Optional.empty(), // nextScheduledLogicalSynchronizerUpgrade
+    Optional.empty(), // nextScheduledLogicalSynchronizerUpgrade,
+    Optional.of(100000L: java.lang.Long), // minMemberTrafficToOnboardValidator
+    Optional.of(10000000L: java.lang.Long), // devNetPublicSetupTrafficAmount
   )
 
   def defaultAmuletConfig(

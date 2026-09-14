@@ -213,6 +213,19 @@ export function buildDsoConfigChanges(
       currentValue: before?.voteCooldownTime?.microseconds || '',
       newValue: after?.voteCooldownTime?.microseconds || '',
     },
+    {
+      fieldName: 'minMemberTrafficToOnboardValidator',
+      label:
+        'Minimum amount of traffic a validator must purchase to be granted a ParticipantSynchronizerPermission',
+      currentValue: before?.minMemberTrafficToOnboardValidator || '',
+      newValue: after?.minMemberTrafficToOnboardValidator || '',
+    },
+    {
+      fieldName: 'devNetPublicSetupTrafficAmount',
+      label: 'Traffic amount purchased for validators onboarded via the DevNet faucet',
+      currentValue: before?.devNetPublicSetupTrafficAmount || '',
+      newValue: after?.devNetPublicSetupTrafficAmount || '',
+    },
   ] as ConfigChange[];
 
   return showAllFields ? changes : changes.filter(c => c.currentValue !== c.newValue);
