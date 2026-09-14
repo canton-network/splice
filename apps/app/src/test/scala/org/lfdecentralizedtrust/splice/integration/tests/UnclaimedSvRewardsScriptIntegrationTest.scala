@@ -8,6 +8,7 @@ import java.time.temporal.ChronoUnit
 import scala.collection.mutable
 import scala.sys.process.ProcessLogger
 import scala.util.control.NonFatal
+import scala.concurrent.duration.DurationInt
 
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet as amuletCodegen
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
@@ -105,15 +106,24 @@ class UnclaimedSvRewardsScriptIntegrationTest
       // Expire
       ///////////
 
-      actAndCheck(
+      // Coupons are only claimable against a ClosedMiningRound (AmuletRules_ClaimExpiredRewards),
+      // so wait for 0-2 to be closed before resuming the coupon-expiry trigger.
+      eventually(40.seconds) {
+        val closed = sv1ScanBackend.getClosedRounds().map(_.payload.round.number.longValue())
+        closed should contain allOf (0L, 1L, 2L)
+      }
+
+      actAndCheck(timeUntilSuccess = 40.seconds)(
         "Resume expired trigger", {
           expireRewardCouponsTrigger.resume()
         },
       )(
         "Coupons for round 0,1,2 get expired",
         _ => {
-          sv1WalletClient
-            .listSvRewardCoupons() should have size (svRewardCouponsCount - svRewardCouponsExpiredCount) withClue "sv1 SvRewardCoupons"
+          val remaining = sv1WalletClient
+            .listSvRewardCoupons()
+          forAll(remaining)(c => c.payload.round.number.longValue() should be > 2L)
+          remaining should have size (svRewardCouponsCount - svRewardCouponsExpiredCount) withClue "sv1 SvRewardCoupons"
           // Pause trigger once we have some coupons expired
           expireRewardCouponsTrigger.pause().futureValue
         },
