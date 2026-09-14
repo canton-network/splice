@@ -17,6 +17,10 @@ release-notes:: Upcoming
           ``/v0/dso`` endpoint. The scan is configured via the new ``.joinWithKeyOnboarding.sponsorScanUrl`` Helm value.
           SVs who set the ``.joinWithKeyOnboarding`` key config must set it before upgrading.
 
+    - Docker Compose
+
+        - The validator deployment can now also deploy the Canton Wallet Gateway and the Portfolio UI with the new ``-g`` flag of ``start.sh``.
+
     - Helm
 
         - The deprecated `splice-domain` Helm chart has been removed.
