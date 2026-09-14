@@ -96,6 +96,8 @@ final case class EnabledFeaturesConfig(
     ignorePartyIdWithIgnoredAmulet: Boolean = true,
     naiveUnresponsivePartiesAutoIgnore: Boolean = true,
     enablePersistedUnavailableParties: Boolean = false,
+    // Exiting is right for a deployed node; in tests every app shares the test JVM, so exiting kills the test runner.
+    exitOnFatalInitFailure: Boolean = true,
 )
 
 final case class SpliceCachingConfigs(

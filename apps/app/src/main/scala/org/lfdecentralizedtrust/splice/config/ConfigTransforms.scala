@@ -206,6 +206,7 @@ object ConfigTransforms {
         _.copy(rewardOperationRoundsCloseBufferDuration = NonNegativeFiniteDuration.ofMillis(100))
       ),
       disableDevelopmentFund(),
+      disableExitOnFatalInitFailure(),
       // Tests default to TrafficBasedAppRewards. Networks (which don't apply
       // ConfigTransforms.defaults) fall back to the FeaturedAppMarkers default
       withTrafficBasedAppRewards,
@@ -220,6 +221,27 @@ object ConfigTransforms {
   type SplitwellAppTransform = Endo[SplitwellAppBackendConfig]
   type RemoteSplitwellAppTransform = Endo[SplitwellAppClientConfig]
   type AutomationConfigTransform = Endo[AutomationConfig]
+
+  /** Apps halt the JVM when initialization fails irrecoverably. In integration tests every app runs
+    * in the test JVM, so that takes the test runner down with it; leave `initializeF` failed instead
+    * and let the harness report the initialization error.
+    */
+  def disableExitOnFatalInitFailure(): ConfigTransform =
+    config =>
+      Seq[ConfigTransform](
+        updateAllSvAppConfigs_(
+          _.focus(_.parameters.enabledFeatures.exitOnFatalInitFailure).replace(false)
+        ),
+        updateAllScanAppConfigs_(
+          _.focus(_.parameters.enabledFeatures.exitOnFatalInitFailure).replace(false)
+        ),
+        updateAllValidatorAppConfigs_(
+          _.focus(_.parameters.enabledFeatures.exitOnFatalInitFailure).replace(false)
+        ),
+        updateAllSplitwellAppConfigs_(
+          _.focus(_.parameters.enabledFeatures.exitOnFatalInitFailure).replace(false)
+        ),
+      ).foldLeft(config)((c, transform) => transform(c))
 
   def withPausedSvDomainComponentsOffboardingTriggers(): ConfigTransform =
     updateAutomationConfig(ConfigurableApp.Sv)(

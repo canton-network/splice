@@ -283,10 +283,15 @@ abstract class NodeBase[State <: AutoCloseable & HasHealth](
           )
         case Failure(err) =>
           val msg = s"$appInitMessage: Initialization failed"
+          val exiting = parameters.enabledFeatures.exitOnFatalInitFailure
           logger.error(msg, err)
-          System.err.println(s"$msg, so exiting; check the application logs for details")
-          err.printStackTrace()
-          sys.exit(1)
+          System.err.println(
+            if (exiting) s"$msg, so exiting; check the application logs for details"
+            else s"$msg; check the application logs for details"
+          )
+          err.printStackTrace(System.err)
+          System.err.flush()
+          if (exiting) sys.exit(1)
       }
   }
 
