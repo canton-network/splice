@@ -20,6 +20,25 @@ rsync -av --delete --exclude version.sbt --exclude community-build.sbt --exclude
     --exclude 'base/contextualized-logging' --exclude 'base/crypto' \
     --exclude 'base/daml-jwt' --exclude 'base/daml-tls' \
     --exclude 'base/errors' --exclude 'base/util-external' \
+    --exclude 'base/executors' \
+    --exclude 'base/grpc-utils' \
+    --exclude 'base/ledger-resources' \
+    --exclude 'base/logging-entries' \
+    --exclude 'base/nameof' \
+    --exclude 'base/nonempty' \
+    --exclude 'base/nonempty-cats' \
+    --exclude 'base/observability/tracing' \
+    --exclude 'base/ports' \
+    --exclude 'base/resources' \
+    --exclude 'base/resources-grpc' \
+    --exclude 'base/resources-pekko' \
+    --exclude 'base/rs-grpc-bridge' \
+    --exclude 'base/rs-grpc-pekko' \
+    --exclude 'base/scala-utils' \
+    --exclude 'base/scalatest-utils' \
+    --exclude 'base/test-evidence' \
+    --exclude 'base/testing-utils' \
+    --exclude 'base/timer-utils' \
     --exclude 'community/lib/Blake2b' \
     --exclude 'community/lib/google-common-protos-scala' \
     --exclude 'community/lib/magnolify' \
