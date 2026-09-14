@@ -29,5 +29,5 @@ object SwitchOverTimes {
     shouldSwitchOver(clock, dsoRules, AlwaysServeVerdictRoundNumber)
 
   val NoFeaturedAppChoiceContext = "no-featured-app-choice-context"
-  val AlwaysServeVerdictRoundNumber = "scan/always-serve-verdict-round-number"
+  val AlwaysServeVerdictRoundNumber = "always-serve-verdict-round-number"
 }
