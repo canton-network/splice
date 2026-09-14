@@ -29,8 +29,8 @@ trait WalletGatewayFrontendTestUtil extends WalletFrontendTestUtil { self: Front
       selectDeepByVisibleText(select, walletGatewayNetworkName)
     }
     credentials.foreach { case (clientId, clientSecret) =>
-      setDeepValue(eventuallyFindDeep(Selectors.Gateway.clientIdInput), clientId)
-      setDeepValue(eventuallyFindDeep(Selectors.Gateway.clientSecretInput), clientSecret)
+      setDeep(Selectors.Gateway.clientIdInput, clientId)
+      setDeep(Selectors.Gateway.clientSecretInput, clientSecret)
     }
     clickDeep(Selectors.Gateway.connectButton)
   }
@@ -57,13 +57,12 @@ trait WalletGatewayFrontendTestUtil extends WalletFrontendTestUtil { self: Front
         "Party hint field is visible",
         _ => findDeep(Selectors.Gateway.partyHintField) should not be empty,
       )
-      setDeepValue(eventuallyFindDeep(Selectors.Gateway.partyHintField), partyHint)
-      setDeepValue(
-        eventuallyFindDeep(Selectors.Gateway.signingProviderSelect),
-        Selectors.Gateway.participantSigningProvider,
-      )
-      if (!eventuallyFindDeep(Selectors.Gateway.primaryCheckbox).isSelected)
-        clickDeep(Selectors.Gateway.primaryCheckbox)
+      setDeep(Selectors.Gateway.partyHintField, partyHint)
+      setDeep(Selectors.Gateway.signingProviderSelect, Selectors.Gateway.participantSigningProvider)
+      eventually() {
+        val primary = findDeep(Selectors.Gateway.primaryCheckbox).valueOrFail("primary checkbox")
+        if (!primary.isSelected) clickDeep(Selectors.Gateway.primaryCheckbox)
+      }
       val (_, wallet) = actAndCheck(timeUntilSuccess = 1.minute)(
         "Submit the new party form",
         clickDeep(Selectors.Gateway.submitButton),
@@ -85,9 +84,7 @@ trait WalletGatewayFrontendTestUtil extends WalletFrontendTestUtil { self: Front
       eventuallyClickOn(xpath(Selectors.Portfolio.connectWalletButton))
       val picker = waitForNewWindow(windowsBefore)
       inWindow(picker) {
-        val customUrlInput =
-          eventuallyFindDeep(Selectors.Picker.customUrlInput, timeUntilSuccess = 1.minute)
-        setDeepValue(customUrlInput, walletGatewayDappUrl)
+        setDeep(Selectors.Picker.customUrlInput, walletGatewayDappUrl, timeUntilSuccess = 1.minute)
         clickDeep(Selectors.Picker.customUrlConnectButton)
       }
       val gatewayWindow = eventually(1.minute) {

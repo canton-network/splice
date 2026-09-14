@@ -62,7 +62,6 @@ class DockerComposeValidatorFrontendIntegrationTest
       "-p",
       partyHint,
       "-b",
-      "-g",
     ) ++ startFlags).asJava
     val builder = new ProcessBuilder(command)
     extraEnv.foreach { case (k, v) => builder.environment().put(k, v) }
@@ -111,7 +110,7 @@ class DockerComposeValidatorFrontendIntegrationTest
         .resolve("compose-validator-backup")
         .resolve(java.time.Instant.now.toEpochMilli.toString)
 
-    withComposeValidator() {
+    withComposeValidator(startFlags = Seq("-g")) {
       withFrontEnd("frontend") { implicit webDriver =>
         eventuallySucceeds()(go to s"http://wallet.localhost")
         actAndCheck(timeUntilSuccess = 60.seconds)(
@@ -160,7 +159,6 @@ class DockerComposeValidatorFrontendIntegrationTest
           _ => seleniumText(find(id("logged-in-user"))) should not be "",
         )
         clue("Use the portfolio UI through the wallet gateway") {
-          val mainWindow = webDriver.getWindowHandle
           val gatewayWalletHint =
             s"$walletGatewayUser-gateway-${scala.util.Random.alphanumeric.take(8).mkString.toLowerCase}"
           go to s"${portfolioUrl}connect"
@@ -171,13 +169,6 @@ class DockerComposeValidatorFrontendIntegrationTest
           waitForPortfolioWallet(gatewayWalletHint)
           tapInPortfolio(BigDecimal(100), gatewayWalletHint)
           assertPortfolioShowsPositiveBalance()
-
-          // The tap approval reuses the gateway popup and closes it
-          if (windowHandles.contains(gatewayWindow)) {
-            webDriver.switchTo().window(gatewayWindow)
-            webDriver.close()
-          }
-          webDriver.switchTo().window(mainWindow)
         }
         // The CNS UI hands the payment off to the wallet, which is still logged in as the gateway user
         actAndCheck(
@@ -397,7 +388,7 @@ class DockerComposeValidatorFrontendIntegrationTest
       clue("Restart the validator, with auth") {
         startComposeValidator(
           extraClue = "with auth",
-          startFlags = Seq("-a", "-P", "da-composeValidator-13"),
+          startFlags = Seq("-a", "-g", "-P", "da-composeValidator-13"),
           extraEnv = Seq(
             "GCP_CLUSTER_BASENAME" -> "cidaily" // Any cluster should work, as long as its UI auth0 apps were created with the localhost callback URLs
           ),

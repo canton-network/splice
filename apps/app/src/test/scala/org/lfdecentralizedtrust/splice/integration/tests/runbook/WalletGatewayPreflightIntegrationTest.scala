@@ -9,7 +9,7 @@ import org.lfdecentralizedtrust.splice.util.Auth0Util.WithAuth0Support
 import java.net.URI
 import java.net.http.{HttpClient, HttpRequest, HttpResponse}
 import java.time.Duration
-import scala.util.{Random, Try}
+import scala.util.{Failure, Random, Success, Try}
 import scala.util.control.NonFatal
 
 abstract class WalletGatewayPreflightIntegrationTestBase
@@ -37,14 +37,25 @@ abstract class WalletGatewayPreflightIntegrationTestBase
   override protected lazy val walletGatewayNetworkName = s"Splice ${validatorName}"
 
   protected def isWalletGatewayDeployed: Boolean = {
-    val client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()
+    val client = HttpClient
+      .newBuilder()
+      .followRedirects(HttpClient.Redirect.NORMAL)
+      .connectTimeout(Duration.ofSeconds(10))
+      .build()
     val request = HttpRequest
-      .newBuilder(URI.create(walletGatewayUrl))
+      .newBuilder(URI.create(s"${walletGatewayUrl}readyz"))
       .timeout(Duration.ofSeconds(10))
       .GET()
       .build()
-    Try(client.send(request, HttpResponse.BodyHandlers.discarding()).statusCode()).toOption
-      .contains(200)
+    Try(client.send(request, HttpResponse.BodyHandlers.discarding()).statusCode()) match {
+      case Success(200) => true
+      case Success(status) =>
+        logger.info(s"Wallet gateway readiness probe at ${request.uri} returned $status")
+        false
+      case Failure(e) =>
+        logger.info(s"Wallet gateway readiness probe at ${request.uri} failed: $e")
+        false
+    }
   }
 
   protected def onboardUserToValidatorWallet(user: Auth0User)(implicit
