@@ -13,7 +13,7 @@ if (len(sys.argv) != 2):
     sys.exit(1)
 
 username = sys.argv[1]
-audience = os.environ.get('VALIDATOR_AUTH_AUDIENCE', 'https://canton.network.global')
+audience = os.environ.get('VALIDATOR_AUTH_AUDIENCE', 'https://validator.example.com')
 
 iat=int(time.time())
 code = jwt.encode({'iat':iat,'aud':audience,'sub':username}, 'unsafe', algorithm='HS256')

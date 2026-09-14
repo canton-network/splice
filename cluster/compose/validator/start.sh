@@ -342,7 +342,7 @@ fi
 if [ $wallet_gateway -eq 1 ]; then
   # The portfolio UI calls the validator API with the gateway's ledger API tokens
   if [ "$(_env_var LEDGER_API_AUTH_AUDIENCE)" != "$(_env_var VALIDATOR_AUTH_AUDIENCE)" ]; then
-    _error_msg "LEDGER_API_AUTH_AUDIENCE and VALIDATOR_AUTH_AUDIENCE must be equal when deploying the wallet gateway with -g"
+    _error_msg "LEDGER_API_AUTH_AUDIENCE and VALIDATOR_AUTH_AUDIENCE must be equal when deploying the wallet gateway with -g, set both to the same value in .env"
     exit 1
   fi
   extra_compose_files+=("-f" "${script_dir}/compose-wallet-gateway.yaml")
