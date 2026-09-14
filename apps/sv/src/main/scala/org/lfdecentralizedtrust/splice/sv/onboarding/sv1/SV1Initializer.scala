@@ -324,7 +324,6 @@ class SV1Initializer(
         new SynchronizerNodeReconciler(
           dsoStore,
           connection,
-          packageVersionSupport,
           clock,
           retryProvider,
           loggerFactory,
@@ -337,7 +336,6 @@ class SV1Initializer(
       withDsoStore = new WithDsoStore(
         dsoAutomation,
         decentralizedSynchronizer,
-        packageVersionSupport,
         domainMigrationId,
       )
       _ <- retryProvider.ensureThatB(
@@ -592,7 +590,6 @@ class SV1Initializer(
   private class WithDsoStore(
       dsoStoreWithIngestion: AppStoreWithIngestion[SvDsoStore],
       synchronizerId: SynchronizerId,
-      packageVersionSupport: PackageVersionSupport,
       domainMigrationId: Long,
   ) {
 
@@ -604,7 +601,6 @@ class SV1Initializer(
       dsoStoreWithIngestion.connection(SpliceLedgerConnectionPriority.Low),
       clock = clock,
       retryProvider = retryProvider,
-      versionSupport = packageVersionSupport,
       migrationId = domainMigrationId,
       scanConfig = config.scan,
       loggerFactory = loggerFactory,
