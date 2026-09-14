@@ -12,7 +12,6 @@ import com.digitalasset.daml.lf.data.Numeric
 import com.digitalasset.daml.lf.data.assertRight as damlRight
 import org.lfdecentralizedtrust.splice.scan.store.ScanRewardsReferenceStore
 import org.lfdecentralizedtrust.splice.scan.store.db.{DbAppActivityRecordStore, DbScanVerdictStore}
-import org.lfdecentralizedtrust.splice.store.TimestampWithMigrationId
 
 import java.math.RoundingMode
 import scala.collection.immutable.SortedMap
@@ -57,7 +56,7 @@ class AppActivityComputation(
   )(implicit tc: TraceContext): Future[Option[Long]] =
     rewardsReferenceStore
       .lookupActiveOpenMiningRounds(Seq(asOf))
-      .map(_.get(asOf).map { case TimestampWithMigrationId(_, roundNumber) => roundNumber })
+      .map(_.get(asOf).map { case (roundNumber, _) => roundNumber })
 
   def lookupActiveOpenMiningRounds(
       asOf: Seq[CantonTimestamp]
