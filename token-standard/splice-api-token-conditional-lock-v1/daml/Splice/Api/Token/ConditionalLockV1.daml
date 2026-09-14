@@ -1,0 +1,286 @@
+-- Copyright (c) 2026 Long Run Advisory. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- | V1 API to attach a release policy to a Holding.
+--
+-- A conditional lock is a set of rules. Each rule pairs a guard the ledger can
+-- check with an outcome the ledger enacts. Rules fire at most once. Every lock
+-- has an expiry and a fallback the owner can enact once the expiry passes.
+module Splice.Api.Token.ConditionalLockV1 where
+
+import Splice.Api.Token.MetadataV1
+import Splice.Api.Token.HoldingV2
+
+
+-- | Hash function for a hashlock. Digests and preimages are hex-encoded byte strings.
+data HashAlgorithm
+  = Sha256
+    -- ^ SHA-256 over the raw preimage bytes. Registries MUST support this algorithm.
+  | Keccak256
+    -- ^ Keccak-256 over the raw preimage bytes. Registries MUST support this algorithm.
+  deriving (Eq, Ord, Show, Serializable)
+
+-- | A condition the ledger can check when a rule is enacted.
+data Guard
+  = Guard_Preimage with
+      algorithm : HashAlgorithm
+      digest : Text
+        -- ^ Lowercase hex-encoded digest. Satisfied by a 32-byte preimage in the witness
+        -- whose digest under `algorithm` equals this value.
+  | Guard_After with
+      time : Time
+        -- ^ Satisfied when ledger time is at or after `time`.
+  | Guard_Before with
+      time : Time
+        -- ^ Satisfied when ledger time is strictly before `time`.
+  | Guard_Parties with
+      parties : [Party]
+        -- ^ Unique list of parties.
+      threshold : Int
+        -- ^ Satisfied when at least `threshold` of `parties` are among the enacting actors.
+        -- MUST satisfy 1 <= threshold <= length parties.
+  | Guard_All with
+      guards : [Guard]
+        -- ^ Satisfied when every guard is satisfied. MUST be non-empty.
+  | Guard_Any with
+      guards : [Guard]
+        -- ^ Satisfied when at least one guard is satisfied. MUST be non-empty.
+  deriving (Eq, Ord, Show, Serializable)
+
+-- | Evidence supplied when enacting a rule.
+data Witness = Witness with
+    preimages : [Text]
+      -- ^ Hex-encoded 32-byte preimages. Each `Guard_Preimage` node is satisfied if any
+      -- listed preimage hashes to its digest.
+  deriving (Eq, Ord, Show, Serializable)
+
+-- | A destination for locked funds.
+data Leg = Leg with
+    receiver : Account
+    amount : Decimal
+      -- ^ MUST be positive.
+  deriving (Eq, Ord, Show, Serializable)
+
+-- | What happens to the locked funds when a rule fires.
+data Outcome
+  = Outcome_Unlock
+    -- ^ The full remaining amount returns to the owner, unlocked. Terminates the lock.
+  | Outcome_Transfer with
+      legs : [Leg]
+        -- ^ Fixed legs. Sum MUST be at most the remaining amount. A leg whose receiver is
+        -- the owner account returns that amount unlocked. Any remainder stays locked.
+  | Outcome_Distribute with
+      receivers : [Account]
+        -- ^ Legs are supplied by the enactor when the rule fires. Each leg's receiver MUST
+        -- be in this list; the sum MUST be at most the remaining amount. Any remainder
+        -- stays locked.
+  deriving (Eq, Ord, Show, Serializable)
+
+-- | One release path.
+data Rule = Rule with
+    id : Text
+      -- ^ Unique within the terms. Reported in events.
+    enactors : [Party]
+      -- ^ Parties entitled to enact this rule. At least one MUST be among the actors.
+    guard : Guard
+    outcome : Outcome
+  deriving (Eq, Ord, Show, Serializable)
+
+-- | The release policy, provided by the owner's wallet.
+data LockTerms = LockTerms with
+    owner : Account
+      -- ^ Account whose holdings fund the lock and to which unlocked funds return.
+    instrumentId : InstrumentId
+    amount : Decimal
+      -- ^ Locked amount. On a continuation, the remaining amount.
+    rules : [Rule]
+      -- ^ Enactable strictly before `expiresAt`. Each fires at most once.
+    expiresAt : Time
+      -- ^ Absolute, inclusive ledger time at which the rules stop being enactable and
+      -- the fallback becomes enactable.
+    fallback : Outcome
+      -- ^ Enactable by the owner at or after `expiresAt`. Typically `Outcome_Unlock`.
+    requestedAt : Time
+      -- ^ Wallet-provided creation timestamp. MUST be in the past when locking.
+    meta : Metadata
+      -- ^ Metadata for extensibility. SHOULD carry
+      -- `splice.lfdecentralizedtrust.org/lock-context`.
+  deriving (Eq, Show, Serializable)
+
+-- | Result of instructing, enacting, expiring, cancelling, or amending a lock.
+data ConditionalLockResult = ConditionalLockResult with
+    output : ConditionalLockResult_Output
+    meta : Metadata
+      -- ^ Implementation-specific metadata, e.g. fees charged.
+  deriving (Eq, Show, Serializable)
+
+data ConditionalLockResult_Output
+  = ConditionalLockResult_Pending with
+      instructionCid : ContractId ConditionalLockInstruction
+        -- ^ One or more receivers must accept before the lock becomes active.
+  | ConditionalLockResult_Locked with
+      lockCid : ContractId ConditionalLock
+      holdingCid : ContractId Holding
+        -- ^ The locked holding backing the lock.
+      ownerChangeCids : [ContractId Holding]
+        -- ^ Change returned to the owner from the input holdings.
+  | ConditionalLockResult_Enacted with
+      receiverHoldingCids : [ContractId Holding]
+        -- ^ Holdings created for receivers other than the owner.
+      ownerHoldingCids : [ContractId Holding]
+        -- ^ Unlocked holdings returned to the owner.
+      continuationCid : Optional (ContractId ConditionalLock)
+        -- ^ The continuing lock, when funds remain.
+  | ConditionalLockResult_Failed
+      -- ^ Instruction rejected or withdrawn; input holdings unlocked.
+  deriving (Eq, Show, Serializable)
+
+
+-- ConditionalLockFactory
+-------------------------
+
+data ConditionalLockFactoryView = ConditionalLockFactoryView with
+    admin : Party
+      -- ^ Registry admin for the instruments this factory serves.
+    meta : Metadata
+      -- ^ MUST carry the registry's limits (see CIP section 3.8).
+  deriving (Eq, Show, Serializable)
+
+interface ConditionalLockFactory where
+  viewtype ConditionalLockFactoryView
+
+  conditionalLockFactory_lockExtraObservers : ConditionalLockFactory_Lock -> [Party]
+  conditionalLockFactory_lockImpl : ContractId ConditionalLockFactory -> ConditionalLockFactory_Lock -> Update ConditionalLockResult
+  conditionalLockFactory_publicFetchImpl : ContractId ConditionalLockFactory -> ConditionalLockFactory_PublicFetch -> Update ConditionalLockFactoryView
+
+  nonconsuming choice ConditionalLockFactory_Lock : ConditionalLockResult
+    -- ^ Lock `terms.amount` of the owner's holdings under `terms`.
+    with
+      terms : LockTerms
+      inputHoldingCids : [ContractId Holding]
+        -- ^ Holdings funding the lock. Same rules as `Transfer.inputHoldingCids` in CIP-0112.
+      actors : [Party]
+        -- ^ MUST include the parties the registry requires to move funds out of `terms.owner`.
+      extraArgs : ExtraArgs
+    observer conditionalLockFactory_lockExtraObservers this arg
+    controller actors
+    do conditionalLockFactory_lockImpl this self arg
+
+  nonconsuming choice ConditionalLockFactory_PublicFetch : ConditionalLockFactoryView
+    with
+      actors : [Party]
+    controller actors
+    do conditionalLockFactory_publicFetchImpl this self arg
+
+
+-- ConditionalLockInstruction
+-----------------------------
+
+data ConditionalLockInstructionView = ConditionalLockInstructionView with
+    terms : LockTerms
+    pendingReceivers : [Account]
+      -- ^ Receivers that have not yet accepted.
+    meta : Metadata
+  deriving (Eq, Show, Serializable)
+
+interface ConditionalLockInstruction where
+  viewtype ConditionalLockInstructionView
+
+  conditionalLockInstruction_acceptImpl : ContractId ConditionalLockInstruction -> ConditionalLockInstruction_Accept -> Update ConditionalLockResult
+  conditionalLockInstruction_rejectImpl : ContractId ConditionalLockInstruction -> ConditionalLockInstruction_Reject -> Update ConditionalLockResult
+  conditionalLockInstruction_withdrawImpl : ContractId ConditionalLockInstruction -> ConditionalLockInstruction_Withdraw -> Update ConditionalLockResult
+
+  nonconsuming choice ConditionalLockInstruction_Accept : ConditionalLockResult
+    -- ^ A receiver accepts. Result is `Locked` once every receiver has accepted,
+    -- otherwise `Pending`.
+    with
+      receiver : Account
+      actors : [Party]
+      extraArgs : ExtraArgs
+    controller actors
+    do conditionalLockInstruction_acceptImpl this self arg
+
+  nonconsuming choice ConditionalLockInstruction_Reject : ConditionalLockResult
+    -- ^ A receiver declines. Result is `Failed`; input holdings return to the owner unlocked.
+    with
+      receiver : Account
+      actors : [Party]
+      extraArgs : ExtraArgs
+    controller actors
+    do conditionalLockInstruction_rejectImpl this self arg
+
+  nonconsuming choice ConditionalLockInstruction_Withdraw : ConditionalLockResult
+    -- ^ Owner withdraws before all receivers have accepted. Result is `Failed`.
+    with
+      actors : [Party]
+      extraArgs : ExtraArgs
+    controller actors
+    do conditionalLockInstruction_withdrawImpl this self arg
+
+
+-- ConditionalLock
+------------------
+
+data ConditionalLockView = ConditionalLockView with
+    lockId : Text
+      -- ^ Stable across continuations and amendments. Reported in events.
+    terms : LockTerms
+      -- ^ Current terms: remaining amount and remaining rules.
+    holdingCid : ContractId Holding
+      -- ^ The locked holding backing this lock.
+    meta : Metadata
+  deriving (Eq, Show, Serializable)
+
+interface ConditionalLock where
+  viewtype ConditionalLockView
+
+  conditionalLock_enactImpl : ContractId ConditionalLock -> ConditionalLock_Enact -> Update ConditionalLockResult
+  conditionalLock_expireImpl : ContractId ConditionalLock -> ConditionalLock_Expire -> Update ConditionalLockResult
+  conditionalLock_cancelImpl : ContractId ConditionalLock -> ConditionalLock_Cancel -> Update ConditionalLockResult
+  conditionalLock_amendImpl : ContractId ConditionalLock -> ConditionalLock_Amend -> Update ConditionalLockResult
+
+  nonconsuming choice ConditionalLock_Enact : ConditionalLockResult
+    -- ^ Fire one rule. MUST fail at or after `terms.expiresAt`, unless at least one of
+    -- the rule's enactors is among `actors`, unless the guard is satisfied, or
+    -- unless `legs` are valid for the outcome.
+    with
+      ruleId : Text
+      actors : [Party]
+      witness : Witness
+      legs : Optional [Leg]
+        -- ^ MUST be provided for `Outcome_Distribute` and MUST be `None` otherwise.
+      extraArgs : ExtraArgs
+    controller actors
+    do conditionalLock_enactImpl this self arg
+
+  nonconsuming choice ConditionalLock_Expire : ConditionalLockResult
+    -- ^ Enact the fallback. MUST fail before `terms.expiresAt`.
+    with
+      actors : [Party]
+        -- ^ MUST include the parties the registry requires to move funds out of the
+        -- owner account. Registries MAY additionally permit the admin alone.
+      legs : Optional [Leg]
+      extraArgs : ExtraArgs
+    controller actors
+    do conditionalLock_expireImpl this self arg
+
+  nonconsuming choice ConditionalLock_Cancel : ConditionalLockResult
+    -- ^ Return the full remaining amount to the owner unlocked, including after expiry, with the
+    -- consent of every named party.
+    with
+      actors : [Party]
+      extraArgs : ExtraArgs
+    controller actors
+    do conditionalLock_cancelImpl this self arg
+
+  nonconsuming choice ConditionalLock_Amend : ConditionalLockResult
+    -- ^ Replace the terms, optionally adding funds, with the consent of every named party
+    -- of the current terms and the owner. Result is `Locked` with the new lock, or
+    -- `Pending` if the new terms introduce receivers that must accept.
+    with
+      newTerms : LockTerms
+      additionalInputHoldingCids : [ContractId Holding]
+      actors : [Party]
+      extraArgs : ExtraArgs
+    controller actors
+    do conditionalLock_amendImpl this self arg
