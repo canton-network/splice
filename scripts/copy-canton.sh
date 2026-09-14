@@ -34,6 +34,19 @@ rsync -av --delete --exclude version.sbt --exclude community-build.sbt --exclude
     --exclude 'community/model-based-testing-drivers' \
     --exclude 'community/model-based-testing-generators' \
     --exclude 'community/model-based-testing-integration-tests' \
+    --exclude 'community/aws-kms-driver' \
+    --exclude 'community/conformance-testing' \
+    --exclude 'community/daml-script-tests' \
+    --exclude 'community/kms-driver-testing' \
+    --exclude 'community/ledger-test-tool' \
+    --exclude 'community/microbench' \
+    --exclude 'community/mock-kms-driver' \
+    --exclude 'community/performance-driver' \
+    --exclude 'community/sequencer-driver-api-conformance-tests' \
+    --exclude 'community/upgrading-integration-tests' \
+    --exclude 'community/ledger/ledger-api-string-interning-benchmark' \
+    --exclude 'community/ledger/ledger-api-tools' \
+    --exclude 'community/ledger/ledger-json-client' \
     "$1/" \
     canton/
 # remove any broken symlinks after the copy
