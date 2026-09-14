@@ -3,7 +3,8 @@
 
 module Splice.Scripts.TestGovernanceLocks where
 
-import DA.Action (unless)
+import DA.Action (unless, when)
+import DA.Optional (isSome, isNone)
 import DA.Time
 
 import Daml.Script
@@ -72,7 +73,7 @@ testGovernanceLockHappyPath = do
 
   -- Check that we can't withdraw exactly at the unlock time (nothing is vested yet).
   actionMustFail (expectMessageContains "'withdraw amount' is not greater than 'zero'") $
-    vestingWithdrawRawChoice' env aliceVesting (unlockTime) [alice]
+    vestingWithdrawRawChoice' env aliceVesting unlockTime [alice]
 
   passTime (days 47)
 
@@ -103,6 +104,35 @@ testGovernanceLockHappyPath = do
   -- Check that we withdrew all and exactly the 70k _remaining_ after the above withdrawal.
   checkHolding' alice unlockedHolding2 70000.0
   checkIsUnlocked alice unlockedHolding2
+
+testTopUpWithAmuletHappyPath : Script ()
+testTopUpWithAmuletHappyPath = do
+  env@TestEnv{..} <- setupTest
+  let someSvSpec = GovernanceLockSpecification with
+        kind = GLK_SuperValidatorRightsOwner "TestSV"
+
+  AmuletRegistryV2.tapFaucet registriesEnv.amuletV2 alice 280000.0
+
+  aliceLock <- governanceLockRawChoice env alice 10000.0 someSvSpec
+  checkLockedHolding alice aliceLock 10000.0
+
+  -- Simple Top up Test
+  (aliceLock', Some changeHolding) <- governanceLockTopUpRawChoice env aliceLock [] None 5000.0 alice
+  checkLockedHolding alice aliceLock' 15000.0
+
+  -- Alice had 1000.0 coming from setupTest
+  checkHolding' alice changeHolding 266000.0
+
+  -- Test to ensure that the original holding that is locked is re-used as an input holdingCid (internally)
+  -- when doing top up
+  AmuletRegistryV2.tapFaucet registriesEnv.amuletV2 bob 10100.0
+
+  bobLock <- governanceLockRawChoice env bob 10000.0 someSvSpec
+  checkLockedHolding bob bobLock 10000.0
+
+  -- We should've used the entire amount, hence None
+  (bobLock', None) <- governanceLockTopUpRawChoice env bobLock [] None 100.0 bob
+  checkLockedHolding bob bobLock' 10100.0
 
 
 testGovernanceLockMinimumLocksLockUnlockWithdraw : Script ()
@@ -146,6 +176,79 @@ testGovernanceLockMinimumLocksLockUnlockWithdraw = do
 
   pure ()
 
+testTopUpWithMergingLocks : Script ()
+testTopUpWithMergingLocks = do
+  env@TestEnv{..} <- setupTest
+  let someSvSpec = GovernanceLockSpecification with
+        kind = GLK_SuperValidatorRightsOwner "TestSV"
+
+  AmuletRegistryV2.tapFaucet registriesEnv.amuletV2 alice 9000000.0
+
+  aliceLock <- governanceLockRawChoice env alice 50000.0 someSvSpec
+  checkLockedHolding alice aliceLock 50000.0
+
+  aliceLock2 <- governanceLockRawChoice env alice 10000.0 someSvSpec
+  aliceLock3 <- governanceLockRawChoice env alice 10000.0 someSvSpec
+
+  -- We want to intentionally pass in no holdingInputs, test MergingLocks only
+  (aliceLock', aliceLockChange) <- governanceLockTopUpRawChoice env aliceLock [aliceLock2, aliceLock3] (Some []) 0.0 alice
+  checkLockedHolding alice aliceLock' 70000.0
+  when (isSome aliceLockChange) $ fail "None is expected when no topUpAmount and only locks are provided for 'GovernanceLock_MergeAndTopUp'"
+
+  -- Now let's test with topUpAmount in addition to Merging Locks
+  aliceLock4 <- governanceLockRawChoice env alice 25000.0 someSvSpec
+  aliceLock5 <- governanceLockRawChoice env alice 25000.0 someSvSpec
+
+  (aliceLock'', aliceLockChange') <- governanceLockTopUpRawChoice env aliceLock' [aliceLock4, aliceLock5] None 30000.0 alice
+  checkLockedHolding alice aliceLock'' 150000.0
+  when (isNone aliceLockChange') $ fail "Some is expected when topUpAmount is provided in addition to lockInputs for 'GovernanceLock_MergeAndTopUp'"
+
+testTopUpNegativePath : Script ()
+testTopUpNegativePath = do
+  env@TestEnv{..} <- setupTest
+  let someSvSpec = GovernanceLockSpecification with
+        kind = GLK_SuperValidatorRightsOwner "TestSV"
+
+  AmuletRegistryV2.tapFaucet registriesEnv.amuletV2 alice 280000.0
+
+  aliceLock <- governanceLockRawChoice env alice 10000.0 someSvSpec
+  checkLockedHolding alice aliceLock 10000.0
+
+  -- Test negative top up amount
+  actionMustFail (expectMessageContains "'topUpAmount' is less than 'zero'") $
+    governanceLockTopUpRawChoice' env aliceLock [] None (-5000.0) alice
+
+  -- Test top up amount when we don't have enough funds
+  actionMustFail (expectMessageContains "Insufficient funds: you are missing 29000.0 to complete this transfer.") $
+    governanceLockTopUpRawChoice' env aliceLock [] None 300000.0 alice
+
+  -- Test top up when the input holdings aren't enough (the original input holding amount is taken into account)
+  actionMustFail (expectMessageContains "The requirement 'The arguments to the GovernanceLock_MergeAndTopUp must be valid' was not met.") $
+    submitWithTransferContext env (actAs alice)
+      $ \context -> exerciseCmd aliceLock GovernanceLock_MergeAndTopUp with
+        topUpAmount = 5000.0
+        holdingInputs = []
+        lockInputs = []
+        extraArgs = emptyExtraArgs with context
+
+  -- Test top up when the amount is 0.0 and holdingInputs are supplied (None gives all holdings under the user)
+  actionMustFail (expectMessageContains "The requirement 'The arguments to the GovernanceLock_MergeAndTopUp must be valid' was not met.") $
+    governanceLockTopUpRawChoice' env aliceLock [] None 0.0 alice
+
+  -- Test top up when the amount is positive and there are no holdingInputs supplied
+  actionMustFail (expectMessageContains "The requirement 'The arguments to the GovernanceLock_MergeAndTopUp must be valid' was not met.") $
+    governanceLockTopUpRawChoice' env aliceLock [] (Some []) 3000.0 alice
+
+  -- Test top up when the lock it is merging with has differnt attributes
+  aliceLock2 <- governanceLockRawChoice env alice 10000.0
+    $ GovernanceLockSpecification with kind = GLK_SuperValidatorRightsOwner "FakeSV"
+
+  actionMustFail (expectMessageContains "'governanceLock.specification' is not equal to 'expected value'") $
+    governanceLockTopUpRawChoice' env aliceLock [aliceLock2] (Some []) 0.0 alice
+
+  -- Test top up choice when all inputs are empty or 0.0
+  actionMustFail (expectMessageContains "The requirement 'The arguments to the GovernanceLock_MergeAndTopUp must be valid' was not met.") $
+    governanceLockTopUpRawChoice' env aliceLock [] (Some []) 0.0 alice
 
 -- | Polymorphic checkHolding, to avoid repeated toInterfaceContractId when we have a LockedAmulet or Amulet ContractId.
 checkHolding' : Implements a V2.Holding => Party -> ContractId a -> Decimal -> Script ()
@@ -245,3 +348,35 @@ vestingWithdrawRawChoice' env cid requestedAt actors = do
     actors
   pure $ ((,) <$> upcast . (.vested) <*> (.vestingLock)) <$> result
 
+governanceLockTopUpRawChoice
+  : TestEnv
+  -> ContractId GovernanceLock
+  -> [ContractId GovernanceLock]
+  -> Optional [ContractId V2.Holding]
+  -> Decimal
+  -> Party
+  -> Script (ContractId GovernanceLock, Optional (ContractId Amulet))
+governanceLockTopUpRawChoice env cid lockInputs optHoldingInputs topUpAmount owner = errorIfLeft
+  =<< governanceLockTopUpRawChoice' env cid lockInputs optHoldingInputs topUpAmount owner
+
+governanceLockTopUpRawChoice'
+  : TestEnv
+  -> ContractId GovernanceLock
+  -> [ContractId GovernanceLock]
+  -> Optional [ContractId V2.Holding]
+  -> Decimal
+  -> Party
+  -> Script (Either SubmitError (ContractId GovernanceLock, Optional (ContractId Amulet)))
+governanceLockTopUpRawChoice' env cid lockInputs optHoldingInputs topUpAmount owner = do
+  holdingInputs <- case optHoldingInputs of
+    -- None should just grab all from wallet for user
+    None -> WalletClientV2.listUnlockedHoldingCidsFor (basicAccount owner) owner env.instrId
+    Some holdingInputs -> pure holdingInputs
+  result : Either SubmitError GovernanceLock_MergeAndTopUpResult <- submitWithTransferContext env (actAs owner) $ \context -> exerciseCmd cid GovernanceLock_MergeAndTopUp with
+    topUpAmount
+    lockInputs = lockInputs
+    holdingInputs = downcast <$> holdingInputs
+    extraArgs = emptyExtraArgs with context
+  pure $ case result of
+    Left e -> Left e
+    Right (GovernanceLock_MergeAndTopUpResult governanceLock changeHolding) -> Right (governanceLock, changeHolding)
