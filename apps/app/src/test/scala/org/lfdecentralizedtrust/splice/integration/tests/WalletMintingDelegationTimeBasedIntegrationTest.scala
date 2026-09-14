@@ -481,7 +481,7 @@ class WalletMintingDelegationTimeBasedIntegrationTest
       val delayedDevelopmentFundAmount = BigDecimal(400.0)
       val rewardCouponV2Amount = BigDecimal(1000.0)
       val svRewardWeight = 5L
-      val mintDelay = Duration.ofMinutes(40)
+      val mintDelay = Duration.ofMinutes(45)
       val mintAfter = env.environment.clock.now.plus(mintDelay).toInstant
 
       // For ValidatorRewardCoupon, we need ValidatorRight for beneficiary
@@ -677,14 +677,9 @@ class WalletMintingDelegationTimeBasedIntegrationTest
 
       actualIncrease shouldBe expectedTotalReward
 
-      val ticksToMintAfter = {
-        val now = sv1Backend.participantClient.ledger_api.time.get().toInstant
-        val remaining = Duration.between(now, mintAfter)
-        (remaining.toMillis / defaultTickDuration.asJava.toMillis + 1).toInt  // +1 crosses the boundary
-      }
       actAndCheck(
         "Advance past the delayed coupon's mintAfter, one round at a time",
-        (1 to ticksToMintAfter).foreach(_ => advanceRoundsToNextRoundOpening),
+        advanceRoundsUntil(mintAfter),
       )(
         "The delayed development fund coupon is collected",
         _ => {
