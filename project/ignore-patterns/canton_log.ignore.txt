@@ -142,7 +142,7 @@ Timeout .*expired, but readers are still active
 # As an alternative, we can spin up dedicated Canton instances. That's not realistic for SVs
 # but could be an option for RecoverExternalPartyIntegrationTest. But it slows down the
 # test significantly so for now we don't bother.
-ACS_COMMITMENT_MISMATCH.*(bob|alice)Participant
+ACS_COMMITMENT_MISMATCH.*(bob|alice)(Participant|Validator)
 
 # TODO(#1450) - investigate this on the canton side
 FAILED_PRECONDITION/SEQUENCER_SENDER_UNKNOWN.*Senders are unknown: MED::sv
