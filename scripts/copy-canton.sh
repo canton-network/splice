@@ -66,6 +66,34 @@ rsync -av --delete --exclude version.sbt --exclude community-build.sbt --exclude
     --exclude 'community/ledger/ledger-api-string-interning-benchmark' \
     --exclude 'community/ledger/ledger-api-tools' \
     --exclude 'community/ledger/ledger-json-client' \
+    --exclude 'community/docs' \
+    --exclude 'community/traffic-enforcement/api' \
+    --exclude 'community/daml-lf/api-type-signature' \
+    --exclude 'community/daml-lf/archive' \
+    --exclude 'community/daml-lf/data' \
+    --exclude 'community/daml-lf/data-bench' \
+    --exclude 'community/daml-lf/data-tests' \
+    --exclude 'community/daml-lf/encoder' \
+    --exclude 'community/daml-lf/engine' \
+    --exclude 'community/daml-lf/ide-ledger' \
+    --exclude 'community/daml-lf/interpreter' \
+    --exclude 'community/daml-lf/language' \
+    --exclude 'community/daml-lf/ledger-api-value' \
+    --exclude 'community/daml-lf/ledger-api-value-proto' \
+    --exclude 'community/daml-lf/parser' \
+    --exclude 'community/daml-lf/repl' \
+    --exclude 'community/daml-lf/snapshot' \
+    --exclude 'community/daml-lf/snapshot-proto' \
+    --exclude 'community/daml-lf/spec' \
+    --exclude 'community/daml-lf/stable-packages' \
+    --exclude 'community/daml-lf/tests' \
+    --exclude 'community/daml-lf/transaction' \
+    --exclude 'community/daml-lf/transaction-tests' \
+    --exclude 'community/daml-lf/upgrades-matrix' \
+    --exclude 'community/daml-lf/upgrades-matrix-integration' \
+    --exclude 'community/daml-lf/validation' \
+    --exclude 'protobuf-continuity-check' \
+    --exclude 'release-notes' \
     "$1/" \
     canton/
 # remove any broken symlinks after the copy
