@@ -130,10 +130,16 @@ class HttpScanHandlerBulkStorageTest extends AnyWordSpec with BaseTest {
     val acsSnapshotStagingProgress = mock[AcsSnapshotBulkStoragePersistentProgress]
     val updateHistoryStagingProgress = mock[UpdateHistoryBulkStoragePersistentProgress]
     when(
-      acsSnapshotStagingProgress.readLatestProcessedSnapshotTimestamp(any[TraceContext], any[ExecutionContext])
+      acsSnapshotStagingProgress.readLatestProcessedSnapshotTimestamp(
+        any[TraceContext],
+        any[ExecutionContext],
+      )
     ).thenReturn(Future.successful(snapshotProgressO))
     when(
-      updateHistoryStagingProgress.readLatestProcessedSegment(any[TraceContext], any[ExecutionContext])
+      updateHistoryStagingProgress.readLatestProcessedSegment(
+        any[TraceContext],
+        any[ExecutionContext],
+      )
     ).thenReturn(Future.successful(updateProgressO))
 
     new BulkStorageReader(
@@ -156,7 +162,9 @@ class HttpScanHandlerBulkStorageTest extends AnyWordSpec with BaseTest {
         objectKeys = Vector("object-1"),
       )
       assertGrpcError(
-        h.getBulkObjectChecksums(ScanResource.GetBulkObjectChecksumsResponse)(request)(TraceContext.empty),
+        h.getBulkObjectChecksums(ScanResource.GetBulkObjectChecksumsResponse)(request)(
+          TraceContext.empty
+        ),
         Status.Code.UNIMPLEMENTED,
         "Bulk storage is not configured",
       )
@@ -172,7 +180,9 @@ class HttpScanHandlerBulkStorageTest extends AnyWordSpec with BaseTest {
         objectKeys = Vector("object-1"),
       )
       assertGrpcError(
-        h.getBulkObjectChecksums(ScanResource.GetBulkObjectChecksumsResponse)(request)(TraceContext.empty),
+        h.getBulkObjectChecksums(ScanResource.GetBulkObjectChecksumsResponse)(request)(
+          TraceContext.empty
+        ),
         Status.Code.NOT_FOUND,
         "Bulk storage is not caught up to the required timestamp",
       )
@@ -188,7 +198,9 @@ class HttpScanHandlerBulkStorageTest extends AnyWordSpec with BaseTest {
         objectKeys = Vector("object-1"),
       )
       assertGrpcError(
-        h.getBulkObjectChecksums(ScanResource.GetBulkObjectChecksumsResponse)(request)(TraceContext.empty),
+        h.getBulkObjectChecksums(ScanResource.GetBulkObjectChecksumsResponse)(request)(
+          TraceContext.empty
+        ),
         Status.Code.NOT_FOUND,
         "Bulk storage is not caught up to the required timestamp",
       )
@@ -202,7 +214,9 @@ class HttpScanHandlerBulkStorageTest extends AnyWordSpec with BaseTest {
         objectKeys = Vector("object-1"),
       )
       assertGrpcError(
-        h.getBulkObjectChecksums(ScanResource.GetBulkObjectChecksumsResponse)(request)(TraceContext.empty),
+        h.getBulkObjectChecksums(ScanResource.GetBulkObjectChecksumsResponse)(request)(
+          TraceContext.empty
+        ),
         Status.Code.NOT_FOUND,
         "Bulk storage is not caught up to the required timestamp",
       )
