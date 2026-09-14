@@ -301,7 +301,6 @@ class SvDsoAutomationService(
           triggerContext,
           dsoStore,
           participantAdminConnection,
-          config.minMemberTrafficToOnboardValidator,
         )
       )
       registerTrigger(

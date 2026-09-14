@@ -520,6 +520,8 @@ data DsoRulesConfig = DsoRulesConfig with
     nextScheduledSynchronizerUpgrade: Optional SynchronizerUpgradeSchedule
     voteCooldownTime : Optional RelTime -- ^ The minimum time between two votes by the same SV.
     nextScheduledLogicalSynchronizerUpgrade: Optional LogicalSynchronizerUpgradeSchedule
+    minMemberTrafficToOnboardValidator: Optional Int -- ^ Minimum amount of traffic a validator must purchase to be granted a ParticipantSynchronizerPermission.
+    devNetPublicSetupTrafficAmount: Optional Int -- ^ Traffic amount purchased for validators onboarded via the DevNet faucet.
   deriving (Eq, Show)
 
 -- | Read the `voteCooldownTime` from the `DsoRulesConfig` with a default value of 1 minute.
@@ -2228,6 +2230,8 @@ instance Patchable DsoRulesConfig where
     nextScheduledSynchronizerUpgrade = patch new.nextScheduledSynchronizerUpgrade base.nextScheduledSynchronizerUpgrade current.nextScheduledSynchronizerUpgrade
     nextScheduledLogicalSynchronizerUpgrade = patch new.nextScheduledLogicalSynchronizerUpgrade base.nextScheduledLogicalSynchronizerUpgrade current.nextScheduledLogicalSynchronizerUpgrade
     voteCooldownTime = patch new.voteCooldownTime base.voteCooldownTime current.voteCooldownTime
+    minMemberTrafficToOnboardValidator = patch new.minMemberTrafficToOnboardValidator base.minMemberTrafficToOnboardValidator current.minMemberTrafficToOnboardValidator
+    devNetPublicSetupTrafficAmount = patch new.devNetPublicSetupTrafficAmount base.devNetPublicSetupTrafficAmount current.devNetPublicSetupTrafficAmount
 
 instance Patchable SynchronizerUpgradeSchedule where
   patch new base current = SynchronizerUpgradeSchedule with

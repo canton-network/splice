@@ -613,7 +613,8 @@ testDsoRulesConfigChange = do
         nextScheduledSynchronizerUpgrade = Some (SynchronizerUpgradeSchedule with
                                                     time = addRelTime now (days 4)
                                                     migrationId = 1)
-
+        minMemberTrafficToOnboardValidator = Some (100000 + 1)
+        devNetPublicSetupTrafficAmount = Some (10000000 + 1)
 
   let initialSynchronizerConfig2 = SynchronizerConfig with
         state = DS_Operational

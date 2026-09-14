@@ -206,6 +206,8 @@ class SvTimeBasedOnboardingIntegrationTest
                 .payload
                 .config
                 .nextScheduledLogicalSynchronizerUpgrade,
+              sv1Backend.getDsoInfo().dsoRules.payload.config.minMemberTrafficToOnboardValidator,
+              sv1Backend.getDsoInfo().dsoRules.payload.config.devNetPublicSetupTrafficAmount,
             )
 
             val action: ActionRequiringConfirmation =

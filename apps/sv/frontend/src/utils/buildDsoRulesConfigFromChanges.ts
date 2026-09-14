@@ -120,6 +120,8 @@ export function buildDsoRulesConfigFromChanges(dsoConfigChanges: ConfigChange[])
             ),
           },
     voteCooldownTime: voteCooldownTime === null ? null : { microseconds: voteCooldownTime },
+    minMemberTrafficToOnboardValidator: getValue('minMemberTrafficToOnboardValidator', true),
+    devNetPublicSetupTrafficAmount: getValue('devNetPublicSetupTrafficAmount', true),
   };
 
   return dsoConfig;

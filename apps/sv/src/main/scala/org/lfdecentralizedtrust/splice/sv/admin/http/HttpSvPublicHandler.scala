@@ -912,7 +912,8 @@ class HttpSvPublicHandler(
         participantId.toProtoPrimitive,
         dsoRules.payload.config.decentralizedSynchronizer.activeSynchronizerId,
         dsoStore.domainMigrationId.toInt,
-        config.devNetPublicSetupTrafficAmount,
+        dsoRules.payload.config.devNetPublicSetupTrafficAmount.toScala
+          .getOrElse(10000000L: java.lang.Long),
         clock.now.plus(java.time.Duration.ofMinutes(5)).toInstant,
         s"devnet-onboard-${participantId.toProtoPrimitive}-${clock.now.toInstant.toEpochMilli}",
       )

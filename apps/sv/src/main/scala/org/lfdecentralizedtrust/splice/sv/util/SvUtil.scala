@@ -258,6 +258,8 @@ object SvUtil {
     Optional.empty(), // nextScheduledSynchronizerUpgrade
     voteCooldownTime.map(t => new RelTime(t.duration.toMicros)).toJava,
     Optional.empty(), // nextScheduledLogicalSynchronizerUpgrade
+    Optional.of(100000L: java.lang.Long), // minMemberTrafficToOnboardValidator
+    Optional.of(10000000L: java.lang.Long), // devNetPublicSetupTrafficAmount
   )
 
   def keyPairMatches(
