@@ -717,12 +717,6 @@ object BuildCommon {
       )
       .settings(
         removeTestSources,
-        // We only need 3 files out of a lot of test files so add them explicitly
-        Test / managedSources := Seq(
-          (Test / sourceDirectory).value / "scala/com/digitalasset/canton/HasActorSystem.scala",
-          (Test / sourceDirectory).value / "scala/com/digitalasset/canton/store/db/DbTest.scala",
-          (Test / sourceDirectory).value / "scala/com/digitalasset/canton/store/db/DbStorageIdempotency.scala",
-        ),
         disableTests,
         sharedCantonSettings,
         libraryDependencies ++= Seq(

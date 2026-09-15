@@ -1189,13 +1189,28 @@ lazy val `lf-value-json` =
       CantonDependencies.excludeTranscodeConflictingDependencies,
     )
 
+lazy val `canton-fork-community-common-test` =
+  project
+    .in(file("canton-fork/community-common-test"))
+    .dependsOn(`canton-community-common`, `canton-community-testing`)
+    .settings(
+      scalacOptions --= JvmRulesPlugin.scalacOptionsToDisableForTests,
+      libraryDependencies ++= {
+        import CantonDependencies._
+        Seq(
+          scalatest % Test
+        )
+      },
+    )
+
 lazy val `apps-common` =
   project
     .in(file("apps/common"))
     .dependsOn(
       `canton-community-common`,
-      `canton-community-app` % "compile->compile;test->test",
-      `canton-community-testing` % "test->test",
+      `canton-community-app`,
+      `canton-community-testing` % Test,
+      `canton-fork-community-common-test` % Test,
       `lf-value-json`,
       `splice-wartremover-extension` % "compile->compile;test->test",
       // We include all DARs here to make sure they are available as resources.
