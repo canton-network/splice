@@ -69,17 +69,6 @@ function getAlertStrategy(notificationChannel: gcp.monitoring.NotificationChanne
   };
 }
 
-// Log matching conditions cannot be aggregated into a threshold, so the notification
-// rate limit is what keeps a flood of matches down to one alert per period.
-function getLogMatchAlertStrategy() {
-  return {
-    autoClose: '3600s',
-    notificationRateLimit: {
-      period: '300s',
-    },
-  };
-}
-
 type AlertPolicyBaseArgs = Pick<
   gcp.monitoring.AlertPolicyArgs,
   'alertStrategy' | 'combiner' | 'notificationChannels' | 'userLabels'
@@ -663,13 +652,6 @@ export function installCloudArmorAlerts(
  * Alerts on requests rejected by one of the preconfigured (OWASP CRS based) WAF rules,
  * as opposed to the IP whitelist, the per endpoint throttles or the default deny rule.
  *
- * Cloud Armor metrics have no label for the rule that matched, so this is a log matching
- * alert over the load balancer request logs, which do report the security policy name,
- * the outcome and the priority of the matching rule. Every WAF match is worth looking at
- * individually (it is either an attack or a false positive signature match), so this
- * alerts on the log entries directly instead of counting them into a log based metric:
- * that way the offending request ends up in the notification.
- *
  * Requires the backend request logging of the load balancer to be enabled
  * (`cloudArmor.logging.enabled`), otherwise Cloud Armor decisions never reach Cloud
  * Logging.
@@ -693,34 +675,70 @@ function installCloudArmorWafAlert(baseArgs: AlertPolicyBaseArgs): void {
     ensureTrailingNewline(`resource.type=("http_external_regional_lb_rule" OR "http_load_balancer")
 ((${matchedWafRule('enforcedSecurityPolicy')}) OR (${matchedWafRule('previewSecurityPolicy')}))`);
 
+  const wafRejectionsMetric = new gcp.logging.Metric('cloud_armor_waf_rejections', {
+    name: `cloud_armor_waf_rejections_${CLUSTER_BASENAME}`,
+    description: 'Requests matching a Cloud Armor WAF (OWASP CRS) rule',
+    filter,
+    // Only the rule priorities are kept as labels: they have a low cardinality (one
+    // value per WAF rule) and identify the matching signature group, while request
+    // details would blow up the metric cardinality and have to be looked up in the logs.
+    labelExtractors: {
+      enforced_rule_priority: 'EXTRACT(jsonPayload.enforcedSecurityPolicy.priority)',
+      previewed_rule_priority: 'EXTRACT(jsonPayload.previewSecurityPolicy.priority)',
+    },
+    metricDescriptor: {
+      labels: [
+        {
+          description: 'Priority of the enforced Cloud Armor rule that matched',
+          key: 'enforced_rule_priority',
+        },
+        {
+          description: 'Priority of the previewed Cloud Armor rule that matched',
+          key: 'previewed_rule_priority',
+        },
+      ],
+      metricKind: 'DELTA',
+      valueType: 'INT64',
+    },
+  });
+
   const displayName = `Cloud Armor WAF rule rejections in ${CLUSTER_BASENAME}`;
   new gcp.monitoring.AlertPolicy('cloudArmorWafRejectionsAlert', {
     ...baseArgs,
-    alertStrategy: getLogMatchAlertStrategy(),
     displayName,
     documentation: {
       subject: displayName,
       content: [
-        `A request to **${CLUSTER_BASENAME}** matched a WAF (OWASP CRS) rule of the Cloud Armor security policy \`${CLOUD_ARMOR_POLICY_NAME}\`.`,
+        `Requests to **${CLUSTER_BASENAME}** matched a WAF (OWASP CRS) rule of the Cloud Armor security policy \`${CLOUD_ARMOR_POLICY_NAME}\`.`,
         'Unlike the generic Cloud Armor alert, this one fires only on attack signature matches (SQL injection, XSS, RCE, ...), not on IP whitelist, throttle or default deny rejections. WAF rules in preview mode are included: they only log, they do not reject.',
-        'Rule priority: `${log.extracted_label.enforced_rule_priority}` enforced / `${log.extracted_label.previewed_rule_priority}` previewed.',
-        'Request: `${log.extracted_label.request_method} ${log.extracted_label.request_url}` from `${log.extracted_label.remote_ip}` (`${log.extracted_label.user_agent}`).',
-        'Check the matching signature id in the `preconfiguredExprIds` field of the log entry to tell an actual attack apart from a false positive on legitimate traffic.',
+        'Rule priority: `${metric.label.enforced_rule_priority}` enforced / `${metric.label.previewed_rule_priority}` previewed.',
+        `Check the matching requests in the load balancer logs with the following filter, the \`preconfiguredExprIds\` field tells an actual attack apart from a false positive on legitimate traffic:\n\`\`\`\n${filter.trim()}\n\`\`\``,
       ].join('\n\n'),
       mimeType: 'text/markdown',
     },
     conditions: [
       {
         displayName,
-        conditionMatchedLog: {
-          filter,
-          labelExtractors: {
-            enforced_rule_priority: 'EXTRACT(jsonPayload.enforcedSecurityPolicy.priority)',
-            previewed_rule_priority: 'EXTRACT(jsonPayload.previewSecurityPolicy.priority)',
-            remote_ip: 'EXTRACT(httpRequest.remoteIp)',
-            request_method: 'EXTRACT(httpRequest.requestMethod)',
-            request_url: 'EXTRACT(httpRequest.requestUrl)',
-            user_agent: 'EXTRACT(httpRequest.userAgent)',
+        conditionThreshold: {
+          aggregations: [
+            {
+              //query period
+              alignmentPeriod: '300s',
+              crossSeriesReducer: 'REDUCE_SUM',
+              groupByFields: [
+                'metric.label.enforced_rule_priority',
+                'metric.label.previewed_rule_priority',
+              ],
+              perSeriesAligner: 'ALIGN_SUM',
+            },
+          ],
+          comparison: 'COMPARISON_GT',
+          // No retest period -- a single WAF match is worth looking at
+          duration: '0s',
+          filter: pulumi.interpolate`metric.type = "logging.googleapis.com/user/${wafRejectionsMetric.name}"`,
+          thresholdValue: 0,
+          trigger: {
+            count: 1,
           },
         },
       },
