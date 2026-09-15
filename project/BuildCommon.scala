@@ -380,9 +380,7 @@ object BuildCommon {
     import CantonDependencies._
     sbt.Project
       .apply("canton-util-observability", file("canton/community/util-observability"))
-      .dependsOn(
-        `canton-wartremover-extension` % "compile->compile;test->test"
-      )
+      .dependsOn(`canton-wartremover-extension`)
       .settings(
         sharedCantonSettings,
         removeTestSources,
@@ -420,7 +418,7 @@ object BuildCommon {
       .apply("canton-community-app", file("canton/community/app"))
       .dependsOn(
         `canton-community-app-base`,
-        `canton-community-common` % "compile->compile;test->test",
+        `canton-community-common`,
         `canton-community-synchronizer`,
         `canton-community-participant`,
         `canton-community-integration-testing` % "test",

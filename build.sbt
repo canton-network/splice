@@ -2412,7 +2412,7 @@ lazy val `apps-app`: Project =
       `apps-sv` % "compile->compile;test->test",
       `apps-scan`,
       `apps-wallet`,
-      `canton-community-app` % "compile->compile;test->test",
+      `canton-community-app`,
       `canton-community-base`,
       `canton-community-integration-testing` % "test",
       `splice-amulet-test-daml` % "test",
