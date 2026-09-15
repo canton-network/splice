@@ -2,14 +2,13 @@ package org.lfdecentralizedtrust.splice.scan.automation
 
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{
-  AcsSnapshot,
   IncrementalAcsSnapshot,
+  LegacyAcsSnapshot,
 }
 import org.lfdecentralizedtrust.splice.util.DomainRecordTimeRange
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.{BaseTest, HasActorSystem, HasExecutionContext}
 import org.lfdecentralizedtrust.splice.scan.automation.AcsSnapshotBackfillingTrigger.RetrieveTaskForBackfillingMigrationResult
-import org.lfdecentralizedtrust.splice.scan.automation.AcsSnapshotTriggerBase
 import org.lfdecentralizedtrust.splice.scan.config.ScanStorageConfig
 import org.scalatest.wordspec.AnyWordSpec
 
@@ -730,7 +729,7 @@ class AcsSnapshotTriggerTest
   private def historyId = 1L
 
   private def snapshotAt(migrationId: Long, time: CantonTimestamp) =
-    AcsSnapshot(time, migrationId, historyId, 0, 100, None, None)
+    LegacyAcsSnapshot(time, migrationId, historyId, 0, 100, None, None)
 
   private def cantonTimestamp(isoStr: String) =
     CantonTimestamp.assertFromInstant(java.time.Instant.parse(isoStr))
