@@ -192,12 +192,82 @@ zcat lsu0/canton_network_test.clog.gz | grep -acE 'lines with problems'
 ```
 This is a plain ScalaTest condition-timeout, not a checkErrors log-scan failure.
 
+## B5. Root cause: why the ::36-0 registration never appears (sv4 published its successor too late)
+
+The wait never completes because the logical synchronizer upgrade is permanently short one sequencer:
+sv4 never published its sequencer successor for the new synchronizer, so a validator migrating through
+the upgrade (bob) cannot complete and hangs.
+
+The upstream "no successor" error, and bob dropping sv4:
+```
+zcat lsu0/canton.clog.gz | grep -aE 'LSU_MALFORMED_REQUEST' | head -1 \
+  | grep -aoE '"@timestamp":"[^"]*"|"message":"[^"]{0,90}|"logger_name":"[^"]*"'
+zcat lsu0/canton.clog.gz | grep -acE 'LSU_MALFORMED_REQUEST'
+```
+```
+"@timestamp":"2026-09-10T12:22:52.743Z"
+"message":"LSU_MALFORMED_REQUEST(8,f1402076): Invalid LSU request: No sequencer successor was found
+"logger_name":"c.d.c.p.t.SequencerConnectionSuccessorListener:participant=sv2Participant"
+34
+```
+```
+zcat lsu0/canton-standalone-lsu-bob-validator-after-upgrade.clog.gz | grep -aE 'Missing successor information' \
+  | head -1 | sed -E 's/[0-9a-f]{16,}/<H>/g' | grep -aoE '"@timestamp":"[^"]*"|"message":"[^"]{0,120}|"logger_name":"[^"]*"'
+```
+```
+"@timestamp":"2026-09-10T12:29:06.157Z"
+"message":"Missing successor information for the following sequencers: Set(Sequencer 'SEQ::sv4::<H>'). They will be removed from the pool of sequencers.
+"logger_name":"c.d.c.p.s.AutomaticLogicalSynchronizerUpgrade:participant=extraStandaloneParticipant/lsu=36-2"
+```
+
+Why sv4 has no successor - it finished its LSU sequencer init AFTER the upgrade time and skipped
+publishing (splice-side guard in LsuNodeInitializer, SV=sv4 only):
+```
+zcat lsu0/canton.clog.gz lsu0/canton_network_test.clog.gz | grep -aoE 'upgradeTime = 2026-09-10T[0-9:.]+Z' | sort | uniq -c
+```
+```
+    196 upgradeTime = 2026-09-10T12:26:56.563832Z     # this test's upgrade time
+    491 upgradeTime = 2026-09-10T13:22:29.282062Z     # a separate/later schedule, not this one
+```
+```
+zcat lsu0/canton_network_test.clog.gz | grep -aE 'o\.l\.s\.s\.l\.LsuNodeInitializer:LsuIntegrationTest/config=9f4b1ae/SV=sv4' \
+  | grep -aE '12:27:3[89]' | grep -aoE '"@timestamp":"[^"]*","message":"[^"]{0,80}'
+```
+```
+"@timestamp":"2026-09-10T12:27:38.623Z","message":"Initializing sequencer from predecessor with StaticSynchronizerParameters(
+"@timestamp":"2026-09-10T12:27:39.998Z","message":"Success: Initialize sequencer from the state of the predecessor, result is ()
+"@timestamp":"2026-09-10T12:27:39.999Z","message":"Not publishing sequencer successor as we are past upgrade time
+```
+sv4 was ~2 minutes behind sv1-3 (still onboarding: "Requesting to be onboarded via the sponsor SV"
+12:21:38, "Check if sequencer is initialized failed with a retryable error" / "Detected an error"
+12:21:43). Its LSU sequencer init finished at 12:27:39.999, ~43s after the 12:26:56.563 upgrade time,
+so LsuNodeInitializer skipped publishing sv4's successor. sv1/sv2/sv3 reached the same step in time
+(~12:26:56-58).
+
+Causal chain:
+1. LSU "upgrade without downtime" scheduled with upgrade time 12:26:56.563.
+2. sv4 was slow to onboard/init (~2 min behind sv1-3).
+3. sv4's LsuNodeInitializer finished its sequencer init at 12:27:39.999 (past the upgrade time) and
+   logged "Not publishing sequencer successor as we are past upgrade time" -> sv4 has no successor.
+4. SequencerConnectionSuccessorListener (sv2Participant) logs "No sequencer successor was found" 34x
+   (12:22:52-12:26:56); bob's participant drops sv4 ("Missing successor information", 12:29:06).
+5. bob's participant cannot complete its migration to the successor synchronizer; its init waits 263x
+   for the ::36-0 registration (12:29:06-12:34:07), never observes it, and times out after 5 min.
+
+This is splice-side (LsuNodeInitializer), not a Canton bug. The design question: splice should either hold
+the upgrade until all SVs' successors are published, or a migrating validator should tolerate/recover a
+missing sequencer successor rather than hang for 5 minutes.
+
 ## Summary
 
 - A (cancelled shards): canton 3.6 rejects the LSU predecessor's StaticSynchronizerParameters -
   InvalidStaticSynchronizerParameters over non-default synchronizerLimits (LsuNodeInitializer.scala:98,
   canton SynchronizerParameters.scala:105); all 4 SVs abort init deterministically; log ends with no
   ScalaTest summary.
-- B (failure): LsuIntegrationTest "upgrade synchronizer to new physical synchronizer without downtime" -
-  bobValidatorLocal never observes the participant registered on source PSID ...::36-0 within 5 min;
-  "Condition never became true within 5 minutes".
+- B (failure): LsuIntegrationTest "upgrade synchronizer to new physical synchronizer without downtime".
+  Root cause: sv4 onboarded ~2 min late and finished its LSU sequencer init ~43s after the 12:26:56.563
+  upgrade time, so splice's LsuNodeInitializer skipped publishing sv4's sequencer successor ("Not
+  publishing sequencer successor as we are past upgrade time"). The upgrade is then permanently short
+  sv4's sequencer ("No sequencer successor was found" 34x); bob's participant drops sv4 and cannot
+  complete its migration, so bobValidatorLocal's init waits 5 min for the ::36-0 registration that never
+  appears -> "Condition never became true within 5 minutes". Splice-side timing race, not a Canton bug.
