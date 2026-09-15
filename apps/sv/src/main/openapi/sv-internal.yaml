@@ -14,6 +14,9 @@ paths:
   /status:
     $ref: "../../../../common/src/main/openapi/common-external.yaml#/paths/~1status"
   /version:
+    # Validators and SVs check this endpoint before calling any other one
+    # TODO(DACH-NY/canton-network-internal#6265): make sure this is blocked on non-DevNet once we can
+    x-external-audience: validators
     $ref: "../../../../common/src/main/openapi/common-external.yaml#/paths/~1version"
   /v0/admin/validator/onboarding/ongoing:
     get:

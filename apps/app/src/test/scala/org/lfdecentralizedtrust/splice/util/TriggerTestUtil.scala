@@ -66,11 +66,15 @@ trait TriggerTestUtil { self: BaseTest =>
   def pauseScanVerdictIngestionWithin[T](scan: ScanAppBackendReference)(codeBlock: => T): T = {
     try {
       logger.info(s"Pausing verdict ingestion for ${scan.name}")
-      scan.automation.services[ScanVerdictIngestionService].foreach(_.pause().futureValue)
+      scan.appState.verdictAutomation
+        .services[ScanVerdictIngestionService]
+        .foreach(
+          _.pause().futureValue
+        )
       codeBlock
     } finally {
       logger.info(s"Resuming verdict ingestion for ${scan.name}")
-      scan.automation.services[ScanVerdictIngestionService].foreach(_.resume())
+      scan.appState.verdictAutomation.services[ScanVerdictIngestionService].foreach(_.resume())
     }
   }
 }

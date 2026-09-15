@@ -1075,6 +1075,96 @@ class DbScanAppRewardsStoreTest
     }
   }
 
+  "deleteRewardAccountingDataForRound" should {
+    "deletes only the given round, keeps other rounds and other histories" in {
+      val dummyHash = RewardHash(Array.fill(32)(0: Byte))
+
+      def insertAllTables(
+          store: DbScanAppRewardsStore,
+          historyId: Long,
+          round: Long,
+      ): Future[Unit] =
+        for {
+          _ <- store.insertAppActivityPartyTotals(
+            Seq(AppActivityPartyTotalT(historyId, round, 100L, s"party-$round", 1L))
+          )
+          _ <- store.insertAppActivityRoundTotals(
+            Seq(AppActivityRoundTotalT(historyId, round, 100L, 1L, 1L))
+          )
+          _ <- store.insertAppRewardPartyTotals(
+            Seq(AppRewardPartyTotalT(historyId, round, 0, s"party-$round", BigDecimal(1)))
+          )
+          _ <- store.insertAppRewardRoundTotals(
+            Seq(
+              AppRewardRoundTotalT(
+                historyId,
+                round,
+                BigDecimal(1),
+                BigDecimal(0),
+                BigDecimal(0),
+                1L,
+              )
+            )
+          )
+          _ <- store.insertAppRewardBatchHashes(
+            Seq(AppRewardBatchHashT(historyId, round, 0, 0, 1, dummyHash))
+          )
+          _ <- store.insertAppRewardRootHashes(
+            Seq(AppRewardRootHashT(historyId, round, dummyHash))
+          )
+        } yield ()
+
+      for {
+        (store, historyId) <- newStore()
+        (otherStore, otherHistoryId) <- newStore()
+        _ <- insertAllTables(store, historyId, 1L)
+        _ <- insertAllTables(store, historyId, 2L)
+        _ <- insertAllTables(store, historyId, 3L)
+        _ <- insertAllTables(otherStore, otherHistoryId, 1L)
+        _ <- store.deleteRewardAccountingDataForRound(2L)
+        activityPartyRound1 <- store.getAppActivityPartyTotalsByRound(1L)
+        activityPartyRound2 <- store.getAppActivityPartyTotalsByRound(2L)
+        activityPartyRound3 <- store.getAppActivityPartyTotalsByRound(3L)
+        activityRoundRound1 <- store.getAppActivityRoundTotalByRound(1L)
+        activityRoundRound2 <- store.getAppActivityRoundTotalByRound(2L)
+        activityRoundRound3 <- store.getAppActivityRoundTotalByRound(3L)
+        rewardPartyRound1 <- store.getAppRewardPartyTotalsByRound(1L)
+        rewardPartyRound2 <- store.getAppRewardPartyTotalsByRound(2L)
+        rewardPartyRound3 <- store.getAppRewardPartyTotalsByRound(3L)
+        rewardRoundRound1 <- store.getAppRewardRoundTotalByRound(1L)
+        rewardRoundRound2 <- store.getAppRewardRoundTotalByRound(2L)
+        rewardRoundRound3 <- store.getAppRewardRoundTotalByRound(3L)
+        batchHashesRound1 <- store.getAppRewardBatchHashesByRound(1L)
+        batchHashesRound2 <- store.getAppRewardBatchHashesByRound(2L)
+        batchHashesRound3 <- store.getAppRewardBatchHashesByRound(3L)
+        rootHashRound1 <- store.getAppRewardRootHashByRound(1L)
+        rootHashRound2 <- store.getAppRewardRootHashByRound(2L)
+        rootHashRound3 <- store.getAppRewardRootHashByRound(3L)
+        otherActivityPartyRound1 <- otherStore.getAppActivityPartyTotalsByRound(1L)
+      } yield {
+        activityPartyRound1 should have size 1
+        activityPartyRound2 shouldBe empty
+        activityPartyRound3 should have size 1
+        activityRoundRound1 shouldBe defined
+        activityRoundRound2 shouldBe empty
+        activityRoundRound3 shouldBe defined
+        rewardPartyRound1 should have size 1
+        rewardPartyRound2 shouldBe empty
+        rewardPartyRound3 should have size 1
+        rewardRoundRound1 shouldBe defined
+        rewardRoundRound2 shouldBe empty
+        rewardRoundRound3 shouldBe defined
+        batchHashesRound1 should have size 1
+        batchHashesRound2 shouldBe empty
+        batchHashesRound3 should have size 1
+        rootHashRound1 shouldBe defined
+        rootHashRound2 shouldBe empty
+        rootHashRound3 shouldBe defined
+        otherActivityPartyRound1 should have size 1
+      }
+    }
+  }
+
   private val verdictCounter = new java.util.concurrent.atomic.AtomicLong(1)
 
   /** Insert a parent row into scan_verdict_store then a child row into

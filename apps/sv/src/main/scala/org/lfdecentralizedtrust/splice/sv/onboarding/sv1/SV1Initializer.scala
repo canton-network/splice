@@ -313,7 +313,7 @@ class SV1Initializer(
         },
         logger,
       )
-      dsoAutomation = newSvDsoAutomationService(
+      dsoAutomation <- newSvDsoAutomationService(
         svStore,
         dsoStore,
         synchronizerNodeService,

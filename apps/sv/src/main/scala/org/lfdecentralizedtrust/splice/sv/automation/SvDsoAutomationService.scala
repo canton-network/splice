@@ -44,8 +44,8 @@ import org.lfdecentralizedtrust.splice.scan.admin.api.client.{
   SingleScanConnection,
 }
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
-import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
+import org.lfdecentralizedtrust.splice.store.{DomainTimeSynchronization, UnavailablePartiesStore}
 import org.lfdecentralizedtrust.splice.sv.{CantonBftSequencerConfig, LocalSynchronizerNode}
 import org.lfdecentralizedtrust.splice.sv.automation.SvDsoAutomationService.{
   LocalSequencerClientConfig,
@@ -92,6 +92,7 @@ class SvDsoAutomationService(
     synchronizerId: SynchronizerId,
     enabledFeatures: EnabledFeaturesConfig,
     val synchronizerNodeReconciler: SynchronizerNodeReconciler,
+    unavailablePartiesStore: UnavailablePartiesStore,
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
@@ -278,6 +279,7 @@ class SvDsoAutomationService(
       () => getOrCreatePeerScanConnection(),
       retryProvider,
       loggerFactory,
+      unavailablePartiesStore,
     )
 
   // required for triggers that must run in sim time as well
