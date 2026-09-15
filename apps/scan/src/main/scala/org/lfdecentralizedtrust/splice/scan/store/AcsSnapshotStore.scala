@@ -32,6 +32,8 @@ import com.digitalasset.canton.resource.DbStorage.SQLActionBuilderChain
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
 import com.google.protobuf.ByteString
+import io.circe.Decoder.Result
+import io.circe.HCursor
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.*
 import org.lfdecentralizedtrust.splice.store.db.{AcsJdbcTypes, AcsQueries, AdvisoryLockIds}
 import org.lfdecentralizedtrust.splice.store.events.SpliceCreatedEvent
@@ -319,46 +321,52 @@ class AcsSnapshotStore(
       templates: Seq[PackageQualifiedName],
   )(implicit
       tc: TraceContext
-  ): Future[Vector[(QueryAcsSnapshotPaginationToken, SpliceCreatedEvent)]] = {
+  ): Future[Vector[
+    (
+        QueryAcsSnapshotPaginationToken,
+        SpliceCreatedEvent,
+    )
+  ]] = {
     val createsTableName =
       AcsTableDDL.acsSnapshotCreatesTableName(historyId, snapshot.snapshotRecordTime)
     val stakeholdersTableName =
       AcsTableDDL.acsSnapshotStakeholdersTableName(historyId, snapshot.snapshotRecordTime)
     val afterFilter = after.fold(sql"") {
-      case QueryAcsSnapshotPaginationToken.RowIdQueryAcsSnapshotPaginationToken(after) =>
-        sql" and s.row_id > $after"
+      case QueryAcsSnapshotPaginationToken.CreatedAtContractIdAcsSnapshotPaginationToken(
+            createdAt,
+            contractId,
+          ) =>
+        sql" and s.created_at >= $createdAt and s.contract_id > $contractId"
+      case QueryAcsSnapshotPaginationToken.RowIdQueryAcsSnapshotPaginationToken(_) =>
+        throw io.grpc.Status.INVALID_ARGUMENT
+          .withDescription(s"Invalid after token provided.")
+          .asRuntimeException()
     }
     storage
       .query(
         (sql"""
-          with contracts as (
-            select distinct on (contract_id) contract_id, row_id, template_id
-            from #$stakeholdersTableName
-            where """ ++ stakeholdersFilter(partyIds) ++
-          templatesFilter(templates) ++
-          afterFilter ++ sql"""
-            order by contract_id
-            limit ${sqlLimit(limit)}
-          )
-          select
-            s.row_id,
-            event_id,
-            record_time,
-            template_id_package_id,
-            template_id,
-            s.contract_id,
-            create_arguments,
-            contract_key,
-            signatories,
-            observers,
-            created_at
-          from contracts s
+           -- 'created_at' is redundant, but required for 'distinct on' to work
+           select distinct on(s.created_at, s.contract_id)
+           event_id,
+           record_time,
+           template_id_package_id,
+           template_id,
+           s.contract_id,
+           create_arguments,
+           contract_key,
+           signatories,
+           observers,
+           s.created_at
+          from #$stakeholdersTableName s
           join #$createsTableName c on s.contract_id = c.contract_id
-          -- This will only sort over LIMIT rows, which is acceptable
-          order by s.row_id
-           """).toActionBuilder.as[
+          where """ ++ stakeholdersFilter(partyIds) ++
+          templatesFilter(templates) ++
+          afterFilter ++
+          sql"""
+             order by s.created_at, s.contract_id
+             limit ${sqlLimit(limit)}
+          """).toActionBuilder.as[
           (
-              Long,
               String,
               CantonTimestamp,
               String,
@@ -375,7 +383,6 @@ class AcsSnapshotStore(
       )
       .map(_.map {
         case (
-              rowId,
               eventId,
               recordTime,
               packageId,
@@ -390,7 +397,10 @@ class AcsSnapshotStore(
           val templateIdPackageQualifiedName =
             PackageQualifiedName.assertFromString(rawTemplateIdPackageQualifiedName)
           QueryAcsSnapshotPaginationToken
-            .RowIdQueryAcsSnapshotPaginationToken(rowId) -> SpliceCreatedEvent(
+            .CreatedAtContractIdAcsSnapshotPaginationToken(
+              createdAt,
+              contractId,
+            ) -> SpliceCreatedEvent(
             eventId = eventId,
             recordTime = recordTime,
             new CreatedEvent(
@@ -427,9 +437,19 @@ class AcsSnapshotStore(
       templates: Seq[PackageQualifiedName],
   )(implicit
       tc: TraceContext
-  ): Future[Vector[(QueryAcsSnapshotPaginationToken, SpliceCreatedEvent)]] = {
+  ): Future[Vector[
+    (QueryAcsSnapshotPaginationToken, SpliceCreatedEvent)
+  ]] = {
     for {
       begin <- after match {
+        case Some(
+              QueryAcsSnapshotPaginationToken.CreatedAtContractIdAcsSnapshotPaginationToken(_, _)
+            ) =>
+          Future.failed(
+            io.grpc.Status.INVALID_ARGUMENT
+              .withDescription(s"Invalid after toke format.")
+              .asRuntimeException()
+          )
         case Some(
               AcsSnapshotStore.QueryAcsSnapshotPaginationToken.RowIdQueryAcsSnapshotPaginationToken(
                 value
@@ -836,6 +856,7 @@ class AcsSnapshotStore(
       _ <- sqlu"create table #$createsTableName (like acs_snapshot_creates_template including all)"
       _ <-
         sqlu"create table #$stakeholdersTableName (like acs_snapshot_stakeholders_template including all)"
+      // `snapshot_id= ?` will match all rows in production, so a direct table scan will be used
       copiedCreateRows <- (sql"""
         insert into #$createsTableName (contract_id, create_arguments, event_id, record_time, template_id_package_id, contract_key, created_at, signatories, observers, unlocked_amulet_balance, locked_amulet_balance)
         select s.contract_id, s.create_arguments, s.event_id, s.record_time, s.template_id_package_id, s.contract_key, s.created_at, s.signatories, s.observers, """ ++ IncrementalAcsSnapshotTable.QueryParts
@@ -843,16 +864,13 @@ class AcsSnapshotStore(
         .lockedAmuletBalance() ++ sql"""
         from #${table.tableName} s
         where s.snapshot_id = ${snapshot.snapshotId}
-        -- ensure consistent ordering across SVs
-        order by created_at, contract_id
       """).toActionBuilder.asUpdate
       copiedStakeholderRows <- sqlu"""
-        insert into #${stakeholdersTableName} (stakeholder, template_id, contract_id)
-        select stakeholder, concat(s.package_name, ':', s.template_id_module_name, ':', s.template_id_entity_name) as template_id, contract_id
+        insert into #${stakeholdersTableName} (stakeholder, template_id, contract_id, created_at)
+        select stakeholder, concat(s.package_name, ':', s.template_id_module_name, ':', s.template_id_entity_name) as template_id, contract_id, created_at
         from #${table.tableName} s
         cross join unnest(array_cat(s.observers, s.signatories)) as stakeholder
         where s.snapshot_id = ${snapshot.snapshotId}
-        order by created_at, contract_id
       """
       // TODO: we should create the necessary indexes
 
@@ -1314,20 +1332,44 @@ object AcsSnapshotStore {
 
   sealed trait QueryAcsSnapshotPaginationToken {
     def encodeToBase64: String = {
-      val jsonString = QueryAcsSnapshotPaginationToken.codec(this).noSpaces
+      val jsonString = QueryAcsSnapshotPaginationToken.encoder(this).noSpaces
       java.util.Base64.getEncoder.encodeToString(jsonString.getBytes(StandardCharsets.UTF_8))
     }
   }
   object QueryAcsSnapshotPaginationToken {
+    import cats.implicits.*
+
+    case class CreatedAtContractIdAcsSnapshotPaginationToken(
+        createdAt: CantonTimestamp,
+        contractId: String,
+    ) extends QueryAcsSnapshotPaginationToken
     case class RowIdQueryAcsSnapshotPaginationToken(after: Long)
         extends QueryAcsSnapshotPaginationToken
 
-    private val codec: io.circe.Codec[QueryAcsSnapshotPaginationToken] =
-      io.circe.Codec
-        .from(io.circe.Decoder[Long], io.circe.Encoder[Long])
-        .iemap[QueryAcsSnapshotPaginationToken]((token: Long) =>
-          Right(RowIdQueryAcsSnapshotPaginationToken(token))
-        ) { case RowIdQueryAcsSnapshotPaginationToken(after) => after }
+    private val decoder: io.circe.Decoder[QueryAcsSnapshotPaginationToken] = io.circe
+      .Decoder[Long]
+      .map(RowIdQueryAcsSnapshotPaginationToken(_): QueryAcsSnapshotPaginationToken)
+      .or(
+        (new io.circe.Decoder[CreatedAtContractIdAcsSnapshotPaginationToken] {
+          override def apply(c: HCursor): Result[CreatedAtContractIdAcsSnapshotPaginationToken] =
+            for {
+              createdAt <- c.downField("created_at").as[Long]
+              contractId <- c.downField("contract_id").as[String]
+            } yield CreatedAtContractIdAcsSnapshotPaginationToken(
+              CantonTimestamp.assertFromLong(createdAt),
+              contractId,
+            )
+        }).widen
+      )
+
+    private val encoder: io.circe.Encoder[QueryAcsSnapshotPaginationToken] = {
+      case CreatedAtContractIdAcsSnapshotPaginationToken(createdAt, contractId) =>
+        io.circe.Json.obj(
+          "created_at" -> io.circe.Json.fromLong(createdAt.toMicros),
+          "contract_id" -> io.circe.Json.fromString(contractId),
+        )
+      case RowIdQueryAcsSnapshotPaginationToken(after) => io.circe.Encoder[Long].apply(after)
+    }
 
     def tryDecodeFromBase64(token: String): QueryAcsSnapshotPaginationToken = {
       import cats.implicits.*
@@ -1340,7 +1382,7 @@ object AcsSnapshotStore {
           }
           .toEither
           .leftMap(_ => "Failed to decode base64 token")
-        decoded <- io.circe.parser.decode(decodedString)(codec).leftMap(_.getMessage)
+        decoded <- io.circe.parser.decode(decodedString)(decoder).leftMap(_.getMessage)
       } yield decoded).fold(
         msg =>
           throw io.grpc.Status.INVALID_ARGUMENT

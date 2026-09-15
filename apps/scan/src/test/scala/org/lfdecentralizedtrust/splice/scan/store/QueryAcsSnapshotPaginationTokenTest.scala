@@ -9,6 +9,7 @@ import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.QueryAcsSnaps
 import org.scalatest.wordspec.AnyWordSpec
 import scala.util.Try
 
+// TODO: test the new one
 class QueryAcsSnapshotPaginationTokenTest extends AnyWordSpec with BaseTest {
 
   "RowIdQueryAcsSnapshotPaginationToken" should {

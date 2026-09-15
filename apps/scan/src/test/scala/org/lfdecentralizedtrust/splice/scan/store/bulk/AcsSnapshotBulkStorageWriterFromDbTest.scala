@@ -378,7 +378,7 @@ class AcsSnapshotBulkStorageWriterFromDbTest
                         .RowIdQueryAcsSnapshotPaginationToken(value)
                     ) =>
                   value
-                case None => 0L
+                case _ => 0L
               }
               val remaining = snapshotSize - afterAsLong
               val numElems = math.min(limit.limit.toLong, remaining)
