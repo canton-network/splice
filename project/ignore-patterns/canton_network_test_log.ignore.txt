@@ -181,3 +181,5 @@ api/sv/v0/onboard/validator \(POST\) resulted in a timeout
 # The same warning is emitted by both the FlywayExecutor and the ClassPathScanner loggers.
 # a single pattern matching the message (the unloadable sbt tests jar) covers both.
 Skipping unloadable jar file: file:.*-tests\.jar
+
+Connection for .* with psid .* is no longer active (status: .*), skipping update of the connection config
