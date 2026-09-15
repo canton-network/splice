@@ -72,8 +72,13 @@ class UnsupportedPackageVettingIntegrationTest
           } else c
         }(config)
       )
-      .addConfigTransforms((_, config) =>
-        ConfigTransforms.useDecentralizedSynchronizerSplitwell()(config)
+      .addConfigTransforms(
+        (_, config) => ConfigTransforms.useDecentralizedSynchronizerSplitwell()(config),
+        // We deliberately unvet the latest version so make sure downgrades are possible.
+        (_, config) =>
+          ConfigTransforms.updateAllSvAppFoundDsoConfigs_(
+            _.copy(initialSvOperationsSwitchOverTimes = None)
+          )(config),
       )
 
   "Unsupported vetted packages are automatically removed by the package vetting trigger for SV and validator" in {
