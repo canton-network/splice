@@ -164,6 +164,7 @@ const MonitoringConfigSchema = z
           seconds: z.number(),
         }),
         acsCommitments: z.object({
+          usePv36Metrics: z.boolean().default(false),
           checkpointDelay: z.object({
             seconds: z.number(),
           }),
