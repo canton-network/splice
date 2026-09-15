@@ -3,7 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.scan.admin.api.client.commands
 
-import org.apache.pekko.http.scaladsl.model.{HttpHeader, HttpResponse, StatusCodes, Uri}
+import org.apache.pekko.http.scaladsl.model.{HttpHeader, HttpResponse, StatusCode, StatusCodes, Uri}
 import cats.data.EitherT
 import cats.syntax.either.*
 import cats.syntax.traverse.*
@@ -3414,6 +3414,9 @@ object HttpScanAppClient {
         http.GetBulkObjectChecksumsResponse,
         definitions.GetBulkObjectChecksumsResponse,
       ] {
+    // Keep 404 as an HTTP-level error for this call so BFT can classify "not yet" by status code.
+    override val nonErrorStatusCodes: Set[StatusCode] = Set.empty
+
     override def submitRequest(
         client: Client,
         headers: List[HttpHeader],
@@ -3433,6 +3436,7 @@ object HttpScanAppClient {
       definitions.GetBulkObjectChecksumsResponse,
     ]] = {
       case http.GetBulkObjectChecksumsResponse.OK(response) => Right(response)
+      case http.GetBulkObjectChecksumsResponse.NotFound(err) => Left(err.error)
       case http.GetBulkObjectChecksumsResponse.NotImplemented(err) => Left(err.error)
     }
   }

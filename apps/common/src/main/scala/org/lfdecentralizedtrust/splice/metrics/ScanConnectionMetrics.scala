@@ -91,7 +91,8 @@ class ScanConnectionMetrics(metricsFactory: LabeledMetricsFactory) {
           "request" -> "Name of the scan request being called",
           "consensus" -> ("Whether the connection's response matched the consensus result: " +
             "agree (matched the consensus response), " +
-            "disagree (differed from the consensus response, including error responses)"),
+            "disagree (differed from the consensus response, including error responses), " +
+            "not_yet (scan not yet ready to provide a response)"),
           "success" -> ("For disagreements, whether the disagreeing response was itself a " +
             "successful (2xx) response (true) or an error response (false)"),
           "http_status" -> ("For disagreements, the HTTP status code of the disagreeing response " +
