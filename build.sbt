@@ -35,6 +35,7 @@ lazy val `canton-observability-metrics-testing` = BuildCommon.`canton-observabil
 lazy val `canton-traffic-enforcement-component` = BuildCommon.`canton-traffic-enforcement-component`
 lazy val `daml-lf-transaction-test-lib` = BuildCommon.`daml-lf-transaction-test-lib`
 lazy val `daml-lf-data-scalacheck` = BuildCommon.`daml-lf-data-scalacheck`
+lazy val `canton-fork-logback-test` = BuildCommon.`canton-fork-logback-test`
 
 lazy val `splice-wartremover-extension` = Wartremover.`splice-wartremover-extension`
 

@@ -385,6 +385,7 @@ object BuildCommon {
       )
       .settings(
         sharedCantonSettings,
+        removeTestSources,
         sharedSettings ++ cantonWarts,
         scalacOptions += "-Wconf:src=src_managed/.*:silent",
         libraryDependencies ++= Seq(
@@ -598,6 +599,15 @@ object BuildCommon {
       )
   }
 
+  lazy val `canton-fork-logback-test` =
+    sbt
+      .Project("canton-fork-logback-test", file("canton-fork/logback-test"))
+      .disablePlugins(WartRemover)
+      .settings(
+        removeTestSources,
+        sharedSettings,
+      )
+
   lazy val `canton-community-testing` = {
     import CantonDependencies._
     sbt.Project
@@ -605,7 +615,7 @@ object BuildCommon {
       .disablePlugins(WartRemover)
       .dependsOn(
         `canton-community-base`,
-        `canton-util-observability` % "compile->test",
+        `canton-fork-logback-test`,
       )
       .settings(
         sharedCantonSettings,
