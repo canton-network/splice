@@ -101,6 +101,20 @@ local services(node, clusterProtocol, clusterAddress, port) =
   else
     error 'Unknown node name ' + node;
 
+// Optional dApp-mode block. Default off so existing start_frontend callers
+// (sv1/sv2/wallet/…) keep byte-for-byte identical config output.
+local dappMode(enabled, cip103RpcUrl, node, clusterProtocol, clusterAddress, port) =
+  if (std.parseJson(enabled)) then
+    {
+      dappMode: {
+        enabled: true,
+        scanUrl: validatorNodes(clusterProtocol, clusterAddress, port)[node].scan.url,
+        cip103RpcUrl: cip103RpcUrl,
+      },
+    }
+  else
+    {};
+
 function(
   authAlgorithm='rs-256',
   enableTestAuth,
@@ -111,4 +125,10 @@ function(
   clusterAddress,
   spliceInstanceNames,
   port,
-) auth(authAlgorithm, auth0Config) + testAuth(std.parseJson(enableTestAuth), auth0Config) + services(validatorNode, clusterProtocol, clusterAddress, port) + spliceInstanceNames
+  enableDappMode='false',
+  cip103RpcUrl='http://localhost:3030/api/v0/dapp',
+) auth(authAlgorithm, auth0Config)
+  + testAuth(std.parseJson(enableTestAuth), auth0Config)
+  + services(validatorNode, clusterProtocol, clusterAddress, port)
+  + spliceInstanceNames
+  + dappMode(enableDappMode, cip103RpcUrl, validatorNode, clusterProtocol, clusterAddress, port)

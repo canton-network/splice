@@ -12,6 +12,8 @@ import { useEffect, useState } from 'react';
 import { Outlet } from 'react-router';
 
 import { useSvAdminClient } from '../contexts/SvAdminServiceContext';
+import { WalletAuthCheck } from '../dapp/WalletAuthCheck';
+import { useDappModeConfig } from '../utils';
 
 interface AuthCheckProps {
   authConfig: AuthConfig;
@@ -19,6 +21,16 @@ interface AuthCheckProps {
 }
 
 const AuthCheck: React.FC<AuthCheckProps> = ({ authConfig, testAuthConfig }) => {
+  const dappMode = useDappModeConfig();
+  // In dApp mode login goes through the wallet gateway instead of OIDC
+  // against the SV backend.
+  if (dappMode) {
+    return <WalletAuthCheck />;
+  }
+  return <BackendAuthCheck authConfig={authConfig} testAuthConfig={testAuthConfig} />;
+};
+
+const BackendAuthCheck: React.FC<AuthCheckProps> = ({ authConfig, testAuthConfig }) => {
   const { userAccessToken, isAuthenticated } = useUserState();
   const svClient = useSvAdminClient();
   type AuthorizationState = 'isLoading' | 'ok' | 'unauthorized' | 'failed' | 'unset';

@@ -935,6 +935,10 @@ object SvApp {
                   reason,
                   java.util.Optional.of(decodedExpiration),
                   effectiveTime,
+                  // The SV requests the vote directly here, so there is no delegated
+                  // voter party co-authorizing. Delegated requests are driven through
+                  // the VoteDelegation contract instead.
+                  java.util.Optional.empty(),
                 )
                 cmd = dsoRules.exercise(_.exerciseDsoRules_RequestVote(request))
                 res <- dsoStoreWithIngestion
@@ -1045,6 +1049,7 @@ object SvApp {
                     reason,
                     Optional.empty(), // optCastAt
                   ),
+                  Optional.empty(), // voterParty
                 )
               )
               res <- dsoStoreWithIngestion

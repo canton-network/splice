@@ -809,6 +809,15 @@ template DsoRules with
     -- Voting as part of on-ledger governance (version 3)
     -----------------------------------------------------
 
+    -- This allows fetchByKey-style fetches if you have readAs
+    -- but not actAs claims. Mirrors AmuletRules_Fetch.
+    nonconsuming choice DsoRules_Fetch : DsoRules
+      with
+        p : Party
+      controller p
+      do
+        pure this
+
     -- TODO(#9317): rate limit inidiviual SVs wrt requesting votes
     nonconsuming choice DsoRules_RequestVote : DsoRules_RequestVoteResult
       with
@@ -817,7 +826,8 @@ template DsoRules with
         reason : Reason
         voteRequestTimeout : Optional RelTime
         targetEffectiveAt : Optional Time
-      controller requester
+        voterParty : Optional Party
+      controller requester, voterParty
       do
         requesterName <- case requester `Map.lookup` svs of
           None -> fail "Requester is not an SV"
@@ -852,7 +862,8 @@ template DsoRules with
       with
         requestCid : ContractId VoteRequest
         vote : Vote
-      controller vote.sv
+        voterParty : Optional Party
+      controller vote.sv, voterParty
       do
         -- validate vote parameters
         requireWellformedVote config vote
