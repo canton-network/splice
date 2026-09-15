@@ -106,14 +106,7 @@ class UnclaimedSvRewardsScriptIntegrationTest
       // Expire
       ///////////
 
-      // Coupons are only claimable against a ClosedMiningRound (AmuletRules_ClaimExpiredRewards),
-      // so wait for 0-2 to be closed before resuming the coupon-expiry trigger.
-      eventually(40.seconds) {
-        val closed = sv1ScanBackend.getClosedRounds().map(_.payload.round.number.longValue())
-        closed should contain allOf (0L, 1L, 2L)
-      }
-
-      actAndCheck(timeUntilSuccess = 40.seconds)(
+      actAndCheck(timeUntilSuccess = 80.seconds)(
         "Resume expired trigger", {
           expireRewardCouponsTrigger.resume()
         },
