@@ -1165,13 +1165,14 @@ class BftScanConnection(
       "getBulkObjectChecksums",
       consensusFailureLogLevel = Level.DEBUG,
       // 404 means a scan has not caught up yet, so classify it as a not-yet response.
-      isNotYet = (f: Future[GetBulkObjectChecksumsResponse]) => f.map(_ => false).recover {
-        case e: BaseAppConnection.UnexpectedHttpJsonResponse =>
-          e.statusCode == StatusCodes.NotFound || e.statusCode == StatusCodes.NotImplemented
-        case e: HttpCommandException =>
-          e.status == StatusCodes.NotFound || e.status == StatusCodes.NotImplemented
-        case _ => false
-      },
+      isNotYet = (f: Future[GetBulkObjectChecksumsResponse]) =>
+        f.map(_ => false).recover {
+          case e: BaseAppConnection.UnexpectedHttpJsonResponse =>
+            e.statusCode == StatusCodes.NotFound || e.statusCode == StatusCodes.NotImplemented
+          case e: HttpCommandException =>
+            e.status == StatusCodes.NotFound || e.status == StatusCodes.NotImplemented
+          case _ => false
+        },
     )
 }
 trait HasUrl {
