@@ -911,6 +911,7 @@ class BftScanConnection(
       callConfig: BftCallConfig = BftCallConfig.default(scanList.scanConnections),
       consensusFailureLogLevel: Level = Level.WARN,
       shortenResponsesForLog: T => Any = identity[T],
+      isNotYet: Future[T] => Future[Boolean] = (_: Future[T]) => Future.successful(false),
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
@@ -920,6 +921,7 @@ class BftScanConnection(
     callConfig,
     consensusFailureLogLevel,
     shortenResponsesForLog = shortenResponsesForLog,
+    isNotYet = isNotYet,
   )
     .map(_._1)
 
@@ -930,6 +932,7 @@ class BftScanConnection(
       consensusFailureLogLevel: Level = Level.WARN,
       disagreementLogLevel: Level = Level.INFO,
       shortenResponsesForLog: T => Any = identity[T],
+      isNotYet: Future[T] => Future[Boolean] = (_: Future[T]) => Future.successful(false),
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
@@ -973,6 +976,7 @@ class BftScanConnection(
             shortenResponsesForLog,
             disagreementLogLevel,
             connectionMetrics,
+            isNotYet,
           ),
           logger,
           (_: String) => ConsensusNotReachedRetryable,
@@ -1160,6 +1164,14 @@ class BftScanConnection(
       _.getBulkObjectChecksums(requiredCatchupTimestamp, objectKeys),
       "getBulkObjectChecksums",
       consensusFailureLogLevel = Level.DEBUG,
+      // 404 means a scan has not caught up yet, so classify it as a not-yet response.
+      isNotYet = (f: Future[GetBulkObjectChecksumsResponse]) => f.map(_ => false).recover {
+        case e: BaseAppConnection.UnexpectedHttpJsonResponse =>
+          e.statusCode == StatusCodes.NotFound || e.statusCode == StatusCodes.NotImplemented
+        case e: HttpCommandException =>
+          e.status == StatusCodes.NotFound || e.status == StatusCodes.NotImplemented
+        case _ => false
+      },
     )
 }
 trait HasUrl {
@@ -1175,7 +1187,7 @@ object BftScanConnection {
       shortenResponsesForLog: T => Any = identity[T],
       disagreementLogLevel: Level = Level.INFO,
       connectionMetrics: Option[ScanConnectionMetrics] = None,
-      notYetResponse: T => Boolean = (_: T) => false,
+      isNotYet: Future[T] => Future[Boolean] = (_: Future[T]) => Future.successful(false),
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
@@ -1225,15 +1237,18 @@ object BftScanConnection {
     }
 
     requestFrom.foreach { scan =>
-      call(scan)
+      val response = call(scan)
+      val groupedResponse =
+        response.transformWith(r => keyToGroupResponses(r).map(_ -> r).map(Right(_)))
+
+      isNotYet(response)
         .transformWith {
-          case Success(value) if notYetResponse(value) =>
-            Future.successful(Left(BftScanConnection.NotYetResponse(scan.url, value)))
-          case response =>
-            keyToGroupResponses(response).map(_ -> response).map(Right(_))
+          case Success(true) =>
+            Future.successful(Left(BftScanConnection.NotYetResponse(scan.url)))
+          case _ => groupedResponse
         }
         .foreach {
-          case Left(_: BftScanConnection.NotYetResponse[?]) =>
+          case Left(_: BftScanConnection.NotYetResponse) =>
             nNotYetResponses.incrementAndGet()
             if (nResponsesDone.incrementAndGet() == requestFrom.size) {
               finalizeNoConsensus()
@@ -2210,7 +2225,7 @@ object BftScanConnection {
       extends RuntimeException(s"Scan $url has no answer to contribute to consensus")
       with NoStackTrace
 
-  private case class NotYetResponse[+T](url: Uri, response: T)
+  private case class NotYetResponse(url: Uri)
 
   class NotEnoughAvailableResponsesToReachConsensus(
       numRequests: Int,

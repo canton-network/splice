@@ -917,7 +917,7 @@ class BftScanConnectionTest
       // Two scans return last id = 3
       mockResponses(2, 3)
       mockResponses(3, 3)
-      // Two scan returns last id = 4
+      // Two scans return last id = 4
       mockResponses(4, 4)
       mockResponses(5, 4)
       // One scan returns last id = 5
@@ -1552,7 +1552,33 @@ class BftScanConnectionTest
           connections,
           nTargetSuccess = 2,
           logger,
-          notYetResponse = (_: PartyId) == partyIdB,
+          isNotYet = (p: Future[PartyId]) => p.map(_ == partyIdB),
+        )
+      } yield {
+        result should be(partyIdA)
+        uris.toSet should be(Set(Uri(scanUrl(0)), Uri(scanUrl(1))))
+      }
+    }
+
+    "reach consensus when 404 failures are classified as not-yet exceptions" in {
+      val connections = getMockedConnections(n = 4)
+      makeMockReturn(connections(0), partyIdA)
+      makeMockReturn(connections(1), partyIdA)
+      makeMockFail(connections(2), notFoundFailure)
+      makeMockFail(connections(3), notFoundFailure)
+
+      for {
+        (result, uris) <- BftScanConnection.executeCall(
+          call,
+          connections,
+          nTargetSuccess = 2,
+          logger,
+          isNotYet = (p: Future[PartyId]) =>
+            p.failed.map {
+              case e: BaseAppConnection.UnexpectedHttpJsonResponse =>
+                e.statusCode == StatusCodes.NotFound
+              case _ => false
+            },
         )
       } yield {
         result should be(partyIdA)
@@ -1573,7 +1599,7 @@ class BftScanConnectionTest
             connections,
             nTargetSuccess = 3,
             logger,
-            notYetResponse = (_: PartyId) == partyIdB,
+            isNotYet = (p: Future[PartyId]) => p.map(_ == partyIdB),
           )
           .failed
       } yield inside(failure) {
@@ -1598,7 +1624,7 @@ class BftScanConnectionTest
             connections,
             nTargetSuccess = 3,
             logger,
-            notYetResponse = (_: PartyId) == partyIdC,
+            isNotYet = (p: Future[PartyId]) => p.map(_ == partyIdC),
           )
           .failed
       } yield failure shouldBe a[BftScanConnection.NotEnoughAvailableResponsesToReachConsensus]
@@ -1618,7 +1644,7 @@ class BftScanConnectionTest
             connections,
             nTargetSuccess = 4,
             logger,
-            notYetResponse = (_: PartyId) == partyIdC,
+            isNotYet = (p: Future[PartyId]) => p.map(_ == partyIdC),
           )
           .failed
       } yield failure shouldBe a[BftScanConnection.ConsensusNotReached]
