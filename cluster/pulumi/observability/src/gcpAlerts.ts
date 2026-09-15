@@ -69,6 +69,17 @@ function getAlertStrategy(notificationChannel: gcp.monitoring.NotificationChanne
   };
 }
 
+// Log matching conditions cannot be aggregated into a threshold, so the notification
+// rate limit is what keeps a flood of matches down to one alert per period.
+function getLogMatchAlertStrategy() {
+  return {
+    autoClose: '3600s',
+    notificationRateLimit: {
+      period: '300s',
+    },
+  };
+}
+
 type AlertPolicyBaseArgs = Pick<
   gcp.monitoring.AlertPolicyArgs,
   'alertStrategy' | 'combiner' | 'notificationChannels' | 'userLabels'
@@ -644,7 +655,7 @@ export function installCloudArmorAlerts(
   // The Cloud Armor metrics only expose whether a request was blocked, not which rule
   // blocked it, so a WAF specific alert has to go through the load balancer request logs.
   if (cloudArmorConfig.wafRules.enabled && cloudArmorConfig.logging.enabled) {
-    installCloudArmorWafAlert(notificationChannel, baseArgs);
+    installCloudArmorWafAlert(baseArgs);
   }
 }
 
@@ -663,10 +674,7 @@ export function installCloudArmorAlerts(
  * (`cloudArmor.logging.enabled`), otherwise Cloud Armor decisions never reach Cloud
  * Logging.
  */
-function installCloudArmorWafAlert(
-  notificationChannel: gcp.monitoring.NotificationChannel,
-  baseArgs: AlertPolicyBaseArgs
-): void {
+function installCloudArmorWafAlert(baseArgs: AlertPolicyBaseArgs): void {
   // Rules in preview mode are reported under previewSecurityPolicy and do not actually
   // reject anything; for the WAF rules that previewed signal is exactly the attack
   // detection we want, so both are matched.
@@ -688,15 +696,7 @@ function installCloudArmorWafAlert(
   const displayName = `Cloud Armor WAF rule rejections in ${CLUSTER_BASENAME}`;
   new gcp.monitoring.AlertPolicy('cloudArmorWafRejectionsAlert', {
     ...baseArgs,
-    alertStrategy: {
-      ...getAlertStrategy(notificationChannel),
-      // Log matching conditions cannot be aggregated into a threshold, so the
-      // notification rate limit is what keeps a flood of matches down to one alert per
-      // period. It is required by GCP for log matching policies.
-      notificationRateLimit: {
-        period: '300s',
-      },
-    },
+    alertStrategy: getLogMatchAlertStrategy(),
     displayName,
     documentation: {
       subject: displayName,

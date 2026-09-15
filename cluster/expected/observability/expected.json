@@ -129,14 +129,6 @@
     "inputs": {
       "alertStrategy": {
         "autoClose": "3600s",
-        "notificationChannelStrategies": [
-          {
-            "notificationChannelNames": [
-              null
-            ],
-            "renotifyInterval": "14400s"
-          }
-        ],
         "notificationRateLimit": {
           "period": "300s"
         }
