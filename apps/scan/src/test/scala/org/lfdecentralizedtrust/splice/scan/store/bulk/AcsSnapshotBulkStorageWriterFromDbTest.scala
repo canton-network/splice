@@ -70,6 +70,7 @@ class AcsSnapshotBulkStorageWriterFromDbTest
   val acsSnapshotSize = 48500
   val bulkStorageTestConfig = ScanStorageConfig(
     dbAcsSnapshotPeriodHours = 3,
+    perAcsSnapshotTablesEnabled = false,
     bulkAcsSnapshotPeriodHours = 24,
     bulkDbReadChunkSize = 1000,
     bulkZstdFrameSize = 10000L,
@@ -377,7 +378,7 @@ class AcsSnapshotBulkStorageWriterFromDbTest
                         .RowIdQueryAcsSnapshotPaginationToken(value)
                     ) =>
                   value
-                case None => 0L
+                case _ => 0L
               }
               val remaining = snapshotSize - afterAsLong
               val numElems = math.min(limit.limit.toLong, remaining)
