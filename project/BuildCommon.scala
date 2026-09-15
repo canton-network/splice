@@ -684,7 +684,7 @@ object BuildCommon {
       .enablePlugins(DamlPlugin)
       .dependsOn(
         `canton-community-base`,
-        `canton-wartremover-extension` % "compile->compile;test->test",
+        `canton-wartremover-extension`,
         `canton-community-testing` % "test",
       )
       .settings(
