@@ -120,9 +120,8 @@ class UnclaimedSvRewardsScriptIntegrationTest
       )(
         "Coupons for round 0,1,2 get expired",
         _ => {
-          val remaining = sv1WalletClient
-            .listSvRewardCoupons()
-          forAll(remaining)(c => c.payload.round.number.longValue() should be > 2L)
+          val remaining = sv1WalletClient.listSvRewardCoupons()
+          forEvery(remaining)(c => c.payload.round.number.longValue() should be > 2L)
           remaining should have size (svRewardCouponsCount - svRewardCouponsExpiredCount) withClue "sv1 SvRewardCoupons"
           // Pause trigger once we have some coupons expired
           expireRewardCouponsTrigger.pause().futureValue
