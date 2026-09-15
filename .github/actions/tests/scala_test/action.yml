@@ -40,7 +40,7 @@ inputs:
   start_frontend_args:
     description: "Args to pass to start-frontends.sh"
     required: false
-    default: "-d -s"
+    default: "-d -s -D"
   with_docker_images:
     description: "Whether to build docker images for the tests"
     required: false

@@ -21,6 +21,7 @@
     "wallet/external-openapi-ts-client"
   ],
   "dependencies": {
+    "@canton-network/wallet-gateway-remote": "^1.8.1",
     "@daml.js/ans": "file:common/frontend/daml.js/splice-amulet-name-service-0.1.24",
     "@daml.js/splice-amulet": "file:common/frontend/daml.js/splice-amulet-0.1.23",
     "@daml.js/splice-dso-governance": "file:common/frontend/daml.js/splice-dso-governance-0.1.30",

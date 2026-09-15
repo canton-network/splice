@@ -8,9 +8,12 @@ import { AmuletRules } from '@daml.js/splice-amulet/lib/Splice/AmuletRules';
 import { SvNodeState } from '@daml.js/splice-dso-governance/lib/Splice/DSO/SvState';
 import { DsoRules } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
 
+import { useDappDsoInfos } from '../dapp/useDappDsoInfos';
+import { useWalletSessionOptional } from '../dapp/WalletSessionContext';
+import { useDappModeConfig } from '../utils';
 import { useSvAdminClient } from './SvAdminServiceContext';
 
-export const useDsoInfos = (): UseQueryResult<DsoInfo> => {
+const useBackendDsoInfos = (): UseQueryResult<DsoInfo> => {
   const { getDsoInfo } = useSvClient();
   // The SV app's /v1/dso endpoint requires authentication
   const { userAccessToken } = useUserState();
@@ -30,6 +33,21 @@ export const useDsoInfos = (): UseQueryResult<DsoInfo> => {
       };
     },
   });
+};
+
+export const useDsoInfos = (): UseQueryResult<DsoInfo> => {
+  const dappMode = useDappModeConfig();
+  // The mode is fixed for the lifetime of the page (config is read once from
+  // window.splice_config), so the branch below never changes hook order
+  // between renders.
+  if (dappMode) {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    const walletSession = useWalletSessionOptional();
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    return useDappDsoInfos(walletSession?.svPartyId);
+  }
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  return useBackendDsoInfos();
 };
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type

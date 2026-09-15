@@ -168,6 +168,9 @@ trait FrontendTestCommon extends TestCommon with WebBrowser with CustomMatchers 
   val sv1UIPort = 3211
   val sv2UIPort = 3212
 
+  /** SV UI with dappMode enabled (start-frontends.sh -D). */
+  val svDappUIPort = 3213
+
   val scanUIPort = 3311
 
   val aliceSplitwellUIPort = 3400
