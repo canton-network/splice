@@ -284,26 +284,14 @@ template AmuletRules
         case validateBuyMemberTrafficInputs configUsd synchronizerId trafficAmount of
           Left failureStatus -> failWithStatus failureStatus
           Right _ -> pure ()
-        (trafficCostAmulet, trafficCostUsd) <- computeSynchronizerFees dso provider trafficAmount this context
-        (transferResult, meta) <- splitAndBurn (toInterfaceContractId self) provider trafficCostAmulet inputs context dso "traffic purchase"
-        -- create a new MemberTraffic contract for the purchased traffic
-        purchasedTraffic <- create MemberTraffic with
-          dso
-          memberId
-          synchronizerId
-          migrationId
-          totalPurchased = trafficAmount
-          numPurchases = 1
-          amuletSpent = trafficCostAmulet
-          usdSpent =  trafficCostUsd
-        -- return result
-        return AmuletRules_BuyMemberTrafficResult with
-          round = transferResult.round
-          summary = transferResult.summary
-          amuletPaid = trafficCostAmulet
-          purchasedTraffic
-          senderChangeAmulet = transferResult.senderChangeAmulet
-          meta = Some meta
+        contextMiningRound <- fetchPublicReferenceData (ForDso dso) context.openMiningRound (OpenMiningRound_Fetch provider)
+        configUsd <- getValueAsOfLedgerTime this.configSchedule
+        let feeConfig = SynchronizerFeeConfig with
+              trafficPriceUsd = fromOptional (configUsd.decentralizedSynchronizer.fees.extraTrafficPrice) contextMiningRound.trafficPrice
+              amuletConversionRate = contextMiningRound.amuletPrice
+            eventLogCid = toInterfaceContractId self
+        csum <- summarizeAndValidateContext eventLogCid context dso provider provider
+        buyMemberTraffic eventLogCid dso feeConfig provider synchronizerId migrationId memberId trafficAmount csum inputs
 
 
     nonconsuming choice AmuletRules_MergeMemberTrafficContracts : AmuletRules_MergeMemberTrafficContractsResult
@@ -1122,7 +1110,7 @@ data RewardsIssuanceConfig = RewardsIssuanceConfig with
 executeTransfer : ContractId TransferEventsV2.EventLog -> RewardsIssuanceConfig -> TransferContext -> Party -> Transfer -> Update TransferResult
 executeTransfer eventLogCid config context dso t = do
   -- compute summaries
-  csum <- summarizeAndValidateContext eventLogCid context dso t
+  csum <- summarizeAndValidateContext eventLogCid context dso t.sender t.provider
   executeTransfer' config csum dso t
 
 -- | Execute a transfer for external parties so that the prepared tx remains valid for 24h
@@ -1259,8 +1247,8 @@ data PreprocessedTransferOutput = PreprocessedTransferOutput with
     meta : Optional Metadata -- ^ Metadata to attach to the output amulet
   deriving (Eq, Show)
 
-summarizeAndValidateContext : ContractId TransferEventsV2.EventLog -> TransferContext -> Party -> Transfer -> Update TransferContextSummaryV2
-summarizeAndValidateContext eventLogCid context dso tf = do
+summarizeAndValidateContext : ContractId TransferEventsV2.EventLog -> TransferContext -> Party -> Party -> Party -> Update TransferContextSummaryV2
+summarizeAndValidateContext eventLogCid context dso sender provider = do
   -- check that the current mining round is open
   openRound <- fetchReferenceData (ForDso with dso) context.openMiningRound
   assertDeadlineExceeded "openRound.opensAt" openRound.opensAt
@@ -1270,8 +1258,8 @@ summarizeAndValidateContext eventLogCid context dso tf = do
   featuredAppProvider <-
     if useFeaturedAppMarkers rewardVersion
       then forA context.featuredAppRight $ \featuredAppRightCid -> do
-        _ <- fetchReferenceData (ForOwner with dso; owner = tf.provider) featuredAppRightCid
-        pure tf.provider
+        _ <- fetchReferenceData (ForOwner with dso; owner = provider) featuredAppRightCid
+        pure provider
       else pure None
 
   -- pre-resolve issuing mining rounds
@@ -1282,7 +1270,7 @@ summarizeAndValidateContext eventLogCid context dso tf = do
 
   -- pre-resolve validator rights
   validatorRights <- forA (Map.toList context.validatorRights) $ \(user, rightCid) -> do
-      requireMatchingContract rightCid (ValidatorRight with dso; validator = tf.sender; user)
+      requireMatchingContract rightCid (ValidatorRight with dso; validator = sender; user)
       pure (user, rightCid)
 
   return TransferContextSummaryV2 with
@@ -1725,17 +1713,20 @@ validateBuyMemberTrafficInputs configUsd synchronizerId trafficAmount
       Left $ mkInsufficientTopupAmountFailure trafficAmount configUsd.decentralizedSynchronizer.fees.minTopupAmount
   | otherwise = Right ()
 
+data SynchronizerFeeConfig = SynchronizerFeeConfig
+  with
+    trafficPriceUsd : Decimal
+    amuletConversionRate : Decimal
+  deriving (Show, Eq)
+
 -- | Computing synchronizer fees
-computeSynchronizerFees : Party -> Party -> Int -> AmuletRules -> TransferContext -> Update (Decimal, Decimal)
-computeSynchronizerFees dso validator trafficAmount amuletRules context = do
-  contextMiningRound <- fetchPublicReferenceData (ForDso dso) context.openMiningRound (OpenMiningRound_Fetch validator)
+computeSynchronizerFees : SynchronizerFeeConfig -> Int -> Update (Decimal, Decimal)
+computeSynchronizerFees trafficFeeConfig trafficAmount = do
   -- compute traffic cost in USD
-  configUsd <- getValueAsOfLedgerTime amuletRules.configSchedule
-  let extraTrafficPrice =
-        fromOptional (configUsd.decentralizedSynchronizer.fees.extraTrafficPrice) contextMiningRound.trafficPrice
+  let extraTrafficPrice = trafficFeeConfig.trafficPriceUsd
   let trafficCostUsd = intToDecimal trafficAmount / 1e6 * extraTrafficPrice
   -- compute traffic cost in Amulet
-  let trafficCostAmulet = trafficCostUsd / contextMiningRound.amuletPrice
+  let trafficCostAmulet = trafficCostUsd / trafficFeeConfig.amuletConversionRate
   pure (trafficCostAmulet, trafficCostUsd)
 
 data AppTransferContext = AppTransferContext
@@ -2220,13 +2211,13 @@ computeTransferPreapprovalFee duration amuletConfig context dso = do
   let feeAmulet = feeUsd / contextMiningRound.amuletPrice
   pure (feeAmulet, feeUsd)
 
-splitAndBurn : ContractId TransferEventsV2.EventLog -> Party -> Decimal -> [TransferInput] -> TransferContext -> Party -> Text -> Update (TransferResult, Metadata)
-splitAndBurn eventLogCid sender amount inputs context dso usage = do
+splitAndBurn : ContractId TransferEventsV2.EventLog -> Party -> Decimal -> [TransferInput] -> TransferContextSummaryV2 -> Party -> Text -> Update (TransferResult, Metadata)
+splitAndBurn eventLogCid sender amount inputs summary dso usage = do
 -- do not create activity records as part of the transfer. We create a validator activity record for the full burn below.
   let rewardsConfig = RewardsIssuanceConfig with
         issueAppRewards = False
         issueValidatorRewards = False
-  transferResult <- executeTransfer eventLogCid rewardsConfig context dso Transfer with
+  transferResult <- executeTransfer' rewardsConfig summary dso Transfer with
     sender
     provider = sender
     inputs
@@ -2264,6 +2255,29 @@ splitAndBurn eventLogCid sender amount inputs context dso usage = do
   let meta = simpleHoldingTxMeta TxKind_Burn (Some usage) (Some burnAmount) <>
              fromOptional mempty transferResult.meta -- overwrite so we keep the reward input metadata
   pure (result, meta)
+
+buyMemberTraffic : ContractId TransferEventsV2.EventLog -> Party -> SynchronizerFeeConfig -> Party -> Text -> Int -> Text -> Int -> TransferContextSummaryV2 -> [TransferInput] -> Update AmuletRules_BuyMemberTrafficResult
+buyMemberTraffic eventLogCid dso feeConfig provider synchronizerId migrationId memberId trafficAmount csum inputs = do
+  (trafficCostAmulet, trafficCostUsd) <- computeSynchronizerFees feeConfig trafficAmount
+  (transferResult, meta) <- splitAndBurn eventLogCid provider trafficCostAmulet inputs csum dso "traffic purchase"
+  -- create a new MemberTraffic contract for the purchased traffic
+  purchasedTraffic <- create MemberTraffic with
+    dso
+    memberId
+    synchronizerId
+    migrationId
+    totalPurchased = trafficAmount
+    numPurchases = 1
+    amuletSpent = trafficCostAmulet
+    usdSpent =  trafficCostUsd
+  -- return result
+  return AmuletRules_BuyMemberTrafficResult with
+    round = transferResult.round
+    summary = transferResult.summary
+    amuletPaid = trafficCostAmulet
+    purchasedTraffic
+    senderChangeAmulet = transferResult.senderChangeAmulet
+    meta = Some meta
 
 -- | Compute the total burn done as part of the transfer.
 totalBurnFromSummary : TransferSummary -> Decimal
@@ -2304,7 +2318,9 @@ payForTransferPreapproval reason dso provider context inputs expiresAt newExpire
         , emptyMetadata)
     else do
       (amuletPaid, _) <- computeTransferPreapprovalFee paidExtension configUsd context.context dso
-      (transferResult, meta) <- splitAndBurn (toInterfaceContractId context.amuletRules) provider amuletPaid inputs context.context dso reason
+      let eventLogCid = toInterfaceContractId context.amuletRules
+      csum <- summarizeAndValidateContext eventLogCid context.context dso provider provider
+      (transferResult, meta) <- splitAndBurn eventLogCid provider amuletPaid inputs csum dso reason
       pure (amuletPaid, transferResult, meta)
 
 -- Token standard context parsing
