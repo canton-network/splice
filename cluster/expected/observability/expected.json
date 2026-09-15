@@ -155,7 +155,7 @@
             ],
             "comparison": "COMPARISON_GT",
             "duration": "0s",
-            "filter": "metric.type = \"logging.googleapis.com/user/cloud_armor_waf_rejections_mock\"",
+            "filter": "resource.type = one_of(\"http_external_regional_lb_rule\", \"http_load_balancer\") AND metric.type = \"logging.googleapis.com/user/cloud_armor_waf_rejections_mock\"",
             "thresholdValue": 0,
             "trigger": {
               "count": 1

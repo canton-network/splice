@@ -671,8 +671,12 @@ function installCloudArmorWafAlert(baseArgs: AlertPolicyBaseArgs): void {
   // The gateway is fronted by a regional external application load balancer, whose
   // request logs use `http_external_regional_lb_rule`; `http_load_balancer` is accepted
   // as well so the alert keeps working if the gateway ever becomes global.
-  const filter =
-    ensureTrailingNewline(`resource.type=("http_external_regional_lb_rule" OR "http_load_balancer")
+  // The security policy name is cluster specific, so this is already scoped to this
+  // cluster even though load balancer logs carry no cluster label.
+  const lbResourceTypes = ['http_external_regional_lb_rule', 'http_load_balancer'];
+  const filter = ensureTrailingNewline(`resource.type=(${lbResourceTypes
+    .map(t => `"${t}"`)
+    .join(' OR ')})
 ((${matchedWafRule('enforcedSecurityPolicy')}) OR (${matchedWafRule('previewSecurityPolicy')}))`);
 
   const wafRejectionsMetric = new gcp.logging.Metric('cloud_armor_waf_rejections', {
@@ -735,7 +739,13 @@ function installCloudArmorWafAlert(baseArgs: AlertPolicyBaseArgs): void {
           comparison: 'COMPARISON_GT',
           // No retest period -- a single WAF match is worth looking at
           duration: '0s',
-          filter: pulumi.interpolate`metric.type = "logging.googleapis.com/user/${wafRejectionsMetric.name}"`,
+          // A monitoring filter must restrict resource.type, even though the log based
+          // metric is only ever written from the load balancer request logs.
+          filter: pulumi.interpolate`resource.type = one_of(${lbResourceTypes
+            .map(t => `"${t}"`)
+            .join(', ')}) AND metric.type = "logging.googleapis.com/user/${
+            wafRejectionsMetric.name
+          }"`,
           thresholdValue: 0,
           trigger: {
             count: 1,
