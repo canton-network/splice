@@ -258,6 +258,7 @@ class BftScanConnectionTest
 
   val partyIdA = PartyId.tryFromProtoPrimitive("whatever::a")
   val partyIdB = PartyId.tryFromProtoPrimitive("whatever::b")
+  val partyIdC = PartyId.tryFromProtoPrimitive("whatever::c")
 
   private def rootHashOk(round: Long, hash: String): GetRewardAccountingRootHashResponse =
     GetRewardAccountingRootHashResponse(
@@ -1534,4 +1535,93 @@ class BftScanConnectionTest
     }
   }
 
+  "BftScanConnection.executeCall not-yet responses" should {
+
+    val call: SingleScanConnection => Future[PartyId] = _.getDsoPartyId()
+
+    "reach consensus from non-not-yet responses" in {
+      val connections = getMockedConnections(n = 4)
+      makeMockReturn(connections(0), partyIdA)
+      makeMockReturn(connections(1), partyIdA)
+      makeMockReturn(connections(2), partyIdB)
+      makeMockReturn(connections(3), partyIdB)
+
+      for {
+        (result, uris) <- BftScanConnection.executeCall(
+          call,
+          connections,
+          nTargetSuccess = 2,
+          logger,
+          notYetResponse = (_: PartyId) == partyIdB,
+        )
+      } yield {
+        result should be(partyIdA)
+        uris.toSet should be(Set(Uri(scanUrl(0)), Uri(scanUrl(1))))
+      }
+    }
+
+    "fail with NotEnoughAvailableResponsesToReachConsensus when too many responses are not-yet" in {
+      val connections = getMockedConnections(n = 3)
+      makeMockReturn(connections(0), partyIdA)
+      makeMockReturn(connections(1), partyIdB)
+      makeMockReturn(connections(2), partyIdB)
+
+      for {
+        failure <- BftScanConnection
+          .executeCall(
+            call,
+            connections,
+            nTargetSuccess = 3,
+            logger,
+            notYetResponse = (_: PartyId) == partyIdB,
+          )
+          .failed
+      } yield inside(failure) {
+        case e: BftScanConnection.NotEnoughAvailableResponsesToReachConsensus =>
+          e.getMessage should include("only 1 available responses remain")
+          e.getMessage should include("after 2 not-yet responses")
+          e.getMessage should include("Required: 3")
+      }
+    }
+
+    "fail with NotEnoughAvailableResponsesToReachConsensus when not-yet responses could still enable quorum" in {
+      val connections = getMockedConnections(n = 4)
+      makeMockReturn(connections(0), partyIdA)
+      makeMockReturn(connections(1), partyIdB)
+      makeMockReturn(connections(2), partyIdB)
+      makeMockReturn(connections(3), partyIdC)
+
+      for {
+        failure <- BftScanConnection
+          .executeCall(
+            call,
+            connections,
+            nTargetSuccess = 3,
+            logger,
+            notYetResponse = (_: PartyId) == partyIdC,
+          )
+          .failed
+      } yield failure shouldBe a[BftScanConnection.NotEnoughAvailableResponsesToReachConsensus]
+    }
+
+    "fall through to ConsensusNotReached when not-yet responses cannot still make quorum possible" in {
+      val connections = getMockedConnections(n = 4)
+      makeMockReturn(connections(0), partyIdA)
+      makeMockReturn(connections(1), partyIdB)
+      makeMockReturn(connections(2), partyIdB)
+      makeMockReturn(connections(3), partyIdC)
+
+      for {
+        failure <- BftScanConnection
+          .executeCall(
+            call,
+            connections,
+            nTargetSuccess = 4,
+            logger,
+            notYetResponse = (_: PartyId) == partyIdC,
+          )
+          .failed
+      } yield failure shouldBe a[BftScanConnection.ConsensusNotReached]
+    }
+  }
 }

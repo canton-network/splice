@@ -1193,8 +1193,11 @@ object BftScanConnection {
       finalResponse.future.value match {
         case None =>
           val availableResponses = requestFrom.size - nNotYetResponses.get()
+          val maxAgreement = responses.values().asScala.map(_.size).maxOption.getOrElse(0)
+          val notYetCouldEnableConsensus =
+            nNotYetResponses.get() > 0 && (maxAgreement + nNotYetResponses.get()) >= nTargetSuccess
           val exception =
-            if (nNotYetResponses.get() > 0 && availableResponses < nTargetSuccess)
+            if (notYetCouldEnableConsensus)
               BftScanConnection.NotEnoughAvailableResponsesToReachConsensus(
                 numRequests = requestFrom.size,
                 availableResponses = availableResponses,
