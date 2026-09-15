@@ -16,7 +16,7 @@ import ExpiredAmuletAllocationTrigger.{Task, getStakeholders}
 import com.digitalasset.canton.util.MonadUtil
 import org.lfdecentralizedtrust.splice.environment.PackageIdResolver
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
-import org.lfdecentralizedtrust.splice.store.IgnoredPartiesStore
+import org.lfdecentralizedtrust.splice.store.UnavailablePartiesStore
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 import org.lfdecentralizedtrust.splice.sv.util.ContractStakeholders
 
@@ -27,7 +27,7 @@ class ExpiredAmuletAllocationTrigger(
     clock: Clock,
     override protected val context: TriggerContext,
     override protected val svTaskContext: SvTaskBasedTrigger.Context,
-    override protected val ignoredPartiesStore: IgnoredPartiesStore,
+    override protected val unavailablePartiesStore: UnavailablePartiesStore,
 )(implicit
     override val ec: ExecutionContext,
     mat: Materializer,
@@ -38,14 +38,14 @@ class ExpiredAmuletAllocationTrigger(
     ](
       svTaskContext.dsoStore.multiDomainAcsStore,
       svConfig.delegatelessAutomationExpiredAmuletAllocationBatchSize,
-      svTaskContext.dsoStore.listExpiredAmuletAllocations(Some(ignoredPartiesStore)),
+      svTaskContext.dsoStore.listExpiredAmuletAllocations(Some(unavailablePartiesStore)),
       splice.amuletallocation.AmuletAllocation.COMPANION,
       svTaskContext.vettingLookupService,
       PackageIdResolver.Package.SpliceAmulet,
       getStakeholders,
     )
     with SvTaskBasedTrigger[Task]
-    with IgnoredUnavailablePartiesGuard {
+    with UnavailablePartiesGuard {
 
   private val store = svTaskContext.dsoStore
 

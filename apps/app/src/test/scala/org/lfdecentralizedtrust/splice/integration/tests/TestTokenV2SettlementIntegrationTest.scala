@@ -50,6 +50,7 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   IntegrationTest,
   SpliceTestConsoleEnvironment,
 }
+import org.lfdecentralizedtrust.splice.integration.tests.TokenStandardV2TestUtil.ExpectedTrafficCost
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.AdvanceOpenMiningRoundTrigger
 import org.lfdecentralizedtrust.splice.sv.config.ExpectedValidatorOnboardingConfig
 import org.lfdecentralizedtrust.splice.util.*
@@ -121,7 +122,9 @@ class TestTokenV2SettlementIntegrationTest
                   .copy(internalPort = Some(aliceValidatorLocal.adminApi.port + 22_000)),
                 onboarding =
                   aliceValidatorLocal.onboarding.map(_.copy(secret = "aliceExtraValidator")),
-                validatorPartyHint = Some(s"testtoken-validator-${scala.util.Random.nextInt().abs}"),
+                // party hint has a fixed length, which the measured traffic costs depend on.
+                validatorPartyHint =
+                  Some(f"testtoken-validator-${scala.util.Random.nextInt(1000000)}%06d"),
               )),
           walletAppClients = config.walletAppClients + (
             InstanceName.tryCreate("aliceValidatorLocalWallet") -> {
@@ -433,6 +436,7 @@ class TestTokenV2SettlementIntegrationTest
               .list()
               .amulets
               .map(_.contract.contractId.toInterface(holdingv2.Holding.INTERFACE))
+            aliceAmulets should have size 1
             val amuletSpec = aliceAllocationRequest.contract.payload.allocations.asScala
               .filter(_.admin == dsoParty.toProtoPrimitive)
               .loneElement
@@ -712,6 +716,7 @@ class TestTokenV2SettlementIntegrationTest
               val bobUsdcHoldings = getHoldings(bobParty, bobValidatorBackend)
                 .map(_.contractId)
                 .map(id => new holdingv2.Holding.ContractId(id))
+              bobUsdcHoldings should have size 2
               val usdcContext = registry.getContext(
                 bobUsdcHoldings
               )
@@ -799,30 +804,19 @@ class TestTokenV2SettlementIntegrationTest
           },
         )
 
-        val events = Seq(
-          createTradeTx -> "Create Trade",
-          createAllocationRequestsTx -> "Create Allocation Requests",
-          aliceAllocateTx -> "Alice Allocations",
-          bobAllocateTx -> "Bob Allocations",
-          settleTradeTx -> "Settle Trade",
-        ).map { case (tx, name) =>
-          val updateId = tx.getUpdateId
-          name -> clue(s"Checking traffic & activity records for '$name'") {
-            eventually() {
-              inside(sv1ScanBackend.getEventById(updateId, None)) {
-                case Some(
-                      item @ EventHistoryItem(
-                        _,
-                        Some(_),
-                        Some(_),
-                        Some(_),
-                      )
-                    ) =>
-                  EventHistoryItem.encodeEventHistoryItem(item)
-              }
-            }
-          }
-        }
+        // The reference traffic costs were recorded by running this test on Canton 3.6.0
+        val events = checkTrafficCosts(
+          Seq(
+            createTradeTx.getUpdateId -> ExpectedTrafficCost("Create Trade", 3202),
+            createAllocationRequestsTx.getUpdateId -> ExpectedTrafficCost(
+              "Create Allocation Requests",
+              8676,
+            ),
+            aliceAllocateTx.getUpdateId -> ExpectedTrafficCost("Alice Allocations", 14795),
+            bobAllocateTx.getUpdateId -> ExpectedTrafficCost("Bob Allocations", 17333),
+            settleTradeTx.getUpdateId -> ExpectedTrafficCost("Settle Trade", 22460),
+          )
+        ).map { case (action, item) => action -> EventHistoryItem.encodeEventHistoryItem(item) }
         val json = io.circe.JsonObject(events*)
         val savePath =
           java.io.File.createTempFile("test_token_v2_settlement_results", ".json").toPath

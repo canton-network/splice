@@ -32,7 +32,7 @@ services:
       - -c
       - max_connections=8000
     healthcheck:
-      test: "pg_isready -U ${SPLICE_DB_USER} -d postgres"
+      test: "pg_isready -h 127.0.0.1 -p 5432 -U ${SPLICE_DB_USER} -d postgres"
       interval: 10s
       timeout: 3s
       retries: 3

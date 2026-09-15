@@ -289,7 +289,7 @@ class JoiningNodeInitializer(
               domainMigrationId,
               config.scan,
             )
-            dsoAutomation =
+            dsoAutomation <-
               newSvDsoAutomationService(
                 svStore,
                 dsoStore,
@@ -921,7 +921,7 @@ class JoiningNodeInitializer(
                   domainMigrationId,
                   config.scan,
                 )
-                dsoAutomation = newSvDsoAutomationService(
+                dsoAutomation <- newSvDsoAutomationService(
                   svStore,
                   dsoStore,
                   synchronizerNodeService,

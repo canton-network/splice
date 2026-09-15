@@ -10,33 +10,37 @@ import com.digitalasset.canton.tracing.TraceContext
 import io.grpc.StatusRuntimeException
 import io.grpc.protobuf.StatusProto
 import org.lfdecentralizedtrust.splice.automation.{TaskOutcome, TaskSuccess}
-import org.lfdecentralizedtrust.splice.store.IgnoredPartiesStore
+import org.lfdecentralizedtrust.splice.store.UnavailablePartiesStore
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 import org.lfdecentralizedtrust.splice.util.UnresponsiveParties
 import org.lfdecentralizedtrust.splice.environment.PackageIdResolver
 import scala.concurrent.{ExecutionContext, Future}
 
-trait IgnoredUnavailablePartiesGuard extends NamedLogging {
+trait UnavailablePartiesGuard extends NamedLogging {
   protected def svConfig: SvAppBackendConfig
-  protected def ignoredPartiesStore: IgnoredPartiesStore
+  protected def unavailablePartiesStore: UnavailablePartiesStore
   protected def svTaskContext: SvTaskBasedTrigger.Context
 
   protected def completeUnlessAmuletVersionIgnored(
       vettedVersion: String,
       stakeholders: Set[PartyId],
       ignoreUnresponsiveParties: Boolean,
-  )(task: => Future[TaskOutcome])(implicit ec: ExecutionContext): Future[TaskOutcome] =
+  )(task: => Future[TaskOutcome])(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[TaskOutcome] =
     if (
       svConfig.allIgnoredAmuletVersions.contains(vettedVersion) &&
       svConfig.parameters.enabledFeatures.ignorePartyIdWithIgnoredAmulet
     ) {
       val toIgnore = withoutDsoParty(stakeholders)
-      ignoredPartiesStore.addAll(toIgnore)
-      Future.successful(
-        TaskSuccess(
-          s"Skipped batch with ignored version $vettedVersion: added ${toIgnore.size} parties to ignore list: $toIgnore"
+      unavailablePartiesStore
+        .addParties(toIgnore.toSeq)
+        .map(_ =>
+          TaskSuccess(
+            s"Skipped batch with ignored version $vettedVersion: added ${toIgnore.size} parties to ignore list: $toIgnore"
+          )
         )
-      )
     } else {
       task.recoverWith(recoverUnresponsiveParties(ignoreUnresponsiveParties))
     }
@@ -59,22 +63,26 @@ trait IgnoredUnavailablePartiesGuard extends NamedLogging {
             ignoreUnresponsiveParties,
           )(task)
         case None =>
-          Future.successful(
-            TaskSuccess(ignorePartiesWithoutVettedAmulet(stakeholders, contractIds))
-          )
+          ignorePartiesWithoutVettedAmulet(stakeholders, contractIds).map(TaskSuccess(_))
       }
 
   protected def ignorePartiesWithoutVettedAmulet(
       informees: Set[PartyId],
       contractIds: Seq[String],
-  ): String = {
+  )(implicit ec: ExecutionContext, tc: TraceContext): Future[String] = {
     val toIgnore = withoutDsoParty(informees)
-    ignoredPartiesStore.addAll(toIgnore)
-    s"No vetted Amulet version for $contractIds; ignoring ${toIgnore.size} parties: $toIgnore"
+    unavailablePartiesStore
+      .addParties(toIgnore.toSeq)
+      .map(_ =>
+        s"No vetted Amulet version for $contractIds; ignoring ${toIgnore.size} parties: $toIgnore"
+      )
   }
 
   private def recoverUnresponsiveParties(
       enabled: Boolean
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
   ): PartialFunction[Throwable, Future[TaskOutcome]] = {
     case ex: StatusRuntimeException
         if enabled && svConfig.parameters.enabledFeatures.naiveUnresponsivePartiesAutoIgnore =>
@@ -82,12 +90,13 @@ trait IgnoredUnavailablePartiesGuard extends NamedLogging {
       if (toIgnore.isEmpty) {
         Future.failed(ex)
       } else {
-        ignoredPartiesStore.addAll(toIgnore)
-        Future.successful(
-          TaskSuccess(
-            s"Batch failed due to unresponsive parties, added ${toIgnore.size} to ignore list: $toIgnore"
+        unavailablePartiesStore
+          .addParties(toIgnore.toSeq)
+          .map(_ =>
+            TaskSuccess(
+              s"Batch failed due to unresponsive parties, added ${toIgnore.size} to ignore list: $toIgnore"
+            )
           )
-        )
       }
   }
 

@@ -10,6 +10,32 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestC
 
 trait WalletFrontendTestUtil extends WalletTestUtil { self: FrontendTestCommon =>
 
+  protected def onboardUserAfterLogin()(implicit webDriver: WebDriverType): Unit = {
+    // After login, the UI fetches the user onboarding status from the validator.
+    // If the user is already onboarded, the party ID is displayed
+    // If the user is not onboarded, the onboard button is displayed
+    eventually() {
+      (find(id("onboard-button")).isDefined || find(className("party-id")).isDefined) shouldBe true
+    }
+
+    if (find(id("onboard-button")).isDefined) {
+      // TODO(DACH-NY/canton-network-internal#485): This is a workaround to bypass slowness of wallet user onboarding
+      actAndCheck(timeUntilSuccess = 2.minute)(
+        "Onboard wallet user", {
+          eventuallyClickOn(id("onboard-button"))
+        },
+      )(
+        "Party ID is displayed after onboarding finishes",
+        _ => {
+          find(className("party-id")) should not be None
+        },
+      )
+    } else {
+      logger.debug("User is already onboarded")
+      find(className("party-id")) should not be None
+    }
+  }
+
   /** Tap amulets by interacting with the UI, and waits until the amulets are visible in the transaction history. */
   protected def tapAmulets(
       tapQuantity: BigDecimal
