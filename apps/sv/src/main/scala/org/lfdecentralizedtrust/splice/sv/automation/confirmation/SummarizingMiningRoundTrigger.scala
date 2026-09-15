@@ -8,6 +8,7 @@ import com.daml.metrics.api.MetricQualification.Errors
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.automation.{
   PollingParallelTaskExecutionTrigger,
+  TaskNoop,
   TaskOutcome,
   TaskSuccess,
   TriggerContext,
@@ -65,6 +66,8 @@ class SummarizingMiningRoundTrigger(
 
   private val miningRoundMetrics = new SummarizingMiningRoundMetrics(context.metricsFactory)
 
+  private object OwnScanTotalsNotYetComputed extends RuntimeException
+
   private def amuletRulesStartIssuingAction(
       miningRoundCid: SummarizingMiningRound.ContractId,
       summary: OpenMiningRoundSummary,
@@ -89,7 +92,7 @@ class SummarizingMiningRoundTrigger(
       task: Task
   )(implicit tc: TraceContext): Future[TaskOutcome] = {
     val round = task.summarizingRound.contract.payload.round.number
-    for {
+    (for {
       rewards <- queryRewards(
         task.summarizingRound.payload,
         task.summarizingRound.domain,
@@ -135,7 +138,7 @@ class SummarizingMiningRoundTrigger(
               )
             }
       }
-    } yield taskOutcome
+    } yield taskOutcome).recover { case OwnScanTotalsNotYetComputed => TaskNoop }
   }
 
   override def isStaleTask(task: SummarizingMiningRoundTrigger.Task)(implicit
@@ -257,7 +260,7 @@ class SummarizingMiningRoundTrigger(
         case RewardAccountingActivityTotalsOk(ok) =>
           Future.successful(ok)
         case RewardAccountingActivityTotalsUndetermined(_) =>
-          totalsUnavailable("our own Scan has not yet computed the reward accounting totals.")
+          Future.failed(OwnScanTotalsNotYetComputed)
         case RewardAccountingActivityTotalsCannotProvide(_) => bftReadTotals
       }
     } yield totals
