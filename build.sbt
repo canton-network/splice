@@ -135,6 +135,8 @@ lazy val root: Project = (project in file("."))
     `canton-community-synchronizer`,
     `canton-community-participant`,
     `canton-ledger-api-value`,
+    `canton-fork-community-common-test`,
+    `canton-fork-logback-test`,
     pulumi,
     `load-tester`,
     tools,
