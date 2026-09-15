@@ -653,6 +653,7 @@ object BuildCommon {
       .disablePlugins(WartRemover)
       .settings(
         sharedCantonSettings,
+        removeTestSources,
         sharedSettings,
         libraryDependencies ++= Seq(
           canton_observability_metrics,
@@ -684,6 +685,7 @@ object BuildCommon {
           (Compile / unmanagedSources / excludeFilter).value || "UseLedgerApiTestTool.scala",
         excludeTranscodeConflictingDependencies,
         sharedCantonSettings,
+        removeTestSources,
 
         // The dependency override is needed because `community-testing` depends transitively on
         // `scalatest` and `community-app-base` depends transitively on `ammonite`, which in turn
@@ -837,6 +839,7 @@ object BuildCommon {
       .apply("canton-community-admin-api", file("canton/community/admin-api"))
       .settings(
         sharedCantonSettings,
+        removeTestSources,
         libraryDependencies ++= Seq(
           canton_util_external,
           grpc_api,
@@ -940,6 +943,7 @@ object BuildCommon {
           "-Wconf:msg=synchronized not selected from this instance:silent"
         ),
         disableTests,
+        removeTestSources,
         sharedSettings,
         libraryDependencies ++= Seq(
           canton_slick_fork,
@@ -1002,6 +1006,7 @@ object BuildCommon {
     )
     .settings(
       sharedCantonSettings,
+      removeTestSources,
       sharedSettings,
       // we restrict the compilation to a few files that we actually need, skipping the large majority ...
       excludeFilter := HiddenFileFilter || "scalapb.proto",
@@ -1117,6 +1122,7 @@ object BuildCommon {
     .disablePlugins(WartRemover)
     .settings(
       sharedCantonSettings,
+      removeTestSources,
       libraryDependencies ++= {
         import CantonDependencies._
         Seq(
@@ -1138,6 +1144,7 @@ object BuildCommon {
       )
       .settings(
         sharedCantonSettings,
+        removeTestSources,
         libraryDependencies ++= Seq(
           canton_util_external,
           logback_classic,
@@ -1175,6 +1182,7 @@ object BuildCommon {
       .enablePlugins(DamlPlugin)
       .settings(
         sharedCantonSettings,
+        removeTestSources,
         Compile / PB.targets := Seq(
           scalapb.gen(flatPackage = false) -> (Compile / sourceManaged).value / "protobuf"
         ),
@@ -1221,6 +1229,7 @@ object BuildCommon {
       )
       .settings(
         sharedCantonSettings,
+        removeTestSources,
         dependencyOverrides ++= Seq(log4j_core, log4j_api),
         libraryDependencies ++= Seq(canton_util_external),
         Compile / PB.targets := Seq(
