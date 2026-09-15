@@ -45,7 +45,7 @@ setupVestingLock = do
   now <- getTime
   let endTime = now `addRelTime` testVestingPeriod
 
-  -- Lock `testVestingAmount` to the DSO until `endTime`. This mirrors
+  -- Lock `testVestingAmount` to the decentralized synchronizer until `endTime`. This mirrors
   -- `GovernanceLock_Unlock`, which relocks the amulet with `expiresAt` set to
   -- the very `endTime` it stores on the `VestingLock`.
   --

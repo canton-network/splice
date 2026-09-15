@@ -104,8 +104,12 @@ export function buildAmuletRulesConfigFromChanges(
       : null;
   const minDevelopmentFundMintingDelay = getValue('minDevelopmentFundMintingDelay', true);
   const rewardConfigMintingVersion = getValue('rewardConfigMintingVersion', true);
-  const governanceLockConfigMinimumGovernanceLockAmount = getValue(
-    'governanceLockConfigMinimumGovernanceLockAmount',
+  const governanceLockSuperValidatorLockVestingDuration = getValue(
+    'governanceLockSuperValidatorLockVestingDuration',
+    true
+  );
+  const governanceLockFeaturedAppLockVestingDuration = getValue(
+    'governanceLockFeaturedAppLockVestingDuration',
     true
   );
   const amuletConfig: AmuletConfig<'USD'> = {
@@ -209,12 +213,15 @@ export function buildAmuletRulesConfigFromChanges(
             appRewardCouponThreshold: getValue('rewardConfigAppRewardCouponThreshold', false),
           },
 
-    governanceLockConfig:
-      governanceLockConfigMinimumGovernanceLockAmount === null
+    governanceLockMinimumLockAmount: getValue('governanceLockMinimumLockAmount', true),
+    governanceLockSuperValidatorLockVestingDuration:
+      governanceLockSuperValidatorLockVestingDuration === null
         ? null
-        : {
-            minimumGovernanceLockAmount: governanceLockConfigMinimumGovernanceLockAmount,
-          },
+        : { microseconds: governanceLockSuperValidatorLockVestingDuration },
+    governanceLockFeaturedAppLockVestingDuration:
+      governanceLockFeaturedAppLockVestingDuration === null
+        ? null
+        : { microseconds: governanceLockFeaturedAppLockVestingDuration },
   };
 
   return amuletConfig;

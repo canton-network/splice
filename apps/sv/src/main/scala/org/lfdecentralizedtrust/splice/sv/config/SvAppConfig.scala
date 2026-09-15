@@ -131,7 +131,10 @@ object SvOnboardingConfig {
           SwitchOverTimes.NoFeaturedAppChoiceContext -> CantonTimestamp.MinValue
         )
       ),
-      initialGovernanceLockConfig: Option[GovernanceLockConfig] = None,
+      initialGovernanceLockMinimumLockAmount: Option[NonNegativeNumeric[BigDecimal]] = None,
+      initialGovernanceLockSuperValidatorLockVestingDuration: Option[NonNegativeFiniteDuration] =
+        None,
+      initialGovernanceLockFeaturedAppLockVestingDuration: Option[NonNegativeFiniteDuration] = None,
   ) extends SvOnboardingConfig
 
   case class JoinWithKey(
@@ -291,15 +294,6 @@ final case class InitialAnsConfig(
     entryLifetime: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofDays(90),
     entryFee: Double = 1.0,
 )
-
-final case class GovernanceLockConfig(
-    minimumGovernanceLockAmount: NonNegativeNumeric[BigDecimal]
-) {
-  def toGovernanceLockConfig: splice.amuletconfig.GovernanceLockConfig =
-    new splice.amuletconfig.GovernanceLockConfig(
-      minimumGovernanceLockAmount.value.bigDecimal
-    )
-}
 
 final case class SynchronizerFeesConfig(
     extraTrafficPrice: NonNegativeNumeric[BigDecimal] =

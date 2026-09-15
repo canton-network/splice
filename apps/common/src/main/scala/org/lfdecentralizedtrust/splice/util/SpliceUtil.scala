@@ -4,6 +4,7 @@
 package org.lfdecentralizedtrust.splice.util
 
 import com.daml.ledger.javaapi.data.Unit as DamlUnit
+import com.digitalasset.canton.config.RequireTypes.NonNegativeNumeric
 import com.digitalasset.daml.lf.data.Numeric
 import com.digitalasset.daml.lf.data.Ref.PackageVersion
 import org.lfdecentralizedtrust.splice.codegen.java.splice
@@ -369,7 +370,9 @@ object SpliceUtil {
       initialExternalPartyConfigStateTickDuration: Option[NonNegativeFiniteDuration] = None,
       optValidatorFaucetCap: Option[BigDecimal] = None,
       initialRewardConfig: Option[splice.amuletconfig.RewardConfig] = None,
-      governanceLockConfig: Option[splice.amuletconfig.GovernanceLockConfig] = None,
+      governanceLockMinimumLockAmount: Option[NonNegativeNumeric[BigDecimal]] = None,
+      governanceLockSuperValidatorLockVestingDuration: Option[NonNegativeFiniteDuration] = None,
+      governanceLockFeaturedAppLockVestingDuration: Option[NonNegativeFiniteDuration] = None,
   ): splice.amuletconfig.AmuletConfig[splice.amuletconfig.USD] =
     new splice.amuletconfig.AmuletConfig(
       // transferConfig
@@ -407,7 +410,13 @@ object SpliceUtil {
       Optional.empty(),
       // amuletSwitchOverTimes
       Optional.empty(),
-      governanceLockConfig.toJava,
+      governanceLockMinimumLockAmount.map(_.value.bigDecimal).toJava,
+      governanceLockSuperValidatorLockVestingDuration
+        .map(d => new RelTime(TimeUnit.NANOSECONDS.toMicros(d.duration.toNanos)))
+        .toJava,
+      governanceLockFeaturedAppLockVestingDuration
+        .map(d => new RelTime(TimeUnit.NANOSECONDS.toMicros(d.duration.toNanos)))
+        .toJava,
     )
 
   def defaultAnsConfig(

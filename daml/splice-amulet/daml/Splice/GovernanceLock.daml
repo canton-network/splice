@@ -9,7 +9,7 @@ import DA.Time
 
 import Splice.Amulet
 import Splice.Amulet.TwoStepTransfer (holdingToTransferInputs)
-import Splice.AmuletConfig (getGovernanceLockConfig)
+import Splice.AmuletConfig (defaultGovernanceLockFeaturedAppLockVestingDuration, defaultGovernanceLockMinimumLockAmount, defaultGovernanceLockSuperValidatorLockVestingDuration)
 import Splice.AmuletRules
 import Splice.Api.Token.HoldingV1 (Holding)
 import Splice.Api.Token.MetadataV1
@@ -65,7 +65,7 @@ template GovernanceLock
 
         (context, state) <- unfeaturedPaymentContextAndConfigFromChoiceContext dso extraArgs.context
 
-        let vestingPeriod = vestingDurationFor specification.kind context
+        let vestingPeriod = vestingDurationFor specification.kind state
         let endTime = unlockAt `addRelTime` vestingPeriod
         let specification = governanceToVestingSpecification this.specification
         let vestingLockProperties = LockProperties with
@@ -302,14 +302,13 @@ describeVestingSpecification lock = "Unlocking from supporting " <> describeGove
 
 -- Lock properties for LockSubject types
 
--- TODO(canton-network/splice-sv-fa-locking#39): make configurable
-vestingDurationFor : GovernanceLockKind -> ExternalPartyTransferContext -> RelTime
-vestingDurationFor (GLK_FeaturedApp _) _ = days 60
-vestingDurationFor (GLK_SuperValidatorRightsOwner _) _ = days 365 + hours 6
+vestingDurationFor : GovernanceLockKind -> ExternalPartyConfigState -> RelTime
+vestingDurationFor (GLK_FeaturedApp _) state = fromOptional defaultGovernanceLockFeaturedAppLockVestingDuration state.governanceLockFeaturedAppLockVestingDuration
+vestingDurationFor (GLK_SuperValidatorRightsOwner _) state = fromOptional defaultGovernanceLockSuperValidatorLockVestingDuration state.governanceLockSuperValidatorLockVestingDuration
 
 requireMinimumLock : ExternalPartyConfigState -> Decimal -> Update ()
 requireMinimumLock context amount = do
-  require' ("locked amount", amount) isGreaterOrEqualR ("minimum governance lock amount", (getGovernanceLockConfig context.governanceLockConfig).minimumGovernanceLockAmount)
+  require' ("locked amount", amount) isGreaterOrEqualR ("minimum governance lock amount", fromOptional defaultGovernanceLockMinimumLockAmount context.governanceLockMinimumLockAmount)
 
 unfeaturedPaymentContextAndConfigFromChoiceContext : Party -> ChoiceContext -> Update (ExternalPartyTransferContext, ExternalPartyConfigState)
 unfeaturedPaymentContextAndConfigFromChoiceContext dso choiceContext = do

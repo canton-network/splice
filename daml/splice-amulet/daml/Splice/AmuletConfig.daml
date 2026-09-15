@@ -119,7 +119,12 @@ data AmuletConfig unit = AmuletConfig with
       -- ^ Minimum delay between allocation and minting. Default: 0 days.
     amuletSwitchOverTimes : Optional (TextMap Time)
       -- ^ Timepoints for synchronized switch-overs of amulet functionality both on and off-ledger.
-    governanceLockConfig : Optional GovernanceLockConfig -- ^ The governance lock configuration
+    governanceLockMinimumLockAmount : Optional Decimal
+      -- ^ Minimum amount for a governance lock. Default: 10k Amulet.
+    governanceLockSuperValidatorLockVestingDuration : Optional RelTime
+      -- ^ Vesting duration for an SV governance lock. Default: 365.25 days.
+    governanceLockFeaturedAppLockVestingDuration : Optional RelTime
+      -- ^ Vesting duration for an FA governance lock. Default: 60 days.
   deriving (Eq, Show, Serializable)
 
 getExternalPartyConfigStateTickDuration : AmuletConfig a -> RelTime
@@ -219,16 +224,14 @@ data PackageConfig = PackageConfig
 validPackageConfig : PackageConfig -> Bool
 validPackageConfig _ = True
 
--- | Governance lock configuration.
-data GovernanceLockConfig = GovernanceLockConfig with
-    minimumGovernanceLockAmount : Decimal
-      -- ^ The minimum amount for a governance lock. Default: 10k Amulet.
-  deriving (Eq, Show, Serializable)
+defaultGovernanceLockMinimumLockAmount : Decimal
+defaultGovernanceLockMinimumLockAmount = 10000.0
 
--- | Unwrap Optional GovernanceLockConfig, using the defaults if None.
-getGovernanceLockConfig : Optional GovernanceLockConfig -> GovernanceLockConfig
-getGovernanceLockConfig cfg = flip fromOptional cfg $ GovernanceLockConfig with
-  minimumGovernanceLockAmount = 10000.0
+defaultGovernanceLockSuperValidatorLockVestingDuration : RelTime
+defaultGovernanceLockSuperValidatorLockVestingDuration = days 365 + hours 6
+
+defaultGovernanceLockFeaturedAppLockVestingDuration : RelTime
+defaultGovernanceLockFeaturedAppLockVestingDuration = days 60
 
 instance Patchable RewardVersion where
   patch = patchScalar
@@ -250,7 +253,9 @@ instance Patchable (AmuletConfig USD) where
     transferPreapprovalBaseDuration = patch new.transferPreapprovalBaseDuration base.transferPreapprovalBaseDuration current.transferPreapprovalBaseDuration
     minDevelopmentFundMintingDelay = patch new.minDevelopmentFundMintingDelay base.minDevelopmentFundMintingDelay current.minDevelopmentFundMintingDelay
     amuletSwitchOverTimes = patch new.amuletSwitchOverTimes base.amuletSwitchOverTimes current.amuletSwitchOverTimes
-    governanceLockConfig = patch new.governanceLockConfig base.governanceLockConfig current.governanceLockConfig
+    governanceLockMinimumLockAmount = patch new.governanceLockMinimumLockAmount base.governanceLockMinimumLockAmount current.governanceLockMinimumLockAmount
+    governanceLockSuperValidatorLockVestingDuration = patch new.governanceLockSuperValidatorLockVestingDuration base.governanceLockSuperValidatorLockVestingDuration current.governanceLockSuperValidatorLockVestingDuration
+    governanceLockFeaturedAppLockVestingDuration = patch new.governanceLockFeaturedAppLockVestingDuration base.governanceLockFeaturedAppLockVestingDuration current.governanceLockFeaturedAppLockVestingDuration
 
 instance Patchable RewardConfig where
   patch new base current = RewardConfig with
@@ -280,7 +285,3 @@ instance Patchable PackageConfig where
     validatorLifecycle = patch new.validatorLifecycle base.validatorLifecycle current.validatorLifecycle
     wallet = patch new.wallet base.wallet current.wallet
     walletPayments = patch new.walletPayments base.walletPayments current.walletPayments
-
-instance Patchable GovernanceLockConfig where
-  patch new base current = GovernanceLockConfig with
-    minimumGovernanceLockAmount = patch new.minimumGovernanceLockAmount base.minimumGovernanceLockAmount current.minimumGovernanceLockAmount
