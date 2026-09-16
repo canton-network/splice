@@ -66,7 +66,16 @@ export function buildDsoConfigChanges(
   after: Optional<DsoRulesConfig>,
   showAllFields: boolean = false
 ): ConfigChange[] {
-  const changes = [
+    const beforeActiveSyncId = before?.decentralizedSynchronizer?.activeSynchronizerId;
+    const beforeActiveSync = beforeActiveSyncId
+        ? before?.decentralizedSynchronizer?.synchronizers.get(beforeActiveSyncId)
+        : undefined;
+
+    const afterActiveSyncId = after?.decentralizedSynchronizer?.activeSynchronizerId;
+    const afterActiveSync = afterActiveSyncId
+        ? after?.decentralizedSynchronizer?.synchronizers.get(afterActiveSyncId)
+        : undefined;
+    const changes = [
     {
       fieldName: 'numUnclaimedRewardsThreshold',
       label: 'Minimum number of unclaimedRewards contracts required for merging',
@@ -217,14 +226,14 @@ export function buildDsoConfigChanges(
       fieldName: 'minMemberTrafficToOnboardValidator',
       label:
         'Minimum amount of traffic a validator must purchase to be granted a ParticipantSynchronizerPermission',
-      currentValue: before?.minMemberTrafficToOnboardValidator || '',
-      newValue: after?.minMemberTrafficToOnboardValidator || '',
+      currentValue: beforeActiveSync?.minMemberTrafficToOnboardValidator || '',
+      newValue: afterActiveSync?.minMemberTrafficToOnboardValidator || '',
     },
     {
       fieldName: 'devNetPublicSetupTrafficAmount',
       label: 'Traffic amount purchased for validators onboarded via the DevNet faucet',
-      currentValue: before?.devNetPublicSetupTrafficAmount || '',
-      newValue: after?.devNetPublicSetupTrafficAmount || '',
+      currentValue: beforeActiveSync?.devNetPublicSetupTrafficAmount || '',
+      newValue: afterActiveSync?.devNetPublicSetupTrafficAmount || '',
     },
   ] as ConfigChange[];
 

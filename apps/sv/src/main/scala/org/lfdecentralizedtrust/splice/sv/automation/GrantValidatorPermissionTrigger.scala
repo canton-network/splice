@@ -21,6 +21,7 @@ import org.lfdecentralizedtrust.splice.util.AssignedContract
 import com.digitalasset.canton.topology.Member
 
 import scala.concurrent.{ExecutionContext, Future}
+import org.lfdecentralizedtrust.splice.sv.util.SvUtil
 import scala.jdk.OptionConverters.*
 
 class GrantValidatorPermissionTrigger(
@@ -60,10 +61,15 @@ class GrantValidatorPermissionTrigger(
 
           for {
             dsoRules <- store.getDsoRules()
-            minMemberTrafficToOnboardValidator =
-              dsoRules.payload.config.minMemberTrafficToOnboardValidator.toScala
-                .map(_.toLong)
-                .getOrElse(100000L)
+
+            synchronizerConfig = Option(
+              dsoRules.payload.config.decentralizedSynchronizer.synchronizers
+                .get(dsoRules.payload.config.decentralizedSynchronizer.activeSynchronizerId)
+            )
+            minMemberTrafficToOnboardValidator = synchronizerConfig
+              .flatMap(_.minMemberTrafficToOnboardValidator.toScala)
+              .map(_.longValue())
+              .getOrElse(SvUtil.DefaultMinMemberTrafficToOnboardValidator)
             totalPurchasedTraffic <- store.getTotalPurchasedMemberTraffic(memberId, synchronizerId)
             unpermissions <- store.listValidatorUnpermissions(payload.memberId)
 

@@ -1630,8 +1630,6 @@ trait AmuletTransferUtil { self: StoreTestBase =>
         Optional.empty(),
         Optional.empty(), // voteCooldownTime
         Optional.empty(), // nextScheduledLogicalSynchronizerUpgrade
-        Optional.empty(),
-        Optional.empty(),
       ),
       Collections.emptyMap(),
       true,

@@ -54,6 +54,8 @@ describe('buildDsoRulesConfigFromChanges', () => {
       state: 'active',
       cometBftGenesisJson: '{"genesis": "data"}',
       acsCommitmentReconciliationInterval: '120',
+      minMemberTrafficToOnboardValidator: null,
+      devNetPublicSetupTrafficAmount: null,
     });
   });
 
@@ -135,14 +137,31 @@ describe('buildDsoRulesConfigFromChanges', () => {
   });
 
   it('should handle minMemberTrafficToOnboardValidator and devNetPublicSetupTrafficAmount when not provided', () => {
-    const changes: ConfigChange[] = [];
+    const changes: ConfigChange[] = [
+      { fieldName: 'decentralizedSynchronizer1', label: 'Sync', currentValue: 'sync1', newValue: 'sync1' },
+      { fieldName: 'decentralizedSynchronizerActiveSynchronizerId', label: 'Active', currentValue: 'sync1', newValue: 'sync1' }
+    ];
     const result = buildDsoRulesConfigFromChanges(changes);
-    expect(result.minMemberTrafficToOnboardValidator).toBeNull();
-    expect(result.devNetPublicSetupTrafficAmount).toBeNull();
+
+    const syncValue = result.decentralizedSynchronizer.synchronizers.get('sync1');
+    expect(syncValue?.minMemberTrafficToOnboardValidator).toBeNull();
+    expect(syncValue?.devNetPublicSetupTrafficAmount).toBeNull();
   });
 
   it('should handle minMemberTrafficToOnboardValidator and devNetPublicSetupTrafficAmount when provided', () => {
     const changes: ConfigChange[] = [
+      {
+        fieldName: 'decentralizedSynchronizer1',
+        label: 'Sync',
+        currentValue: 'sync1',
+        newValue: 'sync1',
+      },
+      {
+        fieldName: 'decentralizedSynchronizerActiveSynchronizerId',
+        label: 'Active',
+        currentValue: 'sync1',
+        newValue: 'sync1',
+      },
       {
         fieldName: 'minMemberTrafficToOnboardValidator',
         label: 'Min Member Traffic',
@@ -155,10 +174,11 @@ describe('buildDsoRulesConfigFromChanges', () => {
         currentValue: '',
         newValue: '25000000',
       },
-    ];
-    const result = buildDsoRulesConfigFromChanges(changes);
+  ];
+  const result = buildDsoRulesConfigFromChanges(changes);
 
-    expect(result.minMemberTrafficToOnboardValidator).toBe('150000');
-    expect(result.devNetPublicSetupTrafficAmount).toBe('25000000');
+  const syncValue = result.decentralizedSynchronizer.synchronizers.get('sync1');
+  expect(syncValue?.minMemberTrafficToOnboardValidator).toBe('150000');
+  expect(syncValue?.devNetPublicSetupTrafficAmount).toBe('25000000');
   });
 });

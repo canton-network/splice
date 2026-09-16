@@ -69,6 +69,8 @@ initDecentralizedSynchronizerWithAmuletPrice isDevNet initialRound amuletPrice o
         state = DS_Operational
         cometBftGenesisJson = "<genesis-json>"
         acsCommitmentReconciliationInterval = Some 1800
+        minMemberTrafficToOnboardValidator = Some 100000
+        devNetPublicSetupTrafficAmount = Some 10000000
   let initialDsoDecentralizedSynchronizerConfig =  DsoDecentralizedSynchronizerConfig with
         synchronizers = Map.fromList [("synchronizer-id", initialSynchronizerConfig)]
         lastSynchronizerId = "synchronizer-id"
@@ -88,8 +90,6 @@ initDecentralizedSynchronizerWithAmuletPrice isDevNet initialRound amuletPrice o
         nextScheduledSynchronizerUpgrade = None
         voteCooldownTime = None -- use default value of 1 minute
         nextScheduledLogicalSynchronizerUpgrade = None
-        minMemberTrafficToOnboardValidator = Some 100000
-        devNetPublicSetupTrafficAmount = Some 10000000
   let amuletConfig = fromOptional defaultAmuletConfig optAmuletConfig
   let ansRulesConfig = defaultAnsRulesConfig
 

@@ -38,7 +38,10 @@ import org.lfdecentralizedtrust.splice.sv.onboarding.DsoPartyHosting
 import org.lfdecentralizedtrust.splice.sv.onboarding.sponsor.DsoPartyMigration
 import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvSvStore}
 import org.lfdecentralizedtrust.splice.sv.util.{Secrets, SvOnboardingToken}
-import org.lfdecentralizedtrust.splice.sv.util.SvUtil.generateRandomOnboardingSecret
+import org.lfdecentralizedtrust.splice.sv.util.SvUtil.{
+  DefaultDevNetPublicSetupTrafficAmount,
+  generateRandomOnboardingSecret,
+}
 import org.lfdecentralizedtrust.splice.util.{Codec, Contract}
 
 import java.util.Base64
@@ -908,12 +911,21 @@ class HttpSvPublicHandler(
         logger,
       )
 
+      synchronizerConfig = Option(
+        dsoRules.payload.config.decentralizedSynchronizer.synchronizers
+          .get(dsoRules.payload.config.decentralizedSynchronizer.activeSynchronizerId)
+      )
+
+      devNetPublicSetupTrafficAmount = synchronizerConfig
+        .flatMap(_.devNetPublicSetupTrafficAmount.toScala)
+        .map(_.longValue())
+        .getOrElse(DefaultDevNetPublicSetupTrafficAmount)
+
       cmd = svWalletInstall.contractId.exerciseWalletAppInstall_CreateBuyTrafficRequest(
         participantId.toProtoPrimitive,
         dsoRules.payload.config.decentralizedSynchronizer.activeSynchronizerId,
         dsoStore.domainMigrationId.toInt,
-        dsoRules.payload.config.devNetPublicSetupTrafficAmount.toScala
-          .getOrElse(10000000L: java.lang.Long),
+        devNetPublicSetupTrafficAmount,
         clock.now.plus(java.time.Duration.ofMinutes(5)).toInstant,
         s"devnet-onboard-${participantId.toProtoPrimitive}-${clock.now.toInstant.toEpochMilli}",
       )

@@ -339,6 +339,8 @@ object SpliceUtil {
           dso.decentralizedsynchronizer.SynchronizerState.DS_OPERATIONAL,
           "TODO(DACH-NY/canton-network-node#4900): share CometBFT genesis.json of sv1 via DsoRules config.",
           Optional.empty(),
+          Optional.empty(),
+          Optional.empty(),
         )
       ).asJava,
       dummyDomain.toProtoPrimitive, // lastDomainId
@@ -347,8 +349,6 @@ object SpliceUtil {
     Optional.empty(), // nextScheduledSynchronizerUpgrade
     Optional.empty(), // voteCooldownTime
     Optional.empty(), // nextScheduledLogicalSynchronizerUpgrade,
-    Optional.of(100000L: java.lang.Long), // minMemberTrafficToOnboardValidator
-    Optional.of(10000000L: java.lang.Long), // devNetPublicSetupTrafficAmount
   )
 
   def defaultAmuletConfig(
