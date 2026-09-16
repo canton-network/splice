@@ -848,14 +848,14 @@ class AcsSnapshotStore(
       nextSnapshotTargetRecordTime: CantonTimestamp,
   )(implicit tc: TraceContext): DBIO[AcsSnapshotStore.SaveIncrementalAcsSnapshotInsertedRows] = {
     val createsTableName =
-      s"acs_snapshot_creates_${historyId}_${snapshot.targetRecordTime.toEpochMilli}"
+      s"acs_snapshot_creates_v1_${historyId}_${snapshot.targetRecordTime.toEpochMilli}"
     val stakeholdersTableName =
-      s"acs_snapshot_stakeholders_${historyId}_${snapshot.targetRecordTime.toEpochMilli}"
+      s"acs_snapshot_stakeholders_v1_${historyId}_${snapshot.targetRecordTime.toEpochMilli}"
 
     for {
-      _ <- sqlu"create table #$createsTableName (like acs_snapshot_creates_template including all)"
+      _ <- sqlu"create table #$createsTableName (like acs_snapshot_creates_v1_template including all)"
       _ <-
-        sqlu"create table #$stakeholdersTableName (like acs_snapshot_stakeholders_template including all)"
+        sqlu"create table #$stakeholdersTableName (like acs_snapshot_stakeholders_v1_template including all)"
       // `snapshot_id= ?` will match all rows in production, so a direct table scan will be used
       copiedCreateRows <- (sql"""
         insert into #$createsTableName (contract_id, create_arguments, event_id, record_time, template_id_package_id, contract_key, created_at, signatories, observers, unlocked_amulet_balance, locked_amulet_balance)

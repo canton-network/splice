@@ -55,7 +55,7 @@ alter table acs_incremental_snapshot_data_next_v2
 -- Template table for acs_snapshot_creates_<history_id>_<record_time_epoch>.
 -- This allows the code to just CREATE TABLE LIKE acs_snapshot_creates_template or acs_snapshot_stakeholders_template.
 -- Design decision: we don't have a single table per (contract_id, stakeholder) in order to avoid duplicating the create_arguments.
-create table acs_snapshot_creates_template
+create table acs_snapshot_creates_v1_template
 (
     contract_id             text primary key,
     -- All the data necessary to reconstruct a created event
@@ -72,7 +72,7 @@ create table acs_snapshot_creates_template
     locked_amulet_balance   numeric
 );
 
-create table acs_snapshot_stakeholders_template
+create table acs_snapshot_stakeholders_v1_template
 (
     -- filtering
     stakeholder text not null,
