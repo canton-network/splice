@@ -197,6 +197,7 @@ object ConfigTransforms {
       makeAllTimeoutsBounded,
       ensureNovelDamlNames(testId),
       useSelfSignedTokensForLedgerApiAuth("test"),
+      useSelfSignedTokensForParticipantAdminApiAuth("test", "test-scope"),
       reducePollingInterval,
       withPausedSvDomainComponentsOffboardingTriggers(),
       disableOnboardingParticipantPromotionDelay(),
@@ -581,7 +582,7 @@ object ConfigTransforms {
         config
           .focus(_.participantClient.ledgerApi.clientConfig.port)
           .modify(setPortPrefix(range))
-          .focus(_.participantClient.adminApi.port)
+          .focus(_.participantClient.adminApi.clientConfig.port)
           .modify(setPortPrefix(range))
           .focus(_.localSynchronizerNodes.current)
           .modify(setSvSynchronizerConfigPortsPrefix(range, _))
@@ -640,7 +641,7 @@ object ConfigTransforms {
         config
           .focus(_.participantClient.ledgerApi.clientConfig.port)
           .modify(setPortPrefix(range))
-          .focus(_.participantClient.adminApi.port)
+          .focus(_.participantClient.adminApi.clientConfig.port)
           .modify(setPortPrefix(range))
           .focus(_.adminApi.internalPort)
           .modify(_.map(setPortPrefix(range)))
@@ -697,7 +698,7 @@ object ConfigTransforms {
         config
           .focus(_.participantClient.ledgerApi.clientConfig.port)
           .modify(setPortPrefix(range))
-          .focus(_.participantClient.adminApi.port)
+          .focus(_.participantClient.adminApi.clientConfig.port)
           .modify(setPortPrefix(range))
           .focus(_.adminApi.internalPort)
           .modify(_.map(setPortPrefix(range)))
@@ -854,7 +855,7 @@ object ConfigTransforms {
       mediator = portTransform(bump, c.mediator),
     )
 
-  private def portTransform(bump: Int, c: LedgerApiClientConfig): LedgerApiClientConfig =
+  private def portTransform(bump: Int, c: ClientConfigWithAuth): ClientConfigWithAuth =
     c.focus(_.clientConfig).modify(portTransform(bump, _))
 
   private def portTransform(
@@ -905,7 +906,7 @@ object ConfigTransforms {
   }
 
   private def updateAllLedgerApiClientConfigs(
-      enableAuth: (String, LedgerApiClientConfig) => LedgerApiClientConfig
+      enableAuth: (String, ClientConfigWithAuth) => ClientConfigWithAuth
   ): ConfigTransform = {
     combineAllTransforms(
       updateAllValidatorConfigs_(c => {
@@ -928,8 +929,8 @@ object ConfigTransforms {
 
   def selfSignedTokenAuthSourceTransform(clockConfig: ClockConfig, secret: String)(
       user: String,
-      c: LedgerApiClientConfig,
-  ): LedgerApiClientConfig = {
+      c: ClientConfigWithAuth,
+  ): ClientConfigWithAuth = {
     val userToken = AuthUtil.LedgerApi.testToken(
       user = user,
       secret = secret,
@@ -941,6 +942,30 @@ object ConfigTransforms {
       )
     )
   }
+
+  def useSelfSignedTokensForParticipantAdminApiAuth(
+      secret: String,
+      scope: String,
+  ): ConfigTransform =
+    modifyAllParticipantAdminApiConfigs {
+      _.copy(
+        authConfig = AuthTokenSourceConfig.Static(
+          token = AuthUtil.CantonAdminApi.testToken(secret, scope),
+          adminToken = None,
+        )
+      )
+    }
+
+  private def modifyAllParticipantAdminApiConfigs(
+      modify: ClientConfigWithAuth => ClientConfigWithAuth
+  ): ConfigTransform =
+    combineAllTransforms(
+      updateAllValidatorConfigs_(_.focus(_.participantClient.adminApi).modify(modify)),
+      updateAllSvAppConfigs_(_.focus(_.participantClient.adminApi).modify(modify)),
+      updateAllScanAppConfigs_(_.focus(_.participantClient.adminApi).modify(modify)),
+      updateAllSplitwellAppConfigs_(_.focus(_.participantClient.adminApi).modify(modify)),
+      updateAllRemoteSplitwellAppConfigs_(_.focus(_.participantClient.adminApi).modify(modify)),
+    )
 
   def useSplitwellUpgradeDomain(): ConfigTransform =
     updateAllSplitwellAppConfigs_(c => {
