@@ -118,7 +118,7 @@ groups:
         # 2 = started, within_range is exclusive in both bounds.
         - uid: ffghab4ms1ds0g
           title: ACS Commitment Component Failed (PV >= 36)
-          condition: acs commitment component failed
+          condition: acs commitment component is not in state started
           data:
             - refId: acs commitment component health
               relativeTimeRange:
