@@ -5,9 +5,6 @@ package org.lfdecentralizedtrust.splice.scan.admin.api.client
 
 import cats.data.{NonEmptyList, OptionT}
 import cats.implicits.*
-import com.daml.metrics.api.MetricHandle.Timer.TimerHandle
-import com.daml.metrics.api.MetricsContext
-import org.lfdecentralizedtrust.splice.admin.http.HttpErrorWithHttpCode
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   FeaturedAppRight,
   UnclaimedDevelopmentFundCoupon,
@@ -27,12 +24,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.round.{
 import org.lfdecentralizedtrust.splice.codegen.java.splice.ans.AnsRules
 import org.lfdecentralizedtrust.splice.config.{NetworkAppClientConfig, Thresholds, UpgradesConfig}
 import org.lfdecentralizedtrust.splice.environment.PackageIdResolver.HasAmuletRules
-import org.lfdecentralizedtrust.splice.environment.{
-  BaseAppConnection,
-  RetryFor,
-  RetryProvider,
-  SpliceLedgerClient,
-}
+import org.lfdecentralizedtrust.splice.environment.{RetryFor, RetryProvider, SpliceLedgerClient}
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   AnsEntry,
@@ -52,9 +44,6 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
 }
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection.{
   BftCallConfig,
-  ConsensusNotReached,
-  ConsensusNotReachedRetryable,
-  ScanConnections,
   ScanList,
 }
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient
@@ -81,23 +70,14 @@ import com.digitalasset.canton.lifecycle.{
   FutureUnlessShutdown,
   SyncCloseable,
 }
-import com.digitalasset.canton.logging.{
-  ErrorLoggingContext,
-  NamedLoggerFactory,
-  NamedLogging,
-  TracedLogger,
-}
+import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.time.{Clock, PeriodicAction}
 import com.digitalasset.canton.topology.{ParticipantId, PartyId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
-import com.digitalasset.canton.util.LoggerUtil
 import com.digitalasset.canton.util.MonadUtil
-import com.digitalasset.canton.util.retry.{ErrorKind, ExceptionRetryPolicy}
-import io.circe.Json
 import io.grpc.Status
 import org.apache.pekko.http.scaladsl.model.*
 import org.apache.pekko.stream.Materializer
-import org.lfdecentralizedtrust.splice.admin.api.client.commands.HttpCommandException
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv1
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationv2
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.allocationinstructionv1
@@ -119,11 +99,10 @@ import org.lfdecentralizedtrust.tokenstandard.{
 }
 import org.slf4j.event.Level
 
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future, Promise}
+import java.util.concurrent.atomic.AtomicReference
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
 import scala.util.control.{NoStackTrace, NonFatal}
-import scala.util.{Failure, Random, Success, Try}
+import scala.util.{Failure, Success}
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 
@@ -367,114 +346,16 @@ class BftScanConnection(
   ): Future[Long] =
     bftCall(_.getMigrationId(), "getMigrationId")
 
-  private case class MigrationInfoResponses(
-      withData: Map[SingleScanConnection, SourceMigrationInfo],
-      withoutData: Set[SingleScanConnection],
-      unknownStatus: Set[SingleScanConnection],
-  )
-  private def getMigrationInfoResponses(connections: ScanConnections, migrationId: Long)(implicit
-      tc: TraceContext
-  ): Future[MigrationInfoResponses] = for {
-    results <- Future.traverse(connections.open)(connection =>
-      connection
-        .getMigrationInfo(migrationId)
-        .transformWith(BftScanConnection.keyToGroupResponses)
-        .map(result => connection -> result)
-    )
-  } yield {
-    val (withData, other) =
-      results.partitionMap { case (connection, response) =>
-        response match {
-          case BftScanConnection.SuccessfulResponse(Some(info)) =>
-            Left(connection -> info)
-          case BftScanConnection.SuccessfulResponse(None) =>
-            Right(Left(connection))
-          case _: BftScanConnection.HttpFailureResponse[?] |
-              _: BftScanConnection.NonJsonHttpFailureResponse[?] |
-              _: BftScanConnection.TextFailureResponse[?] |
-              _: BftScanConnection.ExceptionFailureResponse[?] =>
-            Right(Right(connection))
-        }
-      }
-    val (withoutData, unknownStatus) = other partitionMap identity
-    MigrationInfoResponses(
-      withData.toMap,
-      withoutData.toSet,
-      unknownStatus.toSet,
-    )
-  }
-
   override def getMigrationInfo(migrationId: Long)(implicit
       tc: TraceContext
-  ): Future[Option[SourceMigrationInfo]] = {
-    val connections = scanList.scanConnections
-    for {
-      // Ask ALL scans for the migration info
-      responses <- getMigrationInfoResponses(connections, migrationId)
-      result <-
-        if (responses.withData.nonEmpty) {
-          // At least one scan reported to have some data for the given migration id
-          val completeResponses = responses.withData.filter { case (_, migrationInfo) =>
-            migrationInfo.complete
-          }
-          val importUpdatesCompleteResponses = responses.withData.filter {
-            case (_, migrationInfo) =>
-              migrationInfo.importUpdatesComplete
-          }
-          for {
-            // We already have the responses, use bftCall() to avoid re-implementing the consensus logic.
-            // All non-malicious scans that have backfilled the input migrationId should return
-            // the same value for previousMigrationId.
-            previousMigrationId <- bftCall(
-              connection => Future.successful(completeResponses(connection).previousMigrationId),
-              "getMigrationInfo",
-              BftCallConfig.forAvailableData(connections, completeResponses.contains),
-              // This method is very sensitive to unavailable SVs.
-              // Do not log warnings for failures to reach consensus, as this would be too noisy,
-              // and instead rely on metrics to situations when backfilling is not progressing.
-              Level.INFO,
-            )
-            lastImportUpdateId <- bftCall(
-              connection =>
-                Future.successful(importUpdatesCompleteResponses(connection).lastImportUpdateId),
-              "getMigrationInfo",
-              BftCallConfig.forAvailableData(connections, importUpdatesCompleteResponses.contains),
-              // This method is very sensitive to unavailable SVs.
-              // Do not log warnings for failures to reach consensus, as this would be too noisy,
-              // and instead rely on metrics to situations when backfilling is not progressing.
-              Level.INFO,
-            )
-          } yield {
-            @SuppressWarnings(Array("org.wartremover.warts.IterableOps"))
-            val unionOfRecordTimeRanges =
-              responses.withData.values.map(_.recordTimeRange).reduce(_ |+| _)
-            Some(
-              SourceMigrationInfo(
-                previousMigrationId = previousMigrationId,
-                recordTimeRange = unionOfRecordTimeRanges,
-                lastImportUpdateId = lastImportUpdateId,
-                complete = completeResponses.nonEmpty,
-                importUpdatesComplete = importUpdatesCompleteResponses.nonEmpty,
-              )
-            )
-          }
-        } else if (responses.withoutData.nonEmpty) {
-          // All scans reported to have no data for the given migration id
-          logger.info(
-            s"All ${responses.withoutData.size} available scans reported to have no data for migration ${migrationId}"
-          )
-          Future.successful(None)
-        } else {
-          // No valid response from any scan
-          val httpError =
-            HttpErrorWithHttpCode(
-              StatusCodes.BadGateway,
-              s"No valid response from any scan.",
-            )
-          Future.failed(httpError)
-        }
-    } yield result
-  }
+  ): Future[Option[SourceMigrationInfo]] =
+    BftCallExecutor.getMigrationInfo(
+      scanList.scanConnections,
+      connectionMetrics,
+      retryProvider,
+      logger,
+      migrationId,
+    )
 
   override def lookupTransferCommandCounterByParty(receiver: PartyId)(implicit
       ec: ExecutionContext,
@@ -536,7 +417,7 @@ class BftScanConnection(
     val connections = scanList.scanConnections
     for {
       // Ask ALL scans for the migration info so that we can figure out who has the data
-      responses <- getMigrationInfoResponses(connections, migrationId)
+      responses <- BftCallExecutor.getMigrationInfoResponses(connections, migrationId)
       // Filter out connections that don't have any data
       withData = responses.withData.toList.filter { case (_, info) =>
         info.importUpdatesComplete
@@ -574,7 +455,7 @@ class BftScanConnection(
     val connections = scanList.scanConnections
     for {
       // Ask ALL scans for the migration info so that we can figure out who has the data
-      responses <- getMigrationInfoResponses(connections, migrationId)
+      responses <- BftCallExecutor.getMigrationInfoResponses(connections, migrationId)
       // Filter out connections that don't have any data
       withData = responses.withData.toList.filter { case (_, info) =>
         info.recordTimeRange.get(synchronizerId).exists(_.min < before)
@@ -905,111 +786,6 @@ class BftScanConnection(
       "getAllocationInstructionWithdrawContext",
     )
 
-  private def bftCall[T](
-      call: SingleScanConnection => Future[T],
-      endpoint: String,
-      callConfig: BftCallConfig = BftCallConfig.default(scanList.scanConnections),
-      consensusFailureLogLevel: Level = Level.WARN,
-      shortenResponsesForLog: T => Any = identity[T],
-  )(implicit
-      ec: ExecutionContext,
-      tc: TraceContext,
-  ): Future[T] = bftCallWithScanUris(
-    call,
-    endpoint,
-    callConfig,
-    consensusFailureLogLevel,
-    shortenResponsesForLog = shortenResponsesForLog,
-  )
-    .map(_._1)
-
-  private def bftCallWithScanUris[T](
-      call: SingleScanConnection => Future[T],
-      endpoint: String,
-      callConfig: BftCallConfig,
-      consensusFailureLogLevel: Level = Level.WARN,
-      disagreementLogLevel: Level = Level.INFO,
-      shortenResponsesForLog: T => Any = identity[T],
-  )(implicit
-      ec: ExecutionContext,
-      tc: TraceContext,
-  ): Future[(T, List[Uri])] = {
-    implicit val mc: MetricsContext = MetricsContext("request" -> endpoint)
-
-    val connections = scanList.scanConnections
-
-    def markBftCall(outcome: String): Unit =
-      connectionMetrics.foreach { m =>
-        MetricsContext.withExtraMetricLabels(("outcome", outcome)) { implicit mc =>
-          m.bftCalls.mark()
-        }
-      }
-    def startTimer(): Option[TimerHandle] =
-      connectionMetrics.map(_.bftReadLatency.startAsync())
-    def stopTimer(t: Option[TimerHandle]): Unit = t.foreach(_.stop())
-
-    if (!callConfig.enoughAvailableScans) {
-      val totalNumber = connections.totalNumber
-      val msg =
-        s"Only ${callConfig.connections.size} scan instances can be used " +
-          s"(out of $totalNumber configured ones), which are fewer than the necessary " +
-          s"${callConfig.targetSuccess} to achieve BFT guarantees."
-      val exception = HttpErrorWithHttpCode(StatusCodes.BadGateway, msg)
-      LoggerUtil.logThrowableAtLevel(consensusFailureLogLevel, msg, exception)
-      markBftCall("not_enough_scans")
-      Future.failed(exception)
-    } else {
-      val timer = startTimer()
-
-      retryProvider
-        .retryForClientCalls(
-          "bft_call",
-          s"Bft call with ${callConfig.targetSuccess} out of ${callConfig.requestsToDo} matching responses",
-          BftScanConnection.executeCall(
-            call,
-            requestFrom = Random.shuffle(callConfig.connections).take(callConfig.requestsToDo),
-            nTargetSuccess = callConfig.targetSuccess,
-            logger,
-            shortenResponsesForLog,
-            disagreementLogLevel,
-            connectionMetrics,
-          ),
-          logger,
-          (_: String) => ConsensusNotReachedRetryable,
-        )
-        .recoverWith { case c: ConsensusNotReached =>
-          LoggerUtil.logThrowableAtLevel(consensusFailureLogLevel, "Consensus not reached.", c)
-          markBftCall("consensus_not_reached")
-          Future.failed(
-            HttpErrorWithHttpCode(
-              StatusCodes.BadGateway,
-              s"Failed to reach consensus from ${callConfig.requestsToDo} Scan nodes, " +
-                s"requiring ${callConfig.targetSuccess} matching responses.",
-            )
-          )
-        }
-        .andThen {
-          case Failure(_: HttpErrorWithHttpCode) =>
-            // Already marked by the recoverWith above ("consensus_not_reached")
-            // or by the not_enough_scans branch — nothing more to do.
-            stopTimer(timer)
-          case Failure(_) =>
-            markBftCall("transport_error")
-            stopTimer(timer)
-          case Success(_) =>
-            markBftCall("ok")
-            stopTimer(timer)
-        }
-    }
-  }
-
-  override def closeAsync(): Seq[AsyncOrSyncCloseable] = {
-    refreshAction.map(r => SyncCloseable("refresh_scan_list", r.close())).toList ++
-      Seq[AsyncOrSyncCloseable](
-        SyncCloseable("scan_list", scanList.close())
-      )
-  }
-
   override def listUnclaimedDevelopmentFundCoupons()(implicit
       ec: ExecutionContext,
       tc: TraceContext,
@@ -1161,155 +937,59 @@ class BftScanConnection(
       "getBulkObjectChecksums",
       consensusFailureLogLevel = Level.DEBUG,
     )
-}
-trait HasUrl {
-  def url: Uri
-}
 
-object BftScanConnection {
-  def executeCall[T, C <: HasUrl](
-      call: C => Future[T],
-      requestFrom: Seq[C],
-      nTargetSuccess: Int,
-      logger: TracedLogger,
+  private def bftCall[T](
+      call: SingleScanConnection => Future[T],
+      endpoint: String,
+      callConfig: BftCallConfig = BftCallConfig.default(scanList.scanConnections),
+      consensusFailureLogLevel: Level = Level.WARN,
       shortenResponsesForLog: T => Any = identity[T],
-      disagreementLogLevel: Level = Level.INFO,
-      connectionMetrics: Option[ScanConnectionMetrics] = None,
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
-      mc: MetricsContext = MetricsContext.Empty,
+  ): Future[T] = bftCallWithScanUris(
+    call,
+    endpoint,
+    callConfig,
+    consensusFailureLogLevel,
+    shortenResponsesForLog = shortenResponsesForLog,
+  )
+    .map(_._1)
+
+  private def bftCallWithScanUris[T](
+      call: SingleScanConnection => Future[T],
+      endpoint: String,
+      callConfig: BftCallConfig,
+      consensusFailureLogLevel: Level = Level.WARN,
+      disagreementLogLevel: Level = Level.INFO,
+      shortenResponsesForLog: T => Any = identity[T],
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
   ): Future[(T, List[Uri])] = {
-    require(requestFrom.nonEmpty, "At least one request must be made.")
-
-    val responses =
-      new ConcurrentHashMap[BftScanConnection.ScanResponse[T], List[Uri]]()
-    val nResponsesDone = new AtomicInteger(0)
-    val finalResponse = Promise[(T, List[Uri])]()
-
-    requestFrom.foreach { scan =>
-      call(scan)
-        .transformWith(response => keyToGroupResponses(response).map(_ -> response))
-        .foreach { case (key, response) =>
-          val agreements =
-            responses.compute(
-              key,
-              (_, scans) => scan.url :: Option(scans).getOrElse(List.empty),
-            )
-
-          // In the special case of nTargetSuccess == 1, ignore error responses
-          // Otherwise a single HTTP error or network failure would prevent reading the responses from others
-          val considerResponseForQuorum = key match {
-            case _: ExceptionFailureResponse[?] => !(nTargetSuccess == 1 && requestFrom.size != 1)
-            case _ => true
-          }
-          if (considerResponseForQuorum && agreements.size == nTargetSuccess) { // consensus has been reached
-            finalResponse.tryComplete(response.map(r => (r, agreements))): Unit
-          }
-
-          if (nResponsesDone.incrementAndGet() == requestFrom.size) { // all Scans are done
-            finalResponse.future.value match {
-              case None =>
-                val exception = ConsensusNotReached(
-                  requestFrom.size,
-                  responses,
-                  shortenResponsesForLog,
-                )
-                finalResponse.tryFailure(exception): Unit
-              case Some(consensusResponse) =>
-                logDisagreements(
-                  logger,
-                  consensusResponse.map(_._1),
-                  responses,
-                  disagreementLogLevel,
-                  connectionMetrics,
-                )
-            }
-          }
-        }
-    }
-    finalResponse.future
+    BftCallExecutor.bftCallWithScanUris(
+      scanList.scanConnections,
+      connectionMetrics,
+      retryProvider,
+      logger,
+      call,
+      endpoint,
+      callConfig,
+      consensusFailureLogLevel,
+      disagreementLogLevel,
+      shortenResponsesForLog,
+    )
   }
 
-  /** Responses are stored in a ConcurrentHashMap. Equality is defined as:
-    * - Simple Scala equality when the response is successful (typically, 200 OK).
-    * - Status code + response body when the response is not successful (best effort).
-    * - Never equal when there's other exceptions (unless those define equality, which they typically don't).
-    */
-  private def keyToGroupResponses[T](
-      r1: Try[T]
-  ): Future[BftScanConnection.ScanResponse[T]] = {
-    r1 match {
-      case Success(value) => Future.successful(BftScanConnection.SuccessfulResponse(value))
-      case Failure(unexpected: BaseAppConnection.UnexpectedHttpNonJsonResponse) =>
-        Future.successful(BftScanConnection.NonJsonHttpFailureResponse(unexpected.statusCode))
-      case Failure(unexpected: BaseAppConnection.UnexpectedHttpTextResponse) =>
-        Future.successful(
-          BftScanConnection.TextFailureResponse(unexpected.statusCode, unexpected.content)
-        )
-      case Failure(unexpected: BaseAppConnection.UnexpectedHttpJsonResponse) =>
-        Future.successful(
-          BftScanConnection.HttpFailureResponse(unexpected.statusCode, unexpected.content)
-        )
-      case Failure(unexpected: HttpCommandException) =>
-        Future.successful(
-          BftScanConnection.HttpFailureResponse(
-            unexpected.status,
-            Json.obj("message" -> Json.fromString(unexpected.message)),
-          )
-        )
-      case Failure(error) =>
-        Future.successful(BftScanConnection.ExceptionFailureResponse(error))
-    }
+  override def closeAsync(): Seq[AsyncOrSyncCloseable] = {
+    refreshAction.map(r => SyncCloseable("refresh_scan_list", r.close())).toList ++
+      Seq[AsyncOrSyncCloseable](
+        SyncCloseable("scan_list", scanList.close())
+      )
   }
+}
 
-  private def logDisagreements[T](
-      logger: TracedLogger,
-      consensusResponse: Try[T],
-      responses: ConcurrentHashMap[BftScanConnection.ScanResponse[T], List[Uri]],
-      disagreementLogLevel: Level,
-      connectionMetrics: Option[ScanConnectionMetrics],
-  )(implicit ec: ExecutionContext, tc: TraceContext, mc: MetricsContext): Unit = {
-    implicit val elc: ErrorLoggingContext = ErrorLoggingContext.fromTracedLogger(logger)
-    def recordConsensus(url: Uri, consensus: String, extraLabels: Map[String, String]): Unit =
-      connectionMetrics.foreach { metrics =>
-        val context = mc.merge(
-          MetricsContext(
-            Map(
-              "scan_connection" -> url.authority.host.address(),
-              "consensus" -> consensus,
-            ) ++ extraLabels
-          )
-        )
-        metrics.bftPerConnectionConsensus.mark()(context)
-      }
-    def disagreementLabels(response: BftScanConnection.ScanResponse[T]): Map[String, String] =
-      response match {
-        case _: SuccessfulResponse[?] => Map("success" -> "true")
-        case HttpFailureResponse(status, _) =>
-          Map("success" -> "false", "http_status" -> status.intValue.toString)
-        case NonJsonHttpFailureResponse(status) =>
-          Map("success" -> "false", "http_status" -> status.intValue.toString)
-        case TextFailureResponse(status, _) =>
-          Map("success" -> "false", "http_status" -> status.intValue.toString)
-        case _: ExceptionFailureResponse[?] => Map("success" -> "false")
-      }
-    keyToGroupResponses(consensusResponse).foreach { consensusResponseKey =>
-      val agreeingScanUrls = responses.remove(consensusResponseKey)
-      agreeingScanUrls.foreach(recordConsensus(_, "agree", Map.empty))
-      responses.forEach { (disagreeingResponse, scanUrls) =>
-        val extraLabels = disagreementLabels(disagreeingResponse)
-        scanUrls.foreach(recordConsensus(_, "disagree", extraLabels))
-        LoggerUtil.logAtLevel(
-          disagreementLogLevel,
-          s"""The following Scan URLs disagreed with consensus:
-             |${scanUrls.map(url => s"  $url").mkString("\n")}
-             |consensus response: $consensusResponse
-             |disagreeing response: $disagreeingResponse""".stripMargin,
-        )
-      }
-    }
-  }
+object BftScanConnection {
 
   /** Configuration for a BFT call.
     * Normally a BFT call requires f+1 agreeing responses from 2f+1 requests,
@@ -2178,53 +1858,4 @@ object BftScanConnection {
       extends RuntimeException(s"Scan $url has no answer to contribute to consensus")
       with NoStackTrace
 
-  private sealed trait ScanResponse[+T]
-  private case class SuccessfulResponse[+T](response: T) extends ScanResponse[T]
-  private case class HttpFailureResponse[+T](status: StatusCode, body: Json) extends ScanResponse[T]
-  private case class NonJsonHttpFailureResponse[+T](status: StatusCode) extends ScanResponse[T]
-  private case class TextFailureResponse[+T](status: StatusCode, content: String)
-      extends ScanResponse[T]
-  private case class ExceptionFailureResponse[+T](error: Throwable) extends ScanResponse[T]
-
-  class ConsensusNotReached(
-      numRequests: Int,
-      responses: Seq[(List[Uri], BftScanConnection.ScanResponse[?])],
-  ) extends RuntimeException(
-        s"Failed to reach consensus from $numRequests Scan nodes. Responses: $responses"
-      )
-  object ConsensusNotReached {
-    def apply[T](
-        numRequests: Int,
-        responses: ConcurrentHashMap[BftScanConnection.ScanResponse[T], List[Uri]],
-        shortenResponses: T => Any,
-    ): ConsensusNotReached = {
-      val shortResponses: Seq[(List[Uri], BftScanConnection.ScanResponse[?])] =
-        responses.asScala.toSeq.map {
-          case (SuccessfulResponse(response), uris) =>
-            uris -> SuccessfulResponse(shortenResponses(response))
-          case (HttpFailureResponse(status, body), uris) =>
-            uris -> HttpFailureResponse(status, body)
-          case (NonJsonHttpFailureResponse(status), uris) =>
-            uris -> NonJsonHttpFailureResponse(status)
-          case (TextFailureResponse(status, body), uris) =>
-            uris -> TextFailureResponse(status, body)
-          case (ExceptionFailureResponse(error), uris) => uris -> ExceptionFailureResponse(error)
-        }
-
-      new ConsensusNotReached(numRequests, shortResponses)
-    }
-  }
-
-  object ConsensusNotReachedRetryable extends ExceptionRetryPolicy {
-    override def determineExceptionErrorKind(exception: Throwable, logger: TracedLogger)(implicit
-        tc: TraceContext
-    ): ErrorKind = {
-      exception match {
-        case c: ConsensusNotReached =>
-          logger.info("Consensus not reached. Will be retried.", c)
-          ErrorKind.TransientErrorKind()
-        case _ => ErrorKind.FatalErrorKind
-      }
-    }
-  }
 }
