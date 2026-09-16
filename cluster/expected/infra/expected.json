@@ -2692,12 +2692,12 @@
               {
                 "operation": {
                   "hosts": [
-                    "scan.sv-2.mock.network.canton.global",
                     "scan.sv-2.mock.global.canton.network.digitalasset.com",
-                    "scan.sv-1.mock.network.canton.global",
+                    "scan.sv-2.mock.global.canton.network.digitalasset.com:443",
                     "scan.sv-1.mock.global.canton.network.digitalasset.com",
-                    "scan.sv.mock.network.canton.global",
-                    "scan.sv.mock.global.canton.network.digitalasset.com"
+                    "scan.sv-1.mock.global.canton.network.digitalasset.com:443",
+                    "scan.sv.mock.global.canton.network.digitalasset.com",
+                    "scan.sv.mock.global.canton.network.digitalasset.com:443"
                   ]
                 }
               }
@@ -3392,12 +3392,12 @@
               {
                 "operation": {
                   "hosts": [
-                    "sv.sv-2.mock.network.canton.global",
                     "sv.sv-2.mock.global.canton.network.digitalasset.com",
-                    "sv.sv-1.mock.network.canton.global",
+                    "sv.sv-2.mock.global.canton.network.digitalasset.com:443",
                     "sv.sv-1.mock.global.canton.network.digitalasset.com",
-                    "sv.sv.mock.network.canton.global",
-                    "sv.sv.mock.global.canton.network.digitalasset.com"
+                    "sv.sv-1.mock.global.canton.network.digitalasset.com:443",
+                    "sv.sv.mock.global.canton.network.digitalasset.com",
+                    "sv.sv.mock.global.canton.network.digitalasset.com:443"
                   ],
                   "paths": [
                     "/api/sv/v0/migration-id",
@@ -3459,12 +3459,12 @@
               {
                 "operation": {
                   "hosts": [
-                    "sv.sv-2.mock.network.canton.global",
                     "sv.sv-2.mock.global.canton.network.digitalasset.com",
-                    "sv.sv-1.mock.network.canton.global",
+                    "sv.sv-2.mock.global.canton.network.digitalasset.com:443",
                     "sv.sv-1.mock.global.canton.network.digitalasset.com",
-                    "sv.sv.mock.network.canton.global",
-                    "sv.sv.mock.global.canton.network.digitalasset.com"
+                    "sv.sv-1.mock.global.canton.network.digitalasset.com:443",
+                    "sv.sv.mock.global.canton.network.digitalasset.com",
+                    "sv.sv.mock.global.canton.network.digitalasset.com:443"
                   ],
                   "paths": [
                     "/api/sv/v0/devnet/onboard/validator/prepare",

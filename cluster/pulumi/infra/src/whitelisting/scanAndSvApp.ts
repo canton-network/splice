@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
-import { getDnsNames, SPLICE_ROOT } from '@canton-network/splice-pulumi-common';
+import { CLUSTER_HOSTNAME, SPLICE_ROOT } from '@canton-network/splice-pulumi-common';
 import { allSvsToDeployBasic } from '@canton-network/splice-pulumi-common-sv/src/svConfigsBasic';
 
 import { loadIPRanges } from './ipRanges';
@@ -12,10 +12,11 @@ import { readSvPublicIngressPathsByAudience } from './svPublicEndpoints';
 export const svOpenApiFile = `${SPLICE_ROOT}/apps/sv/src/main/openapi/sv-internal.yaml`;
 
 function hostsFor(prefix: string): string[] {
-  const dnsNames = [getDnsNames().cantonDnsName, getDnsNames().daDnsName];
-  return allSvsToDeployBasic.flatMap(sv =>
-    dnsNames.map(dns => `${prefix}.${sv.ingressName}.${dns}`)
-  );
+  return allSvsToDeployBasic.flatMap(sv => [
+    `${prefix}.${sv.ingressName}.${CLUSTER_HOSTNAME}`,
+    // include the port for Istio IP allow policies, which require the full host:port to match
+    `${prefix}.${sv.ingressName}.${CLUSTER_HOSTNAME}:443`,
+  ]);
 }
 
 export function configureScanAndSvAppWhitelist(
