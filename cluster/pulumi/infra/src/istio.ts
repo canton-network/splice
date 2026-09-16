@@ -61,7 +61,7 @@ function configureIstioBase(
       version: istioVersion.istio,
       namespace: ns.metadata.name,
       repositoryOpts: {
-        repo: 'https://istio-release.storage.googleapis.com/charts',
+        repo: 'https://blob.istio.io/istio-release/charts',
       },
       values: {
         global: {
@@ -187,7 +187,7 @@ function configureIstiod(
       version: istioVersion.istio,
       namespace: ingressNs.metadata.name,
       repositoryOpts: {
-        repo: 'https://istio-release.storage.googleapis.com/charts',
+        repo: 'https://blob.istio.io/istio-release/charts',
       },
       values: mergeWith(
         defaultValues,
@@ -394,7 +394,7 @@ function configureGatewayService(
       version: istioVersion.istio,
       namespace: ingressNs.metadata.name,
       repositoryOpts: {
-        repo: 'https://istio-release.storage.googleapis.com/charts',
+        repo: 'https://blob.istio.io/istio-release/charts',
       },
       values: {
         resources: {
