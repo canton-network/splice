@@ -1201,6 +1201,7 @@ lazy val `canton-fork-community-common-test` =
           scalatest % Test
         )
       },
+      Headers.ApacheDAHeaderSettings,
     )
 
 lazy val `apps-common` =
