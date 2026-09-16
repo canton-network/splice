@@ -75,7 +75,7 @@ import scala.concurrent.{ExecutionContext, Future}
 
 // mock verification triggers this
 @SuppressWarnings(Array("com.digitalasset.canton.DiscardedFuture"))
-class BftScanConnectionTest
+class BftCallExecutorTest
     extends AsyncWordSpec
     with BaseTest
     with HasExecutionContext
@@ -91,6 +91,8 @@ class BftScanConnectionTest
 
   private def scanUrl(n: Int) = s"https://$n.example.com"
 
+  private implicit val mc: MetricsContext = MetricsContext.Empty
+  
   def getMockedConnections(n: Int): Seq[SingleScanConnection] = {
     val connections = (0 until n).map { n =>
       val m = mock[SingleScanConnection]
@@ -1044,7 +1046,7 @@ class BftScanConnectionTest
       connections.tail.foreach(c => when(c.getDsoPartyId()).thenReturn(delayedSuccess))
 
       for {
-        (result, _) <- BftScanConnection.executeCall(call, connections, nTargetSuccess = 1, logger)
+        (result, _) <- BftCallExecutor.executeCall(call, connections, nTargetSuccess = 1, logger)
       } yield result should be(partyIdA)
     }
 
@@ -1061,7 +1063,7 @@ class BftScanConnectionTest
       connections.tail.foreach(c => when(c.getDsoPartyId()).thenReturn(delayedSuccess))
 
       for {
-        failure <- BftScanConnection
+        failure <- BftCallExecutor
           .executeCall(call, connections, nTargetSuccess = 1, logger)
           .failed
       } yield failure should be(notFoundFailure)
@@ -1072,7 +1074,7 @@ class BftScanConnectionTest
       connections.foreach(makeMockFail(_, tcpFailure))
 
       for {
-        failure <- BftScanConnection
+        failure <- BftCallExecutor
           .executeCall(call, connections, nTargetSuccess = 1, logger)
           .failed
       } yield failure should be(tcpFailure)
@@ -1083,10 +1085,10 @@ class BftScanConnectionTest
       connections.foreach(makeMockFail(_, tcpFailure))
 
       for {
-        failure <- BftScanConnection
+        failure <- BftCallExecutor
           .executeCall(call, connections, nTargetSuccess = 1, logger)
           .failed
-      } yield failure shouldBe a[BftScanConnection.ConsensusNotReached]
+      } yield failure shouldBe a[BftCallExecutor.ConsensusNotReached]
     }
   }
 
@@ -1112,7 +1114,7 @@ class BftScanConnectionTest
         }
 
       for {
-        (result, _) <- BftScanConnection.executeCall(
+        (result, _) <- BftCallExecutor.executeCall(
           call,
           connections,
           nTargetSuccess = 2,
@@ -1159,7 +1161,7 @@ class BftScanConnectionTest
       makeMockFail(connections(2), notFoundFailure)
 
       for {
-        (result, _) <- BftScanConnection.executeCall(
+        (result, _) <- BftCallExecutor.executeCall(
           call,
           connections,
           nTargetSuccess = 2,
@@ -1195,7 +1197,7 @@ class BftScanConnectionTest
       }
 
       for {
-        (result, _) <- BftScanConnection.executeCall(
+        (result, _) <- BftCallExecutor.executeCall(
           call,
           connections,
           nTargetSuccess = 2,

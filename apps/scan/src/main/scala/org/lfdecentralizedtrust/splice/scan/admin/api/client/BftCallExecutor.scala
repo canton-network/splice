@@ -113,14 +113,14 @@ object BftCallExecutor {
     }
   }
 
-  private def executeCall[T, C <: HasUrl](
+  private[client] def executeCall[T, C <: HasUrl](
       call: C => Future[T],
       requestFrom: Seq[C],
       nTargetSuccess: Int,
       logger: TracedLogger,
-      shortenResponsesForLog: T => Any,
-      disagreementLogLevel: Level,
-      connectionMetrics: Option[ScanConnectionMetrics],
+      shortenResponsesForLog: T => Any = identity[T],
+      disagreementLogLevel: Level = Level.INFO,
+      connectionMetrics: Option[ScanConnectionMetrics] = None,
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
