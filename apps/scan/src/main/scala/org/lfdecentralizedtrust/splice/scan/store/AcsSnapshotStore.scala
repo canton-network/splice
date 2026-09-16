@@ -831,7 +831,7 @@ class AcsSnapshotStore(
         saveV2IncrementalSnapshot(table, snapshot, nextSnapshotTargetRecordTime)(tc)
     }
     storage.queryAndUpdate(
-      withExclusiveSnapshotDataLock(
+      AdvisoryLocks.withDdlLock(
         withIncrementalSnapshotIdempotencyCheck(
           table,
           statement,
@@ -853,7 +853,8 @@ class AcsSnapshotStore(
       s"acs_snapshot_stakeholders_v1_${historyId}_${snapshot.targetRecordTime.toEpochMilli}"
 
     for {
-      _ <- sqlu"create table #$createsTableName (like acs_snapshot_creates_v1_template including all)"
+      _ <-
+        sqlu"create table #$createsTableName (like acs_snapshot_creates_v1_template including all)"
       _ <-
         sqlu"create table #$stakeholdersTableName (like acs_snapshot_stakeholders_v1_template including all)"
       // `snapshot_id= ?` will match all rows in production, so a direct table scan will be used
