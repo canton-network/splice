@@ -5,6 +5,7 @@ package org.lfdecentralizedtrust.splice.auth
 
 import com.auth0.jwt.JWT
 import com.auth0.jwt.algorithms.Algorithm
+import com.digitalasset.canton.participant.ledger.api.JwtTokenUtilities
 
 // See also: com.daml.ledger.api.auth.Main from the Daml SDK contains utils for generating ledger API access tokens
 object AuthUtil {
@@ -64,6 +65,18 @@ object AuthUtil {
         .withAudience(testAudience)
         .sign(Algorithm.HMAC256(secret))
     }
+  }
+
+  object CantonAdminApi {
+
+    def testToken(
+        secret: String,
+        scope: String,
+    ): String =
+      JwtTokenUtilities.buildUnsafeToken(
+        secret = secret,
+        scope = Some(scope),
+      )
   }
 
   @SuppressWarnings(Array("org.lfdecentralizedtrust.splice.wart.Println"))
