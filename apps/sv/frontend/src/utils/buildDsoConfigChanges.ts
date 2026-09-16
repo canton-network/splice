@@ -66,16 +66,20 @@ export function buildDsoConfigChanges(
   after: Optional<DsoRulesConfig>,
   showAllFields: boolean = false
 ): ConfigChange[] {
-    const beforeActiveSyncId = before?.decentralizedSynchronizer?.activeSynchronizerId;
-    const beforeActiveSync = beforeActiveSyncId
-        ? before?.decentralizedSynchronizer?.synchronizers.get(beforeActiveSyncId)
-        : undefined;
+  const beforeActiveSyncId = before?.decentralizedSynchronizer?.activeSynchronizerId;
+  const beforeActiveSync = beforeActiveSyncId
+    ? before?.decentralizedSynchronizer?.synchronizers
+        .entriesArray()
+        .find(s => s[0] === beforeActiveSyncId)?.[1]
+    : undefined;
 
-    const afterActiveSyncId = after?.decentralizedSynchronizer?.activeSynchronizerId;
-    const afterActiveSync = afterActiveSyncId
-        ? after?.decentralizedSynchronizer?.synchronizers.get(afterActiveSyncId)
-        : undefined;
-    const changes = [
+  const afterActiveSyncId = after?.decentralizedSynchronizer?.activeSynchronizerId;
+  const afterActiveSync = afterActiveSyncId
+    ? after?.decentralizedSynchronizer?.synchronizers
+        .entriesArray()
+        .find(s => s[0] === afterActiveSyncId)?.[1]
+    : undefined;
+  const changes = [
     {
       fieldName: 'numUnclaimedRewardsThreshold',
       label: 'Minimum number of unclaimedRewards contracts required for merging',
