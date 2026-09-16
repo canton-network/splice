@@ -336,7 +336,7 @@ class AcsSnapshotStore(
             createdAt,
             contractId,
           ) =>
-        sql" and s.created_at >= $createdAt and s.contract_id > $contractId"
+        sql" and (s.created_at, s.contract_id) > ($createdAt, $contractId)"
       case QueryAcsSnapshotPaginationToken.RowIdQueryAcsSnapshotPaginationToken(_) =>
         throw io.grpc.Status.INVALID_ARGUMENT
           .withDescription(s"Invalid after token provided.")
