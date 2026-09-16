@@ -56,6 +56,7 @@ it. Job names are listed so the packets can be found by job regardless.
 | 35072334729 | 10141, 10142, 10143 | main 0c43730f70 | 104716522199 `ui_tests`; 104716731789 `simtime (3)`; 104716753202 `frontend-wall-clock-time (2)` | Raymond stated 10141 = ui_tests and 10142 = simtime (3) in the original request; 10143 is the remaining job, frontend-wall-clock-time (2) |
 | 35076492327 | 10144, 10145 | main f1ee318e39 ("Don't wait forever on a non-active psid in ensureSynchronizerRegistered") | 104730030877 `ui_tests`; 104730519175 `resource-intensive (1)` | OPEN: which ref is which job not yet stated |
 | 35077158925 | 10146 | main 8f931e71c0 (#7329 backport of #7325 to main) | 104732535931 `wall-clock-time (4)` | single job |
+| 35082230264 | 10147 | main 743a6ec124 (#7333) | 104749000327 `roll-forward-lsu (0)` | single job |
 | unknown | 10135 | - | - | run not yet given |
 
 ## Overview
