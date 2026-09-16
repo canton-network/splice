@@ -10,7 +10,27 @@ if [ "$#" -ne 1 ]; then
     exit 1
 fi
 
-rsync -av --delete --exclude version.sbt --exclude community-build.sbt --exclude deployment --exclude project --exclude scripts --exclude .idea \
+# rsync '--include' options for a whole path; each ancestor is added so that rsync
+# descends into the tree. Must precede matching exclusions
+# because first rule wins
+keep_includes() {
+    local path="$1"
+    local args=(--include "/$path")
+    local dir
+    dir="$(dirname "$path")"
+    while [[ $dir != "." && $dir != "/" ]]; do
+        # trailing / means only match directory name; leading / anchors to root
+        # of rsync source
+        args=(--include "/$dir/" "${args[@]}")
+        dir="$(dirname "$dir")"
+    done
+    printf '%s\n' "${args[@]}"
+}
+
+rsync -av --delete \
+    $(keep_includes community/ledger/ledger-json-api/src/test/resources/json-api-docs/openapi.yaml) \
+    --exclude '*/src/test/**' \
+    --exclude version.sbt --exclude community-build.sbt --exclude deployment --exclude project --exclude scripts --exclude .idea \
     --exclude=.github --exclude=.git --exclude=.gitmodules --exclude 'LICENSE*.txt' --exclude README.md --exclude demo --exclude '*/test/daml' \
     --exclude /daml --exclude daml-common-staging --exclude '*/ledger-common-dars' --exclude '*/daml/CantonExamples' \
     --exclude '*/wartremove/test/*' --exclude "*/ledger-api-bench-tool" \
