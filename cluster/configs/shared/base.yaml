@@ -194,7 +194,11 @@ monitoring:
       cloudArmor:
         # Number of requests denied by Cloud Armor within a 5 minute window above which
         # the alert fires. Only used if cloudArmor.enabled is true.
-        deniedRequestsThreshold: 0
+        deniedRequestsThreshold: 100
+        # Number of requests matching a WAF (OWASP CRS) rule within a 5 minute window
+        # above which the WAF alert fires. Only used if cloudArmor.wafRules.enabled and
+        # cloudArmor.logging.enabled are true.
+        wafRejectionsThreshold: 10
       gcpQuotas:
         # Quota metric names to exclude from all GCP quota alerts.
         # Each entry is matched exactly for quota exceeded.

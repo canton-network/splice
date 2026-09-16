@@ -82,7 +82,8 @@ monitoring:
       cantonBft:
         mempoolMaxSizeThreshold: 100
       cloudArmor:
-        deniedRequestsThreshold: 0
+        deniedRequestsThreshold: 100
+        wafRejectionsThreshold: 10
       cloudSql:
         maintenance: false
       cometbft:
@@ -364,9 +365,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -441,7 +439,7 @@ svs:
     validatorApp:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
+          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 10m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -514,9 +512,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -589,9 +584,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -664,9 +656,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -739,9 +728,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -814,9 +800,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -889,9 +872,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -964,9 +944,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -1039,9 +1016,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -1114,9 +1088,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -1189,9 +1160,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -1264,9 +1232,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -1339,9 +1304,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -1414,9 +1376,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -1489,9 +1448,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -1564,9 +1520,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -1645,9 +1598,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       auth0:
         clientId: 'fBFpzZSRuufk9ueV2pSEkOXNYXuQtVmY'
       resources:

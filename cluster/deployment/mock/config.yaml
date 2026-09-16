@@ -214,7 +214,7 @@ svs:
   sv: !include(sv.yaml)
     participant:
       bftSequencerConnection: false
-  sv-1: !include(sv.yaml)
+  sv-1: !include(sv.yaml;$SPLICE_ROOT/cluster/configs/shared/validator-topology-metrics-export.yaml)
     appsPg:
       cloudSql:
         tier: "apps-pg-override-tier-sv-1"

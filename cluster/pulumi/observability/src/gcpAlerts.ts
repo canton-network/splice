@@ -571,7 +571,7 @@ export function installCloudArmorAlerts(
   cloudArmorAlertsConfig: CloudArmorAlertsConfig,
   cloudArmorConfig: CloudArmorConfig
 ): void {
-  const { deniedRequestsThreshold } = cloudArmorAlertsConfig;
+  const { deniedRequestsThreshold, wafRejectionsThreshold } = cloudArmorAlertsConfig;
   const hasPreviewOnlyRules =
     cloudArmorConfig.allRulesPreviewOnly ||
     (cloudArmorConfig.wafRules.enabled && cloudArmorConfig.wafRules.previewOnly);
@@ -644,7 +644,7 @@ export function installCloudArmorAlerts(
   // The Cloud Armor metrics only expose whether a request was blocked, not which rule
   // blocked it, so a WAF specific alert has to go through the load balancer request logs.
   if (cloudArmorConfig.wafRules.enabled && cloudArmorConfig.logging.enabled) {
-    installCloudArmorWafAlert(baseArgs);
+    installCloudArmorWafAlert(baseArgs, wafRejectionsThreshold);
   }
 }
 
@@ -655,8 +655,14 @@ export function installCloudArmorAlerts(
  * Requires the backend request logging of the load balancer to be enabled
  * (`cloudArmor.logging.enabled`), otherwise Cloud Armor decisions never reach Cloud
  * Logging.
+ *
+ * @param wafRejectionsThreshold number of matches within the rolling window above which
+ * the alert fires; 0 means a single match already alerts.
  */
-function installCloudArmorWafAlert(baseArgs: AlertPolicyBaseArgs): void {
+function installCloudArmorWafAlert(
+  baseArgs: AlertPolicyBaseArgs,
+  wafRejectionsThreshold: number
+): void {
   // Rules in preview mode are reported under previewSecurityPolicy and do not actually
   // reject anything; for the WAF rules that previewed signal is exactly the attack
   // detection we want, so both are matched.
@@ -737,7 +743,7 @@ function installCloudArmorWafAlert(baseArgs: AlertPolicyBaseArgs): void {
             },
           ],
           comparison: 'COMPARISON_GT',
-          // No retest period -- a single WAF match is worth looking at
+          // No retest period -- a WAF match is worth looking at as soon as it happens
           duration: '0s',
           // A monitoring filter must restrict resource.type, even though the log based
           // metric is only ever written from the load balancer request logs.
@@ -746,7 +752,7 @@ function installCloudArmorWafAlert(baseArgs: AlertPolicyBaseArgs): void {
             .join(', ')}) AND metric.type = "logging.googleapis.com/user/${
             wafRejectionsMetric.name
           }"`,
-          thresholdValue: 0,
+          thresholdValue: wafRejectionsThreshold,
           trigger: {
             count: 1,
           },
