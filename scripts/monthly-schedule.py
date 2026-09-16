@@ -371,7 +371,7 @@ def choice_value(column: dict[str, Any], label: str | bool) -> dict[str, Any] | 
         return label
 
     if column_type == "checkbox":
-        return label
+        return {"checked": "true"} if label else None
 
     raise RuntimeError(f"Unsupported choice column type {column_type!r} for {column['title']!r}")
 
