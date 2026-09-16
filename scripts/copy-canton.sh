@@ -27,6 +27,7 @@ rsync -av --delete --exclude version.sbt --exclude community-build.sbt --exclude
     --exclude 'base/nameof' \
     --exclude 'base/nonempty' \
     --exclude 'base/nonempty-cats' \
+    --exclude 'base/observability/metrics' \
     --exclude 'base/observability/tracing' \
     --exclude 'base/ports' \
     --exclude 'base/resources' \
