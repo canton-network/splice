@@ -7,8 +7,8 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.round.{
 }
 import org.lfdecentralizedtrust.splice.console.*
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
-  TestCommon,
   SpliceTestConsoleEnvironment,
+  TestCommon,
 }
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.UpdateExternalPartyConfigStateTrigger
 import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig
@@ -19,8 +19,8 @@ import com.digitalasset.canton.console.CommandFailure
 import com.digitalasset.canton.topology.PartyId
 import org.scalatest.Assertion
 
-import java.time.Duration
-import scala.annotation.nowarn
+import java.time.{Duration, Instant}
+import scala.annotation.{nowarn, tailrec}
 import scala.concurrent.duration.*
 
 trait TimeTestUtil extends TestCommon {
@@ -111,6 +111,16 @@ trait TimeTestUtil extends TestCommon {
       durationToNextRoundOpening,
       synchronizeExternalPartyConfigStates,
     )
+  }
+
+  @tailrec
+  final def advanceRoundsUntil(
+      target: Instant
+  )(implicit env: SpliceTestConsoleEnvironment): Unit = {
+    if (!getLedgerTime.toInstant.isAfter(target)) {
+      advanceRoundsToNextRoundOpening
+      advanceRoundsUntil(target)
+    }
   }
 
   /** The amount of time to advance in order to reach the next mining round opening. */
