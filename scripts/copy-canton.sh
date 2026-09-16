@@ -27,6 +27,7 @@ keep_includes() {
     printf '%s\n' "${args[@]}"
 }
 
+# shellcheck disable=SC2046
 rsync -av --delete \
     $(keep_includes community/ledger/ledger-json-api/src/test/resources/json-api-docs/openapi.yaml) \
     --exclude '*/src/test/**' \
