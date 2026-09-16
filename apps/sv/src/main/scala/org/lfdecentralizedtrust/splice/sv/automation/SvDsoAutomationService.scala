@@ -690,7 +690,6 @@ class SvDsoAutomationService(
         synchronizerNodeService,
         config.participantClient.sequencerRequestAmplification.toInternal,
         config.participantClient.sequencerConnectionPoolDelays.toInternal,
-        dsoStore.domainMigrationId,
         reconnectOnSynchronizerConfigurationChange =
           enabledFeatures.reconnectOnSynchronizerConfigurationChange,
         useInternalSequencerApi = config.useInternalSequencerApi,

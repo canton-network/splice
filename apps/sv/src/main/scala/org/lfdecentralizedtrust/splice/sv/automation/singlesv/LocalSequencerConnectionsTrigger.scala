@@ -39,7 +39,6 @@ class LocalSequencerConnectionsTrigger(
     synchronizerNodeService: SynchronizerNodeService[LocalSynchronizerNode],
     sequencerRequestAmplification: SubmissionRequestAmplification,
     sequencerConnectionPoolDelays: SequencerConnectionPoolDelays,
-    migrationId: Long,
     reconnectOnSynchronizerConfigurationChange: Boolean,
     useInternalSequencerApi: Boolean,
 )(implicit
@@ -70,7 +69,6 @@ class LocalSequencerConnectionsTrigger(
             dsoRulesActiveSequencerConfig = rulesAndState.lookupActiveSequencerIdConfigFor(
               decentralizedSynchronizerId,
               domainTimeLb.timestamp.toInstant,
-              migrationId,
             )
             _ <- dsoRulesActiveSequencerConfig.fold {
               logger.debug(

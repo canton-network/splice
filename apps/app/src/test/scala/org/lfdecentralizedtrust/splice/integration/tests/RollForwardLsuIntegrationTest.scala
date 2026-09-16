@@ -183,7 +183,7 @@ class RollForwardLsuIntegrationTest
         inside(sv1ScanBackend.listDsoSequencers()) {
           case Seq(DomainSequencers(synchronizerId, sequencers)) =>
             synchronizerId shouldBe decentralizedSynchronizerId
-            sequencers should have size 8
+            sequencers should have size 4
             sequencers.foreach { sequencer =>
               sequencer.serial shouldBe 0
             }
