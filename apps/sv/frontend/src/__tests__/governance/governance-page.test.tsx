@@ -4,8 +4,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { describe, expect, test } from 'vitest';
 import { SvConfigProvider } from '../../utils';
 import userEvent from '@testing-library/user-event';
-import dayjs from 'dayjs';
-import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
+import { formatDatetimeWithOffset } from '../../utils/dateFormat';
 import App from '../../App';
 import { navigateToGovernancePage } from '../helpers';
 import {
@@ -144,7 +143,7 @@ describe('Governance Page', () => {
     const closedVote = voteResultsDsoRules.dso_rules_vote_results[0];
     const effectiveAt =
       closedVote.outcome.tag === 'VRO_Accepted' ? closedVote.outcome.value.effectiveAt : undefined;
-    const expectedEffectiveAt = dayjs(effectiveAt).format(dateTimeFormatISO);
+    const expectedEffectiveAt = effectiveAt ? formatDatetimeWithOffset(effectiveAt) : '';
 
     const rows = screen.getAllByTestId('vote-history-row');
     const targetRow = rows.find(

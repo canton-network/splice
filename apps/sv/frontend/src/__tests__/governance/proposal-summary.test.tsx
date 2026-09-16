@@ -11,6 +11,7 @@ import {
   THRESHOLD_DEADLINE_LABEL,
 } from '../../utils/constants';
 import { ConfigChange } from '../../utils/types';
+import { formatDatetimeWithOffset } from '../../utils/dateFormat';
 
 const url = 'https://example.com';
 const summary = 'Summary of the proposal';
@@ -36,7 +37,9 @@ function expectCommonReviewFields(actionName: string) {
   expect(screen.getByTestId('summary-title').textContent).toBe(REVIEW_LABELS.summary);
   expect(screen.getByTestId('summary-field').textContent).toBe(summary);
   expect(screen.getByTestId('expiryDate-title').textContent).toBe(REVIEW_LABELS.expiryDate);
-  expect(screen.getByTestId('expiryDate-field').textContent).toBe(expiryDate);
+  expect(screen.getByTestId('expiryDate-field').textContent).toBe(
+    formatDatetimeWithOffset(expiryDate)
+  );
   expect(screen.getByTestId('effectiveDate-title').textContent).toBe(REVIEW_LABELS.effectiveDate);
 }
 
@@ -60,7 +63,9 @@ describe('Review Proposal Component', () => {
     );
 
     expectCommonReviewFields(actionName);
-    expect(screen.getByTestId('effectiveDate-field').textContent).toBe(effectiveDate);
+    expect(screen.getByTestId('effectiveDate-field').textContent).toBe(
+      formatDatetimeWithOffset(effectiveDate)
+    );
 
     expect(screen.getByTestId('offboardMember-title').textContent).toBe('Member');
     expect(screen.getByTestId('offboardMember-party-id-value').textContent).toBe(offboardMember);
@@ -113,7 +118,9 @@ describe('Review Proposal Component', () => {
     );
 
     expectCommonReviewFields(actionName);
-    expect(screen.getByTestId('effectiveDate-field').textContent).toBe(effectiveDate);
+    expect(screen.getByTestId('effectiveDate-field').textContent).toBe(
+      formatDatetimeWithOffset(effectiveDate)
+    );
 
     expect(screen.getByTestId('svRewardWeightMember-title').textContent).toBe('Member');
     expect(screen.getByTestId('svRewardWeightMember-party-id-value').textContent).toBe(
@@ -148,7 +155,9 @@ describe('Review Proposal Component', () => {
     );
 
     expectCommonReviewFields(actionName);
-    expect(screen.getByTestId('effectiveDate-field').textContent).toBe(effectiveDate);
+    expect(screen.getByTestId('effectiveDate-field').textContent).toBe(
+      formatDatetimeWithOffset(effectiveDate)
+    );
 
     expect(screen.getByTestId('grantRight-title').textContent).toBe('Provider Party ID');
     expect(screen.getByTestId('grantRight-party-id-value').textContent).toBe(provider);
@@ -181,7 +190,9 @@ describe('Review Proposal Component', () => {
     );
 
     expectCommonReviewFields(actionName);
-    expect(screen.getByTestId('effectiveDate-field').textContent).toBe(effectiveDate);
+    expect(screen.getByTestId('effectiveDate-field').textContent).toBe(
+      formatDatetimeWithOffset(effectiveDate)
+    );
 
     expect(screen.getByTestId('revokeProviderPartyId-title').textContent).toBe('Provider Party ID');
     expect(screen.getByTestId('revokeProviderPartyId-party-id-value').textContent).toBe(
@@ -220,7 +231,9 @@ describe('Review Proposal Component', () => {
     );
 
     expectCommonReviewFields(actionName);
-    expect(screen.getByTestId('effectiveDate-field').textContent).toBe(effectiveDate);
+    expect(screen.getByTestId('effectiveDate-field').textContent).toBe(
+      formatDatetimeWithOffset(effectiveDate)
+    );
 
     expect(screen.getByTestId('updateProviderPartyId-title').textContent).toBe('Provider Party ID');
     expect(screen.getByTestId('updateProviderPartyId-party-id-value').textContent).toBe(
@@ -277,7 +290,9 @@ describe('Review Proposal Component', () => {
     );
 
     expectCommonReviewFields(actionName);
-    expect(screen.getByTestId('effectiveDate-field').textContent).toBe(effectiveDate);
+    expect(screen.getByTestId('effectiveDate-field').textContent).toBe(
+      formatDatetimeWithOffset(effectiveDate)
+    );
 
     expect(screen.getByTestId('configChange-title').textContent).toBe(
       'Proposed Configuration Changes'
@@ -339,7 +354,9 @@ describe('Review Proposal Component', () => {
     );
 
     expectCommonReviewFields(actionName);
-    expect(screen.getByTestId('effectiveDate-field').textContent).toBe(effectiveDate);
+    expect(screen.getByTestId('effectiveDate-field').textContent).toBe(
+      formatDatetimeWithOffset(effectiveDate)
+    );
 
     expect(screen.getByTestId('configChange-title').textContent).toBe(
       'Proposed Configuration Changes'
