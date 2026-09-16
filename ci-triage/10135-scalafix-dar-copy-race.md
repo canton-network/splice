@@ -264,6 +264,74 @@ grep -n 'Running scalafix on\|(docs) generating daml/splice-wallet$' "$f" | sed 
 11915:2026-09-16T04:00:40.0095108Z [info] Running scalafix on 50 Scala sources
 ```
 
+## 6. The fix already exists on main (#7176) and is missing on both release lines
+
+Raymond's pointer: `[ci] Order apps-app compile after copyResources (#7176)`, commit 4031327bc4, merged
+2026-09-10T19:58Z. It targets this exact race and names the same symptom:
+
+```
+git show 4031327bc4 -- build.sbt | sed -n '/^@@/,$p'
+```
+```
+@@ -2435,6 +2435,11 @@ lazy val `apps-app`: Project =
+       assembly / assemblyJarName := "splice-node.jar",
+       // include historic dars in the jar
+       Compile / unmanagedResourceDirectories += { file(file(".").absolutePath) / "daml/dars" },
++      // scalafix walks classDirectory but is only ordered after compile, not copyResources, so a
++      // DAR copy can land mid-walk and delete the .tmp it stages through, failing scalafix with
++      // "Unable to load symbol table". Ordering compile after copyResources avoids the overlap.
++      Compile / compile := (Compile / compile).dependsOn(Compile / copyResources).value,
++      Test / compile := (Test / compile).dependsOn(Test / copyResources).value,
+     )
+```
+
+Which branches contain it (compare API: status `behind` = the commit is an ancestor of the branch,
+`diverged` = it is not):
+
+```
+for b in main release-line-0.8.1 release-line-0.8.0 release-line-0.7.5; do printf '%-22s ' $b; \
+  gh api "repos/canton-network/splice/compare/$b...4031327bc4" --jq '"\(.status) ahead=\(.ahead_by) behind=\(.behind_by)"'; done
+```
+```
+main                   behind ahead=0 behind=35
+release-line-0.8.1     diverged ahead=53 behind=14
+release-line-0.8.0     diverged ahead=60 behind=11
+release-line-0.7.5     diverged ahead=127 behind=8
+```
+
+The failed sha and the sibling 0.8.0 sha have no copyResources ordering in build.sbt at all; main's tip
+does:
+
+```
+git show 66a5e3f02b:build.sbt | grep -n 'copyResources'; git show 7cafbf8ef1:build.sbt | grep -n 'copyResources'
+gh api repos/canton-network/splice/contents/build.sbt?ref=main -H 'Accept: application/vnd.github.raw' | grep -n 'copyResources'
+```
+```
+(no matches for 66a5e3f02b)
+(no matches for 7cafbf8ef1)
+2441:      Compile / compile := (Compile / compile).dependsOn(Compile / copyResources).value,
+2442:      Test / compile := (Test / compile).dependsOn(Test / copyResources).value,
+```
+
+No backport PR for #7176 exists:
+
+```
+gh pr view 7176 --repo canton-network/splice --json number,title,mergedAt,baseRefName,labels \
+  --jq '"#\(.number) \(.title) merged=\(.mergedAt) base=\(.baseRefName) labels=\([.labels[].name]|join(","))"'
+gh pr list --repo canton-network/splice --state all --search "7176 in:title" --json number --jq 'length'
+```
+```
+#7176 [ci] Order apps-app compile after copyResources merged=2026-09-10T19:58:38Z base=main labels=
+0
+```
+
+Why the edge in #7176 is sufficient even though it is on `compile`, not `scalafix`: per the comment in
+4031327bc4, scalafix "is only ordered after compile, not copyResources" (semantic rules need the
+semanticdb output of `compile`), so `compile -> copyResources` transitively orders every dar sync before
+scalafix starts walking `classDirectory`. The `inspect tree` check below verifies the edge per branch. The sibling 0.8.0
+run and the main run of the same content passing (section 5) is consistent with a probabilistic race
+that is unfixed on 0.8.0 and fixed on main.
+
 ## Root cause / hypothesis
 
 Proven from the log and the pinned sources:
@@ -285,15 +353,18 @@ Inferred:
   and scalafix reported it as the symbol-table error. sbt 1.12's `copyResources` re-running the dar sync in
   that evaluation is evidenced by the `.tmp` file's existence, not by a log line (no `--debug`).
 
-Not caused by the backport and not branch-specific. It is a task-graph race that any `lint`/`scalafixAll`
-invocation can hit; the large number and size of dars in `apps-app` resources widens the window.
+Not caused by the backport content. It is the task-graph race that #7176 (4031327bc4) fixed on main on
+2026-09-10 by ordering `apps-app` `compile` after `copyResources`; that fix was never backported, so
+release-line-0.8.1 and release-line-0.8.0 (and 0.7.5) still carry the race (section 6). The large
+number and size of dars in `apps-app` resources widens the window.
 
 ## Reproduction / verification
 
-Deterministic check that the ordering edge is missing (any branch, no CI needed):
+Deterministic check of the ordering edge (no CI needed): on release-line-0.8.x the first count is 0
+(edge missing), on main with #7176 it is >0.
 ```
-USER=$(id -un) direnv exec . bash -c 'sbt --batch "inspect tree apps-app/Compile/scalafix"' | grep -c copyResources   # expect 0
-USER=$(id -un) direnv exec . bash -c 'sbt --batch "inspect tree apps-app/Compile/products"' | grep -c copyResources   # expect >0
+USER=$(id -un) direnv exec . bash -c 'sbt --batch "inspect tree apps-app/Compile/scalafix"' | grep -c copyResources
+USER=$(id -un) direnv exec . bash -c 'sbt --batch "inspect tree apps-app/Compile/products"' | grep -c copyResources   # expect >0 everywhere
 ```
 Race reproduction (probabilistic; loop it): warm the build with `Test/compile`, then repeat `scalafixAll`
 and watch for the error:
@@ -301,15 +372,15 @@ and watch for the error:
 USER=$(id -un) direnv exec . bash -c 'sbt --batch Test/compile'
 for i in $(seq 1 10); do USER=$(id -un) direnv exec . bash -c 'sbt --batch scalafixAll' 2>&1 | grep -m1 'Unable to load symbol table' && break; done
 ```
-Rerunning the failed job is the immediate fix; this commit is identical in content to what passed on
-release-line-0.8.0 and main.
+Rerunning the failed job is the immediate workaround; the fix is the #7176 backport (section 6).
 
 ## Duplicates / related
 
+- Duplicate of the main failure fixed by #7176 (4031327bc4, 2026-09-10; itself the outcome of the
+  2026-09-08 triage round). Same signature: scalafix "Unable to load symbol table" on a `.dar.<uuid>.tmp`
+  under `apps/app/target/scala-2.13/classes/`.
 - No cn-test-failures issue could be searched from this sandbox (`gh search issues` -> no permission on
-  DACH-NY/cn-test-failures); a `canton-network/splice` search for "Unable to load symbol table" returned
-  nothing. Check cn-test-failures for earlier "Unable to load symbol table" static_tests failures; the
-  signature (a `.tmp` under `apps/app/target/scala-2.13/classes/`) identifies them.
+  DACH-NY/cn-test-failures). Earlier occurrences on release lines will show the same signature.
 - 10136 (inferred): the sibling release-line-0.8.0 run 35052864473, failed job wall-clock-time(8), a
   different failure.
 - Not related: the guardrail duplicate-definition warnings for `apps-scan` (ScalaServer + ScalaClient into
@@ -317,13 +388,12 @@ release-line-0.8.0 and main.
 
 ## Suggested next step / owner
 
-1. Rerun the job (or accept: the commit passed the same check on 0.8.0 and main). No code change on
-   release-line-0.8.1 needed.
-2. Build fix (owner: build/CI maintainers): give scalafix an ordering edge to `copyResources` so it never
-   indexes `classes/` mid-sync, e.g. in `project/Houserules.scala` or `BuildCommon.sharedAppSettings`:
-   `Compile / scalafix := (Compile / scalafix).dependsOn(Compile / copyResources).evaluated` (and the same
-   for `Test`), or exclude the 180 MB of dars from `apps-app`'s classes dir by loading them from a jar or a
-   dedicated resource project so `copyResources` does not rewrite 222 files each evaluation.
-3. Optional: upstream to sbt-scalafix (classpath walk should tolerate a vanished entry, or depend on
-   `copyResources` when `scalafixOnCompile` is off) or to scalafix (skip files that disappear during
-   `ClasspathOps.newSymbolTable`).
+1. Backport #7176 (commit 4031327bc4, build.sbt only, 5 added lines) to release-line-0.8.1 and
+   release-line-0.8.0 (and 0.7.5 if it still gets static_tests runs). Use the "Backport a commit or PR
+   across branches" workflow (`.github/workflows/backport_workflow.yml`, workflow_dispatch with
+   `pr_number=7176` and `base_branch=release-line-0.8.x`), or cherry-pick locally:
+   `git cherry-pick -s -x 4031327bc4` on each release branch. Owner: whoever owns release-line
+   backports; the change is CI-only and carries no runtime risk.
+2. Until the backport lands: rerun the failed job.
+3. Optional (unchanged): upstream to sbt-scalafix (classpath walk should tolerate a vanished entry) or to
+   scalafix (skip files that disappear during `ClasspathOps.newSymbolTable`).
