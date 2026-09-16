@@ -1,4 +1,4 @@
-# 10136 - SvOnboardingIntegrationTest: sv3 init timeout, third BFT sequencer wedges ordering (run 35052864473)
+# 10135 - SvOnboardingIntegrationTest: sv3 init timeout, third BFT sequencer wedges ordering (run 35052864473)
 
 Branch release-line-0.8.0, sha 7cafbf8ef1 "Backport PR #7310 to release-line-0.8.0 (#7314)", post-merge CI
 2026-09-16T03:43Z. Canton runtime 3.5.16. One failed job. All commands verified against the downloaded
@@ -6,7 +6,8 @@ artifacts.
 
 Ref mapping (inferred): the cn-test-failures issue URL was the only input. The two failed post-merge runs
 right before ref 10139 (05:00Z) are the release-line backport runs at 03:43Z, so 10135/10136 map to those
-two; this packet takes 10136 = run 35052864473 (release-line-0.8.0). If the issue body names a different
+two. Raymond confirmed 2026-09-16: 10135 = this run 35052864473 (release-line-0.8.0); an earlier draft
+had 10135/10136 swapped. If the issue body names a different
 run, re-map before acting.
 
 ## Categorization
