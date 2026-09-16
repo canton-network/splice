@@ -76,7 +76,7 @@
             "comparison": "COMPARISON_GT",
             "duration": "0s",
             "filter": "resource.type=\"network_security_policy\" AND resource.label.policy_name=\"waf-whitelist-throttle-ban-mock\" AND metric.type=\"networksecurity.googleapis.com/https/request_count\" AND metric.label.blocked=\"true\"",
-            "thresholdValue": 0,
+            "thresholdValue": 100,
             "trigger": {
               "count": 1
             }
@@ -98,7 +98,7 @@
             "comparison": "COMPARISON_GT",
             "duration": "0s",
             "filter": "resource.type=\"network_security_policy\" AND resource.label.policy_name=\"waf-whitelist-throttle-ban-mock\" AND metric.type=\"networksecurity.googleapis.com/https/previewed_request_count\" AND metric.label.blocked=\"true\"",
-            "thresholdValue": 0,
+            "thresholdValue": 100,
             "trigger": {
               "count": 1
             }
@@ -156,7 +156,7 @@
             "comparison": "COMPARISON_GT",
             "duration": "0s",
             "filter": "resource.type = one_of(\"http_external_regional_lb_rule\", \"http_load_balancer\") AND metric.type = \"logging.googleapis.com/user/cloud_armor_waf_rejections_mock\"",
-            "thresholdValue": 0,
+            "thresholdValue": 10,
             "trigger": {
               "count": 1
             }

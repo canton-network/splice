@@ -41,6 +41,9 @@ const CloudArmorAlertsConfigSchema = z.object({
   // Number of requests denied by Cloud Armor within the rolling window above which the
   // alert fires.
   deniedRequestsThreshold: z.number().min(0),
+  // Number of requests matching a WAF (OWASP CRS) rule within the rolling window above
+  // which the WAF specific alert fires.
+  wafRejectionsThreshold: z.number().min(0).default(0),
 });
 
 export type CloudArmorAlertsConfig = z.infer<typeof CloudArmorAlertsConfigSchema>;
