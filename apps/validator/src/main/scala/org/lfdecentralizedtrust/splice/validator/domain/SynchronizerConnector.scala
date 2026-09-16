@@ -221,7 +221,7 @@ class SynchronizerConnector(
               case None =>
                 throw Status.NOT_FOUND
                   .withDescription(
-                      s"sequencer connections for serial $synchronizerSerial is empty at $time"
+                    s"sequencer connections for serial $synchronizerSerial is empty at $time"
                   )
                   .asRuntimeException()
               case Some(nonEmptyConnections) =>
@@ -287,16 +287,16 @@ class SynchronizerConnector(
           .flatMap { sequencers =>
             val serialSequencers =
               sequencers.sequencers
-              .filter(_.serial == synchronizerSerial.unwrap.toLong)
+                .filter(_.serial == synchronizerSerial.unwrap.toLong)
             val svFilteredSequencers = config.domains.global.trustedSynchronizerConfig match {
               case Some(config) =>
                 val allowedNamesSet = config.svNames.toList.toSet
                 logger.debug(
                   s"Filtering sequencers to only include: ${allowedNamesSet.toList.mkString(", ")}"
                 )
-              serialSequencers.filter(s => allowedNamesSet.contains(s.svName))
+                serialSequencers.filter(s => allowedNamesSet.contains(s.svName))
               case None =>
-              serialSequencers
+                serialSequencers
             }
             val validConnections = extractValidConnections(
               svFilteredSequencers,

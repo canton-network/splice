@@ -337,15 +337,12 @@ class LsuIntegrationTest
         inside(sv1ScanBackend.listDsoSequencers()) {
           case Seq(DomainSequencers(synchronizerId, sequencers)) =>
             synchronizerId shouldBe decentralizedSynchronizerId
-            sequencers should have size 12
+            sequencers should have size 8
             forExactly(4, sequencers) {
-              _.serial.value shouldBe 0
+              _.serial shouldBe 0
             }
             forExactly(4, sequencers) {
-              _.serial.value shouldBe 1
-            }
-            forExactly(4, sequencers) {
-              _.serial should be(empty)
+              _.serial shouldBe 1
             }
         }
       }
@@ -683,12 +680,12 @@ class LsuIntegrationTest
                   }
                   if (sv != sv4Backend.config.onboarding.value.name)
                     forExactly(1, sequencers) { sequencer =>
-                      sequencer.serial.value shouldBe newSynchronizerSerial.value.toLong
+                      sequencer.serial shouldBe newSynchronizerSerial.value.toLong
                     }
                   else {
                     // sv4 still reports the old serial until it upgrades
                     forExactly(1, sequencers) { sequencer =>
-                      sequencer.serial.value shouldBe 1
+                      sequencer.serial shouldBe 1
                     }
                   }
                 }
