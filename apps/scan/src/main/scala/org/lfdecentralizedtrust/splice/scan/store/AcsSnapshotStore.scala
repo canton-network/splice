@@ -41,7 +41,6 @@ import slick.jdbc.{GetResult, JdbcProfile}
 
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.Semaphore
-import scala.annotation.unused
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
@@ -114,14 +113,16 @@ class AcsSnapshotStore(
 
   }
 
+  /** *
+    * TESTING ONLY
+    * Creates a new ACS snapshot at time `until`.
+    * For ease of implementation, it clears the incremental snapshot state and reapplies all updates since then.
+    */
   def insertNewSnapshot(
       table: IncrementalAcsSnapshotTable,
-      @unused lastSnapshot: Option[AcsSnapshot],
       migrationId: Long,
       until: CantonTimestamp,
-  )(implicit
-      tc: TraceContext
-  ): Future[Unit] = {
+  )(implicit tc: TraceContext): Future[Unit] = {
     Future {
       scala.concurrent.blocking {
         AcsSnapshotStore.PreventConcurrentSnapshotsSemaphore.acquire()

@@ -1511,12 +1511,7 @@ class HttpScanHandler(
               // - this will only be used in tests
               // - wall clock tests must take manual snapshots anyway, because they can't wait
               // - simtime tests will advanceTime(N.hours)
-              snapshotStore.insertNewSnapshot(
-                snapshotTable,
-                lastSnapshot,
-                snapshotStore.currentMigrationId,
-                snapshotTime,
-              )
+              snapshotStore.insertNewSnapshot(snapshotTable, snapshotStore.currentMigrationId, snapshotTime)
             }
         } yield ScanResource.ForceAcsSnapshotNowResponse.OK(
           definitions.ForceAcsSnapshotResponse(
