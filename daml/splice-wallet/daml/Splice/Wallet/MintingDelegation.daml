@@ -92,9 +92,7 @@ template MintingDelegation
       do
         assertWithinDeadline "expiresAt" expiresAt
 
-        coupon <- fetch couponCid
-        let couponView = view coupon
-        require "coupon provider must be the beneficiary" (couponView.provider == beneficiary)
+        _ <- fetchCheckedInterface (ForOwner with dso; owner = beneficiary) couponCid
 
         -- Assign reward coupons to new beneficiaries
         assignResult <- exercise couponCid assignBeneficiaries

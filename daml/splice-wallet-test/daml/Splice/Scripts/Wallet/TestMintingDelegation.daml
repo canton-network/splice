@@ -507,7 +507,7 @@ testMintingDelegation_AssignAndMint_rejectsDelegateOwnCoupon = do
   (amuletRulesCid, _) <- getAmuletRules app
 
   submitMustFail''
-    (expectMessageContains "coupon provider must be the beneficiary")
+    (expectMessageContains "Contract group identifier mismatch")
     (actAs delegate <> readAs beneficiary <> readAs extraBeneficiary <> readAs app.dso)
     (exerciseCmd mintingDelegationCid MintingDelegation_AssignAndMint with
       couponCid = toInterfaceContractId coupon1Cid
