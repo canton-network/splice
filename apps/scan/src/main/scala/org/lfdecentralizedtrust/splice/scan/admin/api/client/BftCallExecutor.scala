@@ -113,18 +113,18 @@ object BftCallExecutor {
     }
   }
 
-  def executeCall[T, C <: HasUrl](
+  private def executeCall[T, C <: HasUrl](
       call: C => Future[T],
       requestFrom: Seq[C],
       nTargetSuccess: Int,
       logger: TracedLogger,
-      shortenResponsesForLog: T => Any = identity[T],
-      disagreementLogLevel: Level = Level.INFO,
-      connectionMetrics: Option[ScanConnectionMetrics] = None,
+      shortenResponsesForLog: T => Any,
+      disagreementLogLevel: Level,
+      connectionMetrics: Option[ScanConnectionMetrics],
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
-      mc: MetricsContext = MetricsContext.Empty,
+      mc: MetricsContext,
   ): Future[(T, List[Uri])] = {
     require(requestFrom.nonEmpty, "At least one request must be made.")
 
