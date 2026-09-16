@@ -42,6 +42,60 @@ output for these jobs.
 
 ## Ref -> run -> job mapping
 
+Refs are Raymond's cn-test-failures issue numbers, recorded exactly as he gave them (as (run, ref) tuples).
+The tracker is not readable from this sandbox, so nothing here is inferred by the triage: where a run has
+more than one failed job and more than one ref, the job-to-ref assignment is left open until Raymond states
+it. Job names are listed so the packets can be found by job regardless.
+
+| GH run | Refs (Raymond) | Branch / sha | Failed jobs | Ref -> job |
+|--------|----------------|--------------|-------------|------------|
+| 35052914872 | 10136 | release-line-0.8.1 66a5e3f02b (#7313 backport of #7310) | 104656956648 `static_tests` | single job |
+| 35052864473 | 10137 | release-line-0.8.0 7cafbf8ef1 (#7314 backport of #7310) | 104657010559 `wall-clock-time (8)` | single job |
+| 35057829498 | 10139 | main b5d5645c56 (nightly "Wall Clock Tests with Postgres 14") | 104671796734 `wall-clock-time (2)` | single job |
+| 35067363744 | 10140 | main 8c20340d0d (#7322) | 104700886275 `simtime (1)` | single job |
+| 35072334729 | 10141, 10142, 10143 | main 0c43730f70 | 104716522199 `ui_tests`; 104716731789 `simtime (3)`; 104716753202 `frontend-wall-clock-time (2)` | Raymond stated 10141 = ui_tests and 10142 = simtime (3) in the original request; 10143 is the remaining job, frontend-wall-clock-time (2) |
+| 35076492327 | 10144, 10145 | main f1ee318e39 ("Don't wait forever on a non-active psid in ensureSynchronizerRegistered") | 104730030877 `ui_tests`; 104730519175 `resource-intensive (1)` | OPEN: which ref is which job not yet stated |
+| 35077158925 | 10146 | main 8f931e71c0 (#7329 backport of #7325 to main) | 104732535931 `wall-clock-time (4)` | single job |
+| unknown | 10135 | - | - | run not yet given |
+
+## Overview
+
+| My ref | GH run | Failure (one line) | Resolution / status |
+|--------|--------|--------------------|---------------------|
+| 10048 | 33911369750 | BFT deadlock: SEQ::sv4 named first leader of epoch 26 before it was initialized; ordering wedges (strongQuorum == size == 3) | Canton-side bug. Evidence packet `10048-bft-deadlock.md`. Hand off to Canton team. |
+| 10084 | 34458892258 | checkErrors flags 18 IndexerState reconnect-drain WARNs from sv3Participant; all tests pass | Evidence packet `10084-indexer-reconnect-warn.md`. Log-level threshold artifact (INFO escalates to WARN after 2s under reconnect load), drain succeeds in ~3.8s. Not a functional bug; log-ignore rejected; real fix (canton `retryLogLevel=INFO`, or why disconnect returns before drain) open. |
+| 10088 | 34474728903 | (A) roll-forward-lsu: `InvalidStaticSynchronizerParameters` over non-default synchronizerLimits at SV init; (B) LSU: bobValidatorLocal hangs 5 min - validator retries `modify synchronizer` against the OLD psid after the LSU deactivated it | Evidence packet `10088-lsu-failures.md`. A = canton 3.6 static-param check rejects LSU predecessor params (jobs cancelled). B (validator-side): bob picked psid `::36-0` for "Set the new synchronizer connection", the LSU activated `::36-2` and deactivated `::36-0`, so the modify loops on `SYNC_SERVICE_SYNCHRONIZER_STATUS_NOT_ACTIVE` (infinite 100ms retries, no re-pick of the new psid) -> 5-min timeout. Fix in the validator. Separate incidental: sv4 published its successor ~43s past the upgrade time (dropped) - not the cause. |
+| 10091 / 10094 | 34477382133 | globalSequencerSv1 public API (:5108) unresponsive ~120s; co-located mediator's `acknowledge-signed` hits DEADLINE_EXCEEDED; checkErrors flags 2 WARNs. Plus a separate frontend vote-propagation flake. | Evidence packet `10094-sequencer-ack-stall.md`. Raymond's pick to prioritise. Two independent analyses converged. |
+| 10121 | 34612379425 | SummarizingMiningRoundTrigger logs ERROR (fails checkErrors) on a retryable "our own Scan has not yet computed the reward accounting totals" that self-resolves on the next poll | FIX committed on branch `ray/fix-summarizing-round-log-noise` (return TaskNoop instead of throwing; INFO not ERROR). Compile not yet verified in-sandbox (disk-limited). |
+| 10133 | 34931425682 | docker-compose validator: `ghcr.io` image pull `i/o timeout` bringing up the compose stack | Infra flake (transient registry timeout), no code bug. Re-run; other shard passed. |
+| 10312 | cn-internal CircleCI `deploy_upgrade` | preflight `sbt testOnly` killed at the 15m step timeout; a cold Daml+Scala compile ate ~13 of 15 min before the test ran | FIX MERGED into cn-internal: add a `Test/compile` step to `preflight_check` before the timed testOnly (mirrors `preflight_validator_check`). |
+
+## Notes on runtime canton version (differs per run; not what `canton/VERSION` says)
+
+- 10048 (33911369750): canton 3.5.16
+- 10088 (34474728903): canton 3.6.0-snapshot.20260909.20251.0.v0a9e6e25
+- 10094 (34477382133): canton 3.5.15 (branch release-line-0.7.5)
+- 10084 (34458892258): canton 3.6.0-snapshot.20260909.20251.0.v0a9e6e25
+
+## Reproduction prerequisites
+
+The sandbox root filesystem is nearly full; `gh run download` staging ENOSPCs there. Stage on a
+mount with several GB free by setting TMPDIR, and keep artifacts gzipped:
+
+```
+TMPDIR=<roomy-mount>/ghtmp gh run download <run> --repo canton-network/splice -n <artifact> -D <dir>
+cd <dir>
+zcat <file>.clog.gz | grep -a '<pattern>'
+```
+
+# CI failure triage - 2026-09-16
+
+Same packet conventions as above. Artifacts staged under `log/<ref>/` (git-ignored), job logs fetched with
+`gh api repos/canton-network/splice/actions/jobs/<job>/logs` because `gh run view --log` returned empty
+output for these jobs.
+
+## Ref -> run -> job mapping
+
 The cn-test-failures repo is not readable from this sandbox. Refs given only as issue URLs were first mapped
 by elimination and then confirmed by Raymond on 2026-09-16: (35052914872, 10136), (35052864473, 10137),
 (35057829498, 10139). Ref 10135 is therefore NOT one of the two release-line backport runs; its run is still
