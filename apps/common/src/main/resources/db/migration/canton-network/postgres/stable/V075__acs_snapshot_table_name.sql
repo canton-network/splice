@@ -2,8 +2,8 @@
 -- SPDX-License-Identifier: Apache-2.0
 
 alter table acs_snapshot
-    -- the name 'table_name' is not reserved, but it is a PostgreSQL keyword, so we use a different name to avoid confusion
-    add column data_table_name text default null,
+    add column creates_table_name text default null,
+    add column stakeholders_table_name text default null,
     -- these values won't be set anymore
     drop constraint acs_snapshot_first_row_id_fkey,
     drop constraint acs_snapshot_last_row_id_fkey,
@@ -12,9 +12,9 @@ alter table acs_snapshot
     -- ensure consistency
     add constraint legacy_or_per_snapshot check
         -- per-snapshot tables
-        ((first_row_id is null and last_row_id is null and data_table_name is not null) or
+        ((first_row_id is null and last_row_id is null and creates_table_name is not null and stakeholders_table_name is not null) or
             -- legacy table
-         (first_row_id is not null and last_row_id is not null and data_table_name is null));
+         (first_row_id is not null and last_row_id is not null and creates_table_name is null and stakeholders_table_name is null));
 
 -- TODO: template ids can be interned already
 

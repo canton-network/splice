@@ -34,7 +34,6 @@ import com.digitalasset.canton.tracing.TraceContext
 import com.google.protobuf.ByteString
 import io.circe.Decoder.Result
 import io.circe.HCursor
-import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.*
 import org.lfdecentralizedtrust.splice.store.db.{AcsJdbcTypes, AcsQueries, AdvisoryLockIds}
 import org.lfdecentralizedtrust.splice.store.events.SpliceCreatedEvent
 import org.lfdecentralizedtrust.splice.util.{EventId, ValueJsonCodecProtobuf as ProtobufCodec}
@@ -76,7 +75,7 @@ class AcsSnapshotStore(
   )(implicit tc: TraceContext): Future[Option[AcsSnapshot]] = {
     storage
       .querySingle(
-        sql"""select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance, data_table_name
+        sql"""select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance, creates_table_name, stakeholders_table_name
             from acs_snapshot
             where snapshot_record_time <= $before
               and migration_id = $migrationId
@@ -94,7 +93,7 @@ class AcsSnapshotStore(
   )(implicit tc: TraceContext): Future[Option[AcsSnapshot]] = {
 
     val select =
-      sql"select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance, data_table_name "
+      sql"select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance, creates_table_name, stakeholders_table_name "
     val orderLimit = sql" order by snapshot_record_time asc limit 1 "
     val sameMig = select ++ sql""" from acs_snapshot
             where snapshot_record_time > $after
@@ -248,20 +247,21 @@ class AcsSnapshotStore(
           sqlu"""delete from acs_snapshot where snapshot_record_time = ${snapshot.snapshotRecordTime}""",
           sqlu"""delete from acs_snapshot_data where row_id between ${snapshot.firstRowId} and ${snapshot.lastRowId}""",
         )
-      case table: PerTableAcsSnapshot =>
-        DBIOAction.seq(
-          sqlu"""delete from acs_snapshot where snapshot_record_time = ${snapshot.snapshotRecordTime}""",
-          AdvisoryLocks.withDdlLock(sqlu"""drop table #${AcsTableDDL.acsSnapshotCreatesTableName(
-              historyId,
-              table.snapshotRecordTime,
-            )};"""),
-          AdvisoryLocks.withDdlLock(
-            sqlu"""drop table #${AcsTableDDL.acsSnapshotStakeholdersTableName(
-                historyId,
-                table.snapshotRecordTime,
-              )};"""
-          ),
-        )
+      case _: PerTableAcsSnapshot =>
+        for {
+          tableNames <-
+            sql"""delete from acs_snapshot where snapshot_record_time = ${snapshot.snapshotRecordTime} returning creates_table_name, stakeholders_table_name"""
+              .as[(String, String)]
+              .headOption
+          _ <- tableNames match {
+            case Some((createsTableName, stakeholdersTableName)) =>
+              DBIO.seq(
+                AdvisoryLocks.withDdlLock(sqlu"drop table if exists #$createsTableName"),
+                AdvisoryLocks.withDdlLock(sqlu"drop table if exists #$stakeholdersTableName"),
+              )
+            case None => DBIO.successful(())
+          }
+        } yield ()
     }
     storage.queryAndUpdate(statement.transactionally, "deleteSnapshot")
   }
@@ -277,7 +277,7 @@ class AcsSnapshotStore(
     for {
       snapshot <- storage
         .querySingle(
-          sql"""select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance, data_table_name
+          sql"""select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance, creates_table_name, stakeholders_table_name
             from acs_snapshot
             where snapshot_record_time = $snapshot
               and migration_id = $migrationId
@@ -327,10 +327,8 @@ class AcsSnapshotStore(
         SpliceCreatedEvent,
     )
   ]] = {
-    val createsTableName =
-      AcsTableDDL.acsSnapshotCreatesTableName(historyId, snapshot.snapshotRecordTime)
-    val stakeholdersTableName =
-      AcsTableDDL.acsSnapshotStakeholdersTableName(historyId, snapshot.snapshotRecordTime)
+    val createsTableName = snapshot.createsTableName
+    val stakeholdersTableName = snapshot.stakeholdersTableName
     val afterFilter = after.fold(sql"") {
       case QueryAcsSnapshotPaginationToken.CreatedAtContractIdAcsSnapshotPaginationToken(
             createdAt,
@@ -848,9 +846,9 @@ class AcsSnapshotStore(
       nextSnapshotTargetRecordTime: CantonTimestamp,
   )(implicit tc: TraceContext) = {
     val createsTableName =
-      AcsTableDDL.acsSnapshotCreatesTableName(historyId, snapshot.targetRecordTime)
+      s"acs_snapshot_creates_${historyId}_${snapshot.targetRecordTime.toEpochMilli}"
     val stakeholdersTableName =
-      AcsTableDDL.acsSnapshotStakeholdersTableName(historyId, snapshot.targetRecordTime)
+      s"acs_snapshot_stakeholders_${historyId}_${snapshot.targetRecordTime.toEpochMilli}"
 
     for {
       _ <- sqlu"create table #$createsTableName (like acs_snapshot_creates_template including all)"
@@ -891,7 +889,8 @@ class AcsSnapshotStore(
           last_row_id,
           unlocked_amulet_balance,
           locked_amulet_balance,
-          data_table_name
+          creates_table_name,
+          stakeholders_table_name
         )
         values (
           ${snapshot.recordTime},
@@ -901,7 +900,8 @@ class AcsSnapshotStore(
           null,
           ${unlocked_amulet_balance},
           ${locked_amulet_balance},
-          ${createsTableName}
+          ${createsTableName},
+          ${stakeholdersTableName}
         )
        """
 
@@ -1276,7 +1276,8 @@ object AcsSnapshotStore {
       snapshotRecordTime: CantonTimestamp,
       migrationId: Long,
       historyId: Long,
-      dataTableName: String,
+      createsTableName: String,
+      stakeholdersTableName: String,
       unlockedAmuletBalance: Option[BigDecimal],
       lockedAmuletBalance: Option[BigDecimal],
   ) extends AcsSnapshot {
@@ -1285,7 +1286,8 @@ object AcsSnapshotStore {
       param("snapshotRecordTime", _.snapshotRecordTime),
       param("migrationId", _.migrationId),
       param("historyId", _.historyId),
-      param("dataTableName", _.dataTableName.singleQuoted),
+      param("createsTableName", _.createsTableName.singleQuoted),
+      param("stakeholdersTableName", _.stakeholdersTableName.singleQuoted),
       param("unlockedAmuletBalance", _.unlockedAmuletBalance),
       param("lockedAmuletBalance", _.lockedAmuletBalance),
     )
@@ -1300,9 +1302,10 @@ object AcsSnapshotStore {
       val lastRowId = r.<<[Option[Long]]
       val unlockedAmuletBalance = r.<<[Option[BigDecimal]]
       val lockedAmuletBalance = r.<<[Option[BigDecimal]]
-      val dataTableName = r.<<[Option[String]]
-      (firstRowId, lastRowId, dataTableName) match {
-        case (Some(first), Some(last), None) =>
+      val createsTableName = r.<<[Option[String]]
+      val stakeholdersTableName = r.<<[Option[String]]
+      (firstRowId, lastRowId, createsTableName, stakeholdersTableName) match {
+        case (Some(first), Some(last), None, None) =>
           LegacyAcsSnapshot(
             snapshotRecordTime,
             migrationId,
@@ -1312,18 +1315,19 @@ object AcsSnapshotStore {
             unlockedAmuletBalance,
             lockedAmuletBalance,
           )
-        case (None, None, Some(tableName)) =>
+        case (None, None, Some(createsTableName), Some(stakeholdersTableName)) =>
           PerTableAcsSnapshot(
             snapshotRecordTime,
             migrationId,
             historyId,
-            tableName,
+            createsTableName,
+            stakeholdersTableName,
             unlockedAmuletBalance,
             lockedAmuletBalance,
           )
         case _ =>
           throw new IllegalStateException(
-            s"Invalid ACS snapshot row: recordTime=$snapshotRecordTime firstRowId=$firstRowId, lastRowId=$lastRowId, dataTableName=$dataTableName. " +
+            s"Invalid ACS snapshot row: recordTime=$snapshotRecordTime firstRowId=$firstRowId, lastRowId=$lastRowId, createsTableName=$createsTableName, stakeholdersTableName=$stakeholdersTableName. " +
               s"The constraint 'legacy_or_per_snapshot' should make this impossible."
           )
       }
@@ -1451,14 +1455,6 @@ object AcsSnapshotStore {
         entry =>
           Some(entry.getOrElse(summaryZero).addLockedAmulet(amulet, asOfRound))
       })
-  }
-
-  object AcsTableDDL {
-    def acsSnapshotCreatesTableName(historyId: Long, snapshotRecordTime: CantonTimestamp) =
-      s"acs_snapshot_creates_${historyId}_${snapshotRecordTime.toEpochMilli}"
-
-    def acsSnapshotStakeholdersTableName(historyId: Long, snapshotRecordTime: CantonTimestamp) =
-      s"acs_snapshot_stakeholders_${historyId}_${snapshotRecordTime.toEpochMilli}"
   }
 
   def apply(
