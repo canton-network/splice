@@ -12,3 +12,11 @@ release-notes:: Upcoming
  - Validator App
 
   - Fix a bug where the Scan proxy was missing Token Standard V2 endpoints for allocation-instruction and transfer-instruction.
+
+ - Helm
+
+    - The ``splice-validator`` chart now supports configuring Kubernetes resource names
+      via ``appLabels.validatorApp``, ``appLabels.walletWebUi``, ``appLabels.ansWebUi``,
+      ``auth.secretName``, ``validatorWebUi.secretName``, and ``ansWebUi.secretName``.
+      All values default to the existing names, so this change is fully backward compatible.
+
