@@ -522,7 +522,7 @@ testMintingDelegation_AssignAndMint_rejectsDelegateOwnCoupon = do
 
   beneficiaryCoupon <- submit app.dso $ createCmd RewardCouponV2 with
     dso = app.dso
-    provider = beneficiary        -- primary: passes your MintingDelegation guard
+    provider = beneficiary
     beneficiary = None
     amount = 100.0
     round = openRound.round
@@ -530,7 +530,7 @@ testMintingDelegation_AssignAndMint_rejectsDelegateOwnCoupon = do
     expiresAt = now `addRelTime` hours 36
 
   submitMustFail''
-    (expectMessageContains "Contract group identifier mismatch")   -- confirm RED-first
+    (expectMessageContains "Contract group identifier mismatch")
     (actAs delegate <> readAs beneficiary <> readAs extraBeneficiary <> readAs app.dso)
     $ exerciseCmd mintingDelegationCid MintingDelegation_AssignAndMint with
         couponCid = toInterfaceContractId beneficiaryCoupon
