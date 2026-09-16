@@ -42,16 +42,15 @@ output for these jobs.
 
 ## Ref -> run -> job mapping
 
-The cn-test-failures repo is not readable from this sandbox, so refs given only as issue URLs (10135,
-10136, 10143) were mapped by elimination: issue numbers are sequential, 10139 is the 05:00Z nightly, so
-10135/10136 are the two failed post-merge runs just before it (the 03:43Z release-line backports), and
-10143 is the third failed job of run 35072334729 (the one not covered by 10141/10142). Raymond confirmed
-2026-09-16 that 10136 is the static_tests failure, so 10135 is the wall-clock-time (8) one (the first draft
-had these two swapped).
+The cn-test-failures repo is not readable from this sandbox. Refs given only as issue URLs were first mapped
+by elimination and then confirmed by Raymond on 2026-09-16: (35052914872, 10136), (35052864473, 10137),
+(35057829498, 10139). Ref 10135 is therefore NOT one of the two release-line backport runs; its run is still
+unknown (see below). 10143 remains inferred as the third failed job of run 35072334729.
 
 | My ref | GH run | Branch / sha | Failed job | Mapping |
 |--------|--------|--------------|------------|---------|
-| 10135 | 35052864473 | release-line-0.8.0 7cafbf8ef1 (#7314 backport of #7310) | 104657010559 `wall-clock-time (8)` | inferred (by elimination) |
+| 10135 | unknown | - | - | UNMAPPED: not a 09-16 03:43Z backport run; awaiting run URL |
+| 10137 | 35052864473 | release-line-0.8.0 7cafbf8ef1 (#7314 backport of #7310) | 104657010559 `wall-clock-time (8)` | confirmed by Raymond |
 | 10136 | 35052914872 | release-line-0.8.1 66a5e3f02b (#7313 backport of #7310) | 104656956648 `static_tests` | confirmed by Raymond |
 | 10139 | 35057829498 | main b5d5645c56 (nightly "Wall Clock Tests with Postgres 14") | 104671796734 `wall-clock-time (2)` | given |
 | 10140 | 35067363744 | main 8c20340d0d (#7322) | 104700886275 `simtime (1)` | given |
@@ -63,8 +62,8 @@ had these two swapped).
 
 | My ref | GH run / job | Failure (one line) | Category | Resolution / status | Duplicate of |
 |--------|--------------|--------------------|----------|---------------------|--------------|
-| 10135 | 35052864473 wall-clock-time (8) (release-line-0.8.0, canton 3.5.16) | SvOnboardingIntegrationTest: `initDso()` times out after 5 min on sv3. SEQ::sv3 joins the BFT ordering topology (size = strongQuorum = 3) at epoch 21 while two epochs behind and still waiting for onboarding state; it receives all of epoch 20 but never enters 21; nothing is ordered again. sv3's app then spins on "No traffic state found for MED::sv3" from its own frozen sequencer. Teardown plugin `sys.exit(1)`s, so no ScalaTest report. | real bug, canton BFT onboarding | Packet `10135-sv3-init-timeout-bft-onboarding-wedge.md`. Same mechanism and log signatures as 10048 (2->3 membership step with the newcomer two epochs behind; the "named leader before init" detail in 10048 is incidental). New finding: sv3's SequencerSynchronizerState became effective 170 us after epoch 19's topology tick, which slipped its membership from epoch 20 to 21. Hand to Canton BFT team; splice mitigation options in packet. | 10048 family (BFT onboarding, 27+ CI occurrences) |
 | 10136 | 35052914872 static_tests (release-line-0.8.1) | `apps-app / scalafixAll` dies with "Unable to load symbol table: .../classes/splice-wallet-0.1.22.dar.<uuid>.tmp": scalafix indexed the classes dir while `copyResources` was atomically staging a dar into it. The "ErrorResponse.scala contained different content" lines are guardrail noise present in passing runs too. | build race, FIXED on main, missing backport | Packet `10136-scalafix-dar-copy-race.md`. Raymond identified it: #7176 (4031327bc4, 2026-09-10, `compile dependsOn copyResources` for apps-app) fixed exactly this on main and was never backported; release-line-0.8.1, 0.8.0 and 0.7.5 lack it (compare API `diverged`, no copyResources ordering in their build.sbt, no backport PR). Backport #7176 to the release lines; rerun until then. | #7176 (main, fixed) |
+| 10137 | 35052864473 wall-clock-time (8) (release-line-0.8.0, canton 3.5.16) | SvOnboardingIntegrationTest: `initDso()` times out after 5 min on sv3. SEQ::sv3 joins the BFT ordering topology (size = strongQuorum = 3) at epoch 21 while two epochs behind and still waiting for onboarding state; it receives all of epoch 20 but never enters 21; nothing is ordered again. sv3's app then spins on "No traffic state found for MED::sv3" from its own frozen sequencer. Teardown plugin `sys.exit(1)`s, so no ScalaTest report. | real bug, canton BFT onboarding | Packet `10137-sv3-init-timeout-bft-onboarding-wedge.md`. Same mechanism and log signatures as 10048 (2->3 membership step with the newcomer two epochs behind; the "named leader before init" detail in 10048 is incidental). New finding: sv3's SequencerSynchronizerState became effective 170 us after epoch 19's topology tick, which slipped its membership from epoch 20 to 21. Hand to Canton BFT team; splice mitigation options in packet. | 10048 family (BFT onboarding, 27+ CI occurrences) |
 | 10139 | 35057829498 wall-clock-time (2) (nightly PG14, main) | SvStateManagementIntegrationTest teardown: ResetDecentralizedNamespace waits 60 s for its proposals, then `sys.exit(1)` kills sbt (no report, checkErrors skipped). Proposals missed their 20 s max sequencing time because globalSequencerSv1's reference driver `insert block` sat in a PostgreSQL SQLSTATE 40001 serialization-failure retry loop (backoff up to 7.9 s), then all four sequencers exhausted their 8-connection DB pool and disconnected all members. 5 tests passed, none failed, 5 never ran. | infra / canton reference sequencer contention | Packet `10139-reset-namespace-sequencer-insert-block-storm.md`. Flake, not a regression. Test-infra: drop `sys.exit(1)` in ResetTopologyStatePlugin, allow more than 60 s or resubmit after a `not sequenced` timeout. Canton/infra: 40001 storm rises 93/min -> 346/min with four reference-driver writers on one Postgres; cap the backoff, raise the pool, or fewer sequencers per shard. | none; check whether 10094's sequencer stall shows the same `insert block` 40001 + pool-exhaustion signature |
 | 10140 | 35067363744 simtime (1) (main) | checkErrors WARN: aliceParticipant got `ABORTED/SERVER_OVERLOADED` from globalSequencerSv1 on `DownloadTopologyStateForInitHash`. The limit is splice's own test-only `public-api.limits` = 3 in `apps/app/src/test/resources/include/sequencers.conf`; sv4, sv3 and splitwellValidator held the 3 slots and alice connected 8 ms later. Alice retried after 1 s and finished topology init 1.17 s later. All 11 tests passed. | checkErrors WARN, splice test config | Packet `10140-sequencer-overloaded-topology-init.md`. Flake. Fix either: raise the test-only limit to >= participant count (7), or add a scoped ignore next to the existing `SEQUENCER_OVERLOADED` one in canton_log.ignore.txt. Optional upstream: Canton logs a retried refusal at WARN client-side while the server logs it at INFO. | none; same failure mode family as 10094/10121/10084 (all tests pass, one WARN fails checkErrors) |
 | 10141 | 35072334729 ui_tests (main) | SV frontend vitest exits 1 with 269/269 tests passed: an un-awaited `waitFor` in `set-amulet-rules-form.test.tsx:71-85` (sync test, 1000 ms override) rejects after its test finished ("Unhandled Rejection", `AssertionError: expected 20 to be greater than 65`). The 681 "Invalid URL: h..." lines, 67 MSW unhandled requests, ENOTFOUND, 503/500 lines all appear with identical counts in passing runs. | frontend unit test flake | Packet `10141-sv-ui-unawaited-waitfor.md`. Latent since #1945 (2025-08), exposed by a ~1.8x slower runner (SV suite 115 s vs 63 s). Fix: make the test `async`, `await` the `waitFor`, drop the 1000 ms override. ui_tests passed in the main runs before and after. Owner: SV UI. | none |
@@ -74,11 +73,11 @@ had these two swapped).
 ## Cross-cutting observations
 
 - `sys.exit(1)` in ResetTopologyStatePlugin (ResetDecentralizedNamespace) destroyed the evidence in both
-  10135 and 10139: no ScalaTest summary, no junit XML, checkErrors skipped. Same pattern noted for the
+  10137 and 10139: no ScalaTest summary, no junit XML, checkErrors skipped. Same pattern noted for the
   wall-clock shards in the 2026-09-08 triage. Making the plugin fail the suite instead is a cheap,
   independent win.
 - Three of seven (10140, 10142, plus 10121/10094/10084 from earlier) are "all tests pass, one log line
   fails checkErrors". 10142 is the only one with a fix already written.
-- 10135 confirms the BFT onboarding wedge family is still live on release-line-0.8.0 (canton 3.5.16).
-- Runtime canton versions: 10135/10136 (release-line-0.8.x) 3.5.16; 10139/10140/10141/10142/10143 (main)
+- 10137 confirms the BFT onboarding wedge family is still live on release-line-0.8.0 (canton 3.5.16).
+- Runtime canton versions: 10136/10137 (release-line-0.8.x) 3.5.16; 10139/10140/10141/10142/10143 (main)
   3.6.0-snapshot.20260910.20260.0.v90621933. `canton/VERSION` says 3.5.7-SNAPSHOT at all these shas.

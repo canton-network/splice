@@ -4,10 +4,8 @@ Branch release-line-0.8.1, sha 66a5e3f02b "Backport PR #7310 to release-line-0.8
 post-merge CI 2026-09-16T03:43Z. One failed job: static_tests. No run artifacts; the only evidence is
 the job console log.
 
-Ref mapping is inferred: the issue URL alone was given; the two failed post-merge runs right before
-ref 10139 (05:00Z) are the two release-line backport runs at 03:43Z, so 10135/10136 map to those.
-Raymond confirmed 2026-09-16: 10136 = this static_tests failure on the release-line-0.8.1 run
-(an earlier draft of this packet had 10135/10136 swapped).
+Ref mapping: Raymond confirmed 2026-09-16 that this run (35052914872, release-line-0.8.1, static_tests) is
+ref 10136. An earlier draft of this packet carried 10135.
 
 ## Categorization
 
@@ -245,7 +243,7 @@ release-line-0.8.0
 104657010559 ci / scala_test_wall_clock_time / wall-clock-time (8) failure
 run 34992614501 job 104460789587 success
 ```
-(The 0.8.0 run failed a different job, wall-clock-time(8); that is ref 10135, packet `10135-sv3-init-timeout-bft-onboarding-wedge.md`.)
+(The 0.8.0 run failed a different job, wall-clock-time(8); that is ref 10137, packet `10137-sv3-init-timeout-bft-onboarding-wedge.md`.)
 
 The passing 0.8.0 static_tests log has the identical guardrail warnings and no symbol-table error, and the
 same interleaving of resource generation inside `scalafixAll`; the race window is present on every run, the
@@ -382,7 +380,7 @@ Rerunning the failed job is the immediate workaround; the fix is the #7176 backp
   under `apps/app/target/scala-2.13/classes/`.
 - No cn-test-failures issue could be searched from this sandbox (`gh search issues` -> no permission on
   DACH-NY/cn-test-failures). Earlier occurrences on release lines will show the same signature.
-- 10135: the sibling release-line-0.8.0 run 35052864473, failed job wall-clock-time(8), a
+- 10137: the sibling release-line-0.8.0 run 35052864473, failed job wall-clock-time(8), a
   different failure.
 - Not related: the guardrail duplicate-definition warnings for `apps-scan` (ScalaServer + ScalaClient into
   the same package). Cosmetic, deterministic, present on every build.
