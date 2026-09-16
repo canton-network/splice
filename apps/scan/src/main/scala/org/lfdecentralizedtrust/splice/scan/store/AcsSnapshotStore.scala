@@ -815,18 +815,20 @@ class AcsSnapshotStore(
       table: IncrementalAcsSnapshotTable,
       snapshot: IncrementalAcsSnapshot,
       nextSnapshotTargetRecordTime: CantonTimestamp,
-  )(implicit tc: TraceContext): Future[Option[Int]] = {
+  )(implicit
+      tc: TraceContext
+  ): Future[Option[AcsSnapshotStore.SaveIncrementalAcsSnapshotInsertedRows]] = {
     logger.debug(
       s"Saving incremental snapshot ${snapshot.snapshotId} at ${snapshot.recordTime}"
     )
     assert(snapshot.tableName == table.tableName)
     assert(snapshot.historyId == historyId)
     assert(snapshot.recordTime == snapshot.targetRecordTime)
-    val statement: DBIO[Int] = table match {
-      case IncrementalAcsSnapshotTable.NextV2 =>
-        saveV2IncrementalSnapshot(table, snapshot, nextSnapshotTargetRecordTime)(tc)
+    val statement: DBIO[AcsSnapshotStore.SaveIncrementalAcsSnapshotInsertedRows] = table match {
       case IncrementalAcsSnapshotTable.Next | IncrementalAcsSnapshotTable.Backfill =>
         saveLegacyIncrementalSnapshotStatement(table, snapshot, nextSnapshotTargetRecordTime)
+      case IncrementalAcsSnapshotTable.NextV2 =>
+        saveV2IncrementalSnapshot(table, snapshot, nextSnapshotTargetRecordTime)(tc)
     }
     storage.queryAndUpdate(
       withExclusiveSnapshotDataLock(
@@ -844,7 +846,7 @@ class AcsSnapshotStore(
       table: IncrementalAcsSnapshotTable,
       snapshot: IncrementalAcsSnapshot,
       nextSnapshotTargetRecordTime: CantonTimestamp,
-  )(implicit tc: TraceContext) = {
+  )(implicit tc: TraceContext): DBIO[AcsSnapshotStore.SaveIncrementalAcsSnapshotInsertedRows] = {
     val createsTableName =
       s"acs_snapshot_creates_${historyId}_${snapshot.targetRecordTime.toEpochMilli}"
     val stakeholdersTableName =
@@ -917,7 +919,10 @@ class AcsSnapshotStore(
           s" Next snapshot target record time: $nextSnapshotTargetRecordTime"
       )
       // This doesn't make much sense anymore
-      copiedCreateRows
+      AcsSnapshotStore.SaveIncrementalAcsSnapshotInsertedRows(
+        copiedCreateRows,
+        copiedStakeholderRows,
+      )
     }
   }
 
@@ -925,7 +930,7 @@ class AcsSnapshotStore(
       table: IncrementalAcsSnapshotTable,
       snapshot: IncrementalAcsSnapshot,
       nextSnapshotTargetRecordTime: CantonTimestamp,
-  )(implicit tc: TraceContext): DBIOAction[Int, NoStream, Effect.Read & Effect.Write] = {
+  )(implicit tc: TraceContext): DBIO[AcsSnapshotStore.SaveIncrementalAcsSnapshotInsertedRows] = {
     for {
       // Note: Only one client can write to acs_snapshot_data at a time, enforced via advisory locks.
       // We therefore don't need to worry about concurrent writes between getting max_row_id_before and using it.
@@ -935,7 +940,7 @@ class AcsSnapshotStore(
 
       // Copy rows from incremental snapshot to acs_snapshot_data.
       // This is the main, slow part of this operation.
-      copied_rows <- sqlu"""
+      copiedRows <- sqlu"""
         insert into acs_snapshot_data (create_id, template_id, stakeholder)
         select s.create_id, s.template_id, stakeholder
         from #${table.tableName} s
@@ -989,10 +994,11 @@ class AcsSnapshotStore(
       """
     } yield {
       logger.debug(
-        s"Saved incremental snapshot ${snapshot.snapshotId} at ${snapshot.recordTime} with $copied_rows rows." +
+        s"Saved incremental snapshot ${snapshot.snapshotId} at ${snapshot.recordTime} with $copiedRows rows." +
           s" Next snapshot target record time: $nextSnapshotTargetRecordTime"
       )
-      copied_rows
+      // Best effort at reporting numbers
+      AcsSnapshotStore.SaveIncrementalAcsSnapshotInsertedRows(copiedRows, copiedRows)
     }
   }
 
@@ -1455,6 +1461,16 @@ object AcsSnapshotStore {
         entry =>
           Some(entry.getOrElse(summaryZero).addLockedAmulet(amulet, asOfRound))
       })
+  }
+
+  case class SaveIncrementalAcsSnapshotInsertedRows(
+      createRows: Int,
+      stakeholderRows: Int,
+  )
+
+  object SaveIncrementalAcsSnapshotInsertedRows {
+    implicit val rowsAltered: DbStorage.RowsAltered[SaveIncrementalAcsSnapshotInsertedRows] =
+      (a: SaveIncrementalAcsSnapshotInsertedRows) => a.stakeholderRows > 0 || a.createRows > 0
   }
 
   def apply(
