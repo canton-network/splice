@@ -28,6 +28,9 @@ function start_frontend() {
   local user=$3
   local node_name=$4
   local test_auth=$5
+  # Optional 6th arg: enable dApp mode (default false). When true, jsonnet emits
+  # dappMode { enabled, scanUrl, cip103RpcUrl } for CIP-103 wallet e2e tests.
+  local enable_dapp_mode="${6:-false}"
 
   local frontend_dir="${SPLICE_ROOT}/apps/${app}/frontend"
 
@@ -68,6 +71,8 @@ function start_frontend() {
     --tla-str app="$app" \
     --tla-str port="$port" \
     --tla-code spliceInstanceNames="$splice_instance_names" \
+    --tla-str enableDappMode="$enable_dapp_mode" \
+    --tla-str cip103RpcUrl="http://localhost:3030/api/v0/dapp" \
     "$SPLICE_ROOT/apps/app/src/test/resources/frontend-config.jsonnet" \
     >"$config_file"
 
@@ -99,6 +104,7 @@ function usage() {
   echo "  -a        run all frontends with canton-network-test auth0 tenant and no test auth"
   echo "  -v        run frontends with a shared validator for all users"
   echo "  -s        run frontends with two super validators for Sv*IntegrationTest in CI"
+  echo "  -D        also start SV UI in dApp mode on port 3213 (CIP-103 wallet e2e)"
   echo "  -t        start interactive/live vitest suites for frontends"
 }
 
@@ -107,9 +113,10 @@ daemon=0
 enable_test_auth="true"
 shared_validator_for_users=0
 two_svs=0
+dapp_mode_sv=0
 run_tests=0
 
-while getopts "hdapvsmtl" arg; do
+while getopts "hdapvsmtlD" arg; do
   case ${arg} in
     h)
       usage
@@ -126,6 +133,9 @@ while getopts "hdapvsmtl" arg; do
       ;;
     s)
       two_svs=1
+      ;;
+    D)
+      dapp_mode_sv=1
       ;;
     t)
       run_tests=1
@@ -200,6 +210,11 @@ function start_local_frontends() {
 
   if [ $two_svs -eq 1 ]; then
     start_frontend sv 3212 sv2 "sv2" $enable_test_auth
+  fi
+
+  if [ $dapp_mode_sv -eq 1 ]; then
+    # Same SV app / sv1 backend APIs, but with dappMode config for CIP-103 e2e.
+    start_frontend sv 3213 sv-dapp "sv1" $enable_test_auth true
   fi
 
   # Scan

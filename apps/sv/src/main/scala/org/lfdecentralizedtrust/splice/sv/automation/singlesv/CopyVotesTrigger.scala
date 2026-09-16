@@ -120,6 +120,7 @@ class CopyVotesTrigger(
                       reason,
                       Optional.empty(),
                     ),
+                    Optional.empty(), // voterParty
                   )
                 )
                 _ <- connection

@@ -490,6 +490,10 @@ case class SvAppBackendConfig(
     // If set, automatically copies governance votes (VoteRequests) from the named SV.
     // The value is the SV name as it appears in DsoRules.svs (e.g. "Digital-Asset-2").
     copyVotesFrom: Option[String] = None,
+    // The party authorized to request votes on this SV's behalf via a VoteDelegation
+    // contract. The who-can-vote distinction is intentionally NOT encoded in Daml; this
+    // identity is read on the app side so it can be relocated to a different source later.
+    voterPartyId: Option[PartyId] = None,
     // If true, we check that topology on mediator and sequencer is the same after
     // a migration. This can be a useful assertion but is very slow so should not be enabled on clusters with large topology state.
     validateTopologyAfterMigration: Boolean = false,

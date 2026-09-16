@@ -1,0 +1,52 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+module Splice.DsoRules.VoteDelegation where
+
+import Splice.DsoRules
+import Splice.Types (ForDso(..))
+import Splice.Util
+
+data VoteDelegation_RequestVoteResult = VoteDelegation_RequestVoteResult with
+    voteRequest : ContractId VoteRequest
+  deriving (Eq, Show, Serializable)
+
+data VoteDelegation_CastVoteResult = VoteDelegation_CastVoteResult with
+    voteRequest : ContractId VoteRequest
+  deriving (Eq, Show, Serializable)
+
+template VoteDelegation
+  with
+    dso : Party
+    sv : Party
+    voterParty : Party -- ^ The party that can vote on behalf of the SV through the SV dApp.
+  where
+    signatory sv
+    observer voterParty
+
+    nonconsuming choice VoteDelegation_RequestVote : VoteDelegation_RequestVoteResult
+      with
+        dsoRulesCid : ContractId DsoRules
+        requestVote : DsoRules_RequestVote
+      controller voterParty
+      do
+        require "Delegated request is for the delegating SV" (requestVote.requester == sv)
+        require "Delegated request carries this delegation's voter party" (requestVote.voterParty == Some voterParty)
+        fetchPublicReferenceData (ForDso dso) dsoRulesCid (DsoRules_Fetch with p = voterParty)
+        result <- exercise dsoRulesCid requestVote
+        pure VoteDelegation_RequestVoteResult with voteRequest = result.voteRequest
+
+    nonconsuming choice VoteDelegation_CastVote : VoteDelegation_CastVoteResult
+      with
+        dsoRulesCid : ContractId DsoRules
+        castVote : DsoRules_CastVote
+      controller voterParty
+      do
+        require "Delegated vote is cast on behalf of the delegating SV" (castVote.vote.sv == sv)
+        require "Delegated vote carries this delegation's voter party" (castVote.voterParty == Some voterParty)
+        fetchPublicReferenceData (ForDso dso) dsoRulesCid (DsoRules_Fetch with p = voterParty)
+        result <- exercise dsoRulesCid castVote
+        pure VoteDelegation_CastVoteResult with voteRequest = result.voteRequest
+
+instance HasCheckedFetch VoteDelegation ForDso where
+  contractGroupId VoteDelegation {..} = ForDso with dso

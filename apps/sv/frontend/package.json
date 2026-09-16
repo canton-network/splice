@@ -15,6 +15,8 @@
   },
   "dependencies": {
     "@braintree/sanitize-url": "^7.1.1",
+    "@canton-network/canton-json-api-v2-openapi": "file:../../../token-standard/dependencies/canton-json-api-v2/openapi-ts-client",
+    "@canton-network/dapp-sdk": "^1.4.0",
     "@daml/types": "^3.5.2",
     "@emotion/react": "^11.11.1",
     "@emotion/styled": "^11.11.0",
@@ -23,6 +25,8 @@
     "@mui/x-data-grid": "^8.14.1",
     "@mui/x-date-pickers": "^8.14.1",
     "@tanstack/react-form": "^1.23.0",
+    "@walletconnect/sign-client": "^2.23.10",
+    "@walletconnect/types": "^2.23.10",
     "dayjs": "^1.11.9",
     "dompurify": "^3.4.2",
     "jose": "^4.15.9",
@@ -40,10 +44,10 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@eslint/js": "^9.24.0",
     "@canton-network/splice-common-test-handlers": "^0.1.0",
     "@canton-network/splice-common-test-utils": "^0.1.0",
     "@canton-network/splice-common-test-vite-utils": "^0.1.0",
+    "@eslint/js": "^9.24.0",
     "@testing-library/jest-dom": "^6.6.2",
     "@testing-library/react": "^16.0.1",
     "@testing-library/user-event": "^14.4.3",
