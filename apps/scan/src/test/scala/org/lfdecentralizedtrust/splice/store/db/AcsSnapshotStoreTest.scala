@@ -1466,7 +1466,11 @@ class TablePerAcsSnapshotStoreTest extends AcsSnapshotStoreTest {
           c3,
           timestamp1.minusSeconds(1L),
         )
-        _ <- store.insertNewSnapshot(IncrementalAcsSnapshotTable.Next, DefaultMigrationId, timestamp1)
+        _ <- store.insertNewSnapshot(
+          IncrementalAcsSnapshotTable.Next,
+          DefaultMigrationId,
+          timestamp1,
+        )
         snapshot1 <- store.lookupSnapshotAtOrBefore(
           DefaultMigrationId,
           CantonTimestamp.MaxValue,
