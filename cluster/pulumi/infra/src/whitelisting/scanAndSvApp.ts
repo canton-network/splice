@@ -15,7 +15,7 @@ function hostsFor(prefix: string): string[] {
   return allSvsToDeployBasic.flatMap(sv => [
     `${prefix}.${sv.ingressName}.${CLUSTER_HOSTNAME}`,
     // include the port for Istio IP allow policies, which require the full host:port to match
-    `${prefix}.${sv.ingressName}.${CLUSTER_HOSTNAME}:443`,
+    `${prefix}.${sv.ingressName}.${CLUSTER_HOSTNAME}:*`,
   ]);
 }
 

@@ -2693,11 +2693,11 @@
                 "operation": {
                   "hosts": [
                     "scan.sv-2.mock.global.canton.network.digitalasset.com",
-                    "scan.sv-2.mock.global.canton.network.digitalasset.com:443",
+                    "scan.sv-2.mock.global.canton.network.digitalasset.com:*",
                     "scan.sv-1.mock.global.canton.network.digitalasset.com",
-                    "scan.sv-1.mock.global.canton.network.digitalasset.com:443",
+                    "scan.sv-1.mock.global.canton.network.digitalasset.com:*",
                     "scan.sv.mock.global.canton.network.digitalasset.com",
-                    "scan.sv.mock.global.canton.network.digitalasset.com:443"
+                    "scan.sv.mock.global.canton.network.digitalasset.com:*"
                   ]
                 }
               }
@@ -3046,52 +3046,28 @@
               {
                 "operation": {
                   "hosts": [
-                    "sequencer-9.sv-2.mock.network.canton.global",
-                    "sequencer-9.sv-2.mock.network.canton.global:*",
                     "sequencer-9.sv-2.mock.global.canton.network.digitalasset.com",
                     "sequencer-9.sv-2.mock.global.canton.network.digitalasset.com:*",
-                    "sequencer-8.sv-2.mock.network.canton.global",
-                    "sequencer-8.sv-2.mock.network.canton.global:*",
                     "sequencer-8.sv-2.mock.global.canton.network.digitalasset.com",
                     "sequencer-8.sv-2.mock.global.canton.network.digitalasset.com:*",
-                    "sequencer-7.sv-2.mock.network.canton.global",
-                    "sequencer-7.sv-2.mock.network.canton.global:*",
                     "sequencer-7.sv-2.mock.global.canton.network.digitalasset.com",
                     "sequencer-7.sv-2.mock.global.canton.network.digitalasset.com:*",
-                    "sequencer-10.sv-2.mock.network.canton.global",
-                    "sequencer-10.sv-2.mock.network.canton.global:*",
                     "sequencer-10.sv-2.mock.global.canton.network.digitalasset.com",
                     "sequencer-10.sv-2.mock.global.canton.network.digitalasset.com:*",
-                    "sequencer-9.sv-1.mock.network.canton.global",
-                    "sequencer-9.sv-1.mock.network.canton.global:*",
                     "sequencer-9.sv-1.mock.global.canton.network.digitalasset.com",
                     "sequencer-9.sv-1.mock.global.canton.network.digitalasset.com:*",
-                    "sequencer-8.sv-1.mock.network.canton.global",
-                    "sequencer-8.sv-1.mock.network.canton.global:*",
                     "sequencer-8.sv-1.mock.global.canton.network.digitalasset.com",
                     "sequencer-8.sv-1.mock.global.canton.network.digitalasset.com:*",
-                    "sequencer-7.sv-1.mock.network.canton.global",
-                    "sequencer-7.sv-1.mock.network.canton.global:*",
                     "sequencer-7.sv-1.mock.global.canton.network.digitalasset.com",
                     "sequencer-7.sv-1.mock.global.canton.network.digitalasset.com:*",
-                    "sequencer-10.sv-1.mock.network.canton.global",
-                    "sequencer-10.sv-1.mock.network.canton.global:*",
                     "sequencer-10.sv-1.mock.global.canton.network.digitalasset.com",
                     "sequencer-10.sv-1.mock.global.canton.network.digitalasset.com:*",
-                    "sequencer-9.sv.mock.network.canton.global",
-                    "sequencer-9.sv.mock.network.canton.global:*",
                     "sequencer-9.sv.mock.global.canton.network.digitalasset.com",
                     "sequencer-9.sv.mock.global.canton.network.digitalasset.com:*",
-                    "sequencer-8.sv.mock.network.canton.global",
-                    "sequencer-8.sv.mock.network.canton.global:*",
                     "sequencer-8.sv.mock.global.canton.network.digitalasset.com",
                     "sequencer-8.sv.mock.global.canton.network.digitalasset.com:*",
-                    "sequencer-7.sv.mock.network.canton.global",
-                    "sequencer-7.sv.mock.network.canton.global:*",
                     "sequencer-7.sv.mock.global.canton.network.digitalasset.com",
                     "sequencer-7.sv.mock.global.canton.network.digitalasset.com:*",
-                    "sequencer-10.sv.mock.network.canton.global",
-                    "sequencer-10.sv.mock.network.canton.global:*",
                     "sequencer-10.sv.mock.global.canton.network.digitalasset.com",
                     "sequencer-10.sv.mock.global.canton.network.digitalasset.com:*"
                   ]
@@ -3393,11 +3369,11 @@
                 "operation": {
                   "hosts": [
                     "sv.sv-2.mock.global.canton.network.digitalasset.com",
-                    "sv.sv-2.mock.global.canton.network.digitalasset.com:443",
+                    "sv.sv-2.mock.global.canton.network.digitalasset.com:*",
                     "sv.sv-1.mock.global.canton.network.digitalasset.com",
-                    "sv.sv-1.mock.global.canton.network.digitalasset.com:443",
+                    "sv.sv-1.mock.global.canton.network.digitalasset.com:*",
                     "sv.sv.mock.global.canton.network.digitalasset.com",
-                    "sv.sv.mock.global.canton.network.digitalasset.com:443"
+                    "sv.sv.mock.global.canton.network.digitalasset.com:*"
                   ],
                   "paths": [
                     "/api/sv/v0/migration-id",
@@ -3460,11 +3436,11 @@
                 "operation": {
                   "hosts": [
                     "sv.sv-2.mock.global.canton.network.digitalasset.com",
-                    "sv.sv-2.mock.global.canton.network.digitalasset.com:443",
+                    "sv.sv-2.mock.global.canton.network.digitalasset.com:*",
                     "sv.sv-1.mock.global.canton.network.digitalasset.com",
-                    "sv.sv-1.mock.global.canton.network.digitalasset.com:443",
+                    "sv.sv-1.mock.global.canton.network.digitalasset.com:*",
                     "sv.sv.mock.global.canton.network.digitalasset.com",
-                    "sv.sv.mock.global.canton.network.digitalasset.com:443"
+                    "sv.sv.mock.global.canton.network.digitalasset.com:*"
                   ],
                   "paths": [
                     "/api/sv/v0/devnet/onboard/validator/prepare",
