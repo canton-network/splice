@@ -7,10 +7,6 @@ inputs:
   splice_root:
     description: "Path to splice repo"
     default: ${{ github.repository == 'DACH-NY/canton-network-internal' && 'splice' || '.' }}
-  use_pigz:
-    description: "Whether to use pigz for (de)compression in cache actions (falls back to gzip when false)"
-    required: false
-    default: 'true'
 outputs:
   cache_hits:
     description: "Cache hits"
@@ -31,7 +27,6 @@ runs:
       with:
         cache_version: ${{ inputs.cache_version }}
         splice_root: ${{ inputs.splice_root }}
-        use_pigz: ${{ inputs.use_pigz }}
 
     - name: Restore SBT cache
       id: sbt
@@ -46,7 +41,6 @@ runs:
       with:
         cache_version: ${{ inputs.cache_version }}
         splice_root: ${{ inputs.splice_root }}
-        use_pigz: ${{ inputs.use_pigz }}
 
     - name: Restore Daml artifacts
       id: daml
@@ -54,7 +48,6 @@ runs:
       with:
         cache_version: ${{ inputs.cache_version }}
         splice_root: ${{ inputs.splice_root }}
-        use_pigz: ${{ inputs.use_pigz }}
 
     - name: Collect cache hits
       id: cache_hits
