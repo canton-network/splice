@@ -506,8 +506,6 @@ testMintingDelegation_AssignAndMint_rejectsDelegateOwnCoupon = do
         featuredAppRight = None
   (amuletRulesCid, _) <- getAmuletRules app
 
-  -- Assign reward coupons to beneficiary and the extraBeneficiary, and mint beneficiary's share
-  let weights = [(beneficiary, 0.6), (extraBeneficiary, 0.4)]
   submitMustFail''
     (expectMessageContains "coupon provider must be the beneficiary")
     (actAs delegate <> readAs beneficiary <> readAs extraBeneficiary <> readAs app.dso)
@@ -515,7 +513,7 @@ testMintingDelegation_AssignAndMint_rejectsDelegateOwnCoupon = do
       couponCid = toInterfaceContractId coupon1Cid
       assignBeneficiaries = Api.RewardAssignmentV1.RewardCoupon_AssignBeneficiaries with
         additionalCoupons = [toInterfaceContractId coupon2Cid]
-        newBeneficiaries = map (uncurry Api.RewardAssignmentV1.RewardBeneficiary) weights
+        newBeneficiaries = [Api.RewardAssignmentV1.RewardBeneficiary extraBeneficiary 1.0]
         extraArgs = emptyExtraArgs
       inputs = []
       context = PaymentTransferContext with
@@ -538,7 +536,7 @@ testMintingDelegation_AssignAndMint_rejectsDelegateOwnCoupon = do
         couponCid = toInterfaceContractId beneficiaryCoupon
         assignBeneficiaries = Api.RewardAssignmentV1.RewardCoupon_AssignBeneficiaries with
           additionalCoupons = [toInterfaceContractId coupon2Cid]   -- delegate-owned
-          newBeneficiaries = map (uncurry Api.RewardAssignmentV1.RewardBeneficiary) weights
+          newBeneficiaries = [Api.RewardAssignmentV1.RewardBeneficiary extraBeneficiary 1.0]
           extraArgs = emptyExtraArgs
         inputs = []
         context = PaymentTransferContext with context; amuletRules = amuletRulesCid
@@ -566,12 +564,6 @@ testMintingDelegation_Mint_rejectsDelegateOwnedInput = do
   MintingDelegationProposal_AcceptResult mintingDelegationCid <- submit delegate $ exerciseCmd proposalCid MintingDelegationProposal_Accept with
     existingDelegationCid = None
 
-  -- Create a ValidatorRight for beneficiary (needed for ValidatorRewardCoupon)
-  validatorRightCid <- submit beneficiary $ createCmd ValidatorRight with
-    dso = app.dso
-    user = beneficiary
-    validator = beneficiary
-
   (_, openRound) <- getLatestOpenRound app
 
   -- Wait for rounds to advance so coupons can be minted
@@ -586,7 +578,7 @@ testMintingDelegation_Mint_rejectsDelegateOwnedInput = do
         openMiningRound = openMiningRoundCid
         issuingMiningRounds = Map.fromList
           [ (round.round, roundCid) | (roundCid, round) <- issuingRounds, round.opensAt <= now2 ]
-        validatorRights = Map.fromList [(beneficiary, validatorRightCid)]
+        validatorRights = Map.fromList []
         featuredAppRight = None
   (amuletRulesCid, _) <- getAmuletRules app
 
