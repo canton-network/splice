@@ -92,8 +92,7 @@ ansWebUi:
   enabled: true
   imageName: "ans-web-ui"
   # Optional: override the K8s secret name this component reads OIDC credentials from.
-  # Default: "splice-app-cns-ui-auth". Set to a unique value when running multiple
-  # validator instances in the same namespace.
+  # Default: "splice-app-cns-ui-auth".
   secretName: ""
   # Optional: Provide raw strings to override the default Kubernetes secret injection.
   # This is useful for integrating with external secret management tools.
@@ -105,8 +104,7 @@ ansWebUi:
 validatorWebUi:
   enabled: true
   # Optional: override the K8s secret name this component reads OIDC credentials from.
-  # Default: "splice-app-wallet-ui-auth". Set to a unique value when running multiple
-  # validator instances in the same namespace.
+  # Default: "splice-app-wallet-ui-auth".
   secretName: ""
   # Optional: Provide raw strings to override the default Kubernetes secret injection.
   # This is useful for integrating with external secret management tools.
@@ -120,8 +118,7 @@ disableAuth: false
 
 #auth:
 #  # Optional: override the K8s secret name the validator app reads ledger API credentials from.
-#  # Default: "splice-app-validator-ledger-api-auth". Set to a unique value when running
-#  # multiple validator instances in the same namespace.
+#  # Default: "splice-app-validator-ledger-api-auth".
 #  secretName: ""
 #  secretOverrides:
 #    ledgerApiUser: ""
@@ -132,9 +129,7 @@ disableAuth: false
 #    clientSecret: ""
 #    scope: ""
 
-# Optional: override Deployment and Service names. Defaults match existing hardcoded values
-# (fully backward compatible). Set unique values to run multiple validator instances in the
-# same Kubernetes namespace.
+# Optional: override Deployment and Service names.
 appLabels:
   validatorApp: ""   # default: "validator-app"
   walletWebUi: ""    # default: "wallet-web-ui"
