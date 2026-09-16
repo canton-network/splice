@@ -358,7 +358,7 @@ def preflight(token: str, board_id: int, group_name: str) -> tuple[dict[str, Any
     return (board, get_group_id(board, group_name))
 
 
-def choice_value(column: dict[str, Any], label: str) -> dict[str, Any] | str:
+def choice_value(column: dict[str, Any], label: str | bool) -> dict[str, Any] | str:
     column_type = str(column.get("type", "")).lower()
 
     if column_type in {"status", "color"}:
@@ -371,13 +371,7 @@ def choice_value(column: dict[str, Any], label: str) -> dict[str, Any] | str:
         return label
 
     if column_type == "checkbox":
-        if label.lower() in {"true", "yes", "1"}:
-            return True
-
-        if label.lower() in {"false", "no", "0"}:
-            return False
-
-        raise RuntimeError(f"Unsupported checkbox value {label!r} for {column['title']!r}")
+        return label
 
     raise RuntimeError(f"Unsupported choice column type {column_type!r} for {column['title']!r}")
 
