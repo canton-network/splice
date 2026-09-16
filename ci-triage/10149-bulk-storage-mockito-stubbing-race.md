@@ -16,7 +16,8 @@ Ref mapping: given by Raymond as (35092848061, 10149).
   stalling after a `ClassCastException` inside a Future callback.
 - Component: the test's `MockScanConnections` (Mockito re-stubbing while the flow runs). Not the
   backport (#7176 touches build.sbt only), not Canton, not the production code path as such.
-- Flake vs real: test bug, timing-dependent. The test file is byte-identical on main, so main is exposed too.
+- Flake vs real: test bug, timing-dependent. main has the same re-stubbing pattern (its copy differs only by the
+  `requiredCatchupTimestamp` argument added to `getBulkObjectChecksums`), so main is exposed too.
 
 ## Setup
 
@@ -59,16 +60,16 @@ at org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorageCommitFromStagingT
 Line 183 is the third clue of the test: after re-stubbing scans 2..4 to agree, it expects the copy flow to
 emit "go" within 20 s.
 
-## 3. The test at b3e6bfa49d (identical to main)
+## 3. The test at b3e6bfa49d (same stubbing pattern as main)
 
 ```
 T=apps/scan/src/test/scala/org/lfdecentralizedtrust/splice/scan/store/bulk/BulkStorageCommitFromStagingTest.scala
 gh api "repos/canton-network/splice/contents/$T?ref=b3e6bfa49d" -H 'Accept: application/vnd.github.raw' > t.scala
-diff t.scala $T && echo IDENTICAL
+git show <main sha>:$T > m.scala; diff t.scala m.scala | grep -c '^[<>]'
 awk 'NR>=181&&NR<=184 || NR>=246&&NR<=254 || NR>=257&&NR<=262 {printf "%4d  %s\n", NR, $0}' t.scala
 ```
 ```
-IDENTICAL
+14
  181        clue("Enough scans do agree - the copy flow should complete successfully") {
  182          Seq.range(2, 5).foreach(i => mockScanConnections.scanAgrees(i))
  183          sub.expectNext(20.seconds, "go")
@@ -89,7 +90,9 @@ IDENTICAL
  261          )
  262            .thenReturn(
 ```
-`scanAgrees`, `scanDisagreesOnDigest` and `scanMissingAnObject` all re-stub `getBulkObjectChecksums` with
+The 14 differing lines against main (896a62310c) are the `requiredCatchupTimestamp` argument and its
+`any[CantonTimestamp]` matchers; the stubbing pattern is the same. `scanAgrees`, `scanDisagreesOnDigest` and
+`scanMissingAnObject` all re-stub `getBulkObjectChecksums` with
 `when(...).thenReturn(...)` on mocks that the running flow is invoking concurrently from the test execution
 context. The flow polls every `bftRetryInterval = 1 s` (line 110).
 
@@ -206,6 +209,8 @@ response was never counted, and the BFT call's promise never completed.
   suppressed entry, so the ScalaTest report shows only the timeout; the cause is only in the clog.
 - Same production code (`BftScanConnection.executeCall`) as PR #7298 (eventual-consistency reads); the PR
   does not change the stubbing pattern of this test, so it inherits the flake.
+- An earlier draft of this packet said the file was byte-identical on main; that compared against a stale
+  checkout. Corrected above.
 
 ## Suggested next step / owner
 
@@ -213,5 +218,6 @@ Fix the test, not the code: stub each mock once at construction with `thenAnswer
 `AtomicReference[GetBulkObjectChecksumsResponse]` (or a `Behaviour` enum), and have `scanAgrees` /
 `scanDisagreesOnDigest` / `scanMissingAnObject` only set that reference. No `when(...)` after the flow is
 materialized. Optionally assert that no "A fatal error has occurred" line is logged during the test so the
-next such race fails loudly instead of as a timeout. Owner: scan bulk-storage (isegall-da). Applies to main
-as well since the file is identical.
+next such race fails loudly instead of as a timeout. Owner: scan bulk-storage (isegall-da). Applies to main as
+well (same pattern). FIX WRITTEN: branch `ray/fix-bulk-storage-test-stubbing-race` off main 896a62310c, one
+commit, test-only; not compiled in the sandbox (no disk for a cold sbt build), CI must verify.
