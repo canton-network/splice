@@ -94,7 +94,6 @@ import org.lfdecentralizedtrust.splice.scan.admin.http.ScanHttpEncodings.updateV
 import org.lfdecentralizedtrust.splice.scan.config.{
   CantonBftPeerConfig,
   ScanRollForwardLsuConfig,
-  ScanStorageConfig,
 }
 import org.lfdecentralizedtrust.splice.scan.dso.DsoAnsResolver
 import org.lfdecentralizedtrust.splice.scan.metrics.ScanHttpApiMetrics
@@ -175,8 +174,8 @@ class HttpScanHandler(
     scanApiMetrics: ScanHttpApiMetrics,
     dsoAnsResolver: DsoAnsResolver,
     miningRoundsCacheTimeToLiveOverride: Option[NonNegativeFiniteDuration],
-    storageConfig: ScanStorageConfig,
     enableForcedAcsSnapshots: Boolean,
+    perAcsSnapshotTablesEnabled: Boolean,
     clock: Clock,
     protected val loggerFactory: NamedLoggerFactory,
     protected val packageVersionSupport: PackageVersionSupport,
@@ -1455,7 +1454,7 @@ class HttpScanHandler(
         )
       } else {
         val snapshotTable: IncrementalAcsSnapshotTable =
-          if (storageConfig.perAcsSnapshotTablesEnabled) {
+          if (perAcsSnapshotTablesEnabled) {
             AcsSnapshotStore.IncrementalAcsSnapshotTable.NextV2
           } else {
             AcsSnapshotStore.IncrementalAcsSnapshotTable.Next
