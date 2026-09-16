@@ -85,7 +85,7 @@ function _do_start_validator {
       || _error "Failed to start validator, please check ${SPLICE_ROOT}/log/compose.log for details"
 
   containers=(validator participant nginx)
-  if [ "${wallet_gateway:-0}" -eq 1 ]; then
+  if [ "${wallet_gateway:-1}" -eq 1 ]; then
     containers+=(wallet-gateway portfolio)
   fi
   for c in "${containers[@]}"; do
@@ -138,8 +138,8 @@ function _start_validator {
   if [ "${external_access:-0}" -eq 1 ]; then
      extra_flags+=("-E")
   fi
-  if [ "${wallet_gateway:-0}" -eq 1 ]; then
-    extra_flags+=("-g")
+  if [ "${wallet_gateway:-1}" -eq 0 ]; then
+    extra_flags+=("-G")
   fi
 
   secret_url="${sv_from_script}/api/sv/v0/devnet/onboard/validator/prepare"
@@ -216,9 +216,9 @@ function subcmd_start {
   participant_id=""
   trust_single=0
   external_access=0
-  wallet_gateway=0
+  wallet_gateway=1
 
-  while getopts 'haldn:m:wt:i:p:P:bEkg' arg; do
+  while getopts 'haldn:m:wt:i:p:P:bEkG' arg; do
     case ${arg} in
       h)
         subcmd_help
@@ -264,8 +264,8 @@ function subcmd_start {
       k)
         skip_participant_db_conflict_check=1
         ;;
-      g)
-        wallet_gateway=1
+      G)
+        wallet_gateway=0
         ;;
       ?)
         subcmd_help
@@ -300,7 +300,7 @@ function subcmd_start {
   fi
 }
 function usage_start {
-  _info "       Options: [-a] [-l] [-d] [-n <network_name>] [-m <migration_id>] [-w] [-t <image_tag>] [-i <identities_dump>] [-p <party_hint>] [-P <participant_id>] [-b] [-E] [-k] [-g]"
+  _info "       Options: [-a] [-l] [-d] [-n <network_name>] [-m <migration_id>] [-w] [-t <image_tag>] [-i <identities_dump>] [-p <party_hint>] [-P <participant_id>] [-b] [-E] [-k] [-G]"
   _info "      -a: Enable authentication"
   _info "      -l: Start the validator against a local SV (for integration tests). Default is against a cluster determined by GCP_CLUSTER_HOSTNAME"
   _info "      -d: Use images from the DA-internal repository (default: use locally built images)"
@@ -314,7 +314,7 @@ function usage_start {
   _info "      -b: Disable BFT reads&writes and trust a single SV."
   _info "      -E: Bind to 0.0.0.0 for external access."
   _info "      -k: Disable the validator participant db conflict check (forwarded to the validator start.sh as -k)."
-  _info "      -g: Also deploy the wallet gateway and portfolio UI (forwarded to the validator start.sh as -g)."
+  _info "      -G: Skip deploying the wallet gateway and portfolio UI (forwarded to the validator start.sh as -G)."
 }
 
 subcommand_whitelist[stop]='stop a validator'

@@ -19,7 +19,9 @@ release-notes:: Upcoming
 
     - Docker Compose
 
-        - The validator deployment can now also deploy the Canton Wallet Gateway and the Portfolio UI with the new ``-g`` flag of ``start.sh``.
+        - The validator deployment now also deploys the Canton Wallet Gateway and the Portfolio UI by default. Pass the new ``-G`` flag to ``start.sh`` to skip them.
+          This requires ``LEDGER_API_AUTH_AUDIENCE`` and ``VALIDATOR_AUTH_AUDIENCE`` in ``.env`` to be equal, which is now the case for the shipped defaults.
+          If your ``.env`` uses different audiences, ``start.sh`` fails until you set them to the same value (which for authenticated deployments means updating your OIDC provider) or pass ``-G``.
 
     - Helm
 
