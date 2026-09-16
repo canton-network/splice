@@ -115,7 +115,7 @@ groups:
             summary: The job {{ $labels.job }} in namespace {{ $labels.namespace }} is reporting an ACS commitment delay
           labels: {}
           isPaused: false
-        # 2 = started, within_range is exclusive in both bounds.
+        # 2 = started so outside_range [2, 2] matches everything but started.
         - uid: ffghab4ms1ds0g
           title: ACS Commitment Component Failed (PV >= 36)
           condition: acs commitment component is not in state started
@@ -140,9 +140,9 @@ groups:
                 conditions:
                   - evaluator:
                       params:
-                        - 1
-                        - 3
-                      type: within_range
+                        - 2
+                        - 2
+                      type: outside_range
                     operator:
                       type: and
                     query:
