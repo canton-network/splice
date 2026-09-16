@@ -771,8 +771,8 @@ object BuildCommon {
     sbt.Project
       .apply("canton-community-synchronizer", file("canton/community/synchronizer"))
       .dependsOn(
-        `canton-community-common` % "compile->compile;test->test",
-        `canton-community-admin-api` % "compile->compile;test->test",
+        `canton-community-common`,
+        `canton-community-admin-api`,
         `canton-sequencer-driver-api`,
         `canton-community-reference-driver`,
       )
@@ -832,7 +832,7 @@ object BuildCommon {
     sbt.Project
       .apply("canton-community-participant", file("canton/community/participant"))
       .dependsOn(
-        `canton-community-common` % "compile->compile;test->test",
+        `canton-community-common`,
         `canton-ledger-json-api`,
         `canton-community-admin-api`,
         `canton-traffic-enforcement-component`,
@@ -1143,7 +1143,7 @@ object BuildCommon {
       .dependsOn(
         `canton-util-observability`,
         `canton-community-testing` % Test,
-        `canton-community-common` % "compile->compile;test->test",
+        `canton-community-common`,
       )
       .enablePlugins(DamlPlugin)
       .settings(
@@ -1170,7 +1170,7 @@ object BuildCommon {
             // in prod code as well
             pekko_projection_testkit,
             pekko_actor_testkit_typed,
-            pekko_slf4j % "compile->compile;test->test",
+            pekko_slf4j,
             pureconfig,
             pureconfig_generic,
             scalapb_runtime,
@@ -1189,8 +1189,8 @@ object BuildCommon {
         file("canton/community/reference-sequencer-driver/"),
       )
       .dependsOn(
-        `canton-community-common` % "compile->compile;test->test",
-        `canton-sequencer-driver-api` % "compile->compile;test->test",
+        `canton-community-common`,
+        `canton-sequencer-driver-api`,
         `canton-community-testing` % Test,
       )
       .settings(
