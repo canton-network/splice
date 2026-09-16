@@ -1822,7 +1822,7 @@
       "name": "istio-base",
       "namespace": "istio-system",
       "repositoryOpts": {
-        "repo": "https://istio-release.storage.googleapis.com/charts"
+        "repo": "https://blob.istio.io/istio-release/charts"
       },
       "values": {
         "global": {
@@ -1845,7 +1845,7 @@
       "name": "istio-ingress-cometbft",
       "namespace": "cluster-ingress",
       "repositoryOpts": {
-        "repo": "https://istio-release.storage.googleapis.com/charts"
+        "repo": "https://blob.istio.io/istio-release/charts"
       },
       "values": {
         "affinity": {
@@ -2117,7 +2117,7 @@
       "name": "istio-ingress",
       "namespace": "cluster-ingress",
       "repositoryOpts": {
-        "repo": "https://istio-release.storage.googleapis.com/charts"
+        "repo": "https://blob.istio.io/istio-release/charts"
       },
       "values": {
         "affinity": {
@@ -2316,7 +2316,7 @@
       "name": "istiod",
       "namespace": "cluster-ingress",
       "repositoryOpts": {
-        "repo": "https://istio-release.storage.googleapis.com/charts"
+        "repo": "https://blob.istio.io/istio-release/charts"
       },
       "values": {
         "affinity": {

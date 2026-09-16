@@ -25,6 +25,11 @@ release-notes:: Upcoming
 
         - The deprecated `splice-domain` Helm chart has been removed.
 
+        - The ``splice-validator`` chart now supports configuring Kubernetes resource names
+          via ``appLabels.validatorApp``, ``appLabels.walletWebUi``, ``appLabels.ansWebUi``,
+          ``auth.secretName``, ``validatorWebUi.secretName``, and ``ansWebUi.secretName``.
+          All values default to the existing names, so this change is fully backward compatible.
+
     - Scan App
 
         - Added a new public ``/v0/events/latest-record-time`` endpoint that returns the latest
