@@ -1195,12 +1195,7 @@ lazy val `canton-fork-community-common-test` =
     .dependsOn(`canton-community-common`, `canton-community-testing`)
     .settings(
       scalacOptions --= JvmRulesPlugin.scalacOptionsToDisableForTests,
-      libraryDependencies ++= {
-        import CantonDependencies._
-        Seq(
-          scalatest % Test
-        )
-      },
+      libraryDependencies += CantonDependencies.pekko_stream_testkit,
       Headers.ApacheDAHeaderSettings,
     )
 
