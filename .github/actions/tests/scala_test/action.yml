@@ -102,7 +102,7 @@ runs:
         target: 'default'
 
     - name: Wait for postgres
-      uses: ./.github/actions/nix/run_bash_command_in_nix
+      uses: ./.github/actions/nix/run
       env:
         POSTGRES_HOST: localhost
         POSTGRES_PORT: 5432
@@ -114,7 +114,7 @@ runs:
 
     # Starting canton before setting up SBT, to gain a bit of time doing both in parallel
     - name: Start Canton
-      uses: ./.github/actions/nix/run_bash_command_in_nix
+      uses: ./.github/actions/nix/run
       env:
         POSTGRES_HOST: localhost
         CANTON_DB_HOST: localhost
@@ -139,7 +139,7 @@ runs:
         cache_version: ${{ inputs.cache_version }}
 
     - name: Set Daml package versions
-      uses: ./.github/actions/nix/run_bash_command_in_nix
+      uses: ./.github/actions/nix/run
       with:
         cmd: |
           if [[ "${{ inputs.daml_base_version }}" != "" ]]; then
@@ -155,13 +155,13 @@ runs:
       id: daml_package_versions
       shell: bash
       run: |
-        # We can't export from within run_bash_command_in_nix so we do it here.
+        # We can't export from within run so we do it here.
         if [[ "${{ inputs.daml_base_version }}" != "" ]]; then
           echo "initial_package_versions='$(cat initial_package_config)'" >> "$GITHUB_OUTPUT"
         fi
 
     - name: Prepare list of tests to run for sbt
-      uses: ./.github/actions/nix/run_bash_command_in_nix
+      uses: ./.github/actions/nix/run
       with:
         cmd: |
           splitted=$(echo "${{ toJson(inputs.test_names) }}" | jq -r '.[${{ inputs.runner_index }}].[]')
@@ -212,7 +212,7 @@ runs:
 
     - name: Build Docker images
       if: ${{ fromJson(inputs.with_docker_images) }}
-      uses: ./.github/actions/nix/run_bash_command_in_nix
+      uses: ./.github/actions/nix/run
       with:
         cmd: |
           export CIRCLE_REPOSITORY_URL="${{ github.repositoryUrl }}"
