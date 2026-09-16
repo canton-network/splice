@@ -91,7 +91,11 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
 import org.lfdecentralizedtrust.splice.http.v0.scan.ScanResource
 import org.lfdecentralizedtrust.splice.scan.ScanSynchronizerNode
 import org.lfdecentralizedtrust.splice.scan.admin.http.ScanHttpEncodings.updateV1ToUpdateV2
-import org.lfdecentralizedtrust.splice.scan.config.{CantonBftPeerConfig, ScanRollForwardLsuConfig}
+import org.lfdecentralizedtrust.splice.scan.config.{
+  CantonBftPeerConfig,
+  ScanRollForwardLsuConfig,
+  ScanStorageConfig,
+}
 import org.lfdecentralizedtrust.splice.scan.dso.DsoAnsResolver
 import org.lfdecentralizedtrust.splice.scan.metrics.ScanHttpApiMetrics
 import org.lfdecentralizedtrust.splice.scan.metrics.ScanHttpApiMetrics.{
@@ -109,6 +113,7 @@ import org.lfdecentralizedtrust.splice.scan.store.{
 import org.lfdecentralizedtrust.splice.scan.store.AppActivityStore.RoundIngestionStatus
 import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorageReader
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{
+  IncrementalAcsSnapshotTable,
   QueryAcsSnapshotPaginationToken,
   QueryAcsSnapshotResult,
 }
@@ -170,6 +175,7 @@ class HttpScanHandler(
     scanApiMetrics: ScanHttpApiMetrics,
     dsoAnsResolver: DsoAnsResolver,
     miningRoundsCacheTimeToLiveOverride: Option[NonNegativeFiniteDuration],
+    storageConfig: ScanStorageConfig,
     enableForcedAcsSnapshots: Boolean,
     clock: Clock,
     protected val loggerFactory: NamedLoggerFactory,
@@ -1448,6 +1454,12 @@ class HttpScanHandler(
           )
         )
       } else {
+        val snapshotTable: IncrementalAcsSnapshotTable =
+          if (storageConfig.perAcsSnapshotTablesEnabled) {
+            AcsSnapshotStore.IncrementalAcsSnapshotTable.NextV2
+          } else {
+            AcsSnapshotStore.IncrementalAcsSnapshotTable.Next
+          }
         for {
           synchronizerId <- store
             .lookupAmuletRules()
@@ -1500,6 +1512,7 @@ class HttpScanHandler(
               // - wall clock tests must take manual snapshots anyway, because they can't wait
               // - simtime tests will advanceTime(N.hours)
               snapshotStore.insertNewSnapshot(
+                snapshotTable,
                 lastSnapshot,
                 snapshotStore.currentMigrationId,
                 snapshotTime,

@@ -410,6 +410,7 @@ class ScanApp(
         scanAppMetrics.httpApi,
         dsoAnsResolver,
         config.miningRoundsCacheTimeToLiveOverride,
+        scanStorageConfigV1,
         config.enableForcedAcsSnapshots,
         clock,
         loggerFactory,
