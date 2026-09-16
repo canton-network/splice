@@ -3,6 +3,7 @@
 
 package com.digitalasset.canton.admin.api.client.commands
 
+import cats.implicits.toTraverseOps
 import cats.syntax.either.*
 import com.digitalasset.canton.sequencer.admin.v30.SequencerBftAdministrationServiceGrpc.SequencerBftAdministrationServiceStub
 import com.digitalasset.canton.sequencer.admin.v30.{
@@ -14,6 +15,8 @@ import com.digitalasset.canton.sequencer.admin.v30.{
   GetPeerNetworkStatusResponse,
   GetWriteReadinessRequest,
   GetWriteReadinessResponse,
+  ListConfiguredEndpointsRequest,
+  ListConfiguredEndpointsResponse,
   RemovePeerEndpointRequest,
   RemovePeerEndpointResponse,
   SequencerBftAdministrationServiceGrpc,
@@ -24,10 +27,12 @@ import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.admin.Se
   OrderingTopology,
   PeerNetworkStatus,
   WriteReadiness,
+  endpointFromProto,
   endpointIdToProto,
   endpointToProto,
 }
 import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.bindings.p2p.grpc.P2PGrpcNetworking.P2PEndpoint
+import com.digitalasset.canton.topology.SequencerId
 import io.grpc.ManagedChannel
 
 import scala.concurrent.Future
@@ -90,6 +95,43 @@ object SequencerBftAdminCommands {
         response: RemovePeerEndpointResponse
     ): Either[String, Unit] =
       Either.unit
+  }
+
+  final case object ListConfiguredEndpoints
+      extends BaseSequencerBftAdministrationCommand[
+        ListConfiguredEndpointsRequest,
+        ListConfiguredEndpointsResponse,
+        Seq[(P2PEndpoint, Option[SequencerId])],
+      ] {
+
+    override protected def createRequest(): Either[String, ListConfiguredEndpointsRequest] = Right(
+      ListConfiguredEndpointsRequest()
+    )
+
+    override protected def submitRequest(
+        service: SequencerBftAdministrationServiceStub,
+        request: ListConfiguredEndpointsRequest,
+    ): Future[ListConfiguredEndpointsResponse] =
+      service.listConfiguredEndpoints(request)
+
+    override protected def handleResponse(
+        response: ListConfiguredEndpointsResponse
+    ): Either[String, Seq[(P2PEndpoint, Option[SequencerId])]] =
+      response.endpoints
+        .map { peerEndpointAndSequencerId =>
+          for {
+            endpoint <- endpointFromProto(peerEndpointAndSequencerId)
+            sequencerIdO <- peerEndpointAndSequencerId.sequencerId
+              .map(
+                SequencerId
+                  .fromProtoPrimitive(_, "sequencerId")
+                  .leftMap(err => s"Failed to parse sequencerId: $err")
+              )
+              .sequence
+          } yield (endpoint, sequencerIdO)
+        }
+        .sequence
+        .leftMap(err => s"Failed to parse response: $err")
   }
 
   final case class GetPeerNetworkStatus(endpoints: Option[Iterable[P2PEndpoint.Id]])

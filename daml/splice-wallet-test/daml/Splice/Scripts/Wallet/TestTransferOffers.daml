@@ -4,6 +4,7 @@
 module Splice.Scripts.Wallet.TestTransferOffers where
 
 import DA.Assert
+import DA.Foldable (foldMap)
 import DA.Time
 import Daml.Script
 
@@ -52,10 +53,12 @@ testTransferOffers = script do
           inputs = [InputAmulet amulet]
           operations = [CO_CompleteAcceptedTransfer accepted]
           context = transferContext
-      completeTransferMustFail accepted amulet transferContext check = submitMultiMustFail'' check [aliceValidator.primaryParty] [alice.primaryParty, aliceValidator.primaryParty, app.dso] $ exerciseCmd aliceInstall WalletAppInstall_ExecuteBatch with
-        inputs = [InputAmulet amulet]
-        operations = [CO_CompleteAcceptedTransfer accepted]
-        context = transferContext
+      completeTransferMustFail accepted amulet transferContext check =
+        submitMustFail'' check (actAs aliceValidator.primaryParty <> foldMap readAs [alice.primaryParty, aliceValidator.primaryParty, app.dso]) $
+          exerciseCmd aliceInstall WalletAppInstall_ExecuteBatch with
+            inputs = [InputAmulet amulet]
+            operations = [CO_CompleteAcceptedTransfer accepted]
+            context = transferContext
 
   offer <- createOffer 2.0 " transfer test" t "transfer_test"
   acceptResult <- submit (actAs bobValidator.primaryParty <> readAs bob.primaryParty) $ exerciseCmd bobInstall
@@ -109,7 +112,7 @@ testTransferOffers = script do
   tap app alice 100.0  -- chosen such that all amulets of alice are consumed
   [(amulet, _)] <- queryFilter @Amulet alice.primaryParty (\c -> c.amount.initialAmount >= 100.0)
   WalletAppInstall_ExecuteBatchResult { outcomes } <- completeTransfer accepted amulet transferContext
-  trace outcomes $ pure ()
+  debug outcomes
   [COO_CompleteAcceptedTransfer _] <- pure outcomes
 
   aliceAmuletsAfter <- query @Amulet alice.primaryParty

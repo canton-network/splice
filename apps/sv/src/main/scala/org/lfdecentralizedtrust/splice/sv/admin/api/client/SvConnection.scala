@@ -76,17 +76,6 @@ final class SvConnection private (
       ),
     )
 
-  def getDsoInfo()(implicit
-      httpClient: HttpClient,
-      templateDecoder: TemplateJsonDecoder,
-      ec: ExecutionContext,
-      mat: Materializer,
-  ): Future[HttpSvPublicAppClient.DsoInfo] =
-    runHttpCmd(
-      config.url,
-      HttpSvPublicAppClient.GetDsoInfo,
-    )
-
   def getMigrationId()(implicit
       httpClient: HttpClient,
       templateDecoder: TemplateJsonDecoder,

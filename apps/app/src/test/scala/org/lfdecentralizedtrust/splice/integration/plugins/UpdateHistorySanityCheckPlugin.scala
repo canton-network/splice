@@ -4,9 +4,8 @@ import cats.data.Chain
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.updateAllScanAppConfigs_
 import org.lfdecentralizedtrust.splice.config.SpliceConfig
 import org.lfdecentralizedtrust.splice.console.ScanAppBackendReference
-import org.lfdecentralizedtrust.splice.environment.SpliceEnvironment
 import org.lfdecentralizedtrust.splice.http.v0.definitions.DamlValueEncoding.members.CompactJson
-import org.lfdecentralizedtrust.splice.http.v0.definitions.{AcsResponseV1, UpdateHistoryItemV2}
+import org.lfdecentralizedtrust.splice.http.v0.definitions.{AcsResponseV2, UpdateHistoryItemV2}
 import org.lfdecentralizedtrust.splice.http.v0.definitions.UpdateHistoryItemV2.members
 import org.lfdecentralizedtrust.splice.http.v0.definitions.UpdateHistoryReassignment.Event.members as reassignmentMembers
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
@@ -14,10 +13,8 @@ import org.lfdecentralizedtrust.splice.scan.automation.AcsSnapshotTrigger
 import org.lfdecentralizedtrust.splice.util.TriggerTestUtil
 import com.digitalasset.canton.ScalaFuturesWithPatience
 import com.digitalasset.canton.data.CantonTimestamp
-import com.digitalasset.canton.integration.EnvironmentSetupPlugin
 import com.digitalasset.canton.logging.SuppressingLogger
 import com.digitalasset.canton.tracing.TraceContext
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules
 import org.lfdecentralizedtrust.splice.scan.config.ScanStorageConfigs.scanStorageConfigV1
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingState
 import org.scalatest.{Inspectors, LoneElement}
@@ -33,7 +30,7 @@ import scala.concurrent.duration.*
 class UpdateHistorySanityCheckPlugin(
     skipAcsSnapshotChecks: Boolean,
     protected val loggerFactory: SuppressingLogger,
-) extends EnvironmentSetupPlugin[SpliceConfig, SpliceEnvironment]
+) extends SpliceEnvironmentSetupPlugin
     with Matchers
     with Eventually
     with Inspectors
@@ -47,8 +44,7 @@ class UpdateHistorySanityCheckPlugin(
   }
 
   override def beforeEnvironmentDestroyed(
-      config: SpliceConfig,
-      environment: SpliceTestConsoleEnvironment,
+      environment: SpliceTestConsoleEnvironment
   ): Unit = {
     TraceContext.withNewTraceContext("beforeEnvironmentDestroyed") { implicit tc =>
       // A scan might not be initialized if the test uses `manualStart` and it wasn't ever started.
@@ -68,10 +64,9 @@ class UpdateHistorySanityCheckPlugin(
             initializedScans.foreach(waitUntilBackfillingComplete)
             val (founders, others) = initializedScans.partition(_.config.isFirstSv)
             val founder = founders.loneElement
-            val dsoRules =
-              DsoRules.fromJson(founder.getDsoInfo().dsoRules.contract.payload.noSpaces)
+            val dsoRules = founder.getDsoInfo().dsoRules.payload
             val (scansInDsoRules, scansNotInDsoRules) = others.partition { otherScan =>
-              val svPartyId = otherScan.getDsoInfo().svPartyId
+              val svPartyId = otherScan.getDsoInfo().svParty.toProtoPrimitive
               dsoRules.svs.containsKey(svPartyId)
             }
             scansNotInDsoRules.foreach { notInDso =>
@@ -81,7 +76,7 @@ class UpdateHistorySanityCheckPlugin(
               //  - U2: Involves SV
               // founder sees U1, U2 but otherScan only U2
               logger.info(
-                s"The SV party of Scan ${notInDso.name} (partyId=${notInDso.getDsoInfo().svPartyId}) is not in DsoRules. Ignoring."
+                s"The SV party of Scan ${notInDso.name} (partyId=${notInDso.getDsoInfo().svParty}) is not in DsoRules. Ignoring."
               )
             }
             compareHistories(founder, scansInDsoRules)
@@ -220,14 +215,14 @@ class UpdateHistorySanityCheckPlugin(
   private def getAllSnapshots(
       scan: ScanAppBackendReference,
       before: CantonTimestamp,
-      acc: List[AcsResponseV1],
-  ): List[AcsResponseV1] = {
+      acc: List[AcsResponseV2],
+  ): List[AcsResponseV2] = {
     val acsSnapshotPeriodHours = scanStorageConfigV1.dbAcsSnapshotPeriodHours
     val migrationId = scan.getMigrationId()
     scan.getDateOfMostRecentSnapshotBefore(before, migrationId) match {
       case Some(snapshotDate) =>
         val snapshot = scan
-          .getAcsSnapshotAtV1(
+          .getAcsSnapshotAtV2(
             CantonTimestamp.assertFromInstant(snapshotDate.toInstant),
             migrationId,
             pageSize = 1000,

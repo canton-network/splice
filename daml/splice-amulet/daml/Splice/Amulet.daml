@@ -12,11 +12,15 @@ import DA.Map as Map
 import DA.TextMap as TextMap
 import DA.Optional (fromOptional, isNone, optionalToList)
 
-import Splice.Api.Token.MetadataV1 qualified as Api.Token.MetadataV1
+import Splice.Api.Token.MetadataV1 as Api.Token.MetadataV1
 import Splice.Api.Token.HoldingV1 qualified as Api.Token.HoldingV1
 import Splice.Api.RewardAssignmentV1 qualified as Api.RewardAssignmentV1
+import Splice.Api.Token.HoldingV2 qualified as Api.Token.HoldingV2
+import Splice.Api.Token.TransferEventsV2 as TransferEventsV2
+import Splice.TokenStandard.Utils hiding (require)
 
 import Splice.Amulet.TokenApiUtils
+import Splice.AmuletEventLog (withTempAmuletEventLog)
 import Splice.Expiry
 import Splice.ExternalPartyConfigState
 import Splice.Fees
@@ -35,12 +39,12 @@ data AmuletExpireSummary = AmuletExpireSummary with
     -- a amulet created in round 3 is treated as a amulet created in round 0 with a higher initial amount.
     changeToHoldingFeesRate : Decimal
       -- ^ The change of total holding fees introduced by a amulet expiry.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 data AmuletExpireV2Summary = AmuletExpireV2Summary
   with
     owner : Party
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- | Result of an operation that created a new amulet, e.g.,
 -- by minting a fresh amulet, or by unlocking a locked amulet.
@@ -48,75 +52,100 @@ data AmuletCreateSummary amuletContractId = AmuletCreateSummary with
     amulet : amuletContractId -- ^ The new amulet that was created
     amuletPrice : Decimal -- ^ The amulet price at the round the amulet was created
     round: Round -- ^ Round for which this amulet was created.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 data Amulet_ExpireResult = Amulet_ExpireResult with
   expireSum : AmuletExpireSummary
   meta : Optional Api.Token.MetadataV1.Metadata
+    deriving (Serializable)
 
 data Amulet_ExpireV2Result = Amulet_ExpireV2Result with
   expireSum : AmuletExpireV2Summary
   meta : Api.Token.MetadataV1.Metadata
+    deriving (Serializable)
 
 data LockedAmulet_UnlockResult = LockedAmulet_UnlockResult with
   amuletSum : AmuletCreateSummary (ContractId Amulet)
   meta : Optional Api.Token.MetadataV1.Metadata
+    deriving (Serializable)
 
 data LockedAmulet_UnlockV2Result = LockedAmulet_UnlockV2Result with
   amuletCid : ContractId Amulet
   meta : Api.Token.MetadataV1.Metadata
+    deriving (Serializable)
 
 data LockedAmulet_OwnerExpireLockResult = LockedAmulet_OwnerExpireLockResult with
   amuletSum : AmuletCreateSummary (ContractId Amulet)
   meta : Optional Api.Token.MetadataV1.Metadata
+    deriving (Serializable)
 
 data LockedAmulet_OwnerExpireLockV2Result = LockedAmulet_OwnerExpireLockV2Result with
   amuletCid : ContractId Amulet
   meta : Api.Token.MetadataV1.Metadata
+    deriving (Serializable)
 
 data LockedAmulet_ExpireAmuletResult = LockedAmulet_ExpireAmuletResult with
   expireSum : AmuletExpireSummary
   meta : Optional Api.Token.MetadataV1.Metadata
+    deriving (Serializable)
 
 data LockedAmulet_ExpireAmuletV2Result = LockedAmulet_ExpireAmuletV2Result with
   expireSum : AmuletExpireV2Summary
   meta : Api.Token.MetadataV1.Metadata
+    deriving (Serializable)
 
 data ValidatorRight_ArchiveAsValidatorResult = ValidatorRight_ArchiveAsValidatorResult
+  deriving (Serializable)
 
 data ValidatorRight_ArchiveAsUserResult = ValidatorRight_ArchiveAsUserResult
+  deriving (Serializable)
 
 data FeaturedAppRight_WithdrawResult = FeaturedAppRight_WithdrawResult
+  deriving (Serializable)
+
+data FeaturedAppRight_UpdateResult = FeaturedAppRight_UpdateResult with
+  featuredAppRightCid : ContractId FeaturedAppRight
+    deriving (Serializable)
 
 data FeaturedAppRight_CancelResult = FeaturedAppRight_CancelResult
+  deriving (Serializable)
 
 data AppRewardCoupon_DsoExpireResult = AppRewardCoupon_DsoExpireResult with
   featured : Bool
   amount : Decimal
+    deriving (Serializable)
 
 data ValidatorRewardCoupon_DsoExpireResult = ValidatorRewardCoupon_DsoExpireResult with
   amount : Decimal
+    deriving (Serializable)
 
 data ValidatorRewardCoupon_ArchiveAsValidatorResult = ValidatorRewardCoupon_ArchiveAsValidatorResult with
-
+    deriving (Serializable)
 data SvRewardCoupon_DsoExpireResult = SvRewardCoupon_DsoExpireResult with
   weight: Int
+    deriving (Serializable)
 
 data SvRewardCoupon_ArchiveAsBeneficiaryResult = SvRewardCoupon_ArchiveAsBeneficiaryResult
+  deriving (Serializable)
 
 data UnclaimedActivityRecord_ArchiveAsBeneficiaryResult = UnclaimedActivityRecord_ArchiveAsBeneficiaryResult
+  deriving (Serializable)
 
 data UnclaimedActivityRecord_DsoExpireResult = UnclaimedActivityRecord_DsoExpireResult with
   unclaimedRewardCid : ContractId UnclaimedReward
+    deriving (Serializable)
 
 data DevelopmentFundCoupon_WithdrawResult = DevelopmentFundCoupon_WithdrawResult with
   unclaimedDevelopmentFundCouponCid : ContractId UnclaimedDevelopmentFundCoupon
+    deriving (Serializable)
 
 data DevelopmentFundCoupon_RejectResult = DevelopmentFundCoupon_RejectResult with
   unclaimedDevelopmentFundCouponCid : ContractId UnclaimedDevelopmentFundCoupon
+    deriving (Serializable)
 
 data DevelopmentFundCoupon_DsoExpireResult = DevelopmentFundCoupon_DsoExpireResult with
   unclaimedDevelopmentFundCouponCid : ContractId UnclaimedDevelopmentFundCoupon
+    deriving (Serializable)
 
 -- | A amulet, which can be locked and whose amount expires over time.
 --
@@ -145,6 +174,10 @@ template Amulet
       do  requireAmuletExpiredForAllRounds externalPartyConfigState0Cid externalPartyConfigState1Cid this
           let expireSum = AmuletExpireV2Summary with
                 owner = owner
+          logAmuletBurn dso (toInterfaceContractId externalPartyConfigState0Cid) owner
+            amount.initialAmount
+            "expire dust"
+            (toInterfaceContractId self)
           return Amulet_ExpireV2Result with
             meta = simpleHoldingTxMeta TxKind_ExpireDust None (Some amount.initialAmount)
             ..
@@ -156,6 +189,9 @@ template Amulet
         amount = amount.initialAmount
         lock = None
         meta = amuletMetadata this
+
+    interface instance Api.Token.HoldingV2.Holding for Amulet where
+      view = upcast (view (toInterface @Api.Token.HoldingV1.Holding this))
 
 amuletMetadata : Amulet -> Api.Token.MetadataV1.Metadata
 amuletMetadata Amulet{..} =
@@ -184,6 +220,9 @@ template LockedAmulet
           context = lock.optContext
         meta = amuletMetadata amulet
 
+    interface instance Api.Token.HoldingV2.Holding for LockedAmulet where
+      view = upcast (view (toInterface @Api.Token.HoldingV1.Holding this))
+
     choice LockedAmulet_Unlock : LockedAmulet_UnlockResult
       with
         openRoundCid : ContractId OpenMiningRound
@@ -193,6 +232,7 @@ template LockedAmulet
     choice LockedAmulet_UnlockV2 : LockedAmulet_UnlockV2Result
       controller amulet.owner :: lock.holders
       do amuletCid <- create amulet
+         logAmuletUnlock amulet.dso "holders released lock" amulet.owner self amuletCid
          return LockedAmulet_UnlockV2Result with
            meta = simpleHoldingTxMeta TxKind_Unlock (Some "holders released lock") None, ..
 
@@ -206,6 +246,7 @@ template LockedAmulet
       controller amulet.owner
       do assertDeadlineExceeded "Lock.expiresAt" lock.expiresAt
          amuletCid <- create amulet
+         logAmuletUnlock amulet.dso "owner released expired lock" amulet.owner self amuletCid
          return LockedAmulet_OwnerExpireLockV2Result with
           meta = simpleHoldingTxMeta TxKind_Unlock (Some "lock expired") None, ..
 
@@ -224,6 +265,10 @@ template LockedAmulet
          requireAmuletExpiredForAllRounds externalPartyConfigState0Cid externalPartyConfigState1Cid amulet
          let expireSum = AmuletExpireV2Summary with
                owner = amulet.owner
+         logAmuletBurn amulet.dso (toInterfaceContractId externalPartyConfigState0Cid) amulet.owner
+           amulet.amount.initialAmount
+           "expire dust"
+           (toInterfaceContractId self)
          return LockedAmulet_ExpireAmuletV2Result with
            meta = simpleHoldingTxMeta TxKind_ExpireDust None (Some amulet.amount.initialAmount)
            ..
@@ -240,6 +285,7 @@ template ValidatorRight with
   where
     signatory user, validator
 
+
     choice ValidatorRight_ArchiveAsValidator : ValidatorRight_ArchiveAsValidatorResult
       controller validator
       do return ValidatorRight_ArchiveAsValidatorResult
@@ -250,14 +296,33 @@ template ValidatorRight with
 
     -- TODO(M3-90): cancellation, withdrawal
 
+defaultAppActivityWeight : Decimal
+defaultAppActivityWeight = 1.0
 
 -- | The right for an application provider to earn featured app rewards.
 template FeaturedAppRight with
     dso : Party
     provider : Party
+    activityWeight : Optional Decimal
+      -- ^ Weight of the this provider's app activity in the computation of traffic-based app rewards.
+      --
+      -- If not set, the default weight of 1.0 is used.
   where
     signatory dso
     observer provider
+    ensure 0.0 <= fromOptional defaultAppActivityWeight activityWeight
+
+    choice FeaturedAppRight_Update : FeaturedAppRight_UpdateResult
+      with
+        reason : Text
+        newActivityWeight : Decimal
+      controller dso
+      do
+        featuredAppRightCid <- create this with
+          -- use `None` for the default to maximize SCU compatibility
+          activityWeight = if newActivityWeight == defaultAppActivityWeight then None else Some newActivityWeight
+        return FeaturedAppRight_UpdateResult with
+          featuredAppRightCid
 
     choice FeaturedAppRight_Withdraw : FeaturedAppRight_WithdrawResult
       with
@@ -437,7 +502,6 @@ template ValidatorRewardCoupon
         void $ fetchReferenceData (ForRound with dso; round) closedRoundCid
         return ValidatorRewardCoupon_DsoExpireResult with ..
 
-
     choice ValidatorRewardCoupon_ArchiveAsValidator : ValidatorRewardCoupon_ArchiveAsValidatorResult
       -- ^ This choice is used by validators to archive the burn receipt upon claiming its corresponding issuance.
       with
@@ -506,8 +570,9 @@ template DevelopmentFundCoupon
     amount : Decimal -- ^ The total amount of `Amulet` to mint on collection.
     expiresAt : Time -- ^ Until when the minting can be completed.
     reason : Text -- ^ Reason for the emission of the coupon.
+    mintAfter : Optional Time -- ^ The time after which the coupon can be minted.
   where
-    ensure amount > 0.0
+    ensure amount > 0.0 && optional True (< expiresAt) mintAfter
 
     signatory dso
 
@@ -630,6 +695,34 @@ rewardCouponV2_assignBeneficiariesImpl coupon _self arg = do
   return Api.RewardAssignmentV1.RewardCoupon_AssignBeneficiariesResult with
     newBeneficiariesCouponCids = perBeneficiaryCids
 
+-- tx history v2 logging
+------------------------
+
+logAmuletMint : Party -> ContractId TransferEventsV2.EventLog -> Party -> Decimal -> Metadata -> ContractId Amulet -> Update ()
+logAmuletMint dso factoryCid receiver amount meta mintedAmuletCid = do
+  let instrumentId = Api.Token.HoldingV2.InstrumentId with admin = dso; id = amuletInstrumentIdName
+  void $ logMint factoryCid (basicAccount receiver) amount instrumentId meta [toInterfaceContractId mintedAmuletCid]
+
+logAmuletBurn : Party -> ContractId TransferEventsV2.EventLog -> Party -> Decimal -> Text -> ContractId Api.Token.HoldingV2.Holding -> Update ()
+logAmuletBurn dso factoryCid sender amount reason burnedAmuletCid = do
+  let instrumentId = amuletInstrumentIdV2 dso
+  let meta = reasonToMeta reason emptyMetadata
+  void $ logBurn factoryCid (basicAccount sender) amount instrumentId meta [toInterfaceContractId burnedAmuletCid]
+
+logAmuletUnlock : Party -> Text -> Party -> ContractId LockedAmulet -> ContractId Amulet -> Update ()
+logAmuletUnlock dso reason owner lockedAmuletCid unlockedAmuletCid = do
+  withTempAmuletEventLog dso $ \eventLogCid -> do
+    void $ exercise eventLogCid $ TransferEventsV2.EventLog_HoldingsChange with
+      admin = dso
+      account = basicAccount owner
+      inputHoldingCids = [toInterfaceContractId lockedAmuletCid]
+      transferLegSides = []
+      outputHoldingCids = [toInterfaceContractId unlockedAmuletCid]
+      observers = [owner]
+      extraArgs = ExtraArgs with
+        context = emptyChoiceContext
+        meta = reasonToMeta reason emptyMetadata
+
 
 -- instances
 ------------
@@ -659,6 +752,12 @@ instance HasCheckedFetch ValidatorRewardCoupon ForDso where
 
 instance HasCheckedFetch UnclaimedReward ForDso where
   contractGroupId UnclaimedReward {..} = ForDso with dso
+
+instance HasCheckedFetch FeaturedAppRight ForDso where
+  contractGroupId FeaturedAppRight {..} = ForDso with dso
+
+instance HasCheckedFetch FeaturedAppRight ForOwner where
+  contractGroupId FeaturedAppRight {..} = ForOwner with dso; owner = provider
 
 instance HasCheckedFetch FeaturedAppActivityMarker ForOwner where
   contractGroupId FeaturedAppActivityMarker {..} = ForOwner with dso; owner = provider

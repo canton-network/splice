@@ -103,6 +103,7 @@ class Simulation[OnboardingDataT, SystemNetworkMessageT, SystemInputMessageT, Cl
       agenda,
       simSettings.futureSettings,
       futureSimulatorState,
+      loggerFactory,
     )
 
   // the init functions might have already sent messages that we need to add to the agenda
@@ -395,7 +396,7 @@ class Simulation[OnboardingDataT, SystemNetworkMessageT, SystemInputMessageT, Cl
             ) =>
           implicit val tc: TraceContext = traceContext
           logger.debug(s"Establish connection '$from' -> '$to' via endpoint $maybeP2PEndpoint")
-          maybeP2PEndpoint.map(_.id).foreach(p2pConnectionEventListener.onConnect)
+          p2pConnectionEventListener.onConnect(maybeP2PEndpoint.map(_.id))
           p2pConnectionEventListener.onSequencerId(to, maybeP2PEndpoint)
           val machine = tryGetMachine(from)
           runNodeCollector(from, EventOriginator.FromNetwork, machine.nodeCollector)

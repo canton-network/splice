@@ -68,13 +68,24 @@ class PackageVetting(
     // An interface itself also does nothing, only the implementations do, so it's OK from a vetting perspective.
     } ++
       Seq(
+        // Token Standard V1
         PackageIdResolver.Package.TokenStandard.SpliceApiTokenMetadataV1,
         PackageIdResolver.Package.TokenStandard.SpliceApiTokenHoldingV1,
         PackageIdResolver.Package.TokenStandard.SpliceApiTokenTransferInstructionV1,
         PackageIdResolver.Package.TokenStandard.SpliceApiTokenAllocationV1,
         PackageIdResolver.Package.TokenStandard.SpliceApiTokenAllocationRequestV1,
         PackageIdResolver.Package.TokenStandard.SpliceApiTokenAllocationInstructionV1,
+        // Token Standard V2
+        PackageIdResolver.Package.TokenStandard.SpliceApiTokenHoldingV2,
+        PackageIdResolver.Package.TokenStandard.SpliceApiTokenTransferInstructionV2,
+        PackageIdResolver.Package.TokenStandard.SpliceApiTokenAllocationV2,
+        PackageIdResolver.Package.TokenStandard.SpliceApiTokenAllocationRequestV2,
+        PackageIdResolver.Package.TokenStandard.SpliceApiTokenAllocationInstructionV2,
+        PackageIdResolver.Package.TokenStandard.SpliceApiTokenTransferEventsV2,
+        PackageIdResolver.Package.TokenStandard.SpliceTokenStandardUtils,
+        PackageIdResolver.Package.TokenStandard.SpliceUtilTokenStandardWallet,
         PackageIdResolver.Package.SpliceUtilBatchedMarkers,
+        PackageIdResolver.Package.SpliceApiRewardAssignmentV1,
       ).flatMap(pkg =>
         DarResourcesUtil
           .getRequiredPackageVersions(
@@ -142,7 +153,6 @@ class PackageVetting(
       .map(_ => ())
   }
 
-  // See https://github.com/DACH-NY/canton/issues/29834: make it work for non-sv validators as well
   def unvetPackages(
       domainId: SynchronizerId,
       additionalPackagesToUnvet: Map[PackageName, Set[PackageVersion]],

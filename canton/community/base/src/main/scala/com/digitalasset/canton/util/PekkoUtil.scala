@@ -1149,6 +1149,8 @@ object PekkoUtil extends HasLoggerName {
     def apply(index: Long): Unit
   }
 
+  type ShutdownInProgress = () => Boolean
+
   final case class FutureQueueConsumer[T](
       futureQueue: FutureQueue[(Long, T)],
       fromExclusive: Long,
@@ -1198,8 +1200,7 @@ object PekkoUtil extends HasLoggerName {
       retryAttemptErrorThreshold: Int,
       uncommittedWarnTreshold: Int,
       recoveringQueueMetrics: RecoveringQueueMetrics,
-      consumerFactory: Commit => Future[FutureQueueConsumer[T]],
-      initializationKillSwitch: Option[() => Unit],
+      consumerFactory: Commit => ShutdownInProgress => Future[Future[FutureQueueConsumer[T]]],
   ) extends RecoveringFutureQueue[T] {
     assert(maxBlockedOffer > 0)
     assert(retryAttemptWarnThreshold > 0)
@@ -1209,7 +1210,7 @@ object PekkoUtil extends HasLoggerName {
     private val logger = loggerFactory.getLogger(this.getClass)
     private implicit val directEC: ExecutionContext = DirectExecutionContext(logger)
 
-    private var consumer: Consumer[T] = Consumer.InitializationInProgress(initializationKillSwitch)
+    private var consumer: Consumer[T] = Consumer.InitializationInProgress
 
     private val recoveringQueue: RecoveringQueue[T] = new RecoveringQueue(
       maxBlocked = maxBlockedOffer,
@@ -1220,7 +1221,7 @@ object PekkoUtil extends HasLoggerName {
     )
     private val lock = new Mutex()
     private val timer: Timer = new Timer()
-    private var shuttingDown: Boolean = false
+    private val shuttingDown: AtomicBoolean = new AtomicBoolean(false)
     private var shuttingDownTimerCancelled: Boolean = false
     private val donePromise: Promise[Done] = Promise()
     private val firstSuccessfulConsumerInitializationPromise: Promise[Unit] = Promise()
@@ -1234,7 +1235,7 @@ object PekkoUtil extends HasLoggerName {
       firstSuccessfulConsumerInitializationPromise.future
 
     override def offer(elem: T): Future[Done] = blockingSynchronized {
-      if (shuttingDown) {
+      if (shuttingDown.get()) {
         Future.failed(
           new IllegalStateException(
             "Cannot offer new elements to the queue, after shutdown is initiated"
@@ -1248,7 +1249,7 @@ object PekkoUtil extends HasLoggerName {
     }
 
     override def shutdown(): Unit = blockingSynchronized {
-      if (shuttingDown || shuttingDownTimerCancelled) {
+      if (shuttingDown.get() || shuttingDownTimerCancelled) {
         logger.debug("Already shutting down, nothing to do")
       } else {
         shuttingDownTimerCancelled = true
@@ -1272,23 +1273,17 @@ object PekkoUtil extends HasLoggerName {
 
     private def shutdownStepTwo(): Unit = blockingSynchronized {
       logger.info("Shutdown initiated")
-      shuttingDown = true
+      shuttingDown.set(true)
       recoveringQueue.shutdown()
       consumer match {
         case Consumer.Initialized(c) =>
           logger.info("Consumer shutdown initiated")
           c.shutdown()
 
-        case Consumer.InitializationInProgress(killSwitch) =>
-          killSwitch match {
-            case Some(kill) =>
-              logger.info(
-                "Consumer initialization is in progress, invoking initialization kill switch..."
-              )
-              kill()
-            case None =>
-              logger.debug("Consumer initialization is in progress, delaying shutdown...")
-          }
+        case Consumer.InitializationInProgress =>
+          logger.debug(
+            "Consumer initialization is in progress, shutdown signal will be propagated to consumer..."
+          )
 
         case Consumer.WaitingForRetry =>
           logger.info("Interrupting wait for initialization retry, shutdown complete")
@@ -1298,8 +1293,12 @@ object PekkoUtil extends HasLoggerName {
 
     private def initializeConsumer(attempt: Int = 1): Unit = blockingSynchronized {
       logger.info("Initializing consumer...")
-      consumer = Consumer.InitializationInProgress(initializationKillSwitch)
-      consumerFactory(recoveringQueue.commit)
+      consumer = Consumer.InitializationInProgress
+      consumerFactory(recoveringQueue.commit)(() => shuttingDown.get())
+        .flatMap { innerFuture =>
+          firstSuccessfulConsumerInitializationPromise.trySuccess(()).discard
+          innerFuture
+        }(directEC)
         .onComplete(consumerInitialized(_, attempt))(directEC)
     }
 
@@ -1316,14 +1315,13 @@ object PekkoUtil extends HasLoggerName {
               logger.error(s"Exception caught while recovering: ${t.getMessage}. Shutting down.", t)
               shutdown()
           }
-          if (shuttingDown) {
+          if (shuttingDown.get()) {
             logger.info(
               "Consumer initialized, but since shutdown already in progress, consumer shutdown initiated"
             )
             queueConsumer.futureQueue.shutdown()
             queueConsumer.futureQueue.done.onComplete(consumerTerminated)(directEC)
           } else {
-            firstSuccessfulConsumerInitializationPromise.trySuccess(()).discard
             logger.info("Consumer initialized")
             consumer = Consumer.Initialized(
               new FutureQueuePullProxy(
@@ -1339,7 +1337,7 @@ object PekkoUtil extends HasLoggerName {
           }
 
         case Failure(failure) =>
-          if (shuttingDown) {
+          if (shuttingDown.get()) {
             logger.info(
               "Consumer initialization failed, but not retrying anymore since already shutting down",
               failure,
@@ -1373,7 +1371,7 @@ object PekkoUtil extends HasLoggerName {
         case Failure(failure) =>
           logger.info("Consumer terminated with a failure", failure)
       }
-      if (shuttingDown) {
+      if (shuttingDown.get()) {
         logger.info("Terminated (consumer terminated), shutdown complete")
         discard(donePromise.trySuccess(Done))
       } else {
@@ -1400,8 +1398,7 @@ object PekkoUtil extends HasLoggerName {
   }
 
   private object Consumer {
-    final case class InitializationInProgress(killSwitch: Option[() => Unit])
-        extends Consumer[Nothing]
+    case object InitializationInProgress extends Consumer[Nothing]
 
     case object WaitingForRetry extends Consumer[Nothing]
 

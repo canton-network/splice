@@ -16,16 +16,20 @@ import {
 } from '@canton-network/splice-pulumi-common-sv';
 
 import { installParticipant } from './participant';
+import { installSvApps } from './sv';
 
 export async function installNode(sv: string, auth0Client: Auth0Client): Promise<void> {
   const staticConfig = findStaticConfigOrFail(sv);
   const config = configForSv(staticConfig.nodeName);
-  const xns = exactNamespace(staticConfig.nodeName, true, true);
+  const xns = exactNamespace(staticConfig.nodeName, true, false);
   const serviceAccountName = 'sv';
   const imagePullDeps = imagePullSecretWithNonDefaultServiceAccount(xns, serviceAccountName);
   const auth0Config = auth0Client.getCfg();
   const ledgerApiUserSecret = installLedgerApiUserSecret(auth0Client, xns, 'sv', 'sv');
   const ledgerApiUserSecretSource = auth0UserNameEnvVarSource('sv', true);
+  if (staticConfig.nodeName !== svRunbookConfig.nodeName) {
+    await installSvApps(xns, staticConfig, config, auth0Client, []);
+  }
   await installParticipant(
     {
       xns,

@@ -11,11 +11,6 @@ export function createGrafanaDashboards(namespace: Input<string>): void {
     namespace,
     `${SPLICE_ROOT}/cluster/pulumi/observability/grafana-dashboards/`
   );
-  createConfigMapForFolder(
-    namespace,
-    `${SPLICE_ROOT}/canton/community/app/src/pack/examples/13-observability/grafana/dashboards/Canton/`,
-    'canton-bft'
-  );
 }
 
 function createdNestedConfigMapForFolder(namespace: Input<string>, folderPath: string) {

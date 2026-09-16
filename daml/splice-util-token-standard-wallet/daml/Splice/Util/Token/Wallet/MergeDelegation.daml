@@ -34,13 +34,13 @@ import Splice.Api.FeaturedAppRightV1
 data TransferCall = TransferCall with
     factoryCid : ContractId TransferFactory
     choiceArg : TransferFactory_Transfer
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- | A call to create featured app markers using a featured app right.
 data FeaturedAppRightCall = FeaturedAppRightCall with
     appRightCid : ContractId FeaturedAppRight
     beneficiaries : [AppRewardBeneficiary]
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- | The right for a operator like the wallet app operator to merge token
 -- standard holdings on behalf of a token owner.
@@ -147,17 +147,17 @@ data MergeDelegation_MergeResult = MergeDelegation_MergeResult
   with
     optMergeTransferResult : Optional TransferInstructionResult
     optExtraTransferResult : Optional TransferInstructionResult
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 -- | Dedicated record type to simplify upgrading
 data MergeDelegation_RejectResult = MergeDelegation_RejectResult with
     result : ()
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- | Dedicated record type to simplify upgrading
 data MergeDelegation_WithdrawResult = MergeDelegation_WithdrawResult with
     result : ()
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 
 -- Batch merge delegation utility
@@ -166,7 +166,7 @@ data MergeDelegation_WithdrawResult = MergeDelegation_WithdrawResult with
 data MergeDelegationCall = MergeDelegationCall with
     delegationCid : ContractId MergeDelegation
     choiceArg : MergeDelegation_Merge
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- | Utility contract for a operator to execute a batch of merge calls with
 -- proper threading of the operator's change holdings between the calls that
@@ -191,7 +191,7 @@ data BatchMergeUtility_BatchMergeResult = BatchMergeUtility_BatchMergeResult wit
       -- ^ Results of each individual merge delegation call.
     operatorChangeMap : InstrumentHoldingMap
       -- ^ Change holdings for the operator after executing extra transfers.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 
 type InstrumentHoldingMap = M.Map InstrumentId [ContractId Holding]
@@ -261,17 +261,17 @@ template MergeDelegationProposal
 data MergeDelegationProposal_AcceptResult = MergeDelegationProposal_AcceptResult
   with
     mergeDelegationCid : ContractId MergeDelegation
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 -- | Dedicated record type to simplify upgrading
 data MergeDelegationProposal_RejectResult = MergeDelegationProposal_RejectResult with
     result : ()
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- | Dedicated record type to simplify upgrading
 data MergeDelegationProposal_WithdrawResult = MergeDelegationProposal_WithdrawResult with
     result : ()
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 
 -- utility functions

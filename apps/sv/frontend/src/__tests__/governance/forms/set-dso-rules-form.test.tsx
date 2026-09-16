@@ -12,6 +12,12 @@ import { http, HttpResponse } from 'msw';
 import { describe, expect, test } from 'vitest';
 import App from '../../../App';
 import { SetDsoConfigRulesForm } from '../../../components/forms/SetDsoConfigRulesForm';
+import {
+  CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE,
+  DATE_TIME_PLACEHOLDER,
+  REASON_PLACEHOLDER,
+  URL_PLACEHOLDER,
+} from '../../../utils/constants';
 import { SvConfigProvider } from '../../../utils';
 import { Wrapper } from '../../helpers';
 import { svPartyId } from '../../mocks/constants';
@@ -34,7 +40,7 @@ describe('SV user can', () => {
     const button = screen.getByRole('button', { name: 'Log In' });
     await user.click(button);
 
-    expect(await screen.findAllByDisplayValue(svPartyId)).not.toBe([]);
+    expect(await screen.findAllByDisplayValue(svPartyId)).not.toHaveLength(0);
   });
 });
 
@@ -47,21 +53,32 @@ describe('Set DSO Config Rules Form', () => {
     );
 
     expect(screen.getByTestId('set-dso-config-rules-form')).toBeInTheDocument();
-    expect(screen.getByText('Action')).toBeInTheDocument();
+    expect(screen.getByText(CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE)).toBeInTheDocument();
 
     const actionInput = screen.getByTestId('set-dso-config-rules-action');
     expect(actionInput).toBeInTheDocument();
-    expect(actionInput.getAttribute('value')).toBe(
+    expect(actionInput.textContent).toBe(
       'Set Decentralized Synchronizer Operations (DSO) Rules Configuration'
     );
 
     const summaryInput = screen.getByTestId('set-dso-config-rules-summary');
     expect(summaryInput).toBeInTheDocument();
     expect(summaryInput.getAttribute('value')).not.toBeInTheDocument();
+    expect(summaryInput).toHaveAttribute('placeholder', REASON_PLACEHOLDER);
 
     const urlInput = screen.getByTestId('set-dso-config-rules-url');
     expect(urlInput).toBeInTheDocument();
     expect(urlInput.getAttribute('value')).toBe('');
+    expect(urlInput).toHaveAttribute('placeholder', URL_PLACEHOLDER);
+
+    expect(screen.getByTestId('set-dso-config-rules-expiry-date-field')).toHaveAttribute(
+      'placeholder',
+      DATE_TIME_PLACEHOLDER
+    );
+    expect(screen.getByTestId('set-dso-config-rules-effective-date-field')).toHaveAttribute(
+      'placeholder',
+      DATE_TIME_PLACEHOLDER
+    );
 
     const configLabels = screen.getAllByTestId(/config-label-/);
     expect(configLabels.length).toBeGreaterThan(15);
@@ -73,7 +90,11 @@ describe('Set DSO Config Rules Form', () => {
       /Unable to find an element/
     );
 
-    expect(screen.getByTestId('json-diffs-details')).toBeInTheDocument();
+    const jsonDiffsToggle = screen.getByTestId('json-diff-toggle');
+    expect(screen.getByText('JSON')).toBeInTheDocument();
+    expect(jsonDiffsToggle).toHaveTextContent('Show JSON');
+    expect(jsonDiffsToggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByTestId('json-diffs-details')).not.toBeVisible();
   });
 
   test('should render errors when submit button is clicked on new form', async () => {
@@ -90,7 +111,7 @@ describe('Set DSO Config Rules Form', () => {
     expect(submitButton).toBeInTheDocument();
 
     await user.click(submitButton);
-    expect(submitButton.getAttribute('disabled')).toBeDefined();
+    expect(submitButton.getAttribute('disabled')).not.toBeNull();
     expect(async () => await user.click(submitButton)).rejects.toThrowError(
       /Unable to perform pointer interaction/
     );
@@ -109,7 +130,7 @@ describe('Set DSO Config Rules Form', () => {
 
     await user.click(actionInput); // using this to trigger the onBlur event which triggers the validation
 
-    expect(submitButton.getAttribute('disabled')).not.toBeInTheDocument();
+    await waitFor(() => expect(submitButton.getAttribute('disabled')).toBeNull());
   });
 
   test('expiry date must be in the future', async () => {
@@ -263,7 +284,9 @@ describe('Set DSO Config Rules Form', () => {
 
     await user.click(submitButton);
 
-    expect(screen.getByText('Proposal Summary')).toBeInTheDocument();
+    expect(screen.getByText('Proposal Review')).toBeInTheDocument();
+    expect(screen.queryByText('JSON')).not.toBeInTheDocument();
+    expect(screen.getByTestId('json-diff-toggle')).toHaveTextContent('Show JSON');
   });
 
   test('should show error on form if submission fails', async () => {
@@ -374,20 +397,23 @@ describe('Set DSO Config Rules Form', () => {
     const c2Input = screen.getByTestId('config-field-voteCooldownTime');
     await user.type(c2Input, '9999');
 
-    const jsonDiffs = screen.getByText('JSON Diffs');
-    expect(jsonDiffs).toBeInTheDocument();
+    const jsonDiffsToggle = screen.getByTestId('json-diff-toggle');
+    expect(jsonDiffsToggle).toHaveTextContent('Show JSON');
+    expect(jsonDiffsToggle).toHaveAttribute('aria-expanded', 'false');
 
-    await user.click(jsonDiffs);
-    expect(await screen.findByTestId('config-diffs-display')).toBeInTheDocument();
+    await user.click(jsonDiffsToggle);
+    expect(await screen.findByTestId('config-diffs-display')).toBeVisible();
+    expect(jsonDiffsToggle).toHaveTextContent('Hide JSON');
+    expect(jsonDiffsToggle).toHaveAttribute('aria-expanded', 'true');
 
     const reviewButton = screen.getByTestId('submit-button');
     await waitFor(async () => {
       expect(reviewButton.getAttribute('disabled')).not.toBeInTheDocument();
     });
 
-    expect(jsonDiffs).toBeInTheDocument();
-    await user.click(jsonDiffs);
-    expect(screen.queryByTestId('config-diffs-display')).toBeInTheDocument();
+    expect(jsonDiffsToggle).toBeInTheDocument();
+    await user.click(jsonDiffsToggle);
+    expect(await screen.findByTestId('config-diffs-display')).toBeInTheDocument();
   });
 
   test('should have decentralized synchronizer fields disabled', async () => {

@@ -271,6 +271,8 @@ class ConfirmationRequestAndResponseProcessorTest
       result.asScala.map(_.batch).toList
     }
 
+    private val clock = mock[Clock]
+
     val verdictSender: TestVerdictSender =
       new TestVerdictSender(
         syncCryptoApi,
@@ -284,7 +286,7 @@ class ConfirmationRequestAndResponseProcessorTest
     val mediatorState = new MediatorState(
       new InMemoryFinalizedResponseStore(loggerFactory),
       new InMemoryMediatorDeduplicationStore(loggerFactory, timeouts),
-      mock[Clock],
+      clock,
       MediatorTestMetrics,
       testedProtocolVersion,
       timeouts,
@@ -296,10 +298,6 @@ class ConfirmationRequestAndResponseProcessorTest
       syncCryptoApi,
       timeTracker,
       mediatorState,
-      // this test calls processRequest and processResponses directly,
-      // which is not affected by the asynchronous processing flag, which is handled in the enclosing scope
-      // calling these methods
-      asynchronousProcessing = true,
       loggerFactory,
       timeouts,
       BatchingConfig(),

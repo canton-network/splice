@@ -45,6 +45,7 @@ class CommandCircuitBreakerTest
       resetFailuresAfter = NonNegativeFiniteDuration.ofMinutes(1),
     ),
     clock,
+    PartyId.tryFromProtoPrimitive("dso::namespace"),
     loggerFactory,
   )
 

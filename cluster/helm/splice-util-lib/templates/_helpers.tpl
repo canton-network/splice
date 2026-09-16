@@ -1,19 +1,29 @@
+{{- define "splice-util-lib.secret" -}}
+{{- $overrideValue := "" -}}
+{{- if .overrides -}}
+  {{- if hasKey .overrides .overrideKey -}}
+    {{- $overrideValue = index .overrides .overrideKey -}}
+  {{- end -}}
+{{- end -}}
+{{- if $overrideValue -}}
+value: {{ $overrideValue | quote }}
+{{- else -}}
+valueFrom:
+  secretKeyRef:
+    key: {{ .secretKey }}
+    name: {{ .secretName }}
+    optional: {{ if hasKey . "optional" }}{{ .optional }}{{ else }}false{{ end }}
+{{- end -}}
+{{- end -}}
 {{- define "splice-util-lib.auth0-env-vars" -}}
 {{- $app := .appName }}
 {{- $keyName := .keyName }}
 {{- $fixedTokens := .fixedTokens }}
+{{- $secretName := .secretName | default (printf "splice-app-%s-ledger-api-auth" $keyName) }}
 - name: "SPLICE_APP_{{ $app | upper }}_LEDGER_API_AUTH_USER_NAME"
-  valueFrom:
-    secretKeyRef:
-      key: ledger-api-user
-      name: "splice-app-{{ $keyName }}-ledger-api-auth"
-      optional: false
+{{ include "splice-util-lib.secret" (dict "overrides" .secretOverrides "overrideKey" "ledgerApiUser" "secretName" $secretName "secretKey" "ledger-api-user" "optional" false) | indent 2 }}
 - name: "SPLICE_APP_{{ $app | upper }}_LEDGER_API_AUTH_AUDIENCE"
-  valueFrom:
-    secretKeyRef:
-      key: audience
-      name: "splice-app-{{ $keyName }}-ledger-api-auth"
-      optional: false
+{{ include "splice-util-lib.secret" (dict "overrides" .secretOverrides "overrideKey" "audience" "secretName" $secretName "secretKey" "audience" "optional" false) | indent 2 }}
 {{- if .fixedTokens }}
 - name: ADDITIONAL_CONFIG_AUTH
   value: |
@@ -23,47 +33,23 @@
       token = ${SPLICE_APP_{{ $app | upper }}_LEDGER_API_AUTH_TOKEN}
     }
 - name: "SPLICE_APP_{{ $app | upper }}_LEDGER_API_AUTH_TOKEN"
-  valueFrom:
-    secretKeyRef:
-      key: token
-      name: "splice-app-{{ $keyName }}-ledger-api-auth"
-      optional: false
+{{ include "splice-util-lib.secret" (dict "overrides" .secretOverrides "overrideKey" "token" "secretName" $secretName "secretKey" "token" "optional" false) | indent 2 }}
 {{ else }}
 - name: "SPLICE_APP_{{ $app | upper }}_LEDGER_API_AUTH_URL"
-  valueFrom:
-    secretKeyRef:
-      key: url
-      name: "splice-app-{{ $keyName }}-ledger-api-auth"
-      optional: false
+{{ include "splice-util-lib.secret" (dict "overrides" .secretOverrides "overrideKey" "url" "secretName" $secretName "secretKey" "url" "optional" false) | indent 2 }}
 - name: "SPLICE_APP_{{ $app | upper }}_LEDGER_API_AUTH_CLIENT_ID"
-  valueFrom:
-    secretKeyRef:
-      key: client-id
-      name: "splice-app-{{ $keyName }}-ledger-api-auth"
-      optional: false
+{{ include "splice-util-lib.secret" (dict "overrides" .secretOverrides "overrideKey" "clientId" "secretName" $secretName "secretKey" "client-id" "optional" false) | indent 2 }}
 - name: "SPLICE_APP_{{ $app | upper }}_LEDGER_API_AUTH_CLIENT_SECRET"
-  valueFrom:
-    secretKeyRef:
-      key: client-secret
-      name: "splice-app-{{ $keyName }}-ledger-api-auth"
-      optional: false
+{{ include "splice-util-lib.secret" (dict "overrides" .secretOverrides "overrideKey" "clientSecret" "secretName" $secretName "secretKey" "client-secret" "optional" false) | indent 2 }}
 - name: "SPLICE_APP_{{ $app | upper }}_LEDGER_API_AUTH_SCOPE"
-  valueFrom:
-    secretKeyRef:
-      key: scope
-      name: "splice-app-{{ $keyName }}-ledger-api-auth"
-      optional: true
+{{ include "splice-util-lib.secret" (dict "overrides" .secretOverrides "overrideKey" "scope" "secretName" $secretName "secretKey" "scope" "optional" true) | indent 2 }}
 {{- end }}
 {{- end -}}
 {{- define "splice-util-lib.auth0-user-env-var" -}}
 {{- $app := .appName }}
 {{- $keyName := .keyName }}
 - name: "SPLICE_APP_{{ $app | upper }}_LEDGER_API_AUTH_USER_NAME"
-  valueFrom:
-    secretKeyRef:
-      key: ledger-api-user
-      name: "splice-app-{{ $keyName }}-ledger-api-auth"
-      optional: false
+{{ include "splice-util-lib.secret" (dict "overrides" .secretOverrides "overrideKey" "ledgerApiUser" "secretName" (printf "splice-app-%s-ledger-api-auth" $keyName) "secretKey" "ledger-api-user" "optional" false) | indent 2 }}
 {{- end -}}
 {{- define "splice-util-lib.additional-env-vars" -}}
 {{- range $var := . }}
@@ -82,6 +68,7 @@
 {{- $nodeSelector := .nodeSelector }}
 {{- $affinity := .affinity }}
 {{- $tolerations := .tolerations }}
+{{- $priorityClassName := .priorityClassName }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -99,7 +86,7 @@ spec:
       labels:
         app: {{ $name }}
     spec:
-      {{- include "splice-util-lib.service-account" .Values | nindent 6 }}
+      {{- include "splice-util-lib.service-account" . | nindent 6 }}
       volumes:
         - name: postgres-password
           secret:
@@ -114,7 +101,7 @@ spec:
           - name: DATA_SOURCE_PASS_FILE
             value: /tmp/pwd
           - name: DATA_SOURCE_USER
-            value: cnadmin
+            value: {{ $persistence.user | default "cnadmin" }}
           - name: DATA_SOURCE_URI
             value: {{ $persistence.host  }}:{{ $persistence.port | default 5432 }}/{{ $.persistence.databaseName }}?sslmode=disable
         command:
@@ -133,18 +120,18 @@ spec:
         image: postgres:14
         env:
           - name: PGPASSWORD
-            valueFrom:
-              secretKeyRef:
-                key: postgresPassword
-                name: {{ $persistence.secretName }}
+{{ include "splice-util-lib.secret" (dict "overrides" $persistence.secretOverrides "overrideKey" "postgresPassword" "secretName" $persistence.secretName "secretKey" "postgresPassword") | indent 12 }}
         command:
           - 'bash'
           - '-c'
           - |
-            until errmsg=$(psql -h {{ $persistence.host }} -p {{ $persistence.port }} --username=cnadmin --dbname={{ $persistence.databaseName }} -p {{ $persistence.port | default 5432 }} -c 'select 1' 2>&1); do
+            until errmsg=$(psql -h {{ $persistence.host }} -p {{ $persistence.port }} --username={{ $persistence.user | default "cnadmin" }} --dbname={{ $persistence.databaseName }} -p {{ $persistence.port | default 5432 }} -c 'select 1' 2>&1); do
                 echo "Waiting for database {{ $persistence.databaseName }}, at hostname {{ $persistence.host }}, port {{ $persistence.port | default 5432 }} to be accessible. Last error: $errmsg"
                 sleep 2;
             done
+      {{- with $priorityClassName }}
+      priorityClassName: {{ . | quote }}
+      {{- end }}
       {{- with $nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -201,7 +188,7 @@ spec:
 {{- define "splice-util-lib.log-level" }}
 - name: LOG_LEVEL_CANTON
   value: {{ .logLevel | default "INFO" }}
-- name: LOG_API_REQUEST_CANTON
+- name: LOG_LEVEL_API_REQUEST
   value: {{ .apiRequestLogLevel | default "DEBUG" }}
 - name: LOG_LEVEL_STDOUT
   value: {{ .logLevelStdout | default "DEBUG" }}
@@ -209,9 +196,10 @@ spec:
   value: {{ .logAsyncFlush | default true | not | quote }}
 {{- end }}
 {{- define "splice-util-lib.service-account" -}}
-{{- if .serviceAccountName -}}
+automountServiceAccountToken: {{ .automountServiceAccountToken | default false }}
+{{- if .serviceAccountName }}
 serviceAccountName: {{ .serviceAccountName }}
-{{- end -}}
+{{- end }}
 {{- end -}}
 # See https://helm.sh/docs/chart_best_practices/labels/#standard-labels
 {{- define "splice-util-lib.standard-labels" -}}

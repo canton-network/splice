@@ -2,6 +2,52 @@
   "$schema": "http://json-schema.org/schema#",
   "type": "object",
   "properties": {
+    "securityContexts": {
+      "type": "object",
+      "properties": {
+        "pod": { "type": "object" },
+        "containers": {
+          "type": "object",
+          "properties": {
+            "validator": { "type": "object" },
+            "ansWebUi": { "type": "object" },
+            "walletWebUi": { "type": "object" },
+            "persistence": { "type": "object" }
+          },
+          "required": ["validator", "ansWebUi", "walletWebUi", "persistence"]
+        }
+      },
+      "required": ["pod", "containers"]
+    },
+    "serviceAccountName": {
+      "type": "string"
+    },
+    "automountServiceAccountToken": {
+      "type": "boolean"
+    },
+    "ansWebUi": {
+      "type": "object",
+      "required": ["imageName"],
+      "properties": {
+        "imageName": {
+          "type": "string"
+        },
+        "secretName": {
+          "type": "string"
+        },
+        "secretOverrides": {
+          "type": "object",
+          "properties": {
+            "clientId": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
     "imagePullPolicy": {
       "type": "string"
     },
@@ -90,6 +136,45 @@
     "uiPollInterval": {
       "type": "number",
       "description": "The interval in milliseconds to poll the UI for updates"
+    },
+    "wallet": {
+      "type": "object",
+      "required": ["imageName"],
+      "properties": {
+        "imageName": {
+          "type": "string"
+        }
+      }
+    },
+    "validatorWebUi": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "secretName": {
+          "type": "string"
+        },
+        "secretOverrides": {
+          "type": "object",
+          "properties": {
+            "clientId": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "appLabels": {
+      "type": "object",
+      "properties": {
+        "validatorApp": { "type": "string" },
+        "walletWebUi": { "type": "string" },
+        "ansWebUi": { "type": "string" }
+      }
     }
   },
   "allOf": [
@@ -203,10 +288,14 @@
         "migration",
         "nodeIdentifier",
         "persistence",
-        "spliceInstanceNames"
+        "spliceInstanceNames",
+        "imageName"
       ],
       "properties": {
         "imageRepo": {
+          "type": "string"
+        },
+        "imageName": {
           "type": "string"
         },
         "imageDigests": {
@@ -268,7 +357,8 @@
             "host",
             "port",
             "user",
-            "secretName"
+            "secretName",
+            "initImageName"
           ],
           "properties": {
             "databaseName": {
@@ -288,6 +378,20 @@
             },
             "secretName": {
               "type": "string"
+            },
+            "bootstrapDatabaseName": {
+              "type": "string"
+            },
+            "initImageName": {
+              "type": "string"
+            },
+            "secretOverrides": {
+              "type": "object",
+              "properties": {
+                "postgresPassword": {
+                  "type": "string"
+                }
+              }
             }
           }
         },
@@ -334,6 +438,9 @@
         "tolerations": {
           "type": "array"
         },
+        "priorityClassName": {
+          "type": "string"
+        },
         "auth": {
           "type": "object",
           "required": ["audience", "jwksUrl"],
@@ -346,6 +453,35 @@
               "type": "string",
               "pattern": "^http[s]?://.+$",
               "description": "The URL for the JWKS endpoint for the validator app API"
+            },
+            "secretName": {
+              "type": "string"
+            },
+            "secretOverrides": {
+              "type": "object",
+              "properties": {
+                "ledgerApiUser": {
+                  "type": "string"
+                },
+                "audience": {
+                  "type": "string"
+                },
+                "token": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string"
+                },
+                "clientId": {
+                  "type": "string"
+                },
+                "clientSecret": {
+                  "type": "string"
+                },
+                "scope": {
+                  "type": "string"
+                }
+              }
             }
           }
         },
@@ -408,6 +544,14 @@
                     },
                     "secretName": {
                       "type": "string"
+                    },
+                    "secretOverrides": {
+                      "type": "object",
+                      "properties": {
+                        "jsonCredentials": {
+                          "type": "string"
+                        }
+                      }
                     }
                   }
                 },

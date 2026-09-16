@@ -28,6 +28,7 @@ import com.digitalasset.canton.platform.config.{
   PartyManagementServiceConfig,
   StateServiceConfig,
   TopologyAwarePackageSelectionConfig,
+  TrafficEnforcementConfig,
   UpdateServiceConfig,
   UserManagementServiceConfig,
 }
@@ -95,6 +96,7 @@ final case class ParticipantNodeConfig(
     override val monitoring: NodeMonitoringConfig = NodeMonitoringConfig(),
     override val topology: TopologyConfig = TopologyConfig(),
     alphaDynamic: DeclarativeParticipantConfig = DeclarativeParticipantConfig(),
+    trafficEnforcement: TrafficEnforcementConfig = TrafficEnforcementConfig(),
 ) extends LocalNodeConfig
     with BaseParticipantConfig
     with ConfigDefaults[Option[DefaultPorts], ParticipantNodeConfig] {
@@ -381,17 +383,25 @@ object TestingTimeServiceConfig {
   * @param autoSyncProtocolFeatureFlags
   *   When true (default), protocol feature flags will be automatically updated when the node
   *   connects to a synchronizer.
-  * @param alphaMultiSynchronizerSupport
-  *   Determines whether ACS imports use Create/Archive or Assign/Unassign events. Only enable if
-  *   your Ledger API consumers can process (un)assign events and require non-zero reassignment
-  *   counters.
-  *   - false (Default): Uses Create/Archive; resets reassignment counters to zero.
-  *   - true: Uses Assign/Unassign; preserves existing reassignment counters.
+  * @param enableAllLedgerApiReassignments
+  *   Determines whether ACS imports use Created or Assigned events. Similarly, determines whether
+  *   the repair service uses Created/Archive events or Assigned/Unassigned events for add and purge
+  *   respectively. Only enable if your Ledger API consumers can process (un)assigned events and
+  *   require non-zero reassignment counters.
+  *   - false (Default): Uses Created/Archive; resets reassignment counters to zero.
+  *   - true: Uses Assigned/Unassigned; preserves existing reassignment counters.
+  *
+  * Note: If multi-synchronizer is enabled via the EnableMultiSynchronizer flag, then Assigned and
+  * Unassigned event will be emitted when processing reassignments messages from the synchronizer
+  * regardless of the value of enableAllLedgerApiReassignments.
   * @param commitAfterFailedActivenessCheck
   *   For internal testing only. Do not enable this in production.
   * @param validateLegacyContractsV11
   *   Enables an extra validation for contracts with contract id version V11. Keep this enabled in
   *   production.
+  * @param connectToSynchronizersOnStartup
+  *   If true, connects to synchronizers that have manualConnect=false on startup. Default: true.
+  *   Has impact only if manual-start is false.
   */
 final case class ParticipantNodeParameterConfig(
     adminWorkflow: AdminWorkflowConfig = AdminWorkflowConfig(),
@@ -429,10 +439,11 @@ final case class ParticipantNodeParameterConfig(
     commitmentReduceParallelism: NonNegativeInt = NonNegativeInt.one,
     commitmentUseDbSnapshotForParticipantLookup: Boolean = false,
     autoSyncProtocolFeatureFlags: Boolean = true,
-    alphaMultiSynchronizerSupport: Boolean = false,
+    enableAllLedgerApiReassignments: Boolean = false,
     commitAfterFailedActivenessCheck: Boolean = false,
     lsu: LsuConfig = LsuConfig(),
     validateLegacyContractsV11: Boolean = true,
+    connectToSynchronizersOnStartup: Boolean = true,
 ) extends LocalNodeParametersConfig
 
 /** Config for LSU.
@@ -441,9 +452,7 @@ final case class ParticipantNodeParameterConfig(
   *   Whether to automatically perform LSU. Default is true.
   * @param lsuRetry
   *   Config for the retries of the LSU operation. Retries are done aggressively.
-  * @param handshakeRetry
-  *   Config for the retries of the handshake prior to LSU. Retries are infrequent since the
-  *   handshake runs as a non-urgent background task.
+  *
   * @param sequencerIdsRetrievalRetry
   *   Config for the retries of the task that fetches the sequencer ids.
   * @param purgeObsoleteTopology
@@ -458,11 +467,7 @@ final case class LsuConfig(
       maxDelay = config.NonNegativeDuration.ofSeconds(5),
       maxRetries = Int.MaxValue,
     ),
-    handshakeRetry: ExponentialBackoffConfig = ExponentialBackoffConfig(
-      initialDelay = config.NonNegativeFiniteDuration.ofMinutes(1),
-      maxDelay = config.NonNegativeDuration.ofMinutes(5),
-      maxRetries = Int.MaxValue,
-    ),
+    handshake: LsuHandshake = LsuHandshake(),
     sequencerIdsRetrievalRetry: ExponentialBackoffConfig = ExponentialBackoffConfig(
       initialDelay = config.NonNegativeFiniteDuration.ofSeconds(10),
       maxDelay = config.NonNegativeDuration.ofSeconds(30),
@@ -471,10 +476,36 @@ final case class LsuConfig(
     purgeObsoleteTopology: Option[PurgeConfig] = None,
 )
 
+/** Config for the handshake with the successor.
+  *
+  * @param retry
+  *   Config for the retries of the handshake prior to LSU. Retries are infrequent since the
+  *   handshake runs as a non-urgent background task.
+  * @param minimumDuration
+  *   If defined: after a successful handshake, will continue to perform handshake with the
+  *   sequencers for the specified duration. Should not be too big (in the order of a few seconds).
+  * @param periodicCheck
+  *   Duration between two checks whether the wait should be interrupted. Has an impact only if the
+  *   following two conditions hold:
+  *   - minimumDuration is non-empty
+  *   - is smaller than minimumDuration
+  */
+final case class LsuHandshake(
+    retry: ExponentialBackoffConfig = ExponentialBackoffConfig(
+      initialDelay = config.NonNegativeFiniteDuration.ofMinutes(1),
+      maxDelay = config.NonNegativeDuration.ofMinutes(5),
+      maxRetries = Int.MaxValue,
+    ),
+    minimumDuration: Option[config.NonNegativeFiniteDuration] = Some(
+      config.NonNegativeFiniteDuration.ofSeconds(5)
+    ),
+    periodicCheck: config.NonNegativeFiniteDuration = config.NonNegativeFiniteDuration.ofSeconds(1),
+)
+
 /** Control incremental purges
   *
   * @param chunkSize
-  *   The amount of data that should be removed per purge iteration
+  *   The amount of data that should be removed per purge iteration.
   * @param cron
   *   A cron expression, defining when the purges can take place
   * @param maxDuration
@@ -485,6 +516,8 @@ final case class PurgeConfig(
     chunkSize: PositiveInt = PurgeConfig.DefaultChunkSize,
     cron: String = PurgeConfig.DefaultCron,
     maxDuration: config.PositiveFiniteDuration = PurgeConfig.DefaultMaxDuration,
+    purgeableStoresListValidity: config.NonNegativeFiniteDuration =
+      config.NonNegativeFiniteDuration.ofMinutes(1),
 )
 
 object PurgeConfig {

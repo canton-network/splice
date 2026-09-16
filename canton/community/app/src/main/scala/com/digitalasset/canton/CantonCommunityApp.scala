@@ -3,8 +3,8 @@
 
 package com.digitalasset.canton
 
-import com.digitalasset.canton.config.{CantonConfig, DefaultPorts}
 import com.digitalasset.canton.config.ConfigErrors.CantonConfigError
+import com.digitalasset.canton.config.{CantonConfig, DefaultPorts}
 import com.digitalasset.canton.environment.{
   CantonEnvironment,
   CommunityEnvironmentFactory,
@@ -23,7 +23,7 @@ object CantonCommunityApp extends CantonAppDriver {
   ): Either[CantonConfigError, CantonConfig] =
     CantonConfig.loadAndValidate(config, defaultPorts)
 
-  override protected def environmentFactory: EnvironmentFactory[CantonConfig, CantonEnvironment] =
+  override protected def environmentFactory: EnvironmentFactory[Config, E] =
     CommunityEnvironmentFactory
 
   override def withManualStart(config: CantonConfig): CantonConfig =

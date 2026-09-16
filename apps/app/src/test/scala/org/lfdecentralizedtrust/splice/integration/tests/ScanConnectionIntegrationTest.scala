@@ -24,33 +24,39 @@ class ScanConnectionIntegrationTest
     // tap once so the AmuletRules are cached...
     aliceWalletClient.tap(5)
     val baseConfig = sv1ScanBackend.getAmuletRules().contract.payload.configSchedule.initialValue
-    clue("change the amulet config to invalidate the cache.") {
-      val newConfig =
-        mkUpdatedAmuletConfig(
-          sv1ScanBackend.getAmuletRules().contract,
-          tickDuration = defaultTickDuration,
-          maxNumInputs = 101,
-        )
-
-      setAmuletConfig(
-        Seq((Some(durationUntilOffboardingEffectivity), newConfig, baseConfig)),
-        durationUntilExpiration,
-      )
-    }
-    eventually(40.seconds) {
-      sv1ScanBackend
-        .getAmuletRules()
-        .contract
-        .payload
-        .configSchedule
-        .initialValue
-        .transferConfig
-        .maxNumInputs shouldBe 101
-    }
 
     loggerFactory.assertEventuallyLogsSeq(SuppressionRule.LevelAndAbove(Level.DEBUG))(
-      // tapping again..
-      aliceWalletClient.tap(5),
+      {
+        clue("change the amulet config to invalidate the cache.") {
+          val newConfig =
+            mkUpdatedAmuletConfig(
+              sv1ScanBackend.getAmuletRules().contract,
+              tickDuration = defaultTickDuration,
+              maxNumInputs = 101,
+            )
+
+          setAmuletConfig(
+            Seq((Some(durationUntilOffboardingEffectivity), newConfig, baseConfig)),
+            durationUntilExpiration,
+          )
+        }
+
+        eventually(40.seconds) {
+          sv1ScanBackend
+            .getAmuletRules()
+            .contract
+            .payload
+            .configSchedule
+            .initialValue
+            .transferConfig
+            .maxNumInputs shouldBe 101
+        }.withClue("sv1ScanBackend should return the updated amulet rules contract")
+
+        // If the background task didn't already trigger the cache refresh, this tap will.
+        clue("tapping again to trigger the cache refresh, unless already refreshed") {
+          aliceWalletClient.tap(5)
+        }
+      },
       entries => {
         forAtLeast(
           1,

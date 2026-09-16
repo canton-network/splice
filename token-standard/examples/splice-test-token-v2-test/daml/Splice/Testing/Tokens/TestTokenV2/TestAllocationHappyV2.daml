@@ -1,0 +1,346 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- | Test happy path V2 allocation API calls.
+--
+-- Note that batch settlement scenarios are tested as part of the token standard DvP tests.
+module Splice.Testing.Tokens.TestTokenV2.TestAllocationHappyV2 where
+
+import DA.Assert
+import DA.List (sort)
+import DA.Map qualified as Map
+import DA.TextMap qualified as TextMap
+
+import Daml.Script
+
+import Splice.Api.Token.MetadataV1
+import Splice.Api.Token.HoldingV2 qualified as V2
+import Splice.Api.Token.AllocationV2 qualified as V2
+import Splice.Api.Token.AllocationInstructionV2 qualified as V2
+
+import Splice.TokenStandard.Utils qualified as TSU
+
+import Splice.Testing.Tokens.TestTokenV2 qualified as TestTokenV2
+
+import Splice.Testing.Utils
+import Splice.Testing.Registries.TestTokenV2_RegistryV2 qualified as TestTokenRegistryV2
+import Splice.Testing.TokenStandard.RegistryApiV2 qualified as V2
+import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
+import Splice.Testing.TokenStandard.MultiRegistry qualified as MultiRegistry
+
+import Splice.Testing.Tokens.TestTokenV2.TokenStandardTestEnv (TestEnv(..), setupTest, checkEq)
+
+
+-- V2 API: allocate, withdraw and cancel
+----------------------------------------
+
+test_allocation_WithdrawV2 : Script ()
+test_allocation_WithdrawV2 = test_allocation_withdrawCancel_generic $ \TestEnv {..} allocCid -> do
+  context <- V2.getAllocation_WithdrawContext registryV2 allocCid emptyMetadata
+  submit (actAs alice <> discloseMany' context.disclosures) $
+    exerciseCmd allocCid V2.Allocation_Withdraw with
+      actors = [alice]
+      extraArgs = ExtraArgs with
+        context = context.choiceContext
+        meta = emptyMetadata
+  pure ()
+
+-- TODO(tech-debt): add support for dealing with stale references to locked tokens
+--
+-- Handle them analogous to how Amulet handles them and copy the relevant tests from Amulet.
+-- In particular:
+--
+--  - test_allocation_WithdrawV2_expiredLock
+--  - test_allocation_WithdrawV2_missingLockContext : Script ()
+
+
+test_allocation_CancelV2 : Script ()
+test_allocation_CancelV2 = test_allocation_withdrawCancel_generic $ \TestEnv {..} allocCid -> do
+  context <- V2.getAllocation_CancelContext registryV2 allocCid emptyMetadata
+  submit (actAs provider <> discloseMany' context.disclosures) $
+    exerciseCmd allocCid V2.Allocation_Cancel with
+      actors = [provider]
+      extraArgs = ExtraArgs with
+        context = context.choiceContext
+        meta = emptyMetadata
+  pure ()
+
+-- No test for allocationInstruction cancel, as instructions are not visible to
+-- executors and thus do not have a cancel action.
+test_allocationInstruction_WithdrawV2 : Script ()
+test_allocationInstruction_WithdrawV2 = test_allocationInstruction_withdraw_generic $ \TestEnv {..} allocCid -> do
+  context <- V2.getAllocationInstruction_WithdrawContext registryV2 allocCid emptyMetadata
+  submit (actAs alice <> discloseMany' context.disclosures) $
+    exerciseCmd allocCid V2.AllocationInstruction_Withdraw with
+      actors = [alice]
+      extraArgs = ExtraArgs with
+        context = context.choiceContext
+        meta = emptyMetadata
+  pure ()
+
+
+-- Expiry via V2.Allocation_Cancel of V1 and V2 amulet allocations
+------------------------------------------------------------------
+
+-- TODO(tech-debt): add support for time-limited locked tokens to avoid DoS problems from allocations with very long settlement deadlines
+--
+-- Handle them analogous to how Amulet handles them and copy the relevant tests from Amulet.
+-- In particular:
+--  - test_AmuletAllocationV2_DsoExpire
+--  - test_AmuletAllocationV1_DsoExpire
+--  - test_AmuletAllocationV2_DsoExpire_non_default_ttl
+--  - test_AmuletAllocationV1_DsoExpire_non_default_ttl
+
+
+-- Extra observers for allocations
+----------------------------------
+
+test_allocationV1_extraObservers : Script ()
+test_allocationV1_extraObservers = do
+  testEnv@(TestEnv {..}) <- setupTest
+  WalletClientV2.allocateV1 registries allocationV1
+  [(_, allocV1)] <- query @TestTokenV2.TokenAllocationV1 alice
+  checkAllocationExtraObservers testEnv (toInterface allocV1)
+
+test_allocationV2_extraObservers : Script ()
+test_allocationV2_extraObservers = do
+  testEnv@(TestEnv {..}) <- setupTest
+  WalletClientV2.allocateV2 registries alice settlementV2 allocationV2
+  [(_, allocV2)] <- query @TestTokenV2.TokenAllocationV2 alice
+  checkAllocationExtraObservers testEnv (toInterface allocV2)
+
+checkAllocationExtraObservers : TestEnv -> V2.Allocation -> Script ()
+checkAllocationExtraObservers (TestEnv {..}) alloc = do
+  -- We always require the provider as an extra observer to never have extra
+  -- views, independent of actors.
+  checkEq  "settleExtraObservers" [provider] $
+    V2.allocation_settleExtraObservers alloc V2.Allocation_Settle with
+      actors = [provider, instrId.admin]
+      extraArgs = emptyExtraArgs
+      extraTransferLegSides = []
+      nextIterationFunding = None
+  checkEq "cancelExtraObservers" [provider] $
+    V2.allocation_cancelExtraObservers alloc V2.Allocation_Cancel with
+      actors = [provider]
+      extraArgs = emptyExtraArgs
+  checkEq "withdrawExtraObservers" [provider] $
+    V2.allocation_withdrawExtraObservers alloc V2.Allocation_Withdraw with
+      actors = [alice]
+      extraArgs = emptyExtraArgs
+
+
+-- Available actions of allocations
+-----------------------------------
+
+test_allocationV1_singleExecutor_availableActions : Script ()
+test_allocationV1_singleExecutor_availableActions = do
+  (TestEnv {..}) <- setupTest
+  WalletClientV2.allocateV1 registries allocationV1
+  [(_, allocV1)] <- query @TestTokenV2.TokenAllocationV1 alice
+  let allocView = view (toInterface @V2.Allocation allocV1)
+  let expectedActions = Map.fromList
+        [ (V2.AA_Settle, [sort [provider, instrId.admin]])
+        , (V2.AA_Cancel, [[provider]])
+        , (V2.AA_Withdraw, [[alice]])
+        ]
+  checkEq "availableActions" expectedActions (map sort <$> allocView.availableActions)
+
+
+test_allocationV1_multiExecutors_availableActions : Script ()
+test_allocationV1_multiExecutors_availableActions = do
+  (TestEnv {..}) <- setupTest
+  provider2 <- allocatePartyExact "provider2"
+  WalletClientV2.allocateV1 registries allocationV1 with
+    settlement = allocationV1.settlement with
+      meta = Metadata with
+        values = TextMap.fromList
+          [ (TSU.extraExecutorsMetaKey, partyToText provider2)
+          ]
+  [(_, allocV1)] <- query @TestTokenV2.TokenAllocationV1 alice
+  let allocView = view (toInterface @V2.Allocation allocV1)
+  let expectedActions = Map.fromList
+        [ (V2.AA_Settle, [sort [provider, provider2, instrId.admin]])
+        , (V2.AA_Cancel, [[provider, provider2]])
+        , (V2.AA_Withdraw, [[alice]])
+        ]
+  checkEq "availableActions" expectedActions (map sort <$> allocView.availableActions)
+
+test_allocationV1_uncommitted_availableActions : Script ()
+test_allocationV1_uncommitted_availableActions = do
+  (TestEnv {..}) <- setupTest
+  provider2 <- allocatePartyExact "provider2"
+  WalletClientV2.allocateV2 registries alice
+    settlementV2 with
+      executors = [provider, provider2]
+    allocationV2 with
+      settlementDeadline = None
+      committed = False
+  [(_, allocV2)] <- query @TestTokenV2.TokenAllocationV2 alice
+  let allocView = view (toInterface @V2.Allocation allocV2)
+  let expectedActions = Map.fromList
+        [ (V2.AA_Settle, [sort [provider, provider2, instrId.admin]])
+        , (V2.AA_Cancel, [[provider, provider2]])
+        , (V2.AA_Withdraw, [[alice]])
+        ]
+  checkEq "uncommitted.availableActions" expectedActions (map sort <$> allocView.availableActions)
+
+test_allocationV2_committed_availableActions : Script ()
+test_allocationV2_committed_availableActions = do
+  (TestEnv {..}) <- setupTest
+  provider2 <- allocatePartyExact "provider2"
+  WalletClientV2.allocateV2 registries alice
+    settlementV2 with
+      executors = [provider, provider2]
+    allocationV2 with
+      settlementDeadline = None
+      committed = True
+  [(_, allocV2)] <- query @TestTokenV2.TokenAllocationV2 alice
+  let allocView = view (toInterface @V2.Allocation allocV2)
+  let expectedActions = Map.fromList
+        [ (V2.AA_Settle, [sort [provider, provider2, instrId.admin]])
+        , (V2.AA_Cancel, [[provider, provider2]])
+          -- No withdraw for a fully committed allocation.
+        ]
+  checkEq "committed.availableActions" expectedActions (map sort <$> allocView.availableActions)
+
+
+-- Extra observers for V2 factory choices
+-----------------------------------------
+
+test_AllocationFactory_Allocate_observers : Script ()
+test_AllocationFactory_Allocate_observers = do
+  (TestEnv {..}) <- setupTest
+  [(_, extRules)] <- query @TestTokenV2.TokenRules instrId.admin
+  let allocFactory = toInterface @V2.AllocationFactory extRules
+  let allocArg = V2.AllocationFactory_Allocate with
+        settlement = settlementV2
+        allocation = allocationV2
+        inputHoldingCids = []
+        requestedAt = now
+        extraArgs = emptyExtraArgs
+        actors = [alice]
+  -- The 'provider' is no observer, as they should not see the splitting of the input holdings.
+  -- 'alice' is an extra observer, just because they happen to also be a contract observer.
+  -- It's not required, but also doesn't hurt.
+  checkEq "allocFactory.allocateExtraObservers" [alice] $
+    V2.allocationFactory_allocateExtraObservers allocFactory allocArg
+
+test_SettlementFactory_Settle_observers : Script ()
+test_SettlementFactory_Settle_observers = do
+  (TestEnv {..}) <- setupTest
+  [(_, extRules)] <- query @TestTokenV2.TokenRules instrId.admin
+  let settleFactory = toInterface @V2.SettlementFactory extRules
+  let settleArg = V2.SettlementFactory_SettleBatch with
+        settlement = settlementV2
+        transferLegs = [legV2]
+        allocations = []
+        extraArgs = emptyExtraArgs
+        actors = [alice]
+  -- This is a private asset ==> no extra observers on batch settlement.
+  checkEq "settleFactory.settleExtraObservers" [] $
+    V2.settlementFactory_settleBatchExtraObservers settleFactory settleArg
+
+
+-- Shared test setup
+--------------------
+
+test_allocation_withdrawCancel_generic : (TestEnv -> ContractId V2.Allocation -> Script ()) -> Script ()
+test_allocation_withdrawCancel_generic mkTest = do
+  testEnv@(TestEnv {..}) <- setupTest
+
+  let checkReset = do
+        WalletClientV2.checkUnlockedBalance alice instrId 1000.0
+        [] <- WalletClientV2.listAllocationsV1 alice
+        [] <- WalletClientV2.listAllocationsV2 aliceAccount alice
+        pure ()
+
+  -- test v1 version
+  WalletClientV2.allocateV1 registries allocationV1
+  WalletClientV2.checkUnlockedBalance alice instrId 990.0
+  [(allocCid, _)] <- WalletClientV2.listAllocationsV2 aliceAccount alice
+  mkTest testEnv allocCid
+  checkReset
+
+  -- test v2 version
+  WalletClientV2.allocateV2 registries alice settlementV2 allocationV2
+  WalletClientV2.checkUnlockedBalance alice instrId 990.0
+  [(allocCid, _)] <- WalletClientV2.listAllocationsV2 aliceAccount alice
+  mkTest testEnv allocCid
+  checkReset
+
+
+test_allocationInstruction_withdraw_generic : (TestEnv -> ContractId V2.AllocationInstruction -> Script ()) -> Script ()
+test_allocationInstruction_withdraw_generic mkTest = do
+  testEnv@(TestEnv {..}) <- setupTest
+
+  let checkReset = do
+        WalletClientV2.checkUnlockedBalance alice instrId 1000.0
+        [] <- WalletClientV2.listAllocationInstructionsV1 alice
+        [] <- WalletClientV2.listAllocationInstructionsV2 aliceAccount alice
+        pure ()
+
+  -- use a joint-control account to test the allocation instruction
+  accountProvider <- allocatePartyExact "accountProvider"
+  let aliceJointControl = V2.Account with
+        owner = Some alice
+        provider = Some accountProvider
+        id = "test-account"
+  TestTokenRegistryV2.makeAccountIfMissing TestTokenV2.AccountConfig with
+        admin = instrId.admin
+        account = aliceJointControl
+        ownerConfig = TestTokenV2.PartyConfig with
+          canInitiate = True
+          mustApprove = True
+        providerConfig = TestTokenV2.PartyConfig with
+          canInitiate = True
+          mustApprove = True
+
+  -- test v1 creation
+  WalletClientV2.allocateV1 registries allocationV1 with
+    transferLeg = allocationV1.transferLeg with
+      meta = TSU.accountToMeta "sender" aliceJointControl emptyMetadata
+  WalletClientV2.checkUnlockedBalance alice instrId 1000.0 -- instructions do not lock the funds immediately
+  instrs <- WalletClientV2.listAllocationInstructionsV2 aliceJointControl alice
+  debug instrs
+  let [(allocInstrCid, _)] = instrs
+  mkTest testEnv allocInstrCid
+  checkReset
+
+  -- test v2 creation
+  WalletClientV2.allocateV2 registries alice settlementV2 allocationV2 with
+    authorizer = aliceJointControl
+  WalletClientV2.checkUnlockedBalance alice instrId 1000.0 -- instructions do not lock the funds immediately
+  instrs <- WalletClientV2.listAllocationInstructionsV2 aliceJointControl alice
+  debug instrs
+  let [(allocInstrCid, _)] = instrs
+  mkTest testEnv allocInstrCid
+  checkReset
+
+
+-- Testing PublicFetch methods
+------------------------------
+
+test_AllocationFactoryV2_and_SettlementFactoryV2_PublicFetch : Script ()
+test_AllocationFactoryV2_and_SettlementFactoryV2_PublicFetch = do
+  -- we use the factory context to get access to the factory
+  (TestEnv {..}) <- setupTest
+  registryV2 <- MultiRegistry.getRegistryApiV2 registries instrId.admin
+  enrichedChoice <- V2.getAllocationFactory registryV2 V2.AllocationFactory_Allocate with
+    settlement = settlementV2
+    allocation = allocationV2
+    inputHoldingCids = []
+    requestedAt = now
+    actors = [alice]
+    extraArgs = emptyExtraArgs
+
+  view <- submitWithDisclosures' alice enrichedChoice.disclosures $
+    exerciseCmd enrichedChoice.factoryCid V2.AllocationFactory_PublicFetch with
+      actors = [alice]
+  view === V2.AllocationFactoryView instrId.admin emptyMetadata
+
+  -- we exploit that the same contract implements the settlement factory
+  let settlementFactoryCid = coerceContractId @_ @V2.SettlementFactory enrichedChoice.factoryCid
+  view <- submitWithDisclosures' alice enrichedChoice.disclosures $
+    exerciseCmd settlementFactoryCid V2.SettlementFactory_PublicFetch with
+      actors = [alice]
+  view === V2.SettlementFactoryView instrId.admin emptyMetadata

@@ -26,14 +26,26 @@ spec:
         {{- include "splice-util-lib.default-labels" (set . "app" .Release.Name) | nindent 8 }}
     spec:
       {{- include "splice-util-lib.service-account" .Values | nindent 6 }}
+      {{- if .Values.securityContexts }}
+      {{- with .Values.securityContexts.pod }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- end }}
       containers:
         - name: party-allocator
-          image: "{{ .Values.imageRepo }}/party-allocator:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).party_allocator) }}"
+          {{- if .Values.securityContexts }}
+          {{- with .Values.securityContexts.containers.partyAllocator }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- end }}
+          image: {{ .Values.imageRepo }}/{{ .Values.imageName}}:{{ .Chart.AppVersion }}{{ ((.Values.imageDigests).party_allocator) }}
           {{- with .Values.imagePullPolicy }}
           imagePullPolicy: {{ . }}
           {{- end }}
           env:
-            {{- include "splice-util-lib.auth0-env-vars" (dict "appName" "validator" "keyName" "validator" "fixedTokens" (.Values.cluster).fixedTokens) | indent 12}}
+            {{- include "splice-util-lib.auth0-env-vars" (dict "appName" "validator" "keyName" "validator" "fixedTokens" (.Values.cluster).fixedTokens "secretOverrides" (.Values.auth).secretOverrides) | indent 12}}
             - name: EXTERNAL_CONFIG
               value: {{ .Values.config | toJson | quote }}
           volumeMounts:

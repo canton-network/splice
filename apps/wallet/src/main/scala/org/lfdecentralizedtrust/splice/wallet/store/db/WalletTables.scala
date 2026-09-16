@@ -84,7 +84,7 @@ object WalletTables extends AcsTables {
       }
     private object IndexColumns {
       val reward_coupon_round = "reward_coupon_round"
-      val All = Seq(reward_coupon_round)
+      val All: Seq[String] = Seq(reward_coupon_round)
     }
   }
 

@@ -75,7 +75,6 @@ import com.digitalasset.canton.serialization.ProtoConverter
 import com.digitalasset.canton.time.NonNegativeFiniteDuration
 import com.digitalasset.canton.topology.transaction.GrpcConnection
 import com.digitalasset.canton.topology.{
-  ConfiguredPhysicalSynchronizerId,
   ParticipantId,
   PartyId,
   PhysicalSynchronizerId,
@@ -251,7 +250,7 @@ private[console] object ParticipantCommands {
         config: SynchronizerConnectionConfig,
         performHandshake: Boolean,
         validation: SequencerConnectionValidation,
-    )(implicit consoleEnvironment: ConsoleEnvironment): ConsoleCommandResult[Unit] =
+    ): ConsoleCommandResult[Unit] =
       runner.adminCommand(
         ParticipantAdminCommands.SynchronizerConnectivity
           .RegisterSynchronizer(
@@ -265,7 +264,7 @@ private[console] object ParticipantCommands {
         runner: AdminCommandRunner,
         config: SynchronizerConnectionConfig,
         validation: SequencerConnectionValidation,
-    )(implicit consoleEnvironment: ConsoleEnvironment): ConsoleCommandResult[Unit] =
+    ): ConsoleCommandResult[Unit] =
       runner.adminCommand(
         ParticipantAdminCommands.SynchronizerConnectivity
           .ConnectSynchronizer(config.toInternal, validation.toInternal)
@@ -2571,14 +2570,20 @@ trait ParticipantAdministration extends FeatureFlagFilter {
         |currently connected to the synchronizer."""
     )
     def list_registered()
-        : Seq[(SynchronizerConnectionConfig, ConfiguredPhysicalSynchronizerId, Boolean)] = {
-      val result = consoleEnvironment.run {
-        adminCommand(ParticipantAdminCommands.SynchronizerConnectivity.ListRegisteredSynchronizers)
+        : Seq[(SynchronizerConnectionConfig, ConfiguredPhysicalSynchronizerId, Boolean)] =
+      consoleEnvironment.run {
+        adminCommand(
+          ParticipantAdminCommands.SynchronizerConnectivity.ListActiveRegisteredSynchronizers
+        )
       }
-      result.map { case (internalConfig, psid, connected) =>
-        (SynchronizerConnectionConfig.fromInternal(internalConfig), psid, connected)
+
+    @Help.Summary("List all the configured synchronizers of this participant")
+    def list_all_registered(): Seq[RegisteredSynchronizer] =
+      consoleEnvironment.run {
+        adminCommand(
+          ParticipantAdminCommands.SynchronizerConnectivity.ListAllRegisteredSynchronizers
+        )
       }
-    }
 
     @Help.Summary("Returns true if a synchronizer is registered using the given alias")
     def is_registered(synchronizerAlias: SynchronizerAlias): Boolean =
@@ -2629,7 +2634,7 @@ trait ParticipantAdministration extends FeatureFlagFilter {
       consoleEnvironment.runE {
         for {
           registeredSynchronizers <- adminCommand(
-            ParticipantAdminCommands.SynchronizerConnectivity.ListRegisteredSynchronizers
+            ParticipantAdminCommands.SynchronizerConnectivity.ListActiveRegisteredSynchronizers
           ).toEither
           cfg <- registeredSynchronizers
             .collectFirst {
@@ -2637,7 +2642,7 @@ trait ParticipantAdministration extends FeatureFlagFilter {
                   if config.synchronizerAlias == synchronizerAlias &&
                     physicalSynchronizerId
                       .forall(requestedPsid => knownPsid.toOption.contains(requestedPsid)) =>
-                SynchronizerConnectionConfig.fromInternal(config)
+                config
             }
             .toRight(
               s"No active synchronizer $synchronizerAlias configured" + physicalSynchronizerId
@@ -2739,7 +2744,7 @@ trait ParticipantAdministration extends FeatureFlagFilter {
     ): Unit = consoleEnvironment.run {
       adminCommand(
         ParticipantAdminCommands.SynchronizerConnectivity
-          .PerformManualLsu(currentPsid, successorPsid, upgradeTime, Right(config.toInternal))
+          .PerformManualLsu(currentPsid, successorPsid, upgradeTime, Right(config))
       )
     }
   }

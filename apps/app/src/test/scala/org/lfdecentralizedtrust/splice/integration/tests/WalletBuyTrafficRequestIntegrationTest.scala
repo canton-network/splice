@@ -307,6 +307,12 @@ class WalletBuyTrafficRequestIntegrationTest
             ))
           ),
       )
+      // All 10 calls share the same tracking id, but the dedup recovery does not apply here:
+      // reading back an accepted duplicate needs a completed submission, which concurrent
+      // submissions do not have. So one call wins and the other 9 are rejected, mostly with
+      // SUBMISSION_ALREADY_IN_FLIGHT from the participant and some with 429 from the rate
+      // limiter. Duplicates of an already-completed submission are covered by the sequential
+      // dedup tests.
       successes shouldBe 1
     }
   }

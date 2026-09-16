@@ -252,6 +252,15 @@ class WalletPaymentIntegrationTest extends IntegrationTest with WalletTestUtil {
         trackingId,
       )
 
+      // Wait for the offer to be ingested, so that the resubmission hits the trackingId check
+      // instead of racing it. A duplicate that loses the race is recovered from the ledger and
+      // returns the original offer rather than failing.
+      eventually() {
+        inside(aliceWalletClient.listTransferOffers()) { case Seq(t) =>
+          t.contractId should be(offerId)
+        }
+      }
+
       assertThrows[CommandFailure](
         loggerFactory.assertLogs(
           aliceWalletClient.createTransferOffer(
@@ -261,16 +270,13 @@ class WalletPaymentIntegrationTest extends IntegrationTest with WalletTestUtil {
             expiration,
             trackingId,
           ),
-          _.errorMessage should include("Command submission already exists").or(
-            include(s"Transfer offer with trackingId ${trackingId} already exists.")
+          _.errorMessage should include(
+            s"Transfer offer with trackingId ${trackingId} already exists."
           ),
         )
       )
 
       eventually() {
-        inside(aliceWalletClient.listTransferOffers()) { case Seq(t) =>
-          t.contractId should be(offerId)
-        }
         inside(aliceWalletClient.listTransferOffers()) { case Seq(t) =>
           t.contractId should be(offerId)
         }

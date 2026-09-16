@@ -569,32 +569,6 @@ abstract class ValidatorPreflightIntegrationTestBase
     copyPartyId()
   }
 
-  private def onboardUserAfterLogin()(implicit webDriver: WebDriverType) = {
-    // After login, the UI fetches the user onboarding status from the validator.
-    // If the user is already onboarded, the party ID is displayed
-    // If the user is not onboarded, the onboard button is displayed
-    eventually() {
-      (find(id("onboard-button")).isDefined || find(className("party-id")).isDefined) shouldBe true
-    }
-
-    if (find(id("onboard-button")).isDefined) {
-      // TODO(DACH-NY/canton-network-internal#485): This is a workaround to bypass slowness of wallet user onboarding
-      actAndCheck(timeUntilSuccess = 2.minute)(
-        "Onboard wallet user", {
-          eventuallyClickOn(id("onboard-button"))
-        },
-      )(
-        "Party ID is displayed after onboarding finishes",
-        _ => {
-          find(className("party-id")) should not be None
-        },
-      )
-    } else {
-      logger.debug("User is already onboarded")
-      find(className("party-id")) should not be None
-    }
-  }
-
   private def copyPartyId()(implicit webDriver: WebDriverType): String = {
     clue(s"Copying party ID") {
       find(className("party-id")).fold(throw new Error("Party ID display expected, but not found"))(
@@ -619,9 +593,8 @@ class RunbookValidatorPreflightIntegrationTest extends ValidatorPreflightIntegra
   // TODO(#979): remove this check once canton handles sequencer connections more gracefully
   override def checkValidatorIsConnectedToSvRunbook() = "Validator is connected to SV runbook" in {
     implicit env =>
-      val sv = sv_client("sv")
       eventually(2.minutes) {
-        val dsoInfo = sv.getDsoInfo()
+        val dsoInfo = scancl("svScan").getDsoInfo()
         val nodeState = dsoInfo.svNodeStates.get(dsoInfo.svParty).value.payload
         val synchronizerNodeConfig =
           nodeState.state.synchronizerNodes.asScala.values.headOption.value

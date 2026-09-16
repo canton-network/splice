@@ -2,37 +2,35 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import CopyableIdentifier from './CopyableIdentifier';
-import type { CopyableIdentifierSize } from './CopyableIdentifier';
+import type { CopyableIdentifierOverflow, CopyableIdentifierSize } from './CopyableIdentifier';
 
 interface MemberIdentifierProps {
   partyId: string;
   isYou: boolean;
   size: CopyableIdentifierSize;
+  overflow?: CopyableIdentifierOverflow;
+  maxWidth?: number;
+  fullWidth?: boolean;
   'data-testid': string;
-}
-
-function abbreviatePartyId(partyId: string, length = 10): string {
-  const [partyHint, hash] = partyId.split('::');
-  if (hash === undefined) {
-    return partyHint;
-  }
-
-  const partOfHash = hash.slice(0, length);
-
-  return `${partyHint}::${partOfHash}...`;
 }
 
 const MemberIdentifier: React.FC<MemberIdentifierProps> = ({
   partyId,
   isYou,
   size,
+  overflow,
+  maxWidth,
+  fullWidth,
   'data-testid': testId,
 }) => (
   <CopyableIdentifier
-    value={abbreviatePartyId(partyId)}
+    value={partyId}
     copyValue={partyId}
     badge={isYou ? 'You' : undefined}
     size={size}
+    overflow={overflow}
+    maxWidth={maxWidth}
+    fullWidth={fullWidth}
     data-testid={testId}
   />
 );

@@ -18,15 +18,19 @@ spec:
         - port: 443
           uri:
             prefix: "/api/json-api/"
+        - port: 80
+          uri:
+            prefix: "/api/json-api/"
       route:
         - destination:
             port:
               number: 7575
-            host: participant-{{ ((.Values.ingress).decentralizedSynchronizer).activeMigrationId }}.{{ (.Values.cluster).svNamespace }}.svc.cluster.local
+            host: participant.{{ (.Values.cluster).svNamespace }}.svc.cluster.local
       rewrite:
         uri: "/"
     - match:
         - port: 443
+        - port: 80
       route:
         - destination:
             port:

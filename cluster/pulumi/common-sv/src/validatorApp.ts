@@ -3,9 +3,10 @@
 import {
   CLUSTER_HOSTNAME,
   DecentralizedSynchronizerMigrationConfig,
+  EnvVarConfig,
 } from '@canton-network/splice-pulumi-common';
 
-import { EnvVarConfig, SingleSvConfiguration } from './singleSvConfig';
+import { SingleSvConfiguration } from './singleSvConfig';
 
 export function valuesForSvValidatorApp(
   decentralizedSynchronizerMigrationConfig: DecentralizedSynchronizerMigrationConfig,

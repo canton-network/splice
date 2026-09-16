@@ -3,7 +3,7 @@
 import { useAmuletPriceVotes } from './useAmuletPriceVotes';
 import { useCometBftDebug } from './useCometBftDebug';
 import { useInfiniteVoteRequestResults } from './useInfiniteVoteRequestResults';
-import { useListVoteRequestResult, useListDsoRulesVoteRequests } from './useListVoteRequests';
+import { useListDsoRulesVoteRequests, useListVoteRequestResult } from './useListVoteRequests';
 import { useListVotes } from './useListVotes';
 import { useMediatorStatus } from './useMediatorStatus';
 import { useNetworkInstanceName } from './useNetworkInstanceName';
@@ -12,6 +12,7 @@ import { useSequencerStatus } from './useSequencerStatus';
 import { useValidatorLicenses } from './useValidatorLicenses';
 import { useValidatorOnboardings } from './useValidatorOnboardings';
 import { useVoteRequest } from './useVoteRequest';
+import { useVoteRequestResultsCount } from './useVoteRequestResultsCount';
 
 export {
   useAmuletPriceVotes,
@@ -27,4 +28,5 @@ export {
   useValidatorLicenses,
   useValidatorOnboardings,
   useVoteRequest,
+  useVoteRequestResultsCount,
 };

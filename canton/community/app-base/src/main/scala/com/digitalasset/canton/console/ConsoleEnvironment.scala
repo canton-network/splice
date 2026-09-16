@@ -238,8 +238,7 @@ trait ConsoleEnvironment extends NamedLogging with FlagCloseable with NoTracing 
         result
       } catch {
         case err: Throwable =>
-          val internalError = CommandInternalError.ErrorWithException(err)
-          internalError.logWithContext()
+          CommandInternalError.ErrorWithException(err).logWithContext()
           err match {
             case NonFatal(_) =>
               // No need to rethrow err, as it has been logged and output
@@ -261,8 +260,7 @@ trait ConsoleEnvironment extends NamedLogging with FlagCloseable with NoTracing 
 
     resultValue match {
       case null =>
-        val internalError = CommandInternalError.NullError()
-        internalError.logWithContext(invocationContext())
+        CommandInternalError.NullError().logWithContext(invocationContext())
         errorHandler.handleInternalError()
       case CommandSuccessful(value) =>
         value

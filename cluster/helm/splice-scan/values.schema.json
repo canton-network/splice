@@ -22,11 +22,79 @@
       "required": [
         "spliceInstanceNames",
         "persistence",
-        "participantAddress"
+        "participantAddress",
+        "imageName"
       ],
       "properties": {
+        "securityContexts": {
+          "type": "object",
+          "properties": {
+            "pod": {
+              "type": "object"
+            },
+            "containers": {
+              "type": "object",
+              "properties": {
+                "scan": {
+                  "type": "object"
+                },
+                "persistence": {
+                  "type": "object"
+                },
+                "ui": {
+                  "type": "object"
+                }
+              },
+              "required": ["scan", "persistence", "ui"]
+            }
+          },
+          "required": ["pod", "containers"]
+        },
+        "serviceAccountName": {
+          "type": "string"
+        },
+        "automountServiceAccountToken": {
+          "type": "boolean"
+        },
         "imageRepo": {
           "type": "string"
+        },
+        "imageName": {
+          "type": "string"
+        },
+        "auth": {
+          "type": "object",
+          "properties": {
+            "audience": {
+              "type": "string"
+            },
+            "jwksUrl": {
+              "type": "string"
+            },
+            "secretOverrides": {
+              "type": "object",
+              "properties": {
+                "ledgerApiUser": { "type": "string" },
+                "audience": { "type": "string" },
+                "token": { "type": "string" },
+                "url": { "type": "string" },
+                "clientId": { "type": "string" },
+                "clientSecret": { "type": "string" },
+                "scope": { "type": "string" }
+              }
+            }
+          }
+        },
+        "ui": {
+          "type": "object",
+          "required": [
+            "imageName"
+          ],
+          "properties": {
+            "imageName": {
+              "type": "string"
+            }
+          }
         },
         "imageDigests": {
           "type": "object"
@@ -90,7 +158,8 @@
             "host",
             "port",
             "user",
-            "secretName"
+            "secretName",
+            "initImageName"
           ],
           "properties": {
             "databaseName": {
@@ -116,6 +185,17 @@
             },
             "txLogStoreDescriptorUserVersion": {
               "type": "integer"
+            },
+            "initImageName": {
+              "type": "string"
+            },
+            "secretOverrides": {
+              "type": "object",
+              "properties": {
+                "postgresPassword": {
+                  "type": "string"
+                }
+              }
             }
           }
         },
@@ -174,76 +254,13 @@
           ],
           "properties": {
             "current": {
-              "type": "object",
-              "required": [
-                "sequencer",
-                "mediator"
-              ],
-              "properties": {
-                "sequencer": {
-                  "type": "string"
-                },
-                "mediator": {
-                  "type": "string"
-                },
-                "bftSequencerConfig": {
-                  "type": "object",
-                  "required": ["p2pUrl"],
-                  "properties": {
-                    "p2pUrl": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
+              "$ref": "#/$defs/synchronizer"
             },
             "successor": {
-              "type": "object",
-              "required": [
-                "sequencer",
-                "mediator"
-              ],
-              "properties": {
-                "sequencer": {
-                  "type": "string"
-                },
-                "mediator": {
-                  "type": "string"
-                },
-                "bftSequencerConfig": {
-                  "type": "object",
-                  "required": ["p2pUrl"],
-                  "properties": {
-                    "p2pUrl": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
+              "$ref": "#/$defs/synchronizer"
             },
             "legacy": {
-              "type": "object",
-              "required": [
-                "sequencer",
-                "mediator"
-              ],
-              "properties": {
-                "sequencer": {
-                  "type": "string"
-                },
-                "mediator": {
-                  "type": "string"
-                },
-                "bftSequencerConfig": {
-                  "type": "object",
-                  "required": ["p2pUrl"],
-                  "properties": {
-                    "p2pUrl": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
+              "$ref": "#/$defs/synchronizer"
             }
           }
         },
@@ -258,6 +275,9 @@
         },
         "tolerations": {
           "type": "array"
+        },
+        "priorityClassName": {
+          "type": "string"
         },
         "enablePostgresMetrics": {
           "type": "boolean"
@@ -311,5 +331,32 @@
         }
       }
     }
-  ]
+  ],
+  "$defs": {
+    "synchronizer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sequencer",
+        "mediator"
+      ],
+      "properties": {
+        "sequencer": {
+          "type": "string"
+        },
+        "mediator": {
+          "type": "string"
+        },
+        "cantonBft": {
+          "type": "object",
+          "required": ["p2pUrl"],
+          "properties": {
+            "p2pUrl": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  }
 }

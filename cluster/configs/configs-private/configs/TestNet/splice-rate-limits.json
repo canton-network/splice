@@ -1,0 +1,16 @@
+{
+  "scan": {
+    "global": {
+      "rate-per-second": 400,
+      "sustained-rate-per-second": 200,
+      "per-client-ip": {
+        "enabled": true,
+        "limit": {
+          "rate-per-second": 100,
+          "sustained-rate-per-second": 50
+        }
+      }
+    }
+  }
+}
+

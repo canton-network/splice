@@ -53,9 +53,7 @@ class HttpScanProxyHandler(
       for {
         dsoInfo <- scanConnection.getDsoInfo()
       } yield {
-        respond.OK(
-          dsoInfo
-        )
+        respond.OK(dsoInfo.toHttp)
       }
     }
   }

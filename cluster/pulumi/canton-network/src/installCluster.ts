@@ -3,27 +3,19 @@
 import {
   Auth0Client,
   config,
-  DecentralizedSynchronizerUpgradeConfig,
-  ExpectedValidatorOnboarding,
+  exactNamespace,
   isDevNet,
-  svOnboardingPollingInterval,
-  svValidatorTopupConfig,
+  spliceConfig,
 } from '@canton-network/splice-pulumi-common';
-import { readBackupConfig } from '@canton-network/splice-pulumi-common-validator/src/backup';
+import { configForSv, coreSvsToDeploy } from '@canton-network/splice-pulumi-common-sv';
 import {
-  mustInstallSplitwell,
-  mustInstallValidator1,
-  splitwellOnboarding,
-  standaloneValidatorOnboarding,
-  validator1Onboarding,
-} from '@canton-network/splice-pulumi-common-validator/src/validators';
-import { SplitPostgresInstances } from '@canton-network/splice-pulumi-common/src/config/configs';
-import { Resource } from '@pulumi/pulumi';
+  configureScanBigQuery,
+  ScanBigQueryArgs,
+} from '@canton-network/splice-pulumi-common-sv/src/bigQuery';
 
 import { activeVersion } from '../../common';
 import { installChaosMesh } from './chaosMesh';
 import { installDocs } from './docs';
-import { Dso } from './dso';
 
 /// Toplevel Chart Installs
 
@@ -31,55 +23,46 @@ console.error(`Launching with isDevNet: ${isDevNet}`);
 
 const enableChaosMesh = config.envFlag('ENABLE_CHAOS_MESH');
 
-const disableOnboardingParticipantPromotionDelay = config.envFlag(
-  'DISABLE_ONBOARDING_PARTICIPANT_PROMOTION_DELAY',
-  false
-);
-
-export async function installCluster(
-  auth0Client: Auth0Client
-): Promise<{ dso: Dso; validator1?: Resource }> {
+export async function installCluster(auth0Client: Auth0Client): Promise<void> {
   console.error(
     activeVersion.type === 'local'
       ? 'Using locally built charts by default'
       : `Using charts from the container registry by default, version ${activeVersion.version}`
   );
 
-  const backupConfig = await readBackupConfig();
-  const expectedValidatorOnboardings: ExpectedValidatorOnboarding[] = [];
-  if (mustInstallSplitwell) {
-    expectedValidatorOnboardings.push(splitwellOnboarding);
+  const bigQueryArgs = [...iterateBigQueryArgs()];
+  if (bigQueryArgs.length > 1) {
+    throw new Error(
+      `Multiple SVs with BigQuery configuration found: ${bigQueryArgs.map(arg => arg.namespace.logicalName).join(', ')}`
+    );
   }
-  if (mustInstallValidator1) {
-    expectedValidatorOnboardings.push(validator1Onboarding);
+  for (const args of bigQueryArgs) {
+    await configureScanBigQuery(args);
   }
-  if (standaloneValidatorOnboarding) {
-    expectedValidatorOnboardings.push(standaloneValidatorOnboarding);
-  }
-
-  const dso = new Dso('dso', {
-    auth0Client,
-    expectedValidatorOnboardings,
-    isDevNet,
-    ...backupConfig,
-    topupConfig: svValidatorTopupConfig,
-    splitPostgresInstances: SplitPostgresInstances,
-    decentralizedSynchronizerUpgradeConfig: DecentralizedSynchronizerUpgradeConfig,
-    onboardingPollingInterval: svOnboardingPollingInterval,
-    disableOnboardingParticipantPromotionDelay,
-  });
-
-  const allSvs = await dso.allSvs;
-
-  const svDependencies = allSvs.flatMap(sv => [sv.scan, sv.svApp, sv.validatorApp, sv.ingress]);
 
   installDocs();
 
   if (enableChaosMesh) {
-    installChaosMesh({ dependsOn: svDependencies });
+    installChaosMesh({ dependsOn: [] });
   }
+}
 
-  return {
-    dso,
-  };
+function* iterateBigQueryArgs(): Generator<ScanBigQueryArgs> {
+  for (const sv of coreSvsToDeploy) {
+    const config = configForSv(sv.nodeName);
+    const bigQueryConfig = config?.scanApp?.bigQuery;
+    const cloudSqlEnabled = (config.appsPg?.cloudSql ?? spliceConfig.pulumiProjectConfig.cloudSql)
+      .enabled;
+    if (bigQueryConfig !== undefined && cloudSqlEnabled) {
+      const namespace = exactNamespace(sv.nodeName, true, true);
+      yield {
+        namespace,
+        bigQueryConfig: bigQueryConfig,
+        scanReference: {
+          type: 'external',
+          databaseInstanceNamePrefix: `${namespace.logicalName}-cn-apps-pg`,
+        },
+      };
+    }
+  }
 }

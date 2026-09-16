@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, test } from 'vitest';
+import { beforeAll, describe, expect, test } from 'vitest';
 import { MemoryRouter } from 'react-router';
 import { ThemeProvider } from '@emotion/react';
 import { theme } from '../../../../../common/frontend/lib/theme';
@@ -38,11 +38,8 @@ async function checkActionSelection(actionName: string, actionValue: string, tes
   const selectInput = actionDropdown.querySelector('[role="combobox"]') as HTMLElement;
   await user.click(selectInput);
 
-  await waitFor(async () => {
-    const actionToSelect = screen.getByText(actionName);
-    expect(actionToSelect).toBeInTheDocument();
-    await user.click(actionToSelect);
-  });
+  const actionToSelect = await screen.findByText(actionName);
+  await user.click(actionToSelect);
 
   const nextButton = screen.getByText('Next');
   expect(nextButton).toBeInTheDocument();
@@ -50,8 +47,14 @@ async function checkActionSelection(actionName: string, actionValue: string, tes
 
   const actionInput = await screen.findByTestId(testId);
   const action = createProposalActions.find(a => a.value === actionValue);
-  expect(actionInput.getAttribute('value')).toBe(action!.name);
+  expect(actionInput.textContent).toBe(action!.name);
 }
+
+// The SV app's /v1/dso endpoint requires authentication, so log in before rendering
+// (matches the UserProvider's session-restore path for test auth).
+beforeAll(() => {
+  window.sessionStorage.setItem('canton.network.wallet.userid', 'sv1');
+});
 
 describe('Create Proposal', () => {
   test('Does not render the form while dsoInfo is pending, then lands on +7d default', async () => {
@@ -61,7 +64,7 @@ describe('Create Proposal', () => {
     });
 
     server.use(
-      http.get(`${svUrl}/v0/dso`, async () => {
+      http.get(`${svUrl}/v1/dso`, async () => {
         await dsoReady;
         return HttpResponse.json(dsoInfo);
       })
@@ -91,9 +94,6 @@ describe('Create Proposal', () => {
         <CreateProposal />
       </TestWrapper>
     );
-
-    const actionSelectionTitle = screen.getByText('Select an Action');
-    expect(actionSelectionTitle).toBeDefined();
 
     const actionDropdown = screen.getByTestId('select-action');
     expect(actionDropdown).toBeDefined();
@@ -194,20 +194,19 @@ describe('Create Proposal', () => {
 
     const nextButton = screen.getByText('Next');
     expect(nextButton).toBeDefined();
-    expect(nextButton.getAttribute('disabled')).toBeDefined();
+    expect(nextButton.getAttribute('disabled')).not.toBeNull();
 
     const actionDropdown = screen.getByTestId('select-action');
     expect(actionDropdown).toBeDefined();
 
     const selectInput = actionDropdown.querySelector('[role="combobox"]') as HTMLElement;
-    user.click(selectInput);
+    await user.click(selectInput);
+
+    const actionToSelect = await screen.findByText('Offboard Member');
+    await user.click(actionToSelect);
 
     await waitFor(() => {
-      const actionToSelect = screen.getByText('Offboard Member');
-      expect(actionToSelect).toBeDefined();
-      user.click(actionToSelect);
+      expect(nextButton.getAttribute('disabled')).toBeNull();
     });
-
-    expect(nextButton.getAttribute('disabled')).toBe('');
   });
 });

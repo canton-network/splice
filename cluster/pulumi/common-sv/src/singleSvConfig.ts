@@ -1,20 +1,29 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+import * as _ from 'lodash';
 import {
+  DecentralizedSynchronizerUpgradeConfig,
+  EnvVarConfigSchema,
   KmsConfigSchema,
   LogLevelSchema,
-  CloudSqlConfigSchema,
   K8sResourceSchema,
 } from '@canton-network/splice-pulumi-common';
 import { ValidatorAppConfigSchema } from '@canton-network/splice-pulumi-common-validator/src/config';
-import { spliceConfig } from '@canton-network/splice-pulumi-common/src/config/config';
 import { clusterYamlConfig } from '@canton-network/splice-pulumi-common/src/config/config';
+import { mergeConfigFragments } from '@canton-network/splice-pulumi-common/src/config/configLoader';
 import { CnChartVersionSchema } from '@canton-network/splice-pulumi-common/src/config/versionSchema';
-import { merge } from 'lodash';
 import util from 'node:util';
 import { z } from 'zod';
 
 import { TopologySnapshotSchema } from './config';
+import {
+  CloudSqlWithOverrideConfigSchema,
+  PhysicalSynchronizersConfigOverridesSchema,
+  SvMediatorConfig,
+  SvMediatorConfigSchema,
+  SvSequencerConfig,
+  SvSequencerConfigSchema,
+} from './physicalSynchronizerConfig';
 import { CatchupTestSchema } from './testing';
 
 const SvCometbftConfigSchema = z
@@ -37,11 +46,6 @@ const SvCometbftConfigSchema = z
     additionalHelmValues: z.record(z.string(), z.any()).optional(),
   })
   .strict();
-const EnvVarConfigSchema = z.object({
-  name: z.string(),
-  value: z.string(),
-});
-export type EnvVarConfig = z.infer<typeof EnvVarConfigSchema>;
 const CantonPruningSchema = z
   .object({
     enabled: z.boolean().optional(),
@@ -50,25 +54,6 @@ const CantonPruningSchema = z
     retentionPeriod: z.string().optional(),
   })
   .optional();
-const CloudSqlWithOverrideConfigSchema = CloudSqlConfigSchema.partial()
-  .default(spliceConfig.pulumiProjectConfig.cloudSql)
-  .transform(sqlConfig => merge({}, spliceConfig.pulumiProjectConfig.cloudSql, sqlConfig));
-const SvMediatorConfigSchema = z
-  .object({
-    additionalEnvVars: z.array(EnvVarConfigSchema).default([]),
-    additionalJvmOptions: z.string().optional(),
-    cloudSql: CloudSqlWithOverrideConfigSchema,
-    resources: K8sResourceSchema,
-  })
-  .strict();
-const SvSequencerConfigSchema = z
-  .object({
-    additionalEnvVars: z.array(EnvVarConfigSchema).default([]),
-    additionalJvmOptions: z.string().optional(),
-    cloudSql: CloudSqlWithOverrideConfigSchema,
-    resources: K8sResourceSchema,
-  })
-  .strict();
 const SvParticipantConfigSchema = z
   .object({
     kms: KmsConfigSchema.optional(),
@@ -108,22 +93,46 @@ const SvAppConfigSchema = z
 const BulkStorageConfigSchema = z.object({
   enabled: z.boolean(),
 });
+
 export type BulkStorageConfig = z.infer<typeof BulkStorageConfigSchema>;
+
+// 1. Extract ScanBigQueryConfigSchema to validate all Datastream settings.
+//    All new fields are optional to ensure existing deployments do not fail parsing.
+const SECONDS_PER_DAY = 24 * 3600;
+export const ScanBigQueryConfigSchema = z
+  .object({
+    dataset: z.string(),
+    prefix: z.string(),
+    functionsDataset: z.string().optional(),
+    enableLegacyDatastream: z.boolean().default(true),
+    enableStagProdDatastream: z.boolean().default(false),
+    legacyDesiredState: z.enum(['RUNNING', 'PAUSED']).default('RUNNING'),
+    stagProdDesiredState: z.enum(['RUNNING', 'PAUSED']).default('RUNNING'),
+    retentionPeriodSeconds: z
+      .number()
+      .min(3 * SECONDS_PER_DAY, {
+        message: 'Value must be at least 3 days (259,200 seconds)',
+      })
+      .refine(v => v % SECONDS_PER_DAY === 0, {
+        message: 'Value must be an exact number of days, expressed in seconds',
+      })
+      .default(7 * SECONDS_PER_DAY),
+  })
+  .strict(); // Keeps strict mode safe now that all known fields are explicitly defined
+
+// 2. Single source of truth: infer the TypeScript type directly from the Zod schema
+export type ScanBigQueryConfig = z.infer<typeof ScanBigQueryConfigSchema>;
+// 3. Update ScanAppConfigSchema to reference the extracted sub-schema
 const ScanAppConfigSchema = z
   .object({
-    bigQuery: z
-      .object({
-        dataset: z.string(),
-        prefix: z.string(),
-        functionsDataset: z.string().optional(),
-      })
-      .optional(),
+    bigQuery: ScanBigQueryConfigSchema.optional(),
     bulkStorage: BulkStorageConfigSchema.optional(),
     additionalEnvVars: z.array(EnvVarConfigSchema).default([]),
     additionalJvmOptions: z.string().optional(),
     resources: K8sResourceSchema,
   })
   .strict();
+
 const SvValidatorAppConfigSchema = z
   .object({
     walletUser: z.string().optional(),
@@ -150,8 +159,9 @@ const SingleSvConfigSchema = z
     subdomain: z.string().optional(),
     cometbft: SvCometbftConfigSchema.optional(),
     participant: SvParticipantConfigSchema.optional(),
-    sequencer: SvSequencerConfigSchema.optional(),
-    mediator: SvMediatorConfigSchema.optional(),
+    sequencer: SvSequencerConfigSchema.prefault({}),
+    mediator: SvMediatorConfigSchema.prefault({}),
+    physicalSynchronizerOverrides: PhysicalSynchronizersConfigOverridesSchema.prefault({}),
     appsPg: AppsPgConfigSchema.optional(),
     svApp: SvAppConfigSchema.optional(),
     scanApp: ScanAppConfigSchema.optional(),
@@ -170,6 +180,7 @@ const SingleSvConfigSchema = z
             retentionPeriod: z.string().optional(),
           })
           .optional(),
+        cantonBft: CantonPruningSchema,
         mediator: CantonPruningSchema,
         participant: CantonPruningSchema,
       })
@@ -180,7 +191,11 @@ const SingleSvConfigSchema = z
         appsAsync: z.boolean().default(false),
         cantonLogLevel: LogLevelSchema,
         cantonStdoutLogLevel: LogLevelSchema.optional(),
+        // Log level for the Splice apps' HTTP request logging (org.lfdecentralizedtrust.splice.admin.api)
         apiRequestLogLevel: LogLevelSchema.optional(),
+        // Log level for the Canton nodes' Ledger-API audit logging (com.digitalasset.canton.logging.audit)
+        // Falls back to `apiRequestLogLevel` when not specified
+        cantonApiRequestLogLevel: LogLevelSchema.optional(),
         cantonAsync: z.boolean().default(false),
         cometbftLogLevel: CometbftLogLevelSchema.optional(),
         cometbftExtraLogLevelFlags: z.string().optional(),
@@ -190,7 +205,30 @@ const SingleSvConfigSchema = z
     testing: z.object({ catchup: CatchupTestSchema.optional() }).optional(),
     versionOverride: CnChartVersionSchema.optional(),
   })
-  .strict();
+  .strict()
+  .transform(({ physicalSynchronizerOverrides, sequencer, mediator, ...svConfig }) => {
+    // Implicit config merging is confusing but for now I don't really see a better way of introducting these overrides.
+    // Perhaps a proper revisit of the synchronizerMigration config structure will lead to a better solution here.
+    const physicalSynchronizers = DecentralizedSynchronizerUpgradeConfig.allMigrations.map(
+      migration => [
+        migration.id,
+        {
+          mediator: mergeConfigFragments(
+            mediator,
+            physicalSynchronizerOverrides[migration.id]?.mediator || {}
+          ) as SvMediatorConfig,
+          sequencer: mergeConfigFragments(
+            sequencer,
+            physicalSynchronizerOverrides[migration.id]?.sequencer || {}
+          ) as SvSequencerConfig,
+        },
+      ]
+    );
+    return {
+      ...svConfig,
+      physicalSynchronizers: _.fromPairs(physicalSynchronizers),
+    };
+  });
 const AllSvsConfigurationSchema = z.record(z.string(), SingleSvConfigSchema);
 const SvsConfigurationSchema = z.object({
   svs: AllSvsConfigurationSchema,

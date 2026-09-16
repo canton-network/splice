@@ -5,6 +5,7 @@ import type {
   ActionRequiringConfirmation,
   AmuletRules_ActionRequiringConfirmation,
   DsoRules_ActionRequiringConfirmation,
+  DsoRules_CloseVoteRequestResult,
   DsoRules_SetConfig,
   DsoRulesConfig,
   SvInfo,
@@ -25,9 +26,11 @@ import type {
   PendingConfigFieldInfo,
   Proposal,
   ProposalListingStatus,
+  ProposalListingData,
   SupportedActionTag,
   UnclaimedActivityRecordProposal,
   UnfeatureAppProposal,
+  UpdateFeatureAppProposal,
   UpdateSvRewardWeightProposal,
   YourVoteStatus,
 } from '../utils/types';
@@ -46,6 +49,7 @@ export const actionTagToTitle = (amuletName: string): Record<SupportedActionTag,
   SRARC_CreateUnallocatedUnclaimedActivityRecord: 'Create Unclaimed Activity Record',
   SRARC_SetConfig: 'Set Decentralized Synchronizer Operations (DSO) Rules Configuration',
   SRARC_UpdateSvRewardWeight: 'Update Super Validator Reward Weight',
+  SRARC_UpdateFeaturedAppRight: 'Update Featured Application',
 });
 
 export const createProposalActions: {
@@ -55,6 +59,7 @@ export const createProposalActions: {
   { name: 'Offboard Member', value: 'SRARC_OffboardSv' },
   { name: 'Feature Application', value: 'SRARC_GrantFeaturedAppRight' },
   { name: 'Unfeature Application', value: 'SRARC_RevokeFeaturedAppRight' },
+  { name: 'Update Featured Application', value: 'SRARC_UpdateFeaturedAppRight' },
   {
     name: 'Set Decentralized Synchronizer Operations (DSO) Rules Configuration',
     value: 'SRARC_SetConfig',
@@ -101,6 +106,20 @@ export function computeVoteStats(votes: Vote[]): {
   );
 }
 
+export function getRequesterPartyId(
+  requester: string,
+  svs: { entriesArray(): [string, SvInfo][] } | undefined
+): string {
+  if (requester.includes('::')) {
+    return requester;
+  }
+  if (!svs) {
+    return requester;
+  }
+  const match = svs.entriesArray().find(([, info]) => info.name === requester);
+  return match?.[0] ?? requester;
+}
+
 export function computeYourVote(votes: Vote[], svPartyId: string | undefined): YourVoteStatus {
   if (svPartyId === undefined) {
     return 'no-vote';
@@ -108,6 +127,56 @@ export function computeYourVote(votes: Vote[], svPartyId: string | undefined): Y
 
   const vote = votes.find(vote => vote.sv === svPartyId);
   return vote ? (vote.accept ? 'accepted' : 'rejected') : 'no-vote';
+}
+
+export function getGovernanceActionTag(action: ActionRequiringConfirmation): string {
+  switch (action.tag) {
+    case 'ARC_AmuletRules':
+      return action.value.amuletRulesAction.tag;
+    case 'ARC_DsoRules':
+      return action.value.dsoAction.tag;
+    default:
+      return 'Action tag not defined.';
+  }
+}
+
+export function buildVoteHistoryData(
+  voteResults: DsoRules_CloseVoteRequestResult[],
+  amuletName: string,
+  svPartyId: string | undefined,
+  votingThreshold: bigint,
+  svs: { entriesArray(): [string, SvInfo][] } | undefined
+): ProposalListingData[] {
+  return voteResults
+    .filter(
+      vr =>
+        (vr.outcome.tag === 'VRO_Accepted' &&
+          dayjs(vr.outcome.value.effectiveAt).isBefore(dayjs())) ||
+        vr.outcome.tag === 'VRO_Expired' ||
+        vr.outcome.tag === 'VRO_Rejected'
+    )
+    .map(vr => {
+      const votes = vr.request.votes.entriesArray().map(e => e[1]);
+
+      return {
+        contractId: vr.request.trackingCid,
+        actionName:
+          actionTagToTitle(amuletName)[
+            getGovernanceActionTag(vr.request.action) as SupportedActionTag
+          ],
+        description: vr.request.reason.body,
+        votingThresholdDeadline: dayjs(vr.request.voteBefore).format(dateTimeFormatISO),
+        voteTakesEffect:
+          (vr.outcome.tag === 'VRO_Accepted' &&
+            dayjs(vr.outcome.value.effectiveAt).format(dateTimeFormatISO)) ||
+          dayjs(vr.completedAt).format(dateTimeFormatISO),
+        yourVote: computeYourVote(votes, svPartyId),
+        status: getVoteResultStatus(vr.outcome),
+        voteStats: computeVoteStats(votes),
+        acceptanceThreshold: votingThreshold,
+        requester: getRequesterPartyId(vr.request.requester, svs),
+      } as ProposalListingData;
+    });
 }
 
 export function buildProposal(action: ActionRequiringConfirmation, dsoInfo?: DsoInfo): Proposal {
@@ -134,9 +203,17 @@ export function buildProposal(action: ActionRequiringConfirmation, dsoInfo?: Dso
           dsoAction.value.expiresAt
         );
       case 'SRARC_GrantFeaturedAppRight':
-        return createGrantFeatureAppProposal(dsoAction.value.provider);
+        return createGrantFeatureAppProposal(
+          dsoAction.value.provider,
+          dsoAction.value.activityWeight ?? ''
+        );
       case 'SRARC_RevokeFeaturedAppRight':
         return createRevokeFeatureAppProposal(dsoAction.value.rightCid);
+      case 'SRARC_UpdateFeaturedAppRight':
+        return createUpdateFeatureAppProposal(
+          dsoAction.value.rightCid,
+          dsoAction.value.update.newActivityWeight
+        );
       case 'SRARC_SetConfig':
         return createDsoRulesConfigProposal(dsoAction.value.baseConfig, dsoAction.value.newConfig);
     }
@@ -156,10 +233,21 @@ function createOffboardMemberProposal(memberToOffboard: string): OffBoardMemberP
   return { memberToOffboard };
 }
 
-function createGrantFeatureAppProposal(provider: string): FeatureAppProposal {
+function createGrantFeatureAppProposal(
+  provider: string,
+  activityWeight: string
+): FeatureAppProposal {
   return {
     provider: provider,
+    activityWeight: activityWeight,
   };
+}
+
+function createUpdateFeatureAppProposal(
+  rightContractId: string,
+  newActivityWeight: string
+): UpdateFeatureAppProposal {
+  return { rightContractId, newActivityWeight };
 }
 
 function createRevokeFeatureAppProposal(rightContractId: string): UnfeatureAppProposal {
@@ -272,6 +360,10 @@ export function formatBasisPoints(value: string): string {
 export function getSvRewardWeight(svs: [string, SvInfo][], svPartyId: string): string {
   const svInfo = svs.find(sv => sv[0] === svPartyId);
   return svInfo ? svInfo[1].svRewardWeight : '';
+}
+
+export function activityWeightToOptional(weight: string): string | null {
+  return weight.trim() === '' ? null : weight;
 }
 
 export function buildPendingConfigFields(

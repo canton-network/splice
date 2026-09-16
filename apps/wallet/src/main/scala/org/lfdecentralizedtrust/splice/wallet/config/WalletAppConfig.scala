@@ -55,28 +55,55 @@ final case class AppRewardBeneficiaryConfig(
     percentage: BigDecimal,
 )
 
-/** Configuration for sharing traffic-based app reward coupons with beneficiaries.
-  * @param minTtlAfterSharing minimum remaining coupon TTL before sharing is triggered;
-  *   e.g., 30h means share when 30h of coupon lifetime remains (6h after creation for 36h coupons)
-  * @param beneficiaries parties to share rewards with and their percentages;
-  *   the provider keeps the remainder (1.0 - sum of percentages)
-  * @param batchSize maximum number of coupons to share or assign per trigger run
-  */
-final case class RewardSharingConfig(
-    minTtlAfterSharing: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofHours(30),
-    beneficiaries: Seq[AppRewardBeneficiaryConfig] = Seq.empty,
-    batchSize: Int = 100,
-) {
-  def providerRemainder: BigDecimal = BigDecimal(1.0) - beneficiaries.map(_.percentage).sum
+/** How traffic-based app reward coupons are shared with beneficiaries. */
+sealed trait RewardSharingConfig {
+  def mintUnassignedCoupons: Boolean
+  def automateRewardSharing: Boolean
+  def batchSize: Int
+}
 
-  @VisibleForTesting
-  def allBeneficiaries(provider: PartyId): Seq[AppRewardBeneficiaryConfig] = {
-    val remainder = providerRemainder
-    beneficiaries ++
-      (if (remainder > 0) Seq(AppRewardBeneficiaryConfig(provider, remainder))
-       else Seq.empty)
+object RewardSharingConfig {
+
+  val DefaultBatchSize: Int = 100
+
+  /** Beneficiary assignment for RewardCouponV2 contracts is managed by a process
+    * external to the validator app: the validator app must thus leave unassigned
+    * coupons untouched rather than assigning or minting them itself.
+    */
+  case class External(
+      batchSize: Int = DefaultBatchSize
+  ) extends RewardSharingConfig {
+    override def mintUnassignedCoupons: Boolean = false
+    override def automateRewardSharing: Boolean = false
   }
 
-  def allDamlBeneficiaries(provider: PartyId): Seq[(PartyId, java.math.BigDecimal)] =
-    allBeneficiaries(provider).map(b => (b.beneficiary, SpliceUtil.damlDecimal(b.percentage)))
+  /** The node performs beneficiary assignment and minting itself.
+    * @param minTtlAfterSharing minimum remaining coupon TTL before sharing is triggered;
+    *   e.g., 30h means share when 30h of coupon lifetime remains (6h after creation for 36h coupons)
+    * @param beneficiaries parties to share rewards with and their percentages;
+    *   the provider keeps the remainder (1.0 - sum of percentages)
+    * @param batchSize maximum number of coupons to share or assign per trigger run
+    */
+  final case class BuiltIn(
+      minTtlAfterSharing: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofHours(30),
+      beneficiaries: Seq[AppRewardBeneficiaryConfig] = Seq.empty,
+      batchSize: Int = DefaultBatchSize,
+  ) extends RewardSharingConfig {
+    def providerRemainder: BigDecimal = BigDecimal(1.0) - beneficiaries.map(_.percentage).sum
+
+    @VisibleForTesting
+    def allBeneficiaries(provider: PartyId): Seq[AppRewardBeneficiaryConfig] = {
+      val remainder = providerRemainder
+      beneficiaries ++
+        (if (remainder > 0) Seq(AppRewardBeneficiaryConfig(provider, remainder))
+         else Seq.empty)
+    }
+
+    def allDamlBeneficiaries(provider: PartyId): Seq[(PartyId, java.math.BigDecimal)] =
+      allBeneficiaries(provider).map(b => (b.beneficiary, SpliceUtil.damlDecimal(b.percentage)))
+
+    override def mintUnassignedCoupons: Boolean = beneficiaries.isEmpty
+
+    override def automateRewardSharing: Boolean = beneficiaries.nonEmpty
+  }
 }

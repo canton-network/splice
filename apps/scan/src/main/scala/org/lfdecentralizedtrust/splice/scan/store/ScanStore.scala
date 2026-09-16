@@ -30,8 +30,6 @@ import org.lfdecentralizedtrust.splice.store.{
   ExternalPartyConfigStateStore,
   MiningRoundsStore,
   MultiDomainAcsStore,
-  PageLimit,
-  SortOrder,
   TxLogAppStore,
   UpdateHistory,
   VotesStore,
@@ -52,6 +50,8 @@ trait ScanStore
     with MiningRoundsStore
     with VotesStore
     with ExternalPartyConfigStateStore {
+
+  override def dsoPartyId = key.dsoParty
 
   def key: ScanStore.Key
 
@@ -174,6 +174,10 @@ trait ScanStore
       tc: TraceContext
   ): Future[Seq[ContractWithState[FeaturedAppRight.ContractId, FeaturedAppRight]]]
 
+  def lookupLatestSvRewardWeightChange(svParty: PartyId, effectiveBefore: Option[String])(implicit
+      tc: TraceContext
+  ): Future[Option[Long]]
+
   def listEntries(namePrefix: String, now: CantonTimestamp, limit: Limit = defaultLimit)(implicit
       tc: TraceContext
   ): Future[
@@ -208,14 +212,6 @@ trait ScanStore
       splice.externalpartyamuletrules.TransferCommandCounter,
     ]]
   ]
-
-  def listTransactions(
-      pageEndEventId: Option[String],
-      sortOrder: SortOrder,
-      limit: PageLimit,
-  )(implicit
-      tc: TraceContext
-  ): Future[Seq[TxLogEntry.TransactionTxLogEntry]]
 
   def lookupLatestTransferCommandEvents(
       sender: PartyId,
@@ -456,6 +452,21 @@ object ScanStore {
             contract = contract,
             contractExpiresAt =
               Some(Timestamp.assertFromInstant(contract.payload.allocation.settlement.settleBefore)),
+          )
+        },
+        mkFilter(splice.amuletallocationv2.AmuletAllocationV2.COMPANION)(
+          co => co.payload.allocation.admin == dso,
+          versionGuard = { case (pkgVersionSupport, now) =>
+            (tc) =>
+              pkgVersionSupport
+                .supportsAmuletAllocationV2(Seq(key.dsoParty), now)(tc)
+          },
+        ) { contract =>
+          ScanAcsStoreRowData(
+            contract = contract,
+            contractExpiresAt = contract.payload.allocation.settlementDeadline
+              .map(Timestamp.assertFromInstant(_))
+              .toScala,
           )
         },
         mkFilter(splice.amulettransferinstruction.AmuletTransferInstruction.COMPANION)(co =>

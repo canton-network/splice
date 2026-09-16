@@ -67,46 +67,69 @@ abstract class SequencerBftPeerReconciler(
               )
             dsoSequencersWithoutSelf = sequencers.filter(_ != sequencerId)
             sequencersFromScan <- getAllBftSequencers()
-            dsoSequencersWithScanInfo = dsoSequencersWithoutSelf.map { sequencerId =>
-              sequencerId -> sequencersFromScan.find(scanSequencer =>
-                scanSequencer.id == sequencerId && scanSequencer.serialId == serialId
-              )
+            dsoSequencersWithEndpoint = dsoSequencersWithoutSelf.map { sequencerId =>
+              sequencerId -> sequencersFromScan
+                .find(scanSequencer =>
+                  scanSequencer.id == sequencerId && scanSequencer.serialId == serialId
+                )
+                .map(_.peerId)
             }
-            // TODO(#1929) Reconsider whether we can really ignore incoming connections.
-            currentPeers <- sequencerAdminConnection
-              .listCurrentOutgoingPeerEndpoints()
-            peersToAdd = dsoSequencersWithScanInfo
-              .collect { case (id, Some(config)) =>
-                id -> config
-              }
-              .filterNot { case (dsoSequencerId, peer) =>
-                currentPeers.exists { case (peerSequencerId, endpointId) =>
-                  peerSequencerId.forall(_ == dsoSequencerId) && peer.peerId.id == endpointId
-                }
-              }
-            peersToRemove = currentPeers
-              .filterNot {
-                case (Some(peerSequencerId), endpointId) =>
-                  dsoSequencersWithScanInfo.exists { case (sequencerId, config) =>
-                    sequencerId == peerSequencerId && config.forall(_.peerId.id == endpointId)
-                  }
-                case (None, endpointId) =>
-                  dsoSequencersWithScanInfo.exists { case (_, config) =>
-                    config.exists(_.peerId.id == endpointId)
-                  }
-              }
+            dsoSequencerEndpoints = dsoSequencersWithEndpoint.flatMap(_._2)
+            configuredPeers <- sequencerAdminConnection
+              .listConfiguredPeerEndpoints()
+            peersToAdd = dsoSequencerEndpoints
+              .filterNot(endpoint => configuredPeers.map(_._1).exists(_.id == endpoint.id))
+            peersToRemove = computePeersToRemove(
+              configuredPeers,
+              dsoSequencersWithEndpoint,
+            )
           } yield {
             if (peersToAdd.nonEmpty || peersToRemove.nonEmpty)
               Seq(
                 BftPeerDifference(
-                  peersToAdd.map(_._2.peerId),
-                  peersToRemove.map(_._2),
-                  currentPeers,
+                  peersToAdd,
+                  peersToRemove.map(_.id),
+                  configuredPeers,
                 )
               )
             else Seq()
           }
     } yield result
+  }
+
+  private def computePeersToRemove(
+      configuredPeers: Seq[(P2PEndpoint, Option[SequencerId])],
+      dsoSequencersWithEndpoint: Seq[(SequencerId, Option[P2PEndpoint])],
+  ): Seq[P2PEndpoint] = {
+    val peersWithWrongSequencerId = configuredPeers.filter {
+      case (_, Some(sequencerId)) =>
+        !dsoSequencersWithEndpoint.exists({ case (dsoSequencerId, _) =>
+          sequencerId == dsoSequencerId
+        })
+      case _ => false
+    }
+    val peersWithChangedEndpoint = configuredPeers.filter {
+      case (peer, Some(sequencerId)) =>
+        dsoSequencersWithEndpoint.exists({ case (dsoSequencerId, endpoint) =>
+          sequencerId == dsoSequencerId && endpoint.exists(_.id != peer.id)
+        })
+      case _ => false
+    }
+    // we only remove connections for which we don't have a sequencer id when we have been able to query all scans to get connections. otherwise a temporary scan issue could result in us removing the peer.
+    val unknownPeers =
+      if (dsoSequencersWithEndpoint.forall { case (_, endpoint) => endpoint.isDefined }) {
+        configuredPeers.filter(peer =>
+          !dsoSequencersWithEndpoint.exists { case (_, endpoint) =>
+            endpoint.exists(_.id == peer._1.id)
+          }
+        )
+      } else Seq.empty
+
+    (peersWithWrongSequencerId ++ peersWithChangedEndpoint ++ unknownPeers)
+      .map(
+        _._1
+      )
+      .distinct
   }
 
   private def getAllBftSequencers()(implicit ec: ExecutionContext, tc: TraceContext) = {
@@ -115,7 +138,8 @@ abstract class SequencerBftPeerReconciler(
         scan
           .listSvBftSequencers()
           .recover { case NonFatal(ex) =>
-            logger.warn(s"Failed to read bft sequencers list from scan ${scan.url}", ex)
+            // not a warn because short-term failures are benign and longer-term outages should be covered by other monitoring
+            logger.info(s"Failed to read bft sequencers list from scan ${scan.url}", ex)
             Seq.empty
           }
       }
@@ -127,6 +151,6 @@ object SequencerBftPeerReconciler {
   case class BftPeerDifference(
       toAdd: Seq[P2PEndpoint],
       toRemove: Seq[P2PEndpoint.Id],
-      currentPeers: Seq[(Option[SequencerId], P2PEndpoint.Id)],
+      currentPeers: Seq[(P2PEndpoint, Option[SequencerId])],
   )
 }

@@ -17,22 +17,24 @@ import com.digitalasset.canton.participant.synchronizer.SynchronizerConnectionCo
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.sequencing.{GrpcSequencerConnection, SequencerConnections}
 import com.digitalasset.canton.time.Clock
-import com.digitalasset.canton.topology.{ParticipantId, PartyId, SynchronizerId}
+import com.digitalasset.canton.topology.{
+  ParticipantId,
+  PartyId,
+  SynchronizerId,
+  TopologyManagerError,
+}
 import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.canton.topology.transaction.{HostingParticipant, ParticipantPermission}
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.ShowUtil.*
-import io.grpc.Status
+import com.digitalasset.base.error.utils.ErrorDetails
+import io.grpc.{Status, StatusRuntimeException}
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.admin.api.client.GrpcClientMetrics
 import org.lfdecentralizedtrust.splice.codegen.java.splice.svonboarding.SvOnboardingConfirmed
-import org.lfdecentralizedtrust.splice.config.{
-  NetworkAppClientConfig,
-  SpliceInstanceNamesConfig,
-  UpgradesConfig,
-}
+import org.lfdecentralizedtrust.splice.config.{SpliceInstanceNamesConfig, UpgradesConfig}
 import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.{
   TopologySnapshot,
@@ -169,25 +171,27 @@ class JoiningNodeInitializer(
       )
     )
     for {
-      (dsoPartyId, _) <- (
+      (dsoPartyId, registeredGlobalSync) <- (
         // If we're not onboarded yet, this waits for the sponsoring SV
         getDsoPartyId(initConnection),
         // Register domain with manualConnect=true. Confusingly, this still connects the first time.
         // However, it won't connect if we crash and get here again which is what we're really after.
         // If the url is unset, we skip this step. This is fine if the node has already initialized its
         // own sequencer.
-        domainConfigO.traverse_(
+        domainConfigO.traverse(
           participantAdminConnection.ensureSynchronizerRegisteredWithManualConnect(
             _,
             RetryFor.WaitingOnInitDependency,
           )
         ),
       ).tupled
-      decentralizedSynchronizerId <- participantAdminConnection
-        .getSynchronizerId(config.domains.global.alias)
+      psid <- participantAdminConnection
+        .getPhysicalSynchronizerId(config.domains.global.alias)
+      decentralizedSynchronizerId = psid.logical
       dsoPartyHosting = newDsoPartyHosting(dsoPartyId)
       dsoPartyIsAuthorized <- dsoPartyHosting.isDsoPartyAuthorizedOn(
         decentralizedSynchronizerId,
+        registeredGlobalSync,
         participantId,
       )
       _ <-
@@ -196,6 +200,7 @@ class JoiningNodeInitializer(
           reconnectSynchronizersIfDsoPartyMigrationSafe(
             decentralizedSynchronizerId,
             dsoPartyId,
+            tolerateUninitializedStore = registeredGlobalSync.exists(_.config.manualConnect),
           )
         } else Future.unit
       svParty <- SetupUtil.setupSvParty(
@@ -206,11 +211,11 @@ class JoiningNodeInitializer(
       storeKey = SvStore.Key(svParty, dsoPartyId)
       // We need to vet early so the packages are uploaded when we try to use template
       // filters in the ACS queries in the store.
-      _ <- joiningConfig.traverse_ { _ =>
+      _ <- joiningConfig.traverse_ { conf =>
         if (!dsoPartyIsAuthorized) {
           // If the DSO party has already been authorized we should be far enough to not need this step and deliberately avoid it
           // to make sure we don't introduce a dependency on the sponsoring SV.
-          svConnection.flatMap { case (_, c) => vetThroughSponsor(c) }
+          vetThroughSponsor(conf)
         } else Future.unit
       }
       domainMigrationId <- resolveDomainMigrationId(migrationIdFromSponsorSv())
@@ -282,7 +287,7 @@ class JoiningNodeInitializer(
               loggerFactory,
               config.scan,
             )
-            dsoAutomation =
+            dsoAutomation <-
               newSvDsoAutomationService(
                 svStore,
                 dsoStore,
@@ -298,6 +303,7 @@ class JoiningNodeInitializer(
             _ <- reconnectSynchronizersIfDsoPartyMigrationSafe(
               decentralizedSynchronizerId,
               dsoPartyId,
+              tolerateUninitializedStore = false,
             )
             _ <- svStore.domains.waitForDomainConnection(config.domains.global.alias)
             _ <- dsoStore.domains.waitForDomainConnection(config.domains.global.alias)
@@ -354,6 +360,7 @@ class JoiningNodeInitializer(
       // Set autoConnect=true now that DSO party migration is complete
       _ <- participantAdminConnection.modifySynchronizerConnectionConfig(
         config.domains.global.alias,
+        Some(psid),
         config => if (config.manualConnect) Some(config.copy(manualConnect = false)) else None,
       )
       cantonIdentifierConfig = config.cantonIdentifierConfig.getOrElse(
@@ -400,13 +407,13 @@ class JoiningNodeInitializer(
     }
   }
 
-  private def vetThroughSponsor(svConnection: SvConnection): Future[Unit] = {
+  private def vetThroughSponsor(joiningConfig: SvOnboardingConfig.JoinWithKey): Future[Unit] = {
     logger.info("Vetting packages based on state from sponsor")
     for {
       // This is not a BFT read: That's acceptable because
       // we will only vet packages that have been statically compiled into the app.
       // At most, we can be tricked into vetting a package a bit too early.
-      dsoInfo <- svConnection.getDsoInfo()
+      dsoInfo <- getDsoInfoFromSponsor(joiningConfig, upgradesConfig)
       amuletRules = dsoInfo.amuletRules
       synchronizerId = SynchronizerId.tryFromString(
         amuletRules.payload.configSchedule.initialValue.decentralizedSynchronizer.activeSynchronizer
@@ -543,7 +550,23 @@ class JoiningNodeInitializer(
   private def reconnectSynchronizersIfDsoPartyMigrationSafe(
       decentralizedSynchronizerId: SynchronizerId,
       dsoParty: PartyId,
+      tolerateUninitializedStore: Boolean,
   )(implicit tc: TraceContext, ec: ExecutionContext): Future[Unit] = {
+    // When the synchronizer is registered with manualConnect = true, the participant may not yet
+    // have initialized its topology store for that synchronizer. In that case listing the
+    // party-to-participant mappings fails with a TOPOLOGY_STORE_NOT_INITIALIZED / TOPOLOGY_STORE_UNKNOWN
+    // error, which we treat as an empty list instead of failing.
+    def recoverEmptyIfStoreNotInitialized[T]: PartialFunction[Throwable, Seq[T]] = {
+      case ex: StatusRuntimeException
+          if tolerateUninitializedStore &&
+            (ErrorDetails.matches(ex, TopologyManagerError.TopologyStoreNotInitialized) ||
+              ErrorDetails.matches(ex, TopologyManagerError.TopologyStoreUnknown)) =>
+        logger.info(
+          s"Topology store for $decentralizedSynchronizerId is not yet initialized, " +
+            "treating the party-to-participant mappings as empty."
+        )
+        Seq.empty
+    }
     retryProvider.retry(
       RetryFor.ClientCalls,
       "reconnect_all_domains",
@@ -552,12 +575,14 @@ class JoiningNodeInitializer(
         participantId <- participantAdminConnection.getParticipantId()
         // Check if the participant hosts the DSO party. If so,
         // the dsoParty is hosted on the participant we can proceed to all domains reconnect
-        dsoPartyToParticipantMapping <- participantAdminConnection.listPartyToParticipant(
-          store = TopologyStoreId.Synchronizer(decentralizedSynchronizerId).some,
-          filterParty = dsoParty.filterString,
-          filterParticipant = participantId.filterString,
-          topologyTransactionType = TopologyTransactionType.AuthorizedState,
-        )
+        dsoPartyToParticipantMapping <- participantAdminConnection
+          .listPartyToParticipant(
+            store = TopologyStoreId.Synchronizer(decentralizedSynchronizerId).some,
+            filterParty = dsoParty.filterString,
+            filterParticipant = participantId.filterString,
+            topologyTransactionType = TopologyTransactionType.AuthorizedState,
+          )
+          .recover(recoverEmptyIfStoreNotInitialized)
         // Check if he participant has a proposal for hosting the DSO party. If so,
         // we are in the middle of an DSO party migration so don't reconnect to the domain.
         activeDsoPartyToParticipantProposals <- participantAdminConnection
@@ -567,6 +592,7 @@ class JoiningNodeInitializer(
             filterParticipant = participantId.filterString,
             topologyTransactionType = TopologyTransactionType.AllProposals,
           )
+          .recover(recoverEmptyIfStoreNotInitialized)
         _ <-
           if (
             dsoPartyToParticipantMapping.nonEmpty || activeDsoPartyToParticipantProposals.isEmpty
@@ -754,7 +780,7 @@ class JoiningNodeInitializer(
           svConnection: SvConnection,
           joiningConfig: SvOnboardingConfig.JoinWithKey,
       ): Future[Unit] = {
-        val SvOnboardingConfig.JoinWithKey(name, _, publicKey, privateKey) = joiningConfig
+        val SvOnboardingConfig.JoinWithKey(name, _, publicKey, privateKey, _) = joiningConfig
         SvUtil.keyPairMatches(publicKey, privateKey) match {
           case Right(privateKey_) =>
             for {
@@ -850,7 +876,7 @@ class JoiningNodeInitializer(
         synchronizerId: SynchronizerId,
     ): Future[SvDsoAutomationService] = {
       joiningConfig match {
-        case SvOnboardingConfig.JoinWithKey(name, _, publicKey, privateKey) =>
+        case SvOnboardingConfig.JoinWithKey(name, _, publicKey, privateKey, _) =>
           SvUtil.keyPairMatches(publicKey, privateKey) match {
             case Right(privateKey_) =>
               for {
@@ -890,7 +916,7 @@ class JoiningNodeInitializer(
                   loggerFactory,
                   config.scan,
                 )
-                dsoAutomation = newSvDsoAutomationService(
+                dsoAutomation <- newSvDsoAutomationService(
                   svStore,
                   dsoStore,
                   synchronizerNodeService,
@@ -989,34 +1015,27 @@ class JoiningNodeInitializer(
     dsoParty <- dsoPartyFromMetadata
       .fold(
         {
-          val sponsorConfig = joiningConfig
+          val conf = joiningConfig
             .getOrElse(
               sys.error(
                 "An onboarding config is required to get the DSO party ID from a sponsoring SV; exiting."
               )
             )
-            .svClient
-            .adminApi
           retryProvider.getValueWithRetries(
             RetryFor.WaitingOnInitDependency,
             "dso_party_from_sponsor",
             "DSO party ID from sponsoring SV",
-            getDsoPartyIdFromSponsor(sponsorConfig),
+            getDsoPartyIdFromSponsor(conf),
             logger,
           )
         }
       )(Future.successful)
   } yield dsoParty
 
-  private def getDsoPartyIdFromSponsor(sponsorConfig: NetworkAppClientConfig): Future[PartyId] =
-    SvConnection(
-      sponsorConfig,
-      upgradesConfig,
-      retryProvider,
-      loggerFactory,
-    ).flatMap { svConnection =>
-      svConnection.getDsoInfo().map(_.dsoParty).andThen(_ => svConnection.close())
-    }
+  private def getDsoPartyIdFromSponsor(
+      joiningConfig: SvOnboardingConfig.JoinWithKey
+  ): Future[PartyId] =
+    getDsoInfoFromSponsor(joiningConfig, upgradesConfig).map(_.dsoParty)
 
   private def waitForDsoSvRole(dsoStore: SvDsoStore): Future[Unit] = {
     val svParty = dsoStore.key.svParty

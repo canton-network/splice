@@ -1,9 +1,16 @@
 !include(base.yaml;scratch-default-operator.yaml;scratch-default-synchronizer-migration.yaml;enable-grafana-sa.yaml)
+cluster:
+  nodePools:
+    apps:
+      zones: '*'
+      maxNodes: 40
+      nodeType: c3d-standard-8
 infra:
   prometheus:
     retentionDuration: "30d"
     retentionSize: "200GB"
     storageSize: "600Gi"
+  enableSweetSecurity: true
 pulumiProjectConfig:
   default:
     cloudSql:
@@ -14,6 +21,12 @@ validator1:
     maxDuration: "5m"
     retention: "1h" # Keep 1h
   deduplicationDuration: 30m
+  walletGateway:
+    enabled: true
+validators:
+  validator-runbook:
+    walletGateway:
+      enabled: true
 svs:
   sv-1: !include(scratchnet-sv.yaml) {}
   sv-2: !include(scratchnet-sv.yaml) {}

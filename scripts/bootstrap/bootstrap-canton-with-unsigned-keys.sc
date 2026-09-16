@@ -46,7 +46,7 @@ def staticParameters(sequencer: LocalInstanceReference) =
   domainParametersConfig
     .toStaticSynchronizerParameters(
       sequencer.config.crypto,
-      ProtocolVersion.v34,
+      ProtocolVersion.v35,
       NonNegativeInt.zero,
     )
     .map(StaticSynchronizerParameters(_))
@@ -77,7 +77,7 @@ def bootstrapDomainWithUnsignedKeys(
     UniqueIdentifier.tryCreate(synchronizerName, synchronizerNamespace)
   )
   val physicalSynchronizerId =
-    PhysicalSynchronizerId(synchronizerId, NonNegativeInt.zero, ProtocolVersion.v34)
+    PhysicalSynchronizerId(synchronizerId, NonNegativeInt.zero, ProtocolVersion.v35)
 
   val tempStoreForBootstrap = synchronizerOwners
     .map(
@@ -165,6 +165,7 @@ def bootstrapDomainWithUnsignedKeys(
             NonNegativeFiniteDuration.ofSeconds(10),
           ),
           SequencerConnectionPoolDelays.default,
+          SubscriptionLivenessLimits.default,
         ),
         // if we run bootstrap ourselves, we should have been able to reach the nodes
         // so we don't want the bootstrapping to fail spuriously here in the middle of

@@ -8,6 +8,7 @@ import {
   LogLevelSchema,
 } from '@canton-network/splice-pulumi-common/src/config';
 import { clusterSubConfig } from '@canton-network/splice-pulumi-common/src/config/config';
+import { CnChartVersionSchema } from '@canton-network/splice-pulumi-common/src/config/versionSchema';
 import { z } from 'zod';
 
 export const SynchronizerConfigSchema = z.union([
@@ -86,11 +87,24 @@ export const ParticipantConfigSchema = z.object({
   }),
 });
 
+export const WalletGatewayConfigSchema = z.object({
+  enabled: z.boolean(),
+  // Upstream chart versions
+  version: z.string(),
+  portfolioVersion: z.string(),
+});
+
+export type WalletGatewayConfig = z.infer<typeof WalletGatewayConfigSchema>;
+
 export const ValidatorNodeConfigSchema = z.object({
   logging: z
     .object({
       level: LogLevelSchema.optional(),
+      // Log level for the Splice apps' HTTP request logging (org.lfdecentralizedtrust.splice.admin.api)
       apiRequestLogLevel: LogLevelSchema.optional(),
+      // Log level for the Canton nodes' Ledger-API audit logging (com.digitalasset.canton.logging.audit)
+      // Falls back to `apiRequestLogLevel` when not specified
+      cantonApiRequestLogLevel: LogLevelSchema.optional(),
       async: z.boolean().optional(),
     })
     .default({}),
@@ -106,6 +120,7 @@ export const ValidatorNodeConfigSchema = z.object({
   participant: ParticipantConfigSchema.prefault({}),
   validatorApp: ValidatorAppConfigSchema.optional(),
   disableAuth: z.boolean().default(false), // Note that this is currently ignored everywhere except for validator1, where it is used for testing only
+  walletGateway: WalletGatewayConfigSchema,
 });
 export const PartyAllocatorConfigSchema = z.object({
   enable: z.boolean(),
@@ -114,6 +129,7 @@ export const PartyAllocatorConfigSchema = z.object({
   preapprovalRetries: z.number().default(120),
   preapprovalRetryDelayMs: z.number().default(1000),
   pvcSize: z.string().optional(),
+  version: CnChartVersionSchema.optional(),
 });
 export type PartyAllocatorConfig = z.infer<typeof PartyAllocatorConfigSchema>;
 

@@ -11,6 +11,15 @@ function _error_msg(){
   echo -e "\e[1;31mERROR: $@\e[0m" >&2
 }
 
+# value of a variable as docker compose resolves it: the environment wins over .env
+function _env_var(){
+  if [ -n "${!1+x}" ]; then
+    echo "${!1}"
+  else
+    grep -E "^$1=" "${script_dir}/.env" | tail -n1 | cut -d= -f2- | tr -d '"'
+  fi
+}
+
 # issue a user friendly green informational message
 function _info(){
   local first_line="INFO: "
@@ -21,7 +30,7 @@ function _info(){
 }
 
 function usage() {
-  echo "Usage: $0 -s <sponsor_sv_address> -o <onboarding_secret> -p <party_hint> [-m <migration_id>] [-a] [-b] [-c <scan_address>] [-C <host_scan_address>] [-q <sequencer_address>] [-n <network_name>] [-i <identities_dump>] [-P <participant_id>] [-w] [-l] [-E]"
+  echo "Usage: $0 -s <sponsor_sv_address> -o <onboarding_secret> -p <party_hint> [-m <migration_id>] [-a] [-b] [-c <scan_address>] [-C <host_scan_address>] [-q <sequencer_address>] [-n <network_name>] [-i <identities_dump>] [-P <participant_id>] [-w] [-l] [-E] [-g]"
   echo "  -s <sponsor_sv_address>: The full URL of the sponsor SV"
   echo "  -o <onboarding_secret>: The onboarding secret to use. May be empty (\"\") if you are already onboarded."
   echo "  -p <party_hint>: The party hint to use for the validator operator, by default also your participant identifier."
@@ -40,6 +49,7 @@ function usage() {
   echo "  -S <comma_separated_sv_names>: Comma-separated list of SV names for bft-custom mode."
   echo "  -T <threshold>: Consensus threshold integer for bft-custom mode."
   echo "  -k: Disable the safety check that refuses to create a new participant database when another participant database already exists."
+  echo "  -g: Also deploy the Canton Wallet Gateway and the Portfolio UI (reachable at http://walletgateway.localhost and http://portfolio.localhost). Requires LEDGER_API_AUTH_AUDIENCE and VALIDATOR_AUTH_AUDIENCE to be equal, and with -a also WALLET_GATEWAY_UI_CLIENT_ID to be set in .env."
 
   echo ""
   echo "Testing flags:"
@@ -72,8 +82,9 @@ bft_custom_urls=""
 bft_custom_svs=""
 bft_custom_threshold=""
 enable_participant_db_conflict_check=1
+wallet_gateway=0
 
-while getopts 'has:c:C:t:o:n:bq:m:p:P:i:wlEBu:S:T:k' arg; do
+while getopts 'has:c:C:t:o:n:bq:m:p:P:i:wlEBu:S:T:kg' arg; do
   case ${arg} in
     h)
       usage
@@ -138,6 +149,9 @@ while getopts 'has:c:C:t:o:n:bq:m:p:P:i:wlEBu:S:T:k' arg; do
       ;;
     k)
       enable_participant_db_conflict_check=0
+      ;;
+    g)
+      wallet_gateway=1
       ;;
     ?)
       usage
@@ -324,6 +338,23 @@ fi
 extra_compose_files+=("-f" "${script_dir}/compose-traffic-topups.yaml")
 if [ $bft_custom -eq 1 ]; then
   extra_compose_files+=("-f" "${script_dir}/compose-bft-custom.yaml")
+fi
+if [ $wallet_gateway -eq 1 ]; then
+  # The portfolio UI calls the validator API with the gateway's ledger API tokens
+  if [ "$(_env_var LEDGER_API_AUTH_AUDIENCE)" != "$(_env_var VALIDATOR_AUTH_AUDIENCE)" ]; then
+    _error_msg "LEDGER_API_AUTH_AUDIENCE and VALIDATOR_AUTH_AUDIENCE must be equal when deploying the wallet gateway with -g, set both to the same value in .env"
+    exit 1
+  fi
+  extra_compose_files+=("-f" "${script_dir}/compose-wallet-gateway.yaml")
+  if [ $auth -ne 1 ]; then
+    extra_compose_files+=("-f" "${script_dir}/compose-wallet-gateway-disable-auth.yaml")
+  fi
+  # The Portfolio UI runs in the browser, so it needs a Scan URL reachable from the host
+  WALLET_GATEWAY_SCAN_ADDRESS="${host_scan_address:-${SCAN_ADDRESS}}"
+  export WALLET_GATEWAY_SCAN_ADDRESS
+  if [ $wait -ne 1 ]; then
+    _info "Deploying the wallet gateway and portfolio UI, using Scan at ${WALLET_GATEWAY_SCAN_ADDRESS} as the token registry"
+  fi
 fi
 extra_args=()
 if [ $wait -eq 1 ]; then

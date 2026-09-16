@@ -636,6 +636,12 @@ object ScanHttpEncodings {
     )
   }
 
+  def fromDamlValueEncoding(encoding: definitions.DamlValueEncoding): ScanHttpEncodings =
+    encoding match {
+      case definitions.DamlValueEncoding.members.CompactJson => CompactJsonScanHttpEncodings()
+      case definitions.DamlValueEncoding.members.ProtobufJson => ProtobufJsonScanHttpEncodings
+    }
+
   def encodeUpdate(
       update: TreeUpdateWithMigrationId,
       encoding: definitions.DamlValueEncoding,
@@ -656,10 +662,7 @@ object ScanHttpEncodings {
           externalTransactionHashThresholdTime,
         )
     }
-    val encodings: ScanHttpEncodings = encoding match {
-      case definitions.DamlValueEncoding.members.CompactJson => CompactJsonScanHttpEncodings()
-      case definitions.DamlValueEncoding.members.ProtobufJson => ProtobufJsonScanHttpEncodings
-    }
+    val encodings: ScanHttpEncodings = fromDamlValueEncoding(encoding)
     // v0 always returns the update ids as `#` prefixed,as that's the way they were encoded in canton. v1 returns it without the `#`
     encodings.lapiToHttpUpdate(
       update2,

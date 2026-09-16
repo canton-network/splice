@@ -1,0 +1,67 @@
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: istio-rate-limit
+    folder: platform
+    interval: 5m
+    rules:
+      - uid: cfurlpifrmvi8w
+        title: Enforced requests
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 21600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: sum(rate(envoy_http_local_rate_limit_enforced{namespace=~"sv.*"}[$__rate_interval])) by (namespace, pod, limiter)
+              instant: true
+              interval: ""
+              intervalMs: 30000
+              legendFormat: '{{namespace}} - {{pod}} - {{limiter}}'
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: []
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        dashboardUid: cnr56dj
+        panelId: 9
+        noDataState: OK
+        execErrState: Alerting
+        for: 5m
+        annotations:
+          runbook_url: ""
+          severity: warning
+          description: Envoy local rate limiting is active, requests are being rejected. The limiter label tells which limit rejected them (global, per_ip, endpoint_per_ip); the sidecar access log of a rejected request reports the same limit in the local_rate_limited field. Check the "Istio Rate Limiting" dashboard.
+          summary: Envoy is rate limiting requests in {{ $labels.namespace }} on pod {{ $labels.pod }} ({{ $labels.limiter }} limit).
+        labels:
+          "": ""
+          gcloud_filter: jsonPayload.response_code=429%20OR%20jsonPayload.grpc_status=%22ResourceExhausted%22
+        isPaused: false

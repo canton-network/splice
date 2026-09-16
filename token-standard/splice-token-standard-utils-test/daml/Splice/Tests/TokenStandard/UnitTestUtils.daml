@@ -1,0 +1,56 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+{-# LANGUAGE AllowAmbiguousTypes #-}
+
+-- | Shared utilities for the unit tests of token standard utils.
+module Splice.Tests.TokenStandard.UnitTestUtils where
+
+import DA.Action (unless)
+import DA.Foldable (forA_)
+import DA.Text qualified as T
+import DA.TextMap qualified as TextMap
+
+import Splice.Api.Token.MetadataV1
+
+import Daml.Script
+
+import Splice.TokenStandard.Utils qualified as TSU
+
+checkEq' : (Eq a, Show a) => Text -> [(a, a)] -> Script ()
+checkEq' prefix [] = fail $ prefix <> ": no test cases provided"
+checkEq' prefix pairs = forA_ pairs $ uncurry $ checkEq prefix
+
+checkEq : (Eq a, Show a) => Text -> a -> a -> Script ()
+checkEq prefix actual expected =
+  unless (actual == expected) $
+    fail $ T.unlines
+      [ prefix <> ": actual values do not match expected values."
+      , "  actual:   " <> show actual
+      , "  expected: " <> show expected
+      ]
+
+test_v1_roundtrips
+  : forall v2 v1.
+  (Eq v1, Show v1, TSU.BackwardCompatible v1 v2, TSU.ForwardCompatible v1 v2)
+  => Text -> [v1] -> Script ()
+test_v1_roundtrips typeName xs =
+  checkEq' ("test_v1_roundtrips: " <> typeName) $ [ (TSU.downcast (TSU.upcast @v1 @v2 x1), x1) | x1 <- xs ]
+
+test_v2_roundtrips
+  : forall v1 v2.
+  (Eq v2, Show v2, TSU.BackwardCompatible v1 v2, TSU.ForwardCompatible v1 v2)
+  => Text -> [v2] -> Script ()
+test_v2_roundtrips typeName xs =
+  checkEq' ("test_v2_roundtrips: " <> typeName) $ [ (TSU.upcast (TSU.downcast @v1 x2), x2) | x2 <- xs ]
+
+mkMeta : [(Text, Text)] -> Metadata
+mkMeta = Metadata . TextMap.fromList
+
+dummyMeta : [(Text, Text)]
+dummyMeta = [("cip-112/xyz.dummyKey", "xxx")]
+
+emptyExtraArgs : ExtraArgs
+emptyExtraArgs = ExtraArgs with
+  context = emptyChoiceContext
+  meta = emptyMetadata

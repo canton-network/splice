@@ -1,5 +1,6 @@
 joinWithKeyOnboarding:
   sponsorApiUrl: "https://sv.sv-2.TARGET_HOSTNAME"
+  sponsorScanUrl: "https://scan.sv-2.TARGET_HOSTNAME"
 
 # Replace YOUR_SV_NAME with the name you provided for your SV identity
 onboardingName: YOUR_SV_NAME
@@ -34,12 +35,12 @@ synchronizers:
       pruningInterval: "1 hour"
       # The retention period is the time for which the sequencer will retain the data.
       retentionPeriod: "30 days"
+    # Set to true when using CantonBFT
+    enableBftSequencer: false
   #DOCS_PRUNING_END
     sequencerAddress: "global-domain-SERIAL_ID-sequencer"
     mediatorAddress: "global-domain-SERIAL_ID-mediator"
     sequencerPublicUrl: "https://sequencer-SERIAL_ID.sv.YOUR_HOSTNAME"
-    sequencerAvailabilityDelay: "60 seconds"
-    enableBftSequencer: false
     cometBFT:
       enabled: true
       connectionUri: "http://global-domain-SERIAL_ID-cometbft-cometbft-rpc:26657"

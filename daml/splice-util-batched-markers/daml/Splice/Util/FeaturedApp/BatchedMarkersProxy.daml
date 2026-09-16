@@ -11,23 +11,25 @@ import qualified Splice.Api.FeaturedAppRightV2 as FeaturedAppRightV2
 data BatchedMarkersProxy_CreateMarkersResult = BatchedMarkersProxy_CreateMarkersResult
   with
     results : [[FeaturedAppRightV1.FeaturedAppRight_CreateActivityMarkerResult]]
+  deriving (Serializable)
 
 data BatchedMarkersProxy_CreateMarkersV2Result = BatchedMarkersProxy_CreateMarkersV2Result
   with
     results : [FeaturedAppRightV2.FeaturedAppRight_CreateActivityMarkerResult]
+  deriving (Serializable)
 
 data RewardBatch = RewardBatch
   with
     beneficiaries : [FeaturedAppRightV1.AppRewardBeneficiary]
     numMarkers : Int
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 data RewardBatchV2 = RewardBatchV2
   with
     beneficiaries : [FeaturedAppRightV2.AppRewardBeneficiary]
     markerWeight : Decimal
      -- ^ The total weight of the markers that should be created.
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 template BatchedMarkersProxy with
     provider : Party

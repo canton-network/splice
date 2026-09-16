@@ -25,6 +25,7 @@ import scala.annotation.tailrec
 import scala.concurrent.Future
 import scala.jdk.CollectionConverters.*
 import scala.jdk.FutureConverters.*
+import cats.syntax.traverse.*
 
 trait HasS3Mock
     extends NamedLogging
@@ -35,9 +36,9 @@ trait HasS3Mock
     with BeforeAndAfterEach
     with HasExecutionContext { this: Suite =>
 
-  val s3ConfigMock = S3Config(
+  def s3ConfigMock(bucket: String = "bucket") = S3Config(
     "http://127.0.0.1:9090",
-    "bucket",
+    bucket,
     Region.US_EAST_1.toString,
     "mock_id",
     "mock_key",
@@ -46,11 +47,13 @@ trait HasS3Mock
   private var container: Option[S3MockContainer] = None
   override def beforeAll(): Unit = startContainer()
   override def afterAll(): Unit = container.foreach(_.stop)
-  override def beforeEach(): Unit = clearBucket()
+  override def beforeEach(): Unit = clearBuckets()
+
+  val initialBuckets: Seq[String] = Seq("bucket")
 
   private def startContainer() = {
     val c = new S3MockContainer("4.11.0")
-      .withInitialBuckets("bucket")
+      .withInitialBuckets(initialBuckets.mkString(","))
       .withExposedPorts(9090)
       .withEnv(
         Map(
@@ -75,29 +78,36 @@ trait HasS3Mock
     c
   }
 
-  private def clearBucket() = {
+  private def clearBuckets(): Unit = {
 
-    val client = S3BucketConnection(s3ConfigMock, loggerFactory).s3Client
+    initialBuckets
+      .map { bucket =>
+        val client = S3BucketConnection(s3ConfigMock(bucket), loggerFactory).s3Client
 
-    val listRequest = ListObjectsRequest.builder().bucket(s3ConfigMock.bucketName).build()
-    (for {
-      list <- client.listObjects(listRequest).asScala
-      objs = list.contents().asScala.map { obj =>
-        ObjectIdentifier.builder().key(obj.key()).build()
+        val listRequest =
+          ListObjectsRequest.builder().bucket(s3ConfigMock(bucket).bucketName).build()
+        (for {
+          list <- client.listObjects(listRequest).asScala
+          objs = list.contents().asScala.map { obj =>
+            ObjectIdentifier.builder().key(obj.key()).build()
+          }
+          deleteObjRequest = DeleteObjectsRequest
+            .builder()
+            .bucket(s3ConfigMock(bucket).bucketName)
+            .delete(
+              Delete.builder().objects(objs.asJava).build()
+            )
+            .build()
+          _ <-
+            if (list.contents().asScala.isEmpty) { Future.successful(()) }
+            else { client.deleteObjects(deleteObjRequest).asScala }
+        } yield {
+          ()
+        })
       }
-      deleteObjRequest = DeleteObjectsRequest
-        .builder()
-        .bucket(s3ConfigMock.bucketName)
-        .delete(
-          Delete.builder().objects(objs.asJava).build()
-        )
-        .build()
-      _ <-
-        if (list.contents().asScala.isEmpty) { Future.successful(()) }
-        else { client.deleteObjects(deleteObjRequest).asScala }
-    } yield {
-      ()
-    }).futureValue
+      .sequence
+      .futureValue
+
   }
 
   def readUncompressAndDecode[T](

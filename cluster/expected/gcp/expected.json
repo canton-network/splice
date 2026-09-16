@@ -158,6 +158,17 @@
     "custom": true,
     "id": "",
     "inputs": {
+      "cloudArmorTier": "CA_STANDARD",
+      "project": "da-cn-example-project-id"
+    },
+    "name": "cloud-armor-tier",
+    "provider": "",
+    "type": "gcp:compute/projectCloudArmorTier:ProjectCloudArmorTier"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
       "disableDependentServices": true,
       "service": "container.googleapis.com"
     },
@@ -206,13 +217,7 @@
   {
     "custom": true,
     "id": "",
-    "inputs": {
-      "secret": "undefined_id",
-      "secretData": {
-        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
-        "value": "{\"adminUser\": \"grafana-keys-admin-user\"\n                , \"adminPassword\": \"grafana-keys-admin-password\"}"
-      }
-    },
+    "inputs": {},
     "name": "grafana-keys-secretversion",
     "provider": "",
     "type": "gcp:secretmanager/secretVersion:SecretVersion"
@@ -240,16 +245,6 @@
   },
   {
     "custom": true,
-    "id": "organization/infra/infra.mock",
-    "inputs": {
-      "name": "organization/infra/infra.mock"
-    },
-    "name": "organization/infra/infra.mock",
-    "provider": "",
-    "type": "pulumi:pulumi:StackReference"
-  },
-  {
-    "custom": true,
     "id": "",
     "inputs": {
       "disableDependentServices": true,
@@ -273,13 +268,7 @@
   {
     "custom": true,
     "id": "",
-    "inputs": {
-      "secret": "undefined_id",
-      "secretData": {
-        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
-        "value": "{\"publicKey\": \"sv-id-public-key\", \"privateKey\": \"sv-id-private-key\"}"
-      }
-    },
+    "inputs": {},
     "name": "sv-id-secretversion",
     "provider": "",
     "type": "gcp:secretmanager/secretVersion:SecretVersion"
@@ -308,13 +297,7 @@
   {
     "custom": true,
     "id": "",
-    "inputs": {
-      "secret": "undefined_id",
-      "secretData": {
-        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
-        "value": "{\"nodePrivateKey\": \"sv1-cometbft-keys-node-private-key\", \"validatorPrivateKey\": \"sv1-cometbft-keys-validator-private-key\"\n                , \"validatorPublicKey\": \"sv1-cometbft-keys-validator-public-key\"}"
-      }
-    },
+    "inputs": {},
     "name": "sv1-cometbft-keys-secretversion",
     "provider": "",
     "type": "gcp:secretmanager/secretVersion:SecretVersion"
@@ -343,13 +326,7 @@
   {
     "custom": true,
     "id": "",
-    "inputs": {
-      "secret": "undefined_id",
-      "secretData": {
-        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
-        "value": "{\"nodePrivateKey\": \"sv10-cometbft-keys-node-private-key\", \"validatorPrivateKey\": \"sv10-cometbft-keys-validator-private-key\"\n                , \"validatorPublicKey\": \"sv10-cometbft-keys-validator-public-key\"}"
-      }
-    },
+    "inputs": {},
     "name": "sv10-cometbft-keys-secretversion",
     "provider": "",
     "type": "gcp:secretmanager/secretVersion:SecretVersion"
@@ -378,13 +355,7 @@
   {
     "custom": true,
     "id": "",
-    "inputs": {
-      "secret": "undefined_id",
-      "secretData": {
-        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
-        "value": "{\"nodePrivateKey\": \"sv11-cometbft-keys-node-private-key\", \"validatorPrivateKey\": \"sv11-cometbft-keys-validator-private-key\"\n                , \"validatorPublicKey\": \"sv11-cometbft-keys-validator-public-key\"}"
-      }
-    },
+    "inputs": {},
     "name": "sv11-cometbft-keys-secretversion",
     "provider": "",
     "type": "gcp:secretmanager/secretVersion:SecretVersion"
@@ -413,13 +384,7 @@
   {
     "custom": true,
     "id": "",
-    "inputs": {
-      "secret": "undefined_id",
-      "secretData": {
-        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
-        "value": "{\"nodePrivateKey\": \"sv12-cometbft-keys-node-private-key\", \"validatorPrivateKey\": \"sv12-cometbft-keys-validator-private-key\"\n                , \"validatorPublicKey\": \"sv12-cometbft-keys-validator-public-key\"}"
-      }
-    },
+    "inputs": {},
     "name": "sv12-cometbft-keys-secretversion",
     "provider": "",
     "type": "gcp:secretmanager/secretVersion:SecretVersion"
@@ -448,13 +413,7 @@
   {
     "custom": true,
     "id": "",
-    "inputs": {
-      "secret": "undefined_id",
-      "secretData": {
-        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
-        "value": "{\"nodePrivateKey\": \"sv13-cometbft-keys-node-private-key\", \"validatorPrivateKey\": \"sv13-cometbft-keys-validator-private-key\"\n                , \"validatorPublicKey\": \"sv13-cometbft-keys-validator-public-key\"}"
-      }
-    },
+    "inputs": {},
     "name": "sv13-cometbft-keys-secretversion",
     "provider": "",
     "type": "gcp:secretmanager/secretVersion:SecretVersion"
@@ -483,13 +442,7 @@
   {
     "custom": true,
     "id": "",
-    "inputs": {
-      "secret": "undefined_id",
-      "secretData": {
-        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
-        "value": "{\"nodePrivateKey\": \"sv14-cometbft-keys-node-private-key\", \"validatorPrivateKey\": \"sv14-cometbft-keys-validator-private-key\"\n                , \"validatorPublicKey\": \"sv14-cometbft-keys-validator-public-key\"}"
-      }
-    },
+    "inputs": {},
     "name": "sv14-cometbft-keys-secretversion",
     "provider": "",
     "type": "gcp:secretmanager/secretVersion:SecretVersion"
@@ -518,13 +471,7 @@
   {
     "custom": true,
     "id": "",
-    "inputs": {
-      "secret": "undefined_id",
-      "secretData": {
-        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
-        "value": "{\"nodePrivateKey\": \"sv15-cometbft-keys-node-private-key\", \"validatorPrivateKey\": \"sv15-cometbft-keys-validator-private-key\"\n                , \"validatorPublicKey\": \"sv15-cometbft-keys-validator-public-key\"}"
-      }
-    },
+    "inputs": {},
     "name": "sv15-cometbft-keys-secretversion",
     "provider": "",
     "type": "gcp:secretmanager/secretVersion:SecretVersion"
@@ -553,13 +500,7 @@
   {
     "custom": true,
     "id": "",
-    "inputs": {
-      "secret": "undefined_id",
-      "secretData": {
-        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
-        "value": "{\"nodePrivateKey\": \"sv16-cometbft-keys-node-private-key\", \"validatorPrivateKey\": \"sv16-cometbft-keys-validator-private-key\"\n                , \"validatorPublicKey\": \"sv16-cometbft-keys-validator-public-key\"}"
-      }
-    },
+    "inputs": {},
     "name": "sv16-cometbft-keys-secretversion",
     "provider": "",
     "type": "gcp:secretmanager/secretVersion:SecretVersion"
@@ -588,13 +529,7 @@
   {
     "custom": true,
     "id": "",
-    "inputs": {
-      "secret": "undefined_id",
-      "secretData": {
-        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
-        "value": "{\"nodePrivateKey\": \"sv2-cometbft-keys-node-private-key\", \"validatorPrivateKey\": \"sv2-cometbft-keys-validator-private-key\"\n                , \"validatorPublicKey\": \"sv2-cometbft-keys-validator-public-key\"}"
-      }
-    },
+    "inputs": {},
     "name": "sv2-cometbft-keys-secretversion",
     "provider": "",
     "type": "gcp:secretmanager/secretVersion:SecretVersion"
@@ -623,13 +558,7 @@
   {
     "custom": true,
     "id": "",
-    "inputs": {
-      "secret": "undefined_id",
-      "secretData": {
-        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
-        "value": "{\"publicKey\": \"sv2-id-public-key\", \"privateKey\": \"sv2-id-private-key\"}"
-      }
-    },
+    "inputs": {},
     "name": "sv2-id-secretversion",
     "provider": "",
     "type": "gcp:secretmanager/secretVersion:SecretVersion"
@@ -658,13 +587,7 @@
   {
     "custom": true,
     "id": "",
-    "inputs": {
-      "secret": "undefined_id",
-      "secretData": {
-        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
-        "value": "{\"nodePrivateKey\": \"sv3-cometbft-keys-node-private-key\", \"validatorPrivateKey\": \"sv3-cometbft-keys-validator-private-key\"\n                , \"validatorPublicKey\": \"sv3-cometbft-keys-validator-public-key\"}"
-      }
-    },
+    "inputs": {},
     "name": "sv3-cometbft-keys-secretversion",
     "provider": "",
     "type": "gcp:secretmanager/secretVersion:SecretVersion"
@@ -693,13 +616,7 @@
   {
     "custom": true,
     "id": "",
-    "inputs": {
-      "secret": "undefined_id",
-      "secretData": {
-        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
-        "value": "{\"publicKey\": \"sv3-id-public-key\", \"privateKey\": \"sv3-id-private-key\"}"
-      }
-    },
+    "inputs": {},
     "name": "sv3-id-secretversion",
     "provider": "",
     "type": "gcp:secretmanager/secretVersion:SecretVersion"
@@ -728,13 +645,7 @@
   {
     "custom": true,
     "id": "",
-    "inputs": {
-      "secret": "undefined_id",
-      "secretData": {
-        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
-        "value": "{\"nodePrivateKey\": \"sv4-cometbft-keys-node-private-key\", \"validatorPrivateKey\": \"sv4-cometbft-keys-validator-private-key\"\n                , \"validatorPublicKey\": \"sv4-cometbft-keys-validator-public-key\"}"
-      }
-    },
+    "inputs": {},
     "name": "sv4-cometbft-keys-secretversion",
     "provider": "",
     "type": "gcp:secretmanager/secretVersion:SecretVersion"
@@ -763,13 +674,7 @@
   {
     "custom": true,
     "id": "",
-    "inputs": {
-      "secret": "undefined_id",
-      "secretData": {
-        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
-        "value": "{\"publicKey\": \"sv4-id-public-key\", \"privateKey\": \"sv4-id-private-key\"}"
-      }
-    },
+    "inputs": {},
     "name": "sv4-id-secretversion",
     "provider": "",
     "type": "gcp:secretmanager/secretVersion:SecretVersion"
@@ -798,13 +703,7 @@
   {
     "custom": true,
     "id": "",
-    "inputs": {
-      "secret": "undefined_id",
-      "secretData": {
-        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
-        "value": "{\"nodePrivateKey\": \"sv5-cometbft-keys-node-private-key\", \"validatorPrivateKey\": \"sv5-cometbft-keys-validator-private-key\"\n                , \"validatorPublicKey\": \"sv5-cometbft-keys-validator-public-key\"}"
-      }
-    },
+    "inputs": {},
     "name": "sv5-cometbft-keys-secretversion",
     "provider": "",
     "type": "gcp:secretmanager/secretVersion:SecretVersion"
@@ -833,13 +732,7 @@
   {
     "custom": true,
     "id": "",
-    "inputs": {
-      "secret": "undefined_id",
-      "secretData": {
-        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
-        "value": "{\"nodePrivateKey\": \"sv6-cometbft-keys-node-private-key\", \"validatorPrivateKey\": \"sv6-cometbft-keys-validator-private-key\"\n                , \"validatorPublicKey\": \"sv6-cometbft-keys-validator-public-key\"}"
-      }
-    },
+    "inputs": {},
     "name": "sv6-cometbft-keys-secretversion",
     "provider": "",
     "type": "gcp:secretmanager/secretVersion:SecretVersion"
@@ -868,13 +761,7 @@
   {
     "custom": true,
     "id": "",
-    "inputs": {
-      "secret": "undefined_id",
-      "secretData": {
-        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
-        "value": "{\"nodePrivateKey\": \"sv7-cometbft-keys-node-private-key\", \"validatorPrivateKey\": \"sv7-cometbft-keys-validator-private-key\"\n                , \"validatorPublicKey\": \"sv7-cometbft-keys-validator-public-key\"}"
-      }
-    },
+    "inputs": {},
     "name": "sv7-cometbft-keys-secretversion",
     "provider": "",
     "type": "gcp:secretmanager/secretVersion:SecretVersion"
@@ -903,13 +790,7 @@
   {
     "custom": true,
     "id": "",
-    "inputs": {
-      "secret": "undefined_id",
-      "secretData": {
-        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
-        "value": "{\"nodePrivateKey\": \"sv8-cometbft-keys-node-private-key\", \"validatorPrivateKey\": \"sv8-cometbft-keys-validator-private-key\"\n                , \"validatorPublicKey\": \"sv8-cometbft-keys-validator-public-key\"}"
-      }
-    },
+    "inputs": {},
     "name": "sv8-cometbft-keys-secretversion",
     "provider": "",
     "type": "gcp:secretmanager/secretVersion:SecretVersion"
@@ -938,13 +819,7 @@
   {
     "custom": true,
     "id": "",
-    "inputs": {
-      "secret": "undefined_id",
-      "secretData": {
-        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
-        "value": "{\"nodePrivateKey\": \"sv9-cometbft-keys-node-private-key\", \"validatorPrivateKey\": \"sv9-cometbft-keys-validator-private-key\"\n                , \"validatorPublicKey\": \"sv9-cometbft-keys-validator-public-key\"}"
-      }
-    },
+    "inputs": {},
     "name": "sv9-cometbft-keys-secretversion",
     "provider": "",
     "type": "gcp:secretmanager/secretVersion:SecretVersion"

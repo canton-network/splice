@@ -321,6 +321,7 @@
       <logger name="com.digitalasset.canton.logging.audit" level="${LOG_LEVEL_API_REQUEST:-DEBUG}" />
       <logger name="com.daml" level="${LOG_LEVEL_CANTON:-INFO}"/>
       <logger name="org.lfdecentralizedtrust.splice" level="${LOG_LEVEL_CANTON:-INFO}"/>
+      <logger name="org.lfdecentralizedtrust.splice.admin.api" level="${LOG_LEVEL_API_REQUEST:-DEBUG}"/>
     </else>
   </if>
 

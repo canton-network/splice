@@ -1,10 +1,10 @@
-// Copyright (c) 2025 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+// Copyright (c) 2026 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
 package com.digitalasset.canton.integration
 
 import com.digitalasset.canton.config.{SharedCantonConfig, TestingConfigInternal}
-import com.digitalasset.canton.environment.{Environment, EnvironmentFactory}
+import com.digitalasset.canton.environment.Environment
 import com.digitalasset.canton.logging.NamedLoggerFactory
 
 /** Definition of how a environment should be configured and setup.
@@ -20,12 +20,15 @@ import com.digitalasset.canton.logging.NamedLoggerFactory
   *   transforms to perform on the base configuration before starting the environment (typically
   *   making ports unique or some other specialization for the particular tests you're running)
   */
-abstract class BaseEnvironmentDefinition[C <: SharedCantonConfig[
-  C
-], E <: Environment[C]](
+abstract class BaseEnvironmentDefinition[
+    C <: SharedCantonConfig[
+      C
+    ],
+    E <: Environment[C],
+](
     val baseConfig: C,
     val testingConfig: TestingConfigInternal,
-    val setups: List[TestConsoleEnvironment[C, E] => Unit] = Nil,
+    val setups: List[BaseTestConsoleEnvironment[C, E] => Unit] = Nil,
     val teardown: Unit => Unit = _ => (),
     val configTransforms: Seq[C => C],
 ) {
@@ -37,10 +40,8 @@ abstract class BaseEnvironmentDefinition[C <: SharedCantonConfig[
   def generateConfig: C =
     configTransforms.foldLeft(baseConfig)((config, transform) => transform(config))
 
-  def environmentFactory: EnvironmentFactory[C, E]
-
   def createTestConsole(
       environment: E,
       loggerFactory: NamedLoggerFactory,
-  ): TestConsoleEnvironment[C, E]
+  ): BaseTestConsoleEnvironment[C, E]
 }

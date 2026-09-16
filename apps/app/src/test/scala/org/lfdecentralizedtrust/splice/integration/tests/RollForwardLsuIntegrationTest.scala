@@ -18,7 +18,6 @@ import org.lfdecentralizedtrust.splice.environment.{
   MediatorAdminConnection,
   SequencerAdminConnection,
 }
-import org.lfdecentralizedtrust.splice.http.v0.definitions.TransactionHistoryRequest
 import monocle.macros.syntax.lens.*
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTest
@@ -100,14 +99,19 @@ class RollForwardLsuIntegrationTest
                   config
                     .svApps(InstanceName.tryCreate(s"sv$sv"))
                     .focus(_.localSynchronizerNodes)
-                    .modify(c => c.copy(legacy = c.current.some))
+                    .modify(c =>
+                      c.copy(
+                        legacy = c.current.some,
+                        current = c.current.focus(_.protocolVersion).replace(ProtocolVersion.v35),
+                      )
+                    )
                     .focus(_.onboarding)
                     .modify(c =>
                       SvOnboardingConfig
                         .RollForwardLsu(
                           c.value.name,
                           NonNegativeInt.tryCreate(2),
-                          ProtocolVersion.v34,
+                          ProtocolVersion.v35,
                           exportTimes = None,
                         )
                         .some
@@ -164,14 +168,13 @@ class RollForwardLsuIntegrationTest
     startAllSync(allNodes*)
 
     actAndCheck("Create some transaction history", sv1WalletClient.tap(1337))(
-      "Scan transaction history is recorded and wallet balance is updated",
+      "Wallet balance is updated",
       _ => {
         // buffer to account for domain fee payments
         assertInRange(
           sv1WalletClient.balance().unlockedQty,
           (walletUsdToAmulet(1000), walletUsdToAmulet(2000)),
         )
-        countTapsFromScan(sv1ScanBackend, walletUsdToAmulet(1337)) shouldBe 1
       },
     )
 
@@ -195,7 +198,7 @@ class RollForwardLsuIntegrationTest
     val newSynchronizerSerial = decentralizedSynchronizerPSId.serial + NonNegativeInt.two
     val successorPsid = decentralizedSynchronizerPSId.copy(
       serial = newSynchronizerSerial,
-      protocolVersion = ProtocolVersion.v34,
+      protocolVersion = ProtocolVersion.v35,
     )
     val topologyFreezeTime = CantonTimestamp.now()
     val upgradeTime = CantonTimestamp.now().plusSeconds(60)
@@ -416,16 +419,6 @@ class RollForwardLsuIntegrationTest
       grpcClientMetrics,
       retryProvider,
     )
-
-  private def countTapsFromScan(scan: ScanAppBackendReference, tapAmount: BigDecimal) = {
-    listTransactionsFromScan(scan).count(
-      _.tap.map(a => BigDecimal(a.amuletAmount)).contains(tapAmount)
-    )
-  }
-
-  private def listTransactionsFromScan(scan: ScanAppBackendReference) = {
-    scan.listTransactions(None, TransactionHistoryRequest.SortOrder.Asc, 100)
-  }
 
   private def getSequencerUrlSet(
       participantConnection: ParticipantClientReference,

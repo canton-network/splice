@@ -14,6 +14,6 @@ import com.digitalasset.canton.metrics.DbStorageHistograms
   */
 class SplitwellAppMetrics(
     metricsFactory: LabeledMetricsFactory,
-    storageHistograms: DbStorageHistograms,
+    histograms: DbStorageHistograms,
     loggerFactory: NamedLoggerFactory,
-) extends BaseSpliceMetrics("splitwell", metricsFactory, storageHistograms, loggerFactory) {}
+) extends BaseSpliceMetrics("splitwell", metricsFactory, histograms, loggerFactory) {}

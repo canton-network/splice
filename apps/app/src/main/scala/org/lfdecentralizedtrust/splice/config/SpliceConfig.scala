@@ -12,8 +12,8 @@ import org.lfdecentralizedtrust.splice.environment.{DarResources, PackageVetting
 import org.lfdecentralizedtrust.splice.http.UrlValidator
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection.BftScanClientConfig
 import org.lfdecentralizedtrust.splice.scan.config.{
-  BftSequencerConfig,
   BulkStorageConfig,
+  CantonBftPeerConfig,
   MediatorVerdictIngestionConfig,
   ScanAppBackendConfig,
   ScanAppClientConfig,
@@ -21,6 +21,7 @@ import org.lfdecentralizedtrust.splice.scan.config.{
   ScanRollForwardLsuConfig,
   ScanSynchronizerConfig,
   ScanSynchronizerNodesConfig,
+  TokenStandardConfig,
   CacheConfig as SpliceCacheConfig,
 }
 import org.lfdecentralizedtrust.splice.splitwell.config.{
@@ -32,7 +33,12 @@ import org.lfdecentralizedtrust.splice.splitwell.config.{
 import org.lfdecentralizedtrust.splice.sv.config.*
 import org.lfdecentralizedtrust.splice.sv.SvAppClientConfig
 import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.FoundDso
-import org.lfdecentralizedtrust.splice.util.{Codec, SpliceRateLimitConfig}
+import org.lfdecentralizedtrust.splice.util.{
+  Codec,
+  IpCidrRateLimits,
+  PerAttributeRateLimitConfig,
+  SpliceRateLimitConfig,
+}
 import org.lfdecentralizedtrust.splice.validator.config.*
 import org.lfdecentralizedtrust.splice.wallet.config.{
   AppRewardBeneficiaryConfig,
@@ -58,18 +64,27 @@ import com.digitalasset.canton.config.*
 import com.digitalasset.canton.config.RequireTypes.NonNegativeNumeric
 import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory, TracedLogger}
-import com.digitalasset.canton.participant.config.{ParticipantNodeConfig, RemoteParticipantConfig}
+import com.digitalasset.canton.participant.config.RemoteParticipantConfig
 import com.digitalasset.canton.admin.api.client.data.{
   SequencerConnectionPoolDelays,
   SubmissionRequestAmplification,
+  SynchronizerLimits,
+  TransactionProtocolLimits,
 }
 import com.digitalasset.canton.tracing.TraceContext
 import com.typesafe.config.{Config, ConfigRenderOptions}
 import com.typesafe.config.ConfigException.UnresolvedSubstitution
 import org.slf4j.{Logger, LoggerFactory}
 import pureconfig.configurable.{genericMapReader, genericMapWriter}
-import pureconfig.generic.FieldCoproductHint
-import pureconfig.{ConfigReader, ConfigWriter}
+import pureconfig.generic.{CoproductHint, FieldCoproductHint, ProductHint}
+import pureconfig.{
+  CamelCase,
+  ConfigCursor,
+  ConfigFieldMapping,
+  ConfigReader,
+  ConfigWriter,
+  KebabCase,
+}
 import pureconfig.error.{CannotConvert, FailureReason}
 import pureconfig.module.cats.{nonEmptyListReader, nonEmptyListWriter}
 import io.circe.parser.*
@@ -84,17 +99,12 @@ import scala.util.Try
 import scala.util.control.NoStackTrace
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path}
-import com.digitalasset.canton.synchronizer.mediator.{MediatorNodeConfig, RemoteMediatorConfig}
-import com.digitalasset.canton.synchronizer.sequencer.config.{
-  RemoteSequencerConfig,
-  SequencerNodeConfig,
-}
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.daml.lf.data.Ref.{PackageName, PackageVersion}
 import org.lfdecentralizedtrust.splice.store.ChoiceContextContractFetcher
 
 case class SpliceConfig(
-    override val name: Option[String] = None,
+    name: Option[String] = None,
     validatorApps: Map[InstanceName, ValidatorAppBackendConfig] = Map.empty,
     validatorAppClients: Map[InstanceName, ValidatorAppClientConfig] = Map.empty,
     svApps: Map[InstanceName, SvAppBackendConfig] = Map.empty,
@@ -121,12 +131,12 @@ case class SpliceConfig(
   override def withDefaults(defaults: Option[DefaultPorts]): SpliceConfig =
     this
 
-  // TODO(DACH-NY/canton-network-node#736): we want to remove all of the configurations options below:
-  override val participants: Map[InstanceName, ParticipantNodeConfig] = Map.empty
-  override val mediators: Map[InstanceName, MediatorNodeConfig] = Map.empty
-  override val remoteMediators: Map[InstanceName, RemoteMediatorConfig] = Map.empty
-  override val sequencers: Map[InstanceName, SequencerNodeConfig] = Map.empty
-  override val remoteSequencers: Map[InstanceName, RemoteSequencerConfig] = Map.empty
+  // TODO(#546): we want to remove all of the configurations options below:
+  override val participants: Map[InstanceName, Nothing] = Map.empty
+  override val mediators: Map[InstanceName, Nothing] = Map.empty
+  override val remoteMediators: Map[InstanceName, Nothing] = Map.empty
+  override val sequencers: Map[InstanceName, Nothing] = Map.empty
+  override val remoteSequencers: Map[InstanceName, Nothing] = Map.empty
   override def portDescription: String = {
     def nodePorts(config: LocalNodeConfig): Seq[String] =
       portDescriptionFromConfig(config)(Seq(("http-api", _.adminApi)))
@@ -308,6 +318,9 @@ case class SpliceConfig(
     import writers.*
     ConfigWriter[SpliceConfig].to(this).render(SpliceConfig.defaultConfigRenderer)
   }
+
+  override def mergeDynamicChanges(newConfig: SpliceConfig) =
+    this // dynamic changes not supported
 }
 
 // NOTE: the below is patterned after CantonCommunityConfig.
@@ -373,6 +386,15 @@ object SpliceConfig {
 
   import pureconfig.generic.semiauto.*
 
+  private val perClientIpRateLimitHint: ProductHint[PerAttributeRateLimitConfig] =
+    ProductHint[PerAttributeRateLimitConfig](
+      ConfigFieldMapping {
+        case "attributeOverrides" => "ip-overrides"
+        case other => ConfigFieldMapping(CamelCase, KebabCase)(other)
+      },
+      allowUnknownKeys = false,
+    )
+
   private val cantonConfigReaders = new CantonConfig.ConfigReaders()(elc)
 
   class ConfigReaders(implicit
@@ -428,12 +450,30 @@ object SpliceConfig {
       deriveReader[SpliceCachingConfigs]
     implicit val spliceParametersConfig: ConfigReader[SpliceParametersConfig] =
       deriveReader[SpliceParametersConfig]
+    implicit val spliceRateLimiterSimpleConfig: ConfigReader[SpliceRateLimitConfig.Simple] =
+      deriveReader[SpliceRateLimitConfig.Simple]
+    implicit val clientIpRateLimitHint: ProductHint[PerAttributeRateLimitConfig] =
+      SpliceConfig.perClientIpRateLimitHint
+    implicit val clientIpRateLimitConfig: ConfigReader[PerAttributeRateLimitConfig] =
+      deriveReader[PerAttributeRateLimitConfig].emap { config =>
+        Try(IpCidrRateLimits.tryValidate(config)).toEither.left
+          .map[FailureReason](err =>
+            CannotConvert(
+              config.attributeOverrides.keys.mkString("[", ", ", "]"),
+              "ip-overrides",
+              err.getMessage,
+            )
+          )
+          .map(_ => config)
+      }
+    implicit val spliceRateLimiterWithPerClientIpConfig: ConfigReader[PerClientIpRateLimitConfig] =
+      deriveReader[PerClientIpRateLimitConfig]
     implicit val rateLimitersConfig: ConfigReader[RateLimitersConfig] =
       deriveReader[RateLimitersConfig]
-    implicit val spliceRateLimiterConfig: ConfigReader[SpliceRateLimitConfig] =
-      deriveReader[SpliceRateLimitConfig]
     implicit val enabledFeaturesConfigReader: ConfigReader[EnabledFeaturesConfig] =
       deriveReader[EnabledFeaturesConfig]
+    implicit val splicePostgresConfigReader: ConfigReader[SplicePostgresConfig] =
+      deriveReader[SplicePostgresConfig]
 
     implicit val upgradesConfig: ConfigReader[UpgradesConfig] = deriveReader[UpgradesConfig]
 
@@ -465,15 +505,18 @@ object SpliceConfig {
     implicit val scanSynchronizerConfig: ConfigReader[ScanSynchronizerConfig] =
       deriveReader[ScanSynchronizerConfig]
     // a bit more elaborate because the automatic derivation wants us to use `p-2p-url`
-    implicit val bftSequencerConfigReader: ConfigReader[BftSequencerConfig] =
+    implicit val bftSequencerConfigReader: ConfigReader[CantonBftPeerConfig] =
       ConfigReader.forProduct1("p2p-url")(
-        BftSequencerConfig(_)
+        CantonBftPeerConfig(_)
       )
     implicit val scanCacheConfigReader: ConfigReader[ScanCacheConfig] =
       deriveReader[ScanCacheConfig]
     implicit val mediatorVerdictIngestionConfigReader
         : ConfigReader[MediatorVerdictIngestionConfig] =
       deriveReader[MediatorVerdictIngestionConfig]
+    implicit val tokenStandardSettlementConfigReader
+        : ConfigReader[TokenStandardConfig.SettlementConfig] =
+      deriveReader[TokenStandardConfig.SettlementConfig]
     implicit val bulkStorageConfigReader: ConfigReader[BulkStorageConfig] =
       deriveReader[BulkStorageConfig]
     implicit val S3ConfigReader: ConfigReader[S3Config] =
@@ -592,6 +635,10 @@ object SpliceConfig {
       deriveReader[SvMediatorConfig]
     implicit val svScanConfig: ConfigReader[SvScanConfig] =
       deriveReader[SvScanConfig]
+    implicit val transactionProtocolLimitsReader: ConfigReader[TransactionProtocolLimits] =
+      deriveReader[TransactionProtocolLimits]
+    implicit val synchronizerLimitsReader: ConfigReader[SynchronizerLimits] =
+      deriveReader[SynchronizerLimits]
     implicit val svSynchronizerNodeConfig: ConfigReader[SvSynchronizerNodeConfig] =
       deriveReader[SvSynchronizerNodeConfig]
     implicit val svSynchronizerNodesConfig: ConfigReader[SvSynchronizerNodesConfig] =
@@ -635,6 +682,8 @@ object SpliceConfig {
       deriveReader[RangeConfig]
     implicit val packageVettingCacheConfig: ConfigReader[PackageVettingLookupService.CacheConfig] =
       deriveReader[PackageVettingLookupService.CacheConfig]
+    implicit val sequencingParametersReader: ConfigReader[BftSequencingParameters] =
+      deriveReader[BftSequencingParameters]
     implicit val svConfigReader: ConfigReader[SvAppBackendConfig] =
       deriveReader[SvAppBackendConfig].emap { conf =>
         def checkFoundDsoConfig(check: (SvAppBackendConfig, FoundDso) => Boolean) =
@@ -689,8 +738,34 @@ object SpliceConfig {
       deriveReader[AutoAcceptTransfersConfig]
     implicit val appRewardBeneficiaryConfigReader: ConfigReader[AppRewardBeneficiaryConfig] =
       deriveReader[AppRewardBeneficiaryConfig]
+
+    implicit val rewardSharingConfigHint: FieldCoproductHint[RewardSharingConfig] =
+      new FieldCoproductHint[RewardSharingConfig]("type") {
+        override def from(
+            cursor: ConfigCursor,
+            options: Seq[String],
+        ): ConfigReader.Result[CoproductHint.Action] = {
+          cursor.asObjectCursor.flatMap { objCur =>
+            if (objCur.atKeyOrUndefined("type").isUndefined) {
+              options
+                .find(fieldValue(_) == "built-in")
+                .fold(super.from(cursor, options))(opt => Right(CoproductHint.Use(objCur, opt)))
+            } else {
+              super.from(cursor, options)
+            }
+          }
+        }
+      }
+
+    implicit val rewardSharingBuiltInReader: ConfigReader[RewardSharingConfig.BuiltIn] =
+      deriveReader[RewardSharingConfig.BuiltIn]
+    implicit val rewardSharingExternalHint: ProductHint[RewardSharingConfig.External] =
+      ProductHint[RewardSharingConfig.External](allowUnknownKeys = false)
+    implicit val rewardSharingExternalReader: ConfigReader[RewardSharingConfig.External] =
+      deriveReader[RewardSharingConfig.External]
     implicit val rewardSharingConfigReader: ConfigReader[RewardSharingConfig] =
       deriveReader[RewardSharingConfig]
+
     implicit val validatorDecentralizedSynchronizerConfigReader
         : ConfigReader[ValidatorDecentralizedSynchronizerConfig] =
       deriveReader[ValidatorDecentralizedSynchronizerConfig].emap(config => {
@@ -822,28 +897,32 @@ object SpliceConfig {
             case (Right(()), (party, sharingConfig)) =>
               for {
                 _ <- Either.cond(
-                  sharingConfig.beneficiaries.forall(b =>
-                    b.percentage > 0 && b.percentage <= BigDecimal(1.0)
-                  ),
-                  (),
-                  ConfigValidationFailed(
-                    s"Reward sharing percentages for $party must be in (0.0, 1.0]"
-                  ),
-                )
-                _ <- Either.cond(
-                  sharingConfig.beneficiaries.map(_.percentage).sum <= BigDecimal(1.0),
-                  (),
-                  ConfigValidationFailed(
-                    s"Reward sharing percentages for $party must sum to at most 1.0"
-                  ),
-                )
-                _ <- Either.cond(
                   sharingConfig.batchSize > 0,
                   (),
-                  ConfigValidationFailed(
-                    s"Reward sharing batchSize for $party must be positive"
-                  ),
+                  ConfigValidationFailed(s"Reward sharing batchSize for $party must be positive"),
                 )
+                _ <- sharingConfig match {
+                  case RewardSharingConfig.External(_) => Right(())
+                  case builtIn: RewardSharingConfig.BuiltIn =>
+                    for {
+                      _ <- Either.cond(
+                        builtIn.beneficiaries.forall(b =>
+                          b.percentage > 0 && b.percentage <= BigDecimal(1.0)
+                        ),
+                        (),
+                        ConfigValidationFailed(
+                          s"Reward sharing percentages for $party must be in (0.0, 1.0]"
+                        ),
+                      )
+                      _ <- Either.cond(
+                        builtIn.beneficiaries.map(_.percentage).sum <= BigDecimal(1.0),
+                        (),
+                        ConfigValidationFailed(
+                          s"Reward sharing percentages for $party must sum to at most 1.0"
+                        ),
+                      )
+                    } yield ()
+                }
               } yield ()
           }
         } yield conf
@@ -912,13 +991,21 @@ object SpliceConfig {
     implicit val spliceParametersConfig: ConfigWriter[SpliceParametersConfig] =
       deriveWriter[SpliceParametersConfig]
 
+    implicit val spliceRateLimiterSimpleConfig: ConfigWriter[SpliceRateLimitConfig.Simple] =
+      deriveWriter[SpliceRateLimitConfig.Simple]
+    implicit val clientIpRateLimitHint: ProductHint[PerAttributeRateLimitConfig] =
+      SpliceConfig.perClientIpRateLimitHint
+    implicit val clientIpRateLimitConfig: ConfigWriter[PerAttributeRateLimitConfig] =
+      deriveWriter[PerAttributeRateLimitConfig]
+    implicit val spliceRateLimiterWithPerClientIpConfig: ConfigWriter[PerClientIpRateLimitConfig] =
+      deriveWriter[PerClientIpRateLimitConfig]
     implicit val rateLimitersConfig: ConfigWriter[RateLimitersConfig] =
       deriveWriter[RateLimitersConfig]
-    implicit val spliceRateLimiterConfig: ConfigWriter[SpliceRateLimitConfig] =
-      deriveWriter[SpliceRateLimitConfig]
 
     implicit val enabledFeaturesConfigWriter: ConfigWriter[EnabledFeaturesConfig] =
       deriveWriter[EnabledFeaturesConfig]
+    implicit val splicePostgresConfigWriter: ConfigWriter[SplicePostgresConfig] =
+      deriveWriter[SplicePostgresConfig]
 
     implicit val authTokenSourceConfigHint: FieldCoproductHint[AuthTokenSourceConfig] =
       new FieldCoproductHint[AuthTokenSourceConfig]("type")
@@ -966,7 +1053,7 @@ object SpliceConfig {
     implicit val scanSynchronizerConfig: ConfigWriter[ScanSynchronizerConfig] =
       deriveWriter[ScanSynchronizerConfig]
     // a bit more elaborate because the automatic derivation wants us to use `p-2p-url`
-    implicit val bftSequencerConfigWriter: ConfigWriter[BftSequencerConfig] =
+    implicit val bftSequencerConfigWriter: ConfigWriter[CantonBftPeerConfig] =
       ConfigWriter.forProduct1("p2p-url")(c => c.p2pUrl)
     implicit val scanSynchronizerNodes: ConfigWriter[ScanSynchronizerNodesConfig] =
       deriveWriter[ScanSynchronizerNodesConfig]
@@ -979,6 +1066,9 @@ object SpliceConfig {
     implicit val mediatorVerdictIngestionConfigWriter
         : ConfigWriter[MediatorVerdictIngestionConfig] =
       deriveWriter[MediatorVerdictIngestionConfig]
+    implicit val tokenStandardSettlementConfigWriter
+        : ConfigWriter[TokenStandardConfig.SettlementConfig] =
+      deriveWriter[TokenStandardConfig.SettlementConfig]
     implicit val BulkStorageConfigWriter: ConfigWriter[BulkStorageConfig] =
       deriveWriter[BulkStorageConfig]
     implicit val S3ConfigWriter: ConfigWriter[S3Config] =
@@ -1070,6 +1160,10 @@ object SpliceConfig {
       deriveWriter[SvMediatorConfig]
     implicit val svScanConfig: ConfigWriter[SvScanConfig] =
       deriveWriter[SvScanConfig]
+    implicit val transactionProtocolLimitsWriter: ConfigWriter[TransactionProtocolLimits] =
+      deriveWriter[TransactionProtocolLimits]
+    implicit val synchronizerLimitsWriter: ConfigWriter[SynchronizerLimits] =
+      deriveWriter[SynchronizerLimits]
     implicit val svSynchronizerNodeConfig: ConfigWriter[SvSynchronizerNodeConfig] =
       deriveWriter[SvSynchronizerNodeConfig]
     implicit val svSynchronizerNodesConfig: ConfigWriter[SvSynchronizerNodesConfig] =
@@ -1108,6 +1202,8 @@ object SpliceConfig {
       deriveWriter[RangeConfig]
     implicit val packageVettingCacheConfig: ConfigWriter[PackageVettingLookupService.CacheConfig] =
       deriveWriter[PackageVettingLookupService.CacheConfig]
+    implicit val sequencingParametersWriter: ConfigWriter[BftSequencingParameters] =
+      deriveWriter[BftSequencingParameters]
     implicit val svConfigWriter: ConfigWriter[SvAppBackendConfig] =
       deriveWriter[SvAppBackendConfig]
 
@@ -1124,8 +1220,16 @@ object SpliceConfig {
       deriveWriter[AutoAcceptTransfersConfig]
     implicit val appRewardBeneficiaryConfigWriter: ConfigWriter[AppRewardBeneficiaryConfig] =
       deriveWriter[AppRewardBeneficiaryConfig]
+
+    implicit val rewardSharingConfigHint: FieldCoproductHint[RewardSharingConfig] =
+      new FieldCoproductHint[RewardSharingConfig]("type")
+    implicit val rewardSharingConfigBuiltInWriter: ConfigWriter[RewardSharingConfig.BuiltIn] =
+      deriveWriter[RewardSharingConfig.BuiltIn]
+    implicit val rewardSharingConfigExternalWriter: ConfigWriter[RewardSharingConfig.External] =
+      deriveWriter[RewardSharingConfig.External]
     implicit val rewardSharingConfigWriter: ConfigWriter[RewardSharingConfig] =
       deriveWriter[RewardSharingConfig]
+
     implicit val validatorDecentralizedSynchronizerConfigWriter
         : ConfigWriter[ValidatorDecentralizedSynchronizerConfig] =
       deriveWriter[ValidatorDecentralizedSynchronizerConfig]

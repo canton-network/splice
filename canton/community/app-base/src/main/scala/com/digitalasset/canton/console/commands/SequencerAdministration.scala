@@ -4,7 +4,6 @@
 package com.digitalasset.canton.console.commands
 
 import com.digitalasset.canton.admin.api.client.commands.SequencerAdminCommands.{
-  InitializeFromGenesisState,
   InitializeFromGenesisStateV2,
   InitializeFromLsuPredecessor,
   InitializeFromOnboardingState,
@@ -34,7 +33,7 @@ import com.digitalasset.canton.sequencer.admin.v30.{
 import com.digitalasset.canton.synchronizer.sequencer.SequencerSnapshot
 import com.digitalasset.canton.synchronizer.sequencer.admin.grpc.InitializeSequencerResponse
 import com.digitalasset.canton.topology.MediatorGroup.MediatorGroupIndex
-import com.digitalasset.canton.topology.SequencerId
+import com.digitalasset.canton.topology.{SequencerId, SynchronizerId}
 import com.digitalasset.canton.version.ProtocolVersion
 import com.google.protobuf.ByteString
 
@@ -159,38 +158,6 @@ class SequencerAdministration(node: SequencerReference) extends ConsoleCommandGr
       |to need to call this directly.
       """"
   )
-  @deprecated(
-    "Use assign_from_genesis_stateV2 instead.",
-    since = "3.5",
-  )
-  def assign_from_genesis_state(
-      genesisState: ByteString,
-      synchronizerParameters: StaticSynchronizerParameters,
-      waitForReady: Boolean = true,
-  ): InitializeSequencerResponse = {
-    if (waitForReady) node.health.wait_for_ready_for_initialization()
-
-    consoleEnvironment.run {
-      runner.adminCommand(
-        InitializeFromGenesisState(
-          genesisState,
-          synchronizerParameters.toInternal,
-        )
-      )
-    }
-  }
-
-  @Help.Summary(
-    "Initialize a sequencer from the beginning of the event stream"
-  )
-  @Help.Description(
-    """This should only be called for sequencer nodes being initialized at the same time as the
-      |corresponding synchronizer node.
-      |
-      |This is called as part of the synchronizer.setup.bootstrap command, so you are unlikely
-      |to need to call this directly.
-      """"
-  )
   def assign_from_genesis_stateV2(
       genesisState: ByteString,
       synchronizerParameters: StaticSynchronizerParameters,
@@ -222,6 +189,7 @@ class SequencerAdministration(node: SequencerReference) extends ConsoleCommandGr
       |""")
   def initialize_from_lsu_predecessor(
       inputFile: String,
+      synchronizerId: SynchronizerId,
       synchronizerParameters: StaticSynchronizerParameters,
       ignorePsidCheck: Boolean = false,
       waitForReady: Boolean = true,
@@ -236,6 +204,7 @@ class SequencerAdministration(node: SequencerReference) extends ConsoleCommandGr
           ),
           synchronizerParameters.toInternal,
           ignorePsidCheck = ignorePsidCheck,
+          synchronizerId = synchronizerId,
         )
       )
     }

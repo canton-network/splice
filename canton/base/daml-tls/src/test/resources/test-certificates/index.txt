@@ -1,4 +1,0 @@
-V	460309090549Z		1000	unknown	/CN=0.0.0.0.server
-V	460309090550Z		1001	unknown	/CN=0.0.0.0.client
-V	460309090551Z		1002	unknown	/CN=ocsp.127.0.0.1
-R	460309090551Z	260309090551Z	1003	unknown	/CN=0.0.0.0.clientrevoked

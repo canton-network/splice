@@ -15,7 +15,6 @@ trait FrontendLoginUtil extends WithAuth0Support { self: FrontendTestCommon =>
       webDriver: WebDriver
   ) = {
     go to s"http://$hostname:$port"
-    waitForQuery(id("user-id-field"))
     loginOnCurrentPage(port, ledgerApiUser, hostname)
   }
 
@@ -125,7 +124,12 @@ trait FrontendLoginUtil extends WithAuth0Support { self: FrontendTestCommon =>
           )
         }
         val userPartyId = if (onboardThroughWalletUI) {
-          actAndCheck("onboard user", eventuallyClickOn(id("onboard-button")))(
+          // Onboarding creates the WalletAppInstall contract
+          // under CI load sequencing can take longer than the default 20s
+          actAndCheck(timeUntilSuccess = 40.seconds)(
+            "onboard user",
+            eventuallyClickOn(id("onboard-button")),
+          )(
             "user is onboarded",
             _ => {
               val userId = seleniumText(find(id("logged-in-user")))

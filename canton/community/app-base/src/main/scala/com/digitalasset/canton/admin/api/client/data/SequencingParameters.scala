@@ -11,7 +11,7 @@ import com.google.protobuf.ByteString
 
 final case class SequencingParameters(payload: Option[ByteString]) extends PrettyPrinting {
 
-  private[canton] def toInternal: Either[String, protocol.SequencingParameters] =
+  def toInternal: Either[String, protocol.SequencingParameters] =
     protocol.SequencingParameters
       .protocolVersionRepresentativeFor(ProtoVersion(30))
       .leftMap(_.message)

@@ -118,7 +118,7 @@ const TabPanel = (props: TabPanelProps) => {
 function getCometBftDebugData(
   cometBftNodeDebugQuery: UseQueryResult<CometBftNodeDumpOrErrorResponse>
 ) {
-  if (cometBftNodeDebugQuery.isLoading) {
+  if (cometBftNodeDebugQuery.isPending) {
     return <Loading />;
   }
 

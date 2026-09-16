@@ -21,6 +21,11 @@ trait KeyValueStore extends NamedLogging {
       encoder: Encoder[T],
   ): Future[Unit]
 
+  def setValueIfNotExists[T](key: String, value: T)(implicit
+      tc: TraceContext,
+      encoder: Encoder[T],
+  ): Future[Boolean]
+
   def getValue[T](
       key: String
   )(implicit tc: TraceContext, decoder: Decoder[T]): OptionT[Future, Decoder.Result[T]]

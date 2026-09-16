@@ -144,6 +144,10 @@ class SvReconcileSynchronizerConfigIntegrationTest extends SvIntegrationTestBase
     amuletConfig.optDevelopmentFundManager,
     amuletConfig.externalPartyConfigStateTickDuration,
     amuletConfig.rewardConfig,
+    amuletConfig.transferPreapprovalBaseDuration,
+    amuletConfig.developmentFundManagerBlacklist,
+    amuletConfig.minDevelopmentFundMintingDelay,
+    amuletConfig.amuletSwitchOverTimes,
   )
 
 }

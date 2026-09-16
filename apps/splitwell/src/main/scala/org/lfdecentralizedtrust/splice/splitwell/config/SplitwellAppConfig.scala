@@ -8,6 +8,7 @@ import org.lfdecentralizedtrust.splice.config.{
   SpliceBackendConfig,
   SpliceParametersConfig,
   ParticipantClientConfig,
+  SplicePostgresConfig,
   SynchronizerConfig,
   HttpClientConfig,
   NetworkAppClientConfig,
@@ -34,6 +35,7 @@ case class SplitwellDomains(
 case class SplitwellAppBackendConfig(
     override val adminApi: AdminServerConfig = AdminServerConfig(),
     override val storage: DbConfig,
+    postgres: SplicePostgresConfig = SplicePostgresConfig(),
     providerUser: String,
     participantClient: ParticipantClientConfig,
     scanClient: ScanAppClientConfig,
@@ -41,6 +43,10 @@ case class SplitwellAppBackendConfig(
     domains: SplitwellSynchronizerConfig,
     parameters: SpliceParametersConfig = SpliceParametersConfig(batching = BatchingConfig()),
     requiredDarVersion: PackageVersion = DarResources.splitwell.latest.metadata.version,
+    // Set to false to disable the DB-level exclusive lock that prevents two splitwell instances
+    // from running concurrently against the same database.  Only disable for migration scenarios
+    // where intentional overlap is required.
+    instanceLockEnabled: Boolean = true,
 ) extends SpliceBackendConfig // TODO(DACH-NY/canton-network-node#736): fork or generalize this trait.
     {
   override val nodeTypeName: String = "splitwell"

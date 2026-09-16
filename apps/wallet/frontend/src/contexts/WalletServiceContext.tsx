@@ -13,6 +13,7 @@ import React, { useContext, useMemo } from 'react';
 import {
   ArchivedDevelopmentFundCoupon,
   AllocateAmuletRequest,
+  AllocateAmuletV2Request,
   createConfiguration,
   ListTransactionsRequest,
   Middleware,
@@ -68,9 +69,20 @@ import {
   ListTokenStandardTransfersResponse,
 } from '../models/models';
 import { DevelopmentFundCoupon as DevelopmentFundCouponTemplate } from '@daml.js/splice-amulet/lib/Splice/Amulet/';
-import { AllocationRequest } from '@daml.js/splice-api-token-allocation-request/lib/Splice/Api/Token/AllocationRequestV1/module';
-import { AmuletAllocation } from '@daml.js/splice-amulet/lib/Splice/AmuletAllocation';
+import { AllocationRequest as AllocationRequestV2 } from '@daml.js/splice-api-token-allocation-request-v2/lib/Splice/Api/Token/AllocationRequestV2/module';
+import { AllocationRequest as AllocationRequestV1 } from '@daml.js/splice-api-token-allocation-request/lib/Splice/Api/Token/AllocationRequestV1/module';
+import { AmuletAllocation as AmuletAllocationV1 } from '@daml.js/splice-amulet/lib/Splice/AmuletAllocation';
+import { AmuletAllocationV2 } from '@daml.js/splice-amulet/lib/Splice/AmuletAllocationV2';
 import { ContractId } from '@daml/types';
+
+export type AllocationRequest = AllocationRequestV1 | AllocationRequestV2;
+export function isV2AllocationRequest(payload: AllocationRequest): payload is AllocationRequestV2 {
+  return 'availableActions' in payload;
+}
+export type AmuletAllocation = AmuletAllocationV1 | AmuletAllocationV2;
+export function isV2Allocation(payload: AmuletAllocation): payload is AmuletAllocationV2 {
+  return !!(payload as AmuletAllocationV2).numIterations;
+}
 
 const WalletContext = React.createContext<WalletClient | undefined>(undefined);
 
@@ -131,7 +143,9 @@ export interface WalletClient {
   withdrawMintingDelegation: (delegationContractId: ContractId<MintingDelegation>) => Promise<void>;
   rejectAllocationRequest: (allocationRequestCid: ContractId<AllocationRequest>) => Promise<void>;
   createAllocation: (allocateAmuletRequest: AllocateAmuletRequest) => Promise<void>;
-  withdrawAllocation: (allocationCid: ContractId<AmuletAllocation>) => Promise<void>;
+  createAllocationV2: (allocateAmuletV2Request: AllocateAmuletV2Request) => Promise<void>;
+  withdrawAllocation: (allocationCid: ContractId<AmuletAllocationV1>) => Promise<void>;
+  withdrawAllocationV2: (allocationCid: ContractId<AmuletAllocationV2>) => Promise<void>;
 
   getAppPaymentRequest: (contractId: string) => Promise<ContractWithState<AppPaymentRequest>>;
   acceptAppPaymentRequest: (requestContractId: string) => Promise<void>;
@@ -153,7 +167,8 @@ export interface WalletClient {
     beneficiary: string,
     amount: BigNumber,
     expiresAt: Date,
-    reason: string
+    reason: string,
+    mintAfter?: Date
   ) => Promise<void>;
   listActiveDevelopmentFundCoupons: () => Promise<DevelopmentFundCoupon[]>;
   listCouponHistoryEvents: (
@@ -366,13 +381,28 @@ export const WalletClientProvider: React.FC<React.PropsWithChildren<WalletProps>
       },
       listAmuletAllocations: async () => {
         const res = await walletClient.listAmuletAllocations();
-        return res.allocations.map(all => Contract.decodeOpenAPI(all.contract, AmuletAllocation));
+        return res.allocations.map(all => {
+          try {
+            return Contract.decodeOpenAPI(all.contract, AmuletAllocationV2);
+          } catch {
+            return Contract.decodeOpenAPI(all.contract, AmuletAllocationV1);
+          }
+        });
       },
       listAllocationRequests: async () => {
         const res = await walletClient.listAllocationRequests();
-        return res.allocation_requests.map(ar =>
-          Contract.decodeOpenAPI(ar.contract, AllocationRequest)
-        );
+        return res.allocation_requests.map(ar => {
+          try {
+            try {
+              return Contract.decodeOpenAPI(ar.contract, AllocationRequestV2);
+            } catch {
+              return Contract.decodeOpenAPI(ar.contract, AllocationRequestV1);
+            }
+          } catch (e) {
+            console.error('Unsupported AllocationRequest', e, ar);
+            throw e;
+          }
+        });
       },
       listMintingDelegations: async () => {
         const res = await walletClient.listMintingDelegations();
@@ -403,8 +433,14 @@ export const WalletClientProvider: React.FC<React.PropsWithChildren<WalletProps>
       createAllocation: async allocateAmuletRequest => {
         await walletClient.allocateAmulet(allocateAmuletRequest);
       },
+      createAllocationV2: async allocateAmuletV2Request => {
+        await walletClient.allocateAmuletV2(allocateAmuletV2Request);
+      },
       withdrawAllocation: async allocationCid => {
         await walletClient.withdrawAmuletAllocation(allocationCid);
+      },
+      withdrawAllocationV2: async allocationCid => {
+        await walletClient.withdrawAmuletAllocationV2(allocationCid);
       },
       getAppPaymentRequest: async contractId => {
         const response = await walletClient.getAppPaymentRequest(contractId);
@@ -474,13 +510,15 @@ export const WalletClientProvider: React.FC<React.PropsWithChildren<WalletProps>
         beneficiary: string,
         amount: BigNumber,
         expiresAt: Date,
-        reason: string
+        reason: string,
+        mintAfter?: Date
       ): Promise<void> => {
         const request = {
           beneficiary: beneficiary,
           amount: amount.isInteger() ? amount.toFixed(1) : amount.toString(),
           expiresAt: expiresAt.getTime() * 1000,
           reason: reason,
+          mintAfter: mintAfter ? mintAfter.getTime() * 1000 : undefined,
         };
         await walletClient.allocateDevelopmentFundCoupon(request);
       },
@@ -495,6 +533,9 @@ export const WalletClientProvider: React.FC<React.PropsWithChildren<WalletProps>
             beneficiary: contract.payload.beneficiary,
             amount: new BigNumber(contract.payload.amount),
             expiresAt: new Date(contract.payload.expiresAt),
+            mintAfter: contract.payload.mintAfter
+              ? new Date(contract.payload.mintAfter)
+              : undefined,
             reason: contract.payload.reason,
           };
         });

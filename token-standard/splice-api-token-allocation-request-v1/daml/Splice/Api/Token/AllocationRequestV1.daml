@@ -62,4 +62,4 @@ data AllocationRequestView = AllocationRequestView with
       -- depending on the confidentiality requirements of the app.
     meta : Metadata
       -- ^ Additional metadata specific to the allocation request, used for extensibility.
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)

@@ -38,7 +38,9 @@ class ScanConnectionMetrics(metricsFactory: LabeledMetricsFactory) {
         summary = "Count of succeeded and failed requests to a scan connection",
         qualification = Traffic,
         labelsWithDescription = perConnectionLabels ++ Map(
-          "outcome" -> "Category of failure or success"
+          "outcome" -> "Category of failure or success",
+          "http_status" -> ("For failures, the HTTP status code of the response when available, " +
+            "'none' otherwise (e.g. transport-level failures). Absent for successful requests."),
         ),
       )
     )
@@ -74,6 +76,26 @@ class ScanConnectionMetrics(metricsFactory: LabeledMetricsFactory) {
             "not_enough_scans (fewer than f+1 reachable scans), " +
             "consensus_not_reached (responses did not agree), " +
             "transport_error (all underlying calls failed)"),
+        ),
+      )
+    )
+
+  val bftPerConnectionConsensus: Meter =
+    metricsFactory.meter(
+      MetricInfo(
+        name = prefix :+ "bft_per_connection_consensus",
+        summary = "Count of per-connection agreements/disagreements with the BFT consensus result",
+        qualification = Traffic,
+        labelsWithDescription = Map(
+          "scan_connection" -> "The scan connection that responded",
+          "request" -> "Name of the scan request being called",
+          "consensus" -> ("Whether the connection's response matched the consensus result: " +
+            "agree (matched the consensus response), " +
+            "disagree (differed from the consensus response, including error responses)"),
+          "success" -> ("For disagreements, whether the disagreeing response was itself a " +
+            "successful (2xx) response (true) or an error response (false)"),
+          "http_status" -> ("For disagreements, the HTTP status code of the disagreeing response " +
+            "when available (absent for successful responses and transport-level failures)"),
         ),
       )
     )

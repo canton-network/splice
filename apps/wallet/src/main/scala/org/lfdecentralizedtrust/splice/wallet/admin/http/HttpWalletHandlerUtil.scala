@@ -91,6 +91,7 @@ trait HttpWalletHandlerUtil extends Spanning with NamedLogging {
               priority = priority,
             )
             .withDedup(commandId, dedupConfig)
+            .recoveringAcceptedDuplicates()
             .withDisclosedContracts(disclosedContracts(userWallet.connection))
             .yieldResult()
       }

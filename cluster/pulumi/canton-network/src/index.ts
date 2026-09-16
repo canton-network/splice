@@ -1,5 +1,6 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+import * as pulumi from '@pulumi/pulumi';
 import { Auth0ClientType, getAuth0Config, Auth0Fetch } from '@canton-network/splice-pulumi-common';
 
 import { installClusterVersion } from './clusterVersion';
@@ -11,11 +12,9 @@ async function auth0CacheAndInstallCluster(auth0Fetch: Auth0Fetch) {
 
   installClusterVersion();
 
-  const cluster = await installCluster(auth0Fetch);
+  await installCluster(auth0Fetch);
 
   await auth0Fetch.saveAuth0Cache();
-
-  return cluster;
 }
 
 async function main() {

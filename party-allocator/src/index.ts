@@ -7,9 +7,10 @@ import {
   DisclosedContract,
 } from "@canton-network/canton-json-api-v2-openapi";
 import { opendir, writeFile } from "node:fs/promises";
-import { config } from "./config.js";
+import { config, redactedConfig } from "./config.js";
 import fs from "fs";
 import { logger } from "./logger.js";
+import { tokenSourceFromConfig } from "./auth.js";
 import { PrometheusExporter } from "@opentelemetry/exporter-prometheus";
 import { AggregationType, MeterProvider } from "@opentelemetry/sdk-metrics";
 import { Counter, Gauge, Histogram } from "@opentelemetry/api";
@@ -305,9 +306,7 @@ function setupMetrics(): Metrics {
 
 async function main() {
   const metrics = setupMetrics();
-  logger.info(
-    `Running with config: ${JSON.stringify({ ...config, ...{ token: "<redacted>" } })}`,
-  );
+  logger.info(`Running with config: ${JSON.stringify(redactedConfig(config))}`);
   const synchronizerId = await getSynchronizerId();
   logger.info(`Synchronizer id: ${synchronizerId}`);
   const validatorPartyId = await getValidatorPartyId();
@@ -327,7 +326,8 @@ async function main() {
   // and incrementally handle all kinds of failures.
   logger.info(`Starting at ${maxIndex}`);
 
-  const client = new LedgerApiClient(config.jsonLedgerApiUrl, config.token);
+  const tokenSource = await tokenSourceFromConfig(config.auth);
+  const client = new LedgerApiClient(config.jsonLedgerApiUrl, tokenSource);
 
   // This is idempotent so we just always grant it. We don't revoke it at the end as keeping it doesn't do any harm
   await client.grantExecuteAndReadAsAnyPartyRights(config.userId);

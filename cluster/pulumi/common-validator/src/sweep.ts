@@ -5,4 +5,5 @@ export type SweepConfig = {
   toParty: string;
   maxBalance: number;
   minBalance: number;
+  useTransferPreapproval?: boolean;
 };

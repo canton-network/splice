@@ -14,11 +14,7 @@ import org.lfdecentralizedtrust.splice.automation.{
 import org.lfdecentralizedtrust.splice.config.UpgradesConfig
 import org.lfdecentralizedtrust.splice.environment.SpliceLedgerClient
 import org.lfdecentralizedtrust.splice.http.HttpClient
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.{
-  BackfillingScanConnection,
-  BftScanConnection,
-}
-import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.BackfillingScanConnection
 import org.lfdecentralizedtrust.splice.scan.store.ScanHistoryBackfilling.{
   FoundingTransactionTreeUpdate,
   InitialTransactionTreeUpdate,
@@ -30,17 +26,19 @@ import org.lfdecentralizedtrust.splice.store.{
   HistoryMetrics,
   ImportUpdatesBackfilling,
   PageLimit,
+  TimestampWithMigrationId,
   TreeUpdateWithMigrationId,
   UpdateHistory,
 }
 import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 import com.digitalasset.canton.data.CantonTimestamp
-import com.digitalasset.canton.lifecycle.{AsyncOrSyncCloseable, SyncCloseable}
+import com.digitalasset.canton.lifecycle.{AsyncOrSyncCloseable, LifeCycle}
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
+import org.lfdecentralizedtrust.splice.scan.util.PeerBftScanConnection
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingState
 
 import scala.concurrent.{ExecutionContextExecutor, Future, blocking}
@@ -65,6 +63,17 @@ class ScanHistoryBackfillingTrigger(
 
   private val currentMigrationId = updateHistory.domainMigrationId
 
+  private val scanConnection = new PeerBftScanConnection(
+    store,
+    svName,
+    ledgerClient,
+    context.config,
+    upgradesConfig,
+    context.clock,
+    context.retryProvider,
+    loggerFactory,
+  )
+
   private val historyMetrics = new HistoryMetrics(context.metricsFactory)(
     MetricsContext(
       "current_migration_id" -> currentMigrationId.toString
@@ -77,11 +86,7 @@ class ScanHistoryBackfillingTrigger(
     */
   @SuppressWarnings(Array("org.wartremover.warts.Var"))
   @volatile
-  private var findHistoryStartAfter: Option[(Long, CantonTimestamp)] = None
-
-  @SuppressWarnings(Array("org.wartremover.warts.Var"))
-  @volatile
-  private var connectionVar: Option[BftScanConnection] = None
+  private var findHistoryStartAfter: Option[TimestampWithMigrationId] = None
 
   @SuppressWarnings(Array("org.wartremover.warts.Var"))
   @volatile
@@ -210,7 +215,8 @@ class ScanHistoryBackfillingTrigger(
           PageLimit.tryCreate(batchSize),
         )
         _ = updates.lastOption.foreach(u =>
-          findHistoryStartAfter = Some(u.migrationId -> u.update.update.recordTime)
+          findHistoryStartAfter =
+            Some(TimestampWithMigrationId(u.update.update.recordTime, u.migrationId))
         )
         result <-
           if (updates.isEmpty) {
@@ -221,34 +227,6 @@ class ScanHistoryBackfillingTrigger(
       } yield result
     }
   }
-
-  private def getOrCreateScanConnection()(implicit tc: TraceContext): Future[BftScanConnection] =
-    blocking {
-      mutex.exclusive {
-        connectionVar match {
-          case Some(connection) =>
-            Future.successful(connection)
-          case None =>
-            for {
-              connection <- BftScanConnection.peerScanConnection(
-                () => BftScanConnection.Bft.getPeerScansFromStore(store, svName),
-                ledgerClient,
-                // When the network is starting up, the pool of SVs is changing fast
-                // Using a short refresh interval to quickly pick up new SVs
-                scansRefreshInterval = context.config.pollingInterval,
-                amuletRulesCacheTimeToLive = ScanAppClientConfig.DefaultAmuletRulesCacheTimeToLive,
-                upgradesConfig,
-                context.clock,
-                context.retryProvider,
-                loggerFactory,
-              )
-            } yield {
-              connectionVar = Some(connection)
-              connection
-            }
-        }
-      }
-    }
 
   private def getOrCreateBackfilling(
       connection: BackfillingScanConnection
@@ -273,7 +251,7 @@ class ScanHistoryBackfillingTrigger(
   }
 
   private def performBackfilling()(implicit traceContext: TraceContext): Future[TaskOutcome] = for {
-    connection <- getOrCreateScanConnection()
+    connection <- scanConnection.connection
     backfilling = getOrCreateBackfilling(connection)
     outcome <- backfilling.backfill().map {
       case HistoryBackfilling.Outcome.MoreWorkAvailableNow(workDone) =>
@@ -305,7 +283,7 @@ class ScanHistoryBackfillingTrigger(
   private def performImportUpdatesBackfilling()(implicit
       traceContext: TraceContext
   ): Future[TaskOutcome] = for {
-    connection <- getOrCreateScanConnection()
+    connection <- scanConnection.connection
     backfilling = getOrCreateBackfilling(connection)
     outcome <- backfilling.backfillImportUpdates().map {
       case ImportUpdatesBackfilling.Outcome.MoreWorkAvailableNow(workDone) =>
@@ -327,21 +305,15 @@ class ScanHistoryBackfillingTrigger(
   } yield outcome
 
   override def closeAsync(): Seq[AsyncOrSyncCloseable] = {
-    connectionVar
-      .map(connection =>
-        SyncCloseable(
-          "closing scan connection",
-          connection.close(),
-        )
-      )
-      .toList
+    LifeCycle.close(scanConnection)(logger)
+    super.closeAsync()
   }
 }
 
 object ScanHistoryBackfillingTrigger {
   sealed trait Task extends PrettyPrinting
   final case class InitializeBackfillingTask(
-      after: Option[(Long, CantonTimestamp)]
+      after: Option[TimestampWithMigrationId]
   ) extends Task {
     override def pretty: Pretty[this.type] =
       prettyOfClass(param("after", _.after))

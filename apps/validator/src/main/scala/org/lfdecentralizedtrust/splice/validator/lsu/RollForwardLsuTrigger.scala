@@ -80,13 +80,13 @@ final case class RollForwardLsuTrigger(
   ): Future[Option[Seq[DsoSequencer]]] = {
     for {
       config <- participantAdminConnection
-        .lookupSynchronizerConnectionConfig(alias)
+        .lookupRegisteredSynchronizer(alias, Some(rollForward.currentPhysicalSynchronizerId))
         .map(
           _.getOrElse(
             throw Status.INTERNAL
               .withDescription(s"Failed to find connection config for ${alias}")
               .asRuntimeException
-          )
+          ).config
         )
       sequencers <- scanConnection.listDsoSequencers()
     } yield {

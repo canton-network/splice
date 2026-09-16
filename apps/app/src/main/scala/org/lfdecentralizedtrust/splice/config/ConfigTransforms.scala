@@ -7,7 +7,7 @@ import com.digitalasset.daml.lf.data.Ref.PackageVersion
 import org.lfdecentralizedtrust.splice.auth.AuthUtil
 import org.lfdecentralizedtrust.splice.environment.DarResources
 import org.lfdecentralizedtrust.splice.scan.config.{
-  BftSequencerConfig,
+  CantonBftPeerConfig,
   ScanAppBackendConfig,
   ScanSynchronizerConfig,
   ScanSynchronizerNodesConfig,
@@ -44,7 +44,7 @@ import scala.io.Source
 
 object ConfigTransforms {
 
-  val IsTheCantonSequencerBFTEnabled: Boolean = sys.env.contains("SPLICE_USE_BFT_SEQUENCER")
+  val IsTheCantonSequencerBFTEnabled: Boolean = sys.env.contains("SPLICE_USE_CANTON_BFT_SEQUENCER")
 
   sealed abstract class ConfigurableApp extends Product with Serializable
 
@@ -206,6 +206,9 @@ object ConfigTransforms {
         _.copy(rewardOperationRoundsCloseBufferDuration = NonNegativeFiniteDuration.ofMillis(100))
       ),
       disableDevelopmentFund(),
+      // Tests default to TrafficBasedAppRewards. Networks (which don't apply
+      // ConfigTransforms.defaults) fall back to the FeaturedAppMarkers default
+      withTrafficBasedAppRewards,
     )
   }
 
@@ -430,7 +433,7 @@ object ConfigTransforms {
           .some
           .modify(
             portTransform(bump, _)
-              .focus(_.bftSequencerConfig)
+              .focus(_.cantonBft)
               .some
               .modify(_.focus(_.p2pUrl).modify(bumpUrl(bump, _)))
           )
@@ -451,7 +454,7 @@ object ConfigTransforms {
           .some
           .modify(
             portTransform(bump, _)
-              .focus(_.bftSequencerConfig)
+              .focus(_.cantonBft)
               .some
               .modify(_.focus(_.p2pUrl).modify(bumpUrl(bump, _)))
           )
@@ -478,7 +481,7 @@ object ConfigTransforms {
           conf
             .focus(_.synchronizerNodes)
             .modify(portTransform(bump, _))
-            .focus(_.synchronizerNodes.current.bftSequencerConfig)
+            .focus(_.synchronizerNodes.current.cantonBft)
             .modify(_.map(c => c.copy(p2pUrl = bumpUrl(bump, c.p2pUrl))))
         else conf
       ),
@@ -722,39 +725,39 @@ object ConfigTransforms {
     )
   }
 
-  private def enableBftOnSvNode(node: SvSynchronizerNodeConfig): SvSynchronizerNodeConfig =
-    node.focus(_.sequencer).modify(_.copy(isBftSequencer = true))
+  private def enableCantonBftForSv(node: SvSynchronizerNodeConfig): SvSynchronizerNodeConfig =
+    node.focus(_.sequencer).modify(_.copy(isCantonBftSequencer = true))
 
-  def withBftSequencer(config: SvAppBackendConfig): SvAppBackendConfig =
-    config.focus(_.localSynchronizerNodes.current).modify(enableBftOnSvNode)
+  def withCantonBft(config: SvAppBackendConfig): SvAppBackendConfig =
+    config.focus(_.localSynchronizerNodes.current).modify(enableCantonBftForSv)
 
-  def withBftSequencerSuccessor(config: SvAppBackendConfig): SvAppBackendConfig =
-    config.focus(_.localSynchronizerNodes.successor).modify(_.map(enableBftOnSvNode))
+  def withCantonBftSuccessor(config: SvAppBackendConfig): SvAppBackendConfig =
+    config.focus(_.localSynchronizerNodes.successor).modify(_.map(enableCantonBftForSv))
 
-  private def bftScanConfig(name: String, basePort: Int): Option[BftSequencerConfig] =
+  private def cantonBftScanConfig(name: String, basePort: Int): Option[CantonBftPeerConfig] =
     Some(
-      BftSequencerConfig(
+      CantonBftPeerConfig(
         s"http://localhost:${basePort + Integer.parseInt(name.stripPrefix("sv").take(1)) * 100}"
       )
     )
 
-  def withBftSequencer(
+  def withCantonBft(
       name: String,
       config: ScanAppBackendConfig,
       basePort: Int = 5010,
   ): ScanAppBackendConfig =
     config
-      .focus(_.synchronizerNodes.current.bftSequencerConfig)
-      .replace(bftScanConfig(name, basePort))
+      .focus(_.synchronizerNodes.current.cantonBft)
+      .replace(cantonBftScanConfig(name, basePort))
 
-  def withBftSequencerSuccessor(
+  def withCantonBftSuccessor(
       name: String,
       config: ScanAppBackendConfig,
       basePort: Int = 5010,
   ): ScanAppBackendConfig =
     config
       .focus(_.synchronizerNodes.successor)
-      .modify(_.map(_.focus(_.bftSequencerConfig).replace(bftScanConfig(name, basePort))))
+      .modify(_.map(_.focus(_.cantonBft).replace(cantonBftScanConfig(name, basePort))))
 
   private def withBftSequencersFor(
       svTransform: SvAppBackendConfig => SvAppBackendConfig,
@@ -778,10 +781,10 @@ object ConfigTransforms {
     }
 
   def withBftSequencers(namePredicate: String => Boolean = _ => true): ConfigTransform =
-    withBftSequencersFor(withBftSequencer, withBftSequencer(_, _), namePredicate)
+    withBftSequencersFor(withCantonBft, withCantonBft(_, _), namePredicate)
 
   def withBftSequencersSuccessor(namePredicate: String => Boolean = _ => true): ConfigTransform =
-    withBftSequencersFor(withBftSequencerSuccessor, withBftSequencerSuccessor(_, _), namePredicate)
+    withBftSequencersFor(withCantonBftSuccessor, withCantonBftSuccessor(_, _), namePredicate)
 
   def withNoVoteCooldown: ConfigTransform = {
     updateAllSvAppFoundDsoConfigs_ { c =>
@@ -794,6 +797,9 @@ object ConfigTransforms {
       )
     }
   }
+
+  def withNoSvOperationsSwitchOverTimes: ConfigTransform =
+    updateAllSvAppFoundDsoConfigs_(_.copy(initialSvOperationsSwitchOverTimes = None))
 
   def withValidatorFaucetCap(cap: BigDecimal): ConfigTransform =
     updateAllSvAppFoundDsoConfigs_(c => c.copy(optValidatorFaucetCap = Some(cap)))
@@ -808,6 +814,24 @@ object ConfigTransforms {
       rewardConfig: InitialRewardConfig
   ): ConfigTransform =
     updateAllSvAppFoundDsoConfigs_(c => c.copy(initialRewardConfig = Some(rewardConfig)))
+
+  // Tests mint TBAR without dry-run — the network default enables TBAR dry-run
+  // alongside FeaturedAppMarkers minting, but tests already exercise TBAR
+  // directly so a dry-run would be redundant.
+  def withTrafficBasedAppRewards: ConfigTransform =
+    updateAllSvAppFoundDsoConfigs_(c =>
+      c.copy(initialRewardConfig =
+        Some(
+          InitialRewardConfig(
+            mintingVersion = "RewardVersion_TrafficBasedAppRewards",
+            dryRunVersion = None,
+          )
+        )
+      )
+    )
+
+  def withFeaturedAppMarkers: ConfigTransform =
+    updateAllSvAppFoundDsoConfigs_(c => c.copy(initialRewardConfig = None))
 
   private def portTransform(bump: Int, c: AdminServerConfig): AdminServerConfig =
     c.copy(internalPort = c.internalPort.map(_ + bump))

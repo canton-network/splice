@@ -12,7 +12,7 @@ import DA.List.Total (head)
 import Splice.Amulet
 import Splice.AmuletRules
 import Splice.Api.RewardAssignmentV1 qualified as Api.RewardAssignmentV1
-import Splice.Testing.Utils (emptyExtraArgs)
+import Splice.Testing.Utils (emptyExtraArgs, expectErrorId, expectMessageContains, submitMustFail'')
 import Splice.Round
 import Splice.Util
 import Splice.Wallet.MintingDelegation
@@ -85,6 +85,7 @@ testMintingDelegation = do
     amount = developmentFundCouponAmount
     expiresAt = now `addRelTime` days 60
     reason = "Test development fund coupon"
+    mintAfter = Some (now `addRelTime` minutes 1)
 
   let rewardCouponV2Amount = 42.0
   rewardCouponV2Cid <- submit app.dso $ createCmd RewardCouponV2 with
@@ -193,6 +194,67 @@ testMintingDelegation_checksExpiry = do
     context = PaymentTransferContext with
       context
       amuletRules = amuletRulesCid
+
+  pure ()
+
+testMintingDelegation_checksMintAfter : Script ()
+testMintingDelegation_checksMintAfter = do
+  DefaultAppWithUsers{..} <- setupDefaultAppWithUsers
+
+  beneficiary <- allocateParty "beneficiary"
+  let delegate = aliceValidator.primaryParty
+
+  now <- getTime
+  proposalCid <- submit beneficiary $ createCmd MintingDelegationProposal with
+    delegation = MintingDelegation with
+      dso = app.dso
+      beneficiary
+      delegate
+      expiresAt = now `addRelTime` days 30
+      amuletMergeLimit = 10
+
+  MintingDelegationProposal_AcceptResult mintingDelegationCid <- submit delegate $ exerciseCmd proposalCid MintingDelegationProposal_Accept with
+    existingDelegationCid = None
+
+  -- Advance rounds so the coupon can be minted
+  runNextIssuance app
+  runNextIssuance app
+  runNextIssuance app
+
+  couponCreatedAt <- getTime
+  developmentFundCouponCid <- submit app.dso $ createCmd DevelopmentFundCoupon with
+    dso = app.dso
+    beneficiary
+    fundManager = app.dso
+    amount = 50.0
+    expiresAt = couponCreatedAt `addRelTime` days 60
+    reason = "Test development fund coupon"
+    mintAfter = Some (couponCreatedAt `addRelTime` minutes 2)
+
+  (amuletRulesCid, _) <- getAmuletRules app
+
+  -- Shared between the failing and the succeeding submission, so the only difference
+  -- between them is the elapsed time.
+  let submitOptions = actAs delegate <> readAs beneficiary <> readAs app.dso
+      mintCmd context = exerciseCmd mintingDelegationCid MintingDelegation_Mint with
+        inputs = [InputDevelopmentFundCoupon developmentFundCouponCid]
+        context = PaymentTransferContext with
+          context
+          amuletRules = amuletRulesCid
+
+  -- Unhappy - mintAfter has not passed yet
+  contextBefore <- getTransferContext app alice None
+  submitMustFail''
+    ( expectErrorId "stdlib.daml.com/deadline-not-exceeded" <>
+      expectMessageContains "deadline 'DevelopmentFundCoupon.mintAfter'"
+    )
+    submitOptions
+    (mintCmd contextBefore)
+
+  -- Happy - the same mint succeeds once mintAfter has passed
+  passTime (minutes 3)
+  contextAfter <- getTransferContext app alice None
+  _ <- submit submitOptions (mintCmd contextAfter)
 
   pure ()
 

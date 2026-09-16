@@ -3,16 +3,15 @@
 
 package org.lfdecentralizedtrust.splice.environment
 
-import better.files.File
 import cats.data.EitherT
 import com.daml.nameof.NameOf.functionFullName
 import org.lfdecentralizedtrust.splice.SpliceMetrics
 import com.digitalasset.canton.concurrent.ExecutionContextIdlenessExecutorService
-import com.digitalasset.canton.config.{LocalNodeConfig, ProcessingTimeout}
+import com.digitalasset.canton.config.ProcessingTimeout
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.crypto.Crypto
 import com.digitalasset.canton.environment.{CantonNode, CantonNodeBootstrap, CantonNodeParameters}
-import com.digitalasset.canton.lifecycle.{HasCloseContext, LifeCycle}
+import com.digitalasset.canton.lifecycle.{HasCloseContext, LifeCycle, UnlessShutdown}
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.resource.{DbStorage, StorageFactory}
 import com.digitalasset.canton.telemetry.ConfiguredOpenTelemetry
@@ -20,15 +19,14 @@ import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.tracing.{NoTracing, TracerProvider}
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.actor.ActorSystem
+import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
-import scala.concurrent.{Future, blocking}
+import scala.concurrent.{blocking, Future}
+import scala.util.{Failure, Success}
 import org.lfdecentralizedtrust.splice.admin.http.{AdminRoutes, HttpAdminService}
-
-object NodeBootstrap {
-  type HealthDumpFunction = () => Future[File]
-}
+import org.lfdecentralizedtrust.splice.config.SpliceBackendConfig
 
 /** Modelled after CantonNodeBootstrap
   */
@@ -69,7 +67,7 @@ trait NodeBootstrap[+N <: CantonNode]
   */
 abstract class NodeBootstrapBase[
     T <: CantonNode,
-    NodeConfig <: LocalNodeConfig,
+    NodeConfig <: SpliceBackendConfig,
     ParameterConfig <: CantonNodeParameters,
 ](
     nodeConfig: NodeConfig,
@@ -112,6 +110,7 @@ abstract class NodeBootstrapBase[
       nodeConfig.adminApi,
       parameterConfig,
       parameterConfig.loggingConfig.api,
+      nodeConfig.parameters.rateLimiting.clientIpHeaders,
       loggerFactory,
       getNode,
     )
@@ -166,12 +165,35 @@ abstract class NodeBootstrapBase[
   /** Attempt to start the node.
     */
   def start(): EitherT[Future, String, Unit] = {
+    warnIfDataChecksumsDisabled()
     initialize(httpAdminService).leftMap { err =>
       logger.info(s"Failed to initialize node, trying to clean up: $err")
       close()
       err
     }
   }
+
+  private def warnIfDataChecksumsDisabled(): Unit =
+    storage
+      .query(
+        sql"show data_checksums".as[String].headOption,
+        "checkDataChecksumsEnabled",
+      )
+      .onComplete {
+        case Success(UnlessShutdown.Outcome(Some(value))) if value.trim.toLowerCase == "on" =>
+          logger.info("PostgreSQL data checksums are enabled.")
+        case Success(UnlessShutdown.Outcome(value)) =>
+          logger.warn(
+            s"PostgreSQL data checksums are not enabled on the database (result: $value). See https://www.postgresql.org/docs/current/checksums.html"
+          )
+        case Success(UnlessShutdown.AbortedDueToShutdown) =>
+          ()
+        case Failure(ex) =>
+          logger.warn(
+            s"Could not determine whether PostgreSQL data checksums are enabled on the database.",
+            ex,
+          )
+      }
 
   @SuppressWarnings(Array("com.digitalasset.canton.RequireBlocking"))
   override def onClosed(): Unit = blocking {

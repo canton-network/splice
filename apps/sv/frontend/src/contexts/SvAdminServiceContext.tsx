@@ -10,6 +10,7 @@ import BigNumber from 'bignumber.js';
 import React, { useContext, useMemo } from 'react';
 import {
   CastVoteRequest,
+  CountVoteResultsResponse,
   createConfiguration,
   CreateVoteRequest,
   GetPartyToParticipantResponseV1,
@@ -27,6 +28,7 @@ import {
   Middleware,
   PrepareValidatorOnboardingRequest,
   PrepareValidatorOnboardingResponse,
+  PreviousSvRewardWeightResponse,
   RequestContext,
   ResponseContext,
   ServerConfiguration,
@@ -62,6 +64,14 @@ export interface SvAdminClient {
     accepted?: boolean,
     pageToken?: number
   ) => Promise<ListDsoRulesVoteResultsResponse>;
+  countVoteRequestResults: (
+    accepted?: boolean,
+    effectiveTo?: string
+  ) => Promise<CountVoteResultsResponse>;
+  getPreviousSvRewardWeight: (
+    svParty: string,
+    effectiveBefore?: string
+  ) => Promise<PreviousSvRewardWeightResponse>;
   lookupDsoRulesVoteRequest: (
     voteRequestContractId: string
   ) => Promise<LookupDsoRulesVoteRequestResponse>;
@@ -157,6 +167,18 @@ export const SvAdminClientProvider: React.FC<React.PropsWithChildren<SvAdminProp
           pageToken: pageToken,
         };
         return await svAdminClient.listVoteRequestResults(request);
+      },
+      countVoteRequestResults: async (
+        accepted?: boolean,
+        effectiveTo?: string
+      ): Promise<CountVoteResultsResponse> => {
+        return await svAdminClient.countVoteRequestResults({ accepted, effectiveTo });
+      },
+      getPreviousSvRewardWeight: async (
+        svParty: string,
+        effectiveBefore?: string
+      ): Promise<PreviousSvRewardWeightResponse> => {
+        return await svAdminClient.getPreviousSvRewardWeight({ svParty, effectiveBefore });
       },
       lookupDsoRulesVoteRequest: async (
         voteRequestContractId: string

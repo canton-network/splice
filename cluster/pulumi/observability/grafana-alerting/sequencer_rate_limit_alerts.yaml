@@ -51,14 +51,16 @@ groups:
         panelId: 3
         noDataState: OK
         execErrState: Alerting
-        for: 5m
+        for: 15m
         annotations:
           __dashboardUid__: eb26bc60-6c26-408a-b0de-befc19f6915c
           __panelId__: "3"
           description: Sequencer throughput cap is rejecting confirmation requests on namespace {{ $labels.namespace }} job {{ $labels.job }}. This means members are exceeding their rate limits.
           severity: warning
           summary: Sequencer throughput cap rejections detected on {{ $labels.namespace }} {{ $labels.job }}
-        labels: {}
+        labels:
+          # if high => alert on #team-canton-network-high-prio-prod-alerts
+          priority: $SEQUENCER_RATE_LIMIT_REJECTION_RATE_PRIORITY
         isPaused: false
       - uid: b4e8d9f2e5a3
         title: Sequencer Circuit Breaker Open

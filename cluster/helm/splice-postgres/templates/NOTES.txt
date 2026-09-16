@@ -1,1 +1,14 @@
-Splice Self-Hosted PGSQL
+******************************************************************************
+WARNING: splice-postgres IS DEPRECATED
+******************************************************************************
+
+This chart is unsupported after 2026-11-12, the PostgreSQL 14 upstream
+end-of-life date, and receives no PostgreSQL version upgrades. No new chart
+versions are published after 2026-10-12.
+
+Run Splice against a PostgreSQL instance you provision yourself; a managed
+database service such as Amazon RDS or Google Cloud SQL is recommended.
+
+Migration guide:
+https://docs.canton.network/global-synchronizer/production-operations/validator-postgres-migration
+******************************************************************************

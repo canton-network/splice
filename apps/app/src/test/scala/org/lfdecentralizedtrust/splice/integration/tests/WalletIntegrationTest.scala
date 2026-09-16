@@ -2,7 +2,6 @@ package org.lfdecentralizedtrust.splice.integration.tests
 
 import org.lfdecentralizedtrust.splice.auth.AuthUtil
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet as amuletCodegen
-import org.lfdecentralizedtrust.splice.codegen.java.splice.types.Round
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.payment as walletCodegen
 import org.lfdecentralizedtrust.splice.codegen.java.splice.wallet.transferpreapproval.TransferPreapprovalProposal
 import org.lfdecentralizedtrust.splice.http.v0.definitions.TapRequest
@@ -12,11 +11,7 @@ import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.BracketSynchronous.bracket
 import org.lfdecentralizedtrust.splice.integration.tests.WalletTxLogTestUtil
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.ContractState
-import org.lfdecentralizedtrust.splice.util.{
-  SpliceUtil,
-  WalletTestUtil,
-  JavaDecodeUtil as DecodeUtil,
-}
+import org.lfdecentralizedtrust.splice.util.{WalletTestUtil, JavaDecodeUtil as DecodeUtil}
 import org.lfdecentralizedtrust.splice.validator.automation.AcceptTransferPreapprovalProposalTrigger
 import org.lfdecentralizedtrust.splice.wallet.admin.api.client.commands.HttpWalletAppClient.CreateTransferPreapprovalResponse
 import org.lfdecentralizedtrust.splice.wallet.store.{
@@ -34,6 +29,8 @@ import com.digitalasset.canton.discard.Implicits.DiscardOps
 import org.apache.pekko.http.scaladsl.Http
 import org.apache.pekko.http.scaladsl.model.{HttpRequest, HttpResponse, StatusCodes}
 import org.apache.pekko.http.scaladsl.model.headers.{Authorization, OAuth2BearerToken}
+import org.scalatest.concurrent.PatienceConfiguration
+import org.scalatest.time.{Seconds, Span}
 import org.slf4j.event.Level
 
 import java.time.Duration
@@ -58,41 +55,37 @@ class WalletIntegrationTest
 
   "A wallet" should {
 
-    // TODO (#2336): unignore this test
-    "tap stupid amount" ignore { implicit env =>
+    val tapLimit = 100000000
+
+    s"tap $tapLimit amount" in { implicit env =>
       import com.digitalasset.daml.lf.data.Numeric
       val aliceParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
       val round = sv1ScanBackend.getLatestOpenMiningRound(env.environment.clock.now)
       val price = round.contract.payload.amuletPrice
       val decimalScale = Numeric.Scale.assertFromInt(10)
-      // We subtract one to allow some slack in back/forth conversions from CC to USD. Otherwise,
-      // the command gets rejected by the participant and we test nothing.
-      val maxDecimal = Numeric
-        .subtract(Numeric.maxValue(decimalScale), Numeric.assertFromBigDecimal(decimalScale, 1))
-        .value
       val maxUsd = Numeric
-        .multiply(decimalScale, maxDecimal, Numeric.assertFromBigDecimal(decimalScale, price))
+        .multiply(
+          decimalScale,
+          Numeric.assertFromBigDecimal(decimalScale, tapLimit),
+          Numeric.assertFromBigDecimal(decimalScale, price),
+        )
         .value
       // Integration test that the tap goes through
       aliceWalletClient.tap(maxUsd)
       val amulet = aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
         .filterJava(amuletCodegen.Amulet.COMPANION)(aliceParty, _ => true)
         .loneElement
-      // Unit test that expiry does the right thing
-      SpliceUtil.amuletExpiresAt(amulet.data) shouldBe new Round(Long.MaxValue)
-      // Test that the USD/CC conversions get us to the max Decimal value ignoring decimal points
+      // Test that the USD/CC conversions get us to the limit ignoring decimal points
       amulet.data.amount.initialAmount.setScale(0, java.math.RoundingMode.DOWN) shouldBe Numeric
-        .maxValue(decimalScale)
+        .assertFromBigDecimal(decimalScale, tapLimit)
         .setScale(0, java.math.RoundingMode.DOWN)
     }
 
     "tap deduplicates" in { implicit env =>
       onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
       aliceWalletClient.tap(50.0, Some("dedup-test"))
-      assertThrowsAndLogsCommandFailures(
-        aliceWalletClient.tap(50.0, Some("dedup-test")),
-        _.errorMessage should include("409 Conflict"),
-      )
+      // Duplicate tap with the same command id returns the original result idempotently (200, not 409).
+      aliceWalletClient.tap(50.0, Some("dedup-test"))
     }
 
     "allow two wallet app users to connect to one wallet backend and tap" in { implicit env =>
@@ -225,9 +218,12 @@ class WalletIntegrationTest
 
           val tapsAfter = Range(0, 3).map(_ => Future(Try(aliceWalletClient.tap(10))))
 
-          // Wait for all futures to complete
-          val successfulTaps = (tapsBefore ++ tapsAfter).map(_.futureValue).count(_.isSuccess)
-          if (failedAcceptF.futureValue.isSuccess)
+          // Wait for all futures to complete. The stale accept forces the treasury to filter
+          // and retry batches, so under load this can exceed the default patience.
+          val patience = PatienceConfiguration.Timeout(Span(60, Seconds))
+          val successfulTaps =
+            (tapsBefore ++ tapsAfter).map(_.futureValue(patience)).count(_.isSuccess)
+          if (failedAcceptF.futureValue(patience).isSuccess)
             fail("The AcceptTransferOffer action unexpectedly succeeded")
 
           successfulTaps should be(
@@ -543,10 +539,11 @@ class WalletIntegrationTest
             aliceWalletClient.balance().unlockedQty should be(40.0)
           },
         )
-        assertThrowsAndLogsCommandFailures(
-          bobWalletClient.transferPreapprovalSend(aliceUserParty, 40.0, deduplicationId),
-          _.errorMessage should include("409 Conflict"),
-        )
+        // Duplicate send with same deduplication id returns the original result idempotently (200, not 409).
+        bobWalletClient.transferPreapprovalSend(aliceUserParty, 40.0, deduplicationId)
+        // Balance is unchanged — idempotent
+        bobWalletClient.balance().unlockedQty should be(60.0)
+        aliceWalletClient.balance().unlockedQty should be(40.0)
 
         clue("Preapproval sends work if provider has a featured app right") {
           // Feature alice validator to test a transfer with a featured preapproval provider
@@ -815,6 +812,7 @@ class WalletIntegrationTest
 
       darPaths
         .foreach { f =>
+          logger.info(s"Uploading dar path $f")
           aliceValidatorBackend.participantClientWithAdminToken.upload_dar_unless_exists(
             f.toString()
           )

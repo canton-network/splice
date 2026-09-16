@@ -1,3 +1,4 @@
 # Sequencer was offboarded
 The operation 'request current time' was not successful.*Outcome\(Left\(RequestInvalid\(Unregistered recipients: Set\(\), unregistered senders: Set\(SEQ::sv1::.*\)\)\)\)
+The operation 'request current time' was not successful.*Outcome\(Left\(RequestFailed\(No connection available\)\)\)
 Now retrying operation 'request current time'

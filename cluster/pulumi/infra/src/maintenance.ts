@@ -4,7 +4,7 @@ import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
 import { versionFromDefault } from '@canton-network/splice-pulumi-common/src/version';
 
-import { DOCKER_REPO, infraAffinityAndTolerations } from '../../common';
+import { DOCKER_REPO, infraKubernetesScheduling } from '../../common';
 
 const cronJobName = 'gc-pod-reaper-job';
 const reaperNamespace = 'gc-pod-reaper';
@@ -139,7 +139,7 @@ export function deployGCPodReaper(
       },
       spec: {
         schedule: schedule,
-        concurrencyPolicy: 'Forbid',
+        concurrencyPolicy: 'Replace', // Replace stuck jobs instead of freezing
         successfulJobsHistoryLimit: 2,
         failedJobsHistoryLimit: 2,
         jobTemplate: {
@@ -149,16 +149,17 @@ export function deployGCPodReaper(
             },
           },
           spec: {
+            activeDeadlineSeconds: 1200, // Kill the job if it hangs for 20 minutes
             template: {
               spec: {
                 serviceAccountName: serviceAccountName,
                 restartPolicy: 'OnFailure',
-                ...infraAffinityAndTolerations,
+                ...infraKubernetesScheduling,
                 containers: [
                   {
                     name: cronJobName,
                     image: `${DOCKER_REPO}/splice-debug:${versionFromDefault()}`,
-                    imagePullPolicy: 'Always',
+                    imagePullPolicy: 'IfNotPresent', // Stop forcing pulls if image is cached
                     command: deleteBadPodsCommand,
                     env: [
                       {

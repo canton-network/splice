@@ -605,7 +605,7 @@ class CantonConfigTest extends AnyWordSpec with BaseTest {
       participant.httpLedgerApi.requestTimeout.toMinutes shouldBe 105
 
       // verify that `crypto.sessionSigningKeys` is configured with the expected values
-      participant.crypto.sessionSigningKeys shouldBe SessionSigningKeysConfig.default
+      participant.crypto.sessionSigningKeys shouldBe SessionSigningKeysConfig.enabled
     }
 
     // In this test case, both deprecated and new fields are set with opposite values, we make sure the new fields
@@ -696,5 +696,71 @@ class CantonConfigTest extends AnyWordSpec with BaseTest {
       )
     }
   }
+  "AuthServiceConfig parsing" should {
+    "correctly parse max-token-life for all provider types" in {
+      import com.digitalasset.canton.config.AuthServiceConfig.*
+      import scala.concurrent.duration.*
 
+      val authConfigStr =
+        """
+          |canton.participants.participant1.ledger-api.auth-services = [
+          |  {
+          |    type = "unsafe-jwt-hmac-256"
+          |    secret = "super-secret-test-key-here"
+          |    max-token-life = "10m"
+          |  },
+          |  {
+          |    type = "jwt-rs-256-crt"
+          |    certificate = "path/to/rsa-cert.crt"
+          |    max-token-life = "20m"
+          |  },
+          |  {
+          |    type = "jwt-jwks"
+          |    url = "https://example.com/.well-known/jwks.json"
+          |    max-token-life = "30m"
+          |  },
+          |  {
+          |    type = "jwt-es-256-crt"
+          |    certificate = "path/to/cert256.crt"
+          |    max-token-life = "40m"
+          |  },
+          |  {
+          |    type = "jwt-es-512-crt"
+          |    certificate = "path/to/cert512.crt"
+          |    max-token-life = "50m"
+          |  }
+          |]
+          |""".stripMargin
+
+      File.usingTemporaryFile("auth-services-test", ".conf") { tempFile =>
+        tempFile.writeText(authConfigStr)
+
+        val parsedConfig = CantonConfig
+          .parseAndLoad(
+            Seq(simpleConf.toJava, tempFile.toJava),
+            Some(DefaultPorts.create()),
+          )
+          .valueOrFail("Failed to parse config with auth services")
+
+        val authServices = parsedConfig.participantsByString("participant1").ledgerApi.authServices
+
+        authServices should have size 5
+
+        inside(authServices) {
+          case Seq(
+                unsafe: UnsafeJwtHmac256,
+                rs256: JwtRs256Crt,
+                jwks: JwtJwks,
+                es256: JwtEs256Crt,
+                es512: JwtEs512Crt,
+              ) =>
+            unsafe.maxTokenLife.duration shouldBe 10.minutes
+            rs256.maxTokenLife.duration shouldBe 20.minutes
+            jwks.maxTokenLife.duration shouldBe 30.minutes
+            es256.maxTokenLife.duration shouldBe 40.minutes
+            es512.maxTokenLife.duration shouldBe 50.minutes
+        }
+      }
+    }
+  }
 }

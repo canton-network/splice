@@ -68,7 +68,6 @@ trait OnShutdownRunner extends HasRunOnClosing { this: AutoCloseable =>
   protected[this] override def close(): Unit = {
     import TraceContext.Implicits.Empty.*
     status.set(OnShutdownRunner.Status.Closing)
-    logger.debug("Initiating shutdown.")(TraceContext.empty)
 
     val firstCallToClose = onShutdownTasks.stopAccumulating(()).isEmpty
     if (firstCallToClose) {

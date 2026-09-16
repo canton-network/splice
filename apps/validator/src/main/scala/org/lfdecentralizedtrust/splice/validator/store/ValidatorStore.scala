@@ -40,6 +40,8 @@ trait ValidatorStore extends WalletStore with AppStore {
   /** The key identifying the parties considered by this store. */
   val key: ValidatorStore.Key
 
+  override val dsoPartyId = key.dsoParty
+
   def domainMigrationId: Long
 
   def lookupWalletInstallByNameWithOffset(

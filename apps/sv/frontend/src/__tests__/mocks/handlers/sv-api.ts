@@ -8,6 +8,8 @@ import dayjs from 'dayjs';
 import { http, HttpHandler, HttpResponse, PathParams } from 'msw';
 import { FeatureSupportResponse, SuccessStatusResponse } from '@canton-network/scan-openapi';
 import {
+  CountVoteResultsRequest,
+  CountVoteResultsResponse,
   ErrorResponse,
   ListDsoRulesVoteRequestsResponse,
   ListDsoRulesVoteResultsResponse,
@@ -17,6 +19,7 @@ import {
   LookupFeaturedAppRightByContractIdResponse,
   ListVoteRequestByTrackingCidResponse,
   LookupDsoRulesVoteRequestResponse,
+  PrepareValidatorOnboardingResponse,
 } from '@canton-network/sv-openapi';
 
 import {
@@ -34,7 +37,7 @@ export const buildSvMock = (svUrl: string): HttpHandler[] => [
     return new HttpResponse(null, { status: 200 });
   }),
 
-  dsoInfoHandler(svUrl),
+  dsoInfoHandler(svUrl, '/v1/dso'),
 
   http.get(`${svUrl}/v0/admin/sv/voterequests`, () => {
     return HttpResponse.json<ListDsoRulesVoteRequestsResponse>(voteRequests);
@@ -159,6 +162,28 @@ export const buildSvMock = (svUrl: string): HttpHandler[] => [
     }
   ),
 
+  http.post<PathParams, CountVoteResultsRequest>(
+    `${svUrl}/v0/admin/sv/voteresults/count`,
+    ({ request }) => {
+      return request.json().then(data => {
+        const count = voteResultsAmuletRules.dso_rules_vote_results
+          .concat(voteResultsDsoRules.dso_rules_vote_results)
+          .filter(r => {
+            const isAccepted = r.outcome.tag === 'VRO_Accepted';
+            const acceptedMatch =
+              data.accepted === undefined || data.accepted === null
+                ? true
+                : data.accepted === isAccepted;
+            const effectiveToMatch = data.effectiveTo
+              ? isAccepted && dayjs(r.outcome.value.effectiveAt).isBefore(dayjs(data.effectiveTo))
+              : true;
+            return acceptedMatch && effectiveToMatch;
+          }).length;
+        return HttpResponse.json<CountVoteResultsResponse>({ count });
+      });
+    }
+  ),
+
   http.post(`${svUrl}/v0/admin/sv/votes`, () => {
     return new HttpResponse(null, { status: 201 });
   }),
@@ -205,6 +230,9 @@ export const buildSvMock = (svUrl: string): HttpHandler[] => [
   }),
 
   validatorLicensesHandler(svUrl),
+  http.post(`${svUrl}/v0/admin/validator/onboarding/prepare`, () => {
+    return HttpResponse.json<PrepareValidatorOnboardingResponse>({ secret: 'new_encoded_secret' });
+  }),
   http.get(`${svUrl}/v0/admin/validator/onboarding/ongoing`, () => {
     return HttpResponse.json<ListOngoingValidatorOnboardingsResponse>({
       ongoing_validator_onboardings: [
@@ -249,7 +277,7 @@ export const buildSvMock = (svUrl: string): HttpHandler[] => [
               {
                 template_id: 'featured-app-right-template-id',
                 contract_id: 'rightCid123',
-                payload: {},
+                payload: { activityWeight: '1.0' },
                 created_event_blob: '',
                 created_at: '2026-02-26T13:00:00.000000Z',
               },
@@ -269,7 +297,7 @@ export const buildSvMock = (svUrl: string): HttpHandler[] => [
         ? {
             template_id: 'featured-app-right-template-id',
             contract_id: 'rightCid123',
-            payload: { provider: 'a-party-id::1014912492' },
+            payload: { provider: 'a-party-id::1014912492', activityWeight: '1.0' },
             created_event_blob: '',
             created_at: '2026-02-26T13:00:00.000000Z',
           }

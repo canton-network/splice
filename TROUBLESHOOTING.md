@@ -5,7 +5,6 @@ This guide outlines steps to resolve common issues that a contributor might enco
 ## Prerequisites
 
 - Install **`nix`**, **`direnv`**, and **`sbt`** as per [DEVELOPMENT.md](./DEVELOPMENT.md)
-- Ensure access to JFrog Artifactory (`splice-developers` team). Contact your team lead if access is denied.
 
 ## Steps
 
@@ -156,5 +155,4 @@ If you see **`Environment variable VERSION must be set`** or **`locale.Error: un
 ### Additional notes
 
 - Always run SBT commands from a terminal with `direnv` enabled to ensure the `nix` environment is correctly set up.
-- If JFrog access issues persist, confirm with your team lead that all necessary team members have been added to the `splice-developers` group.
 - For persistent issues, consult the Splice repository’s documentation or raise an issue in the repository for further assistance.

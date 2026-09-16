@@ -1,24 +1,30 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { Contract } from '@canton-network/splice-common-frontend-utils';
+import { Contract, PollingStrategy } from '@canton-network/splice-common-frontend-utils';
 import { useQuery, UseQueryResult } from '@tanstack/react-query';
 
 import { VoteRequest } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules/module';
 import { ContractId } from '@daml/types';
 
 import { useSvAdminClient } from '../contexts/SvAdminServiceContext';
+import { useConfigPollInterval } from '../utils';
+import { retryOnRateLimit, retryQuery } from '@canton-network/splice-common-frontend';
 
 export const useVoteRequest = (
   contractId: ContractId<VoteRequest>,
-  retry: boolean = true
+  retry: boolean = true,
+  poll: boolean = true
 ): UseQueryResult<Contract<VoteRequest>> => {
   const { lookupDsoRulesVoteRequest } = useSvAdminClient();
+  const pollInterval = useConfigPollInterval();
+
   return useQuery({
     queryKey: ['listDsoRulesVoteRequests', contractId],
     queryFn: async () => {
       const request = await lookupDsoRulesVoteRequest(contractId);
       return Contract.decodeOpenAPI(request.dso_rules_vote_request, VoteRequest);
     },
-    retry,
+    retry: retry ? retryQuery : retryOnRateLimit,
+    refetchInterval: poll ? pollInterval : PollingStrategy.NONE,
   });
 };

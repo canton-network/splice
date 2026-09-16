@@ -7,7 +7,7 @@ import {
   config,
   HELM_MAX_HISTORY_SIZE,
   imagePullSecret,
-  infraAffinityAndTolerations,
+  infraKubernetesScheduling,
 } from '@canton-network/splice-pulumi-common';
 import { local } from '@pulumi/command';
 
@@ -56,7 +56,7 @@ export const operator = new k8s.helm.v3.Release(
       serviceMonitor: {
         enabled: true,
       },
-      ...infraAffinityAndTolerations,
+      ...infraKubernetesScheduling,
       maxHistory: HELM_MAX_HISTORY_SIZE,
     },
   },

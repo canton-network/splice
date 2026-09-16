@@ -4,8 +4,7 @@ import * as gcp from '@pulumi/gcp';
 import * as pulumi from '@pulumi/pulumi';
 
 type Role =
-  | string
-  | { id: string; condition: { title: string; description: string; expression: string } };
+  string | { id: string; condition: { title: string; description: string; expression: string } };
 
 const roleToPulumiName = (role: Role): string => {
   if (typeof role === 'string') {

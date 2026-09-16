@@ -8,14 +8,18 @@ import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
-import com.digitalasset.canton.util.ShowUtil.*
 import com.digitalasset.daml.lf.data.Ref.PackageVersion
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.environment.{PackageIdResolver, PackageVettingLookupService}
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.ContractState
-import org.lfdecentralizedtrust.splice.store.{MultiDomainAcsStore, PageLimit}
+import org.lfdecentralizedtrust.splice.store.{
+  MultiDomainAcsStore,
+  PageLimit,
+  UnavailablePartiesStore,
+}
 import org.lfdecentralizedtrust.splice.util.{AssignedContract, Contract}
+import com.digitalasset.canton.discard.Implicits.DiscardOps
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -34,7 +38,7 @@ abstract class BatchedMultiDomainExpiredContractTrigger[
     companion: C,
     vettingLookupService: PackageVettingLookupService,
     pkg: PackageIdResolver.Package,
-    stakeholders: T => Seq[PartyId],
+    getStakeholders: T => Seq[PartyId],
 )(implicit
     ec: ExecutionContext,
     mat: Materializer,
@@ -43,6 +47,13 @@ abstract class BatchedMultiDomainExpiredContractTrigger[
 ) extends ScheduledTaskTrigger[BatchedMultiDomainExpiredContractTrigger.Batch[TCid, T]] {
 
   import BatchedMultiDomainExpiredContractTrigger.Batch
+
+  protected val unavailablePartiesStore: UnavailablePartiesStore
+
+  protected def ignorePartiesWithoutVettedAmulet(
+      informees: Set[PartyId],
+      contractIds: Seq[String],
+  )(implicit ec: ExecutionContext, tc: TraceContext): Future[String]
 
   override final protected def listReadyTasks(now: CantonTimestamp, limit: Int)(implicit
       tc: TraceContext
@@ -58,14 +69,20 @@ abstract class BatchedMultiDomainExpiredContractTrigger[
         PackageIdResolver.Package.SpliceAmulet,
         expiredContracts,
         batchSize,
-      )(c => stakeholders(c.payload))
+      )(c => getStakeholders(c.payload))
       .map {
         _.toSeq.flatMap {
-          case (Some(version), contractBatches) => contractBatches.map(Batch(pkg, version, _))
+          case (Some(version), contractBatches) =>
+            contractBatches.map { contracts =>
+              val stakeholders = contracts.flatMap(c => getStakeholders(c.payload)).toSet
+              Batch(pkg, version, contracts, stakeholders)
+            }
           case (None, contracts) =>
-            logger.warn(
-              show"No vetted $pkg version for ${contracts.flatten.map { _.contractId.contractId }}"
-            )
+            val stakeholders = contracts.flatten.flatMap(c => getStakeholders(c.payload)).toSet
+            ignorePartiesWithoutVettedAmulet(
+              stakeholders,
+              contracts.flatten.map(_.contractId.contractId),
+            ).discard
             Seq.empty
         }
       }
@@ -92,6 +109,7 @@ object BatchedMultiDomainExpiredContractTrigger {
       expiredContracts: Seq[
         AssignedContract[TCid, T]
       ],
+      stakeholders: Set[PartyId],
   ) extends PrettyPrinting {
     override def pretty: Pretty[this.type] =
       prettyOfClass(
@@ -99,6 +117,7 @@ object BatchedMultiDomainExpiredContractTrigger {
         param("vettedVersion", _.vettedVersion),
         param("numExpiredContracts", _.expiredContracts.size),
         param("expiredContractCids", _.expiredContracts.map(_.contractId.contractId.unquoted)),
+        param("stakeholders", _.stakeholders),
       )
   }
 

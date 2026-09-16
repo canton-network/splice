@@ -38,13 +38,20 @@ import {
   networkWideConfig,
   getValidatorAppApiAudience,
   getNamespaceConfig,
+  persistentHeapDumpsPvc,
   standardStorageClassName,
   pvcSuffix,
   CnChartVersion,
 } from '@canton-network/splice-pulumi-common';
 import { installLoopback } from '@canton-network/splice-pulumi-common-sv';
-import { installParticipant } from '@canton-network/splice-pulumi-common-validator';
-import { SplicePostgres } from '@canton-network/splice-pulumi-common/src/postgres';
+import {
+  installParticipant,
+  installWalletGateway,
+} from '@canton-network/splice-pulumi-common-validator';
+import {
+  installPasswordWithParent,
+  SplicePostgres,
+} from '@canton-network/splice-pulumi-common/src/postgres';
 
 import { installPartyAllocator } from './partyAllocator';
 import { validatorConfig, validatorName } from './validatorConfig';
@@ -68,7 +75,7 @@ export async function installNode(auth0Client: Auth0Client): Promise<void> {
   console.error(
     validatorVersion.type === 'local'
       ? 'Using locally built charts by default'
-      : `Using charts from the artifactory by default, version ${validatorVersion.version}`
+      : `Using charts from the ghcr by default, version ${validatorVersion.version}`
   );
 
   const xns = exactNamespace(validatorConfig.namespace, true);
@@ -121,6 +128,9 @@ export async function installNode(auth0Client: Auth0Client): Promise<void> {
         nameServiceDomain: ansDomainPrefix,
       },
       withSvIngress: false,
+      ingress: {
+        walletGateway: validatorConfig.walletGateway.enabled,
+      },
     },
     validatorVersion,
     { dependsOn: ingressImagePullDeps.concat([validator]) }
@@ -167,12 +177,16 @@ async function installValidator(
         db: { ...postgresValuesFromFile.db, volumeSize: validatorConfig.postgresPvcSize },
       }
     : postgresValuesFromFile;
+  const postgresInstanceName = 'postgres';
   const postgres = new SplicePostgres(
     xns,
-    'postgres',
-    // can be removed once base version > 0.2.1
-    `postgres`,
-    'postgres-secrets',
+    postgresInstanceName,
+    parent => installPasswordWithParent(parent, xns, postgresInstanceName, 'postgres-secrets'),
+    // No need to support legacy chart
+    {
+      deployment: 'docker-image',
+      postgresImage: postgresValuesFromFile.db.postgresImage || 'postgres:18',
+    },
     postgresValues,
     true,
     supportsValidatorRunbookReset,
@@ -181,7 +195,6 @@ async function installValidator(
   const participantAddress = (
     await installParticipant(
       validatorConfig,
-      DecentralizedSynchronizerUpgradeConfig.activeMigrationId,
       xns,
       auth0Client.getCfg(),
       false, // We don't currently support non-auth for validator-runbook
@@ -246,12 +259,14 @@ async function installValidator(
     ...(participantBootstrapDumpSecret ? { nodeIdentifier: newParticipantIdentifier } : {}),
     persistence: {
       ...validatorValuesFromYamlFiles.persistence,
-      postgresName: 'postgres',
+      postgresName: postgres.instanceName,
+      host: postgres.address,
     },
     pvc: {
       volumeStorageClass: standardStorageClassName,
       volumeName: `domain-migration-validator-${pvcSuffix}`,
     },
+    persistentDataPvc: persistentHeapDumpsPvc(),
     db: { volumeSize: clusterSmallDisk ? '240Gi' : undefined },
     enablePostgresMetrics: true,
     ...spliceInstanceNames,
@@ -311,6 +326,17 @@ async function installValidator(
   );
   if (validatorConfig?.partyAllocator.enable) {
     installPartyAllocator(xns, validatorConfig.partyAllocator, [validatorChart]);
+  }
+  if (validatorConfig.walletGateway.enabled) {
+    await installWalletGateway(
+      auth0Client,
+      xns,
+      validatorConfig.walletGateway,
+      participantAddress,
+      postgres,
+      validatorConfig.logging.level,
+      [validatorChart]
+    );
   }
   return validatorChart;
 }

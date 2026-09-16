@@ -10,7 +10,11 @@ import { describe, expect, test } from 'vitest';
 import App from '../../../App';
 import { CreateUnallocatedUnclaimedActivityRecordForm } from '../../../components/forms/CreateUnallocatedUnclaimedActivityRecordForm';
 import { SvConfigProvider } from '../../../utils';
-import { PROPOSAL_SUMMARY_SUBTITLE, PROPOSAL_SUMMARY_TITLE } from '../../../utils/constants';
+import {
+  CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE,
+  PROPOSAL_REVIEW_TITLE,
+  PROPOSAL_SUMMARY_SUBTITLE,
+} from '../../../utils/constants';
 import { Wrapper } from '../../helpers';
 import { svPartyId } from '../../mocks/constants';
 import { server, svUrl } from '../../setup/setup';
@@ -32,7 +36,7 @@ describe('SV user can', () => {
     const button = screen.getByRole('button', { name: 'Log In' });
     await user.click(button);
 
-    expect(await screen.findAllByDisplayValue(svPartyId)).not.toBe([]);
+    expect(await screen.findAllByDisplayValue(svPartyId)).not.toHaveLength(0);
   });
 });
 
@@ -47,11 +51,11 @@ describe('Create Unallocated Unclaimed Activity Record Form', () => {
     expect(
       screen.getByTestId('create-unallocated-unclaimed-activity-record-form')
     ).toBeInTheDocument();
-    expect(screen.getByText('Action')).toBeInTheDocument();
+    expect(screen.getByText(CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE)).toBeInTheDocument();
 
     const actionInput = screen.getByTestId('create-unallocated-unclaimed-activity-record-action');
     expect(actionInput).toBeInTheDocument();
-    expect(actionInput.getAttribute('value')).toBe('Create Unclaimed Activity Record');
+    expect(actionInput.textContent).toBe('Create Unclaimed Activity Record');
 
     const summaryInput = screen.getByTestId('create-unallocated-unclaimed-activity-record-summary');
     expect(summaryInput).toBeInTheDocument();
@@ -99,7 +103,7 @@ describe('Create Unallocated Unclaimed Activity Record Form', () => {
     expect(submitButton).toBeInTheDocument();
 
     await user.click(submitButton);
-    expect(submitButton.getAttribute('disabled')).toBeDefined();
+    expect(submitButton.getAttribute('disabled')).not.toBeNull();
     await expect(async () => await user.click(submitButton)).rejects.toThrowError(
       /Unable to perform pointer interaction/
     );
@@ -368,7 +372,7 @@ describe('Create Unallocated Unclaimed Activity Record Form', () => {
 
     await user.click(submitButton);
 
-    expect(screen.getByText(PROPOSAL_SUMMARY_TITLE)).toBeInTheDocument();
+    expect(screen.getByText(PROPOSAL_REVIEW_TITLE)).toBeInTheDocument();
   });
 
   test('should show error on form if submission fails', async () => {

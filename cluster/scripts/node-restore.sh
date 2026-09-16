@@ -16,6 +16,8 @@ function component_to_deployments() {
   local -r namespace=$3
   if [[ "$component" == "sequencer" ]]; then
     echo "global-domain-$migration_id-sequencer"
+  elif [[ "$component" == "cantonBft" ]]; then
+    echo "global-domain-$migration_id-sequencer"
   elif [[ "$component" == "mediator" ]]; then
     echo "global-domain-$migration_id-mediator"
   elif [[ "$component" == "participant" && "$namespace" == sv* ]]; then
@@ -98,6 +100,36 @@ function down() {
   done
 }
 
+# Adapted from gc-pod-reaper.
+# This is necessary because wait_down might block on pods that failed initializing
+# e.g., (maybe) because GCP failed to schedule a pod due to Out of Resources
+function kill_dead_pods() {
+  local -r namespace=$1
+  local -r bad_pods=$(
+    kubectl get pods -n "$namespace" -o json | \
+    jq -r '.items[] |
+        select(
+        (.status.phase == "Unknown" and .status.reason == "ContainerStatusUnknown") or
+        (.status.reason == "Evicted") or
+        (.status.containerStatuses[]?.state.terminated? | .reason == "Error" and .exitCode == 137) or
+        (.status.initContainerStatuses[]?.state.waiting?.reason == "ContainerStatusUnknown")
+      ) | .metadata.name' | sort -u
+  );
+  if [ -z "$bad_pods" ]; then
+      echo "No bad pods found in $namespace. Skipping.";
+      return
+  fi
+  echo "Found bad pods in $namespace: $bad_pods";
+  for pod_name in $bad_pods; do
+      echo "Attempting to delete pod $namespace/$pod_name";
+      if kubectl delete pod -n "$namespace" "$pod_name" --ignore-not-found=true --timeout=180s; then
+          echo "Successfully deleted $namespace/$pod_name";
+      else
+          echo "Failed to delete $namespace/$pod_name";
+      fi
+  done
+}
+
 function wait_down() {
   local -r namespace=$1
   local -r component=$2
@@ -156,21 +188,12 @@ function restore_pvc_postgres() {
   local -r namespace=$1
   local -r component=$2
   local -r run_id=$3
-  local -r hyperdisk_enabled=$4
 
-  local template_name
   local storage_class
-  if [ "$hyperdisk_enabled" = "true" ]; then
-    template_name="pg-data-hd"
-    storage_class="hyperdisk-standard-rwo"
-  else
-    template_name="pg-data"
-    storage_class="standard-rwo"
-  fi
+  storage_class="hyperdisk-standard-rwo"
 
-  local -r ss_name="$component-pg"
-  local -r pg_pod_name="$ss_name-0"
-  local -r pvc_name="$template_name-$pg_pod_name"
+  local -r ss_name=$(get_postgres_statefulset_name "$namespace" "$component-pg")
+  local -r pvc_name=$(get_postgres_pvc_name "$namespace" "$component-pg")
   local -r snapshot_name="$pvc_name-$run_id"
 
   _info "Scaling down postgres StatefulSet"
@@ -263,7 +286,6 @@ function restore_component() {
   local -r migration_id=$3
   local -r run_id=$4
   local -r restore_cluster=$5 # cluster to restore into (if different from current)
-  local -r hyperdisk_enabled=$6
   local -r deployment_names=$(component_to_deployments "$component" "$migration_id" "$namespace")
   local stack
 
@@ -275,20 +297,11 @@ function restore_component() {
 
     local cometbft_pvc_name
     local cometbft_snapshot_name
-    if [ "$hyperdisk_enabled" = "true" ]; then
-      cometbft_pvc_name="cometbft-migration-${migration_id}-hd-pvc"
-      cometbft_snapshot_name="${cometbft_pvc_name}-$run_id"
-    else
-      cometbft_pvc_name="global-domain-$migration_id-cometbft-cometbft-data"
-      cometbft_snapshot_name="${cometbft_pvc_name}-$run_id"
-    fi
+    cometbft_pvc_name="cometbft-migration-${migration_id}-hd-pvc"
+    cometbft_snapshot_name="${cometbft_pvc_name}-$run_id"
 
     local cometbft_storage_class
-    if [ "$hyperdisk_enabled" = "true" ]; then
-      cometbft_storage_class="hyperdisk-standard-rwo"
-    else
-      cometbft_storage_class="premium-rwo"
-    fi
+    cometbft_storage_class="hyperdisk-standard-rwo"
 
     restore_pvc_from_snapshot "$namespace" "$cometbft_snapshot_name" "$cometbft_pvc_name" "$cometbft_storage_class"
     kubectl scale deployment -n "$namespace" "${deployment_names}" --replicas=1
@@ -298,7 +311,7 @@ function restore_component() {
     type=$(get_postgres_type "$namespace-$instance-pg" "$stack")
     case "$type" in
       "canton:network:postgres")
-        restore_pvc_postgres "$namespace" "$instance" "$run_id" "$hyperdisk_enabled"
+        restore_pvc_postgres "$namespace" "$instance" "$run_id"
         ;;
       "canton:cloud:postgres")
         restore_cloudsql_postgres "$namespace" "$component" "$run_id" "$migration_id" "$restore_cluster"
@@ -439,48 +452,74 @@ function main() {
 
   local config
   config=$(get_resolved_config)
-  local hyperdisk_enabled
-  hyperdisk_enabled=$(echo "$config" | yq '.cluster.hyperdiskSupport.enabled // false')
+
+  # Determine whether the BFT sequencer is enabled for the migration being restored.
+  # When it is, CometBFT is not used and there is nothing to restore for it.
+  local bft_sequencer_enabled
+  bft_sequencer_enabled=$(echo "$config" | yq "
+    ([.synchronizerMigration.active, .synchronizerMigration.upgrade, .synchronizerMigration.legacy]
+      + (.synchronizerMigration.archived // [])
+      + (.synchronizerMigration.additionalLegacy // []))
+    | map(select(.id == $migration_id))
+    | .[0].sequencer.enableBftSequencer // false")
+
+  local bft_db_enabled
+  bft_db_enabled=$(canton_bft_db_enabled "$migration_id" "$config")
+
+  local -a components=()
+  for component in "${@:4}"; do
+    if [ "$component" == "cometbft" ] && [ "$bft_sequencer_enabled" == "true" ]; then
+      _info "BFT sequencer is enabled for migration $migration_id, skipping CometBFT restore"
+      continue
+    fi
+    if [ "$component" == "cantonBft" ] && [ "$bft_db_enabled" != "true" ]; then
+      _info "Dedicated CantonBFT sequencer DB is not enabled for migration $migration_id, skipping CantonBFT restore"
+      continue
+    fi
+    components+=("$component")
+  done
 
   if [[ "$run_id" == *","* ]]; then
     _info " ** Validate backup ids ** "
     local map_keys
     map_keys=$(echo "$run_id" | tr ',' '\n' | cut -d: -f1 | sort)
     local req_components
-    req_components=$(printf '%s\n' "${@:4}" | sort)
+    req_components=$(printf '%s\n' "${components[@]}" | sort)
     if [ "$map_keys" != "$req_components" ]; then
-      _error "Backup map keys ($map_keys) do not match requested components (${*:4})"
+      _error "Backup map keys ($map_keys) do not match requested components (${components[*]})"
     fi
   fi
 
-  for component in "${@:4}"; do
+  for component in "${components[@]}"; do
     component_to_deployments "$component" "$migration_id" "$namespace"
   done
 
   _info " ** Scaling down ** "
-  for component in "${@:4}"; do
+  for component in "${components[@]}"; do
     down "$namespace" "$component" "$migration_id"
   done
 
-  for component in "${@:4}"; do
+  kill_dead_pods "$namespace"
+
+  for component in "${components[@]}"; do
     wait_down "$namespace" "$component" "$migration_id"
   done
 
   _info " ** Restoring ** "
-  for component in "${@:4}"; do
+  for component in "${components[@]}"; do
     local component_run_id
     component_run_id=$(get_component_run_id "$run_id" "$component")
-    restore_component "$namespace" "$component" "$migration_id" "$component_run_id" "$restore_cluster" "$hyperdisk_enabled"
+    restore_component "$namespace" "$component" "$migration_id" "$component_run_id" "$restore_cluster"
   done
 
   _info " ** Waiting for all restore operations to finish ** "
-  for component in "${@:4}"; do
+  for component in "${components[@]}"; do
     wait_restore_component "$namespace" "$component"
   done
 
 
   _info " ** Scaling up ** "
-  for component in "${@:4}"; do
+  for component in "${components[@]}"; do
     up "$namespace" "$component" "$migration_id"
   done
 

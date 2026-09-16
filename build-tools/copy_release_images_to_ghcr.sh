@@ -3,7 +3,7 @@
 # Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Copies release docker images from artifactory to ghcr.io
+# Copies release docker images from dev to release to ghcr.io
 # skopeo is used to copy multi-arch images correctly
 # Note: skopeo in nix does not work, complains about policy.json, version from brew install (skopeo version 1.17.0) works fine.
 # There could be a fix here, though it is a super old link ¯\_(ツ)_/¯: https://github.com/NixOS/nixpkgs/commit/365d07cea0446cbdc3d2c89502ce62c1f283989b
@@ -85,8 +85,6 @@ for VERSION in $VERSIONS; do
     TARGET_IMAGE="$DEST_REGISTRY/$IMAGE_NAME:$TAG"
 
     for i in {1..10}; do
-      # Some images have been copied before from Artifactory, which is not used anymore.
-      # Artifactory has unknown/unknown attestation manifests, which show up as unknown/unknown os/architecture manifests. There is nothing inherently wrong with this.
       # skopeo on nix does not bundle the policy.json file, so we need to provide it.
       if skopeo copy --policy "${SPLICE_ROOT}"/build-tools/skopeo_policy.json --all docker://"$SOURCE_IMAGE" docker://"$TARGET_IMAGE"; then
         echo "Successfully copied $SOURCE_IMAGE to $TARGET_IMAGE"

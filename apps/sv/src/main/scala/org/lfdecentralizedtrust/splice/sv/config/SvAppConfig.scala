@@ -3,10 +3,16 @@
 
 package org.lfdecentralizedtrust.splice.sv.config
 
+import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.topology.{
+  BlacklistLeaderSelectionPolicyConfig,
+  SequencingParameters,
+}
 import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.admin.api.client.data.{
   SequencerConnectionPoolDelays,
   SubmissionRequestAmplification,
+  SynchronizerLimits,
+  TransactionProtocolLimits,
 }
 import com.digitalasset.canton.config.*
 import com.digitalasset.canton.config.RequireTypes.{
@@ -14,8 +20,10 @@ import com.digitalasset.canton.config.RequireTypes.{
   NonNegativeLong,
   NonNegativeNumeric,
   PositiveInt,
+  PositiveLong,
   PositiveNumeric,
 }
+import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.synchronizer.mediator.RemoteMediatorConfig
 import com.digitalasset.canton.synchronizer.sequencer.config.RemoteSequencerConfig
 import com.digitalasset.canton.topology.PartyId
@@ -36,6 +44,7 @@ import org.lfdecentralizedtrust.splice.config.{
   SpliceBackendConfig,
   SpliceInstanceNamesConfig,
   SpliceParametersConfig,
+  SplicePostgresConfig,
 }
 import org.lfdecentralizedtrust.splice.environment.{
   DarResource,
@@ -43,9 +52,10 @@ import org.lfdecentralizedtrust.splice.environment.{
   PackageVettingLookupService,
 }
 import org.lfdecentralizedtrust.splice.lsu.LsuRollForwardTimestamp
+import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
 import org.lfdecentralizedtrust.splice.sv.SvAppClientConfig
 import org.lfdecentralizedtrust.splice.sv.util.SvUtil
-import org.lfdecentralizedtrust.splice.util.SpliceUtil
+import org.lfdecentralizedtrust.splice.util.{SpliceUtil, SwitchOverTimes}
 
 import java.nio.file.Path
 
@@ -114,7 +124,15 @@ object SvOnboardingConfig {
       developmentFundManager: Option[PartyId] = None,
       initialExternalPartyConfigStateTickDuration: Option[NonNegativeFiniteDuration] = None,
       optValidatorFaucetCap: Option[BigDecimal] = None,
-      initialRewardConfig: Option[InitialRewardConfig] = None,
+      // Networks default to FeaturedAppMarkers minting with TrafficBasedAppRewards
+      // dry-run alongside. Tests default to TrafficBasedAppRewards minting (no
+      // dry-run) via a config transform in ConfigTransforms.defaults().
+      initialRewardConfig: Option[InitialRewardConfig] = Some(InitialRewardConfig()),
+      initialSvOperationsSwitchOverTimes: Option[Map[String, CantonTimestamp]] = Some(
+        Map(
+          SwitchOverTimes.NoFeaturedAppChoiceContext -> CantonTimestamp.MinValue
+        )
+      ),
   ) extends SvOnboardingConfig
 
   case class JoinWithKey(
@@ -122,6 +140,8 @@ object SvOnboardingConfig {
       svClient: SvAppClientConfig, // an SV that we'll contact to start our onboarding
       publicKey: String, // the key that identifies us together with our name
       privateKey: String, // the private key we use for authenticating ourselves
+      // A scan instance (typically the sponsor's) used to fetch DSO info during onboarding
+      scanClient: ScanAppClientConfig,
   ) extends SvOnboardingConfig
 
   object JoinWithKey
@@ -214,8 +234,8 @@ object SvOnboardingConfig {
   def hideConfidential(config: SvOnboardingConfig): SvOnboardingConfig = {
     val hidden = "****"
     config match {
-      case JoinWithKey(name, svClient, publicKey, _) =>
-        JoinWithKey(name, svClient, publicKey, hidden)
+      case JoinWithKey(name, svClient, publicKey, _, scanClient) =>
+        JoinWithKey(name, svClient, publicKey, hidden, scanClient)
       case other => other
     }
   }
@@ -240,7 +260,7 @@ object SvOnboardingConfig {
 
 final case class InitialRewardConfig(
     mintingVersion: String = "RewardVersion_FeaturedAppMarkers",
-    dryRunVersion: Option[String] = None,
+    dryRunVersion: Option[String] = Some("RewardVersion_TrafficBasedAppRewards"),
     batchSize: Long = 100,
     rewardCouponTimeToLiveMicros: Long = 36L * 60 * 60 * 1000000, // 36 hours
     appRewardCouponThreshold: BigDecimal = BigDecimal("0.5"),
@@ -323,9 +343,58 @@ final case class SvParticipantClientConfig(
       SequencerConnectionPoolDelays.default,
 ) extends BaseParticipantClientConfig(adminApi, ledgerApi)
 
+final case class BftSequencingParameters(
+    pbftViewChangeTimeout: PositiveFiniteDuration,
+    segmentLength: PositiveLong,
+    blacklistLeaderSelectionPolicyConfig: BlacklistLeaderSelectionPolicyConfig,
+    maxRequestsInBatch: Short,
+    maxBatchesPerBlockProposal: Short,
+    pbftViewChangeTimeoutStep: NonNegativeFiniteDuration,
+    pbftViewChangeTimeoutUpperBound: NonNegativeFiniteDuration,
+    stricterDetectionOfRequestsPotentiallyChangingOrderingTopology: Boolean,
+) {
+  import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.topology.SequencingParameters
+  def toInternal(protocolVersion: ProtocolVersion): SequencingParameters =
+    SequencingParameters.create(
+      pbftViewChangeTimeout = pbftViewChangeTimeout.toInternal,
+      segmentLength = SequencingParameters.SegmentLength(segmentLength),
+      blacklistLeaderSelectionPolicyConfig = blacklistLeaderSelectionPolicyConfig,
+      maxRequestsInBatch = maxRequestsInBatch,
+      maxBatchesPerBlockProposal = maxBatchesPerBlockProposal,
+      pbftViewChangeTimeoutStep = pbftViewChangeTimeoutStep,
+      pbftViewChangeTimeoutUpperBound = pbftViewChangeTimeoutUpperBound,
+      stricterDetectionOfRequestsPotentiallyChangingOrderingTopology =
+        stricterDetectionOfRequestsPotentiallyChangingOrderingTopology,
+    )(protocolVersion)
+}
+
+object BftSequencingParameters {
+  val default =
+    BftSequencingParameters(
+      pbftViewChangeTimeout = PositiveFiniteDuration.ofSeconds(5),
+      // increased from default as epoch changes are synchronization points which can slow things down.
+      segmentLength =
+        PositiveLong.tryCreate(SequencingParameters.DefaultSegmentLength.length.value * 4),
+      blacklistLeaderSelectionPolicyConfig =
+        SequencingParameters.DefaultLeaderSelectionPolicyConfig.copy(
+          howLongToBlacklist = BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.Exponential(
+            initialValue = 1L,
+            // Reduced by 4 to compensate for increased segmentLength.
+            maximumEpochBlacklisted = Some(250L / 4L),
+          )
+        ),
+      maxRequestsInBatch = SequencingParameters.DefaultMaxRequestsInBatch,
+      maxBatchesPerBlockProposal = SequencingParameters.DefaultMaxBatchesPerProposal,
+      pbftViewChangeTimeoutStep = SequencingParameters.DefaultPbftViewChangeTimeoutStep,
+      pbftViewChangeTimeoutUpperBound = SequencingParameters.DefaultPbftViewChangeTimeoutUpperBound,
+      stricterDetectionOfRequestsPotentiallyChangingOrderingTopology = true,
+    )
+}
+
 case class SvAppBackendConfig(
     override val adminApi: AdminServerConfig = AdminServerConfig(),
     override val storage: DbConfig,
+    postgres: SplicePostgresConfig = SplicePostgresConfig(),
     ledgerApiUser: String,
     // The SV app shares the primary party with the validator app. To discover it we query the
     // validator user. Additionally, sv1 app is expected to create that user,
@@ -391,6 +460,11 @@ case class SvAppBackendConfig(
     delegatelessAutomationExpiredAmuletBatchSize: Int = 100,
     delegatelessAutomationExpiredAmuletTransferInstructionBatchSize: Int = 100,
     delegatelessAutomationExpiredAmuletAllocationBatchSize: Int = 100,
+    delegatelessAutomationExpiredRewardCouponV2BatchSize: Int = 100,
+    delegatelessAutomationUnhideRewardCouponV2SampleSize: Int = 100,
+    // As RewardCouponV2 have default TTL of 36h, at max 216 (36*6) should be active
+    // So try to unhide all in single batch and avoid race among SVs
+    delegatelessAutomationUnhideRewardCouponV2BatchSize: Int = 220,
     // configuration to periodically take topology snapshots
     topologySnapshotConfig: Option[PeriodicBackupDumpConfig] = None,
     bftSequencerConnection: Boolean = true,
@@ -428,10 +502,22 @@ case class SvAppBackendConfig(
     convertFeaturedAppActivityMarkerObservers: Boolean = true,
     // Whether to ensure that heuristic free confirmation responses get enabled on the synchronizer via the ReconcileDynamicSynchronizerConfigTrigger.
     enableFreeConfirmationResponses: Boolean = true,
+    // Target value for the setBalanceRequestSubmissionWindowSize traffic control parameter,
+    // applied to the synchronizer via the ReconcileDynamicSynchronizerParametersTrigger.
+    // The default matches Canton's current default as of 3.5.12
+    setBalanceRequestSubmissionWindowSize: PositiveFiniteDuration =
+      PositiveFiniteDuration.ofMinutes(2),
     packageVettingCache: PackageVettingLookupService.CacheConfig =
       PackageVettingLookupService.CacheConfig(),
     useInternalSequencerApi: Boolean = false,
     ignoredAmuletVersions: Set[String] = Set.empty,
+    cantonBftSequencingParameters: Option[BftSequencingParameters] = Some(
+      BftSequencingParameters.default
+    ),
+    // Set to false to disable the DB-level exclusive lock that prevents two SV instances
+    // from running concurrently against the same database.  Only disable for migration scenarios
+    // where intentional overlap is required.
+    instanceLockEnabled: Boolean = true,
 ) extends SpliceBackendConfig {
 
   def allIgnoredAmuletVersions: Set[String] =
@@ -524,8 +610,8 @@ final case class SvSequencerConfig(
     // TODO (#845): consider reading config value from participant instead of configuring here
     sequencerAvailabilityDelay: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(60),
     pruning: Option[SequencerPruningConfig] = None,
-    isBftSequencer: Boolean = false,
-    dabftPruning: Option[PruningConfig] = Some(
+    isCantonBftSequencer: Boolean = false,
+    cantonBftPruning: Option[PruningConfig] = Some(
       PruningConfig(
         cron = "0 /10 * * * ?", // Run every 10min,
         maxDuration = PositiveDurationSeconds.ofMinutes(5),
@@ -571,11 +657,35 @@ final case class SvSynchronizerNodeConfig(
     sequencer: SvSequencerConfig,
     mediator: SvMediatorConfig,
     cometBftConfig: Option[SvCometBftConfig] = None,
-    protocolVersion: ProtocolVersion = ProtocolVersion.v34,
+    protocolVersion: ProtocolVersion = ProtocolVersion.v35,
     serial: Option[NonNegativeInt],
     // We want to be able to override this for simtime tests
-    topologyChangeDelayDuration: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofMillis(250),
+    topologyChangeDelayDuration: NonNegativeFiniteDuration =
+      NonNegativeFiniteDuration.ofMillis(250),
+    // TODO(##7162) Set sensible defaults here once Canton comes up with some magic numbers.
+    synchronizerLimits: Option[SynchronizerLimits] = Some(
+      SvSynchronizerNodeConfig.defaultSynchronizerLimits
+    ),
 )
+
+object SvSynchronizerNodeConfig {
+  // Default values as recommended by Canton. Check with the Canton team before changing them.
+  val defaultSynchronizerLimits = SynchronizerLimits(
+    transactionProtocolLimits = TransactionProtocolLimits(
+      maxActAs = PositiveInt.tryCreate(1000),
+      maxEnvelopes = PositiveInt.tryCreate(10_000),
+      maxRecipientsPerBatch = PositiveInt.tryCreate(10_000),
+      maxRecipientsTrees = PositiveInt.tryCreate(10_000),
+      maxRecipientsPerRecipientsTreeLevel = PositiveInt.tryCreate(10_000),
+      maxChildrenPerRecipientsTreeLevel = PositiveInt.tryCreate(10_000),
+      maxRecipientsPerEnvelope = PositiveInt.tryCreate(10_000),
+      maxRecipientsTreeDepth = PositiveInt.tryCreate(100),
+      maxTransactionRootViews = PositiveInt.tryCreate(1_000_000),
+      maxTransactionSubViews = PositiveInt.tryCreate(10_000_000),
+      maxTransactionTreeDepth = PositiveInt.MaxValue,
+    )
+  )
+}
 
 final case class SvSynchronizerNodesConfig(
     current: SvSynchronizerNodeConfig,

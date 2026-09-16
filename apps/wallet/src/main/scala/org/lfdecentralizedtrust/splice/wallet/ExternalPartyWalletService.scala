@@ -3,7 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.wallet
 
-import com.digitalasset.canton.lifecycle.{CloseContext, FlagCloseable}
+import com.digitalasset.canton.lifecycle.{CloseContext, FlagCloseable, LifeCycle}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.time.Clock
@@ -20,6 +20,7 @@ import org.lfdecentralizedtrust.splice.wallet.config.RewardSharingConfig
 import org.lfdecentralizedtrust.splice.wallet.store.ExternalPartyWalletStore
 
 import scala.concurrent.ExecutionContext
+import scala.util.control.NonFatal
 
 /** A service managing the treasury, automation, and store for an external party's wallet. */
 class ExternalPartyWalletService(
@@ -59,23 +60,31 @@ class ExternalPartyWalletService(
       params.defaultLimit,
     )
 
-  val automation = new ExternalPartyWalletAutomationService(
-    store,
-    ledgerClient,
-    automationConfig,
-    clock,
-    domainTimeSync,
-    retryProvider,
-    params,
-    scanConnection,
-    loggerFactory,
-    packageVersionSupport,
-    rewardSharingConfig,
-  )
+  val automation =
+    try {
+      new ExternalPartyWalletAutomationService(
+        store,
+        ledgerClient,
+        automationConfig,
+        clock,
+        domainTimeSync,
+        retryProvider,
+        params,
+        scanConnection,
+        loggerFactory,
+        packageVersionSupport,
+        rewardSharingConfig,
+      )
+    } catch {
+      // a failed construction never reaches onClosed, so close the store here
+      case NonFatal(e) =>
+        store.close()
+        throw e
+    }
 
   override def onClosed(): Unit = {
-    automation.close()
-    store.close()
+    // LifeCycle.close closes both in order even if the first close fails.
+    LifeCycle.close(automation, store)(logger)
     super.onClosed()
   }
 }

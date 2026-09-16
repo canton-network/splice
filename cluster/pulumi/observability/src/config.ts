@@ -1,6 +1,10 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { clusterSubConfig } from '@canton-network/splice-pulumi-common';
+import {
+  clusterSubConfig,
+  SplicePostgresConfig,
+  SplicePostgresSchema,
+} from '@canton-network/splice-pulumi-common';
 import { z } from 'zod';
 
 const quotaMetricNameSchema = z
@@ -26,11 +30,81 @@ const GcpQuotasConfigSchema = z.object({
     }),
 });
 
+const NatPortUsageConfigSchema = z.object({
+  thresholdPercent: z.number().min(0).max(100),
+  droppedSentPacketsThreshold: z.number().min(0),
+});
+
+export type NatPortUsageConfig = z.infer<typeof NatPortUsageConfigSchema>;
+
+const CloudArmorAlertsConfigSchema = z.object({
+  // Number of requests denied by Cloud Armor within the rolling window above which the
+  // alert fires.
+  deniedRequestsThreshold: z.number().min(0),
+  // Number of requests matching a WAF (OWASP CRS) rule within the rolling window above
+  // which the WAF specific alert fires.
+  wafRejectionsThreshold: z.number().min(0).default(0),
+});
+
+export type CloudArmorAlertsConfig = z.infer<typeof CloudArmorAlertsConfigSchema>;
+
+// Subset of the Cloud Armor config (owned by the infra stack, see
+// cluster/pulumi/infra/src/config.ts) that the alerts need. Parsed leniently, as the
+// infra stack is the one validating the full config.
+const CloudArmorConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  allRulesPreviewOnly: z.boolean().default(false),
+  // Cloud Armor rule decisions are only logged if the load balancer backend request
+  // logging is enabled, which the WAF log based alert depends on.
+  logging: z
+    .object({
+      enabled: z.boolean().default(false),
+    })
+    .prefault({}),
+  wafRules: z
+    .object({
+      enabled: z.boolean().default(true),
+      previewOnly: z.boolean().default(true),
+    })
+    .prefault({}),
+});
+
+export type CloudArmorConfig = z.infer<typeof CloudArmorConfigSchema>;
+
+export const cloudArmorConfig = CloudArmorConfigSchema.parse(clusterSubConfig('cloudArmor'));
+
+const MuteTimeWindowSchema = z.object({
+  times: z.array(
+    z.object({
+      startTime: z.string(), // UTC
+      endTime: z.string(), // UTC
+    })
+  ),
+  weekdays: z.array(z.string()).optional(), // e.g. ['monday', 'tuesday:friday']
+});
+export type MuteTimeWindow = z.infer<typeof MuteTimeWindowSchema>;
+
+const MuteTimeIntervalSchema = z.array(
+  z.object({
+    name: z.string(),
+    objectMatchers: z.array(z.tuple([z.string(), z.string(), z.string()])),
+    timeWindows: z.array(MuteTimeWindowSchema),
+  })
+);
+export type MuteTimeInterval = z.infer<typeof MuteTimeIntervalSchema>[number];
+
+// Observability needs to be migrated
+const defaultObservabilityPostgresConfig: SplicePostgresConfig = {
+  deployment: 'legacy-helm-chart',
+};
 const MonitoringConfigSchema = z
   .object({
     enableGrafanaServiceAccountToken: z.boolean(),
+    grafanaPostgres: SplicePostgresSchema.default({ deployment: 'legacy-helm-chart' }),
     alerting: z.object({
       enableNoDataAlerts: z.boolean(),
+      // routes more alerts than just "mining rounds are not advancing" to #team-canton-network-high-prio-prod-alerts
+      enableExtraHighPrioAlerts: z.boolean().default(false),
       alerts: z.object({
         pruning: z.object({
           participantRetentionDays: z.number(),
@@ -57,6 +131,22 @@ const MonitoringConfigSchema = z
             overMinutes: z.number(),
           }),
         }),
+        dsoMissedConfirmations: z.object({
+          // Fraction (0-1) of confirmation requests (as measured by the mediator) in
+          // which the DSO party may miss its confirmation within the rolling window
+          // before the alert fires.
+          threshold: z.number(),
+          // Rolling window (in minutes) over which the DSO party missed confirmation
+          // rate is computed.
+          windowMinutes: z.number(),
+        }),
+        spliceRateLimits: z.object({
+          // Fraction (0-1) of a rate limiter's configured maximum rate above which the alert fires
+          usageThreshold: z.number(),
+          // Rejected requests per second, above which the rejection alert fires
+          rejectionCountThreshold: z.number(),
+          excludedLimiters: z.array(z.string()).default([]),
+        }),
         cloudSql: z.object({
           maintenance: z.boolean(),
         }),
@@ -77,6 +167,7 @@ const MonitoringConfigSchema = z
           seconds: z.number(),
         }),
         acsCommitments: z.object({
+          usePv36Metrics: z.boolean().default(false),
           checkpointDelay: z.object({
             seconds: z.number(),
           }),
@@ -95,27 +186,59 @@ const MonitoringConfigSchema = z
           rejectionRateThreshold: z.number(),
           circuitBreakerStateThreshold: z.number(),
         }),
+        cantonBft: z.object({
+          // Alert if the number of ingress requests queued in the BFT ordering
+          // layer exceeds this threshold.
+          mempoolMaxSizeThreshold: z.number(),
+        }),
+        scanConnectionDisagreement: z.object({
+          // Fraction (0-1) of BFT consensus comparisons on a scan connection that may
+          // return a response (successful or failed) disagreeing with the consensus
+          // result before the success/failure alerts fire.
+          alertThreshold: z.number(),
+          // Requests (by their `request` label) to exclude from the scan connection
+          // disagreement alerts. Matched as a regex against the `request` label.
+          excludedRequests: z.array(z.string()).default([]),
+          // Scan connections (by their `scan_connection` label) to exclude from the scan
+          // connection disagreement alerts. Matched as a regex against the
+          // `scan_connection` label.
+          excludedConnections: z.array(z.string()).default([]),
+          // Http status code (by their `http_status` label) to exclude from the disagreement alerts.
+          // Matched as a regex against the `http_status` label.
+          excludedHttpStatusCodes: z.array(z.string()).default([]),
+        }),
         walletSweep: z.object({
           tolerance: z.number(),
         }),
         gcpQuotas: GcpQuotasConfigSchema,
+        cloudArmor: CloudArmorAlertsConfigSchema.prefault({ deniedRequestsThreshold: 0 }),
+        natPortUsage: NatPortUsageConfigSchema.default({
+          thresholdPercent: 80,
+          // `default 30` because every once in a while (likely due to dynamic port allocation),
+          // a few packets (less than 1/s) get dropped and getting alerted on it every time can be very noisy.
+          droppedSentPacketsThreshold: 30,
+        }),
+        globalSynchronizerHealth: z.object({
+          // Fraction (0-1) of sequenced confirmation requests that were discarded
+          // (i.e., never processed by the mediator, e.g. due to CometBFT replays)
+          // above which the alert fires.
+          discardedConfirmationRequestsThreshold: z.number(),
+          // Fraction (0-1) of confirmation requests that failed (as observed by the
+          // mediator, over the last 30m) above which the alert fires.
+          failedConfirmationRequestsThreshold: z.number(),
+          // Fire when TPS (approved confirmation requests per second) over the last
+          // 30m drops below this fraction of the previous 30m.
+          tpsDropThreshold: z.number(),
+        }),
         trafficBasedRewards: z.object({
           featuredAppRightsLimit: z.number(),
+          verdictIngestionBatchSizeThreshold: z.number(),
+          verdictIngestionBatchSizePendingPeriodMinutes: z.number(),
         }),
       }),
       logAlerts: z.object({}).catchall(z.string()).default({}),
       loggedSecretsFilter: z.string().optional(),
-      muteTimeIntervals: z
-        .array(
-          z.object({
-            name: z.string(),
-            objectMatchers: z.array(z.tuple([z.string(), z.string(), z.string()])),
-            startTime: z.string(), // UTC
-            endTime: z.string(), // UTC
-            weekdays: z.array(z.string()).optional(), // e.g. ['monday', 'tuesday:friday']
-          })
-        )
-        .default([]),
+      muteTimeIntervals: MuteTimeIntervalSchema.default([]),
     }),
   })
   .strict();

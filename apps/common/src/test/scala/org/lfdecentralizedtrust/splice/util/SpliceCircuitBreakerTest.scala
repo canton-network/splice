@@ -2,12 +2,13 @@ package org.lfdecentralizedtrust.splice.util
 
 import com.digitalasset.base.error.ErrorCode
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
+import com.digitalasset.canton.error.MediatorError
 import com.digitalasset.canton.participant.protocol.TransactionProcessor.SubmissionErrors
 import com.digitalasset.canton.{BaseTest, HasActorSystem, HasExecutionContext}
 import com.digitalasset.canton.time.SimClock
+import com.digitalasset.canton.topology.PartyId
 import io.grpc.StatusRuntimeException
 import org.apache.pekko.actor.Scheduler
-import org.apache.pekko.pattern.CircuitBreakerOpenException
 import org.lfdecentralizedtrust.splice.config.CircuitBreakerConfig
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.time.{Millis, Seconds, Span}
@@ -39,7 +40,13 @@ class SpliceCircuitBreakerTest
       randomFactor = 0.0,
       resetFailuresAfter = NonNegativeFiniteDuration.ofMinutes(1),
     )
-    SpliceCircuitBreaker("test", config, clock, loggerFactory)
+    SpliceCircuitBreaker(
+      "test",
+      config,
+      clock,
+      PartyId.tryFromProtoPrimitive("dso::namespace"),
+      loggerFactory,
+    )
   }
 
   "SpliceCircuitBreaker" should {
@@ -62,8 +69,83 @@ class SpliceCircuitBreakerTest
 
       val future3 = cb.withCircuitBreaker(Future.successful("should not reach here"))
       whenReady(future3.failed) { ex =>
-        ex shouldBe a[CircuitBreakerOpenException]
+        ex shouldBe a[SpliceCircuitBreakerOpenException]
         cb.isOpen shouldBe true
+      }
+    }
+
+    "attach the last failure as the cause of the CircuitBreakerOpenException" in {
+      val cb = createCircuitBreaker()
+
+      val lastFailure = new RuntimeException("root cause failure")
+
+      val future1 = cb.withCircuitBreaker(Future.failed(new RuntimeException("test failure 1")))
+      whenReady(future1.failed) { ex =>
+        ex shouldBe a[RuntimeException]
+        cb.isClosed shouldBe true
+      }
+      loggerFactory.suppressWarnings {
+        val future2 = cb.withCircuitBreaker(Future.failed(lastFailure))
+        whenReady(future2.failed) { ex =>
+          ex shouldBe a[RuntimeException]
+          cb.isOpen shouldBe true
+        }
+      }
+
+      val future3 = cb.withCircuitBreaker(Future.successful("should not reach here"))
+      whenReady(future3.failed) { ex =>
+        ex shouldBe a[SpliceCircuitBreakerOpenException]
+        ex.getCause shouldBe lastFailure
+        ex.getCause.getMessage shouldBe "root cause failure"
+      }
+
+      eventually() {
+        cb.isHalfOpen shouldBe true
+      }
+
+      val newFailure = new RuntimeException("new root cause failure")
+      loggerFactory.suppressWarnings {
+        val future4 = cb.withCircuitBreaker(Future.failed(newFailure))
+        whenReady(future4.failed) { ex =>
+          ex shouldBe newFailure
+          cb.isOpen shouldBe true
+        }
+      }
+      val future5 = cb.withCircuitBreaker(Future.successful("should not reach here"))
+      whenReady(future5.failed) { ex =>
+        ex shouldBe a[SpliceCircuitBreakerOpenException]
+        ex.getCause shouldBe newFailure
+        ex.getCause.getMessage shouldBe "new root cause failure"
+      }
+
+      eventually() {
+        cb.isHalfOpen shouldBe true
+      }
+      val successFuture = cb.withCircuitBreaker(Future.successful("success"))
+      whenReady(successFuture) { result =>
+        result shouldBe "success"
+        cb.isClosed shouldBe true
+      }
+
+      val thirdFailure = new RuntimeException("third root cause failure")
+      val future6 = cb.withCircuitBreaker(Future.failed(new RuntimeException("test failure 3")))
+      whenReady(future6.failed) { ex =>
+        ex shouldBe a[RuntimeException]
+        cb.isClosed shouldBe true
+      }
+      loggerFactory.suppressWarnings {
+        val future7 = cb.withCircuitBreaker(Future.failed(thirdFailure))
+        whenReady(future7.failed) { ex =>
+          ex shouldBe thirdFailure
+          cb.isOpen shouldBe true
+        }
+      }
+
+      val future8 = cb.withCircuitBreaker(Future.successful("should not reach here"))
+      whenReady(future8.failed) { ex =>
+        ex shouldBe a[SpliceCircuitBreakerOpenException]
+        ex.getCause shouldBe thirdFailure
+        ex.getCause.getMessage shouldBe "third root cause failure"
       }
     }
 
@@ -79,6 +161,42 @@ class SpliceCircuitBreakerTest
         whenReady(future.failed) { ex =>
           ex shouldBe a[StatusRuntimeException]
           cb.isClosed shouldBe true
+        }
+      }
+    }
+
+    "not open after unresponsive party errors not including the dso party" in {
+      val cb = createCircuitBreaker()
+
+      val ignoredError =
+        MediatorError.Timeout.Reject(unresponsiveParties = "alice::namespace,bob::namespace")
+      val exception = ErrorCode.asGrpcError(ignoredError)
+      1 to 20 foreach { _ =>
+        val future = cb.withCircuitBreaker(Future.failed(exception))
+
+        whenReady(future.failed) { ex =>
+          ex shouldBe a[StatusRuntimeException]
+          cb.isClosed shouldBe true
+        }
+      }
+    }
+
+    "open after unresponsive party errors including the dso party" in {
+      val cb = createCircuitBreaker()
+
+      val ignoredError =
+        MediatorError.Timeout.Reject(unresponsiveParties = "alice::namespace,dso::namespace")
+      val exception = ErrorCode.asGrpcError(ignoredError)
+      val future = cb.withCircuitBreaker(Future.failed(exception))
+      whenReady(future.failed) { ex =>
+        ex shouldBe a[StatusRuntimeException]
+        cb.isClosed shouldBe true
+      }
+      loggerFactory.suppressWarnings {
+        val future2 = cb.withCircuitBreaker(Future.failed(exception))
+        whenReady(future2.failed) { ex =>
+          ex shouldBe a[StatusRuntimeException]
+          cb.isOpen shouldBe true
         }
       }
     }
@@ -115,7 +233,7 @@ class SpliceCircuitBreakerTest
 
       val future4 = cb.withCircuitBreaker(Future.successful("should not reach here"))
       whenReady(future4.failed) { ex =>
-        ex shouldBe a[CircuitBreakerOpenException]
+        ex shouldBe a[SpliceCircuitBreakerOpenException]
         cb.isOpen shouldBe true
       }
     }

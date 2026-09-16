@@ -30,13 +30,10 @@ import com.digitalasset.canton.topology.admin.grpc.TopologyStoreId
 import com.digitalasset.canton.topology.store.TimeQuery.HeadState
 import monocle.macros.syntax.lens.*
 import org.lfdecentralizedtrust.splice.console.ParticipantClientReference
-import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.AmuletRules_SetConfig
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.amuletrules_actionrequiringconfirmation.CRARC_SetConfig
 
 import scala.jdk.CollectionConverters.*
-import java.time.Instant
-import java.time.temporal.ChronoUnit
 import scala.util.Using
 import scala.util.Using.Releasable
 import scala.concurrent.duration.*
@@ -84,14 +81,7 @@ class AppUpgradeIntegrationTest
         // Makes the test a bit faster and easier to debug. See #11488
         ConfigTransforms.useDecentralizedSynchronizerSplitwell()(config)
       )
-      .addConfigTransform((_, conf) =>
-        ConfigTransforms.updateAllValidatorAppConfigs_(c =>
-          // Reduce the cache TTL so package upgrades are picked up quickly.
-          c.copy(scanClient =
-            c.scanClient.setAmuletRulesCacheTimeToLive(NonNegativeFiniteDuration.ofSeconds(1))
-          )
-        )(conf)
-      )
+      .withReducedAmuletRulesCacheTTL()
       .addConfigTransform((_, config) => {
         config
           .focus(_.validatorApps)
@@ -168,23 +158,22 @@ class AppUpgradeIntegrationTest
           bobValidatorBackend.participantClient.upload_dar_unless_exists(splitwellDarPathV1)
 
           val sv2Wallet = wc("sv2Wallet")
-          val sv1Client = sv_client("sv1Client")
 
           val bob = onboardWalletUser(bobWalletClient, bobValidatorBackend)
 
           clue("Tapping some amulet in the network before any upgrades") {
             bobWalletClient.tap(10)
-            bobValidatorWalletClient.tap(1_000_001)
-            bobValidatorWalletClient.balance().unlockedQty should be > BigDecimal(1_000_000)
-            sv2Wallet.tap(1_000_002)
-            sv2Wallet.balance().unlockedQty should be > BigDecimal(1_000_000)
+            bobValidatorWalletClient.tap(1001)
+            bobValidatorWalletClient.balance().unlockedQty should be > BigDecimal(1000)
+            sv2Wallet.tap(1002)
+            sv2Wallet.balance().unlockedQty should be > BigDecimal(1000)
           }
 
           val bobTxsBeforeUpgrade =
             clue("Check that bob validator can see the tap in the wallet tx history") {
               val txs = withoutDevNetTopups(bobValidatorWalletClient.listTransactions(None, 10))
               inside(txs(0)) { case logEntry: BalanceChangeTxLogEntry =>
-                logEntry.amount shouldBe walletUsdToAmulet(BigDecimal(1_000_001))
+                logEntry.amount shouldBe walletUsdToAmulet(BigDecimal(1001))
               }
               txs
             }
@@ -203,7 +192,7 @@ class AppUpgradeIntegrationTest
           }
 
           clue("Validating that the balance is visible in the upgraded validator") {
-            bobValidatorWalletClient.balance().unlockedQty should be > BigDecimal(1_000_000)
+            bobValidatorWalletClient.balance().unlockedQty should be > BigDecimal(1000)
           }
 
           clue("Upgrading sv-2 & sv-3") {
@@ -214,16 +203,16 @@ class AppUpgradeIntegrationTest
           }
 
           clue("Testing some more transactions after 2 SVs upgraded") {
-            sv2Wallet.tap(1_000_003)
-            sv2Wallet.balance().unlockedQty should be > BigDecimal(2_000_000)
-            // p2p transfer between an upgraded validator (alice's) and a non-upgraded (sv-1's)
+            sv2Wallet.tap(1003)
+            sv2Wallet.balance().unlockedQty should be > BigDecimal(2000)
+            // p2p transfer between an upgraded validator (alice's) and a non-upgraded (sv-1's).
             p2pTransfer(
               bobValidatorWalletClient,
               sv1WalletClient,
               sv1Client.getDsoInfo().svParty,
-              500_001,
+              501,
             )
-            sv1WalletClient.balance().unlockedQty should be > BigDecimal(490_000)
+            sv1WalletClient.balance().unlockedQty should be > BigDecimal(400)
           }
 
           clue("Upgrading also sv1") {
@@ -239,12 +228,6 @@ class AppUpgradeIntegrationTest
 
           val amuletRules = sv2ScanBackend.getAmuletRules()
           val amuletConfig = amuletRules.payload.configSchedule.initialValue
-          // Ideally we'd like the config to take effect immediately. However, we
-          // can only schedule configs in the future and this is enforced at the Daml level.
-          // So we pick a date that is far enough in the future that we can complete the voting process
-          // before it is reached but close enough that we don't need to wait for long.
-          // 12 seconds seems to work well empirically.
-          val scheduledTime = Instant.now().plus(12, ChronoUnit.SECONDS)
           val newAmuletConfig = new splice.amuletconfig.AmuletConfig(
             SpliceUtil.defaultTransferConfig(
               amuletConfig.transferConfig.maxNumInputs,
@@ -266,6 +249,10 @@ class AppUpgradeIntegrationTest
             amuletConfig.optDevelopmentFundManager,
             amuletConfig.externalPartyConfigStateTickDuration,
             amuletConfig.rewardConfig,
+            amuletConfig.transferPreapprovalBaseDuration,
+            amuletConfig.developmentFundManagerBlacklist,
+            amuletConfig.minDevelopmentFundMintingDelay,
+            amuletConfig.amuletSwitchOverTimes,
           )
           val upgradeAction = new ARC_AmuletRules(
             new CRARC_SetConfig(
@@ -306,22 +293,26 @@ class AppUpgradeIntegrationTest
           )(
             "observing AmuletRules with upgraded config",
             _ => {
-              val newAmuletRules = sv1Client.getDsoInfo().amuletRules
+              val newAmuletRules = sv1Backend.getDsoInfo().amuletRules
               val config =
                 newAmuletRules.payload.configSchedule.initialValue
               config.packageConfig.amulet should endWith(".123")
             },
           )
 
-          // Ensure that the code below really uses the new version. Locally things can be sufficiently
-          // fast that you otherwise still end up using the old version.
-          env.environment.clock
-            .scheduleAt(
-              _ => (),
-              CantonTimestamp.assertFromInstant(scheduledTime.plus(500, ChronoUnit.MILLIS)),
-            )
-            .unwrap
-            .futureValue
+          clue("SVs have vetted new dso governance version") {
+            eventually() {
+              // dso party vetting only changes once all SVs vetted the package.
+              val preferredPackages =
+                sv1Backend.participantClientWithAdminToken.ledger_api.interactive_submission
+                  .preferred_packages(
+                    Map(DarResources.dsoGovernance_current.metadata.name -> Set(dsoParty))
+                  )
+              val dsoGovernancePackage = preferredPackages.packageReferences.loneElement
+              dsoGovernancePackage.packageName shouldBe DarResources.dsoGovernance_current.metadata.name.toString
+              dsoGovernancePackage.packageVersion shouldBe DarResources.dsoGovernance_current.metadata.version.toString
+            }
+          }
 
           // Vote on a dummy change on amulet rules to ensure it is archived and recreated
           // which indicates the new choice is being used.

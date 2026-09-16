@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.scan.store.db
 
+import com.daml.nonempty.NonEmpty
 import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnlessShutdownToFuture
 import com.digitalasset.canton.sequencer.admin.{v30 as seqv30}
 import com.digitalasset.canton.data.CantonTimestamp
@@ -25,7 +26,7 @@ import slick.dbio.DBIO
 import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.{ExecutionContext, Future}
 import cats.data.NonEmptyList
-import org.lfdecentralizedtrust.splice.store.UpdateHistory
+import org.lfdecentralizedtrust.splice.store.{TimestampWithMigrationId, UpdateHistory}
 import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore.AppActivityRecordT
 
 object DbScanVerdictStore {
@@ -237,13 +238,13 @@ object DbScanVerdictStore {
   def apply(
       storage: com.digitalasset.canton.resource.DbStorage,
       updateHistory: UpdateHistory,
-      appActivityRecordStoreO: Option[DbAppActivityRecordStore],
+      appActivityRecordStore: DbAppActivityRecordStore,
       loggerFactory: NamedLoggerFactory,
   )(implicit ec: ExecutionContext): DbScanVerdictStore =
     new DbScanVerdictStore(
       storage,
       updateHistory,
-      appActivityRecordStoreO,
+      appActivityRecordStore,
       loggerFactory,
     )
 }
@@ -251,7 +252,7 @@ object DbScanVerdictStore {
 class DbScanVerdictStore(
     storage: DbStorage,
     updateHistory: UpdateHistory,
-    val appActivityRecordStoreO: Option[DbAppActivityRecordStore],
+    val appActivityRecordStore: DbAppActivityRecordStore,
     override protected val loggerFactory: NamedLoggerFactory,
 )(implicit
     ec: ExecutionContext
@@ -410,41 +411,58 @@ class DbScanVerdictStore(
   def insertVerdictAndTransactionViewsDBIO(
       items: Seq[(VerdictT, Long => Seq[TransactionViewT])]
   )(implicit tc: TraceContext): DBIO[Map[CantonTimestamp, Long]] = {
-    if (items.isEmpty) DBIO.successful(Map.empty)
-    else {
-      val checkExist = (sql"""
-               select update_id
-               from #${Tables.verdicts}
-               where history_id = $historyId
-                 and """ ++ inClause("update_id", items.map(t => lengthLimited(t._1.updateId))))
-        .as[String]
+    NonEmpty.from(items) match {
+      case None => DBIO.successful(Map.empty)
+      case Some(items) =>
+        val checkExist = (sql"""
+                 select update_id
+                 from #${Tables.verdicts}
+                 where history_id = $historyId
+                   and """ ++ DbStorage.toInClause(
+          "update_id",
+          items.map(t => lengthLimited(t._1.updateId)),
+        ))
+          .as[String]
 
-      for {
-        alreadyExisting <- checkExist.map(_.toSet)
-        nonExisting = items.filter(item => !alreadyExisting.contains(item._1.updateId))
-        _ = logger.info(
-          s"Already ingested verdicts: $alreadyExisting. Non-existing: ${nonExisting.map(_._1.updateId)}."
-        )
-        rowIdMap <-
-          if (nonExisting.nonEmpty) {
-            DBIO
-              .sequence(nonExisting.map { case (verdict, mkViews) =>
-                for {
-                  idOpt <- sqlInsertVerdictReturningId(verdict)
-                  rowId <- idOpt match {
-                    case Some(id) => DBIO.successful(id)
-                    case None =>
-                      DBIO.failed(new RuntimeException("insertVerdict did not return row_id"))
-                  }
-                  views = mkViews(rowId)
-                  _ <- DBIO.sequence(views.map(sqlInsertView)).map(_ => ())
-                } yield verdict.recordTime -> rowId
-              })
-              .map(_.toMap)
-          } else {
-            DBIO.successful(Map.empty[CantonTimestamp, Long])
-          }
-      } yield rowIdMap
+        for {
+          alreadyExisting <- checkExist.map(_.toSet)
+          (dropped, nonExisting) =
+            items.partition(item => alreadyExisting.contains(item._1.updateId))
+          droppedAccepts =
+            dropped.filter(_._1.verdictResult == DbScanVerdictStore.VerdictResultDbValue.Accepted)
+          nonExistingMessage = s"Non-existing: ${nonExisting.map(_._1.updateId)}."
+          _ =
+            if (droppedAccepts.nonEmpty)
+              logger.warn(
+                s"Dropping duplicate accepted verdicts: ${droppedAccepts.map(_._1.updateId)}. " +
+                  s"All dropped verdicts: ${dropped.map(_._1.updateId)}. $nonExistingMessage"
+              )
+            else if (dropped.nonEmpty)
+              logger.info(
+                s"Dropping duplicate verdicts: ${dropped.map(_._1.updateId)}. $nonExistingMessage"
+              )
+            else
+              logger.info(s"Already ingested verdicts: $alreadyExisting. $nonExistingMessage")
+          rowIdMap <-
+            if (nonExisting.nonEmpty) {
+              DBIO
+                .sequence(nonExisting.map { case (verdict, mkViews) =>
+                  for {
+                    idOpt <- sqlInsertVerdictReturningId(verdict)
+                    rowId <- idOpt match {
+                      case Some(id) => DBIO.successful(id)
+                      case None =>
+                        DBIO.failed(new RuntimeException("insertVerdict did not return row_id"))
+                    }
+                    views = mkViews(rowId)
+                    _ <- DBIO.sequence(views.map(sqlInsertView)).map(_ => ())
+                  } yield verdict.recordTime -> rowId
+                })
+                .map(_.toMap)
+            } else {
+              DBIO.successful(Map.empty[CantonTimestamp, Long])
+            }
+        } yield rowIdMap
     }
   }
 
@@ -479,27 +497,32 @@ class DbScanVerdictStore(
     *
     * @param items verdicts with transaction view constructors
     * @param appActivityRecords activity records with placeholder verdictRowIds
+    * @param hasTrafficSummaries whether traffic summaries were fetched for this batch
+    * @param firstActiveRoundO the OpenMiningRound round active at the earliest
+    *                          record time of the batch
     * @param lastArchivedRoundO the highest archived OpenMiningRound round as of the
     *                           max record time of the batch
     */
   def insertVerdictsWithAppActivityRecords(
-      items: Seq[(VerdictT, Long => Seq[TransactionViewT])],
+      items: NonEmptyList[(VerdictT, Long => Seq[TransactionViewT])],
       appActivityRecords: Seq[(CantonTimestamp, AppActivityRecordT)],
+      hasTrafficSummaries: Boolean,
+      firstActiveRoundO: Option[Long] = None,
       lastArchivedRoundO: Option[Long] = None,
   )(implicit tc: TraceContext): Future[Unit] = {
     import profile.api.jdbcActionExtensionMethods
 
     val combinedAction = for {
-      rowIdByTime <- insertVerdictAndTransactionViewsDBIO(items)
+      rowIdByTime <- insertVerdictAndTransactionViewsDBIO(items.toList)
       // Resolve placeholder verdictRowId to actual row_ids from the inserted verdicts
       resolvedAppActivityRecords = appActivityRecords.flatMap { case (sequencingTime, record) =>
         rowIdByTime.get(sequencingTime).map(rowId => record.copy(verdictRowId = rowId))
       }
       _ <- insertAppActivityRecordsDBIO(
         resolvedAppActivityRecords,
-        if (appActivityRecords.nonEmpty)
-          Some(items.headOption.fold(0L)(_._1.recordTime.toMicros))
-        else None,
+        items.head._1.recordTime.toMicros,
+        hasTrafficSummaries,
+        firstActiveRoundO,
         lastArchivedRoundO,
       )
     } yield ()
@@ -510,8 +533,8 @@ class DbScanVerdictStore(
         "scanVerdict.insertVerdictsWithAppActivityRecords",
       )
     ).map { _ =>
-      val maxRt = items.map(_._1.recordTime).maxOption
-      maxRt.foreach(advanceLastIngestedRecordTime)
+      // items is NonEmptyList so maxOption always returns Some
+      items.toList.map(_._1.recordTime).maxOption.foreach(advanceLastIngestedRecordTime)
     }
   }
 
@@ -546,24 +569,28 @@ class DbScanVerdictStore(
 
   private def insertAppActivityRecordsDBIO(
       items: Seq[AppActivityRecordT],
-      firstRecordTimeMicros: Option[Long],
+      firstRecordTimeMicros: Long,
+      hasTrafficSummaries: Boolean,
+      firstActiveRoundO: Option[Long],
       lastArchivedRoundO: Option[Long],
   )(implicit tc: TraceContext): DBIO[Unit] =
-    appActivityRecordStoreO match {
-      case None => DBIO.successful(())
-      case Some(s) =>
-        s.insertAppActivityRecordsDBIO(items, firstRecordTimeMicros, lastArchivedRoundO)
-    }
+    appActivityRecordStore.insertAppActivityRecordsDBIO(
+      items,
+      firstRecordTimeMicros,
+      hasTrafficSummaries,
+      firstActiveRoundO,
+      lastArchivedRoundO,
+    )
 
   private def afterFilters(
-      afterO: Option[(Long, CantonTimestamp)],
+      afterO: Option[TimestampWithMigrationId],
       includeImportUpdates: Boolean,
   ): NonEmptyList[SQLActionBuilder] = {
     val gt = if (includeImportUpdates) ">=" else ">"
     afterO match {
       case None =>
         NonEmptyList.of(sql"migration_id >= 0 and record_time #$gt ${CantonTimestamp.MinValue}")
-      case Some((afterMigrationId, afterRecordTime)) =>
+      case Some(TimestampWithMigrationId(afterRecordTime, afterMigrationId)) =>
         NonEmptyList.of(
           sql"migration_id = ${afterMigrationId} and record_time > ${afterRecordTime} ",
           sql"migration_id > ${afterMigrationId} and record_time #$gt ${CantonTimestamp.MinValue}",
@@ -606,7 +633,7 @@ class DbScanVerdictStore(
   }
 
   def listVerdicts(
-      afterO: Option[(Long, CantonTimestamp)],
+      afterO: Option[TimestampWithMigrationId],
       includeImportUpdates: Boolean,
       limit: Int,
   )(implicit tc: TraceContext): Future[Seq[VerdictT]] = {

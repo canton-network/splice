@@ -9,6 +9,7 @@ images := \
 	canton-mediator \
 	canton-cometbft-sequencer \
 	cometbft \
+	cometbft-watchdog \
 	\
 	splice-app \
 	splice-debug \
@@ -43,7 +44,13 @@ sequencer-image := cluster/images/canton-sequencer
 splice-ui-image := cluster/images/splice-web-ui
 images_file := cluster/images/.images
 
-ifdef CI
+ifdef GITHUB_ACTIONS
+    # never use the cache in CI on the master branch
+    cache_opt := --no-cache
+    platform_opt := --platform=linux/amd64,linux/arm64
+    repo = $(GITHUB_SERVER_URL)/$(GITHUB_REPOSITORY)
+    commit_sha = $(GITHUB_SHA)
+else ifdef CI # CCI
     # never use the cache in CI on the master branch
     cache_opt := --no-cache
     platform_opt := --platform=linux/amd64,linux/arm64

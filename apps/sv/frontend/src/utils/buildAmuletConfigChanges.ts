@@ -5,6 +5,7 @@ import {
   AmuletConfig,
   PackageConfig,
   RewardConfig,
+  RewardVersion,
 } from '@daml.js/splice-amulet/lib/Splice/AmuletConfig';
 import { Tuple2 } from '@daml.js/daml-prim-DA-Types-1.0.0/lib/DA/Types';
 import { Set as DamlSet } from '@daml.js/daml-stdlib-DA-Set-Types-1.0.0/lib/DA/Set/Types';
@@ -44,6 +45,19 @@ export function buildAmuletConfigChanges(
       label: 'Development fund manager',
       currentValue: before?.optDevelopmentFundManager || '',
       newValue: after?.optDevelopmentFundManager || '',
+    },
+    {
+      fieldName: 'developmentFundManagerBlacklist',
+      label: 'Blacklisted development fund managers (comma-separated party ids)',
+      currentValue: before?.developmentFundManagerBlacklist?.join(', ') || '',
+      newValue: after?.developmentFundManagerBlacklist?.join(', ') || '',
+    },
+    {
+      fieldName: 'minDevelopmentFundMintingDelay',
+      label:
+        'Minimum delay between allocating and minting a development fund coupon in microseconds',
+      currentValue: before?.minDevelopmentFundMintingDelay?.microseconds || '',
+      newValue: after?.minDevelopmentFundMintingDelay?.microseconds || '',
     },
     {
       fieldName: 'transferConfigCreateFee',
@@ -99,6 +113,12 @@ export function buildAmuletConfigChanges(
       label: 'Max number of lock holders per locked coin created in a transfer',
       currentValue: before?.transferConfig.maxNumLockHolders || '',
       newValue: after?.transferConfig.maxNumLockHolders || '',
+    },
+    {
+      fieldName: 'transferConfigTokenStandardMaxTTL',
+      label: 'Token standard allocation and instruction max TTL (microseconds)',
+      currentValue: before?.transferConfig.tokenStandardMaxTTL?.microseconds || '',
+      newValue: after?.transferConfig.tokenStandardMaxTTL?.microseconds || '',
     },
 
     ...buildIssuanceCurveChanges(before?.issuanceCurve, after?.issuanceCurve),
@@ -314,6 +334,16 @@ function buildIssuanceCurveChanges(
   return [...initialValues, ...futureValues];
 }
 
+const rewardVersionLabels = {
+  RewardVersion_FeaturedAppMarkers: 'Featured App Markers (pre CIP-104)',
+  RewardVersion_TrafficBasedAppRewards: 'Traffic-Based App Rewards (CIP-104)',
+} satisfies Record<RewardVersion, string>;
+
+const rewardVersionOptions = RewardVersion.keys.map(value => ({
+  value,
+  label: rewardVersionLabels[value],
+}));
+
 function buildRewardConfigChanges(
   before: RewardConfig | null | undefined,
   after: RewardConfig | null | undefined
@@ -321,33 +351,42 @@ function buildRewardConfigChanges(
   return [
     {
       fieldName: 'rewardConfigMintingVersion',
-      label: 'Reward config: Minting version',
+      label: 'Reward config: Reward scheme',
       currentValue: before?.mintingVersion || '',
       newValue: after?.mintingVersion || '',
+      options: rewardVersionOptions,
+      description: 'Which reward scheme to use in production.',
     },
     {
       fieldName: 'rewardConfigDryRunVersion',
-      label: 'Reward config: Dry-run version',
+      label: 'Reward config: Dry-run reward scheme',
       currentValue: before?.dryRunVersion || '',
       newValue: after?.dryRunVersion || '',
+      options: [{ value: '', label: 'None (disabled)' }, ...rewardVersionOptions],
+      description:
+        'Which reward scheme to run in dry-run mode. Select "None (disabled)" to turn it off.',
     },
     {
       fieldName: 'rewardConfigBatchSize',
-      label: 'Reward config: Batch size',
+      label: 'Reward config: Merkle tree batch size',
       currentValue: before?.batchSize || '',
       newValue: after?.batchSize || '',
+      description: 'Batch size for building the Merkle tree over minting allowances (default: 100)',
     },
     {
       fieldName: 'rewardConfigRewardCouponTimeToLive',
       label: 'Reward config: Reward coupon time to live (microseconds)',
       currentValue: before?.rewardCouponTimeToLive.microseconds || '',
       newValue: after?.rewardCouponTimeToLive.microseconds || '',
+      description: 'Time-to-live for RewardCouponV2 contracts (default: 36 hours)',
     },
     {
       fieldName: 'rewardConfigAppRewardCouponThreshold',
       label: 'Reward config: App reward coupon threshold ($)',
       currentValue: before?.appRewardCouponThreshold || '',
       newValue: after?.appRewardCouponThreshold || '',
+      description:
+        'Minimum reward amount in USD below which no RewardCouponV2 is created (default: $0.50)',
     },
   ] as ConfigChange[];
 }

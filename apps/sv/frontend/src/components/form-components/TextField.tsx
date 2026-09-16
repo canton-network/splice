@@ -7,23 +7,43 @@ import {
   TextFieldProps as MuiTextFieldProps,
   Typography,
 } from '@mui/material';
+import {
+  CREATE_PROPOSAL_FIELD_HELPER_SX,
+  CREATE_PROPOSAL_FIELD_LABEL_SX,
+} from '../../constants/createProposalLayout';
 import { useFieldContext } from '../../hooks/formContext';
+import { scrollableTextFieldSx } from '../beta/identifierStyles';
+import { singleLineFieldSx } from '../../themes/fieldStyles';
 
 export interface TextFieldProps {
   id: string;
   title: string;
   subtitle?: string;
+  scrollableIdentifier?: boolean;
   muiTextFieldProps?: MuiTextFieldProps;
   onChange?: (value: string) => void;
   onBlur?: () => void;
 }
 
 export const TextField: React.FC<TextFieldProps> = props => {
-  const { title, subtitle, id, muiTextFieldProps, onChange, onBlur } = props;
+  const {
+    title,
+    subtitle,
+    id,
+    scrollableIdentifier = false,
+    muiTextFieldProps,
+    onChange,
+    onBlur,
+  } = props;
   const field = useFieldContext<string>();
   return (
     <Box>
-      <Typography variant="h6" id={`${id}-title`} data-testid={`${id}-title`} gutterBottom>
+      <Typography
+        component="p"
+        id={`${id}-title`}
+        data-testid={`${id}-title`}
+        sx={{ ...CREATE_PROPOSAL_FIELD_LABEL_SX, mb: 1 }}
+      >
         {title}
       </Typography>
 
@@ -38,7 +58,12 @@ export const TextField: React.FC<TextFieldProps> = props => {
         }}
         error={!field.state.meta.isValid}
         helperText={
-          <Typography variant="caption" id={`${id}-error`} data-testid={`${id}-error`}>
+          <Typography
+            component="span"
+            id={`${id}-error`}
+            data-testid={`${id}-error`}
+            sx={{ ...CREATE_PROPOSAL_FIELD_HELPER_SX, color: 'inherit' }}
+          >
             {field.state.meta.errors?.[0]}
           </Typography>
         }
@@ -48,10 +73,24 @@ export const TextField: React.FC<TextFieldProps> = props => {
         }}
         inputProps={{ 'data-testid': id }}
         id={id}
+        sx={
+          scrollableIdentifier
+            ? theme => ({
+                ...(typeof singleLineFieldSx === 'function'
+                  ? singleLineFieldSx(theme)
+                  : singleLineFieldSx),
+                ...scrollableTextFieldSx,
+              })
+            : singleLineFieldSx
+        }
         {...muiTextFieldProps}
       />
       {subtitle && (
-        <Typography variant="body2" color="text.secondary" data-testid={`${id}-subtitle`} mt={1}>
+        <Typography
+          component="p"
+          data-testid={`${id}-subtitle`}
+          sx={{ ...CREATE_PROPOSAL_FIELD_HELPER_SX, mt: 1 }}
+        >
           {subtitle}
         </Typography>
       )}

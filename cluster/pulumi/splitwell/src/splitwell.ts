@@ -18,6 +18,7 @@ import {
   imagePullSecret,
   installLedgerApiSecret,
   installSpliceHelmChart,
+  persistentHeapDumpsPvc,
   ValidatorTopupConfig,
 } from '@canton-network/splice-pulumi-common';
 import { installLoopback } from '@canton-network/splice-pulumi-common-sv';
@@ -50,6 +51,7 @@ export async function installSplitwell(
         'splitwell-pg',
         activeVersion,
         spliceConfig.pulumiProjectConfig.cloudSql,
+        spliceConfig.pulumiProjectConfig.defaultSplicePostgresConfig,
         splitPostgresInstances
       );
 
@@ -61,7 +63,6 @@ export async function installSplitwell(
 
   const participant = await installParticipant(
     splitwellConfig,
-    decentralizedSynchronizerMigrationConfig.activeMigrationId,
     xns,
     auth0Client.getCfg(),
     false,
@@ -80,6 +81,7 @@ export async function installSplitwell(
       'sw-pg',
       activeVersion,
       spliceConfig.pulumiProjectConfig.cloudSql,
+      spliceConfig.pulumiProjectConfig.defaultSplicePostgresConfig,
       true
     ));
   const splitwellDbName = 'app_splitwell';
@@ -112,6 +114,7 @@ export async function installSplitwell(
       logLevel: splitwellConfig.logging?.level,
       apiRequestLogLevel: splitwellConfig.logging?.apiRequestLogLevel,
       logAsyncFlush: splitwellConfig.logging?.async,
+      pvc: persistentHeapDumpsPvc(),
     },
     activeVersion,
     { dependsOn: imagePullDeps }
@@ -125,6 +128,7 @@ export async function installSplitwell(
       'validator-pg',
       activeVersion,
       spliceConfig.pulumiProjectConfig.cloudSql,
+      spliceConfig.pulumiProjectConfig.defaultSplicePostgresConfig,
       true
     ));
   const validatorDbName = 'val_splitwell';

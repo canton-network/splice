@@ -7,7 +7,11 @@ import cats.data.EitherT
 import com.digitalasset.canton.config.RequireTypes.{NonNegativeLong, PositiveInt}
 import com.digitalasset.canton.data.{CantonTimestamp, SynchronizerSuccessor}
 import com.digitalasset.canton.error.CantonBaseError
-import com.digitalasset.canton.health.{AtomicHealthElement, CloseableHealthQuasiComponent}
+import com.digitalasset.canton.health.{
+  AtomicHealthElement,
+  CloseableHealthQuasiComponent,
+  HealthComponent,
+}
 import com.digitalasset.canton.lifecycle.{FutureUnlessShutdown, HasCloseContext}
 import com.digitalasset.canton.logging.{HasLoggerName, NamedLogging}
 import com.digitalasset.canton.resource.Storage
@@ -47,6 +51,8 @@ import io.grpc.ServerServiceDefinition
 import org.apache.pekko.Done
 import org.apache.pekko.stream.KillSwitch
 import org.apache.pekko.stream.scaladsl.Source
+
+import scala.concurrent.Future
 
 /** Errors from pruning */
 sealed trait PruningError {
@@ -97,6 +103,10 @@ trait Sequencer
 
   @VisibleForTesting
   private[canton] def orderer: Option[BlockOrderer]
+
+  /** Health of the sequencer's background writer, if any.
+    */
+  private[sequencer] def backgroundWriterHealth: Option[HealthComponent] = None
 
   /** True if member is registered in sequencer persistent state / storage (i.e. database).
     */
@@ -265,6 +275,18 @@ trait Sequencer
   def performLsuSequencingTest(mediatorGroupRecipient: MediatorGroupRecipient)(implicit
       traceContext: TraceContext
   ): EitherT[FutureUnlessShutdown, CantonBaseError, Unit]
+
+  /** Apply a lock to prevent post processing of events
+    *
+    * The sequencer should run checks on the write side (malicious or racy participant) or on the
+    * post processing side (malicious or racy sequencer).
+    *
+    * In order to test the behaviour, we need to be able to control the timing of when transactions
+    * are really applied during post-processing.
+    */
+  @VisibleForTesting
+  def applyPostProcessingLockForTesting(continueAfter: Future[Unit]): Unit = ???
+
 }
 
 /** Sequencer pruning interface.
@@ -339,6 +361,7 @@ trait SequencerPruning {
   def pruningStatus(implicit
       traceContext: TraceContext
   ): FutureUnlessShutdown[SequencerPruningStatus]
+
 }
 
 object Sequencer extends HasLoggerName {

@@ -9,6 +9,8 @@ import org.apache.pekko.stream.stage.{GraphStage, GraphStageLogic, InHandler, Ou
 import org.apache.pekko.stream.{Attributes, FlowShape, Inlet, Outlet}
 import org.apache.pekko.util.ByteString
 
+import scala.util.control.NonFatal
+
 /** A Pekko GraphStage that zstd-compresses a stream of bytestrings, and splits the output into zstd objects of size (minWeight + delta).
   * Somewhat similar to Pekko's built-in GroupedWeight, but outputs valid zstd compressed objects.
   */
@@ -47,15 +49,25 @@ case class ZstdGroupedWeight(
 
     val bufferAllocator = PooledByteBufAllocator.DEFAULT
     val tmpBuffer = bufferAllocator.directBuffer(zstdTmpBufferSize)
-    val tmpNioBuffer = tmpBuffer.nioBuffer(0, tmpBuffer.capacity())
-    val compressingStream =
-      new ZstdDirectBufferCompressingStreamNoFinalizer(tmpNioBuffer, compressionLevel)
+    val (tmpNioBuffer, compressingStream) =
+      try {
+        val nioBuffer = tmpBuffer.nioBuffer(0, tmpBuffer.capacity())
+        (nioBuffer, new ZstdDirectBufferCompressingStreamNoFinalizer(nioBuffer, compressionLevel))
+      } catch {
+        // a failed construction never reaches close(), so release the buffer here
+        case NonFatal(e) =>
+          val _ = tmpBuffer.release()
+          throw e
+      }
 
     def compress(input: ByteString): ByteString = {
       val inputBB = bufferAllocator.directBuffer(input.size)
-      inputBB.writeBytes(input.toArrayUnsafe())
-      compressingStream.compress(inputBB.nioBuffer())
-      inputBB.release()
+      try {
+        inputBB.writeBytes(input.toArrayUnsafe())
+        compressingStream.compress(inputBB.nioBuffer())
+      } finally {
+        val _ = inputBB.release()
+      }
       compressingStream.flush()
       tmpNioBuffer.flip()
       val result = ByteString.fromByteBuffer(tmpNioBuffer)
@@ -72,8 +84,11 @@ case class ZstdGroupedWeight(
     }
 
     override def close(): Unit = {
-      compressingStream.close()
-      val _ = tmpBuffer.release()
+      try {
+        compressingStream.close()
+      } finally {
+        val _ = tmpBuffer.release()
+      }
     }
   }
 

@@ -88,6 +88,8 @@ trait SvSvStore extends AppStore {
       .map(_.headOption map (_.contract))
 
   def key: SvStore.Key
+
+  override def dsoPartyId = key.dsoParty
 }
 
 object SvSvStore {

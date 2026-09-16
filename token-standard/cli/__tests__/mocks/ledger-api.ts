@@ -7,7 +7,7 @@ import txs from "./data/txs.json";
 import { HttpHandler, http, HttpResponse } from "msw";
 import { setupServer, SetupServerApi } from "msw/node";
 import {
-  HoldingInterface,
+  HoldingInterfaceV1,
   TransferInstructionInterface,
 } from "../../src/constants";
 
@@ -17,7 +17,7 @@ export const buildLedgerApiMock = (ledgerUrl: string): HttpHandler[] => [
   }),
   http.post(`${ledgerUrl}/v2/state/active-contracts`, async (req) => {
     const requestBody = await req.request.text();
-    if (requestBody.includes(HoldingInterface.toString())) {
+    if (requestBody.includes(HoldingInterfaceV1.toString())) {
       return HttpResponse.json(holdings);
     } else if (requestBody.includes(TransferInstructionInterface.toString())) {
       return HttpResponse.json(transferInstructions);
@@ -31,7 +31,7 @@ export const buildLedgerApiMock = (ledgerUrl: string): HttpHandler[] => [
       allDivulgedContractsPrunedUpToInclusive: 0,
     });
   }),
-  http.post(`${ledgerUrl}/v2/updates/flats`, () => {
+  http.post(`${ledgerUrl}/v2/updates`, () => {
     return HttpResponse.json(txs);
   }),
   http.post(`${ledgerUrl}/v2/events/events-by-contract-id`, async (req) => {

@@ -177,15 +177,18 @@ class UserWalletAutomationService(
     )
   }
 
-  if (rewardSharingConfig.beneficiaries.nonEmpty) {
-    registerTrigger(
-      new RewardSharingTrigger(
-        triggerContext,
-        store,
-        rewardSharingConfig,
-        connection(SpliceLedgerConnectionPriority.Low),
+  rewardSharingConfig match {
+    case builtIn: RewardSharingConfig.BuiltIn if builtIn.automateRewardSharing =>
+      registerTrigger(
+        new RewardSharingTrigger(
+          triggerContext,
+          store,
+          builtIn,
+          connection(SpliceLedgerConnectionPriority.Low),
+        )
       )
-    )
+    case _: RewardSharingConfig.BuiltIn => ()
+    case _: RewardSharingConfig.External => ()
   }
 
   registerTrigger(

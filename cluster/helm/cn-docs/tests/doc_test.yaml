@@ -1,0 +1,63 @@
+# Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+suite: "docs values"
+templates:
+  - docs.yaml
+tests:
+  - it: "sets default security contexts for pods and containers"
+    set:
+      networkName: "MockNet"
+    asserts:
+      - documentIndex: 0
+        equal:
+          path: spec.template.spec.securityContext
+          value:
+            seccompProfile:
+              type: RuntimeDefault
+      - documentIndex: 0
+        equal:
+          path: spec.template.spec.containers[0].securityContext
+          value:
+            allowPrivilegeEscalation: false
+            privileged: false
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - NET_BIND_SERVICE
+
+  - it: "allows overriding security contexts via values"
+    set:
+      networkName: "MockNet"
+      securityContexts:
+        pod:
+          runAsNonRoot: true
+          seccompProfile:
+            type: Localhost
+            localhostProfile: profiles/hardened.json
+        containers:
+          docs:
+            runAsUser: 5000
+            allowPrivilegeEscalation: true
+    asserts:
+      - documentIndex: 0
+        equal:
+          path: spec.template.spec.securityContext
+          value:
+            runAsNonRoot: true
+            seccompProfile:
+              type: Localhost
+              localhostProfile: profiles/hardened.json
+      - documentIndex: 0
+        equal:
+          path: spec.template.spec.containers[0].securityContext
+          value:
+            allowPrivilegeEscalation: true
+            privileged: false
+            runAsUser: 5000
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - NET_BIND_SERVICE

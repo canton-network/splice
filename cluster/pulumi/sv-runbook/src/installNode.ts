@@ -43,12 +43,14 @@ import {
   failOnAppVersionMismatch,
   networkWideConfig,
   getAdditionalJvmOptions,
+  persistentHeapDumpsPvc,
   installSvAppSecrets,
   getSvAppApiAudience,
   getValidatorAppApiAudience,
   externalIpRangesFile,
   clusterNetwork,
   CnChartVersion,
+  envoyClientIpHeaderEnvVar,
 } from '@canton-network/splice-pulumi-common';
 import {
   approvedSvIdentities,
@@ -70,6 +72,7 @@ import { CloudPostgres, SplicePostgres } from '@canton-network/splice-pulumi-com
 import { createHash } from 'node:crypto';
 
 import { installRateLimits } from '../../common/src/ratelimit/rateLimit';
+import { scanRateLimitEnvVars } from '../../common/src/ratelimit/spliceRateLimits';
 import { SvAppConfig, ValidatorAppConfig } from './config';
 import { installPostgres } from './postgres';
 
@@ -101,7 +104,7 @@ export async function installNode(
   console.error(
     activeVersion.type === 'local'
       ? 'Using locally built charts by default'
-      : `Using charts from the artifactory by default, version ${activeVersion.version}`
+      : `Using charts from the ghcr by default, version ${activeVersion.version}`
   );
   console.error(`CLUSTER_BASENAME: ${CLUSTER_BASENAME}`);
   console.error(`Installing SV node in namespace: ${svNamespaceStr}`);
@@ -321,6 +324,7 @@ async function installSvAndValidator(
     logAsyncFlush: svConfig.logging?.appsAsync,
     additionalJvmOptions: getAdditionalJvmOptions(svConfig.svApp?.additionalJvmOptions),
     resources: svConfig.svApp?.resources,
+    persistentDataPvc: persistentHeapDumpsPvc(),
   };
 
   const svValuesWithSpecifiedAud: ChartValues = {
@@ -370,9 +374,9 @@ async function installSvAndValidator(
       SERIAL_ID: decentralizedSynchronizerMigrationConfig.active.id.toString(),
     }
   );
-  const bftSequencerConfigFor = (node: DecentralizedSynchronizerNode) => {
+  const cantonBftConfigFor = (node: DecentralizedSynchronizerNode) => {
     return {
-      bftSequencerConfig: {
+      cantonBft: {
         p2pUrl: (node as unknown as CantonBftSynchronizerNode).externalSequencerP2pAddress,
       },
     };
@@ -382,7 +386,7 @@ async function installSvAndValidator(
     synchronizers: {
       current: {
         ...defaultScanValues.synchronizers.current,
-        ...(useCantonBft ? bftSequencerConfigFor(canton.active) : {}),
+        ...(useCantonBft ? cantonBftConfigFor(canton.active) : {}),
       },
       ...(canton.upgrade
         ? {
@@ -390,7 +394,7 @@ async function installSvAndValidator(
               sequencer: canton.upgrade.namespaceInternalSequencerAddress,
               mediator: canton.upgrade.namespaceInternalMediatorAddress,
               ...(decentralizedSynchronizerMigrationConfig.upgrade?.sequencer.enableBftSequencer
-                ? bftSequencerConfigFor(canton.upgrade)
+                ? cantonBftConfigFor(canton.upgrade)
                 : {}),
             },
           }
@@ -401,7 +405,7 @@ async function installSvAndValidator(
               sequencer: canton.legacy.namespaceInternalSequencerAddress,
               mediator: canton.legacy.namespaceInternalMediatorAddress,
               ...(decentralizedSynchronizerMigrationConfig.legacy?.sequencer.enableBftSequencer
-                ? bftSequencerConfigFor(canton.legacy)
+                ? cantonBftConfigFor(canton.legacy)
                 : {}),
             },
           }
@@ -417,7 +421,11 @@ async function installSvAndValidator(
       enable: true,
     },
     ...synchronizerValues,
+    additionalEnvVars: (defaultScanValues.additionalEnvVars || [])
+      .concat([envoyClientIpHeaderEnvVar('canton.scan-apps.scan-app')])
+      .concat(scanRateLimitEnvVars()),
     resources: svConfig.scanApp?.resources,
+    pvc: persistentHeapDumpsPvc(),
   };
 
   const scanValuesWithFixedTokens = {
@@ -471,6 +479,7 @@ async function installSvAndValidator(
     ...spliceInstanceNames,
     maxVettingDelay: networkWideConfig?.maxVettingDelay,
     resources: svConfig.validatorApp?.resources,
+    persistentDataPvc: persistentHeapDumpsPvc(),
   };
 
   const validatorValuesWithSpecifiedAud: ChartValues = {

@@ -186,6 +186,10 @@ class SequencerConnectionSuccessorListener(
         .handshakeWithSuccessor(pendingOperation)
         .value
         .flatMap {
+          /*
+            This branch is usually not expected to run because handshakeWithSuccessor above is
+            retried until a right is returned by default. This can be changed through config.
+           */
           case Left(error) =>
             val isRetryable = error.retryable.isDefined
 
@@ -243,7 +247,7 @@ class SequencerConnectionSuccessorListener(
           syncPersistentStateManager,
           metrics,
         )
-    } yield logger.info(s"Successfully copied topology from predecessor to $successorPsid"))
+    } yield ())
       .valueOr { error =>
         logger.warn(s"Failed to copy topology from predecessor to $successorPsid: $error")
       }

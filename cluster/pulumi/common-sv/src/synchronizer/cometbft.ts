@@ -4,7 +4,8 @@ import * as k8s from '@pulumi/kubernetes';
 import * as _ from 'lodash';
 import {
   activeVersion,
-  appsAffinityAndTolerations,
+  appsKubernetesScheduling,
+  ChartValues,
   CLUSTER_BASENAME,
   CLUSTER_HOSTNAME,
   clusterSmallDisk,
@@ -23,7 +24,6 @@ import {
   withAddedDependencies,
 } from '@canton-network/splice-pulumi-common';
 import { CnChartVersion } from '@canton-network/splice-pulumi-common/src/artifacts';
-import { hyperdiskSupportConfig } from '@canton-network/splice-pulumi-common/src/config/hyperdiskSupportConfig';
 import { jsonStringify, Output } from '@pulumi/pulumi';
 
 import { svsConfig } from '../config';
@@ -103,26 +103,6 @@ export function installCometBftNode(
       ? undefined
       : installCometBftKeysSecret(xns, nodeConfig.validator.keyAddress, migrationId);
 
-  let hyperdiskDbValues = {};
-  if (hyperdiskSupportConfig.hyperdiskSupport.enabled) {
-    hyperdiskDbValues = {
-      pvcName: `cometbft-migration-${migrationId}-hd-pvc`,
-      volumeStorageClass: standardStorageClassName,
-    };
-    if (hyperdiskSupportConfig.hyperdiskSupport.migrating) {
-      const { dataSource } = createVolumeSnapshot({
-        resourceName: `cometbft-${xns.logicalName}-migration-${migrationId}-snapshot`,
-        snapshotName: `cometbft-migration-${migrationId}-pd-snapshot`,
-        namespace: xns.logicalName,
-        pvcName: `global-domain-${migrationId}-cometbft-cometbft-data`,
-      });
-      hyperdiskDbValues = {
-        ...hyperdiskDbValues,
-        dataSource,
-      };
-    }
-  }
-
   const cometbftChartValues = _.mergeWith(cometBftValues, {
     sv1: nodeConfigs.sv1,
     istioVirtualService: {
@@ -158,11 +138,13 @@ export function installCometBftNode(
     },
     db: {
       volumeSize: clusterSmallDisk ? '240Gi' : pvcSize || svsConfig?.cometbft?.volumeSize,
-      ...hyperdiskDbValues,
+      pvcName: `cometbft-migration-${migrationId}-hd-pvc`,
+      volumeStorageClass: standardStorageClassName,
     },
     extraLogLevelFlags: svConfiguration.logging?.cometbftExtraLogLevelFlags,
     serviceAccountName: imagePullServiceAccountName,
     resources: svConfiguration.cometbft?.resources,
+    watchdog: watchdogValues(migrationId),
   });
   if (svConfiguration.cometbft?.additionalHelmValues) {
     _.merge(cometbftChartValues, svConfiguration.cometbft.additionalHelmValues);
@@ -182,9 +164,30 @@ export function installCometBftNode(
       protect: disableProtection ? false : protectCometBft,
     },
     true,
-    appsAffinityAndTolerations
+    appsKubernetesScheduling
   );
   return { rpcServiceName: `${nodeConfig.identifier}-cometbft-rpc`, release };
+}
+
+const CANTON_METRICS_PORT = 10013;
+
+function watchdogValues(migrationId: DomainMigrationIndex): ChartValues {
+  const watchdog = svsConfig?.cometbft?.watchdog;
+  if (watchdog?.disabled) {
+    return { enabled: false };
+  }
+  const synchronizer = `global-domain-${migrationId}`;
+  return {
+    enabled: true,
+    sequencerMetricsUrl: `http://${synchronizer}-sequencer:${CANTON_METRICS_PORT}/metrics`,
+    mediatorMetricsUrl: `http://${synchronizer}-mediator:${CANTON_METRICS_PORT}/metrics`,
+    threshold: watchdog?.threshold,
+    evaluationIntervalSeconds: watchdog?.evaluationIntervalSeconds,
+    pollIntervalSeconds: watchdog?.pollIntervalSeconds,
+    scrapeTimeoutSeconds: watchdog?.scrapeTimeoutSeconds,
+    startupGraceSeconds: watchdog?.startupGraceSeconds,
+    cooldownSeconds: watchdog?.cooldownSeconds,
+  };
 }
 
 function installCometBftKeysSecret(

@@ -31,8 +31,8 @@ object SequencerConfig {
       sequencerConfig: SvSequencerConfig,
       cometbftConfig: Option[SvCometBftConfig],
   ): SequencerConfig = {
-    if (sequencerConfig.isBftSequencer) {
-      BftSequencerConfig()
+    if (sequencerConfig.isCantonBftSequencer) {
+      CantonBftSequencerConfig()
     } else if (cometbftConfig.exists(_.enabled)) {
       CometBftSequencerConfig()
     } else {
@@ -41,7 +41,7 @@ object SequencerConfig {
   }
 }
 
-final case class BftSequencerConfig(
+final case class CantonBftSequencerConfig(
 ) extends SequencerConfig
 
 final case class CometBftSequencerConfig(

@@ -46,6 +46,7 @@ import com.digitalasset.canton.participant.protocol.validation.{
 import com.digitalasset.canton.participant.sync.SyncEphemeralState
 import com.digitalasset.canton.participant.util.DAMLe
 import com.digitalasset.canton.platform.apiserver.execution.CommandProgressTracker
+import com.digitalasset.canton.platform.apiserver.services.command.TrafficEnforcementBackend
 import com.digitalasset.canton.protocol.*
 import com.digitalasset.canton.protocol.WellFormedTransaction.WithoutSuffixes
 import com.digitalasset.canton.sequencing.client.{SendAsyncClientError, SequencerClient}
@@ -83,6 +84,7 @@ class TransactionProcessor(
     override val testingConfig: TestingConfigInternal,
     promiseFactory: PromiseUnlessShutdownFactory,
     participantNodeParameters: ParticipantNodeParameters,
+    trafficEnforcementBackendO: Option[TrafficEnforcementBackend],
 )(implicit val ec: ExecutionContext)
     extends ProtocolProcessor[
       TransactionProcessingSteps.SubmissionParam,
@@ -145,6 +147,22 @@ class TransactionProcessor(
       "user-id" -> submissionParam.submitterInfo.userId,
       "type" -> "send-confirmation-request",
     )
+
+  override protected def validateLocalTrafficCost(
+      submissionParam: TransactionProcessingSteps.SubmissionParam
+  )(
+      trafficCost: Long,
+      traceContext: TraceContext,
+  ): FutureUnlessShutdown[Unit] = ???
+  // stubbed in splice
+  // trafficEnforcementBackendO
+  //   .traverse(
+  //     _.validateTraffic(
+  //       actAs = submissionParam.submitterInfo.actAs,
+  //       trafficCost = trafficCost,
+  //     )(traceContext)
+  //   )
+  //   .map(_.discard)
 
   def submit(
       submitterInfo: SubmitterInfo,

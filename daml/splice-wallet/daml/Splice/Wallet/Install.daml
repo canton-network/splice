@@ -10,9 +10,16 @@ import DA.Time
 import DA.Foldable (forA_)
 import DA.Optional (isSome)
 
+
 import qualified Splice.Api.Token.AllocationV1
 import qualified Splice.Api.Token.AllocationInstructionV1
 import qualified Splice.Api.Token.TransferInstructionV1
+import qualified Splice.Api.Token.AllocationV2
+import qualified Splice.Api.Token.AllocationInstructionV2
+import qualified Splice.Api.Token.AllocationRequestV2
+import qualified Splice.Api.Token.TransferInstructionV2
+import qualified Splice.TokenStandard.Utils as TokenStandard.Utils
+
 import Splice.Amulet
 import Splice.Amulet.TokenApiUtils
 import Splice.Types
@@ -30,10 +37,11 @@ import Splice.Util
 
 
 data ExecutionContext = ExecutionContext with
-  dso : Party
-  endUser : Party
-  validator : Party
-  paymentContext : PaymentTransferContext
+    dso : Party
+    endUser : Party
+    validator : Party
+    paymentContext : PaymentTransferContext
+  deriving (Serializable)
 
 -- Main function for batched execution of multiple amulet operations.
 -- Given multiple amulet operations and transfer inputs, it executes the operations sequentially while
@@ -70,14 +78,14 @@ executeAmuletOperationRec executionContext inputs prevResults (operation::remain
     CO_CreateExternalPartySetupProposal externalParty preapprovalExpiresAt -> do
       -- creates ExternalPartySetupProposal for externally hosted parties
       result <- handleCreateExternalPartySetupProposal executionContext externalParty preapprovalExpiresAt
-      handleResult COO_CreateExternalPartySetupProposal result
+      handleResultMultiChange COO_CreateExternalPartySetupProposal result
     CO_AcceptTransferPreapprovalProposal preapprovalProposalCid expiresAt -> do
       -- creates TransferPreapproval via the wallet
       result <- handleAcceptTransferPreapprovalProposal preapprovalProposalCid expiresAt
-      handleResult COO_AcceptTransferPreapprovalProposal result
+      handleResultMultiChange COO_AcceptTransferPreapprovalProposal result
     CO_RenewTransferPreapproval previousApprovalCid newExpiresAt -> do
       result <- handleRenewTransferPreapproval previousApprovalCid newExpiresAt
-      handleResult COO_RenewTransferPreapproval result
+      handleResultMultiChange COO_RenewTransferPreapproval result
     CO_TransferPreapprovalSend transferPreapprovalCid providerFeaturedAppRightCid amount description -> do
       -- The designated app provider for pre-approved transfers is the host of the receiver's party and
       -- not sender's wallet provider. So, the `featuredAppRight` in this context needs to be replaced
@@ -105,6 +113,10 @@ executeAmuletOperationRec executionContext inputs prevResults (operation::remain
       let senderChange = transferResult.senderChangeAmulet
       let inputAmulets = optional [] (\amulet -> [InputAmulet amulet]) senderChange
       executeAmuletOperationRec executionContext inputAmulets (COO_MergeTransferInputs senderChange :: prevResults) remainingOperations
+
+    handleResultMultiChange : (r -> AmuletOperationOutcome) -> (r, [TransferInput]) -> Update [AmuletOperationOutcome]
+    handleResultMultiChange resultConstructor (result, newInputs) =
+        executeAmuletOperationRec executionContext newInputs (resultConstructor result :: prevResults) remainingOperations
 
     handleResultTap : AmuletRules_DevNet_TapResult -> Update [AmuletOperationOutcome]
     handleResultTap result = do
@@ -186,7 +198,7 @@ executeAmuletOperationRec executionContext inputs prevResults (operation::remain
         expectedDso = Some executionContext.dso
       pure (result.purchasedTraffic, result.senderChangeAmulet)
 
-    handleCreateExternalPartySetupProposal : ExecutionContext -> Party -> Time -> Update (ContractId ExternalPartySetupProposal, Optional (ContractId Amulet))
+    handleCreateExternalPartySetupProposal : ExecutionContext -> Party -> Time -> Update (ContractId ExternalPartySetupProposal, [TransferInput])
     handleCreateExternalPartySetupProposal executionContext externalParty preapprovalExpiresAt = do
       require "Only a validator can create a proposal to host an external party" (executionContext.endUser == executionContext.validator)
       AmuletRules_CreateExternalPartySetupProposalResult{..} <- exercise context.amuletRules AmuletRules_CreateExternalPartySetupProposal with
@@ -196,24 +208,31 @@ executeAmuletOperationRec executionContext inputs prevResults (operation::remain
         validator = executionContext.validator
         preapprovalExpiresAt
         expectedDso = Some executionContext.dso
-      pure (proposalCid, transferResult.senderChangeAmulet)
+        optCreatedAt = None
+      pure (proposalCid, inputsFromPreapprovalOperation amuletPaid transferResult)
 
-    handleAcceptTransferPreapprovalProposal : ContractId TransferPreapprovalProposal -> Time -> Update (ContractId TransferPreapproval, Optional (ContractId Amulet))
+    handleAcceptTransferPreapprovalProposal : ContractId TransferPreapprovalProposal -> Time -> Update (ContractId TransferPreapproval, [TransferInput])
     handleAcceptTransferPreapprovalProposal preapprovalProposalCid expiresAt = do
       require "Only a validator can accept a proposal to create a transfer preapproval" (executionContext.endUser == executionContext.validator)
       TransferPreapprovalProposal_AcceptResult{..} <- exercise preapprovalProposalCid TransferPreapprovalProposal_Accept with
         context = executionContext.paymentContext
         inputs
         expiresAt
-      pure (transferPreapprovalCid, transferResult.senderChangeAmulet)
+      pure (transferPreapprovalCid, inputsFromPreapprovalOperation amuletPaid transferResult)
 
-    handleRenewTransferPreapproval : ContractId TransferPreapproval -> Time -> Update (ContractId TransferPreapproval, Optional (ContractId Amulet))
+    handleRenewTransferPreapproval : ContractId TransferPreapproval -> Time -> Update (ContractId TransferPreapproval, [TransferInput])
     handleRenewTransferPreapproval previousApprovalCid newExpiresAt = do
       TransferPreapproval_RenewResult{..} <- exercise previousApprovalCid TransferPreapproval_Renew with
         context = executionContext.paymentContext
         inputs
         newExpiresAt
-      pure (transferPreapprovalCid, transferResult.senderChangeAmulet)
+      pure (transferPreapprovalCid, inputsFromPreapprovalOperation amuletPaid transferResult)
+
+    inputsFromPreapprovalOperation : Decimal -> TransferResult -> [TransferInput]
+    inputsFromPreapprovalOperation amuletPaid transferResult =
+      if amuletPaid <= 0.0
+        then inputs
+        else optional [] (\amulet -> [InputAmulet amulet]) transferResult.senderChangeAmulet
 
 executeAmuletOperationRec _executionContext _inputs prevResults [] = do
   return prevResults
@@ -265,7 +284,7 @@ data AmuletOperation
       providerFeaturedAppRightCid : Optional (ContractId FeaturedAppRight)
       amount : Decimal
       description : Optional Text
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- Enum of the possible outcomes of operating on a amulet through the wallet.
 data AmuletOperationOutcome
@@ -288,7 +307,7 @@ data AmuletOperationOutcome
   | COO_AcceptTransferPreapprovalProposal (ContractId TransferPreapproval)
   | COO_RenewTransferPreapproval (ContractId TransferPreapproval)
   | COO_TransferPreapprovalSend (Optional (ContractId Amulet))
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 data WalletAppInstall_ExecuteBatchResult = WalletAppInstall_ExecuteBatchResult
   with
@@ -299,77 +318,95 @@ data WalletAppInstall_ExecuteBatchResult = WalletAppInstall_ExecuteBatchResult
     optEndUserParty : Optional Party
       -- The primary party on whose wallet the batch was executed. This is useful since the logic parsing
       -- the tx log entry currently cannot resolve the payload of the WalletAppInstall to get the party from there.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 data WalletAppInstall_AppPaymentRequest_RejectResult = WalletAppInstall_AppPaymentRequest_RejectResult
   with
     terminatedAppPayment : ContractId TerminatedAppPayment
+  deriving (Serializable)
 
 data WalletAppInstall_AppPaymentRequest_ExpireResult = WalletAppInstall_AppPaymentRequest_ExpireResult
   with
     terminatedAppPayment : ContractId TerminatedAppPayment
+  deriving (Serializable)
 
 data WalletAppInstall_SubscriptionRequest_RejectResult = WalletAppInstall_SubscriptionRequest_RejectResult
   with
     terminatedSubscription : ContractId TerminatedSubscription
+  deriving (Serializable)
 
 data WalletAppInstall_SubscriptionIdleState_CancelSubscriptionResult = WalletAppInstall_SubscriptionIdleState_CancelSubscriptionResult
   with
     terminatedSubscription : ContractId TerminatedSubscription
+  deriving (Serializable)
 
 data WalletAppInstall_CreateTransferOfferResult = WalletAppInstall_CreateTransferOfferResult
   with
     transferOffer : ContractId TransferOffer
+  deriving (Serializable)
 
 data WalletAppInstall_TransferOffer_AcceptResult = WalletAppInstall_TransferOffer_AcceptResult
   with
     acceptedTransferOffer : ContractId AcceptedTransferOffer
+  deriving (Serializable)
 
 data WalletAppInstall_TransferOffer_RejectResult = WalletAppInstall_TransferOffer_RejectResult
   with
     trackingInfo : TransferOfferTrackingInfo
+  deriving (Serializable)
 
 data WalletAppInstall_TransferOffer_WithdrawResult = WalletAppInstall_TransferOffer_WithdrawResult
   with
     trackingInfo : TransferOfferTrackingInfo
+  deriving (Serializable)
 
 data WalletAppInstall_TransferOffer_ExpireResult = WalletAppInstall_TransferOffer_ExpireResult
   with
     trackingInfo : TransferOfferTrackingInfo
+  deriving (Serializable)
 
 data WalletAppInstall_AcceptedTransferOffer_AbortResult = WalletAppInstall_AcceptedTransferOffer_AbortResult
   with
     trackingInfo : TransferOfferTrackingInfo
+  deriving (Serializable)
 
 data WalletAppInstall_AcceptedTransferOffer_WithdrawResult = WalletAppInstall_AcceptedTransferOffer_WithdrawResult
   with
     trackingInfo : TransferOfferTrackingInfo
+  deriving (Serializable)
 
 data WalletAppInstall_AcceptedTransferOffer_ExpireResult = WalletAppInstall_AcceptedTransferOffer_ExpireResult
   with
     trackingInfo : TransferOfferTrackingInfo
+  deriving (Serializable)
 
 data WalletAppInstall_CreateBuyTrafficRequestResult = WalletAppInstall_CreateBuyTrafficRequestResult
   with
     buyTrafficRequest : ContractId BuyTrafficRequest
+  deriving (Serializable)
 
 data WalletAppInstall_BuyTrafficRequest_CancelResult = WalletAppInstall_BuyTrafficRequest_CancelResult
   with
     trackingInfo : BuyTrafficRequestTrackingInfo
+  deriving (Serializable)
 
 data WalletAppInstall_BuyTrafficRequest_ExpireResult = WalletAppInstall_BuyTrafficRequest_ExpireResult
   with
     trackingInfo : BuyTrafficRequestTrackingInfo
+  deriving (Serializable)
 
 data WalletAppInstall_FeaturedAppRights_CancelResult = WalletAppInstall_FeaturedAppRights_CancelResult
+  deriving (Serializable)
 
 data WalletAppInstall_FeaturedAppRights_SelfGrantResult = WalletAppInstall_FeaturedAppRights_SelfGrantResult
   with
     featuredAppRight : ContractId FeaturedAppRight
+  deriving (Serializable)
 
 data WalletAppInstall_TransferPreapprovalProposal_CreateResult = WalletAppInstall_TransferPreapprovalProposal_CreateResult
   with
     preapprovalProposalCid : ContractId TransferPreapprovalProposal
+  deriving (Serializable)
 
 template WalletAppInstall
   with
@@ -548,7 +585,9 @@ template WalletAppInstall
       with
         amuletRulesCid : ContractId AmuletRules
       controller validatorParty
-      do result <- exercise amuletRulesCid $ AmuletRules_DevNet_FeatureApp endUserParty
+      do result <- exercise amuletRulesCid $ AmuletRules_DevNet_FeatureApp with
+           provider = endUserParty
+           activityWeight = None
          return WalletAppInstall_FeaturedAppRights_SelfGrantResult with
            featuredAppRight = result.featuredAppRightCid
 
@@ -596,6 +635,9 @@ template WalletAppInstall
          require ("sender " <> show sender <> " must match endUserParty " <> show endUserParty) (sender == endUserParty)
          exercise transferInstructionCid withdrawArg
 
+    -- V1 token standard API support
+    --------------------------------
+
     -- This is a dedicated choice rather than going through AmuletOperation as it behaves a bit differently than all the other operations:
     -- 1. We cannot use rewards as inputs.
     -- 2. We can use expired locked amulets as inputs.
@@ -620,6 +662,112 @@ template WalletAppInstall
          let sender = (view allocation).allocation.transferLeg.sender
          require ("sender " <> show sender <> " must match endUserParty " <> show endUserParty) (sender == endUserParty)
          exercise allocationCid withdrawArg
+
+    -- V2 token standard API support
+    ---------------------------------
+
+    nonconsuming choice WalletAppInstall_TransferFactoryV2_Transfer : Splice.Api.Token.TransferInstructionV2.TransferInstructionResult
+      with
+        transferFactoryCid : ContractId Splice.Api.Token.TransferInstructionV2.TransferFactory
+        transferArg : Splice.Api.Token.TransferInstructionV2.TransferFactory_Transfer
+      controller validatorParty
+      do TokenStandard.Utils.requireMatchExpected ("transfer.instrumentId", transferArg.transfer.instrumentId) (amuletInstrumentIdV2 dsoParty)
+         exercise transferFactoryCid transferArg
+
+    nonconsuming choice WalletAppInstall_TransferInstructionV2_Accept : Splice.Api.Token.TransferInstructionV2.TransferInstructionResult
+      with
+        transferInstructionCid : ContractId Splice.Api.Token.TransferInstructionV2.TransferInstruction
+        acceptArg : Splice.Api.Token.TransferInstructionV2.TransferInstruction_Accept
+      controller validatorParty
+      do checkTransferInstructionV2 dsoParty transferInstructionCid acceptArg.actors endUserParty
+         exercise transferInstructionCid acceptArg
+
+    nonconsuming choice WalletAppInstall_TransferInstructionV2_Reject : Splice.Api.Token.TransferInstructionV2.TransferInstructionResult
+      with
+        transferInstructionCid : ContractId Splice.Api.Token.TransferInstructionV2.TransferInstruction
+        rejectArg : Splice.Api.Token.TransferInstructionV2.TransferInstruction_Reject
+      controller validatorParty
+      do checkTransferInstructionV2 dsoParty transferInstructionCid rejectArg.actors endUserParty
+         exercise transferInstructionCid rejectArg
+
+    nonconsuming choice WalletAppInstall_TransferInstructionV2_Withdraw : Splice.Api.Token.TransferInstructionV2.TransferInstructionResult
+      with
+        transferInstructionCid : ContractId Splice.Api.Token.TransferInstructionV2.TransferInstruction
+        withdrawArg : Splice.Api.Token.TransferInstructionV2.TransferInstruction_Withdraw
+      controller validatorParty
+      do checkTransferInstructionV2 dsoParty transferInstructionCid withdrawArg.actors endUserParty
+         exercise transferInstructionCid withdrawArg
+
+    nonconsuming choice WalletAppInstall_AllocationFactoryV2_Allocate : Splice.Api.Token.AllocationInstructionV2.AllocationInstructionResult
+      with
+        allocationFactory : ContractId Splice.Api.Token.AllocationInstructionV2.AllocationFactory
+        allocateArg : Splice.Api.Token.AllocationInstructionV2.AllocationFactory_Allocate
+        allocationReqCid : Optional (ContractId Splice.Api.Token.AllocationRequestV2.AllocationRequest)
+          -- ^ Allocation request to accept at the same time as creating the allocation.
+          --
+          -- Useful for replay protection when creating allocations that do not require funding.
+          --
+          -- Optional in case the allocation request should be left as-is, e.g., because
+          -- it is used in another registry-specific UI to create an allocation.
+      controller validatorParty
+      do
+        TokenStandard.Utils.checkActors allocateArg.actors [[endUserParty]]
+        checkAllocationSpecificationV2 allocateArg.allocation endUserParty
+        forA_ allocationReqCid $ \reqCid -> do
+          req <- fetchUncheckedButArchiveLater reqCid
+          TokenStandard.Utils.requireMatchExpected
+            ("allocationReq.settlement", (view req).settlement) allocateArg.settlement
+          exercise reqCid Splice.Api.Token.AllocationRequestV2.AllocationRequest_Accept with
+            actors = [endUserParty]
+            extraArgs = ExtraArgs emptyChoiceContext emptyMetadata
+        exercise allocationFactory allocateArg
+
+    nonconsuming choice WalletAppInstall_AllocationV2_Withdraw : Splice.Api.Token.AllocationV2.AllocationResult
+      with
+        allocationCid : ContractId Splice.Api.Token.AllocationV2.Allocation
+        withdrawArg : Splice.Api.Token.AllocationV2.Allocation_Withdraw
+      controller validatorParty
+      do
+        TokenStandard.Utils.checkActors withdrawArg.actors [[endUserParty]]
+        allocation <- fetchCheckedInterface (ForDso dsoParty) allocationCid
+        checkAllocationSpecificationV2 (view allocation).allocation endUserParty
+        exercise allocationCid withdrawArg
+
+    nonconsuming choice WalletAppInstall_AllocationInstructionV2_Accept : Splice.Api.Token.AllocationInstructionV2.AllocationInstructionResult
+      with
+        allocationInstructionCid : ContractId Splice.Api.Token.AllocationInstructionV2.AllocationInstruction
+        acceptArg : Splice.Api.Token.AllocationInstructionV2.AllocationInstruction_Accept
+      controller validatorParty
+      do
+        TokenStandard.Utils.checkActors acceptArg.actors [[endUserParty]]
+        allocationInstruction <- fetchCheckedInterface (ForDso dsoParty) allocationInstructionCid
+        checkAllocationSpecificationV2 (view allocationInstruction).allocation endUserParty
+        exercise allocationInstructionCid acceptArg
+
+    nonconsuming choice WalletAppInstall_AllocationInstructionV2_Withdraw : Splice.Api.Token.AllocationInstructionV2.AllocationInstructionResult
+      with
+        allocationInstructionCid : ContractId Splice.Api.Token.AllocationInstructionV2.AllocationInstruction
+        withdrawArg : Splice.Api.Token.AllocationInstructionV2.AllocationInstruction_Withdraw
+      controller validatorParty
+      do
+        TokenStandard.Utils.checkActors withdrawArg.actors [[endUserParty]]
+        allocationInstruction <- fetchCheckedInterface (ForDso dsoParty) allocationInstructionCid
+        checkAllocationSpecificationV2 (view allocationInstruction).allocation endUserParty
+        exercise allocationInstructionCid withdrawArg
+
+
+checkTransferInstructionV2 : Party -> ContractId Splice.Api.Token.TransferInstructionV2.TransferInstruction -> [Party] -> Party -> Update ()
+checkTransferInstructionV2 dsoParty transferInstructionCid actors endUserParty = do
+  TokenStandard.Utils.checkActors actors [[endUserParty]]
+  instruction <- fetchCheckedInterface (ForDso dsoParty) transferInstructionCid
+  TokenStandard.Utils.requireMatchExpected
+    ("instruction.transfer.instrumentId", (view instruction).transfer.instrumentId) (amuletInstrumentIdV2 dsoParty)
+
+checkAllocationSpecificationV2 : Splice.Api.Token.AllocationV2.AllocationSpecification -> Party -> Update ()
+checkAllocationSpecificationV2 allocation endUserParty = do
+  TokenStandard.Utils.requireMatchExpected ("allocation.authorizer", allocation.authorizer) (TokenStandard.Utils.basicAccount endUserParty)
+  forA_ allocation.transferLegSides $ \leg -> do
+    TokenStandard.Utils.requireMatchExpected (leg.transferLegId <> ".instrumentId", leg.instrumentId) amuletInstrumentIdName
 
 unpackCid : AnyValue -> AnyContractId
 unpackCid (AV_ContractId cid) = cid

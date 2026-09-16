@@ -13,11 +13,10 @@ import org.lfdecentralizedtrust.splice.automation.AutomationServiceCompanion.{
 }
 import org.lfdecentralizedtrust.splice.automation.{AutomationService, AutomationServiceCompanion}
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
-import org.lfdecentralizedtrust.splice.store.DomainTimeSynchronization
+import org.lfdecentralizedtrust.splice.store.{DomainTimeSynchronization, UnavailablePartiesStore}
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.{BftScanConnection, ScanConnection}
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.*
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.ExpiredAmuletAllocationTrigger
-import org.lfdecentralizedtrust.splice.sv.store.IgnoredPartiesStore
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
@@ -31,6 +30,7 @@ class DsoDelegateBasedAutomationService(
     getPeerBftScanConnection: () => Future[BftScanConnection],
     retryProvider: RetryProvider,
     override protected val loggerFactory: NamedLoggerFactory,
+    val unavailablePartiesStore: UnavailablePartiesStore,
 )(implicit
     ec: ExecutionContextExecutor,
     mat: Materializer,
@@ -45,10 +45,6 @@ class DsoDelegateBasedAutomationService(
   override def companion
       : org.lfdecentralizedtrust.splice.sv.automation.DsoDelegateBasedAutomationService.type =
     DsoDelegateBasedAutomationService
-
-  val expiredAmuletIgnoredPartiesStore = new IgnoredPartiesStore(
-    triggerContext.config.ignoredPartyIds
-  )
 
   def start(): Unit = {
     registerTrigger(new AdvanceOpenMiningRoundTrigger(triggerContext, svTaskContext))
@@ -69,7 +65,7 @@ class DsoDelegateBasedAutomationService(
         config,
         triggerContext,
         svTaskContext,
-        expiredAmuletIgnoredPartiesStore,
+        unavailablePartiesStore,
       )
     )
     registerTrigger(
@@ -77,7 +73,7 @@ class DsoDelegateBasedAutomationService(
         config,
         triggerContext,
         svTaskContext,
-        expiredAmuletIgnoredPartiesStore,
+        unavailablePartiesStore,
       )
     )
     registerTrigger(
@@ -86,7 +82,7 @@ class DsoDelegateBasedAutomationService(
         clock,
         triggerContext,
         svTaskContext,
-        expiredAmuletIgnoredPartiesStore,
+        unavailablePartiesStore,
       )
     )
     registerTrigger(
@@ -95,7 +91,16 @@ class DsoDelegateBasedAutomationService(
         clock,
         triggerContext,
         svTaskContext,
-        expiredAmuletIgnoredPartiesStore,
+        unavailablePartiesStore,
+      )
+    )
+    registerTrigger(
+      new ExpiredAmuletAllocationV2Trigger(
+        config,
+        clock,
+        triggerContext,
+        svTaskContext,
+        unavailablePartiesStore,
       )
     )
     registerTrigger(new ExpiredSvOnboardingRequestTrigger(triggerContext, svTaskContext))
@@ -110,15 +115,36 @@ class DsoDelegateBasedAutomationService(
       new ExpireRewardCouponsTrigger(
         triggerContext,
         svTaskContext,
-        expiredAmuletIgnoredPartiesStore,
+        unavailablePartiesStore,
         config,
       )
     )
 
     registerTrigger(new AnsSubscriptionRenewalPaymentTrigger(triggerContext, svTaskContext))
-    registerTrigger(new ExpiredAnsEntryTrigger(triggerContext, svTaskContext))
-    registerTrigger(new ExpireTransferPreapprovalsTrigger(triggerContext, svTaskContext))
-    registerTrigger(new ExpiredAnsSubscriptionTrigger(triggerContext, svTaskContext))
+    registerTrigger(
+      new ExpiredAnsEntryTrigger(
+        triggerContext,
+        svTaskContext,
+        config,
+        unavailablePartiesStore,
+      )
+    )
+    registerTrigger(
+      new ExpireTransferPreapprovalsTrigger(
+        triggerContext,
+        svTaskContext,
+        config,
+        unavailablePartiesStore,
+      )
+    )
+    registerTrigger(
+      new ExpiredAnsSubscriptionTrigger(
+        triggerContext,
+        svTaskContext,
+        config,
+        unavailablePartiesStore,
+      )
+    )
     registerTrigger(new TerminatedSubscriptionTrigger(triggerContext, svTaskContext))
     registerTrigger(new MergeSvRewardStateContractsTrigger(triggerContext, svTaskContext))
 
@@ -134,7 +160,7 @@ class DsoDelegateBasedAutomationService(
         triggerContext,
         svTaskContext,
         config,
-        expiredAmuletIgnoredPartiesStore,
+        unavailablePartiesStore,
       )
     )
 
@@ -167,6 +193,17 @@ class DsoDelegateBasedAutomationService(
     )
 
     registerTrigger(
+      new ExpireRewardCouponV2Trigger(
+        config,
+        triggerContext,
+        svTaskContext,
+        unavailablePartiesStore,
+      )
+    )
+
+    registerTrigger(new UnhideRewardCouponV2Trigger(config, triggerContext, svTaskContext))
+
+    registerTrigger(
       new BootstrapExternalPartyConfigStateInstructionTrigger(
         triggerContext,
         svTaskContext,
@@ -195,7 +232,7 @@ class DsoDelegateBasedAutomationService(
 
 object DsoDelegateBasedAutomationService extends AutomationServiceCompanion {
   // defined because the service isn't available immediately in sv app state,
-  // but created later by the restart trigger
+  // but created later
   override protected[this] def expectedTriggerClasses: Seq[TriggerClass] = Seq(
     aTrigger[AdvanceOpenMiningRoundTrigger],
     aTrigger[UpdateExternalPartyConfigStateTrigger],
@@ -206,6 +243,7 @@ object DsoDelegateBasedAutomationService extends AutomationServiceCompanion {
     aTrigger[ExpiredLockedAmuletTrigger],
     aTrigger[ExpiredAmuletTransferInstructionTrigger],
     aTrigger[ExpiredAmuletAllocationTrigger],
+    aTrigger[ExpiredAmuletAllocationV2Trigger],
     aTrigger[ExpiredSvOnboardingRequestTrigger],
     aTrigger[CloseVoteRequestTrigger],
     aTrigger[ExpiredSvOnboardingConfirmedTrigger],
@@ -227,6 +265,8 @@ object DsoDelegateBasedAutomationService extends AutomationServiceCompanion {
     aTrigger[ExpiredUnclaimedActivityRecordTrigger],
     aTrigger[MergeUnclaimedDevelopmentFundCouponsTrigger],
     aTrigger[ExpiredDevelopmentFundCouponTrigger],
+    aTrigger[ExpireRewardCouponV2Trigger],
+    aTrigger[UnhideRewardCouponV2Trigger],
     aTrigger[BootstrapExternalPartyConfigStateInstructionTrigger],
     aTrigger[ProcessRewardsTrigger],
     aTrigger[ProcessRewardsDryRunTrigger],

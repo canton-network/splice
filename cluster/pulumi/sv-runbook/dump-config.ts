@@ -9,11 +9,6 @@ import {
 async function main() {
   await initDumpConfig();
 
-  /* eslint-disable no-process-env */
-  process.env.ARTIFACTORY_USER = 'artie';
-  /* eslint-disable no-process-env */
-  process.env.ARTIFACTORY_PASSWORD = 's3cr3t';
-
   const installNode = await import('./src/installNode');
   const secrets = new SecretsFixtureMap();
   // Need to import this directly to avoid initializing any configs before the mocks are initialized

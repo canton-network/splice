@@ -3,12 +3,12 @@
 import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
 import {
-  appsAffinityAndTolerations,
+  appsKubernetesScheduling,
   DOCKER_REPO,
   ExactNamespace,
   HELM_MAX_HISTORY_SIZE,
   imagePullSecretByNamespaceNameForServiceAccount,
-  infraAffinityAndTolerations,
+  infraKubernetesScheduling,
   K8sResourceSchema,
   SingleK8sResourceSchema,
 } from '@canton-network/splice-pulumi-common';
@@ -72,8 +72,9 @@ function installDockerRunnerScaleSet(
   repo: string,
   dependsOn: Resource[]
 ): k8s.helm.v3.Release {
+  const shortName = repo == 'splice' ? name : name.replace('self-hosted-', '');
   return new k8s.helm.v3.Release(
-    `${name}-${repo}`,
+    `${shortName}-${repo}`,
     {
       chart: 'oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set',
       version: ghaConfig.runnerScaleSetVersion,
@@ -85,7 +86,7 @@ function installDockerRunnerScaleSet(
         listenerTemplate: {
           spec: {
             containers: [{ name: 'listener' }],
-            ...infraAffinityAndTolerations,
+            ...infraKubernetesScheduling,
           },
         },
         template: {
@@ -230,7 +231,7 @@ function installDockerRunnerScaleSet(
               },
             ],
             serviceAccountName: serviceAccountName,
-            ...appsAffinityAndTolerations,
+            ...appsKubernetesScheduling,
           },
           metadata: {
             // prevent eviction by the gke autoscaler
@@ -243,7 +244,7 @@ function installDockerRunnerScaleSet(
             },
           },
         },
-        ...infraAffinityAndTolerations,
+        ...infraKubernetesScheduling,
         maxHistory: HELM_MAX_HISTORY_SIZE,
       },
     },
@@ -305,7 +306,7 @@ function installDockerRunnerScaleSets(
     .filter(spec => spec.docker)
     .forEach(spec => {
       installDockerRunnerScaleSet(
-        repo == 'splice' ? `self-hosted-docker-${spec.name}` : `docker-${spec.name}`,
+        `self-hosted-docker-${spec.name}`,
         runnersNamespace,
         controller,
         tokenSecret,
@@ -337,7 +338,8 @@ function installK8sRunnerScaleSet(
   dependsOn: Resource[],
   performanceTestsDb?: PerformanceTestDb
 ): Release {
-  const podConfigMapName = `${name}-pod-config-${repo}`;
+  const shortName = repo == 'splice' ? name : name.replace('self-hosted-', '');
+  const podConfigMapName = `${shortName}-pod-config-${repo}`;
   // A configMap that will be mounted to runner pods and provide additional pod spec for the workflow pods
   const workflowPodConfigMap = cachePvcName.apply(
     cachePvcName =>
@@ -405,7 +407,7 @@ function installK8sRunnerScaleSet(
                   },
                 ],
                 serviceAccountName: serviceAccountName,
-                ...appsAffinityAndTolerations,
+                ...appsKubernetesScheduling,
               },
               metadata: {
                 // prevent eviction by the gke autoscaler
@@ -425,7 +427,7 @@ function installK8sRunnerScaleSet(
   const runnerImage = `${DOCKER_REPO}/splice-test-runner-hook:${ghaConfig.runnerHookVersion}`;
 
   return new k8s.helm.v3.Release(
-    `${name}-${repo}`,
+    `${shortName}-${repo}`,
     {
       chart: 'oci://ghcr.io/actions/actions-runner-controller-charts/gha-runner-scale-set',
       version: ghaConfig.runnerScaleSetVersion,
@@ -437,7 +439,7 @@ function installK8sRunnerScaleSet(
         listenerTemplate: {
           spec: {
             containers: [{ name: 'listener' }],
-            ...infraAffinityAndTolerations,
+            ...infraKubernetesScheduling,
           },
         },
         template: {
@@ -522,7 +524,7 @@ function installK8sRunnerScaleSet(
               // Mount the volumes as owned by the runner user
               fsGroup: 1001,
             },
-            ...appsAffinityAndTolerations,
+            ...appsKubernetesScheduling,
             volumes: [
               {
                 name: 'work',
@@ -557,7 +559,7 @@ function installK8sRunnerScaleSet(
             },
           },
         },
-        ...infraAffinityAndTolerations,
+        ...infraKubernetesScheduling,
         maxHistory: HELM_MAX_HISTORY_SIZE,
       },
     },
@@ -673,7 +675,7 @@ function installK8sRunnerScaleSets(
     .forEach(spec => {
       installK8sRunnerScaleSet(
         runnersNamespace,
-        repo == 'splice' ? `self-hosted-k8s-${spec.name}` : `k8s-${spec.name}`,
+        `self-hosted-k8s-${spec.name}`,
         tokenSecret,
         cachePvcName,
         spec.resources,

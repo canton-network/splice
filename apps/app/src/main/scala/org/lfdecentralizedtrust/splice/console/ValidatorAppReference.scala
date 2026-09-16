@@ -19,6 +19,7 @@ import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAp
 import org.lfdecentralizedtrust.splice.util.{
   ChoiceContextWithDisclosures,
   ContractWithState,
+  DsoInfo,
   FactoryChoiceWithDisclosures,
 }
 import org.lfdecentralizedtrust.splice.validator.admin.api.client.commands.*
@@ -37,6 +38,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.TransferP
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
   allocationinstructionv1,
   allocationv1,
+  allocationv2,
   transferinstructionv1,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.UnclaimedDevelopmentFundCoupon
@@ -245,50 +247,6 @@ abstract class ValidatorAppReference(
     }
   }
 
-  @Help.Summary("Prepare TransferPreapproval send")
-  def prepareTransferPreapprovalSend(
-      senderPartyId: PartyId,
-      receiverPartyId: PartyId,
-      amount: BigDecimal,
-      expiresAt: CantonTimestamp,
-      nonce: Long,
-      description: Option[String],
-      verboseHashing: Boolean = false,
-  ): definitions.PrepareTransferPreapprovalSendResponse = {
-    consoleEnvironment.run {
-      httpCommand(
-        HttpValidatorAdminAppClient.PrepareTransferPreapprovalSend(
-          senderPartyId,
-          receiverPartyId,
-          amount,
-          expiresAt,
-          nonce,
-          description,
-          verboseHashing,
-        )
-      )
-    }
-  }
-
-  @Help.Summary("Submit TransferPreapproval send")
-  def submitTransferPreapprovalSend(
-      senderPartyId: PartyId,
-      transaction: String,
-      signature: String,
-      publicKey: String,
-  ): String = {
-    consoleEnvironment.run {
-      httpCommand(
-        HttpValidatorAdminAppClient.SubmitTransferPreapprovalSend(
-          senderPartyId,
-          transaction,
-          signature,
-          publicKey,
-        )
-      )
-    }
-  }
-
   def getExternalPartyBalance(partyId: PartyId): definitions.ExternalPartyBalanceResponse = {
     consoleEnvironment.run {
       httpCommand(
@@ -359,7 +317,7 @@ abstract class ValidatorAppReference(
       }
     }
 
-    def getDsoInfo(): definitions.GetDsoInfoResponse = {
+    def getDsoInfo(): DsoInfo = {
       consoleEnvironment.run {
         httpCommand(
           HttpScanProxyAppClient.GetDsoInfo
@@ -514,6 +472,17 @@ abstract class ValidatorAppReference(
       consoleEnvironment.run {
         httpCommand(
           HttpScanAppClient.GetAllocationCancelContext(allocationId),
+          Some(scanProxyPrefix),
+        )
+      }
+    }
+
+    def getAllocationV2CancelContext(
+        allocationId: allocationv2.Allocation.ContractId
+    ): ChoiceContextWithDisclosures = {
+      consoleEnvironment.run {
+        httpCommand(
+          HttpScanAppClient.GetAllocationV2CancelContext(allocationId),
           Some(scanProxyPrefix),
         )
       }

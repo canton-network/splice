@@ -15,6 +15,11 @@ pruning:
     cron: "0 0 * * *"
     maxDuration: "30m"
     retentionPeriod: "7d"
+  cantonBft:
+    enabled: true
+    cron: "0 /10 * * * ?"
+    maxDuration: "5m"
+    retentionPeriod: "15 days"
 cometbft:
   mempool:
     size: 4000

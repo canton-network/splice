@@ -2,9 +2,33 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Box, Typography } from '@mui/material';
-import { THRESHOLD_DEADLINE_SUBTITLE } from '../../utils/constants';
+import type { ReactNode } from 'react';
+import { MemberIdentifier } from '../beta';
+import { IDENTIFIER_COMPACT_MAX_WIDTH_PX } from '../beta/identifierStyles';
+import {
+  EFFECTIVE_AT_LABEL,
+  CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE,
+  PROPOSAL_REVIEW_TITLE,
+  THRESHOLD_DEADLINE_LABEL,
+  THRESHOLD_DEADLINE_SUBTITLE,
+} from '../../utils/constants';
 import type { ConfigChange } from '../../utils/types';
 import { ConfigValuesChanges } from './ConfigValuesChanges';
+import { ProposalReviewField } from './ProposalReviewField';
+
+/** Figma review party IDs: Source Code Pro 14px + copy (node 4832:4323). */
+const ReviewPartyId: React.FC<{ partyId: string; 'data-testid': string }> = ({
+  partyId,
+  'data-testid': testId,
+}) => (
+  <MemberIdentifier
+    partyId={partyId}
+    isYou={false}
+    size="small"
+    maxWidth={IDENTIFIER_COMPACT_MAX_WIDTH_PX}
+    data-testid={testId}
+  />
+);
 
 interface BaseProposalSummaryProps {
   actionName: string;
@@ -31,6 +55,7 @@ type ProposalSummaryProps = BaseProposalSummaryProps &
     | {
         formType: 'grant-right';
         grantRight: string;
+        activityWeight: string;
       }
     | {
         formType: 'revoke-right';
@@ -40,6 +65,8 @@ type ProposalSummaryProps = BaseProposalSummaryProps &
     | {
         formType: 'config-change';
         configFormData: ConfigChange[];
+        /** Rendered under Proposed Configuration Changes (e.g. Show JSON). */
+        jsonDiff?: ReactNode;
       }
     | {
         formType: 'create-unallocated-unclaimed-activity-record';
@@ -47,49 +74,73 @@ type ProposalSummaryProps = BaseProposalSummaryProps &
         amount: string;
         expiresAt: string;
       }
+    | {
+        formType: 'update-right-weight';
+        providerPartyId: string;
+        rightCid: string;
+        currentActivityWeight: string;
+        newActivityWeight: string;
+      }
   );
 
 export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
   const { formType, actionName, url, summary, expiryDate, effectiveDate } = props;
 
   return (
-    <Box>
-      <Typography variant="h3" mb={8}>
-        Proposal Summary
+    <Box data-testid="proposal-review">
+      <Typography
+        component="h2"
+        data-testid="proposal-review-title"
+        sx={{
+          fontFamily: "'Inter', sans-serif",
+          fontWeight: 700,
+          fontSize: '18px',
+          lineHeight: '28px',
+          letterSpacing: 0,
+          color: '#FFFFFF',
+          mb: 4,
+        }}
+      >
+        {PROPOSAL_REVIEW_TITLE}
       </Typography>
 
-      <Box>
-        <ProposalField id="action" title="Action" value={actionName} />
-
-        <ProposalField id="url" title="URL" value={url} />
-
-        <ProposalField id="summary" title="Summary" value={summary} />
-
-        <ProposalField
-          id="expiryDate"
-          title="Threshold Deadline"
-          subtitle={THRESHOLD_DEADLINE_SUBTITLE}
-          value={expiryDate}
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <ProposalReviewField
+          id="action"
+          label={CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE}
+          value={actionName}
         />
 
-        <ProposalField
-          id="effectiveDate"
-          title="Effective Date"
-          value={effectiveDate ? effectiveDate : 'Threshold'}
-        />
+        {/* Action-specific fields follow Action (Figma: config/member before threshold). */}
+        {formType === 'config-change' && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <ProposalReviewField
+              id="configChange"
+              label="Proposed Configuration Changes"
+              value={<ConfigValuesChanges changes={props.configFormData} isSummaryView />}
+            />
+            {props.jsonDiff}
+          </Box>
+        )}
 
         {formType === 'sv-reward-weight' && (
           <>
-            <ProposalField
+            <ProposalReviewField
               id="svRewardWeightMember"
-              title="Member"
-              value={props.svRewardWeightMember}
+              label="Member"
+              value={
+                <ReviewPartyId
+                  partyId={props.svRewardWeightMember}
+                  data-testid="svRewardWeightMember-party-id"
+                />
+              }
             />
-            <ProposalField
+            <ProposalReviewField
               id="configChange"
-              title="Proposed Changes"
+              label="Proposed Changes"
               value={
                 <ConfigValuesChanges
+                  isSummaryView
                   changes={[
                     {
                       label: 'Super Validator Reward Weight',
@@ -105,93 +156,117 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
         )}
 
         {formType === 'grant-right' && (
-          <ProposalField id="grantRight" title="Provider Party ID" value={props.grantRight} />
+          <>
+            <ProposalReviewField
+              id="grantRight"
+              label="Provider Party ID"
+              value={<ReviewPartyId partyId={props.grantRight} data-testid="grantRight-party-id" />}
+            />
+            <ProposalReviewField
+              id="grantRightActivityWeight"
+              label="Activity Weight"
+              value={props.activityWeight}
+            />
+          </>
         )}
 
         {formType === 'revoke-right' && (
           <>
-            <ProposalField
+            <ProposalReviewField
               id="revokeProviderPartyId"
-              title="Provider Party ID"
-              value={props.providerPartyId}
+              label="Provider Party ID"
+              value={
+                <ReviewPartyId
+                  partyId={props.providerPartyId}
+                  data-testid="revokeProviderPartyId-party-id"
+                />
+              }
             />
-            <ProposalField
+            <ProposalReviewField
               id="revokeRight"
-              title="Featured Application Contract ID"
+              label="Featured Application Contract ID"
               value={props.revokeRight}
             />
           </>
         )}
 
+        {formType === 'update-right-weight' && (
+          <>
+            <ProposalReviewField
+              id="updateProviderPartyId"
+              label="Provider Party ID"
+              value={
+                <ReviewPartyId
+                  partyId={props.providerPartyId}
+                  data-testid="updateProviderPartyId-party-id"
+                />
+              }
+            />
+            <ProposalReviewField
+              id="updateRight"
+              label="Featured Application Contract ID"
+              value={props.rightCid}
+            />
+            <ProposalReviewField
+              id="updateActivityWeight"
+              label="Proposed Changes"
+              value={
+                <ConfigValuesChanges
+                  isSummaryView
+                  changes={[
+                    {
+                      label: 'Activity Weight',
+                      fieldName: 'newActivityWeight',
+                      currentValue: props.currentActivityWeight,
+                      newValue: props.newActivityWeight,
+                    },
+                  ]}
+                />
+              }
+            />
+          </>
+        )}
+
         {formType === 'offboard' && (
-          <ProposalField id="offboardMember" title="Offboard Member" value={props.offboardMember} />
+          <ProposalReviewField
+            id="offboardMember"
+            label="Member"
+            value={
+              <ReviewPartyId partyId={props.offboardMember} data-testid="offboardMember-party-id" />
+            }
+          />
         )}
 
         {formType === 'create-unallocated-unclaimed-activity-record' && (
           <>
-            <ProposalField id="beneficiary" title="Beneficiary" value={props.beneficiary} />
-
-            <ProposalField id="amount" title="Amount" value={props.amount} />
-
-            <ProposalField id="expiresAt" title="Must Mint Before" value={props.expiresAt} />
+            <ProposalReviewField
+              id="beneficiary"
+              label="Beneficiary"
+              value={
+                <ReviewPartyId partyId={props.beneficiary} data-testid="beneficiary-party-id" />
+              }
+            />
+            <ProposalReviewField id="amount" label="Amount" value={props.amount} />
+            <ProposalReviewField id="expiresAt" label="Must Mint Before" value={props.expiresAt} />
           </>
         )}
 
-        <Box mt={4}>
-          {formType === 'config-change' && (
-            <ProposalField
-              id="configChange"
-              title="Proposed Changes"
-              value={<ConfigValuesChanges changes={props.configFormData} isSummaryView />}
-            />
-          )}
-        </Box>
-      </Box>
-    </Box>
-  );
-};
+        <ProposalReviewField
+          id="expiryDate"
+          label={THRESHOLD_DEADLINE_LABEL}
+          subtitle={THRESHOLD_DEADLINE_SUBTITLE}
+          value={expiryDate}
+        />
 
-interface ProposalFieldProps {
-  id: string;
-  title: string;
-  subtitle?: string;
-  value: React.ReactNode;
-}
+        <ProposalReviewField
+          id="effectiveDate"
+          label={EFFECTIVE_AT_LABEL}
+          value={effectiveDate ? effectiveDate : 'Threshold'}
+        />
 
-const ProposalField: React.FC<ProposalFieldProps> = props => {
-  const { id, title, subtitle, value } = props;
-  return (
-    <Box sx={{ minWidth: '80%' }}>
-      <Typography
-        variant="h5"
-        id={`${id}-title`}
-        data-testid={`${id}-title`}
-        gutterBottom
-        mb={1}
-        mt={4}
-      >
-        {title}
-      </Typography>
+        <ProposalReviewField id="summary" label="Proposal Summary" value={summary} />
 
-      <Box>
-        {subtitle && (
-          <Typography
-            variant="body2"
-            id={`${id}-subtitle`}
-            data-testid={`${id}-subtitle`}
-            gutterBottom
-          >
-            {subtitle}
-          </Typography>
-        )}
-
-        {typeof value === 'string' ? (
-          <Typography variant="body2" data-testid={`${id}-field`} color="grey">
-            {value}
-          </Typography>
-        ) : (
-          value
-        )}
+        <ProposalReviewField id="url" label="Supporting URL" value={url} />
       </Box>
     </Box>
   );

@@ -2,6 +2,12 @@
 # SPDX-License-Identifier: Apache-2.0
 
 imageRepo: "ghcr.io/digital-asset/decentralized-canton-sync/docker"
+imageName: "splitwell-web-ui"
+
+#secretOverrides:
+#  clientId: ""
+#  url: ""
+
 resources:
   requests:
     cpu: 100m
@@ -27,4 +33,6 @@ spliceInstanceNames:
 
 # should stakater reloader annotation be added (note: reloader needs to be installed separately)
 enableReloader: true
+
+#TODO(DACH-NY/canton-network-internal#5945): Add missing Helm Chart Security Contexts
 

@@ -105,6 +105,7 @@ class LsuNodeInitializer(
             state.synchronizerStatePath,
             initParams,
             ignorePsidCheck,
+            successorSynchronizerId.logical,
           )
         },
         logger,

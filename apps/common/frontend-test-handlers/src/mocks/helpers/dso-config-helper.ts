@@ -21,6 +21,7 @@ export function getDsoRulesConfig(
       ? nextScheduledSynchronizerUpgrade
       : null,
     nextScheduledLogicalSynchronizerUpgrade: null,
+    svOperationsSwitchOverTimes: null,
     actionConfirmationTimeout: {
       microseconds: '3600000000',
     },
@@ -181,47 +182,27 @@ export function getExpectedDsoRulesConfigDiffsHTML(
       data-key="decentralizedSynchronizer"><div
         class="jsondiffpatch-property-name">decentralizedSynchronizer</div><ul
         class="jsondiffpatch-node jsondiffpatch-node-type-object"><li
-          class="jsondiffpatch-node jsondiffpatch-child-node-type-object"
+          class="jsondiffpatch-node jsondiffpatch-child-node-type-array"
           data-key="synchronizers"><div
             class="jsondiffpatch-property-name">synchronizers</div><ul
-            class="jsondiffpatch-node jsondiffpatch-node-type-object"><li
-              class="jsondiffpatch-unchanged" data-key="0"><div
-                class="jsondiffpatch-property-name">0</div><div
-                class="jsondiffpatch-value"><pre>[
-  "global-domain::1220d57d4ce92ad14bb5647b453f2ba69c721e69810ca7d376d2c1455323a6763c37",
-  {
-    "state": "DS_Operational",
-    "cometBftGenesisJson": "TODO(DACH-NY/canton-network-node#4900): share CometBFT genesis.json of sv1 via DsoRules config.",
-    "acsCommitmentReconciliationInterval": "1600"
-  }
-]</pre></div></li><li
+            class="jsondiffpatch-node jsondiffpatch-node-type-array"><li
               class="jsondiffpatch-node jsondiffpatch-child-node-type-array"
-              data-key="_kvs"><div
-                class="jsondiffpatch-property-name">_kvs</div><ul
+              data-key="0"><div class="jsondiffpatch-property-name">0</div><ul
                 class="jsondiffpatch-node jsondiffpatch-node-type-array"><li
-                  class="jsondiffpatch-node jsondiffpatch-child-node-type-array"
-                  data-key="0"><div
-                    class="jsondiffpatch-property-name">0</div><ul
-                    class="jsondiffpatch-node jsondiffpatch-node-type-array"><li
-                      class="jsondiffpatch-unchanged" data-key="0"><div
-                        class="jsondiffpatch-property-name">0</div></li><li
-                      class="jsondiffpatch-node jsondiffpatch-child-node-type-object"
-                      data-key="1"><div
-                        class="jsondiffpatch-property-name">1</div><ul
-                        class="jsondiffpatch-node jsondiffpatch-node-type-object"><li
-                          class="jsondiffpatch-modified"
-                          data-key="acsCommitmentReconciliationInterval"><div
-                            class="jsondiffpatch-property-name">acsCommitmentReconciliationInterval</div><div
-                            class="jsondiffpatch-value jsondiffpatch-left-value"><pre>"${originalAcsCommitmentReconciliationInterval}"</pre></div><div
-                            class="jsondiffpatch-value jsondiffpatch-right-value"><pre>"${replacementAcsCommitmentReconciliationInterval}"</pre></div></li></ul></li></ul></li></ul></li><li
-              class="jsondiffpatch-node jsondiffpatch-child-node-type-array"
-              data-key="_values"><div
-                class="jsondiffpatch-property-name">_values</div><ul
-                class="jsondiffpatch-node jsondiffpatch-node-type-array"><li
+                  class="jsondiffpatch-unchanged" data-key="0"><div
+                    class="jsondiffpatch-property-name">0</div><div
+                    class="jsondiffpatch-value"><pre>"global-domain::1220d57d4ce92ad14bb5647b453f2ba69c721e69810ca7d376d2c1455323a6763c37"</pre></div></li><li
                   class="jsondiffpatch-node jsondiffpatch-child-node-type-object"
-                  data-key="0"><div
-                    class="jsondiffpatch-property-name">0</div><ul
+                  data-key="1"><div
+                    class="jsondiffpatch-property-name">1</div><ul
                     class="jsondiffpatch-node jsondiffpatch-node-type-object"><li
+                      class="jsondiffpatch-unchanged" data-key="state"><div
+                        class="jsondiffpatch-property-name">state</div><div
+                        class="jsondiffpatch-value"><pre>"DS_Operational"</pre></div></li><li
+                      class="jsondiffpatch-unchanged"
+                      data-key="cometBftGenesisJson"><div
+                        class="jsondiffpatch-property-name">cometBftGenesisJson</div><div
+                        class="jsondiffpatch-value"><pre>"TODO(DACH-NY/canton-network-node#4900): share CometBFT genesis.json of sv1 via DsoRules config."</pre></div></li><li
                       class="jsondiffpatch-modified"
                       data-key="acsCommitmentReconciliationInterval"><div
                         class="jsondiffpatch-property-name">acsCommitmentReconciliationInterval</div><div
@@ -244,6 +225,9 @@ export function getExpectedDsoRulesConfigDiffsHTML(
 }</pre></div></li><li class="jsondiffpatch-unchanged"
       data-key="nextScheduledLogicalSynchronizerUpgrade"><div
         class="jsondiffpatch-property-name">nextScheduledLogicalSynchronizerUpgrade</div><div
+        class="jsondiffpatch-value"><pre>null</pre></div></li><li
+      class="jsondiffpatch-unchanged" data-key="svOperationsSwitchOverTimes"><div
+        class="jsondiffpatch-property-name">svOperationsSwitchOverTimes</div><div
         class="jsondiffpatch-value"><pre>null</pre></div></li></ul></div>
 `;
 
@@ -345,6 +329,9 @@ export function getExpectedDsoRulesConfigDiffsHTML(
 }</pre></div></li><li class="jsondiffpatch-unchanged"
       data-key="nextScheduledLogicalSynchronizerUpgrade"><div
         class="jsondiffpatch-property-name">nextScheduledLogicalSynchronizerUpgrade</div><div
+        class="jsondiffpatch-value"><pre>null</pre></div></li><li
+      class="jsondiffpatch-unchanged" data-key="svOperationsSwitchOverTimes"><div
+        class="jsondiffpatch-property-name">svOperationsSwitchOverTimes</div><div
         class="jsondiffpatch-value"><pre>null</pre></div></li></ul></div>
 `;
 

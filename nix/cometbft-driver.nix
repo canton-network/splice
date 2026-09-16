@@ -6,7 +6,7 @@ stdenv.mkDerivation rec {
   name = "cometbft-driver";
   version = sources.version;
   src = builtins.fetchurl {
-    url = "https://digitalasset.jfrog.io/artifactory/canton-drivers/com/digitalasset/canton/drivers/canton-drivers/${sources.version}/canton-drivers-${sources.version}.tar.gz";
+    url = "https://storage.googleapis.com/da-images-public/canton-drivers/canton-drivers-${version}.tar.gz";
     sha256 = sources.sha256;
   };
   dontUnpack = true;

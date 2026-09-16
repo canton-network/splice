@@ -1,19 +1,16 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
-import com.digitalasset.daml.lf.data.Ref.PackageVersion
-import com.daml.ledger.javaapi.data.CreatedEvent
+import com.daml.ledger.javaapi.data.{CreatedEvent, ExercisedEvent}
 import com.digitalasset.canton.admin.api.client.data.TemplateId
 import com.digitalasset.canton.HasExecutionContext
 import com.digitalasset.canton.topology.PartyId
 import org.lfdecentralizedtrust.splice.codegen.java.splice.testing.apps.tradingapp
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.{
-  allocationinstructionv1,
   allocationrequestv1,
   allocationv1,
-  holdingv1,
   metadatav1,
 }
-import org.lfdecentralizedtrust.splice.environment.DarResources
+import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   IntegrationTestWithIsolatedEnvironment,
@@ -21,8 +18,6 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
 }
 import org.lfdecentralizedtrust.splice.util.{
   ChoiceContextWithDisclosures,
-  FactoryChoiceWithDisclosures,
-  JavaDecodeUtil,
   TriggerTestUtil,
   WalletTestUtil,
 }
@@ -30,19 +25,15 @@ import org.lfdecentralizedtrust.splice.util.{
 import scala.jdk.CollectionConverters.*
 import scala.util.Random
 import com.digitalasset.canton.util.ShowUtil.*
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
-  AppRewardCoupon,
-  FeaturedAppActivityMarker,
-}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{FeaturedAppActivityMarker}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletallocation as amuletallocationCodegen
-import org.lfdecentralizedtrust.splice.console.{
-  ParticipantClientReference,
-  WalletAppClientReference,
-}
+import org.lfdecentralizedtrust.splice.console.WalletAppClientReference
 import org.lfdecentralizedtrust.splice.integration.tests.TokenStandardTest.CreateAllocationRequestResult
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
+import org.lfdecentralizedtrust.splice.wallet.admin.api.client.commands.HttpWalletAppClient
 
 @org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceTokenTestTradingApp_1_0_0
+@org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceDsoGovernance_0_1_29
 class TokenStandardAllocationIntegrationTest
     extends IntegrationTestWithIsolatedEnvironment
     with HasExecutionContext
@@ -55,6 +46,8 @@ class TokenStandardAllocationIntegrationTest
   override def environmentDefinition: EnvironmentDefinition = {
     EnvironmentDefinition
       .simpleTopology1Sv(this.getClass.getSimpleName)
+      // Uses FeaturedAppMarkers: test asserts on AppRewardCoupon which TBAR replaces with RewardCouponV2
+      .addConfigTransform((_, config) => ConfigTransforms.withFeaturedAppMarkers(config))
       .withAdditionalSetup(implicit env => {
         Seq(
           sv1ValidatorBackend,
@@ -74,59 +67,6 @@ class TokenStandardAllocationIntegrationTest
   val bobTransferAmount = walletUsdToAmulet(20.0)
   val feesReserveMultiplier = 1.1 // fee reserves are 4 x the fees required for the transfer
   val feesUpperBound = walletUsdToAmulet(1.15)
-
-  def createAllocationCommand(
-      participantClient: ParticipantClientReference,
-      request: allocationrequestv1.AllocationRequestView,
-      legId: String,
-  )(implicit
-      env: SpliceTestConsoleEnvironment
-  ): FactoryChoiceWithDisclosures[
-    allocationinstructionv1.AllocationFactory.ContractId,
-    allocationinstructionv1.AllocationFactory_Allocate,
-  ] = {
-    val leg = request.transferLegs.get(legId)
-    clue(
-      s"Creating command to request allocation for leg $legId to transfer ${leg.amount} amulets from ${leg.sender} to ${leg.receiver}"
-    ) {
-      val sender = PartyId.tryFromProtoPrimitive(leg.sender)
-      val senderHoldings =
-        participantClient.ledger_api.state.acs.of_party(
-          party = sender,
-          filterInterfaces = Seq(holdingv1.Holding.TEMPLATE_ID).map(templateId =>
-            TemplateId(
-              templateId.getPackageId,
-              templateId.getModuleName,
-              templateId.getEntityName,
-            )
-          ),
-          includeCreatedEventBlob = true,
-        )
-      val allocation = new allocationv1.AllocationSpecification(
-        request.settlement,
-        legId,
-        leg,
-      )
-      val now = env.environment.clock.now.toInstant
-      val choiceArgs = new allocationinstructionv1.AllocationFactory_Allocate(
-        dsoParty.toProtoPrimitive,
-        allocation,
-        /*requestedAt =*/ now,
-        senderHoldings
-          .map(senderHolding => new holdingv1.Holding.ContractId(senderHolding.contractId))
-          .asJava,
-        new metadatav1.ExtraArgs(
-          new metadatav1.ChoiceContext(
-            java.util.Map.of()
-          ),
-          new metadatav1.Metadata(java.util.Map.of()),
-        ),
-      )
-      val factoryChoice0 = sv1ScanBackend.getAllocationFactory(choiceArgs)
-      aliceValidatorBackend.scanProxy.getAllocationFactory(choiceArgs) shouldBe factoryChoice0
-      factoryChoice0.copy(disclosedContracts = factoryChoice0.disclosedContracts)
-    }
-  }
 
   def createAllocation(
       walletClient: WalletAppClientReference,
@@ -148,12 +88,13 @@ class TokenStandardAllocationIntegrationTest
     )(
       show"There exists an allocation from $senderParty",
       _ => {
-        val allocations = walletClient.listAmuletAllocations()
-        allocations should have size 1 withClue "AmuletAllocations"
-        allocations.head
+        inside(walletClient.listAmuletAllocations()) {
+          case (allocationRequest: HttpWalletAppClient.TokenStandard.V1AmuletAllocation) +: Nil =>
+            allocationRequest
+        }
       },
     )
-    new allocationv1.Allocation.ContractId(allocation.contractId.contractId)
+    new allocationv1.Allocation.ContractId(allocation.contract.contractId.contractId)
   }
 
   "Settle a DvP using allocations" in { implicit env =>
@@ -238,30 +179,14 @@ class TokenStandardAllocationIntegrationTest
           }
         }
         val events = tree.getEventsById().asScala.values
-        forExactly(1, events) {
-          inside(_) { case c: CreatedEvent =>
-            if (
-              PackageVersion.assertFromString(
-                sv1ScanBackend
-                  .getAmuletRules()
-                  .payload
-                  .configSchedule
-                  .initialValue
-                  .packageConfig
-                  .amulet
-              ) >= DarResources.amulet_0_1_17.metadata.version
-            ) {
-              val decoded = JavaDecodeUtil
-                .decodeCreated(FeaturedAppActivityMarker.COMPANION)(c)
-                .value
-              decoded.data.provider shouldBe allocatedOtcTrade.venueParty.toProtoPrimitive
-            } else {
-              val decoded = JavaDecodeUtil
-                .decodeCreated(AppRewardCoupon.COMPANION)(c)
-                .value
-              decoded.data.featured shouldBe true
-              decoded.data.provider shouldBe allocatedOtcTrade.venueParty.toProtoPrimitive
-            }
+        forAll(events) {
+          inside(_) {
+            case c: CreatedEvent =>
+              Seq(
+                FeaturedAppActivityMarker.TEMPLATE_ID,
+                FeaturedAppActivityMarker.TEMPLATE_ID,
+              ) shouldNot contain(c.getTemplateId)
+            case _: ExercisedEvent => succeed
           }
         }
       },

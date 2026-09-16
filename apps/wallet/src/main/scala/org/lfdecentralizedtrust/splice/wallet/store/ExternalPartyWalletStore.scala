@@ -9,6 +9,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   DevelopmentFundCoupon,
   LockedAmulet,
   RewardCouponV2,
+  SvRewardCoupon,
   UnclaimedActivityRecord,
   ValidatorRewardCoupon,
   ValidatorRight,
@@ -41,6 +42,8 @@ trait ExternalPartyWalletStore extends TransferInputStore with NamedLogging {
 
   /** The key identifying the parties considered by this store. */
   def key: ExternalPartyWalletStore.Key
+
+  override def dsoPartyId = key.dsoParty
 
   def listAmulets(limit: Limit = defaultLimit)(implicit
       tc: TraceContext
@@ -81,6 +84,15 @@ trait ExternalPartyWalletStore extends TransferInputStore with NamedLogging {
         BigDecimal,
     )
   ]]
+
+  def listSortedSvRewardCoupons(
+      issuingRoundsMap: Map[Round, IssuingMiningRound],
+      limit: Limit = defaultLimit,
+  )(implicit tc: TraceContext): Future[
+    Seq[
+      (Contract[SvRewardCoupon.ContractId, SvRewardCoupon], BigDecimal)
+    ]
+  ]
 
   def listUnclaimedActivityRecords(
       limit: Limit = defaultLimit
@@ -237,6 +249,10 @@ object ExternalPartyWalletStore {
           co.payload.dso == dso &&
           co.payload.user == externalParty &&
           co.payload.validator == externalParty
+        }(ExternalPartyWalletAcsStoreRowData(_)),
+        mkFilter(SvRewardCoupon.COMPANION) { co =>
+          co.payload.dso == dso &&
+          co.payload.beneficiary == externalParty
         }(ExternalPartyWalletAcsStoreRowData(_)),
       ),
     )

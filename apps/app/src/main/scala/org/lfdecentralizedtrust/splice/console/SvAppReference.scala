@@ -23,6 +23,7 @@ import org.lfdecentralizedtrust.splice.environment.{
   SpliceStatus,
 }
 import org.lfdecentralizedtrust.splice.http.v0.definitions
+import org.lfdecentralizedtrust.splice.store.VoteResultsFilters
 import org.lfdecentralizedtrust.splice.sv.{SvApp, SvAppBootstrap, SvAppClientConfig}
 import org.lfdecentralizedtrust.splice.sv.admin.api.client.commands.{
   HttpSvAdminAppClient,
@@ -41,7 +42,7 @@ import org.lfdecentralizedtrust.splice.sv.config.{
 }
 import org.lfdecentralizedtrust.splice.sv.migration.SynchronizerNodeIdentities
 import org.lfdecentralizedtrust.splice.sv.util.ValidatorOnboarding
-import org.lfdecentralizedtrust.splice.util.Contract
+import org.lfdecentralizedtrust.splice.util.{Contract, DsoInfo}
 
 import java.time.Instant
 import scala.concurrent.duration.FiniteDuration
@@ -88,9 +89,9 @@ abstract class SvAppReference(
       httpCommand(HttpSvPublicAppClient.DevNetOnboardValidatorPrepare())
     }
 
-  def getDsoInfo(): HttpSvPublicAppClient.DsoInfo =
+  def getDsoInfo(): DsoInfo =
     consoleEnvironment.run {
-      httpCommand(HttpSvPublicAppClient.GetDsoInfo)
+      httpCommand(HttpSvOperatorAppClient.GetDsoInfo)
     }
 
   @Help.Summary("Get the CometBFT node status")
@@ -133,7 +134,7 @@ abstract class SvAppReference(
   @Help.Summary("Cancel a running logical synchronizer upgrade by removing its LSU announcement")
   def cancelLogicalSynchronizerUpgrade(): Unit =
     consoleEnvironment.run {
-      httpCommand(HttpSvAdminAppClient.CancelLogicalSynchronizerUpgrade())
+      httpCommand(HttpSvOperatorAppClient.CancelLogicalSynchronizerUpgrade())
     }
 
   @Help.Summary("Get identities of all domain node components")
@@ -197,25 +198,27 @@ abstract class SvAppReference(
   }
 
   def listVoteRequestResults(
-      actionName: Option[String],
-      accepted: Option[Boolean],
-      requester: Option[String],
-      effectiveFrom: Option[String],
-      effectiveTo: Option[String],
+      filters: VoteResultsFilters,
       limit: BigInt,
       pageToken: Option[BigInt] = None,
   ): (Seq[DsoRules_CloseVoteRequestResult], Option[BigInt]) = {
     consoleEnvironment.run {
       httpCommand(
         HttpSvOperatorAppClient.ListVoteRequestResults(
-          actionName,
-          accepted,
-          requester,
-          effectiveFrom,
-          effectiveTo,
+          filters,
           limit,
           pageToken,
         )
+      )
+    }
+  }
+
+  def countVoteRequestResults(
+      filters: VoteResultsFilters
+  ): Long = {
+    consoleEnvironment.run {
+      httpCommand(
+        HttpSvOperatorAppClient.CountVoteRequestResults(filters)
       )
     }
   }
@@ -289,13 +292,10 @@ class SvAppBackendReference(
   def appState: SvApp.State = _appState[SvApp.State, SvApp]
 
   @Help.Summary(
-    "Returns the current delegate based automation. Do not keep references to the result, as this automation gets replaced whenever the DSO delegate changes."
+    "Returns the delegate based automation. The reference is stable for the lifetime of the app."
   )
-  def dsoDelegateBasedAutomation: DsoDelegateBasedAutomationService = {
-    appState.dsoAutomation.restartDsoDelegateBasedAutomationTrigger.epochState
-      .getOrElse(throw new RuntimeException("LeaderBasedAutomation is not fully started up"))
-      .dsoDelegateBasedAutomation
-  }
+  def dsoDelegateBasedAutomation: DsoDelegateBasedAutomationService =
+    appState.dsoAutomation.dsoDelegateBasedAutomation
 
   @Help.Summary(
     "Returns the current DSO automation."

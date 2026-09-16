@@ -2,13 +2,19 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Box, TextField as MuiTextField, Typography } from '@mui/material';
+import {
+  CREATE_PROPOSAL_FIELD_HELPER_SX,
+  CREATE_PROPOSAL_FIELD_LABEL_SX,
+} from '../../constants/createProposalLayout';
 import { useFieldContext } from '../../hooks/formContext';
 import { useDsoInfos } from '../../contexts/SvContext';
 import {
   DEFAULT_PROPOSAL_SUMMARY_MAX_LENGTH,
+  PROPOSAL_SUMMARY_PLACEHOLDER,
   PROPOSAL_SUMMARY_SUBTITLE,
   PROPOSAL_SUMMARY_TITLE,
 } from '../../utils/constants';
+import { proposalSummaryFieldSx } from '../../themes/fieldStyles';
 
 export interface ProposalSummaryFieldProps {
   id: string;
@@ -28,10 +34,10 @@ export const ProposalSummaryField: React.FC<ProposalSummaryFieldProps> = props =
 
   return (
     <Box>
-      <Typography variant="h6" gutterBottom>
+      <Typography component="p" sx={{ ...CREATE_PROPOSAL_FIELD_LABEL_SX, mb: 1 }}>
         {title || PROPOSAL_SUMMARY_TITLE}
         {optional && (
-          <Typography component="span" variant="body2" color="text.secondary" sx={{ ml: 1 }}>
+          <Typography component="span" sx={{ ...CREATE_PROPOSAL_FIELD_HELPER_SX, ml: 1 }}>
             optional
           </Typography>
         )}
@@ -39,34 +45,37 @@ export const ProposalSummaryField: React.FC<ProposalSummaryFieldProps> = props =
       <MuiTextField
         fullWidth
         multiline
-        rows={5}
         variant="outlined"
         autoComplete="off"
+        sx={proposalSummaryFieldSx}
+        id={id}
         value={field.state.value}
         onBlur={field.handleBlur}
         onChange={e => field.handleChange(e.target.value)}
         error={!field.state.meta.isValid}
         helperText={field.state.meta.errors?.[0]}
+        placeholder={PROPOSAL_SUMMARY_PLACEHOLDER}
         inputProps={{ 'data-testid': id, maxLength }}
-        id={id}
       />
       <Box
         sx={{
           display: 'flex',
           justifyContent: 'space-between',
-          alignItems: 'center',
-          mt: 1,
+          alignItems: 'flex-start',
           gap: 2,
         }}
       >
-        <Typography variant="body2" data-testid={`${id}-subtitle`}>
+        <Typography
+          component="p"
+          data-testid={`${id}-subtitle`}
+          sx={CREATE_PROPOSAL_FIELD_HELPER_SX}
+        >
           {subtitle || PROPOSAL_SUMMARY_SUBTITLE}
         </Typography>
         <Typography
-          variant="body2"
-          color={'text.secondary'}
+          component="p"
           data-testid={`${id}-character-counter`}
-          sx={{ flexShrink: 0 }}
+          sx={{ ...CREATE_PROPOSAL_FIELD_HELPER_SX, flexShrink: 0 }}
         >
           {currentLength}/{maxLength}
         </Typography>

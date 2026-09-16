@@ -1,0 +1,11 @@
+# dlint (Daml linter) configuration.
+#
+# `- ignore: {}` disables *all* dlint hints. dlint only runs in the Daml IDE
+# (Daml Studio / `daml ide`); `daml build`, `daml test` and CI never run it, so
+# this only silences the linter suggestions shown while editing in Daml Studio.
+#
+# dlint discovers this file by searching upward from each source file, so this
+# single repo-root file applies to every Daml project in the repo. Placing the
+# flag in a daml.yaml `build-options` is not an option: `--without-dlint` is an
+# `daml ide`-only flag and `daml build` rejects it (build-options are shared).
+- ignore: {}

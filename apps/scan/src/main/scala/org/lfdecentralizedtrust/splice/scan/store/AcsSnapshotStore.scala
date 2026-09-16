@@ -5,19 +5,25 @@ package org.lfdecentralizedtrust.splice.scan.store
 
 import cats.data.NonEmptyVector
 import com.daml.ledger.javaapi.data.CreatedEvent
+import com.daml.nonempty.NonEmpty
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{Amulet, LockedAmulet}
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{
   AcsSnapshot,
-  FailedToAcquireLockException,
   IncrementalAcsSnapshot,
   IncrementalAcsSnapshotTable,
+  QueryAcsSnapshotPaginationToken,
   QueryAcsSnapshotResult,
   amuletQualifiedName,
   lockedAmuletQualifiedName,
 }
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.SelectFromCreateEvents
 import org.lfdecentralizedtrust.splice.store.{HardLimit, Limit, LimitHelpers, UpdateHistory}
-import org.lfdecentralizedtrust.splice.store.db.{AcsJdbcTypes, AcsQueries, AdvisoryLockIds}
+import org.lfdecentralizedtrust.splice.store.db.{
+  AcsJdbcTypes,
+  AcsQueries,
+  AdvisoryLockIds,
+  AdvisoryLocks,
+}
 import org.lfdecentralizedtrust.splice.util.{Contract, HoldingsSummary, PackageQualifiedName}
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.{CloseContext, FutureUnlessShutdown}
@@ -34,6 +40,7 @@ import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInt
 import slick.jdbc.canton.SQLActionBuilder
 import slick.jdbc.{GetResult, JdbcProfile}
 
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.Semaphore
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -52,6 +59,10 @@ class AcsSnapshotStore(
 
   override val profile: JdbcProfile = storage.profile.jdbc
   import profile.api.jdbcActionExtensionMethods
+
+  private implicit def rowsAlteredByIdempotencyCheck[A](implicit
+      row: DbStorage.RowsAltered[A]
+  ): DbStorage.RowsAltered[Option[A]] = _.exists(row(_))
 
   private def historyId = updateHistory.historyId
 
@@ -216,22 +227,7 @@ class AcsSnapshotStore(
   private def withExclusiveSnapshotDataLock[T, E <: Effect](
       action: DBIOAction[T, NoStream, E]
   ): DBIOAction[T, NoStream, Effect.Read & Effect.Transactional & E] =
-    (for {
-      lockResult <- sql"SELECT pg_try_advisory_xact_lock(${AdvisoryLockIds.acsSnapshotDataInsert})"
-        .as[Boolean]
-        .head
-      result <- lockResult match {
-        case true => action
-        // Lock conflicts can happen:
-        // - In production, if the application crashes while writing a snapshot and then restarts
-        //   and tries to write another snapshot before the database has closed the connection and released the lock.
-        // - In production, if two triggers (ingesting and backfilling) happen to write a snapshot at the same time.
-        // - In testing, where multiple scan instances write to the same app database.
-        // In all cases, we want to fail immediately, and rely on the caller's infrastructure to retry.
-        case false =>
-          DBIOAction.failed(FailedToAcquireLockException())
-      }
-    } yield result).transactionally
+    AdvisoryLocks.withTransactionalLock(profile, AdvisoryLockIds.acsSnapshotDataInsert, action)
 
   def deleteSnapshot(
       snapshot: AcsSnapshot
@@ -248,7 +244,7 @@ class AcsSnapshotStore(
   def queryAcsSnapshot(
       migrationId: Long,
       snapshot: CantonTimestamp,
-      after: Option[Long],
+      after: Option[QueryAcsSnapshotPaginationToken],
       limit: Limit,
       partyIds: Seq[PartyId],
       templates: Seq[PackageQualifiedName],
@@ -274,7 +270,11 @@ class AcsSnapshotStore(
           )
         )
       begin <- after match {
-        case Some(value) if value < snapshot.firstRowId || value > snapshot.lastRowId =>
+        case Some(
+              AcsSnapshotStore.QueryAcsSnapshotPaginationToken.RowIdQueryAcsSnapshotPaginationToken(
+                value
+              )
+            ) if value < snapshot.firstRowId || value > snapshot.lastRowId =>
           Future.failed(
             io.grpc.Status.INVALID_ARGUMENT
               .withDescription(
@@ -282,22 +282,27 @@ class AcsSnapshotStore(
               )
               .asRuntimeException()
           )
-        case Some(value) => Future.successful(value + 1)
+        case Some(
+              AcsSnapshotStore.QueryAcsSnapshotPaginationToken.RowIdQueryAcsSnapshotPaginationToken(
+                value
+              )
+            ) =>
+          Future.successful(value + 1)
         case None => Future.successful(snapshot.firstRowId)
       }
       end = snapshot.lastRowId
-      partyIdsFilter = partyIds match {
-        case Nil =>
+      partyIdsFilter = NonEmpty.from(partyIds) match {
+        case None =>
           // This expression is always true (scan only processes data where the DSO is stakeholder).
           // It is included to make sure the query plan uses the right index (acs_snapshot_data_all_filters)
           sql"and stakeholder = ${dsoParty}"
-        case partyIds =>
-          (sql" and " ++ inClause("stakeholder", partyIds)).toActionBuilder
+        case Some(partyIds) =>
+          (sql" and " ++ DbStorage.toInClause("stakeholder", partyIds)).toActionBuilder
       }
-      templatesFilter = templates match {
-        case Nil => sql""
-        case _ =>
-          (sql" and " ++ inClause(
+      templatesFilter = NonEmpty.from(templates) match {
+        case None => sql""
+        case Some(templates) =>
+          (sql" and " ++ DbStorage.toInClause(
             "template_id",
             templates.map(t =>
               lengthLimited(
@@ -352,7 +357,9 @@ class AcsSnapshotStore(
         migrationId = migrationId,
         snapshotRecordTime = snapshot.snapshotRecordTime,
         createdEventsInPage = eventsInPage,
-        afterToken = afterToken,
+        afterToken = afterToken.map(
+          AcsSnapshotStore.QueryAcsSnapshotPaginationToken.RowIdQueryAcsSnapshotPaginationToken(_)
+        ),
       )
     }
   }
@@ -360,7 +367,7 @@ class AcsSnapshotStore(
   def getHoldingsState(
       migrationId: Long,
       snapshot: CantonTimestamp,
-      after: Option[Long],
+      after: Option[QueryAcsSnapshotPaginationToken],
       limit: Limit,
       partyIds: NonEmptyVector[PartyId],
   )(implicit tc: TraceContext): Future[QueryAcsSnapshotResult] = {
@@ -469,18 +476,18 @@ class AcsSnapshotStore(
       expectedState: Option[IncrementalAcsSnapshot],
   )(implicit
       tc: TraceContext
-  ): DBIOAction[Unit, NoStream, Effect.Transactional & Effect.Read & E] = {
+  ): DBIOAction[Option[R], NoStream, Effect.Transactional & Effect.Read & E] = {
     (for {
       actualState <- getIncrementalSnapshotAction(table)
       result <-
         if (actualState == expectedState) {
-          action.map(_ => ())
+          action.map(Option.apply)
         } else {
           logger.info(
             s"Skipping action because actual state $actualState != expected state $expectedState. " +
               "In production, this is expected only during retries after transient network failures."
           )
-          DBIOAction.unit
+          DBIOAction.successful(Option.empty)
         }
     } yield result).transactionally
   }
@@ -541,10 +548,12 @@ class AcsSnapshotStore(
       )
     }
 
-    storage.queryAndUpdate(
-      withIncrementalSnapshotIdempotencyCheck(table, statement, None),
-      "initializeIncrementalSnapshot",
-    )
+    storage
+      .queryAndUpdate(
+        withIncrementalSnapshotIdempotencyCheck(table, statement, None),
+        "initializeIncrementalSnapshot",
+      )
+      .map(_ => ())
   }
 
   /** Initializes an incremental snapshot that represents an empty ACS at the given record time.
@@ -602,10 +611,12 @@ class AcsSnapshotStore(
       )
     }
 
-    storage.queryAndUpdate(
-      withIncrementalSnapshotIdempotencyCheck(table, statement, None),
-      "initializeIncrementalSnapshotFromImportUpdates",
-    )
+    storage
+      .queryAndUpdate(
+        withIncrementalSnapshotIdempotencyCheck(table, statement, None),
+        "initializeIncrementalSnapshotFromImportUpdates",
+      )
+      .map(_ => ())
   }
 
   /** Copies an incremental snapshot to historical storage.
@@ -620,7 +631,7 @@ class AcsSnapshotStore(
       table: IncrementalAcsSnapshotTable,
       snapshot: IncrementalAcsSnapshot,
       nextSnapshotTargetRecordTime: CantonTimestamp,
-  )(implicit tc: TraceContext): Future[Unit] = {
+  )(implicit tc: TraceContext): Future[Option[Int]] = {
     logger.debug(
       s"Saving incremental snapshot ${snapshot.snapshotId} at ${snapshot.recordTime}"
     )
@@ -693,7 +704,7 @@ class AcsSnapshotStore(
         s"Saved incremental snapshot ${snapshot.snapshotId} at ${snapshot.recordTime} with $copied_rows rows." +
           s" Next snapshot target record time: $nextSnapshotTargetRecordTime"
       )
-      ()
+      copied_rows
     }
     storage.queryAndUpdate(
       withExclusiveSnapshotDataLock(
@@ -780,19 +791,16 @@ class AcsSnapshotStore(
       _ <- sqlu"""delete from #${table.tableName} where snapshot_id = ${snapshot.snapshotId}"""
       _ <- sqlu"""delete from acs_incremental_snapshot where snapshot_id = ${snapshot.snapshotId}"""
     } yield ()
-    storage.queryAndUpdate(
-      withIncrementalSnapshotIdempotencyCheck(table, statement, Some(snapshot)),
-      "deleteIncrementalSnapshot",
-    )
+    storage
+      .queryAndUpdate(
+        withIncrementalSnapshotIdempotencyCheck(table, statement, Some(snapshot)),
+        "deleteIncrementalSnapshot",
+      )
+      .map(_ => ())
   }
 }
 
 object AcsSnapshotStore {
-
-  case class FailedToAcquireLockException()
-      extends RuntimeException(
-        "Failed to acquire advisory lock for writing to the acs snapshot table."
-      )
 
   sealed trait IncrementalAcsSnapshotTable { def tableName: String }
   object IncrementalAcsSnapshotTable {
@@ -912,11 +920,50 @@ object AcsSnapshotStore {
     )
   }
 
+  sealed trait QueryAcsSnapshotPaginationToken {
+    def encodeToBase64: String = {
+      val jsonString = QueryAcsSnapshotPaginationToken.codec(this).noSpaces
+      java.util.Base64.getEncoder.encodeToString(jsonString.getBytes(StandardCharsets.UTF_8))
+    }
+  }
+  object QueryAcsSnapshotPaginationToken {
+    case class RowIdQueryAcsSnapshotPaginationToken(after: Long)
+        extends QueryAcsSnapshotPaginationToken
+
+    private val codec: io.circe.Codec[QueryAcsSnapshotPaginationToken] =
+      io.circe.Codec
+        .from(io.circe.Decoder[Long], io.circe.Encoder[Long])
+        .iemap[QueryAcsSnapshotPaginationToken]((token: Long) =>
+          Right(RowIdQueryAcsSnapshotPaginationToken(token))
+        ) { case RowIdQueryAcsSnapshotPaginationToken(after) => after }
+
+    def tryDecodeFromBase64(token: String): QueryAcsSnapshotPaginationToken = {
+      import cats.implicits.*
+
+      (for {
+        decodedString <- scala.util
+          .Try {
+            val decodedBytes = java.util.Base64.getDecoder.decode(token)
+            new String(decodedBytes, StandardCharsets.UTF_8)
+          }
+          .toEither
+          .leftMap(_ => "Failed to decode base64 token")
+        decoded <- io.circe.parser.decode(decodedString)(codec).leftMap(_.getMessage)
+      } yield decoded).fold(
+        msg =>
+          throw io.grpc.Status.INVALID_ARGUMENT
+            .withDescription(msg)
+            .asRuntimeException(),
+        identity,
+      )
+    }
+  }
+
   case class QueryAcsSnapshotResult(
       migrationId: Long,
       snapshotRecordTime: CantonTimestamp,
       createdEventsInPage: Vector[SpliceCreatedEvent],
-      afterToken: Option[Long],
+      afterToken: Option[QueryAcsSnapshotPaginationToken],
   )
 
   private val amuletQualifiedName =

@@ -65,7 +65,7 @@ import org.lfdecentralizedtrust.splice.validator.automation.{
   ValidatorPackageVettingTrigger,
 }
 import org.lfdecentralizedtrust.splice.validator.config.*
-import org.lfdecentralizedtrust.splice.validator.domain.DomainConnector
+import org.lfdecentralizedtrust.splice.validator.domain.SynchronizerConnector
 import org.lfdecentralizedtrust.splice.validator.metrics.ValidatorAppMetrics
 import org.lfdecentralizedtrust.splice.validator.migration.ParticipantPartyMigrator
 import org.lfdecentralizedtrust.splice.validator.store.{
@@ -83,10 +83,13 @@ import org.lfdecentralizedtrust.splice.wallet.admin.http.{
 import org.lfdecentralizedtrust.splice.wallet.automation.UserWalletAutomationService
 import org.lfdecentralizedtrust.splice.wallet.util.ValidatorTopupConfig
 import org.lfdecentralizedtrust.splice.wallet.{ExternalPartyWalletManager, UserWalletManager}
-import org.lfdecentralizedtrust.tokenstandard.allocation.v1.Resource as TokenStandardAllocationResource
-import org.lfdecentralizedtrust.tokenstandard.allocationinstruction.v1.Resource as TokenStandardAllocationInstructionResource
+import org.lfdecentralizedtrust.tokenstandard.allocation.v1.Resource as TokenStandardAllocationV1Resource
+import org.lfdecentralizedtrust.tokenstandard.allocation.v2.Resource as TokenStandardAllocationV2Resource
+import org.lfdecentralizedtrust.tokenstandard.allocationinstruction.v1.Resource as TokenStandardAllocationInstructionV1Resource
+import org.lfdecentralizedtrust.tokenstandard.allocationinstruction.v2.Resource as TokenStandardAllocationInstructionV2Resource
 import org.lfdecentralizedtrust.tokenstandard.metadata.v1.Resource as TokenStandardMetadataResource
-import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v1.Resource as TokenStandardTransferInstructionResource
+import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v1.Resource as TokenStandardTransferInstructionV1Resource
+import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v2.Resource as TokenStandardTransferInstructionV2Resource
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 
@@ -188,7 +191,7 @@ class ValidatorApp(
             domainMigrationId <- appInitStep("Resolving domain migration id") {
               resolveDomainMigrationId(scanConnection)
             }
-            domainConnector = new DomainConnector(
+            domainConnector = new SynchronizerConnector(
               config,
               participantAdminConnection,
               scanConnection,
@@ -196,8 +199,7 @@ class ValidatorApp(
               loggerFactory,
             )
             domainAlreadyRegistered <- participantAdminConnection
-              .lookupSynchronizerConnectionConfig(config.domains.global.alias)
-              .map(_.isDefined)
+              .isSynchronizerRegistered(config.domains.global.alias)
             now = clock.now
             // This is used by the ReconcileSequencerConnectionsTrigger to avoid travelling back in time if the domain time is behind this.
             // We want to avoid using this when we already have a synchronizer connection as then synchronizer time should be used so we
@@ -760,7 +762,7 @@ class ValidatorApp(
         ledgerClient,
         participantAdminConnection,
         participantIdentitiesStore,
-        new DomainConnector(
+        new SynchronizerConnector(
           config,
           participantAdminConnection,
           scanConnection,
@@ -863,7 +865,6 @@ class ValidatorApp(
           getAmuletRulesDomain = scanConnection.getAmuletRulesDomain,
           scanConnection = scanConnection,
           participantAdminConnection,
-          packageVersionSupport,
           config,
           clock,
           retryProvider = retryProvider,
@@ -1002,7 +1003,7 @@ class ValidatorApp(
                           }
                       },
                     ),
-                    TokenStandardTransferInstructionResource.routes(
+                    TokenStandardTransferInstructionV1Resource.routes(
                       tokenStandardScanProxyHandler,
                       operation =>
                         metrics.httpServerMetrics
@@ -1019,7 +1020,24 @@ class ValidatorApp(
                             )
                           },
                     ),
-                    TokenStandardAllocationInstructionResource.routes(
+                    TokenStandardTransferInstructionV2Resource.routes(
+                      tokenStandardScanProxyHandler,
+                      operation =>
+                        metrics.httpServerMetrics
+                          .withMetrics("tokenStandardTransferV2")(operation)
+                          .tflatMap { _ =>
+                            AuthenticationOnlyAuthExtractor(
+                              verifier,
+                              loggerFactory,
+                              OAuthRealms.ScanProxy,
+                            )(
+                              traceContext
+                            )(
+                              operation
+                            )
+                          },
+                    ),
+                    TokenStandardAllocationInstructionV1Resource.routes(
                       tokenStandardScanProxyHandler,
                       operation =>
                         metrics.httpServerMetrics
@@ -1036,7 +1054,24 @@ class ValidatorApp(
                             )
                           },
                     ),
-                    TokenStandardAllocationResource.routes(
+                    TokenStandardAllocationInstructionV2Resource.routes(
+                      tokenStandardScanProxyHandler,
+                      operation =>
+                        metrics.httpServerMetrics
+                          .withMetrics("tokenStandardAllocationInstructionV2")(operation)
+                          .tflatMap { _ =>
+                            AuthenticationOnlyAuthExtractor(
+                              verifier,
+                              loggerFactory,
+                              OAuthRealms.ScanProxy,
+                            )(
+                              traceContext
+                            )(
+                              operation
+                            )
+                          },
+                    ),
+                    TokenStandardAllocationV1Resource.routes(
                       tokenStandardScanProxyHandler,
                       operation =>
                         metrics.httpServerMetrics
@@ -1052,6 +1087,24 @@ class ValidatorApp(
                               operation
                             )
                           },
+                    ),
+                    TokenStandardAllocationV2Resource.routes(
+                      tokenStandardScanProxyHandler,
+                      operation => {
+                        metrics.httpServerMetrics
+                          .withMetrics("tokenStandardAllocationV2")(operation)
+                          .tflatMap { _ =>
+                            AuthenticationOnlyAuthExtractor(
+                              verifier,
+                              loggerFactory,
+                              OAuthRealms.ScanProxy,
+                            )(
+                              traceContext
+                            )(
+                              operation
+                            )
+                          }
+                      },
                     ),
                   )
                 },

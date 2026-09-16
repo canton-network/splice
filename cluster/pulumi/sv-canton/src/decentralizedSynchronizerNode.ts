@@ -14,11 +14,11 @@ import {
   loadJsonFromFile,
   loadYamlFromFile,
   LogLevel,
+  persistentHeapDumpsPvc,
   sanitizedForPostgres,
   sequencerTokenExpirationTime,
   SPLICE_ROOT,
   SpliceCustomResourceOptions,
-  standardStorageClassName,
 } from '@canton-network/splice-pulumi-common';
 import {
   CometBftNodeConfigs,
@@ -27,9 +27,10 @@ import {
   installCometBftNode,
   SingleSvConfiguration,
   StaticCometBftConfigWithNodeName,
+  svsConfig,
 } from '@canton-network/splice-pulumi-common-sv';
-import { spliceConfig } from '@canton-network/splice-pulumi-common/src/config/config';
 import { Postgres } from '@canton-network/splice-pulumi-common/src/postgres';
+import { installSequencerRateLimits } from '@canton-network/splice-pulumi-common/src/ratelimit/rateLimit';
 import { Release } from '@pulumi/kubernetes/helm/v3';
 import { ComponentResource, Output, Resource } from '@pulumi/pulumi';
 
@@ -80,10 +81,12 @@ abstract class InStackDecentralizedSynchronizerNode
 
   protected installDecentralizedSynchronizer(
     svConfig: SingleSvConfiguration,
+    migrationId: number,
     dbs: {
       setCoreDbNames: boolean;
       sequencerPostgres: Postgres;
       mediatorPostgres: Postgres;
+      bftSequencerPostgres?: Postgres;
     },
     driver:
       | { type: 'cometbft'; host: Output<string>; port: number }
@@ -111,6 +114,7 @@ abstract class InStackDecentralizedSynchronizerNode
     const mediatorDbName = `${sanitizedName}_mediator`;
     const sequencerDbName = `${sanitizedName}_sequencer`;
     this.version = version;
+    const physicalSynchronizerConfig = svConfig.physicalSynchronizers[migrationId];
 
     const decentralizedSynchronizerValues: ChartValues = loadYamlFromFile(
       `${SPLICE_ROOT}/apps/app/src/pack/examples/sv-helm/global-domain-values.yaml`,
@@ -146,8 +150,11 @@ abstract class InStackDecentralizedSynchronizerNode
             additionalEnvVars: (rateLimitConfig
               ? [{ name: 'ADDITIONAL_CONFIG_SEQUENCER_RATE_LIMITS', value: rateLimitConfig }]
               : []
-            ).concat(svConfig.sequencer?.additionalEnvVars || []),
-            resources: svConfig.sequencer?.resources,
+            ).concat(physicalSynchronizerConfig.sequencer.additionalEnvVars),
+            resources: physicalSynchronizerConfig.sequencer.resources,
+            additionalJvmOptions: getAdditionalJvmOptions(
+              physicalSynchronizerConfig.sequencer.additionalJvmOptions
+            ),
           },
           mediator: {
             ...decentralizedSynchronizerValues.mediator,
@@ -158,8 +165,11 @@ abstract class InStackDecentralizedSynchronizerNode
               postgresName: dbs.mediatorPostgres.instanceName,
               ...(dbs.setCoreDbNames ? { databaseName: mediatorDbName } : {}),
             },
-            additionalEnvVars: svConfig.mediator?.additionalEnvVars,
-            resources: svConfig.mediator?.resources,
+            additionalEnvVars: physicalSynchronizerConfig.mediator.additionalEnvVars,
+            resources: physicalSynchronizerConfig.mediator.resources,
+            additionalJvmOptions: getAdditionalJvmOptions(
+              physicalSynchronizerConfig.mediator.additionalJvmOptions
+            ),
           },
           enablePostgresMetrics: true,
           metrics: {
@@ -169,23 +179,31 @@ abstract class InStackDecentralizedSynchronizerNode
             },
           },
           livenessProbeInitialDelaySeconds: domainLivenessProbeInitialDelaySeconds,
-          additionalJvmOptions: getAdditionalJvmOptions(svConfig.sequencer?.additionalJvmOptions),
-          pvc: spliceConfig.configuration.persistentHeapDumps
-            ? {
-                size: '35Gi',
-                volumeStorageClass: standardStorageClassName,
-              }
-            : undefined,
+          pvc: persistentHeapDumpsPvc(),
           serviceAccountName: imagePullServiceAccountName,
+          enableAntiAffinity: physicalSynchronizerConfig.sequencer.enableAntiAffinity,
         },
       },
       this.version,
       {
         ...opts,
-        dependsOn: (opts?.dependsOn || []).concat([dbs.sequencerPostgres, dbs.mediatorPostgres]),
+        dependsOn: (opts?.dependsOn || []).concat(
+          [dbs.sequencerPostgres, dbs.mediatorPostgres].concat(
+            dbs.bftSequencerPostgres ? [dbs.bftSequencerPostgres] : []
+          )
+        ),
         parent: this,
       }
     );
+
+    const sequencerRateLimits = svsConfig?.synchronizer?.sequencer?.externalRateLimits;
+    if (sequencerRateLimits) {
+      installSequencerRateLimits(
+        this.xns.logicalName,
+        `${this.name}-sequencer`,
+        sequencerRateLimits
+      );
+    }
   }
 
   get namespaceInternalSequencerAddress(): string {
@@ -261,6 +279,7 @@ export class InStackCometBftDecentralizedSynchronizerNode
     this.cometbftRpcServiceName = cometbftRelease.rpcServiceName;
     this.installDecentralizedSynchronizer(
       svConfig,
+      migrationId,
       dbs,
       {
         type: 'cometbft',
@@ -270,7 +289,7 @@ export class InStackCometBftDecentralizedSynchronizerNode
       version,
       svConfig.logging?.cantonLogLevel,
       svConfig.logging?.cantonStdoutLogLevel,
-      svConfig.logging?.apiRequestLogLevel,
+      svConfig.logging?.cantonApiRequestLogLevel ?? svConfig.logging?.apiRequestLogLevel,
       svConfig.logging?.cantonAsync,
       imagePullServiceAccountName,
       opts
@@ -288,27 +307,37 @@ export class InStackCantonBftDecentralizedSynchronizerNode extends InStackDecent
       setCoreDbNames: boolean;
       sequencerPostgres: Postgres;
       mediatorPostgres: Postgres;
+      bftSequencerPostgres?: Postgres;
     },
     version: CnChartVersion,
     imagePullServiceAccountName?: string,
     opts?: SpliceCustomResourceOptions
   ) {
     super(migrationId, xns, version);
+    const databaseName = `sequencer_${migrationId}_dabft`;
+    const persistence = dbs.bftSequencerPostgres
+      ? {
+          host: dbs.bftSequencerPostgres.address,
+          secretName: dbs.bftSequencerPostgres.secretName,
+          databaseName,
+        }
+      : {
+          databaseName,
+        };
     this.installDecentralizedSynchronizer(
       svConfig,
+      migrationId,
       dbs,
       {
         type: 'cantonbft',
         externalAddress: `sequencer-p2p-${migrationId}.${ingressName}.${CLUSTER_HOSTNAME}`,
         externalPort: 443,
-        persistence: {
-          databaseName: `sequencer_${migrationId}_dabft`,
-        },
+        persistence,
       },
       version,
       svConfig.logging?.cantonLogLevel,
       svConfig.logging?.cantonStdoutLogLevel,
-      svConfig.logging?.apiRequestLogLevel,
+      svConfig.logging?.cantonApiRequestLogLevel ?? svConfig.logging?.apiRequestLogLevel,
       svConfig.logging?.cantonAsync,
       imagePullServiceAccountName,
       opts

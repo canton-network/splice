@@ -2,12 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 import * as k8s from '@pulumi/kubernetes';
 import {
-  appsAffinityAndTolerations,
+  appsKubernetesScheduling,
   clusterYamlConfig,
   DecentralizedSynchronizerUpgradeConfig,
   GCP_PROJECT,
   HELM_MAX_HISTORY_SIZE,
-  infraAffinityAndTolerations,
+  infraAndAppsKubernetesSchedulingForDaemonSets,
+  infraKubernetesScheduling,
 } from '@canton-network/splice-pulumi-common';
 import { Resource } from '@pulumi/pulumi';
 import { z } from 'zod';
@@ -16,6 +17,7 @@ const chaosMeshSchema = z.object({
   chaosMesh: z
     .object({
       dabftLatency: z.string().optional(),
+      podKillSchedule: z.string().optional(),
     })
     .optional(),
 });
@@ -30,6 +32,7 @@ export const podKillSchedule = (
   chaosMeshNs: k8s.core.v1.Namespace,
   appName: string,
   appNs: string,
+  schedule: string | undefined,
   dependsOn: Resource[]
 ): k8s.apiextensions.CustomResource =>
   new k8s.apiextensions.CustomResource(
@@ -42,8 +45,7 @@ export const podKillSchedule = (
         namespace: chaosMeshNs.metadata.name,
       },
       spec: {
-        // TODO(DACH-NY/canton-network-node#10689) Reduce this back to 5min once Canton sequencers stop being so slow
-        schedule: '@every 60m',
+        schedule: schedule ?? '@every 60m',
         historyLimit: 2,
         concurrencyPolicy: 'Forbid',
         type: 'PodChaos',
@@ -210,35 +212,18 @@ export const installChaosMesh = ({ dependsOn }: ChaosMeshArguments): k8s.helm.v3
       },
       values: {
         controllerManager: {
-          ...infraAffinityAndTolerations,
+          ...infraKubernetesScheduling,
         },
         chaosDaemon: {
-          ...infraAffinityAndTolerations,
-          // the chaos-daemon needs to run on the apps nodes to be able to inject latency
-          tolerations: [
-            ...infraAffinityAndTolerations.tolerations,
-            ...appsAffinityAndTolerations.tolerations,
-          ],
-          affinity: {
-            nodeAffinity: {
-              requiredDuringSchedulingIgnoredDuringExecution: {
-                nodeSelectorTerms: [
-                  ...infraAffinityAndTolerations.affinity.nodeAffinity
-                    .requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms,
-                  ...appsAffinityAndTolerations.affinity.nodeAffinity
-                    .requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms,
-                ],
-              },
-            },
-          },
+          ...infraAndAppsKubernetesSchedulingForDaemonSets,
           runtime: 'containerd',
           socketPath: '/run/containerd/containerd.sock',
         },
         dashboard: {
-          ...infraAffinityAndTolerations,
+          ...infraKubernetesScheduling,
         },
         dnsServer: {
-          ...infraAffinityAndTolerations,
+          ...infraKubernetesScheduling,
         },
         maxHistory: HELM_MAX_HISTORY_SIZE,
       },
@@ -251,11 +236,16 @@ export const installChaosMesh = ({ dependsOn }: ChaosMeshArguments): k8s.helm.v3
     `global-domain-${DecentralizedSynchronizerUpgradeConfig.active.id}-cometbft`,
     `global-domain-${DecentralizedSynchronizerUpgradeConfig.active.id}-mediator`,
     `global-domain-${DecentralizedSynchronizerUpgradeConfig.active.id}-sequencer`,
-    `participant-${DecentralizedSynchronizerUpgradeConfig.active.id}`,
+    'participant',
     'scan-app',
     'sv-app',
     'validator-app',
-  ].forEach(name => podKillSchedule(ns, name, 'sv-4', [roleBinding, ...dependsOn]));
+  ].forEach(name =>
+    podKillSchedule(ns, name, 'sv-4', config.chaosMesh?.podKillSchedule, [
+      roleBinding,
+      ...dependsOn,
+    ])
+  );
   if (config.chaosMesh?.dabftLatency) {
     dabftLatency(ns, config.chaosMesh.dabftLatency, [roleBinding, ...dependsOn]);
   }

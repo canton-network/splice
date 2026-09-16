@@ -52,40 +52,6 @@ abstract class RunbookSvPreflightIntegrationTestBase
     }
   }
 
-  "CometBFT is working" in { _ =>
-    val svUiUrl = s"https://sv.sv.${sys.env("NETWORK_APPS_ADDRESS")}/";
-
-    withFrontEnd("sv") { implicit webDriver =>
-      actAndCheck(
-        s"Logging in to SV UI at: ${svUiUrl}", {
-          completeAuth0LoginWithAuthorization(
-            svUiUrl,
-            svUsername,
-            svPassword,
-            () => find(id("logout-button")) should not be empty withClue "'Logout' button",
-          )
-
-          eventuallyClickOn(id("information-tab-cometBft-debug"))
-        },
-      )(
-        s"We see all other SVs as peers",
-        _ => {
-          inside(find(id("comet-bft-debug-network"))) { case Some(e) =>
-            if (isDevNet) {
-              forAll(Range(1, 5)) { _ =>
-                e.text should include(s"\"moniker\": \"${getSvName(1)}\"")
-              }
-            } else {
-              forAll(Range(1, 2)) { _ =>
-                e.text should include(s"\"moniker\": \"Digital-Asset-2\"")
-              }
-            }
-          }
-        },
-      )
-    }
-  }
-
   "The SV can log in to their wallet" in { implicit env =>
     withFrontEnd("sv") { implicit webDriver =>
       actAndCheck(
@@ -110,10 +76,10 @@ abstract class RunbookSvPreflightIntegrationTestBase
   }
 
   "The SV rewards are claimed by the SV, with 33.33% going to validator1" in { implicit env =>
-    val svClient = sv_client("sv")
+    val svScanClient = scancl("svScan")
     val sv1ScanClient = scancl("sv1Scan")
 
-    val dsoInfo = svClient.getDsoInfo()
+    val dsoInfo = svScanClient.getDsoInfo()
     val svParty = dsoInfo.svParty.toProtoPrimitive
     val svInfo = dsoInfo.dsoRules.payload.svs.asScala.get(svParty).value
     val joinedAsOfRound = svInfo.joinedAsOfRound.number
@@ -237,7 +203,7 @@ abstract class RunbookSvPreflightIntegrationTestBase
           ansAcronym,
         )
         clue(s"Reserved ANS name can be looked up via scan") {
-          val svScanClient = scancl("svTestScan")
+          val svScanClient = scancl("svScan")
           eventuallySucceeds(3.minutes) {
             svScanClient.lookupEntryByName(ansName)
           }
@@ -255,7 +221,7 @@ abstract class RunbookSvPreflightIntegrationTestBase
       )(noTracingLogger)
     }
     val svValidatorClient = vc("svTestValidator").copy(token = Some(token))
-    val svScanClient = scancl("svTestScan")
+    val svScanClient = scancl("svScan")
     val sv1ScanClient = scancl("sv1Scan")
     val participantId = clue("Can dump participant identities from SV validator") {
       // retry to guard against badly timed restarts

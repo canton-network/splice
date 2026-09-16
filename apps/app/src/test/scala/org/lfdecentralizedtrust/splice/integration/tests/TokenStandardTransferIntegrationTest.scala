@@ -1,7 +1,6 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.concurrent.Threading
-import com.digitalasset.canton.console.CommandFailure
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.{HasActorSystem, HasExecutionContext}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.api.token.metadatav1
@@ -157,16 +156,20 @@ class TokenStandardTransferIntegrationTest
       }
 
       // Thanks for zero fees we can check the exact balances w/o complex fee calculations.
+      val aliceExpectedUnlocked = BigDecimal(19980.0)
+      val aliceExpectedLocked = BigDecimal(10.0)
       clue("Check the exact balances of alice ") {
         val balances = aliceWalletClient.balance()
-        balances.unlockedQty shouldBe BigDecimal(19980.0)
-        balances.lockedQty shouldBe BigDecimal(10.0)
+        balances.unlockedQty shouldBe aliceExpectedUnlocked
+        balances.lockedQty shouldBe aliceExpectedLocked
       }
 
+      val bobExpectedUnlocked = BigDecimal(10.0)
+      val bobExpectedLocked = BigDecimal(0.0)
       clue("Check the exact balances of bob ") {
         val balances = bobWalletClient.balance()
-        balances.unlockedQty shouldBe BigDecimal(10.0)
-        balances.lockedQty shouldBe BigDecimal(0.0)
+        balances.unlockedQty shouldBe bobExpectedUnlocked
+        balances.lockedQty shouldBe bobExpectedLocked
       }
 
       checkTxHistory(
@@ -302,7 +305,8 @@ class TokenStandardTransferIntegrationTest
         ),
       )
 
-    // TODO(#2254): check the exact balances once the scan backend supports it
+      sv1ScanBackend
+        .getTotalAmuletBalance() shouldBe (bobExpectedLocked + bobExpectedUnlocked + aliceExpectedLocked + aliceExpectedUnlocked)
 
     }
 
@@ -423,25 +427,28 @@ class TokenStandardTransferIntegrationTest
         trackingId,
       )
 
-      assertThrows[CommandFailure](
-        loggerFactory.assertLogs(
-          aliceWalletClient.createTokenStandardTransfer(
-            bobUserParty,
-            10,
-            "not ok, resubmitted same trackingId so should be rejected",
-            expiration,
-            trackingId,
-          ),
-          _.errorMessage should include("Command submission already exists"),
-        )
-      )
+      val createdCid = created.output match {
+        case members.TransferInstructionPending(value) => value.transferInstructionCid
+        case x => fail(s"Expected pending transfer, got $x")
+      }
 
+      // Resubmitting the same trackingId is deduplicated idempotently: the accepted duplicate is
+      // recovered centrally and returns the original result instead of failing.
+      val resubmitted = aliceWalletClient.createTokenStandardTransfer(
+        bobUserParty,
+        10,
+        "resubmitted with the same trackingId",
+        expiration,
+        trackingId,
+      )
+      inside(resubmitted.output) { case members.TransferInstructionPending(value) =>
+        value.transferInstructionCid shouldBe createdCid
+      }
+
+      // Still exactly one transfer instruction, i.e. no duplicate was created.
       eventually() {
         inside(aliceWalletClient.listTokenStandardTransfers()) { case Seq(t) =>
-          t.contractId.contractId should be(created.output match {
-            case members.TransferInstructionPending(value) => value.transferInstructionCid
-            case x => fail(s"Expected pending transfer, got $x")
-          })
+          t.contractId.contractId should be(createdCid)
         }
       }
     }

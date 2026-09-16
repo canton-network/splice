@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Box, Typography } from '@mui/material';
-import { ConfigChange } from '../../utils/types';
 import { PartyId } from '@canton-network/splice-common-frontend';
+import { CREATE_PROPOSAL_FIELD_BODY_SX } from '../../constants/createProposalLayout';
+import { ConfigChange } from '../../utils/types';
 
 interface ConfigValuesChangesProps {
   changes: ConfigChange[];
@@ -12,7 +13,8 @@ interface ConfigValuesChangesProps {
 
 export const ConfigValuesChanges: React.FC<ConfigValuesChangesProps> = props => {
   const { changes, isSummaryView } = props;
-  const textColor = isSummaryView ? 'text.secondary' : 'text.primary';
+  const textColor = isSummaryView ? undefined : 'text.primary';
+  const summaryLabelSx = isSummaryView ? CREATE_PROPOSAL_FIELD_BODY_SX : undefined;
 
   return (
     <Box
@@ -22,7 +24,11 @@ export const ConfigValuesChanges: React.FC<ConfigValuesChangesProps> = props => 
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {changes.length === 0 && (
           <Box sx={{ py: 1 }}>
-            <Typography variant="body2" color={textColor}>
+            <Typography
+              variant="body2"
+              color={textColor}
+              sx={isSummaryView ? CREATE_PROPOSAL_FIELD_BODY_SX : undefined}
+            >
               No changes found.
             </Typography>
           </Box>
@@ -31,45 +37,73 @@ export const ConfigValuesChanges: React.FC<ConfigValuesChangesProps> = props => 
         {changes.map((change, index) => (
           <Box
             key={index}
-            sx={{ display: 'flex', alignItems: 'center', gap: 2 }}
-            data-testid="config-change"
-          >
-            <Typography
-              variant="body1"
-              sx={{ minWidth: 200 }}
-              data-testid="config-change-field-label"
-              color={textColor}
-            >
-              {change.label}
-            </Typography>
-
-            <Box
-              sx={{
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 2,
+              ...(change.disabled && {
                 px: 1.5,
-                py: 0.5,
-                bgcolor: 'rgba(255, 255, 255, 0.1)',
+                py: 1,
                 borderRadius: 1,
-                minWidth: 80,
-                textAlign: 'center',
-              }}
-              data-testid="config-change-current-value-container"
-            >
-              {change.isId ? (
-                <PartyId partyId={`${change.currentValue}`} id="config-change-current-value" />
-              ) : (
+                borderLeft: '3px solid',
+                borderColor: 'warning.main',
+                bgcolor: 'rgba(255, 167, 38, 0.08)',
+              }),
+            }}
+            data-testid="config-change"
+            data-disabled={change.disabled ? 'true' : undefined}
+          >
+            <Box sx={{ minWidth: 200 }}>
+              <Typography
+                variant={isSummaryView ? undefined : 'body1'}
+                data-testid="config-change-field-label"
+                color={textColor}
+                sx={summaryLabelSx}
+              >
+                {change.label}
+              </Typography>
+              {change.disabled && (
                 <Typography
-                  variant="body2"
-                  fontFamily="monospace"
-                  data-testid="config-change-current-value"
+                  variant="caption"
+                  color="warning.main"
+                  data-testid="config-change-disabled-label"
                 >
-                  {change.currentValue}
+                  Disabled field
                 </Typography>
               )}
             </Box>
 
-            <Typography variant="body1" sx={{ mx: 1 }}>
-              →
-            </Typography>
+            {change.currentValue && (
+              <>
+                <Box
+                  sx={{
+                    px: 1.5,
+                    py: 0.5,
+                    bgcolor: 'rgba(255, 255, 255, 0.1)',
+                    borderRadius: 1,
+                    minWidth: 80,
+                    textAlign: 'center',
+                  }}
+                  data-testid="config-change-current-value-container"
+                >
+                  {change.isId ? (
+                    <PartyId partyId={`${change.currentValue}`} id="config-change-current-value" />
+                  ) : (
+                    <Typography
+                      variant="body2"
+                      fontFamily="monospace"
+                      data-testid="config-change-current-value"
+                    >
+                      {change.currentValue}
+                    </Typography>
+                  )}
+                </Box>
+
+                <Typography variant="body1" sx={{ mx: 1 }}>
+                  →
+                </Typography>
+              </>
+            )}
 
             <Box
               sx={{

@@ -13,7 +13,13 @@ import dayjs from 'dayjs';
 import { OffboardSvForm } from '../../../components/forms/OffboardSvForm';
 import { server, svUrl } from '../../setup/setup';
 import { http, HttpResponse } from 'msw';
-import { PROPOSAL_SUMMARY_SUBTITLE, PROPOSAL_SUMMARY_TITLE } from '../../../utils/constants';
+import {
+  CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE,
+  PROPOSAL_REVIEW_TITLE,
+  PROPOSAL_SUMMARY_PLACEHOLDER,
+  PROPOSAL_SUMMARY_SUBTITLE,
+  URL_PLACEHOLDER,
+} from '../../../utils/constants';
 
 describe('SV user can', () => {
   test('login and see the SV party ID', async () => {
@@ -32,7 +38,7 @@ describe('SV user can', () => {
     const button = screen.getByRole('button', { name: 'Log In' });
     await user.click(button);
 
-    expect(await screen.findAllByDisplayValue(svPartyId)).not.toBe([]);
+    expect(await screen.findAllByDisplayValue(svPartyId)).not.toHaveLength(0);
   });
 });
 
@@ -45,15 +51,16 @@ describe('Offboard SV Form', () => {
     );
 
     expect(screen.getByTestId('offboard-sv-form')).toBeInTheDocument();
-    expect(screen.getByText('Action')).toBeInTheDocument();
+    expect(screen.getByText(CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE)).toBeInTheDocument();
 
     const actionInput = screen.getByTestId('offboard-sv-action');
     expect(actionInput).toBeInTheDocument();
-    expect(actionInput.getAttribute('value')).toBe('Offboard Member');
+    expect(actionInput.textContent).toBe('Offboard Member');
 
     const summaryInput = screen.getByTestId('offboard-sv-summary');
     expect(summaryInput).toBeInTheDocument();
     expect(summaryInput.getAttribute('value')).toBeNull();
+    expect(summaryInput.getAttribute('placeholder')).toBe(PROPOSAL_SUMMARY_PLACEHOLDER);
 
     const summarySubtitle = screen.getByTestId('offboard-sv-summary-subtitle');
     expect(summarySubtitle).toBeInTheDocument();
@@ -62,10 +69,12 @@ describe('Offboard SV Form', () => {
     const urlInput = screen.getByTestId('offboard-sv-url');
     expect(urlInput).toBeInTheDocument();
     expect(urlInput.getAttribute('value')).toBe('');
+    expect(urlInput).toHaveAttribute('placeholder', URL_PLACEHOLDER);
 
     const memberInput = screen.getByTestId('offboard-sv-member-dropdown');
     expect(memberInput).toBeInTheDocument();
     expect(memberInput.getAttribute('value')).toBe('');
+    expect(screen.getByText('Select a member')).toBeInTheDocument();
 
     expect(screen.getByText('Review Proposal')).toBeInTheDocument();
   });
@@ -85,7 +94,7 @@ describe('Offboard SV Form', () => {
     expect(screen.getByText('Review Proposal')).toBeInTheDocument();
 
     await user.click(submitButton);
-    expect(submitButton.getAttribute('disabled')).toBeDefined();
+    expect(submitButton.getAttribute('disabled')).not.toBeNull();
     await expect(async () => await user.click(submitButton)).rejects.toThrowError(
       /Unable to perform pointer interaction/
     );
@@ -109,11 +118,8 @@ describe('Offboard SV Form', () => {
     const selectInput = screen.getByRole('combobox');
     fireEvent.mouseDown(selectInput);
 
-    await waitFor(async () => {
-      const memberToSelect = screen.getByText('Digital-Asset-Eng-2');
-      expect(memberToSelect).toBeInTheDocument();
-      await user.click(memberToSelect);
-    });
+    const memberToSelect = await screen.findByText('Digital-Asset-Eng-2');
+    await user.click(memberToSelect);
 
     await user.click(actionInput); // using this to trigger the onBlur event which triggers the validation
 
@@ -221,10 +227,8 @@ describe('Offboard SV Form', () => {
     const selectInput = screen.getByRole('combobox');
     fireEvent.mouseDown(selectInput);
 
-    await waitFor(async () => {
-      const memberToSelect = screen.getByText('Digital-Asset-Eng-2');
-      await user.click(memberToSelect);
-    });
+    const memberToSelect = await screen.findByText('Digital-Asset-Eng-2');
+    await user.click(memberToSelect);
 
     expect(screen.getByText('Review Proposal')).toBeInTheDocument();
     const submitButton = screen.getByTestId('submit-button');
@@ -236,7 +240,7 @@ describe('Offboard SV Form', () => {
 
     await user.click(submitButton);
 
-    expect(screen.getByText(PROPOSAL_SUMMARY_TITLE)).toBeInTheDocument();
+    expect(screen.getByText(PROPOSAL_REVIEW_TITLE)).toBeInTheDocument();
   });
 
   test('should show error on form if submission fails', async () => {
@@ -265,10 +269,8 @@ describe('Offboard SV Form', () => {
     const selectInput = screen.getByRole('combobox');
     fireEvent.mouseDown(selectInput);
 
-    await waitFor(async () => {
-      const memberToSelect = screen.getByText('Digital-Asset-Eng-2');
-      await user.click(memberToSelect);
-    });
+    const memberToSelect = await screen.findByText('Digital-Asset-Eng-2');
+    await user.click(memberToSelect);
 
     expect(screen.getByText('Review Proposal')).toBeInTheDocument();
     const submitButton = screen.getByTestId('submit-button');
@@ -312,10 +314,8 @@ describe('Offboard SV Form', () => {
     const selectInput = screen.getByRole('combobox');
     fireEvent.mouseDown(selectInput);
 
-    await waitFor(async () => {
-      const memberToSelect = screen.getByText('Digital-Asset-Eng-2');
-      await user.click(memberToSelect);
-    });
+    const memberToSelect = await screen.findByText('Digital-Asset-Eng-2');
+    await user.click(memberToSelect);
 
     const submitButton = screen.getByTestId('submit-button');
     await user.click(actionInput); // using this to trigger the onBlur event which triggers the validation

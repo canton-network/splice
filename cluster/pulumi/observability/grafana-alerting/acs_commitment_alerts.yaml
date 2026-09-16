@@ -1,7 +1,7 @@
 apiVersion: 1
 groups:
     - orgId: 1
-      name: acs commitment checkpoint delay
+      name: acs commitment
       folder: canton
       interval: 1m
       rules:
@@ -60,11 +60,6 @@ groups:
             summary: The job {{ $labels.job }} in namespace {{ $labels.namespace }} is reporting an ACS commitment checkpoint delay
           labels: {}
           isPaused: false
-    - orgId: 1
-      name: acs commitment delay
-      folder: canton
-      interval: 1m
-      rules:
         - uid: ffghab4ms1ds0c
           title: ACS Commitment Delay
           condition: acs commitment delay threshold exceeded
@@ -120,11 +115,6 @@ groups:
             summary: The job {{ $labels.job }} in namespace {{ $labels.namespace }} is reporting an ACS commitment delay
           labels: {}
           isPaused: false
-    - orgId: 1
-      name: acs commitment compute duration
-      folder: canton
-      interval: 1m
-      rules:
         - uid: ffghab4ms1ds0d
           title: ACS Commitment Compute Duration
           condition: acs commitment compute duration threshold exceeded

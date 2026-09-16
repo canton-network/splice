@@ -16,6 +16,7 @@ import org.lfdecentralizedtrust.splice.config.{
   SpliceBackendConfig,
   SpliceInstanceNamesConfig,
   SpliceParametersConfig,
+  SplicePostgresConfig,
 }
 
 import org.lfdecentralizedtrust.splice.store.Limit
@@ -27,7 +28,7 @@ trait BaseScanAppConfig {}
 final case class ScanSynchronizerConfig(
     sequencer: FullClientConfig,
     mediator: FullClientConfig,
-    bftSequencerConfig: Option[BftSequencerConfig],
+    cantonBft: Option[CantonBftPeerConfig],
 )
 
 final case class MediatorVerdictIngestionConfig(
@@ -40,9 +41,28 @@ final case class BulkStorageConfig(
     snapshotPollingInterval: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(30),
     // When more updates are not yet available, how long to wait for more.
     updatesPollingInterval: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(30),
+    // When BFT was not reached on objects, how long to wait before retrying.
+    bftRetryInterval: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofSeconds(30),
     // The maximum parallelization for uploading multiple parts of the same object
     maxParallelPartUploads: Int = 4,
-    s3: Option[S3Config] = None,
+    staging: Option[S3Config] = None,
+    committed: Option[S3Config] = None,
+    bftCheckEnabled: Boolean = true,
+    /** When enabled, the app will reset all progress markers thus force recomputing data from genesis.
+      * Note that this does not delete any existing data, you usually would want to do that before setting
+      * this flag. Also, after restarting the app once with this flag enabled, you'd want to disable it back
+      * to avoid having the markers reset on every restart.
+      * TODO(#6251): this makes sense for initial stages of testing&deploying bulk storage, in case of
+      *   encountered issues, but will not make sense when we start pruning the data from scan. We should remove
+      *   this before starting to prune data.
+      */
+    debugForceStartFromGenesis: Boolean = false,
+    /** A list of S3 object keys that this instance should not save to the committed bucket, and instead only
+      * delete from staging. To be used only in extreme cases where we decide to accept a BFT disagreement,
+      * and have the (minority of) disagreeing instances simply skip the broken objects.
+      * Should typically be used in test environments only.
+      */
+    debugObjectsToNotCommit: Seq[String] = Seq.empty,
 )
 
 /** @param miningRoundsCacheTimeToLiveOverride Intended only for testing!
@@ -51,17 +71,19 @@ final case class BulkStorageConfig(
 case class ScanAppBackendConfig(
     override val adminApi: AdminServerConfig = AdminServerConfig(),
     override val storage: DbConfig,
+    postgres: SplicePostgresConfig = SplicePostgresConfig(),
     svUser: String,
     override val participantClient: ParticipantClientConfig,
     synchronizerNodes: ScanSynchronizerNodesConfig,
     override val automation: AutomationConfig = AutomationConfig(),
     mediatorVerdictIngestion: MediatorVerdictIngestionConfig = MediatorVerdictIngestionConfig(),
-    enableAppActivityRecordAndTrafficIngestion: Boolean = true,
-    serveAppActivityRecordsAndTraffic: Boolean = true,
     isFirstSv: Boolean = false,
     // Max rounding error tolerated wrt actual total of minting allowances
     // and the per-round minting allowance from the CC whitepaper.
     rewardMintingAllowanceTolerance: BigDecimal = BigDecimal(0.1),
+    // Reward-accounting data is retained for this duration and may get pruned afterwards.
+    rewardAccountingRetentionPeriod: NonNegativeFiniteDuration =
+      NonNegativeFiniteDuration.ofDays(7),
     miningRoundsCacheTimeToLiveOverride: Option[NonNegativeFiniteDuration] = None,
     enableForcedAcsSnapshots: Boolean = false,
     // The migration id is normally read from the DB (the highest known migration id in the
@@ -83,6 +105,8 @@ case class ScanAppBackendConfig(
     txLogStoreDescriptorUserVersion: Option[Long] = None,
     activityIngestionUserVersion: Option[Long] = None,
     bulkStorage: BulkStorageConfig = BulkStorageConfig(),
+    tokenStandardSettlement: TokenStandardConfig.SettlementConfig =
+      TokenStandardConfig.SettlementConfig(),
     publicUrl: Option[Uri] = None,
     // The thresholdDate from which external transaction hashes are included in the updates from internal ScanAPIs.
     // TODO(#4249): use on-ledger synchronization for switching record times
@@ -90,6 +114,10 @@ case class ScanAppBackendConfig(
       ScanAppBackendConfig.DefaultExternalTransactionHashThresholdTime,
     globalSynchronizerAlias: SynchronizerAlias = SynchronizerAlias.tryCreate("global"),
     rollForwardLsu: Option[ScanRollForwardLsuConfig] = None,
+    // Set to false to disable the DB-level exclusive lock that prevents two scan instances
+    // from running concurrently against the same database.  Only disable for migration scenarios
+    // where intentional overlap is required.
+    instanceLockEnabled: Boolean = true,
 ) extends SpliceBackendConfig
     with BaseScanAppConfig // TODO(DACH-NY/canton-network-node#736): fork or generalize this trait.
     {
@@ -171,6 +199,10 @@ final case class ScanCacheConfig(
     voteRequests: CacheConfig = CacheConfig(
       ttl = NonNegativeFiniteDuration.ofMinutes(1),
       maxSize = 1000,
+    ),
+    internedStrings: CacheConfig = CacheConfig(
+      ttl = NonNegativeFiniteDuration.ofDays(365L),
+      maxSize = 10000,
     ),
 )
 

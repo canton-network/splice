@@ -4,12 +4,14 @@ import * as k8s from '@pulumi/kubernetes';
 import { ExactNamespace } from '@canton-network/splice-pulumi-common';
 
 import { clusterIsResetPeriodically, enableAlerts } from './alertings';
-import { monitoringConfig } from './config';
+import { cloudArmorConfig, monitoringConfig } from './config';
 import {
   getNotificationChannel,
+  installCloudArmorAlerts,
   installCloudSQLMaintenanceUpdateAlerts,
   installCloudSqlTxIdUtilizationAlert,
   installClusterMaintenanceUpdateAlerts,
+  installNatAlerts,
   installGcpLoggingAlerts,
   installGcpQuotaAlerts,
   installLoggedSecretsAlerts,
@@ -53,5 +55,13 @@ if (enableAlerts && !clusterIsResetPeriodically) {
     }
     installGcpQuotaAlerts(notificationChannel, monitoringConfig.alerting.alerts.gcpQuotas);
     installCloudSqlTxIdUtilizationAlert(notificationChannel);
+    installNatAlerts(notificationChannel, monitoringConfig.alerting.alerts.natPortUsage);
+    if (cloudArmorConfig.enabled) {
+      installCloudArmorAlerts(
+        notificationChannel,
+        monitoringConfig.alerting.alerts.cloudArmor,
+        cloudArmorConfig
+      );
+    }
   }
 }

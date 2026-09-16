@@ -7,8 +7,8 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.round.{
 }
 import org.lfdecentralizedtrust.splice.console.*
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
-  TestCommon,
   SpliceTestConsoleEnvironment,
+  TestCommon,
 }
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.UpdateExternalPartyConfigStateTrigger
 import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig
@@ -19,8 +19,8 @@ import com.digitalasset.canton.console.CommandFailure
 import com.digitalasset.canton.topology.PartyId
 import org.scalatest.Assertion
 
-import java.time.Duration
-import scala.annotation.nowarn
+import java.time.{Duration, Instant}
+import scala.annotation.{nowarn, tailrec}
 import scala.concurrent.duration.*
 
 trait TimeTestUtil extends TestCommon {
@@ -107,16 +107,57 @@ trait TimeTestUtil extends TestCommon {
         }
       }
     }
+    advanceTimeAndWaitForRoundAutomation(
+      durationToNextRoundOpening,
+      synchronizeExternalPartyConfigStates,
+    )
+  }
+
+  @tailrec
+  final def advanceRoundsUntil(
+      target: Instant
+  )(implicit env: SpliceTestConsoleEnvironment): Unit = {
+    if (!getLedgerTime.toInstant.isAfter(target)) {
+      advanceRoundsToNextRoundOpening
+      advanceRoundsUntil(target)
+    }
+  }
+
+  /** The amount of time to advance in order to reach the next mining round opening. */
+  private def durationToNextRoundOpening(implicit
+      env: SpliceTestConsoleEnvironment
+  ): Duration = {
     import math.Ordering.Implicits.*
     val now = sv1Backend.participantClient.ledger_api.time.get().toInstant
     val (openRounds, _) = sv1ScanBackend.getOpenAndIssuingMiningRounds()
-    val advanceWith = openRounds
+    openRounds
       .filter(round => now < round.contract.payload.opensAt)
       .map(_.contract.payload.opensAt)
       .minOption
       .map(minFutureOpen => Duration.between(now, minFutureOpen.plusSeconds(10)))
       .getOrElse(tickDurationWithBuffer)
-    advanceTimeAndWaitForRoundAutomation(advanceWith, synchronizeExternalPartyConfigStates)
+  }
+
+  /** Advance time, but only waits for the next round to open and does not wait
+    * for the summarizing and issuing round automation to catch up.
+    */
+  @nowarn("msg=match may not be exhaustive")
+  def advanceTimeAndWaitForRoundOpening(implicit env: SpliceTestConsoleEnvironment): Unit = {
+    val advanceWith = durationToNextRoundOpening
+    val (previousOpenRounds, _) = sv1ScanBackend.getOpenAndIssuingMiningRounds()
+    val Seq(lowestOpen, middleOpen, highestOpen) =
+      previousOpenRounds.map(_.contract.payload.round.number)
+
+    actAndCheck()("advancing time", advanceTime(advanceWith))(
+      s"waiting for open round automation (should create OpenMiningRound ${highestOpen + 1})",
+      _ => {
+        val (newOpenRounds, _) = sv1ScanBackend.getOpenAndIssuingMiningRounds()
+        val Seq(newLowestOpen, newMiddleOpen, newHighestOpen) =
+          newOpenRounds.map(_.contract.payload.round.number)
+        (newLowestOpen, newMiddleOpen, newHighestOpen) shouldBe
+          (lowestOpen + 1, middleOpen + 1, highestOpen + 1)
+      },
+    )
   }
 
   def advanceTimeAndUpdateExternalPartyConfigStates(implicit env: SpliceTestConsoleEnvironment) = {

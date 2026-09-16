@@ -1,11 +1,6 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import {
-  config,
-  DeploySvRunbook,
-  GitReferenceSchema,
-  K8sResourceSchema,
-} from '@canton-network/splice-pulumi-common';
+import { config, DeploySvRunbook, K8sResourceSchema } from '@canton-network/splice-pulumi-common';
 import {
   mustInstallSplitwell,
   mustInstallValidator1,
@@ -63,10 +58,7 @@ function* iterateDefaultProjectFilters(): Generator<ProjectFilter> {
   }
 }
 
-export const OperatorDeploymentConfigSchema = z.object({
-  operatorDeployment: z.object({
-    reference: GitReferenceSchema,
-  }),
+export const DeploymentConfigSchema = z.object({
   pulumiStacks: z.record(z.string(), StackConfigSchema).and(
     z.object({
       default: StackConfigSchema,
@@ -81,13 +73,10 @@ export const OperatorDeploymentConfigSchema = z.object({
     }),
 });
 
-export type Config = z.infer<typeof OperatorDeploymentConfigSchema>;
+export type Config = z.infer<typeof DeploymentConfigSchema>;
 export type StackConfig = z.infer<typeof StackConfigSchema>;
 
-// eslint-disable-next-line
-// @ts-ignore
-const fullConfig = OperatorDeploymentConfigSchema.parse(clusterYamlConfig);
-export const operatorDeploymentConfig = fullConfig.operatorDeployment;
+const fullConfig = DeploymentConfigSchema.parse(clusterYamlConfig);
 export const deploymentConf = fullConfig.deployment;
 
 export const PulumiOperatorGracePeriod = 1800;

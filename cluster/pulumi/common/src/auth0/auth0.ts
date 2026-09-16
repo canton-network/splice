@@ -8,7 +8,7 @@ import { Output } from '@pulumi/pulumi';
 import { AuthenticationClient, ManagementClient, TokenSet, withRetries } from 'auth0';
 
 import { config, isMainNet } from '../config';
-import { infraStack } from '../stackReferences';
+import { StackReferences } from '../stackReferences';
 import { fixedTokens } from '../utils';
 import { DEFAULT_AUDIENCE } from './audiences';
 import type {
@@ -314,7 +314,7 @@ export enum Auth0ClientType {
 
 export function getAuth0ClusterConfig(): Output<Auth0ClusterConfig> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const infraOutput: pulumi.Output<any> = infraStack.requireOutput('auth0');
+  const infraOutput: pulumi.Output<any> = StackReferences.infra.requireOutput('auth0');
   return infraOutput.apply(output => {
     if (
       (output['cantonNetwork'] && output['cantonNetwork']['appToClientId'] === undefined) ||

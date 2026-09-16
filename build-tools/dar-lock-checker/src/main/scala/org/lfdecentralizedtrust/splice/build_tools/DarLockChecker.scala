@@ -121,15 +121,7 @@ object DarLockChecker {
             val currentHashes = File(outputFilename).contentAsString
             val lockStr = getLockStr(checkedInDarMap ++ darMap)
             if (currentHashes != lockStr)
-              sys.error(
-                Seq(
-                  "Error: daml lockfile is not up-to-date",
-                  "Expected:",
-                  lockStr,
-                  "Actual:",
-                  currentHashes,
-                ).mkString(System.lineSeparator())
-              )
+              sys.error(lockOutOfDateMessage(outputFilename, lockStr))
           case "update" =>
             // Check that the freshly built packages either match the
             // last release or have a different version number.
@@ -203,7 +195,9 @@ object DarLockChecker {
       mismatches.foreach { case (pkg, currentHash, lastReleaseHash) =>
         System.err.println(s"Package $pkg changed hash from $currentHash to $lastReleaseHash")
       }
-      sys.error("Some packages changed their hash, did you forget to bump the package versions?")
+      sys.error(
+        "Some packages changed their hash, did you forget to bump the package versions? Or are you on a feature branch and your versions numbers are now being used by new actual release"
+      )
     }
     if (exhaustive) {
       lastReleaseDars.keys.foreach { case pkg @ (pkgName, _) =>
@@ -260,6 +254,33 @@ object DarLockChecker {
       .toSeq
       .sorted
       .mkString(System.lineSeparator())
+
+  private[build_tools] def lockOutOfDateMessage(
+      currentLockFile: String,
+      expectedLockStr: String,
+      diffColor: String = if (sys.env.contains("CI")) "never" else "always",
+  ): String =
+    File.temporaryFile(prefix = "expected-dars", suffix = ".lock") { expectedFile =>
+      val _ = expectedFile.write(expectedLockStr)
+
+      val out = new StringBuilder("")
+      def appendToOut(s: String): Unit = out ++= s + System.lineSeparator()
+      val _ = Seq(
+        "diff",
+        s"--color=$diffColor",
+        "--unified=0",
+        s"--label=$currentLockFile",
+        "--label=expected-dars.lock",
+        currentLockFile,
+        expectedFile.toString,
+      ).!(ProcessLogger(appendToOut, appendToOut))
+
+      Seq(
+        "Error: daml lockfile is not up-to-date",
+        "",
+        out.toString,
+      ).mkString(System.lineSeparator())
+    }
 
   private def getCheckedInDarMap(): Map[(PackageName, PackageVersion), String] = {
     val checkedInDars = File("daml/dars").list(_.extension == Some(".dar")).toSeq

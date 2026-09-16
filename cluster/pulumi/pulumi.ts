@@ -243,6 +243,12 @@ export async function awaitAllOrThrowAllExceptions(operations: Operation[]): Pro
                 ? (cmdResult.stdout ?? '') + (cmdResult.stderr ?? '')
                 : err.message;
             writeOperationErrorOutput(op.name, output);
+            if (cmdResult?.stderr) {
+              console.error(cmdResult.stderr);
+            }
+            if (cmdResult?.stdout) {
+              console.log(cmdResult.stdout);
+            }
           } else {
             console.error(`Operation ${op.name} failed with an unknown error.`);
             const output = err instanceof Error ? err.message : String(err);

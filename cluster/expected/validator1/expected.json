@@ -279,16 +279,6 @@
   },
   {
     "custom": true,
-    "id": "organization/infra/infra.mock",
-    "inputs": {
-      "name": "organization/infra/infra.mock"
-    },
-    "name": "organization/infra/infra.mock",
-    "provider": "",
-    "type": "pulumi:pulumi:StackReference"
-  },
-  {
-    "custom": true,
     "id": "",
     "inputs": {},
     "name": "participantKmsServiceAccountKey",
@@ -339,6 +329,27 @@
       }
     },
     "name": "splice-auth0-secret-validator1-validator",
+    "provider": "",
+    "type": "kubernetes:core/v1:Secret"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "apiVersion": "v1",
+      "kind": "Secret",
+      "metadata": {
+        "name": "splice-app-wallet-gateway-admin-oauth",
+        "namespace": "validator1"
+      },
+      "stringData": {
+        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+        "value": {
+          "client-secret": "***"
+        }
+      }
+    },
+    "name": "splice-auth0-secret-validator1-wallet-gateway-admin",
     "provider": "",
     "type": "kubernetes:core/v1:Secret"
   },
@@ -479,10 +490,9 @@
         },
         "imageRepo": "us-central1-docker.pkg.dev/da-cn-shared/ghcr/digital-asset/decentralized-canton-sync-dev/docker",
         "ingress": {
-          "decentralizedSynchronizer": {
-            "activeMigrationId": "2"
-          },
-          "splitwell": true
+          "decentralizedSynchronizer": {},
+          "splitwell": true,
+          "walletGateway": true
         },
         "spliceDomainNames": {
           "nameServiceDomain": "cns"
@@ -539,7 +549,7 @@
       }
     },
     "name": "validator1-default",
-    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-validator1-default::undefined_id",
+    "provider": "urn:pulumi:test-stack::test-project::pulumi:providers:kubernetes::k8s-imgpull-validator1-default::04da6b54-80e4-46f7-96ec-b56ff0331ba9",
     "type": "kubernetes:core/v1:ServiceAccountPatch"
   },
   {
@@ -555,7 +565,7 @@
       "stringData": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
         "value": {
-          ".dockerconfigjson": "{\"auths\":{\"digitalasset-canton-enterprise-docker.jfrog.io\":{\"auth\":\"YXJ0X3VzZXI6czNjcjN0\",\"username\":\"art_user\",\"password\":\"s3cr3t\"},\"us-central1-docker.pkg.dev\":{\"auth\":\"X2pzb25fa2V5OnsidHlwZSI6InNlcnZpY2VfYWNjb3VudCIsInByb2plY3RfaWQiOiJmYWtlLXByb2plY3QiLCJwcml2YXRlX2tleV9pZCI6ImZha2VfaWQiLCJwcml2YXRlX2tleSI6Ii0tLS0tQkVHSU4gUFJJVkFURSBLRVktLS0tLVxuZmFrZVxuLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLVxuIiwiY2xpZW50X2VtYWlsIjoiZmFrZUBmYWtlLXByb2plY3QuaWFtLmdzZXJ2aWNlYWNjb3VudC5jb20iLCJjbGllbnRfaWQiOiJmYWtlLWNsaWVudC1pZCIsImF1dGhfdXJpIjoiaHR0cHM6Ly9hY2NvdW50cy5nb29nbGUuY29tL28vb2F1dGgyL2F1dGgiLCJ0b2tlbl91cmkiOiJodHRwczovL29hdXRoMi5nb29nbGVhcGlzLmNvbS90b2tlbiIsImF1dGhfcHJvdmlkZXJfeDUwOV9jZXJ0X3VybCI6Imh0dHBzOi8vd3d3Lmdvb2dsZWFwaXMuY29tL29hdXRoMi92MS9jZXJ0cyIsImNsaWVudF94NTA5X2NlcnRfdXJsIjoiaHR0cHM6Ly93d3cuZ29vZ2xlYXBpcy5jb20vcm9ib3QvdjEvbWV0YWRhdGEveDUwOS9mYWtlJTQwZmFrZS1wcm9qZWN0LmlhbS5nc2VydmljZWFjY291bnQuY29tIiwidW5pdmVyc2VfZG9tYWluIjoiZ29vZ2xlYXBpcy5jb20ifQ==\",\"username\":\"_json_key\",\"password\":\"{\\\"type\\\":\\\"service_account\\\",\\\"project_id\\\":\\\"fake-project\\\",\\\"private_key_id\\\":\\\"fake_id\\\",\\\"private_key\\\":\\\"-----BEGIN PRIVATE KEY-----\\\\nfake\\\\n-----END PRIVATE KEY-----\\\\n\\\",\\\"client_email\\\":\\\"fake@fake-project.iam.gserviceaccount.com\\\",\\\"client_id\\\":\\\"fake-client-id\\\",\\\"auth_uri\\\":\\\"https://accounts.google.com/o/oauth2/auth\\\",\\\"token_uri\\\":\\\"https://oauth2.googleapis.com/token\\\",\\\"auth_provider_x509_cert_url\\\":\\\"https://www.googleapis.com/oauth2/v1/certs\\\",\\\"client_x509_cert_url\\\":\\\"https://www.googleapis.com/robot/v1/metadata/x509/fake%40fake-project.iam.gserviceaccount.com\\\",\\\"universe_domain\\\":\\\"googleapis.com\\\"}\"}}}"
+          ".dockerconfigjson": "{\"auths\":{\"us-central1-docker.pkg.dev\":{\"auth\":\"X2pzb25fa2V5OnsidHlwZSI6InNlcnZpY2VfYWNjb3VudCIsInByb2plY3RfaWQiOiJmYWtlLXByb2plY3QiLCJwcml2YXRlX2tleV9pZCI6ImZha2VfaWQiLCJwcml2YXRlX2tleSI6Ii0tLS0tQkVHSU4gUFJJVkFURSBLRVktLS0tLVxuZmFrZVxuLS0tLS1FTkQgUFJJVkFURSBLRVktLS0tLVxuIiwiY2xpZW50X2VtYWlsIjoiZmFrZUBmYWtlLXByb2plY3QuaWFtLmdzZXJ2aWNlYWNjb3VudC5jb20iLCJjbGllbnRfaWQiOiJmYWtlLWNsaWVudC1pZCIsImF1dGhfdXJpIjoiaHR0cHM6Ly9hY2NvdW50cy5nb29nbGUuY29tL28vb2F1dGgyL2F1dGgiLCJ0b2tlbl91cmkiOiJodHRwczovL29hdXRoMi5nb29nbGVhcGlzLmNvbS90b2tlbiIsImF1dGhfcHJvdmlkZXJfeDUwOV9jZXJ0X3VybCI6Imh0dHBzOi8vd3d3Lmdvb2dsZWFwaXMuY29tL29hdXRoMi92MS9jZXJ0cyIsImNsaWVudF94NTA5X2NlcnRfdXJsIjoiaHR0cHM6Ly93d3cuZ29vZ2xlYXBpcy5jb20vcm9ib3QvdjEvbWV0YWRhdGEveDUwOS9mYWtlJTQwZmFrZS1wcm9qZWN0LmlhbS5nc2VydmljZWFjY291bnQuY29tIiwidW5pdmVyc2VfZG9tYWluIjoiZ29vZ2xlYXBpcy5jb20ifQ==\",\"username\":\"_json_key\",\"password\":\"{\\\"type\\\":\\\"service_account\\\",\\\"project_id\\\":\\\"fake-project\\\",\\\"private_key_id\\\":\\\"fake_id\\\",\\\"private_key\\\":\\\"-----BEGIN PRIVATE KEY-----\\\\nfake\\\\n-----END PRIVATE KEY-----\\\\n\\\",\\\"client_email\\\":\\\"fake@fake-project.iam.gserviceaccount.com\\\",\\\"client_id\\\":\\\"fake-client-id\\\",\\\"auth_uri\\\":\\\"https://accounts.google.com/o/oauth2/auth\\\",\\\"token_uri\\\":\\\"https://oauth2.googleapis.com/token\\\",\\\"auth_provider_x509_cert_url\\\":\\\"https://www.googleapis.com/oauth2/v1/certs\\\",\\\"client_x509_cert_url\\\":\\\"https://www.googleapis.com/robot/v1/metadata/x509/fake%40fake-project.iam.gserviceaccount.com\\\",\\\"universe_domain\\\":\\\"googleapis.com\\\"}\"}}}"
         }
       },
       "type": "kubernetes.io/dockerconfigjson"
@@ -568,10 +578,140 @@
     "custom": true,
     "id": "",
     "inputs": {
+      "length": 16,
+      "overrideSpecial": "_%@",
+      "special": true
+    },
+    "name": "validator1-participant-pg-cnadmin-passwd",
+    "provider": "",
+    "type": "random:index/randomPassword:RandomPassword"
+  },
+  {
+    "custom": false,
+    "id": "",
+    "inputs": {
+      "active": true,
+      "alias": "participant-pg",
+      "cloudSqlConfig": {
+        "databaseVersion": "POSTGRES_14",
+        "enabled": true,
+        "enterprisePlus": false,
+        "flags": {
+          "maintenance_work_mem": "2000000",
+          "max_wal_size": "20480",
+          "random_page_cost": "1.1",
+          "temp_file_limit": "2147483647",
+          "work_mem": "16384"
+        },
+        "maintenanceWindow": {
+          "day": 2,
+          "hour": 8
+        },
+        "protected": true,
+        "tier": "db-custom-2-7680"
+      },
+      "defaultUserName": "cnadmin",
+      "deletionProtection": true,
+      "instanceName": "participant-pg",
+      "logicalDecoding": false,
+      "namespace": {
+        "logicalName": "validator1",
+        "ns": {
+          "__aliases": [],
+          "__name": "validator1",
+          "__providers": {},
+          "__pulumiCustomResource": true,
+          "__pulumiResource": true,
+          "__pulumiType": "kubernetes:core/v1:Namespace",
+          "__transformations": [],
+          "__version": "4.28.0",
+          "apiVersion": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
+          "id": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
+          "kind": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
+          "metadata": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
+          "spec": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
+          "status": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
+          "urn": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi."
+        }
+      },
+      "retainDbResourcesOnDelete": false,
+      "secretName": "participant-pg-secrets"
+    },
+    "name": "validator1-participant-pg",
+    "provider": "",
+    "type": "canton:cloud:postgres"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "databaseVersion": "POSTGRES_14",
+      "deletionProtection": false,
+      "region": "europe-west6",
+      "settings": {
+        "activationPolicy": "ALWAYS",
+        "backupConfiguration": {
+          "enabled": true,
+          "pointInTimeRecoveryEnabled": true
+        },
+        "databaseFlags": [
+          {
+            "name": "random_page_cost",
+            "value": "1.1"
+          },
+          {
+            "name": "temp_file_limit",
+            "value": "2147483647"
+          },
+          {
+            "name": "max_wal_size",
+            "value": "20480"
+          },
+          {
+            "name": "maintenance_work_mem",
+            "value": "2000000"
+          },
+          {
+            "name": "work_mem",
+            "value": "16384"
+          }
+        ],
+        "deletionProtectionEnabled": true,
+        "edition": "ENTERPRISE",
+        "insightsConfig": {
+          "enhancedQueryInsightsEnabled": false,
+          "queryInsightsEnabled": true
+        },
+        "ipConfiguration": {
+          "enablePrivatePathForGoogleCloudServices": true,
+          "ipv4Enabled": false,
+          "privateNetwork": "projects/test-project/global/networks/default"
+        },
+        "locationPreference": {
+          "zone": "europe-west6-a"
+        },
+        "maintenanceWindow": {
+          "day": 2,
+          "hour": 8
+        },
+        "tier": "db-custom-2-7680",
+        "userLabels": {
+          "cluster": "mock"
+        }
+      }
+    },
+    "name": "validator1-participant-pg",
+    "provider": "",
+    "type": "gcp:sql/databaseInstance:DatabaseInstance"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
       "chart": "oci://ghcr.io/digital-asset/decentralized-canton-sync-dev/helm/splice-participant",
       "compat": "true",
       "maxHistory": 10,
-      "name": "participant-2",
+      "name": "participant",
       "namespace": "validator1",
       "timeout": 600,
       "values": {
@@ -579,6 +719,10 @@
           {
             "name": "GOOGLE_APPLICATION_CREDENTIALS",
             "value": "/app/gcp-credentials.json"
+          },
+          {
+            "name": "ADDITIONAL_CONFIG_SESSION_SIGNING_KEYS",
+            "value": "canton.participants.participant.crypto.session-signing-keys.enabled = true"
           },
           {
             "name": "ADDITIONAL_CONFIG_PARTICIPANT_PRUNING",
@@ -679,7 +823,7 @@
       },
       "version": "0.3.20"
     },
-    "name": "validator1-participant-2",
+    "name": "validator1-participant",
     "provider": "",
     "type": "kubernetes:helm.sh/v3:Release"
   },
@@ -687,129 +831,64 @@
     "custom": true,
     "id": "",
     "inputs": {
-      "length": 16,
-      "overrideSpecial": "_%@",
-      "special": true
-    },
-    "name": "validator1-participant-pg-cnadmin-passwd",
-    "provider": "",
-    "type": "random:index/randomPassword:RandomPassword"
-  },
-  {
-    "custom": false,
-    "id": "",
-    "inputs": {
-      "active": true,
-      "alias": "participant-pg",
-      "cloudSqlConfig": {
-        "enabled": true,
-        "enterprisePlus": false,
-        "flags": {
-          "maintenance_work_mem": "2000000",
-          "max_wal_size": "20480",
-          "random_page_cost": "1.1",
-          "temp_file_limit": "2147483647",
-          "work_mem": "16384"
-        },
-        "maintenanceWindow": {
-          "day": 2,
-          "hour": 8
-        },
-        "protected": true,
-        "tier": "db-custom-2-7680"
-      },
-      "defaultUserName": "cnadmin",
-      "deletionProtection": true,
-      "instanceName": "participant-pg",
-      "logicalDecoding": false,
-      "namespace": {
-        "logicalName": "validator1",
-        "ns": {
-          "__aliases": [],
-          "__name": "validator1",
-          "__providers": {},
-          "__pulumiCustomResource": true,
-          "__pulumiResource": true,
-          "__pulumiType": "kubernetes:core/v1:Namespace",
-          "__transformations": [],
-          "__version": "4.28.0",
-          "apiVersion": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
-          "id": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
-          "kind": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
-          "metadata": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
-          "spec": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
-          "status": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi.",
-          "urn": "Calling [toJSON] on an [Output<T>] is not supported.\n\nTo get the value of an Output as a JSON value or JSON string consider either:\n    1: o.apply(v => v.toJSON())\n    2: o.apply(v => JSON.stringify(v))\n\nSee https://www.pulumi.com/docs/concepts/inputs-outputs for more details.\nThis function may throw in a future version of @pulumi/pulumi."
-        }
-      },
-      "retainDbResourcesOnDelete": false,
-      "secretName": "participant-pg-secrets"
-    },
-    "name": "validator1-participant-pg",
-    "provider": "",
-    "type": "canton:cloud:postgres"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "databaseVersion": "POSTGRES_14",
-      "deletionProtection": false,
-      "region": "europe-west6",
-      "settings": {
-        "activationPolicy": "ALWAYS",
-        "backupConfiguration": {
-          "enabled": true,
-          "pointInTimeRecoveryEnabled": true
-        },
-        "databaseFlags": [
-          {
-            "name": "random_page_cost",
-            "value": "1.1"
-          },
-          {
-            "name": "temp_file_limit",
-            "value": "2147483647"
-          },
-          {
-            "name": "max_wal_size",
-            "value": "20480"
-          },
-          {
-            "name": "maintenance_work_mem",
-            "value": "2000000"
-          },
-          {
-            "name": "work_mem",
-            "value": "16384"
+      "chart": "oci://ghcr.io/digital-asset/splice-portfolio/helm/splice-portfolio",
+      "compat": "true",
+      "maxHistory": 10,
+      "name": "portfolio",
+      "namespace": "validator1",
+      "timeout": 600,
+      "values": {
+        "affinity": {
+          "nodeAffinity": {
+            "requiredDuringSchedulingIgnoredDuringExecution": {
+              "nodeSelectorTerms": [
+                {
+                  "matchExpressions": [
+                    {
+                      "key": "cn_apps",
+                      "operator": "Exists"
+                    },
+                    {
+                      "key": "cn_apps",
+                      "operator": "In",
+                      "values": [
+                        "hyperdisk"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
           }
-        ],
-        "deletionProtectionEnabled": true,
-        "edition": "ENTERPRISE",
-        "insightsConfig": {
-          "queryInsightsEnabled": true
         },
-        "ipConfiguration": {
-          "enablePrivatePathForGoogleCloudServices": true,
-          "ipv4Enabled": false,
-          "privateNetwork": "projects/test-project/global/networks/default"
+        "config": {
+          "amulet": {
+            "registry": "https://scan.sv-2.mock.global.canton.network.digitalasset.com",
+            "validatorUrl": "https://wallet.validator1.mock.global.canton.network.digitalasset.com/api/validator"
+          },
+          "token": {
+            "registries": [
+              {
+                "name": "Amulet registry",
+                "url": "https://scan.sv-2.mock.global.canton.network.digitalasset.com"
+              }
+            ],
+            "validatorUrl": "https://wallet.validator1.mock.global.canton.network.digitalasset.com/api/validator"
+          }
         },
-        "locationPreference": {
-          "zone": "europe-west6-a"
-        },
-        "maintenanceWindow": {
-          "day": 2,
-          "hour": 8
-        },
-        "tier": "db-custom-2-7680",
-        "userLabels": {
-          "cluster": "mock"
-        }
-      }
+        "tolerations": [
+          {
+            "effect": "NoSchedule",
+            "key": "cn_apps",
+            "operator": "Exists"
+          }
+        ]
+      },
+      "version": "1.12.2"
     },
-    "name": "validator1-participant-pg",
+    "name": "validator1-portfolio",
     "provider": "",
-    "type": "gcp:sql/databaseInstance:DatabaseInstance"
+    "type": "kubernetes:helm.sh/v3:Release"
   },
   {
     "custom": true,
@@ -897,6 +976,7 @@
       "active": true,
       "alias": "validator-pg",
       "cloudSqlConfig": {
+        "databaseVersion": "POSTGRES_14",
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
@@ -982,6 +1062,7 @@
         "deletionProtectionEnabled": true,
         "edition": "ENTERPRISE",
         "insightsConfig": {
+          "enhancedQueryInsightsEnabled": false,
           "queryInsightsEnabled": true
         },
         "ipConfiguration": {
@@ -1019,6 +1100,12 @@
       "values": {
         "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
         "value": {
+          "additionalEnvVars": [
+            {
+              "name": "ADDITIONAL_CONFIG_VALIDATOR1_DUMMY_NAME",
+              "value": "ADDITIONAL_CONFIG_VALIDATOR1_DUMMY_NAME"
+            }
+          ],
           "additionalJvmOptions": "-Dcom.sun.management.jmxremote=true -Dcom.sun.management.jmxremote.port=9010 -Dcom.sun.management.jmxremote.rmi.port=9010 -Dcom.sun.management.jmxremote.local.only=false -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Djava.rmi.server.hostname=127.0.0.1",
           "additionalUsers": [],
           "affinity": {
@@ -1082,7 +1169,7 @@
               "optional": false
             }
           },
-          "participantAddress": "participant-2",
+          "participantAddress": "participant",
           "participantIdentitiesDumpPeriodicBackup": {
             "backupInterval": "10m",
             "location": {
@@ -1146,6 +1233,149 @@
       "version": "0.3.20"
     },
     "name": "validator1-validator-validator1",
+    "provider": "",
+    "type": "kubernetes:helm.sh/v3:Release"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "chart": "oci://ghcr.io/digital-asset/wallet-gateway/helm/wallet-gateway",
+      "compat": "true",
+      "maxHistory": 10,
+      "name": "wallet-gateway",
+      "namespace": "validator1",
+      "timeout": 600,
+      "values": {
+        "affinity": {
+          "nodeAffinity": {
+            "requiredDuringSchedulingIgnoredDuringExecution": {
+              "nodeSelectorTerms": [
+                {
+                  "matchExpressions": [
+                    {
+                      "key": "cn_apps",
+                      "operator": "Exists"
+                    },
+                    {
+                      "key": "cn_apps",
+                      "operator": "In",
+                      "values": [
+                        "hyperdisk"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "config": {
+          "bootstrap": {
+            "idps": [
+              {
+                "configUrl": "https://canton-network-dev.us.auth0.com/.well-known/openid-configuration",
+                "id": "idp-auth0",
+                "issuer": "https://canton-network-dev.us.auth0.com/",
+                "type": "oauth"
+              }
+            ],
+            "networks": [
+              {
+                "adminAuth": {
+                  "audience": "https://canton.network.global",
+                  "clientId": "validator1-client-id",
+                  "clientSecretEnv": "OAUTH2_ADMIN_CLIENT_SECRET",
+                  "method": "client_credentials",
+                  "scope": "daml_ledger_api"
+                },
+                "auth": {
+                  "audience": "https://canton.network.global",
+                  "clientId": "validator1-wallet-gateway-ui-client-id",
+                  "method": "authorization_code",
+                  "scope": "openid daml_ledger_api offline_access"
+                },
+                "description": "Splice validator1 wallet gateway network",
+                "id": "canton:validator1",
+                "identityProviderId": "idp-auth0",
+                "ledgerApi": {
+                  "baseUrl": "http://participant:7575"
+                },
+                "name": "Splice validator1"
+              }
+            ]
+          },
+          "kernel": {
+            "clientType": "remote",
+            "id": "splice-validator1",
+            "publicUrl": "https://walletgateway.validator1.mock.global.canton.network.digitalasset.com"
+          },
+          "logging": {
+            "level": "debug"
+          },
+          "server": {
+            "allowedOrigins": [
+              "https://portfolio.validator1.mock.global.canton.network.digitalasset.com"
+            ],
+            "dappPath": "/api/v0/dapp",
+            "port": 3030,
+            "requestRateLimit": 10000,
+            "requestSizeLimit": "5mb",
+            "signingWorker": {
+              "pollInterval": 5000
+            },
+            "trustProxy": 1,
+            "userPath": "/api/v0/user"
+          },
+          "signingStore": {
+            "connection": {
+              "database": "wg_signing_store",
+              "passwordEnv": "WG_STORE_PASSWORD",
+              "port": 5432,
+              "type": "postgres",
+              "user": "cnadmin"
+            }
+          },
+          "store": {
+            "connection": {
+              "database": "wg_store",
+              "passwordEnv": "WG_STORE_PASSWORD",
+              "port": 5432,
+              "type": "postgres",
+              "user": "cnadmin"
+            }
+          }
+        },
+        "extraEnv": [
+          {
+            "name": "WG_STORE_PASSWORD",
+            "valueFrom": {
+              "secretKeyRef": {
+                "key": "postgresPassword",
+                "name": "validator-pg-secrets"
+              }
+            }
+          }
+        ],
+        "oauthSecrets": {
+          "OAUTH2_ADMIN_CLIENT_SECRET": {
+            "secretRef": {
+              "key": "client-secret",
+              "name": "splice-app-wallet-gateway-admin-oauth"
+            }
+          }
+        },
+        "tolerations": [
+          {
+            "effect": "NoSchedule",
+            "key": "cn_apps",
+            "operator": "Exists"
+          }
+        ]
+      },
+      "version": "1.11.1"
+    },
+    "name": "validator1-wallet-gateway",
     "provider": "",
     "type": "kubernetes:helm.sh/v3:Release"
   },

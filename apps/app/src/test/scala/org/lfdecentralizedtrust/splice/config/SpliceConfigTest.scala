@@ -86,9 +86,104 @@ class SpliceConfigTest extends AsyncWordSpec with BaseTest {
     }
   }
 
+  "rate limiting config" should {
+
+    def perClientIpOf(cfg: SpliceConfig) =
+      cfg.scanApps.values.headOption.value.parameters.rateLimiting.global.perClientIp
+
+    "parse the per client IP CIDR overrides" in {
+      val overwrite = ConfigFactory.parseString(
+        """
+          |canton.scan-apps.sv1Scan.parameters.rate-limiting.global.per-client-ip {
+          |  enabled = true
+          |  limit.rate-per-second = 10
+          |  ip-overrides {
+          |    "10.0.0.0/8" = { rate-per-second = 100 }
+          |    "192.0.2.0/24" = { enabled = false, rate-per-second = 0 }
+          |    "10.1.2.3" = { rate-per-second = 200 }
+          |    "2001:db8::/32" = { rate-per-second = 300 }
+          |    "2001:db8:1::/48" = { enabled = false, rate-per-second = 0 }
+          |    "2001:db8:2:3:4:5:6:7" = { rate-per-second = 400 }
+          |    "::/0" = { rate-per-second = 500 }
+          |  }
+          |}
+          """.stripMargin
+      )
+      val loaded =
+        SpliceConfig.loadAndValidate(CantonConfig.mergeConfigs(config, Seq(overwrite))).value
+      val perClientIp = perClientIpOf(loaded)
+      perClientIp.limit.ratePerSecond should be(10d)
+      perClientIp.attributeOverrides.keySet should be(
+        Set(
+          "10.0.0.0/8",
+          "192.0.2.0/24",
+          "10.1.2.3",
+          "2001:db8::/32",
+          "2001:db8:1::/48",
+          "2001:db8:2:3:4:5:6:7",
+          "::/0",
+        )
+      )
+      perClientIp.attributeOverrides("10.0.0.0/8").ratePerSecond should be(100d)
+      perClientIp.attributeOverrides("192.0.2.0/24").enabled should be(false)
+      perClientIp.attributeOverrides("10.1.2.3").ratePerSecond should be(200d)
+      perClientIp.attributeOverrides("2001:db8::/32").ratePerSecond should be(300d)
+      perClientIp.attributeOverrides("2001:db8:1::/48").enabled should be(false)
+      perClientIp.attributeOverrides("2001:db8:2:3:4:5:6:7").ratePerSecond should be(400d)
+      perClientIp.attributeOverrides("::/0").ratePerSecond should be(500d)
+    }
+
+    Seq(
+      "not-an-ip/8",
+      "10.0.0.0/33",
+      "10.0.0.256/8",
+      "2001:db8::/129",
+      "2001:db8:::1/32",
+      "not-an-ip/32",
+    ).foreach { cidr =>
+      s"reject the invalid per client IP CIDR override '$cidr'" in {
+        val overwrite = ConfigFactory.parseString(
+          s"""
+             |canton.scan-apps.sv1Scan.parameters.rate-limiting.rate-limiters.getDsoInfo.per-client-ip {
+             |  ip-overrides {
+             |    "$cidr" = { rate-per-second = 100 }
+             |  }
+             |}
+          """.stripMargin
+        )
+        SpliceConfig
+          .loadAndValidate(CantonConfig.mergeConfigs(config, Seq(overwrite)))
+          .left
+          .value
+          .toString should include(cidr)
+      }
+    }
+
+    "reject unknown per client IP keys" in {
+      val overwrite = ConfigFactory.parseString(
+        """
+          |canton.scan-apps.sv1Scan.parameters.rate-limiting.global.per-client-ip {
+          |  attribute-overrides {
+          |    "10.0.0.0/8" = { rate-per-second = 100 }
+          |  }
+          |}
+          """.stripMargin
+      )
+      SpliceConfig
+        .loadAndValidate(CantonConfig.mergeConfigs(config, Seq(overwrite)))
+        .left
+        .value
+        .toString should include("attribute-overrides")
+    }
+
+    "default to no per client IP overrides" in {
+      perClientIpOf(SpliceConfig.loadAndValidate(config).value).attributeOverrides should be(empty)
+    }
+  }
+
   // Shared helper for RewardSharingConfig tests
-  private def mkSharingCfg(percentages: BigDecimal*): RewardSharingConfig =
-    RewardSharingConfig(
+  private def mkSharingCfg(percentages: BigDecimal*): RewardSharingConfig.BuiltIn =
+    RewardSharingConfig.BuiltIn(
       minTtlAfterSharing = NonNegativeFiniteDuration.ofHours(30),
       beneficiaries = percentages.zipWithIndex.map { case (pct, i) =>
         AppRewardBeneficiaryConfig(
@@ -165,6 +260,7 @@ class SpliceConfigTest extends AsyncWordSpec with BaseTest {
       s"""
         |canton.validator-apps.aliceValidator.reward-sharing-config-by-party = {
         |  "alice::1220abc" = {
+        |    type = "built-in"
         |    beneficiaries = [$beneficiaries]
         |    min-ttl-after-sharing = 30h
         |  }
@@ -222,6 +318,7 @@ class SpliceConfigTest extends AsyncWordSpec with BaseTest {
         """
           |canton.validator-apps.aliceValidator.reward-sharing-config-by-party = {
           |  "alice::1220abc" = {
+          |    type = "built-in"
           |    beneficiaries = [{ beneficiary = "bob::1220", percentage = 0.4 }]
           |    min-ttl-after-sharing = 30h
           |    batch-size = 50
@@ -238,6 +335,7 @@ class SpliceConfigTest extends AsyncWordSpec with BaseTest {
         """
           |canton.validator-apps.aliceValidator.reward-sharing-config-by-party = {
           |  "alice::1220abc" = {
+          |    type = "built-in"
           |    beneficiaries = [{ beneficiary = "bob::1220", percentage = 0.4 }]
           |    min-ttl-after-sharing = 30h
           |    batch-size = 0
@@ -251,6 +349,89 @@ class SpliceConfigTest extends AsyncWordSpec with BaseTest {
         .left
         .value
         .toString should include("batchSize")
+    }
+
+    def sharingConfigOf(cfg: SpliceConfig): RewardSharingConfig =
+      cfg.validatorApps.values
+        .flatMap(_.rewardSharingConfigByParty.get("alice::1220abc"))
+        .loneElement
+
+    "accept type = external with no beneficiaries and custom batch size" in {
+      val overwrite = ConfigFactory.parseString(
+        """
+          |canton.validator-apps.aliceValidator.reward-sharing-config-by-party = {
+          |  "alice::1220abc" = {
+          |    type = "external"
+          |    batch-size = 500
+          |  }
+          |}
+          """.stripMargin
+      )
+      val validConfig = CantonConfig.mergeConfigs(config, Seq(overwrite))
+      val loaded = SpliceConfig.loadAndValidate(validConfig).value
+      sharingConfigOf(loaded) shouldBe RewardSharingConfig.External(batchSize = 500)
+    }
+
+    "accept explicit type = built-in with beneficiaries" in {
+      val overwrite = ConfigFactory.parseString(
+        """
+          |canton.validator-apps.aliceValidator.reward-sharing-config-by-party = {
+          |  "alice::1220abc" = {
+          |    type = "built-in"
+          |    beneficiaries = [{ beneficiary = "bob::1220", percentage = 0.4 }]
+          |    min-ttl-after-sharing = 30h
+          |  }
+          |}
+          """.stripMargin
+      )
+      val validConfig = CantonConfig.mergeConfigs(config, Seq(overwrite))
+      val loaded = SpliceConfig.loadAndValidate(validConfig).value
+      sharingConfigOf(loaded) shouldBe a[RewardSharingConfig.BuiltIn]
+    }
+
+    "reject type = external, with beneficiaries" in {
+      val overwrite = ConfigFactory.parseString(
+        """
+          |canton.validator-apps.aliceValidator.reward-sharing-config-by-party = {
+          |  "alice::1220abc" = {
+          |    type = "external"
+          |    beneficiaries = [{ beneficiary = "bob::1220", percentage = 0.4 }]
+          |  }
+          |}
+          """.stripMargin
+      )
+      val validConfig = CantonConfig.mergeConfigs(config, Seq(overwrite))
+      SpliceConfig.loadAndValidate(validConfig) shouldBe a[Left[?, ?]]
+    }
+
+    "reject an invalid type value" in {
+      val overwrite = ConfigFactory.parseString(
+        """
+          |canton.validator-apps.aliceValidator.reward-sharing-config-by-party = {
+          |  "alice::1220abc" = {
+          |    type = "bogus"
+          |  }
+          |}
+          """.stripMargin
+      )
+      val buggyConfig = CantonConfig.mergeConfigs(config, Seq(overwrite))
+      SpliceConfig.loadAndValidate(buggyConfig) shouldBe a[Left[?, ?]]
+    }
+
+    "default to built-in when type is omitted (legacy config shape)" in {
+      val overwrite = ConfigFactory.parseString(
+        """
+          |canton.validator-apps.aliceValidator.reward-sharing-config-by-party = {
+          |  "alice::1220abc" = {
+          |    beneficiaries = [{ beneficiary = "bob::1220", percentage = 0.4 }]
+          |    min-ttl-after-sharing = 30h
+          |  }
+          |}
+      """.stripMargin
+      )
+      val loaded =
+        SpliceConfig.loadAndValidate(CantonConfig.mergeConfigs(config, Seq(overwrite))).value
+      sharingConfigOf(loaded) shouldBe a[RewardSharingConfig.BuiltIn]
     }
   }
 }

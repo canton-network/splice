@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { z } from 'zod';
 
-import { CloudSqlConfigSchema } from './cloudSql';
+import { CloudSqlConfigSchema, SplicePostgresSchema } from './database';
 import { defaultActiveMigration, SynchronizerMigrationSchema } from './migrationSchema';
 
 // This is a config that's relevant for all (most) pulumi projects. For project-specific configuration,
@@ -13,6 +13,10 @@ const PulumiProjectConfigSchema = z.object({
   hasPublicInfo: z.boolean(),
   interAppsDependencies: z.boolean(),
   cloudSql: CloudSqlConfigSchema,
+  defaultSplicePostgresConfig: SplicePostgresSchema.default({
+    deployment: 'docker-image',
+    postgresImage: 'postgres:18-trixie',
+  }),
   allowDowngrade: z.boolean(),
   replacePostgresStatefulSetOnChanges: z.boolean().default(false),
 });
@@ -33,6 +37,18 @@ export const ConfigSchema = z.object({
         PulumiProjectConfigSchema.extend({ cloudSql: CloudSqlConfigSchema.partial() }).partial()
       )
     ),
+  // Settings that affect both how node pools are created and how pods are deployed
+  // (e.g, how we set labels/taints). Since these are implemented in different pulumi projects,
+  // we need to have a common config schema for them.
+  kubernetesScheduling: z
+    .object({
+      computeClasses: z
+        .object({
+          enabled: z.boolean().default(false),
+        })
+        .prefault({}),
+    })
+    .prefault({}),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -59,3 +75,5 @@ export const EnvVarConfigSchema = z.object({
   name: z.string(),
   value: z.string(),
 });
+
+export type EnvVarConfig = z.infer<typeof EnvVarConfigSchema>;

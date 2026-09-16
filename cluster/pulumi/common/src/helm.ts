@@ -9,7 +9,6 @@ import path from 'path';
 import { CnChartVersion } from './artifacts';
 import { config, imagePullPolicy } from './config';
 import { spliceConfig } from './config/config';
-import { hyperdiskSupportConfig } from './config/hyperdiskSupportConfig';
 import { activeVersion } from './domainMigration';
 import { SplicePlaceholderResource } from './pulumiUtilResources';
 import {
@@ -74,7 +73,7 @@ function installSpliceHelmChartByNamespaceName(
   version: CnChartVersion = activeVersion,
   opts?: SpliceCustomResourceOptions,
   includeNamespaceInName = true,
-  affinityAndTolerations: object = appsAffinityAndTolerations,
+  affinityAndTolerations: object = appsKubernetesScheduling,
   timeout: number = HELM_CHART_TIMEOUT_SEC
 ): InstalledHelmChart {
   if (spliceConfig.pulumiProjectConfig.installDataOnly) {
@@ -108,7 +107,7 @@ export function installSpliceHelmChart(
   version: CnChartVersion = activeVersion,
   opts?: SpliceCustomResourceOptions,
   includeNamespaceInName = true,
-  affinityAndTolerations: object = appsAffinityAndTolerations,
+  affinityAndTolerations: object = appsKubernetesScheduling,
   timeout: number = HELM_CHART_TIMEOUT_SEC
 ): InstalledHelmChart {
   return installSpliceHelmChartByNamespaceName(
@@ -172,7 +171,7 @@ export function installSpliceRunbookHelmChartByNamespaceName(
         chart: chartPath(chartName, version),
         version: versionStringWithPossibleOverride(version, nsLogicalName, chartName),
         values: {
-          ...appsAffinityAndTolerations,
+          ...appsKubernetesScheduling,
           ...values,
           imageRepo: DOCKER_REPO,
           ...imagePullPolicy,
@@ -225,46 +224,80 @@ function versionStringWithPossibleOverride(
   }
 }
 
-export const appsAffinityAndTolerations = getAppsAffinityAndTolerations(
-  hyperdiskSupportConfig.hyperdiskSupport.enabled
-);
+export const appsComputeClassName = 'cn-apps';
+export const infraComputeClassName = 'cn-infra';
 
-export const nonHyperdiskAppsAffinityAndTolerations = getAppsAffinityAndTolerations(false);
+const appsKubernetesSchedulingComputeClass = {
+  nodeSelector: { 'cloud.google.com/compute-class': appsComputeClassName },
+};
 
-function getAppsAffinityAndTolerations(hyperdiskSupport: boolean) {
-  return {
-    affinity: {
-      nodeAffinity: {
-        requiredDuringSchedulingIgnoredDuringExecution: {
-          nodeSelectorTerms: [
-            {
-              matchExpressions: [
-                {
-                  key: 'cn_apps',
-                  operator: 'Exists',
-                },
-                {
-                  key: 'cn_apps',
-                  operator: hyperdiskSupport ? 'In' : 'NotIn',
-                  values: ['hyperdisk'],
-                },
-              ],
-            },
-          ],
-        },
+const appsKubernetesSchedulingAffinityTolerations = {
+  affinity: {
+    nodeAffinity: {
+      requiredDuringSchedulingIgnoredDuringExecution: {
+        nodeSelectorTerms: [
+          {
+            matchExpressions: [
+              {
+                key: 'cn_apps',
+                operator: 'Exists',
+              },
+              {
+                key: 'cn_apps',
+                operator: 'In',
+                values: ['hyperdisk'],
+              },
+            ],
+          },
+        ],
       },
     },
-    tolerations: [
-      {
-        key: 'cn_apps',
-        operator: 'Exists',
-        effect: 'NoSchedule',
-      },
-    ],
-  };
-}
+  },
+  tolerations: [
+    {
+      key: 'cn_apps',
+      operator: 'Exists',
+      effect: 'NoSchedule',
+    },
+  ],
+};
 
-export const infraAffinityAndTolerations = {
+export const useComputeClasses =
+  spliceConfig.configuration.kubernetesScheduling.computeClasses.enabled;
+
+// Values that determine how apps pods are scheduled.
+export const appsKubernetesScheduling = useComputeClasses
+  ? appsKubernetesSchedulingComputeClass
+  : appsKubernetesSchedulingAffinityTolerations;
+
+export const infraKubernetesSchedulingComputeClass = {
+  nodeSelector: { 'cloud.google.com/compute-class': infraComputeClassName },
+};
+
+// This should have the same effect as infraKubernetesSchedulingComputeClass,
+// but uses affinity instead of nodeSelector. It's not the documented way to use
+// compute classes, but can be used for helm charts that do not support node selectors.
+export const infraKubernetesSchedulingComputeClassViaAffinity = {
+  affinity: {
+    nodeAffinity: {
+      requiredDuringSchedulingIgnoredDuringExecution: {
+        nodeSelectorTerms: [
+          {
+            matchExpressions: [
+              {
+                key: 'cloud.google.com/compute-class',
+                operator: 'In',
+                values: [infraComputeClassName],
+              },
+            ],
+          },
+        ],
+      },
+    },
+  },
+};
+
+export const infraKubernetesSchedulingAffinityTolerations = {
   affinity: {
     nodeAffinity: {
       requiredDuringSchedulingIgnoredDuringExecution: {
@@ -289,3 +322,47 @@ export const infraAffinityAndTolerations = {
     },
   ],
 };
+
+// Values that determine how infra pods are scheduled.
+export const infraKubernetesScheduling = useComputeClasses
+  ? infraKubernetesSchedulingComputeClass
+  : infraKubernetesSchedulingAffinityTolerations;
+
+// Values that determine how daemons are scheduled that need to run on BOTH apps and infra nodes.
+export const infraAndAppsKubernetesSchedulingForDaemonSets = useComputeClasses
+  ? {
+      // DaemonSets do not trigger autoscaling and are instead scheduled once
+      // per existing, eligible node.
+      tolerations: [
+        {
+          key: 'cloud.google.com/compute-class',
+          operator: 'Equal',
+          value: infraComputeClassName,
+          effect: 'NoSchedule',
+        },
+        {
+          key: 'cloud.google.com/compute-class',
+          operator: 'Equal',
+          value: appsComputeClassName,
+          effect: 'NoSchedule',
+        },
+      ],
+    }
+  : {
+      affinity: {
+        nodeAffinity: {
+          requiredDuringSchedulingIgnoredDuringExecution: {
+            nodeSelectorTerms: [
+              ...appsKubernetesSchedulingAffinityTolerations.affinity.nodeAffinity
+                .requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms,
+              ...infraKubernetesSchedulingAffinityTolerations.affinity.nodeAffinity
+                .requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms,
+            ],
+          },
+        },
+      },
+      tolerations: [
+        ...appsKubernetesSchedulingAffinityTolerations.tolerations,
+        ...infraKubernetesSchedulingAffinityTolerations.tolerations,
+      ],
+    };

@@ -1,19 +1,14 @@
 name: "Setup Nix"
 description: "Setup Nix"
 inputs:
-  artifactory_user:
-    description: "The Artifactory user"
-    required: true
-  artifactory_password:
-    description: "The Artifactory password"
-    required: true
   nix_path:
     description: "The path to nix flake directory"
     required: false
     default: ${{ format('{0}/nix', github.repository == 'DACH-NY/canton-network-internal' && 'splice' || '.') }}
   target:
-    description: "Choose nix target: oss - restrict upstream dependencies (e.g. Canton) to OSS versions (the equivalent of OSS_ONLY=1 in local checkouts), static_tests - for static tests, default - for enterprise dependencies"
-    required: true
+    description: "Choose nix target: static_tests - for static tests, default - for full dependencies"
+    required: false
+    default: "default"
   cache_version:
     description: "Cache version"
     required: true
@@ -37,12 +32,12 @@ runs:
   using: "composite"
   steps:
     - name: Validate input
-      if: "${{!( inputs.target == 'default' || inputs.target == 'oss' || inputs.target == 'static_tests')}}"
+      if: "${{!( inputs.target == 'default' || inputs.target == 'static_tests')}}"
       shell: bash
       id: validate_input
       run: |
         echo "Target invalid: ${{ inputs.target }}"
-        echo "Target needs to be one of: 'default', 'oss', 'static_tests'"
+        echo "Target needs to be one of: 'default', 'static_tests'"
         exit 1
     - name: Compute cache Key
       id: cache_key
@@ -60,8 +55,8 @@ runs:
         echo "home: $HOME" >> /tmp/nix-cache-key # important when restoring simlinks from cache, apparently
         echo "nix binary version: $NIX_BINARY_VERSION" >> /tmp/nix-cache-key # different nix versions might behave differently and corrupt the caches
         echo "target: ${{ inputs.target }}" >> /tmp/nix-cache-key
-        if [ "${{ inputs.target }}" != 'default' ]; then
-          echo "Using OSS only dependencies"
+        if [ "${{ inputs.target }}" == 'static_tests' ]; then
+          echo "Using minimal nix dependencies for static tests"
         fi
         cat /tmp/nix-cache-key
         cache_key=($(md5sum "/tmp/nix-cache-key"))
@@ -75,11 +70,6 @@ runs:
       shell: bash
       run: |
         set -euxo pipefail
-
-        if [[ ${{ inputs.target }} == 'default' ]]; then
-          echo "Must use OSS only dependencies in GitHub-hosted runners"
-          exit 1
-        fi
 
         echo "Latest nix cache:"
 
@@ -143,15 +133,6 @@ runs:
           sh <(curl -fsSL --retry 8 "https://releases.nixos.org/nix/nix-$NIX_BINARY_VERSION/install") --no-daemon
           sudo mkdir -p /etc/nix
           sudo chmod a+rw /etc/nix
-          if [[ "${{ inputs.target }}" != 'default' ]]; then
-            echo "Using OSS only dependencies, not setting up Artifactory credentials"
-          else
-            cat <<EOF > /etc/nix/netrc
-            machine digitalasset.jfrog.io
-            login ${{ inputs.artifactory_user }}
-            password ${{ inputs.artifactory_password }}
-        EOF
-          fi
           export USER=$(whoami)
           echo "Running nix.sh"
           . ~/.nix-profile/etc/profile.d/nix.sh

@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 import {
   AmountDisplay,
+  DisableConditionally,
   ErrorDisplay,
   Loading,
   RateDisplay,
 } from '@canton-network/splice-common-frontend';
+import { useMutation } from '@tanstack/react-query';
 import BigNumber from 'bignumber.js';
 import React from 'react';
 import { useParams, useSearchParams } from 'react-router';
@@ -309,16 +311,33 @@ const ConfirmPaymentButton: React.FC<{
   const [searchParams] = useSearchParams();
   const redirect = searchParams.get('redirect');
 
-  const onAccept = async () => {
-    await acceptAppPaymentRequest(contractId);
-    if (redirect) {
-      window.location.assign(redirect);
-    }
-  };
+  const acceptMutation = useMutation({
+    mutationFn: async () => {
+      await acceptAppPaymentRequest(contractId);
+    },
+    retry: 3,
+    onSuccess: () => {
+      if (redirect) {
+        window.location.assign(redirect);
+      }
+    },
+    onError: error => {
+      console.error('Failed to accept app payment request', error);
+    },
+  });
 
   return (
-    <Button variant="pill" size="large" onClick={onAccept} className="payment-accept">
-      Send Payment
-    </Button>
+    <DisableConditionally
+      conditions={[{ disabled: acceptMutation.isPending, reason: 'Processing payment...' }]}
+    >
+      <Button
+        variant="pill"
+        size="large"
+        onClick={() => acceptMutation.mutate()}
+        className="payment-accept"
+      >
+        Send Payment
+      </Button>
+    </DisableConditionally>
   );
 };

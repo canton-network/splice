@@ -5,10 +5,10 @@ package com.digitalasset.canton.integration.util
 
 import com.digitalasset.canton.admin.api.client.data.TrafficControlParameters
 import com.digitalasset.canton.config
-import com.digitalasset.canton.config.{CantonConfig, ClockConfig}
+import com.digitalasset.canton.config.ClockConfig
 import com.digitalasset.canton.config.RequireTypes.{NonNegativeLong, PositiveInt}
 import com.digitalasset.canton.console.{BaseInspection, InstanceReference}
-import com.digitalasset.canton.environment.{CantonEnvironment, CantonNode}
+import com.digitalasset.canton.environment.CantonNode
 import com.digitalasset.canton.integration.TestConsoleEnvironment
 import com.digitalasset.canton.integration.bootstrap.InitializedSynchronizer
 import com.digitalasset.canton.sequencing.TrafficControlParameters as InternalTrafficControlParameters
@@ -30,7 +30,7 @@ object TrafficControlUtils {
   )
 
   private def runOnEachInitializedSynchronizer[T](f: InitializedSynchronizer => T)(implicit
-      env: TestConsoleEnvironment[CantonConfig, CantonEnvironment]
+      env: TestConsoleEnvironment
   ): List[T] =
     env.initializedSynchronizers.values.toList.map(f)
 
@@ -45,7 +45,7 @@ object TrafficControlUtils {
         TrafficControlParameters.default.copy(maxBaseTrafficAmount = NonNegativeLong.maxValue),
       topUpAllMembers: Boolean = false,
       disableCommitments: Boolean = false,
-  )(implicit env: TestConsoleEnvironment[CantonConfig, CantonEnvironment]): Unit = {
+  )(implicit env: TestConsoleEnvironment): Unit = {
     import env.*
 
     val isSimClock = env.actualConfig.parameters.clock match {

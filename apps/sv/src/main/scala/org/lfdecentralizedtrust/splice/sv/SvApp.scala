@@ -220,6 +220,7 @@ class SvApp(
             localSynchronizerNodes.current.close()
             localSynchronizerNodes.successor.foreach(_.close())
             localSynchronizerNodes.legacy.foreach(_.close())
+            localSynchronizerNodes.additionalLegacy.foreach(_.close())
             Future.failed(err)
           }
       )
@@ -254,6 +255,7 @@ class SvApp(
         participantAdminConnection,
         config.domains.global.alias,
         config.parameters.spliceCachingConfigs.physicalSynchronizerExpiration,
+        retryProvider,
         loggerFactory,
       )
 
@@ -464,7 +466,6 @@ class SvApp(
         }
 
       publicHandler = new HttpSvPublicHandler(
-        config.ledgerApiUser,
         svAutomation,
         dsoAutomation,
         isDevNet,
@@ -483,7 +484,6 @@ class SvApp(
           loggerFactory,
         ),
         loggerFactory,
-        initialRound,
       )
 
       operatorHandler = new HttpSvOperatorHandler(
@@ -497,6 +497,8 @@ class SvApp(
         timeouts,
         loggerFactory,
         amuletAppParameters.upgradesConfig,
+        participantAdminConnection,
+        initialRound,
       )
 
       adminHandler = new HttpSvAdminHandler(
@@ -741,12 +743,22 @@ object SvApp {
 
     override def closeAsync(): Seq[AsyncOrSyncCloseable] =
       Seq(
+        // One SyncCloseable per node so a failing close does not skip the others.
         SyncCloseable(
-          s"Domain connections", {
-            localSynchronizerNodes.current.close()
-            localSynchronizerNodes.successor.foreach(_.close())
-            localSynchronizerNodes.legacy.foreach(_.close())
-          },
+          s"current domain connections",
+          localSynchronizerNodes.current.close(),
+        ),
+        SyncCloseable(
+          s"successor domain connections",
+          localSynchronizerNodes.successor.foreach(_.close()),
+        ),
+        SyncCloseable(
+          s"legacy domain connections",
+          localSynchronizerNodes.legacy.foreach(_.close()),
+        ),
+        SyncCloseable(
+          s"additional legacy domain connections",
+          localSynchronizerNodes.additionalLegacy.foreach(_.close()),
         ),
         SyncCloseable(
           s"Participant Admin connection",

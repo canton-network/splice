@@ -18,13 +18,18 @@ import com.digitalasset.canton.time.WallClock
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.{HasActorSystem, HasExecutionContext}
 import io.grpc.StatusRuntimeException
-import org.apache.pekko.stream.scaladsl.Keep
+import org.apache.pekko.actor.Cancellable
+import org.apache.pekko.stream.scaladsl.{Keep, Source}
 import org.apache.pekko.stream.testkit.scaladsl.TestSink
 import org.lfdecentralizedtrust.splice.config.AutomationConfig
 import org.lfdecentralizedtrust.splice.environment.{DarResources, RetryProvider, SpliceMetrics}
 import org.lfdecentralizedtrust.splice.environment.ledger.api.TransactionTreeUpdate
 import org.lfdecentralizedtrust.splice.http.v0.definitions.UpdateHistoryItemV2
-import org.lfdecentralizedtrust.splice.scan.admin.http.CompactJsonScanHttpEncodings
+import org.lfdecentralizedtrust.splice.scan.admin.http.{
+  CompactJsonScanHttpEncodings,
+  ProtobufJsonScanHttpEncodings,
+  ScanHttpEncodings,
+}
 import org.lfdecentralizedtrust.splice.scan.config.{BulkStorageConfig, ScanStorageConfig}
 import org.lfdecentralizedtrust.splice.scan.store.{ScanKeyValueProvider, ScanKeyValueStore}
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryResponse
@@ -56,13 +61,14 @@ class UpdateHistoryBulkStorageTest
     zstdCompressionLevel = 3,
   )
   val appConfig = BulkStorageConfig(
-    updatesPollingInterval = NonNegativeFiniteDuration.ofSeconds(5)
+    updatesPollingInterval = NonNegativeFiniteDuration.ofSeconds(5),
+    bftCheckEnabled = false, // bft checks are tested elsewhere
   )
 
   "UpdateHistoryBulkStorage" should {
 
     "successfully dump a single segment of updates to an s3 bucket" in {
-      val bucketConnection = new S3BucketConnectionForUnitTests(s3ConfigMock, loggerFactory)
+      val bucketConnection = new S3BucketConnectionForUnitTests(s3ConfigMock(), loggerFactory)
       val initialStoreSize = 1500
       val segmentSize = 2200L
       val segmentFromTimestamp = 100L
@@ -103,22 +109,43 @@ class UpdateHistoryBulkStorageTest
         "Ingest 1000 more events. Now the last timestamp will be beyond the segment, so the source will complete and emit the object keys"
       ) {
         mockStore.mockIngestion(1000)
-        probe.expectNext(20.seconds) should contain theSameElementsInOrderAs Seq(
-          "1970-01-01T00:00:00.100Z~1970-01-01T00:00:02.300Z/updates_0.zstd",
-          "1970-01-01T00:00:00.100Z~1970-01-01T00:00:02.300Z/updates_1.zstd",
+        val expectedKeys = ScanStorageConfig.Encoding.all.toList.flatMap(e =>
+          Seq(
+            s"1970-01-01T00:00:00.100Z~1970-01-01T00:00:02.300Z/${e.storageKey("updates", 0)}",
+            s"1970-01-01T00:00:00.100Z~1970-01-01T00:00:02.300Z/${e.storageKey("updates", 1)}",
+          )
+        )
+        val actualKeys = probe.expectNext(20.seconds)
+        def filterKeys(keys: Seq[String], encoding: ScanStorageConfig.Encoding) =
+          keys.filter(encoding.storageKeyRegex("updates").matches)
+        actualKeys should contain theSameElementsAs expectedKeys
+        // Confirm encoding-specific keys are in the correct order
+        ScanStorageConfig.Encoding.all.toList.foreach(e =>
+          filterKeys(actualKeys, e) should contain theSameElementsInOrderAs filterKeys(
+            expectedKeys,
+            e,
+          )
         )
         probe.expectComplete()
         val objectCountMetrics = metricsFactory.metrics.counters
           .get(SpliceMetrics.MetricsPrefix :+ "history" :+ "bulk-storage" :+ "object-count")
           .value
-        val numObjectsFromMetric = objectCountMetrics
-          .get(MetricsContext.Empty)
-          .value
-          .markers
-          .get(MetricsContext("object_type" -> "updates"))
-          .value
-          .get()
-        numObjectsFromMetric shouldBe 2
+        def numObjectsFromMetric(encoding: ScanStorageConfig.Encoding): Long =
+          objectCountMetrics
+            .get(MetricsContext.Empty)
+            .value
+            .markers
+            .get(
+              MetricsContext(
+                "object_type" -> "updates",
+                "encoding" -> encoding.key,
+                "bucket" -> "staging",
+              )
+            )
+            .value
+            .get()
+        numObjectsFromMetric(ScanStorageConfig.Encoding.CompactJson) shouldBe 2
+        numObjectsFromMetric(ScanStorageConfig.Encoding.ProtobufJson) shouldBe 2
       }
 
       clue("Check that the dumped content is correct") {
@@ -133,33 +160,56 @@ class UpdateHistoryBulkStorageTest
               update.update.update.recordTime <= toTimestamp
           )
         } yield {
-          val objectKeys = s3Objects.contents.asScala.map(_.key()).sorted
-          objectKeys should have length 2
-          s3Objects.contents().get(0).size().toInt should be >= maxFileSize.toInt
-          val allUpdatesFromS3 = objectKeys.flatMap(
-            readUncompressAndDecode(bucketConnection, io.circe.parser.decode[UpdateHistoryItemV2])
-          )
-          allUpdatesFromS3.length shouldBe segmentUpdates.length
-          allUpdatesFromS3
-            .map(
-              new CompactJsonScanHttpEncodings(identity, identity).httpToLapiUpdate
-            ) should contain theSameElementsInOrderAs segmentUpdates
-          /* We hard-code the expected digests to enforce that the persisted data format does not change.
-             These values must not be modified unless there is a conscious decision to change the persisted format,
-             with a migration plan for how to apply it consistently across SVs. */
-          bucketConnection
-            .getChecksums(objectKeys.toSeq)
-            .futureValue
-            .map(_.checksum) should contain theSameElementsInOrderAs Seq(
-            "MM+DyxPP6UgpAaSCsm99j4ZAtYIK3TIrPmxFyodBrQQ=",
-            "2oWb5Um18xwnJTMkC4yilyrcsUADYoxtV7toJi29VsI=",
-          )
+          def checkEncoding(encoding: ScanStorageConfig.Encoding) = {
+            /* We hard-code the expected digests to enforce that the persisted data format does not change.
+               These values must not be modified unless there is a conscious decision to change the persisted format,
+               with a migration plan for how to apply it consistently across SVs. */
+            val (encodings, expectedDigests): (ScanHttpEncodings, Seq[String]) = encoding match {
+              case ScanStorageConfig.Encoding.CompactJson =>
+                (
+                  new CompactJsonScanHttpEncodings(identity, identity),
+                  Seq(
+                    "MM+DyxPP6UgpAaSCsm99j4ZAtYIK3TIrPmxFyodBrQQ=",
+                    "2oWb5Um18xwnJTMkC4yilyrcsUADYoxtV7toJi29VsI=",
+                  ),
+                )
+              case ScanStorageConfig.Encoding.ProtobufJson =>
+                (
+                  ProtobufJsonScanHttpEncodings,
+                  Seq(
+                    "9QrYwnzkSce+GIh82uzY+1JHv4ukYC+llD0Idx1GDio=",
+                    "pCOz8MG6Zoxup4NGnzBx48kFPm582cWn+GxWSZFyq+E=",
+                  ),
+                )
+            }
+
+            val filteredS3Objects = s3Objects.contents.asScala
+              .filter(o => encoding.storageKeyRegex("updates").matches(o.key()))
+            val objectKeys = filteredS3Objects.map(_.key()).sorted
+            objectKeys should have length expectedDigests.length.toLong
+            filteredS3Objects(0).size().toInt should be >= maxFileSize.toInt
+            val allUpdatesFromS3 = objectKeys.flatMap(
+              readUncompressAndDecode(bucketConnection, io.circe.parser.decode[UpdateHistoryItemV2])
+            )
+            allUpdatesFromS3.length shouldBe segmentUpdates.length
+            allUpdatesFromS3
+              .map(
+                encodings.httpToLapiUpdate
+              ) should contain theSameElementsInOrderAs segmentUpdates
+            bucketConnection
+              .getChecksums(objectKeys.toSeq)
+              .futureValue
+              .map(_.checksum) should contain theSameElementsInOrderAs expectedDigests
+          }
+
+          checkEncoding(ScanStorageConfig.Encoding.CompactJson)
+          checkEncoding(ScanStorageConfig.Encoding.ProtobufJson)
         }
       }
     }
 
     "successfully handle an empty segment" in {
-      val bucketConnection = new S3BucketConnectionForUnitTests(s3ConfigMock, loggerFactory)
+      val bucketConnection = new S3BucketConnectionForUnitTests(s3ConfigMock(), loggerFactory)
       val mockStore =
         new MockUpdateHistoryStore(10, { i => Instant.ofEpochMilli(i + 1000) })
       val fromTimestamp =
@@ -202,16 +252,17 @@ class UpdateHistoryBulkStorageTest
     }
 
     "successfully dump all segments" in {
-      val bucketConnection = new S3BucketConnectionForUnitTests(s3ConfigMock, loggerFactory)
+      val bucketConnection = new S3BucketConnectionForUnitTests(s3ConfigMock(), loggerFactory)
       val initialStoreSize = 2000
       val genesisDate = LocalDate.of(2001, 1, 23)
       val genesisInstant = genesisDate.atTime(2, 34).toInstant(ZoneOffset.UTC)
       val metricsFactory = new InMemoryMetricsFactory
       def latestSegmentMetrics = metricsFactory.metrics.gauges
         .get(
-          SpliceMetrics.MetricsPrefix :+ "history" :+ "bulk-storage" :+ "latest-updates-segment"
+          SpliceMetrics.MetricsPrefix :+ "history" :+ "bulk-storage" :+ "latest-updates-segment-staging"
         )
         .value
+      val metrics = new HistoryMetrics(metricsFactory)(MetricsContext.Empty)
 
       val mockStore = new MockUpdateHistoryStore(
         initialStoreSize,
@@ -224,16 +275,31 @@ class UpdateHistoryBulkStorageTest
         val retryProvider =
           RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory)
 
-        val svc = new UpdateHistoryBulkStorage(
+        val writer = new UpdateHistoryBulkStorageWriterFromDb(
           bulkStorageTestConfig,
           appConfig,
           mockStore.store,
-          kvProvider,
-          migrationId,
           bucketConnection,
-          new HistoryMetrics(metricsFactory)(MetricsContext.Empty),
+          metrics,
+          migrationId,
           loggerFactory,
-        ).asRetryableService(
+        )
+        val progress = new UpdateHistoryBulkStoragePersistentProgress(
+          "latest_updates_segment_in_bulk_storage",
+          kvProvider,
+          metrics.BulkStorage.latestUpdatesSegmentStaging,
+          loggerFactory,
+        )
+        val bulkStorage = new UpdateHistoryBulkStorage(
+          "UpdateHistoryBulkStorageUnitTest",
+          writer,
+          progress,
+          appConfig,
+          Source.single(true).mapMaterializedValue(_ => Cancellable.alreadyCancelled),
+          loggerFactory,
+        )
+
+        val svc = bulkStorage.asPekkoRetryingService(
           AutomationConfig(pollingInterval =
             NonNegativeFiniteDuration.ofSeconds(1)
           ), // Fast retries
@@ -241,10 +307,11 @@ class UpdateHistoryBulkStorageTest
           retryProvider,
         )
 
-        (retryProvider, svc)
+        (retryProvider, bulkStorage, svc, progress)
       }
 
       def assertLatestSegmentInDb(
+          progress: UpdateHistoryBulkStoragePersistentProgress,
           fromHour: Int,
           fromMigration: Int,
           toHour: Int,
@@ -264,7 +331,7 @@ class UpdateHistoryBulkStorageTest
             toMigration.toLong,
           ),
         )
-        kvProvider.getLatestUpdatesSegmentInBulkStorage().value.futureValue.value shouldBe segment
+        progress.readLatestProcessedSegment.futureValue.value shouldBe segment
       }
 
       def assertLatestSegmentInMetrics(hour: Int) =
@@ -273,14 +340,15 @@ class UpdateHistoryBulkStorageTest
           .toInstant(ZoneOffset.UTC)
           .toEpochMilli * 1000
 
-      val (retryProvider, svc) = newRetryProviderAndUpdatesBulkStorageService(0L)
+      val (retryProvider, bulkStorage, svc, progress) =
+        newRetryProviderAndUpdatesBulkStorageService(0L)
       Using.resources(
         svc,
         retryProvider,
       ) { (_, _) =>
         clue("First 2000 events end at 08:07:10, so expecting segments up to 08:00") {
           eventually() {
-            assertLatestSegmentInDb(6, 0, 8, 0)
+            assertLatestSegmentInDb(progress, 6, 0, 8, 0)
 
             assertLatestSegmentInMetrics(8)
           }
@@ -289,7 +357,7 @@ class UpdateHistoryBulkStorageTest
         clue("Ingest 2000 more updates, up to 13:14, expecting segments up to 12:00") {
           mockStore.mockIngestion(2000)
           eventually() {
-            assertLatestSegmentInDb(10, 0, 12, 0)
+            assertLatestSegmentInDb(progress, 10, 0, 12, 0)
             assertLatestSegmentInMetrics(12)
           }
 
@@ -300,12 +368,13 @@ class UpdateHistoryBulkStorageTest
       // then start a new one with the new migration and ingest updates in the new migration
 
       mockStore.mockMigration()
-      val (retryProvider1, svc1) = newRetryProviderAndUpdatesBulkStorageService(1L)
+      val (retryProvider1, bulkStorage1, svc1, progress1) =
+        newRetryProviderAndUpdatesBulkStorageService(1L)
       Using.resources(svc1, retryProvider1) { (_, _) =>
         clue("500 more updates in the new migration, up to 15:03") {
           mockStore.mockIngestion(500)
           eventually() {
-            assertLatestSegmentInDb(12, 0, 14, 1)
+            assertLatestSegmentInDb(progress1, 12, 0, 14, 1)
             assertLatestSegmentInMetrics(14)
           }
         }
@@ -313,11 +382,11 @@ class UpdateHistoryBulkStorageTest
     }
 
     "list objects correctly" in {
-      val bucketConnection = new S3BucketConnectionForUnitTests(s3ConfigMock, loggerFactory)
+      val bucketConnection = new S3BucketConnectionForUnitTests(s3ConfigMock(), loggerFactory)
       val mockKvStore = mock[KeyValueStore]
       when(
         mockKvStore.readValueAndLogOnDecodingFailure[UpdatesSegment](
-          eqTo("latest_updates_segment_in_bulk_storage")
+          eqTo("latest_updates_segment_in_bulk_storage_staging")
         )(
           any[Decoder[UpdatesSegment]],
           any[TraceContext],
@@ -342,39 +411,48 @@ class UpdateHistoryBulkStorageTest
         )
       )
       val mockKvProvider = new ScanKeyValueProvider(mockKvStore, loggerFactory)
-      val svc = new UpdateHistoryBulkStorage(
-        bulkStorageTestConfig,
-        appConfig,
-        mock[UpdateHistory],
+      val progress = new UpdateHistoryBulkStoragePersistentProgress(
+        "latest_updates_segment_in_bulk_storage_staging",
         mockKvProvider,
-        0L,
-        bucketConnection,
-        new HistoryMetrics(new InMemoryMetricsFactory)(MetricsContext.Empty),
+        new HistoryMetrics(new InMemoryMetricsFactory)(
+          MetricsContext.Empty
+        ).BulkStorage.latestUpdatesSegmentStaging,
+        loggerFactory,
+      )
+      val reader = new BulkStorageReader(
+        acsSnapshotStagingProgress = null, // no ACS snapshots in this test
+        acsSnapshotCommittedProgress = null, // no ACS snapshots in this test
+        updateHistoryStagingProgress = progress,
+        updateHistoryCommittedProgress = progress,
+        storageConfig = bulkStorageTestConfig,
+        stagingS3Connection = bucketConnection,
+        committedS3Connection =
+          bucketConnection, // we use the same bucket for staging and committed for this test, as we don't run the commit from staging flow
         loggerFactory,
       )
 
-      val d20u0 = "2015-10-20T00:00:00Z~2015-10-21T00:00:00Z/updates_0.zstd"
-      val d20u1 = "2015-10-20T00:00:00Z~2015-10-21T00:00:00Z/updates_1.zstd"
-      val d21u0 = "2015-10-21T00:00:00Z~2015-10-22T00:00:00Z/updates_0.zstd"
-      val d21u1 = "2015-10-21T00:00:00Z~2015-10-22T00:00:00Z/updates_1.zstd"
-      val d22u0 = "2015-10-22T00:00:00Z~2015-10-23T00:00:00Z/updates_0.zstd"
-      val d22u1 = "2015-10-22T00:00:00Z~2015-10-23T00:00:00Z/updates_1.zstd"
-      val d23u0 = "2015-10-23T00:00:00Z~2015-10-24T00:00:00Z/updates_0.zstd"
-      val d23u1 = "2015-10-23T00:00:00Z~2015-10-24T00:00:00Z/updates_1.zstd"
-      val d24u0 = "2015-10-24T00:00:00Z~2015-10-25T00:00:00Z/updates_0.zstd"
-      val d24u1 = "2015-10-24T00:00:00Z~2015-10-25T00:00:00Z/updates_1.zstd"
-      val allObjs = Seq(
-        d20u0,
-        d20u1,
-        d21u0,
-        d21u1,
-        d22u0,
-        d22u1,
-        d23u0,
-        d23u1,
-        d24u0,
-        d24u1,
-      )
+      def makeObjectKeys(dates: String, prefix: String = "updates"): Seq[String] =
+        ScanStorageConfig.Encoding.all.toList.flatMap { encoding =>
+          Seq(0, 1).map { i =>
+            s"${dates}/${encoding.storageKey(prefix, i)}"
+          }
+        }
+
+      def getCommitted(start: String, end: String, limit: Int, nextPageTokenO: Option[String]) =
+        reader.getCommittedUpdatesBetweenDates(
+          CantonTimestamp.tryFromInstant(Instant.parse(start)),
+          CantonTimestamp.tryFromInstant(Instant.parse(end)),
+          PageLimit.tryCreate(limit),
+          nextPageTokenO,
+          ScanStorageConfig.Encoding.all,
+        )
+
+      val d20 = makeObjectKeys("2015-10-20T00:00:00Z~2015-10-21T00:00:00Z")
+      val d21 = makeObjectKeys("2015-10-21T00:00:00Z~2015-10-22T00:00:00Z")
+      val d22 = makeObjectKeys("2015-10-22T00:00:00Z~2015-10-23T00:00:00Z")
+      val d23 = makeObjectKeys("2015-10-23T00:00:00Z~2015-10-24T00:00:00Z")
+      val d24 = makeObjectKeys("2015-10-24T00:00:00Z~2015-10-25T00:00:00Z")
+      val allObjs = d20 ++ d21 ++ d22 ++ d23 ++ d24
       Future
         .sequence(allObjs.map {
           bucketConnection.createObject(_)
@@ -382,108 +460,58 @@ class UpdateHistoryBulkStorageTest
         .futureValue
 
       // A wider range than the data
-      val res1 = svc
-        .getUpdatesBetweenDates(
-          CantonTimestamp.tryFromInstant(Instant.parse("2015-10-10T00:00:00Z")),
-          CantonTimestamp.tryFromInstant(Instant.parse("2015-10-30T00:00:00Z")),
-          PageLimit.tryCreate(10),
-          None,
-        )
-        .futureValue
-      res1.objects.map(_.key) should contain theSameElementsInOrderAs Seq(
-        d20u0,
-        d20u1,
-        d21u0,
-        d21u1,
-        d22u0,
-        d22u1,
-        d23u0,
-        d23u1,
-      )
+      val res1 = getCommitted("2015-10-10T00:00:00Z", "2015-10-30T00:00:00Z", 20, None).futureValue
+      res1.objects.map(_.key) should contain theSameElementsInOrderAs d20 ++ d21 ++ d22 ++ d23
       res1.nextPageTokenO shouldBe Some("2015-10-23T00:00:00Z~2015-10-24T00:00:00Z/")
-      val res1b = svc
-        .getUpdatesBetweenDates(
-          CantonTimestamp.tryFromInstant(Instant.parse("2015-10-10T00:00:00Z")),
-          CantonTimestamp.tryFromInstant(Instant.parse("2015-10-30T00:00:00Z")),
-          PageLimit.tryCreate(10),
-          res1.nextPageTokenO,
-        )
-        .futureValue
+      val res1b = getCommitted(
+        "2015-10-10T00:00:00Z",
+        "2015-10-30T00:00:00Z",
+        20,
+        res1.nextPageTokenO,
+      ).futureValue
       res1b.objects.map(_.key) shouldBe empty
       res1b.nextPageTokenO shouldBe Some("2015-10-23T00:00:00Z~2015-10-24T00:00:00Z/")
 
       // A smaller range within the data
-      val res2 = svc
-        .getUpdatesBetweenDates(
-          CantonTimestamp.tryFromInstant(Instant.parse("2015-10-21T16:00:00Z")),
-          CantonTimestamp.tryFromInstant(Instant.parse("2015-10-21T16:00:05Z")),
-          PageLimit.tryCreate(10),
-          None,
-        )
-        .futureValue
-      res2.objects.map(_.key) should contain theSameElementsInOrderAs Seq(d21u0, d21u1)
+      val res2 = getCommitted("2015-10-21T16:00:00Z", "2015-10-21T16:00:05Z", 20, None).futureValue
+      res2.objects.map(_.key) should contain theSameElementsInOrderAs d21
       res2.nextPageTokenO shouldBe None
 
       // pagination
-      val res3 = svc
-        .getUpdatesBetweenDates(
-          CantonTimestamp.tryFromInstant(Instant.parse("2015-10-01T12:00:00Z")),
-          CantonTimestamp.tryFromInstant(Instant.parse("2015-10-21T16:00:05Z")),
-          PageLimit.tryCreate(
-            3
-          ), // on purpose 3 even though we expect only 2 back (since the response is always full days of updates)
-          None,
-        )
-        .futureValue
-      res3.objects.map(_.key) should contain theSameElementsInOrderAs Seq(d20u0, d20u1)
+      val res3 = getCommitted(
+        "2015-10-01T12:00:00Z",
+        "2015-10-21T16:00:05Z",
+        5, // on purpose 5 even though we expect only 4 back (since the response is always full days of updates)
+        None,
+      ).futureValue
+      res3.objects.map(_.key) should contain theSameElementsInOrderAs d20
       res3.nextPageTokenO shouldBe Some("2015-10-20T00:00:00Z~2015-10-21T00:00:00Z/")
-      val res3b = svc
-        .getUpdatesBetweenDates(
-          CantonTimestamp.tryFromInstant(Instant.parse("2015-10-01T12:00:00Z")),
-          CantonTimestamp.tryFromInstant(Instant.parse("2015-10-21T16:00:05Z")),
-          PageLimit.tryCreate(3),
-          res3.nextPageTokenO,
-        )
-        .futureValue
-      res3b.objects.map(_.key) should contain theSameElementsInOrderAs Seq(d21u0, d21u1)
+      val res3b = getCommitted(
+        "2015-10-01T12:00:00Z",
+        "2015-10-21T16:00:05Z",
+        5,
+        res3.nextPageTokenO,
+      ).futureValue
+      res3b.objects.map(_.key) should contain theSameElementsInOrderAs d21
       res3b.nextPageTokenO shouldBe None
 
       // exact match with start and end of segments
-      val res4 = svc
-        .getUpdatesBetweenDates(
-          CantonTimestamp.tryFromInstant(Instant.parse("2015-10-21T00:00:00Z")),
-          CantonTimestamp.tryFromInstant(Instant.parse("2015-10-23T00:00:00Z")),
-          PageLimit.tryCreate(4),
-          None,
-        )
-        .futureValue
+      val res4 = getCommitted("2015-10-21T00:00:00Z", "2015-10-23T00:00:00Z", 8, None).futureValue
       res4.objects
-        .map(_.key) should contain theSameElementsInOrderAs Seq(d21u0, d21u1, d22u0, d22u1)
+        .map(_.key) should contain theSameElementsInOrderAs d21 ++ d22
       res4.nextPageTokenO shouldBe None
 
       // limit too low for first folder
-      val ex = svc
-        .getUpdatesBetweenDates(
-          CantonTimestamp.tryFromInstant(Instant.parse("2015-10-21T00:00:00Z")),
-          CantonTimestamp.tryFromInstant(Instant.parse("2015-10-23T00:00:00Z")),
-          PageLimit.tryCreate(1),
-          None,
-        )
-        .failed
-        .futureValue
+      val ex =
+        getCommitted("2015-10-21T00:00:00Z", "2015-10-23T00:00:00Z", 3, None).failed.futureValue
       ex shouldBe a[StatusRuntimeException]
       ex.asInstanceOf[StatusRuntimeException]
         .getStatus
         .getCode shouldBe io.grpc.Status.Code.INVALID_ARGUMENT
 
       // Test handling an empty segment: Simulate no updates in 2015-10-25 to 2015-10-26
-      val d26u0 = "2015-10-26T00:00:00Z~2015-10-27T00:00:00Z/updates_0.zstd"
-      val d26u1 = "2015-10-26T00:00:00Z~2015-10-27T00:00:00Z/updates_1.zstd"
-      val moreObjs = Seq(
-        "2015-10-25T00:00:00Z~2015-10-26T00:00:00Z/ACS_0.zstd",
-        d26u0,
-        d26u1,
-      )
+      val d26 = makeObjectKeys("2015-10-26T00:00:00Z~2015-10-27T00:00:00Z")
+      val moreObjs = makeObjectKeys("2015-10-25T00:00:00Z~2015-10-26T00:00:00Z", "ACS") ++ d26
       Future
         .sequence(moreObjs.map {
           bucketConnection.createObject(_)
@@ -492,7 +520,7 @@ class UpdateHistoryBulkStorageTest
       // Update the kvStore mock to report that up to 10-27 everything was dumped
       when(
         mockKvStore.readValueAndLogOnDecodingFailure[UpdatesSegment](
-          eqTo("latest_updates_segment_in_bulk_storage")
+          eqTo("latest_updates_segment_in_bulk_storage_staging")
         )(
           any[Decoder[UpdatesSegment]],
           any[TraceContext],
@@ -517,25 +545,16 @@ class UpdateHistoryBulkStorageTest
         )
       )
       // Query up to the middle of the empty segment
-      val res5 = svc
-        .getUpdatesBetweenDates(
-          CantonTimestamp.tryFromInstant(Instant.parse("2015-10-20T00:00:00Z")),
-          CantonTimestamp.tryFromInstant(Instant.parse("2015-10-25T12:00:00Z")),
-          PageLimit.tryCreate(20),
-          None,
-        )
-        .futureValue
+      val res5 = getCommitted("2015-10-20T00:00:00Z", "2015-10-25T12:00:00Z", 20, None).futureValue
       // First response contains all data, but with a next page token
       res5.objects.map(_.key) should contain theSameElementsInOrderAs allObjs
       res5.nextPageTokenO shouldBe Some("2015-10-24T00:00:00Z~2015-10-25T00:00:00Z/")
-      val res5b = svc
-        .getUpdatesBetweenDates(
-          CantonTimestamp.tryFromInstant(Instant.parse("2015-10-21T00:00:00Z")),
-          CantonTimestamp.tryFromInstant(Instant.parse("2015-10-25T12:00:00Z")),
-          PageLimit.tryCreate(20),
-          res5.nextPageTokenO,
-        )
-        .futureValue
+      val res5b = getCommitted(
+        "2015-10-21T00:00:00Z",
+        "2015-10-25T12:00:00Z",
+        20,
+        res5.nextPageTokenO,
+      ).futureValue
       // Second page should be empty, with no nextPageToken
       res5b.objects.map(_.key) shouldBe empty
       res5b.nextPageTokenO shouldBe None
@@ -567,17 +586,15 @@ class UpdateHistoryBulkStorageTest
       val store = mock[UpdateHistory]
       when(
         store.getUpdatesWithoutImportUpdates(
-          any[Option[(Long, CantonTimestamp)]],
+          any[Option[TimestampWithMigrationId]],
           any[Limit],
         )(any[TraceContext])
       ).thenAnswer {
         (
-            afterO: Option[(Long, CantonTimestamp)],
+            afterO: Option[TimestampWithMigrationId],
             limit: Limit,
         ) =>
-          val after = afterO
-            .map(a => TimestampWithMigrationId(a._2, a._1))
-            .getOrElse(TimestampWithMigrationId(CantonTimestamp.MinValue, 0L))
+          val after = afterO.getOrElse(TimestampWithMigrationId(CantonTimestamp.MinValue, 0L))
           Future.successful(
             data
               .filter(update =>

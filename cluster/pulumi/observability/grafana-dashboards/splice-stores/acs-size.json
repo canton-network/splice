@@ -18,7 +18,6 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "id": 3573,
   "links": [],
   "panels": [
     {
@@ -26,73 +25,85 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
+      "description": "Number of rows in the latest saved ACS snapshot, as reported by the SV Scan app. This is the metric behind the 'ACS growth' alert. Note that it counts rows, not contracts: contracts with multiple stakeholders are counted multiple times. A value of -1 means the size of the last snapshot save is unknown.",
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "thresholds"
+            "mode": "palette-classic"
           },
           "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
             },
-            "inspect": false
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": 0
               },
               {
                 "color": "red",
                 "value": 80
               }
             ]
-          }
+          },
+          "unit": "short"
         },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Trend #A"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "ACS size"
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "gridPos": {
-        "h": 26,
+        "h": 10,
         "w": 24,
         "x": 0,
         "y": 0
       },
       "id": 2,
       "options": {
-        "cellHeight": "sm",
-        "footer": {
-          "countRows": false,
-          "fields": "",
-          "reducer": [
-            "sum"
-          ],
-          "show": false
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
         },
-        "showHeader": true,
-        "sortBy": [
-          {
-            "desc": true,
-            "displayName": "ACS size"
-          }
-        ]
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
       },
-      "pluginVersion": "12.0.2",
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "datasource": {
@@ -100,25 +111,15 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (namespace, store_name, store_party) (splice_store_acs_size{namespace=~\"$namespace\",store_name=~\"$store_name\"})",
+          "expr": "splice_history_acs_snapshots_snapshot_size{namespace=~\"$namespace\"}",
           "instant": false,
-          "legendFormat": "__auto",
+          "legendFormat": "{{namespace}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "ACS Size",
-      "transformations": [
-        {
-          "id": "timeSeriesTable",
-          "options": {
-            "A": {
-              "timeField": "Time"
-            }
-          }
-        }
-      ],
-      "type": "table"
+      "title": "ACS size (rows in latest saved snapshot)",
+      "type": "timeseries"
     },
     {
       "datasource": {
@@ -154,6 +155,7 @@
               "type": "linear"
             },
             "showPoints": "auto",
+            "showValues": false,
             "spanNulls": false,
             "stacking": {
               "group": "A",
@@ -168,7 +170,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green"
+                "color": "green",
+                "value": 0
               },
               {
                 "color": "red",
@@ -184,7 +187,7 @@
         "h": 20,
         "w": 24,
         "x": 0,
-        "y": 26
+        "y": 10
       },
       "id": 1,
       "options": {
@@ -200,7 +203,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.0.2",
+      "pluginVersion": "12.4.0",
       "targets": [
         {
           "datasource": {
@@ -208,20 +211,20 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum without (__name__,endpoint,instance,job,migration,otel_scope) (splice_store_acs_size{namespace=~\"$namespace\",store_name=~\"$store_name\"})",
+          "expr": "(increase(splice_store_acs_size_increase_total{namespace=~\"$namespace\",store_name=~\"$store_name\"}[24h]))-(increase(splice_store_acs_size_decrease_total{namespace=~\"$namespace\",store_name=~\"$store_name\"}[24h]))",
           "instant": false,
-          "legendFormat": "__auto",
+          "legendFormat": "{{namespace}} {{store_name}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Splice Store ACS Size",
+      "title": "Splice Store ACS Change in last 24h",
       "type": "timeseries"
     }
   ],
   "preload": false,
   "refresh": "",
-  "schemaVersion": 41,
+  "schemaVersion": 42,
   "tags": [],
   "templating": {
     "list": [
@@ -235,18 +238,19 @@
           "type": "prometheus",
           "uid": "prometheus"
         },
-        "definition": "label_values(splice_store_acs_size,namespace)",
+        "definition": "label_values(splice_store_acs_size_increase_total,namespace)",
         "includeAll": true,
         "multi": true,
         "name": "namespace",
         "options": [],
         "query": {
           "qryType": 1,
-          "query": "label_values(splice_store_acs_size,namespace)",
+          "query": "label_values(splice_store_acs_size_increase_total,namespace)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
         "regex": "",
+        "regexApplyTo": "value",
         "type": "query"
       },
       {
@@ -259,18 +263,19 @@
           "type": "prometheus",
           "uid": "prometheus"
         },
-        "definition": "label_values(splice_store_acs_size,store_name)",
+        "definition": "label_values(splice_store_acs_size_increase_total,store_name)",
         "includeAll": true,
         "multi": true,
         "name": "store_name",
         "options": [],
         "query": {
           "qryType": 1,
-          "query": "label_values(splice_store_acs_size,store_name)",
+          "query": "label_values(splice_store_acs_size_increase_total,store_name)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
         "regex": "",
+        "regexApplyTo": "value",
         "type": "query"
       }
     ]
@@ -281,7 +286,8 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "Splice Store ACS Size",
+  "title": "ACS Size",
   "uid": "dduss3xr5or28c",
-  "version": 1
+  "version": 2,
+  "weekStart": ""
 }

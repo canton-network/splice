@@ -24,7 +24,7 @@ import org.lfdecentralizedtrust.splice.admin.http.HttpErrorHandler
 import org.lfdecentralizedtrust.splice.auth.ActAsKnownPartyAuthExtractor.ActAsKnownUserRequest
 import org.lfdecentralizedtrust.splice.http.v0.{definitions, sv_operator as v0}
 import org.lfdecentralizedtrust.splice.http.v0.sv_operator.SvOperatorResource as r0
-import org.lfdecentralizedtrust.splice.config.{NetworkAppClientConfig, UpgradesConfig}
+import org.lfdecentralizedtrust.splice.config.{NetworkAppClientConfig, Thresholds, UpgradesConfig}
 import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.http.{
   HttpClient,
@@ -34,14 +34,19 @@ import org.lfdecentralizedtrust.splice.http.{
 }
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.ScanConnection
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
-import org.lfdecentralizedtrust.splice.store.{ActiveVotesStore, AppStore, AppStoreWithIngestion}
+import org.lfdecentralizedtrust.splice.store.{
+  ActiveVotesStore,
+  AppStore,
+  AppStoreWithIngestion,
+  VoteResultsFilters,
+}
 import org.lfdecentralizedtrust.splice.sv.cometbft.CometBftClient
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvSvStore}
 import org.lfdecentralizedtrust.splice.sv.util.SvUtil.generateRandomOnboardingSecret
 import org.lfdecentralizedtrust.splice.sv.util.Secrets
 import org.lfdecentralizedtrust.splice.sv.{LocalSynchronizerNode, SvApp}
-import org.lfdecentralizedtrust.splice.util.{Codec, Contract, TemplateJsonDecoder}
+import org.lfdecentralizedtrust.splice.util.{Codec, Contract, DsoInfo, TemplateJsonDecoder}
 
 import java.util.Optional
 import scala.concurrent.{blocking, ExecutionContextExecutor, Future}
@@ -57,6 +62,8 @@ class HttpSvOperatorHandler(
     override protected val timeouts: ProcessingTimeout,
     protected val loggerFactory: NamedLoggerFactory,
     upgradesConfig: UpgradesConfig,
+    participantAdminConnection: ParticipantAdminConnection,
+    initialRound: String,
 )(implicit
     ec: ExecutionContextExecutor,
     protected val tracer: Tracer,
@@ -109,6 +116,36 @@ class HttpSvOperatorHandler(
     }
   }
 
+  /** Intended use: The SV app UI.
+    *
+    * Protection: Requires authorization as SV operator; replaces the public `/v0/dso` endpoint.
+    */
+  override def getDsoInfoV1(
+      respond: r0.GetDsoInfoV1Response.type
+  )()(extracted: ActAsKnownUserRequest): Future[r0.GetDsoInfoV1Response] = {
+    implicit val ActAsKnownUserRequest(traceContext) = extracted
+    withSpan(s"$workflowId.getDsoInfoV1") { _ => _ =>
+      for {
+        latestOpenMiningRound <- dsoStore.getLatestActiveOpenMiningRound()
+        amuletRules <- dsoStore.getAssignedAmuletRules()
+        rulesAndStates <- dsoStore.getDsoRulesWithStateWithSvNodeStates()
+        dsoRules = rulesAndStates.dsoRules
+      } yield r0.GetDsoInfoV1Response.OK(
+        DsoInfo(
+          svUser = config.ledgerApiUser,
+          svParty = dsoStore.key.svParty,
+          dsoParty = dsoStore.key.dsoParty,
+          votingThreshold = Thresholds.requiredNumVotes(dsoRules),
+          latestMiningRound = latestOpenMiningRound.toContractWithState,
+          amuletRules = amuletRules.toContractWithState,
+          dsoRules = dsoRules,
+          svNodeStates = rulesAndStates.svNodeStates,
+          initialRound = Some(initialRound),
+        ).toHttp
+      )
+    }
+  }
+
   override def listDsoRulesVoteRequests(
       respond: r0.ListDsoRulesVoteRequestsResponse.type
   )()(
@@ -131,11 +168,13 @@ class HttpSvOperatorHandler(
       for {
         scanConnection <- scanConnectionF
         (voteResults, nextPageToken) <- scanConnection.listVoteRequestResults(
-          body.actionName,
-          body.accepted,
-          body.requester,
-          body.effectiveFrom,
-          body.effectiveTo,
+          VoteResultsFilters(
+            body.actionName,
+            body.accepted,
+            requester = body.requester,
+            effectiveFrom = body.effectiveFrom,
+            effectiveTo = body.effectiveTo,
+          ),
           body.limit.intValue,
           body.pageToken,
         )
@@ -157,6 +196,54 @@ class HttpSvOperatorHandler(
               .toVector,
             nextPageToken,
           )
+        )
+      }
+    }
+  }
+
+  override def countVoteRequestResults(
+      respond: r0.CountVoteRequestResultsResponse.type
+  )(
+      body: definitions.CountVoteResultsRequest
+  )(
+      extracted: ActAsKnownUserRequest
+  ): Future[r0.CountVoteRequestResultsResponse] = {
+    implicit val ActAsKnownUserRequest(traceContext) = extracted
+    withSpan(s"$workflowId.countVoteRequestResults") { _ => _ =>
+      for {
+        scanConnection <- scanConnectionF
+        count <- scanConnection.countVoteRequestResults(
+          VoteResultsFilters(
+            body.actionName,
+            body.accepted,
+            requester = body.requester,
+            effectiveFrom = body.effectiveFrom,
+            effectiveTo = body.effectiveTo,
+          )
+        )
+      } yield {
+        r0.CountVoteRequestResultsResponse.OK(
+          definitions.CountVoteResultsResponse(count)
+        )
+      }
+    }
+  }
+
+  override def getPreviousSvRewardWeight(
+      respond: r0.GetPreviousSvRewardWeightResponse.type
+  )(
+      body: definitions.PreviousSvRewardWeightRequest
+  )(
+      extracted: ActAsKnownUserRequest
+  ): Future[r0.GetPreviousSvRewardWeightResponse] = {
+    implicit val ActAsKnownUserRequest(traceContext) = extracted
+    withSpan(s"$workflowId.getPreviousSvRewardWeight") { _ => _ =>
+      for {
+        scanConnection <- scanConnectionF
+        rewardWeight <- scanConnection.getPreviousSvRewardWeight(body.svParty, body.effectiveBefore)
+      } yield {
+        r0.GetPreviousSvRewardWeightResponse.OK(
+          definitions.PreviousSvRewardWeightResponse(rewardWeight = rewardWeight.map(_.toString))
         )
       }
     }
@@ -539,6 +626,21 @@ class HttpSvOperatorHandler(
             )
           )
       }
+    }
+  }
+
+  override def cancelLogicalSynchronizerUpgrade(
+      respond: r0.CancelLogicalSynchronizerUpgradeResponse.type
+  )()(
+      extracted: ActAsKnownUserRequest
+  ): Future[r0.CancelLogicalSynchronizerUpgradeResponse] = {
+    implicit val ActAsKnownUserRequest(traceContext) = extracted
+    withSpan(s"$workflowId.cancelLogicalSynchronizerUpgrade") { _ => _ =>
+      for {
+        decentralizedSynchronizer <- dsoStore.getDsoRules().map(_.domain)
+        _ <- participantAdminConnection
+          .removeLsuAnnouncement(decentralizedSynchronizer)
+      } yield r0.CancelLogicalSynchronizerUpgradeResponseOK
     }
   }
 

@@ -31,8 +31,8 @@ class CachingScanRewardsReferenceStore private[splice] (
     with NamedLogging {
 
   private val featuredAppPartiesCache
-      : ScaffeineCache.TracedAsyncLoadingCache[Future, CantonTimestamp, Set[String]] =
-    ScaffeineCache.buildTracedAsync[Future, CantonTimestamp, Set[String]](
+      : ScaffeineCache.TracedAsyncLoadingCache[Future, CantonTimestamp, Map[String, BigDecimal]] =
+    ScaffeineCache.buildTracedAsync[Future, CantonTimestamp, Map[String, BigDecimal]](
       Scaffeine()
         .maximumSize(2L),
       loader = implicit tc => asOf => store.lookupFeaturedAppPartiesAsOf(asOf),
@@ -57,7 +57,7 @@ class CachingScanRewardsReferenceStore private[splice] (
 
   override def lookupFeaturedAppPartiesAsOf(
       asOf: CantonTimestamp
-  )(implicit tc: TraceContext): Future[Set[String]] =
+  )(implicit tc: TraceContext): Future[Map[String, BigDecimal]] =
     featuredAppPartiesCache.get(asOf)
 
   override def lookupSvParticipantIdsAsOf(
@@ -86,6 +86,21 @@ class CachingScanRewardsReferenceStore private[splice] (
       tc: TraceContext
   ): Future[Seq[Contract[CalculateRewardsV2.ContractId, CalculateRewardsV2]]] =
     store.listActiveCalculateRewardsV2ForRound(roundNumber)
+
+  override def lookupArchivedAtForOpenMiningRound(
+      roundNumber: Long
+  )(implicit tc: TraceContext): Future[Option[CantonTimestamp]] =
+    store.lookupArchivedAtForOpenMiningRound(roundNumber)
+
+  override def lookupLowestPrunableArchivedRewardRound()(implicit
+      tc: TraceContext
+  ): Future[Option[Long]] =
+    store.lookupLowestPrunableArchivedRewardRound()
+
+  override def pruneArchivedUpToRound(
+      roundNumber: Long
+  )(implicit tc: TraceContext): Future[Long] =
+    store.pruneArchivedUpToRound(roundNumber)
 
   override val storeName: String = store.storeName
   override def defaultLimit: Limit = store.defaultLimit

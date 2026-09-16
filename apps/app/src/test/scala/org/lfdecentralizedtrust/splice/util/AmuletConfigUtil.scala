@@ -54,6 +54,7 @@ trait AmuletConfigUtil extends TestCommon {
         maxNumInputs,
         existingTransferConfig.maxNumOutputs,
         existingTransferConfig.maxNumLockHolders,
+        existingTransferConfig.tokenStandardMaxTTL,
       ),
       existingAmuletConfig.issuanceCurve,
       existingAmuletConfig.decentralizedSynchronizer,
@@ -64,6 +65,10 @@ trait AmuletConfigUtil extends TestCommon {
       existingAmuletConfig.optDevelopmentFundManager,
       existingAmuletConfig.externalPartyConfigStateTickDuration,
       existingAmuletConfig.rewardConfig,
+      existingAmuletConfig.transferPreapprovalBaseDuration,
+      existingAmuletConfig.developmentFundManagerBlacklist,
+      existingAmuletConfig.minDevelopmentFundMintingDelay,
+      existingAmuletConfig.amuletSwitchOverTimes,
     )
   }
 

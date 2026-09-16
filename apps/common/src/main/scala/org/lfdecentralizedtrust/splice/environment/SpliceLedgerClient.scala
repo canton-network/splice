@@ -64,7 +64,7 @@ class SpliceLedgerClient(
       )
 
     val channel = builder.build
-    new LedgerClient(channel, applicationId, getToken, loggerFactory)
+    new LedgerClient(channel, applicationId, getToken, loggerFactory, timeouts)
   }
 
   private val inactiveContractsCallbacks = new AtomicReference[Seq[String => Unit]](Seq())

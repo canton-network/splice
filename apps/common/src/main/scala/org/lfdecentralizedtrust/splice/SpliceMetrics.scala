@@ -5,7 +5,7 @@ package org.lfdecentralizedtrust.splice
 
 import com.daml.metrics.HealthMetrics
 import com.daml.metrics.api.MetricHandle.LabeledMetricsFactory
-import com.daml.metrics.api.{MetricName, MetricsContext}
+import com.daml.metrics.api.{HistogramInventory, MetricName, MetricsContext}
 import com.digitalasset.canton.environment.BaseMetrics
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.metrics.ActiveRequestsMetrics.GrpcServerMetricsX
@@ -59,4 +59,28 @@ abstract class BaseSpliceMetrics(
   override def httpClientMetrics: HttpClientMetrics = new HttpClientMetrics(
     openTelemetryMetricsFactory
   )
+
+  override def cryptoMetrics = crypto
+
+  private[this] val crypto = {
+    import com.digitalasset.canton.metrics.{
+      CryptoMetrics,
+      DecryptionHistograms,
+      DecryptionMetrics,
+      KmsMetrics,
+      SigningHistograms,
+      SigningMetrics,
+    }
+    new CryptoMetrics(
+      new SigningMetrics(
+        new SigningHistograms(prefix)(new HistogramInventory()),
+        openTelemetryMetricsFactory,
+      ),
+      new DecryptionMetrics(
+        new DecryptionHistograms(prefix)(new HistogramInventory()),
+        openTelemetryMetricsFactory,
+      ),
+      Some(new KmsMetrics(prefix, openTelemetryMetricsFactory)),
+    )
+  }
 }
