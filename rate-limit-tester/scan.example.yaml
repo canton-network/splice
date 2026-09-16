@@ -1,0 +1,27 @@
+# Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Scan rate limits as deployed on cilr, i.e. the defaults from `cluster/configs/shared/base.yaml`.
+# `/api/scan/version` has no bucket of its own, so it is charged against the global and the
+# global per-IP bucket only.
+#
+#   k6 run src/main.ts \
+#     -e DOMAIN=<domain> \
+#     -e CONFIG=scan.example.yaml
+
+sv:
+  scan:
+    externalRateLimits:
+      globalLimits:
+        maxTokens: 60000
+        tokensPerFill: 10000
+        fillInterval: "10s"
+      globalPerIpLimits:
+        maxTokens: 6000
+        tokensPerFill: 1000
+        fillInterval: "10s"
+      rateLimits:
+        /api/scan/version:
+          test: true
+          name: "scan-version"
+          type: "limited"

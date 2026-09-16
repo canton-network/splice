@@ -1994,6 +1994,56 @@ lazy val `load-tester` =
       },
     )
 
+lazy val `rate-limit-tester` =
+  project
+    .in(file("rate-limit-tester"))
+    .settings(
+      Headers.TsHeaderSettings,
+      npmRootDir := baseDirectory.value,
+      npmFix := {
+        val log = streams.value.log
+        npmInstall.value
+        runCommand(
+          Seq("npm", "run", "fix"),
+          log,
+          None,
+          Some(npmRootDir.value),
+        )
+      },
+      npmLint := {
+        val log = streams.value.log
+        npmInstall.value
+        runCommand(
+          Seq("npm", "run", "check"),
+          log,
+          None,
+          Some(npmRootDir.value),
+        )
+      },
+      npmInstall := {
+        val s = streams.value
+        val log = s.log
+        val cacheDir = s.cacheDirectory
+        val buildDir = (ThisBuild / baseDirectory).value
+        val npmInstall = buildDir / "build-tools" / "npm-install.sh"
+        val cache = FileFunction.cached(cacheDir / "npmInstall", FileInfo.hash) { _ =>
+          runCommand(Seq(npmInstall.absolutePath), log, None, Some(npmRootDir.value))
+          Set(npmRootDir.value / "node_modules")
+        }
+        cache(Set(npmRootDir.value / "package.json")).toSeq
+      },
+      npmBuild := {
+        val log = streams.value.log
+        npmLint.value
+        runCommand(
+          Seq("npm", "run", "build"),
+          log,
+          None,
+          Some(npmRootDir.value),
+        )
+      },
+    )
+
 lazy val patchTemplate = taskKey[File]("patch an openapi codegen template")
 
 lazy val `openapi-typescript-template` =
