@@ -113,9 +113,6 @@ def schedule_date(month: str, weekday: str, week_number: int) -> datetime.date:
     if key not in weekdays:
         raise ValueError(f"Unknown weekday: {weekday}")
 
-    if week_number < 0:
-        raise ValueError("week_number must be >= 0")
-
     return first_monday_in_month(month) + datetime.timedelta(weeks=week_number, days=weekdays[key])
 
 
