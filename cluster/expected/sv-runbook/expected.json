@@ -1561,10 +1561,6 @@
               "value": "canton.validator-apps.validator_backend.disable-sv-validator-bft-sequencer-connection = true"
             },
             {
-              "name": "ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT",
-              "value": "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
-            },
-            {
               "name": "ADDITIONAL_CONFIG_PARTICIPANT_PRUNING",
               "value": "canton.validator-apps.validator_backend.participant-pruning-schedule {\n                    cron = \"0 /10 * * * ?\"\n                    max-duration = \"5m\"\n                    retention = \"30d\"\n                  }"
             }
