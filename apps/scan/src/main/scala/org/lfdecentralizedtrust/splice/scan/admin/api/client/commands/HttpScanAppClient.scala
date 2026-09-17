@@ -3436,8 +3436,8 @@ object HttpScanAppClient {
       definitions.GetBulkObjectChecksumsResponse,
     ]] = {
       case http.GetBulkObjectChecksumsResponse.OK(response) => Right(response)
-      case http.GetBulkObjectChecksumsResponse.NotFound(err) => Left(err.error)
-      case http.GetBulkObjectChecksumsResponse.NotImplemented(err) => Left(err.error)
+//      case http.GetBulkObjectChecksumsResponse.NotFound(err) => Left(err.error)
+//      case http.GetBulkObjectChecksumsResponse.NotImplemented(err) => Left(err.error)
     }
   }
 
