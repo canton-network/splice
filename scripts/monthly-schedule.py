@@ -171,7 +171,7 @@ def monday_request(token: str, query: str, variables: dict) -> dict:
 
 
 def trigger_website_update() -> None:
-    request = urllib.request.Request(required_env("TRIIGER_CALENDAR_UPDATE_URL"), method="GET")
+    request = urllib.request.Request(required_env("MONDAY_REFRESH_STAGING_CALENDAR"), method="GET")
 
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
