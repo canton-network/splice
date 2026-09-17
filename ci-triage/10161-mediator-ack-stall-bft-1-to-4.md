@@ -1,8 +1,7 @@
-# run 35206251191 wall-clock-time (6) - globalMediatorSv1 acknowledge-signed hangs 120 s on SEQ::sv1 during the 1 -> 4 BFT onboarding step (ref not yet given)
+# 10161 - globalMediatorSv1 acknowledge-signed hangs 120 s on SEQ::sv1 during the 1 -> 4 BFT onboarding step (run 35206251191)
 
 DUPLICATE of 10094 and 10153 (same mechanism, same log shape). Second occurrence on main / canton 3.6 in two
-days. Ref: Raymond named only wall-clock-time (1) = 10162 for this run; this job's ref is left open (possibly
-10161, not inferred).
+days. Ref 10161 confirmed by Raymond on 2026-09-17 (the same run's wall-clock-time (1) is 10162).
 
 - Run: https://github.com/canton-network/splice/actions/runs/35206251191, main 22e775d614 (#7363), job
   105152950723 `wall-clock-time (6)`, canton 3.6.0-snapshot.20260910.20260.0.v90621933.
@@ -11,7 +10,7 @@ days. Ref: Raymond named only wall-clock-time (1) = 10162 for this run; this job
 ## 1. Flagged lines
 
 ```
-grep -a -B400 'contains problems' log/35206251191-wct6/job.log | grep -a '@timestamp' | grep -a -v 'ignore this line'
+grep -a -B400 'contains problems' log/10161/job.log | grep -a '@timestamp' | grep -a -v 'ignore this line'
 ```
 ```
 09:52:47.459Z WARN GrpcConnection:mediator=globalMediatorSv1/.../connection=DefaultSequencer-0
@@ -23,7 +22,7 @@ grep -a -B400 'contains problems' log/35206251191-wct6/job.log | grep -a '@times
 ## 2. Test running: SvOnboardingIntegrationTest (initDso -> 1 -> 4 step)
 
 ```
-zcat log/35206251191-wct6/logs-wall-clock-time-6/canton_network_test.clog.gz | grep -a -E "Starting '|Test succeeded" | grep -a 'T09:(49|5[0-2])'
+zcat log/10161/logs-wall-clock-time-6/canton_network_test.clog.gz | grep -a -E "Starting '|Test succeeded" | grep -a 'T09:(49|5[0-2])'
 ```
 ```
 09:49:48.595Z Starting 'SvOnboardingIntegrationTest/fail registration with invalid tokens, succeed with a valid token'
