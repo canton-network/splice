@@ -851,7 +851,8 @@
       },
       "inboundPort": 5012,
       "namespace": "sv",
-      "protocol": "http"
+      "protocol": "http",
+      "xffNumTrustedHops": 3
     },
     "name": "splice-sv-scan-app-rate-limit",
     "provider": "",
@@ -1309,6 +1310,32 @@
       },
       "spec": {
         "configPatches": [
+          {
+            "applyTo": "NETWORK_FILTER",
+            "match": {
+              "context": "SIDECAR_INBOUND",
+              "listener": {
+                "filterChain": {
+                  "filter": {
+                    "name": "envoy.filters.network.http_connection_manager"
+                  }
+                },
+                "portNumber": 5012
+              }
+            },
+            "patch": {
+              "operation": "MERGE",
+              "value": {
+                "typed_config": {
+                  "@type": "type.googleapis.com/udpa.type.v1.TypedStruct",
+                  "type_url": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "value": {
+                    "xff_num_trusted_hops": 3
+                  }
+                }
+              }
+            }
+          },
           {
             "applyTo": "HTTP_FILTER",
             "match": {
