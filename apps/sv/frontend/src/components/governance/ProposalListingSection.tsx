@@ -28,6 +28,7 @@ import { InfoOutlined } from '@mui/icons-material';
 import dayjs from 'dayjs';
 import React, { useEffect, useMemo, useRef } from 'react';
 import { useInView } from 'react-intersection-observer';
+import { formatDatetimeWithOffset } from '../../utils/dateFormat';
 
 export type ProposalSortOrder = 'effectiveAtAsc' | 'effectiveAtDesc';
 
@@ -435,14 +436,16 @@ const VoteRow: React.FC<VoteRowProps> = React.memo(props => {
             sx={governanceTableBodyCellSx}
             data-testid={`${uniqueId}-row-voting-threshold-deadline`}
           >
-            <TableBodyTypography>{votingThresholdDeadline}</TableBodyTypography>
+            <TableBodyTypography>
+              {formatDatetimeWithOffset(votingThresholdDeadline)}
+            </TableBodyTypography>
           </TableCell>
           <SubmittedByCell requester={requester} uniqueId={uniqueId} />
           <TableCell
             sx={governanceTableBodyCellSx}
             data-testid={`${uniqueId}-row-vote-takes-effect`}
           >
-            <TableBodyTypography>{voteTakesEffect}</TableBodyTypography>
+            <TableBodyTypography>{formatDatetimeWithOffset(voteTakesEffect)}</TableBodyTypography>
           </TableCell>
         </>
       ) : (
@@ -451,7 +454,7 @@ const VoteRow: React.FC<VoteRowProps> = React.memo(props => {
             sx={governanceTableBodyCellSx}
             data-testid={`${uniqueId}-row-vote-takes-effect`}
           >
-            <TableBodyTypography>{voteTakesEffect}</TableBodyTypography>
+            <TableBodyTypography>{formatDatetimeWithOffset(voteTakesEffect)}</TableBodyTypography>
           </TableCell>
           <SubmittedByCell requester={requester} uniqueId={uniqueId} />
           {showStatus && (

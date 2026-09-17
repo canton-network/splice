@@ -23,7 +23,6 @@ import {
   getVoteResultStatus,
 } from '../utils/governance';
 import { useDsoInfos } from '../contexts/SvContext';
-import { formatDatetimeWithOffset } from '../utils/dateFormat';
 import { useVoteRequestResultByCid } from '../hooks/useVoteRequestResultByCid';
 import { usePreviousSvRewardWeight } from '../hooks/usePreviousSvRewardWeight';
 import { Loading } from '@canton-network/splice-common-frontend';
@@ -91,7 +90,7 @@ export const VoteRequestDetails: React.FC = () => {
 
   const action = amuletOrDsoAction.tag as SupportedActionTag;
   const actionName = actionTagToTitle(amuletName)[action];
-  const createdAt = voteRequest ? formatDatetimeWithOffset(voteRequest.createdAt) : '';
+  const createdAt = voteRequest ? voteRequest.createdAt : '';
 
   const proposalDetails: ProposalDetails = {
     actionName,
@@ -118,19 +117,19 @@ export const VoteRequestDetails: React.FC = () => {
   // threshold" apart from "effective at expiry".
   const voteTakesEffect = hasVoteRequest
     ? request.targetEffectiveAt
-      ? formatDatetimeWithOffset(request.targetEffectiveAt)
+      ? request.targetEffectiveAt
       : 'Threshold'
     : voteResult?.outcome.tag === 'VRO_Accepted'
-      ? formatDatetimeWithOffset(voteResult.outcome.value.effectiveAt)
+      ? voteResult.outcome.value.effectiveAt
       : voteResult?.completedAt
-        ? formatDatetimeWithOffset(voteResult.completedAt)
+        ? voteResult.completedAt
         : '';
 
   const requesterPartyId = getRequesterPartyId(request.requester, svs);
   const votingInformation: ProposalVotingInformation = {
     requester: requesterPartyId,
     requesterIsYou: requesterPartyId === svPartyId,
-    votingThresholdDeadline: formatDatetimeWithOffset(request.voteBefore),
+    votingThresholdDeadline: request.voteBefore,
     voteTakesEffect,
     status: hasVoteRequest ? 'In Progress' : getVoteResultStatus(voteResult?.outcome),
   };

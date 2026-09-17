@@ -3,7 +3,6 @@
 import { Temporal } from '@js-temporal/polyfill';
 import BigNumber from 'bignumber.js';
 
-
 function prettyPrintInterval(
   seconds: number = 0,
   minutes: number = 0,

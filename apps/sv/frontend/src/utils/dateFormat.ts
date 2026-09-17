@@ -2,9 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import dayjs from 'dayjs';
-import { dateTimeFormatISO, getUTCWithOffset } from '@canton-network/splice-common-frontend-utils';
+import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 
-export function formatDatetimeWithOffset(datetime: string | Date | dayjs.Dayjs): string {
-  const d = dayjs(datetime);
-  return `${d.format(dateTimeFormatISO)} (${getUTCWithOffset(d.toDate())})`;
-}
+export const formatDatetimeWithOffset = (d: dayjs.ConfigType): string =>
+  dayjs(d).format(`${dateTimeFormatISO} [(UTC]Z[)]`);

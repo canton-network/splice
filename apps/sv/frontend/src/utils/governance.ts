@@ -15,7 +15,6 @@ import type {
 } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
 import type { DsoInfo } from '@canton-network/splice-common-frontend';
 import { type Contract } from '@canton-network/splice-common-frontend-utils';
-import { formatDatetimeWithOffset } from './dateFormat';
 import dayjs, { type Dayjs } from 'dayjs';
 import type {
   AmuletRulesConfigProposal,
@@ -166,11 +165,9 @@ export function buildVoteHistoryData(
             getGovernanceActionTag(vr.request.action) as SupportedActionTag
           ],
         description: vr.request.reason.body,
-        votingThresholdDeadline: formatDatetimeWithOffset(vr.request.voteBefore),
+        votingThresholdDeadline: vr.request.voteBefore,
         voteTakesEffect:
-          (vr.outcome.tag === 'VRO_Accepted' &&
-            formatDatetimeWithOffset(vr.outcome.value.effectiveAt)) ||
-          formatDatetimeWithOffset(vr.completedAt),
+          (vr.outcome.tag === 'VRO_Accepted' && vr.outcome.value.effectiveAt) || vr.completedAt,
         yourVote: computeYourVote(votes, svPartyId),
         status: getVoteResultStatus(vr.outcome),
         voteStats: computeVoteStats(votes),
@@ -389,7 +386,7 @@ export function buildPendingConfigFields(
         pendingValue: change.newValue as string,
         proposalCid: proposal.contractId,
         effectiveDate: proposal.payload.targetEffectiveAt
-          ? formatDatetimeWithOffset(proposal.payload.targetEffectiveAt)
+          ? proposal.payload.targetEffectiveAt
           : 'Threshold',
       }));
     });
@@ -418,7 +415,7 @@ export function buildAmuletRulesPendingConfigFields(
         pendingValue: change.newValue as string,
         proposalCid: proposal.contractId,
         effectiveDate: proposal.payload.targetEffectiveAt
-          ? formatDatetimeWithOffset(proposal.payload.targetEffectiveAt)
+          ? proposal.payload.targetEffectiveAt
           : 'Threshold',
       }));
     });

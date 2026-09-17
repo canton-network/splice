@@ -10,7 +10,6 @@ import {
 import { ProposalListingSection } from '../components/governance/ProposalListingSection';
 import ProposalSearch from '../components/governance/ProposalSearch';
 import { Loading, useVotesHooks } from '@canton-network/splice-common-frontend';
-import { formatDatetimeWithOffset } from '../utils/dateFormat';
 import { ContractId } from '@daml/types';
 import { VoteRequest } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
 import { useSvConfig } from '../utils';
@@ -83,8 +82,8 @@ export const Governance: React.FC = () => {
             getGovernanceActionTag(vr.payload.action) as SupportedActionTag
           ],
         description: vr.payload.reason.body,
-        votingCloses: formatDatetimeWithOffset(vr.payload.voteBefore),
-        createdAt: formatDatetimeWithOffset(vr.createdAt),
+        votingCloses: vr.payload.voteBefore,
+        createdAt: vr.createdAt,
         requester: getRequesterPartyId(vr.payload.requester, svs),
       })) as ActionRequiredData[];
   }, [voteRequests, alreadyVotedRequestIds, amuletName, svs]);
@@ -97,9 +96,7 @@ export const Governance: React.FC = () => {
     return voteRequests
       .filter(v => alreadyVotedRequestIds.has(v.payload.trackingCid || v.contractId))
       .map(v => {
-        const effectiveAt = v.payload.targetEffectiveAt
-          ? formatDatetimeWithOffset(v.payload.targetEffectiveAt)
-          : 'Threshold';
+        const effectiveAt = v.payload.targetEffectiveAt ? v.payload.targetEffectiveAt : 'Threshold';
         const votes = v.payload.votes.entriesArray().map(e => e[1]);
 
         return {
@@ -109,7 +106,7 @@ export const Governance: React.FC = () => {
               getGovernanceActionTag(v.payload.action) as SupportedActionTag
             ],
           description: v.payload.reason.body,
-          votingThresholdDeadline: formatDatetimeWithOffset(v.payload.voteBefore),
+          votingThresholdDeadline: v.payload.voteBefore,
           voteTakesEffect: effectiveAt,
           yourVote: computeYourVote(votes, svPartyId),
           status: 'In Progress',

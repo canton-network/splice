@@ -131,10 +131,10 @@ describe('Inflight Vote Requests', () => {
     expect(action.textContent).toBe(data.actionName);
 
     const votingThresholdDeadline = screen.getByTestId(`${uniqueId}-row-voting-threshold-deadline`);
-    expect(votingThresholdDeadline.textContent).toBe(data.votingThresholdDeadline);
+    expect(votingThresholdDeadline.textContent).toBe(`${data.votingThresholdDeadline} (UTC+02:00)`);
 
     const voteTakesEffect = screen.getByTestId(`${uniqueId}-row-vote-takes-effect`);
-    expect(voteTakesEffect.textContent).toBe(data.voteTakesEffect);
+    expect(voteTakesEffect.textContent).toBe(`${data.voteTakesEffect} (UTC+02:00)`);
 
     const acceptedVoteStats = screen.getByTestId(`${uniqueId}-row-all-votes-stats-accepted`);
     expect(acceptedVoteStats.textContent).toBe('2 Accepted');
@@ -336,7 +336,7 @@ describe('Vote history', () => {
     expect(action.textContent).toBe(data.actionName);
 
     const voteTakesEffect = screen.getByTestId(`${uniqueId}-row-vote-takes-effect`);
-    expect(voteTakesEffect.textContent).toBe(data.voteTakesEffect);
+    expect(voteTakesEffect.textContent).toBe(`${data.voteTakesEffect} (UTC+02:00)`);
 
     const status = screen.getByTestId(`${uniqueId}-row-status`);
     expect(status.textContent).toBe(data.status);
