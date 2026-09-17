@@ -1,4 +1,4 @@
-# 10144 - run 35076492327 ui_tests: SV UI config-diffs test times out finding "Vote Requests"
+# 10145 - run 35076492327 ui_tests: SV UI config-diffs test times out finding "Vote Requests"
 
 Post-merge CI on main, sha f1ee318e39 ("Don't wait forever on a non-active psid in
 `ensureSynchronizerRegisteredAndConnected` (#7311)"), 2026-09-16T08:55Z. Job 104730030877
@@ -401,7 +401,7 @@ Inferred:
 ## Duplicates / related
 
 - Same run, other failed job: resource-intensive (1) (104730519175), an independent Scala shard, not covered
-  here. Which of refs 10144/10145 is this job is unknown.
+  here. That job is ref 10144.
 - 10141 (run 35072334729, `ci-triage/10141-sv-ui-unawaited-waitfor.md`): same job type and same SV frontend
   suite, but a DIFFERENT root cause. 10141 was a test bug (a `waitFor` never awaited, surfacing as an
   unhandled rejection) exposed by a suite-wide 1.8x slowdown. Here the wait is awaited and attributed, the
