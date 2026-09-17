@@ -122,3 +122,21 @@ sv1Participant vs aliceValidator, ExpiryWithNoVettedAmuletVersionIntegrationTest
 all later ones (10129, 10146, 10155, 10158, 10162, 10164). Chronologically 10111 is the parent; whichever issue is
 kept, the fix is the multi-hosting in ExpiryWithMinimalVettedPackagesIntegrationTest.scala and
 AutoIgnoreUnresponsivePartiesIntegrationTest.scala.
+
+## 8. 10167 (run 35237977178, 2026-09-17) - eighth occurrence
+
+- Run: https://github.com/canton-network/splice/actions/runs/35237977178, main e6689c46e7, job 105259186280
+  `wall-clock-time (1)`, canton 3.6.0-snapshot.20260916.20284.0.vf27c4824. 26 tests pass (4 ignored); one WARN.
+```
+15:30:07.126Z WARN ReceivedAcsCommitmentMatcher:participant=sv1Participant  ACS_COMMITMENT_MISMATCH(5,e51fe2c2)
+  sender = aliceValidator::1220eb494657..., period = (2026-09-17T15:29:24.158920Z, 2026-09-17T15:30:00Z]
+```
+```
+15:28:44.621Z Starting test suite 'ExpiryWithNoVettedAmuletVersionIntegrationTest'
+15:29:21.446Z Running clue: (act) Multi-host alice on sv1Participant (alice keeps her old host)
+15:29:45.778Z Test succeeded: '.../Amulet expiry ignores parties with no vetted amulet version'
+```
+Period starts 2.7 s after the multi-host step; WARN delivered 7 s after period end (short random delay this time).
+Side note in the same job: the artifact upload step also errored on a file name containing a party id with `::`
+(`alice-validatorcfbce084-1::1220eb494657...acs`, "Colon :" not allowed), unrelated to the failure but it means
+one ACS dump file is missing from the artifact.

@@ -169,6 +169,7 @@ given as (run, job, ref) tuples in the request; nothing inferred.
 | 10166 | 35226878907 | release-line-0.8.x 57c06ffded (#7369) | 105220970474 `simtime (2)` | 3.5.18-snapshot.20260916.19252.0.v9635aea8 |
 | 10111 | 34523566111 | main 4031327bc4 (#7176), 2026-09-10 | 103027245797 `wall-clock-time (1)` | 3.6.0-snapshot (2026-09-10 pin) |
 | 10010 | 33785420105 | main 3063ad675b (#7110), 2026-09-03 | 100749318272 `wall-clock-time (1)`; (8) and (9) are in the off-boarding sweep | 3.5.16 |
+| 10167 | 35237977178 | main e6689c46e7 | 105259186280 `wall-clock-time (1)` | 3.6.0-snapshot.20260916.20284.0.vf27c4824 |
 
 ## Overview
 
@@ -187,6 +188,7 @@ given as (run, job, ref) tuples in the request; nothing inferred.
 | 10166 | WalletMintingDelegationTimeBasedIntegrationTest: same `advanceTime(PT25H)` -> `LOCAL_VERDICT_INACTIVE_CONTRACTS` on release-line-0.8.x. | 10154 (cn-test-failures 10060 / #7223) | Section 5 of the 10154 packet. #7261 still not backported (0.8.x tip ef2dc6d559). |
 | 10111 | Earliest recorded ACS_COMMITMENT_MISMATCH sv1Participant vs aliceValidator after a multi-host step (ExpiryWithNoVettedAmuletVersionIntegrationTest), period (20:29:33.04, 20:30:00]. | parent of 10129 / 10146 / 10155 / 10158 / 10162 / 10164 | Section 7 of the 10155/10158 packet. Fix the multi-hosting suites. |
 | 10010 | All 35 tests pass; checkErrors WARN: sv3's sequencer denied a P2P auth token by sv4 (`Member SEQ::sv3 access is disabled`) for 12 s. sv3 had been an active sequencer for 21 s; sv4 was stuck at its onboarding snapshot after the false off-boarding conclusion (10048 bug) and only learned of sv3 once catch-up state transfer kicked in. Shards (8)/(9) of the same run are the sv2 wedge. | 10048 family | Packet `10010-p2p-auth-token-denied-false-offboarding.md`. NOT a benign in-flight topology change; do not add the proposed ignore. Fixed by canton#35600 (3.5.17 / main 20260910+); release-line-0.8.0 still exposed. |
+| 10167 | All 26 tests pass; checkErrors WARN `ACS_COMMITMENT_MISMATCH` sv1Participant vs aliceValidator, period (15:29:24.16, 15:30:00], 2.7 s after ExpiryWithNoVettedAmuletVersionIntegrationTest's `Multi-host alice on sv1Participant`. | 10146 (10111 parent) | Section 8 of the 10155/10158 packet. Eighth occurrence. |
 
 ## Cross-cutting observations
 
