@@ -145,3 +145,44 @@ unknown (see below). 10143 remains inferred as the third failed job of run 35072
 - 10137 confirms the BFT onboarding wedge family is still live on release-line-0.8.0 (canton 3.5.16).
 - Runtime canton versions: 10136/10137 (release-line-0.8.x) 3.5.16; 10139/10140/10141/10142/10143 (main)
   3.6.0-snapshot.20260910.20260.0.v90621933. `canton/VERSION` says 3.5.7-SNAPSHOT at all these shas.
+
+# CI failure triage - 2026-09-17
+
+Same packet conventions. Artifacts under `log/<ref>/<artifact-name>/` (git-ignored), job logs via
+`gh api repos/canton-network/splice/actions/jobs/<job>/logs`. Refs are Raymond's cn-test-failures numbers,
+given as (run, job, ref) tuples in the request; nothing inferred.
+
+## Ref -> run -> job mapping
+
+| My ref | GH run | Branch / sha | Failed job | Canton |
+|--------|--------|--------------|------------|--------|
+| 10153 | 35113435367 | main f3adbc39e1 | 104853130622 `wall-clock-time (0)` | 3.6.0-snapshot.20260910.20260.0.v90621933 |
+| 10154 | 35115826905 | release-line-0.8.x ba405bcbf6 (#7344) | 104861329019 `simtime (0)` | 3.5.17 |
+| 10155 | 35115412224 | main ed12df6164 (#7348) | 104861312251 `wall-clock-time (5)` | 3.6.0-snapshot.20260910.20260.0.v90621933 |
+| 10156 | 35115826905 | release-line-0.8.x ba405bcbf6 (#7344) | 104863007896 `frontend-wall-clock-time (2)` | 3.5.17 |
+| 10157 | 35122937351 | release-line-0.8.x b741fda663 (#7342) | 104884928585 `ui_tests` | n/a (vitest only) |
+| 10158 | 35123371703 | main 2b3e9d21ae (#7352) | 104886784003 `wall-clock-time (1)` | 3.6.0-snapshot.20260910.20260.0.v90621933 |
+
+## Overview
+
+| My ref | Failure (one line) | Duplicate of | Resolution / status |
+|--------|--------------------|--------------|---------------------|
+| 10153 | All 36 tests pass; checkErrors flags 2 WARNs: splitwellParticipant `acknowledge-signed` to SEQ::sv1 (:5108) hits DEADLINE_EXCEEDED after 120 s during ValidatorIntegrationTest "validator apps connect to all DSO sequencers". Epoch 28 steps the BFT topology 1 -> 4 at 15:33:18 with only sv1 authenticated; sv1 is blacklisted epochs 29-31 (42.5 s); the ack accepted at 15:33:20 is answered 155 ms after the client cancelled. | 10094 (same mechanism; 10048/10137 family) | Packet `10153-sequencer-ack-stall-bft-1-to-4.md`. First occurrence on main / canton 3.6. Canton-side (BFT onboarding membership step); splice mitigation options as in 10137. |
+| 10154 | WalletMintingDelegationTimeBasedIntegrationTest: `transferPreapprovalSend` -> `LOCAL_VERDICT_INACTIVE_CONTRACTS` right after `advanceTime(PT25H)`. | cn-test-failures 10060 / splice #7223 | Packet `10154-minting-delegation-time-advance-missing-backport.md`. FIXED on main by #7261 (0c43730f70, 2026-09-16); NOT on release-line-0.8.x. Backport. |
+| 10155 | All 20 tests pass; checkErrors WARN `ACS_COMMITMENT_MISMATCH` sv1Participant vs aliceValidator, period (15:59:21.46, 16:00:00], 4 s after AutoIgnoreUnresponsivePartiesInMemoryIntegrationTest's `Multi-host alice on sv1Participant` (ExpiryWithIgnoredAmuletVersionIntegrationTest did the same 70 s earlier). | 10146 (and 10129, run 34523566111) | Packet `10155-10158-acs-commitment-mismatch-expiry-multihost.md`. Fix the multi-hosting test suites; do not widen the ignore. |
+| 10156 | SplitwellFrontendIntegrationTest "settle debts with multiple parties": alice's splitwell UI (:3400) never renders a login form. Firefox blocked all `/node_modules/.vite/deps/*.js` modules ("disallowed MIME type") because alice's `vite --force` optimizer lost the `.vite/deps` rename race against bob's and charlie's servers (same directory) at 15:46:58 and only re-optimized at 16:00:19. | cn-test-failures 9704 | Packet `10156-splitwell-vite-deps-cache-race-missing-backport.md`. FIXED on main by #7305 "Per-port vite deps caching" (4f0c04b8ed, 2026-09-15); NOT on release-line-0.8.x. Backport. |
+| 10157 | wallet vitest: 2 of 32 tests in `wallet.test.tsx` hit the describe-level 7500 ms cap. (A) "see allocation requests v2, and accept them": contract id re-minted per poll remounts the Accept button. (B) "Regular transfer offer > ... checkbox is unchecked": 7726 ms on a slow runner, siblings 6.0-7.2 s. | (A) cn-test-failures 10120 | Packet `10157-wallet-vitest-7500ms-timeouts.md`. (A) FIXED on main by #7304 (ffe110031a, 2026-09-15), NOT on release-line-0.8.x: backport. (B) remove the `}, 7500)` override at `wallet.test.tsx:1140` (same class as #7252). |
+| 10158 | All 28 tests pass; checkErrors WARN `ACS_COMMITMENT_MISMATCH` sv1Participant vs aliceValidator, period (16:59:27.31, 17:00:00], 13 s after ExpiryWithIgnoredAmuletVersionIntegrationTest's `Multi-host alice on sv1Participant`. | 10146 | Same packet as 10155. |
+
+## Cross-cutting observations
+
+- Three of the four release-line-0.8.x failures (10154, 10156, 10157-A) are main fixes merged 2026-09-15/16
+  that were not backported: #7261, #7305, #7304. Worth a single backport PR.
+- 10155 and 10158 bring the (sv1Participant, aliceValidator) ACS mismatch after a multi-host step to five
+  recorded occurrences; every one follows `Multi-host alice on sv1Participant` by 1-15 s. The test fix
+  proposed in 10146 is the only open action.
+- 10153 shows the 10094 quorum-loss mechanism is not specific to canton 3.5: same epoch shape (1 -> 4 step,
+  newcomers unauthenticated, sv1 blacklisted 3 epochs) on the 20260910 3.6 snapshot.
+- 10048 follow-up (Canton reply 2026-09-17): the #35600 state-transfer fix is present in the jars main
+  (20260910 snapshot), release-line-0.8.x and 0.8.1 run, verified by string markers absent in 3.5.16 and the
+  20260909.20244 snapshot; release-line-0.8.0 still pins 3.5.16. Details appended to `10048-bft-deadlock.md`.

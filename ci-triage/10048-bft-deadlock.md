@@ -215,3 +215,65 @@ they are below strong quorum and ordering halts permanently. Downstream: MED::sv
 investigate: epoch leader selection names a newly-added sequencer (sv4, active in topology from epoch 24)
 as first leader before it has initialized from its onboarding snapshot and joined consensus - unrecoverable
 when strongQuorum equals full membership.
+
+## Canton response and version check (2026-09-17)
+
+Canton's answer on the issue: the key line is `Received topology for epoch 25, but this node isn't part of it
+(i.e., it has been off-boarded): not starting consensus as this node is going to be shut down and decommissioned`
+(IssConsensusModule, globalSequencerSv4), caused by speculative state transfer mixing up an empty response for
+the next epoch with the current one, so an onboarding node concludes it was off-boarded. Fixed in
+DACH-NY/canton#35600 (in 3.5.17); further hardening (speculative download only within the current target,
+target updated from consensus messages, no return to consensus during onboarding until the node is in the
+membership, timeout races) is in canton main as of the 2026-09-16 mirror update.
+
+Question asked: is main already on 3.5.17 or higher, and can the issue be closed. Version numbers do not
+compare across lines (main is on the 3.6 snapshot line), so this was checked against the jars that run.
+
+Markers: two string literals that the public canton mirror shows arriving with the state-transfer fix
+(`digital-asset/canton` `[main] Update 2026-09-04.13` -> `[main] Update 2026-09-15.22`, files
+`consensus/iss/statetransfer/StateTransferManager.scala` and `CatchupDetector.scala`):
+`Might already have all necessary blocks for new epoch` and `Detected need for catch-up state transfer (to `.
+
+```
+cd log/canton-jars; for V in 3.5.16 3.5.17 3.6.0-snapshot.20260909.20244.0.v9d7eddd6 3.6.0-snapshot.20260910.20260.0.v90621933 3.6.0-snapshot.20260916.20284.0.vf27c4824; do
+  curl -sSLo canton-$V.tgz https://www.canton.io/releases/canton-open-source-$V.tar.gz; tar -xzf canton-$V.tgz --wildcards '*/lib/canton-open-source-*.jar'; done
+python3 - <<'PY'
+import zipfile,glob
+pfx='com/digitalasset/canton/synchronizer/sequencer/block/bftordering/core/modules/consensus/iss/'
+for j in sorted(glob.glob('*/lib/*.jar')):
+    z=zipfile.ZipFile(j); cls=[z.read(n) for n in z.namelist() if n.startswith(pfx) and n.endswith('.class')]
+    print(j.split('canton-open-source-')[1].split('/lib')[0], all(any(k in c for c in cls) for k in [b'Might already have all necessary blocks for new epoch', b'Detected need for catch-up state transfer (to ']))
+PY
+```
+```
+3.5.16                                       False   (10048, 10137 and all 3.5.x sweep occurrences ran this)
+3.5.17                                       True    (Canton: contains #35600)
+3.6.0-snapshot.20260909.20244.0.v9d7eddd6    False   (last 3.6 pin with sweep occurrences, 3 on main up to 2026-09-09T14:55)
+3.6.0-snapshot.20260910.20260.0.v90621933    True    (main since #7264, 2026-09-11)
+3.6.0-snapshot.20260916.20284.0.vf27c4824    True    (open bump PR #7364; consensus/iss classes byte-identical to 20260910)
+```
+3.5.16 -> 3.5.17 changes 32 classes under `consensus/iss`, all in `IssConsensusModule`, `TimeoutManager` and
+`statetransfer/*` (StateTransferManager, StateTransferBehavior, CatchupDetector, StateTransferMessageValidator),
+matching the described fix. The 20260910 -> 20260916 snapshot step changes nothing under `consensus/iss`, so
+#7364 brings no further BFT change; whatever landed in canton main after 09-10 in this area is not in either.
+
+Pins per line (2026-09-17):
+
+| branch | canton pin | last bump | has markers |
+|--------|-----------|-----------|-------------|
+| main | 3.6.0-snapshot.20260910.20260.0.v90621933 | d6e5120026 2026-09-11 (#7264) | yes |
+| release-line-0.8.x | 3.5.18-snapshot.20260916.19252.0.v9635aea8 | b741fda663 2026-09-16 (#7342) | yes (3.5.17+) |
+| release-line-0.8.1 | 3.5.17 | 7a37440fe4 2026-09-10 (#7243) | yes |
+| release-line-0.8.0 | 3.5.16 | 3063ad675b 2026-09-03 (#7110) | NO - 10137 (2026-09-16) ran this |
+
+Occurrence check: the 2026-09-10 sweep (27 occurrences, `ray/ci-triage-svonboarding-bft` 4b7534bbee) has no
+occurrence on a pin newer than 3.5.16 or 3.6.0-snapshot.20260909.20244; this week's main runs (10153, 10155,
+10158, all 20260910) show no false off-boarding (the one `isn't part of it` line, in 10155's
+`canton-standalone-sv123-non-sv1-svs.clog`, is sv1StandaloneSequencer being genuinely off-boarded by
+SvOnboardingViaNonFoundingSvIntegrationTest at epoch 32, covered by that log's own ignore file).
+
+Answer: yes, main has had the #35600 fix since the 20260910 snapshot (2026-09-11), and so do release-line-0.8.x
+and 0.8.1. Closing 10048 is fine on that basis, with two caveats: release-line-0.8.0 still pins 3.5.16 and will
+keep producing this failure (10137) until it bumps to 3.5.17 or is no longer built; and the milder
+quorum-loss variant during the 1 -> 4 onboarding step (10094, 10153) is a different mechanism that the
+state-transfer fix does not address and is still live on the 20260910 pin.
