@@ -56,6 +56,9 @@ const getTotalVotes = (item: ProposalListingData): number =>
 const getEffectiveDate = (item: ProposalListingData): dayjs.Dayjs =>
   item.voteTakesEffect === 'Threshold' ? dayjs(0) : dayjs(item.voteTakesEffect);
 
+const formatEffectiveDate = (item: string | dayjs.ConfigType): string =>
+  item === 'Threshold' ? item : formatDatetimeWithOffset(item as dayjs.ConfigType);
+
 // Using stable sort: chain sorts from least to most significant criterion
 const sortProposals = (
   data: ProposalListingData[],
@@ -445,7 +448,7 @@ const VoteRow: React.FC<VoteRowProps> = React.memo(props => {
             sx={governanceTableBodyCellSx}
             data-testid={`${uniqueId}-row-vote-takes-effect`}
           >
-            <TableBodyTypography>{formatDatetimeWithOffset(voteTakesEffect)}</TableBodyTypography>
+            <TableBodyTypography>{formatEffectiveDate(voteTakesEffect)}</TableBodyTypography>
           </TableCell>
         </>
       ) : (
@@ -454,7 +457,7 @@ const VoteRow: React.FC<VoteRowProps> = React.memo(props => {
             sx={governanceTableBodyCellSx}
             data-testid={`${uniqueId}-row-vote-takes-effect`}
           >
-            <TableBodyTypography>{formatDatetimeWithOffset(voteTakesEffect)}</TableBodyTypography>
+            <TableBodyTypography>{formatEffectiveDate(voteTakesEffect)}</TableBodyTypography>
           </TableCell>
           <SubmittedByCell requester={requester} uniqueId={uniqueId} />
           {showStatus && (
