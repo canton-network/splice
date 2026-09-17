@@ -80,8 +80,14 @@ monitoring:
       cantonBft:
         mempoolMaxSizeThreshold: 100
       cloudArmor:
-        deniedRequestsThreshold: 100
-        wafRejectionsThreshold: 10
+        deniedRequests:
+          alignmentPeriodSeconds: 300
+          durationSeconds: 0
+          threshold: 100
+        wafRejections:
+          alignmentPeriodSeconds: 300
+          durationSeconds: 0
+          threshold: 10
       cloudSql:
         maintenance: false
       cometbft:

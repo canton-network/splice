@@ -37,13 +37,38 @@ const NatPortUsageConfigSchema = z.object({
 
 export type NatPortUsageConfig = z.infer<typeof NatPortUsageConfigSchema>;
 
+// Threshold based alert on a request count: the requests are summed over windows of
+// `alignmentPeriodSeconds` and the alert fires once such a window exceeds `threshold`
+// for `durationSeconds` in a row.
+const CloudArmorAlertConfigSchema = z
+  .object({
+    // Number of requests within one alignment period above which the alert fires;
+    // 0 means a single request already alerts.
+    threshold: z.number().min(0),
+    // Length of the window the requests are summed over (GCP `alignmentPeriod`).
+    alignmentPeriodSeconds: z
+      .number()
+      .int()
+      .min(60)
+      .refine(v => v % 60 === 0, { message: 'must be a multiple of 60s' })
+      .default(300),
+    // Retest window (GCP `duration`): how long the threshold has to be exceeded before
+    // the alert fires. 0 fires on the first violating alignment period.
+    durationSeconds: z.number().int().min(0).default(0),
+  })
+  .refine(c => c.durationSeconds % c.alignmentPeriodSeconds === 0, {
+    // GCP requires the retest window to be a multiple of the alignment period
+    message: 'durationSeconds must be 0 or a multiple of alignmentPeriodSeconds',
+    path: ['durationSeconds'],
+  });
+
+export type CloudArmorAlertConfig = z.infer<typeof CloudArmorAlertConfigSchema>;
+
 const CloudArmorAlertsConfigSchema = z.object({
-  // Number of requests denied by Cloud Armor within the rolling window above which the
-  // alert fires.
-  deniedRequestsThreshold: z.number().min(0),
-  // Number of requests matching a WAF (OWASP CRS) rule within the rolling window above
-  // which the WAF specific alert fires.
-  wafRejectionsThreshold: z.number().min(0).default(0),
+  // Requests denied by any rule of the Cloud Armor policy (metric based).
+  deniedRequests: CloudArmorAlertConfigSchema,
+  // Requests matching a WAF (OWASP CRS) rule (log based).
+  wafRejections: CloudArmorAlertConfigSchema.prefault({ threshold: 0 }),
 });
 
 export type CloudArmorAlertsConfig = z.infer<typeof CloudArmorAlertsConfigSchema>;
@@ -211,7 +236,7 @@ const MonitoringConfigSchema = z
           tolerance: z.number(),
         }),
         gcpQuotas: GcpQuotasConfigSchema,
-        cloudArmor: CloudArmorAlertsConfigSchema.prefault({ deniedRequestsThreshold: 0 }),
+        cloudArmor: CloudArmorAlertsConfigSchema.prefault({ deniedRequests: { threshold: 0 } }),
         natPortUsage: NatPortUsageConfigSchema.default({
           thresholdPercent: 80,
           // `default 30` because every once in a while (likely due to dynamic port allocation),

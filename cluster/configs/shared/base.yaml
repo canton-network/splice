@@ -193,13 +193,21 @@ monitoring:
         # 30m drops below this fraction of the previous 30m.
         tpsDropThreshold: 0.5
       cloudArmor:
-        # Number of requests denied by Cloud Armor within a 5 minute window above which
-        # the alert fires. Only used if cloudArmor.enabled is true.
-        deniedRequestsThreshold: 100
-        # Number of requests matching a WAF (OWASP CRS) rule within a 5 minute window
-        # above which the WAF alert fires. Only used if cloudArmor.wafRules.enabled and
-        # cloudArmor.logging.enabled are true.
-        wafRejectionsThreshold: 10
+        # Each alert sums the matching requests over windows of alignmentPeriodSeconds
+        # and fires once a window exceeds threshold for durationSeconds in a row
+        # (durationSeconds must be 0 or a multiple of alignmentPeriodSeconds; 0 fires
+        # on the first violating window).
+        # Requests denied by Cloud Armor. Only used if cloudArmor.enabled is true.
+        deniedRequests:
+          threshold: 100
+          alignmentPeriodSeconds: 300
+          durationSeconds: 0
+        # Requests matching a WAF (OWASP CRS) rule. Only used if cloudArmor.wafRules.enabled
+        # and cloudArmor.logging.enabled are true.
+        wafRejections:
+          threshold: 10
+          alignmentPeriodSeconds: 300
+          durationSeconds: 0
       gcpQuotas:
         # Quota metric names to exclude from all GCP quota alerts.
         # Each entry is matched exactly for quota exceeded.
