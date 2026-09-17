@@ -3,86 +3,52 @@
 
 package org.lfdecentralizedtrust.splice.scan.automation
 
-import com.digitalasset.canton.data.CantonTimestamp
-import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
-import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
+import org.apache.pekko.NotUsed
 import org.apache.pekko.stream.Materializer
-import org.lfdecentralizedtrust.splice.automation.{SqlIndexInitializationTrigger, TriggerContext}
-import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore
-import com.digitalasset.canton.discard.Implicits.DiscardOps
-import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{
-  AcsSnapshot,
-  AcsSnapshotTableDDL,
-  PerTableAcsSnapshot,
+import org.apache.pekko.stream.scaladsl.Source
+import org.lfdecentralizedtrust.splice.automation.{
+  SourceBasedTrigger,
+  TaskOutcome,
+  TaskSuccess,
+  TriggerContext,
 }
-import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
+import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore
+import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.PerTableAcsSnapshot
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 
-class AcsSnapshotIndexTrigger(storage: DbStorage, store: AcsSnapshotStore, context: TriggerContext)(
-    implicit
+class AcsSnapshotIndexTrigger(
+    store: AcsSnapshotStore,
+    protected val context: TriggerContext,
+)(implicit
     ec: ExecutionContextExecutor,
     override val tracer: Tracer,
     mat: Materializer,
-) extends SqlIndexInitializationTrigger[AcsSnapshot](storage, context) {
+) extends SourceBasedTrigger[PerTableAcsSnapshot] {
 
-  override protected def retrieveNextIndexTasks()(implicit
+  /** The source from which to consume tasks. */
+  override protected def source(implicit
+      traceContext: TraceContext
+  ): Source[PerTableAcsSnapshot, NotUsed] = Source
+    .repeat(())
+    .mapAsync(parallelism = 1)(_ => store.lookupOldestUnindexedSnapshot())
+    .collect { case Some(snapshot) => snapshot }
+
+  override protected def completeTask(task: PerTableAcsSnapshot)(implicit
       tc: TraceContext
-  ): FutureUnlessShutdown[Seq[(SqlIndexInitializationTrigger.IndexAction, AcsSnapshot)]] = {
-    store
-      .lookupOldestUnindexedSnapshot()
-      .map { snapshot =>
-        // Statements are safe to retry because of `if not exists`
-        indexesToCreate(snapshot).map(_ -> snapshot)
-      }
-      .value
-      .map {
-        case Some(result) => result
-        case None => Seq.empty
-      }
-  }
+  ): Future[TaskOutcome] = store
+    .indexSnapshotStakeholdersTable(task)
+    .map(_ => TaskSuccess(s"Successfully indexed tables of snapshot ${task.snapshotRecordTime}"))
 
-  private def indexesToCreate(snapshot: AcsSnapshot) = Seq(
-    SqlIndexInitializationTrigger.IndexAction.Create(
-      AcsSnapshotTableIndexes
-        .stakeholderIndexName(snapshot.historyId, snapshot.snapshotRecordTime),
-      AcsSnapshotTableIndexes.stakeholderIndexAction(snapshot.historyId, snapshot.snapshotRecordTime),
-    ),
-    SqlIndexInitializationTrigger.IndexAction.Create(
-      AcsSnapshotTableIndexes
-        .stakeholderTemplateIdIndexName(snapshot.historyId, snapshot.snapshotRecordTime),
-      AcsSnapshotTableIndexes
-        .stakeholderTemplateIdIndexAction(snapshot.historyId, snapshot.snapshotRecordTime),
-    ),
-  )
-
-  private val createdIndexesMap =
-    new java.util.concurrent.ConcurrentHashMap[CantonTimestamp, Set[String]]()
-  override protected def onActionCompleted(
-      action: SqlIndexInitializationTrigger.IndexAction,
-      // We could also extract the snapshotRecordTime from the action,
-      // but that will require regex-ing the index name, which is significantly more error-prone than this.
-      meta: AcsSnapshot,
-  )(implicit tc: TraceContext): Future[Unit] = {
-    val snapshotRecordTime = meta.snapshotRecordTime
-    val createdIndexesForSnapshot =
-      createdIndexesMap.compute(
-        snapshotRecordTime,
-        (_, createdIndexes) => createdIndexes + action.indexName,
-      )
-
-    // Once all the indexes are created, we can mark the snapshot as indexed
-    if (createdIndexesForSnapshot.size == indexesToCreate(meta).size) {
-      for {
-        _ <- store.markSnapshotAsIndexed(snapshotRecordTime)
-      } yield {
-        // Cleanup to avoid filling it up forever
-        createdIndexesMap.remove(snapshotRecordTime).discard
-      }
-    } else {
-      Future.unit
+  override protected def isStaleTask(task: PerTableAcsSnapshot)(implicit
+      tc: TraceContext
+  ): Future[Boolean] = {
+    store.lookupOldestUnindexedSnapshot().map {
+      case None => false
+      // if the oldest has changed, the task is stale
+      case Some(oldest) => oldest.snapshotRecordTime != task.snapshotRecordTime
     }
   }
 

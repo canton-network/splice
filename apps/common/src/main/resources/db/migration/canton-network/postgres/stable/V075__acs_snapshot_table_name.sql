@@ -18,6 +18,8 @@ alter table acs_snapshot
             -- legacy table
          (first_row_id is not null and last_row_id is not null and creates_table_name is null and stakeholders_table_name is null));
 
+create index acs_snapshot_unindexed on acs_snapshot (history_id, snapshot_record_time) where not indexes_created;
+
 -- TODO: template ids can be interned already
 
 -- Same as acs_incremental_snapshot_data_next,

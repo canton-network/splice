@@ -149,7 +149,6 @@ class ScanAutomationService(
   if (scanStorageConfigV1.perAcsSnapshotTablesEnabled) {
     registerTrigger(
       new AcsSnapshotIndexTrigger(
-        storage,
         snapshotStore,
         triggerContext,
       )
