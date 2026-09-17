@@ -1,11 +1,16 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import { RefinedResponse, ResponseType } from "k6/http";
+import http, { RefinedResponse, ResponseType } from "k6/http";
 import { check as k6check } from "k6";
 import exec from "k6/execution";
 import { Counter, Rate } from "k6/metrics";
 import { Scenario } from "k6/options";
-import { Target, perIpBucket, sharedBucket } from "../config.ts";
+import {
+  RATE_LIMITED_GRPC_STATUS,
+  Target,
+  perIpBucket,
+  sharedBucket,
+} from "../config.ts";
 
 /** One traffic phase of a check, e.g. staying below or going above a limit. */
 export interface CheckScenario {
@@ -33,8 +38,8 @@ export interface Check {
   /** stable id, used to name scenarios and tag metrics */
   id: string;
   /**
-   * Returns why this check cannot run against `target`, so main.ts can report skipped
-   * targets instead of silently passing, or `undefined` if it can run.
+   * Returns why this check cannot run against `target`, so main.ts can report it as skipped rather
+   * than silently pass, or `undefined` if it can run.
    */
   inapplicable(target: Target): string | undefined;
   /** Derives the scenarios and thresholds for `target` from its global buckets. */
@@ -48,22 +53,33 @@ const APP_RATE_LIMIT_BODY =
 /** The body Envoy's local rate limit filter returns. */
 const ENVOY_RATE_LIMIT_BODY = "local_rate_limited";
 /**
- * Tolerated share of responses that are neither 200 nor 429. Load always causes the odd
- * connection reset, but a large share means the load reached the app.
+ * Tolerated share of responses that are neither 200 nor 429: load always causes the odd connection
+ * reset, but a large share means it reached the app.
  */
 export const UNEXPECTED_STATUS_TOLERANCE = 0.02;
-/**
- * How far above the binding rate to drive traffic. Envoy keeps one bucket per proxy instance, so
- * raise it with `-e BURST_FACTOR=5` if a limit is reported as not enforced.
- */
+/** How far above the binding rate to drive traffic. */
 const BURST_FACTOR = Number(__ENV.BURST_FACTOR ?? "2");
 /** Hard ceiling on the generated load, so this cannot turn into a DoS by accident. */
 const MAX_BURST_RPS = Number(__ENV.MAX_BURST_RPS ?? "2500");
-/** Bounds on how long a burst is held: long enough to drain the bucket, never absurdly long. */
+/**
+ * Bounds on how long a burst is held. The per-IP floor is higher because such a bucket is really N
+ * buckets (see `PER_IP_BUFFER_RPS`), i.e. N times as deep, and drains N times slower than
+ * `drainSeconds` predicts. `-e BURST_SECONDS` pins the window instead of deriving it.
+ */
 const MIN_BURST_SECONDS = 30;
+const MIN_PER_IP_BURST_SECONDS = 60;
 const MAX_BURST_SECONDS = 120;
+const BURST_SECONDS =
+  __ENV.BURST_SECONDS === undefined ? undefined : Number(__ENV.BURST_SECONDS);
 /** Cap on the quiet period before a burst; a partly refilled bucket only rejects sooner. */
 const MAX_RECOVERY_SECONDS = 15;
+/**
+ * Flat buffer on the burst of a target bound by its per-IP bucket. Envoy keys that bucket on the
+ * address the sidecar sees, i.e. the ingress gateway pod rather than the client, so N gateway
+ * replicas allow N times the configured rate. Measured on the sequencer (166.7 req/s configured),
+ * 344 and 510 req/s were absorbed entirely while 1334 req/s was rejected within 9s.
+ */
+const PER_IP_BUFFER_RPS = Number(__ENV.PER_IP_BUFFER_RPS ?? "1000");
 /** The traffic shape derived from the global buckets that apply to a target. */
 export interface BurstSizing {
   /** sustained rate the per-IP bucket allows */
@@ -80,14 +96,17 @@ export function burstSizing(target: Target): BurstSizing | string {
   if (!perIp) {
     return "no global per-IP bucket is configured for this service";
   }
-  const shared = sharedBucket(target);
   const { maxTokens, tokensPerFill, fillIntervalSeconds, sustainedRps } = perIp;
-  // A single client drains the per-IP bucket and the shared one at once, so the rate to exceed
-  // is the higher of the two.
+  // The rate to exceed is the higher of the two buckets a client drains at once. Over gRPC the
+  // shared one is ignored: envoy enforces the per-IP limit in a filter of its own, and no single
+  // client can drive the sequencer's ~3333 req/s global bucket.
+  const shared = target.protocol === "grpc" ? undefined : sharedBucket(target);
   const bindingRps = Math.max(sustainedRps, shared?.sustainedRps ?? 0);
+  // Only a per-IP bucket is split over the gateway replicas, so only it gets the buffer and window.
+  const perIpBound = bindingRps === sustainedRps;
   const burstRps = Math.min(
     MAX_BURST_RPS,
-    Math.ceil(bindingRps * BURST_FACTOR),
+    Math.ceil(bindingRps * BURST_FACTOR) + (perIpBound ? PER_IP_BUFFER_RPS : 0),
   );
   if (burstRps <= bindingRps) {
     return (
@@ -95,18 +114,32 @@ export function burstSizing(target: Target): BurstSizing | string {
       `ceiling of ${MAX_BURST_RPS} req/s; raise -e MAX_BURST_RPS`
     );
   }
+  // The bucket refills while it is drained, so it empties only after maxTokens/(burst - binding)
+  // seconds, and the burst is held for twice that: one merely long enough to empty it ends exactly
+  // when the first rejection would happen, making the limit look unenforced.
+  const drainSeconds = maxTokens / (burstRps - bindingRps);
+  // A pinned window is taken at face value; the derived one has the 2x drain to fit under the cap.
+  const maxWindow = BURST_SECONDS ?? MAX_BURST_SECONDS;
+  if (drainSeconds * 2 > maxWindow) {
+    return (
+      `draining the ${maxTokens} token bucket at ${burstRps} req/s takes ` +
+      `${drainSeconds.toFixed(0)}s, too long to then hold the burst past it within the ` +
+      `${maxWindow}s window; raise -e BURST_FACTOR, -e PER_IP_BUFFER_RPS or -e BURST_SECONDS`
+    );
+  }
   return {
     perIpRps: sustainedRps,
     bindingRps,
     burstRps,
-    // hold long enough to drain the bucket, which refills while we drain it
-    burstSeconds: Math.min(
-      MAX_BURST_SECONDS,
-      Math.max(
-        MIN_BURST_SECONDS,
-        Math.ceil(maxTokens / (burstRps - bindingRps)),
+    burstSeconds:
+      BURST_SECONDS ??
+      Math.min(
+        MAX_BURST_SECONDS,
+        Math.max(
+          perIpBound ? MIN_PER_IP_BURST_SECONDS : MIN_BURST_SECONDS,
+          Math.ceil(drainSeconds * 2),
+        ),
       ),
-    ),
     recoverySeconds: Math.min(
       MAX_RECOVERY_SECONDS,
       Math.ceil((maxTokens / tokensPerFill) * fillIntervalSeconds),
@@ -140,8 +173,8 @@ export function inapplicableTarget(target: Target): string | undefined {
   return typeof sized === "string" ? sized : undefined;
 }
 /**
- * Metrics shared by all checks, so `handleSummary` can build a verdict without knowing which
- * check produced them. The `check` and `phase` tags keep the runs apart.
+ * Metrics shared by all checks, so `handleSummary` can build a verdict without knowing which check
+ * produced them. The `check` and `phase` tags keep the runs apart.
  */
 const throttled = new Rate("rate_limit_throttled");
 /** 429s that carry the splice app's rate limit error, i.e. enforced by the app. */
@@ -151,8 +184,8 @@ const throttledByInfra = new Counter("rate_limit_throttled_by_infra");
 /** Responses that are neither 200 nor 429; `passes` is their absolute count. */
 const unexpectedStatusRate = new Rate("rate_limit_unexpected_status_rate");
 /**
- * Builds a k6 submetric selector. Thresholds and `handleSummary` must spell a selector exactly
- * the same way, so both go through this helper.
+ * Builds a k6 submetric selector. Thresholds and `handleSummary` must spell one identically, so
+ * both go through this helper.
  */
 export function selector(metric: string, tags: Record<string, string>): string {
   const spelled = Object.entries(tags)
@@ -192,28 +225,85 @@ export function rateLimitThresholds(
 function body(res: RefinedResponse<ResponseType | undefined>): string {
   return String(res.body ?? "");
 }
-/** Records one response against the shared metrics and checks, and reports whether it was 429. */
-export function recordResponse(
+/**
+ * The gRPC status of a response. A rejected call is a trailers-only response, i.e. the status is in
+ * the headers, which is the only place k6 exposes.
+ */
+function grpcStatus(
   res: RefinedResponse<ResponseType | undefined>,
+): number | undefined {
+  const status = res.headers["Grpc-Status"] ?? res.headers["grpc-status"];
+  return status === undefined ? undefined : Number(status);
+}
+/** What one probe response tells the caller. */
+export interface ProbeResult {
+  /** the request was rate limited */
+  rejected: boolean;
+  /** the response is neither a success nor a rejection, e.g. a 503 or a connection reset */
+  unexpected: boolean;
+  /**
+   * The response came from an upstream rather than from a proxy. The gateway answers a host it has
+   * no route for itself, and for gRPC that reply is an ordinary 200 with a gRPC status; rate limits
+   * live on the app's sidecar, so load that never reaches an upstream is never rate limited.
+   */
+  reachedApp: boolean;
+  /** human readable status, so a run that is never rejected can still be diagnosed */
+  description: string;
+}
+/**
+ * Sends the probe request of `target` and records it against the shared metrics and checks. Envoy
+ * rejects an HTTP request with `429` and a gRPC call with HTTP `200` plus `RESOURCE_EXHAUSTED`; any
+ * other gRPC status means the call reached the app. gRPC is spoken over plain HTTP/2 rather than
+ * `k6/net/grpc`, as the sidecar rate limits it before the app, so no proto descriptor is needed.
+ */
+export function probe(
+  target: Target,
   tags: Record<string, string>,
-): boolean {
-  const rejected = res.status === 429;
+  headers?: Record<string, string>,
+): ProbeResult {
+  // NB: no X-Forwarded-For by default. Istio trusts two proxy hops here, so a client supplied
+  // entry could hand every VU its own bucket and turn the per-ip check into a no-op.
+  const res =
+    target.protocol === "grpc"
+      ? // a length prefixed frame of an empty message: not compressed, zero bytes long
+        http.post(target.url, new Uint8Array([0, 0, 0, 0, 0]).buffer, {
+          tags,
+          headers: {
+            "Content-Type": "application/grpc",
+            TE: "trailers",
+            ...(headers ?? {}),
+          },
+        })
+      : http.get(target.url, headers ? { tags, headers } : { tags });
+
+  const grpc = target.protocol === "grpc";
+  const status = grpcStatus(res);
+  const rejected = grpc
+    ? res.status === 200 && status === RATE_LIMITED_GRPC_STATUS
+    : res.status === 429;
+  // For gRPC, a response without a gRPC status at all (e.g. HTTP/2 was not negotiated) never
+  // reached the gRPC server, so it is not a success either.
+  const unexpected =
+    !rejected && (res.status !== 200 || (grpc && status === undefined));
+  // The app rejects with its own body (HTTP) or without envoy's message (gRPC).
+  const byApp = grpc
+    ? !String(res.headers["Grpc-Message"] ?? "").includes(ENVOY_RATE_LIMIT_BODY)
+    : body(res).includes(APP_RATE_LIMIT_BODY);
+
   throttled.add(rejected, tags);
-  unexpectedStatusRate.add(res.status !== 200 && !rejected, tags);
+  unexpectedStatusRate.add(unexpected, tags);
   if (rejected) {
-    (body(res).includes(APP_RATE_LIMIT_BODY)
-      ? throttledByApp
-      : throttledByInfra
-    ).add(1, tags);
+    (byApp ? throttledByApp : throttledByInfra).add(1, tags);
   }
   k6check(
     res,
     {
-      "status is 200 or 429": (r) => r.status === 200 || r.status === 429,
-      "429 is not produced by the splice app": (r) =>
-        r.status !== 429 || !body(r).includes(APP_RATE_LIMIT_BODY),
-      "429 looks like an envoy local rate limit rejection": (r) =>
-        r.status !== 429 ||
+      "response is a success or a rate limit rejection": () => !unexpected,
+      "the rejection is not produced by the splice app": () =>
+        !rejected || !byApp,
+      "the rejection looks like an envoy local rate limit rejection": (r) =>
+        !rejected ||
+        grpc ||
         body(r).includes(ENVOY_RATE_LIMIT_BODY) ||
         body(r).trim() === "",
       "rate limit headers are stripped at the ingress": (r) =>
@@ -223,15 +313,19 @@ export function recordResponse(
     },
     tags,
   );
-  return rejected;
-}
-export function requestParams(
-  tags: Record<string, string>,
-  headers?: Record<string, string>,
-): { tags: Record<string, string>; headers?: Record<string, string> } {
-  // NB: no X-Forwarded-For by default. Istio trusts two proxy hops here, so a client supplied
-  // entry could hand every VU its own bucket and turn the per-ip check into a no-op.
-  return headers ? { tags, headers } : { tags };
+  // envoy only sets this once a response has come back from an upstream, so a locally generated
+  // reply (e.g. the gateway having no route for this host) does not carry it
+  const upstreamTime = res.headers["X-Envoy-Upstream-Service-Time"];
+  return {
+    rejected,
+    unexpected,
+    reachedApp: upstreamTime !== undefined,
+    description: grpc
+      ? `HTTP ${res.status}, gRPC status ${status ?? "absent (in the trailers?)"}` +
+        `${res.headers["Grpc-Message"] ? `, '${res.headers["Grpc-Message"]}'` : ""}` +
+        `, upstream ${upstreamTime === undefined ? "NOT reached" : `reached in ${upstreamTime}ms`}`
+      : `HTTP ${res.status}`,
+  };
 }
 /** Metric/scenario safe version of a name. */
 export function slug(value: string): string {
@@ -239,8 +333,8 @@ export function slug(value: string): string {
 }
 
 /**
- * Rejections the test waits for before it stops sending: the limit is proven at that point, and
- * the scenarios keep scheduling iterations that no longer put load on the cluster.
+ * Rejections the test waits for before it stops sending: the limit is proven at that point, and the
+ * scenarios keep scheduling iterations that no longer put load on the cluster.
  */
 const REJECTIONS_TO_PROVE = Number(__ENV.REJECTIONS_TO_PROVE ?? "50");
 const rejectionsSeen: Record<string, number> = {};

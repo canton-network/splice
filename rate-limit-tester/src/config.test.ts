@@ -69,6 +69,46 @@ test("targets are resolved to the probe path under the domain", () => {
   assert.equal(scan.url, "https://scan.sv-2.example.com/api/scan/version");
 });
 
+test("each service is probed on its own path and protocol", () => {
+  const [scan, sequencer] = parseConfig(exampleYaml, "under.test");
+
+  assert.equal(scan.protocol, "http");
+  assert.equal(scan.url, "https://under.test/api/scan/version");
+
+  // The sequencer's public API is gRPC, and GetTime has no per endpoint bucket of its own, so it
+  // is charged against the global buckets only.
+  assert.equal(sequencer.protocol, "grpc");
+  assert.equal(
+    sequencer.url,
+    "https://under.test/com.digitalasset.canton.sequencer.api.v30.SequencerService/GetTime",
+  );
+});
+
+test("PROBE_PATH overrides the probe path of every service", () => {
+  const [scan] = parseConfig(exampleYaml, "under.test", "/api/scan/other");
+  assert.equal(scan.url, "https://under.test/api/scan/other");
+});
+
+test("a service this tester cannot probe is skipped rather than driven", () => {
+  const targets = collectTargets(
+    {
+      sv: {
+        mediator: {
+          externalRateLimits: {
+            globalPerIpLimits: {
+              maxTokens: 10,
+              tokensPerFill: 10,
+              fillInterval: "60s",
+            },
+          },
+        },
+      },
+    },
+    "under.test",
+  );
+  assert.deepEqual(targets, []);
+});
+
 test("the global buckets are the ones under test, per endpoint ones are ignored", () => {
   const [scan, sequencer] = parseConfig(
     exampleYaml,

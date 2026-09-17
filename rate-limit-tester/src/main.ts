@@ -1,30 +1,29 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import http from "k6/http";
 import exec from "k6/execution";
 import { Options, Scenario } from "k6/options";
-import { Target, loadConfig } from "./config";
+import { Target, loadConfig } from "./config.ts";
 import { checks } from "./checks/index.ts";
 import {
   UNEXPECTED_STATUS_TOLERANCE,
-  requestParams,
+  probe,
   selector,
   slug,
 } from "./checks/common.ts";
 
 /**
- * Entry point of the rate limit tester. It takes the domain under test and a cluster config, and
- * runs every check in `checks/` against the *global* rate limits of every service declared in it.
- * Per endpoint buckets are out of scope for now, so the load is driven against a probe path that
- * has no bucket of its own (`/api/scan/version` by default, override with `-e PROBE_PATH=`):
+ * Entry point of the rate limit tester: takes a domain and a cluster config, and runs every check
+ * in `checks/` against the global rate limits of every service declared in it. Per endpoint buckets
+ * are out of scope, so the load goes to a probe path that has no bucket of its own (`PROBES` in
+ * `config.ts`, override with `-e PROBE_PATH=`). One host per run, so scan and the sequencer are run
+ * separately, and scenarios run one after the other, as a service shares its buckets between them.
  *
  *   k6 run src/main.ts -e DOMAIN=scan.sv-2.example.com -e CONFIG=./scan.example.yaml
- *
- * Scenarios run one after the other, because a service shares its token buckets between them.
+ *   k6 run src/main.ts -e DOMAIN=sequencer-0.sv-2.example.com -e CONFIG=./sequencer.example.yaml
  */
 const DOMAIN = __ENV.DOMAIN ?? "";
 const CONFIG = __ENV.CONFIG ?? "";
-const PROBE_PATH = __ENV.PROBE_PATH ?? "/api/scan/version";
+const PROBE_PATH = __ENV.PROBE_PATH || undefined;
 if (DOMAIN === "" || CONFIG === "") {
   throw new Error(
     "DOMAIN and CONFIG are required, e.g. " +
@@ -48,8 +47,8 @@ interface Report {
 }
 
 /**
- * k6 only accepts `exec` functions exported by this module, so every scenario runs `run` and
- * looks its target up here by scenario name. Each VU rebuilds the plan in its init context.
+ * k6 only accepts `exec` functions exported by this module, so every scenario runs `run` and looks
+ * its target up here by scenario name. Each VU rebuilds the plan in its init context.
  */
 const targets: Record<string, ScenarioTarget> = {};
 const scenarios: Record<string, Scenario> = {};
@@ -106,12 +105,26 @@ export const options: Options = { scenarios, thresholds };
 export function setup(): void {
   // Fail fast if the probe path is not served here: an unrouted host answers with an empty 404,
   // which would otherwise look like a clean "never rate limited" run.
-  for (const url of new Set(reports.map((r) => r.target.url))) {
-    const probe = http.get(url, requestParams({ phase: "preflight" }));
-    if (probe.status !== 200) {
+  const seen = new Set<string>();
+  for (const { target } of reports) {
+    if (seen.has(target.url)) {
+      continue;
+    }
+    seen.add(target.url);
+    // A rejection here is fine, it just means the bucket is already drained.
+    const result = probe(target, { phase: "preflight" });
+    // Always reported: a run that is never rate limited can only be diagnosed if what the endpoint
+    // actually answers is known.
+    console.log(`preflight ${target.url} -> ${result.description}`);
+    if (result.unexpected || (!result.rejected && !result.reachedApp)) {
       throw new Error(
-        `preflight GET ${url} returned ${probe.status}, expected 200. ` +
-          "Is the app deployed and routed on this domain?",
+        `preflight ${target.protocol} request to ${target.url} did not reach the app ` +
+          `(${result.description}). The rate limits are enforced by the app's own sidecar, so ` +
+          "load that stops at the ingress gateway can never be rate limited. Is the host right " +
+          "and routed to the app" +
+          (target.protocol === "grpc"
+            ? ", and is HTTP/2 negotiated on it?"
+            : "?"),
       );
     }
   }
@@ -141,9 +154,9 @@ function metric(
 }
 
 /**
- * k6 reports a failure as the list of thresholds that were crossed, which does not say whether
- * the limit was missing, enforced by the wrong component or simply never reached. This reports
- * the verdict per check and target instead.
+ * k6 reports a failure as the list of thresholds that were crossed, which does not say whether the
+ * limit was missing, enforced by the wrong component or simply never reached. This reports the
+ * verdict per check and target instead.
  */
 export function handleSummary(data: SummaryData): Record<string, string> {
   const lines: string[] = ["", `rate limits of ${DOMAIN}:`, ""];
@@ -177,9 +190,11 @@ export function handleSummary(data: SummaryData): Record<string, string> {
       failed = true;
       verdicts.push(
         `NOT ENFORCED at ${report.peakLoad}: not a single request was rejected. Either the limit ` +
-          "is looser than configured (envoy keeps a bucket per proxy instance, so N replicas " +
-          "allow N times the rate: retry with a higher -e BURST_FACTOR), or no limit is " +
-          "installed at all. Confirm with envoy_http_local_rate_limit_enabled.",
+          "is looser than configured (envoy keeps a bucket per proxy instance, keyed on the " +
+          "ingress gateway pod rather than on this client, so N gateway replicas allow N times " +
+          "the rate: retry with a higher -e PER_IP_BUFFER_RPS, and a -e BURST_SECONDS long enough " +
+          "to drain a bucket N times as deep), or no limit is installed at all. Confirm with " +
+          "envoy_http_local_rate_limit_enabled.",
       );
     } else if (byApp > 0) {
       failed = true;
@@ -189,7 +204,7 @@ export function handleSummary(data: SummaryData): Record<string, string> {
       );
     } else {
       verdicts.push(
-        `ENFORCED by the infrastructure: ${byInfra} request(s) rejected with 429, ` +
+        `ENFORCED by the infrastructure: ${byInfra} request(s) rejected, ` +
           `${(burstRate * 100).toFixed(1)}% of the load.`,
       );
     }
@@ -218,7 +233,7 @@ export function handleSummary(data: SummaryData): Record<string, string> {
       const tolerated = share < UNEXPECTED_STATUS_TOLERANCE;
       failed = failed || !tolerated;
       verdicts.push(
-        `${unexpected} response(s), ${(share * 100).toFixed(2)}%, were neither 200 nor 429 ` +
+        `${unexpected} response(s), ${(share * 100).toFixed(2)}%, were neither a success nor a rejection ` +
           "(e.g. 503 upstream connect error), i.e. that load reached the app instead of being " +
           `shed at the edge${tolerated ? " (within tolerance)" : ""}.`,
       );

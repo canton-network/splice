@@ -6,11 +6,10 @@
 import { load } from "../node_modules/js-yaml/dist/js-yaml.mjs";
 
 /**
- * Reads a cluster config (e.g. `cluster/deployment/<cluster>/config.resolved.yaml`) and returns
- * the service wide (global) rate limits declared in it, see `scan.example.yaml` for the shape.
- *
- * Per endpoint buckets (`rateLimits`) are deliberately ignored for now: only the global and the
- * global per-IP buckets are exercised, against a probe path that has no bucket of its own.
+ * Reads a cluster config (e.g. `cluster/deployment/<cluster>/config.resolved.yaml`) and returns the
+ * service wide rate limits declared in it, see `scan.example.yaml` for the shape. Per endpoint
+ * buckets (`rateLimits`) are ignored: only the global and global per-IP ones are exercised, against
+ * a probe path that has no bucket of its own.
  */
 
 interface Bucket {
@@ -31,6 +30,40 @@ interface ExternalRateLimits {
   globalPerIpLimits?: Bucket;
 }
 
+/**
+ * The protocol spoken on the rate limited port, which decides how a rejection is recognized: Envoy
+ * answers a rate limited HTTP request with `429`, but a gRPC call with HTTP `200` and
+ * `RESOURCE_EXHAUSTED` (see `rate_limited_as_resource_exhausted` in `cluster/pulumi/common/src`).
+ */
+export type Protocol = "http" | "grpc";
+
+/** The gRPC status code (`RESOURCE_EXHAUSTED`) Envoy returns for a rate limited gRPC call. */
+export const RATE_LIMITED_GRPC_STATUS = 8;
+
+/**
+ * How each service is probed, keyed by the last segment of the config path its `externalRateLimits`
+ * block sits under (`sv.scan` -> `scan`). The paths have no per endpoint bucket of their own in
+ * `cluster/configs/shared/rate-limits/`, so they are charged against the global buckets only.
+ */
+const PROBES: Record<string, { protocol: Protocol; probePath: string }> = {
+  scan: { protocol: "http", probePath: "/api/scan/version" },
+  // The sequencer's public API (port 5008) is gRPC. GetTime is read only and, like every
+  // SequencerService method, needs authentication, so the sequencer rejects it with UNAUTHENTICATED
+  // before doing any work; the limit is enforced by the sidecar, before the app sees the call.
+  sequencer: {
+    protocol: "grpc",
+    probePath:
+      "/com.digitalasset.canton.sequencer.api.v30.SequencerService/GetTime",
+  },
+};
+
+/** How to probe the service a config path points at, if it is one this tester knows. */
+export function probeFor(
+  name: string,
+): { protocol: Protocol; probePath: string } | undefined {
+  return PROBES[name.split(".").pop() ?? ""];
+}
+
 /** A service whose global rate limits are under test. */
 export interface Target {
   /** where the `externalRateLimits` block sits in the config, e.g. `sv.scan` */
@@ -39,8 +72,10 @@ export interface Target {
   globalPerIpLimits?: ResolvedBucket;
   /** the bucket shared by all clients and all endpoints of the service */
   globalLimits?: ResolvedBucket;
-  /** the URL under test, built from the domain and the probe path passed to main.ts */
+  /** the URL under test, built from the domain passed to main.ts and the probe path */
   url: string;
+  /** the protocol the URL speaks, which decides how a rejection is recognized */
+  protocol: Protocol;
 }
 
 export function parseDurationSeconds(duration: string): number {
@@ -85,13 +120,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Collects every `externalRateLimits` block that declares a global bucket, wherever it sits in
- * the config.
+ * Collects every `externalRateLimits` block declaring a global bucket, wherever it sits in the
+ * config. A service this tester cannot probe (missing from `PROBES`) is skipped, as the wrong
+ * protocol or path would either miss the global buckets or be charged to a per endpoint one.
+ * `probePathOverride` replaces the probe path of every service, see `-e PROBE_PATH=`.
  */
 export function collectTargets(
   config: unknown,
   domain: string,
-  probePath: string,
+  probePathOverride?: string,
 ): Target[] {
   const targets: Target[] = [];
 
@@ -111,14 +148,16 @@ export function collectTargets(
   const collectFrom = (limits: ExternalRateLimits, service: string): void => {
     const globalPerIpLimits = resolveBucket(limits.globalPerIpLimits);
     const globalLimits = resolveBucket(limits.globalLimits);
-    if (!globalPerIpLimits && !globalLimits) {
+    const probe = probeFor(service);
+    if ((!globalPerIpLimits && !globalLimits) || !probe) {
       return;
     }
     targets.push({
       name: service,
       globalPerIpLimits,
       globalLimits,
-      url: `https://${domain}${probePath}`,
+      url: `https://${domain}${probePathOverride ?? probe.probePath}`,
+      protocol: probe.protocol,
     });
   };
 
@@ -139,7 +178,7 @@ export function sharedBucket(target: Target): ResolvedBucket | undefined {
 export function loadConfig(
   configPath: string,
   domain: string,
-  probePath: string,
+  probePathOverride?: string,
 ): Target[] {
   // `open` only exists in k6's init context and resolves relative paths against this file, while
   // the paths passed in are relative to the package root, so both are tried.
@@ -148,7 +187,7 @@ export function loadConfig(
     : [`../${configPath}`, configPath];
   for (const candidate of candidates) {
     try {
-      return parseConfig(open(candidate), domain, probePath);
+      return parseConfig(open(candidate), domain, probePathOverride);
     } catch {
       // try the next candidate
     }
@@ -162,11 +201,11 @@ export function loadConfig(
 export function parseConfig(
   raw: string,
   domain: string,
-  probePath: string,
+  probePathOverride?: string,
 ): Target[] {
   return collectTargets(
     (load as (input: string) => unknown)(raw),
     domain,
-    probePath,
+    probePathOverride,
   );
 }

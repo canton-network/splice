@@ -1,6 +1,5 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import http from "k6/http";
 import { Target } from "../config.ts";
 import {
   Check,
@@ -11,8 +10,7 @@ import {
   limitProven,
   rateLimitThresholds,
   recordRejection,
-  recordResponse,
-  requestParams,
+  probe,
   slug,
 } from "./common.ts";
 /**
@@ -34,12 +32,17 @@ export const perIpRateLimitCheck: Check = {
     // Half the per-IP rate: the bucket refills faster than we drain it, so a correctly
     // configured limit may never reject, whatever the replica count.
     const belowRps = Math.max(1, Math.floor(sized.perIpRps / 2));
+    // The gRPC services carry per endpoint buckets far tighter than their global per-IP one (the
+    // sequencer caps SequencerConnectService at 100 tokens/min per IP, against 10000 globally),
+    // and this tester models only the global ones. Traffic at half the global per-IP rate can
+    // therefore legitimately be rejected, so the below phase would report a bogus OVER-ENFORCED.
+    const withBelow = target.protocol !== "grpc";
     return {
-      peakLoad: `${sized.burstRps} req/s (binding rate ${sized.bindingRps} req/s)`,
+      peakLoad: `${sized.burstRps} req/s (binding rate ${sized.bindingRps.toFixed(1)} req/s)`,
       burstPhase: "above",
-      belowPhase: "below",
+      belowPhase: withBelow ? "below" : undefined,
       scenarios: [
-        flatScenario("below", belowRps, 20),
+        ...(withBelow ? [flatScenario("below", belowRps, 20)] : []),
         flatScenario(
           "above",
           sized.burstRps,
@@ -50,7 +53,7 @@ export const perIpRateLimitCheck: Check = {
       thresholds: rateLimitThresholds(
         { target: slug(target.name), check: slug(CHECK_ID) },
         "above",
-        "below",
+        withBelow ? "below" : undefined,
       ),
     };
   },
@@ -65,7 +68,7 @@ export const perIpRateLimitCheck: Check = {
       phase,
       check: slug(CHECK_ID),
     };
-    if (recordResponse(http.get(target.url, requestParams(tags)), tags)) {
+    if (probe(target, tags).rejected) {
       recordRejection(CHECK_ID, phase);
     }
   },

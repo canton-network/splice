@@ -1,6 +1,5 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import http from "k6/http";
 import { Target } from "../config.ts";
 import {
   Check,
@@ -11,8 +10,7 @@ import {
   limitProven,
   rateLimitThresholds,
   recordRejection,
-  recordResponse,
-  requestParams,
+  probe,
   slug,
 } from "./common.ts";
 
@@ -83,12 +81,7 @@ export const clientIpSpoofingCheck: Check = {
       phase,
       check: slug(CHECK_ID),
     };
-    if (
-      recordResponse(
-        http.get(target.url, requestParams(tags, spoofedHeaders())),
-        tags,
-      )
-    ) {
+    if (probe(target, tags, spoofedHeaders()).rejected) {
       recordRejection(CHECK_ID, phase);
     }
   },
