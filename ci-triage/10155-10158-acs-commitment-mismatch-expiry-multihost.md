@@ -71,3 +71,30 @@ AutoIgnoreUnresponsivePartiesIntegrationTest.scala:89
 Four occurrences now (34523566111, 10129, 10146, 10155, 10158) with the same (sv1Participant, aliceValidator)
 pair and always the first period after a multi-host step. Fix the four test suites (host alice on sv1 before
 she owns contracts, or replicate the party with its ACS); do not widen `canton_log.ignore.txt:145`.
+
+## 5. 10162 (run 35206251191, 2026-09-17) - sixth occurrence, same shape
+
+- Run: https://github.com/canton-network/splice/actions/runs/35206251191, main 22e775d614 (#7363 "set pg max
+  freeze age to 500mil"), job 105152950685 `wall-clock-time (1)`, canton 3.6.0-snapshot.20260910.20260.0.v90621933.
+  All 23 tests pass; one WARN.
+
+```
+grep -a -B400 'contains problems' log/10162/job.log | grep -a '@timestamp' | grep -a -v 'ignore this line'
+```
+```
+10:03:16.243Z WARN ReceivedAcsCommitmentMatcher:participant=sv1Participant  ACS_COMMITMENT_MISMATCH(5,a2e67a5e)
+  sender = aliceValidator::12203bec954e..., period = (2026-09-17T09:59:53.894149Z, 2026-09-17T10:00:00Z]
+  remote digest 12207e0c947a..., local digest 1220ba2224b7...
+```
+```
+zcat log/10162/logs-wall-clock-time-1/canton_network_test.clog.gz | grep -a -E "Starting test suite|Multi-host alice" | grep -a 'T09:5[89]'
+```
+```
+09:58:06.786Z Starting test suite 'ExpiryWithIgnoredAmuletVersionIntegrationTest'
+09:58:43.414Z Running clue: (act) Multi-host alice on sv1Participant (alice keeps her old host)
+09:59:19.069Z Starting test suite 'AutoIgnoreUnresponsivePartiesWithPersistenceIntegrationTest'
+09:59:50.308Z Running clue: (act) Multi-host alice on sv1Participant
+```
+The mismatched period starts 3.6 s after the second multi-host step (the WithPersistence variant this time;
+same `AutoIgnoreUnresponsivePartiesIntegrationTest.scala:89` code). WARN delivered 3.3 min later during
+UnvetAllSupportedPackagesIntegrationTest.

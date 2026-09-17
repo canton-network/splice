@@ -162,6 +162,9 @@ given as (run, job, ref) tuples in the request; nothing inferred.
 | 10156 | 35115826905 | release-line-0.8.x ba405bcbf6 (#7344) | 104863007896 `frontend-wall-clock-time (2)` | 3.5.17 |
 | 10157 | 35122937351 | release-line-0.8.x b741fda663 (#7342) | 104884928585 `ui_tests` | n/a (vitest only) |
 | 10158 | 35123371703 | main 2b3e9d21ae (#7352) | 104886784003 `wall-clock-time (1)` | 3.6.0-snapshot.20260910.20260.0.v90621933 |
+| 10162 | 35206251191 | main 22e775d614 (#7363) | 105152950685 `wall-clock-time (1)` | 3.6.0-snapshot.20260910.20260.0.v90621933 |
+| open (10161?) | 35206251191 | main 22e775d614 (#7363) | 105152950723 `wall-clock-time (6)` | 3.6.0-snapshot.20260910.20260.0.v90621933 |
+| 10161 | unknown | - | - | issue URL only; run not readable from the sandbox, awaiting run URL |
 
 ## Overview
 
@@ -173,6 +176,8 @@ given as (run, job, ref) tuples in the request; nothing inferred.
 | 10156 | SplitwellFrontendIntegrationTest "settle debts with multiple parties": alice's splitwell UI (:3400) never renders a login form. Firefox blocked all `/node_modules/.vite/deps/*.js` modules ("disallowed MIME type") because alice's `vite --force` optimizer lost the `.vite/deps` rename race against bob's and charlie's servers (same directory) at 15:46:58 and only re-optimized at 16:00:19. | cn-test-failures 9704 | Packet `10156-splitwell-vite-deps-cache-race-missing-backport.md`. FIXED on main by #7305 "Per-port vite deps caching" (4f0c04b8ed, 2026-09-15); NOT on release-line-0.8.x. Backport. |
 | 10157 | wallet vitest: 2 of 32 tests in `wallet.test.tsx` hit the describe-level 7500 ms cap. (A) "see allocation requests v2, and accept them": contract id re-minted per poll remounts the Accept button. (B) "Regular transfer offer > ... checkbox is unchecked": 7726 ms on a slow runner, siblings 6.0-7.2 s. | (A) cn-test-failures 10120 | Packet `10157-wallet-vitest-7500ms-timeouts.md`. (A) FIXED on main by #7304 (ffe110031a, 2026-09-15), NOT on release-line-0.8.x: backport. (B) remove the `}, 7500)` override at `wallet.test.tsx:1140` (same class as #7252). |
 | 10158 | All 28 tests pass; checkErrors WARN `ACS_COMMITMENT_MISMATCH` sv1Participant vs aliceValidator, period (16:59:27.31, 17:00:00], 13 s after ExpiryWithIgnoredAmuletVersionIntegrationTest's `Multi-host alice on sv1Participant`. | 10146 | Same packet as 10155. |
+| 10162 | All 23 tests pass; checkErrors WARN `ACS_COMMITMENT_MISMATCH` sv1Participant vs aliceValidator, period (09:59:53.89, 10:00:00], 3.6 s after AutoIgnoreUnresponsivePartiesWithPersistenceIntegrationTest's `Multi-host alice on sv1Participant`. | 10146 | Section 5 of the 10155/10158 packet. Sixth occurrence. |
+| open (wall-clock-time (6) of 35206251191) | All 25 tests pass; checkErrors flags globalMediatorSv1's acknowledge-signed to SEQ::sv1 at DEADLINE_EXCEEDED (120 s) during SvOnboardingIntegrationTest: epoch 32 steps 1 -> 4 at 09:50:45 with only sv1 authenticated, sv1 blacklisted epochs 33-35, the ack accepted in the gap is answered 190 ms after cancellation. | 10094 / 10153 | Packet `35206251191-wct6-mediator-ack-stall-bft-1-to-4.md`. Third hit; two on main in two days. Canton-side. |
 
 ## Cross-cutting observations
 
