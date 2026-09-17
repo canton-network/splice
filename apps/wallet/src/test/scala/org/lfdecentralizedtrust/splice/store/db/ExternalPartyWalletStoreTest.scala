@@ -8,6 +8,7 @@ import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.util.MonadUtil
 import com.digitalasset.canton.{HasActorSystem, HasExecutionContext, SynchronizerAlias}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.AppRewardCoupon
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.environment.{DarResources, RetryProvider}
 import org.lfdecentralizedtrust.splice.store.{
@@ -154,6 +155,44 @@ abstract class ExternalPartyWalletStoreTest
         }
       }
     }
+
+    "AppRewardCoupon ingestion" should {
+
+      "ingest coupons where external party is provider or beneficiary" in {
+        for {
+          store <- mkStore(externalParty1)
+          // external party is the provider, no beneficiary
+          couponAsProvider = appRewardCoupon(round = 1, provider = externalParty1)
+          // external party is the beneficiary, different provider
+          couponAsBeneficiary = appRewardCoupon(
+            round = 1,
+            provider = externalParty2,
+            beneficiary = Some(externalParty1),
+          )
+          // neither provider nor beneficiary — should not be ingested
+          couponForOther = appRewardCoupon(round = 1, provider = externalParty2)
+          _ <- dummyDomain.create(
+            couponAsProvider,
+            createdEventSignatories = Seq(dsoParty, externalParty1),
+          )(store.multiDomainAcsStore)
+          _ <- dummyDomain.create(
+            couponAsBeneficiary,
+            createdEventSignatories = Seq(dsoParty, externalParty1),
+          )(store.multiDomainAcsStore)
+          _ <- dummyDomain.create(
+            couponForOther,
+            createdEventSignatories = Seq(dsoParty, externalParty2),
+          )(store.multiDomainAcsStore)
+        } yield {
+          val coupons = store.multiDomainAcsStore
+            .listContracts(AppRewardCoupon.COMPANION, HardLimit.tryCreate(Limit.DefaultMaxPageSize))
+            .futureValue
+          coupons.map(_.contractId) should contain theSameElementsAs
+            Seq(couponAsProvider, couponAsBeneficiary).map(_.contractId)
+        }
+      }
+
+    }
   }
 
   private lazy val externalParty1 = userParty(1)
@@ -202,13 +241,13 @@ class DbExternalPartyWalletStoreTest
 
     val store = new DbExternalPartyWalletStore(
       key = storeKey(externalParty),
-      storage = storage,
       loggerFactory = loggerFactory,
+      storage = storage,
       retryProvider =
         RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory),
-      migrationId,
+      domainMigrationId = migrationId,
       participantId = mkParticipantId("ExternalPartyWalletStoreTest"),
-      IngestionConfig(),
+      ingestionConfig = IngestionConfig(),
       defaultLimit = HardLimit.tryCreate(Limit.DefaultMaxPageSize),
     )
     for {
