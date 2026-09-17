@@ -14,7 +14,6 @@ class ScanStorageConfigTest
     "computeSnapshotTimeAfter" should {
       def mkConfig(periodHours: Int) = ScanStorageConfig(
         dbAcsSnapshotPeriodHours = periodHours,
-        perAcsSnapshotTablesEnabled = false,
         bulkAcsSnapshotPeriodHours = 4,
         bulkDbReadChunkSize = 1,
         bulkZstdFrameSize = 0L,

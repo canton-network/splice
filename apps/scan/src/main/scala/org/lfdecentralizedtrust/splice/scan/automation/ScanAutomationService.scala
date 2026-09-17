@@ -143,10 +143,11 @@ class ScanAutomationService(
       snapshotStore,
       updateHistory,
       scanStorageConfigV1,
+      config.perAcsSnapshotTablesEnabled,
       triggerContext,
     )
   )
-  if (scanStorageConfigV1.perAcsSnapshotTablesEnabled) {
+  if (config.perAcsSnapshotTablesEnabled) {
     registerTrigger(
       new AcsSnapshotIndexTrigger(
         snapshotStore,
