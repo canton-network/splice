@@ -1,6 +1,6 @@
 # rate-limit-tester
 
-It checks that the Envoy rate limits declared in a cluster config are actually enforced using k6.
+It checks that the rate limits declared in a cluster config are actually enforced using k6.
 
 ## Running
 
