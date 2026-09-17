@@ -14,7 +14,6 @@ import org.lfdecentralizedtrust.splice.scan.automation.{
   AcsSnapshotBackfillingTrigger,
   AcsSnapshotTrigger,
 }
-import org.lfdecentralizedtrust.splice.sv.automation.singlesv.SvPackageVettingTrigger
 import org.lfdecentralizedtrust.splice.util.{Codec, TimeTestUtil, WalletTestUtil}
 import org.lfdecentralizedtrust.tokenstandard.metadata.v1
 
