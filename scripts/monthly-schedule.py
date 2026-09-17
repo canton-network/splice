@@ -170,6 +170,24 @@ def monday_request(token: str, query: str, variables: dict) -> dict:
     return parsed
 
 
+def trigger_website_update() -> None:
+    request = urllib.request.Request(required_env("TRIIGER_CALENDAR_UPDATE_URL"), method="GET")
+
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            response.read()
+
+    except urllib.error.HTTPError as exc:
+        response_body = exc.read().decode("utf-8", errors="replace")
+
+        raise RuntimeError(
+            f"Website update trigger failed ({exc.code}): {response_body}"
+        ) from exc
+
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"Could not reach website update endpoint: {exc}") from exc
+
+
 def get_board(token: str, board_id: int) -> dict:
     if board_id in _BOARD_CACHE:
         return _BOARD_CACHE[board_id]
@@ -881,6 +899,12 @@ def main() -> None:
         print(f"LINKED: {event.title} depends on {event.depends_on}")
 
     print()
+
+    if args.dry_run:
+        print("SKIPPED: Website update trigger (dry run)")
+    else:
+        trigger_website_update()
+        print("TRIGGERED: Website update")
 
     print("Done.")
 
