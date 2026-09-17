@@ -1548,4 +1548,27 @@ class TablePerAcsSnapshotStoreTest extends AcsSnapshotStoreTest {
       ) should contain theSameElementsInOrderAs Seq(c1, c2, c3).map(_.contractId.contractId)
     }
   }
+
+  "index the stakeholders table" in {
+    for {
+      updateHistory <- mkUpdateHistory()
+      store = mkStore(updateHistory)
+      _ <- ingestCreate(
+        updateHistory,
+        amuletRules(),
+        timestamp1.minusSeconds(1L),
+      )
+      _ <- store.insertNewSnapshot(nextTable, DefaultMigrationId, timestamp1)
+      snapshotOpt <- store.lookupSnapshotAtOrBefore(
+        migrationId = DefaultMigrationId,
+        CantonTimestamp.MaxValue,
+      )
+      snapshot = snapshotOpt.valueOrFail("snapshot should've just been created")
+      oldestUnindexedOpt <- store.lookupOldestUnindexedSnapshot()
+      oldestUnindexed = oldestUnindexedOpt.valueOrFail("snapshot should be unindexed")
+      _ = oldestUnindexed should be(snapshot)
+      _ <- store.indexSnapshotStakeholdersTable(oldestUnindexed)
+      oldestAfter <- store.lookupOldestUnindexedSnapshot()
+    } yield oldestAfter should be(None)
+  }
 }

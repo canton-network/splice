@@ -119,7 +119,7 @@ class AcsSnapshotStore(
   ): Future[Option[PerTableAcsSnapshot]] = {
     storage
       .querySingle(
-        sql"""select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance, data_table_name
+        sql"""select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance, creates_table_name, stakeholders_table_name 
             from acs_snapshot
             where not indexes_created
             and   history_id = $historyId
