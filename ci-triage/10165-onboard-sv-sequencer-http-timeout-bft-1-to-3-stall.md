@@ -125,3 +125,50 @@ onboarding step, e.g. 2 minutes); (b) extend the existing ignore to `api/sv/v0/o
 resulted in a timeout` with the same "calls have retries" justification. Neither fixes the quorum stall itself,
 which stays with Canton (see 10137 for the splice mitigations: serialise SV sequencer onboardings, or gate
 onboarding on P2P authentication).
+
+## 8. Is the stall fixed in canton main? Checked against github.com/digital-asset/canton on 2026-09-17: no
+
+The public repo is a squashed mirror (`[main] Update 2026-09-15.22`, pushed 2026-09-16 06:25; `release-line-3.6`
+and `release-line-3.5` updated the same morning). Partial clone under `log/canton-mirror`.
+
+```
+cd log/canton-mirror; B=community/synchronizer/src/main/scala/com/digitalasset/canton/synchronizer/sequencer/block/bftordering
+git diff --stat af87a966d611 origin/main -- $B | tail -1          # 09-04 -> 09-15.22
+git show origin/main:$B/core/modules/mempool/MempoolModule.scala | grep -n -B4 'P2P connectivity is not ready'
+git show origin/main:$B/docs/P2P.md | grep -n -i -E 'quorum|onboard'
+```
+```
+40 files changed, 1964 insertions(+), 719 deletions(-)
+MempoolModule.scala:71-75  // Reject in order to avoid dissemination failing due to insufficient quorum, which
+                           //  shortens the client retry cycle and leverages sequencer client amplification.
+                           //  This is especially convenient for automation of topology change submissions.
+                           s"P2P connectivity is not ready (authenticated = $authenticatedCount < dissemination quorum = $weakQuorum), rejecting"
+P2P.md:498  startModulesIfNeeded starts Availability at weak quorum ... and Consensus at strong quorum
+P2P.md:571  module-start gating (boots Mempool/Output/Pruning immediately, Availability at weak quorum, Consensus at strong quorum)
+```
+
+What changed in bftordering between the two mirror states: the state-transfer/onboarding fixes (#35600, see
+10048 packet), a large P2P connection-manager rework that makes "authenticated" stricter (a peer is not
+reported authenticated before it actually authenticated), a mempool queue rework (`dequeueForBatch`,
+expired-request discarding), `OutputModule` crypto-provider handling for onboarding between epochs, and
+`BlacklistLeaderSelectionPolicyConfig` pretty-printing. None of it changes the two behaviours behind this
+family:
+
+- A new ordering topology is still activated at the epoch boundary as soon as its activation time passes,
+  regardless of whether the newcomers are P2P-authenticated ("module-start gating" in P2P.md is about a
+  starting node's own modules, not about the incumbents adopting a topology that lists unauthenticated
+  nodes). `IssConsensusModule`, `PreIssConsensusModule`, `OutputModule` and
+  `BftOrderingModuleSystemInitializer` at `origin/main` contain no `authenticat*` logic (0 hits each).
+- The mempool still rejects submissions while `authenticated < weakQuorum` by design (comment above), and
+  the `BlockSequencer` / `BftBlockOrderer` acknowledgement path still holds an accepted ack until ordering
+  resumes (the 10153/10161 evidence: accepted, mempool-rejected, answered 120 s later after cancellation).
+  `UNRELEASED.md` has no entry about it.
+
+Jar cross-check: of the mirror's bftordering changes, the P2P hardening is already in every jar
+(`NoAuthenticatedRecipientCandidates` present in 3.5.17, 20260910, 20260916), the mempool queue rework is in
+3.5.17 but not yet in the 3.6 snapshots, and 20260910 -> 20260916 changed only 9 bftordering classes
+(`BftBlockOrderer`, `P2PGrpcConnectionManager`, `BftBlockOrdererConfig`, `MempoolModule`, `OutputModule`).
+10165 reproduced on 20260916, consistent with no fix being present.
+
+Conclusion: not fixed in any publicly visible canton state as of 2026-09-16. Whatever the internal repo has
+after 09-15 22:00 is not observable from here.
