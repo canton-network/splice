@@ -8,7 +8,7 @@ import com.daml.metrics.api.testing.{InMemoryMetricsFactory, MetricValues}
 import com.digitalasset.canton.concurrent.FutureSupervisor
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.data.CantonTimestamp
-import com.digitalasset.canton.logging.SuppressionRule
+import com.digitalasset.canton.logging.{LogEntry, SuppressionRule}
 import com.digitalasset.canton.time.SimClock
 import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
@@ -29,6 +29,7 @@ import org.lfdecentralizedtrust.splice.config.NetworkAppClientConfig
 import org.lfdecentralizedtrust.splice.environment.ledger.api.TransactionTreeUpdate
 import org.lfdecentralizedtrust.splice.environment.{
   BaseAppConnection,
+  RetryFor,
   RetryProvider,
   SpliceLedgerClient,
 }
@@ -65,6 +66,7 @@ import org.lfdecentralizedtrust.splice.util.{
 }
 import org.lfdecentralizedtrust.tokenstandard.transferinstruction.v1.definitions.TransferFactoryWithChoiceContext.TransferKind
 import org.mockito.exceptions.base.MockitoAssertionError
+import org.scalatest.Assertion
 import org.scalatest.wordspec.AsyncWordSpec
 import org.slf4j.event.Level
 
@@ -90,6 +92,20 @@ class BftScanConnectionTest
   val synchronizerId = SynchronizerId.tryFromString("domain::id")
 
   private def scanUrl(n: Int) = s"https://$n.example.com"
+
+  private def assertNotYetReadyResponseLog(level: Level, expectedScanNumbers: Int*)(
+      logs: Seq[LogEntry]
+  ): Assertion =
+    forExactly(1, logs) { log =>
+      log.level should be(level)
+      log.message should include("were not yet ready to provide a response")
+      expectedScanNumbers.foreach { n =>
+        log.message should include(scanUrl(n))
+      }
+      log.message.linesIterator.count(_.trim.startsWith("https://")) should be(
+        expectedScanNumbers.size
+      )
+    }
 
   def getMockedConnections(n: Int): Seq[SingleScanConnection] = {
     val connections = (0 until n).map { n =>
@@ -258,6 +274,7 @@ class BftScanConnectionTest
 
   val partyIdA = PartyId.tryFromProtoPrimitive("whatever::a")
   val partyIdB = PartyId.tryFromProtoPrimitive("whatever::b")
+  val partyIdC = PartyId.tryFromProtoPrimitive("whatever::c")
 
   private def rootHashOk(round: Long, hash: String): GetRewardAccountingRootHashResponse =
     GetRewardAccountingRootHashResponse(
@@ -583,6 +600,77 @@ class BftScanConnectionTest
               "Consensus not reached. Will be retried."
             )
           ) should be(true)
+        },
+      )
+    }
+
+    "still fail quickly on actual BFT disagreement" in {
+      val attempts = new AtomicInteger(0)
+      val fastDisagreementRetry = RetryFor.ClientCalls.copy(maxRetries = 0)
+      val longReadyRetry = RetryFor.Automation.copy(maxRetries = 3)
+
+      loggerFactory.assertLogsSeq(SuppressionRule.Level(Level.INFO))(
+        for {
+          failure <- BftScanConnection
+            .retryBftClientCallWaitingForReadyScans(
+              retryProvider,
+              "test bft disagreement", {
+                attempts.incrementAndGet()
+                Future.failed(new BftScanConnection.ConsensusNotReached(3, Seq.empty))
+              },
+              logger,
+              disagreementRetryFor = fastDisagreementRetry,
+              waitingForReadyScansRetryFor = longReadyRetry,
+            )
+            .failed
+        } yield {
+          failure shouldBe a[BftScanConnection.ConsensusNotReached]
+          attempts.get() should be(1)
+        },
+        logs => {
+          logs.filter(_.message.contains("Consensus not reached. Will be retried.")) shouldBe empty
+          logs.filter(
+            _.message.contains(
+              "Not enough available Scan responses to reach consensus. Will be retried."
+            )
+          ) shouldBe empty
+        },
+      )
+    }
+
+    "retry longer when quorum is blocked by not-yet-ready scans" in {
+      val attempts = new AtomicInteger(0)
+      val failure = new BftScanConnection.NotEnoughAvailableResponsesToReachConsensus(
+        numRequests = 3,
+        availableResponses = 1,
+        targetSuccess = 2,
+        notYetResponses = 2,
+        responses = Seq.empty,
+      )
+
+      loggerFactory.assertLogsSeq(SuppressionRule.Level(Level.INFO))(
+        for {
+          result <- BftScanConnection.retryBftClientCallWaitingForReadyScans(
+            retryProvider,
+            "test bft call", {
+              if (attempts.incrementAndGet() == 1) Future.failed(failure)
+              else Future.successful(partyIdA)
+            },
+            logger,
+            disagreementRetryFor = RetryFor.ClientCalls.copy(maxRetries = 0),
+            waitingForReadyScansRetryFor = RetryFor.Automation.copy(maxRetries = 1),
+          )
+        } yield {
+          result should be(partyIdA)
+          attempts.get() should be(2)
+        },
+        logs => {
+          forExactly(1, logs) { log =>
+            log.level should be(Level.INFO)
+            log.message should include(
+              "Not enough available Scan responses to reach consensus. Will be retried."
+            )
+          }
         },
       )
     }
@@ -916,7 +1004,7 @@ class BftScanConnectionTest
       // Two scans return last id = 3
       mockResponses(2, 3)
       mockResponses(3, 3)
-      // Two scan returns last id = 4
+      // Two scans return last id = 4
       mockResponses(4, 4)
       mockResponses(5, 4)
       // One scan returns last id = 5
@@ -1534,4 +1622,211 @@ class BftScanConnectionTest
     }
   }
 
+  "BftScanConnection.executeCall not-yet responses" should {
+
+    val call: SingleScanConnection => Future[PartyId] = _.getDsoPartyId()
+
+    "reach consensus from non-not-yet responses" in {
+      val metrics = new ScanConnectionMetrics(new InMemoryMetricsFactory)
+      implicit val mc: MetricsContext = MetricsContext("request" -> "getDsoPartyId")
+
+      val connections = getMockedConnections(n = 4)
+      connections.zipWithIndex.foreach { case (c, n) =>
+        when(c.url).thenReturn(Uri(scanUrl(n)))
+      }
+      makeMockReturn(connections(0), partyIdA)
+      makeMockReturn(connections(1), partyIdA)
+      makeMockReturn(connections(2), partyIdB)
+      makeMockReturn(connections(3), partyIdB)
+
+      loggerFactory.assertLogsSeq(SuppressionRule.Level(Level.INFO))(
+        for {
+          (result, uris) <- BftScanConnection.executeCall(
+            call,
+            connections,
+            nTargetSuccess = 2,
+            logger,
+            connectionMetrics = Some(metrics),
+            isNotYet = (p: Future[PartyId]) => p.map(_ == partyIdB),
+          )
+        } yield {
+          result should be(partyIdA)
+          uris.toSet should be(Set(Uri(scanUrl(0)), Uri(scanUrl(1))))
+          eventually() {
+            val recordedLabels = metrics.bftPerConnectionConsensus.valuesWithContext.toSeq.map {
+              case (context, value) =>
+                context.labels -> value
+            }
+            // Two not-yet responses recorded with consensus=not_yet
+            recordedLabels should contain(
+              Map(
+                "request" -> "getDsoPartyId",
+                "scan_connection" -> "2.example.com",
+                "consensus" -> "not_yet",
+              ) -> 1L
+            )
+            recordedLabels should contain(
+              Map(
+                "request" -> "getDsoPartyId",
+                "scan_connection" -> "3.example.com",
+                "consensus" -> "not_yet",
+              ) -> 1L
+            )
+          }
+        },
+        assertNotYetReadyResponseLog(Level.INFO, 2, 3),
+      )
+    }
+
+    "reach consensus when 404 failures are classified as not-yet exceptions" in {
+      val metrics = new ScanConnectionMetrics(new InMemoryMetricsFactory)
+      implicit val mc: MetricsContext = MetricsContext("request" -> "getDsoPartyId")
+
+      val connections = getMockedConnections(n = 4)
+      connections.zipWithIndex.foreach { case (c, n) =>
+        when(c.url).thenReturn(Uri(scanUrl(n)))
+      }
+      makeMockReturn(connections(0), partyIdA)
+      makeMockReturn(connections(1), partyIdA)
+      makeMockFail(connections(2), notFoundFailure)
+      makeMockFail(connections(3), notFoundFailure)
+
+      loggerFactory.assertLogsSeq(SuppressionRule.Level(Level.INFO))(
+        for {
+          (result, uris) <- BftScanConnection.executeCall(
+            call,
+            connections,
+            nTargetSuccess = 2,
+            logger,
+            connectionMetrics = Some(metrics),
+            isNotYet = (p: Future[PartyId]) =>
+              p.failed.map {
+                case e: BaseAppConnection.UnexpectedHttpJsonResponse =>
+                  e.statusCode == StatusCodes.NotFound
+                case _ => false
+              },
+          )
+        } yield {
+          result should be(partyIdA)
+          uris.toSet should be(Set(Uri(scanUrl(0)), Uri(scanUrl(1))))
+          eventually() {
+            val recordedLabels = metrics.bftPerConnectionConsensus.valuesWithContext.toSeq.map {
+              case (context, value) =>
+                context.labels -> value
+            }
+            // Two not-yet responses (404s) recorded with consensus=not_yet, no success/http_status
+            recordedLabels should contain(
+              Map(
+                "request" -> "getDsoPartyId",
+                "scan_connection" -> "2.example.com",
+                "consensus" -> "not_yet",
+              ) -> 1L
+            )
+            recordedLabels should contain(
+              Map(
+                "request" -> "getDsoPartyId",
+                "scan_connection" -> "3.example.com",
+                "consensus" -> "not_yet",
+              ) -> 1L
+            )
+          }
+        },
+        // Log is at INFO level because the not-yet responses are printed as
+        // part of summarizing "disagreements" when reaching consensus, so use disagreementLogLevel.
+        assertNotYetReadyResponseLog(Level.INFO, 2, 3),
+      )
+    }
+
+    "fail with NotEnoughAvailableResponsesToReachConsensus when too many responses are not-yet" in {
+      val metrics = new ScanConnectionMetrics(new InMemoryMetricsFactory)
+      implicit val mc: MetricsContext = MetricsContext("request" -> "getDsoPartyId")
+
+      val connections = getMockedConnections(n = 3)
+      connections.zipWithIndex.foreach { case (c, n) =>
+        when(c.url).thenReturn(Uri(scanUrl(n)))
+      }
+      makeMockReturn(connections(0), partyIdA)
+      makeMockReturn(connections(1), partyIdB)
+      makeMockReturn(connections(2), partyIdB)
+
+      loggerFactory.assertLogsSeq(SuppressionRule.Level(Level.DEBUG))(
+        for {
+          failure <- BftScanConnection
+            .executeCall(
+              call,
+              connections,
+              nTargetSuccess = 3,
+              logger,
+              connectionMetrics = Some(metrics),
+              isNotYet = (p: Future[PartyId]) => p.map(_ == partyIdB),
+            )
+            .failed
+        } yield {
+          inside(failure) { case e: BftScanConnection.NotEnoughAvailableResponsesToReachConsensus =>
+            e.getMessage should include("only 1 available responses remain")
+            e.getMessage should include("after 2 not-yet responses")
+            e.getMessage should include("Required: 3")
+          }
+        },
+        assertNotYetReadyResponseLog(Level.DEBUG, 1, 2),
+      )
+    }
+
+    "fail with NotEnoughAvailableResponsesToReachConsensus when not-yet responses could still enable quorum (despite a disagreement)" in {
+      val metrics = new ScanConnectionMetrics(new InMemoryMetricsFactory)
+      implicit val mc: MetricsContext = MetricsContext("request" -> "getDsoPartyId")
+
+      val connections = getMockedConnections(n = 4)
+      connections.zipWithIndex.foreach { case (c, n) =>
+        when(c.url).thenReturn(Uri(scanUrl(n)))
+      }
+      makeMockReturn(connections(0), partyIdA)
+      makeMockReturn(connections(1), partyIdB)
+      makeMockReturn(connections(2), partyIdB)
+      makeMockReturn(connections(3), partyIdC)
+
+      loggerFactory.assertLogsSeq(SuppressionRule.Level(Level.DEBUG))(
+        for {
+          failure <- BftScanConnection
+            .executeCall(
+              call,
+              connections,
+              nTargetSuccess = 3,
+              logger,
+              connectionMetrics = Some(metrics),
+              isNotYet = (p: Future[PartyId]) => p.map(_ == partyIdC),
+            )
+            .failed
+        } yield {
+          failure shouldBe a[BftScanConnection.NotEnoughAvailableResponsesToReachConsensus]
+        },
+        assertNotYetReadyResponseLog(Level.DEBUG, 3),
+      )
+    }
+
+    "fall through to ConsensusNotReached when not-yet responses cannot still make quorum possible" in {
+      implicit val mc: MetricsContext = MetricsContext("request" -> "getDsoPartyId")
+
+      val connections = getMockedConnections(n = 4)
+      connections.zipWithIndex.foreach { case (c, n) =>
+        when(c.url).thenReturn(Uri(scanUrl(n)))
+      }
+      makeMockReturn(connections(0), partyIdA)
+      makeMockReturn(connections(1), partyIdB)
+      makeMockReturn(connections(2), partyIdB)
+      makeMockReturn(connections(3), partyIdC)
+
+      for {
+        failure <- BftScanConnection
+          .executeCall(
+            call,
+            connections,
+            nTargetSuccess = 4,
+            logger,
+            isNotYet = (p: Future[PartyId]) => p.map(_ == partyIdC),
+          )
+          .failed
+      } yield failure shouldBe a[BftScanConnection.ConsensusNotReached]
+    }
+  }
 }

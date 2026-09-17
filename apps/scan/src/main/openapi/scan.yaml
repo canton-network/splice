@@ -1845,6 +1845,8 @@ paths:
             application/json:
               schema:
                 "$ref": "#/components/schemas/GetBulkObjectChecksumsResponse"
+        "404":
+          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
         "501":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/501"
 

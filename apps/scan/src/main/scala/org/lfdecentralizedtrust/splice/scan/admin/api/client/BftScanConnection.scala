@@ -53,7 +53,6 @@ import org.lfdecentralizedtrust.splice.http.v0.definitions.{
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection.{
   BftCallConfig,
   ConsensusNotReached,
-  ConsensusNotReachedRetryable,
   ScanConnections,
   ScanList,
 }
@@ -911,6 +910,7 @@ class BftScanConnection(
       callConfig: BftCallConfig = BftCallConfig.default(scanList.scanConnections),
       consensusFailureLogLevel: Level = Level.WARN,
       shortenResponsesForLog: T => Any = identity[T],
+      isNotYet: Future[T] => Future[Boolean] = (_: Future[T]) => Future.successful(false),
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
@@ -920,6 +920,7 @@ class BftScanConnection(
     callConfig,
     consensusFailureLogLevel,
     shortenResponsesForLog = shortenResponsesForLog,
+    isNotYet = isNotYet,
   )
     .map(_._1)
 
@@ -930,6 +931,7 @@ class BftScanConnection(
       consensusFailureLogLevel: Level = Level.WARN,
       disagreementLogLevel: Level = Level.INFO,
       shortenResponsesForLog: T => Any = identity[T],
+      isNotYet: Future[T] => Future[Boolean] = (_: Future[T]) => Future.successful(false),
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
@@ -961,9 +963,9 @@ class BftScanConnection(
     } else {
       val timer = startTimer()
 
-      retryProvider
-        .retryForClientCalls(
-          "bft_call",
+      BftScanConnection
+        .retryBftClientCallWaitingForReadyScans(
+          retryProvider,
           s"Bft call with ${callConfig.targetSuccess} out of ${callConfig.requestsToDo} matching responses",
           BftScanConnection.executeCall(
             call,
@@ -973,10 +975,25 @@ class BftScanConnection(
             shortenResponsesForLog,
             disagreementLogLevel,
             connectionMetrics,
+            isNotYet,
           ),
           logger,
-          (_: String) => ConsensusNotReachedRetryable,
         )
+        .recoverWith { case c: BftScanConnection.NotEnoughAvailableResponsesToReachConsensus =>
+          LoggerUtil.logThrowableAtLevel(
+            consensusFailureLogLevel,
+            "Not enough available Scan responses to reach consensus.",
+            c,
+          )
+          markBftCall("consensus_not_reached")
+          Future.failed(
+            HttpErrorWithHttpCode(
+              StatusCodes.BadGateway,
+              s"Failed to reach consensus from ${callConfig.requestsToDo} Scan nodes, " +
+                s"requiring ${callConfig.targetSuccess} matching responses.",
+            )
+          )
+        }
         .recoverWith { case c: ConsensusNotReached =>
           LoggerUtil.logThrowableAtLevel(consensusFailureLogLevel, "Consensus not reached.", c)
           markBftCall("consensus_not_reached")
@@ -1160,6 +1177,17 @@ class BftScanConnection(
       _.getBulkObjectChecksums(requiredCatchupTimestamp, objectKeys),
       "getBulkObjectChecksums",
       consensusFailureLogLevel = Level.DEBUG,
+      // 404 means a scan has not caught up yet, so classify it as a not-yet response.
+      // 501 means a scan does not have bulk-storage enabled, so classify it as a not-yet response (for now, during roll-out of bulk storage).
+      // TODO(#3429): Once all scans have bulk-storage enabled, and that's the default, we can remove the 501 case and treat it as a failure.
+      isNotYet = (f: Future[GetBulkObjectChecksumsResponse]) =>
+        f.map(_ => false).recover {
+          case e: BaseAppConnection.UnexpectedHttpJsonResponse =>
+            e.statusCode == StatusCodes.NotFound || e.statusCode == StatusCodes.NotImplemented
+          case e: HttpCommandException =>
+            e.status == StatusCodes.NotFound || e.status == StatusCodes.NotImplemented
+          case _ => false
+        },
     )
 }
 trait HasUrl {
@@ -1167,6 +1195,38 @@ trait HasUrl {
 }
 
 object BftScanConnection {
+  private[client] def retryBftClientCallWaitingForReadyScans[T](
+      retryProvider: RetryProvider,
+      operationDescription: String,
+      task: => Future[T],
+      logger: TracedLogger,
+      disagreementRetryFor: RetryFor = RetryFor.ClientCalls,
+      waitingForReadyScansRetryFor: RetryFor = RetryFor.Automation,
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[T] = {
+    // External retry loop with long timeouts, retrying on NotEnoughAvailableResponsesToReachConsensus
+    retryProvider.retry(
+      waitingForReadyScansRetryFor,
+      "bft_call_waiting_for_ready_scans",
+      operationDescription,
+      // Internal retry loop with shorter timeouts, retrying on ConsensusNotReached,
+      // as genuine BFT disagreements, e.g. due to network errors or component unavailability,
+      // must be resolved quickly, or considered a failure.
+      retryProvider.retry(
+        disagreementRetryFor,
+        "bft_call",
+        operationDescription,
+        task,
+        logger,
+        (_: String) => ConsensusNotReachedRetryable,
+      ),
+      logger,
+      (_: String) => NotEnoughAvailableResponsesToReachConsensusRetryable,
+    )
+  }
+
   def executeCall[T, C <: HasUrl](
       call: C => Future[T],
       requestFrom: Seq[C],
@@ -1175,6 +1235,7 @@ object BftScanConnection {
       shortenResponsesForLog: T => Any = identity[T],
       disagreementLogLevel: Level = Level.INFO,
       connectionMetrics: Option[ScanConnectionMetrics] = None,
+      isNotYet: Future[T] => Future[Boolean] = (_: Future[T]) => Future.successful(false),
   )(implicit
       ec: ExecutionContext,
       tc: TraceContext,
@@ -1184,48 +1245,90 @@ object BftScanConnection {
 
     val responses =
       new ConcurrentHashMap[BftScanConnection.ScanResponse[T], List[Uri]]()
+    val notYetResponses = new ConcurrentHashMap[Uri, Unit]()
     val nResponsesDone = new AtomicInteger(0)
+    val nNotYetResponses = new AtomicInteger(0)
     val finalResponse = Promise[(T, List[Uri])]()
 
+    def finalizeNoConsensus(): Unit = {
+      finalResponse.future.value match {
+        case None =>
+          val availableResponses = requestFrom.size - nNotYetResponses.get()
+          val maxAgreement = responses.values().asScala.map(_.size).maxOption.getOrElse(0)
+          val notYetCouldEnableConsensus =
+            nNotYetResponses.get() > 0 && (maxAgreement + nNotYetResponses.get()) >= nTargetSuccess
+          val exception =
+            if (notYetCouldEnableConsensus) {
+              logger.debug(
+                s"Not enough Scan responses to reach consensus, but some scans are not yet ready"
+              )
+              logNotYetReadyResponses(logger, Level.DEBUG, notYetResponses.keys().asScala.toList)
+
+              BftScanConnection.NotEnoughAvailableResponsesToReachConsensus(
+                numRequests = requestFrom.size,
+                availableResponses = availableResponses,
+                targetSuccess = nTargetSuccess,
+                notYetResponses = nNotYetResponses.get(),
+                responses = responses,
+                shortenResponses = shortenResponsesForLog,
+              )
+            } else
+              BftScanConnection.ConsensusNotReached(
+                requestFrom.size,
+                responses,
+                shortenResponsesForLog,
+              )
+          finalResponse.tryFailure(exception): Unit
+        case Some(consensusResponse) =>
+          logDisagreements(
+            logger,
+            consensusResponse.map(_._1),
+            responses,
+            disagreementLogLevel,
+            connectionMetrics,
+            notYetResponses = notYetResponses.keys().asScala.toList,
+          )
+      }
+    }
+
     requestFrom.foreach { scan =>
-      call(scan)
-        .transformWith(response => keyToGroupResponses(response).map(_ -> response))
-        .foreach { case (key, response) =>
-          val agreements =
-            responses.compute(
-              key,
-              (_, scans) => scan.url :: Option(scans).getOrElse(List.empty),
-            )
+      val response = call(scan)
+      val groupedResponse =
+        response.transformWith(r => keyToGroupResponses(r).map(_ -> r).map(Right(_)))
 
-          // In the special case of nTargetSuccess == 1, ignore error responses
-          // Otherwise a single HTTP error or network failure would prevent reading the responses from others
-          val considerResponseForQuorum = key match {
-            case _: ExceptionFailureResponse[?] => !(nTargetSuccess == 1 && requestFrom.size != 1)
-            case _ => true
-          }
-          if (considerResponseForQuorum && agreements.size == nTargetSuccess) { // consensus has been reached
-            finalResponse.tryComplete(response.map(r => (r, agreements))): Unit
-          }
-
-          if (nResponsesDone.incrementAndGet() == requestFrom.size) { // all Scans are done
-            finalResponse.future.value match {
-              case None =>
-                val exception = ConsensusNotReached(
-                  requestFrom.size,
-                  responses,
-                  shortenResponsesForLog,
-                )
-                finalResponse.tryFailure(exception): Unit
-              case Some(consensusResponse) =>
-                logDisagreements(
-                  logger,
-                  consensusResponse.map(_._1),
-                  responses,
-                  disagreementLogLevel,
-                  connectionMetrics,
-                )
+      isNotYet(response)
+        .transformWith {
+          case Success(true) =>
+            Future.successful(Left(BftScanConnection.NotYetResponse(scan.url)))
+          case _ => groupedResponse
+        }
+        .foreach {
+          case Left(_: BftScanConnection.NotYetResponse) =>
+            notYetResponses.put(scan.url, ())
+            nNotYetResponses.incrementAndGet()
+            if (nResponsesDone.incrementAndGet() == requestFrom.size) {
+              finalizeNoConsensus()
             }
-          }
+          case Right((key, response)) =>
+            val agreements =
+              responses.compute(
+                key,
+                (_, scans) => scan.url :: Option(scans).getOrElse(List.empty),
+              )
+
+            // In the special case of nTargetSuccess == 1, ignore error responses
+            // Otherwise a single HTTP error or network failure would prevent reading the responses from others
+            val considerResponseForQuorum = key match {
+              case _: ExceptionFailureResponse[?] => !(nTargetSuccess == 1 && requestFrom.size != 1)
+              case _ => true
+            }
+            if (considerResponseForQuorum && agreements.size == nTargetSuccess) { // consensus has been reached
+              finalResponse.tryComplete(response.map(r => (r, agreements))): Unit
+            }
+
+            if (nResponsesDone.incrementAndGet() == requestFrom.size) { // all Scans are done
+              finalizeNoConsensus()
+            }
         }
     }
     finalResponse.future
@@ -1263,12 +1366,27 @@ object BftScanConnection {
     }
   }
 
+  private def logNotYetReadyResponses(
+      logger: TracedLogger,
+      logLevel: Level,
+      notYetResponses: List[Uri],
+  )(implicit tc: TraceContext): Unit = {
+    implicit val elc: ErrorLoggingContext = ErrorLoggingContext.fromTracedLogger(logger)
+    LoggerUtil.logAtLevel(
+      logLevel,
+      s"""The following Scan URLs were not yet ready to provide a response:
+         |${notYetResponses.map(url => s"  $url").mkString("\n")}""".stripMargin,
+    )
+
+  }
+
   private def logDisagreements[T](
       logger: TracedLogger,
       consensusResponse: Try[T],
       responses: ConcurrentHashMap[BftScanConnection.ScanResponse[T], List[Uri]],
       disagreementLogLevel: Level,
       connectionMetrics: Option[ScanConnectionMetrics],
+      notYetResponses: List[Uri],
   )(implicit ec: ExecutionContext, tc: TraceContext, mc: MetricsContext): Unit = {
     implicit val elc: ErrorLoggingContext = ErrorLoggingContext.fromTracedLogger(logger)
     def recordConsensus(url: Uri, consensus: String, extraLabels: Map[String, String]): Unit =
@@ -1307,6 +1425,24 @@ object BftScanConnection {
              |consensus response: $consensusResponse
              |disagreeing response: $disagreeingResponse""".stripMargin,
         )
+      }
+
+      // Note: "not yet" responses don't get the "success" or "http_status" labels since they're not disagreements
+      if (notYetResponses.nonEmpty) {
+        notYetResponses.foreach(url =>
+          connectionMetrics.foreach { metrics =>
+            val context = mc.merge(
+              MetricsContext(
+                Map(
+                  "scan_connection" -> url.authority.host.address(),
+                  "consensus" -> "not_yet",
+                )
+              )
+            )
+            metrics.bftPerConnectionConsensus.mark()(context)
+          }
+        )
+        logNotYetReadyResponses(logger, disagreementLogLevel, notYetResponses)
       }
     }
   }
@@ -1904,7 +2040,7 @@ object BftScanConnection {
           trustedScanDetails = trustedScans
             .map(s => s"  - Name: ${s.svName}, URL: ${s.publicUrl}")
             .mkString("\n")
-          _ = logger.info(s"all available trusted scans on booststrap:\n$trustedScanDetails")
+          _ = logger.info(s"all available trusted scans on boosttrap:\n$trustedScanDetails")
 
           initialConnections <- Future.traverse(trustedScans)(scan =>
             builder(scan.publicUrl, ts.amuletRulesCacheTimeToLive).transformWith {
@@ -2178,6 +2314,49 @@ object BftScanConnection {
       extends RuntimeException(s"Scan $url has no answer to contribute to consensus")
       with NoStackTrace
 
+  private case class NotYetResponse(url: Uri)
+
+  class NotEnoughAvailableResponsesToReachConsensus(
+      numRequests: Int,
+      availableResponses: Int,
+      targetSuccess: Int,
+      notYetResponses: Int,
+      responses: Seq[(List[Uri], BftScanConnection.ScanResponse[?])],
+  ) extends RuntimeException(
+        s"Failed to reach consensus from $numRequests Scan nodes because only $availableResponses available responses remain after $notYetResponses not-yet responses. Required: $targetSuccess. Responses: $responses"
+      )
+  object NotEnoughAvailableResponsesToReachConsensus {
+    def apply[T](
+        numRequests: Int,
+        availableResponses: Int,
+        targetSuccess: Int,
+        notYetResponses: Int,
+        responses: ConcurrentHashMap[BftScanConnection.ScanResponse[T], List[Uri]],
+        shortenResponses: T => Any,
+    ): NotEnoughAvailableResponsesToReachConsensus = {
+      val shortResponses: Seq[(List[Uri], BftScanConnection.ScanResponse[?])] =
+        responses.asScala.toSeq.map {
+          case (SuccessfulResponse(response), uris) =>
+            uris -> SuccessfulResponse(shortenResponses(response))
+          case (HttpFailureResponse(status, body), uris) =>
+            uris -> HttpFailureResponse(status, body)
+          case (NonJsonHttpFailureResponse(status), uris) =>
+            uris -> NonJsonHttpFailureResponse(status)
+          case (TextFailureResponse(status, body), uris) =>
+            uris -> TextFailureResponse(status, body)
+          case (ExceptionFailureResponse(error), uris) => uris -> ExceptionFailureResponse(error)
+        }
+
+      new NotEnoughAvailableResponsesToReachConsensus(
+        numRequests,
+        availableResponses,
+        targetSuccess,
+        notYetResponses,
+        shortResponses,
+      )
+    }
+  }
+
   private sealed trait ScanResponse[+T]
   private case class SuccessfulResponse[+T](response: T) extends ScanResponse[T]
   private case class HttpFailureResponse[+T](status: StatusCode, body: Json) extends ScanResponse[T]
@@ -2222,6 +2401,19 @@ object BftScanConnection {
       exception match {
         case c: ConsensusNotReached =>
           logger.info("Consensus not reached. Will be retried.", c)
+          ErrorKind.TransientErrorKind()
+        case _ => ErrorKind.FatalErrorKind
+      }
+    }
+  }
+
+  object NotEnoughAvailableResponsesToReachConsensusRetryable extends ExceptionRetryPolicy {
+    override def determineExceptionErrorKind(exception: Throwable, logger: TracedLogger)(implicit
+        tc: TraceContext
+    ): ErrorKind = {
+      exception match {
+        case c: NotEnoughAvailableResponsesToReachConsensus =>
+          logger.info("Not enough available Scan responses to reach consensus. Will be retried.", c)
           ErrorKind.TransientErrorKind()
         case _ => ErrorKind.FatalErrorKind
       }
