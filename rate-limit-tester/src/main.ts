@@ -3,7 +3,7 @@
 import http from "k6/http";
 import exec from "k6/execution";
 import { Options, Scenario } from "k6/options";
-import { Target, loadConfig } from "./config.ts";
+import { Target, loadConfig } from "./config";
 import { checks } from "./checks/index.ts";
 import {
   UNEXPECTED_STATUS_TOLERANCE,
