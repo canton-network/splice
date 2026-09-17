@@ -1594,7 +1594,8 @@
           "tokensPerFill": 10000,
           "type": "limited"
         }
-      }
+      },
+      "xffNumTrustedHops": 3
     },
     "name": "splice-sv-1-global-domain-10-sequencer-rate-limit",
     "provider": "",
@@ -1667,7 +1668,8 @@
           "tokensPerFill": 10000,
           "type": "limited"
         }
-      }
+      },
+      "xffNumTrustedHops": 3
     },
     "name": "splice-sv-1-global-domain-7-sequencer-rate-limit",
     "provider": "",
@@ -1740,7 +1742,8 @@
           "tokensPerFill": 10000,
           "type": "limited"
         }
-      }
+      },
+      "xffNumTrustedHops": 3
     },
     "name": "splice-sv-1-global-domain-8-sequencer-rate-limit",
     "provider": "",
@@ -1813,7 +1816,8 @@
           "tokensPerFill": 10000,
           "type": "limited"
         }
-      }
+      },
+      "xffNumTrustedHops": 3
     },
     "name": "splice-sv-1-global-domain-9-sequencer-rate-limit",
     "provider": "",
@@ -1886,7 +1890,8 @@
           "tokensPerFill": 10000,
           "type": "limited"
         }
-      }
+      },
+      "xffNumTrustedHops": 3
     },
     "name": "splice-sv-da-1-global-domain-10-sequencer-rate-limit",
     "provider": "",
@@ -1959,7 +1964,8 @@
           "tokensPerFill": 10000,
           "type": "limited"
         }
-      }
+      },
+      "xffNumTrustedHops": 3
     },
     "name": "splice-sv-da-1-global-domain-7-sequencer-rate-limit",
     "provider": "",
@@ -2032,7 +2038,8 @@
           "tokensPerFill": 10000,
           "type": "limited"
         }
-      }
+      },
+      "xffNumTrustedHops": 3
     },
     "name": "splice-sv-da-1-global-domain-8-sequencer-rate-limit",
     "provider": "",
@@ -2105,7 +2112,8 @@
           "tokensPerFill": 10000,
           "type": "limited"
         }
-      }
+      },
+      "xffNumTrustedHops": 3
     },
     "name": "splice-sv-da-1-global-domain-9-sequencer-rate-limit",
     "provider": "",
@@ -2178,7 +2186,8 @@
           "tokensPerFill": 10000,
           "type": "limited"
         }
-      }
+      },
+      "xffNumTrustedHops": 3
     },
     "name": "splice-sv-global-domain-10-sequencer-rate-limit",
     "provider": "",
@@ -2251,7 +2260,8 @@
           "tokensPerFill": 10000,
           "type": "limited"
         }
-      }
+      },
+      "xffNumTrustedHops": 3
     },
     "name": "splice-sv-global-domain-7-sequencer-rate-limit",
     "provider": "",
@@ -2324,7 +2334,8 @@
           "tokensPerFill": 10000,
           "type": "limited"
         }
-      }
+      },
+      "xffNumTrustedHops": 3
     },
     "name": "splice-sv-global-domain-8-sequencer-rate-limit",
     "provider": "",
@@ -2397,7 +2408,8 @@
           "tokensPerFill": 10000,
           "type": "limited"
         }
-      }
+      },
+      "xffNumTrustedHops": 3
     },
     "name": "splice-sv-global-domain-9-sequencer-rate-limit",
     "provider": "",
@@ -2827,6 +2839,32 @@
       },
       "spec": {
         "configPatches": [
+          {
+            "applyTo": "NETWORK_FILTER",
+            "match": {
+              "context": "SIDECAR_INBOUND",
+              "listener": {
+                "filterChain": {
+                  "filter": {
+                    "name": "envoy.filters.network.http_connection_manager"
+                  }
+                },
+                "portNumber": 5008
+              }
+            },
+            "patch": {
+              "operation": "MERGE",
+              "value": {
+                "typed_config": {
+                  "@type": "type.googleapis.com/udpa.type.v1.TypedStruct",
+                  "type_url": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "value": {
+                    "xff_num_trusted_hops": 3
+                  }
+                }
+              }
+            }
+          },
           {
             "applyTo": "HTTP_FILTER",
             "match": {
@@ -3633,6 +3671,32 @@
       "spec": {
         "configPatches": [
           {
+            "applyTo": "NETWORK_FILTER",
+            "match": {
+              "context": "SIDECAR_INBOUND",
+              "listener": {
+                "filterChain": {
+                  "filter": {
+                    "name": "envoy.filters.network.http_connection_manager"
+                  }
+                },
+                "portNumber": 5008
+              }
+            },
+            "patch": {
+              "operation": "MERGE",
+              "value": {
+                "typed_config": {
+                  "@type": "type.googleapis.com/udpa.type.v1.TypedStruct",
+                  "type_url": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "value": {
+                    "xff_num_trusted_hops": 3
+                  }
+                }
+              }
+            }
+          },
+          {
             "applyTo": "HTTP_FILTER",
             "match": {
               "context": "SIDECAR_INBOUND",
@@ -4434,6 +4498,32 @@
       "spec": {
         "configPatches": [
           {
+            "applyTo": "NETWORK_FILTER",
+            "match": {
+              "context": "SIDECAR_INBOUND",
+              "listener": {
+                "filterChain": {
+                  "filter": {
+                    "name": "envoy.filters.network.http_connection_manager"
+                  }
+                },
+                "portNumber": 5008
+              }
+            },
+            "patch": {
+              "operation": "MERGE",
+              "value": {
+                "typed_config": {
+                  "@type": "type.googleapis.com/udpa.type.v1.TypedStruct",
+                  "type_url": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "value": {
+                    "xff_num_trusted_hops": 3
+                  }
+                }
+              }
+            }
+          },
+          {
             "applyTo": "HTTP_FILTER",
             "match": {
               "context": "SIDECAR_INBOUND",
@@ -5234,6 +5324,32 @@
       },
       "spec": {
         "configPatches": [
+          {
+            "applyTo": "NETWORK_FILTER",
+            "match": {
+              "context": "SIDECAR_INBOUND",
+              "listener": {
+                "filterChain": {
+                  "filter": {
+                    "name": "envoy.filters.network.http_connection_manager"
+                  }
+                },
+                "portNumber": 5008
+              }
+            },
+            "patch": {
+              "operation": "MERGE",
+              "value": {
+                "typed_config": {
+                  "@type": "type.googleapis.com/udpa.type.v1.TypedStruct",
+                  "type_url": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "value": {
+                    "xff_num_trusted_hops": 3
+                  }
+                }
+              }
+            }
+          },
           {
             "applyTo": "HTTP_FILTER",
             "match": {
@@ -9194,6 +9310,32 @@
       "spec": {
         "configPatches": [
           {
+            "applyTo": "NETWORK_FILTER",
+            "match": {
+              "context": "SIDECAR_INBOUND",
+              "listener": {
+                "filterChain": {
+                  "filter": {
+                    "name": "envoy.filters.network.http_connection_manager"
+                  }
+                },
+                "portNumber": 5008
+              }
+            },
+            "patch": {
+              "operation": "MERGE",
+              "value": {
+                "typed_config": {
+                  "@type": "type.googleapis.com/udpa.type.v1.TypedStruct",
+                  "type_url": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "value": {
+                    "xff_num_trusted_hops": 3
+                  }
+                }
+              }
+            }
+          },
+          {
             "applyTo": "HTTP_FILTER",
             "match": {
               "context": "SIDECAR_INBOUND",
@@ -9999,6 +10141,32 @@
       "spec": {
         "configPatches": [
           {
+            "applyTo": "NETWORK_FILTER",
+            "match": {
+              "context": "SIDECAR_INBOUND",
+              "listener": {
+                "filterChain": {
+                  "filter": {
+                    "name": "envoy.filters.network.http_connection_manager"
+                  }
+                },
+                "portNumber": 5008
+              }
+            },
+            "patch": {
+              "operation": "MERGE",
+              "value": {
+                "typed_config": {
+                  "@type": "type.googleapis.com/udpa.type.v1.TypedStruct",
+                  "type_url": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "value": {
+                    "xff_num_trusted_hops": 3
+                  }
+                }
+              }
+            }
+          },
+          {
             "applyTo": "HTTP_FILTER",
             "match": {
               "context": "SIDECAR_INBOUND",
@@ -10800,6 +10968,32 @@
       "spec": {
         "configPatches": [
           {
+            "applyTo": "NETWORK_FILTER",
+            "match": {
+              "context": "SIDECAR_INBOUND",
+              "listener": {
+                "filterChain": {
+                  "filter": {
+                    "name": "envoy.filters.network.http_connection_manager"
+                  }
+                },
+                "portNumber": 5008
+              }
+            },
+            "patch": {
+              "operation": "MERGE",
+              "value": {
+                "typed_config": {
+                  "@type": "type.googleapis.com/udpa.type.v1.TypedStruct",
+                  "type_url": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "value": {
+                    "xff_num_trusted_hops": 3
+                  }
+                }
+              }
+            }
+          },
+          {
             "applyTo": "HTTP_FILTER",
             "match": {
               "context": "SIDECAR_INBOUND",
@@ -11600,6 +11794,32 @@
       },
       "spec": {
         "configPatches": [
+          {
+            "applyTo": "NETWORK_FILTER",
+            "match": {
+              "context": "SIDECAR_INBOUND",
+              "listener": {
+                "filterChain": {
+                  "filter": {
+                    "name": "envoy.filters.network.http_connection_manager"
+                  }
+                },
+                "portNumber": 5008
+              }
+            },
+            "patch": {
+              "operation": "MERGE",
+              "value": {
+                "typed_config": {
+                  "@type": "type.googleapis.com/udpa.type.v1.TypedStruct",
+                  "type_url": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "value": {
+                    "xff_num_trusted_hops": 3
+                  }
+                }
+              }
+            }
+          },
           {
             "applyTo": "HTTP_FILTER",
             "match": {
@@ -14818,6 +15038,32 @@
       "spec": {
         "configPatches": [
           {
+            "applyTo": "NETWORK_FILTER",
+            "match": {
+              "context": "SIDECAR_INBOUND",
+              "listener": {
+                "filterChain": {
+                  "filter": {
+                    "name": "envoy.filters.network.http_connection_manager"
+                  }
+                },
+                "portNumber": 5008
+              }
+            },
+            "patch": {
+              "operation": "MERGE",
+              "value": {
+                "typed_config": {
+                  "@type": "type.googleapis.com/udpa.type.v1.TypedStruct",
+                  "type_url": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "value": {
+                    "xff_num_trusted_hops": 3
+                  }
+                }
+              }
+            }
+          },
+          {
             "applyTo": "HTTP_FILTER",
             "match": {
               "context": "SIDECAR_INBOUND",
@@ -15623,6 +15869,32 @@
       "spec": {
         "configPatches": [
           {
+            "applyTo": "NETWORK_FILTER",
+            "match": {
+              "context": "SIDECAR_INBOUND",
+              "listener": {
+                "filterChain": {
+                  "filter": {
+                    "name": "envoy.filters.network.http_connection_manager"
+                  }
+                },
+                "portNumber": 5008
+              }
+            },
+            "patch": {
+              "operation": "MERGE",
+              "value": {
+                "typed_config": {
+                  "@type": "type.googleapis.com/udpa.type.v1.TypedStruct",
+                  "type_url": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "value": {
+                    "xff_num_trusted_hops": 3
+                  }
+                }
+              }
+            }
+          },
+          {
             "applyTo": "HTTP_FILTER",
             "match": {
               "context": "SIDECAR_INBOUND",
@@ -16424,6 +16696,32 @@
       "spec": {
         "configPatches": [
           {
+            "applyTo": "NETWORK_FILTER",
+            "match": {
+              "context": "SIDECAR_INBOUND",
+              "listener": {
+                "filterChain": {
+                  "filter": {
+                    "name": "envoy.filters.network.http_connection_manager"
+                  }
+                },
+                "portNumber": 5008
+              }
+            },
+            "patch": {
+              "operation": "MERGE",
+              "value": {
+                "typed_config": {
+                  "@type": "type.googleapis.com/udpa.type.v1.TypedStruct",
+                  "type_url": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "value": {
+                    "xff_num_trusted_hops": 3
+                  }
+                }
+              }
+            }
+          },
+          {
             "applyTo": "HTTP_FILTER",
             "match": {
               "context": "SIDECAR_INBOUND",
@@ -17224,6 +17522,32 @@
       },
       "spec": {
         "configPatches": [
+          {
+            "applyTo": "NETWORK_FILTER",
+            "match": {
+              "context": "SIDECAR_INBOUND",
+              "listener": {
+                "filterChain": {
+                  "filter": {
+                    "name": "envoy.filters.network.http_connection_manager"
+                  }
+                },
+                "portNumber": 5008
+              }
+            },
+            "patch": {
+              "operation": "MERGE",
+              "value": {
+                "typed_config": {
+                  "@type": "type.googleapis.com/udpa.type.v1.TypedStruct",
+                  "type_url": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "value": {
+                    "xff_num_trusted_hops": 3
+                  }
+                }
+              }
+            }
+          },
           {
             "applyTo": "HTTP_FILTER",
             "match": {
