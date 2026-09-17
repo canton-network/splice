@@ -1,9 +1,10 @@
 # Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-# Scan rate limits as deployed on cilr, i.e. the defaults from `cluster/configs/shared/base.yaml`.
-# `/api/scan/version` has no bucket of its own, so it is charged against the global and the
-# global per-IP bucket only.
+# Scan rate limits, i.e. the defaults from `cluster/configs/shared/base.yaml`.
+# Only the global buckets below are under test; the load is driven against `/api/scan/version`,
+# which has no bucket of its own and is therefore charged against the global and the global
+# per-IP bucket only. Override the probe path with `-e PROBE_PATH=`.
 #
 #   k6 run src/main.ts \
 #     -e DOMAIN=<domain> \
@@ -20,8 +21,3 @@ sv:
         maxTokens: 6000
         tokensPerFill: 1000
         fillInterval: "10s"
-      rateLimits:
-        /api/scan/version:
-          test: true
-          name: "scan-version"
-          type: "limited"

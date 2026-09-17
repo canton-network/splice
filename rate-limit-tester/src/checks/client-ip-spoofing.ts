@@ -1,14 +1,16 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import http from "k6/http";
-import { Endpoint } from "../config.ts";
+import { Target } from "../config.ts";
 import {
   Check,
   CheckPlan,
   burstSizing,
   flatScenario,
-  inapplicableHttpLimited,
+  inapplicableTarget,
+  limitProven,
   rateLimitThresholds,
+  recordRejection,
   recordResponse,
   requestParams,
   slug,
@@ -18,8 +20,7 @@ import {
  * Verifies that a client cannot get a fresh per-IP bucket by forging the headers that carry a
  * client address.
  */
-const REJECTIONS_TO_PROVE = 5;
-let rejectionsSeen = 0;
+const CHECK_ID = "client-ip-spoofing";
 
 /**
  * A different, routable looking IPv4 address per request. 1.0.0.0-223.255.255.255 avoids the
@@ -44,13 +45,13 @@ function spoofedHeaders(): Record<string, string> {
 }
 
 export const clientIpSpoofingCheck: Check = {
-  id: "client-ip-spoofing",
-  inapplicable: inapplicableHttpLimited,
-  plan(endpoint: Endpoint): CheckPlan {
-    const sized = burstSizing(endpoint);
+  id: CHECK_ID,
+  inapplicable: inapplicableTarget,
+  plan(target: Target): CheckPlan {
+    const sized = burstSizing(target);
     if (typeof sized === "string") {
       throw new Error(
-        `cannot plan client-ip-spoofing for ${endpoint.name}: ${sized}`,
+        `cannot plan client-ip-spoofing for ${target.name}: ${sized}`,
       );
     }
     return {
@@ -65,28 +66,30 @@ export const clientIpSpoofingCheck: Check = {
         ),
       ],
       thresholds: rateLimitThresholds(
-        { endpoint: slug(endpoint.name), check: slug("client-ip-spoofing") },
+        { target: slug(target.name), check: slug(CHECK_ID) },
         "spoofed",
       ),
     };
   },
 
-  run(endpoint: Endpoint, phase: string): void {
-    if (rejectionsSeen >= REJECTIONS_TO_PROVE) {
+  run(target: Target, phase: string): void {
+    // The limit is proven for this VU and phase, so stop sending: the scenario keeps scheduling
+    // iterations, but they no longer put load on the cluster.
+    if (limitProven(CHECK_ID, phase)) {
       return;
     }
     const tags = {
-      endpoint: slug(endpoint.name),
+      target: slug(target.name),
       phase,
-      check: slug("client-ip-spoofing"),
+      check: slug(CHECK_ID),
     };
     if (
       recordResponse(
-        http.get(endpoint.url, requestParams(tags, spoofedHeaders())),
+        http.get(target.url, requestParams(tags, spoofedHeaders())),
         tags,
       )
     ) {
-      rejectionsSeen += 1;
+      recordRejection(CHECK_ID, phase);
     }
   },
 };

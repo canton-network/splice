@@ -3,7 +3,7 @@
 import http from "k6/http";
 import exec from "k6/execution";
 import { Options, Scenario } from "k6/options";
-import { Endpoint, loadConfig } from "./config.ts";
+import { Target, loadConfig } from "./config.ts";
 import { checks } from "./checks/index.ts";
 import {
   UNEXPECTED_STATUS_TOLERANCE,
@@ -14,7 +14,9 @@ import {
 
 /**
  * Entry point of the rate limit tester. It takes the domain under test and a cluster config, and
- * runs every check in `checks/` against each endpoint flagged with `test: true`:
+ * runs every check in `checks/` against the *global* rate limits of every service declared in it.
+ * Per endpoint buckets are out of scope for now, so the load is driven against a probe path that
+ * has no bucket of its own (`/api/scan/version` by default, override with `-e PROBE_PATH=`):
  *
  *   k6 run src/main.ts -e DOMAIN=scan.sv-2.example.com -e CONFIG=./scan.example.yaml
  *
@@ -22,6 +24,7 @@ import {
  */
 const DOMAIN = __ENV.DOMAIN ?? "";
 const CONFIG = __ENV.CONFIG ?? "";
+const PROBE_PATH = __ENV.PROBE_PATH ?? "/api/scan/version";
 if (DOMAIN === "" || CONFIG === "") {
   throw new Error(
     "DOMAIN and CONFIG are required, e.g. " +
@@ -29,15 +32,15 @@ if (DOMAIN === "" || CONFIG === "") {
   );
 }
 
-interface Target {
-  endpoint: Endpoint;
+interface ScenarioTarget {
+  target: Target;
   checkId: string;
   phase: string;
 }
 
-/** What the summary needs to report the verdict of one check on one endpoint. */
+/** What the summary needs to report the verdict of one check on one target. */
 interface Report {
-  endpoint: Endpoint;
+  target: Target;
   checkId: string;
   peakLoad: string;
   burstPhase: string;
@@ -48,23 +51,23 @@ interface Report {
  * k6 only accepts `exec` functions exported by this module, so every scenario runs `run` and
  * looks its target up here by scenario name. Each VU rebuilds the plan in its init context.
  */
-const targets: Record<string, Target> = {};
+const targets: Record<string, ScenarioTarget> = {};
 const scenarios: Record<string, Scenario> = {};
 const thresholds: Record<string, string[]> = {};
 const reports: Report[] = [];
 const skipped: string[] = [];
 let totalSeconds = 0;
-for (const endpoint of loadConfig(CONFIG, DOMAIN)) {
+for (const target of loadConfig(CONFIG, DOMAIN, PROBE_PATH)) {
   for (const check of checks) {
-    const reason = check.inapplicable(endpoint);
+    const reason = check.inapplicable(target);
     if (reason) {
-      skipped.push(`${check.id} on ${endpoint.name}: ${reason}`);
+      skipped.push(`${check.id} on ${target.name}: ${reason}`);
       continue;
     }
-    const plan = check.plan(endpoint);
+    const plan = check.plan(target);
     Object.assign(thresholds, plan.thresholds);
     reports.push({
-      endpoint,
+      target,
       checkId: check.id,
       peakLoad: plan.peakLoad,
       burstPhase: plan.burstPhase,
@@ -76,15 +79,15 @@ for (const endpoint of loadConfig(CONFIG, DOMAIN)) {
       durationSeconds,
       recoverySeconds,
     } of plan.scenarios) {
-      const name = `${slug(check.id)}__${slug(endpoint.name)}__${slug(phase)}`;
+      const name = `${slug(check.id)}__${slug(target.name)}__${slug(phase)}`;
       totalSeconds += recoverySeconds;
       scenarios[name] = {
         ...scenario,
         exec: "run",
         startTime: `${totalSeconds}s`,
-        tags: { check: slug(check.id), endpoint: slug(endpoint.name), phase },
+        tags: { check: slug(check.id), target: slug(target.name), phase },
       };
-      targets[name] = { endpoint, checkId: check.id, phase };
+      targets[name] = { target, checkId: check.id, phase };
       // Small gap, so the tail of one scenario cannot be charged to the next one.
       totalSeconds += durationSeconds + 1;
     }
@@ -93,7 +96,7 @@ for (const endpoint of loadConfig(CONFIG, DOMAIN)) {
 
 if (Object.keys(scenarios).length === 0) {
   throw new Error(
-    `no runnable check for the endpoints flagged with test: true in ${CONFIG}` +
+    `no runnable check for the global rate limits declared in ${CONFIG}` +
       (skipped.length > 0 ? `; skipped ${skipped.join("; ")}` : ""),
   );
 }
@@ -101,9 +104,9 @@ if (Object.keys(scenarios).length === 0) {
 export const options: Options = { scenarios, thresholds };
 
 export function setup(): void {
-  // Fail fast if the endpoint is not served here: an unrouted host answers with an empty 404,
+  // Fail fast if the probe path is not served here: an unrouted host answers with an empty 404,
   // which would otherwise look like a clean "never rate limited" run.
-  for (const url of new Set(reports.map((r) => r.endpoint.url))) {
+  for (const url of new Set(reports.map((r) => r.target.url))) {
     const probe = http.get(url, requestParams({ phase: "preflight" }));
     if (probe.status !== 200) {
       throw new Error(
@@ -115,12 +118,12 @@ export function setup(): void {
 }
 
 export function run(): void {
-  const target = targets[exec.scenario.name];
-  const check = checks.find((c) => c.id === target?.checkId);
-  if (!target || !check) {
+  const scenarioTarget = targets[exec.scenario.name];
+  const check = checks.find((c) => c.id === scenarioTarget?.checkId);
+  if (!scenarioTarget || !check) {
     throw new Error(`no check registered for scenario '${exec.scenario.name}'`);
   }
-  check.run(target.endpoint, target.phase);
+  check.run(scenarioTarget.target, scenarioTarget.phase);
 }
 
 /** Minimal view of what k6 hands to `handleSummary`. */
@@ -140,14 +143,14 @@ function metric(
 /**
  * k6 reports a failure as the list of thresholds that were crossed, which does not say whether
  * the limit was missing, enforced by the wrong component or simply never reached. This reports
- * the verdict per check and endpoint instead.
+ * the verdict per check and target instead.
  */
 export function handleSummary(data: SummaryData): Record<string, string> {
   const lines: string[] = ["", `rate limits of ${DOMAIN}:`, ""];
   let failed = false;
   for (const report of reports) {
     const scope = {
-      endpoint: slug(report.endpoint.name),
+      target: slug(report.target.name),
       check: slug(report.checkId),
     };
     const byInfra = metric(
@@ -221,7 +224,7 @@ export function handleSummary(data: SummaryData): Record<string, string> {
       );
     }
     lines.push(
-      `  [${report.checkId}] ${report.endpoint.name} (${report.endpoint.url})`,
+      `  [${report.checkId}] ${report.target.name} (${report.target.url})`,
     );
     verdicts.forEach((v) => lines.push(`    - ${v}`));
     lines.push("");

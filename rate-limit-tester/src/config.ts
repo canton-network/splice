@@ -7,7 +7,10 @@ import { load } from "../node_modules/js-yaml/dist/js-yaml.mjs";
 
 /**
  * Reads a cluster config (e.g. `cluster/deployment/<cluster>/config.resolved.yaml`) and returns
- * the endpoints flagged with `test: true`, see `scan.example.yaml` for the shape.
+ * the service wide (global) rate limits declared in it, see `scan.example.yaml` for the shape.
+ *
+ * Per endpoint buckets (`rateLimits`) are deliberately ignored for now: only the global and the
+ * global per-IP buckets are exercised, against a probe path that has no bucket of its own.
  */
 
 interface Bucket {
@@ -23,35 +26,20 @@ export interface ResolvedBucket extends Bucket {
   sustainedRps: number;
 }
 
-interface RateLimitEntry extends Partial<Bucket> {
-  test?: boolean;
-  name?: string;
-  type?: "limited" | "unlimited" | string;
-  perIpLimits?: Bucket;
-}
-
 interface ExternalRateLimits {
   globalLimits?: Bucket;
   globalPerIpLimits?: Bucket;
-  rateLimits?: Record<string, RateLimitEntry>;
 }
 
-/** An endpoint flagged with `test: true`, with all the buckets that apply to it. */
-export interface Endpoint {
-  /** `name` of the entry, used to tag metrics and name scenarios */
+/** A service whose global rate limits are under test. */
+export interface Target {
+  /** where the `externalRateLimits` block sits in the config, e.g. `sv.scan` */
   name: string;
-  type: string;
-  /** the endpoint's own bucket, shared by all clients */
-  endpointLimits?: ResolvedBucket;
-  /** the endpoint's bucket for a single client IP */
-  endpointPerIpLimits?: ResolvedBucket;
   /** the bucket for a single client IP, shared by all endpoints of the service */
   globalPerIpLimits?: ResolvedBucket;
   /** the bucket shared by all clients and all endpoints of the service */
   globalLimits?: ResolvedBucket;
-  /** true if the path is a gRPC service rather than an HTTP route */
-  grpc: boolean;
-  /** the URL under test, built from the domain passed to main.ts */
+  /** the URL under test, built from the domain and the probe path passed to main.ts */
   url: string;
 }
 
@@ -92,28 +80,20 @@ function resolveBucket(bucket?: Partial<Bucket>): ResolvedBucket | undefined {
   };
 }
 
-/**
- * Whether the path is a gRPC one, e.g.
- * `/com.digitalasset.canton.sequencer.api.v30.SequencerConnectService/`. Such paths need a real
- * gRPC call, so the HTTP checks skip them.
- */
-function isGrpcPath(path: string): boolean {
-  return /^\/[a-zA-Z0-9_]+(\.[a-zA-Z0-9_]+)+\//.test(path);
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /**
- * Collects every `rateLimits` entry flagged with `test: true`, wherever its
- * `externalRateLimits` block sits in the config.
+ * Collects every `externalRateLimits` block that declares a global bucket, wherever it sits in
+ * the config.
  */
-export function collectTestedEndpoints(
+export function collectTargets(
   config: unknown,
   domain: string,
-): Endpoint[] {
-  const endpoints: Endpoint[] = [];
+  probePath: string,
+): Target[] {
+  const targets: Target[] = [];
 
   const visit = (node: unknown, servicePath: string[]): void => {
     if (!isRecord(node)) {
@@ -131,61 +111,36 @@ export function collectTestedEndpoints(
   const collectFrom = (limits: ExternalRateLimits, service: string): void => {
     const globalPerIpLimits = resolveBucket(limits.globalPerIpLimits);
     const globalLimits = resolveBucket(limits.globalLimits);
-    for (const [path, entry] of Object.entries(limits.rateLimits ?? {})) {
-      if (entry?.test !== true) {
-        continue;
-      }
-      endpoints.push({
-        name: entry.name ?? `${service}${path}`,
-        type: entry.type ?? "limited",
-        endpointLimits: resolveBucket(entry),
-        endpointPerIpLimits: resolveBucket(entry.perIpLimits),
-        globalPerIpLimits,
-        globalLimits,
-        grpc: isGrpcPath(path),
-        url: `https://${domain}${path}`,
-      });
+    if (!globalPerIpLimits && !globalLimits) {
+      return;
     }
+    targets.push({
+      name: service,
+      globalPerIpLimits,
+      globalLimits,
+      url: `https://${domain}${probePath}`,
+    });
   };
 
   visit(config, []);
-  return endpoints;
+  return targets;
 }
 
-/** The per-IP bucket that rejects first, i.e. the stricter of the endpoint's and the global one. */
-export function effectivePerIpBucket(
-  endpoint: Endpoint,
-): ResolvedBucket | undefined {
-  const candidates = [
-    endpoint.endpointPerIpLimits,
-    endpoint.globalPerIpLimits,
-  ].filter((b): b is ResolvedBucket => b !== undefined);
-  if (candidates.length === 0) {
-    return undefined;
-  }
-  return candidates.reduce((strictest, candidate) =>
-    candidate.sustainedRps < strictest.sustainedRps ||
-    (candidate.sustainedRps === strictest.sustainedRps &&
-      candidate.maxTokens < strictest.maxTokens)
-      ? candidate
-      : strictest,
-  );
+/** The per-IP bucket that applies to a target, i.e. the global per-IP one. */
+export function perIpBucket(target: Target): ResolvedBucket | undefined {
+  return target.globalPerIpLimits;
 }
 
-/** The strictest bucket that is shared between clients, i.e. not keyed by client IP. */
-export function effectiveSharedBucket(
-  endpoint: Endpoint,
-): ResolvedBucket | undefined {
-  const candidates = [endpoint.endpointLimits, endpoint.globalLimits].filter(
-    (b): b is ResolvedBucket => b !== undefined,
-  );
-  if (candidates.length === 0) {
-    return undefined;
-  }
-  return candidates.reduce((a, b) => (b.sustainedRps < a.sustainedRps ? b : a));
+/** The bucket that is shared between clients, i.e. not keyed by client IP. */
+export function sharedBucket(target: Target): ResolvedBucket | undefined {
+  return target.globalLimits;
 }
 
-export function loadConfig(configPath: string, domain: string): Endpoint[] {
+export function loadConfig(
+  configPath: string,
+  domain: string,
+  probePath: string,
+): Target[] {
   // `open` only exists in k6's init context and resolves relative paths against this file, while
   // the paths passed in are relative to the package root, so both are tried.
   const candidates = configPath.startsWith("/")
@@ -193,7 +148,7 @@ export function loadConfig(configPath: string, domain: string): Endpoint[] {
     : [`../${configPath}`, configPath];
   for (const candidate of candidates) {
     try {
-      return parseConfig(open(candidate), domain);
+      return parseConfig(open(candidate), domain, probePath);
     } catch {
       // try the next candidate
     }
@@ -203,10 +158,15 @@ export function loadConfig(configPath: string, domain: string): Endpoint[] {
   );
 }
 
-/** Parses a YAML cluster config and collects the endpoints to test in it. */
-export function parseConfig(raw: string, domain: string): Endpoint[] {
-  return collectTestedEndpoints(
+/** Parses a YAML cluster config and collects the global rate limits declared in it. */
+export function parseConfig(
+  raw: string,
+  domain: string,
+  probePath: string,
+): Target[] {
+  return collectTargets(
     (load as (input: string) => unknown)(raw),
     domain,
+    probePath,
   );
 }

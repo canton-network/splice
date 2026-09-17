@@ -2,13 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 import { RefinedResponse, ResponseType } from "k6/http";
 import { check as k6check } from "k6";
+import exec from "k6/execution";
 import { Counter, Rate } from "k6/metrics";
 import { Scenario } from "k6/options";
-import {
-  Endpoint,
-  effectivePerIpBucket,
-  effectiveSharedBucket,
-} from "../config.ts";
+import { Target, perIpBucket, sharedBucket } from "../config.ts";
 
 /** One traffic phase of a check, e.g. staying below or going above a limit. */
 export interface CheckScenario {
@@ -36,14 +33,14 @@ export interface Check {
   /** stable id, used to name scenarios and tag metrics */
   id: string;
   /**
-   * Returns why this check cannot run against `endpoint`, so main.ts can report skipped
-   * endpoints instead of silently passing, or `undefined` if it can run.
+   * Returns why this check cannot run against `target`, so main.ts can report skipped
+   * targets instead of silently passing, or `undefined` if it can run.
    */
-  inapplicable(endpoint: Endpoint): string | undefined;
-  /** Derives the scenarios and thresholds for `endpoint` from its buckets. */
-  plan(endpoint: Endpoint): CheckPlan;
+  inapplicable(target: Target): string | undefined;
+  /** Derives the scenarios and thresholds for `target` from its global buckets. */
+  plan(target: Target): CheckPlan;
   /** The request logic, executed by every VU iteration of this check's scenarios. */
-  run(endpoint: Endpoint, phase: string): void;
+  run(target: Target, phase: string): void;
 }
 /** The body the splice app returns when *it* rate limits a request (see HttpRateLimiter). */
 const APP_RATE_LIMIT_BODY =
@@ -67,7 +64,7 @@ const MIN_BURST_SECONDS = 30;
 const MAX_BURST_SECONDS = 120;
 /** Cap on the quiet period before a burst; a partly refilled bucket only rejects sooner. */
 const MAX_RECOVERY_SECONDS = 15;
-/** The traffic shape derived from the buckets that apply to an endpoint. */
+/** The traffic shape derived from the global buckets that apply to a target. */
 export interface BurstSizing {
   /** sustained rate the per-IP bucket allows */
   perIpRps: number;
@@ -77,13 +74,13 @@ export interface BurstSizing {
   burstSeconds: number;
   recoverySeconds: number;
 }
-/** Derives the traffic shape from an endpoint's buckets, or the reason why it cannot. */
-export function burstSizing(endpoint: Endpoint): BurstSizing | string {
-  const perIp = effectivePerIpBucket(endpoint);
+/** Derives the traffic shape from a target's global buckets, or the reason why it cannot. */
+export function burstSizing(target: Target): BurstSizing | string {
+  const perIp = perIpBucket(target);
   if (!perIp) {
-    return "no per-IP bucket applies to this endpoint";
+    return "no global per-IP bucket is configured for this service";
   }
-  const shared = effectiveSharedBucket(endpoint);
+  const shared = sharedBucket(target);
   const { maxTokens, tokensPerFill, fillIntervalSeconds, sustainedRps } = perIp;
   // A single client drains the per-IP bucket and the shared one at once, so the rate to exceed
   // is the higher of the two.
@@ -137,20 +134,9 @@ export function flatScenario(
     },
   };
 }
-/** Why a check cannot drive `endpoint`, for the checks that need an HTTP route. */
-export function inapplicableHttpLimited(
-  endpoint: Endpoint,
-): string | undefined {
-  if (endpoint.grpc) {
-    return "gRPC paths cannot be driven with plain HTTP requests";
-  }
-  return inapplicableLimited(endpoint);
-}
-function inapplicableLimited(endpoint: Endpoint): string | undefined {
-  if (endpoint.type !== "limited") {
-    return `endpoint type is '${endpoint.type}', not 'limited'`;
-  }
-  const sized = burstSizing(endpoint);
+/** Why a check cannot drive `target`. */
+export function inapplicableTarget(target: Target): string | undefined {
+  const sized = burstSizing(target);
   return typeof sized === "string" ? sized : undefined;
 }
 /**
@@ -174,9 +160,9 @@ export function selector(metric: string, tags: Record<string, string>): string {
     .join(",");
   return `${metric}{${spelled}}`;
 }
-/** The thresholds every rate limit check asserts, scoped to one check and endpoint. */
+/** The thresholds every rate limit check asserts, scoped to one check and target. */
 export function rateLimitThresholds(
-  scope: { endpoint: string; check: string },
+  scope: { target: string; check: string },
   burstPhase: string,
   belowPhase?: string,
 ): Record<string, string[]> {
@@ -250,4 +236,30 @@ export function requestParams(
 /** Metric/scenario safe version of a name. */
 export function slug(value: string): string {
   return value.replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+}
+
+/**
+ * Rejections the test waits for before it stops sending: the limit is proven at that point, and
+ * the scenarios keep scheduling iterations that no longer put load on the cluster.
+ */
+const REJECTIONS_TO_PROVE = Number(__ENV.REJECTIONS_TO_PROVE ?? "50");
+const rejectionsSeen: Record<string, number> = {};
+
+/** The share of `REJECTIONS_TO_PROVE` this VU is responsible for, given the VUs running now. */
+function perVuBudget(): number {
+  return Math.max(
+    1,
+    Math.ceil(REJECTIONS_TO_PROVE / Math.max(1, exec.instance.vusActive)),
+  );
+}
+
+/** True once this VU has proven the limit for `checkId`/`phase`, i.e. it can stop sending. */
+export function limitProven(checkId: string, phase: string): boolean {
+  return (rejectionsSeen[`${checkId}:${phase}`] ?? 0) >= perVuBudget();
+}
+
+/** Records a rejection towards the proof of `checkId`/`phase` for this VU. */
+export function recordRejection(checkId: string, phase: string): void {
+  const key = `${checkId}:${phase}`;
+  rejectionsSeen[key] = (rejectionsSeen[key] ?? 0) + 1;
 }

@@ -1,35 +1,34 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import http from "k6/http";
-import { Endpoint } from "../config.ts";
+import { Target } from "../config.ts";
 import {
   Check,
   CheckPlan,
   burstSizing,
   flatScenario,
-  inapplicableHttpLimited,
+  inapplicableTarget,
+  limitProven,
   rateLimitThresholds,
+  recordRejection,
   recordResponse,
   requestParams,
   slug,
 } from "./common.ts";
 /**
- * Verifies that an endpoint's rate limit is enforced by the Envoy sidecar and not by the splice
- * app itself.
+ * Verifies that a service's global per-IP rate limit is enforced by the Envoy sidecar and not by
+ * the splice app itself.
  */
+const CHECK_ID = "per-ip-rate-limit";
 
-/** Rejections a VU waits for before it stops sending: the limit is proven at that point. */
-const REJECTIONS_TO_PROVE = 5;
-/** Per VU, and therefore reset for every VU k6 starts. */
-let rejectionsSeen = 0;
 export const perIpRateLimitCheck: Check = {
-  id: "per-ip-rate-limit",
-  inapplicable: inapplicableHttpLimited,
-  plan(endpoint: Endpoint): CheckPlan {
-    const sized = burstSizing(endpoint);
+  id: CHECK_ID,
+  inapplicable: inapplicableTarget,
+  plan(target: Target): CheckPlan {
+    const sized = burstSizing(target);
     if (typeof sized === "string") {
       throw new Error(
-        `cannot plan per-ip-rate-limit for ${endpoint.name}: ${sized}`,
+        `cannot plan per-ip-rate-limit for ${target.name}: ${sized}`,
       );
     }
     // Half the per-IP rate: the bucket refills faster than we drain it, so a correctly
@@ -49,25 +48,25 @@ export const perIpRateLimitCheck: Check = {
         ),
       ],
       thresholds: rateLimitThresholds(
-        { endpoint: slug(endpoint.name), check: slug("per-ip-rate-limit") },
+        { target: slug(target.name), check: slug(CHECK_ID) },
         "above",
         "below",
       ),
     };
   },
-  run(endpoint: Endpoint, phase: string): void {
-    // The limit is proven for this VU, so stop sending: the scenario keeps scheduling
+  run(target: Target, phase: string): void {
+    // The limit is proven for this VU and phase, so stop sending: the scenario keeps scheduling
     // iterations, but they no longer put load on the cluster.
-    if (phase === "above" && rejectionsSeen >= REJECTIONS_TO_PROVE) {
+    if (phase === "above" && limitProven(CHECK_ID, phase)) {
       return;
     }
     const tags = {
-      endpoint: slug(endpoint.name),
+      target: slug(target.name),
       phase,
-      check: slug("per-ip-rate-limit"),
+      check: slug(CHECK_ID),
     };
-    if (recordResponse(http.get(endpoint.url, requestParams(tags)), tags)) {
-      rejectionsSeen += 1;
+    if (recordResponse(http.get(target.url, requestParams(tags)), tags)) {
+      recordRejection(CHECK_ID, phase);
     }
   },
 };
