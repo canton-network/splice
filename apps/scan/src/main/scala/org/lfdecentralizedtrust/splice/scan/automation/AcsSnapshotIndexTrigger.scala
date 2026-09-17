@@ -12,7 +12,7 @@ import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.automation.{SqlIndexInitializationTrigger, TriggerContext}
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore
 import com.digitalasset.canton.discard.Implicits.DiscardOps
-import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{AcsSnapshot, AcsTableDDL}
+import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{AcsSnapshot, AcsSnapshotTableIndexes}
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
@@ -42,14 +42,14 @@ class AcsSnapshotIndexTrigger(storage: DbStorage, store: AcsSnapshotStore, conte
 
   private def indexesToCreate(snapshot: AcsSnapshot) = Seq(
     SqlIndexInitializationTrigger.IndexAction.Create(
-      AcsTableDDL
+      AcsSnapshotTableIndexes
         .stakeholderIndexName(snapshot.historyId, snapshot.snapshotRecordTime),
-      AcsTableDDL.stakeholderIndexAction(snapshot.historyId, snapshot.snapshotRecordTime),
+      AcsSnapshotTableIndexes.stakeholderIndexAction(snapshot.historyId, snapshot.snapshotRecordTime),
     ),
     SqlIndexInitializationTrigger.IndexAction.Create(
-      AcsTableDDL
+      AcsSnapshotTableIndexes
         .stakeholderTemplateIdIndexName(snapshot.historyId, snapshot.snapshotRecordTime),
-      AcsTableDDL
+      AcsSnapshotTableIndexes
         .stakeholderTemplateIdIndexAction(snapshot.historyId, snapshot.snapshotRecordTime),
     ),
   )

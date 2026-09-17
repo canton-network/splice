@@ -1517,7 +1517,10 @@ object AcsSnapshotStore {
       (a: SaveIncrementalAcsSnapshotInsertedRows) => a.stakeholderRows > 0 || a.createRows > 0
   }
 
-  object AcsTableIndexes {
+  object AcsSnapshotTableIndexes {
+    def stakeholderIndexName(historyId: Long, snapshotRecordTime: CantonTimestamp) =
+      s"acs_snapshot_creates_${historyId}_${snapshotRecordTime.toEpochMilli}_s_ri"
+
     def stakeholderIndexAction(historyId: Long, snapshotRecordTime: CantonTimestamp) =
       sql"""create index concurrently if not exists #${stakeholderIndexName(
         historyId,
