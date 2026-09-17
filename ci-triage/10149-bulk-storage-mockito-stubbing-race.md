@@ -219,5 +219,10 @@ Fix the test, not the code: stub each mock once at construction with `thenAnswer
 `scanDisagreesOnDigest` / `scanMissingAnObject` only set that reference. No `when(...)` after the flow is
 materialized. Optionally assert that no "A fatal error has occurred" line is logged during the test so the
 next such race fails loudly instead of as a timeout. Owner: scan bulk-storage (isegall-da). Applies to main as
-well (same pattern). FIX WRITTEN: branch `ray/fix-bulk-storage-test-stubbing-race` off main 896a62310c, one
-commit, test-only; not compiled in the sandbox (no disk for a cold sbt build), CI must verify.
+well (same pattern). FIX WRITTEN AND VERIFIED 2026-09-17: branch `ray/fix-bulk-storage-test-stubbing-race`, one test-only commit
+(63359204ae after rebase onto main 22e775d614). Compiled in the sandbox (`apps-scan/Test/compile`, sbt run straight
+from the nix store, see `log/sbt-env.sh`), `apps-scan/Test/scalafmtCheck` clean, and
+`apps-scan/testOnly ...BulkStorageCommitFromStagingTest` run 6 times against the local Postgres container and the
+adobe/s3mock testcontainer: 6 x `Tests: succeeded 5, failed 0`, zero `A fatal error has occurred` /
+`ClassCastException` lines in `log/canton_network_test.clog`. Unpushed; needs a PR against main and backports
+to release-line-0.8.x/0.8.1 (10149 ran on 0.8.1).
