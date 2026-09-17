@@ -482,6 +482,7 @@ class DevelopmentFundFrontendTimeBasedIntegrationTest
       existingConfig.governanceLockMinimumLockAmount,
       existingConfig.governanceLockSuperValidatorLockVestingDuration,
       existingConfig.governanceLockFeaturedAppLockVestingDuration,
+      existingConfig.governanceLockSearchTimeGranularity,
     )
 
     val action = new ARC_AmuletRules(

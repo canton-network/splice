@@ -112,6 +112,7 @@ export function buildAmuletRulesConfigFromChanges(
     'governanceLockFeaturedAppLockVestingDuration',
     true
   );
+  const governanceLockSearchTimeGranularity = getValue('governanceLockSearchTimeGranularity', true);
   const amuletConfig: AmuletConfig<'USD'> = {
     tickDuration: { microseconds: getValue('tickDuration', false) },
     transferPreapprovalFee: getValue('transferPreapprovalFee', true),
@@ -222,6 +223,10 @@ export function buildAmuletRulesConfigFromChanges(
       governanceLockFeaturedAppLockVestingDuration === null
         ? null
         : { microseconds: governanceLockFeaturedAppLockVestingDuration },
+    governanceLockSearchTimeGranularity:
+      governanceLockSearchTimeGranularity === null
+        ? null
+        : { microseconds: governanceLockSearchTimeGranularity },
   };
 
   return amuletConfig;

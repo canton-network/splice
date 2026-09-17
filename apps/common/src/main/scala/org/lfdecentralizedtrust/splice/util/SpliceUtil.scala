@@ -373,6 +373,7 @@ object SpliceUtil {
       governanceLockMinimumLockAmount: Option[NonNegativeNumeric[BigDecimal]] = None,
       governanceLockSuperValidatorLockVestingDuration: Option[NonNegativeFiniteDuration] = None,
       governanceLockFeaturedAppLockVestingDuration: Option[NonNegativeFiniteDuration] = None,
+      governanceLockSearchTimeGranularity: Option[NonNegativeFiniteDuration] = None,
   ): splice.amuletconfig.AmuletConfig[splice.amuletconfig.USD] =
     new splice.amuletconfig.AmuletConfig(
       // transferConfig
@@ -415,6 +416,9 @@ object SpliceUtil {
         .map(d => new RelTime(TimeUnit.NANOSECONDS.toMicros(d.duration.toNanos)))
         .toJava,
       governanceLockFeaturedAppLockVestingDuration
+        .map(d => new RelTime(TimeUnit.NANOSECONDS.toMicros(d.duration.toNanos)))
+        .toJava,
+      governanceLockSearchTimeGranularity
         .map(d => new RelTime(TimeUnit.NANOSECONDS.toMicros(d.duration.toNanos)))
         .toJava,
     )

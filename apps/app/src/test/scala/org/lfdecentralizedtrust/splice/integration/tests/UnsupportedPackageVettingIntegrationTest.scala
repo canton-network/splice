@@ -198,6 +198,7 @@ class UnsupportedPackageVettingIntegrationTest
           currentConfig.governanceLockMinimumLockAmount,
           currentConfig.governanceLockSuperValidatorLockVestingDuration,
           currentConfig.governanceLockFeaturedAppLockVestingDuration,
+          currentConfig.governanceLockSearchTimeGranularity,
         )
         setAmuletConfig(Seq((None, newAmuletConfig, currentConfig)))
       }

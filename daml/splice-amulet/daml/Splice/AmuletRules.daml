@@ -1034,6 +1034,7 @@ template AmuletRules
           governanceLockMinimumLockAmount = config.governanceLockMinimumLockAmount
           governanceLockSuperValidatorLockVestingDuration = config.governanceLockSuperValidatorLockVestingDuration
           governanceLockFeaturedAppLockVestingDuration = config.governanceLockFeaturedAppLockVestingDuration
+          governanceLockSearchTimeGranularity = config.governanceLockSearchTimeGranularity
         pure AmuletRules_UpdateExternalPartyConfigStatesResult with ..
 
 
@@ -2406,6 +2407,7 @@ bootstrapExternalPartyConfigState AmuletRules{..} openMiningRoundTriple = do
         governanceLockMinimumLockAmount = config.governanceLockMinimumLockAmount
         governanceLockSuperValidatorLockVestingDuration = config.governanceLockSuperValidatorLockVestingDuration
         governanceLockFeaturedAppLockVestingDuration = config.governanceLockFeaturedAppLockVestingDuration
+        governanceLockSearchTimeGranularity = config.governanceLockSearchTimeGranularity
       configState1 = configState0 with
         targetArchiveAfter = configState0.targetArchiveAfter `addRelTime` getExternalPartyConfigStateTickDuration config
   create configState0

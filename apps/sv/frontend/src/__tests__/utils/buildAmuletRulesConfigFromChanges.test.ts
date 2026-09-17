@@ -266,6 +266,13 @@ describe('buildAmuletRulesConfigFromChanges', () => {
         currentValue: '7200000000',
         newValue: '3600000000',
       },
+      {
+        fieldName: 'governanceLockSearchTimeGranularity',
+        label:
+          'Governance lock config: Fallback timepoint determination granularity (microseconds)',
+        currentValue: '864000000000',
+        newValue: '43200000000',
+      },
     ];
 
     const result = buildAmuletRulesConfigFromChanges(changes);
@@ -327,6 +334,9 @@ describe('buildAmuletRulesConfigFromChanges', () => {
     });
     expect(result.governanceLockFeaturedAppLockVestingDuration).toEqual({
       microseconds: '3600000000',
+    });
+    expect(result.governanceLockSearchTimeGranularity).toEqual({
+      microseconds: '43200000000',
     });
   });
 
@@ -527,6 +537,13 @@ describe('buildAmuletRulesConfigFromChanges', () => {
         currentValue: '3600000000',
         newValue: '',
       },
+      {
+        fieldName: 'governanceLockSearchTimeGranularity',
+        label:
+          'Governance lock config: Granularity of the fallback timepoint determination (microseconds)',
+        currentValue: '864000000000',
+        newValue: '',
+      },
     ];
 
     const result = buildAmuletRulesConfigFromChanges(changes);
@@ -534,5 +551,6 @@ describe('buildAmuletRulesConfigFromChanges', () => {
     expect(result.governanceLockMinimumLockAmount).toBeNull();
     expect(result.governanceLockSuperValidatorLockVestingDuration).toBeNull();
     expect(result.governanceLockFeaturedAppLockVestingDuration).toBeNull();
+    expect(result.governanceLockSearchTimeGranularity).toBeNull();
   });
 });

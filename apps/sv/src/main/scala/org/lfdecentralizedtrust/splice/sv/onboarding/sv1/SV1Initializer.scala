@@ -689,6 +689,8 @@ class SV1Initializer(
                     sv1Config.initialGovernanceLockSuperValidatorLockVestingDuration,
                   governanceLockFeaturedAppLockVestingDuration =
                     sv1Config.initialGovernanceLockFeaturedAppLockVestingDuration,
+                  governanceLockSearchTimeGranularity =
+                    sv1Config.initialGovernanceLockSearchTimeGranularity,
                 )
                 for {
                   sv1SynchronizerNodes <- SvUtil.getSV1SynchronizerNodeConfig(

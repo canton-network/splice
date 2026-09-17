@@ -125,6 +125,8 @@ data AmuletConfig unit = AmuletConfig with
       -- ^ Vesting duration for an SV governance lock. Default: 365.25 days.
     governanceLockFeaturedAppLockVestingDuration : Optional RelTime
       -- ^ Vesting duration for an FA governance lock. Default: 60 days.
+    governanceLockSearchTimeGranularity : Optional RelTime
+      -- ^ Granularity of the governance lock fallback timepoint determination. Default: 1 day.
   deriving (Eq, Show, Serializable)
 
 getExternalPartyConfigStateTickDuration : AmuletConfig a -> RelTime
@@ -233,6 +235,9 @@ defaultGovernanceLockSuperValidatorLockVestingDuration = days 365 + hours 6
 defaultGovernanceLockFeaturedAppLockVestingDuration : RelTime
 defaultGovernanceLockFeaturedAppLockVestingDuration = days 60
 
+defaultGovernanceLockSearchTimeGranularity : RelTime
+defaultGovernanceLockSearchTimeGranularity = days 1
+
 instance Patchable RewardVersion where
   patch = patchScalar
 
@@ -256,6 +261,7 @@ instance Patchable (AmuletConfig USD) where
     governanceLockMinimumLockAmount = patch new.governanceLockMinimumLockAmount base.governanceLockMinimumLockAmount current.governanceLockMinimumLockAmount
     governanceLockSuperValidatorLockVestingDuration = patch new.governanceLockSuperValidatorLockVestingDuration base.governanceLockSuperValidatorLockVestingDuration current.governanceLockSuperValidatorLockVestingDuration
     governanceLockFeaturedAppLockVestingDuration = patch new.governanceLockFeaturedAppLockVestingDuration base.governanceLockFeaturedAppLockVestingDuration current.governanceLockFeaturedAppLockVestingDuration
+    governanceLockSearchTimeGranularity = patch new.governanceLockSearchTimeGranularity base.governanceLockSearchTimeGranularity current.governanceLockSearchTimeGranularity
 
 instance Patchable RewardConfig where
   patch new base current = RewardConfig with

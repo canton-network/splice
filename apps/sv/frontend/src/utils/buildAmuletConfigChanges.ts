@@ -154,6 +154,14 @@ export function buildAmuletConfigChanges(
       newValue: after?.governanceLockFeaturedAppLockVestingDuration?.microseconds || '',
       description: 'Vesting duration for featured app governance locks (default: 60 days)',
     },
+    {
+      fieldName: 'governanceLockSearchTimeGranularity',
+      label: 'Governance lock config: Fallback timepoint determination granularity (microseconds)',
+      currentValue: before?.governanceLockSearchTimeGranularity?.microseconds || '',
+      newValue: after?.governanceLockSearchTimeGranularity?.microseconds || '',
+      description:
+        'Granularity used by the governance lock fallback timepoint determination (default: 1 day)',
+    },
   ] as ConfigChange[];
 
   return showAllFields ? changes : changes.filter(c => c.currentValue !== c.newValue);

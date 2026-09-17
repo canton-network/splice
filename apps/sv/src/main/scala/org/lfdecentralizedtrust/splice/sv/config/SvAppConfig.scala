@@ -135,6 +135,7 @@ object SvOnboardingConfig {
       initialGovernanceLockSuperValidatorLockVestingDuration: Option[NonNegativeFiniteDuration] =
         None,
       initialGovernanceLockFeaturedAppLockVestingDuration: Option[NonNegativeFiniteDuration] = None,
+      initialGovernanceLockSearchTimeGranularity: Option[NonNegativeFiniteDuration] = None,
   ) extends SvOnboardingConfig
 
   case class JoinWithKey(

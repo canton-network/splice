@@ -151,6 +151,7 @@ class SvReconcileSynchronizerConfigIntegrationTest extends SvIntegrationTestBase
     amuletConfig.governanceLockMinimumLockAmount,
     amuletConfig.governanceLockSuperValidatorLockVestingDuration,
     amuletConfig.governanceLockFeaturedAppLockVestingDuration,
+    amuletConfig.governanceLockSearchTimeGranularity,
   )
 
 }

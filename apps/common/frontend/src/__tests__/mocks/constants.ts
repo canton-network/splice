@@ -202,6 +202,7 @@ export const plannedVoteResult: DsoRules_CloseVoteRequestResult = {
                 governanceLockMinimumLockAmount: null,
                 governanceLockSuperValidatorLockVestingDuration: null,
                 governanceLockFeaturedAppLockVestingDuration: null,
+                governanceLockSearchTimeGranularity: null,
               },
             },
           },

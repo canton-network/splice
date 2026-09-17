@@ -34,6 +34,7 @@ template ExternalPartyConfigState
     governanceLockMinimumLockAmount : Optional Decimal -- ^ Minimum amount for a governance lock.
     governanceLockSuperValidatorLockVestingDuration : Optional RelTime -- ^ Vesting duration for an SV governance lock.
     governanceLockFeaturedAppLockVestingDuration : Optional RelTime -- ^ Vesting duration for an FA governance lock.
+    governanceLockSearchTimeGranularity : Optional RelTime -- ^ Granularity of the governance lock fallback timepoint determination.
   where
     signatory dso
 
