@@ -84,44 +84,16 @@ abstract class AutoIgnoreUnresponsivePartiesIntegrationTestBase
       val synchronizerId = decentralizedSynchronizerId
 
       val aliceUserId = aliceWalletClient.config.ledgerApiUser
-      val aliceParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
+      val aliceParty = onboardWalletUserHostedAlsoOn(
+        aliceWalletClient,
+        aliceValidatorBackend,
+        sv1Backend.participantClientWithAdminToken,
+        synchronizerId,
+      )
       val sv1ParticipantId = sv1Backend.participantClientWithAdminToken.id
       val aliceParticipantId = aliceValidatorBackend.participantClient.id
       val sv1Participant = sv1Backend.participantClientWithAdminToken
       val aliceParticipant = aliceValidatorBackend.participantClient
-
-      clue("Wait for alice's PartyToParticipant mapping to be visible on sv1") {
-        eventually() {
-          sv1Participant.topology.party_to_participant_mappings
-            .list(synchronizerId, filterParty = aliceParty.toProtoPrimitive) should not be empty
-        }
-      }
-
-      // Multi-host alice on sv1 (threshold=1) to be able to create amulets
-      actAndCheck(
-        "Multi-host alice on sv1Participant",
-        eventuallySucceeds() {
-          aliceParticipant.topology.party_to_participant_mappings.propose_delta(
-            party = aliceParty,
-            adds = Seq((sv1ParticipantId, ParticipantPermission.Submission)),
-            store = synchronizerId,
-          )
-          sv1Participant.topology.party_to_participant_mappings.propose_delta(
-            party = aliceParty,
-            adds = Seq((sv1ParticipantId, ParticipantPermission.Submission)),
-            store = synchronizerId,
-          )
-        },
-      )(
-        "alice is fully authorized on both participants",
-        _ => {
-          val hosts = sv1Participant.topology.party_to_participant_mappings
-            .list(synchronizerId, filterParty = aliceParty.toProtoPrimitive)
-            .flatMap(_.item.participants)
-          hosts.exists(h => h.participantId == sv1ParticipantId && !h.onboarding) shouldBe true
-          hosts.exists(h => h.participantId == aliceParticipantId && !h.onboarding) shouldBe true
-        },
-      )
 
       val numAmulets = 2
       val amuletAmount = BigDecimal(123.0)
