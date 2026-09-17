@@ -1,4 +1,4 @@
-# refs 10144/10145 (run 35076492327), job resource-intensive (1) - INTERNAL on GetPreferredPackages while the SV app uploads DARs: package metadata view seen mid-update
+# 10145 - refs 10144/10145 (run 35076492327), job resource-intensive (1) - INTERNAL on GetPreferredPackages while the SV app uploads DARs: package metadata view seen mid-update
 
 Post-merge CI on main, sha f1ee318e39 "Don't wait forever on a non-active psid in
 ensureSynchronizerRegisteredAndConnected (#7311)", 2026-09-16T08:55Z. Canton runtime
@@ -646,7 +646,7 @@ interim allowlist.
 
 ## Summary
 
-resource-intensive(1), job 104730519175, refs 10144/10145 (which is which unknown), canton
+resource-intensive(1), job 104730519175, ref 10145 (confirmed by Raymond 2026-09-17), canton
 3.6.0-snapshot.20260910.20260.0.v90621933. Both tests passed; checkErrors flags 3 lines in
 canton_network_test.clog, all one `GetPreferredPackages` call from sv1's
 CreateBootstrapExternalPartyConfigStateInstructionTrigger that got a redacted INTERNAL. Server side the call

@@ -1,4 +1,4 @@
-# refs 10144/10145 (run 35076492327), job ui_tests - SV UI config-diffs test times out finding "Vote Requests"
+# 10144 - refs 10144/10145 (run 35076492327), job ui_tests - SV UI config-diffs test times out finding "Vote Requests"
 
 Post-merge CI on main, sha f1ee318e39 ("Don't wait forever on a non-active psid in
 `ensureSynchronizerRegisteredAndConnected` (#7311)"), 2026-09-16T08:55Z. Job 104730030877
@@ -415,6 +415,10 @@ Inferred:
   is the same as documented in 10141 section 3.
 
 ## Suggested next step / owner
+
+FIX WRITTEN 2026-09-17: branch `ray/fix-sv-ui-test-timeouts` (26ad84f42d) passes the 15 s vitest budget to the
+`findByText` in `navigateToLegacyGovernancePage` (`apps/sv/frontend/src/__tests__/helpers.tsx`), together with the
+10141 await fix; prettier clean, vitest not run in the sandbox.
 
 Give the SV suite's implicit waits the same budget #7252 gave its explicit ones: `configure({
 asyncUtilTimeout: <n> })` from `@testing-library/dom` in `apps/sv/frontend/src/__tests__/setup/setup.ts`
