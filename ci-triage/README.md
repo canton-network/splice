@@ -164,6 +164,9 @@ given as (run, job, ref) tuples in the request; nothing inferred.
 | 10158 | 35123371703 | main 2b3e9d21ae (#7352) | 104886784003 `wall-clock-time (1)` | 3.6.0-snapshot.20260910.20260.0.v90621933 |
 | 10162 | 35206251191 | main 22e775d614 (#7363) | 105152950685 `wall-clock-time (1)` | 3.6.0-snapshot.20260910.20260.0.v90621933 |
 | 10161 | 35206251191 | main 22e775d614 (#7363) | 105152950723 `wall-clock-time (6)` | 3.6.0-snapshot.20260910.20260.0.v90621933 |
+| 10164 | 35222005752 | main d7a75f6e9e (#7346) | 105204675967 `wall-clock-time (6)` | 3.6.0-snapshot.20260916.20284.0.vf27c4824 |
+| 10165 | 35223275137 | main ce81b9f29b | 105208906926 `wall-clock-time (9)` | 3.6.0-snapshot.20260916.20284.0.vf27c4824 |
+| 10166 | 35226878907 | release-line-0.8.x 57c06ffded (#7369) | 105220970474 `simtime (2)` | 3.5.18-snapshot.20260916.19252.0.v9635aea8 |
 
 ## Overview
 
@@ -177,6 +180,9 @@ given as (run, job, ref) tuples in the request; nothing inferred.
 | 10158 | All 28 tests pass; checkErrors WARN `ACS_COMMITMENT_MISMATCH` sv1Participant vs aliceValidator, period (16:59:27.31, 17:00:00], 13 s after ExpiryWithIgnoredAmuletVersionIntegrationTest's `Multi-host alice on sv1Participant`. | 10146 | Same packet as 10155. |
 | 10162 | All 23 tests pass; checkErrors WARN `ACS_COMMITMENT_MISMATCH` sv1Participant vs aliceValidator, period (09:59:53.89, 10:00:00], 3.6 s after AutoIgnoreUnresponsivePartiesWithPersistenceIntegrationTest's `Multi-host alice on sv1Participant`. | 10146 | Section 5 of the 10155/10158 packet. Sixth occurrence. |
 | 10161 | All 25 tests pass; checkErrors flags globalMediatorSv1's acknowledge-signed to SEQ::sv1 at DEADLINE_EXCEEDED (120 s) during SvOnboardingIntegrationTest: epoch 32 steps 1 -> 4 at 09:50:45 with only sv1 authenticated, sv1 blacklisted epochs 33-35, the ack accepted in the gap is answered 190 ms after cancellation. | 10094 / 10153 | Packet `10161-mediator-ack-stall-bft-1-to-4.md`. Third hit; two on main in two days. Canton-side. |
+| 10164 | All 39 tests pass; checkErrors WARN `ACS_COMMITMENT_MISMATCH` sv1Participant vs aliceValidator, period (12:59:58.30, 13:00:00], 2.5 s after AmuletExpiryV1FallbackIntegrationTest's `Multi-host alice on sv1Participant`. | 10146 | Section 6 of the 10155/10158 packet. Seventh occurrence; first on canton 3.6.0-snapshot.20260916. |
+| 10165 | All 35 tests pass; checkErrors WARN from sv1's HttpErrorHandler: `POST /api/sv/v0/onboard/sv/sequencer` (sv4's request) timed out after the 38 s `pekko.http.server.request-timeout`. sv1's handler was waiting for the sv4 sequencer-add topology tx, which all 4 SVs proposed at 13:16:26.5 but which was only sequenced at 13:17:16 because epoch 104 (the 1 -> 3 BFT step) had no strong quorum for 25 s and lasted 38 s. sv4's retry succeeded 23 s later. | 10094 / 10153 / 10161 family (new symptom) | Packet `10165-onboard-sv-sequencer-http-timeout-bft-1-to-3-stall.md`. Splice options: do not block the HTTP request on the topology wait (or a `custom-timeouts` entry for `onboardSvSequencer` in tests), or extend the existing `onboard/validator` timeout ignore to the sequencer endpoint. Quorum stall itself is Canton-side. |
+| 10166 | WalletMintingDelegationTimeBasedIntegrationTest: same `advanceTime(PT25H)` -> `LOCAL_VERDICT_INACTIVE_CONTRACTS` on release-line-0.8.x. | 10154 (cn-test-failures 10060 / #7223) | Section 5 of the 10154 packet. #7261 still not backported (0.8.x tip ef2dc6d559). |
 
 ## Cross-cutting observations
 
@@ -187,6 +193,9 @@ given as (run, job, ref) tuples in the request; nothing inferred.
   proposed in 10146 is the only open action.
 - 10153 shows the 10094 quorum-loss mechanism is not specific to canton 3.5: same epoch shape (1 -> 4 step,
   newcomers unauthenticated, sv1 blacklisted 3 epochs) on the 20260910 3.6 snapshot.
+- Main moved to canton 3.6.0-snapshot.20260916.20284.0.vf27c4824 (#7364) on 2026-09-17; 10164 and 10165 are the
+  first triaged runs on it. Both the multi-host ACS mismatch (test issue) and the BFT onboarding-step stall (10165,
+  consensus/iss classes unchanged from 20260910) are still present on it.
 - 10048 follow-up (Canton reply 2026-09-17): the #35600 state-transfer fix is present in the jars main
   (20260910 snapshot), release-line-0.8.x and 0.8.1 run, verified by string markers absent in 3.5.16 and the
   20260909.20244 snapshot; release-line-0.8.0 still pins 3.5.16. Details appended to `10048-bft-deadlock.md`.

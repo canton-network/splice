@@ -55,3 +55,18 @@ git show origin/release-line-0.8.x:apps/app/src/test/scala/.../WalletMintingDele
 ## 4. Verdict
 
 Not a new failure. Backport #7261 to release-line-0.8.x (and 0.8.0/0.8.1 if those lines are still built).
+
+## 5. 10166 (run 35226878907, 2026-09-17) - same failure again on release-line-0.8.x
+
+- Run: https://github.com/canton-network/splice/actions/runs/35226878907, release-line-0.8.x 57c06ffded (#7369),
+  job 105220970474 `simtime (2)`, canton 3.5.18-snapshot.20260916.19252.0.v9635aea8. 14 tests, 1 failed, same test.
+```
+zcat log/10166/logs-simtime-2/canton_network_test.clog.gz | grep -a WalletMintingDelegation | grep -a -E 'PT25H|transfer-preapproval/send.*(NOT_FOUND|404)'
+```
+```
+13:44:31.201Z Starting 'WalletMintingDelegationTimeBasedIntegrationTest/MintingDelegationCollectRewardsTrigger should collect rewards for all coupons owned by the beneficiary'
+13:45:13.483Z advancing time by PT25H to 1970-01-02T04:02:39.999Z
+13:45:15.982Z Request to http://127.0.0.1:5503/api/validator/v0/wallet/transfer-preapproval/send resulted in ... NOT_FOUND: LOCAL_VERDICT_INACTIVE_CONTRACTS(11,8308ec61)
+```
+`git merge-base --is-ancestor 0c43730f70 57c06ffded` -> not an ancestor: #7261 is still not on release-line-0.8.x
+(tip ef2dc6d559 on 2026-09-17 17:xx has no backport of it either). Second hit in two days; backport it.

@@ -98,3 +98,18 @@ zcat log/10162/logs-wall-clock-time-1/canton_network_test.clog.gz | grep -a -E "
 The mismatched period starts 3.6 s after the second multi-host step (the WithPersistence variant this time;
 same `AutoIgnoreUnresponsivePartiesIntegrationTest.scala:89` code). WARN delivered 3.3 min later during
 UnvetAllSupportedPackagesIntegrationTest.
+
+## 6. 10164 (run 35222005752, 2026-09-17) - seventh occurrence, first on canton 3.6.0-snapshot.20260916
+
+- Run: https://github.com/canton-network/splice/actions/runs/35222005752, main d7a75f6e9e (#7346), job 105204675967
+  `wall-clock-time (6)`, canton 3.6.0-snapshot.20260916.20284.0.vf27c4824. 39 tests pass; one WARN.
+```
+13:01:47.078Z WARN ReceivedAcsCommitmentMatcher:participant=sv1Participant  ACS_COMMITMENT_MISMATCH(5,c6aaa3ff)
+  sender = aliceValidator::12207ee73d49..., period = (2026-09-17T12:59:58.296222Z, 2026-09-17T13:00:00Z]
+```
+```
+12:59:20.802Z Starting test suite 'AmuletExpiryV1FallbackIntegrationTest'
+12:59:55.748Z Running clue: (act) Multi-host alice on sv1Participant (alice keeps her old host)
+13:00:30.504Z Test succeeded: 'AmuletExpiryV1FallbackIntegrationTest/...'
+```
+Period starts 2.5 s after the multi-host step. Same suite as 10146 itself.
