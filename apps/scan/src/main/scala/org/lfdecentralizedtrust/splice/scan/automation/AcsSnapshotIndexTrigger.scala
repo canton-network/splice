@@ -12,7 +12,11 @@ import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.automation.{SqlIndexInitializationTrigger, TriggerContext}
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore
 import com.digitalasset.canton.discard.Implicits.DiscardOps
-import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{AcsSnapshot, AcsSnapshotTableIndexes}
+import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{
+  AcsSnapshot,
+  AcsSnapshotTableDDL,
+  PerTableAcsSnapshot,
+}
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdownImpl.*
 
 import scala.concurrent.{ExecutionContextExecutor, Future}

@@ -96,7 +96,7 @@ class SqlIndexInitializationTriggerStoreTest
     }
 
     "drop index" in {
-      val trigger = new StartupSqlIndexInitializationTrigger(
+      val trigger = new SqlIndexInitializationTrigger(
         storage = storage,
         context = triggerContext,
         indexActions = List(
@@ -138,9 +138,7 @@ class SqlIndexInitializationTriggerStoreTest
           )
           .failOnShutdown
         tasks <- trigger.retrieveTasks()
-        _ = tasks.loneElement shouldBe a[
-          SqlIndexInitializationTrigger.Task.ConfirmActionCompleted[_]
-        ]
+        _ = tasks.loneElement shouldBe a[SqlIndexInitializationTrigger.Task.ConfirmActionCompleted]
         _ <- runTriggerUntilAllTasksDone(trigger)
         indexNames <- listIndexNames()
       } yield {
@@ -159,9 +157,7 @@ class SqlIndexInitializationTriggerStoreTest
 
       for {
         tasks <- trigger.retrieveTasks()
-        _ = tasks.loneElement shouldBe a[
-          SqlIndexInitializationTrigger.Task.ConfirmActionCompleted[_]
-        ]
+        _ = tasks.loneElement shouldBe a[SqlIndexInitializationTrigger.Task.ConfirmActionCompleted]
         _ <- runTriggerUntilAllTasksDone(trigger)
         indexNames <- listIndexNames()
       } yield {
@@ -170,7 +166,7 @@ class SqlIndexInitializationTriggerStoreTest
     }
 
     "delete invalid index" in {
-      val trigger = new StartupSqlIndexInitializationTrigger(
+      val trigger = new SqlIndexInitializationTrigger(
         storage = storage,
         context = triggerContext,
         indexActions = List(
@@ -244,8 +240,7 @@ class SqlIndexInitializationTriggerStoreTest
           },
         )
         _ = tasks.loneElement match {
-          case SqlIndexInitializationTrigger.Task
-                .ExecuteAction(IndexAction.Drop("test_index"), ()) =>
+          case SqlIndexInitializationTrigger.Task.ExecuteAction(IndexAction.Drop("test_index")) =>
             succeed
           case other =>
             fail(s"Expected Drop for test_index, got $other")
@@ -271,7 +266,7 @@ class SqlIndexInitializationTriggerStoreTest
     }
 
     "avoid deleting index that is being created" in {
-      val trigger = new StartupSqlIndexInitializationTrigger(
+      val trigger = new SqlIndexInitializationTrigger(
         storage = storage,
         context = triggerContext,
         indexActions = List(
@@ -282,7 +277,7 @@ class SqlIndexInitializationTriggerStoreTest
         ),
       )
       // Too annoying to get this value out of Future.sequence below, so we use a var
-      var tasksResult: Option[Seq[SqlIndexInitializationTrigger.Task[Unit]]] = None
+      var tasksResult: Option[Seq[SqlIndexInitializationTrigger.Task]] = None
       for {
         _ <- Future.unit
         _ <- storage.underlying
@@ -444,9 +439,7 @@ class SqlIndexInitializationTriggerStoreTest
       .map(_ => ())
   }
 
-  private def runTriggerUntilAllTasksDone(
-      trigger: StartupSqlIndexInitializationTrigger
-  ): Future[Unit] = {
+  private def runTriggerUntilAllTasksDone(trigger: SqlIndexInitializationTrigger): Future[Unit] = {
     trigger.run(paused = false)
     trigger.remainingActionsEmpty.future
   }

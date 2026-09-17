@@ -118,6 +118,7 @@ class AcsSnapshotStore(
   def lookupOldestUnindexedSnapshot()(implicit
       tc: TraceContext
   ): OptionT[FutureUnlessShutdown, PerTableAcsSnapshot] = {
+    // TODO: create index
     storage
       .querySingle(
         sql"""select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance, data_table_name
@@ -1517,32 +1518,34 @@ object AcsSnapshotStore {
       (a: SaveIncrementalAcsSnapshotInsertedRows) => a.stakeholderRows > 0 || a.createRows > 0
   }
 
-  object AcsSnapshotTableIndexes {
+  object AcsSnapshotDDL {
     def stakeholderIndexName(historyId: Long, snapshotRecordTime: CantonTimestamp) =
       s"acs_snapshot_creates_${historyId}_${snapshotRecordTime.toEpochMilli}_s_ri"
 
-    def stakeholderIndexAction(historyId: Long, snapshotRecordTime: CantonTimestamp) =
+    def stakeholderIndexAction(
+        stakeholdersTableName: String,
+        historyId: Long,
+        snapshotRecordTime: CantonTimestamp,
+    ) =
       sql"""create index concurrently if not exists #${stakeholderIndexName(
-        historyId,
-        snapshotRecordTime,
-      )}
-           on #${acsSnapshotStakeholdersTableName(
-        historyId,
-        snapshotRecordTime,
-      )} (stakeholder, row_id) """.asUpdate
+          historyId,
+          snapshotRecordTime,
+        )}
+           on #$stakeholdersTableName (stakeholder, row_id) """.asUpdate
 
     def stakeholderTemplateIdIndexName(historyId: Long, snapshotRecordTime: CantonTimestamp) =
       s"acs_snapshot_creates_${historyId}_${snapshotRecordTime.toEpochMilli}_s_rid_ri"
 
-    def stakeholderTemplateIdIndexAction(historyId: Long, snapshotRecordTime: CantonTimestamp) =
+    def stakeholderTemplateIdIndexAction(
+        createsTableName: String,
+        historyId: Long,
+        snapshotRecordTime: CantonTimestamp,
+    ) =
       sql"""create index concurrently if not exists #${stakeholderIndexName(
-        historyId,
-        snapshotRecordTime,
-      )}
-           on #${acsSnapshotStakeholdersTableName(
-        historyId,
-        snapshotRecordTime,
-      )} (stakeholder, template_id row_id) """.asUpdate
+          historyId,
+          snapshotRecordTime,
+        )}
+           on #$createsTableName (stakeholder, template_id row_id) """.asUpdate
   }
 
   def apply(
