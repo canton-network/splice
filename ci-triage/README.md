@@ -199,3 +199,12 @@ given as (run, job, ref) tuples in the request; nothing inferred.
 - 10048 follow-up (Canton reply 2026-09-17): the #35600 state-transfer fix is present in the jars main
   (20260910 snapshot), release-line-0.8.x and 0.8.1 run, verified by string markers absent in 3.5.16 and the
   20260909.20244 snapshot; release-line-0.8.0 still pins 3.5.16. Details appended to `10048-bft-deadlock.md`.
+
+## Fix branches written 2026-09-17 (sandbox only, unpushed; compile/tests to be run on the host)
+
+| Branch | Commit | Fixes | Verified here |
+|--------|--------|-------|---------------|
+| `ray/fix-bulk-storage-test-stubbing-race` | 63359204ae | 10149 | apps-scan Test/compile, scalafmtCheck, 6/6 green runs of BulkStorageCommitFromStagingTest |
+| `ray/fix-reset-topology-plugin-no-exit` | 743babe3f0 | 10137/10139 evidence loss (plugin `sys.exit`): reset failure now aborts the suite after `environment.close()` via `afterEnvironmentDestroyed`, and every later environment creation in the JVM is refused with `TopologyStateNotReset` | apps-app Test/compile, scalafmtCheck; no runtime run |
+| `ray/fix-topology-init-limit` | 72dc373508 | 10140: `sequencers.conf` DownloadTopologyStateForInit(Hash) limit 3 -> 7 (no test references the value) | config only |
+| `ray/fix-sv-ui-test-timeouts` | 26ad84f42d | 10141 (await the `waitFor`, drop the 1000 ms override) and the ui_tests half of 10144/10145 (`navigateToLegacyGovernancePage` findByText with the 15 s vitest budget) | prettier --check clean; vitest not run |
