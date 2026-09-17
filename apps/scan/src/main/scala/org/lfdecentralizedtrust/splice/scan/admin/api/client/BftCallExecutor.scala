@@ -314,8 +314,9 @@ object BftCallExecutor {
   )
 
   /** getMigrationInfo is used for backfilling Scan data as part of SV onboarding.
-   * It has its own unique BFT logic, to prevent multiple SVs onboarding in parallel
-   * from live-locking each other by all not having the data thus breaking BFT */
+    * It has its own unique BFT logic, to prevent multiple SVs onboarding in parallel
+    * from live-locking each other by all not having the data thus breaking BFT
+    */
 
   def getMigrationInfo(
       connections: ScanConnections,
@@ -439,4 +440,3 @@ object BftCallExecutor {
 trait HasUrl {
   def url: Uri
 }
-

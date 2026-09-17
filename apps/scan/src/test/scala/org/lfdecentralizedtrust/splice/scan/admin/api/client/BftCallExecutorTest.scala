@@ -92,7 +92,7 @@ class BftCallExecutorTest
   private def scanUrl(n: Int) = s"https://$n.example.com"
 
   private implicit val mc: MetricsContext = MetricsContext.Empty
-  
+
   def getMockedConnections(n: Int): Seq[SingleScanConnection] = {
     val connections = (0 until n).map { n =>
       val m = mock[SingleScanConnection]
