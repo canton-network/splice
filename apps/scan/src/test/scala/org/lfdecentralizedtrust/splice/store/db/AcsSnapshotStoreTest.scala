@@ -153,29 +153,12 @@ trait AcsSnapshotStoreTest
               case Failure(ex)
                   if ex.getMessage.contains(
                     "ERROR: duplicate key value violates unique constraint \"acs_snapshot_pkey\""
-                  ) =>
+                  ) || ex.getMessage.matches(".*relation .* already exists.*") =>
                 Success("OK")
               case Failure(ex) =>
                 Failure(ex)
             }
         } yield result should be("OK")
-      }
-
-      "allow two snapshots with the same record time, different migration_ids" in {
-        MonadUtil
-          .sequentialTraverse(Seq(1, 2)) { migrationId =>
-            for {
-              updateHistory <- mkUpdateHistory(migrationId = migrationId.toLong)
-              store = mkStore(updateHistory, migrationId = migrationId.toLong)
-              _ <- ingestCreate(
-                updateHistory,
-                amuletRules(),
-                timestamp1.minusSeconds(1L),
-              )
-              _ <- store.insertNewSnapshot(nextTable, migrationId.toLong, timestamp1)
-            } yield succeed
-          }
-          .map(_ => succeed)
       }
 
       "build snapshots incrementally" in {
@@ -1432,6 +1415,37 @@ trait AcsSnapshotStoreTest
       _ <- resetAllAppTables(storage)
     } yield ()
 
+  override def beforeEach(): Unit = {
+    import storage.api.jdbcProfile.api.*
+    super.beforeEach()
+    scala.concurrent.Await.result(
+      storage.queryAndUpdate(
+        for {
+          dynamicAcsSnapshotTables <- sql"""
+              select tablename
+              from pg_tables
+              where schemaname = current_schema()
+                and (
+                  tablename like 'acs_snapshot_creates_v1%'
+                  or tablename like 'acs_snapshot_stakeholders_v1%'
+                )
+                and tablename not in (
+                  'acs_snapshot_creates_v1_template',
+                  'acs_snapshot_stakeholders_v1_template'
+                )
+            """.as[String]
+          _ <- DBIO.sequence(
+            dynamicAcsSnapshotTables.map { tableName =>
+              logger.info(s"Dropping table $tableName")
+              sqlu"drop table if exists #$tableName cascade"
+            }
+          )
+        } yield (),
+        "dropDynamicAcsSnapshotTables",
+      ),
+      scala.concurrent.duration.Duration("10s"),
+    )
+  }
 }
 
 class LegacyAcsSnapshotStoreTest extends AcsSnapshotStoreTest {

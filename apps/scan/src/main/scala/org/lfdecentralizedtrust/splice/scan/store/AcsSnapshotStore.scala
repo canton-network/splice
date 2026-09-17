@@ -778,10 +778,6 @@ class AcsSnapshotStore(
 
     for {
       _ <-
-        sqlu"drop table if exists #$createsTableName"
-      _ <-
-        sqlu"drop table if exists #$stakeholdersTableName"
-      _ <-
         sqlu"create table #$createsTableName (like acs_snapshot_creates_v1_template including all)"
       _ <-
         sqlu"create table #$stakeholdersTableName (like acs_snapshot_stakeholders_v1_template including all)"
