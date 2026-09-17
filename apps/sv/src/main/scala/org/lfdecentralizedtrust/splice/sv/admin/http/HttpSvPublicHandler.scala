@@ -38,7 +38,10 @@ import org.lfdecentralizedtrust.splice.sv.onboarding.DsoPartyHosting
 import org.lfdecentralizedtrust.splice.sv.onboarding.sponsor.DsoPartyMigration
 import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvSvStore}
 import org.lfdecentralizedtrust.splice.sv.util.{Secrets, SvOnboardingToken}
-import org.lfdecentralizedtrust.splice.sv.util.SvUtil.generateRandomOnboardingSecret
+import org.lfdecentralizedtrust.splice.sv.util.SvUtil.{
+  DefaultDevNetPublicSetupTrafficAmount,
+  generateRandomOnboardingSecret,
+}
 import org.lfdecentralizedtrust.splice.util.{Codec, Contract}
 
 import java.util.Base64
@@ -57,6 +60,7 @@ class HttpSvPublicHandler(
     retryProvider: RetryProvider,
     dsoPartyMigration: DsoPartyMigration,
     protected val loggerFactory: NamedLoggerFactory,
+    packageVersionSupport: PackageVersionSupport,
 )(implicit
     ec: ExecutionContext,
     protected val tracer: Tracer,
@@ -190,7 +194,7 @@ class HttpSvPublicHandler(
                     s"Party ${token.candidateParty} does not have the same namespace than its participant ${token.candidateParticipantId}."
                   )
                 )
-              } else if (!isCandidatePartyHostedOnParticipant)
+              } else if (!isCandidatePartyHostedOnParticipant && !config.permissionedSynchronizer)
                 // Conflict instead of not authorized because this can happen if our participant just has not yet caught up
                 // and the client can just retry on that.
                 Future.failed(
@@ -300,6 +304,40 @@ class HttpSvPublicHandler(
                 definitions.SvOnboardingStateUnknown(state = "unknown")
               )
           }
+      }
+    }
+  }
+
+  /** Intended use: Used by validator candidates to buy member traffic using SV's DevNet faucet
+    *
+    * Protection: Rate limiting, endpoint only used for DevNet
+    */
+  override def devNetBuyMemberTraffic(
+      respond: r0.DevNetBuyMemberTrafficResponse.type
+  )(
+      body: definitions.DevNetBuyMemberTrafficRequest
+  )(extracted: TraceContext): Future[r0.DevNetBuyMemberTrafficResponse] = {
+    implicit val traceContext: TraceContext = extracted
+    withSpan(s"$workflowId.devNetBuyMemberTraffic") { _ => _ =>
+      if (isDevNet && config.permissionedSynchronizer) {
+        for {
+          participantId <- ParticipantId.fromProtoPrimitive(
+            body.participantId,
+            "participant_id",
+          ) match {
+            case Right(id) => Future.successful(id)
+            case Left(err) =>
+              Future.failed(HttpErrorHandler.badRequest(s"Invalid participant ID: $err"))
+          }
+          _ <- devNetTapAndBuyMemberTraffic(participantId)
+
+        } yield r0.DevNetBuyMemberTrafficResponseOK("Success")
+      } else {
+        Future.failed(
+          HttpErrorHandler.notImplemented(
+            "Traffic purchasing self-service is only available in DevNet when permissioned synchronizer is enabled."
+          )
+        )
       }
     }
   }
@@ -722,9 +760,23 @@ class HttpSvPublicHandler(
           .asRuntimeException()
       )
     for {
-      confirmations <- OptionT.liftF(
-        dsoStore.listSvOnboardingConfirmations(svOnboardingRequest, weight)
+      featureSupport <- OptionT.liftF(
+        packageVersionSupport.supportsPermissionedSynchronizer(
+          Seq(dsoParty),
+          clock.now,
+        )
       )
+      migrationIdOpt =
+        if (featureSupport.supported) {
+          java.util.Optional.of(java.lang.Long.valueOf(dsoStore.domainMigrationId))
+        } else {
+          java.util.Optional.empty[java.lang.Long]()
+        }
+
+      confirmations <- OptionT.liftF(
+        dsoStore.listSvOnboardingConfirmations(svOnboardingRequest, weight, migrationIdOpt)
+      )
+
       confirmedBy = confirmations
         .map(c =>
           dsoRules.payload.svs.asScala.get(c.payload.confirmer) match {
@@ -803,6 +855,65 @@ class HttpSvPublicHandler(
         .noDedup // No command-dedup required, as the ValidatorOnboarding contract is archived
         .yieldUnit()
     } yield ()
+
+  private def devNetTapAndBuyMemberTraffic(
+      participantId: ParticipantId
+  )(implicit tc: TraceContext): Future[Unit] = {
+    for {
+      dsoRules <- dsoStore.getDsoRules()
+
+      svWalletInstall <- retryProvider.retryForClientCalls(
+        "wait_for_wallet_install",
+        "Wait for SV WalletAppInstall contract to be ingested",
+        for {
+          svWalletInstallOpt <- svStoreWithIngestion.store.lookupWalletAppInstallByEndUser(svParty)
+          install <- svWalletInstallOpt match {
+            case Some(install) => Future.successful(install)
+            case None =>
+              Future.failed(
+                HttpErrorHandler.internalServerError(
+                  "SV WalletAppInstall contract not found."
+                )
+              )
+          }
+        } yield install,
+        logger,
+      )
+
+      synchronizerConfig = Option(
+        dsoRules.payload.config.decentralizedSynchronizer.synchronizers
+          .get(dsoRules.payload.config.decentralizedSynchronizer.activeSynchronizerId)
+      )
+
+      devNetPublicSetupTrafficAmount = synchronizerConfig
+        .flatMap(_.devNetPublicSetupTrafficAmount.toScala)
+        .map(_.longValue())
+        .getOrElse(DefaultDevNetPublicSetupTrafficAmount)
+
+      cmd = svWalletInstall.contractId.exerciseWalletAppInstall_CreateBuyTrafficRequest(
+        participantId.toProtoPrimitive,
+        dsoRules.payload.config.decentralizedSynchronizer.activeSynchronizerId,
+        dsoStore.domainMigrationId.toInt,
+        devNetPublicSetupTrafficAmount,
+        clock.now.plus(java.time.Duration.ofMinutes(5)).toInstant,
+        s"devnet-onboard-${participantId.toProtoPrimitive}-${clock.now.toInstant.toEpochMilli}",
+      )
+
+      _ = logger.info(s"Creating BuyTrafficRequest for $participantId")
+
+      _ <- dsoStoreWithIngestion
+        .connection(SpliceLedgerConnectionPriority.Medium)
+        .submit(
+          actAs = Seq(svParty),
+          readAs = Seq(dsoParty),
+          update = cmd,
+        )
+        .withSynchronizerId(dsoRules.domain)
+        .noDedup
+        .yieldUnit()
+
+    } yield ()
+  }
 
   private def startSvOnboarding(
       candidateName: String,

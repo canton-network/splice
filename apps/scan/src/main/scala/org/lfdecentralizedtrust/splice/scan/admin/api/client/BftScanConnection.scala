@@ -58,7 +58,10 @@ import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection.{
   ScanList,
 }
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.DsoScan
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.{
+  DsoScan,
+  SynchronizerPermissionState,
+}
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
 import org.lfdecentralizedtrust.splice.scan.store.ScanStore
 import org.lfdecentralizedtrust.splice.store.{DsoRulesStore, VoteResultsFilters}
@@ -307,6 +310,19 @@ class BftScanConnection(
       tc: TraceContext
   ): Future[Option[HttpScanAppClient.Lsu]] = {
     bftCall(_.getLsu(), "getLsu")
+  }
+
+  override def getParticipantSynchronizerPermission(
+      synchronizerId: SynchronizerId,
+      participantId: ParticipantId,
+  )(implicit
+      tc: TraceContext,
+      ec: ExecutionContext,
+  ): Future[Option[SynchronizerPermissionState]] = {
+    bftCall(
+      _.getParticipantSynchronizerPermission(synchronizerId, participantId),
+      "getParticipantSynchronizerPermission",
+    )
   }
 
   override def getPartyToParticipant(

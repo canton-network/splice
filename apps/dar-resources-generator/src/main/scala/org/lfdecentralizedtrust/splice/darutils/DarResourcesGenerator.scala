@@ -219,8 +219,8 @@ object DarResourcesGenerator {
     Seq("object TokenStandard {") ++
       indent(2, production ++ test ++ testV2) ++
       Seq(
-        s"  val allProductionPackageResources = Seq(${tokenStandardProductionPackageOrder.map(camel).mkString(", ")})",
-        s"  val allPackageResources = allProductionPackageResources :+ ${camel(tokenStandardTestPackage)} :+ ${camel(tokenStandardTestPackageV2)}",
+        s"  lazy val allProductionPackageResources = Seq(${tokenStandardProductionPackageOrder.map(camel).mkString(", ")})", // lazy avoids JVM 64KB <clinit> method size limit
+        s"  lazy val allPackageResources = allProductionPackageResources :+ ${camel(tokenStandardTestPackage)} :+ ${camel(tokenStandardTestPackageV2)}",
         "}",
       )
   }
@@ -247,7 +247,7 @@ object DarResourcesGenerator {
     dars.flatMap(dar => renderDarResource(varSuffix(dar), dar)) ++
       renderDarResource("current", latest.copy(path = s"$name-current.dar")) ++
       Seq(
-        s"val ${camel(name)} = PackageResource(",
+        s"lazy val ${camel(name)} = PackageResource(", // lazy avoids JVM 64KB <clinit> method size limit
         s"  ${camel(name)}_current,",
         s"  ${camel(name)}_${varSuffix(minimumDar)},",
         s"  Seq(${dars.map(dar => s"${camel(name)}_${varSuffix(dar)}").mkString(", ")})",
@@ -257,7 +257,7 @@ object DarResourcesGenerator {
 
   private def renderDarResource(suffix: String, dar: DarEntry): Seq[String] =
     Seq(
-      s"val ${camel(dar.packageName)}_${suffix} = DarResource(",
+      s"lazy val ${camel(dar.packageName)}_${suffix} = DarResource(", // lazy avoids JVM 64KB <clinit> method size limit
       s"   \"${dar.path}\",",
       s"   \"${dar.packageId}\",",
       s"   PackageMetadata(PackageName.assertFromString(\"${dar.metadata.name}\"), PackageVersion.assertFromString(\"${dar.metadata.version}\"), None),",

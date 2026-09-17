@@ -219,6 +219,7 @@ case class ValidatorAppBackendConfig(
     // `latestPackagesOnly=true` is intended for LocalNet testing only and is not supported in production
     latestPackagesOnly: Boolean = false,
     acsStoreDescriptorUserVersion: Option[Long] = None,
+    permissionedSynchronizer: Boolean = false,
     additionalPackagesToUnvet: Map[PackageName, Set[PackageVersion]] = Map.empty,
     // Set to false to disable the DB-level exclusive lock that prevents two validator instances
     // from running concurrently against the same database.  Only disable for migration scenarios
