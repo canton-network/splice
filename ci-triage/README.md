@@ -167,6 +167,8 @@ given as (run, job, ref) tuples in the request; nothing inferred.
 | 10164 | 35222005752 | main d7a75f6e9e (#7346) | 105204675967 `wall-clock-time (6)` | 3.6.0-snapshot.20260916.20284.0.vf27c4824 |
 | 10165 | 35223275137 | main ce81b9f29b | 105208906926 `wall-clock-time (9)` | 3.6.0-snapshot.20260916.20284.0.vf27c4824 |
 | 10166 | 35226878907 | release-line-0.8.x 57c06ffded (#7369) | 105220970474 `simtime (2)` | 3.5.18-snapshot.20260916.19252.0.v9635aea8 |
+| 10111 | 34523566111 | main 4031327bc4 (#7176), 2026-09-10 | 103027245797 `wall-clock-time (1)` | 3.6.0-snapshot (2026-09-10 pin) |
+| 10010 | 33785420105 | main 3063ad675b (#7110), 2026-09-03 | 100749318272 `wall-clock-time (1)`; (8) and (9) are in the off-boarding sweep | 3.5.16 |
 
 ## Overview
 
@@ -183,6 +185,8 @@ given as (run, job, ref) tuples in the request; nothing inferred.
 | 10164 | All 39 tests pass; checkErrors WARN `ACS_COMMITMENT_MISMATCH` sv1Participant vs aliceValidator, period (12:59:58.30, 13:00:00], 2.5 s after AmuletExpiryV1FallbackIntegrationTest's `Multi-host alice on sv1Participant`. | 10146 | Section 6 of the 10155/10158 packet. Seventh occurrence; first on canton 3.6.0-snapshot.20260916. |
 | 10165 | All 35 tests pass; checkErrors WARN from sv1's HttpErrorHandler: `POST /api/sv/v0/onboard/sv/sequencer` (sv4's request) timed out after the 38 s `pekko.http.server.request-timeout`. sv1's handler was waiting for the sv4 sequencer-add topology tx, which all 4 SVs proposed at 13:16:26.5 but which was only sequenced at 13:17:16 because epoch 104 (the 1 -> 3 BFT step) had no strong quorum for 25 s and lasted 38 s. sv4's retry succeeded 23 s later. | 10094 / 10153 / 10161 family (new symptom) | Packet `10165-onboard-sv-sequencer-http-timeout-bft-1-to-3-stall.md` (section 8: NOT fixed in digital-asset/canton main as of the 2026-09-15.22 mirror); paste-ready umbrella issue text in `10165-issue-body.md` (10094/10153 closed as dups). Splice options: do not block the HTTP request on the topology wait (or a `custom-timeouts` entry for `onboardSvSequencer` in tests), or extend the existing `onboard/validator` timeout ignore to the sequencer endpoint. Quorum stall itself is Canton-side. |
 | 10166 | WalletMintingDelegationTimeBasedIntegrationTest: same `advanceTime(PT25H)` -> `LOCAL_VERDICT_INACTIVE_CONTRACTS` on release-line-0.8.x. | 10154 (cn-test-failures 10060 / #7223) | Section 5 of the 10154 packet. #7261 still not backported (0.8.x tip ef2dc6d559). |
+| 10111 | Earliest recorded ACS_COMMITMENT_MISMATCH sv1Participant vs aliceValidator after a multi-host step (ExpiryWithNoVettedAmuletVersionIntegrationTest), period (20:29:33.04, 20:30:00]. | parent of 10129 / 10146 / 10155 / 10158 / 10162 / 10164 | Section 7 of the 10155/10158 packet. Fix the multi-hosting suites. |
+| 10010 | All 35 tests pass; checkErrors WARN: sv3's sequencer denied a P2P auth token by sv4 (`Member SEQ::sv3 access is disabled`) for 12 s. sv3 had been an active sequencer for 21 s; sv4 was stuck at its onboarding snapshot after the false off-boarding conclusion (10048 bug) and only learned of sv3 once catch-up state transfer kicked in. Shards (8)/(9) of the same run are the sv2 wedge. | 10048 family | Packet `10010-p2p-auth-token-denied-false-offboarding.md`. NOT a benign in-flight topology change; do not add the proposed ignore. Fixed by canton#35600 (3.5.17 / main 20260910+); release-line-0.8.0 still exposed. |
 
 ## Cross-cutting observations
 

@@ -113,3 +113,12 @@ UnvetAllSupportedPackagesIntegrationTest.
 13:00:30.504Z Test succeeded: 'AmuletExpiryV1FallbackIntegrationTest/...'
 ```
 Period starts 2.5 s after the multi-host step. Same suite as 10146 itself.
+
+## 7. 10111 is run 34523566111 (2026-09-10), the earliest recorded occurrence
+
+Ref 10111 = https://github.com/canton-network/splice/actions/runs/34523566111 wall-clock-time (1), main 4031327bc4
+(#7176), the run already listed in the 10146 packet's occurrence table: period (20:29:33.037, 20:30:00], 27 s,
+sv1Participant vs aliceValidator, ExpiryWithNoVettedAmuletVersionIntegrationTest in the shard. Same mechanism as
+all later ones (10129, 10146, 10155, 10158, 10162, 10164). Chronologically 10111 is the parent; whichever issue is
+kept, the fix is the multi-hosting in ExpiryWithMinimalVettedPackagesIntegrationTest.scala and
+AutoIgnoreUnresponsivePartiesIntegrationTest.scala.
