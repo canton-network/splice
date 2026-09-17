@@ -1,4 +1,4 @@
-# 10145 - refs 10144/10145 (run 35076492327), job resource-intensive (1) - INTERNAL on GetPreferredPackages while the SV app uploads DARs: package metadata view seen mid-update
+# 10145 - run 35076492327 resource-intensive (1): INTERNAL on GetPreferredPackages while the SV app uploads DARs: package metadata view seen mid-update
 
 Post-merge CI on main, sha f1ee318e39 "Don't wait forever on a non-active psid in
 ensureSynchronizerRegisteredAndConnected (#7311)", 2026-09-16T08:55Z. Canton runtime

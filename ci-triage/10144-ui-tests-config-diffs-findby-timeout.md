@@ -1,4 +1,4 @@
-# 10144 - refs 10144/10145 (run 35076492327), job ui_tests - SV UI config-diffs test times out finding "Vote Requests"
+# 10144 - run 35076492327 ui_tests: SV UI config-diffs test times out finding "Vote Requests"
 
 Post-merge CI on main, sha f1ee318e39 ("Don't wait forever on a non-active psid in
 `ensureSynchronizerRegisteredAndConnected` (#7311)"), 2026-09-16T08:55Z. Job 104730030877
