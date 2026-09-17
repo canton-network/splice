@@ -4099,7 +4099,7 @@
       "description": "Per source IP throttle rule for all publicScan API endpoints",
       "match": {
         "expr": {
-          "expression": "request.path.lower().urlDecode().startsWith(R\"/api/scan\") && request.headers['host'].lower().matches(R\"^(?:scan)\\.[\\w-]+\\.(?:mock\\.network\\.canton\\.global|mock\\.global\\.canton\\.network\\.digitalasset\\.com)(?::[0-9]+)?$\")"
+          "expression": "request.path.lower().urlDecode().startsWith(R\"/api/scan\") && request.headers['host'].lower().matches(R\"^(?:scan)\\.[\\w-]+\\.mock\\.global\\.canton\\.network\\.digitalasset\\.com(?::[0-9]+)?$\")"
         }
       },
       "preview": true,
@@ -4127,7 +4127,7 @@
       "description": "Per source IP throttle rule for all sequencer API endpoints",
       "match": {
         "expr": {
-          "expression": "request.path.lower().urlDecode().startsWith(R\"/\") && request.headers['host'].lower().matches(R\"^(?:sequencer-[0-9]+)\\.[\\w-]+\\.(?:mock\\.network\\.canton\\.global|mock\\.global\\.canton\\.network\\.digitalasset\\.com)(?::[0-9]+)?$\")"
+          "expression": "request.path.lower().urlDecode().startsWith(R\"/\") && request.headers['host'].lower().matches(R\"^(?:sequencer-[0-9]+)\\.[\\w-]+\\.mock\\.global\\.canton\\.network\\.digitalasset\\.com(?::[0-9]+)?$\")"
         }
       },
       "preview": true,
@@ -4155,7 +4155,7 @@
       "description": "Per source IP throttle rule for all tokenRegistry API endpoints",
       "match": {
         "expr": {
-          "expression": "request.path.lower().urlDecode().startsWith(R\"/registry\") && request.headers['host'].lower().matches(R\"^(?:scan)\\.[\\w-]+\\.(?:mock\\.network\\.canton\\.global|mock\\.global\\.canton\\.network\\.digitalasset\\.com)(?::[0-9]+)?$\")"
+          "expression": "request.path.lower().urlDecode().startsWith(R\"/registry\") && request.headers['host'].lower().matches(R\"^(?:scan)\\.[\\w-]+\\.mock\\.global\\.canton\\.network\\.digitalasset\\.com(?::[0-9]+)?$\")"
         }
       },
       "preview": true,

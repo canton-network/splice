@@ -33,6 +33,12 @@ export type CloudArmorLoggingConfig = z.infer<typeof CloudArmorLoggingConfigSche
 const CloudArmorWafRulesConfigSchema = z.object({
   enabled: z.boolean().default(true),
   groups: WafRuleGroupsSchema.default([]),
+  // Leading hostname labels (`<prefix>.<cluster dns name>`) whose traffic the WAF rules
+  // skip. Grafana is excluded because its dashboard JSON and query payloads regularly
+  // trip the OWASP CRS signatures, and it is only reachable from whitelisted IPs anyway.
+  excludedHostPrefixes: z
+    .array(z.string().regex(/^[A-Za-z0-9-]+$/, 'DNS label'))
+    .default(['grafana']),
   // The preconfigured WAF rules deny by default, but are kept in Cloud Armor preview
   // mode so they only produce logs and alerts. That gives us attack detection and the
   // data to spot false positives before we let them block real traffic.

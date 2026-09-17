@@ -8,7 +8,7 @@ import {
   CLOUD_ARMOR_WAF_RULE_MAX_PRIORITY,
   CLOUD_ARMOR_WAF_RULE_MIN_PRIORITY,
   CLUSTER_BASENAME,
-  getDnsNames,
+  CLUSTER_HOSTNAME,
 } from '@canton-network/splice-pulumi-common';
 import { PerEndpointLimits } from '@canton-network/splice-pulumi-common/src/ratelimit/envoyRateLimiter';
 
@@ -103,6 +103,7 @@ export function configureCloudArmorPolicy(
     addWafRules(
       securityPolicy,
       cac.wafRules.groups,
+      cac.wafRules.excludedHostPrefixes,
       cac.allRulesPreviewOnly || cac.wafRules.previewOnly,
       ruleOpts
     );
@@ -138,9 +139,17 @@ export function configureCloudArmorPolicy(
 function addWafRules(
   securityPolicy: CloudArmorPolicy,
   groups: WafRuleGroup[],
+  excludedHostPrefixes: string[],
   preview: boolean,
   opts: pulumi.ResourceOptions
 ): void {
+  const excludedHostsExpr =
+    excludedHostPrefixes.length > 0
+      ? hostCondition('waf-excluded-hosts', CLUSTER_HOSTNAME, {
+          hostPrefixRegex: excludedHostPrefixes.map(p => p.toLowerCase()).join('|'),
+          perNodeHost: false,
+        })
+      : undefined;
   groups.forEach((group, i) => {
     const priority = WAF_RULE_MIN + i * RULE_SPACING;
     if (priority >= IP_WHITELIST_RULE_MIN) {
@@ -157,7 +166,7 @@ function addWafRules(
         action: 'deny(502)',
         match: {
           expr: {
-            expression: wafRuleExpression(group),
+            expression: wafRuleExpression(group, excludedHostsExpr),
           },
         },
       },
@@ -259,9 +268,12 @@ function addThrottleAndBanRules(
         );
         const hostExpr = hostCondition(
           confEntryHead,
-          [getDnsNames().cantonDnsName, getDnsNames().daDnsName],
-          hostname,
-          hostPrefixRegex
+          CLUSTER_HOSTNAME,
+          hostname
+            ? { hostname }
+            : hostPrefixRegex
+              ? { hostPrefixRegex, perNodeHost: true }
+              : undefined
         );
         const matchExpr = matchExpression(confEntryHead, pathExpr, hostExpr);
 
