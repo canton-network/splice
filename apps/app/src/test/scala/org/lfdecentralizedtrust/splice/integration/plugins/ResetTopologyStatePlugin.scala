@@ -1,6 +1,11 @@
 package org.lfdecentralizedtrust.splice.integration.plugins
 
+import org.lfdecentralizedtrust.splice.config.SpliceConfig
 import org.lfdecentralizedtrust.splice.console.{ParticipantClientReference, SvAppBackendReference}
+import org.lfdecentralizedtrust.splice.integration.plugins.ResetTopologyStatePlugin.{
+  TopologyStateNotReset,
+  TopologyStateResetFailed,
+}
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests
 import com.digitalasset.canton.BaseTest
 import com.digitalasset.canton.console.CommandFailure
@@ -8,6 +13,7 @@ import com.digitalasset.canton.topology.SynchronizerId
 import io.grpc
 import io.grpc.StatusRuntimeException
 
+import java.util.concurrent.atomic.AtomicReference
 import scala.util.control.NonFatal
 
 abstract class ResetTopologyStatePlugin extends SpliceEnvironmentSetupPlugin with BaseTest {
@@ -22,6 +28,15 @@ abstract class ResetTopologyStatePlugin extends SpliceEnvironmentSetupPlugin wit
 
   protected def topologyType: String
 
+  private val resetFailure = new AtomicReference[Option[Throwable]](None)
+
+  override def beforeEnvironmentCreated(config: SpliceConfig): SpliceConfig = {
+    ResetTopologyStatePlugin.notResetTopologyType.get().foreach { notReset =>
+      throw TopologyStateNotReset(notReset)
+    }
+    config
+  }
+
   override def beforeEnvironmentDestroyed(
       env: SpliceTests.SpliceTestConsoleEnvironment
   ): Unit = {
@@ -33,12 +48,16 @@ abstract class ResetTopologyStatePlugin extends SpliceEnvironmentSetupPlugin wit
       attemptToResetTopologyState(env)
     } catch {
       case NonFatal(e) =>
-        val msg = s"Resetting $topologyType failed with: $e, giving up"
-        logger.error(msg)
-        System.err.println(msg)
-        sys.exit(1)
+        logger.error(s"Resetting $topologyType failed, giving up", e)
+        resetFailure.set(Some(e))
+        ResetTopologyStatePlugin.notResetTopologyType.compareAndSet(None, Some(topologyType))
     }
   }
+
+  override def afterEnvironmentDestroyed(config: SpliceConfig): Unit =
+    resetFailure.getAndSet(None).foreach { e =>
+      throw TopologyStateResetFailed(topologyType, e)
+    }
 
   private def attemptToResetTopologyState(env: SpliceTests.SpliceTestConsoleEnvironment): Unit = {
     val sv1 = env.svs.local.find(_.name == "sv1").value
@@ -79,10 +98,9 @@ abstract class ResetTopologyStatePlugin extends SpliceEnvironmentSetupPlugin wit
 
     def resetTopologyStateRetries(retries: Int): Unit = {
       if (retries > MAX_RETRIES) {
-        logger.error(
-          s"Exceeded max retries for resetting $topologyType: $MAX_RETRIES, giving up"
+        throw new IllegalStateException(
+          s"Exceeded max retries for resetting $topologyType: $MAX_RETRIES"
         )
-        sys.exit(1)
       }
       try {
         resetTopologyState(
@@ -102,12 +120,25 @@ abstract class ResetTopologyStatePlugin extends SpliceEnvironmentSetupPlugin wit
             s"Restarting $topologyType reset as base serial has changed"
           )
           resetTopologyStateRetries(retries + 1)
-        case e: Throwable =>
-          logger.error(s"Failed to reset $topologyType", e)
-          sys.exit(1)
       }
     }
     resetTopologyStateRetries(0)
     logger.info(s"$topologyType has been reset")
   }
+}
+
+object ResetTopologyStatePlugin {
+
+  private val notResetTopologyType = new AtomicReference[Option[String]](None)
+
+  final case class TopologyStateResetFailed(topologyType: String, cause: Throwable)
+      extends RuntimeException(
+        s"The $topologyType could not be reset after the test suite; the shared Canton topology state is left modified",
+        cause,
+      )
+
+  final case class TopologyStateNotReset(topologyType: String)
+      extends RuntimeException(
+        s"Not creating a new environment: the $topologyType could not be reset after an earlier test suite in this JVM, see the preceding 'Resetting $topologyType failed' error"
+      )
 }
