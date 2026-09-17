@@ -27,8 +27,10 @@ import {
   installCometBftNode,
   SingleSvConfiguration,
   StaticCometBftConfigWithNodeName,
+  svsConfig,
 } from '@canton-network/splice-pulumi-common-sv';
 import { Postgres } from '@canton-network/splice-pulumi-common/src/postgres';
+import { installSequencerRateLimits } from '@canton-network/splice-pulumi-common/src/ratelimit/rateLimit';
 import { Release } from '@pulumi/kubernetes/helm/v3';
 import { ComponentResource, Output, Resource } from '@pulumi/pulumi';
 
@@ -193,6 +195,15 @@ abstract class InStackDecentralizedSynchronizerNode
         parent: this,
       }
     );
+
+    const sequencerRateLimits = svsConfig?.synchronizer?.sequencer?.externalRateLimits;
+    if (sequencerRateLimits) {
+      installSequencerRateLimits(
+        this.xns.logicalName,
+        `${this.name}-sequencer`,
+        sequencerRateLimits
+      );
+    }
   }
 
   get namespaceInternalSequencerAddress(): string {

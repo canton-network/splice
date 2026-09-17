@@ -1430,8 +1430,7 @@ subcommand_whitelist[wait_for_daml_upgrade]="Waits for daml upgrade after a vote
 
 function subcmd_wait_for_daml_upgrade() {
     _info "Fetching DSO rules"
-    token=$(subcmd_get_token sv-1 sv)
-    dso=$(curl -s "https://sv.sv-2.${GCP_CLUSTER_HOSTNAME}/api/sv/v0/dso" -H "authorization: Bearer ${token}")
+    dso=$(curl -s "https://scan.sv-2.${GCP_CLUSTER_HOSTNAME}/api/scan/v0/dso")
     # get the first futureValue's effective date, which corresponds to the vote from DamlCIUpgradeVotePreflightTest
     effective_date=$(jq -r '.amulet_rules.payload.configSchedule.futureValues[0]._1' <<< "$dso")
 
@@ -1986,7 +1985,7 @@ function subcmd_list_sv_cometbft_addresses() {
 
   pubkey_sv=$(mktemp)
   pubkey_address=$(mktemp)
-  curl -sSLf "https://sv.$sv.${GCP_CLUSTER_HOSTNAME}/api/sv/v0/dso" | jq '[.sv_node_states[] | .contract.payload as $payload | .contract.payload.state.synchronizerNodes[] | select(.[0] | startswith("global"))[1].cometBft.nodes[]|{ sv: $payload.svName, pub_key: .[1].validatorPubKey, peer_id: .[0]}]' > "$pubkey_sv"
+  curl -sSLf "https://scan.$sv.${GCP_CLUSTER_HOSTNAME}/api/scan/v0/dso" | jq '[.sv_node_states[] | .contract.payload as $payload | .contract.payload.state.synchronizerNodes[] | select(.[0] | startswith("global"))[1].cometBft.nodes[]|{ sv: $payload.svName, pub_key: .[1].validatorPubKey, peer_id: .[0]}]' > "$pubkey_sv"
   curl -sSLf --header "Content-Type: application/json" -X POST -d '{"id": 0, "method": "validators"}' "https://sv.$sv.${GCP_CLUSTER_HOSTNAME}/api/sv/v0/admin/domain/cometbft/json-rpc" | \
     jq '[.result.validators[] | { address: .address, pub_key:  .pub_key.value}] | to_entries | map({index: .key, pub_key: .value.pub_key, address: .value.address})' > "$pubkey_address"
 

@@ -709,6 +709,7 @@ abstract class WalletAppReference(
       amount: BigDecimal,
       expiresAt: CantonTimestamp,
       reason: String,
+      mintAfter: Option[CantonTimestamp] = None,
   ): AllocateDevelopmentFundCouponResponse =
     consoleEnvironment.run {
       httpCommand(
@@ -717,6 +718,7 @@ abstract class WalletAppReference(
           amount,
           expiresAt,
           reason,
+          mintAfter,
         )
       )
     }

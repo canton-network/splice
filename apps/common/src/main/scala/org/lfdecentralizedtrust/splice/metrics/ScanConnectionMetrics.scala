@@ -38,7 +38,9 @@ class ScanConnectionMetrics(metricsFactory: LabeledMetricsFactory) {
         summary = "Count of succeeded and failed requests to a scan connection",
         qualification = Traffic,
         labelsWithDescription = perConnectionLabels ++ Map(
-          "outcome" -> "Category of failure or success"
+          "outcome" -> "Category of failure or success",
+          "http_status" -> ("For failures, the HTTP status code of the response when available, " +
+            "'none' otherwise (e.g. transport-level failures). Absent for successful requests."),
         ),
       )
     )

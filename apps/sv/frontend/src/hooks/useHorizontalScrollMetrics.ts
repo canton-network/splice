@@ -26,7 +26,11 @@ export const computeScrollMetrics = (el: HTMLElement): ScrollMetrics => {
   const scrollableDistance = scrollWidth - clientWidth;
   const thumbLeftPercent = scrollableDistance > 0 ? (scrollLeft / scrollableDistance) * maxLeft : 0;
 
-  return { canScroll: true, thumbWidthPercent, thumbLeftPercent };
+  return {
+    canScroll: true,
+    thumbWidthPercent,
+    thumbLeftPercent,
+  };
 };
 
 export const useHorizontalScrollMetrics = (

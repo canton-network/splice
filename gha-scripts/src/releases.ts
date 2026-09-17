@@ -1,9 +1,13 @@
-import type { Github } from './types'
+import type { Context, Github } from './types'
 import { getFileFromGit } from './git'
 
 const spliceRepo = {
   owner: 'canton-network',
   repo: 'splice',
+}
+
+export function isSpliceRepo(context: Context): boolean {
+  return context.repo.owner === spliceRepo.owner && context.repo.repo === spliceRepo.repo
 }
 
 export async function findLatestReleaseBranchesUpTo(

@@ -165,6 +165,7 @@ def bootstrapDomainWithUnsignedKeys(
             NonNegativeFiniteDuration.ofSeconds(10),
           ),
           SequencerConnectionPoolDelays.default,
+          SubscriptionLivenessLimits.default,
         ),
         // if we run bootstrap ourselves, we should have been able to reach the nodes
         // so we don't want the bootstrapping to fail spuriously here in the middle of

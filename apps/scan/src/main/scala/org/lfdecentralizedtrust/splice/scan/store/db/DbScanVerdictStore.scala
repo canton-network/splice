@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.scan.store.db
 
+import com.daml.nonempty.NonEmpty
 import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnlessShutdownToFuture
 import com.digitalasset.canton.sequencer.admin.{v30 as seqv30}
 import com.digitalasset.canton.data.CantonTimestamp
@@ -25,7 +26,7 @@ import slick.dbio.DBIO
 import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.{ExecutionContext, Future}
 import cats.data.NonEmptyList
-import org.lfdecentralizedtrust.splice.store.UpdateHistory
+import org.lfdecentralizedtrust.splice.store.{TimestampWithMigrationId, UpdateHistory}
 import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore.AppActivityRecordT
 
 object DbScanVerdictStore {
@@ -410,41 +411,58 @@ class DbScanVerdictStore(
   def insertVerdictAndTransactionViewsDBIO(
       items: Seq[(VerdictT, Long => Seq[TransactionViewT])]
   )(implicit tc: TraceContext): DBIO[Map[CantonTimestamp, Long]] = {
-    if (items.isEmpty) DBIO.successful(Map.empty)
-    else {
-      val checkExist = (sql"""
-               select update_id
-               from #${Tables.verdicts}
-               where history_id = $historyId
-                 and """ ++ inClause("update_id", items.map(t => lengthLimited(t._1.updateId))))
-        .as[String]
+    NonEmpty.from(items) match {
+      case None => DBIO.successful(Map.empty)
+      case Some(items) =>
+        val checkExist = (sql"""
+                 select update_id
+                 from #${Tables.verdicts}
+                 where history_id = $historyId
+                   and """ ++ DbStorage.toInClause(
+          "update_id",
+          items.map(t => lengthLimited(t._1.updateId)),
+        ))
+          .as[String]
 
-      for {
-        alreadyExisting <- checkExist.map(_.toSet)
-        nonExisting = items.filter(item => !alreadyExisting.contains(item._1.updateId))
-        _ = logger.info(
-          s"Already ingested verdicts: $alreadyExisting. Non-existing: ${nonExisting.map(_._1.updateId)}."
-        )
-        rowIdMap <-
-          if (nonExisting.nonEmpty) {
-            DBIO
-              .sequence(nonExisting.map { case (verdict, mkViews) =>
-                for {
-                  idOpt <- sqlInsertVerdictReturningId(verdict)
-                  rowId <- idOpt match {
-                    case Some(id) => DBIO.successful(id)
-                    case None =>
-                      DBIO.failed(new RuntimeException("insertVerdict did not return row_id"))
-                  }
-                  views = mkViews(rowId)
-                  _ <- DBIO.sequence(views.map(sqlInsertView)).map(_ => ())
-                } yield verdict.recordTime -> rowId
-              })
-              .map(_.toMap)
-          } else {
-            DBIO.successful(Map.empty[CantonTimestamp, Long])
-          }
-      } yield rowIdMap
+        for {
+          alreadyExisting <- checkExist.map(_.toSet)
+          (dropped, nonExisting) =
+            items.partition(item => alreadyExisting.contains(item._1.updateId))
+          droppedAccepts =
+            dropped.filter(_._1.verdictResult == DbScanVerdictStore.VerdictResultDbValue.Accepted)
+          nonExistingMessage = s"Non-existing: ${nonExisting.map(_._1.updateId)}."
+          _ =
+            if (droppedAccepts.nonEmpty)
+              logger.warn(
+                s"Dropping duplicate accepted verdicts: ${droppedAccepts.map(_._1.updateId)}. " +
+                  s"All dropped verdicts: ${dropped.map(_._1.updateId)}. $nonExistingMessage"
+              )
+            else if (dropped.nonEmpty)
+              logger.info(
+                s"Dropping duplicate verdicts: ${dropped.map(_._1.updateId)}. $nonExistingMessage"
+              )
+            else
+              logger.info(s"Already ingested verdicts: $alreadyExisting. $nonExistingMessage")
+          rowIdMap <-
+            if (nonExisting.nonEmpty) {
+              DBIO
+                .sequence(nonExisting.map { case (verdict, mkViews) =>
+                  for {
+                    idOpt <- sqlInsertVerdictReturningId(verdict)
+                    rowId <- idOpt match {
+                      case Some(id) => DBIO.successful(id)
+                      case None =>
+                        DBIO.failed(new RuntimeException("insertVerdict did not return row_id"))
+                    }
+                    views = mkViews(rowId)
+                    _ <- DBIO.sequence(views.map(sqlInsertView)).map(_ => ())
+                  } yield verdict.recordTime -> rowId
+                })
+                .map(_.toMap)
+            } else {
+              DBIO.successful(Map.empty[CantonTimestamp, Long])
+            }
+        } yield rowIdMap
     }
   }
 
@@ -565,14 +583,14 @@ class DbScanVerdictStore(
     )
 
   private def afterFilters(
-      afterO: Option[(Long, CantonTimestamp)],
+      afterO: Option[TimestampWithMigrationId],
       includeImportUpdates: Boolean,
   ): NonEmptyList[SQLActionBuilder] = {
     val gt = if (includeImportUpdates) ">=" else ">"
     afterO match {
       case None =>
         NonEmptyList.of(sql"migration_id >= 0 and record_time #$gt ${CantonTimestamp.MinValue}")
-      case Some((afterMigrationId, afterRecordTime)) =>
+      case Some(TimestampWithMigrationId(afterRecordTime, afterMigrationId)) =>
         NonEmptyList.of(
           sql"migration_id = ${afterMigrationId} and record_time > ${afterRecordTime} ",
           sql"migration_id > ${afterMigrationId} and record_time #$gt ${CantonTimestamp.MinValue}",
@@ -615,7 +633,7 @@ class DbScanVerdictStore(
   }
 
   def listVerdicts(
-      afterO: Option[(Long, CantonTimestamp)],
+      afterO: Option[TimestampWithMigrationId],
       includeImportUpdates: Boolean,
       limit: Int,
   )(implicit tc: TraceContext): Future[Seq[VerdictT]] = {

@@ -133,7 +133,12 @@ class RollForwardLsuDRIntegrationTest
                   config
                     .svApps(InstanceName.tryCreate(s"sv$sv"))
                     .focus(_.localSynchronizerNodes)
-                    .modify(c => c.copy(legacy = c.current.some))
+                    .modify(c =>
+                      c.copy(
+                        legacy = c.current.some,
+                        current = c.current.focus(_.protocolVersion).replace(ProtocolVersion.v35),
+                      )
+                    )
                     .focus(_.onboarding)
                     .modify(c =>
                       SvOnboardingConfig

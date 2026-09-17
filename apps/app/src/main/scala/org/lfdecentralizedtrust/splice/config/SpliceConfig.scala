@@ -35,6 +35,7 @@ import org.lfdecentralizedtrust.splice.sv.SvAppClientConfig
 import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.FoundDso
 import org.lfdecentralizedtrust.splice.util.{
   Codec,
+  IpCidrRateLimits,
   PerAttributeRateLimitConfig,
   SpliceRateLimitConfig,
 }
@@ -67,6 +68,8 @@ import com.digitalasset.canton.participant.config.RemoteParticipantConfig
 import com.digitalasset.canton.admin.api.client.data.{
   SequencerConnectionPoolDelays,
   SubmissionRequestAmplification,
+  SynchronizerLimits,
+  TransactionProtocolLimits,
 }
 import com.digitalasset.canton.tracing.TraceContext
 import com.typesafe.config.{Config, ConfigRenderOptions}
@@ -74,7 +77,14 @@ import com.typesafe.config.ConfigException.UnresolvedSubstitution
 import org.slf4j.{Logger, LoggerFactory}
 import pureconfig.configurable.{genericMapReader, genericMapWriter}
 import pureconfig.generic.{CoproductHint, FieldCoproductHint, ProductHint}
-import pureconfig.{ConfigCursor, ConfigReader, ConfigWriter}
+import pureconfig.{
+  CamelCase,
+  ConfigCursor,
+  ConfigFieldMapping,
+  ConfigReader,
+  ConfigWriter,
+  KebabCase,
+}
 import pureconfig.error.{CannotConvert, FailureReason}
 import pureconfig.module.cats.{nonEmptyListReader, nonEmptyListWriter}
 import io.circe.parser.*
@@ -376,6 +386,15 @@ object SpliceConfig {
 
   import pureconfig.generic.semiauto.*
 
+  private val perClientIpRateLimitHint: ProductHint[PerAttributeRateLimitConfig] =
+    ProductHint[PerAttributeRateLimitConfig](
+      ConfigFieldMapping {
+        case "attributeOverrides" => "ip-overrides"
+        case other => ConfigFieldMapping(CamelCase, KebabCase)(other)
+      },
+      allowUnknownKeys = false,
+    )
+
   private val cantonConfigReaders = new CantonConfig.ConfigReaders()(elc)
 
   class ConfigReaders(implicit
@@ -433,11 +452,22 @@ object SpliceConfig {
       deriveReader[SpliceParametersConfig]
     implicit val spliceRateLimiterSimpleConfig: ConfigReader[SpliceRateLimitConfig.Simple] =
       deriveReader[SpliceRateLimitConfig.Simple]
+    implicit val clientIpRateLimitHint: ProductHint[PerAttributeRateLimitConfig] =
+      SpliceConfig.perClientIpRateLimitHint
     implicit val clientIpRateLimitConfig: ConfigReader[PerAttributeRateLimitConfig] =
-      deriveReader[PerAttributeRateLimitConfig]
-    implicit val spliceRateLimiterWithPerClientIpConfig
-        : ConfigReader[SpliceRateLimitConfig.WithPerClientIp] =
-      deriveReader[SpliceRateLimitConfig.WithPerClientIp]
+      deriveReader[PerAttributeRateLimitConfig].emap { config =>
+        Try(IpCidrRateLimits.tryValidate(config)).toEither.left
+          .map[FailureReason](err =>
+            CannotConvert(
+              config.attributeOverrides.keys.mkString("[", ", ", "]"),
+              "ip-overrides",
+              err.getMessage,
+            )
+          )
+          .map(_ => config)
+      }
+    implicit val spliceRateLimiterWithPerClientIpConfig: ConfigReader[PerClientIpRateLimitConfig] =
+      deriveReader[PerClientIpRateLimitConfig]
     implicit val rateLimitersConfig: ConfigReader[RateLimitersConfig] =
       deriveReader[RateLimitersConfig]
     implicit val enabledFeaturesConfigReader: ConfigReader[EnabledFeaturesConfig] =
@@ -605,6 +635,10 @@ object SpliceConfig {
       deriveReader[SvMediatorConfig]
     implicit val svScanConfig: ConfigReader[SvScanConfig] =
       deriveReader[SvScanConfig]
+    implicit val transactionProtocolLimitsReader: ConfigReader[TransactionProtocolLimits] =
+      deriveReader[TransactionProtocolLimits]
+    implicit val synchronizerLimitsReader: ConfigReader[SynchronizerLimits] =
+      deriveReader[SynchronizerLimits]
     implicit val svSynchronizerNodeConfig: ConfigReader[SvSynchronizerNodeConfig] =
       deriveReader[SvSynchronizerNodeConfig]
     implicit val svSynchronizerNodesConfig: ConfigReader[SvSynchronizerNodesConfig] =
@@ -959,11 +993,12 @@ object SpliceConfig {
 
     implicit val spliceRateLimiterSimpleConfig: ConfigWriter[SpliceRateLimitConfig.Simple] =
       deriveWriter[SpliceRateLimitConfig.Simple]
+    implicit val clientIpRateLimitHint: ProductHint[PerAttributeRateLimitConfig] =
+      SpliceConfig.perClientIpRateLimitHint
     implicit val clientIpRateLimitConfig: ConfigWriter[PerAttributeRateLimitConfig] =
       deriveWriter[PerAttributeRateLimitConfig]
-    implicit val spliceRateLimiterWithPerClientIpConfig
-        : ConfigWriter[SpliceRateLimitConfig.WithPerClientIp] =
-      deriveWriter[SpliceRateLimitConfig.WithPerClientIp]
+    implicit val spliceRateLimiterWithPerClientIpConfig: ConfigWriter[PerClientIpRateLimitConfig] =
+      deriveWriter[PerClientIpRateLimitConfig]
     implicit val rateLimitersConfig: ConfigWriter[RateLimitersConfig] =
       deriveWriter[RateLimitersConfig]
 
@@ -1125,6 +1160,10 @@ object SpliceConfig {
       deriveWriter[SvMediatorConfig]
     implicit val svScanConfig: ConfigWriter[SvScanConfig] =
       deriveWriter[SvScanConfig]
+    implicit val transactionProtocolLimitsWriter: ConfigWriter[TransactionProtocolLimits] =
+      deriveWriter[TransactionProtocolLimits]
+    implicit val synchronizerLimitsWriter: ConfigWriter[SynchronizerLimits] =
+      deriveWriter[SynchronizerLimits]
     implicit val svSynchronizerNodeConfig: ConfigWriter[SvSynchronizerNodeConfig] =
       deriveWriter[SvSynchronizerNodeConfig]
     implicit val svSynchronizerNodesConfig: ConfigWriter[SvSynchronizerNodesConfig] =

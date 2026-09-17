@@ -32,7 +32,13 @@ import com.digitalasset.canton.sequencing.protocol
 import com.digitalasset.canton.synchronizer.sequencer.SequencerPruningStatus
 import com.digitalasset.canton.synchronizer.sequencer.admin.grpc.InitializeSequencerResponse
 import com.digitalasset.canton.time.Clock
-import com.digitalasset.canton.topology.{Member, NodeIdentity, PhysicalSynchronizerId, SequencerId}
+import com.digitalasset.canton.topology.{
+  Member,
+  NodeIdentity,
+  PhysicalSynchronizerId,
+  SequencerId,
+  SynchronizerId,
+}
 import com.digitalasset.canton.topology.admin.v30.{
   GenesisStateV2Response,
   SequencerLsuStateResponse,
@@ -156,6 +162,7 @@ class SequencerAdminConnection(
       topologySnapshot: Path,
       staticSynchronizerParameters: StaticSynchronizerParameters,
       ignorePsidCheck: Boolean,
+      synchronizerId: SynchronizerId,
   )(implicit
       traceContext: TraceContext
   ): Future[Unit] = {
@@ -165,6 +172,7 @@ class SequencerAdminConnection(
         inputStream,
         staticSynchronizerParameters,
         ignorePsidCheck,
+        synchronizerId,
       )
     ).andThen(_ => inputStream.close())
   }
@@ -329,19 +337,6 @@ class SequencerAdminConnection(
       )
     )
   }
-
-  /** This is used for initializing the sequencer after hard domain migrations.
-    */
-  def initializeFromGenesisState(
-      genesisState: Seq[ByteString],
-      domainParameters: StaticSynchronizerParameters,
-  )(implicit traceContext: TraceContext): Future[InitializeSequencerResponse] =
-    runCmd(
-      SequencerAdminCommands.InitializeFromGenesisStateV2(
-        genesisState,
-        domainParameters,
-      )
-    )
 
   def initializeFromOnboardingState(
       onboardingState: ByteString

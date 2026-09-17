@@ -195,7 +195,19 @@ class HistoryMetrics(metricsFactory: LabeledMetricsFactory)(implicit
     override lazy val snapshotSize: Gauge[Int] = metricsFactory.gauge(
       MetricInfo(
         name = acsSnapshotsPrefix :+ "snapshot-size",
-        summary = "Number of rows copied in the latest acs snapshot",
+        summary = "Number of create rows copied in the latest backfilled acs snapshot. " +
+          "For legacy snapshots this increases by ACS size and stakeholders per contract. " +
+          "For new snapshots, this is strictly equal to the ACS size.",
+        Traffic,
+      ),
+      0,
+    )(metricsContext)
+
+    override lazy val snapshotStakeholdersSize: Gauge[Int] = metricsFactory.gauge(
+      MetricInfo(
+        name = acsSnapshotsPrefix :+ "snapshot-stakeholders-size",
+        summary = "Number of stakeholder rows copied in the latest backfilled acs snapshot. " +
+          "This increases by ACS size and stakeholders per contract.",
         Traffic,
       ),
       0,
@@ -258,7 +270,19 @@ class HistoryMetrics(metricsFactory: LabeledMetricsFactory)(implicit
     override lazy val snapshotSize: Gauge[Int] = metricsFactory.gauge(
       MetricInfo(
         name = acsSnapshotsPrefix :+ "snapshot-size",
-        summary = "Number of rows copied in the latest acs snapshot",
+        summary = "Number of create rows copied in the latest acs snapshot. " +
+          "For legacy snapshots this increases by ACS size and stakeholders per contract. " +
+          "For new snapshots, this is strictly equal to the ACS size.",
+        Traffic,
+      ),
+      0,
+    )(metricsContext)
+
+    override lazy val snapshotStakeholdersSize: Gauge[Int] = metricsFactory.gauge(
+      MetricInfo(
+        name = acsSnapshotsPrefix :+ "snapshot-stakeholders-size",
+        summary = "Number of stakeholder rows copied in the latest acs snapshot. " +
+          "This increases by ACS size and stakeholders per contract.",
         Traffic,
       ),
       0,
@@ -438,11 +462,15 @@ class HistoryMetrics(metricsFactory: LabeledMetricsFactory)(implicit
         )
       )(metricsContext)
 
-    def incAcsSnapshotObjects(encoding: String): Unit =
-      objectsCount.inc()(MetricsContext("object_type" -> "ACS_snapshots", "encoding" -> encoding))
+    def incAcsSnapshotObjects(encoding: String, bucket: String): Unit =
+      objectsCount.inc()(
+        MetricsContext("object_type" -> "ACS_snapshots", "encoding" -> encoding, "bucket" -> bucket)
+      )
 
-    def incUpdateObjects(encoding: String): Unit =
-      objectsCount.inc()(MetricsContext("object_type" -> "updates", "encoding" -> encoding))
+    def incUpdateObjects(encoding: String, bucket: String): Unit =
+      objectsCount.inc()(
+        MetricsContext("object_type" -> "updates", "encoding" -> encoding, "bucket" -> bucket)
+      )
 
     def incUpdatesCount(count: Int): Unit =
       updatesCount.inc(count.toLong)(MetricsContext.Empty)
@@ -507,5 +535,6 @@ object HistoryMetrics {
     def latencySave: Timer
     def waitingForLock: Gauge[Int]
     def snapshotSize: Gauge[Int]
+    def snapshotStakeholdersSize: Gauge[Int]
   }
 }

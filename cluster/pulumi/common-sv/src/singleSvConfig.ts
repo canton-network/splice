@@ -98,6 +98,7 @@ export type BulkStorageConfig = z.infer<typeof BulkStorageConfigSchema>;
 
 // 1. Extract ScanBigQueryConfigSchema to validate all Datastream settings.
 //    All new fields are optional to ensure existing deployments do not fail parsing.
+const SECONDS_PER_DAY = 24 * 3600;
 export const ScanBigQueryConfigSchema = z
   .object({
     dataset: z.string(),
@@ -107,6 +108,15 @@ export const ScanBigQueryConfigSchema = z
     enableStagProdDatastream: z.boolean().default(false),
     legacyDesiredState: z.enum(['RUNNING', 'PAUSED']).default('RUNNING'),
     stagProdDesiredState: z.enum(['RUNNING', 'PAUSED']).default('RUNNING'),
+    retentionPeriodSeconds: z
+      .number()
+      .min(3 * SECONDS_PER_DAY, {
+        message: 'Value must be at least 3 days (259,200 seconds)',
+      })
+      .refine(v => v % SECONDS_PER_DAY === 0, {
+        message: 'Value must be an exact number of days, expressed in seconds',
+      })
+      .default(7 * SECONDS_PER_DAY),
   })
   .strict(); // Keeps strict mode safe now that all known fields are explicitly defined
 

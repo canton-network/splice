@@ -33,7 +33,7 @@
           "createdEventBlob" : "",
           "interfaceViews" : [
             {
-              "implementationPackageId" : "0b3f41ae14e183232720d398dab66d2df2b073a3f3f107ec48fcb07ec407163b",
+              "implementationPackageId" : "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a",
               "interfaceId" : "#package-name:Splice.Api.Token.HoldingV1:Holding",
               "viewStatus" : {
                 "code" : 0,
@@ -65,7 +65,7 @@
               }
             },
             {
-              "implementationPackageId" : "0b3f41ae14e183232720d398dab66d2df2b073a3f3f107ec48fcb07ec407163b",
+              "implementationPackageId" : "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a",
               "interfaceId" : "#package-name:Splice.Api.Token.HoldingV2:Holding",
               "viewStatus" : {
                 "code" : 0,
@@ -106,7 +106,7 @@
           ],
           "offset" : 1,
           "packageName" : "splice-amulet",
-          "representativePackageId" : "0b3f41ae14e183232720d398dab66d2df2b073a3f3f107ec48fcb07ec407163b",
+          "representativePackageId" : "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a",
           "signatories" : [
             "dso::normalized",
             "alice::normalized"
@@ -120,7 +120,7 @@
         "synchronizerId" : "sync::normalized"
       }
     },
-    "streamContinuationToken" : "CgMIogMSBFd+w1I=",
+    "streamContinuationToken" : "CgMImgMSBGluFtM=",
     "workflowId" : ""
   },
   {
@@ -148,7 +148,7 @@
           "createdEventBlob" : "",
           "interfaceViews" : [
             {
-              "implementationPackageId" : "0b3f41ae14e183232720d398dab66d2df2b073a3f3f107ec48fcb07ec407163b",
+              "implementationPackageId" : "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a",
               "interfaceId" : "#package-name:Splice.Api.Token.HoldingV1:Holding",
               "viewStatus" : {
                 "code" : 0,
@@ -173,7 +173,7 @@
               }
             },
             {
-              "implementationPackageId" : "0b3f41ae14e183232720d398dab66d2df2b073a3f3f107ec48fcb07ec407163b",
+              "implementationPackageId" : "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a",
               "interfaceId" : "#package-name:Splice.Api.Token.HoldingV2:Holding",
               "viewStatus" : {
                 "code" : 0,
@@ -207,7 +207,7 @@
           ],
           "offset" : 1,
           "packageName" : "splice-amulet",
-          "representativePackageId" : "0b3f41ae14e183232720d398dab66d2df2b073a3f3f107ec48fcb07ec407163b",
+          "representativePackageId" : "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a",
           "signatories" : [
             "dso::normalized",
             "alice::normalized"
@@ -221,7 +221,7 @@
         "synchronizerId" : "sync::normalized"
       }
     },
-    "streamContinuationToken" : "CgMI4gMSBFd+w1I=",
+    "streamContinuationToken" : "CgMI2gMSBGluFtM=",
     "workflowId" : ""
   },
   {
@@ -249,7 +249,7 @@
           "createdEventBlob" : "",
           "interfaceViews" : [
             {
-              "implementationPackageId" : "0b3f41ae14e183232720d398dab66d2df2b073a3f3f107ec48fcb07ec407163b",
+              "implementationPackageId" : "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a",
               "interfaceId" : "#package-name:Splice.Api.Token.HoldingV1:Holding",
               "viewStatus" : {
                 "code" : 0,
@@ -274,7 +274,7 @@
               }
             },
             {
-              "implementationPackageId" : "0b3f41ae14e183232720d398dab66d2df2b073a3f3f107ec48fcb07ec407163b",
+              "implementationPackageId" : "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a",
               "interfaceId" : "#package-name:Splice.Api.Token.HoldingV2:Holding",
               "viewStatus" : {
                 "code" : 0,
@@ -308,7 +308,7 @@
           ],
           "offset" : 1,
           "packageName" : "splice-amulet",
-          "representativePackageId" : "0b3f41ae14e183232720d398dab66d2df2b073a3f3f107ec48fcb07ec407163b",
+          "representativePackageId" : "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a",
           "signatories" : [
             "dso::normalized",
             "alice::normalized"
@@ -322,7 +322,7 @@
         "synchronizerId" : "sync::normalized"
       }
     },
-    "streamContinuationToken" : "CgMI4wMSBFd+w1I=",
+    "streamContinuationToken" : "CgMI2wMSBGluFtM=",
     "workflowId" : ""
   },
   {
@@ -350,7 +350,7 @@
           "createdEventBlob" : "",
           "interfaceViews" : [
             {
-              "implementationPackageId" : "0b3f41ae14e183232720d398dab66d2df2b073a3f3f107ec48fcb07ec407163b",
+              "implementationPackageId" : "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a",
               "interfaceId" : "#package-name:Splice.Api.Token.HoldingV1:Holding",
               "viewStatus" : {
                 "code" : 0,
@@ -375,7 +375,7 @@
               }
             },
             {
-              "implementationPackageId" : "0b3f41ae14e183232720d398dab66d2df2b073a3f3f107ec48fcb07ec407163b",
+              "implementationPackageId" : "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a",
               "interfaceId" : "#package-name:Splice.Api.Token.HoldingV2:Holding",
               "viewStatus" : {
                 "code" : 0,
@@ -409,7 +409,7 @@
           ],
           "offset" : 1,
           "packageName" : "splice-amulet",
-          "representativePackageId" : "0b3f41ae14e183232720d398dab66d2df2b073a3f3f107ec48fcb07ec407163b",
+          "representativePackageId" : "fb10433a48c24f30076a7aee03a3e314b7ab02fe9a22e2069e3af92d2b6ac88a",
           "signatories" : [
             "dso::normalized",
             "alice::normalized"
@@ -423,7 +423,7 @@
         "synchronizerId" : "sync::normalized"
       }
     },
-    "streamContinuationToken" : "CgMI/gMSBFd+w1I=",
+    "streamContinuationToken" : "CgMI7AMSBGluFtM=",
     "workflowId" : ""
   },
   {
@@ -443,7 +443,7 @@
           "createdEventBlob" : "",
           "interfaceViews" : [
             {
-              "implementationPackageId" : "26c72abb5a4b485e58f201021de6f9e525c85863fa115536f768d6ee138ef13e",
+              "implementationPackageId" : "1385c84f161e8d63593b4ac58149642fc2d15cea813861df3231bb47d8be2907",
               "interfaceId" : "#package-name:Splice.Api.Token.HoldingV1:Holding",
               "viewStatus" : {
                 "code" : 0,
@@ -472,7 +472,7 @@
           ],
           "offset" : 1,
           "packageName" : "splice-token-test-dummy-holding",
-          "representativePackageId" : "26c72abb5a4b485e58f201021de6f9e525c85863fa115536f768d6ee138ef13e",
+          "representativePackageId" : "1385c84f161e8d63593b4ac58149642fc2d15cea813861df3231bb47d8be2907",
           "signatories" : [
             "alice::normalized"
           ],
@@ -485,7 +485,7 @@
         "synchronizerId" : "sync::normalized"
       }
     },
-    "streamContinuationToken" : "CgMIgQQSBFd+w1I=",
+    "streamContinuationToken" : "CgMI7wMSBGluFtM=",
     "workflowId" : ""
   },
   {
@@ -505,7 +505,7 @@
           "createdEventBlob" : "",
           "interfaceViews" : [
             {
-              "implementationPackageId" : "26c72abb5a4b485e58f201021de6f9e525c85863fa115536f768d6ee138ef13e",
+              "implementationPackageId" : "1385c84f161e8d63593b4ac58149642fc2d15cea813861df3231bb47d8be2907",
               "interfaceId" : "#package-name:Splice.Api.Token.HoldingV1:Holding",
               "viewStatus" : {
                 "code" : 0,
@@ -534,7 +534,7 @@
           ],
           "offset" : 1,
           "packageName" : "splice-token-test-dummy-holding",
-          "representativePackageId" : "26c72abb5a4b485e58f201021de6f9e525c85863fa115536f768d6ee138ef13e",
+          "representativePackageId" : "1385c84f161e8d63593b4ac58149642fc2d15cea813861df3231bb47d8be2907",
           "signatories" : [
             "alice::normalized"
           ],
@@ -547,7 +547,7 @@
         "synchronizerId" : "sync::normalized"
       }
     },
-    "streamContinuationToken" : "CgMIggQSBFd+w1I=",
+    "streamContinuationToken" : "CgMI8AMSBGluFtM=",
     "workflowId" : ""
   }
 ]

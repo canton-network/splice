@@ -5,7 +5,7 @@ import * as pulumi from '@pulumi/pulumi';
 import {
   CLUSTER_BASENAME,
   config,
-  infraAffinityAndTolerations,
+  infraKubernetesScheduling,
   isMainNet,
 } from '@canton-network/splice-pulumi-common';
 import { CustomResource } from '@pulumi/kubernetes/apiextensions';
@@ -265,7 +265,7 @@ export function createStackCR(
               resources: stackConfig.resources,
               podTemplate: {
                 spec: {
-                  ...infraAffinityAndTolerations,
+                  ...infraKubernetesScheduling,
                   terminationGracePeriodSeconds: PulumiOperatorGracePeriod,
                   volumes: [
                     {

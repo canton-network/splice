@@ -16,7 +16,7 @@ import DA.Time
 data Schedule t a = Schedule with
     initialValue : a -- ^ Initial value to use until the future values come into effect.
     futureValues : [(t, a)] -- ^ sorted in ascending order
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 instance Functor (Schedule t) where
   fmap f (Schedule{..}) = Schedule with

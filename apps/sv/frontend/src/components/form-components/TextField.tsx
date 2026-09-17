@@ -7,14 +7,13 @@ import {
   TextFieldProps as MuiTextFieldProps,
   Typography,
 } from '@mui/material';
+import {
+  CREATE_PROPOSAL_FIELD_HELPER_SX,
+  CREATE_PROPOSAL_FIELD_LABEL_SX,
+} from '../../constants/createProposalLayout';
 import { useFieldContext } from '../../hooks/formContext';
 import { scrollableTextFieldSx } from '../beta/identifierStyles';
-import {
-  fieldDescriptionSx,
-  fieldSectionSx,
-  fieldSectionTitleSx,
-  singleLineFieldSx,
-} from '../../themes/fieldStyles';
+import { singleLineFieldSx } from '../../themes/fieldStyles';
 
 export interface TextFieldProps {
   id: string;
@@ -38,8 +37,13 @@ export const TextField: React.FC<TextFieldProps> = props => {
   } = props;
   const field = useFieldContext<string>();
   return (
-    <Box sx={fieldSectionSx}>
-      <Typography sx={fieldSectionTitleSx} id={`${id}-title`} data-testid={`${id}-title`}>
+    <Box>
+      <Typography
+        component="p"
+        id={`${id}-title`}
+        data-testid={`${id}-title`}
+        sx={{ ...CREATE_PROPOSAL_FIELD_LABEL_SX, mb: 1 }}
+      >
         {title}
       </Typography>
 
@@ -56,9 +60,9 @@ export const TextField: React.FC<TextFieldProps> = props => {
         helperText={
           <Typography
             component="span"
-            sx={fieldDescriptionSx}
             id={`${id}-error`}
             data-testid={`${id}-error`}
+            sx={{ ...CREATE_PROPOSAL_FIELD_HELPER_SX, color: 'inherit' }}
           >
             {field.state.meta.errors?.[0]}
           </Typography>
@@ -82,7 +86,11 @@ export const TextField: React.FC<TextFieldProps> = props => {
         {...muiTextFieldProps}
       />
       {subtitle && (
-        <Typography sx={fieldDescriptionSx} data-testid={`${id}-subtitle`}>
+        <Typography
+          component="p"
+          data-testid={`${id}-subtitle`}
+          sx={{ ...CREATE_PROPOSAL_FIELD_HELPER_SX, mt: 1 }}
+        >
           {subtitle}
         </Typography>
       )}

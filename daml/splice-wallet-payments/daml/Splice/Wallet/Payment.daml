@@ -22,44 +22,50 @@ data Unit
   | ExtUnit
       -- ^ Extension constructor to work around the current lack of upgrading for variants in Daml 3.0.
       -- Will serve as the default value in a containing record in case of an extension.
-  deriving (Eq, Show, Ord)
+  deriving (Eq, Show, Ord, Serializable)
 
 data AppPaymentRequest_ExpireResult = AppPaymentRequest_ExpireResult with
-  terminatedAppPayment : ContractId TerminatedAppPayment
+    terminatedAppPayment : ContractId TerminatedAppPayment
+  deriving (Serializable)
 
 data AppPaymentRequest_AcceptResult = AppPaymentRequest_AcceptResult with
-  acceptedPayment : ContractId AcceptedAppPayment
-  senderChangeAmulet : Optional (ContractId Amulet)
+    acceptedPayment : ContractId AcceptedAppPayment
+    senderChangeAmulet : Optional (ContractId Amulet)
+  deriving (Serializable)
 
 data AppPaymentRequest_WithdrawResult = AppPaymentRequest_WithdrawResult with
-  terminatedAppPayment : ContractId TerminatedAppPayment
+    terminatedAppPayment : ContractId TerminatedAppPayment
+  deriving (Serializable)
 
 data AppPaymentRequest_RejectResult = AppPaymentRequest_RejectResult with
-  terminatedAppPayment : ContractId TerminatedAppPayment
+    terminatedAppPayment : ContractId TerminatedAppPayment
+  deriving (Serializable)
 
 data AcceptedAppPayment_RejectResult = AcceptedAppPayment_RejectResult with
-  amulet : AmuletCreateSummary (ContractId Amulet)
+    amulet : AmuletCreateSummary (ContractId Amulet)
+  deriving (Serializable)
 
 data AcceptedAppPayment_ExpireResult = AcceptedAppPayment_ExpireResult with
-  amulet : AmuletCreateSummary (ContractId Amulet)
+    amulet : AmuletCreateSummary (ContractId Amulet)
+  deriving (Serializable)
 
 data PaymentAmount = PaymentAmount
   with
     amount : Decimal
     unit : Unit
-  deriving (Eq, Show, Ord)
+  deriving (Eq, Show, Ord, Serializable)
 
 data ReceiverAmount = ReceiverAmount
  with
    receiver : Party
    amount : PaymentAmount
- deriving (Show, Eq, Ord)
+ deriving (Show, Eq, Ord, Serializable)
 
 data ReceiverAmuletAmount = ReceiverAmuletAmount
  with
    receiver : Party
    amuletAmount : Decimal
- deriving (Show, Eq, Ord)
+ deriving (Show, Eq, Ord, Serializable)
 
 paymentAmountToAmulet : Party -> OpenMiningRound -> PaymentAmount -> Update Decimal
 paymentAmountToAmulet dso openMiningRound pq =
@@ -182,7 +188,7 @@ template TerminatedAppPayment
     signatory sender, provider, receivers
 
 data ReceiverAmulet = ReceiverAmulet with receiver : Party, lockedAmulet : ContractId LockedAmulet
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 unzipReceiverAmulets : [ReceiverAmulet] -> ([Party], [ContractId LockedAmulet])
 unzipReceiverAmulets = foldr (\ReceiverAmulet{..} (rs,cs) -> (receiver :: rs, lockedAmulet :: cs)) ([], [])
@@ -200,6 +206,7 @@ mkReceiverOutput receiverAmount =
 
 data AcceptedAppPayment_CollectResult = AcceptedAppPayment_CollectResult with
   receiverAmulets: [(Party, ContractId Amulet)]
+    deriving (Serializable)
 
 template AcceptedAppPayment
   with

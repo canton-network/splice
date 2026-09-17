@@ -17,44 +17,52 @@ data AnsRules_RequestEntryResult = AnsRules_RequestEntryResult
   with
     entryCid : ContractId AnsEntryContext
     requestCid : ContractId SubscriptionRequest
+  deriving (Serializable)
 
 data AnsRules_CollectInitialEntryPaymentResult = AnsRules_CollectInitialEntryPaymentResult
   with
     entryCid : ContractId AnsEntry
     subscriptionStateCid : ContractId SubscriptionIdleState
+  deriving (Serializable)
 
 data AnsEntryContext_CollectInitialEntryPaymentResult = AnsEntryContext_CollectInitialEntryPaymentResult
   with
     entryCid : ContractId AnsEntry
     subscriptionStateCid : ContractId SubscriptionIdleState
+  deriving (Serializable)
 
 data AnsRules_CollectEntryRenewalPaymentResult = AnsRules_CollectEntryRenewalPaymentResult
   with
     entryCid : ContractId AnsEntry
     subscriptionStateCid : ContractId SubscriptionIdleState
+  deriving (Serializable)
 
 data AnsRules_RejectEntryInitialPaymentResult = AnsRules_RejectEntryInitialPaymentResult
   with
     amuletSum : AmuletCreateSummary (ContractId Amulet)
+  deriving (Serializable)
 
 data AnsEntryContext_CollectEntryRenewalPaymentResult = AnsEntryContext_CollectEntryRenewalPaymentResult
   with
     entryCid : ContractId AnsEntry
     subscriptionStateCid : ContractId SubscriptionIdleState
+  deriving (Serializable)
 
 data AnsEntryContext_RejectEntryInitialPaymentResult = AnsEntryContext_RejectEntryInitialPaymentResult
   with
     amuletSum : AmuletCreateSummary (ContractId Amulet)
+  deriving (Serializable)
 
 data AnsEntryContext_TerminateResult = AnsEntryContext_TerminateResult
   with
-
+  deriving (Serializable)
 data AnsEntry_ExpireResult = AnsEntry_ExpireResult
   with
-
+  deriving (Serializable)
 data AnsEntry_RenewResult = AnsEntry_RenewResult
   with
     entryCid : ContractId AnsEntry
+  deriving (Serializable)
 
 -- | The rules governing how users can pay to use the Amulet Name service.
 template AnsRules
@@ -174,7 +182,7 @@ data ExpectedPayment = ExpectedPayment
   with
     dso : Party
     sender : Party
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 fetchAndValidateInitialPayment : ContractId SubscriptionInitialPayment -> ExpectedPayment -> Update SubscriptionInitialPayment
 fetchAndValidateInitialPayment cid ExpectedPayment{..} = do
@@ -197,7 +205,7 @@ data ExpectedEntryContext = ExpectedEntryContext
     dso : Party
     user : Party
     reference : ContractId SubscriptionRequest
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 fetchAndValidateEntryContext : ContractId AnsEntryContext -> ExpectedEntryContext -> Update AnsEntryContext
 fetchAndValidateEntryContext cid ExpectedEntryContext{..} = do
@@ -212,7 +220,7 @@ data AnsRulesConfig = AnsRulesConfig with
     entryLifetime : RelTime -- Duration until an entry expires
     entryFee : Decimal -- Fee for each entry
     descriptionPrefix : Text -- Prefix to use for the description of the entry subscription
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 template AnsEntryContext
   with

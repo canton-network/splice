@@ -21,16 +21,23 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dso.decentralizedsync
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRulesConfig
 import org.lfdecentralizedtrust.splice.codegen.java.splice.{cometbft, dso}
 import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
+import org.lfdecentralizedtrust.splice.environment.DarResources
 import org.lfdecentralizedtrust.splice.sv.{LocalSynchronizerNode, SvSynchronizerNode}
 import org.lfdecentralizedtrust.splice.sv.cometbft.CometBftNode
-import org.lfdecentralizedtrust.splice.sv.config.{BeneficiaryConfig, SvScanConfig}
+import org.lfdecentralizedtrust.splice.sv.config.{
+  BeneficiaryConfig,
+  SvScanConfig,
+  SvOnboardingConfig,
+}
 import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.config.{NonNegativeFiniteDuration, PositiveDurationSeconds}
+import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.logging.TracedLogger
 import com.digitalasset.canton.protocol.AcsCommitmentsCatchUpParameters
 import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
+import com.digitalasset.daml.lf.data.Ref.PackageVersion
 
 import java.security.interfaces.{ECPrivateKey, ECPublicKey}
 import java.security.spec.{EncodedKeySpec, PKCS8EncodedKeySpec, X509EncodedKeySpec}
@@ -241,24 +248,37 @@ object SvUtil {
       synchronizerId: SynchronizerId,
       voteCooldownTime: Option[NonNegativeFiniteDuration] = None,
       acsCommitmentReconciliationInterval: PositiveDurationSeconds,
-  ): DsoRulesConfig = new DsoRulesConfig(
-    10, // numUnclaimedRewardsThreshold
-    5, // numMemberTrafficContractsThreshold, arbitrarily set as 5 for now.
-    new RelTime(TimeUnit.HOURS.toMicros(1)), // actionConfirmationTimeout
-    new RelTime(TimeUnit.HOURS.toMicros(1)), // svOnboardingRequestTimeout
-    new RelTime(TimeUnit.HOURS.toMicros(1)), // svOnboardingConfirmedTimeout
-    new RelTime(TimeUnit.HOURS.toMicros(7 * 24)), // voteRequestTimeout
-    new RelTime(TimeUnit.SECONDS.toMicros(70)), // dsoDelegateInactiveTimeout
-    defaultSynchronizerNodeConfigLimits,
-    1024, // maxTextLength
-    defaultDsoDecentralizedSynchronizerConfig(
-      synchronizerId,
-      acsCommitmentReconciliationInterval,
-    ), // decentralizedSynchronizerConfig
-    Optional.empty(), // nextScheduledSynchronizerUpgrade
-    voteCooldownTime.map(t => new RelTime(t.duration.toMicros)).toJava,
-    Optional.empty(), // nextScheduledLogicalSynchronizerUpgrade
-  )
+      switchOverTimes: Option[Map[String, CantonTimestamp]],
+      packageConfig: SvOnboardingConfig.InitialPackageConfig,
+  ): DsoRulesConfig = {
+    // This runs too early to do a proper topology version check so just check the config here.
+    val supportsSwitchoverTimes = PackageVersion.assertFromString(
+      packageConfig.dsoGovernanceVersion
+    ) >= DarResources.dsoGovernance_0_1_29.metadata.version
+    new DsoRulesConfig(
+      10, // numUnclaimedRewardsThreshold
+      5, // numMemberTrafficContractsThreshold, arbitrarily set as 5 for now.
+      new RelTime(TimeUnit.HOURS.toMicros(1)), // actionConfirmationTimeout
+      new RelTime(TimeUnit.HOURS.toMicros(1)), // svOnboardingRequestTimeout
+      new RelTime(TimeUnit.HOURS.toMicros(1)), // svOnboardingConfirmedTimeout
+      new RelTime(TimeUnit.HOURS.toMicros(7 * 24)), // voteRequestTimeout
+      new RelTime(TimeUnit.SECONDS.toMicros(70)), // dsoDelegateInactiveTimeout
+      defaultSynchronizerNodeConfigLimits,
+      1024, // maxTextLength
+      defaultDsoDecentralizedSynchronizerConfig(
+        synchronizerId,
+        acsCommitmentReconciliationInterval,
+      ), // decentralizedSynchronizerConfig
+      Optional.empty(), // nextScheduledSynchronizerUpgrade
+      voteCooldownTime.map(t => new RelTime(t.duration.toMicros)).toJava,
+      Optional.empty(), // nextScheduledLogicalSynchronizerUpgrade
+      // We silently drop all switchover values when switchover is not supported as making it an error doesn't work well with setting it as the default.
+      switchOverTimes
+        .map(_.view.mapValues(_.toInstant).toMap.asJava)
+        .filter(_ => supportsSwitchoverTimes)
+        .toJava,
+    )
+  }
 
   def keyPairMatches(
       publicKeyBase64: String,

@@ -362,7 +362,7 @@ class SvOnboardingAddlIntegrationTest
               amount = amuletAmount,
             ),
             _.errorMessage should (include(
-              s"INVALID_ARGUMENT/An error occurred. Please contact the operator and inquire about the request"
+              s"FAILED_PRECONDITION/DECENTRALIZED_PARTY_CANNOT_SUBMIT"
             ) or include(
               s"NO_SYNCHRONIZER_ON_WHICH_ALL_SUBMITTERS_CAN_SUBMIT"
             )),

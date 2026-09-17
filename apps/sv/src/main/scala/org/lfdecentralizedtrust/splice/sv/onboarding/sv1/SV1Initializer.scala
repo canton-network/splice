@@ -313,7 +313,7 @@ class SV1Initializer(
         },
         logger,
       )
-      dsoAutomation = newSvDsoAutomationService(
+      dsoAutomation <- newSvDsoAutomationService(
         svStore,
         dsoStore,
         synchronizerNodeService,
@@ -641,6 +641,8 @@ class SV1Initializer(
         synchronizerId,
         sv1Config.voteCooldownTime,
         sv1Config.acsCommitmentReconciliationInterval,
+        sv1Config.initialSvOperationsSwitchOverTimes,
+        sv1Config.initialPackageConfig,
       )
       for {
         (participantId, trafficStateForAllMembers, amuletRules, dsoRules) <- (

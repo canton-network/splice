@@ -14,6 +14,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amuletrules.transferi
   InputAppRewardCoupon,
   InputDevelopmentFundCoupon,
   InputRewardCouponV2,
+  InputSvRewardCoupon,
   InputUnclaimedActivityRecord,
   InputValidatorLivenessActivityRecord,
   InputValidatorRewardCoupon,
@@ -23,6 +24,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   Amulet,
   DevelopmentFundCoupon,
   RewardCouponV2,
+  SvRewardCoupon,
   UnclaimedActivityRecord,
   ValidatorRewardCoupon,
   ValidatorRight,
@@ -53,6 +55,7 @@ import org.lfdecentralizedtrust.splice.util.{
 }
 import org.lfdecentralizedtrust.splice.wallet.config.RewardSharingConfig
 import org.lfdecentralizedtrust.splice.wallet.store.ExternalPartyWalletStore
+import org.lfdecentralizedtrust.splice.wallet.util.DevelopmentFundCouponUtil
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.util.ShowUtil.*
 import org.lfdecentralizedtrust.splice.util.PrettyInstances.*
@@ -322,6 +325,10 @@ class MintingDelegationCollectRewardsTrigger(
         RewardCouponV2.ContractId,
         RewardCouponV2,
       ]],
+      svRewardCoupons: Seq[Contract[
+        SvRewardCoupon.ContractId,
+        SvRewardCoupon,
+      ]],
   ) extends PrettyPrinting {
     def hasRewards: Boolean =
       livenessActivityRecords.nonEmpty ||
@@ -329,7 +336,8 @@ class MintingDelegationCollectRewardsTrigger(
         appRewardCoupons.nonEmpty ||
         rewardCouponsV2.nonEmpty ||
         unclaimedActivityRecords.nonEmpty ||
-        developmentFundCoupons.nonEmpty
+        developmentFundCoupons.nonEmpty ||
+        svRewardCoupons.nonEmpty
 
     override def pretty: Pretty[this.type] = prettyOfClass(
       param("livenessActivityRecords", _.livenessActivityRecords.size),
@@ -338,6 +346,7 @@ class MintingDelegationCollectRewardsTrigger(
       param("rewardCouponsV2", _.rewardCouponsV2.size),
       param("unclaimedActivityRecords", _.unclaimedActivityRecords.size),
       param("developmentFundCoupons", _.developmentFundCoupons.size),
+      param("svRewardCoupons", _.svRewardCoupons.size),
     )
   }
 
@@ -360,15 +369,20 @@ class MintingDelegationCollectRewardsTrigger(
         includeAssigned = true,
         limit = HardLimit.tryCreate(rewardSharingConfig.batchSize),
       )
+      svRewardCouponsWithQuantity <- store.listSortedSvRewardCoupons(issuingRoundsMap)
       unclaimedActivityRecords <- store.listUnclaimedActivityRecords()
-      developmentFundCoupons <- store.listDevelopmentFundCoupons()
+      allDevelopmentFundCoupons <- store.listDevelopmentFundCoupons()
+      mintableDevelopmentFundCoupons = allDevelopmentFundCoupons.filter(
+        DevelopmentFundCouponUtil.isMintable(_, context.clock.now.toInstant)
+      )
     } yield CouponsData(
       livenessActivityRecordsWithQuantity.map(_._1),
       validatorRewardCoupons,
       appRewardCouponsWithQuantity.map(_._1),
       unclaimedActivityRecords,
-      developmentFundCoupons,
+      mintableDevelopmentFundCoupons,
       rewardCouponsV2.map(_.contract),
+      svRewardCouponsWithQuantity.map(_._1),
     )
   }
 
@@ -411,8 +425,13 @@ class MintingDelegationCollectRewardsTrigger(
       new InputRewardCouponV2(coupon.contractId): TransferInput
     }
 
-    val allInputs = livenessInputs ++ validatorCouponInputs ++ appCouponInputs ++
-      rewardCouponV2Inputs ++ unclaimedActivityRecordInputs ++ developmentFundCouponInputs ++ amuletInputs
+    val svRewardCouponInputs: Seq[TransferInput] = couponsData.svRewardCoupons.map { coupon =>
+      new InputSvRewardCoupon(coupon.contractId): TransferInput
+    }
+
+    val allInputs = livenessInputs ++ validatorCouponInputs ++ svRewardCouponInputs ++
+      appCouponInputs ++ rewardCouponV2Inputs ++ unclaimedActivityRecordInputs ++
+      developmentFundCouponInputs ++ amuletInputs
     allInputs.take(maxNumInputs)
   }
 
@@ -436,7 +455,8 @@ class MintingDelegationCollectRewardsTrigger(
           couponsData.livenessActivityRecords.exists(_.payload.round == r.payload.round) ||
             couponsData.validatorRewardCoupons.exists(_.payload.round == r.payload.round) ||
             couponsData.appRewardCoupons.exists(_.payload.round == r.payload.round) ||
-            couponsData.rewardCouponsV2.exists(_.payload.round == r.payload.round)
+            couponsData.rewardCouponsV2.exists(_.payload.round == r.payload.round) ||
+            couponsData.svRewardCoupons.exists(_.payload.round == r.payload.round)
         )
         .map(r => (r.payload.round, r.contractId))
         .toMap[

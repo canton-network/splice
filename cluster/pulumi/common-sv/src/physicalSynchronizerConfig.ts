@@ -21,7 +21,7 @@ export const SvMediatorConfigSchema = z
     cloudSql: CloudSqlWithOverrideConfigSchema,
     // Mediator is either deployed on cloudSQL or is reset frequently, so we can skip migration
     splicePostgres: SplicePostgresSchema.default({
-      postgresImage: 'postgres:18',
+      postgresImage: 'postgres:18-trixie',
       deployment: 'docker-image',
     }),
     resources: K8sResourceSchema,
@@ -35,7 +35,7 @@ export const SvSequencerConfigSchema = z
     cloudSql: CloudSqlWithOverrideConfigSchema,
     // Sequencer is either deployed on cloudSQL or is reset frequently, so we can skip migration
     splicePostgres: SplicePostgresSchema.default({
-      postgresImage: 'postgres:18',
+      postgresImage: 'postgres:18-trixie',
       deployment: 'docker-image',
     }),
     resources: K8sResourceSchema,

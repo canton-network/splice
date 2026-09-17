@@ -17,11 +17,9 @@ import org.lfdecentralizedtrust.splice.util.{
   ContractWithState,
   TemplateJsonDecoder,
 }
-import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.topology.{ParticipantId, PartyId, SynchronizerId}
 import org.apache.pekko.http.scaladsl.model.{HttpHeader, HttpResponse, StatusCodes}
 
-import java.time.ZoneOffset
 import scala.concurrent.Future
 
 object HttpValidatorAdminAppClient {
@@ -425,79 +423,4 @@ object HttpValidatorAdminAppClient {
       Right(response)
     }
   }
-
-  case class PrepareTransferPreapprovalSend(
-      senderPartyId: PartyId,
-      receiverPartyId: PartyId,
-      amount: BigDecimal,
-      expiresAt: CantonTimestamp,
-      nonce: Long,
-      description: Option[String],
-      verboseHashing: Boolean,
-  ) extends BaseCommand[
-        http.PrepareTransferPreapprovalSendResponse,
-        definitions.PrepareTransferPreapprovalSendResponse,
-      ] {
-
-    override def submitRequest(
-        client: Client,
-        headers: List[HttpHeader],
-    ): EitherT[Future, Either[
-      Throwable,
-      HttpResponse,
-    ], http.PrepareTransferPreapprovalSendResponse] =
-      client.prepareTransferPreapprovalSend(
-        definitions.PrepareTransferPreapprovalSendRequest(
-          senderPartyId.toProtoPrimitive,
-          receiverPartyId.toProtoPrimitive,
-          amount,
-          expiresAt.toInstant.atOffset(ZoneOffset.UTC),
-          nonce,
-          Some(verboseHashing),
-          description = description,
-        ),
-        headers = headers,
-      )
-
-    override protected def handleOk()(implicit
-        decoder: TemplateJsonDecoder
-    ) = { case http.PrepareTransferPreapprovalSendResponse.OK(response) =>
-      Right(response)
-    }
-  }
-
-  case class SubmitTransferPreapprovalSend(
-      senderPartyId: PartyId,
-      transaction: String,
-      signature: String,
-      publicKey: String,
-  ) extends BaseCommand[
-        http.SubmitTransferPreapprovalSendResponse,
-        String,
-      ] {
-
-    override def submitRequest(
-        client: Client,
-        headers: List[HttpHeader],
-    ): EitherT[Future, Either[
-      Throwable,
-      HttpResponse,
-    ], http.SubmitTransferPreapprovalSendResponse] =
-      client.submitTransferPreapprovalSend(
-        definitions.SubmitTransferPreapprovalSendRequest(
-          definitions.ExternalPartySubmission(
-            senderPartyId.toProtoPrimitive,
-            transaction,
-            signature,
-            publicKey,
-          )
-        ),
-        headers = headers,
-      )
-
-    override protected def handleOk()(implicit
-        decoder: TemplateJsonDecoder
-    ) = { case http.SubmitTransferPreapprovalSendResponse.OK(response) => Right(response.updateId) }
-  }
-
 }

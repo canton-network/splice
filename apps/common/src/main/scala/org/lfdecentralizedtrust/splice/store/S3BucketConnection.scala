@@ -117,27 +117,39 @@ class S3BucketConnection(
 
   def getChecksums(
       objectKeys: Seq[String]
-  )(implicit ec: ExecutionContext, as: ActorSystem): Future[Seq[ObjectKeyAndChecksum]] = {
+  )(implicit
+      ec: ExecutionContext,
+      as: ActorSystem,
+      tc: TraceContext,
+  ): Future[Seq[ObjectKeyAndChecksum]] = {
     Source(objectKeys.toList)
       .mapAsync(4) { key => // TODO(#3429): make this parallelism configurable
         readChecksum(key)
-          .map(checksum => ObjectKeyAndChecksum(key, checksum))
+          .map(checksum => checksum.map(ObjectKeyAndChecksum(key, _)))
       }
+      .collect { case Some(obj) => obj }
       .runWith(Sink.seq[ObjectKeyAndChecksum])
   }
 
-  private def readChecksum(key: String)(implicit ec: ExecutionContext): Future[String] = {
+  private def readChecksum(
+      key: String
+  )(implicit ec: ExecutionContext, tc: TraceContext): Future[Option[String]] = {
     val headRequest = HeadObjectRequest
       .builder()
       .bucket(bucketName)
       .key(key)
       .build()
     for {
-      head <- s3Client.headObject(headRequest).asScala
-      checksum = head
-        .metadata()
-        .asScala
-        .getOrElse("splice-checksum", throw new RuntimeException("Missing checksum metadata"))
+      head <- s3Client.headObject(headRequest).asScala.map(Some(_)).recover { case e =>
+        // TODO(#3429): distinguish between "object not found" and other errors, probably want to catch only NoSuchKeyException, and throw everything else
+        logger
+          .debug(s"Failed to read checksum for object $key, object may not exist: ${e.getMessage}")
+        None
+      }
+      checksum = head.map(
+        _.metadata().asScala
+          .getOrElse("splice-checksum", throw new RuntimeException("Missing checksum metadata"))
+      )
     } yield checksum
   }
 
@@ -210,6 +222,14 @@ class S3BucketConnection(
     private val parts = TrieMap.empty[Integer, CompletedPart]
     private val md = MessageDigest.getInstance("SHA-256")
 
+    /** The checksum of the whole object. Computing it via a `lazy val` to support idempotent `finish()` calls.
+      */
+    private lazy val objectChecksum: String = Base64.getEncoder.encodeToString(md.digest())
+
+    /** `lazy val` to ensure that multi-part upload is completed at most once.
+      */
+    private lazy val finishResult: Future[Unit] = doFinish()
+
     /** Call this once before uploading a new part.
       *  The content must already be provided for checksums, but will not be uploaded yet.
       */
@@ -261,7 +281,12 @@ class S3BucketConnection(
       }
     }
 
-    def finish(): Future[Unit] = {
+    /** Completes the multi-part upload and stores the object checksum in the object's metadata.
+      * Idempotent, safe to call more than once (will just return the Future from the first call again).
+      */
+    def finish(): Future[Unit] = finishResult
+
+    private def doFinish(): Future[Unit] = {
       require(numParts.get() > 0)
       require(
         parts.size == numParts.get(),
@@ -285,7 +310,7 @@ class S3BucketConnection(
         _ <- s3Client.completeMultipartUpload(completeRequest).asScala
 
         // Copy-in-place of the object to add the final checksum to its metadata
-        metadata = Map("splice-checksum" -> Base64.getEncoder.encodeToString(md.digest()))
+        metadata = Map("splice-checksum" -> objectChecksum)
 
         copyReq = CopyObjectRequest
           .builder()

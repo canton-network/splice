@@ -12,29 +12,20 @@ async function auth0CacheAndInstallCluster(auth0Fetch: Auth0Fetch) {
 
   installClusterVersion();
 
-  const dso = await installCluster(auth0Fetch);
+  await installCluster(auth0Fetch);
 
   await auth0Fetch.saveAuth0Cache();
-
-  return (await dso?.allSvs)?.map(sv => ({
-    nodeName: sv.nodeName,
-    databaseInstanceName: sv.appsPostgres.databaseId,
-    databaseSecretName: sv.appsPostgres.secretName,
-  }));
 }
 
 async function main() {
   const auth0FetchOutput = getAuth0Config(Auth0ClientType.MAINSTACK);
 
-  const svs = auth0FetchOutput.apply(async auth0Fetch => {
-    const svs = await auth0CacheAndInstallCluster(auth0Fetch);
+  auth0FetchOutput.apply(async auth0Fetch => {
+    await auth0CacheAndInstallCluster(auth0Fetch);
 
     scheduleLoadGenerator(auth0Fetch, []);
-
-    return svs;
   });
-
-  return svs;
 }
 
-export const svs = pulumi.output(main());
+// eslint-disable-next-line @typescript-eslint/no-floating-promises
+main();

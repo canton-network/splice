@@ -33,9 +33,12 @@ scaleAmuletConfig amuletPrice config = AmuletConfig with
   transferPreapprovalFee = fmap (/ amuletPrice) config.transferPreapprovalFee
   featuredAppActivityMarkerAmount = fmap (/ amuletPrice) config.featuredAppActivityMarkerAmount
   optDevelopmentFundManager = config.optDevelopmentFundManager
+  developmentFundManagerBlacklist = config.developmentFundManagerBlacklist
   externalPartyConfigStateTickDuration = config.externalPartyConfigStateTickDuration
   rewardConfig = config.rewardConfig
   transferPreapprovalBaseDuration = config.transferPreapprovalBaseDuration
+  minDevelopmentFundMintingDelay = config.minDevelopmentFundMintingDelay
+  amuletSwitchOverTimes = config.amuletSwitchOverTimes
 
 test : Script ()
 test = script do

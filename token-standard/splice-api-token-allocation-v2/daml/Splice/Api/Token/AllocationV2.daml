@@ -50,7 +50,7 @@ data SettlementInfo = SettlementInfo
       -- representation being only known after transactions have been prepared.
     meta : Metadata
       -- ^ Additional metadata to identify the settlement, used for extensibility.
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 -- | A specification of a transfer of holdings between two parties for the
 -- purpose of a settlement, which often requires the atomic execution of multiple legs.
@@ -67,7 +67,7 @@ data TransferLeg = TransferLeg with
       -- ^ The instrument identifier used by the instrument admin.
     meta : Metadata
       -- ^ Additional metadata about the transfer leg, used for extensibility.
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Serializable)
 
 -- | A side of a transfer.
 data TransferSide
@@ -75,7 +75,7 @@ data TransferSide
     -- ^ The outbound side of a transfer, i.e., the sending of assets.
   | ReceiverSide
     -- ^ The inbound direction, i.e., the receipt of assets.
-  deriving (Show, Ord, Eq)
+  deriving (Show, Ord, Eq, Serializable)
 
 -- | A side of a transfer leg, which is what allocations authorize.
 data TransferLegSide = TransferLegSide with
@@ -93,7 +93,7 @@ data TransferLegSide = TransferLegSide with
       -- ^ The instrument identifier used by the instrument admin.
     meta : Metadata
       -- ^ Additional metadata about the transfer leg, used for extensibility.
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Serializable)
 
 -- | An approval by the authorizer to receive or send assets as part of
 -- settlement.
@@ -136,7 +136,7 @@ data AllocationSpecification = AllocationSpecification with
     meta : Metadata
       -- ^ Additional metadata for the allocation specification, which can be used
       -- to store information about an allocation used in iterated settlement.
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 -- | Actions available on an allocation.
 data AllocationAction
@@ -147,7 +147,7 @@ data AllocationAction
       AA_Custom with
         id : Text
           -- ^ Identifier of the action. Namespaced analogously to metadata keys.
-    deriving (Show, Eq, Ord)
+    deriving (Show, Eq, Ord, Serializable)
 
 -- | View of a contract representing a ready-to-settle allocation.
 data AllocationView = AllocationView with
@@ -196,7 +196,7 @@ data AllocationView = AllocationView with
       -- will require appropriate, registry-specific delegation contracts to be in place.
     meta : Metadata
       -- ^ Additional metadata specific to the allocation, used for extensibility.
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 
 -- Allocation
@@ -215,7 +215,7 @@ data FinalizedAllocation = FinalizedAllocation with
       -- ^ The funding to reserve for the next settlement iteration.
       --
       -- This MUST NOT be set unless iterated settlement was enabled by the allocation's authorizer.
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 -- | A contract representing the approval of the authorizer to send or receive
 -- the net amount of assets of the transfer legs as part of a settlement where
@@ -342,7 +342,7 @@ data AllocationResult = AllocationResult with
       -- keyed by their `instrumentId.id`.
     meta : Metadata
       -- ^ Additional metadata specific to the settlement, used for extensibility.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- | The output of changing the state of an allocation.
 data AllocationResult_Output
@@ -360,7 +360,7 @@ data AllocationResult_Output
       -- ^ The result of the `Allocation_Cancel` choice  when fully authorized.
   | AllocationResult_Withdrawn
       -- ^ The result of the `Allocation_Withdraw` choice when fully authorized.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 
 -- Settlement Factory
@@ -373,7 +373,7 @@ data SettlementFactoryView = SettlementFactoryView with
       -- for which this settlement factory can be used.
     meta : Metadata
       -- ^ Additional metadata specific to the settlement factory, used for extensibility.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- | A settlement factory enables the net settlement of a batch of allocations
 -- for the same instrument admin.
@@ -451,4 +451,4 @@ data SettlementFactory_SettleBatchResult = SettlementFactory_SettleBatchResult w
       -- In the same order as the `allocations` in the choice arguments.
     meta : Metadata
       -- ^ Additional metadata specific to the batch settlement, used for extensibility.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)

@@ -75,6 +75,7 @@ class HttpTokenStandardTransferInstructionHandler(
         choiceContextBuilder <- getAmuletRulesTransferContextV1(
           body.excludeDebugFields.getOrElse(false)
         )
+        dsoRules <- store.getDsoRules()
         result <- buildTransferFactory(
           PartyId.tryFromProtoPrimitive(transferInstr.transfer.sender),
           PartyId.tryFromProtoPrimitive(transferInstr.transfer.receiver),
@@ -92,9 +93,9 @@ class HttpTokenStandardTransferInstructionHandler(
               kind,
               choiceContext = choiceContextBuilder
                 .addOptionalContracts(
-                  "featured-app-right" -> optFeaturedAppRight,
-                  "transfer-preapproval" -> optTransferPreapproval,
+                  "transfer-preapproval" -> optTransferPreapproval
                 )
+                .addFeaturedAppRight(clock, dsoRules.payload, optFeaturedAppRight)
                 .disclose(externalPartyAmuletRules.contract)
                 .build(),
             )
@@ -183,6 +184,7 @@ class HttpTokenStandardTransferInstructionHandler(
         choiceContextBuilder <- getAmuletRulesTransferContextV2(
           body.excludeDebugFields.getOrElse(false)
         )
+        dsoRules <- store.getDsoRules()
         result <- buildTransferFactory(
           PartyId.tryFromProtoPrimitive(
             TokenStandardAccount.tryGetRegularAccountOwner(transferInstr.transfer.sender)
@@ -204,9 +206,9 @@ class HttpTokenStandardTransferInstructionHandler(
               kind,
               choiceContext = choiceContextBuilder
                 .addOptionalContracts(
-                  "featured-app-right" -> optFeaturedAppRight,
-                  "transfer-preapproval" -> optTransferPreapproval,
+                  "transfer-preapproval" -> optTransferPreapproval
                 )
+                .addFeaturedAppRight(clock, dsoRules.payload, optFeaturedAppRight)
                 .disclose(externalPartyAmuletRules.contract)
                 .build(),
             )

@@ -435,7 +435,7 @@ trait AcsSnapshotStoreTest
 
       def queryRecursive(
           store: AcsSnapshotStore,
-          after: Option[Long],
+          after: Option[AcsSnapshotStore.QueryAcsSnapshotPaginationToken],
           acc: Vector[String],
           partyIds: Seq[PartyId],
           templates: Seq[PackageQualifiedName],
@@ -1403,6 +1403,7 @@ trait AcsSnapshotStoreTest
       mkParticipantId(participantId),
       dsoParty,
       backfillingRequired,
+      internedStringStore(storage),
       loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = true,

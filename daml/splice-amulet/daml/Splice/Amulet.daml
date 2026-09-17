@@ -39,12 +39,12 @@ data AmuletExpireSummary = AmuletExpireSummary with
     -- a amulet created in round 3 is treated as a amulet created in round 0 with a higher initial amount.
     changeToHoldingFeesRate : Decimal
       -- ^ The change of total holding fees introduced by a amulet expiry.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 data AmuletExpireV2Summary = AmuletExpireV2Summary
   with
     owner : Party
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- | Result of an operation that created a new amulet, e.g.,
 -- by minting a fresh amulet, or by unlocking a locked amulet.
@@ -52,78 +52,100 @@ data AmuletCreateSummary amuletContractId = AmuletCreateSummary with
     amulet : amuletContractId -- ^ The new amulet that was created
     amuletPrice : Decimal -- ^ The amulet price at the round the amulet was created
     round: Round -- ^ Round for which this amulet was created.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 data Amulet_ExpireResult = Amulet_ExpireResult with
   expireSum : AmuletExpireSummary
   meta : Optional Api.Token.MetadataV1.Metadata
+    deriving (Serializable)
 
 data Amulet_ExpireV2Result = Amulet_ExpireV2Result with
   expireSum : AmuletExpireV2Summary
   meta : Api.Token.MetadataV1.Metadata
+    deriving (Serializable)
 
 data LockedAmulet_UnlockResult = LockedAmulet_UnlockResult with
   amuletSum : AmuletCreateSummary (ContractId Amulet)
   meta : Optional Api.Token.MetadataV1.Metadata
+    deriving (Serializable)
 
 data LockedAmulet_UnlockV2Result = LockedAmulet_UnlockV2Result with
   amuletCid : ContractId Amulet
   meta : Api.Token.MetadataV1.Metadata
+    deriving (Serializable)
 
 data LockedAmulet_OwnerExpireLockResult = LockedAmulet_OwnerExpireLockResult with
   amuletSum : AmuletCreateSummary (ContractId Amulet)
   meta : Optional Api.Token.MetadataV1.Metadata
+    deriving (Serializable)
 
 data LockedAmulet_OwnerExpireLockV2Result = LockedAmulet_OwnerExpireLockV2Result with
   amuletCid : ContractId Amulet
   meta : Api.Token.MetadataV1.Metadata
+    deriving (Serializable)
 
 data LockedAmulet_ExpireAmuletResult = LockedAmulet_ExpireAmuletResult with
   expireSum : AmuletExpireSummary
   meta : Optional Api.Token.MetadataV1.Metadata
+    deriving (Serializable)
 
 data LockedAmulet_ExpireAmuletV2Result = LockedAmulet_ExpireAmuletV2Result with
   expireSum : AmuletExpireV2Summary
   meta : Api.Token.MetadataV1.Metadata
+    deriving (Serializable)
 
 data ValidatorRight_ArchiveAsValidatorResult = ValidatorRight_ArchiveAsValidatorResult
+  deriving (Serializable)
 
 data ValidatorRight_ArchiveAsUserResult = ValidatorRight_ArchiveAsUserResult
+  deriving (Serializable)
 
 data FeaturedAppRight_WithdrawResult = FeaturedAppRight_WithdrawResult
+  deriving (Serializable)
 
 data FeaturedAppRight_UpdateResult = FeaturedAppRight_UpdateResult with
   featuredAppRightCid : ContractId FeaturedAppRight
+    deriving (Serializable)
 
 data FeaturedAppRight_CancelResult = FeaturedAppRight_CancelResult
+  deriving (Serializable)
 
 data AppRewardCoupon_DsoExpireResult = AppRewardCoupon_DsoExpireResult with
   featured : Bool
   amount : Decimal
+    deriving (Serializable)
 
 data ValidatorRewardCoupon_DsoExpireResult = ValidatorRewardCoupon_DsoExpireResult with
   amount : Decimal
+    deriving (Serializable)
 
 data ValidatorRewardCoupon_ArchiveAsValidatorResult = ValidatorRewardCoupon_ArchiveAsValidatorResult with
-
+    deriving (Serializable)
 data SvRewardCoupon_DsoExpireResult = SvRewardCoupon_DsoExpireResult with
   weight: Int
+    deriving (Serializable)
 
 data SvRewardCoupon_ArchiveAsBeneficiaryResult = SvRewardCoupon_ArchiveAsBeneficiaryResult
+  deriving (Serializable)
 
 data UnclaimedActivityRecord_ArchiveAsBeneficiaryResult = UnclaimedActivityRecord_ArchiveAsBeneficiaryResult
+  deriving (Serializable)
 
 data UnclaimedActivityRecord_DsoExpireResult = UnclaimedActivityRecord_DsoExpireResult with
   unclaimedRewardCid : ContractId UnclaimedReward
+    deriving (Serializable)
 
 data DevelopmentFundCoupon_WithdrawResult = DevelopmentFundCoupon_WithdrawResult with
   unclaimedDevelopmentFundCouponCid : ContractId UnclaimedDevelopmentFundCoupon
+    deriving (Serializable)
 
 data DevelopmentFundCoupon_RejectResult = DevelopmentFundCoupon_RejectResult with
   unclaimedDevelopmentFundCouponCid : ContractId UnclaimedDevelopmentFundCoupon
+    deriving (Serializable)
 
 data DevelopmentFundCoupon_DsoExpireResult = DevelopmentFundCoupon_DsoExpireResult with
   unclaimedDevelopmentFundCouponCid : ContractId UnclaimedDevelopmentFundCoupon
+    deriving (Serializable)
 
 -- | A amulet, which can be locked and whose amount expires over time.
 --
@@ -548,8 +570,9 @@ template DevelopmentFundCoupon
     amount : Decimal -- ^ The total amount of `Amulet` to mint on collection.
     expiresAt : Time -- ^ Until when the minting can be completed.
     reason : Text -- ^ Reason for the emission of the coupon.
+    mintAfter : Optional Time -- ^ The time after which the coupon can be minted.
   where
-    ensure amount > 0.0
+    ensure amount > 0.0 && optional True (< expiresAt) mintAfter
 
     signatory dso
 

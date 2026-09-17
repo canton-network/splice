@@ -14,6 +14,7 @@ import org.lfdecentralizedtrust.splice.admin.api.client.DamlGrpcClientMetrics
 import org.lfdecentralizedtrust.splice.automation.TriggerMetrics
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanStoreMetrics
 import org.lfdecentralizedtrust.splice.scan.metrics.{
+  RewardAccountingPruningMetrics,
   RewardComputationMetrics,
   ScanMediatorVerdictIngestionMetrics,
 }
@@ -32,7 +33,7 @@ import org.lfdecentralizedtrust.splice.sv.automation.confirmation.{
 }
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.ProcessRewardsTriggerBase
 import org.lfdecentralizedtrust.splice.validator.metrics.TopologyMetrics
-import org.lfdecentralizedtrust.splice.wallet.metrics.AmuletMetrics
+import org.lfdecentralizedtrust.splice.wallet.metrics.{AmuletMetrics, TreasuryMetrics}
 
 final case class GeneratedMetrics(
     common: List[MetricDoc.Item],
@@ -96,6 +97,7 @@ object MetricsDocs {
     generator.reset()
     // validator
     new AmuletMetrics(walletUserParty, generator)
+    new TreasuryMetrics(walletUserParty, generator, () => 0L)
     val topologyMetrics = new TopologyMetrics(generator)
     // force creation of a gauge for a dummy participant
     val _ = topologyMetrics.getNumPartiesPerParticipantGauge(
@@ -127,6 +129,7 @@ object MetricsDocs {
     )
     new ScanMediatorVerdictIngestionMetrics(generator)
     new RewardComputationMetrics(generator)(MetricsContext.Empty)
+    new RewardAccountingPruningMetrics(generator)(MetricsContext.Empty)
     val scanMetrics = generator.getAll()
     generator.reset()
     GeneratedMetrics(

@@ -3,7 +3,7 @@
 import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
 import {
-  appsAffinityAndTolerations,
+  appsKubernetesScheduling,
   DOCKER_REPO,
   imagePullPolicy,
   jmxOptions,
@@ -178,7 +178,7 @@ export class MultiNodeDeployment extends pulumi.ComponentResource {
                   ],
                 },
               ],
-              ...appsAffinityAndTolerations,
+              ...appsKubernetesScheduling,
             },
           },
         },

@@ -67,6 +67,7 @@ valueFrom:
 {{- $nodeSelector := .nodeSelector }}
 {{- $affinity := .affinity }}
 {{- $tolerations := .tolerations }}
+{{- $priorityClassName := .priorityClassName }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -99,7 +100,7 @@ spec:
           - name: DATA_SOURCE_PASS_FILE
             value: /tmp/pwd
           - name: DATA_SOURCE_USER
-            value: cnadmin
+            value: {{ $persistence.user | default "cnadmin" }}
           - name: DATA_SOURCE_URI
             value: {{ $persistence.host  }}:{{ $persistence.port | default 5432 }}/{{ $.persistence.databaseName }}?sslmode=disable
         command:
@@ -123,10 +124,13 @@ spec:
           - 'bash'
           - '-c'
           - |
-            until errmsg=$(psql -h {{ $persistence.host }} -p {{ $persistence.port }} --username=cnadmin --dbname={{ $persistence.databaseName }} -p {{ $persistence.port | default 5432 }} -c 'select 1' 2>&1); do
+            until errmsg=$(psql -h {{ $persistence.host }} -p {{ $persistence.port }} --username={{ $persistence.user | default "cnadmin" }} --dbname={{ $persistence.databaseName }} -p {{ $persistence.port | default 5432 }} -c 'select 1' 2>&1); do
                 echo "Waiting for database {{ $persistence.databaseName }}, at hostname {{ $persistence.host }}, port {{ $persistence.port | default 5432 }} to be accessible. Last error: $errmsg"
                 sleep 2;
             done
+      {{- with $priorityClassName }}
+      priorityClassName: {{ . | quote }}
+      {{- end }}
       {{- with $nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -191,9 +195,10 @@ spec:
   value: {{ .logAsyncFlush | default true | not | quote }}
 {{- end }}
 {{- define "splice-util-lib.service-account" -}}
-{{- if .serviceAccountName -}}
+automountServiceAccountToken: {{ .automountServiceAccountToken | default false }}
+{{- if .serviceAccountName }}
 serviceAccountName: {{ .serviceAccountName }}
-{{- end -}}
+{{- end }}
 {{- end -}}
 # See https://helm.sh/docs/chart_best_practices/labels/#standard-labels
 {{- define "splice-util-lib.standard-labels" -}}

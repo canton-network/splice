@@ -27,11 +27,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.ans.AnsRules
 import org.lfdecentralizedtrust.splice.config.NetworkAppClientConfig
 import org.lfdecentralizedtrust.splice.environment.SpliceConsoleEnvironment
 import org.lfdecentralizedtrust.splice.http.v0.definitions
-import org.lfdecentralizedtrust.splice.http.v0.definitions.{
-  GetDsoInfoResponse,
-  UpdateHistoryItem,
-  UpdateHistoryItemV2,
-}
+import org.lfdecentralizedtrust.splice.http.v0.definitions.{UpdateHistoryItem, UpdateHistoryItemV2}
 import org.lfdecentralizedtrust.splice.scan.{ScanApp, ScanAppBootstrap}
 import org.lfdecentralizedtrust.splice.store.VoteResultsFilters
 import org.lfdecentralizedtrust.splice.scan.automation.ScanAutomationService
@@ -43,6 +39,7 @@ import org.lfdecentralizedtrust.splice.util.{
   ChoiceContextWithDisclosures,
   Contract,
   ContractWithState,
+  DsoInfo,
   FactoryChoiceWithDisclosures,
   PackageQualifiedName,
   SpliceUtil,
@@ -89,7 +86,7 @@ abstract class ScanAppReference(
       httpCommand(HttpScanAppClient.GetDsoPartyId(List()))
     }
 
-  def getDsoInfo(): GetDsoInfoResponse = {
+  def getDsoInfo(): DsoInfo = {
     consoleEnvironment.run {
       httpCommand(HttpScanAppClient.GetDsoInfo(List()))
     }
@@ -452,6 +449,31 @@ abstract class ScanAppReference(
       )
     }
 
+  def getAcsSnapshotAtV2(
+      at: CantonTimestamp,
+      migrationId: Long,
+      recordTimeMatch: Option[definitions.AcsRequestV2.RecordTimeMatch] = Some(
+        definitions.AcsRequestV2.RecordTimeMatch.Exact
+      ),
+      after: Option[String] = None,
+      pageSize: Int = 100,
+      partyIds: Option[Vector[PartyId]] = None,
+      templates: Option[Vector[PackageQualifiedName]] = None,
+  ) =
+    consoleEnvironment.run {
+      httpCommand(
+        HttpScanAppClient.GetAcsSnapshotAtV2(
+          at.toInstant.atOffset(java.time.ZoneOffset.UTC),
+          migrationId,
+          recordTimeMatch,
+          after,
+          pageSize,
+          partyIds,
+          templates,
+        )
+      )
+    }
+
   def getHoldingsStateAt(
       at: CantonTimestamp,
       migrationId: Long,
@@ -603,6 +625,11 @@ abstract class ScanAppReference(
       )
     }
   }
+
+  def getLatestEventRecordTime(): Option[definitions.EventLatestRecordTimeResponse] =
+    consoleEnvironment.run {
+      httpCommand(HttpScanAppClient.GetLatestEventRecordTime())
+    }
 
   def getEventById(
       updateId: String,

@@ -6,17 +6,25 @@ package org.lfdecentralizedtrust.splice.http
 import com.daml.metrics.api.MetricHandle.LabeledMetricsFactory
 import com.daml.metrics.api.MetricsContext
 import com.digitalasset.canton.logging.TracedLogger
-import org.apache.pekko.http.scaladsl.model.{HttpEntity, RemoteAddress, StatusCodes}
+import org.apache.pekko.http.scaladsl.model.{
+  AttributeKey,
+  ContentTypes,
+  HttpEntity,
+  HttpResponse,
+  RemoteAddress,
+  StatusCodes,
+}
 import org.apache.pekko.http.scaladsl.server.{Directive0, Directive1}
 import org.lfdecentralizedtrust.splice.config.RateLimitersConfig
+import org.lfdecentralizedtrust.splice.http.v0.definitions as d0
 import org.lfdecentralizedtrust.splice.util.{
+  IpCidrRateLimits,
   PerAttributeRateLimiter,
   SpliceRateLimiter,
   SpliceRateLimitMetrics,
 }
 
 import java.net.{Inet6Address, InetAddress}
-import java.time.Instant
 
 class HttpRateLimiter(
     config: RateLimitersConfig,
@@ -33,8 +41,11 @@ class HttpRateLimiter(
     ]()
   private val metrics = scala.collection.concurrent.TrieMap[String, SpliceRateLimitMetrics]()
 
-  private val trustedClientIpHeader: String =
-    config.trustedClientIpHeader.trim
+  private val clientIpHeaders: Seq[String] =
+    config.clientIpHeaders.map(_.trim).filter(_.nonEmpty)
+
+  private val clientIpKey: Directive1[Option[String]] =
+    HttpRateLimiter.extractClientIpKey(clientIpHeaders)
 
   private def metricsFor(service: String): SpliceRateLimitMetrics =
     metrics.getOrElseUpdate(
@@ -46,10 +57,6 @@ class HttpRateLimiter(
       ),
     )
 
-  // the rate limiter has a cold start, to avoid the first request being rejected
-  // we enforce the rate limit only after 1 second
-  private def enforceAfter = Instant.now().plusSeconds(1)
-
   private val globalRateLimiter: (SpliceRateLimiter, PerAttributeRateLimiter) = {
     val globalMetrics = metricsFor(HttpRateLimiter.GlobalService)
     (
@@ -57,16 +64,14 @@ class HttpRateLimiter(
         HttpRateLimiter.GlobalLimiter,
         config.global,
         globalMetrics,
-        enforceAfter,
       ),
       new PerAttributeRateLimiter(
         HttpRateLimiter.GlobalLimiter,
         HttpRateLimiter.ClientIpAttribute,
-        config.global,
         config.global.perClientIp,
         globalMetrics,
-        enforceAfter,
         logger,
+        IpCidrRateLimits.matchClientIp,
       ),
     )
   }
@@ -84,16 +89,14 @@ class HttpRateLimiter(
             operation,
             operationConfig,
             rateLimiterMetrics,
-            enforceAfter,
           ),
           new PerAttributeRateLimiter(
             operation,
             HttpRateLimiter.ClientIpAttribute,
-            operationConfig,
             operationConfig.perClientIp,
             rateLimiterMetrics,
-            enforceAfter,
             logger,
+            IpCidrRateLimits.matchClientIp,
           ),
         )
       },
@@ -102,32 +105,43 @@ class HttpRateLimiter(
   def withRateLimit(service: String)(operation: String): Directive0 = {
     val (globalLimiter, globalClientIpLimiter) = globalRateLimiter
     val (operationLimiter, operationClientIpLimiter) = operationRateLimiter(service, operation)
+    val operationName = s"$service/$operation"
 
     import org.apache.pekko.http.scaladsl.server.Directives.*
 
-    HttpRateLimiter.extractClientIpKey(trustedClientIpHeader).flatMap { clientIp =>
-      // The per client IP limiters are checked first (and `&&` short-circuits) so that a request
-      // rejected because of its own client IP does not consume budget from the shared overall
-      // limiters. Otherwise a single abusive client could exhaust the overall limits and thereby
-      // deny service to all other clients.
-      // Within each of those two groups the narrower per operation limiter is checked before the
-      // global one, so that a request rejected for its operation does not consume global budget.
-      val allowed =
-        operationClientIpLimiter.markRun(clientIp) &&
-          globalClientIpLimiter.markRun(clientIp) &&
-          operationLimiter.markRun() &&
-          globalLimiter.markRun()
-      if (allowed) {
-        pass
-      } else {
-        complete(
-          StatusCodes.TooManyRequests,
-          HttpEntity(
-            "Too Many Requests: Server is busy, please try again later."
-          ),
-        )
+    clientIpKey
+      .flatMap { clientIp =>
+        // The per client IP limiters are checked first (short-circuiting) so that a request
+        // rejected because of its own client IP does not consume budget from the shared overall
+        // limiters. Otherwise a single abusive client could exhaust the overall limits and thereby
+        // deny service to all other clients.
+        // Within each of those two groups the narrower per operation limiter is checked before the
+        // global one, so that a request rejected for its operation does not consume global budget.
+        val rejectedBy =
+          if (!operationClientIpLimiter.markRun(clientIp)) Some(s"per-client-ip $operationName")
+          else if (!globalClientIpLimiter.markRun(clientIp)) Some("per-client-ip global")
+          else if (!operationLimiter.markRun()) Some(operationName)
+          else if (!globalLimiter.markRun()) Some("global")
+          else None
+
+        rejectedBy match {
+          case None => pass
+          case Some(limiter) =>
+            complete(
+              HttpResponse(
+                StatusCodes.TooManyRequests,
+                entity = HttpEntity(
+                  ContentTypes.`application/json`,
+                  d0.ErrorResponse
+                    .encodeErrorResponse(
+                      d0.ErrorResponse(HttpRateLimiter.TooManyRequestsMessage)
+                    )
+                    .toString,
+                ),
+              ).addAttribute(HttpRateLimiter.RejectedByRateLimiter, limiter)
+            )
+        }
       }
-    }
   }
 
   def close(): Unit = metrics.view.values.foreach(_.close())
@@ -135,16 +149,22 @@ class HttpRateLimiter(
 
 object HttpRateLimiter {
 
+  /** Names the rate limiter that rejected a request. Read by HttpRequestLogger. */
+  val RejectedByRateLimiter: AttributeKey[String] = AttributeKey[String]("rejected-by-rate-limiter")
+
+  private[splice] val TooManyRequestsMessage =
+    "Too Many Requests: Server is busy, please try again later."
+
   private val ClientIpAttribute = "client_ip"
 
   private[splice] val GlobalLimiter = "global"
   private[splice] val GlobalService = "global"
 
   private[splice] def extractClientIpKey(
-      trustedClientIpHeader: String = RateLimitersConfig.DefaultTrustedClientIpHeader
+      clientIpHeaders: Seq[String] = RateLimitersConfig.DefaultClientIpHeaders
   ): Directive1[Option[String]] =
     ClientIpDirectives
-      .extractClientIp(trustedClientIpHeader)
+      .extractClientIp(clientIpHeaders)
       .map(_.collect { case RemoteAddress.IP(ip, _) => rateLimitKey(ip) })
 
   /** Single clients are typically assigned a whole IPv6 /64 (or larger) network, so limiting per

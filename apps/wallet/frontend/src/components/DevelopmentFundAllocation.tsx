@@ -30,6 +30,11 @@ const DevelopmentFundAllocation: React.FC = () => {
     setAmount,
     expiresAt,
     setExpiresAt,
+    mintAfter,
+    setMintAfter,
+    minMintAfter,
+    isMintAfterRequired,
+    mintAfterError,
     reason,
     setReason,
     amountNum,
@@ -124,6 +129,26 @@ const DevelopmentFundAllocation: React.FC = () => {
                   }}
                 />
               </Stack>
+
+              <Stack spacing={1} sx={{ flex: 1 }}>
+                <Typography variant="h6">Mint After</Typography>
+                <DesktopDateTimePicker
+                  label={isMintAfterRequired ? 'Mint After' : 'Mint After (optional)'}
+                  value={mintAfter}
+                  onChange={newValue => setMintAfter(newValue)}
+                  minDateTime={minMintAfter ?? undefined}
+                  disabled={disabled}
+                  enableAccessibleFieldDOMStructure={false}
+                  slotProps={{
+                    textField: {
+                      id: 'development-fund-allocation-mint-after',
+                      fullWidth: true,
+                      error: !!mintAfterError,
+                      helperText: mintAfterError,
+                    },
+                  }}
+                />
+              </Stack>
             </Stack>
 
             <Typography variant="h6">Reason</Typography>
@@ -167,6 +192,7 @@ const DevelopmentFundAllocation: React.FC = () => {
                     amount: amountNum,
                     expiresAt: expiresAt.toDate(),
                     reason,
+                    mintAfter: mintAfter?.toDate(),
                   })
                 }
               >

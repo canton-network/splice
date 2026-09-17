@@ -88,7 +88,8 @@ class EventHistorySanityCheckPlugin(
                     .fromJson(exercised.choiceArgument.noSpaces)
                     .newSvParty == otherScan
                     .getDsoInfo()
-                    .svPartyId
+                    .svParty
+                    .toProtoPrimitive
                 case _ => false
               })
           }

@@ -53,6 +53,9 @@
         "serviceAccountName": {
           "type": "string"
         },
+        "automountServiceAccountToken": {
+          "type": "boolean"
+        },
         "imageRepo": {
           "type": "string"
         },
@@ -272,6 +275,9 @@
         },
         "tolerations": {
           "type": "array"
+        },
+        "priorityClassName": {
+          "type": "string"
         },
         "enablePostgresMetrics": {
           "type": "boolean"

@@ -94,7 +94,7 @@ case class EnvironmentDefinition(
       .withMultiSyncFeatureFlag()
       .withTrafficTopupsEnabled
       .withInitialPackageVersions
-      .withProtocolVersion(ProtocolVersion.v35)
+      .withProtocolVersion(ProtocolVersion.v36)
       .withProtocolVersionFromEnv
       .withEagerAppActivityMarkerConversion
 
@@ -503,13 +503,6 @@ case class EnvironmentDefinition(
         )
       )
   }
-
-  def withTransferCommandSupport: EnvironmentDefinition =
-    this.addConfigTransform((_, conf) =>
-      ConfigTransforms.updateAllValidatorAppConfigs_(
-        _.copy(enableDeprecatedTransferCommandSupport = true)
-      )(conf)
-    )
 
   def clearConfigTransforms(): EnvironmentDefinition =
     copy(configTransformsWithContext = _ => Seq())

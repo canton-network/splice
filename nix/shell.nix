@@ -94,6 +94,7 @@ let
     redocly
     ripgrep
     rsync
+    ruff
     sbt
     scala_2_13
     selenium-server-standalone

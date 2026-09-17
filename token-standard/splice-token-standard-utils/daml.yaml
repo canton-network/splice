@@ -23,6 +23,7 @@ data-dependencies:
 - ../splice-api-token-transfer-instruction-v2/.daml/dist/splice-api-token-transfer-instruction-v2-current.dar
 
 build-options:
+  - --explicit-serializable=yes
   - --target=2.1
 
   - --force-utility-package=yes

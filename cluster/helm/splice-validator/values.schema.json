@@ -22,6 +22,9 @@
     "serviceAccountName": {
       "type": "string"
     },
+    "automountServiceAccountToken": {
+      "type": "boolean"
+    },
     "ansWebUi": {
       "type": "object",
       "required": ["imageName"],
@@ -362,6 +365,9 @@
             "secretName": {
               "type": "string"
             },
+            "bootstrapDatabaseName": {
+              "type": "string"
+            },
             "initImageName": {
               "type": "string"
             },
@@ -417,6 +423,9 @@
         },
         "tolerations": {
           "type": "array"
+        },
+        "priorityClassName": {
+          "type": "string"
         },
         "auth": {
           "type": "object",

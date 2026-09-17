@@ -13,7 +13,12 @@ import dayjs from 'dayjs';
 import { GrantRevokeFeaturedAppForm } from '../../../components/forms/GrantRevokeFeaturedAppForm';
 import { server, svUrl } from '../../setup/setup';
 import { http, HttpResponse } from 'msw';
-import { PROPOSAL_SUMMARY_SUBTITLE, PROPOSAL_SUMMARY_TITLE } from '../../../utils/constants';
+import {
+  CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE,
+  CREATE_PROPOSAL_LABEL_PROVIDER_PARTY_ID,
+  PROPOSAL_REVIEW_TITLE,
+  PROPOSAL_SUMMARY_SUBTITLE,
+} from '../../../utils/constants';
 
 describe('SV user can', () => {
   test('login and see the SV party ID', async () => {
@@ -45,7 +50,7 @@ describe('Grant Featured App Form', () => {
     );
 
     expect(screen.getByTestId('grant-featured-app-form')).toBeInTheDocument();
-    expect(screen.getByText('Proposal type')).toBeInTheDocument();
+    expect(screen.getByText(CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE)).toBeInTheDocument();
 
     const actionInput = screen.getByTestId('grant-featured-app-action');
     expect(actionInput).toBeInTheDocument();
@@ -69,7 +74,7 @@ describe('Grant Featured App Form', () => {
 
     const providerInput = screen.getByTestId('grant-featured-app-idValue-title');
     expect(providerInput).toBeInTheDocument();
-    expect(providerInput.textContent).toBe('Provider Party ID');
+    expect(providerInput.textContent).toBe(CREATE_PROPOSAL_LABEL_PROVIDER_PARTY_ID);
 
     expect(screen.getByText('Review Proposal')).toBeInTheDocument();
   });
@@ -212,7 +217,7 @@ describe('Grant Featured App Form', () => {
 
     await user.click(submitButton);
 
-    expect(screen.getByText(PROPOSAL_SUMMARY_TITLE)).toBeInTheDocument();
+    expect(screen.getByText(PROPOSAL_REVIEW_TITLE)).toBeInTheDocument();
   });
 
   test('activity weight is optional and is sent to backend as null when left blank', async () => {
@@ -391,7 +396,7 @@ describe('Revoke Featured App Form', () => {
     );
 
     expect(screen.getByTestId('revoke-featured-app-form')).toBeInTheDocument();
-    expect(screen.getByText('Proposal type')).toBeInTheDocument();
+    expect(screen.getByText(CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE)).toBeInTheDocument();
 
     const actionInput = screen.getByTestId('revoke-featured-app-action');
     expect(actionInput).toBeInTheDocument();
@@ -411,7 +416,7 @@ describe('Revoke Featured App Form', () => {
 
     const partyIdTitle = screen.getByTestId('revoke-featured-app-partyId-title');
     expect(partyIdTitle).toBeInTheDocument();
-    expect(partyIdTitle.textContent).toBe('Provider Party ID');
+    expect(partyIdTitle.textContent).toBe(CREATE_PROPOSAL_LABEL_PROVIDER_PARTY_ID);
 
     const rightCidDropdown = screen.getByTestId('revoke-featured-app-rightCid-dropdown');
     expect(rightCidDropdown).toBeInTheDocument();
@@ -544,7 +549,7 @@ describe('Revoke Featured App Form', () => {
 
     await user.click(submitButton);
 
-    expect(screen.getByText(PROPOSAL_SUMMARY_TITLE)).toBeInTheDocument();
+    expect(screen.getByText(PROPOSAL_REVIEW_TITLE)).toBeInTheDocument();
     expect(screen.getByTestId('revokeProviderPartyId-title').textContent).toBe('Provider Party ID');
     expect(screen.getByTestId('revokeProviderPartyId-field').textContent).toBe(
       'a-party-id::1014912492'

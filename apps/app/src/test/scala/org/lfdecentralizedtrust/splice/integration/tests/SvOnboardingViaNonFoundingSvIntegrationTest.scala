@@ -13,6 +13,7 @@ import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
 import org.lfdecentralizedtrust.splice.config.{ConfigTransforms, NetworkAppClientConfig}
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTestWithIsolatedEnvironment
+import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
 import org.lfdecentralizedtrust.splice.sv.{LocalSynchronizerNode, SvAppClientConfig}
 import org.lfdecentralizedtrust.splice.sv.automation.singlesv.SvBftSequencerPeerOffboardingTrigger
 import org.lfdecentralizedtrust.splice.sv.automation.singlesv.offboarding.SvOffboardingSequencerTrigger
@@ -55,6 +56,17 @@ class SvOnboardingViaNonFoundingSvIntegrationTest
             case node: JoinWithKey => bumpUrl(sv1ToSv2Bump, node.svClient.adminApi.url.toString())
             case _ => throw new IllegalStateException("JoinWithKey configuration not found.")
           }
+        val sv2OnboardingScanClientUrl =
+          configuration
+            .svApps(InstanceName.tryCreate("sv2"))
+            .onboarding
+            .getOrElse(
+              throw new IllegalStateException("Onboarding configuration not found.")
+            ) match {
+            case node: JoinWithKey =>
+              bumpUrl(sv1ToSv2Bump, node.scanClient.adminApi.url.toString())
+            case _ => throw new IllegalStateException("JoinWithKey configuration not found.")
+          }
         val sv2BootstrapSequencerUrl =
           configuration
             .svApps(InstanceName.tryCreate("sv2"))
@@ -76,6 +88,8 @@ class SvOnboardingViaNonFoundingSvIntegrationTest
                       SvAppClientConfig(NetworkAppClientConfig(sv2OnboardingSvClientUrl)),
                       node.publicKey,
                       node.privateKey,
+                      // fetch DSO info via the sponsor's (sv2's) scan
+                      ScanAppClientConfig(NetworkAppClientConfig(sv2OnboardingScanClientUrl)),
                     )
                   )
                 case _ => throw new IllegalStateException("JoinWithKey configuration not found.")

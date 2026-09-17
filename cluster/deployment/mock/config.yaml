@@ -13,6 +13,8 @@ validator1:
     additionalEnvVars:
       - name: ADDITIONAL_CONFIG_VALIDATOR1_DUMMY_NAME
         value: ADDITIONAL_CONFIG_VALIDATOR1_DUMMY_NAME
+  walletGateway:
+    enabled: true
 multiValidator:
   postgresPvcSize: '100Gi'
   # Dummy values for testing
@@ -40,16 +42,14 @@ sv:
     skipInitialization: true
   scan:
     externalRateLimits:
-      rateLimits:
-        /registry/metadata/v1/info:
-          perIpLimits:
-            overrides:
-              test:
-                ips:
-                  - 192.68.78.50
-                maxTokens: 250
-                tokensPerFill: 250
-                fillInterval: 60s
+      globalPerIpLimits:
+        overrides:
+          test:
+            ips:
+              - 192.68.78.50
+            maxTokens: 250
+            tokensPerFill: 250
+            fillInterval: 60s
 splitwell:
   maxDarVersion: '0.1.8'
   participantPruningSchedule:
@@ -57,7 +57,6 @@ splitwell:
     maxDuration: "5m"
     retention: "30d"
 synchronizerMigration:
-  splitSvDeploymentEnabled: true
   frozenMigrationId: 2
   archived:
     - id: 5
@@ -143,6 +142,7 @@ pulumiProjectConfig:
 monitoring:
   alerting:
     enableNoDataAlerts: true
+    enableExtraHighPrioAlerts: true
     alerts:
       cloudSql:
         maintenance: true
@@ -279,6 +279,8 @@ svs:
       cantonLogLevel: INFO
       apiRequestLogLevel: DEBUG
 infra:
+  gkeGateway:
+    proxyForIstioHttp: true
   ipWhitelisting:
     extraWhitelistedIngress:
       - 1.2.3.4/32
@@ -310,6 +312,7 @@ infra:
         key: value
         anotherKey: anotherValue
   istio:
+    enableGeneralIpWhitelist: false
     istiodValues: # example istiod overrides
       global:
         proxy:
@@ -446,6 +449,7 @@ validators:
       parallelism: 321
       preapprovalRetries: 9876
       preapprovalRetryDelayMs: 42
+      version: '1.2.3'
     participantPruningSchedule:
       cron: "0 /10 * * * ?" # Run every 10min
       maxDuration: "5m"
@@ -468,3 +472,8 @@ validators:
   extra-validator:
     namespace: validator
     partyHint: 'extra-validator'
+    walletGateway: !include(../../configs/shared/wallet_gateway.yaml) {}
+cloudArmor:
+  enabled: true
+  logging:
+    enabled: true

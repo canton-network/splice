@@ -130,6 +130,16 @@ replaceDevelopmentFundConfig app baseConfig optDevelopmentFundManager optDevelop
       initialValue = baseConfig.issuanceCurve.initialValue with
         optDevelopmentFundPercentage
 
+setDevelopmentFundManagerBlacklist : AmuletApp -> [Party] -> Script ()
+setDevelopmentFundManagerBlacklist app fundManagerBlacklist =
+  updateAmuletConfig app $ \config -> config with
+    developmentFundManagerBlacklist = Some fundManagerBlacklist
+
+setMinDevelopmentFundMintingDelay : AmuletApp -> RelTime -> Script ()
+setMinDevelopmentFundMintingDelay app delay =
+  updateAmuletConfig app $ \config -> config with
+    minDevelopmentFundMintingDelay = Some delay
+
 
 -- AmuletApp users
 --------------
@@ -711,8 +721,8 @@ updateAmuletConfig app f = do
 
 allocateDevelopmentFundCoupon
   : AmuletApp -> Party -> Party -> Decimal -> Time -> Text -> [ContractId UnclaimedDevelopmentFundCoupon]
-  -> Script AmuletRules_AllocateDevelopmentFundCouponResult
-allocateDevelopmentFundCoupon app fundManager beneficiary amount expiresAt reason unclaimedDevelopmentFundCouponCids = do
+  -> Optional Time -> Script AmuletRules_AllocateDevelopmentFundCouponResult
+allocateDevelopmentFundCoupon app fundManager beneficiary amount expiresAt reason unclaimedDevelopmentFundCouponCids mintAfter = do
   submitExerciseAmuletRulesByKey app [fundManager] [] AmuletRules_AllocateDevelopmentFundCoupon with
     unclaimedDevelopmentFundCouponCids
     beneficiary
@@ -720,6 +730,7 @@ allocateDevelopmentFundCoupon app fundManager beneficiary amount expiresAt reaso
     expiresAt
     reason
     fundManager
+    mintAfter
 
 -- Metadata verification
 ------------------------

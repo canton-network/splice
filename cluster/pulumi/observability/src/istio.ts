@@ -3,6 +3,7 @@
 import * as pulumi from '@pulumi/pulumi';
 import { ExactNamespace } from '@canton-network/splice-pulumi-common';
 import { PodMonitor, ServiceMonitor } from '@canton-network/splice-pulumi-common/src/metrics';
+import { rateLimiterMetricRelabelings } from '@canton-network/splice-pulumi-common/src/ratelimit';
 
 export function istioMonitoring(
   ingressNs: ExactNamespace,
@@ -42,6 +43,9 @@ export function istioMonitoring(
               regex: '(istio_.*' + '|envoy_.*http_local_rate_limit_.*)',
               action: 'keep',
             },
+            // one local rate limit filter per limit is installed on the apps, each of them with
+            // its own stat prefix; merge them into a single metric labeled by limiter
+            ...rateLimiterMetricRelabelings,
             // drop instance label, we have the pod name
             {
               action: 'labeldrop',

@@ -1,5 +1,6 @@
 joinWithKeyOnboarding:
   sponsorApiUrl: "https://sv.sv-2.TARGET_HOSTNAME"
+  sponsorScanUrl: "https://scan.sv-2.TARGET_HOSTNAME"
 
 # Replace YOUR_SV_NAME with the name you provided for your SV identity
 onboardingName: YOUR_SV_NAME

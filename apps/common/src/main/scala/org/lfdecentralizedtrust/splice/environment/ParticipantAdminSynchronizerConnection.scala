@@ -12,6 +12,7 @@ import com.digitalasset.canton.admin.api.client.data.{
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.admin.api.client.data
+import com.digitalasset.canton.logging.pretty.Pretty
 import com.digitalasset.canton.participant.synchronizer.SynchronizerConnectionConfig
 import com.digitalasset.canton.sequencing.SequencerConnectionValidation
 import com.digitalasset.canton.topology.{PhysicalSynchronizerId, SynchronizerId}
@@ -160,6 +161,9 @@ trait ParticipantAdminSynchronizerConnection {
   ): Future[Unit] =
     runCmd(ParticipantAdminCommands.SynchronizerConnectivity.DisconnectSynchronizer(alias))
 
+  private implicit val prettyRegisteredSynchronizer: Pretty[RegisteredSynchronizer] =
+    Pretty.adHocPrettyInstance
+
   def ensureSynchronizerRegisteredWithManualConnect(
       config: SynchronizerConnectionConfig,
       retryFor: RetryFor,
@@ -169,15 +173,14 @@ trait ParticipantAdminSynchronizerConnection {
       "manualConnect must be true when trying to register only",
     )
     retryProvider
-      .ensureThat(
+      .ensureThatO(
         retryFor,
         "synchronizer_registered_no_handshake",
         s"participant registered ${config.synchronizerAlias}",
-        isSynchronizerRegistered(config.synchronizerAlias).map(Either.cond(_, (), ())),
-        (_: Unit) => registerSynchronizer(config),
+        listSynchronizerConnectionConfig(config.synchronizerAlias).map(_.headOption),
+        registerSynchronizer(config),
         logger,
       )
-      .flatMap(_ => getRegisteredSynchronizer(config.synchronizerAlias))
   }
 
   def ensureSynchronizerRegisteredAndConnected(

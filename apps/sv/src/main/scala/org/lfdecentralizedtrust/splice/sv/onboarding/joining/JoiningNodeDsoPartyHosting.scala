@@ -180,7 +180,7 @@ class JoiningNodeDsoPartyHosting(
       onboardingConfig: Option[SvOnboardingConfig]
   ): Option[SvAppClientConfig] =
     onboardingConfig match {
-      case Some(SvOnboardingConfig.JoinWithKey(_, sponsorSv, _, _)) =>
+      case Some(SvOnboardingConfig.JoinWithKey(_, sponsorSv, _, _, _)) =>
         Some(sponsorSv)
       case _ => None
     }

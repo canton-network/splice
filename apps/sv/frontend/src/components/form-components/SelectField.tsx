@@ -11,10 +11,11 @@ import {
   SelectChangeEvent,
   Typography,
 } from '@mui/material';
+import { CREATE_PROPOSAL_FIELD_LABEL_SX } from '../../constants/createProposalLayout';
 import type { FormEvent } from 'react';
 import { useFieldContext } from '../../hooks/formContext';
 import { scrollableSelectFieldSx } from '../beta/identifierStyles';
-import { fieldSectionSx, fieldSectionTitleSx, selectFieldSx } from '../../themes/fieldStyles';
+import { selectFieldSx } from '../../themes/fieldStyles';
 
 export type Option = { key: string; value: string };
 export interface SelectFieldProps {
@@ -36,12 +37,16 @@ export const SelectField: React.FC<SelectFieldProps> = props => {
     externalOnChange();
   };
 
-  const showPlaceholder = !!placeholder && !field.state.value;
-  const isError = !field.state.meta.isValid && !showPlaceholder;
+  const article = /^[aeiou]/i.test(title) ? 'an' : 'a';
+  const resolvedPlaceholder = placeholder ?? `Select ${article} ${title.toLowerCase()}`;
+  const showPlaceholder = !field.state.value;
+  const isError = !field.state.meta.isValid && !(placeholder && showPlaceholder);
 
   return (
-    <Box sx={fieldSectionSx} data-testid={`${id}-select-component`}>
-      <Typography sx={fieldSectionTitleSx}>{title}</Typography>
+    <Box data-testid={`${id}-select-component`}>
+      <Typography component="p" sx={{ ...CREATE_PROPOSAL_FIELD_LABEL_SX, mb: 1 }}>
+        {title}
+      </Typography>
 
       <FormControl
         variant="outlined"
@@ -57,7 +62,7 @@ export const SelectField: React.FC<SelectFieldProps> = props => {
             if (!selected) {
               return showPlaceholder ? (
                 <Typography component="span" color="text.secondary">
-                  {placeholder}
+                  {resolvedPlaceholder}
                 </Typography>
               ) : (
                 ''

@@ -31,7 +31,7 @@ jobs:
       - name: Setup Nix
         uses: ./.github/actions/tests/common_test_setup
         with:
-          cache_version: 9
+          cache_version: 10
           test_name: canton_consistency
           target: 'static_tests'
 
@@ -87,7 +87,7 @@ jobs:
         id: setup
         uses: ./.github/actions/tests/common_test_setup
         with:
-          cache_version: 9
+          cache_version: 10
           test_name: static_tests
           target: 'static_tests'
 

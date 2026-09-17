@@ -25,6 +25,7 @@ abstract class SpliceBackendConfig extends LocalNodeConfig {
 
   def participantClient: BaseParticipantClientConfig
   def automation: AutomationConfig
+  def parameters: SpliceParametersConfig
 
 }
 
@@ -94,6 +95,7 @@ final case class EnabledFeaturesConfig(
     enableValidatorDarsUnvetting: Boolean = true,
     ignorePartyIdWithIgnoredAmulet: Boolean = true,
     naiveUnresponsivePartiesAutoIgnore: Boolean = true,
+    enablePersistedUnavailableParties: Boolean = false,
 )
 
 final case class SpliceCachingConfigs(

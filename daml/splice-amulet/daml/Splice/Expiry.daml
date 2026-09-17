@@ -35,7 +35,7 @@ data BoundedSet a
   = Singleton a     -- ^ `Singleton x` represents the singleton set `{x}`
   | AfterMaxBound
     -- ^ `AfterMaxBound` represents the set of all values larger than the maximal value that can be represented by type `a`
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- Note: be careful when using this instance: `fmap (- 100) AfterMaxBound` will return
 -- `AfterMaxBound`, but should actually return an error.
@@ -135,7 +135,7 @@ data TimeLock = TimeLock with
       -- Intended for wallets to inform the user about the reason for the lock.
       -- Consider what details to share about the context, as that might be private and
       -- the string here will be public information.
-  deriving (Eq, Show, Ord)
+  deriving (Eq, Show, Ord, Serializable)
 
 -- | `isAmuletExpired openRound amuletAmount` computes whether the expiring `amuletAmount`
 -- is definitely expired in case the `openRound` is open.

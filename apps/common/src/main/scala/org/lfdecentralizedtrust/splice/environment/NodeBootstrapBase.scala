@@ -7,7 +7,7 @@ import cats.data.EitherT
 import com.daml.nameof.NameOf.functionFullName
 import org.lfdecentralizedtrust.splice.SpliceMetrics
 import com.digitalasset.canton.concurrent.ExecutionContextIdlenessExecutorService
-import com.digitalasset.canton.config.{LocalNodeConfig, ProcessingTimeout}
+import com.digitalasset.canton.config.ProcessingTimeout
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.crypto.Crypto
 import com.digitalasset.canton.environment.{CantonNode, CantonNodeBootstrap, CantonNodeParameters}
@@ -26,6 +26,7 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 import scala.concurrent.{blocking, Future}
 import scala.util.{Failure, Success}
 import org.lfdecentralizedtrust.splice.admin.http.{AdminRoutes, HttpAdminService}
+import org.lfdecentralizedtrust.splice.config.SpliceBackendConfig
 
 /** Modelled after CantonNodeBootstrap
   */
@@ -66,7 +67,7 @@ trait NodeBootstrap[+N <: CantonNode]
   */
 abstract class NodeBootstrapBase[
     T <: CantonNode,
-    NodeConfig <: LocalNodeConfig,
+    NodeConfig <: SpliceBackendConfig,
     ParameterConfig <: CantonNodeParameters,
 ](
     nodeConfig: NodeConfig,
@@ -109,6 +110,7 @@ abstract class NodeBootstrapBase[
       nodeConfig.adminApi,
       parameterConfig,
       parameterConfig.loggingConfig.api,
+      nodeConfig.parameters.rateLimiting.clientIpHeaders,
       loggerFactory,
       getNode,
     )

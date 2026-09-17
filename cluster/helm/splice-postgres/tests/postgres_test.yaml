@@ -111,7 +111,7 @@ tests:
           value: test-postgres
       - equal:
           path: spec.template.spec.containers[0].image
-          value: postgres:14
+          value: postgres:14.24-trixie
       - equal:
           path: spec.template.spec.containers[0].imagePullPolicy
           value: IfNotPresent

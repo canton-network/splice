@@ -44,7 +44,10 @@ import {
   CnChartVersion,
 } from '@canton-network/splice-pulumi-common';
 import { installLoopback } from '@canton-network/splice-pulumi-common-sv';
-import { installParticipant } from '@canton-network/splice-pulumi-common-validator';
+import {
+  installParticipant,
+  installWalletGateway,
+} from '@canton-network/splice-pulumi-common-validator';
 import {
   installPasswordWithParent,
   SplicePostgres,
@@ -125,6 +128,9 @@ export async function installNode(auth0Client: Auth0Client): Promise<void> {
         nameServiceDomain: ansDomainPrefix,
       },
       withSvIngress: false,
+      ingress: {
+        walletGateway: validatorConfig.walletGateway.enabled,
+      },
     },
     validatorVersion,
     { dependsOn: ingressImagePullDeps.concat([validator]) }
@@ -320,6 +326,17 @@ async function installValidator(
   );
   if (validatorConfig?.partyAllocator.enable) {
     installPartyAllocator(xns, validatorConfig.partyAllocator, [validatorChart]);
+  }
+  if (validatorConfig.walletGateway.enabled) {
+    await installWalletGateway(
+      auth0Client,
+      xns,
+      validatorConfig.walletGateway,
+      participantAddress,
+      postgres,
+      validatorConfig.logging.level,
+      [validatorChart]
+    );
   }
   return validatorChart;
 }

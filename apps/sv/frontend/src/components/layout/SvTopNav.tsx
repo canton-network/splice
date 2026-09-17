@@ -7,7 +7,6 @@ import { Box, Stack, Typography } from '@mui/material';
 import {
   BRAND_TITLE,
   layoutTokens,
-  NAV_BRAND_GAP,
   NAV_GAP,
   NAV_PILL_PX,
   NAV_ROW_MIN_HEIGHT,
@@ -21,19 +20,20 @@ interface SvTopNavProps {
 }
 
 /**
- * Figma nav row (Frame11): brand pinned left, a fixed 145px gap (`NAV_BRAND_GAP`)
- * to the nav cluster, then a flexible spacer that pushes logout to the pinned
- * right edge. The fixed left gap matches the Dev Mode measurement exactly; the
- * flexible right gap lets logout track the row's right edge at any viewport width.
+ * Nav row: brand (left, intrinsic width) · flex spacer · nav cluster ·
+ * flex spacer · logout (right, intrinsic width). Equal spacers center the pills
+ * in the gap between brand and logout — not in the full viewport.
  */
 const SvTopNav: React.FC<SvTopNavProps> = ({ navLinks, onLogout }) => (
-  <Stack
-    direction="row"
-    alignItems="center"
-    flexWrap="wrap"
+  <Box
+    data-testid="sv-top-nav"
     sx={{
+      display: 'flex',
+      flexWrap: 'wrap',
       width: '100%',
       minHeight: NAV_ROW_MIN_HEIGHT,
+      alignItems: 'center',
+      columnGap: 0,
       rowGap: NAV_GAP,
     }}
   >
@@ -61,23 +61,60 @@ const SvTopNav: React.FC<SvTopNavProps> = ({ navLinks, onLogout }) => (
       </Typography>
     </Box>
 
-    <Box sx={{ width: NAV_BRAND_GAP, flexShrink: 0 }} />
+    <Box
+      aria-hidden
+      data-testid="sv-top-nav-spacer-start"
+      sx={{
+        flex: '1 1 0',
+        minWidth: 16,
+        // On narrow rows, drop side spacers so the nav can sit on its own centered row.
+        '@media (max-width: 1400px)': { display: 'none' },
+      }}
+    />
 
     <Stack
       direction="row"
       flexWrap="wrap"
       alignItems="center"
-      sx={{ gap: NAV_GAP, rowGap: NAV_GAP }}
+      justifyContent="center"
+      data-testid="sv-top-nav-links"
+      sx={{
+        flexShrink: 0,
+        gap: NAV_GAP,
+        rowGap: NAV_GAP,
+        minWidth: 0,
+        '@media (max-width: 1400px)': {
+          flex: '1 1 100%',
+          order: 3,
+        },
+      }}
     >
       {navLinks.map(link => (
         <SvNavLink key={link.path} link={link} />
       ))}
     </Stack>
 
-    <Box sx={{ flexGrow: 1, minWidth: 16 }} />
+    <Box
+      aria-hidden
+      data-testid="sv-top-nav-spacer-end"
+      sx={{
+        flex: '1 1 0',
+        minWidth: 16,
+        '@media (max-width: 1400px)': { display: 'none' },
+      }}
+    />
 
-    <LogoutButton onLogout={onLogout} />
-  </Stack>
+    <Box
+      sx={{
+        flexShrink: 0,
+        '@media (max-width: 1400px)': {
+          marginLeft: 'auto',
+        },
+      }}
+    >
+      <LogoutButton onLogout={onLogout} />
+    </Box>
+  </Box>
 );
 
 export default SvTopNav;

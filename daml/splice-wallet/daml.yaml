@@ -1,7 +1,7 @@
 sdk-version: 3.5.2
 name: splice-wallet
 source: daml
-version: 0.1.23
+version: 0.1.24
 dependencies:
   - daml-prim
   - daml-stdlib
@@ -21,6 +21,7 @@ data-dependencies:
 - ../splice-util/.daml/dist/splice-util-current.dar
 - ../splice-wallet-payments/.daml/dist/splice-wallet-payments-current.dar
 build-options:
+  - --explicit-serializable=yes
   - --ghc-option=-Wunused-binds
   - --ghc-option=-Wunused-matches
   - -Wno-deprecated-exceptions

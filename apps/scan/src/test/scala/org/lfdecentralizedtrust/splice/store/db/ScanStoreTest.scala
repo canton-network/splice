@@ -1606,6 +1606,7 @@ trait AmuletTransferUtil { self: StoreTestBase =>
         Optional.empty(),
         Optional.empty(), // voteCooldownTime
         Optional.empty(), // nextScheduledLogicalSynchronizerUpgrade
+        Optional.empty(), // svOperationsSwitchOverTimes
       ),
       Collections.emptyMap(),
       true,
@@ -1730,6 +1731,7 @@ class DbScanStoreTest
       mkParticipantId("whatever"),
       dsoParty,
       BackfillingRequirement.BackfillingNotRequired,
+      internedStringStore(storage),
       loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = true,

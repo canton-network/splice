@@ -1,9 +1,10 @@
 synchronizerMigration:
-  splitSvDeploymentEnabled: true
   frozenMigrationId: 0
   active:
     id: 0
     version: "local"
+    sequencer:
+      enableBftSequencer: true
     releaseReference:
       gitReference: "refs/heads/main"
       repoUrl: https://github.com/canton-network/splice

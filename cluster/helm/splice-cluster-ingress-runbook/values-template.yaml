@@ -10,6 +10,7 @@ ingress:
   scan: true
   sequencer: true
   splitwell: false
+  walletGateway: false
   decentralizedSynchronizer:
     migrationIds: ["0"]
 spliceDomainNames:

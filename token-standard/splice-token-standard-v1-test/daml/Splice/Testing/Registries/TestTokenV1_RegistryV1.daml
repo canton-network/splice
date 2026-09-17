@@ -31,7 +31,7 @@ import Daml.Script
 -- | A reference to a mock amulet registry.
 data TestTokenV1Registry = TestTokenV1Registry with
     admin : Party
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Ord, Show, Serializable)
 
 instance RegistryApi TestTokenV1Registry where
   getTransferFactory = registryApi_getFactory
@@ -51,7 +51,7 @@ instance RegistryApi TestTokenV1Registry where
 data TestTokenV1RegistryConfig = TestTokenV1RegistryConfig
   with
     adminPartyName : Text
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 defaultTestTokenV1RegistryConfig : TestTokenV1RegistryConfig
 defaultTestTokenV1RegistryConfig = TestTokenV1RegistryConfig with

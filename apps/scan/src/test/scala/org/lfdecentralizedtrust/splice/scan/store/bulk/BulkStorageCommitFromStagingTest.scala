@@ -188,10 +188,55 @@ class BulkStorageCommitFromStagingTest
         logEntries =>
           forAtLeast(1, logEntries)(
             _.message should include(
-              "All objects are known to the BFT peers, but the checksums do not match"
+              "Checksums do not match for objects"
             )
           ),
       )
+    }
+
+    "ignore digest mismatches for objects listed in debugObjectsToNotCommit and not copy them to the committed bucket" in {
+      val (stagingS3Connection, committedS3Connection, objsWithDigests) = setupTest
+
+      val ignoredObject = objsWithDigests(1)
+
+      val mockScanConnections = new MockScanConnections(objsWithDigests)
+      // all peers disagree with us on the digest of the ignored object only
+      Seq.range(0, 7).foreach(i => mockScanConnections.scanDisagreesOnDigest(i, 1))
+
+      val flow = newCopyFlow(
+        stagingS3Connection,
+        committedS3Connection,
+        objsWithDigests,
+        mockScanConnections,
+        appConfig.copy(debugObjectsToNotCommit = Seq(ignoredObject.key)),
+      )
+
+      loggerFactory.assertLogsSeq(SuppressionRule.LevelAndAbove(Level.ERROR))(
+        {
+          triggerCopyFlowAndAssertCompletion(flow)
+        },
+        logEntries =>
+          forAll(logEntries)(
+            _.message should include("Checksums do not match for objects")
+          ),
+      )
+
+      val expectedCommittedObjects = objsWithDigests.filterNot(_.key == ignoredObject.key)
+
+      clue("All objects have been deleted from staging") {
+        stagingS3Connection.listObjects.futureValue.contents().asScala shouldBe empty
+      }
+      clue("Only the non-ignored objects have been copied to the committed bucket") {
+        committedS3Connection.listObjects.futureValue
+          .contents()
+          .asScala
+          .map(_.key()) should contain theSameElementsAs expectedCommittedObjects.map(_.key)
+      }
+      clue("Checksums of objects in committed S3 bucket match the expected digests") {
+        committedS3Connection
+          .getChecksums(expectedCommittedObjects.map(_.key))
+          .futureValue should contain theSameElementsAs expectedCommittedObjects
+      }
     }
 
     class MockScanConnections(
@@ -292,12 +337,13 @@ class BulkStorageCommitFromStagingTest
         committedS3Connection: S3BucketConnectionForUnitTests,
         objsWithDigests: Seq[ObjectKeyAndChecksum],
         mockScanConnections: MockScanConnections,
+        config: BulkStorageConfig = appConfig,
     ) = {
       new BulkStorageCommitFromStaging[String](
         stagingS3Connection,
         committedS3Connection,
         _ => Future.successful(objsWithDigests),
-        appConfig,
+        config,
         mockScanConnections.peerBftConnection,
         loggerFactory,
       ).getFlow

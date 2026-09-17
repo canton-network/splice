@@ -254,7 +254,7 @@ class ScanTimeBasedIntegrationTest
       .getDateOfFirstSnapshotAfter(CantonTimestamp.tryFromInstant(snapshot1.value.toInstant), 0)
       .value shouldBe snapshotAfter.value
 
-    val snapshotAfterData = sv1ScanBackend.getAcsSnapshotAtV1(
+    val snapshotAfterData = sv1ScanBackend.getAcsSnapshotAtV2(
       CantonTimestamp.assertFromInstant(snapshotAfter.value.toInstant),
       migrationId,
       templates = Some(
@@ -271,10 +271,10 @@ class ScanTimeBasedIntegrationTest
     val atOrBefore = getLedgerTime
 
     // afOrBefore should return the same ACS snapshot as the exact time given by snapshotAfter
-    val snapshotAtOrBeforeAfterData = sv1ScanBackend.getAcsSnapshotAtV1(
+    val snapshotAtOrBeforeAfterData = sv1ScanBackend.getAcsSnapshotAtV2(
       CantonTimestamp.assertFromInstant(atOrBefore.toInstant),
       migrationId,
-      recordTimeMatch = Some(definitions.AcsRequest.RecordTimeMatch.AtOrBefore),
+      recordTimeMatch = Some(definitions.AcsRequestV2.RecordTimeMatch.AtOrBefore),
       templates = Some(
         Vector(
           PackageQualifiedName.fromJavaCodegenCompanion(Amulet.COMPANION),
@@ -287,10 +287,10 @@ class ScanTimeBasedIntegrationTest
     snapshotAfterData shouldBe snapshotAtOrBeforeAfterData
     snapshotAtOrBeforeAfterData.value.recordTime shouldBe snapshotAfter.value
 
-    sv1ScanBackend.getAcsSnapshotAtV1(
+    sv1ScanBackend.getAcsSnapshotAtV2(
       CantonTimestamp.assertFromInstant(atOrBefore.toInstant),
       migrationId,
-      recordTimeMatch = Some(definitions.AcsRequest.RecordTimeMatch.Exact),
+      recordTimeMatch = Some(definitions.AcsRequestV2.RecordTimeMatch.Exact),
       templates = Some(
         Vector(
           PackageQualifiedName.fromJavaCodegenCompanion(Amulet.COMPANION),
@@ -486,7 +486,7 @@ class ScanTimeBasedIntegrationTest
       // Compare bulk storage data to hot storage data from scan
       // TODO(#4788): for now, bulk storage still uses v0, so we use that here as well
       val acsAtMidnightFromScan = sv1ScanBackend
-        .getAcsSnapshotAtV1(CantonTimestamp.assertFromInstant(lastMidnight), 0)
+        .getAcsSnapshotAtV2(CantonTimestamp.assertFromInstant(lastMidnight), 0)
         .value
         .createdEvents
       val acsObjUrl = getSnapshotResponse.objectRefs.head.url

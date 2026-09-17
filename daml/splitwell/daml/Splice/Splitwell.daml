@@ -23,22 +23,22 @@ data GroupKey = GroupKey
     owner : Party
     provider : Party
     id: GroupId
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 -- | Group id unique per owner
 newtype GroupId = GroupId Text
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 data ForOwner = ForOwner
   with
     owner : Party
     provider : Party
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 data ForApp = ForApp
   with
     provider : Party
-  deriving (Show, Eq)
+  deriving (Show, Eq, Serializable)
 
 instance HasCheckedFetch Group ForApp where
   contractGroupId Group{..} = ForApp{..}
@@ -343,7 +343,7 @@ data BalanceUpdateType
   | ExtBalanceUpdateType with
       dummyUnitField : ()
         -- ^ Extension constructor (and field) to work around the current lack of upgrading for variants in Daml 3.0
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 template GroupInvite
   with

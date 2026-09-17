@@ -4,6 +4,7 @@
 package org.lfdecentralizedtrust.splice.scan.store.db
 
 import com.daml.ledger.javaapi.data.codegen.ContractId
+import com.daml.nonempty.NonEmpty
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.{
   AsyncOrSyncCloseable,
@@ -496,24 +497,28 @@ class DbScanStore(
   override def getValidatorLicenseByValidator(validators: Vector[PartyId])(implicit
       tc: TraceContext
   ): Future[Seq[Contract[ValidatorLicense.ContractId, ValidatorLicense]]] = waitUntilAcsIngested {
-    val validatorPartyIds = inClause("validator", validators)
-    for {
-      rows <- storage
-        .query(
-          selectFromAcsTable(
-            ScanTables.acsTableName,
-            acsStoreId,
-            domainMigrationId,
-            ValidatorLicense.COMPANION,
-            where = validatorPartyIds,
-          ),
-          "getValidatorLicenseByValidator",
-        )
-    } yield {
-      rows
-        .map(
-          contractFromRow(ValidatorLicense.COMPANION)(_)
-        )
+    NonEmpty.from(validators) match {
+      case None => Future.successful(Seq.empty)
+      case Some(validators) =>
+        val validatorPartyIds = DbStorage.toInClause("validator", validators)
+        for {
+          rows <- storage
+            .query(
+              selectFromAcsTable(
+                ScanTables.acsTableName,
+                acsStoreId,
+                domainMigrationId,
+                ValidatorLicense.COMPANION,
+                where = validatorPartyIds,
+              ),
+              "getValidatorLicenseByValidator",
+            )
+        } yield {
+          rows
+            .map(
+              contractFromRow(ValidatorLicense.COMPANION)(_)
+            )
+        }
     }
   }
 
@@ -665,22 +670,26 @@ class DbScanStore(
       trackingCids: Seq[VoteRequest.ContractId],
       limit: Limit,
   )(implicit tc: TraceContext): Future[Seq[Contract[VoteRequest.ContractId, VoteRequest]]] = {
-    for {
-      result <- storage
-        .query(
-          listVoteRequestsByTrackingCidQuery(
-            acsTableName = ScanTables.acsTableName,
-            acsStoreId = acsStoreId,
-            domainMigrationId = domainMigrationId,
-            trackingCidColumnName = "vote_request_tracking_cid",
-            trackingCids = trackingCids,
-            limit = limit,
-          ),
-          "listVoteRequestsByTrackingCid",
-        )
-      records = applyLimit("listVoteRequestsByTrackingCid", limit, result)
-    } yield records
-      .map(contractFromRow(VoteRequest.COMPANION)(_))
+    NonEmpty.from(trackingCids) match {
+      case None => Future.successful(Seq.empty)
+      case Some(trackingCids) =>
+        for {
+          result <- storage
+            .query(
+              listVoteRequestsByTrackingCidQuery(
+                acsTableName = ScanTables.acsTableName,
+                acsStoreId = acsStoreId,
+                domainMigrationId = domainMigrationId,
+                trackingCidColumnName = "vote_request_tracking_cid",
+                trackingCids = trackingCids,
+                limit = limit,
+              ),
+              "listVoteRequestsByTrackingCid",
+            )
+          records = applyLimit("listVoteRequestsByTrackingCid", limit, result)
+        } yield records
+          .map(contractFromRow(VoteRequest.COMPANION)(_))
+    }
   }
 
   override def lookupVoteRequest(voteRequestCid: VoteRequest.ContractId)(implicit

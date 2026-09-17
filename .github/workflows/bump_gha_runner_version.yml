@@ -27,7 +27,7 @@ jobs:
       - name: Set up Nix (Self hosted)
         uses: ./.github/actions/nix/setup_nix
         with:
-          cache_version: 9
+          cache_version: 10
           target: default
 
       - name: Check for the latest version and create a PR to splice

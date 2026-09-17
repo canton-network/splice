@@ -36,6 +36,7 @@ object HttpAdminService {
       adminApi: AdminServerConfig,
       parameterConfig: CantonNodeParameters,
       apiLoggingConfig: ApiLoggingConfig,
+      clientIpHeaders: Seq[String],
       loggerFactory: NamedLoggerFactory,
       node: => Option[CantonNode],
   )(implicit
@@ -49,6 +50,7 @@ object HttpAdminService {
     adminApi.port,
     parameterConfig,
     apiLoggingConfig,
+    clientIpHeaders,
     loggerFactory,
     node,
   )
@@ -59,6 +61,7 @@ object HttpAdminService {
       port: Port,
       parameterConfig: CantonNodeParameters,
       apiLoggingConfig: ApiLoggingConfig,
+      clientIpHeaders: Seq[String],
       loggerFactory: NamedLoggerFactory,
       node: => Option[CantonNode],
   )(implicit ac: ActorSystem, ec: ExecutionContext, tracer: Tracer, elc: ErrorLoggingContext)
@@ -98,7 +101,7 @@ object HttpAdminService {
         // handleRejections (inside the logger) seals the route: rejections are
         // converted to HTTP responses so mapResponse sees all outcomes and logs
         // exactly one "Responding with status code" per request.
-        HttpRequestLogger(apiLoggingConfig, loggerFactory)(traceContext) {
+        HttpRequestLogger(apiLoggingConfig, clientIpHeaders, loggerFactory)(traceContext) {
           handleRejections(RejectionHandler.default) {
             encodeResponse(
               handleRejections(

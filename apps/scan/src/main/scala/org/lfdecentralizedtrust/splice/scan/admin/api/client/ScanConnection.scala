@@ -25,7 +25,6 @@ import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   GetBulkObjectChecksumsResponse,
-  GetDsoInfoResponse,
   GetRewardAccountingActivityTotalsResponse,
   GetRewardAccountingBatchResponse,
   GetRewardAccountingRootHashResponse,
@@ -74,7 +73,7 @@ trait ScanConnection
 
   def getDsoPartyId()(implicit ec: ExecutionContext, tc: TraceContext): Future[PartyId]
 
-  def getDsoInfo()(implicit ec: ExecutionContext, tc: TraceContext): Future[GetDsoInfoResponse]
+  def getDsoInfo()(implicit ec: ExecutionContext, tc: TraceContext): Future[DsoInfo]
 
   /** Query for the DSO party id, retrying until it succeeds.
     *
@@ -109,9 +108,7 @@ trait ScanConnection
       tc: TraceContext,
   ): Future[ContractWithState[AmuletRules.ContractId, AmuletRules]]
 
-  def getDsoRules()(implicit
-      tc: TraceContext
-  ): Future[Contract[DsoRules.ContractId, DsoRules]]
+  def getDsoRules()(implicit tc: TraceContext): Future[Contract[DsoRules.ContractId, DsoRules]]
 
   def getExternalPartyAmuletRules()(implicit
       ec: ExecutionContext,

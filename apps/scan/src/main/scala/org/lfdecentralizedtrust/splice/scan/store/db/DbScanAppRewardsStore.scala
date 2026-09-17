@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.scan.store.db
 
+import com.daml.nonempty.NonEmpty
 import org.lfdecentralizedtrust.splice.scan.rewards.{RewardComputationInputs, RewardIssuanceParams}
 import org.lfdecentralizedtrust.splice.scan.store.ScanAppRewardsStore
 import org.lfdecentralizedtrust.splice.store.UpdateHistory
@@ -86,6 +87,16 @@ object DbScanAppRewardsStore {
       activityRecordsCount: Long,
       rewardedPartiesCount: Long,
       batchesCreatedCount: Long,
+  )
+
+  /** Row counts deleted per table by `deleteRewardAccountingDataForRound`. */
+  final case class RewardAccountingPruneSummary(
+      activityPartyTotals: Long,
+      activityRoundTotals: Long,
+      rewardPartyTotals: Long,
+      rewardRoundTotals: Long,
+      batchHashes: Long,
+      rootHashes: Long,
   )
 
   /** A SHA-256 hash stored as raw bytes, avoiding unnecessary Array[Byte] ↔
@@ -615,15 +626,16 @@ class DbScanAppRewardsStore(
   override def roundsWithComputedRewards(rounds: Seq[Long])(implicit
       tc: TraceContext
   ): Future[Set[Long]] = {
-    if (rounds.isEmpty) Future.successful(Set.empty)
-    else {
-      runQuery(
-        (sql"""select round_number from #${Tables.appRewardRootHashes}
-               where history_id = $historyId
-                 and """ ++ inClause("round_number", rounds)).toActionBuilder
-          .as[Long],
-        "appRewards.roundsWithComputedRewards",
-      ).map(_.toSet)
+    NonEmpty.from(rounds) match {
+      case None => Future.successful(Set.empty)
+      case Some(rounds) =>
+        runQuery(
+          (sql"""select round_number from #${Tables.appRewardRootHashes}
+                 where history_id = $historyId
+                   and """ ++ DbStorage.toInClause("round_number", rounds)).toActionBuilder
+            .as[Long],
+          "appRewards.roundsWithComputedRewards",
+        ).map(_.toSet)
     }
   }
 
@@ -1019,6 +1031,49 @@ class DbScanAppRewardsStore(
               where history_id = $historyId and round_number = $roundNumber
             )
     """.asUpdate
+
+  /** Deletes all reward-accounting data for a single round across all six
+    * tables, in a single transaction.
+    */
+  def deleteRewardAccountingDataForRound(
+      roundNumber: Long
+  )(implicit tc: TraceContext): Future[DbScanAppRewardsStore.RewardAccountingPruneSummary] = {
+    import profile.api.jdbcActionExtensionMethods
+
+    runUpdate(
+      (for {
+        batchHashes <-
+          sql"""delete from #${Tables.appRewardBatchHashes}
+                where history_id = $historyId and round_number = $roundNumber""".asUpdate
+        rootHashes <-
+          sql"""delete from #${Tables.appRewardRootHashes}
+                where history_id = $historyId and round_number = $roundNumber""".asUpdate
+        rewardPartyTotals <-
+          sql"""delete from #${Tables.appRewardPartyTotals}
+                where history_id = $historyId and round_number = $roundNumber""".asUpdate
+        rewardRoundTotals <-
+          sql"""delete from #${Tables.appRewardRoundTotals}
+                where history_id = $historyId and round_number = $roundNumber""".asUpdate
+        activityPartyTotals <-
+          sql"""delete from #${Tables.appActivityPartyTotals}
+                where history_id = $historyId and round_number = $roundNumber""".asUpdate
+        activityRoundTotals <-
+          sql"""delete from #${Tables.appActivityRoundTotals}
+                where history_id = $historyId and round_number = $roundNumber""".asUpdate
+      } yield DbScanAppRewardsStore.RewardAccountingPruneSummary(
+        activityPartyTotals = activityPartyTotals.toLong,
+        activityRoundTotals = activityRoundTotals.toLong,
+        rewardPartyTotals = rewardPartyTotals.toLong,
+        rewardRoundTotals = rewardRoundTotals.toLong,
+        batchHashes = batchHashes.toLong,
+        rootHashes = rootHashes.toLong,
+      )).map { summary =>
+        logger.debug(s"Pruned reward accounting data for round $roundNumber: $summary")
+        summary
+      }.transactionally,
+      "appRewards.deleteRewardAccountingDataForRound",
+    )
+  }
 
   // -- Private helpers -------------------------------------------------------
 

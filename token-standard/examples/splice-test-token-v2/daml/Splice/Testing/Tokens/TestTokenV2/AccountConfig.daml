@@ -67,7 +67,7 @@ data PartyConfig = PartyConfig with
       -- ^ Whether the party can initiate token standard actions on the account.
     mustApprove : Bool
       -- ^ Whether the party must approve token standard actions on the account for them to be executed.
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 -- | A configuration of the authorization rules for an account.
 --
@@ -161,13 +161,13 @@ template AccountConfig
 
 data AccountProposal_Accept_Result = AccountProposal_Accept_Result with
     accountConfig : ContractId AccountConfig
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 data AccountProposal_Reject_Result = AccountProposal_Reject_Result with
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 data AccountProposal_Withdraw_Result = AccountProposal_Withdraw_Result with
-  deriving (Eq, Show)
+  deriving (Eq, Show, Serializable)
 
 template AccountProposal
   with
@@ -206,7 +206,7 @@ data TransferInstructionState
   | TIS_Withdrawn
   | TIS_Rejected
   | TIS_Accepted
-    deriving (Eq, Ord, Enum, Show)
+    deriving (Eq, Ord, Enum, Show, Serializable)
 
 transferInstructionStateMachineSpec :
   V2.Account -> V2.Account -> AuthStateMachine V2.TransferInstructionAction TransferInstructionState
@@ -227,7 +227,7 @@ data AllocationInstructionState
   = AIS_Init
   | AIS_Withdrawn
   | AIS_Accepted
-    deriving (Eq, Ord, Enum, Show)
+    deriving (Eq, Ord, Enum, Show, Serializable)
 
 allocationInstructionStateMachineSpec :
   V2.Account -> AuthStateMachine V2.AllocationInstructionAction AllocationInstructionState
@@ -246,7 +246,7 @@ data AllocationState
   | AS_Withdrawn
   | AS_Cancelled
   | AS_Settled
-    deriving (Eq, Ord, Enum, Show)
+    deriving (Eq, Ord, Enum, Show, Serializable)
 
 allocationStateMachineSpec :
   V2.Account -> [Party] -> Party -> AuthStateMachine V2.AllocationAction AllocationState
@@ -389,7 +389,7 @@ data AuthSpec actionType
     -- ^ The authorizers of another action need to authorize
   | STAS_Parties [Party]
     -- ^ A specific set of parties needs to authorize
-    deriving (Show)
+    deriving (Show, Serializable)
 
 -- The specification of an authorization state machine
 -- The outer map is the current state

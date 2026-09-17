@@ -21,7 +21,7 @@ import {
   JsInterfaceView,
   PartySignatures,
   ServerConfiguration,
-  TransactionFilter,
+  EventFormat,
   JsGetEventsByContractIdResponse,
 } from "@canton-network/canton-json-api-v2-openapi";
 import { DisclosedContract } from "@canton-network/transfer-instruction-openapi";
@@ -48,7 +48,7 @@ export function filtersByParty(
   party: string,
   interfaceNames: InterfaceId[],
   includeWildcard: boolean,
-): TransactionFilter["filtersByParty"] {
+): EventFormat["filtersByParty"] {
   return {
     [party]: {
       cumulative: interfaceNames

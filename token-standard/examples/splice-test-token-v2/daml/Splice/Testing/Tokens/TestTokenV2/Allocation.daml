@@ -538,6 +538,7 @@ token_allocation_settleImplV2 callSource allocationKind this self arg = do
 
 -- | Which kind of allocation to create.
 data AllocationKind = CreateV1Allocation | CreateV2Allocation
+  deriving (Serializable)
 
 createTokenAllocation : AllocationKind -> TokenAllocationV2 -> Update (ContractId V2.Allocation)
 createTokenAllocation allocationKind allocationV2 = case allocationKind of

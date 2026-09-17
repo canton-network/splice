@@ -1,12 +1,13 @@
 sdk-version: 3.5.2
 name: splice-util
 source: daml
-version: 0.1.7
+version: 0.1.8
 dependencies:
   - daml-prim
   - daml-stdlib
 data-dependencies: []
 build-options:
+  - --explicit-serializable=yes
   - --ghc-option=-Wunused-binds
   - --ghc-option=-Wunused-matches
   - --target=2.1

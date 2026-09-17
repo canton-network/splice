@@ -66,7 +66,7 @@ describe('SV user can', () => {
 
   test('set next scheduled synchronizer upgrade', async () => {
     server.use(
-      http.get(`${svUrl}/v0/dso`, () => {
+      http.get(`${svUrl}/v1/dso`, () => {
         return HttpResponse.json(dsoInfoWithoutSynchronizerUpgrade);
       })
     );
@@ -94,7 +94,7 @@ describe('SV user can', () => {
 
   test('submit vote request with new valid synchronizer upgrade time', async () => {
     server.use(
-      http.get(`${svUrl}/v0/dso`, () => {
+      http.get(`${svUrl}/v1/dso`, () => {
         return HttpResponse.json(dsoInfoWithoutSynchronizerUpgrade);
       })
     );
@@ -142,7 +142,7 @@ describe('SV user can', () => {
 
   test('submit vote request with existing and unchanged synchronizer upgrade time', async () => {
     server.use(
-      http.get(`${svUrl}/v0/dso`, () => {
+      http.get(`${svUrl}/v1/dso`, () => {
         return HttpResponse.json(dsoInfoWithSynchronizerUpgrade);
       })
     );
@@ -169,7 +169,7 @@ describe('SV user can', () => {
 
   test('not submit vote request if new synchronizer upgrade time is before expiry', async () => {
     server.use(
-      http.get(`${svUrl}/v0/dso`, () => {
+      http.get(`${svUrl}/v1/dso`, () => {
         return HttpResponse.json(dsoInfoWithoutSynchronizerUpgrade);
       })
     );
@@ -225,7 +225,7 @@ describe('SV user can', () => {
 
   test('not submit vote request if synchronizer upgrade time is changed and is before expiry and effective at threshold', async () => {
     server.use(
-      http.get(`${svUrl}/v0/dso`, () => {
+      http.get(`${svUrl}/v1/dso`, () => {
         return HttpResponse.json(dsoInfoWithSynchronizerUpgrade);
       })
     );
@@ -282,7 +282,7 @@ describe('SV user can', () => {
 
   test('not submit vote request if synchronizer upgrade time is changed and is before effective date', async () => {
     server.use(
-      http.get(`${svUrl}/v0/dso`, () => {
+      http.get(`${svUrl}/v1/dso`, () => {
         return HttpResponse.json(dsoInfoWithSynchronizerUpgrade);
       })
     );
@@ -335,91 +335,81 @@ describe('SV user can', () => {
     expect(disabled).toBeOneOf([null, '']);
   });
 
-  test(
-    'make changes with different timezones',
-    async () => {
-      server.use(
-        http.get(`${svUrl}/v0/dso`, () => {
-          return HttpResponse.json(dsoInfoWithoutSynchronizerUpgrade);
-        })
-      );
+  test('make changes with different timezones', async () => {
+    server.use(
+      http.get(`${svUrl}/v1/dso`, () => {
+        return HttpResponse.json(dsoInfoWithoutSynchronizerUpgrade);
+      })
+    );
 
-      const user = userEvent.setup();
-      render(<AppWithConfig />);
+    const user = userEvent.setup();
+    render(<AppWithConfig />);
 
-      expect(await screen.findByText('Log In')).toBeDefined();
+    expect(await screen.findByText('Log In')).toBeDefined();
 
-      const input = screen.getByRole('textbox');
-      await user.type(input, 'sv1');
+    const input = screen.getByRole('textbox');
+    await user.type(input, 'sv1');
 
-      await navigateToLegacyGovernancePage();
+    await navigateToLegacyGovernancePage();
 
-      await changeAction();
-      await fillOutForm(user);
+    await changeAction();
+    await fillOutForm(user);
 
-      const effectiveAtThresholdCheckBox = screen.getByTestId(
-        'checkbox-set-effective-at-threshold'
-      );
-      await user.click(effectiveAtThresholdCheckBox);
+    const effectiveAtThresholdCheckBox = screen.getByTestId('checkbox-set-effective-at-threshold');
+    await user.click(effectiveAtThresholdCheckBox);
 
-      const synchronizerUpgradeCheckBox = screen.getByTestId(
-        'enable-next-scheduled-domain-upgrade'
-      );
-      await user.click(synchronizerUpgradeCheckBox);
+    const synchronizerUpgradeCheckBox = screen.getByTestId('enable-next-scheduled-domain-upgrade');
+    await user.click(synchronizerUpgradeCheckBox);
 
-      const expirationDate = screen
-        .getByTestId('datetime-picker-vote-request-expiration')
-        .getAttribute('value');
-      expect(expirationDate).toBeDefined();
+    const expirationDate = screen
+      .getByTestId('datetime-picker-vote-request-expiration')
+      .getAttribute('value');
+    expect(expirationDate).toBeDefined();
 
-      // FYI: Tests are running in UTC+2 timezone by default
-      const expirationDateDayjs = dayjs(expirationDate);
+    // FYI: Tests are running in UTC+2 timezone by default
+    const expirationDateDayjs = dayjs(expirationDate);
 
-      const invalidUpgradeTime = expirationDateDayjs
-        .utc()
-        .subtract(1, 'minute')
-        .format(syncPauseTimeDateFormat);
+    const invalidUpgradeTime = expirationDateDayjs
+      .utc()
+      .subtract(1, 'minute')
+      .format(syncPauseTimeDateFormat);
 
-      const sameUpgradeTime = expirationDateDayjs
-        .utc()
-        .add(1, 'minute')
-        .format(syncPauseTimeDateFormat);
+    const sameUpgradeTime = expirationDateDayjs
+      .utc()
+      .add(1, 'minute')
+      .format(syncPauseTimeDateFormat);
 
-      const validUpgradeTime = expirationDateDayjs
-        .utc()
-        .add(1, 'minute')
-        .format(syncPauseTimeDateFormat);
+    const validUpgradeTime = expirationDateDayjs
+      .utc()
+      .add(1, 'minute')
+      .format(syncPauseTimeDateFormat);
 
-      const nextScheduledSynchronizerUpgradeTime = screen.getByTestId(
-        'nextScheduledSynchronizerUpgrade.time-value'
-      );
+    const nextScheduledSynchronizerUpgradeTime = screen.getByTestId(
+      'nextScheduledSynchronizerUpgrade.time-value'
+    );
 
-      fireEvent.change(nextScheduledSynchronizerUpgradeTime, {
-        target: { value: invalidUpgradeTime },
-      });
+    fireEvent.change(nextScheduledSynchronizerUpgradeTime, {
+      target: { value: invalidUpgradeTime },
+    });
 
-      expect(
-        screen.getByTestId('create-voterequest-submit-button').getAttribute('disabled')
-      ).toBeDefined();
+    expect(
+      screen.getByTestId('create-voterequest-submit-button').getAttribute('disabled')
+    ).toBeDefined();
 
-      fireEvent.change(nextScheduledSynchronizerUpgradeTime, {
-        target: { value: sameUpgradeTime },
-      });
+    fireEvent.change(nextScheduledSynchronizerUpgradeTime, {
+      target: { value: sameUpgradeTime },
+    });
 
-      expect(
-        screen.getByTestId('create-voterequest-submit-button').getAttribute('disabled')
-      ).toBeDefined();
+    expect(
+      screen.getByTestId('create-voterequest-submit-button').getAttribute('disabled')
+    ).toBeDefined();
 
-      fireEvent.change(nextScheduledSynchronizerUpgradeTime, {
-        target: { value: validUpgradeTime },
-      });
+    fireEvent.change(nextScheduledSynchronizerUpgradeTime, {
+      target: { value: validUpgradeTime },
+    });
 
-      expect(
-        screen.queryByTestId('create-voterequest-submit-button')?.getAttribute('disabled')
-      ).toBeNull();
-    },
-    {
-      timeout: 10000,
-    }
-  );
+    expect(
+      screen.queryByTestId('create-voterequest-submit-button')?.getAttribute('disabled')
+    ).toBeNull();
+  });
 });

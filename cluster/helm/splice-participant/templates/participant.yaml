@@ -55,6 +55,10 @@ spec:
           value: {{ .Values.persistence.port | quote }}
         - name: CANTON_PARTICIPANT_POSTGRES_SCHEMA
           value: {{ .Values.persistence.schema }}
+        {{- with .Values.persistence.user }}
+        - name: CANTON_PARTICIPANT_POSTGRES_USER
+          value: {{ . | quote }}
+        {{- end }}
         - name: CANTON_PARTICIPANT_POSTGRES_PASSWORD
           {{- if ((.Values.persistence).secretOverrides).postgresPassword }}
           value: {{ .Values.persistence.secretOverrides.postgresPassword | quote }}
@@ -186,7 +190,7 @@ spec:
               {{- end }}
               DB_TO_CREATE='{{ .Values.persistence.databaseName }}'
 
-              until db_exists=$(psql -h {{ .Values.persistence.host }} -p {{ .Values.persistence.port }} --username=cnadmin --dbname=cantonnet -tAc "SELECT 1 FROM pg_database WHERE datname='${DB_TO_CREATE}'" 2>&1); do
+              until db_exists=$(psql -h {{ .Values.persistence.host }} -p {{ .Values.persistence.port }} --username={{ .Values.persistence.user | default "cnadmin" }} --dbname={{ .Values.persistence.bootstrapDatabaseName | default "cantonnet" }} -tAc "SELECT 1 FROM pg_database WHERE datname='${DB_TO_CREATE}'" 2>&1); do
                 echo "trying to connect to postgres, last error: ${db_exists}";
                 sleep 2;
               done
@@ -195,7 +199,7 @@ spec:
                 echo "Database ${DB_TO_CREATE} already exists. Done."
               else
                 {{- if $conflictCheck }}
-                existing=$(psql -h {{ .Values.persistence.host }} -p {{ .Values.persistence.port }} --username=cnadmin --dbname=cantonnet -tAc "SELECT datname FROM pg_database WHERE datname LIKE 'participant%'" | paste -sd ', ' -)
+                existing=$(psql -h {{ .Values.persistence.host }} -p {{ .Values.persistence.port }} --username={{ .Values.persistence.user | default "cnadmin" }} --dbname={{ .Values.persistence.bootstrapDatabaseName | default "cantonnet" }} -tAc "SELECT datname FROM pg_database WHERE datname LIKE 'participant%'" | paste -sd ', ' -)
                 if [ -n "${existing}" ]; then
                   echo "ERROR: Refusing to create participant database '${DB_TO_CREATE}' because the following participant database(s) already exist: ${existing}." >&2
                   echo "       A participant database should only be created during a fresh deployment. Please double-check that this is intended and not a misconfiguration." >&2
@@ -203,7 +207,7 @@ spec:
                   exit 1
                 fi
                 {{- end }}
-                until errmsg=$(psql -h {{ .Values.persistence.host }} -p {{ .Values.persistence.port }} --username=cnadmin --dbname=cantonnet -c "create database ${DB_TO_CREATE}" 2>&1); do
+                until errmsg=$(psql -h {{ .Values.persistence.host }} -p {{ .Values.persistence.port }} --username={{ .Values.persistence.user | default "cnadmin" }} --dbname={{ .Values.persistence.bootstrapDatabaseName | default "cantonnet" }} -c "create database ${DB_TO_CREATE}" 2>&1); do
                   if [[ ${errmsg} == *"already exists"* ]]; then
                     echo "Database ${DB_TO_CREATE} already exists. Done."
                     break
@@ -217,6 +221,9 @@ spec:
         {{- if .Values.extraInitContainers }}
         {{ .Values.extraInitContainers | toYaml | nindent 8 }}
         {{- end }}
+      {{- end }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . | quote }}
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
@@ -304,5 +311,5 @@ data:
 {{ .Files.Get "files/logback.xml" | indent 4 }}
 ---
 {{- if .Values.enablePostgresMetrics }}
-{{- include "splice-util-lib.postgres-metrics" (dict "persistence" .Values.persistence "namespace" .Release.Namespace "nodeSelector" .Values.nodeSelector "affinity" .Values.affinity "tolerations" .Values.tolerations "serviceAccountName" .Values.serviceAccountName ) }}
+{{- include "splice-util-lib.postgres-metrics" (dict "persistence" .Values.persistence "namespace" .Release.Namespace "nodeSelector" .Values.nodeSelector "affinity" .Values.affinity "tolerations" .Values.tolerations "priorityClassName" .Values.priorityClassName "serviceAccountName" .Values.serviceAccountName ) }}
 {{- end}}

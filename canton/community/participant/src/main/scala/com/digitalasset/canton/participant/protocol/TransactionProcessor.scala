@@ -4,7 +4,6 @@
 package com.digitalasset.canton.participant.protocol
 
 import cats.data.EitherT
-import cats.implicits.toTraverseOps
 import com.daml.metrics.api.MetricsContext
 import com.digitalasset.base.error.{
   Alarm,
@@ -20,7 +19,6 @@ import com.digitalasset.canton.config.{ProcessingTimeout, TestingConfigInternal}
 import com.digitalasset.canton.crypto.*
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.data.ViewType.TransactionViewType
-import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.error.*
 import com.digitalasset.canton.error.CantonErrorGroups.ParticipantErrorGroup.TransactionErrorGroup.SubmissionErrorGroup
 import com.digitalasset.canton.ledger.error.groups.ConsistencyErrors
@@ -155,15 +153,16 @@ class TransactionProcessor(
   )(
       trafficCost: Long,
       traceContext: TraceContext,
-  ): FutureUnlessShutdown[Unit] =
-    trafficEnforcementBackendO
-      .traverse(
-        _.validateTraffic(
-          actAs = submissionParam.submitterInfo.actAs,
-          trafficCost = trafficCost,
-        )(traceContext)
-      )
-      .map(_.discard)
+  ): FutureUnlessShutdown[Unit] = ???
+  // stubbed in splice
+  // trafficEnforcementBackendO
+  //   .traverse(
+  //     _.validateTraffic(
+  //       actAs = submissionParam.submitterInfo.actAs,
+  //       trafficCost = trafficCost,
+  //     )(traceContext)
+  //   )
+  //   .map(_.discard)
 
   def submit(
       submitterInfo: SubmitterInfo,

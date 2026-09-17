@@ -16,7 +16,7 @@ import com.github.benmanes.caffeine.cache.{Caffeine, RemovalCause, RemovalListen
 import com.google.common.util.concurrent.{BurstyRateLimiterFactory, RateLimiter}
 import org.lfdecentralizedtrust.splice.environment.SpliceMetrics
 
-import java.time.{Duration, Instant}
+import java.time.Duration
 import java.util
 import java.util.Collections
 import java.util.concurrent.TimeUnit
@@ -41,6 +41,17 @@ case class SpliceRateLimitMetrics(
     )
   )
 
+  val unknownAttributeNotLimited: MetricHandle.Meter = otelFactory.meter(
+    MetricInfo(
+      SpliceMetrics.MetricsPrefix :+ "rate_limiting_unknown_attribute_not_limited",
+      "Number of requests not rate limited by a per-attribute limiter because the attribute value is unknown",
+      Saturation,
+    )
+  )
+
+  def recordUnknownAttributeNotLimited()(implicit extraMc: MetricsContext): Unit =
+    unknownAttributeNotLimited.mark()(mc.merge(extraMc))
+
   /*we need to pass the full context when we create it to avoid duplicate values warnings*/
   def recordMaxLimit(limit: Double)(implicit extraMc: MetricsContext): Unit = {
     val createdGauge = otelFactory.gauge[Double](
@@ -62,7 +73,7 @@ case class SpliceRateLimitMetrics(
 
 }
 
-sealed trait SpliceRateLimitConfig {
+trait SpliceRateLimitConfig {
 
   def enabled: Boolean
 
@@ -82,14 +93,6 @@ object SpliceRateLimitConfig {
       sustainedWindowSeconds: Long = SpliceRateLimiter.DefaultSustainedWindowSeconds,
   ) extends SpliceRateLimitConfig
 
-  final case class WithPerClientIp(
-      enabled: Boolean = true,
-      ratePerSecond: Double,
-      sustainedRatePerSecond: Option[Double] = None,
-      sustainedWindowSeconds: Long = SpliceRateLimiter.DefaultSustainedWindowSeconds,
-      perClientIp: PerAttributeRateLimitConfig = PerAttributeRateLimitConfig.Disabled,
-  ) extends SpliceRateLimitConfig
-
   def apply(
       enabled: Boolean = true,
       ratePerSecond: Double,
@@ -103,22 +106,21 @@ case class PerAttributeRateLimitConfig(
     enabled: Boolean = true,
     limit: SpliceRateLimitConfig.Simple = PerAttributeRateLimitConfig.DefaultLimit,
     maxAttributeValues: Long = 10000,
-) {
-
-  def rateLimitFor(overall: SpliceRateLimitConfig): SpliceRateLimitConfig.Simple =
-    limit.copy(enabled = enabled && limit.enabled && overall.enabled)
-}
+    attributeOverrides: Map[String, SpliceRateLimitConfig.Simple] = Map.empty,
+)
 
 object PerAttributeRateLimitConfig {
+
   val DefaultLimit: SpliceRateLimitConfig.Simple = SpliceRateLimitConfig(ratePerSecond = 10)
-  val Disabled: PerAttributeRateLimitConfig = PerAttributeRateLimitConfig(enabled = false)
+
+  def disabled: PerAttributeRateLimitConfig =
+    PerAttributeRateLimitConfig(enabled = false)
 }
 
 object SpliceRateLimiter {
 
   val GlobalLimiterType = "global"
   val PerAttributeLimiterType = "per-attribute"
-  val UnknownAttributeLimiterType = "unknown-attribute"
 
   val DefaultSustainedWindowSeconds: Long = 60
 
@@ -131,7 +133,6 @@ class SpliceRateLimiter(
     name: String,
     config: SpliceRateLimitConfig,
     metrics: SpliceRateLimitMetrics,
-    enforceAfter: Instant = Instant.now(),
     limiterType: String = SpliceRateLimiter.GlobalLimiterType,
     extraLabels: Map[String, String] = Map.empty,
     // must be disabled for the per-attribute limiters as they'd all report the same value
@@ -143,34 +144,35 @@ class SpliceRateLimiter(
     extraLabels ++ Map("limiter" -> name, "limiter_type" -> limiterType)
   )
 
-  // The limiters are created eagerly so that they are already "warm" (i.e. have accumulated their
-  // burst budget) by the time the limit starts being enforced. They are only created for enabled
-  // limiters: a disabled limiter is never consulted and its configured rate might not even be a
-  // valid guava rate (e.g. 0).
-  // enforces the per-second burst limit (checked over a 1s window)
+  private val rejectAll: Boolean =
+    config.enabled &&
+      (config.ratePerSecond <= 0 || config.sustainedRatePerSecond.exists(_ <= 0))
+
+  // The limiters are created with one second worth of permits already available
   private val limiter: Option[RateLimiter] =
-    Option.when(config.enabled)(RateLimiter.create(config.ratePerSecond))
+    Option.when(config.enabled && !rejectAll)(
+      BurstyRateLimiterFactory.create(config.ratePerSecond)
+    )
   // enforces the sustained limit over the sustained window, while still allowing bursts within its budget.
   private val sustainedLimiter: Option[RateLimiter] =
     Option
-      .when(config.enabled)(config.sustainedRatePerSecond)
+      .when(config.enabled && !rejectAll)(config.sustainedRatePerSecond)
       .flatten
       .map(
         BurstyRateLimiterFactory
           .create(_, SpliceRateLimiter.sustainedWindow(config).toSeconds.toDouble)
       )
   // lazy to ensure metrics get registered only if the limiter is actually used
-  private lazy val rateLimiter: Option[RateLimiter] = {
+  private lazy val reportedMaxLimit: Unit =
     if (reportMaxLimit) {
-      metrics
-        .recordMaxLimit(config.ratePerSecond)(metricsContext)
+      metrics.recordMaxLimit(config.ratePerSecond)(metricsContext)
     }
-    limiter
-  }
 
   def markRun(): Boolean = {
-    if (config.enabled && Instant.now().isAfter(enforceAfter)) {
-      val canRun = rateLimiter.forall(_.tryAcquire()) && sustainedLimiter.forall(_.tryAcquire())
+    if (config.enabled) {
+      reportedMaxLimit
+      val canRun =
+        !rejectAll && limiter.forall(_.tryAcquire()) && sustainedLimiter.forall(_.tryAcquire())
       if (canRun) {
         metrics.meter.mark()(
           metricsContext.merge(MetricsContext("result" -> "accepted"))
@@ -201,15 +203,17 @@ class SpliceRateLimiter(
 class PerAttributeRateLimiter(
     name: String,
     attribute: String,
-    config: SpliceRateLimitConfig,
-    attributeConfig: PerAttributeRateLimitConfig,
+    config: PerAttributeRateLimitConfig,
     metrics: SpliceRateLimitMetrics,
-    enforceAfter: Instant = Instant.now(),
     logger: TracedLogger,
+    attributeMatcherFactory: PerAttributeRateLimitConfig => String => Option[
+      SpliceRateLimitConfig.Simple
+    ] = PerAttributeRateLimiter.exactMatch,
 ) {
 
-  private val perAttributeConfig = attributeConfig.rateLimitFor(config)
-  private val isEnabled = perAttributeConfig.enabled && perAttributeConfig.ratePerSecond > 0
+  private val attributeMatcher: String => Option[SpliceRateLimitConfig.Simple] =
+    attributeMatcherFactory(config)
+
   private val attributeLabel = Map("limiter_attribute" -> attribute)
 
   // evictions by size can happen for every single request (e.g. when a large number of distinct
@@ -223,7 +227,7 @@ class PerAttributeRateLimiter(
         implicit val tc: TraceContext = TraceContext.empty
         val message =
           s"Rate limiter cache for $name (attribute '$attribute') exceeded its maximum size of " +
-            s"${attributeConfig.maxAttributeValues}; evicting the rate limiter for attribute value '$key'. " +
+            s"${config.maxAttributeValues}; evicting the rate limiter for attribute value '$key'. " +
             "Its rate limiting state is lost. Consider increasing max-attribute-values."
         val now = System.nanoTime()
         val last = lastSizeEvictionWarning.get()
@@ -245,26 +249,25 @@ class PerAttributeRateLimiter(
   ](
     Caffeine
       .newBuilder()
-      .maximumSize(attributeConfig.maxAttributeValues)
+      .maximumSize(config.maxAttributeValues)
       // Evict limiters that have not been used for a full sustained rate limiting window (the bucket
       // size of the interval rate limiter): after that time an idle limiter would have refilled its
       // budget anyway, so dropping it does not change the enforced rate.
-      .expireAfterAccess(SpliceRateLimiter.sustainedWindow(perAttributeConfig))
+      // The longest window of the default limit and all overrides is used, so that no limiter is
+      // evicted before its own window has elapsed.
+      .expireAfterAccess(
+        (config.limit +: config.attributeOverrides.values.toSeq)
+          .map(SpliceRateLimiter.sustainedWindow)
+          .foldLeft(Duration.ZERO)((longest, window) =>
+            if (window.compareTo(longest) > 0) window else longest
+          )
+      )
       .evictionListener(evictionListener),
     Some(new CacheMetrics(s"$name-$attribute-rate-limiter", metrics.otelFactory)),
   )
 
-  private lazy val defaultRateLimiter = new SpliceRateLimiter(
-    name,
-    perAttributeConfig,
-    metrics,
-    enforceAfter,
-    limiterType = SpliceRateLimiter.UnknownAttributeLimiterType,
-    extraLabels = attributeLabel,
-  )
-
   private lazy val reportedMaxLimit: Unit =
-    metrics.recordMaxLimit(perAttributeConfig.ratePerSecond)(
+    metrics.recordMaxLimit(config.limit.ratePerSecond)(
       MetricsContext(
         attributeLabel ++ Map(
           "limiter" -> name,
@@ -274,7 +277,19 @@ class PerAttributeRateLimiter(
     )
 
   def markRun(attributeValue: Option[String]): Boolean =
-    if (isEnabled) attributeValue.fold(defaultRateLimiter)(limiterFor).markRun()
+    if (config.enabled) attributeValue match {
+      case Some(value) => limiterFor(value).markRun()
+      case None =>
+        metrics.recordUnknownAttributeNotLimited()(
+          MetricsContext(
+            attributeLabel ++ Map(
+              "limiter" -> name,
+              "limiter_type" -> SpliceRateLimiter.PerAttributeLimiterType,
+            )
+          )
+        )
+        true
+    }
     else true
 
   private def limiterFor(attributeValue: String): SpliceRateLimiter = {
@@ -284,9 +299,8 @@ class PerAttributeRateLimiter(
       (_: String) =>
         new SpliceRateLimiter(
           name,
-          perAttributeConfig,
+          attributeMatcher(attributeValue).getOrElse(config.limit),
           metrics,
-          enforceAfter,
           limiterType = SpliceRateLimiter.PerAttributeLimiterType,
           extraLabels = attributeLabel,
           reportMaxLimit = false,
@@ -298,4 +312,10 @@ class PerAttributeRateLimiter(
 object PerAttributeRateLimiter {
 
   private val EvictionWarningIntervalNanos: Long = TimeUnit.MINUTES.toNanos(1)
+
+  val exactMatch: PerAttributeRateLimitConfig => String => Option[SpliceRateLimitConfig.Simple] =
+    config => attributeValue => config.attributeOverrides.get(attributeValue)
+
+  val noOverrides: PerAttributeRateLimitConfig => String => Option[SpliceRateLimitConfig.Simple] =
+    _ => _ => None
 }

@@ -4,8 +4,9 @@
 # SPDX-License-Identifier: Apache-2.0
 
 if [ -z "${CI}" ]; then
-    npm install --no-update-notifier
+    # we rely on dependabot for npm vulnerabilities so disable the audit check here for faster installs.
+    npm install --no-update-notifier --no-audit
 else
   # shellcheck disable=SC2015
-  for _ in {1..5}; do npm ci && break || sleep 15; done
+  for _ in {1..5}; do npm ci --no-audit && break || sleep 15; done
 fi
