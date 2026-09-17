@@ -22,6 +22,9 @@ cloudArmor:
       throttleAcrossAllEndpointsPerIp:
         maxRequestsBeforeHttp429: 10000
         withinIntervalSeconds: 60
+  wafRules:
+    excludedHostPrefixes:
+      - 'grafana'
 cluster:
   nodePools:
     apps:

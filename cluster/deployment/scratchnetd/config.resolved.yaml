@@ -26,6 +26,8 @@ cloudArmor:
         withinIntervalSeconds: 60
   wafRules:
     enabled: true
+    excludedHostPrefixes:
+      - 'grafana'
     previewOnly: false
 cluster:
   nodePools:
