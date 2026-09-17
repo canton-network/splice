@@ -41,9 +41,13 @@ jobs:
         env:
           MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
           MONDAY_BOARD_ID: ${{ secrets.MONDAY_BOARD_ID }}
+<<<<<<< HEAD
           INPUT_VERSION: ${{ inputs.version }}
           INPUT_MONTH: ${{ inputs.month }}
           INPUT_DRY_RUN: ${{ inputs.dry_run }}
+=======
+          MONDAY_REFRESH_STAGING_CALENDAR: ${{ secrets.MONDAY_REFRESH_STAGING_CALENDAR }}
+>>>>>>> b43a68354e ([static] read the secret from URL)
         shell: bash
         run: |
           ARGS=(
