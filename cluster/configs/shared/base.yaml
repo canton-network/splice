@@ -62,6 +62,7 @@ pulumiProjectConfig:
         max_wal_size: '20480' # 20GB, but GCP doesn't allow to write it that way and must be a number indicating MB
         maintenance_work_mem: '2000000' # 2Gi, but GCP doesn't allow to write it that way and must be a number indicating KB,
         work_mem: '16384' # 16MB, raised from the default of 4MB to better support large queries, but still low enough to avoid OOMs in case of many concurrent queries, can be increased for instances with high memory
+        autovacuum_freeze_max_age: '500000000' # 500 million, raised from the default of 200 million to avoid large impact of autovacuum freeze and allow more time for regular autovacuum
     skipSynchronizerInitialization: true
     # default not allowing version downgrades in our apps
     allowDowngrade: true
