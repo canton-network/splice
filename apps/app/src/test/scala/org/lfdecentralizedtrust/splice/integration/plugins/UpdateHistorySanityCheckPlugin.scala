@@ -53,10 +53,13 @@ class UpdateHistorySanityCheckPlugin(
 
       TriggerTestUtil
         .setTriggersWithin(
-          triggersToPauseAtStart = initializedScans.map(scan =>
+          triggersToPauseAtStart = initializedScans.flatMap { scan =>
             // prevent races with the trigger when taking the forced manual snapshot
-            scan.automation.trigger[AcsSnapshotTrigger]
-          ),
+            val trigger = scan.automation.trigger[AcsSnapshotTrigger]
+            // If the test already paused the trigger, this block will resume it, which we don't want.
+            // Particularly in simtime tests that may cause the trigger to fail after resuming.
+            if (trigger.isPaused) None else Some(trigger)
+          },
           triggersToResumeAtStart = Seq(),
         ) {
           // This flag should have the same value on all scans

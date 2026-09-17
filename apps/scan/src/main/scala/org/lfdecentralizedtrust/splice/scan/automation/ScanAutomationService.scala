@@ -143,6 +143,7 @@ class ScanAutomationService(
       snapshotStore,
       updateHistory,
       scanStorageConfigV1,
+      config.perAcsSnapshotTablesEnabled,
       triggerContext,
     )
   )
