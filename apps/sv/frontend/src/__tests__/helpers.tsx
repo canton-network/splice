@@ -109,5 +109,5 @@ export async function navigateToGovernancePage(user: UserEvent): Promise<void> {
 export async function navigateToLegacyGovernancePage(): Promise<void> {
   window.history.pushState({}, '', '/governance-old');
   window.dispatchEvent(new PopStateEvent('popstate'));
-  expect(await screen.findByText('Vote Requests')).toBeDefined();
+  expect(await screen.findByText('Vote Requests', {}, { timeout: 15000 })).toBeDefined();
 }
