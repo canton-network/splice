@@ -349,7 +349,7 @@ class RollForwardLsuIntegrationTest
               sequencers should have size 8
               sequencers.groupBy(_.svName).foreach { case (sv, sequencers) =>
                 clue(s"check sequencers for $sv") {
-                  sequencers.size shouldBe 3
+                  sequencers.size shouldBe 2
                   forExactly(1, sequencers) { sequencer =>
                     sequencer.serial shouldBe 0
                   }

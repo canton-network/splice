@@ -865,7 +865,7 @@ class LsuIntegrationTest
         sv1Backend.stop()
         sv1LocalBackend.startSync()
         forExactly(1, sv1ScanBackend.listDsoSequencers().loneElement.sequencers) { s =>
-          s.serial shouldBe Some(0)
+          s.serial shouldBe 0
           s.svName shouldBe sv1LocalBackend.config.onboarding.value.name
         }
       }
