@@ -8,6 +8,7 @@ import {
   coreSvsToDeployBasic,
 } from '@canton-network/splice-pulumi-common-sv/src/svConfigsBasic';
 import { cometBFTExternalPort } from '@canton-network/splice-pulumi-common-sv/src/synchronizer/cometbftConfig';
+import { gkeL7GatewayNumTrustedProxies } from '@canton-network/splice-pulumi-common/src/ratelimit/envoyRateLimiter';
 import { rateLimitResponseHeaders } from '@canton-network/splice-pulumi-common/src/ratelimit/rateLimitHeaders';
 import { mergeWith } from 'lodash';
 import { z } from 'zod';
@@ -397,8 +398,8 @@ function configureGatewayService(
           deploymentValues: {
             podAnnotations: {
               'proxy.istio.io/config': JSON.stringify({
-                // the 2 are an IP from the proxy-only subnet and the ingress IP itself
-                gatewayTopology: { numTrustedProxies: 2 },
+                // the 2 are an IP from the proxy-only subnet and the ingress IP itself.
+                gatewayTopology: { numTrustedProxies: gkeL7GatewayNumTrustedProxies },
               }),
             },
           },
