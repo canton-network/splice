@@ -10,6 +10,10 @@ import { load } from "../node_modules/js-yaml/dist/js-yaml.mjs";
  * service wide rate limits declared in it, see `scan.example.yaml` for the shape. Per endpoint
  * buckets (`rateLimits`) are ignored: only the global and global per-IP ones are exercised, against
  * a probe path that has no bucket of its own.
+ *
+ * The config declares buckets but no hostnames, and each service is reached on a host of its own,
+ * so the URLs are supplied per service by the caller (`SCAN_URL` / `SEQUENCER_URL`). A service
+ * without a URL is not part of the run.
  */
 
 interface Bucket {
@@ -43,7 +47,8 @@ export const RATE_LIMITED_GRPC_STATUS = 8;
 /**
  * How each service is probed, keyed by the last segment of the config path its `externalRateLimits`
  * block sits under (`sv.scan` -> `scan`). The paths have no per endpoint bucket of their own in
- * `cluster/configs/shared/rate-limits/`, so they are charged against the global buckets only.
+ * `cluster/configs/shared/rate-limits/`, so they are charged against the global buckets only. The
+ * same keys identify the base URLs passed in, see `ServiceUrls`.
  */
 const PROBES: Record<string, { protocol: Protocol; probePath: string }> = {
   scan: { protocol: "http", probePath: "/api/scan/version" },
@@ -57,11 +62,30 @@ const PROBES: Record<string, { protocol: Protocol; probePath: string }> = {
   },
 };
 
+/**
+ * Base URLs of the services under test, keyed like `PROBES`, e.g.
+ * `{ scan: 'https://scan.sv-2.example.com' }`. A service missing from this map is skipped.
+ */
+export type ServiceUrls = Record<string, string>;
+
+/** The key a config path maps to, i.e. its last segment (`sv.scan` -> `scan`). */
+export function serviceKey(name: string): string {
+  return name.split(".").pop() ?? "";
+}
+
+/** `https://host`, `https://host/` and a bare `host` all normalize to `https://host`. */
+export function normalizeBaseUrl(url: string): string {
+  const withScheme = /^https?:\/\//.test(url.trim())
+    ? url.trim()
+    : `https://${url.trim()}`;
+  return withScheme.replace(/\/+$/, "");
+}
+
 /** How to probe the service a config path points at, if it is one this tester knows. */
 export function probeFor(
   name: string,
 ): { protocol: Protocol; probePath: string } | undefined {
-  return PROBES[name.split(".").pop() ?? ""];
+  return PROBES[serviceKey(name)];
 }
 
 /** A service whose global rate limits are under test. */
@@ -72,7 +96,7 @@ export interface Target {
   globalPerIpLimits?: ResolvedBucket;
   /** the bucket shared by all clients and all endpoints of the service */
   globalLimits?: ResolvedBucket;
-  /** the URL under test, built from the domain passed to main.ts and the probe path */
+  /** the URL under test, built from this service's base URL and the probe path */
   url: string;
   /** the protocol the URL speaks, which decides how a rejection is recognized */
   protocol: Protocol;
@@ -121,13 +145,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 /**
  * Collects every `externalRateLimits` block declaring a global bucket, wherever it sits in the
- * config. A service this tester cannot probe (missing from `PROBES`) is skipped, as the wrong
- * protocol or path would either miss the global buckets or be charged to a per endpoint one.
- * `probePathOverride` replaces the probe path of every service, see `-e PROBE_PATH=`.
+ * config. A service this tester cannot probe (missing from `PROBES`), or one with no base URL in
+ * `serviceUrls`, is skipped: the wrong protocol, path or host would either miss the global buckets
+ * or never reach the app at all. `probePathOverride` replaces the probe path of every service, see
+ * `-e PROBE_PATH=`.
  */
 export function collectTargets(
   config: unknown,
-  domain: string,
+  serviceUrls: ServiceUrls,
   probePathOverride?: string,
 ): Target[] {
   const targets: Target[] = [];
@@ -149,14 +174,15 @@ export function collectTargets(
     const globalPerIpLimits = resolveBucket(limits.globalPerIpLimits);
     const globalLimits = resolveBucket(limits.globalLimits);
     const probe = probeFor(service);
-    if ((!globalPerIpLimits && !globalLimits) || !probe) {
+    const baseUrl = serviceUrls[serviceKey(service)];
+    if ((!globalPerIpLimits && !globalLimits) || !probe || !baseUrl) {
       return;
     }
     targets.push({
       name: service,
       globalPerIpLimits,
       globalLimits,
-      url: `https://${domain}${probePathOverride ?? probe.probePath}`,
+      url: `${normalizeBaseUrl(baseUrl)}${probePathOverride ?? probe.probePath}`,
       protocol: probe.protocol,
     });
   };
@@ -177,7 +203,7 @@ export function sharedBucket(target: Target): ResolvedBucket | undefined {
 
 export function loadConfig(
   configPath: string,
-  domain: string,
+  serviceUrls: ServiceUrls,
   probePathOverride?: string,
 ): Target[] {
   // `open` only exists in k6's init context and resolves relative paths against this file, while
@@ -187,7 +213,7 @@ export function loadConfig(
     : [`../${configPath}`, configPath];
   for (const candidate of candidates) {
     try {
-      return parseConfig(open(candidate), domain, probePathOverride);
+      return parseConfig(open(candidate), serviceUrls, probePathOverride);
     } catch {
       // try the next candidate
     }
@@ -200,12 +226,12 @@ export function loadConfig(
 /** Parses a YAML cluster config and collects the global rate limits declared in it. */
 export function parseConfig(
   raw: string,
-  domain: string,
+  serviceUrls: ServiceUrls,
   probePathOverride?: string,
 ): Target[] {
   return collectTargets(
     (load as (input: string) => unknown)(raw),
-    domain,
+    serviceUrls,
     probePathOverride,
   );
 }

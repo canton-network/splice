@@ -4,13 +4,17 @@ k6 checks that the rate limits declared in a cluster config are actually enforce
 
 ## Running
 
-One host per run, against the buckets in the given config (use the cluster's own
-`cluster/deployment/<cluster>/config.resolved.yaml`; the examples are just the shared defaults):
+Pass the cluster's own `cluster/deployment/<cluster>/config.resolved.yaml` and the URL of each
+service to test; a service without a URL is skipped, so one config covers every run:
 
 ```bash
-k6 run src/main.ts -e DOMAIN=scan.sv-2.example.com -e CONFIG=./scan.example.yaml
-k6 run src/main.ts -e DOMAIN=sequencer-17.sv-2.example.com -e CONFIG=./sequencer.example.yaml
+k6 run src/main.ts -e SCAN_URL=https://scan.sv-2.example.com -e CONFIG=./config.resolved.yaml
+k6 run src/main.ts -e SEQUENCER_URL=https://sequencer-17.sv-2.example.com -e CONFIG=./config.resolved.yaml
 ```
+
+Both may be given in one run: scan and the sequencer have independent buckets, and scenarios are
+still scheduled one after the other. The scheme may be omitted (`scan.sv-2.example.com`), in which
+case `https` is assumed.
 
 Only `externalRateLimits.globalLimits` and `globalPerIpLimits` are exercised, so the probe paths
 have no per endpoint bucket of their own. A service missing from `PROBES` in `src/config.ts` is
@@ -42,16 +46,19 @@ never one.
 
 ## Options
 
-| Variable              | Default      | Meaning                                     |
-| --------------------- | ------------ | ------------------------------------------- |
-| `DOMAIN`              | _required_   | host under test                             |
-| `CONFIG`              | _required_   | config to read the buckets from             |
-| `PROBE_PATH`          | per service  | probe another endpoint                      |
-| `BURST_FACTOR`        | `2`          | how far above the binding rate bursts run   |
-| `PER_IP_BUFFER_RPS`   | `1000`       | flat req/s added, per-IP bound targets only |
-| `BURST_SECONDS`       | _from drain_ | pin the burst window                        |
-| `MAX_BURST_RPS`       | `2500`       | ceiling on generated load                   |
-| `REJECTIONS_TO_PROVE` | `50`         | rejections after which VUs stop sending     |
+| Variable              | Default      | Meaning                                          |
+| --------------------- | ------------ | ------------------------------------------------ |
+| `CONFIG`              | _required_   | config to read the buckets from                  |
+| `SCAN_URL`            | _see below_  | base URL of scan                                 |
+| `SEQUENCER_URL`       | _see below_  | base URL of the sequencer's public API           |
+| `PROBE_PATH`          | per service  | probe another endpoint, single service runs only |
+| `BURST_FACTOR`        | `2`          | how far above the binding rate bursts run        |
+| `PER_IP_BUFFER_RPS`   | `1000`       | flat req/s added, per-IP bound targets only      |
+| `BURST_SECONDS`       | _from drain_ | pin the burst window                             |
+| `MAX_BURST_RPS`       | `2500`       | ceiling on generated load                        |
+| `REJECTIONS_TO_PROVE` | `50`         | rejections after which VUs stop sending          |
+
+At least one of `SCAN_URL` / `SEQUENCER_URL` is required.
 
 A burst runs at `bindingRps x BURST_FACTOR`, capped at `MAX_BURST_RPS`, and is held for twice the
 time it takes to drain the bucket, so half of it lies past the first rejection.

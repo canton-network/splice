@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import exec from "k6/execution";
 import { Options, Scenario } from "k6/options";
-import { Target, loadConfig } from "./config.ts";
+import { type ServiceUrls, Target, loadConfig } from "./config.ts";
 import { checks } from "./checks/index.ts";
 import {
   UNEXPECTED_STATUS_TOLERANCE,
@@ -12,22 +12,37 @@ import {
 } from "./checks/common.ts";
 
 /**
- * Entry point of the rate limit tester: takes a domain and a cluster config, and runs every check
- * in `checks/` against the global rate limits of every service declared in it. Per endpoint buckets
- * are out of scope, so the load goes to a probe path that has no bucket of its own (`PROBES` in
- * `config.ts`, override with `-e PROBE_PATH=`). One host per run, so scan and the sequencer are run
- * separately, and scenarios run one after the other, as a service shares its buckets between them.
+ * Entry point of the rate limit tester: takes the URL of each service under test and a cluster
+ * config, and runs every check in `checks/` against the global rate limits declared for those
+ * services. Per endpoint buckets are out of scope, so the load goes to a probe path that has no
+ * bucket of its own (`PROBES` in `config.ts`, override with `-e PROBE_PATH=`). The config declares
+ * buckets but no hostnames, so each service is given its own URL and a service without one is
+ * skipped; the cluster's own `config.resolved.yaml` can therefore be passed as is. Scenarios run
+ * one after the other, as a service shares its buckets between them.
  *
- *   k6 run src/main.ts -e DOMAIN=scan.sv-2.example.com -e CONFIG=./scan.example.yaml
- *   k6 run src/main.ts -e DOMAIN=sequencer-0.sv-2.example.com -e CONFIG=./sequencer.example.yaml
+ *   k6 run src/main.ts -e SCAN_URL=https://scan.sv-2.example.com -e CONFIG=./config.resolved.yaml
+ *   k6 run src/main.ts -e SEQUENCER_URL=https://sequencer-17.sv-2.example.com -e CONFIG=./config.resolved.yaml
  */
-const DOMAIN = __ENV.DOMAIN ?? "";
 const CONFIG = __ENV.CONFIG ?? "";
 const PROBE_PATH = __ENV.PROBE_PATH || undefined;
-if (DOMAIN === "" || CONFIG === "") {
+/** Base URL per service, keyed like `PROBES` in `config.ts`. */
+const SERVICE_URLS: ServiceUrls = {};
+if (__ENV.SCAN_URL) {
+  SERVICE_URLS.scan = __ENV.SCAN_URL;
+}
+if (__ENV.SEQUENCER_URL) {
+  SERVICE_URLS.sequencer = __ENV.SEQUENCER_URL;
+}
+if (CONFIG === "" || Object.keys(SERVICE_URLS).length === 0) {
   throw new Error(
-    "DOMAIN and CONFIG are required, e.g. " +
-      "k6 run src/main.ts -e DOMAIN=scan.sv-2.example.com -e CONFIG=./scan.example.yaml",
+    "CONFIG and at least one of SCAN_URL / SEQUENCER_URL are required, e.g. " +
+      "k6 run src/main.ts -e SCAN_URL=https://scan.sv-2.example.com -e CONFIG=./config.resolved.yaml",
+  );
+}
+if (PROBE_PATH && Object.keys(SERVICE_URLS).length > 1) {
+  throw new Error(
+    "PROBE_PATH replaces the probe path of every service, so it only makes sense with a single " +
+      "service under test; set just one of SCAN_URL / SEQUENCER_URL alongside it",
   );
 }
 
@@ -56,7 +71,7 @@ const thresholds: Record<string, string[]> = {};
 const reports: Report[] = [];
 const skipped: string[] = [];
 let totalSeconds = 0;
-for (const target of loadConfig(CONFIG, DOMAIN, PROBE_PATH)) {
+for (const target of loadConfig(CONFIG, SERVICE_URLS, PROBE_PATH)) {
   for (const check of checks) {
     const reason = check.inapplicable(target);
     if (reason) {
@@ -95,7 +110,8 @@ for (const target of loadConfig(CONFIG, DOMAIN, PROBE_PATH)) {
 
 if (Object.keys(scenarios).length === 0) {
   throw new Error(
-    `no runnable check for the global rate limits declared in ${CONFIG}` +
+    `no runnable check for the global rate limits declared in ${CONFIG} for ` +
+      `${JSON.stringify(SERVICE_URLS)}` +
       (skipped.length > 0 ? `; skipped ${skipped.join("; ")}` : ""),
   );
 }
@@ -159,7 +175,11 @@ function metric(
  * verdict per check and target instead.
  */
 export function handleSummary(data: SummaryData): Record<string, string> {
-  const lines: string[] = ["", `rate limits of ${DOMAIN}:`, ""];
+  const lines: string[] = [
+    "",
+    `rate limits of ${Object.values(SERVICE_URLS).join(", ")}:`,
+    "",
+  ];
   let failed = false;
   for (const report of reports) {
     const scope = {
@@ -179,6 +199,10 @@ export function handleSummary(data: SummaryData): Record<string, string> {
       { ...scope, phase: report.burstPhase },
       "rate",
     );
+    // A Rate counts every observation, so passes + fails is the number of requests sent.
+    const sent =
+      metric(data, "rate_limit_throttled", scope, "passes") +
+      metric(data, "rate_limit_throttled", scope, "fails");
     const unexpected = metric(
       data,
       "rate_limit_unexpected_status_rate",
@@ -186,7 +210,15 @@ export function handleSummary(data: SummaryData): Record<string, string> {
       "passes",
     );
     const verdicts: string[] = [];
-    if (byInfra === 0 && byApp === 0) {
+    if (sent === 0) {
+      // Without this, an aborted run (Ctrl-C, or VU initialization that never finished) reports
+      // every target as NOT ENFORCED, which looks like a finding but is an artifact.
+      failed = true;
+      verdicts.push(
+        "INCONCLUSIVE: no request was sent for this target, so nothing was measured. The run was " +
+          "most likely interrupted before this scenario started; rerun it and let it finish.",
+      );
+    } else if (byInfra === 0 && byApp === 0) {
       failed = true;
       verdicts.push(
         `NOT ENFORCED at ${report.peakLoad}: not a single request was rejected. Either the limit ` +
