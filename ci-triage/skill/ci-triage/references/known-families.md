@@ -93,4 +93,7 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   (`ClassCastException` Promise -> Uri, then `expectNext(20 s)` timeout). Fix: `ray/fix-bulk-storage-test-stubbing-race`.
 
 ## J. Infra, no code change
-- 10133 ghcr.io pull i/o timeout; 10150 Docker Hub 502 in the multi-arch image check.
+- 10133 ghcr.io pull i/o timeout.
+- Multi-arch image check (deployment_test, `scripts/check-multiarch-images.py`): one skopeo answer decides. 10150 = Docker Hub
+  502 (`unable to inspect ... 502` on stderr); 10172 = no stderr line, response without a `manifests` list for a digest
+  that is an index. Confirm with the registry probe in the 10172 packet. Fix: `ray/fix-multiarch-check-retry`.

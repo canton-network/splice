@@ -175,6 +175,7 @@ given as (run, job, ref) tuples in the request; nothing inferred.
 | 9740 | 32257514623 | main 306014bc81 (#6853), 2026-08-19 | 96082925012 `simtime (1)` | 3.5.14-snapshot.20260815 |
 | 10171 | 35330711023 | release-line-0.8.3 8460154135 (#7389, release 0.8.3) | 105556336894 `simtime (3)` | 3.5.18 |
 | 8784 | 27544243403 | main 21ed11e124, 2026-06-15 (logs expired) | simtime (3) / signatures (0) / roll-forward-lsu (1), job for the ref unknown | - |
+| 10172 | 35341655357 | release-line-0.8.x 495349f01f (#7381) | 105588693020 `deployment_test` | 3.5.18 (n/a) |
 
 ## Overview
 
@@ -199,6 +200,7 @@ given as (run, job, ref) tuples in the request; nothing inferred.
 | 9740 | Same test, same step, same message on main 2026-08-19 (canton 3.5.14 snapshot): identical mechanism from its artifact (blocked scheduler sc=1008, MAX_SEQUENCING_TIME_EXCEEDED, stale TimeProof, 10m 9.99 s delay). | parent of 10170 | Same packet. Not fixed on main; the fix branch above covers it. |
 | 10171 | WalletMintingDelegationTimeBasedIntegrationTest: `advanceTime(PT25H)` -> `LOCAL_VERDICT_INACTIVE_CONTRACTS`, third hit, now on the 0.8.3 release commit. | 10154 (cn-test-failures 10060 / #7223) | Section 6 of the 10154 packet. Backport branch `ray/backport-7261-release-line-0.8.3`; release-line-0.8.x still needs #7261 as well. |
 | 8784 | Venue participant submits OTCTrade_Settle before it has ingested the two AmuletAllocation contracts (CONTRACT_NOT_FOUND, per PR #6013). #6013 never merged; its own CI failed because its `awaitJava` predicate compares two unrelated codegen ContractId classes (`ContractId.equals` requires assignable classes), so the wait timed out although the venue had the contract 0.8 s earlier. Race still present on main. | - | Packet `8784-venue-allocation-contract-not-found.md`. Fix branch `ray/fix-venue-allocation-wait` (47c1b9f7e3): shared `waitForAllocationsOnParticipant` comparing ids by value, used in both tests. |
+| 10172 | deployment_test: multi-arch image check reports `ubuntu:24.04@sha256:440dcf...` (splice-debug) as not multi-arch; skopeo succeeded but returned a manifest without a `manifests` list for a digest that is a 12-entry OCI index (unchanged since 2025-07); no stderr detail, 16 other images passed. | 10150 (same check, second failure mode) | Packet `10172-multiarch-check-non-index-response.md`. Fix branch `ray/fix-multiarch-check-retry` (82f8f571c2): retry inspects, print the manifest shape. |
 
 ## Cross-cutting observations
 
@@ -228,5 +230,6 @@ given as (run, job, ref) tuples in the request; nothing inferred.
 | `ray/backport-7299-release-line-0.8.3` | 87d76de621 | 10169: clean `cherry-pick -x -s` of #7299 onto origin/release-line-0.8.3 (0.8.x needs the same) | cherry-pick only |
 | `ray/fix-venue-allocation-wait` | 47c1b9f7e3 | 8784: venue participant waits for both AmuletAllocation contracts (id compared by value) before OTCTrade_Settle, in TokenStandardAllocationIntegrationTest and TrafficBasedRewardsTimeBasedIntegrationTest | scalafmt only; NOT compiled/run |
 | `ray/fix-auth0-relogin-retry` | c21d8246fb | 10143: the second login in WalletAuth0FrontendIntegrationTest goes through completeAuth0LoginWithAuthorization (1 min retry with Auth0 cookie/storage reset and re-navigation to /confirm-payment) instead of a single unretried loginViaAuth0InCurrentPage | scalafmt only; NOT run (needs Auth0 credentials) |
+| `ray/fix-multiarch-check-retry` | 82f8f571c2 | 10150 / 10172: `check-multiarch-images.py` retries skopeo 3x and reports the manifest shape on a non-index answer | py_compile only |
 | `ray/fix-sv-ui-test-timeouts` | 26ad84f42d | 10141 (await the `waitFor`, drop the 1000 ms override) and 10145 (`navigateToLegacyGovernancePage` findByText with the 15 s vitest budget) | prettier --check clean; vitest not run |
 | `ray/fix-multihost-acs-mismatch` | 5e4f9464cd | 10111 family (10129, 10146, 10155, 10158, 10162, 10164, 10167): new `WalletTestUtil.onboardWalletUserHostedAlsoOn` allocates alice's wallet party hosted on both her participant and sv1Participant before she owns any contract, then onboards it as the wallet user; the expiry base suite and AutoIgnoreUnresponsivePartiesIntegrationTest use it instead of `propose_delta` multi-hosting after onboarding | scalafmt only; NOT compiled, NOT run (host) |
