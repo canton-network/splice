@@ -4,6 +4,7 @@ import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
 import {
   appsKubernetesScheduling,
+  CACHE_GHCR,
   DOCKER_REPO,
   ExactNamespace,
   HELM_MAX_HISTORY_SIZE,
@@ -23,6 +24,14 @@ import yaml from 'js-yaml';
 import { createCachePvc } from './cache';
 import { ghaConfig } from './config';
 import { createCloudSQLInstanceForPerformanceTests, PerformanceTestDb } from './performanceTests';
+
+// Version and multi-platform index digest of ghcr.io/actions/actions-runner, pulled via the Artifact Registry
+// ghcr mirror. Must match ARG RUNNER_VERSION / RUNNER_DIGEST in cluster/images/splice-test-docker-runner and
+// splice-test-runner-hook, so the externals copied for dind match the runner binary. The digest comes from
+// `docker buildx imagetools inspect ghcr.io/actions/actions-runner:<version>`; all three places are updated
+// together by scripts/bump-gha-runner-version.sh.
+const RUNNER_VERSION = '2.337.0';
+const RUNNER_DIGEST = 'sha256:e5496277be5d09bc968b3d64911b74e219ac4a3f2edce956a3ecf9271bea1ef4';
 
 const localnetHostAliases = [
   {
@@ -95,7 +104,7 @@ function installDockerRunnerScaleSet(
             initContainers: [
               {
                 name: 'init-dind-externals',
-                image: 'ghcr.io/actions/actions-runner:latest',
+                image: `${CACHE_GHCR}/actions/actions-runner:${RUNNER_VERSION}@${RUNNER_DIGEST}`,
                 command: ['cp', '-r', '-v', '/home/runner/externals/.', '/home/runner/tmpDir/'],
                 volumeMounts: [
                   {
@@ -448,7 +457,7 @@ function installK8sRunnerScaleSet(
               {
                 name: 'runner',
                 image: runnerImage,
-                imagePullPolicy: 'dirty'.indexOf(runnerImage) ? 'Always' : 'IfNotPresent',
+                imagePullPolicy: runnerImage.includes('dirty') ? 'Always' : 'IfNotPresent',
                 command: ['/home/runner/run.sh'],
                 env: [
                   {
