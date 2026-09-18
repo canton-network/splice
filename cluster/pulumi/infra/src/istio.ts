@@ -855,7 +855,12 @@ function configureSequencerFlowControl(
               typed_config: {
                 '@type':
                   'type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager',
-                http2_protocol_options: http2ProtocolOptions(config),
+                http2_protocol_options: {
+                  ...http2ProtocolOptions(config),
+                  // The L7 load balancer forwards WebSockets as HTTP/2 extended CONNECT.
+                  // Rejecting these headers closes the shared connection, failing unrelated requests.
+                  ...(context === 'GATEWAY' ? { allow_connect: true } : {}),
+                },
               },
             },
           },
