@@ -52,6 +52,8 @@ Infra flake in the external registry path, second variant of 10150 (the digest a
 unchanged). Fix branch `ray/fix-multiarch-check-retry` (4dc7d6c36d, off main): the single-call body moves unchanged into `_inspect_once` and `_inspect` retries it up
 to 3 times with a 5 s pause on registry errors, invalid JSON, or a response without a `manifests` list, and prints
 the received `mediaType`, `schemaVersion` and top-level keys for the non-index case so the next occurrence
-carries evidence. A genuinely single-arch pin still fails after three consistent answers. `py_compile` clean;
-not run here (needs skopeo and registry access from the runner). Backport to release-line-0.8.x with the same
+carries evidence. A genuinely single-arch pin still fails after three consistent answers. `py_compile` clean, and a
+five-case harness with a fake `subprocess.run` (success; 502 twice then success; invalid JSON then success; single-arch
+three times; 502 three times) returns the expected result, call count and sleeps. Not run against a real registry
+and not formatted here. Backport to release-line-0.8.x with the same
 cherry-pick once merged.
