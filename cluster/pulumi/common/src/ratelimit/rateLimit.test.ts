@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { expect, jest, test } from '@jest/globals';
 
-import { directIngressXffNumTrustedHops, gkeL7GatewayXffNumTrustedHops } from './envoyRateLimiter';
+import { directIngressXffNumTrustedHops, gkeL7GatewayNumTrustedProxies } from './envoyRateLimiter';
 import { rateLimitedRequestsExpression, sidecarXffNumTrustedHops } from './rateLimit';
 
 // the real module reads the cluster yaml config at import time, which is not available in tests
@@ -29,5 +29,5 @@ test('the trusted hop count follows the ingress topology', () => {
   // further entries, so trusting a single hop would key the per-IP buckets on the proxy-only
   // subnet address instead of the client
   infraConfig.gkeGateway = { proxyForIstioHttp: true };
-  expect(sidecarXffNumTrustedHops()).toEqual(gkeL7GatewayXffNumTrustedHops);
+  expect(sidecarXffNumTrustedHops()).toEqual(gkeL7GatewayNumTrustedProxies);
 });
