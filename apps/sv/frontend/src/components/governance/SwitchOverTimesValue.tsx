@@ -12,7 +12,6 @@ interface SwitchOverTimesValueProps {
   'data-testid'?: string;
 }
 
-
 export const SwitchOverTimesValue: React.FC<SwitchOverTimesValueProps> = ({
   value,
   'data-testid': testId,
