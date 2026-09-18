@@ -606,12 +606,13 @@ Allocation Request
 Conditional Lock
 ----------------
 
-An optional API that lets the owner of a holding attach a release policy to it:
-rules pairing a ledger-checkable guard (hash preimage, ledger time, party
-threshold, bounded combinations) with an outcome (unlock, fixed legs, or
-distribution among fixed receivers), plus an expiry and fallback. It provides
-a standard HTLC leg for cross-chain swaps, executor-free DvP between
-registries, escrow, vesting, and collateral. Specified in the
+An optional API that lets an authorizer attach a release policy to their
+holdings: rules pairing alternative conjunctions of guards (hash preimage,
+ledger time, party threshold), checked by the lock contract's signatories,
+with an outcome that unlocks or releases fixed legs plus enactor-supplied
+legs within a receiver set. At expiry the remainder returns to the
+authorizer. It provides a standard HTLC leg for cross-chain swaps, DvP
+between registries, escrow, vesting, and collateral. Specified in the
 Conditional Holding Lock CIP (draft).
 
   .. toctree::

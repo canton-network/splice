@@ -7,7 +7,8 @@ info:
   description: |
     Implemented by token registries that support the conditional lock API
     (splice-api-token-conditional-lock-v1) for the purpose of locking holdings
-    under a release policy; e.g. HTLC legs, escrow, vesting, and collateral.
+    under a release policy; e.g. HTLC legs, DvP between registries, escrow,
+    vesting, and collateral.
   version: 1.0.0
 paths:
 
@@ -132,13 +133,13 @@ paths:
         "404":
           $ref: "#/components/responses/404"
 
-  /registry/conditional-lock/v1/{lockId}/choice-contexts/enact:
+  /registry/conditional-lock/v1/{lockContractId}/choice-contexts/enact:
     post:
       operationId: "getConditionalLockEnactContext"
       description: |
         Get the choice context to enact a rule on a conditional lock.
       parameters:
-        - name: lockId
+        - name: lockContractId
           description: "The contract ID of the conditional lock to enact a rule on."
           in: path
           required: true
@@ -164,13 +165,13 @@ paths:
         "404":
           $ref: "#/components/responses/404"
 
-  /registry/conditional-lock/v1/{lockId}/choice-contexts/expire:
+  /registry/conditional-lock/v1/{lockContractId}/choice-contexts/expire:
     post:
       operationId: "getConditionalLockExpireContext"
       description: |
         Get the choice context to expire a conditional lock.
       parameters:
-        - name: lockId
+        - name: lockContractId
           description: "The contract ID of the conditional lock to expire."
           in: path
           required: true
@@ -196,13 +197,13 @@ paths:
         "404":
           $ref: "#/components/responses/404"
 
-  /registry/conditional-lock/v1/{lockId}/choice-contexts/cancel:
+  /registry/conditional-lock/v1/{lockContractId}/choice-contexts/cancel:
     post:
       operationId: "getConditionalLockCancelContext"
       description: |
         Get the choice context to cancel a conditional lock.
       parameters:
-        - name: lockId
+        - name: lockContractId
           description: "The contract ID of the conditional lock to cancel."
           in: path
           required: true
@@ -228,13 +229,13 @@ paths:
         "404":
           $ref: "#/components/responses/404"
 
-  /registry/conditional-lock/v1/{lockId}/choice-contexts/amend:
+  /registry/conditional-lock/v1/{lockContractId}/choice-contexts/amend:
     post:
       operationId: "getConditionalLockAmendContext"
       description: |
         Get the choice context to amend a conditional lock.
       parameters:
-        - name: lockId
+        - name: lockContractId
           description: "The contract ID of the conditional lock to amend."
           in: path
           required: true
