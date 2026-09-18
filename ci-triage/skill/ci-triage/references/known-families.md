@@ -1,0 +1,96 @@
+# Known flake families (2026-09 state). Check these before any deep analysis.
+
+Format: signature to grep | confirming check | mechanism | parent ref and duplicates | fix state.
+
+## A. ACS_COMMITMENT_MISMATCH sv1Participant vs aliceValidator after a multi-host step
+- Signature (canton log WARN): `ReceivedAcsCommitmentMatcher:participant=sv1Participant ... ACS_COMMITMENT_MISMATCH ... sender = aliceValidator`.
+- Confirm: `zcat canton_network_test.clog.gz | grep -a -E "Starting test suite|Multi-host alice"`; the mismatched
+  period's `fromExclusive` is 1-15 s after a `Multi-host alice on sv1Participant` clue (ExpiryWithMinimalVettedPackages
+  base suites: AmuletExpiryV1Fallback, ExpiryWithIgnoredAmuletVersion, ExpiryWithNoVettedAmuletVersion; and
+  AutoIgnoreUnresponsiveParties*). The WARN lands 0-27 min later in an unrelated suite (random send delay).
+- Mechanism: the tests add sv1Participant as a host of alice's wallet party after she owns contracts, with no
+  ACS import; the two hosts genuinely disagree. Test issue, not product. Canton 3.6 detects it every time.
+- Parent 10111 (run 34523566111); dups 10129, 10146, 10155, 10158, 10162, 10164, 10167.
+- Fix: `ray/fix-multihost-acs-mismatch` (allocate alice's party hosted on both participants before onboarding).
+  Do not widen `canton_log.ignore.txt:145`.
+
+## B. BFT 1 -> N sequencer onboarding step with unauthenticated newcomers (quorum loss, blacklisting)
+- Signatures: (1) `acknowledge-signed ... DEADLINE_EXCEEDED after 119.99s` + `Failed to acknowledge clean timestamp`
+  (participant or mediator client, WARN); (2) SV app WARN `POST /api/sv/v0/onboard/sv/sequencer ... timeout after 38 seconds`.
+- Confirm on globalSequencerSv1: `New epoch N has started with leaders = [sv1, sv2, ...]` with `size` stepping 1 -> 3/4,
+  preceded within a second by `Authenticated P2P nodes count ... 1 is currently below weak quorum size 2`, then
+  `blacklisted nodes = List(SEQ::sv1...)` (or the newcomer) for ~3 epochs; the ack `received a message` on the
+  sequencer, `MempoolModule: P2P connectivity is not ready`, `cancelled` then `sending response` ~120 s later.
+- Mechanism: Canton activates the new ordering topology at the epoch boundary regardless of P2P authentication.
+  Not fixed in digital-asset/canton main as of the 2026-09-15.22 mirror. Splice mitigations: serialise SV
+  sequencer onboardings, or gate on P2P authentication; for (2) a non-blocking onboard handler or a
+  `custom-timeouts` entry for `onboardSvSequencer`, or extend the `onboard/validator` timeout ignore.
+- Umbrella 10165 (10094 and 10153 closed as dups; 10161 same). Occurs during any initDso with 3-4 SVs
+  (ValidatorIntegrationTest, SvOnboardingIntegrationTest, SvDsoPartyManagementIntegrationTest).
+
+## C. False off-boarding conclusion during onboarding state transfer (10048 family) - FIXED
+- Signatures: `Received topology for epoch N, but this node isn't part of it (i.e., it has been off-boarded)` on a
+  newly onboarded sequencer; downstream: initDso timeouts (10137), `Failed to fetch P2P server authentication token
+  ... Member SEQ::svN access is disabled` (10010: the frozen node judges peers against its stale topology).
+- Fixed by DACH-NY/canton#35600: present in 3.5.17+, and 3.6 snapshots from 20260910 on (markers
+  `Might already have all necessary blocks for new epoch`, `Detected need for catch-up state transfer (to `).
+  Absent in 3.5.16 and 20260909.20244. No supported line is exposed (0.8.0 unsupported). Do not add ignores.
+- Beware: `isn't part of it` also appears legitimately when a test really off-boards a sequencer
+  (canton-standalone-sv123-non-sv1-svs has its own ignore file).
+
+## D. Simulated time jump with a command in flight (round-opening waits)
+- Signature: `Check waiting for open round automation (should create OpenMiningRound N) ... (a, b, c) was not equal to (a+1, b+1, c+1)`
+  (TimeTestUtil.scala) in simtime shards; also `Domain time delay is currently 10m ... waiting until delay is below 2 minutes` (sv1).
+- Confirm: `Advancing sim clock to <T>` followed within 20 ms by `MAX_SEQUENCING_TIME_EXCEEDED` on the sequencer,
+  `Task scheduler waits for tick of sc=...` on sv1Participant, and a `Received TimeProof(<pre-jump time>)`; then no
+  `Validating event` on sv1Participant until ~30 s later.
+- Mechanism: the sequencer drops the in-flight message, the participant blocks until its 30 s wall-clock timeout,
+  domain time stays behind, SV automation pauses. #5779 fixed `advanceTimeAndWaitForRoundAutomation` (90 s);
+  `advanceTimeAndWaitForRoundOpening` was left at 20 s.
+- Parent 9740 (2026-08-19), dup 10170. Fix: `ray/fix-round-opening-wait-budget`.
+- Sibling: `advanceTime(PT25H)` then `LOCAL_VERDICT_INACTIVE_CONTRACTS` on transfer-preapproval send in
+  WalletMintingDelegationTimeBasedIntegrationTest = 10060 / splice #7223, fixed on main by #7261; release lines
+  need the backport (10154, 10166, 10171; `ray/backport-7261-release-line-0.8.3`).
+
+## E. Missing backports to release lines (check first for any release-line-* failure)
+- #7261 (minting delegation time jump), #7305 (per-port Vite deps cache, 10156 / 9704), #7304 (wallet allocation
+  UI test, 10157 / 10120), #7299 (package downgrade in UnsupportedPackageVettingIntegrationTest, 10169 / 9965).
+- Check: `git merge-base --is-ancestor <sha> origin/<line>`; `git log origin/<line>..origin/main -- <test file>`.
+
+## F. Frontend test infrastructure
+- Vite dev servers for alice/bob/charlie splitwell run `vite --force` from one directory; without #7305 they race
+  on `node_modules/.vite/deps` (`ENOENT ... rename ... deps_temp` in `npm-splitwell-*.out`, Firefox
+  `disallowed MIME type ("")` for every module, empty `<div id="root">`). 9704 / 10156.
+- testing-library 1 s `findBy` budgets versus the 15 s vitest budget: `navigateToLegacyGovernancePage` (10145),
+  un-awaited `waitFor` in set-amulet-rules-form.test.tsx (10141). Fix: `ray/fix-sv-ui-test-timeouts`.
+- Describe-level `}, 7500)` in wallet.test.tsx makes near-limit tests fail on slow runners (10157 B).
+- Auth0 login stall on the second login in WalletAuth0FrontendIntegrationTest (10143): only the first login had the
+  retry wrapper. Fix: `ray/fix-auth0-relogin-retry`.
+
+## G. "All tests pass, one log line fails checkErrors" items still without a fix
+- 10084 IndexerState reconnect-drain WARN (Canton `retryLogLevel`; ignore rejected).
+- 10140 `SERVER_OVERLOADED` on DownloadTopologyStateForInit: test-only limit 3 in `sequencers.conf`; fix
+  `ray/fix-topology-init-limit` (3 -> 7).
+- 10144 GetPreferredPackages INTERNAL while a DAR upload merges into the package metadata view (Canton race,
+  cn-test-failures 9136).
+- 10147 `[UNEXPECTED] State transition ... Connecting (unchanged)` WARN at standalone shutdown (Canton log level).
+- 10121 / 10142 SummarizingMiningRoundTrigger ERROR on a retryable "totals not yet computed"
+  (`ray/fix-summarizing-round-log-noise`).
+
+## H. Evidence loss
+- `ResetTopologyStatePlugin` `sys.exit(1)` in teardown (10137, 10139): no report, checkErrors skipped, later
+  suites lost. Fix: `ray/fix-reset-topology-plugin-no-exit`.
+- `NodeBase` `sys.exit(1)` on init failure in the shared sbt JVM: silent 60-minute hang recorded as cancelled
+  (10088-A, #7289; branch `ray/fix-fail-fast-init`).
+- 10139 cause: reference block sequencer `insert block` SQLSTATE 40001 retry storm with four sequencers on one
+  Postgres until the 8-connection pools are exhausted (Canton / topology size).
+
+## I. Test races (venue and splitwell)
+- 8784: settlement venue submits `OTCTrade_Settle` before its participant ingested the AmuletAllocation contracts
+  (`CONTRACT_NOT_FOUND`). PR #6013's wait compared two unrelated codegen ContractId classes and could never
+  match. Fix: `ray/fix-venue-allocation-wait` (compare `.contractId` strings).
+- 10149: BulkStorageCommitFromStagingTest re-stubs Mockito mocks while the flow calls them
+  (`ClassCastException` Promise -> Uri, then `expectNext(20 s)` timeout). Fix: `ray/fix-bulk-storage-test-stubbing-race`.
+
+## J. Infra, no code change
+- 10133 ghcr.io pull i/o timeout; 10150 Docker Hub 502 in the multi-arch image check.
