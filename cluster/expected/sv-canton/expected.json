@@ -1595,7 +1595,7 @@
           "type": "limited"
         }
       },
-      "xffNumTrustedHops": 3
+      "xffNumTrustedHops": 2
     },
     "name": "splice-sv-1-global-domain-10-sequencer-rate-limit",
     "provider": "",
@@ -1669,7 +1669,7 @@
           "type": "limited"
         }
       },
-      "xffNumTrustedHops": 3
+      "xffNumTrustedHops": 2
     },
     "name": "splice-sv-1-global-domain-7-sequencer-rate-limit",
     "provider": "",
@@ -1743,7 +1743,7 @@
           "type": "limited"
         }
       },
-      "xffNumTrustedHops": 3
+      "xffNumTrustedHops": 2
     },
     "name": "splice-sv-1-global-domain-8-sequencer-rate-limit",
     "provider": "",
@@ -1817,7 +1817,7 @@
           "type": "limited"
         }
       },
-      "xffNumTrustedHops": 3
+      "xffNumTrustedHops": 2
     },
     "name": "splice-sv-1-global-domain-9-sequencer-rate-limit",
     "provider": "",
@@ -1891,7 +1891,7 @@
           "type": "limited"
         }
       },
-      "xffNumTrustedHops": 3
+      "xffNumTrustedHops": 2
     },
     "name": "splice-sv-da-1-global-domain-10-sequencer-rate-limit",
     "provider": "",
@@ -1965,7 +1965,7 @@
           "type": "limited"
         }
       },
-      "xffNumTrustedHops": 3
+      "xffNumTrustedHops": 2
     },
     "name": "splice-sv-da-1-global-domain-7-sequencer-rate-limit",
     "provider": "",
@@ -2039,7 +2039,7 @@
           "type": "limited"
         }
       },
-      "xffNumTrustedHops": 3
+      "xffNumTrustedHops": 2
     },
     "name": "splice-sv-da-1-global-domain-8-sequencer-rate-limit",
     "provider": "",
@@ -2113,7 +2113,7 @@
           "type": "limited"
         }
       },
-      "xffNumTrustedHops": 3
+      "xffNumTrustedHops": 2
     },
     "name": "splice-sv-da-1-global-domain-9-sequencer-rate-limit",
     "provider": "",
@@ -2187,7 +2187,7 @@
           "type": "limited"
         }
       },
-      "xffNumTrustedHops": 3
+      "xffNumTrustedHops": 2
     },
     "name": "splice-sv-global-domain-10-sequencer-rate-limit",
     "provider": "",
@@ -2261,7 +2261,7 @@
           "type": "limited"
         }
       },
-      "xffNumTrustedHops": 3
+      "xffNumTrustedHops": 2
     },
     "name": "splice-sv-global-domain-7-sequencer-rate-limit",
     "provider": "",
@@ -2335,7 +2335,7 @@
           "type": "limited"
         }
       },
-      "xffNumTrustedHops": 3
+      "xffNumTrustedHops": 2
     },
     "name": "splice-sv-global-domain-8-sequencer-rate-limit",
     "provider": "",
@@ -2409,7 +2409,7 @@
           "type": "limited"
         }
       },
-      "xffNumTrustedHops": 3
+      "xffNumTrustedHops": 2
     },
     "name": "splice-sv-global-domain-9-sequencer-rate-limit",
     "provider": "",
@@ -2856,11 +2856,8 @@
               "operation": "MERGE",
               "value": {
                 "typed_config": {
-                  "@type": "type.googleapis.com/udpa.type.v1.TypedStruct",
-                  "type_url": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
-                  "value": {
-                    "xff_num_trusted_hops": 3
-                  }
+                  "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "xff_num_trusted_hops": 2
                 }
               }
             }
@@ -3687,11 +3684,8 @@
               "operation": "MERGE",
               "value": {
                 "typed_config": {
-                  "@type": "type.googleapis.com/udpa.type.v1.TypedStruct",
-                  "type_url": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
-                  "value": {
-                    "xff_num_trusted_hops": 3
-                  }
+                  "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "xff_num_trusted_hops": 2
                 }
               }
             }
@@ -4514,11 +4508,8 @@
               "operation": "MERGE",
               "value": {
                 "typed_config": {
-                  "@type": "type.googleapis.com/udpa.type.v1.TypedStruct",
-                  "type_url": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
-                  "value": {
-                    "xff_num_trusted_hops": 3
-                  }
+                  "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "xff_num_trusted_hops": 2
                 }
               }
             }
@@ -5341,11 +5332,8 @@
               "operation": "MERGE",
               "value": {
                 "typed_config": {
-                  "@type": "type.googleapis.com/udpa.type.v1.TypedStruct",
-                  "type_url": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
-                  "value": {
-                    "xff_num_trusted_hops": 3
-                  }
+                  "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "xff_num_trusted_hops": 2
                 }
               }
             }
@@ -9256,11 +9244,8 @@
               "operation": "MERGE",
               "value": {
                 "typed_config": {
-                  "@type": "type.googleapis.com/udpa.type.v1.TypedStruct",
-                  "type_url": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
-                  "value": {
-                    "xff_num_trusted_hops": 3
-                  }
+                  "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "xff_num_trusted_hops": 2
                 }
               }
             }
@@ -10087,11 +10072,8 @@
               "operation": "MERGE",
               "value": {
                 "typed_config": {
-                  "@type": "type.googleapis.com/udpa.type.v1.TypedStruct",
-                  "type_url": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
-                  "value": {
-                    "xff_num_trusted_hops": 3
-                  }
+                  "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "xff_num_trusted_hops": 2
                 }
               }
             }
@@ -10914,11 +10896,8 @@
               "operation": "MERGE",
               "value": {
                 "typed_config": {
-                  "@type": "type.googleapis.com/udpa.type.v1.TypedStruct",
-                  "type_url": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
-                  "value": {
-                    "xff_num_trusted_hops": 3
-                  }
+                  "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "xff_num_trusted_hops": 2
                 }
               }
             }
@@ -11741,11 +11720,8 @@
               "operation": "MERGE",
               "value": {
                 "typed_config": {
-                  "@type": "type.googleapis.com/udpa.type.v1.TypedStruct",
-                  "type_url": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
-                  "value": {
-                    "xff_num_trusted_hops": 3
-                  }
+                  "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "xff_num_trusted_hops": 2
                 }
               }
             }
@@ -14914,11 +14890,8 @@
               "operation": "MERGE",
               "value": {
                 "typed_config": {
-                  "@type": "type.googleapis.com/udpa.type.v1.TypedStruct",
-                  "type_url": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
-                  "value": {
-                    "xff_num_trusted_hops": 3
-                  }
+                  "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "xff_num_trusted_hops": 2
                 }
               }
             }
@@ -15745,11 +15718,8 @@
               "operation": "MERGE",
               "value": {
                 "typed_config": {
-                  "@type": "type.googleapis.com/udpa.type.v1.TypedStruct",
-                  "type_url": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
-                  "value": {
-                    "xff_num_trusted_hops": 3
-                  }
+                  "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "xff_num_trusted_hops": 2
                 }
               }
             }
@@ -16572,11 +16542,8 @@
               "operation": "MERGE",
               "value": {
                 "typed_config": {
-                  "@type": "type.googleapis.com/udpa.type.v1.TypedStruct",
-                  "type_url": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
-                  "value": {
-                    "xff_num_trusted_hops": 3
-                  }
+                  "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "xff_num_trusted_hops": 2
                 }
               }
             }
@@ -17399,11 +17366,8 @@
               "operation": "MERGE",
               "value": {
                 "typed_config": {
-                  "@type": "type.googleapis.com/udpa.type.v1.TypedStruct",
-                  "type_url": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
-                  "value": {
-                    "xff_num_trusted_hops": 3
-                  }
+                  "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "xff_num_trusted_hops": 2
                 }
               }
             }

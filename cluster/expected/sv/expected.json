@@ -1543,7 +1543,7 @@
       "inboundPort": 5012,
       "namespace": "sv-1",
       "protocol": "http",
-      "xffNumTrustedHops": 3
+      "xffNumTrustedHops": 2
     },
     "name": "splice-sv-1-scan-app-rate-limit",
     "provider": "",
@@ -1577,7 +1577,7 @@
       "inboundPort": 5012,
       "namespace": "sv-da-1",
       "protocol": "http",
-      "xffNumTrustedHops": 3
+      "xffNumTrustedHops": 2
     },
     "name": "splice-sv-da-1-scan-app-rate-limit",
     "provider": "",
@@ -2272,11 +2272,8 @@
               "operation": "MERGE",
               "value": {
                 "typed_config": {
-                  "@type": "type.googleapis.com/udpa.type.v1.TypedStruct",
-                  "type_url": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
-                  "value": {
-                    "xff_num_trusted_hops": 3
-                  }
+                  "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "xff_num_trusted_hops": 2
                 }
               }
             }
@@ -3824,11 +3821,8 @@
               "operation": "MERGE",
               "value": {
                 "typed_config": {
-                  "@type": "type.googleapis.com/udpa.type.v1.TypedStruct",
-                  "type_url": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
-                  "value": {
-                    "xff_num_trusted_hops": 3
-                  }
+                  "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "xff_num_trusted_hops": 2
                 }
               }
             }
