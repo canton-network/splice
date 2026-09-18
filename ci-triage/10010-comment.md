@@ -28,8 +28,8 @@ propagating.
 4. Consequence for the proposed fix: an ignore pattern on "Failed to fetch P2P server authentication token ...
    access is disabled" would hide the only WARN that surfaces this bug on shards where the wedge does not
    happen. Since canton 3.5.17 contains #35600, main (since the 20260910 snapshot), release-line-0.8.x and 0.8.1
-   should no longer produce it; release-line-0.8.0 still pins 3.5.16 and can. Close this against the canton
-   bump and re-check any post-3.5.17 occurrence individually rather than adding the ignore.
+   should no longer produce it; release-line-0.8.0 (still on 3.5.16) is no longer supported. Close this against
+   the canton bump and re-check any post-3.5.17 occurrence individually rather than adding the ignore.
 
 Evidence packet: ci-triage/10010-p2p-auth-token-denied-false-offboarding.md (all timestamps from
 logs-wall-clock-time-1/canton_before_shutdown.clog of the run).

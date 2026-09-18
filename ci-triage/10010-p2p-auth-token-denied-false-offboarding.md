@@ -61,6 +61,7 @@ epoch 14 (17:48:34-38) finally pushed it into catch-up state transfer at 17:48:3
 Not a benign "topology change in flight" and not a candidate for a log-ignore: the WARN is the P2P-side symptom
 of a node that wrongly stopped processing after the false off-boarding conclusion (10048 family). Fixed by
 DACH-NY/canton#35600 (3.5.17; main since the 20260910 snapshot, see 10048 packet section "Canton response and
-version check"); release-line-0.8.0 still pins 3.5.16 and can still produce it. Close 10010 (and its duplicates
-10020, 10055, and splice #6986 if that is the same line) against the #35600 bump rather than adding an ignore;
+version check"); release-line-0.8.0 is no longer supported (Raymond, 2026-09-18), so every supported line (main, 0.8.x on 3.5.18,
+0.8.1 on 3.5.17) has the fix. Close 10010 (and its duplicates 10020, 10055, and splice #6986 if that is the same
+line) against the #35600 bump rather than adding an ignore;
 an ignore would have hidden the only WARN that surfaced the bug on shards where the wedge did not happen.
