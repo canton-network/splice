@@ -4,6 +4,7 @@ import * as k8s from '@pulumi/kubernetes';
 import * as pulumi from '@pulumi/pulumi';
 import {
   appsKubernetesScheduling,
+  CACHE_GHCR,
   DOCKER_REPO,
   ExactNamespace,
   HELM_MAX_HISTORY_SIZE,
@@ -23,6 +24,9 @@ import yaml from 'js-yaml';
 import { createCachePvc } from './cache';
 import { ghaConfig } from './config';
 import { createCloudSQLInstanceForPerformanceTests, PerformanceTestDb } from './performanceTests';
+
+const RUNNER_VERSION = '2.337.0';
+const RUNNER_DIGEST = 'sha256:e5496277be5d09bc968b3d64911b74e219ac4a3f2edce956a3ecf9271bea1ef4';
 
 const localnetHostAliases = [
   {
@@ -95,7 +99,7 @@ function installDockerRunnerScaleSet(
             initContainers: [
               {
                 name: 'init-dind-externals',
-                image: `${DOCKER_REPO}/splice-test-docker-runner:${ghaConfig.runnerVersion}`,
+                image: `${CACHE_GHCR}/actions/actions-runner:${RUNNER_VERSION}@${RUNNER_DIGEST}`,
                 command: ['cp', '-r', '-v', '/home/runner/externals/.', '/home/runner/tmpDir/'],
                 volumeMounts: [
                   {
