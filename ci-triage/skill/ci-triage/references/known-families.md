@@ -90,6 +90,13 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
 - 10139 cause: reference block sequencer `insert block` SQLSTATE 40001 retry storm with four sequencers on one
   Postgres until the 8-connection pools are exhausted (Canton / topology size).
 
+## H2. LSU: validator init against a non-active psid
+- 10088-B (5-min hang, infinite retry) -> fixed by #7311 (WARN + skip). 10174: the WARN fails checkErrors because #7311's
+  ignore regex `... active (status: .*), ...` has unescaped parentheses (ripgrep group), fix `ray/fix-10174-lsu-source-ignore-regex`.
+  Mechanism: a validator restarted after the LSU uses the participant's registered (stale) psid; Canton rejects the
+  modify; on retry the participant reports LSU_SOURCE. Rare on main (1 of 40 runs). Design note: prefer the active psid.
+- Checking an ignore pattern: `LINE=$(zcat ... | grep -a -m1 '<text>'); echo "$LINE" | rg -c -e '<pattern>'`.
+
 ## I. Test races (venue and splitwell)
 - 8784: settlement venue submits `OTCTrade_Settle` before its participant ingested the AmuletAllocation contracts
   (`CONTRACT_NOT_FOUND`). PR #6013's wait compared two unrelated codegen ContractId classes and could never
