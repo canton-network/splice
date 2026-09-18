@@ -76,7 +76,7 @@ monitoring:
       cantonBft:
         mempoolMaxSizeThreshold: 100
       cloudArmor:
-        deniedRequestsThreshold: 0
+        deniedRequestsThreshold: 100
       cloudSql:
         maintenance: false
       cometbft:
