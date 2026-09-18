@@ -49,7 +49,7 @@ maps every non-index outcome to "not pinned to a multi-arch digest"; the step ru
 ## 4. Verdict and fix
 
 Infra flake in the external registry path, second variant of 10150 (the digest and the Dockerfile are correct and
-unchanged). Fix branch `ray/fix-multiarch-check-retry` (82f8f571c2, off main): `_inspect` retries the skopeo call up
+unchanged). Fix branch `ray/fix-multiarch-check-retry` (4dc7d6c36d, off main): the single-call body moves unchanged into `_inspect_once` and `_inspect` retries it up
 to 3 times with a 5 s pause on registry errors, invalid JSON, or a response without a `manifests` list, and prints
 the received `mediaType`, `schemaVersion` and top-level keys for the non-index case so the next occurrence
 carries evidence. A genuinely single-arch pin still fails after three consistent answers. `py_compile` clean;
