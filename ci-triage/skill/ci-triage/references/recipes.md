@@ -73,8 +73,10 @@ sources or jars, not commit ids.
 
 ## 8. Fix branch
 ```
-git checkout -B ray/fix-<slug> origin/main            # or origin/release-line-X for a backport
-git cherry-pick -x -s <sha>                            # backports
+git checkout -B ray/fix-<ref>-<slug> origin/main                        # e.g. ray/fix-10172-multiarch-check-retry
+git checkout -B ray/backport-<ref>-<pr>-<release-line> origin/<release-line>   # e.g. ray/backport-10169-7299-release-line-0.8.3
+git cherry-pick -x -s <sha>                                              # backports
 git commit -s -m "[ci] <one subject line>"
 ```
+The ref in the branch name is the cn-test-failures issue the branch fixes (the parent ref when it closes a family).
 Cheap checks: `sbt --batch "apps-app/Test/scalafmtCheck"`, `npx --no-install prettier --check <files>`.

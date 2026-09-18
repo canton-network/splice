@@ -13,7 +13,8 @@
   precedent: the IndexerState reconnect WARN (10084) and the P2P auth-token WARN (10010).
 - Root cause, not symptom: for a real failure, find what the stalled component was waiting on and why, with a
   timestamped event. Timeouts are never the cause.
-- Fix branches: one branch per PR, stacked follow-ups on the same branch, never a branch per fix. Test-only
+- Fix branches: one branch per PR, stacked follow-ups on the same branch, never a branch per fix. Name them
+  `ray/fix-<ref>-<slug>` or `ray/backport-<ref>-<pr>-<release-line>` so the ref is visible in `git branch` and PR titles. Test-only
   fixes are written; production changes are described and left to the owner unless asked.
 - Sandbox limits: do not run sbt compiles or start Canton unless asked; the host does that. The sandbox has
   no read access to DACH-NY/cn-test-failures; the mapping comes from the user.
