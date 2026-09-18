@@ -58,7 +58,7 @@ const ENVOY_RATE_LIMIT_BODY = "local_rate_limited";
  */
 export const UNEXPECTED_STATUS_TOLERANCE = 0.02;
 /** How far above the binding rate to drive traffic. */
-const BURST_FACTOR = Number(__ENV.BURST_FACTOR ?? "2");
+const BURST_FACTOR = Number(__ENV.BURST_FACTOR ?? "2.5");
 /** Hard ceiling on the generated load, so this cannot turn into a DoS by accident. */
 const MAX_BURST_RPS = Number(__ENV.MAX_BURST_RPS ?? "2500");
 /**
@@ -204,6 +204,10 @@ export function rateLimitThresholds(
     // is the whole point.
     [selector("rate_limit_throttled_by_infra", scope)]: ["count>0"],
     [selector("rate_limit_throttled_by_app", scope)]: ["count==0"],
+    // Always true: k6 only computes a submetric that a threshold spells out, and the summary needs
+    // this one (every phase of the check together) to know how many requests were sent. Without it
+    // an ordinary run is reported as if it had been interrupted before sending anything.
+    [selector("rate_limit_throttled", scope)]: ["rate>=0"],
     // NB: also makes k6 compute the submetric, which the summary reports.
     [selector("rate_limit_throttled", { ...scope, phase: burstPhase })]: [
       "rate>0",

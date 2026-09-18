@@ -139,7 +139,10 @@ export function setup(): void {
           "load that stops at the ingress gateway can never be rate limited. Is the host right " +
           "and routed to the app" +
           (target.protocol === "grpc"
-            ? ", and is HTTP/2 negotiated on it?"
+            ? ", is HTTP/2 negotiated on it, and does the route point at the gRPC port? A gRPC " +
+              "status 14 with 'upstream connect error ... protocol error' means a proxy reached " +
+              "an upstream that did not speak gRPC back, so the call died before the sidecar's " +
+              "rate limit filter ever ran on it."
             : "?"),
       );
     }
