@@ -95,7 +95,7 @@ function installDockerRunnerScaleSet(
             initContainers: [
               {
                 name: 'init-dind-externals',
-                image: 'ghcr.io/actions/actions-runner:latest',
+                image: `${DOCKER_REPO}/splice-test-docker-runner:${ghaConfig.runnerVersion}`,
                 command: ['cp', '-r', '-v', '/home/runner/externals/.', '/home/runner/tmpDir/'],
                 volumeMounts: [
                   {
@@ -448,7 +448,7 @@ function installK8sRunnerScaleSet(
               {
                 name: 'runner',
                 image: runnerImage,
-                imagePullPolicy: 'dirty'.indexOf(runnerImage) ? 'Always' : 'IfNotPresent',
+                imagePullPolicy: runnerImage.includes('dirty') ? 'Always' : 'IfNotPresent',
                 command: ['/home/runner/run.sh'],
                 env: [
                   {
