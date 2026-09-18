@@ -341,7 +341,7 @@ test('buildXffNumTrustedHopsPatch keys the per-IP buckets on the client behind e
       context: string;
       listener: { portNumber: number; filterChain: { filter: { name: string } } };
     };
-    patch: { operation: string; value: { typed_config: { value: unknown } } };
+    patch: { operation: string; value: { typed_config: Record<string, unknown> } };
   };
 
   // the sidecar derives the address masked_remote_address keys on from x-forwarded-for, so the
@@ -357,7 +357,11 @@ test('buildXffNumTrustedHopsPatch keys the per-IP buckets on the client behind e
   );
   // merged into the connection manager istio generates, which must keep all its other settings
   expect(patch.patch.operation).toEqual('MERGE');
-  expect(patch.patch.value.typed_config.value).toEqual({
+  // istiod merges the typed config into the one it generated and panics on a descriptor mismatch,
+  // dropping every listener patch, so this must be the concrete type and not a TypedStruct
+  expect(patch.patch.value.typed_config).toEqual({
+    '@type':
+      'type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager',
     xff_num_trusted_hops: gkeL7GatewayXffNumTrustedHops,
   });
 });

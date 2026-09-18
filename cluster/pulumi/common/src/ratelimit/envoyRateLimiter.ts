@@ -380,12 +380,9 @@ export function buildXffNumTrustedHopsPatch(
       operation: 'MERGE',
       value: {
         typed_config: {
-          '@type': 'type.googleapis.com/udpa.type.v1.TypedStruct',
-          type_url:
+          '@type':
             'type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager',
-          value: {
-            xff_num_trusted_hops: xffNumTrustedHops,
-          },
+          xff_num_trusted_hops: xffNumTrustedHops,
         },
       },
     },
