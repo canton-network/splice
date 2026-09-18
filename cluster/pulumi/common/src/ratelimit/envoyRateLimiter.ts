@@ -351,7 +351,6 @@ export const directIngressXffNumTrustedHops = 1;
 
 // The GKE L7 gateway (required for Cloud Armor) adds a proxy in front of the istio ingress gateway, which appends its own address to x-forwarded-for, so the sidecar must trust two hops to get the client address.
 export const gkeL7GatewayNumTrustedProxies = 2;
-export const gkeL7GatewayXffNumTrustedHops = gkeL7GatewayNumTrustedProxies + 1;
 
 /**
  * The `NETWORK_FILTER` config patch aligning the sidecar's `xff_num_trusted_hops` with the number

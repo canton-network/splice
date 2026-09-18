@@ -852,7 +852,7 @@
       "inboundPort": 5012,
       "namespace": "sv",
       "protocol": "http",
-      "xffNumTrustedHops": 3
+      "xffNumTrustedHops": 2
     },
     "name": "splice-sv-scan-app-rate-limit",
     "provider": "",
@@ -1323,7 +1323,7 @@
               "value": {
                 "typed_config": {
                   "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
-                  "xff_num_trusted_hops": 3
+                  "xff_num_trusted_hops": 2
                 }
               }
             }

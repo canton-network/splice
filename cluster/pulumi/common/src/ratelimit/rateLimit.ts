@@ -6,10 +6,10 @@ import { z } from 'zod';
 import { clusterSubConfig } from '../config/config';
 import {
   directIngressXffNumTrustedHops,
-  gkeL7GatewayXffNumTrustedHops,
-  RateLimitProtocol,
-  RateLimitEnvoyFilter,
+  gkeL7GatewayNumTrustedProxies,
   rateLimitedGrpcStatus,
+  RateLimitEnvoyFilter,
+  RateLimitProtocol,
 } from './envoyRateLimiter';
 import { ExternalRateLimit } from './rateLimitSchema';
 
@@ -24,7 +24,7 @@ const IngressTopologyConfigSchema = z.object({
  */
 export function sidecarXffNumTrustedHops(): number {
   return IngressTopologyConfigSchema.parse(clusterSubConfig('infra')).gkeGateway.proxyForIstioHttp
-    ? gkeL7GatewayXffNumTrustedHops
+    ? gkeL7GatewayNumTrustedProxies
     : directIngressXffNumTrustedHops;
 }
 
