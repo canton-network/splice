@@ -25,6 +25,11 @@ import { createCachePvc } from './cache';
 import { ghaConfig } from './config';
 import { createCloudSQLInstanceForPerformanceTests, PerformanceTestDb } from './performanceTests';
 
+// Version and multi-platform index digest of ghcr.io/actions/actions-runner, pulled via the Artifact Registry
+// ghcr mirror. Must match ARG RUNNER_VERSION / RUNNER_DIGEST in cluster/images/splice-test-docker-runner and
+// splice-test-runner-hook, so the externals copied for dind match the runner binary. The digest comes from
+// `docker buildx imagetools inspect ghcr.io/actions/actions-runner:<version>`; all three places are updated
+// together by scripts/bump-gha-runner-version.sh.
 const RUNNER_VERSION = '2.337.0';
 const RUNNER_DIGEST = 'sha256:e5496277be5d09bc968b3d64911b74e219ac4a3f2edce956a3ecf9271bea1ef4';
 
