@@ -19,9 +19,11 @@ release-notes:: Upcoming
 
     - Docker Compose
 
-        - The validator deployment now also deploys the Canton Wallet Gateway and the Portfolio UI by default. Pass the new ``-G`` flag to ``start.sh`` to skip them.
-          This requires ``LEDGER_API_AUTH_AUDIENCE`` and ``VALIDATOR_AUTH_AUDIENCE`` in ``.env`` to be equal, which is now the case for the shipped defaults.
-          If your ``.env`` uses different audiences, ``start.sh`` fails until you set them to the same value (which for authenticated deployments means updating your OIDC provider) or pass ``-G``.
+        - The validator deployment can now also deploy the Canton Wallet Gateway and the Portfolio UI with the new ``-g`` flag of ``start.sh``.
+          This requires ``LEDGER_API_AUTH_AUDIENCE`` and ``VALIDATOR_AUTH_AUDIENCE`` in ``.env`` to be equal, and with ``-a`` an OAuth app for the Wallet Gateway UI set as ``WALLET_GATEWAY_UI_CLIENT_ID``,
+          see `Wallet Gateway and Splice Portfolio <https://docs.canton.network/global-synchronizer/deployment/validator-docker-compose#wallet-gateway-and-splice-portfolio>`__.
+
+          .. important:: From Splice 0.10.0 the Wallet Gateway will be deployed by default, so an ``.env`` with different audiences will no longer start. Enabling it with ``-g`` now prepares your deployment for that.
 
     - Helm
 
