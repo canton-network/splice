@@ -2,6 +2,8 @@ package org.lfdecentralizedtrust.splice.store.db
 
 import com.daml.ledger.javaapi.data.{DamlRecord, Unit as damlUnit}
 import com.daml.metrics.api.noop.NoOpMetricsFactory
+import com.daml.metrics.api.MetricsContext
+import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryMetrics
 import com.digitalasset.canton.concurrent.FutureSupervisor
 import com.digitalasset.canton.crypto.Fingerprint
 import com.digitalasset.canton.data.CantonTimestamp
@@ -1735,7 +1737,7 @@ class DbScanStoreTest
       loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = true,
-      HistoryMetrics(NoOpMetricsFactory, migrationId),
+      new UpdateHistoryMetrics(NoOpMetricsFactory)(MetricsContext.Empty),
     )
     updateHistory.ingestionSink.initialize().map(_ => updateHistory)
   }

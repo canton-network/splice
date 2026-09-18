@@ -3,10 +3,13 @@
 
 package org.lfdecentralizedtrust.splice.automation
 
-import com.daml.metrics.api.MetricsContext
+import com.daml.metrics.api.MetricHandle.{Counter, Gauge, LabeledMetricsFactory}
+import com.daml.metrics.api.MetricQualification.{Debug, Traffic}
+import com.daml.metrics.api.{MetricInfo, MetricName, MetricsContext}
+import com.digitalasset.canton.data.CantonTimestamp
+import com.digitalasset.canton.lifecycle.{AsyncOrSyncCloseable, LifeCycle, SyncCloseable}
 import org.lfdecentralizedtrust.splice.store.{
   HistoryBackfilling,
-  HistoryMetrics,
   TxLogAppStore,
   TxLogBackfilling,
   UpdateHistory,
@@ -16,6 +19,8 @@ import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
+import org.lfdecentralizedtrust.splice.automation.TxLogBackfillingTrigger.TxLogBackfillingMetrics
+import org.lfdecentralizedtrust.splice.environment.SpliceMetrics
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.TxLogBackfillingState
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingState
 
@@ -25,7 +30,7 @@ class TxLogBackfillingTrigger[TXE](
     store: TxLogAppStore[TXE],
     updateHistory: UpdateHistory,
     batchSize: Int,
-    metrics: HistoryMetrics,
+    metricsContext: MetricsContext,
     override protected val context: TriggerContext,
 )(implicit
     override val ec: ExecutionContext,
@@ -39,7 +44,7 @@ class TxLogBackfillingTrigger[TXE](
     "party" -> party.toProtoPrimitive
   )
 
-  private val historyMetrics = metrics
+  private val historyMetrics = new TxLogBackfillingMetrics(context.metricsFactory)(metricsContext)
 
   private val backfilling = new TxLogBackfilling(
     store.multiDomainAcsStore,
@@ -66,7 +71,7 @@ class TxLogBackfillingTrigger[TXE](
           case BackfillingState.Complete =>
             destinationState match {
               case TxLogBackfillingState.Complete =>
-                historyMetrics.TxLogBackfilling.completed.updateValue(1)
+                historyMetrics.completed.updateValue(1)
                 Seq.empty
               case TxLogBackfillingState.InProgress =>
                 Seq(TxLogBackfillingTrigger.BackfillTask(party))
@@ -75,7 +80,7 @@ class TxLogBackfillingTrigger[TXE](
             }
           case _ =>
             logger.debug("UpdateHistory is not yet complete")
-            historyMetrics.TxLogBackfilling.completed.updateValue(0)
+            historyMetrics.completed.updateValue(0)
             Seq.empty
         }
       }
@@ -107,32 +112,35 @@ class TxLogBackfillingTrigger[TXE](
   private def performBackfilling()(implicit traceContext: TraceContext): Future[TaskOutcome] = for {
     outcome <- backfilling.backfill().map {
       case HistoryBackfilling.Outcome.MoreWorkAvailableNow(workDone) =>
-        historyMetrics.TxLogBackfilling.completed.updateValue(0)
-        // Using MetricsContext.Empty is okay, because it's merged with the StoreMetrics context
-        historyMetrics.TxLogBackfilling.latestRecordTime.updateValue(
+        historyMetrics.completed.updateValue(0)
+        historyMetrics.latestRecordTime.updateValue(
           workDone.lastBackfilledRecordTime
         )(MetricsContext.Empty)
-        historyMetrics.TxLogBackfilling.updateCount.inc(
+        historyMetrics.updateCount.inc(
           workDone.backfilledUpdates
         )(MetricsContext.Empty)
-        historyMetrics.TxLogBackfilling.eventCount.inc(workDone.backfilledCreatedEvents)(
+        historyMetrics.eventCount.inc(workDone.backfilledCreatedEvents)(
           MetricsContext("event_type" -> "created")
         )
-        historyMetrics.TxLogBackfilling.eventCount.inc(workDone.backfilledExercisedEvents)(
+        historyMetrics.eventCount.inc(workDone.backfilledExercisedEvents)(
           MetricsContext("event_type" -> "exercised")
         )
         TaskSuccess("Backfilling step completed")
       case HistoryBackfilling.Outcome.MoreWorkAvailableLater =>
-        historyMetrics.TxLogBackfilling.completed.updateValue(0)
+        historyMetrics.completed.updateValue(0)
         TaskNoop
       case HistoryBackfilling.Outcome.BackfillingIsComplete =>
-        historyMetrics.TxLogBackfilling.completed.updateValue(1)
+        historyMetrics.completed.updateValue(1)
         logger.info(
           "TxLog backfilling is complete, this trigger should not do any work ever again"
         )
         TaskSuccess("Backfilling completed")
     }
   } yield outcome
+
+  override def closeAsync(): Seq[AsyncOrSyncCloseable] =
+    super.closeAsync() :+
+      SyncCloseable("txlog_backfilling_metrics", LifeCycle.close(historyMetrics)(logger))
 }
 
 object TxLogBackfillingTrigger {
@@ -148,5 +156,57 @@ object TxLogBackfillingTrigger {
       prettyOfClass(
         param("party", _.party)
       )
+  }
+
+  class TxLogBackfillingMetrics(metricsFactory: LabeledMetricsFactory)(implicit
+      metricsContext: MetricsContext
+  ) extends AutoCloseable {
+
+    private val historyBackfillingPrefix: MetricName =
+      SpliceMetrics.MetricsHistoryPrefix :+ "txlog-backfilling"
+
+    val latestRecordTime: Gauge[CantonTimestamp] =
+      SpliceMetrics.cantonTimestampGauge(
+        metricsFactory,
+        MetricInfo(
+          name = historyBackfillingPrefix :+ "latest-record-time",
+          summary = "The latest record time that has been backfilled",
+          Traffic,
+        ),
+        initial = CantonTimestamp.MinValue,
+      )(metricsContext)
+
+    val updateCount: Counter =
+      metricsFactory.counter(
+        MetricInfo(
+          name = historyBackfillingPrefix :+ "transaction-count",
+          summary = "The number of updates (txs & reassignments) that have been backfilled",
+          Traffic,
+        )
+      )(metricsContext)
+
+    val eventCount: Counter =
+      metricsFactory.counter(
+        MetricInfo(
+          name = historyBackfillingPrefix :+ "event-count",
+          summary = "The number of events that have been backfilled",
+          Traffic,
+        )
+      )(metricsContext)
+
+    lazy val completed: Gauge[Int] =
+      metricsFactory.gauge(
+        MetricInfo(
+          name = historyBackfillingPrefix :+ "completed",
+          summary = "Whether it was completed (1) or not (0)",
+          Debug,
+        ),
+        initial = 0,
+      )(metricsContext)
+
+    override def close(): Unit = {
+      latestRecordTime.close()
+      completed.close()
+    }
   }
 }

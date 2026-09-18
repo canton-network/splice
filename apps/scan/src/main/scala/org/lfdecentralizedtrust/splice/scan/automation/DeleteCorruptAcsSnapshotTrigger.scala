@@ -3,6 +3,9 @@
 
 package org.lfdecentralizedtrust.splice.scan.automation
 
+import com.daml.metrics.api.MetricHandle.{Counter, Gauge, LabeledMetricsFactory}
+import com.daml.metrics.api.MetricQualification.{Debug, Traffic}
+import com.daml.metrics.api.{MetricInfo, MetricName, MetricsContext}
 import org.lfdecentralizedtrust.splice.automation.{
   PollingParallelTaskExecutionTrigger,
   TaskOutcome,
@@ -10,19 +13,22 @@ import org.lfdecentralizedtrust.splice.automation.{
   TriggerContext,
 }
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore
-import org.lfdecentralizedtrust.splice.store.{HistoryMetrics, UpdateHistory}
+import org.lfdecentralizedtrust.splice.store.UpdateHistory
 import com.digitalasset.canton.data.CantonTimestamp
+import com.digitalasset.canton.lifecycle.{AsyncOrSyncCloseable, LifeCycle, SyncCloseable}
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
+import org.lfdecentralizedtrust.splice.environment.SpliceMetrics
+import org.lfdecentralizedtrust.splice.scan.automation.DeleteCorruptAcsSnapshotTrigger.CorruptAcsSnapshotsMetrics
 
 import scala.concurrent.{ExecutionContext, Future}
 
 class DeleteCorruptAcsSnapshotTrigger(
     store: AcsSnapshotStore,
     updateHistory: UpdateHistory,
-    metrics: HistoryMetrics,
+    metricsContext: MetricsContext,
     protected val context: TriggerContext,
 )(implicit
     ec: ExecutionContext,
@@ -31,7 +37,9 @@ class DeleteCorruptAcsSnapshotTrigger(
     // we always return 1 task, so PollingParallelTaskExecutionTrigger in effect does nothing in parallel
 ) extends PollingParallelTaskExecutionTrigger[DeleteCorruptAcsSnapshotTrigger.Task] {
 
-  private val historyMetrics = metrics
+  private val historyMetrics = new CorruptAcsSnapshotsMetrics(context.metricsFactory)(
+    metricsContext
+  )
 
   override def retrieveTasks()(implicit
       tc: TraceContext
@@ -45,11 +53,11 @@ class DeleteCorruptAcsSnapshotTrigger(
         migrations <- updateHistory.migrationsWithCorruptSnapshots()
       } yield migrations.lastOption match {
         case Some(migrationToClean) =>
-          historyMetrics.CorruptAcsSnapshots.completed.updateValue(0)
+          historyMetrics.completed.updateValue(0)
           Seq(DeleteCorruptAcsSnapshotTrigger.Task(migrationToClean))
         case None =>
           updateHistory.markCorruptAcsSnapshotsDeleted()
-          historyMetrics.CorruptAcsSnapshots.completed.updateValue(1)
+          historyMetrics.completed.updateValue(1)
           Seq.empty
       }
     }
@@ -66,8 +74,8 @@ class DeleteCorruptAcsSnapshotTrigger(
         )
         _ <- store.deleteSnapshot(lastSnapshot)
       } yield {
-        historyMetrics.CorruptAcsSnapshots.count.inc()
-        historyMetrics.CorruptAcsSnapshots.latestRecordTime.updateValue(
+        historyMetrics.count.inc()
+        historyMetrics.latestRecordTime.updateValue(
           lastSnapshot.snapshotRecordTime
         )
         TaskSuccess(
@@ -79,6 +87,10 @@ class DeleteCorruptAcsSnapshotTrigger(
   override protected def isStaleTask(task: DeleteCorruptAcsSnapshotTrigger.Task)(implicit
       tc: TraceContext
   ): Future[Boolean] = Future.successful(false)
+
+  override def closeAsync(): Seq[AsyncOrSyncCloseable] =
+    super.closeAsync() :+
+      SyncCloseable("corrupt_acs_snapshots_metrics", LifeCycle.close(historyMetrics)(logger))
 }
 
 object DeleteCorruptAcsSnapshotTrigger {
@@ -93,4 +105,46 @@ object DeleteCorruptAcsSnapshotTrigger {
     )
   }
 
+  class CorruptAcsSnapshotsMetrics(metricsFactory: LabeledMetricsFactory)(implicit
+      metricsContext: MetricsContext
+  ) extends AutoCloseable {
+
+    private val corruptAcsSnapshotsPrefix: MetricName =
+      SpliceMetrics.MetricsHistoryPrefix :+ "corrupt-acs-snapshots"
+
+    val latestRecordTime: Gauge[CantonTimestamp] =
+      SpliceMetrics.cantonTimestampGauge(
+        metricsFactory,
+        MetricInfo(
+          name = corruptAcsSnapshotsPrefix :+ "latest-record-time",
+          summary = "The record time of the latest corrupt snapshot that has been deleted",
+          Traffic,
+        ),
+        initial = CantonTimestamp.MinValue,
+      )(metricsContext)
+
+    val count: Counter =
+      metricsFactory.counter(
+        MetricInfo(
+          name = corruptAcsSnapshotsPrefix :+ "count",
+          summary = "The number of corrupt ACS snapshots deleted",
+          Traffic,
+        )
+      )(metricsContext)
+
+    val completed: Gauge[Int] =
+      metricsFactory.gauge(
+        MetricInfo(
+          name = corruptAcsSnapshotsPrefix :+ "completed",
+          summary = "Whether all corrupt snapshots are deleted (1) or not (0)",
+          Debug,
+        ),
+        initial = 0,
+      )(metricsContext)
+
+    override def close(): Unit = {
+      latestRecordTime.close()
+      completed.close()
+    }
+  }
 }

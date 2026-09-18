@@ -11,7 +11,7 @@ import com.digitalasset.canton.lifecycle.{FlagCloseable, UnlessShutdown}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.tracing.TraceContext
 import org.lfdecentralizedtrust.splice.environment.SpliceMetrics
-import org.lfdecentralizedtrust.splice.store.HistoryMetrics
+import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryMetrics
 
 class DbScanStoreMetrics(
     metricsFactory: LabeledMetricsFactory,
@@ -38,7 +38,7 @@ class DbScanStoreMetrics(
       )
     }
 
-  val history = new HistoryMetrics(metricsFactory)(MetricsContext.Empty)
+  val history = new UpdateHistoryMetrics(metricsFactory)(MetricsContext.Empty)
 
   override protected def onClosed(): Unit = {
     cacheOfMetrics.clear()

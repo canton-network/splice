@@ -4,7 +4,6 @@
 package org.lfdecentralizedtrust.splice.scan.automation
 
 import com.daml.metrics.api.MetricsContext
-import com.digitalasset.canton.lifecycle.{AsyncOrSyncCloseable, LifeCycle, SyncCloseable}
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.automation.{
   AutomationServiceCompanion,
@@ -21,11 +20,7 @@ import org.lfdecentralizedtrust.splice.environment.{
 }
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppBackendConfig
-import org.lfdecentralizedtrust.splice.store.{
-  DomainTimeSynchronization,
-  HistoryMetrics,
-  UpdateHistory,
-}
+import org.lfdecentralizedtrust.splice.store.{DomainTimeSynchronization, UpdateHistory}
 import org.lfdecentralizedtrust.splice.scan.store.{
   AcsSnapshotStore,
   AppActivityStore,
@@ -129,16 +124,10 @@ class ScanAutomationService(
       )
     )
 
-  val historyMetrics: HistoryMetrics = new HistoryMetrics(triggerContext.metricsFactory)(
-    MetricsContext(
-      "current_migration_id" -> updateHistory.domainMigrationId.toString,
-      "partyId" -> updateHistory.updateStreamParty.toProtoPrimitive,
-    )
+  private val historyMetricsContext: MetricsContext = MetricsContext(
+    "current_migration_id" -> updateHistory.domainMigrationId.toString,
+    "partyId" -> updateHistory.updateStreamParty.toProtoPrimitive,
   )
-
-  override protected def closeAsync(): Seq[AsyncOrSyncCloseable] =
-    super.closeAsync() :+
-      SyncCloseable("history_metrics", LifeCycle.close(historyMetrics)(logger))
 
   if (config.updateHistoryBackfillEnabled) {
     registerTrigger(
@@ -151,7 +140,7 @@ class ScanAutomationService(
         config.updateHistoryBackfillImportUpdatesEnabled,
         svParty,
         upgradesConfig,
-        historyMetrics,
+        historyMetricsContext,
         triggerContext,
       )
     )
@@ -161,7 +150,7 @@ class ScanAutomationService(
       snapshotStore,
       updateHistory,
       scanStorageConfigV1,
-      historyMetrics,
+      historyMetricsContext,
       triggerContext,
     )
   )
@@ -182,7 +171,7 @@ class ScanAutomationService(
       new DeleteCorruptAcsSnapshotTrigger(
         snapshotStore,
         updateHistory,
-        historyMetrics,
+        historyMetricsContext,
         triggerContext,
       )
     )
@@ -193,7 +182,7 @@ class ScanAutomationService(
         store,
         updateHistory,
         config.txLogBackfillBatchSize,
-        historyMetrics,
+        historyMetricsContext,
         triggerContext,
       )
     )

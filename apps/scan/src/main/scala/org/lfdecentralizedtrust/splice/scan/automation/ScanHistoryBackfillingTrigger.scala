@@ -3,7 +3,9 @@
 
 package org.lfdecentralizedtrust.splice.scan.automation
 
-import com.daml.metrics.api.MetricsContext
+import com.daml.metrics.api.MetricHandle.{Counter, Gauge, LabeledMetricsFactory}
+import com.daml.metrics.api.MetricQualification.{Debug, Traffic}
+import com.daml.metrics.api.{MetricInfo, MetricName, MetricsContext}
 import org.lfdecentralizedtrust.splice.automation.{
   PollingParallelTaskExecutionTrigger,
   TaskNoop,
@@ -12,7 +14,7 @@ import org.lfdecentralizedtrust.splice.automation.{
   TriggerContext,
 }
 import org.lfdecentralizedtrust.splice.config.UpgradesConfig
-import org.lfdecentralizedtrust.splice.environment.SpliceLedgerClient
+import org.lfdecentralizedtrust.splice.environment.{SpliceLedgerClient, SpliceMetrics}
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BackfillingScanConnection
 import org.lfdecentralizedtrust.splice.scan.store.ScanHistoryBackfilling.{
@@ -23,7 +25,6 @@ import org.lfdecentralizedtrust.splice.scan.store.ScanHistoryBackfilling.{
 import org.lfdecentralizedtrust.splice.scan.store.{ScanHistoryBackfilling, ScanStore}
 import org.lfdecentralizedtrust.splice.store.{
   HistoryBackfilling,
-  HistoryMetrics,
   ImportUpdatesBackfilling,
   PageLimit,
   TimestampWithMigrationId,
@@ -32,12 +33,16 @@ import org.lfdecentralizedtrust.splice.store.{
 }
 import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 import com.digitalasset.canton.data.CantonTimestamp
-import com.digitalasset.canton.lifecycle.{AsyncOrSyncCloseable, LifeCycle}
+import com.digitalasset.canton.lifecycle.{AsyncOrSyncCloseable, LifeCycle, SyncCloseable}
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
+import org.lfdecentralizedtrust.splice.scan.automation.ScanHistoryBackfillingTrigger.{
+  ImportUpdatesBackfillingMetrics,
+  UpdateHistoryBackfillingMetrics,
+}
 import org.lfdecentralizedtrust.splice.scan.util.PeerBftScanConnection
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingState
 
@@ -52,7 +57,7 @@ class ScanHistoryBackfillingTrigger(
     importUpdateBackfillingEnabled: Boolean,
     svParty: PartyId,
     upgradesConfig: UpgradesConfig,
-    metrics: HistoryMetrics,
+    metricsContext: MetricsContext,
     override protected val context: TriggerContext,
 )(implicit
     override val ec: ExecutionContextExecutor,
@@ -75,7 +80,12 @@ class ScanHistoryBackfillingTrigger(
     loggerFactory,
   )
 
-  private val historyMetrics = metrics
+  private val updateHistoryBackfillingMetrics = new UpdateHistoryBackfillingMetrics(
+    context.metricsFactory
+  )(metricsContext)
+  private val importUpdatesBackfillingMetrics = new ImportUpdatesBackfillingMetrics(
+    context.metricsFactory
+  )(metricsContext)
 
   /** A cursor for iterating over the beginning of the update history in findHistoryStart,
     *  see [[org.lfdecentralizedtrust.splice.updateHistory.getUpdates()]].
@@ -101,20 +111,20 @@ class ScanHistoryBackfillingTrigger(
     } else {
       updateHistory.getBackfillingState().map {
         case BackfillingState.Complete =>
-          historyMetrics.UpdateHistoryBackfilling.completed.updateValue(1)
-          historyMetrics.ImportUpdatesBackfilling.completed.updateValue(1)
+          updateHistoryBackfillingMetrics.completed.updateValue(1)
+          importUpdatesBackfillingMetrics.completed.updateValue(1)
           Seq.empty
         case BackfillingState.InProgress(updatesComplete, _) =>
           if (!updatesComplete) {
-            historyMetrics.ImportUpdatesBackfilling.completed.updateValue(0)
+            importUpdatesBackfillingMetrics.completed.updateValue(0)
             Seq(ScanHistoryBackfillingTrigger.BackfillTask())
           } else {
-            historyMetrics.UpdateHistoryBackfilling.completed.updateValue(1)
+            updateHistoryBackfillingMetrics.completed.updateValue(1)
             Seq(ScanHistoryBackfillingTrigger.ImportUpdatesBackfillTask())
           }
         case BackfillingState.NotInitialized =>
-          historyMetrics.UpdateHistoryBackfilling.completed.updateValue(0)
-          historyMetrics.ImportUpdatesBackfilling.completed.updateValue(0)
+          updateHistoryBackfillingMetrics.completed.updateValue(0)
+          importUpdatesBackfillingMetrics.completed.updateValue(0)
           Seq(ScanHistoryBackfillingTrigger.InitializeBackfillingTask(findHistoryStartAfter))
       }
     }
@@ -252,26 +262,26 @@ class ScanHistoryBackfillingTrigger(
     backfilling = getOrCreateBackfilling(connection)
     outcome <- backfilling.backfill().map {
       case HistoryBackfilling.Outcome.MoreWorkAvailableNow(workDone) =>
-        historyMetrics.UpdateHistoryBackfilling.completed.updateValue(0)
+        updateHistoryBackfillingMetrics.completed.updateValue(0)
         // Using MetricsContext.Empty is okay, because it's merged with the StoreMetrics context
-        historyMetrics.UpdateHistoryBackfilling.latestRecordTime.updateValue(
+        updateHistoryBackfillingMetrics.latestRecordTime.updateValue(
           workDone.lastBackfilledRecordTime
         )(MetricsContext.Empty)
-        historyMetrics.UpdateHistoryBackfilling.updateCount.inc(
+        updateHistoryBackfillingMetrics.updateCount.inc(
           workDone.backfilledUpdates
         )(MetricsContext.Empty)
-        historyMetrics.UpdateHistoryBackfilling.eventCount.inc(workDone.backfilledCreatedEvents)(
+        updateHistoryBackfillingMetrics.eventCount.inc(workDone.backfilledCreatedEvents)(
           MetricsContext("event_type" -> "created")
         )
-        historyMetrics.UpdateHistoryBackfilling.eventCount.inc(workDone.backfilledExercisedEvents)(
+        updateHistoryBackfillingMetrics.eventCount.inc(workDone.backfilledExercisedEvents)(
           MetricsContext("event_type" -> "exercised")
         )
         TaskSuccess("Backfilling step completed")
       case HistoryBackfilling.Outcome.MoreWorkAvailableLater =>
-        historyMetrics.UpdateHistoryBackfilling.completed.updateValue(0)
+        updateHistoryBackfillingMetrics.completed.updateValue(0)
         TaskNoop
       case HistoryBackfilling.Outcome.BackfillingIsComplete =>
-        historyMetrics.UpdateHistoryBackfilling.completed.updateValue(1)
+        updateHistoryBackfillingMetrics.completed.updateValue(1)
         logger.info("UpdateHistory backfilling is complete")
         TaskSuccess("Backfilling completed")
     }
@@ -284,18 +294,18 @@ class ScanHistoryBackfillingTrigger(
     backfilling = getOrCreateBackfilling(connection)
     outcome <- backfilling.backfillImportUpdates().map {
       case ImportUpdatesBackfilling.Outcome.MoreWorkAvailableNow(workDone) =>
-        historyMetrics.ImportUpdatesBackfilling.completed.updateValue(0)
+        importUpdatesBackfillingMetrics.completed.updateValue(0)
         // Using MetricsContext.Empty is okay, because it's merged with the StoreMetrics context
-        historyMetrics.ImportUpdatesBackfilling.contractCount.inc(
+        importUpdatesBackfillingMetrics.contractCount.inc(
           workDone.backfilledContracts
         )(MetricsContext.Empty)
-        historyMetrics.ImportUpdatesBackfilling.latestMigrationId.updateValue(workDone.migrationId)
+        importUpdatesBackfillingMetrics.latestMigrationId.updateValue(workDone.migrationId)
         TaskSuccess("Backfilling import updates step completed")
       case ImportUpdatesBackfilling.Outcome.MoreWorkAvailableLater =>
-        historyMetrics.ImportUpdatesBackfilling.completed.updateValue(0)
+        importUpdatesBackfillingMetrics.completed.updateValue(0)
         TaskNoop
       case ImportUpdatesBackfilling.Outcome.BackfillingIsComplete =>
-        historyMetrics.ImportUpdatesBackfilling.completed.updateValue(1)
+        importUpdatesBackfillingMetrics.completed.updateValue(1)
         logger.info("UpdateHistory backfilling import updates is complete")
         TaskSuccess("Backfilling import updates completed")
     }
@@ -303,7 +313,15 @@ class ScanHistoryBackfillingTrigger(
 
   override def closeAsync(): Seq[AsyncOrSyncCloseable] = {
     LifeCycle.close(scanConnection)(logger)
-    super.closeAsync()
+    super.closeAsync() :+
+      SyncCloseable(
+        "scan_history_backfilling_trigger_update_history_backfilling_metrics",
+        LifeCycle.close(updateHistoryBackfillingMetrics)(logger),
+      ) :+
+      SyncCloseable(
+        "scan_history_backfilling_trigger_import_updates_backfilling_metrics",
+        LifeCycle.close(importUpdatesBackfillingMetrics)(logger),
+      )
   }
 }
 
@@ -322,5 +340,98 @@ object ScanHistoryBackfillingTrigger {
   final case class ImportUpdatesBackfillTask() extends Task {
     override def pretty: Pretty[this.type] =
       prettyOfClass()
+  }
+
+  class UpdateHistoryBackfillingMetrics(metricsFactory: LabeledMetricsFactory)(implicit
+      metricsContext: MetricsContext
+  ) extends AutoCloseable {
+
+    private val historyBackfillingPrefix: MetricName =
+      SpliceMetrics.MetricsHistoryPrefix :+ "backfilling"
+
+    lazy val latestRecordTime = SpliceMetrics.cantonTimestampGauge(
+      metricsFactory,
+      MetricInfo(
+        name = historyBackfillingPrefix :+ "latest-record-time",
+        summary = "The latest record time that has been backfilled",
+        Traffic,
+      ),
+      initial = CantonTimestamp.MinValue,
+    )(metricsContext)
+
+    val updateCount: Counter =
+      metricsFactory.counter(
+        MetricInfo(
+          name = historyBackfillingPrefix :+ "transaction-count",
+          summary = "The number of updates (txs & reassignments) that have been backfilled",
+          Traffic,
+        )
+      )(metricsContext)
+
+    val eventCount: Counter =
+      metricsFactory.counter(
+        MetricInfo(
+          name = historyBackfillingPrefix :+ "event-count",
+          summary = "The number of events that have been backfilled",
+          Traffic,
+        )
+      )(metricsContext)
+
+    lazy val completed: Gauge[Int] =
+      metricsFactory.gauge(
+        MetricInfo(
+          name = historyBackfillingPrefix :+ "completed",
+          summary = "Whether it was completed (1) or not (0)",
+          Debug,
+        ),
+        initial = 0,
+      )(metricsContext)
+
+    override def close(): Unit = {
+      latestRecordTime.close()
+      completed.close()
+    }
+  }
+
+  class ImportUpdatesBackfillingMetrics(metricsFactory: LabeledMetricsFactory)(implicit
+      metricsContext: MetricsContext
+  ) extends AutoCloseable {
+
+    private val importUpdatesBackfillingPrefix: MetricName =
+      SpliceMetrics.MetricsHistoryPrefix :+ "import-updates-backfilling"
+
+    lazy val latestMigrationId: Gauge[Long] =
+      metricsFactory.gauge(
+        MetricInfo(
+          name = importUpdatesBackfillingPrefix :+ "latest-migration-id",
+          summary = "The migration id of the latest backfilled import update",
+          Traffic,
+        ),
+        initial = -1L,
+      )(metricsContext)
+
+    val contractCount: Counter =
+      metricsFactory.counter(
+        MetricInfo(
+          name = importUpdatesBackfillingPrefix :+ "contract-count",
+          summary = "The number of contracts that have been backfilled",
+          Traffic,
+        )
+      )(metricsContext)
+
+    lazy val completed: Gauge[Int] =
+      metricsFactory.gauge(
+        MetricInfo(
+          name = importUpdatesBackfillingPrefix :+ "completed",
+          summary = "Whether it was completed (1) or not (0)",
+          Debug,
+        ),
+        initial = 0,
+      )(metricsContext)
+
+    override def close(): Unit = {
+      latestMigrationId.close()
+      completed.close()
+    }
   }
 }

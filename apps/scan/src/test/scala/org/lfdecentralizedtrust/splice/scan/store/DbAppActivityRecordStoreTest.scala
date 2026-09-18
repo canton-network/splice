@@ -11,11 +11,13 @@ import org.lfdecentralizedtrust.splice.scan.store.AppActivityStore.RoundIngestio
 import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore
 import org.lfdecentralizedtrust.splice.scan.store.db.DbAppActivityRecordStore.*
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanVerdictStore
-import org.lfdecentralizedtrust.splice.store.{HistoryMetrics, StoreTestBase, UpdateHistory}
+import org.lfdecentralizedtrust.splice.store.{StoreTestBase, UpdateHistory}
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingRequirement
 import org.lfdecentralizedtrust.splice.store.db.SplicePostgresTest
 import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnlessShutdownToFuture
 import com.daml.metrics.api.noop.NoOpMetricsFactory
+import com.daml.metrics.api.MetricsContext
+import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryMetrics
 
 import scala.concurrent.Future
 
@@ -1241,7 +1243,7 @@ class DbAppActivityRecordStoreTest
       loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = false,
-      HistoryMetrics(NoOpMetricsFactory, migrationId),
+      new UpdateHistoryMetrics(NoOpMetricsFactory)(MetricsContext.Empty),
     )
     updateHistory.ingestionSink.initialize().map { _ =>
       val store = new DbAppActivityRecordStore(
@@ -1274,7 +1276,7 @@ class DbAppActivityRecordStoreTest
       loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = false,
-      HistoryMetrics(NoOpMetricsFactory, migrationId),
+      new UpdateHistoryMetrics(NoOpMetricsFactory)(MetricsContext.Empty),
     )
     updateHistory.ingestionSink.initialize().map { _ =>
       val appStore = new DbAppActivityRecordStore(

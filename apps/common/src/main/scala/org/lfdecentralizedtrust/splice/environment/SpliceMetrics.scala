@@ -11,6 +11,8 @@ object SpliceMetrics {
 
   val MetricsPrefix: MetricName = MetricName("splice")
 
+  val MetricsHistoryPrefix: MetricName = MetricsPrefix :+ "history"
+
   private type CantonTimestampMicros = Long
 
   def cantonTimestampGauge(
