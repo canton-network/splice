@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.scan.automation
 
+import com.daml.metrics.api.MetricsContext
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.automation.{
   AutomationServiceCompanion,
@@ -123,6 +124,11 @@ class ScanAutomationService(
       )
     )
 
+  private val historyMetricsContext: MetricsContext = MetricsContext(
+    "current_migration_id" -> updateHistory.domainMigrationId.toString,
+    "partyId" -> updateHistory.updateStreamParty.toProtoPrimitive,
+  )
+
   if (config.updateHistoryBackfillEnabled) {
     registerTrigger(
       new ScanHistoryBackfillingTrigger(
@@ -134,6 +140,7 @@ class ScanAutomationService(
         config.updateHistoryBackfillImportUpdatesEnabled,
         svParty,
         upgradesConfig,
+        historyMetricsContext,
         triggerContext,
       )
     )
@@ -143,6 +150,7 @@ class ScanAutomationService(
       snapshotStore,
       updateHistory,
       scanStorageConfigV1,
+      historyMetricsContext,
       triggerContext,
     )
   )
@@ -163,6 +171,7 @@ class ScanAutomationService(
       new DeleteCorruptAcsSnapshotTrigger(
         snapshotStore,
         updateHistory,
+        historyMetricsContext,
         triggerContext,
       )
     )
@@ -173,6 +182,7 @@ class ScanAutomationService(
         store,
         updateHistory,
         config.txLogBackfillBatchSize,
+        historyMetricsContext,
         triggerContext,
       )
     )

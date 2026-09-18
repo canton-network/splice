@@ -14,6 +14,8 @@ import com.daml.ledger.javaapi.data.{
   Value,
 }
 import com.daml.metrics.api.noop.NoOpMetricsFactory
+import com.daml.metrics.api.MetricsContext
+import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryMetrics
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.topology.{ParticipantId, PartyId}
 import com.digitalasset.daml.lf.data.Ref
@@ -36,7 +38,7 @@ import org.lfdecentralizedtrust.splice.scan.store.db.DbScanAppRewardsStore.{
   AppActivityPartyTotalT,
   AppRewardPartyTotalT,
 }
-import org.lfdecentralizedtrust.splice.store.{HistoryMetrics, UpdateHistory}
+import org.lfdecentralizedtrust.splice.store.UpdateHistory
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingRequirement
 import org.lfdecentralizedtrust.splice.store.db.InternedStringStore
 import org.lfdecentralizedtrust.splice.util.{DarUtil, WalletTestUtil}
@@ -149,7 +151,7 @@ class CryptoHashEquivalenceIntegrationTest extends IntegrationTest with WalletTe
         loggerFactory,
         enableissue12777Workaround = true,
         enableImportUpdateBackfill = false,
-        HistoryMetrics(NoOpMetricsFactory, 0L),
+        new UpdateHistoryMetrics(NoOpMetricsFactory)(MetricsContext.Empty),
       )
       updateHistory.ingestionSink.initialize().futureValue
       val appActivityRecordStore = new DbAppActivityRecordStore(

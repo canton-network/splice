@@ -44,6 +44,7 @@ import scala.jdk.CollectionConverters.*
 import scala.math.Ordering.Implicits.*
 import scala.util.Using
 import io.circe.Decoder
+import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorage.BulkStorageMetrics
 
 class UpdateHistoryBulkStorageTest
     extends StoreTestBase
@@ -91,7 +92,7 @@ class UpdateHistoryBulkStorageTest
           mockStore.store,
           bucketConnection,
           segment,
-          new HistoryMetrics(metricsFactory)(MetricsContext.Empty),
+          new BulkStorageMetrics(metricsFactory)(MetricsContext.Empty),
           loggerFactory,
         )
         .toMat(TestSink.probe[Seq[String]])(Keep.right)
@@ -232,7 +233,7 @@ class UpdateHistoryBulkStorageTest
               mockStore.store,
               bucketConnection,
               segment,
-              new HistoryMetrics(metricsFactory)(MetricsContext.Empty),
+              new BulkStorageMetrics(metricsFactory)(MetricsContext.Empty),
               loggerFactory,
             )
             .toMat(TestSink.probe[Seq[String]])(Keep.right)
@@ -262,7 +263,7 @@ class UpdateHistoryBulkStorageTest
           SpliceMetrics.MetricsPrefix :+ "history" :+ "bulk-storage" :+ "latest-updates-segment-staging"
         )
         .value
-      val metrics = new HistoryMetrics(metricsFactory)(MetricsContext.Empty)
+      val metrics = new BulkStorageMetrics(metricsFactory)(MetricsContext.Empty)
 
       val mockStore = new MockUpdateHistoryStore(
         initialStoreSize,
@@ -287,7 +288,7 @@ class UpdateHistoryBulkStorageTest
         val progress = new UpdateHistoryBulkStoragePersistentProgress(
           "latest_updates_segment_in_bulk_storage",
           kvProvider,
-          metrics.BulkStorage.latestUpdatesSegmentStaging,
+          metrics.latestUpdatesSegmentStaging,
           loggerFactory,
         )
         val bulkStorage = new UpdateHistoryBulkStorage(
@@ -414,9 +415,9 @@ class UpdateHistoryBulkStorageTest
       val progress = new UpdateHistoryBulkStoragePersistentProgress(
         "latest_updates_segment_in_bulk_storage_staging",
         mockKvProvider,
-        new HistoryMetrics(new InMemoryMetricsFactory)(
+        new BulkStorageMetrics(new InMemoryMetricsFactory)(
           MetricsContext.Empty
-        ).BulkStorage.latestUpdatesSegmentStaging,
+        ).latestUpdatesSegmentStaging,
         loggerFactory,
       )
       val reader = new BulkStorageReader(

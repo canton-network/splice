@@ -13,7 +13,6 @@ import org.apache.pekko.util.ByteString
 import org.apache.pekko.pattern.after
 import org.lfdecentralizedtrust.splice.scan.admin.http.{ScanHttpEncodings, ScanJsonSupport}
 import org.lfdecentralizedtrust.splice.store.{
-  HistoryMetrics,
   PageLimit,
   S3BucketConnection,
   TimestampWithMigrationId,
@@ -22,6 +21,7 @@ import org.lfdecentralizedtrust.splice.store.{
 }
 import io.circe.syntax.*
 import org.apache.pekko.actor.ActorSystem
+import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorage.BulkStorageMetrics
 
 import java.nio.charset.StandardCharsets
 import scala.concurrent.{ExecutionContext, Future}
@@ -51,7 +51,7 @@ class UpdateHistorySegmentBulkStorage(
     updateHistory: UpdateHistory,
     s3Connection: S3BucketConnection,
     segment: UpdatesSegment,
-    historyMetrics: HistoryMetrics,
+    historyMetrics: BulkStorageMetrics,
     override val loggerFactory: NamedLoggerFactory,
 )(implicit tc: TraceContext, ec: ExecutionContext)
     extends NamedLogging {
@@ -149,7 +149,7 @@ class UpdateHistorySegmentBulkStorage(
     Source
       .unfoldAsync(segment.fromTimestamp)(ts => getUpdatesChunk(ts))
       .map(updates => {
-        historyMetrics.BulkStorage.incUpdatesCount(updates.length)
+        historyMetrics.incUpdatesCount(updates.length)
         updates
       })
       .via(
@@ -170,7 +170,7 @@ class UpdateHistorySegmentBulkStorage(
                 loggerFactory,
               )
             ),
-          encoding => historyMetrics.BulkStorage.incUpdateObjects(encoding.key, "staging"),
+          encoding => historyMetrics.incUpdateObjects(encoding.key, "staging"),
         )
       )
       .orElse(Source.lazySource { () =>
@@ -187,7 +187,7 @@ object UpdateHistorySegmentBulkStorage {
       appConfig: BulkStorageConfig,
       updateHistory: UpdateHistory,
       s3Connection: S3BucketConnection,
-      historyMetrics: HistoryMetrics,
+      historyMetrics: BulkStorageMetrics,
       loggerFactory: NamedLoggerFactory,
   )(implicit
       tc: TraceContext,
@@ -212,7 +212,7 @@ object UpdateHistorySegmentBulkStorage {
       updateHistory: UpdateHistory,
       s3Connection: S3BucketConnection,
       segment: UpdatesSegment,
-      historyMetrics: HistoryMetrics,
+      historyMetrics: BulkStorageMetrics,
       loggerFactory: NamedLoggerFactory,
   )(implicit
       tc: TraceContext,

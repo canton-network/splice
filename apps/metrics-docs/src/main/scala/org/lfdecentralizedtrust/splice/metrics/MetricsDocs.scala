@@ -26,7 +26,16 @@ import org.lfdecentralizedtrust.splice.sv.automation.{
   VoteRequestMetricsTrigger,
 }
 import org.lfdecentralizedtrust.splice.sv.store.db.DbSvDsoStoreMetrics
-import org.lfdecentralizedtrust.splice.store.{HistoryMetrics, StoreMetrics}
+import org.lfdecentralizedtrust.splice.store.StoreMetrics
+import org.lfdecentralizedtrust.splice.store.UpdateHistory
+import org.lfdecentralizedtrust.splice.automation.TxLogBackfillingTrigger
+import org.lfdecentralizedtrust.splice.scan.automation.{
+  AcsSnapshotBackfillingTrigger,
+  AcsSnapshotTrigger,
+  DeleteCorruptAcsSnapshotTrigger,
+  ScanHistoryBackfillingTrigger,
+}
+import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorage
 import org.lfdecentralizedtrust.splice.sv.automation.confirmation.{
   CalculateRewardsTriggerBase,
   SummarizingMiningRoundTrigger,
@@ -89,7 +98,20 @@ object MetricsDocs {
     val svParty = PartyId.tryFromProtoPrimitive("sv::namespace")
     val generator = new MetricsDocGenerator()
     // common
-    new HistoryMetrics(generator)(MetricsContext.Empty)
+    new TxLogBackfillingTrigger.TxLogBackfillingMetrics(generator)(MetricsContext.Empty)
+    new UpdateHistory.UpdateHistoryMetrics(generator)(MetricsContext.Empty)
+    new ScanHistoryBackfillingTrigger.UpdateHistoryBackfillingMetrics(generator)(
+      MetricsContext.Empty
+    )
+    new ScanHistoryBackfillingTrigger.ImportUpdatesBackfillingMetrics(generator)(
+      MetricsContext.Empty
+    )
+    new DeleteCorruptAcsSnapshotTrigger.CorruptAcsSnapshotsMetrics(generator)(MetricsContext.Empty)
+    new AcsSnapshotTrigger.AcsSnapshotsMetrics(generator)(MetricsContext.Empty)
+    new AcsSnapshotBackfillingTrigger.AcsSnapshotsBackfillingMetrics(generator)(
+      MetricsContext.Empty
+    )
+    new BulkStorage.BulkStorageMetrics(generator)(MetricsContext.Empty)
     new StoreMetrics(generator)(MetricsContext.Empty)
     new DamlGrpcClientMetrics(generator, "")
     new TriggerMetrics(generator)

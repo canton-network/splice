@@ -1,6 +1,8 @@
 package org.lfdecentralizedtrust.splice.performance.tests
 
 import com.daml.metrics.api.noop.NoOpMetricsFactory
+import com.daml.metrics.api.MetricsContext
+import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryMetrics
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.config.{ProcessingTimeout, StorageConfig}
 import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory}
@@ -17,11 +19,7 @@ import org.lfdecentralizedtrust.splice.scan.admin.http.{
 }
 import org.lfdecentralizedtrust.splice.scan.config.ScanAppBackendConfig
 import org.lfdecentralizedtrust.splice.store.db.InternedStringStore
-import org.lfdecentralizedtrust.splice.store.{
-  HistoryMetrics,
-  TreeUpdateWithMigrationId,
-  UpdateHistory,
-}
+import org.lfdecentralizedtrust.splice.store.{TreeUpdateWithMigrationId, UpdateHistory}
 import pureconfig.ConfigReader
 import pureconfig.generic.semiauto.deriveReader
 
@@ -71,7 +69,7 @@ class UpdateHistoryReadPerformanceTest(
       loggerFactory = loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = false,
-      metrics = HistoryMetrics.apply(NoOpMetricsFactory, migrationId),
+      metrics = new UpdateHistoryMetrics(NoOpMetricsFactory)(MetricsContext.Empty),
     )
   }
 

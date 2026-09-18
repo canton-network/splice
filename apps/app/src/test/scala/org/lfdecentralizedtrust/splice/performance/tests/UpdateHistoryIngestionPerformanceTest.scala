@@ -1,6 +1,8 @@
 package org.lfdecentralizedtrust.splice.performance.tests
 
 import com.daml.metrics.api.noop.NoOpMetricsFactory
+import com.daml.metrics.api.MetricsContext
+import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryMetrics
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.config.{ProcessingTimeout, StorageConfig}
 import com.digitalasset.canton.logging.NamedLoggerFactory
@@ -10,7 +12,7 @@ import com.typesafe.config.Config
 import org.apache.pekko.actor.ActorSystem
 import org.lfdecentralizedtrust.splice.config.{IngestionConfig, SpliceConfig}
 import org.lfdecentralizedtrust.splice.store.db.InternedStringStore
-import org.lfdecentralizedtrust.splice.store.{HistoryMetrics, UpdateHistory}
+import org.lfdecentralizedtrust.splice.store.UpdateHistory
 import pureconfig.ConfigReader
 import pureconfig.generic.semiauto.deriveReader
 
@@ -60,7 +62,7 @@ class UpdateHistoryIngestionPerformanceTest(
       loggerFactory = loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = false,
-      metrics = HistoryMetrics.apply(NoOpMetricsFactory, migrationId),
+      metrics = new UpdateHistoryMetrics(NoOpMetricsFactory)(MetricsContext.Empty),
     )
   }
 
