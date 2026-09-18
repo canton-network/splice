@@ -97,6 +97,14 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   modify; on retry the participant reports LSU_SOURCE. Rare on main (1 of 40 runs). Design note: prefer the active psid.
 - Checking an ignore pattern: `LINE=$(zcat ... | grep -a -m1 '<text>'); echo "$LINE" | rg -c -e '<pattern>'`.
 
+## H3. Trigger pause timeout: `Waited 5 seconds. (TriggerTestUtil.scala:93)`
+- `setTriggersWithin` pauses with `pause().futureValue` (5 s). `PollingTrigger.pause()` waits for the running task, so a
+  task that is retrying a "retryable" ledger error (deadline-exceeded, CONTRACT_NOT_FOUND) blocks the pause. Confirming
+  grep: the trigger's `failed with a retryable error` / `Retrying after a number of N failures` lines in the 5 s window.
+- 10175 (7864/#5176 lineage): UnclaimedActivityRecordIntegrationTest resumed alice's merge trigger for 1 ms between two
+  blocks after the record's 10 s expiry had passed. Fix: pause across both blocks (outer setTriggersWithin), never a
+  bigger expiry margin. Also check `actAndCheck`'s 5 s max poll interval when a block "takes too long".
+
 ## I. Test races (venue and splitwell)
 - 8784: settlement venue submits `OTCTrade_Settle` before its participant ingested the AmuletAllocation contracts
   (`CONTRACT_NOT_FOUND`). PR #6013's wait compared two unrelated codegen ContractId classes and could never
