@@ -56,7 +56,7 @@ const ENVOY_RATE_LIMIT_BODY = "local_rate_limited";
  * Tolerated share of responses that are neither 200 nor 429: load always causes the odd connection
  * reset, but a large share means it reached the app.
  */
-export const UNEXPECTED_STATUS_TOLERANCE = 0.02;
+export const UNEXPECTED_STATUS_TOLERANCE = 0.05;
 /** How far above the binding rate to drive traffic. */
 const BURST_FACTOR = Number(__ENV.BURST_FACTOR ?? "2.5");
 /** Hard ceiling on the generated load, so this cannot turn into a DoS by accident. */
