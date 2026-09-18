@@ -48,6 +48,11 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   domain time stays behind, SV automation pauses. #5779 fixed `advanceTimeAndWaitForRoundAutomation` (90 s);
   `advanceTimeAndWaitForRoundOpening` was left at 20 s.
 - Parent 9740 (2026-08-19), dup 10170. Fix: `ray/fix-round-opening-wait-budget`.
+- Sibling: `advanceTimeAndWaitForRoundAutomation` failing with rounds one too far ((7, 7, 8, 9) vs (6, 6, 7, 8)) right
+  after a multi-hour `advanceTime`: the round automation is still catching up a backlog when the next helper snapshots.
+  UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest (37 h coupon TTL jump) = splice #7206 / 10173; fix
+  `ray/fix-10173-unhide-expire-coupon-ttl` (short TTL + advanceRoundsUntil). Grep: `advancing time by PT[0-9]+H` followed
+  by `successfully advanced the rounds` lines during the next `(act) advancing time` clue.
 - Sibling: `advanceTime(PT25H)` then `LOCAL_VERDICT_INACTIVE_CONTRACTS` on transfer-preapproval send in
   WalletMintingDelegationTimeBasedIntegrationTest = 10060 / splice #7223, fixed on main by #7261; release lines
   need the backport (10154, 10166, 10171; `ray/backport-7261-release-line-0.8.3`).
