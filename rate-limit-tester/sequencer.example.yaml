@@ -1,0 +1,23 @@
+# Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+# Sequencer public API rate limits, i.e. the global buckets from
+# `cluster/configs/shared/rate-limits/sequencer-public-api.yaml`.
+# The public API is gRPC and lives on its own host, so pass its domain:
+#
+#   k6 run src/main.ts \
+#     -e DOMAIN=sequencer-<migrationId>.<sv>.<cluster> \
+#     -e CONFIG=sequencer.example.yaml
+
+sv:
+  synchronizer:
+    sequencer:
+      externalRateLimits:
+        globalLimits:
+          maxTokens: 200000
+          tokensPerFill: 200000
+          fillInterval: "60s"
+        globalPerIpLimits:
+          maxTokens: 10000
+          tokensPerFill: 10000
+          fillInterval: "60s"
