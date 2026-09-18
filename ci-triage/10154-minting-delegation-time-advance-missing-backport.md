@@ -70,3 +70,14 @@ zcat log/10166/logs-simtime-2/canton_network_test.clog.gz | grep -a WalletMintin
 ```
 `git merge-base --is-ancestor 0c43730f70 57c06ffded` -> not an ancestor: #7261 is still not on release-line-0.8.x
 (tip ef2dc6d559 on 2026-09-17 17:xx has no backport of it either). Second hit in two days; backport it.
+
+## 6. 10171 (run 35330711023, 2026-09-18) - third hit, now on the 0.8.3 release commit
+
+- Run: https://github.com/canton-network/splice/actions/runs/35330711023, release-line-0.8.3 8460154135
+  ("[release] Release 0.8.3 [ci] (#7389)"), job 105556336894 `simtime (3)`, canton 3.5.18. 18 tests, 1 failed, same test.
+```
+10:15:45.004Z advancing time by PT25H to 1970-01-05T10:07:40.999Z
+10:15:47.061Z Request to .../api/validator/v0/wallet/transfer-preapproval/send resulted in ... NOT_FOUND: LOCAL_VERDICT_INACTIVE_CONTRACTS(11,a5635d77)
+```
+`git merge-base --is-ancestor 0c43730f70 origin/release-line-0.8.3` -> not an ancestor. Backport branch
+`ray/backport-7261-release-line-0.8.3` (clean `cherry-pick -x -s 0c43730f70`); release-line-0.8.x still lacks it too.

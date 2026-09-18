@@ -173,6 +173,7 @@ given as (run, job, ref) tuples in the request; nothing inferred.
 | 10169 | 35325516312 | release-line-0.8.3 5f97fba71b (#7383) | 105537809798 `wall-clock-time (1)` | 3.5.18 |
 | 10170 | 35326825932 | release-line-0.8.x 19bfcbca6f (#7386) | 105542036722 `simtime (0)` | 3.5.18 |
 | 9740 | 32257514623 | main 306014bc81 (#6853), 2026-08-19 | 96082925012 `simtime (1)` | 3.5.14-snapshot.20260815 |
+| 10171 | 35330711023 | release-line-0.8.3 8460154135 (#7389, release 0.8.3) | 105556336894 `simtime (3)` | 3.5.18 |
 
 ## Overview
 
@@ -195,6 +196,7 @@ given as (run, job, ref) tuples in the request; nothing inferred.
 | 10169 | All 25 tests pass; checkErrors ERROR from sv1's ReceiveSvRewardCouponTrigger: `INTERPRETATION_UPGRADE_ERROR_TRANSLATION_FAILED`, DsoRulesConfig optional field 13 (SV operations switch-over times) is Some and cannot be dropped when the test downgrades the package config to dsoGovernance 0.1.25. | cn-test-failures 9965 | Packet `10169-unsupported-package-vetting-downgrade-translation-missing-backport.md`. FIXED on main by #7299 (d3499d1439, 2026-09-15); NOT on release-line-0.8.3 or 0.8.x. Backport branch `ray/backport-7299-release-line-0.8.3` (87d76de621). Deterministic on those lines. |
 | 10170 | TrafficBasedRewardsTimeBasedIntegrationTest CIP-104: round 11 not opened within the 20 s check after a 10-minute sim-time jump; an SV app command was in flight, the sequencer dropped its response (MAX_SEQUENCING_TIME_EXCEEDED), sv1Participant's time proof carried the pre-jump time and it saw no further event, so the SV app's domain time stayed 10 min behind and automation paused until the 30 s wall-clock recovery. | 9740 (and the #5779 / cn-test-failures 8423 family) | Packet `10170-9740-round-opening-wait-after-time-jump.md`. Fix branch `ray/fix-round-opening-wait-budget` (9ac0f24ab3): 90 s budget in `advanceTimeAndWaitForRoundOpening`, matching #5779's fix of the sibling helper. |
 | 9740 | Same test, same step, same message on main 2026-08-19 (canton 3.5.14 snapshot): identical mechanism from its artifact (blocked scheduler sc=1008, MAX_SEQUENCING_TIME_EXCEEDED, stale TimeProof, 10m 9.99 s delay). | parent of 10170 | Same packet. Not fixed on main; the fix branch above covers it. |
+| 10171 | WalletMintingDelegationTimeBasedIntegrationTest: `advanceTime(PT25H)` -> `LOCAL_VERDICT_INACTIVE_CONTRACTS`, third hit, now on the 0.8.3 release commit. | 10154 (cn-test-failures 10060 / #7223) | Section 6 of the 10154 packet. Backport branch `ray/backport-7261-release-line-0.8.3`; release-line-0.8.x still needs #7261 as well. |
 
 ## Cross-cutting observations
 
@@ -220,6 +222,7 @@ given as (run, job, ref) tuples in the request; nothing inferred.
 | `ray/fix-reset-topology-plugin-no-exit` | 743babe3f0 | 10137/10139 evidence loss (plugin `sys.exit`): reset failure now aborts the suite after `environment.close()` via `afterEnvironmentDestroyed`, and every later environment creation in the JVM is refused with `TopologyStateNotReset` | apps-app Test/compile, scalafmtCheck; no runtime run |
 | `ray/fix-topology-init-limit` | 72dc373508 | 10140: `sequencers.conf` DownloadTopologyStateForInit(Hash) limit 3 -> 7 (no test references the value) | config only |
 | `ray/fix-round-opening-wait-budget` | 9ac0f24ab3 | 9740 / 10170: `advanceTimeAndWaitForRoundOpening` gets the 90 s budget #5779 gave the sibling helper | scalafmt only; NOT compiled/run |
+| `ray/backport-7261-release-line-0.8.3` | 8460154135 | 10154/10166/10171: `cherry-pick -x -s 0c43730f70` (#7261) onto origin/release-line-0.8.3 | cherry-pick only |
 | `ray/backport-7299-release-line-0.8.3` | 87d76de621 | 10169: clean `cherry-pick -x -s` of #7299 onto origin/release-line-0.8.3 (0.8.x needs the same) | cherry-pick only |
 | `ray/fix-sv-ui-test-timeouts` | 26ad84f42d | 10141 (await the `waitFor`, drop the 1000 ms override) and 10145 (`navigateToLegacyGovernancePage` findByText with the 15 s vitest budget) | prettier --check clean; vitest not run |
 | `ray/fix-multihost-acs-mismatch` | 5e4f9464cd | 10111 family (10129, 10146, 10155, 10158, 10162, 10164, 10167): new `WalletTestUtil.onboardWalletUserHostedAlsoOn` allocates alice's wallet party hosted on both her participant and sv1Participant before she owns any contract, then onboards it as the wallet user; the expiry base suite and AutoIgnoreUnresponsivePartiesIntegrationTest use it instead of `propose_delta` multi-hosting after onboarding | scalafmt only; NOT compiled, NOT run (host) |
