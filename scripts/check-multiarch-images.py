@@ -92,7 +92,7 @@ def _image_sha256_for(file: str) -> str | None:
     return os.environ.get(key)
 
 
-INSPECT_ATTEMPTS = 3
+INSPECT_ATTEMPTS = 20
 INSPECT_RETRY_WAIT_SECONDS = 5
 
 
