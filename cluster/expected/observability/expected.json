@@ -3,6 +3,38 @@
     "custom": true,
     "id": "",
     "inputs": {
+      "apiVersion": "networking.istio.io/v1beta1",
+      "kind": "DestinationRule",
+      "metadata": {
+        "name": "alertmanager",
+        "namespace": "observability"
+      },
+      "spec": {
+        "host": "prometheus-alertmanager.observability.svc.cluster.local",
+        "trafficPolicy": {
+          "connectionPool": {
+            "http": {
+              "idleTimeout": "30s"
+            },
+            "tcp": {
+              "tcpKeepalive": {
+                "interval": "10s",
+                "probes": 3,
+                "time": "30s"
+              }
+            }
+          }
+        }
+      }
+    },
+    "name": "alertmanager-destination-rule",
+    "provider": "",
+    "type": "kubernetes:networking.istio.io/v1beta1:DestinationRule"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
       "apiVersion": "networking.istio.io/v1alpha3",
       "kind": "VirtualService",
       "metadata": {
@@ -26,6 +58,11 @@
                 "port": 80
               }
             ],
+            "retries": {
+              "attempts": 3,
+              "perTryTimeout": "30s",
+              "retryOn": "connect-failure,refused-stream,reset-before-request"
+            },
             "route": [
               {
                 "destination": {
@@ -578,6 +615,38 @@
     "custom": true,
     "id": "",
     "inputs": {
+      "apiVersion": "networking.istio.io/v1beta1",
+      "kind": "DestinationRule",
+      "metadata": {
+        "name": "grafana",
+        "namespace": "observability"
+      },
+      "spec": {
+        "host": "grafana.observability.svc.cluster.local",
+        "trafficPolicy": {
+          "connectionPool": {
+            "http": {
+              "idleTimeout": "30s"
+            },
+            "tcp": {
+              "tcpKeepalive": {
+                "interval": "10s",
+                "probes": 3,
+                "time": "30s"
+              }
+            }
+          }
+        }
+      }
+    },
+    "name": "grafana-destination-rule",
+    "provider": "",
+    "type": "kubernetes:networking.istio.io/v1beta1:DestinationRule"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
       "apiVersion": "networking.istio.io/v1alpha3",
       "kind": "EnvoyFilter",
       "metadata": {
@@ -651,6 +720,11 @@
                 "port": 80
               }
             ],
+            "retries": {
+              "attempts": 3,
+              "perTryTimeout": "30s",
+              "retryOn": "connect-failure,refused-stream,reset-before-request"
+            },
             "route": [
               {
                 "destination": {
@@ -1894,6 +1968,38 @@
     "custom": true,
     "id": "",
     "inputs": {
+      "apiVersion": "networking.istio.io/v1beta1",
+      "kind": "DestinationRule",
+      "metadata": {
+        "name": "prometheus",
+        "namespace": "observability"
+      },
+      "spec": {
+        "host": "prometheus-prometheus.observability.svc.cluster.local",
+        "trafficPolicy": {
+          "connectionPool": {
+            "http": {
+              "idleTimeout": "30s"
+            },
+            "tcp": {
+              "tcpKeepalive": {
+                "interval": "10s",
+                "probes": 3,
+                "time": "30s"
+              }
+            }
+          }
+        }
+      }
+    },
+    "name": "prometheus-destination-rule",
+    "provider": "",
+    "type": "kubernetes:networking.istio.io/v1beta1:DestinationRule"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
       "apiVersion": "networking.istio.io/v1alpha3",
       "kind": "VirtualService",
       "metadata": {
@@ -1917,6 +2023,11 @@
                 "port": 80
               }
             ],
+            "retries": {
+              "attempts": 3,
+              "perTryTimeout": "30s",
+              "retryOn": "connect-failure,refused-stream,reset-before-request"
+            },
             "route": [
               {
                 "destination": {

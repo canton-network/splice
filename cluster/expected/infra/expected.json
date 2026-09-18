@@ -1119,11 +1119,15 @@
       },
       "spec": {
         "default": {
+          "connectionDraining": {
+            "drainingTimeoutSec": 60
+          },
           "logging": {
             "enabled": true,
             "sampleRate": 1000000
           },
-          "securityPolicy": "waf-whitelist-throttle-ban-mock"
+          "securityPolicy": "waf-whitelist-throttle-ban-mock",
+          "timeoutSec": 3600
         },
         "targetRef": {
           "group": "",
@@ -1266,10 +1270,14 @@
       },
       "spec": {
         "default": {
+          "connectionDraining": {
+            "drainingTimeoutSec": 60
+          },
           "logging": {
             "enabled": true,
             "sampleRate": 1000000
-          }
+          },
+          "timeoutSec": 3600
         },
         "targetRef": {
           "group": "",
@@ -1868,7 +1876,8 @@
           "cloud.google.com/l4-rbs": "enabled"
         },
         "autoscaling": {
-          "maxReplicas": 15
+          "maxReplicas": 15,
+          "minReplicas": 2
         },
         "podDisruptionBudget": {
           "maxUnavailable": 1
@@ -2140,10 +2149,21 @@
           "cloud.google.com/l4-rbs": "enabled"
         },
         "autoscaling": {
-          "maxReplicas": 15
+          "maxReplicas": 15,
+          "minReplicas": 2
+        },
+        "lifecycle": {
+          "preStop": {
+            "exec": {
+              "command": [
+                "sleep",
+                "120"
+              ]
+            }
+          }
         },
         "podAnnotations": {
-          "proxy.istio.io/config": "{\"gatewayTopology\":{\"numTrustedProxies\":2}}"
+          "proxy.istio.io/config": "{\"gatewayTopology\":{\"numTrustedProxies\":2},\"terminationDrainDuration\":\"60s\"}"
         },
         "podDisruptionBudget": {
           "maxUnavailable": 1
@@ -2278,6 +2298,7 @@
           ],
           "type": "ClusterIP"
         },
+        "terminationGracePeriodSeconds": 210,
         "tolerations": [
           {
             "effect": "NoSchedule",
@@ -2751,6 +2772,35 @@
                     },
                     "initial_connection_window_size": 104857600,
                     "initial_stream_window_size": 1048576
+                  }
+                }
+              }
+            }
+          },
+          {
+            "applyTo": "NETWORK_FILTER",
+            "match": {
+              "context": "GATEWAY",
+              "listener": {
+                "filterChain": {
+                  "filter": {
+                    "name": "envoy.filters.network.http_connection_manager"
+                  }
+                }
+              }
+            },
+            "patch": {
+              "operation": "MERGE",
+              "value": {
+                "typed_config": {
+                  "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "http2_protocol_options": {
+                    "connection_keepalive": {
+                      "interval": "30s",
+                      "timeout": "5s"
+                    },
+                    "initial_connection_window_size": 52428800,
+                    "initial_stream_window_size": 524288
                   }
                 }
               }

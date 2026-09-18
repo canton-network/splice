@@ -56,6 +56,36 @@ function istioVirtualService(
   serviceName: string,
   servicePort: number
 ) {
+  const host = pulumi.interpolate`${serviceName}.${ns.metadata.name}.svc.cluster.local`;
+  new k8s.apiextensions.CustomResource(
+    `${name}-destination-rule`,
+    {
+      apiVersion: 'networking.istio.io/v1beta1',
+      kind: 'DestinationRule',
+      metadata: {
+        name: name,
+        namespace: ns.metadata.name,
+      },
+      spec: {
+        host: host,
+        trafficPolicy: {
+          connectionPool: {
+            http: {
+              idleTimeout: '30s',
+            },
+            tcp: {
+              tcpKeepalive: {
+                time: '30s',
+                interval: '10s',
+                probes: 3,
+              },
+            },
+          },
+        },
+      },
+    },
+    { deleteBeforeReplace: true }
+  );
   new k8s.apiextensions.CustomResource(
     `${name}-virtual-service`,
     {
@@ -74,13 +104,25 @@ function istioVirtualService(
             route: [
               {
                 destination: {
-                  host: pulumi.interpolate`${serviceName}.${ns.metadata.name}.svc.cluster.local`,
+                  host: host,
                   port: {
                     number: servicePort,
                   },
                 },
               },
             ],
+            // Istio's automatic retries are globally disabled (see defaultHttpRetryPolicy in
+            // infra/src/istio.ts) because our app clients retry themselves. The observability
+            // UIs are browser-facing, so there is no client-side retry and a transient upstream
+            // connection drop shows up as "upstream connect error or disconnect/reset before
+            // headers. reset reason: connection termination". We only retry failures that happen
+            // before the request was handed to the upstream, so this stays safe for non-idempotent
+            // requests.
+            retries: {
+              attempts: 3,
+              perTryTimeout: '30s',
+              retryOn: 'connect-failure,refused-stream,reset-before-request',
+            },
           },
         ],
       },
