@@ -511,6 +511,8 @@ case class SvAppBackendConfig(
       PackageVettingLookupService.CacheConfig(),
     useInternalSequencerApi: Boolean = false,
     ignoredAmuletVersions: Set[String] = Set.empty,
+    // Safety list of parties that must never be marked as unavailable by the automation
+    protectedPartyIds: Set[PartyId] = Set.empty,
     cantonBftSequencingParameters: Option[BftSequencingParameters] = Some(
       BftSequencingParameters.default
     ),
