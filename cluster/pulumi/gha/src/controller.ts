@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import * as k8s from '@pulumi/kubernetes';
 import {
+  CACHE_GHCR,
   HELM_MAX_HISTORY_SIZE,
   infraKubernetesScheduling,
 } from '@canton-network/splice-pulumi-common';
@@ -24,6 +25,9 @@ export function installController(repo: string, runnersNamespaceName: string): k
     values: {
       ...infraKubernetesScheduling,
       maxHistory: HELM_MAX_HISTORY_SIZE,
+      image: {
+        repository: `${CACHE_GHCR}/actions/gha-runner-scale-set-controller`,
+      },
       flags: {
         logFormat: 'json',
         watchSingleNamespace: runnersNamespaceName,
