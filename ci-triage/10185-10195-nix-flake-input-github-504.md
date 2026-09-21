@@ -74,4 +74,5 @@ git show 183a5f972e --stat -- nix flake.nix flake.lock .github | wc -l
 - Worth raising with the runner owners: the flake input `nix-systems/default` (and `numtide/flake-utils`, downloaded
   just before it) is fetched from GitHub on every job because it is not in the runner binary cache; pre-populating
   the cache would remove this failure class.
-- Not verified: whether main's runs in the same window failed identically (see README cross-cutting note if checked).
+- Main's only run in the same window, 35614301425 (created 14:45:29Z), passed with no failed job, so the 504 window was
+  short or hit only jobs whose runner cache lacked the input; the class is the same either way.
