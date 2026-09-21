@@ -13,6 +13,7 @@ import {
   K8sResourceSchema,
   SingleK8sResourceSchema,
 } from '@canton-network/splice-pulumi-common';
+import { spliceEnvConfig } from '@canton-network/splice-pulumi-common/src/config/envConfig';
 import { DockerConfig } from '@canton-network/splice-pulumi-common/src/dockerConfig';
 import { getSecretVersionOutput } from '@pulumi/gcp/secretmanager/getSecretVersion';
 import { ConfigMap, Namespace, PersistentVolumeClaim, Secret } from '@pulumi/kubernetes/core/v1';
@@ -25,13 +26,8 @@ import { createCachePvc } from './cache';
 import { ghaConfig } from './config';
 import { createCloudSQLInstanceForPerformanceTests, PerformanceTestDb } from './performanceTests';
 
-// Version and multi-platform index digest of ghcr.io/actions/actions-runner, pulled via the Artifact Registry
-// ghcr mirror. Must match ARG RUNNER_VERSION / RUNNER_DIGEST in cluster/images/splice-test-docker-runner and
-// splice-test-runner-hook, so the externals copied for dind match the runner binary. The digest comes from
-// `docker buildx imagetools inspect ghcr.io/actions/actions-runner:<version>`; all three places are updated
-// together by scripts/bump-gha-runner-version.sh.
-const RUNNER_VERSION = '2.337.0';
-const RUNNER_DIGEST = 'sha256:e5496277be5d09bc968b3d64911b74e219ac4a3f2edce956a3ecf9271bea1ef4';
+const runnerVersion = spliceEnvConfig.requireEnv('GHA_RUNNER_VERSION');
+const runnerDigest = spliceEnvConfig.requireEnv('GHA_RUNNER_DIGEST');
 
 const localnetHostAliases = [
   {
@@ -104,7 +100,7 @@ function installDockerRunnerScaleSet(
             initContainers: [
               {
                 name: 'init-dind-externals',
-                image: `${CACHE_GHCR}/actions/actions-runner:${RUNNER_VERSION}@${RUNNER_DIGEST}`,
+                image: `${CACHE_GHCR}/actions/actions-runner:${runnerVersion}@${runnerDigest}`,
                 command: ['cp', '-r', '-v', '/home/runner/externals/.', '/home/runner/tmpDir/'],
                 volumeMounts: [
                   {
