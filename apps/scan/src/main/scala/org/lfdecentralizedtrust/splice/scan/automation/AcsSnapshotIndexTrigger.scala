@@ -28,7 +28,13 @@ class AcsSnapshotIndexTrigger(
 
   override protected def retrieveTasks()(implicit
       tc: TraceContext
-  ): Future[Seq[PerTableAcsSnapshot]] = store.lookupOldestUnindexedSnapshot().map(_.toList)
+  ): Future[Seq[PerTableAcsSnapshot]] = {
+    if (store.updateHistory.isReady) {
+      store.lookupOldestUnindexedSnapshot().map(_.toList)
+    } else {
+      Future.successful(Seq.empty)
+    }
+  }
 
   override protected def completeTask(task: PerTableAcsSnapshot)(implicit
       tc: TraceContext
