@@ -152,6 +152,20 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
 - Fix: sim-time-only ignore in `canton_log_simtime_extra.ignore.txt` (`ray/fix-10184-mediator-pruning-backoff-ignore`);
   do not put it in `canton_log.ignore.txt`, in production the line means the mediator lags the clock by > retention.
 
+## L. Reference sequencer `insert block` SQLSTATE 40001 retry storm (slow ordering, not only teardown exits)
+- Signature: a ledger command or confirmation takes 10-25 s; participants log `timeout-result has not completed after
+  N milliseconds` / `succeed successfully but slow`; on the sequencer, `enqueued reference sequencer store request` is
+  followed by `Created batch reference-driver-requests-batch` many seconds later, and `DbStorageSingle` logs
+  `The operation 'insert block' has failed ... Retrying after` with growing backoff and `SQL state: 40001`.
+- Confirm: pair first `enqueued ... tag send` with the next `Created batch` on globalSequencerSv1 and list waits over
+  5 s; grep the `insert block` retry chain in that window. Block production (`Processing block`) keeps running.
+- Cause: several reference sequencers (4 global + 2 splitwell) store serializable block inserts in one Postgres; the
+  test configs run the reference driver in both wall-clock and sim-time shards (`sequencers.conf:33`).
+- Occurrences: 10139 (wall-clock nightly, 27 s gap, then ResetTopologyStatePlugin exit), 10197 (simtime, 19.6 s wait,
+  20 s test budget). 3.5.17/3.5.18 sim-time runs show the same storm with backoff under 0.4 s; 10197 reached 8.6 s.
+- Fixes: per-test budgets where a check depends on one ordering round trip (`ray/fix-10197-bft-read-confirmation-wait`);
+  the contention itself is Canton / test infra (fewer writers per DB, non-serializable insert, capped backoff).
+
 ## J. Infra, no code change
 - 10133 ghcr.io pull i/o timeout.
 - Multi-arch image check (deployment_test, `scripts/check-multiarch-images.py`): one skopeo answer decides. 10150 = Docker Hub
