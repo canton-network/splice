@@ -136,6 +136,17 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   `ray/fix-10179-member-traffic-status-consistent-read` (compare inside `eventually()`).
 
 
+## K. Sim time: mediator pruning scheduler backoff after a jump of at least the retention period
+- Signature (canton-simtime log WARN): `MediatorPruningScheduler ... Backing off 1s or until next window after error: Requested
+  pruning timestamp [T] is later than the earliest available pruning timestamp [T - 30 s]`, all tests pass.
+- Mechanism (10183/10184 simtime (2)): the SV app installs a 10-minute cron with 30 d retention on its mediator; the
+  scheduler prunes up to `clock.now - retention`; a sim-time jump >= 30 d puts that at the pre-jump clean timestamp, and
+  `Mediator.prune` refuses anything above `clean - confirmationResponseTimeout` (30 s) until the mediator sees a
+  post-jump event. Confirming grep: `advancing time by PT720H` (or longer) in the test log within a second before the WARN,
+  and the other mediators logging `Pruned up to <same T>` a few seconds later.
+- Fix: sim-time-only ignore in `canton_log_simtime_extra.ignore.txt` (`ray/fix-10183-10184-simtime-2-mediator-pruning-backoff-ignore`);
+  do not put it in `canton_log.ignore.txt`, in production the line means the mediator lags the clock by > retention.
+
 ## J. Infra, no code change
 - 10133 ghcr.io pull i/o timeout.
 - Multi-arch image check (deployment_test, `scripts/check-multiarch-images.py`): one skopeo answer decides. 10150 = Docker Hub
