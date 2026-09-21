@@ -10,7 +10,7 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   AutoIgnoreUnresponsiveParties*). The WARN lands 0-27 min later in an unrelated suite (random send delay).
 - Mechanism: the tests add sv1Participant as a host of alice's wallet party after she owns contracts, with no
   ACS import; the two hosts genuinely disagree. Test issue, not product. Canton 3.6 detects it every time.
-- Parent 10111 (run 34523566111); dups 10129, 10146, 10155, 10158, 10162, 10164, 10167, 10178 (PG14 nightly).
+- Parent 10111 (run 34523566111); dups 10129, 10146, 10155, 10158, 10162, 10164, 10167, 10178 (PG14 nightly), 10182.
 - Fix: `ray/fix-multihost-acs-mismatch` (allocate alice's party hosted on both participants before onboarding).
   Do not widen `canton_log.ignore.txt:145`.
 

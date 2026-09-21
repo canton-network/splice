@@ -175,3 +175,37 @@ the WARN is delivered 79.6 s after the period end, during WalletBuyTrafficReques
 to do with it. The multi-host site at this sha is unchanged (`ExpiryWithMinimalVettedPackagesIntegrationTest.scala:183-185`,
 `git grep -n 'Multi-host alice' 18f490ae5a -- apps/app/src/test`). Postgres 14 versus 18 makes no difference to the
 mechanism, which is the party topology, not storage. Fix remains `ray/fix-multihost-acs-mismatch` (5e4f9464cd).
+
+## 10. 10182 (run 35602699661, 2026-09-21) - tenth occurrence
+
+- Run: https://github.com/canton-network/splice/actions/runs/35602699661 (main 78dee2bc38, "Use ghcr cache for runner
+  images (#7424)"), job 106342679281 `ci / scala_test_wall_clock_time / wall-clock-time (8)`, canton
+  3.6.0-snapshot.20260916.20284.0.vf27c4824. 23 tests pass; the only non-ignored checkErrors line is the mismatch
+  (673 ignored lines, among them globalMediatorSv4's `Failed to send result to sequencer ... ABORTED` burst at 13:15,
+  which is on the ignore list).
+```
+gh api repos/canton-network/splice/actions/jobs/106342679281/logs > log/10182/job.log
+grep -a '^\S*Z \*\*\*"@timestamp"' log/10182/job.log | grep -a -v 'ignore this line' | sed -E 's/^[^Z]*Z \*\*\*"@timestamp":"([^"]+)","message":"(.{0,70}).*"logger_name":"([^"]{0,60}).*/\2 | \3/' | sort | uniq -c
+C=log/10182/logs-wall-clock-time-8/canton_before_shutdown.clog.gz
+zcat $C | grep -a 'ACS_COMMITMENT_MISMATCH' | grep -a '"level":"WARN"' | sed -E 's/^\{"@timestamp":"([^"]+)","message":"([^"]*)".*"logger_name":"([^"]*)".*period = CommitmentPeriod\(([^)]*)\).*/\1 [\3] \2 period=\4/; s/1220[0-9a-f]{60}/../g'
+```
+```
+      1 ACS_COMMITMENT_MISMATCH(5,e16f8c7b): The local commitment does not mat | c.d.c.p.c.ReceivedAcsCommitmentMatcher:participant=sv1Partic
+2026-09-21T13:33:35.272Z [c.d.c.p.c.ReceivedAcsCommitmentMatcher:participant=sv1Participant/synchronizer=global-domain::122089f3e158] ACS_COMMITMENT_MISMATCH(5,e16f8c7b): The local commitment does not match the remote commitment period=fromExclusive = 2026-09-21T13:28:38.513060Z, toInclusive = 2026-09-21T13:30:00Z
+  sender = aliceValidator::122080b19061..., counterparticipant = sv1::1220d0cb486b...
+```
+```
+T=log/10182/logs-wall-clock-time-8/canton_network_test.clog.gz
+zcat $T | grep -a -E "Starting test suite|Test (succeeded|failed): |Multi-host alice" | grep -a -E 'T13:(2[7-9]|3[0-3])' | sed -E 's/"logger_name":.*//; s/\{"@timestamp":"([^"]+)","message":"/\1 /' | cut -c1-150
+```
+```
+2026-09-21T13:27:33.255Z Starting test suite 'ExpiryWithIgnoredAmuletVersionIntegrationTest'...
+2026-09-21T13:28:23.205Z Running clue: (act) Multi-host alice on sv1Participant (alice keeps her old host)
+2026-09-21T13:28:24.129Z Finished clue: (act) Multi-host alice on sv1Participant (alice keeps her old host)
+2026-09-21T13:29:01.719Z Test succeeded: 'ExpiryWithIgnoredAmuletVersionIntegrationTest/Expiry triggers skip parties whose preferred amulet package version is ignored'
+...
+2026-09-21T13:33:12.054Z Starting test suite 'AmuletAllocationsIntegrationTest'...
+```
+Period starts 14.4 s after the multi-host clue finished; the WARN arrives 3 min 35 s after the period end, during
+AmuletAllocationsIntegrationTest. Same suite as 10158 and 10178. Fix remains `ray/fix-multihost-acs-mismatch`
+(5e4f9464cd); the family has now hit ten times between 2026-09-10 and 2026-09-21.
