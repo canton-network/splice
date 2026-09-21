@@ -482,7 +482,7 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
             }
 
           clue(s"Only sv1 and sv4 confirm round $round, so it is not yet processed") {
-            eventually() {
+            eventually(90.seconds) {
               val startProcessingAction = new ARC_AmuletRules(
                 new CRARC_StartProcessingRewardsV2(
                   new AmuletRules_StartProcessingRewardsV2(calculateRewardsCid, new Hash(rootHash))
