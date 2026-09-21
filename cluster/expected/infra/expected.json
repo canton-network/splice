@@ -2795,6 +2795,7 @@
                 "typed_config": {
                   "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
                   "http2_protocol_options": {
+                    "allow_connect": true,
                     "connection_keepalive": {
                       "interval": "30s",
                       "timeout": "5s"
