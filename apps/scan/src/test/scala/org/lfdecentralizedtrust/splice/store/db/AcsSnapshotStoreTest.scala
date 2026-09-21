@@ -1549,7 +1549,7 @@ class TablePerAcsSnapshotStoreTest extends AcsSnapshotStoreTest {
     }
   }
 
-  "index the stakeholders table" in {
+  "idempotently index the stakeholders table" in {
     for {
       updateHistory <- mkUpdateHistory()
       store = mkStore(updateHistory)
@@ -1569,6 +1569,8 @@ class TablePerAcsSnapshotStoreTest extends AcsSnapshotStoreTest {
       _ = oldestUnindexed should be(snapshot)
       _ <- store.indexSnapshotStakeholdersTable(oldestUnindexed)
       oldestAfter <- store.lookupOldestUnindexedSnapshot()
+      // idempotency check, shouldn't fail
+      _ <- store.indexSnapshotStakeholdersTable(oldestUnindexed)
     } yield oldestAfter should be(None)
   }
 }
