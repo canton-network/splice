@@ -179,6 +179,7 @@ given as (run, job, ref) tuples in the request; nothing inferred.
 | 10173 | 35349868387 | release-line-0.8.3 9adbf80cd2 (#7410) | 105615504911 `simtime (2)` | 3.5.18 |
 | 10174 | 35366024437 | main 696b79a4c6 (#7418) | 105669130974 `logical-sync-upgrade (0)` | 3.6.0-snapshot.20260916.20284.0.vf27c4824 |
 | 10175 | 35368993884 | main 6d59d2b131 (#7416) | 105678546586 `wall-clock-time (1)` | 3.6.0-snapshot.20260916.20284.0.vf27c4824 |
+| 10176 | 35379257952 | main 18f490ae5a (the 10174 fix) | 105711633730 `wall-clock-time (5)` | 3.6.0-snapshot.20260916.20284.0.vf27c4824 |
 
 ## Overview
 
@@ -207,6 +208,7 @@ given as (run, job, ref) tuples in the request; nothing inferred.
 | 10173 | UnhideAndExpireRewardCouponV2TimeBasedIntegrationTest: after `advanceTime(37 h)` the round automation has ~220 rounds of backlog; the next `advanceRoundsToNextRoundOpening` sees (7, 7, 8, 9) instead of (6, 6, 7, 8) and fails its 90 s check. | splice #7206 (open, same test, same mechanism); sibling of 10060/#7261 | Packet `10173-unhide-expire-coupon-time-jump-backlog.md`. Fix branch `ray/fix-10173-unhide-expire-coupon-ttl` (77c50439a9): coupon TTL 2 h via initialRewardConfig, advance past it with advanceRoundsUntil. |
 | 10174 | LsuIntegrationTest passes; checkErrors WARN from bobValidatorLocal: `Connection for 'global' with psid ...::36-0 is no longer active (status: LSU source), skipping update` (the branch #7311 added for 10088-B). #7311's own ignore pattern has unescaped parentheses and never matches. bob was restarted after the upgrade and its init used the participant's stale registered psid. | successor of 10088-B (#7311) | Packet `10174-lsu-source-warn-ignore-regex.md`. Fix branch `ray/fix-10174-lsu-source-ignore-regex` (8cdbe8996b): escape the parentheses; ripgrep-verified. Validator-side psid selection after LSU left as a note. |
 | 10175 | UnclaimedActivityRecordIntegrationTest "An UnclaimedActivityRecord gets expired": `pause().futureValue` on alice's CollectRewardsAndMergeAmuletsTrigger times out after 5 s. Block 1 took 10.6 s (actAndCheck 5 s poll cap), the record (expiresAt = now+10 s) had expired, the one-instant resume between the blocks let the trigger start a task on the expired record, Daml deadline-exceeded, infinite retries inside the task. | recurrence of 7864 (#5176 widened 5 s -> 10 s) | Packet `10175-unclaimed-activity-record-merge-trigger-pause-timeout.md`. Fix branch `ray/fix-10175-unclaimed-activity-record-keep-merge-paused` (a107408328): keep the merge trigger paused across both blocks; scalafmt only. App note: wallet does not filter expired UnclaimedActivityRecord inputs. |
+| 10176 | SvInitializationIntegrationTest "SV apps can start one by one" passes its body, then `UpdateHistorySanityCheckPlugin.beforeEnvironmentDestroyed` times out (5 s) pausing sv2Scan's AcsSnapshotTrigger at 18:30:47.179: the trigger's `UpdateIncrementalSnapshotTask` had finished its SQL at 18:30:46.901 but the transaction only completed at 18:30:57.568 (10.67 s). The plugin hook runs outside the `try` in vendored `EnvironmentSetup.manualDestroyEnvironment`, so `environment.close()` is skipped, Prometheus :25000 stays bound, and 12 more tests plus 2 shared-environment suites fail at `Creating fixture` (`Could not create Prometheus HTTP server`). Commit latency was an outlier for the whole shard (p99 350 ms, six commits over 1 s vs 10-30 ms p99 elsewhere). | H3 sibling of 10175 (different cause); cascade shape of run 28921009132 (July, SvOnboardingViaNonFoundingSv) | Packet `10176-sanity-check-pause-timeout-teardown-cascade.md`. Fix branch `ray/fix-10176-sanity-check-pause-timeout` (e59f6538c0): `setTriggersWithin` takes a `pauseTimeout`, the plugin passes 1 minute. Canton-side: run `beforeEnvironmentDestroyed` inside the `try` so a failing check cannot leak the environment (described, not written). |
 
 ## Cross-cutting observations
 
@@ -223,6 +225,10 @@ given as (run, job, ref) tuples in the request; nothing inferred.
 - 10048 follow-up (Canton reply 2026-09-17): the #35600 state-transfer fix is present in the jars main
   (20260910 snapshot), release-line-0.8.x and 0.8.1 run, verified by string markers absent in 3.5.16 and the
   20260909.20244 snapshot; release-line-0.8.0 still pins 3.5.16. Details appended to `10048-bft-deadlock.md`.
+- 10176 and the July run 28921009132 share the teardown-leak cascade: any exception from a plugin's
+  `beforeEnvironmentDestroyed` skips `environment.close()` in vendored `EnvironmentSetup.manualDestroyEnvironment`
+  (canton main unchanged as of 2026-09-15.22), so one teardown hiccup costs the rest of the shard. Worth an
+  upstream one-line fix independent of the individual plugin causes.
 
 ## Fix branches written 2026-09-17 (sandbox only, unpushed; compile/tests to be run on the host)
 
@@ -242,3 +248,4 @@ given as (run, job, ref) tuples in the request; nothing inferred.
 | `ray/fix-10175-unclaimed-activity-record-keep-merge-paused` | a107408328 | 10175: outer pause of alice's merge trigger across both blocks of the expiry test | apps-app/Test/scalafmtCheck |
 | `ray/fix-sv-ui-test-timeouts` | 26ad84f42d | 10141 (await the `waitFor`, drop the 1000 ms override) and 10145 (`navigateToLegacyGovernancePage` findByText with the 15 s vitest budget) | prettier --check clean; vitest not run |
 | `ray/fix-multihost-acs-mismatch` | 5e4f9464cd | 10111 family (10129, 10146, 10155, 10158, 10162, 10164, 10167): new `WalletTestUtil.onboardWalletUserHostedAlsoOn` allocates alice's wallet party hosted on both her participant and sv1Participant before she owns any contract, then onboards it as the wallet user; the expiry base suite and AutoIgnoreUnresponsivePartiesIntegrationTest use it instead of `propose_delta` multi-hosting after onboarding | scalafmt only; NOT compiled, NOT run (host) |
+| `ray/fix-10176-sanity-check-pause-timeout` | e59f6538c0 | 10176: `TriggerTestUtil.setTriggersWithin` gets a `pauseTimeout` (default unchanged), `UpdateHistorySanityCheckPlugin` pauses the snapshot triggers with a 1 min budget | apps-app/Test/scalafmtCheck (see packet); NOT compiled/run |

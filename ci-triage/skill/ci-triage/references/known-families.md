@@ -89,6 +89,11 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   (10088-A, #7289; branch `ray/fix-fail-fast-init`).
 - 10139 cause: reference block sequencer `insert block` SQLSTATE 40001 retry storm with four sequencers on one
   Postgres until the 8-connection pools are exhausted (Canton / topology size).
+- Teardown leak cascade (10176; July run 28921009132): an exception from any plugin's `beforeEnvironmentDestroyed`
+  skips `environment.close()` (vendored `EnvironmentSetup.manualDestroyEnvironment` runs the hook outside its `try`;
+  canton main unchanged 2026-09-15.22). Signature: one teardown failure, then every later test fails at `Creating
+  fixture` with `Could not create Prometheus HTTP server` / `Address already in use` (:25000) and shared-environment
+  suites abort with zero tests. Confirming grep: the old environment's `config=<id>` keeps logging after the failure.
 
 ## H2. LSU: validator init against a non-active psid
 - 10088-B (5-min hang, infinite retry) -> fixed by #7311 (WARN + skip). 10174: the WARN fails checkErrors because #7311's
@@ -104,6 +109,12 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
 - 10175 (7864/#5176 lineage): UnclaimedActivityRecordIntegrationTest resumed alice's merge trigger for 1 ms between two
   blocks after the record's 10 s expiry had passed. Fix: pause across both blocks (outer setTriggersWithin), never a
   bigger expiry margin. Also check `actAndCheck`'s 5 s max poll interval when a block "takes too long".
+- 10176: same timeout from `UpdateHistorySanityCheckPlugin.beforeEnvironmentDestroyed` pausing a scan's AcsSnapshotTrigger
+  whose `UpdateIncrementalSnapshotTask` transaction took 10.67 s to complete after 1 ms of SQL (Postgres commit
+  latency outlier on the runner; p99 350 ms in that shard vs 10-30 ms elsewhere). No retry lines: the confirming
+  grep is the gap between the store's `Updated incremental snapshot` and the trigger's `Completed processing` for
+  the scan named first in `Checking update histories for List(...)`. Fix `ray/fix-10176-sanity-check-pause-timeout`
+  (1 min pause budget in the plugin); the cascade itself is family H.
 
 ## I. Test races (venue and splitwell)
 - 8784: settlement venue submits `OTCTrade_Settle` before its participant ingested the AmuletAllocation contracts
