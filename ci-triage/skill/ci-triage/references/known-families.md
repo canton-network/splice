@@ -5,12 +5,12 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
 ## A. ACS_COMMITMENT_MISMATCH sv1Participant vs aliceValidator after a multi-host step
 - Signature (canton log WARN): `ReceivedAcsCommitmentMatcher:participant=sv1Participant ... ACS_COMMITMENT_MISMATCH ... sender = aliceValidator`.
 - Confirm: `zcat canton_network_test.clog.gz | grep -a -E "Starting test suite|Multi-host alice"`; the mismatched
-  period's `fromExclusive` is 1-15 s after a `Multi-host alice on sv1Participant` clue (ExpiryWithMinimalVettedPackages
+  period's `fromExclusive` is 1-16 s after a `Multi-host alice on sv1Participant` clue (ExpiryWithMinimalVettedPackages
   base suites: AmuletExpiryV1Fallback, ExpiryWithIgnoredAmuletVersion, ExpiryWithNoVettedAmuletVersion; and
   AutoIgnoreUnresponsiveParties*). The WARN lands 0-27 min later in an unrelated suite (random send delay).
 - Mechanism: the tests add sv1Participant as a host of alice's wallet party after she owns contracts, with no
   ACS import; the two hosts genuinely disagree. Test issue, not product. Canton 3.6 detects it every time.
-- Parent 10111 (run 34523566111); dups 10129, 10146, 10155, 10158, 10162, 10164, 10167.
+- Parent 10111 (run 34523566111); dups 10129, 10146, 10155, 10158, 10162, 10164, 10167, 10178 (PG14 nightly).
 - Fix: `ray/fix-multihost-acs-mismatch` (allocate alice's party hosted on both participants before onboarding).
   Do not widen `canton_log.ignore.txt:145`.
 

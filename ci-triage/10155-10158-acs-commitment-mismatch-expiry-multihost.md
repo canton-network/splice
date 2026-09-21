@@ -140,3 +140,38 @@ Period starts 2.7 s after the multi-host step; WARN delivered 7 s after period e
 Side note in the same job: the artifact upload step also errored on a file name containing a party id with `::`
 (`alice-validatorcfbce084-1::1220eb494657...acs`, "Colon :" not allowed), unrelated to the failure but it means
 one ACS dump file is missing from the artifact.
+
+## 9. 10178 (run 35422792959, 2026-09-19) - ninth occurrence, first on the Postgres 14 nightly
+
+- Run: https://github.com/canton-network/splice/actions/runs/35422792959 ("Wall Clock Tests with Postgres 14",
+  main 18f490ae5a, the 10174 fix commit), job 105843722429 `scala_test_wall_clock_time / wall-clock-time (2)`,
+  canton 3.6.0-snapshot.20260916.20284.0.vf27c4824. 25 tests pass; one WARN fails checkErrors.
+```
+gh api repos/canton-network/splice/actions/jobs/105843722429/logs > log/10178/job.log
+grep -a -B400 'contains problems' log/10178/job.log | grep -a '@timestamp' | grep -a -v 'ignore this line' | sed -E 's/^[^Z]*Z //' | cut -c1-600
+C=log/10178/logs-wall-clock-time-2/canton_before_shutdown.clog.gz
+zcat $C | grep -a 'ACS_COMMITMENT_MISMATCH' | grep -a '"level":"WARN"' | sed -E 's/^\{"@timestamp":"([^"]+)","message":"([^"]*)".*"logger_name":"([^"]*)".*period = CommitmentPeriod\(([^)]*)\).*/\1 [\3] \2 period=\4/; s/1220[0-9a-f]{60}/../g'
+```
+```
+2026-09-19T05:31:19.616Z [c.d.c.p.c.ReceivedAcsCommitmentMatcher:participant=sv1Participant/synchronizer=global-domain::1220a24cee43] ACS_COMMITMENT_MISMATCH(5,2a5ce42e): The local commitment does not match the remote commitment period=fromExclusive = 2026-09-19T05:29:32.183705Z, toInclusive = 2026-09-19T05:30:00Z
+  sender = aliceValidator::12206bd67a0a..., counterparticipant = sv1::12208b8d6a1b...
+```
+The only mismatch WARN in the canton log. Suite timeline:
+```
+T=log/10178/logs-wall-clock-time-2/canton_network_test.clog.gz
+zcat $T | grep -a -E "Starting test suite|Test (succeeded|failed): |Multi-host alice" | grep -a -E 'T05:(2[89]|3[01])' | sed -E 's/"logger_name":.*//; s/\{"@timestamp":"([^"]+)","message":"/\1 /' | cut -c1-150
+```
+```
+2026-09-19T05:28:34.677Z Starting test suite 'ExpiryWithIgnoredAmuletVersionIntegrationTest'...
+2026-09-19T05:29:15.826Z Running clue: (act) Multi-host alice on sv1Participant (alice keeps her old host)
+2026-09-19T05:29:16.752Z Finished clue: (act) Multi-host alice on sv1Participant (alice keeps her old host)
+2026-09-19T05:30:04.043Z Test succeeded: 'ExpiryWithIgnoredAmuletVersionIntegrationTest/Expiry triggers skip parties whose preferred amulet package version is ignored'
+2026-09-19T05:30:04.051Z Starting test suite 'BootstrapTest'...
+2026-09-19T05:31:04.643Z Test succeeded: 'BootstrapTest/Bootstrap script should pass'
+2026-09-19T05:31:04.654Z Starting test suite 'WalletBuyTrafficRequestIntegrationTest'...
+```
+Period starts 15.4 s after the multi-host clue finished (the widest gap so far; the family range is now 1-16 s);
+the WARN is delivered 79.6 s after the period end, during WalletBuyTrafficRequestIntegrationTest, which has nothing
+to do with it. The multi-host site at this sha is unchanged (`ExpiryWithMinimalVettedPackagesIntegrationTest.scala:183-185`,
+`git grep -n 'Multi-host alice' 18f490ae5a -- apps/app/src/test`). Postgres 14 versus 18 makes no difference to the
+mechanism, which is the party topology, not storage. Fix remains `ray/fix-multihost-acs-mismatch` (5e4f9464cd).
