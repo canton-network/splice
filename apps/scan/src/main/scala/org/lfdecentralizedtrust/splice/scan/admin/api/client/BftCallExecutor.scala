@@ -16,20 +16,43 @@ import org.lfdecentralizedtrust.splice.admin.api.client.commands.HttpCommandExce
 import org.lfdecentralizedtrust.splice.admin.http.HttpErrorWithHttpCode
 import org.lfdecentralizedtrust.splice.environment.{BaseAppConnection, RetryProvider}
 import org.lfdecentralizedtrust.splice.metrics.ScanConnectionMetrics
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection.{
-  BftCallConfig,
-  ScanConnections,
-}
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftCallExecutor.handleNotEnoughScans
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection.{BftCallConfig, ScanConnections}
 import org.lfdecentralizedtrust.splice.store.HistoryBackfilling.SourceMigrationInfo
 import org.slf4j.event.Level
 
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentSkipListSet}
 import java.util.concurrent.atomic.AtomicInteger
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.util.{Failure, Random, Success, Try}
 import scala.jdk.CollectionConverters.*
 
 object BftCallExecutor {
+
+  def bftCallForEventualConsistencyEndpoints[T](
+      connections: ScanConnections,
+      connectionMetrics: Option[ScanConnectionMetrics] = None,
+      retryProvider: RetryProvider,
+      logger: TracedLogger,
+      precall: SingleScanConnection => Future[Boolean],
+      call: SingleScanConnection => Future[T],
+      endpoint: String,
+      callConfig: BftCallConfig,
+      consensusFailureLogLevel: Level = Level.WARN,
+      disagreementLogLevel: Level = Level.INFO,
+      shortenResponsesForLog: T => Any = identity[T],
+  )(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+      loggingContext: com.digitalasset.canton.logging.ErrorLoggingContext,
+  ): Future[(T, List[Uri])] = {
+    if (!callConfig.enoughAvailableScans) {
+      handleNotEnoughScans(connections, callConfig, consensusFailureLogLevel, connectionMetrics)
+    } else {
+      findScansWithAvailableData(connections, connectionMetrics, logger, precall, callConfig.requestsToDo)
+    }
+  }
+
   def bftCallWithScanUris[T](
       connections: ScanConnections,
       connectionMetrics: Option[ScanConnectionMetrics] = None,
@@ -48,26 +71,13 @@ object BftCallExecutor {
   ): Future[(T, List[Uri])] = {
     implicit val mc: MetricsContext = MetricsContext("request" -> endpoint)
 
-    def markBftCall(outcome: String): Unit =
-      connectionMetrics.foreach { m =>
-        MetricsContext.withExtraMetricLabels(("outcome", outcome)) { implicit mc =>
-          m.bftCalls.mark()
-        }
-      }
+    // FIXME: start timer before phase 1? separate timers?
     def startTimer(): Option[TimerHandle] =
       connectionMetrics.map(_.bftReadLatency.startAsync())
     def stopTimer(t: Option[TimerHandle]): Unit = t.foreach(_.stop())
 
     if (!callConfig.enoughAvailableScans) {
-      val totalNumber = connections.totalNumber
-      val msg =
-        s"Only ${callConfig.connections.size} scan instances can be used " +
-          s"(out of $totalNumber configured ones), which are fewer than the necessary " +
-          s"${callConfig.targetSuccess} to achieve BFT guarantees."
-      val exception = HttpErrorWithHttpCode(StatusCodes.BadGateway, msg)
-      LoggerUtil.logThrowableAtLevel(consensusFailureLogLevel, msg, exception)
-      markBftCall("not_enough_scans")
-      Future.failed(exception)
+      handleNotEnoughScans(connections, callConfig, consensusFailureLogLevel, connectionMetrics)
     } else {
       val timer = startTimer()
 
@@ -89,7 +99,7 @@ object BftCallExecutor {
         )
         .recoverWith { case c: ConsensusNotReached =>
           LoggerUtil.logThrowableAtLevel(consensusFailureLogLevel, "Consensus not reached.", c)
-          markBftCall("consensus_not_reached")
+          markBftCall("consensus_not_reached", connectionMetrics)
           Future.failed(
             HttpErrorWithHttpCode(
               StatusCodes.BadGateway,
@@ -104,12 +114,80 @@ object BftCallExecutor {
             // or by the not_enough_scans branch — nothing more to do.
             stopTimer(timer)
           case Failure(_) =>
-            markBftCall("transport_error")
+            markBftCall("transport_error", connectionMetrics)
             stopTimer(timer)
           case Success(_) =>
-            markBftCall("ok")
+            markBftCall("ok", connectionMetrics)
             stopTimer(timer)
         }
+    }
+  }
+
+  private def markBftCall(outcome: String, connectionMetrics: Option[ScanConnectionMetrics]): Unit =
+    connectionMetrics.foreach { m =>
+      MetricsContext.withExtraMetricLabels(("outcome", outcome)) { implicit mc =>
+        m.bftCalls.mark()
+      }
+    }
+
+  private def handleNotEnoughScans[T](connections: ScanConnections, callConfig: BftCallConfig, consensusFailureLogLevel: Level, connectionMetrics: Option[ScanConnectionMetrics]) = {
+    val totalNumber = connections.totalNumber
+    val msg =
+      s"Only ${callConfig.connections.size} scan instances can be used " +
+        s"(out of $totalNumber configured ones), which are fewer than the necessary " +
+        s"${callConfig.targetSuccess} to achieve BFT guarantees."
+    val exception = HttpErrorWithHttpCode(StatusCodes.BadGateway, msg)
+    LoggerUtil.logThrowableAtLevel(consensusFailureLogLevel, msg, exception)
+    markBftCall("not_enough_scans", connectionMetrics)
+    Future.failed(exception)
+  }
+
+  private[client] def findScansWithAvailableData(
+    connections: ScanConnections,
+    connectionMetrics: Option[ScanConnectionMetrics],
+    logger: TracedLogger,
+    precall: SingleScanConnection => Future[Boolean],
+    requiredNumber: Integer,
+                                                ) = {
+
+    val scansWithData = new ConcurrentHashMap[Boolean, List[ScanConnection]]()
+    val finalResponse = Promise[List[ScanConnection]]()
+    val nResponsesDone = new AtomicInteger(0)
+
+    // FIXME: Should we optimistically call only `requestsToDo` scans first, and if not all have data,
+    //  then call others? Currently leaning toward "no", and assume that precall is a cheap enough call that we
+    //  can accept just hitting all scans with it.
+    connections.open.foreach {scan =>
+      precall(scan)
+        .transformWith{
+          case Success(value) => Future.successful(value)
+          // FIXME: we're considering all failures to be "no data yet". Is that enough, or do we need to distinguish "not yet" from "never"?
+          case _ => Future.successful(false)
+        }
+
+
+        .foreach(hasData => {
+          val agreements = scansWithData.compute(
+            hasData,
+            (_, scans) => scan :: Option(scans).getOrElse(List.empty)
+          )
+
+          if (hasData && agreements.size == requiredNumber) {
+            finalResponse.tryComplete(Try(agreements))
+          }
+          // FIXME: we can also fail early if we have too many "no's"
+
+          if (nResponsesDone.incrementAndGet() == connections.open.size) { // all scans are done
+            finalResponse.future.value match {
+              case None =>
+                val exception = new NotEnoughScansHaveData()
+                finalResponse.tryFailure(exception): Unit
+              case _ =>
+                // logs, metrics, etc
+            }
+
+          }
+        })
     }
   }
 
@@ -146,7 +224,7 @@ object BftCallExecutor {
           // In the special case of nTargetSuccess == 1, ignore error responses
           // Otherwise a single HTTP error or network failure would prevent reading the responses from others
           val considerResponseForQuorum = key match {
-            case _: ExceptionFailureResponse[?] => nTargetSuccess != 1 || requestFrom.size == 1
+            case _: ExceptionFailureResponse[?] => !(nTargetSuccess == 1 && requestFrom.size != 1)
             case _ => true
           }
           if (considerResponseForQuorum && agreements.size == nTargetSuccess) { // consensus has been reached
@@ -264,6 +342,10 @@ object BftCallExecutor {
   private case class TextFailureResponse[+T](status: StatusCode, content: String)
       extends ScanResponse[T]
   private case class ExceptionFailureResponse[+T](error: Throwable) extends ScanResponse[T]
+
+  class NotEnoughScansHaveData() extends RuntimeException {
+    // FIXME: a bit more information in the exception
+  }
 
   class ConsensusNotReached(
       numRequests: Int,
