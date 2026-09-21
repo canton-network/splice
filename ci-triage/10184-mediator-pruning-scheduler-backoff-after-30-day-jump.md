@@ -1,4 +1,4 @@
-# 10183 or 10184 (job simtime (2); Raymond to confirm the mapping) - globalMediatorSv3's pruning scheduler fires 160 ms after a 30-day sim-time jump and WARNs that now - retention is 30 s past the mediator's safe pruning bound (run 35611022158)
+# 10184 - globalMediatorSv3's pruning scheduler fires 160 ms after a 30-day sim-time jump and WARNs that now - retention is 30 s past the mediator's safe pruning bound (run 35611022158)
 
 New, sim-time only, test-infrastructure. All 18 tests pass; checkErrors fails on one WARN from
 `MediatorPruningScheduler` on globalMediatorSv3 at 14:43:45.424: requested pruning timestamp 1970-01-31T07:25:11Z is
@@ -153,7 +153,7 @@ observability stack and an ignore pattern for DownloadTopologyStateForInit).
 
 ## 6. Fix
 
-Branch `ray/fix-10183-10184-simtime-2-mediator-pruning-backoff-ignore` (see README for the sha; to be renamed to the
+Branch `ray/fix-10184-mediator-pruning-backoff-ignore` (see README for the sha; to be renamed to the
 confirmed ref), off cn/main: one pattern appended to `project/ignore-patterns/canton_log_simtime_extra.ignore.txt`,
 the file that exists for "issues in simtime where in-flight requests end up timing out when we concurrently advance
 time":
@@ -177,5 +177,5 @@ Verified with ripgrep: the run's WARN line and the job console line match (1 eac
 - Fix: sim-time-only ignore pattern, written and rg-verified. Alternative if the team prefers no ignore: ask Canton to
   log `CannotPruneAtTimestamp` from the scheduler at INFO when the requested timestamp exceeds the bound by less than
   the confirmation response timeout.
-- Not verified: the ref mapping (10183 or 10184); the exact cron phase of each mediator's window (the 10-minute cron
+- Not verified: the ref mapping (10183/10184); the exact cron phase of each mediator's window (the 10-minute cron
   is anchored to wall-clock minutes, the scheduler runs on the sim clock).

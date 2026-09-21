@@ -85,11 +85,11 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
 ## H. Evidence loss
 - `ResetTopologyStatePlugin` `sys.exit(1)` in teardown (10137, 10139): no report, checkErrors skipped, later
   suites lost. Fix: `ray/fix-reset-topology-plugin-no-exit`.
-  Third hit (run 35611022158 wall-clock-time (2), ref 10183 or 10184): the fourth owner's reset proposal arrived after
+  Third hit (run 35611022158 wall-clock-time (2), ref 10183): the fourth owner's reset proposal arrived after
   three signatures had already authorized owners = {sv1}; `TOPOLOGY_NO_APPROPRIATE_SIGNING_KEY_IN_STORE`, then 15
   zero-delay restarts inside the 250 ms effective delay all hit `TOPOLOGY_MAPPING_ALREADY_EXISTS`. Confirming grep:
   `zcat canton_network_test.clog.gz | grep -a -c 'Restarting decentralized namespace reset'` = 16 within 100 ms.
-  Fix: `ray/fix-10183-10184-wct-2-reset-namespace-late-proposer` (tolerate the late proposer; wait loop decides).
+  Fix: `ray/fix-10183-reset-namespace-late-proposer` (tolerate the late proposer; wait loop decides).
 - `NodeBase` `sys.exit(1)` on init failure in the shared sbt JVM: silent 60-minute hang recorded as cancelled
   (10088-A, #7289; branch `ray/fix-fail-fast-init`). Second hit 10180 (LSU shard, bobValidatorLocal init). Signature:
   GH conclusion cancelled, `Received SIGINT` at start+60 min, no ScalaTest summary, test log ends on
@@ -144,12 +144,12 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
 ## K. Sim time: mediator pruning scheduler backoff after a jump of at least the retention period
 - Signature (canton-simtime log WARN): `MediatorPruningScheduler ... Backing off 1s or until next window after error: Requested
   pruning timestamp [T] is later than the earliest available pruning timestamp [T - 30 s]`, all tests pass.
-- Mechanism (10183/10184 simtime (2)): the SV app installs a 10-minute cron with 30 d retention on its mediator; the
+- Mechanism (10184 (simtime (2))): the SV app installs a 10-minute cron with 30 d retention on its mediator; the
   scheduler prunes up to `clock.now - retention`; a sim-time jump >= 30 d puts that at the pre-jump clean timestamp, and
   `Mediator.prune` refuses anything above `clean - confirmationResponseTimeout` (30 s) until the mediator sees a
   post-jump event. Confirming grep: `advancing time by PT720H` (or longer) in the test log within a second before the WARN,
   and the other mediators logging `Pruned up to <same T>` a few seconds later.
-- Fix: sim-time-only ignore in `canton_log_simtime_extra.ignore.txt` (`ray/fix-10183-10184-simtime-2-mediator-pruning-backoff-ignore`);
+- Fix: sim-time-only ignore in `canton_log_simtime_extra.ignore.txt` (`ray/fix-10184-mediator-pruning-backoff-ignore`);
   do not put it in `canton_log.ignore.txt`, in production the line means the mediator lags the clock by > retention.
 
 ## J. Infra, no code change
@@ -157,3 +157,8 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
 - Multi-arch image check (deployment_test, `scripts/check-multiarch-images.py`): one skopeo answer decides. 10150 = Docker Hub
   502 (`unable to inspect ... 502` on stderr); 10172 = no stderr line, response without a `manifests` list for a digest
   that is an index. Confirm with the registry probe in the 10172 packet. Fix: `ray/fix-multiarch-check-retry`.
+- 10185-10193, 10195 (run 35613990408, release-line-0.8.x, 2026-09-21 14:52-14:57 UTC): eleven shards die in nix flake
+  setup, `unable to download https://github.com/nix-systems/default/archive/<rev>.tar.gz: HTTP error 504` after
+  cache misses in the runner binary cache and cache.nixos.org. Signature: no `Tests:` line, failure within 2-6 min of
+  job start, every shard of the run at once. Fix: rerun failed jobs; ask runner owners to cache the flake inputs.
+

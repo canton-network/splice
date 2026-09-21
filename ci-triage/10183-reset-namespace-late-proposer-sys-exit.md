@@ -1,4 +1,4 @@
-# 10183 or 10184 (job wall-clock-time (2); Raymond to confirm the mapping) - SvStateManagementIntegrationTest teardown: the fourth owner's decentralized-namespace reset proposal arrived after the first three had already authorized it, the plugin re-proposed 15 times in 90 ms and called sys.exit(1); the shard reported nothing (run 35611022158)
+# 10183 - SvStateManagementIntegrationTest teardown: the fourth owner's decentralized-namespace reset proposal arrived after the first three had already authorized it, the plugin re-proposed 15 times in 90 ms and called sys.exit(1); the shard reported nothing (run 35611022158)
 
 Family H, first bullet (`ResetTopologyStatePlugin` `sys.exit(1)` in teardown; 10137 and 10139), with a new cause. sbt
 exited 1 at 14:39:16 with no ScalaTest summary. The test log ends at 14:39:14.853 on
@@ -186,7 +186,7 @@ and on the ignore list.
 - Family H, first bullet, third occurrence (10137, 10139, this one), with a new trigger: not a slow sequencer but the
   reset succeeding before the last proposer got its turn. Flake, test-harness side. Not a duplicate of an open ref
   as a mechanism; the evidence-loss half is the same as 10137/10139.
-- Fix branch `ray/fix-10183-10184-wct-2-reset-namespace-late-proposer` (5792168c1f, off main 4f5d6220eb; to be renamed
+- Fix branch `ray/fix-10183-reset-namespace-late-proposer` (5792168c1f, off main 4f5d6220eb; to be renamed
   once the ref is confirmed): `ResetDecentralizedNamespace` now treats a rejected proposal from one owner as
   non-fatal and lets the existing wait loop decide (it succeeds once owners = {sv1} is effective, throws the serial
   changed error if the definition moved elsewhere, and times out as before if the reset really did not happen), and
