@@ -5,11 +5,9 @@ package org.lfdecentralizedtrust.splice.scan.automation
 
 import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
-import org.apache.pekko.NotUsed
 import org.apache.pekko.stream.Materializer
-import org.apache.pekko.stream.scaladsl.Source
 import org.lfdecentralizedtrust.splice.automation.{
-  SourceBasedTrigger,
+  PollingParallelTaskExecutionTrigger,
   TaskOutcome,
   TaskSuccess,
   TriggerContext,
@@ -26,15 +24,11 @@ class AcsSnapshotIndexTrigger(
     ec: ExecutionContextExecutor,
     override val tracer: Tracer,
     mat: Materializer,
-) extends SourceBasedTrigger[PerTableAcsSnapshot] {
+) extends PollingParallelTaskExecutionTrigger[PerTableAcsSnapshot] {
 
-  /** The source from which to consume tasks. */
-  override protected def source(implicit
-      traceContext: TraceContext
-  ): Source[PerTableAcsSnapshot, NotUsed] = Source
-    .repeat(())
-    .mapAsync(parallelism = 1)(_ => store.lookupOldestUnindexedSnapshot())
-    .collect { case Some(snapshot) => snapshot }
+  override protected def retrieveTasks()(implicit
+      tc: TraceContext
+  ): Future[Seq[PerTableAcsSnapshot]] = store.lookupOldestUnindexedSnapshot().map(_.toList)
 
   override protected def completeTask(task: PerTableAcsSnapshot)(implicit
       tc: TraceContext
