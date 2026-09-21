@@ -124,21 +124,25 @@ export const InfraConfigSchema = z.object({
       })
       .optional(),
     enableGCReaperJob: z.boolean().default(false),
-    gkeGateway: z.object({
-      proxyForIstioHttp: z.boolean(),
-    }),
-    istio: z.object({
-      enableIngressAccessLogging: z.boolean(),
-      enableClusterAccessLogging: z.boolean().default(false),
-      enablePublicTokenRegistry: z.boolean().default(false),
-      istiodValues: z.object({}).catchall(z.any()).default({}),
-      flowControl: z.object({
-        // public APIs like the sequencer
-        public: flowControlConfigSchema,
-        // internal APIs like the participant
-        internal: flowControlConfigSchema,
-      }),
-    }),
+    gkeGateway: z
+      .object({
+        proxyForIstioHttp: z.boolean(),
+      })
+      .strict(),
+    istio: z
+      .object({
+        enableIngressAccessLogging: z.boolean(),
+        enableClusterAccessLogging: z.boolean().default(false),
+        enablePublicTokenRegistry: z.boolean().default(false),
+        istiodValues: z.object({}).catchall(z.any()).default({}),
+        flowControl: z.object({
+          // public APIs like the sequencer
+          public: flowControlConfigSchema,
+          // internal APIs like the participant
+          internal: flowControlConfigSchema,
+        }),
+      })
+      .strict(),
     enableSweetSecurity: z.boolean().default(false),
     extraCustomResources: z.object({}).catchall(z.any()).default({}),
   }),

@@ -314,7 +314,6 @@ infra:
         key: value
         anotherKey: anotherValue
   istio:
-    enableGeneralIpWhitelist: false
     istiodValues: # example istiod overrides
       global:
         proxy:
