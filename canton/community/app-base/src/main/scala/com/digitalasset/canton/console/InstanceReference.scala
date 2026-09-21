@@ -395,7 +395,7 @@ trait LocalInstanceReference extends InstanceReference with NoTracing {
   ): ConsoleCommandResult[Result] =
     runCommandIfRunning(
       consoleEnvironment.grpcAdminCommandRunner
-        .runCommand(name, grpcCommand, config.clientAdminApi, adminToken)
+        .runCommand(name, grpcCommand, config.clientAdminApi, None)
     )
 
 }
@@ -415,7 +415,7 @@ trait RemoteInstanceReference extends InstanceReference {
       name,
       grpcCommand,
       config.clientAdminApi,
-      adminToken,
+      None,
     )
 }
 
