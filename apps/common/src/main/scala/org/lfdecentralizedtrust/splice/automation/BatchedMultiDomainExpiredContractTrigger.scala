@@ -13,7 +13,11 @@ import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
 import org.lfdecentralizedtrust.splice.environment.{PackageIdResolver, PackageVettingLookupService}
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.ContractState
-import org.lfdecentralizedtrust.splice.store.{IgnoredPartiesStore, MultiDomainAcsStore, PageLimit}
+import org.lfdecentralizedtrust.splice.store.{
+  MultiDomainAcsStore,
+  PageLimit,
+  UnavailablePartiesStore,
+}
 import org.lfdecentralizedtrust.splice.util.{AssignedContract, Contract}
 import com.digitalasset.canton.discard.Implicits.DiscardOps
 
@@ -44,12 +48,12 @@ abstract class BatchedMultiDomainExpiredContractTrigger[
 
   import BatchedMultiDomainExpiredContractTrigger.Batch
 
-  protected val ignoredPartiesStore: IgnoredPartiesStore
+  protected val unavailablePartiesStore: UnavailablePartiesStore
 
   protected def ignorePartiesWithoutVettedAmulet(
       informees: Set[PartyId],
       contractIds: Seq[String],
-  ): String
+  )(implicit ec: ExecutionContext, tc: TraceContext): Future[String]
 
   override final protected def listReadyTasks(now: CantonTimestamp, limit: Int)(implicit
       tc: TraceContext

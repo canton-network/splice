@@ -4,7 +4,6 @@
 package com.digitalasset.canton.console.commands
 
 import com.digitalasset.canton.admin.api.client.commands.SequencerAdminCommands.{
-  InitializeFromGenesisState,
   InitializeFromGenesisStateV2,
   InitializeFromLsuPredecessor,
   InitializeFromOnboardingState,
@@ -147,38 +146,6 @@ class SequencerAdministration(node: SequencerReference) extends ConsoleCommandGr
 
       processResult(call, responseObserver.resultBytes, timeout, "Downloading onboarding state")
     }
-
-  @Help.Summary(
-    "Initialize a sequencer from the beginning of the event stream"
-  )
-  @Help.Description(
-    """This should only be called for sequencer nodes being initialized at the same time as the
-      |corresponding synchronizer node.
-      |
-      |This is called as part of the synchronizer.setup.bootstrap command, so you are unlikely
-      |to need to call this directly.
-      """"
-  )
-  @deprecated(
-    "Use assign_from_genesis_stateV2 instead.",
-    since = "3.5",
-  )
-  def assign_from_genesis_state(
-      genesisState: ByteString,
-      synchronizerParameters: StaticSynchronizerParameters,
-      waitForReady: Boolean = true,
-  ): InitializeSequencerResponse = {
-    if (waitForReady) node.health.wait_for_ready_for_initialization()
-
-    consoleEnvironment.run {
-      runner.adminCommand(
-        InitializeFromGenesisState(
-          genesisState,
-          synchronizerParameters.toInternal,
-        )
-      )
-    }
-  }
 
   @Help.Summary(
     "Initialize a sequencer from the beginning of the event stream"

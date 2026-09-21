@@ -61,6 +61,15 @@ export const CLUSTER_NAME = `cn-${CLUSTER_BASENAME}net`;
 // exactly the policy of this cluster.
 export const CLOUD_ARMOR_POLICY_NAME = `waf-whitelist-throttle-ban-${CLUSTER_BASENAME}`;
 
+// Priority range reserved for the preconfigured (OWASP CRS based) WAF rules of the
+// Cloud Armor policy (see cluster/pulumi/infra/src/cloudArmor.ts). Shared so that alerts
+// can tell a WAF rule rejection apart from an IP whitelist, throttle or default deny
+// rejection: the request logs only carry the priority of the rule that matched, not its
+// name.
+export const CLOUD_ARMOR_WAF_RULE_MIN_PRIORITY = 10;
+// Exclusive upper bound: the IP whitelist rules start at this priority.
+export const CLOUD_ARMOR_WAF_RULE_MAX_PRIORITY = 1000010;
+
 export const sequencerTokenExpirationTime: string | undefined = config.optionalEnv(
   'SEQUENCER_TOKEN_EXPIRATION_TIME'
 );

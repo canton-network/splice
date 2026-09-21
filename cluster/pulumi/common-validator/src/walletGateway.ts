@@ -165,11 +165,11 @@ export async function installWalletGateway(
         config: {
           amulet: {
             validatorUrl: `https://wallet.${ns}.${CLUSTER_HOSTNAME}/api/validator`,
-            registry: `${scanUrl}/registry/`,
+            registry: scanUrl,
           },
           token: {
             validatorUrl: `https://wallet.${ns}.${CLUSTER_HOSTNAME}/api/validator`,
-            registries: [{ url: `${scanUrl}/registry/`, name: 'Amulet registry' }],
+            registries: [{ url: scanUrl, name: 'Amulet registry' }],
           },
         },
       },

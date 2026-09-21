@@ -1,5 +1,6 @@
 org.lfdecentralizedtrust.splice.integration.tests.LocalNetFrontendIntegrationTest
 org.lfdecentralizedtrust.splice.integration.tests.LocalNetReassignIntegrationTest
+org.lfdecentralizedtrust.splice.scan.admin.http.HttpScanHandlerBulkStorageTest
 org.lfdecentralizedtrust.splice.scan.store.bulk.AcsSnapshotBulkStorageCommitFromStagingTest
 org.lfdecentralizedtrust.splice.scan.store.bulk.AcsSnapshotBulkStorageWriterFromDbTest
 org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorageCommitFromStagingTest

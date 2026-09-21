@@ -48,7 +48,13 @@ export function ipWhitelistRuleChunks(ipRanges: string[], availablePriorities: n
   return chunks;
 }
 
-const OWASP_CRS_VERSION = 'v030301';
+// the OWASP CRS version behind each Cloud Armor rule set generation, see
+// https://cloud.google.com/armor/docs/waf-rules. It is part of the opt-out rule ids,
+// and there is no way to derive it from the rule set name.
+const OWASP_CRS_VERSIONS: Record<string, string> = {
+  v33: 'v030301',
+  v422: 'v042200',
+};
 
 /**
  * One of Cloud Armor's preconfigured WAF rule sets (see
@@ -56,14 +62,14 @@ const OWASP_CRS_VERSION = 'v030301';
  * signatures we opt out of.
  */
 const WafSignatureSchema = z.object({
-  // preconfigured rule set name, e.g. 'sqli-v33-stable'
+  // preconfigured rule set name, e.g. 'sqli-v422-stable'
   name: z.string(),
   // https://cloud.google.com/armor/docs/rule-tuning#sensitivity_levels: 1 only
   // evaluates the paranoia level 1 signatures, which are the ones least prone to
-  // false positives.
-  sensitivity: z.number().int().min(0).max(4),
+  // false positives. If unset, Cloud Armor's default (all levels) applies.
+  sensitivity: z.number().int().min(0).max(4).optional(),
   // numeric OWASP CRS ids of the signatures to skip, e.g. '942190' for
-  // 'owasp-crs-v030301-id942190-sqli'. These are the signatures that produced false
+  // 'owasp-crs-v042200-id942190-sqli'. These are the signatures that produced false
   // positives on our own traffic.
   optOutRuleIds: z.array(z.string().regex(/^[0-9]+$/, 'numeric OWASP CRS id')).default([]),
 });
@@ -86,16 +92,28 @@ export type WafRuleGroup = z.infer<typeof WafRuleGroupSchema>;
 
 /**
  * Expands a numeric OWASP CRS id into the full opt-out rule id Cloud Armor expects,
- * e.g. ('sqli-v33-stable', '942190') -> 'owasp-crs-v030301-id942190-sqli'.
+ * e.g. ('sqli-v422-stable', '942190') -> 'owasp-crs-v042200-id942190-sqli'.
  */
 function optOutRuleId(signatureName: string, crsId: string): string {
-  const category = signatureName.replace(/-v\d+-stable$/, '');
-  return `owasp-crs-${OWASP_CRS_VERSION}-id${crsId}-${category}`;
+  const match = /^(.*)-(v\d+)-stable$/.exec(signatureName);
+  if (!match) {
+    throw new Error(
+      `Cannot expand opt-out rule id ${crsId}: ${signatureName} is not a versioned OWASP CRS rule set`
+    );
+  }
+  const [, category, generation] = match;
+  const crsVersion = OWASP_CRS_VERSIONS[generation];
+  if (!crsVersion) {
+    throw new Error(
+      `Unknown OWASP CRS version for rule set ${signatureName}, add ${generation} to OWASP_CRS_VERSIONS`
+    );
+  }
+  return `owasp-crs-${crsVersion}-id${crsId}-${category}`;
 }
 
 function wafSignatureCondition(context: string, signature: WafSignature): string {
   const options = [
-    `'sensitivity': ${signature.sensitivity}`,
+    ...(signature.sensitivity !== undefined ? [`'sensitivity': ${signature.sensitivity}`] : []),
     ...(signature.optOutRuleIds && signature.optOutRuleIds.length > 0
       ? [
           `'opt_out_rule_ids': [${signature.optOutRuleIds
@@ -113,9 +131,14 @@ function wafSignatureCondition(context: string, signature: WafSignature): string
 /**
  * Builds the match expression of a WAF rule: the request matches if any of the
  * group's signatures fires.
+ *
+ * @param excludedHostsExpr condition matching the hosts the WAF rules must not apply to
  */
-export function wafRuleExpression(group: WafRuleGroup): string {
-  const expr = group.signatures.map(s => wafSignatureCondition(group.name, s)).join(' || ');
+export function wafRuleExpression(group: WafRuleGroup, excludedHostsExpr?: string): string {
+  const signatureExpr = group.signatures
+    .map(s => wafSignatureCondition(group.name, s))
+    .join(' || ');
+  const expr = excludedHostsExpr ? `!(${excludedHostsExpr}) && (${signatureExpr})` : signatureExpr;
   if (expr.length > MAX_EXPRESSION_LENGTH) {
     throw new Error(
       `Cloud Armor WAF expression for ${group.name} exceeds the ${MAX_EXPRESSION_LENGTH} character limit (current: ${expr.length}). ` +
@@ -135,35 +158,43 @@ export function checkSubexpressionLength(context: string, expr: string): string 
 }
 
 /**
- * Builds the host match condition for an endpoint, or undefined to match any host.
+ * How a rule selects the hosts it applies to:
+ * - `hostname`: one exact host
+ * - `hostPrefixRegex`: an RE2 fragment matching the leading label(s) under the cluster
+ *   DNS name, e.g. `scan` or `sequencer-[0-9]+`. `perNodeHost` adds the node label in
+ *   between, i.e. `<prefix>.<node>.<cluster dns name>` instead of
+ *   `<prefix>.<cluster dns name>`.
+ */
+export type HostMatch = { hostname: string } | { hostPrefixRegex: string; perNodeHost: boolean };
+
+/**
+ * Builds the host match condition of a rule, or undefined to match any host.
  *
- * A cluster is served under more than one DNS name (see getDnsNames), so a prefix match
- * has to cover all of them, otherwise traffic on the other name falls through to the
- * default deny rule.
+ * Only `clusterHostname` is matched. A cluster resolves under a second DNS name too (see
+ * getDnsNames), but everything is served under CLUSTER_HOSTNAME, so matching just that
+ * one keeps the expressions short and the rules unambiguous.
  *
- * @param context config key of the endpoint, only used for error messages
- * @param dnsNames all DNS names the cluster is served under
- * @param hostname exact hostname to match
- * @param hostPrefixRegex RE2 fragment matching the leading label(s) of a per-node hostname
+ * @param context config key of the rule, only used for error messages
+ * @param clusterHostname the cluster's DNS name, i.e. CLUSTER_HOSTNAME
+ * @param match which hosts the rule applies to, or undefined for all of them
  */
 export function hostCondition(
   context: string,
-  dnsNames: string[],
-  hostname?: string,
-  hostPrefixRegex?: string
+  clusterHostname: string,
+  match?: HostMatch
 ): string | undefined {
-  let hostnameRegex;
-  if (hostname) {
-    hostnameRegex = _.escapeRegExp(hostname.toLowerCase());
-  } else if (hostPrefixRegex) {
-    if (dnsNames.length === 0) {
-      throw new Error(`No cluster DNS names to build a host condition for ${context}`);
-    }
-    const dnsAlternatives = dnsNames.map(n => _.escapeRegExp(n.toLowerCase())).join('|');
-    hostnameRegex = `(?:${hostPrefixRegex})\\.[\\w-]+\\.(?:${dnsAlternatives})`;
-  } else {
+  if (!match) {
     return undefined;
   }
+  const clusterHostRegex = _.escapeRegExp(clusterHostname.toLowerCase());
+  const hostnameRegex =
+    'hostname' in match
+      ? _.escapeRegExp(match.hostname.toLowerCase())
+      : [
+          `(?:${match.hostPrefixRegex})`,
+          ...(match.perNodeHost ? ['[\\w-]+'] : []),
+          clusterHostRegex,
+        ].join('\\.');
   // the host header may carry a port, and Cloud Armor does not strip it
   return checkSubexpressionLength(
     context,

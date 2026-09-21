@@ -133,7 +133,12 @@ class RollForwardLsuDRIntegrationTest
                   config
                     .svApps(InstanceName.tryCreate(s"sv$sv"))
                     .focus(_.localSynchronizerNodes)
-                    .modify(c => c.copy(legacy = c.current.some))
+                    .modify(c =>
+                      c.copy(
+                        legacy = c.current.some,
+                        current = c.current.focus(_.protocolVersion).replace(ProtocolVersion.v35),
+                      )
+                    )
                     .focus(_.onboarding)
                     .modify(c =>
                       SvOnboardingConfig
@@ -393,21 +398,15 @@ class RollForwardLsuDRIntegrationTest
             inside(sv1ScanLocalBackend.listDsoSequencers()) {
               case Seq(DomainSequencers(synchronizerId, sequencers)) =>
                 synchronizerId shouldBe decentralizedSynchronizerId
-                sequencers should have size 12
+                sequencers should have size 8
                 sequencers.groupBy(_.svName).foreach { case (sv, sequencers) =>
                   clue(s"check sequencers for $sv") {
-                    sequencers.size shouldBe 3
+                    sequencers.size shouldBe 2
                     forExactly(1, sequencers) { sequencer =>
-                      sequencer.serial.value shouldBe 0
-                      sequencer.migrationId shouldBe -1
+                      sequencer.serial shouldBe 0
                     }
                     forExactly(1, sequencers) { sequencer =>
-                      sequencer.serial.value shouldBe newSynchronizerSerial.value.toLong
-                      sequencer.migrationId shouldBe -1
-                    }
-                    forExactly(1, sequencers) { sequencer =>
-                      sequencer.serial should be(empty)
-                      sequencer.migrationId shouldBe 0
+                      sequencer.serial shouldBe newSynchronizerSerial.value.toLong
                     }
                   }
                 }

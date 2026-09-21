@@ -13,6 +13,7 @@ import {
 import React from 'react';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
+import { formatDatetimeWithOffset } from '../../utils/dateFormat';
 
 dayjs.extend(relativeTime);
 
@@ -154,7 +155,7 @@ const ActionCard = (props: ActionCardProps) => {
         />
         <ActionCardSegment
           title="VOTE CREATED"
-          content={createdAt}
+          content={formatDatetimeWithOffset(createdAt)}
           data-testid="action-required-created-at"
         />
         <ActionCardSegment

@@ -33,7 +33,7 @@ import FeaturedAppActivityMarkerTrigger.{
 }
 import com.digitalasset.canton.discard.Implicits.DiscardOps
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
-import org.lfdecentralizedtrust.splice.store.IgnoredPartiesStore
+import org.lfdecentralizedtrust.splice.store.UnavailablePartiesStore
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 import org.lfdecentralizedtrust.splice.sv.util.ContractStakeholders
 
@@ -44,7 +44,7 @@ class FeaturedAppActivityMarkerTrigger(
     override protected val context: TriggerContext,
     override protected val svTaskContext: SvTaskBasedTrigger.Context,
     override protected val svConfig: SvAppBackendConfig,
-    override protected val ignoredPartiesStore: IgnoredPartiesStore,
+    override protected val unavailablePartiesStore: UnavailablePartiesStore,
 )(implicit
     override val ec: ExecutionContext,
     mat: Materializer,
@@ -52,7 +52,7 @@ class FeaturedAppActivityMarkerTrigger(
     // This is a polling trigger as we usually expect to be able to batch together the conversion
 ) extends PollingParallelTaskExecutionTrigger[Task]
     with SvTaskBasedTrigger[Task]
-    with IgnoredUnavailablePartiesGuard {
+    with UnavailablePartiesGuard {
 
   private val rng: Random = new Random()
 
@@ -74,7 +74,7 @@ class FeaturedAppActivityMarkerTrigger(
     store
       .featuredAppActivityMarkerCountAboveOrEqualTo(
         activityMarkerCatchupModeThreshold,
-        Some(ignoredPartiesStore),
+        Some(unavailablePartiesStore),
       )
       .flatMap {
         case false =>
@@ -191,7 +191,7 @@ class FeaturedAppActivityMarkerTrigger(
         hashMinBoundIncl,
         hashMaxBoundIncl,
         numMarkers,
-        Some(ignoredPartiesStore),
+        Some(unavailablePartiesStore),
       )
       .map(markers =>
         markers

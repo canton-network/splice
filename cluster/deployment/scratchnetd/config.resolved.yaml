@@ -1,7 +1,7 @@
 # This file is generated automatically. Do not edit directly.
 cloudArmor:
   allRulesPreviewOnly: false
-  enabled: true
+  enabled: false
   logging:
     enabled: true
   publicEndpoints:
@@ -26,69 +26,8 @@ cloudArmor:
         withinIntervalSeconds: 60
   wafRules:
     enabled: true
-    groups:
-      - description: 'WAF: remote code execution and local file inclusion'
-        name: 'waf-rce-lfi'
-        signatures:
-          - name: 'rce-v33-stable'
-            optOutRuleIds:
-              - '932110'
-              - '932115'
-              - '932120'
-              - '932140'
-            sensitivity: 1
-          - name: 'lfi-v33-stable'
-            optOutRuleIds:
-              - '930110'
-            sensitivity: 1
-      - description: 'WAF: CVE canary, protocol attacks, Node.js injection and XSS'
-        name: 'waf-cve-protocolattack-nodejs-xss'
-        signatures:
-          - name: 'cve-canary'
-            sensitivity: 1
-          - name: 'protocolattack-v33-stable'
-            optOutRuleIds:
-              - '921110'
-              - '921150'
-              - '921151'
-              - '921170'
-            sensitivity: 1
-          - name: 'nodejs-v33-stable'
-            sensitivity: 1
-          - name: 'xss-v33-stable'
-            optOutRuleIds:
-              - '941100'
-              - '941120'
-              - '941190'
-              - '941200'
-              - '941210'
-              - '941220'
-              - '941230'
-              - '941240'
-              - '941250'
-              - '941260'
-              - '941270'
-              - '941280'
-              - '941290'
-              - '941300'
-            sensitivity: 1
-      - description: 'WAF: SQL injection, session fixation and Java attacks'
-        name: 'waf-sqli-sessionfixation-java'
-        signatures:
-          - name: 'sqli-v33-stable'
-            optOutRuleIds:
-              - '942190'
-              - '942240'
-              - '942270'
-              - '942290'
-              - '942320'
-              - '942350'
-              - '942500'
-            sensitivity: 1
-          - name: 'sessionfixation-v33-stable'
-            sensitivity: 1
-          - name: 'java-v33-stable'
-            sensitivity: 1
+    excludedHostPrefixes:
+      - 'grafana'
     previewOnly: false
 cluster:
   nodePools:
@@ -104,7 +43,7 @@ cluster:
 infra:
   enableSweetSecurity: true
   gkeGateway:
-    proxyForIstioHttp: true
+    proxyForIstioHttp: false
   istio:
     enableIngressAccessLogging: true
     enablePublicTokenRegistry: true
@@ -138,13 +77,21 @@ monitoring:
           seconds: 3600
         computeDuration:
           seconds: 1200
+        usePv36Metrics: false
       acsSnapshots:
         saveLatencyThresholdSeconds: 5400
         updateLatencyThresholdSeconds: 3
       cantonBft:
         mempoolMaxSizeThreshold: 100
       cloudArmor:
-        deniedRequestsThreshold: 0
+        deniedRequests:
+          alignmentPeriodSeconds: 300
+          durationSeconds: 0
+          threshold: 100
+        wafRejections:
+          alignmentPeriodSeconds: 300
+          durationSeconds: 0
+          threshold: 10
       cloudSql:
         maintenance: false
       cometbft:
@@ -256,6 +203,7 @@ pulumiProjectConfig:
       enabled: false
       enterprisePlus: false
       flags:
+        autovacuum_freeze_max_age: '500000000'
         maintenance_work_mem: '2000000'
         max_wal_size: '20480'
         random_page_cost: '1.1'
@@ -293,8 +241,8 @@ splitwell:
         value: "# Ignore missing ACS commitment and commitment mismatches\ncanton.participants.participant.parameters.stores.safe-to-prune-commitment-state = \"all\"\n"
   walletGateway:
     enabled: false
-    portfolioVersion: '1.11.0'
-    version: '1.10.0'
+    portfolioVersion: '1.12.2'
+    version: '1.11.1'
 sv:
   scan:
     externalRateLimits:
@@ -426,9 +374,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -503,7 +448,7 @@ svs:
     validatorApp:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
+          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 10m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -576,9 +521,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -651,9 +593,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -726,9 +665,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -801,9 +737,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -876,9 +809,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -951,9 +881,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -1026,9 +953,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -1101,9 +1025,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -1176,9 +1097,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -1251,9 +1169,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -1326,9 +1241,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -1401,9 +1313,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -1476,9 +1385,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -1551,9 +1457,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -1626,9 +1529,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -1707,9 +1607,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       auth0:
         clientId: 'fBFpzZSRuufk9ueV2pSEkOXNYXuQtVmY'
       resources:
@@ -1748,8 +1645,8 @@ validator1:
     retention: '1h'
   walletGateway:
     enabled: true
-    portfolioVersion: '1.11.0'
-    version: '1.10.0'
+    portfolioVersion: '1.12.2'
+    version: '1.11.1'
 validators:
   validator-runbook:
     namespace: 'validator'
@@ -1758,5 +1655,5 @@ validators:
     partyHint: 'digitalasset-testValidator-1'
     walletGateway:
       enabled: true
-      portfolioVersion: '1.11.0'
-      version: '1.10.0'
+      portfolioVersion: '1.12.2'
+      version: '1.11.1'

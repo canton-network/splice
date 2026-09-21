@@ -1,6 +1,6 @@
 import type { Context, Github } from './types'
 import { getFileFromGit } from './git'
-import { findLatestReleaseBranchesUpTo, findNLatestReleaseBranches } from './releases'
+import { findLatestReleaseBranchesUpTo, findNLatestReleaseBranches, isSpliceRepo } from './releases'
 import * as yaml from 'js-yaml'
 
 export async function parseBackportComments(
@@ -69,8 +69,8 @@ export async function addBackportReminderComment(
   const [relevantReleaseBranches, explanation] = lookupProdClusterConfigs
     ? await getRelevantReleaseBranchesFromProdClusters(github, context)
     : [await findNLatestReleaseBranches(github, 4), undefined]
-  const backportBranchCandidates = ['main', ...relevantReleaseBranches]
-  const backportBranches = backportBranchCandidates
+  const backportBranchCandidates = ['main', ...alwaysIncludedBranches(context), ...relevantReleaseBranches]
+  const backportBranches = [...new Set(backportBranchCandidates)]
     .filter(branch => branch !== baseBranch)
 
   console.log(`Adding backport reminder comment to PR #${prNumber}...`)
@@ -80,6 +80,11 @@ export async function addBackportReminderComment(
     repo: context.repo.repo,
     body: formatBackportReminderComment(baseBranch, backportBranches, explanation),
   })
+}
+
+// TODO(#7248) Remove once we release from main again.
+function alwaysIncludedBranches(context: Context): Array<string> {
+  return isSpliceRepo(context) ? ['release-line-0.8.x'] : []
 }
 
 async function getRelevantReleaseBranchesFromProdClusters(

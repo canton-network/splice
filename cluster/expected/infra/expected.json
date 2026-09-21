@@ -1119,11 +1119,15 @@
       },
       "spec": {
         "default": {
+          "connectionDraining": {
+            "drainingTimeoutSec": 60
+          },
           "logging": {
             "enabled": true,
             "sampleRate": 1000000
           },
-          "securityPolicy": "waf-whitelist-throttle-ban-mock"
+          "securityPolicy": "waf-whitelist-throttle-ban-mock",
+          "timeoutSec": 3600
         },
         "targetRef": {
           "group": "",
@@ -1266,10 +1270,14 @@
       },
       "spec": {
         "default": {
+          "connectionDraining": {
+            "drainingTimeoutSec": 60
+          },
           "logging": {
             "enabled": true,
             "sampleRate": 1000000
-          }
+          },
+          "timeoutSec": 3600
         },
         "targetRef": {
           "group": "",
@@ -1822,7 +1830,7 @@
       "name": "istio-base",
       "namespace": "istio-system",
       "repositoryOpts": {
-        "repo": "https://istio-release.storage.googleapis.com/charts"
+        "repo": "https://blob.istio.io/istio-release/charts"
       },
       "values": {
         "global": {
@@ -1845,7 +1853,7 @@
       "name": "istio-ingress-cometbft",
       "namespace": "cluster-ingress",
       "repositoryOpts": {
-        "repo": "https://istio-release.storage.googleapis.com/charts"
+        "repo": "https://blob.istio.io/istio-release/charts"
       },
       "values": {
         "affinity": {
@@ -1868,7 +1876,8 @@
           "cloud.google.com/l4-rbs": "enabled"
         },
         "autoscaling": {
-          "maxReplicas": 15
+          "maxReplicas": 15,
+          "minReplicas": 2
         },
         "podDisruptionBudget": {
           "maxUnavailable": 1
@@ -2117,7 +2126,7 @@
       "name": "istio-ingress",
       "namespace": "cluster-ingress",
       "repositoryOpts": {
-        "repo": "https://istio-release.storage.googleapis.com/charts"
+        "repo": "https://blob.istio.io/istio-release/charts"
       },
       "values": {
         "affinity": {
@@ -2140,10 +2149,21 @@
           "cloud.google.com/l4-rbs": "enabled"
         },
         "autoscaling": {
-          "maxReplicas": 15
+          "maxReplicas": 15,
+          "minReplicas": 2
+        },
+        "lifecycle": {
+          "preStop": {
+            "exec": {
+              "command": [
+                "sleep",
+                "120"
+              ]
+            }
+          }
         },
         "podAnnotations": {
-          "proxy.istio.io/config": "{\"gatewayTopology\":{\"numTrustedProxies\":2}}"
+          "proxy.istio.io/config": "{\"gatewayTopology\":{\"numTrustedProxies\":2},\"terminationDrainDuration\":\"60s\"}"
         },
         "podDisruptionBudget": {
           "maxUnavailable": 1
@@ -2278,6 +2298,7 @@
           ],
           "type": "ClusterIP"
         },
+        "terminationGracePeriodSeconds": 210,
         "tolerations": [
           {
             "effect": "NoSchedule",
@@ -2316,7 +2337,7 @@
       "name": "istiod",
       "namespace": "cluster-ingress",
       "repositoryOpts": {
-        "repo": "https://istio-release.storage.googleapis.com/charts"
+        "repo": "https://blob.istio.io/istio-release/charts"
       },
       "values": {
         "affinity": {
@@ -2692,12 +2713,12 @@
               {
                 "operation": {
                   "hosts": [
-                    "scan.sv-2.mock.network.canton.global",
                     "scan.sv-2.mock.global.canton.network.digitalasset.com",
-                    "scan.sv-1.mock.network.canton.global",
+                    "scan.sv-2.mock.global.canton.network.digitalasset.com:*",
                     "scan.sv-1.mock.global.canton.network.digitalasset.com",
-                    "scan.sv.mock.network.canton.global",
-                    "scan.sv.mock.global.canton.network.digitalasset.com"
+                    "scan.sv-1.mock.global.canton.network.digitalasset.com:*",
+                    "scan.sv.mock.global.canton.network.digitalasset.com",
+                    "scan.sv.mock.global.canton.network.digitalasset.com:*"
                   ]
                 }
               }
@@ -2751,6 +2772,36 @@
                     },
                     "initial_connection_window_size": 104857600,
                     "initial_stream_window_size": 1048576
+                  }
+                }
+              }
+            }
+          },
+          {
+            "applyTo": "NETWORK_FILTER",
+            "match": {
+              "context": "GATEWAY",
+              "listener": {
+                "filterChain": {
+                  "filter": {
+                    "name": "envoy.filters.network.http_connection_manager"
+                  }
+                }
+              }
+            },
+            "patch": {
+              "operation": "MERGE",
+              "value": {
+                "typed_config": {
+                  "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "http2_protocol_options": {
+                    "allow_connect": true,
+                    "connection_keepalive": {
+                      "interval": "30s",
+                      "timeout": "5s"
+                    },
+                    "initial_connection_window_size": 52428800,
+                    "initial_stream_window_size": 524288
                   }
                 }
               }
@@ -3046,52 +3097,28 @@
               {
                 "operation": {
                   "hosts": [
-                    "sequencer-9.sv-2.mock.network.canton.global",
-                    "sequencer-9.sv-2.mock.network.canton.global:*",
                     "sequencer-9.sv-2.mock.global.canton.network.digitalasset.com",
                     "sequencer-9.sv-2.mock.global.canton.network.digitalasset.com:*",
-                    "sequencer-8.sv-2.mock.network.canton.global",
-                    "sequencer-8.sv-2.mock.network.canton.global:*",
                     "sequencer-8.sv-2.mock.global.canton.network.digitalasset.com",
                     "sequencer-8.sv-2.mock.global.canton.network.digitalasset.com:*",
-                    "sequencer-7.sv-2.mock.network.canton.global",
-                    "sequencer-7.sv-2.mock.network.canton.global:*",
                     "sequencer-7.sv-2.mock.global.canton.network.digitalasset.com",
                     "sequencer-7.sv-2.mock.global.canton.network.digitalasset.com:*",
-                    "sequencer-10.sv-2.mock.network.canton.global",
-                    "sequencer-10.sv-2.mock.network.canton.global:*",
                     "sequencer-10.sv-2.mock.global.canton.network.digitalasset.com",
                     "sequencer-10.sv-2.mock.global.canton.network.digitalasset.com:*",
-                    "sequencer-9.sv-1.mock.network.canton.global",
-                    "sequencer-9.sv-1.mock.network.canton.global:*",
                     "sequencer-9.sv-1.mock.global.canton.network.digitalasset.com",
                     "sequencer-9.sv-1.mock.global.canton.network.digitalasset.com:*",
-                    "sequencer-8.sv-1.mock.network.canton.global",
-                    "sequencer-8.sv-1.mock.network.canton.global:*",
                     "sequencer-8.sv-1.mock.global.canton.network.digitalasset.com",
                     "sequencer-8.sv-1.mock.global.canton.network.digitalasset.com:*",
-                    "sequencer-7.sv-1.mock.network.canton.global",
-                    "sequencer-7.sv-1.mock.network.canton.global:*",
                     "sequencer-7.sv-1.mock.global.canton.network.digitalasset.com",
                     "sequencer-7.sv-1.mock.global.canton.network.digitalasset.com:*",
-                    "sequencer-10.sv-1.mock.network.canton.global",
-                    "sequencer-10.sv-1.mock.network.canton.global:*",
                     "sequencer-10.sv-1.mock.global.canton.network.digitalasset.com",
                     "sequencer-10.sv-1.mock.global.canton.network.digitalasset.com:*",
-                    "sequencer-9.sv.mock.network.canton.global",
-                    "sequencer-9.sv.mock.network.canton.global:*",
                     "sequencer-9.sv.mock.global.canton.network.digitalasset.com",
                     "sequencer-9.sv.mock.global.canton.network.digitalasset.com:*",
-                    "sequencer-8.sv.mock.network.canton.global",
-                    "sequencer-8.sv.mock.network.canton.global:*",
                     "sequencer-8.sv.mock.global.canton.network.digitalasset.com",
                     "sequencer-8.sv.mock.global.canton.network.digitalasset.com:*",
-                    "sequencer-7.sv.mock.network.canton.global",
-                    "sequencer-7.sv.mock.network.canton.global:*",
                     "sequencer-7.sv.mock.global.canton.network.digitalasset.com",
                     "sequencer-7.sv.mock.global.canton.network.digitalasset.com:*",
-                    "sequencer-10.sv.mock.network.canton.global",
-                    "sequencer-10.sv.mock.network.canton.global:*",
                     "sequencer-10.sv.mock.global.canton.network.digitalasset.com",
                     "sequencer-10.sv.mock.global.canton.network.digitalasset.com:*"
                   ]
@@ -3392,12 +3419,12 @@
               {
                 "operation": {
                   "hosts": [
-                    "sv.sv-2.mock.network.canton.global",
                     "sv.sv-2.mock.global.canton.network.digitalasset.com",
-                    "sv.sv-1.mock.network.canton.global",
+                    "sv.sv-2.mock.global.canton.network.digitalasset.com:*",
                     "sv.sv-1.mock.global.canton.network.digitalasset.com",
-                    "sv.sv.mock.network.canton.global",
-                    "sv.sv.mock.global.canton.network.digitalasset.com"
+                    "sv.sv-1.mock.global.canton.network.digitalasset.com:*",
+                    "sv.sv.mock.global.canton.network.digitalasset.com",
+                    "sv.sv.mock.global.canton.network.digitalasset.com:*"
                   ],
                   "paths": [
                     "/api/sv/v0/migration-id",
@@ -3459,16 +3486,17 @@
               {
                 "operation": {
                   "hosts": [
-                    "sv.sv-2.mock.network.canton.global",
                     "sv.sv-2.mock.global.canton.network.digitalasset.com",
-                    "sv.sv-1.mock.network.canton.global",
+                    "sv.sv-2.mock.global.canton.network.digitalasset.com:*",
                     "sv.sv-1.mock.global.canton.network.digitalasset.com",
-                    "sv.sv.mock.network.canton.global",
-                    "sv.sv.mock.global.canton.network.digitalasset.com"
+                    "sv.sv-1.mock.global.canton.network.digitalasset.com:*",
+                    "sv.sv.mock.global.canton.network.digitalasset.com",
+                    "sv.sv.mock.global.canton.network.digitalasset.com:*"
                   ],
                   "paths": [
                     "/api/sv/v0/devnet/onboard/validator/prepare",
-                    "/api/sv/v0/onboard/validator"
+                    "/api/sv/v0/onboard/validator",
+                    "/api/sv/version"
                   ]
                 }
               }
@@ -4122,7 +4150,7 @@
       "description": "Per source IP throttle rule for all publicScan API endpoints",
       "match": {
         "expr": {
-          "expression": "request.path.lower().urlDecode().startsWith(R\"/api/scan\") && request.headers['host'].lower().matches(R\"^(?:scan)\\.[\\w-]+\\.(?:mock\\.network\\.canton\\.global|mock\\.global\\.canton\\.network\\.digitalasset\\.com)(?::[0-9]+)?$\")"
+          "expression": "request.path.lower().urlDecode().startsWith(R\"/api/scan\") && request.headers['host'].lower().matches(R\"^(?:scan)\\.[\\w-]+\\.mock\\.global\\.canton\\.network\\.digitalasset\\.com(?::[0-9]+)?$\")"
         }
       },
       "preview": true,
@@ -4150,7 +4178,7 @@
       "description": "Per source IP throttle rule for all sequencer API endpoints",
       "match": {
         "expr": {
-          "expression": "request.path.lower().urlDecode().startsWith(R\"/\") && request.headers['host'].lower().matches(R\"^(?:sequencer-[0-9]+)\\.[\\w-]+\\.(?:mock\\.network\\.canton\\.global|mock\\.global\\.canton\\.network\\.digitalasset\\.com)(?::[0-9]+)?$\")"
+          "expression": "request.path.lower().urlDecode().startsWith(R\"/\") && request.headers['host'].lower().matches(R\"^(?:sequencer-[0-9]+)\\.[\\w-]+\\.mock\\.global\\.canton\\.network\\.digitalasset\\.com(?::[0-9]+)?$\")"
         }
       },
       "preview": true,
@@ -4178,7 +4206,7 @@
       "description": "Per source IP throttle rule for all tokenRegistry API endpoints",
       "match": {
         "expr": {
-          "expression": "request.path.lower().urlDecode().startsWith(R\"/registry\") && request.headers['host'].lower().matches(R\"^(?:scan)\\.[\\w-]+\\.(?:mock\\.network\\.canton\\.global|mock\\.global\\.canton\\.network\\.digitalasset\\.com)(?::[0-9]+)?$\")"
+          "expression": "request.path.lower().urlDecode().startsWith(R\"/registry\") && request.headers['host'].lower().matches(R\"^(?:scan)\\.[\\w-]+\\.mock\\.global\\.canton\\.network\\.digitalasset\\.com(?::[0-9]+)?$\")"
         }
       },
       "preview": true,
@@ -4511,63 +4539,6 @@
     "name": "validator",
     "provider": "",
     "type": "pulumi:providers:auth0"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "action": "deny(403)",
-      "description": "WAF: CVE canary, protocol attacks, Node.js injection and XSS",
-      "match": {
-        "expr": {
-          "expression": "evaluatePreconfiguredWaf('cve-canary', {'sensitivity': 1}) || evaluatePreconfiguredWaf('protocolattack-v33-stable', {'sensitivity': 1, 'opt_out_rule_ids': ['owasp-crs-v030301-id921110-protocolattack', 'owasp-crs-v030301-id921150-protocolattack', 'owasp-crs-v030301-id921151-protocolattack', 'owasp-crs-v030301-id921170-protocolattack']}) || evaluatePreconfiguredWaf('nodejs-v33-stable', {'sensitivity': 1}) || evaluatePreconfiguredWaf('xss-v33-stable', {'sensitivity': 1, 'opt_out_rule_ids': ['owasp-crs-v030301-id941100-xss', 'owasp-crs-v030301-id941120-xss', 'owasp-crs-v030301-id941190-xss', 'owasp-crs-v030301-id941200-xss', 'owasp-crs-v030301-id941210-xss', 'owasp-crs-v030301-id941220-xss', 'owasp-crs-v030301-id941230-xss', 'owasp-crs-v030301-id941240-xss', 'owasp-crs-v030301-id941250-xss', 'owasp-crs-v030301-id941260-xss', 'owasp-crs-v030301-id941270-xss', 'owasp-crs-v030301-id941280-xss', 'owasp-crs-v030301-id941290-xss', 'owasp-crs-v030301-id941300-xss']})"
-        }
-      },
-      "preview": true,
-      "priority": 110,
-      "securityPolicy": "waf-whitelist-throttle-ban-mock"
-    },
-    "name": "waf-cve-protocolattack-nodejs-xss",
-    "provider": "",
-    "type": "gcp:compute/regionSecurityPolicyRule:RegionSecurityPolicyRule"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "action": "deny(403)",
-      "description": "WAF: remote code execution and local file inclusion",
-      "match": {
-        "expr": {
-          "expression": "evaluatePreconfiguredWaf('rce-v33-stable', {'sensitivity': 1, 'opt_out_rule_ids': ['owasp-crs-v030301-id932110-rce', 'owasp-crs-v030301-id932115-rce', 'owasp-crs-v030301-id932120-rce', 'owasp-crs-v030301-id932140-rce']}) || evaluatePreconfiguredWaf('lfi-v33-stable', {'sensitivity': 1, 'opt_out_rule_ids': ['owasp-crs-v030301-id930110-lfi']})"
-        }
-      },
-      "preview": true,
-      "priority": 10,
-      "securityPolicy": "waf-whitelist-throttle-ban-mock"
-    },
-    "name": "waf-rce-lfi",
-    "provider": "",
-    "type": "gcp:compute/regionSecurityPolicyRule:RegionSecurityPolicyRule"
-  },
-  {
-    "custom": true,
-    "id": "",
-    "inputs": {
-      "action": "deny(403)",
-      "description": "WAF: SQL injection, session fixation and Java attacks",
-      "match": {
-        "expr": {
-          "expression": "evaluatePreconfiguredWaf('sqli-v33-stable', {'sensitivity': 1, 'opt_out_rule_ids': ['owasp-crs-v030301-id942190-sqli', 'owasp-crs-v030301-id942240-sqli', 'owasp-crs-v030301-id942270-sqli', 'owasp-crs-v030301-id942290-sqli', 'owasp-crs-v030301-id942320-sqli', 'owasp-crs-v030301-id942350-sqli', 'owasp-crs-v030301-id942500-sqli']}) || evaluatePreconfiguredWaf('sessionfixation-v33-stable', {'sensitivity': 1}) || evaluatePreconfiguredWaf('java-v33-stable', {'sensitivity': 1})"
-        }
-      },
-      "preview": true,
-      "priority": 210,
-      "securityPolicy": "waf-whitelist-throttle-ban-mock"
-    },
-    "name": "waf-sqli-sessionfixation-java",
-    "provider": "",
-    "type": "gcp:compute/regionSecurityPolicyRule:RegionSecurityPolicyRule"
   },
   {
     "custom": true,

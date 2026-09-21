@@ -84,7 +84,7 @@ class LsuIntegrationTest
     SynchronizerUpgradeUtil.migrationDumpDir.delete(swallowIOExceptions = true)
   }
 
-  private val successorPv = ProtocolVersion.v35
+  private val successorPv = ProtocolVersion.v36
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
@@ -337,15 +337,12 @@ class LsuIntegrationTest
         inside(sv1ScanBackend.listDsoSequencers()) {
           case Seq(DomainSequencers(synchronizerId, sequencers)) =>
             synchronizerId shouldBe decentralizedSynchronizerId
-            sequencers should have size 12
+            sequencers should have size 8
             forExactly(4, sequencers) {
-              _.serial.value shouldBe 0
+              _.serial shouldBe 0
             }
             forExactly(4, sequencers) {
-              _.serial.value shouldBe 1
-            }
-            forExactly(4, sequencers) {
-              _.serial should be(empty)
+              _.serial shouldBe 1
             }
         }
       }
@@ -550,6 +547,9 @@ class LsuIntegrationTest
           clue(s"check ${backend.name} initialized sequencer from synchronizer predecessor") {
             eventuallySucceeds(3.minutes) {
               upgradeSequencerClient.physical_synchronizer_id shouldBe successorPsid
+              upgradeSequencerClient.synchronizer_parameters.static
+                .get()
+                .synchronizerLimits shouldBe SvSynchronizerNodeConfig.defaultSynchronizerLimits
             }
           }
 
@@ -672,28 +672,21 @@ class LsuIntegrationTest
           inside(sv1ScanBackend.listDsoSequencers()) {
             case Seq(DomainSequencers(synchronizerId, sequencers)) =>
               synchronizerId shouldBe decentralizedSynchronizerId
-              sequencers should have size 12
+              sequencers should have size 8
               sequencers.groupBy(_.svName).foreach { case (sv, sequencers) =>
                 clue(s"check sequencers for $sv") {
                   forExactly(1, sequencers) { sequencer =>
-                    sequencer.serial.value shouldBe 0
-                    sequencer.migrationId shouldBe -1
+                    sequencer.serial shouldBe 0
                   }
                   if (sv != sv4Backend.config.onboarding.value.name)
                     forExactly(1, sequencers) { sequencer =>
-                      sequencer.serial.value shouldBe newSynchronizerSerial.value.toLong
-                      sequencer.migrationId shouldBe -1
+                      sequencer.serial shouldBe newSynchronizerSerial.value.toLong
                     }
                   else {
                     // sv4 still reports the old serial until it upgrades
                     forExactly(1, sequencers) { sequencer =>
-                      sequencer.serial.value shouldBe 1
-                      sequencer.migrationId shouldBe -1
+                      sequencer.serial shouldBe 1
                     }
-                  }
-                  forExactly(1, sequencers) { sequencer =>
-                    sequencer.serial should be(empty)
-                    sequencer.migrationId shouldBe 0
                   }
                 }
               }
@@ -872,7 +865,7 @@ class LsuIntegrationTest
         sv1Backend.stop()
         sv1LocalBackend.startSync()
         forExactly(1, sv1ScanBackend.listDsoSequencers().loneElement.sequencers) { s =>
-          s.serial shouldBe Some(0)
+          s.serial shouldBe 0
           s.svName shouldBe sv1LocalBackend.config.onboarding.value.name
         }
       }
@@ -887,11 +880,9 @@ class LsuIntegrationTest
               .listDsoSequencers()
               .loneElement
               .sequencers
-              .filter(c =>
-                c.svName == sv1LocalBackend.config.onboarding.value.name && c.serial.isDefined
-              )
+              .filter(c => c.svName == sv1LocalBackend.config.onboarding.value.name)
               .loneElement
-              .serial shouldBe Some(2),
+              .serial shouldBe 2,
         )
       }
 

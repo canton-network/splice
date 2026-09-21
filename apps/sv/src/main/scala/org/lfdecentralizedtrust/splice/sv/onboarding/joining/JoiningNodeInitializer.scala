@@ -282,14 +282,12 @@ class JoiningNodeInitializer(
             synchronizerNodeReconciler = new SynchronizerNodeReconciler(
               dsoStore,
               connection,
-              packageVersionSupport,
               clock,
               retryProvider,
               loggerFactory,
-              domainMigrationId,
               config.scan,
             )
-            dsoAutomation =
+            dsoAutomation <-
               newSvDsoAutomationService(
                 svStore,
                 dsoStore,
@@ -497,7 +495,7 @@ class JoiningNodeInitializer(
                 // This triggers automation in other SV apps, that's why we make sure the sequencer is known first
                 preInit = () =>
                   synchronizerNodeReconciler.reconcileSynchronizerNodeConfigIfRequired(
-                    Some(synchronizerNodeService.nodes),
+                    synchronizerNodeService.nodes,
                     decentralizedSynchronizer,
                     Onboarding(participantReportedPSid.serial),
                   ),
@@ -529,7 +527,7 @@ class JoiningNodeInitializer(
         if (!config.shouldSkipSynchronizerInitialization) {
           synchronizerNodeReconciler
             .reconcileSynchronizerNodeConfigIfRequired(
-              synchronizerNodeService.nodes.some,
+              synchronizerNodeService.nodes,
               decentralizedSynchronizer,
               OnboardedAfterDelay,
             )
@@ -910,18 +908,15 @@ class JoiningNodeInitializer(
                   svStore.key.dsoParty,
                 )
                 _ = logger.info(s"granted ${config.ledgerApiUser} readAs rights for dsoParty")
-                domainMigrationId <- resolveDomainMigrationId(migrationIdFromSponsorSv())
                 synchronizerNodeReconciler = new SynchronizerNodeReconciler(
                   dsoStore,
                   svStoreWithIngestion.connection(SpliceLedgerConnectionPriority.Low),
-                  packageVersionSupport,
                   clock,
                   retryProvider,
                   loggerFactory,
-                  domainMigrationId,
                   config.scan,
                 )
-                dsoAutomation = newSvDsoAutomationService(
+                dsoAutomation <- newSvDsoAutomationService(
                   svStore,
                   dsoStore,
                   synchronizerNodeService,

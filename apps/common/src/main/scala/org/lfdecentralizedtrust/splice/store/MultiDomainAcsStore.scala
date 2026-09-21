@@ -197,7 +197,7 @@ trait MultiDomainAcsStore extends HasIngestionSink with AutoCloseable with Named
 
   private[splice] def listExpiredFromPayloadExpiry[C, TCid <: ContractId[T], T <: Template](
       companion: C,
-      ignoredPartiesStore: Option[IgnoredPartiesStore] = None,
+      unavailablePartiesStore: Option[UnavailablePartiesStore] = None,
       ignoredPartyFields: Seq[String] = Seq.empty,
   )(implicit
       companionClass: ContractCompanion[C, TCid, T]

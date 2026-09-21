@@ -5,6 +5,7 @@ import {
   AuthProvider,
   ErrorBoundary,
   ErrorRouterPage,
+  QueryDevtools,
   UserProvider,
   retryQuery,
   theme,
@@ -12,7 +13,6 @@ import {
 } from '@canton-network/splice-common-frontend';
 import { replaceEqualDeep } from '@canton-network/splice-common-frontend-utils';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { Helmet, HelmetProvider } from 'react-helmet-async';
 import {
   Navigate,
@@ -60,7 +60,7 @@ const Providers: React.FC<React.PropsWithChildren> = ({ children }) => {
     <LocalizationProvider dateAdapter={AdapterDayjs}>
       <AuthProvider authConf={config.auth} redirect={(path: string) => navigate(path)}>
         <QueryClientProvider client={queryClient}>
-          <ReactQueryDevtools initialIsOpen={false} />
+          <QueryDevtools />
           <UserProvider authConf={config.auth} testAuthConf={config.testAuth}>
             <SvClientProvider url={config.services.sv.url}>
               <SvAppVotesHooksProvider>

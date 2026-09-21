@@ -17,6 +17,12 @@ release-notes:: Upcoming
           ``/v0/dso`` endpoint. The scan is configured via the new ``.joinWithKeyOnboarding.sponsorScanUrl`` Helm value.
           SVs who set the ``.joinWithKeyOnboarding`` key config must set it before upgrading.
 
+    - Docker Compose
+
+        - The validator deployment now also deploys the Canton Wallet Gateway and the Portfolio UI by default. Pass the new ``-G`` flag to ``start.sh`` to skip them.
+          This requires ``LEDGER_API_AUTH_AUDIENCE`` and ``VALIDATOR_AUTH_AUDIENCE`` in ``.env`` to be equal, which is now the case for the shipped defaults.
+          If your ``.env`` uses different audiences, ``start.sh`` fails until you set them to the same value (which for authenticated deployments means updating your OIDC provider) or pass ``-G``.
+
     - Helm
 
         - The deprecated `splice-domain` Helm chart has been removed.
@@ -25,6 +31,11 @@ release-notes:: Upcoming
 
         - Added a new public ``/v0/events/latest-record-time`` endpoint that returns the latest
           record time for which ``/v0/events`` will be able to return events.
+
+        - Added an automation to prune the DB tables having the temporary data used
+          by the verdict ingestion service and the traffic-based app reward calculations.
+
+          The default retention period is 1 week for this automation, after which the data will be removed from the DB.
 
     - Validator App
 
