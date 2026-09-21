@@ -86,7 +86,9 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
 - `ResetTopologyStatePlugin` `sys.exit(1)` in teardown (10137, 10139): no report, checkErrors skipped, later
   suites lost. Fix: `ray/fix-reset-topology-plugin-no-exit`.
 - `NodeBase` `sys.exit(1)` on init failure in the shared sbt JVM: silent 60-minute hang recorded as cancelled
-  (10088-A, #7289; branch `ray/fix-fail-fast-init`).
+  (10088-A, #7289; branch `ray/fix-fail-fast-init`). Second hit 10180 (LSU shard, bobValidatorLocal init). Signature:
+  GH conclusion cancelled, `Received SIGINT` at start+60 min, no ScalaTest summary, test log ends on
+  `app initialization: Initialization failed`, canton logs continue. Confirming grep: `zcat canton_network_test.clog.gz | tail -1`.
 - 10139 cause: reference block sequencer `insert block` SQLSTATE 40001 retry storm with four sequencers on one
   Postgres until the 8-connection pools are exhausted (Canton / topology size).
 - Teardown leak cascade (10176; July run 28921009132): an exception from any plugin's `beforeEnvironmentDestroyed`
@@ -100,6 +102,11 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   ignore regex `... active (status: .*), ...` has unescaped parentheses (ripgrep group), fix `ray/fix-10174-lsu-source-ignore-regex`.
   Mechanism: a validator restarted after the LSU uses the participant's registered (stale) psid; Canton rejects the
   modify; on retry the participant reports LSU_SOURCE. Rare on main (1 of 40 runs). Design note: prefer the active psid.
+- 10180 (variant C): same restart, the OTK rotation check `listAllTransactions(Synchronizer(logical id))` in
+  `NodeInitializer.rotateOwnerToKeyMappingNotSignedByKeys` is not wrapped in `retryProvider.retry`; between the LSU
+  target registration (36-0 deactivated) and 36-2 reaching Ok (~470 ms) the participant answers
+  `TOPOLOGY_STORE_NOT_FOUND: No active synchronizer found` and the validator exits (family H). App fix: retry it like
+  `findOwnerToKeyMappingThatUsesNamespaceSigningKey` does, NOT_FOUND is already in `retryableStatusCodes`.
 - Checking an ignore pattern: `LINE=$(zcat ... | grep -a -m1 '<text>'); echo "$LINE" | rg -c -e '<pattern>'`.
 
 ## H3. Trigger pause timeout: `Waited 5 seconds. (TriggerTestUtil.scala:93)`

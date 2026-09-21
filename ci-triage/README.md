@@ -182,6 +182,7 @@ given as (run, job, ref) tuples in the request; nothing inferred.
 | 10176 | 35379257952 | main 18f490ae5a (the 10174 fix) | 105711633730 `wall-clock-time (5)` | 3.6.0-snapshot.20260916.20284.0.vf27c4824 |
 | 10178 | 35422792959 | main 18f490ae5a (Postgres 14 nightly) | 105843722429 `wall-clock-time (2)` | 3.6.0-snapshot.20260916.20284.0.vf27c4824 |
 | 10179 | 35490579821 | main 18f490ae5a (Postgres 14 nightly, 2026-09-20) | 106024968667 `wall-clock-time (4)` | 3.6.0-snapshot.20260916.20284.0.vf27c4824 |
+| 10180 | 35587381756 | main 8a83eb63b5 (the 10175 fix) | 106294069033 `logical-sync-upgrade (0)` (cancelled) | 3.6.0-snapshot.20260916.20284.0.vf27c4824 |
 
 ## Overview
 
@@ -213,6 +214,7 @@ given as (run, job, ref) tuples in the request; nothing inferred.
 | 10176 | SvInitializationIntegrationTest "SV apps can start one by one" passes its body, then `UpdateHistorySanityCheckPlugin.beforeEnvironmentDestroyed` times out (5 s) pausing sv2Scan's AcsSnapshotTrigger at 18:30:47.179: the trigger's `UpdateIncrementalSnapshotTask` had finished its SQL at 18:30:46.901 but the transaction only completed at 18:30:57.568 (10.67 s). The plugin hook runs outside the `try` in vendored `EnvironmentSetup.manualDestroyEnvironment`, so `environment.close()` is skipped, Prometheus :25000 stays bound, and 12 more tests plus 2 shared-environment suites fail at `Creating fixture` (`Could not create Prometheus HTTP server`). Commit latency was an outlier for the whole shard (p99 350 ms, six commits over 1 s vs 10-30 ms p99 elsewhere). | H3 sibling of 10175 (different cause); cascade shape of run 28921009132 (July, SvOnboardingViaNonFoundingSv) | Packet `10176-sanity-check-pause-timeout-teardown-cascade.md`. Fix branch `ray/fix-10176-sanity-check-pause-timeout` (e59f6538c0): `setTriggersWithin` takes a `pauseTimeout`, the plugin passes 1 minute. Canton-side: run `beforeEnvironmentDestroyed` inside the `try` so a failing check cannot leak the environment (described, not written). |
 | 10178 | All 25 tests pass; checkErrors WARN `ACS_COMMITMENT_MISMATCH` sv1Participant vs aliceValidator, period (05:29:32.18, 05:30:00], 15.4 s after ExpiryWithIgnoredAmuletVersionIntegrationTest's `Multi-host alice on sv1Participant` clue (05:29:15.8-16.8); WARN delivered 79.6 s after period end during WalletBuyTrafficRequestIntegrationTest. First hit on the Postgres 14 nightly. | 10146 / 10111 family (9th occurrence) | Section 9 of `10155-10158-acs-commitment-mismatch-expiry-multihost.md`. Fix branch `ray/fix-multihost-acs-mismatch` (5e4f9464cd) unchanged. |
 | 10179 | MemberTrafficIntegrationTest "serve a member's traffic status as reported by the sequencer": `298932 was not equal to 295144`. The test reads aliceParticipant's own traffic view at 05:30:04.866 (stamped .326851), Scan reads globalSequencerSv1 at .893 (stamped .806012); aliceValidator automation's `ValidatorLicense_RecordValidatorLivenessActivity` was sequenced at .806010 (cost 3947) and its receipt reached the participant at .890. Two correct answers for two instants. | - (new, family I) | Packet `10179-member-traffic-status-participant-view-lags-sequencer.md`. Fix branch `ray/fix-10179-member-traffic-status-consistent-read` (f877bd3b79): both reads and the `actual` comparisons inside `eventually()`. |
+| 10180 | LsuIntegrationTest shard cancelled at the 60 min job limit with no report: in "bob validator local upgrades after upgrade and can tap" the validator's OTK rotation check read `ListAllV2` on the logical synchronizer store at 10:29:54.018, inside the 470 ms in which its participant had deactivated psid 36-0 (53.631) and not yet activated 36-2 (54.104); `TOPOLOGY_STORE_NOT_FOUND` -> init failed -> `NodeBase.sys.exit(1)` -> test JVM silent from 10:29:54, SIGINT at 11:14:41. | H (10088-A / #7289 evidence loss, 2nd hit); H2 variant C (10088-B, 10174 same restart window) | Packet `10180-lsu-bob-validator-init-not-found-during-participant-lsu-sys-exit.md`. App fix described: retry the `listAllTransactions` call in `rotateOwnerToKeyMappingNotSignedByKeys` (NOT_FOUND is already retryable). Evidence loss: #7289 / `ray/fix-fail-fast-init`. |
 
 ## Cross-cutting observations
 
@@ -233,6 +235,12 @@ given as (run, job, ref) tuples in the request; nothing inferred.
   `beforeEnvironmentDestroyed` skips `environment.close()` in vendored `EnvironmentSetup.manualDestroyEnvironment`
   (canton main unchanged as of 2026-09-15.22), so one teardown hiccup costs the rest of the shard. Worth an
   upstream one-line fix independent of the individual plugin causes.
+- The LSU shard's "bob validator local upgrades after upgrade" step has now failed three different ways in the same
+  470 ms window (10088-B: modify synchronizer connection loops; 10174: WARN path; 10180: OTK rotation topology read
+  NOT_FOUND -> exit). The validator init path has several calls that assume an active physical synchronizer while the
+  participant is mid-LSU; a single guard (resolve the active psid first, or retry NOT_FOUND / NOT_ACTIVE across init)
+  would close the family. 10180 also shows #7289 is still costing whole shards.
+
 
 ## Fix branches written 2026-09-17 (sandbox only, unpushed; compile/tests to be run on the host)
 
