@@ -11,10 +11,13 @@ import Daml.Script
 
 import Splice.Amulet (Amulet, LockedAmulet, LockedAmulet_OwnerExpireLockV2(..))
 import Splice.DsoRules (DsoRules, DsoRules_VestingLock_ExpireVestingLock(..))
-import Splice.GovernanceLock (GovernanceLockKind(..), VestingLock(..), VestingLockSpecification(..))
+import Splice.GovernanceLock
 import Splice.Scripts.DsoTestUtils (initDevNet)
-import Splice.Scripts.Util (AmuletApp(..), AmuletUser(..), lockTo1, setupUser, tap)
+import Splice.Scripts.TestGovernanceLocks
+import Splice.Scripts.Util
+import Splice.Testing.Registries.AmuletRegistryV2 qualified as AmuletRegistryV2
 import Splice.Testing.Utils (actionMustFail, expectMessageContains)
+import Splice.TokenStandard.Utils qualified as TSU
 
 
 -- | A DsoRules test environment holding a single, not-yet-vested `VestingLock`
@@ -28,11 +31,20 @@ data VestingLockEnv = VestingLockEnv with
   vestingLockCid : ContractId VestingLock
   endTime : Time
 
+-- | Must be at least the default `minimumGovernanceLockAmount` of 10k Amulet,
+-- otherwise `ExternalPartyAmuletRules_LockForGovernance` rejects the lock.
 testVestingAmount : Decimal
-testVestingAmount = 500.0
+testVestingAmount = 20000.0
 
+-- | `vestingDurationFor` fixes this per `GovernanceLockKind`; it is not
+-- configurable, so the tests have to live with the SV duration. Asserted
+-- against the created `VestingLock` in `setupVestingLock`.
 testVestingPeriod : RelTime
-testVestingPeriod = hours 1
+testVestingPeriod = days 365 + hours 6
+
+testLockSpecification : GovernanceLockSpecification
+testLockSpecification = GovernanceLockSpecification with
+  kind = GLK_SuperValidatorRightsOwner "TestSV"
 
 setupVestingLock : Script VestingLockEnv
 setupVestingLock = do
@@ -40,32 +52,44 @@ setupVestingLock = do
   [(dsoRulesCid, _)] <- query @DsoRules app.dso
 
   alice <- setupUser app "alice" app.dso
-  _ <- tap app alice 1000.0
+  _ <- tap app alice (testVestingAmount + 1000.0)
 
-  now <- getTime
-  let endTime = now `addRelTime` testVestingPeriod
-
-  -- Lock `testVestingAmount` to the decentralized synchronizer until `endTime`. This mirrors
-  -- `GovernanceLock_Unlock`, which relocks the amulet with `expiresAt` set to
-  -- the very `endTime` it stores on the `VestingLock`.
-  --
-  -- We create a `VestingLock` directly because it easier than going through
+  -- Reach the `VestingLock` the way production does:
   -- `ExternalPartyAmuletRules_LockForGovernance` -> `GovernanceLock_Unlock`
-  lockTo1 app alice app.dso testVestingAmount testVestingPeriod
+  let registry = TSU.upcast app.registry : AmuletRegistryV2.AmuletRegistry
+
+  governanceLockCid <- governanceLockRawChoice registry alice.primaryParty testVestingAmount testLockSpecification
+
+  unlockAt <- (`addRelTime` hours 1) <$> getTime
+
+  -- `unlockAmount = None` unlocks the full amount, so no `GovernanceLock` remains.
+  (vestingLockCid, None) <- governanceUnlockRawChoice registry governanceLockCid None unlockAt [alice.primaryParty]
+
   [(lockedAmuletCid, lockedAmulet)] <- query @LockedAmulet alice.primaryParty
-  lockedAmulet.lock.expiresAt === endTime
 
-  vestingLockCid <- submit (actAs [app.dso, alice.primaryParty]) $ createCmd VestingLock with
-    dso = app.dso
-    owner = alice.primaryParty
-    lockedAmulet = lockedAmuletCid
-    vestingPeriod = testVestingPeriod
-    endTime
-    vestingAmount = testVestingAmount
-    specification = VestingLockSpecification with
-      kind = GLK_SuperValidatorRightsOwner "TestSV"
+  let expectedVestingLock = VestingLock with
+        dso = app.dso
+        owner = alice.primaryParty
+        lockedAmulet = lockedAmuletCid
+        vestingPeriod = testVestingPeriod
+        endTime = unlockAt `addRelTime` testVestingPeriod
+        vestingAmount = testVestingAmount
+        specification = governanceToVestingSpecification testLockSpecification
 
-  pure VestingLockEnv with ..
+  Some vestingLock <- queryContractId alice.primaryParty vestingLockCid
+  vestingLock === expectedVestingLock
+
+  -- `GovernanceLock_Unlock` relocks the amulet with `expiresAt = endTime`.
+  lockedAmulet.lock.expiresAt === vestingLock.endTime
+
+  pure VestingLockEnv with
+    endTime = vestingLock.endTime
+    ..
+
+
+-- | Move the ledger clock past the end of the vesting period.
+passVestingPeriod : VestingLockEnv -> Script ()
+passVestingPeriod env = setTime (env.endTime `addRelTime` hours 1)
 
 
 -- | Happy path: an SV collects a fully vested lock, and the owner's holding
@@ -74,7 +98,7 @@ testDsoRulesExpireVestingLock : Script ()
 testDsoRulesExpireVestingLock = do
   env <- setupVestingLock
 
-  passTime (testVestingPeriod + hours 1)
+  passVestingPeriod env
 
   _ <- submit (actAs env.sv1 <> readAs env.app.dso) $
     exerciseCmd env.dsoRulesCid DsoRules_VestingLock_ExpireVestingLock with
@@ -130,7 +154,7 @@ testDsoRulesExpireVestingLockRejectsNonSv : Script ()
 testDsoRulesExpireVestingLockRejectsNonSv = do
   env <- setupVestingLock
 
-  passTime (testVestingPeriod + hours 1)
+  passVestingPeriod env
 
   -- alice owns the lock, but she is not an SV.
   submitMustFail (actAs env.alice.primaryParty <> readAs env.app.dso) $
@@ -149,7 +173,7 @@ testDsoRulesExpireVestingLockWithDanglingLockedAmulet : Script ()
 testDsoRulesExpireVestingLockWithDanglingLockedAmulet = do
   env <- setupVestingLock
 
-  passTime (testVestingPeriod + hours 1)
+  passVestingPeriod env
 
   _ <- submit env.alice.primaryParty $
     exerciseCmd env.lockedAmuletCid LockedAmulet_OwnerExpireLockV2
