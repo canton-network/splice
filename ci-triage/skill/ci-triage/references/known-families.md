@@ -122,6 +122,12 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   match. Fix: `ray/fix-venue-allocation-wait` (compare `.contractId` strings).
 - 10149: BulkStorageCommitFromStagingTest re-stubs Mockito mocks while the flow calls them
   (`ClassCastException` Promise -> Uri, then `expectNext(20 s)` timeout). Fix: `ray/fix-bulk-storage-test-stubbing-race`.
+- 10179: MemberTrafficIntegrationTest compares the participant admin API's traffic view (lags until the receipt of
+  the last submission is processed, ~80 ms) with Scan's sequencer admin view taken 27 ms later; alice's validator
+  automation submits 2-3 times a second during the suite. Confirming grep: `TrafficConsumedManager ... Consumed N for
+  PAR::aliceValidator` with a sequencing timestamp between the two `TrafficControlState` responses. Fix
+  `ray/fix-10179-member-traffic-status-consistent-read` (compare inside `eventually()`).
+
 
 ## J. Infra, no code change
 - 10133 ghcr.io pull i/o timeout.
