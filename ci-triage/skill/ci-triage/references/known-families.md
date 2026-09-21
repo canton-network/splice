@@ -85,6 +85,11 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
 ## H. Evidence loss
 - `ResetTopologyStatePlugin` `sys.exit(1)` in teardown (10137, 10139): no report, checkErrors skipped, later
   suites lost. Fix: `ray/fix-reset-topology-plugin-no-exit`.
+  Third hit (run 35611022158 wall-clock-time (2), ref 10183 or 10184): the fourth owner's reset proposal arrived after
+  three signatures had already authorized owners = {sv1}; `TOPOLOGY_NO_APPROPRIATE_SIGNING_KEY_IN_STORE`, then 15
+  zero-delay restarts inside the 250 ms effective delay all hit `TOPOLOGY_MAPPING_ALREADY_EXISTS`. Confirming grep:
+  `zcat canton_network_test.clog.gz | grep -a -c 'Restarting decentralized namespace reset'` = 16 within 100 ms.
+  Fix: `ray/fix-10183-10184-wct-2-reset-namespace-late-proposer` (tolerate the late proposer; wait loop decides).
 - `NodeBase` `sys.exit(1)` on init failure in the shared sbt JVM: silent 60-minute hang recorded as cancelled
   (10088-A, #7289; branch `ray/fix-fail-fast-init`). Second hit 10180 (LSU shard, bobValidatorLocal init). Signature:
   GH conclusion cancelled, `Received SIGINT` at start+60 min, no ScalaTest summary, test log ends on
