@@ -142,8 +142,8 @@ const istioDashboardVersions: pulumi.Output<any> =
 
 export function configureObservability(namespace: ExactNamespace): pulumi.Resource {
   // If the stack version is updated the crd version might need to be upgraded as well, check the release notes https://artifacthub.io/packages/helm/prometheus-community/kube-prometheus-stack
-  const stackVersion = '82.9.0';
-  const prometheusStackCrdVersion = '0.89.0';
+  const stackVersion = '91.4.1';
+  const prometheusStackCrdVersion = '0.94.0';
   const namespaceName = namespace.logicalName;
   const postgres = installPostgres(namespace);
   const adminPassword = grafanaKeysFromSecret().adminPassword;
@@ -689,7 +689,7 @@ function createGrafanaServiceAccount(
     url: grafanaExternalUrl,
   });
 
-  const serviceAccountResource = new grafana.ServiceAccount(
+  const serviceAccountResource = new grafana.oss.ServiceAccount(
     'grafanaSA',
     {
       role: 'Editor',
@@ -699,7 +699,7 @@ function createGrafanaServiceAccount(
       dependsOn: [...dependsOn, grafanaProvider],
     }
   );
-  const serviceAccountToken = new grafana.ServiceAccountToken(
+  const serviceAccountToken = new grafana.oss.ServiceAccountToken(
     'grafanaSAToken',
     {
       serviceAccountId: serviceAccountResource.id,
