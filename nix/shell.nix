@@ -128,6 +128,7 @@ let
     jq
     nodejs
     openapi-generator-cli
+    pigz
     pre-commit
     python3
     python3Packages.dockerfile-parse
