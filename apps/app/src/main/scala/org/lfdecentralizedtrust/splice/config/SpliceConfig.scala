@@ -684,6 +684,9 @@ object SpliceConfig {
       deriveReader[PackageVettingLookupService.CacheConfig]
     implicit val sequencingParametersReader: ConfigReader[BftSequencingParameters] =
       deriveReader[BftSequencingParameters]
+    implicit val unavailablePartiesBackoffParametersReader
+        : ConfigReader[UnavailablePartiesBackoffParameters] =
+      deriveReader[UnavailablePartiesBackoffParameters]
     implicit val svConfigReader: ConfigReader[SvAppBackendConfig] =
       deriveReader[SvAppBackendConfig].emap { conf =>
         def checkFoundDsoConfig(check: (SvAppBackendConfig, FoundDso) => Boolean) =
@@ -1204,6 +1207,9 @@ object SpliceConfig {
       deriveWriter[PackageVettingLookupService.CacheConfig]
     implicit val sequencingParametersWriter: ConfigWriter[BftSequencingParameters] =
       deriveWriter[BftSequencingParameters]
+    implicit val unavailablePartiesBackoffParametersWriter
+        : ConfigWriter[UnavailablePartiesBackoffParameters] =
+      deriveWriter[UnavailablePartiesBackoffParameters]
     implicit val svConfigWriter: ConfigWriter[SvAppBackendConfig] =
       deriveWriter[SvAppBackendConfig]
 

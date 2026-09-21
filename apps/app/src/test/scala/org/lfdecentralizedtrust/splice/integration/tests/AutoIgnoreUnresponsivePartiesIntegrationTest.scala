@@ -6,6 +6,7 @@ package org.lfdecentralizedtrust.splice.integration.tests
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.logging.SuppressionRule
+import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.topology.transaction.ParticipantPermission
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
@@ -13,7 +14,10 @@ import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   updateAutomationConfig,
 }
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
-import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTest
+import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
+  IntegrationTest,
+  SpliceTestConsoleEnvironment,
+}
 import org.lfdecentralizedtrust.splice.store.db.DbMultiDomainAcsStore
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
   AdvanceOpenMiningRoundTrigger,
@@ -21,6 +25,7 @@ import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
   ExpiredLockedAmuletTrigger,
   UpdateExternalPartyConfigStateTrigger,
 }
+import org.lfdecentralizedtrust.splice.sv.config.UnavailablePartiesBackoffParameters
 import org.lfdecentralizedtrust.splice.util.*
 import org.slf4j.event.Level
 
@@ -37,6 +42,16 @@ abstract class AutoIgnoreUnresponsivePartiesIntegrationTestBase
   override protected def runUpdateHistorySanityCheck: Boolean = false
 
   protected val enablePersistedUnavailableParties: Boolean
+
+  protected def unavailablePartiesBackoffParameters: UnavailablePartiesBackoffParameters =
+    UnavailablePartiesBackoffParameters()
+
+  protected def reconnectAliceAfterIgnore: Boolean = true
+
+  protected def ignoredParties(implicit env: SpliceTestConsoleEnvironment): Seq[PartyId] =
+    sv1Backend.dsoDelegateBasedAutomation.unavailablePartiesStore
+      .listParties()(TraceContext.empty)
+      .futureValue
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
@@ -66,6 +81,11 @@ abstract class AutoIgnoreUnresponsivePartiesIntegrationTestBase
       .addConfigTransforms((_, c) =>
         ConfigTransforms.updateAllSvAppConfigs_(
           _.copy(delegatelessAutomationExpiredAmuletBatchSize = 2)
+        )(c)
+      )
+      .addConfigTransforms((_, c) =>
+        ConfigTransforms.updateAllSvAppConfigs_(
+          _.copy(unavailablePartiesBackoffParameters = unavailablePartiesBackoffParameters)
         )(c)
       )
       .addConfigTransforms((_, c) =>
@@ -204,17 +224,15 @@ abstract class AutoIgnoreUnresponsivePartiesIntegrationTestBase
       )(
         "Alice is added to the ignored parties store after mediator timeout",
         _ => {
-          sv1Backend.dsoDelegateBasedAutomation.unavailablePartiesStore
-            .listParties()(TraceContext.empty)
-            .futureValue should contain(
-            aliceParty
-          )
+          ignoredParties should contain(aliceParty)
         },
       )
 
       // reconnect or other tests might get unhappy, in particular `withNoVettedPackages` gets confused if the nodes is disconnected.
-      clue("Reconnect alice's participant") {
-        aliceValidatorBackend.participantClient.synchronizers.reconnect_all()
+      if (reconnectAliceAfterIgnore) {
+        clue("Reconnect alice's participant") {
+          aliceValidatorBackend.participantClient.synchronizers.reconnect_all()
+        }
       }
   }
 }
@@ -226,9 +244,7 @@ class AutoIgnoreUnresponsivePartiesInMemoryIntegrationTest
   "Ignored parties don't survive an SV app restart" in { implicit env =>
     sv1Backend.stop()
     sv1Backend.startSync()
-    sv1Backend.dsoDelegateBasedAutomation.unavailablePartiesStore
-      .listParties()(TraceContext.empty)
-      .futureValue shouldBe empty
+    ignoredParties shouldBe empty
   }
 }
 
@@ -237,11 +253,60 @@ class AutoIgnoreUnresponsivePartiesWithPersistenceIntegrationTest
 
   override protected val enablePersistedUnavailableParties: Boolean = true
 
+  override protected def reconnectAliceAfterIgnore: Boolean = false
+
+  override protected def unavailablePartiesBackoffParameters: UnavailablePartiesBackoffParameters =
+    UnavailablePartiesBackoffParameters(
+      baseIgnoreDuration = NonNegativeFiniteDuration.ofSeconds(15),
+      maxIgnoreDuration = NonNegativeFiniteDuration.ofSeconds(30),
+    )
+
+  private def resumeExpiryTriggers()(implicit env: SpliceTestConsoleEnvironment): Unit =
+    env.svs.local.foreach { sv =>
+      sv.dsoDelegateBasedAutomation.trigger[ExpiredAmuletTrigger].resume()
+      sv.dsoDelegateBasedAutomation.trigger[ExpiredLockedAmuletTrigger].resume()
+    }
+
   "Ignored parties survive an SV app restart" in { implicit env =>
     sv1Backend.stop()
     sv1Backend.startSync()
-    sv1Backend.dsoDelegateBasedAutomation.unavailablePartiesStore
-      .listParties()(TraceContext.empty)
-      .futureValue should not be empty
+    eventually(timeUntilSuccess = 120.seconds) {
+      ignoredParties should not be empty
+    }
+    // the expiry triggers are configured as paused, so they come back paused after a restart
+    resumeExpiryTriggers()
+  }
+
+  "A party that is still unavailable is retried and ignored again with a doubled window" in {
+    implicit env =>
+      clue("Alice's ignore window elapses, so the transaction is retried") {
+        eventually(timeUntilSuccess = 120.seconds) {
+          ignoredParties shouldBe empty
+        }
+      }
+
+      clue(
+        "The retry fails again, so alice is ignored again with a doubled ignored duration window"
+      ) {
+        eventually(timeUntilSuccess = 120.seconds) {
+          ignoredParties should not be empty
+        }
+      }
+  }
+
+  "A party that became available again is removed from the store" in { implicit env =>
+    clue("Reconnect alice's participant so that the next retry succeeds") {
+      aliceValidatorBackend.participantClient.synchronizers.reconnect_all()
+    }
+
+    clue("Alice is removed from the store once the expiry submission succeeds") {
+      eventually(timeUntilSuccess = 180.seconds) {
+        ignoredParties shouldBe empty
+      }
+      // as opposed to the previous test, alice is gone for good and not just past her window
+      always(durationOfSuccess = 60.seconds) {
+        ignoredParties shouldBe empty
+      }
+    }
   }
 }
