@@ -7,7 +7,9 @@ import { Contract } from '@canton-network/splice-common-frontend-utils';
 import { ActionRequiringConfirmation } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
 import { VoteRequest } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules/module';
 
-import { ActionFromForm } from '../components/votes/VoteRequest';
+import { DecoderError } from '@mojotech/json-type-validation/dist/types/decoder';
+
+export type ActionFromForm = ActionRequiringConfirmation | { formError: DecoderError };
 
 /** function used to parse the keys from jsondiffpatch.Delta, which has the form
  * {
