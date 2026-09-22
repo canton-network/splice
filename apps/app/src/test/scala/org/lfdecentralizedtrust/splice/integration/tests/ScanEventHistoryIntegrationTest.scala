@@ -11,14 +11,20 @@ import org.lfdecentralizedtrust.splice.util.*
 import org.lfdecentralizedtrust.splice.http.v0.definitions
 import definitions.DamlValueEncoding.members.{CompactJson, ProtobufJson}
 import definitions.EventHistoryItem
-import definitions.UpdateHistoryItemV2.members.{UpdateHistoryReassignment, UpdateHistoryTransactionV2}
+import definitions.UpdateHistoryItemV2.members.{
+  UpdateHistoryReassignment,
+  UpdateHistoryTransactionV2,
+}
 
 import scala.concurrent.duration.*
 import com.digitalasset.canton.config.RequireTypes.Port
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.metrics.MetricValue
 import monocle.macros.syntax.lens.*
-import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{ConfigurableApp, updateAutomationConfig}
+import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
+  ConfigurableApp,
+  updateAutomationConfig,
+}
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.AdvanceOpenMiningRoundTrigger
 
 class ScanEventHistoryIntegrationTest
