@@ -14,7 +14,8 @@
 - Root cause, not symptom: for a real failure, find what the stalled component was waiting on and why, with a
   timestamped event. Timeouts are never the cause.
 - Fix branches: one branch per PR, stacked follow-ups on the same branch, never a branch per fix. Name them
-  `ray/fix-<ref>-<slug>` or `ray/backport-<ref>-<pr>-<release-line>` so the ref is visible in `git branch` and PR titles. Test-only
+  `<user>/fix-<ref>-<slug>` or `<user>/backport-<ref>-<pr>-<release-line>` so the ref is visible in `git branch` and PR titles. Test-only
+  `<user>` is your own short git prefix; the existing branches use `ray`.
   fixes are written; production changes are described and left to the owner unless asked.
 - Sandbox limits: do not run sbt compiles or start Canton unless asked; the host does that. The sandbox has
   no read access to DACH-NY/cn-test-failures; the mapping comes from the user.

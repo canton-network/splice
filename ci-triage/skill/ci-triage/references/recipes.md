@@ -73,8 +73,8 @@ sources or jars, not commit ids.
 
 ## 8. Fix branch
 ```
-git checkout -B ray/fix-<ref>-<slug> origin/main                        # e.g. ray/fix-10172-multiarch-check-retry
-git checkout -B ray/backport-<ref>-<pr>-<release-line> origin/<release-line>   # e.g. ray/backport-10169-7299-release-line-0.8.3
+git checkout -B <user>/fix-<ref>-<slug> origin/main                     # e.g. ray/fix-10172-multiarch-check-retry
+git checkout -B <user>/backport-<ref>-<pr>-<release-line> origin/<release-line>   # e.g. ray/backport-10169-7299-release-line-0.8.3
 git cherry-pick -x -s <sha>                                              # backports
 git commit -s -m "[ci] <one subject line>"
 ```

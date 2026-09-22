@@ -39,7 +39,8 @@ output. Read `references/conventions.md` once before starting; it overrides defa
    Add new families or occurrences to `references/known-families.md`.
 8. Fix, only when it is test-side and small enough to review in one screen: one branch per PR off
    `origin/main` (or the release line for a backport, `cherry-pick -x -s`), named
-   `ray/fix-<ref>-<slug>` (backports: `ray/backport-<ref>-<pr>-<release-line>`) so the branch carries the
+   `<user>/fix-<ref>-<slug>` (backports: `<user>/backport-<ref>-<pr>-<release-line>`) so the branch carries the
+  `<user>` is your own short git prefix; the existing branches use `ray`.
    cn-test-failures ref; when one branch fixes several refs, use the parent ref and list the others in the
    README row. Single-subject commit with a CI tag and DCO sign-off, no code comments, no AI attribution. State plainly what was and was not verified.
    Do not compile or start Canton in the sandbox unless asked; cheap checks only (`scalafmtCheck`,

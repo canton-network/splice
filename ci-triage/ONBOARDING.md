@@ -33,7 +33,8 @@ has several failed jobs and several refs, never assign refs by elimination; reco
   makes the PR unmergeable), `[ci]` on fix branches, `[static]` for lint-only changes.
 - No code comments in fixes; the reasoning goes in the packet and the commit subject.
 - Fix branches: one branch per PR off `origin/main` (release lines: `git cherry-pick -x -s`), named
-  `ray/fix-<ref>-<slug>` or `ray/backport-<ref>-<pr>-<release-line>` so the ref is visible in `git branch`.
+  `<user>/fix-<ref>-<slug>` or `<user>/backport-<ref>-<pr>-<release-line>` so the ref is visible in `git branch`.
+  `<user>` is your own short git prefix; the existing branches use `ray`.
 - Root cause, not symptom: for a real failure, find what the stalled component was waiting on and why, with a
   timestamped event. A timeout is never the cause. An ignore pattern is a last resort and must argue why the line
   can never carry signal (two were rejected: 10084, 10010).

@@ -13,7 +13,7 @@ of the handover; every packet contains the commands that fetched them.
 | Index | `ci-triage/README.md` | Ref -> run -> job mapping, one-line overview per ref, cross-cutting notes, fix-branch table (the table below supersedes its status column) |
 | Triage skill | `ci-triage/skill/ci-triage/` | `SKILL.md` procedure, `references/{conventions,recipes,packet-template,known-families}.md`. Install: `cp -r ci-triage/skill/ci-triage ~/.claude/skills/`, then `/ci-triage <run id or url> <ref>` |
 | Flake families A-L | `ci-triage/skill/ci-triage/references/known-families.md` | Signature, confirming grep, parent ref, dups, fix per family. Check it before deep analysis |
-| Fix branches | local branches `ray/fix-<ref>-<slug>` in the sandbox that produced them | Status table in section 3; lift with `git fetch sandbox-<name> <branch>` on the host, then push |
+| Fix branches | local branches `ray/fix-<ref>-<slug>` (Raymond's prefix; yours will be `<user>/`) in the sandbox that produced them | Status table in section 3; lift with `git fetch sandbox-<name> <branch>` on the host, then push |
 | sbt without the nix dev shell | `ci-triage/skill/ci-triage/references/sandbox-sbt-env.sh` | Only when `direnv exec . sbt` cannot realize the dev shell (root overlay full); paths are those of the splice-ready template image |
 
 Not on the branch, by design: `CLAUDE.md` files (local), the memory files of the assistant, `log/` (12 GB of
@@ -96,7 +96,8 @@ Checked 2026-09-22 with `git cherry <base> <branch>` (patch present upstream) an
 - Job logs: GitHub masks `{` and `}` as `***`; ignored checkErrors lines carry the suffix
   `(ignore this line in check-sbt-output.sh)`, the real problems are the `@timestamp` lines without it.
 - Fix branches: one branch per PR off `origin/main` (or the release line for a backport, `cherry-pick -x -s`),
-  named `ray/fix-<ref>-<slug>`; single `[ci]` commit, `-s`, no code comments, no AI attribution. `[skip ci]` makes a
+  named `<user>/fix-<ref>-<slug>`; single `[ci]` commit, `-s`, no code comments, no AI attribution. `[skip ci]` makes a
+  `<user>` is your own short git prefix; the existing branches use `ray`.
   PR unmergeable; `[static]` is the cheap mergeable tag. Do not compile or start Canton in the sandbox unless asked;
   `apps-app/Test/scalafmtCheck` in a `git worktree` is the cheap check.
 - To fetch a branch from the host repo inside a `--clone` sandbox: `git fetch /run/sandbox/source <branch>`.
