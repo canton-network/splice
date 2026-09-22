@@ -16,6 +16,13 @@ cloudArmor:
       throttleAcrossAllEndpointsPerIp:
         maxRequestsBeforeHttp429: 20000
         withinIntervalSeconds: 60
+    svApp:
+      hostPrefixRegex: 'sv'
+      pathPrefix: '/api/sv'
+      restrictToRateLimitedPaths: false
+      throttleAcrossAllEndpointsPerIp:
+        maxRequestsBeforeHttp429: 500
+        withinIntervalSeconds: 60
     tokenRegistry:
       hostPrefixRegex: 'scan'
       pathPrefix: '/registry'

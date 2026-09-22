@@ -281,6 +281,14 @@ cloudArmor:
       throttleAcrossAllEndpointsPerIp:
         withinIntervalSeconds: 60
         maxRequestsBeforeHttp429: 20000
+    svApp:
+      # required by validators during onboarding
+      hostPrefixRegex: sv
+      pathPrefix: /api/sv
+      restrictToRateLimitedPaths: false
+      throttleAcrossAllEndpointsPerIp:
+        withinIntervalSeconds: 60
+        maxRequestsBeforeHttp429: 500
   wafRules:
     excludedHostPrefixes:
       - 'grafana'
