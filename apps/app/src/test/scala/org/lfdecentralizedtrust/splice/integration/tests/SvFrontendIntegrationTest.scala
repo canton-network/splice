@@ -1,27 +1,35 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.logging.SuppressionRule
-import com.digitalasset.canton.topology.PartyId
+import com.digitalasset.canton.topology.{PartyId, SynchronizerId}
+import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.{
   ARC_AmuletRules,
   ARC_DsoRules,
 }
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_OffboardSv
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules_OffboardSv
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.{
+  SRARC_OffboardSv,
+  SRARC_SetConfig,
+}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   ActionRequiringConfirmation,
+  DsoRules_OffboardSv,
+  DsoRules_SetConfig,
   VoteRequest,
 }
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
 import org.lfdecentralizedtrust.splice.store.VoteResultsFilters
+import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.CloseVoteRequestTrigger
+import org.lfdecentralizedtrust.splice.util.SpliceUtil.defaultDsoRulesConfig
 import org.lfdecentralizedtrust.splice.util.*
 import org.openqa.selenium.By
 import org.slf4j.event.Level
 
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
+import java.util.Optional
 
 class SvFrontendIntegrationTest
     extends SvFrontendCommonIntegrationTest
@@ -416,7 +424,7 @@ class SvFrontendIntegrationTest
       )
     }
 
-    def sv2CastVoteOnActionRequired(proposalContractId: String)(implicit
+    def sv2CastVoteOnActionRequired(proposalContractId: String, accept: Boolean = true)(implicit
         webDriver: WebDriverType,
         env: SpliceTestConsoleEnvironment,
     ): Unit = {
@@ -434,7 +442,7 @@ class SvFrontendIntegrationTest
       )
 
       actAndCheck(
-        "sv2 fills out and submits a vote", {
+        s"sv2 fills out and submits a vote to ${if (accept) "accept" else "reject"}", {
           inside(find(testId("your-vote-reason-input"))) { case Some(element) =>
             element.underlying.sendKeys("A sample reason")
           }
@@ -443,7 +451,7 @@ class SvFrontendIntegrationTest
             element.underlying.sendKeys("https://my-splice-vote-url.com")
           }
 
-          click on testId("your-vote-accept")
+          click on testId(if (accept) "your-vote-accept" else "your-vote-reject")
         },
       )(
         "the vote submission success message is shown",
@@ -693,6 +701,157 @@ class SvFrontendIntegrationTest
           selectMuiOptionByValue("update-sv-reward-weight-member-dropdown", sv3PartyId)
           fillOutTextField("update-sv-reward-weight-weight", newWeight)
       }
+    }
+
+    "Set Dso Rules Configuration proposals can be rejected by other SVs and can expire" in {
+      implicit env =>
+        val requestReasonUrl = "https://new-proposal-url.com/"
+        // A VoteRequest only gets a trackingCid once somebody votes on it, so the UI cannot show a
+        // stable contract id for a request that expires untouched. Match rows by description instead.
+        val expiringProposalReason = "This proposal expires before anybody votes on it"
+        val rejectedProposalReason = "This proposal gets rejected by the other SVs"
+
+        def rowDescriptions(section: String)(implicit webDriver: WebDriverType): Seq[String] =
+          webDriver
+            .findElements(By.cssSelector(s"[data-testid='$section-row-description']"))
+            .asScala
+            .map(_.getText)
+            .toSeq
+
+        def voteHistoryStatus(reason: String)(implicit webDriver: WebDriverType): Option[String] =
+          webDriver
+            .findElements(By.cssSelector("[data-testid='vote-history-row']"))
+            .asScala
+            .find(
+              _.findElement(
+                By.cssSelector("[data-testid='vote-history-row-description']")
+              ).getText == reason
+            )
+            .map(_.findElement(By.cssSelector("[data-testid='vote-history-row-status']")).getText)
+
+        def newVoteRequestWithReason(reason: String): VoteRequest.ContractId =
+          eventually() {
+            getTrackingId(
+              sv1Backend.listVoteRequests().filter(_.payload.reason.body == reason).loneElement
+            )
+          }
+
+        // Creates a SetConfig proposal via the backend with a short expiry so it expires on its own
+        def createShortLivedSetConfigProposal(): Unit = {
+          val activeSynchronizerId =
+            AmuletConfigSchedule(sv1Backend.getDsoInfo().amuletRules)
+              .getConfigAsOf(env.environment.clock.now)
+              .decentralizedSynchronizer
+              .activeSynchronizer
+          val baseConfig =
+            defaultDsoRulesConfig(1, 2, 3, SynchronizerId.tryFromString(activeSynchronizerId))
+          val newConfig =
+            defaultDsoRulesConfig(41, 2, 3, SynchronizerId.tryFromString(activeSynchronizerId))
+          val setDsoConfigAction: ActionRequiringConfirmation = new ARC_DsoRules(
+            new SRARC_SetConfig(new DsoRules_SetConfig(newConfig, Optional.of(baseConfig)))
+          )
+          sv1Backend.createVoteRequest(
+            sv1Backend.getDsoInfo().svParty.toProtoPrimitive,
+            setDsoConfigAction,
+            requestReasonUrl,
+            expiringProposalReason,
+            new RelTime(java.time.Duration.ofSeconds(10).toMillis * 1000L),
+            None,
+          )
+        }
+
+        clue("Pausing vote request expiration automation") {
+          sv1Backend.dsoDelegateBasedAutomation
+            .trigger[CloseVoteRequestTrigger]
+            .pause()
+            .futureValue
+        }
+
+        actAndCheck(
+          "sv1 creates a proposal with a short expiration time",
+          createShortLivedSetConfigProposal(),
+        )(
+          "the short-lived proposal exists",
+          _ => newVoteRequestWithReason(expiringProposalReason),
+        )
+
+        val rejectedProposalCid = clue("sv1 creates a proposal via the UI") {
+          withFrontEnd("sv1") { implicit webDriver =>
+            loginToGovernance(sv1UIPort, sv1Backend.config.ledgerApiUser)
+            selectActionAndNavigateToForm("SRARC_SetConfig", "set-dso-config-rules")
+            fillAndSubmitProposalForm(
+              "set-dso-config-rules",
+              rejectedProposalReason,
+              requestReasonUrl,
+              effectiveAtThreshold = true,
+              { implicit webDriver =>
+                eventually() {
+                  inside(find(testId("config-field-numMemberTrafficContractsThreshold"))) {
+                    case Some(element) => element.underlying.sendKeys("42")
+                  }
+                }
+              },
+            )
+          }
+          newVoteRequestWithReason(rejectedProposalReason)
+        }
+
+        withFrontEnd("sv1") { implicit webDriver =>
+          clue("sv1 sees both proposals in flight and neither in the vote history") {
+            go to s"http://localhost:$sv1UIPort/governance"
+            eventually() {
+              val inflight = rowDescriptions("inflight-proposals")
+              inflight should contain(expiringProposalReason)
+              inflight should contain(rejectedProposalReason)
+              val history = rowDescriptions("vote-history")
+              history should not contain expiringProposalReason
+              history should not contain rejectedProposalReason
+            }
+          }
+        }
+
+        clue("Resuming vote request expiration automation") {
+          sv1Backend.dsoDelegateBasedAutomation.trigger[CloseVoteRequestTrigger].resume()
+        }
+
+        withFrontEnd("sv2") { implicit webDriver =>
+          sv2CastVoteOnActionRequired(rejectedProposalCid.contractId, accept = false)
+        }
+
+        actAndCheck(
+          "sv3 and sv4 also reject the proposal",
+          Seq(sv3Backend, sv4Backend).foreach(
+            _.castVote(rejectedProposalCid, false, requestReasonUrl, "rejecting")
+          ),
+        )(
+          "both proposals are closed, one by vote and one by expiry",
+          _ => {
+            val closedReasons = sv1Backend
+              .listVoteRequestResults(VoteResultsFilters(accepted = Some(false)), 10)
+              ._1
+              .map(_.request.reason.body)
+            closedReasons should contain(rejectedProposalReason)
+            closedReasons should contain(expiringProposalReason)
+            sv1Backend
+              .listVoteRequests()
+              .map(_.payload.reason.body)
+              .toSet
+              .intersect(Set(rejectedProposalReason, expiringProposalReason)) shouldBe empty
+          },
+        )
+
+        withFrontEnd("sv1") { implicit webDriver =>
+          clue("sv1 sees both proposals in the vote history with the right status") {
+            go to s"http://localhost:$sv1UIPort/governance"
+            eventually() {
+              val inflight = rowDescriptions("inflight-proposals")
+              inflight should not contain expiringProposalReason
+              inflight should not contain rejectedProposalReason
+              voteHistoryStatus(rejectedProposalReason) shouldBe Some("Rejected")
+              voteHistoryStatus(expiringProposalReason) shouldBe Some("Expired")
+            }
+          }
+        }
     }
 
     "Vote history is ordered by completion time and supports pagination" in { implicit env =>
