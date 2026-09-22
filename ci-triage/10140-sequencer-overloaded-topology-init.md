@@ -404,7 +404,7 @@ Two options, both splice-side and small; pick one:
 1. Raise `public-api.limits.active` for `DownloadTopologyStateForInit` and `DownloadTopologyStateForInitHash`
    in `apps/app/src/test/resources/include/sequencers.conf` from 3 to at least the number of participants in
    the standard topology (7). The limit is test-only (not in pack/helm) and was introduced to exercise
-   the limiter (#1253); check with the author (Moritz Kiefer) whether a test still depends on the value 3
+   the limiter (#1253); check with the PR author whether a test still depends on the value 3
    before raising it.
 2. Add to `project/ignore-patterns/canton_log.ignore.txt`, next to the SEQUENCER_OVERLOADED entry:
    `GrpcRequestRefusedByServer: ABORTED/SERVER_OVERLOADED.*Reached the limit of concurrent requests for .*DownloadTopologyStateForInit`

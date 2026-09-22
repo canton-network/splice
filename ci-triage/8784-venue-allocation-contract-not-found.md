@@ -5,7 +5,7 @@
   original evidence is PR #6013's description: "The command submission on the splitwell participant fails with
   CONTRACT_NOT_FOUND" in TokenStandardAllocationIntegrationTest and TrafficBasedRewardsTimeBasedIntegrationTest.
   Which of the three jobs carried ref 8784 cannot be re-derived here.
-- PR #6013 "Wait for splitwell to see allocations in test" (rautenrieth-da, 2026-06-17, approved twice) is still OPEN,
+- PR #6013 "Wait for splitwell to see allocations in test" (opened 2026-06-17, approved twice) is still OPEN,
   so it never fixed anything on main. Its own CI (run 29411909403, 2026-07-15) is red on 4 shards; that run is
   still available and is what this packet analyses.
 

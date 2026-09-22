@@ -529,7 +529,7 @@ grep -n 'canton_network_test' build.sbt | head -1
 ```
 ```
 project/ignore-patterns/canton_log.ignore.txt:210:INTERNAL/Missing package-id.*in package metadata view
-8dbadf1d3a 2026-07-09 Simon Meier Ignore spurious Missing package-id error (#6356)
+8dbadf1d3a 2026-07-09 Ignore spurious Missing package-id error (#6356)
 +
 +# TODO(DACH-NY/cn-test-failures#9136) remove once Canton fixes this race condition from not storing packages in dependency order
 +INTERNAL/Missing package-id.*in package metadata view
@@ -605,8 +605,7 @@ Inferred:
 
 ## Duplicates / related
 
-- Same Canton bug, server side: splice #6356 "Ignore spurious Missing package-id error" (2026-07-09, Simon
-  Meier), tracking DACH-NY/cn-test-failures#9136 (repo not readable from this sandbox; status unknown).
+- Same Canton bug, server side: splice #6356 "Ignore spurious Missing package-id error" (2026-07-09), tracking DACH-NY/cn-test-failures#9136 (repo not readable from this sandbox; status unknown).
   That fix only covers `canton_log`, not the app-side mirror of the error.
 - Sibling test-side comment: BootstrapPackageConfigIntegrationTest.scala:212-214 already treats "DARs
   uploaded and vetted before commands run" as a timing race it mitigates with a 20 s buffer.
