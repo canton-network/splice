@@ -2590,6 +2590,28 @@
     "custom": true,
     "id": "",
     "inputs": {
+      "action": "deny(403)",
+      "description": "Preview-only deny all rule, mirroring the enforced default deny rule",
+      "match": {
+        "config": {
+          "srcIpRanges": [
+            "*"
+          ]
+        },
+        "versionedExpr": "SRC_IPS_V1"
+      },
+      "preview": true,
+      "priority": 2147483646,
+      "securityPolicy": "waf-whitelist-throttle-ban-mock"
+    },
+    "name": "preview-deny-all",
+    "provider": "",
+    "type": "gcp:compute/regionSecurityPolicyRule:RegionSecurityPolicyRule"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
       "apiVersion": "v1",
       "kind": "Namespace",
       "metadata": {
