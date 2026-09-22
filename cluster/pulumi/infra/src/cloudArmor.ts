@@ -5,8 +5,10 @@ import * as pulumi from '@pulumi/pulumi';
 import * as _ from 'lodash';
 import {
   CLOUD_ARMOR_POLICY_NAME,
+  CLOUD_ARMOR_WAF_RULE_MAX_PRIORITY,
+  CLOUD_ARMOR_WAF_RULE_MIN_PRIORITY,
   CLUSTER_BASENAME,
-  getDnsNames,
+  CLUSTER_HOSTNAME,
 } from '@canton-network/splice-pulumi-common';
 import { PerEndpointLimits } from '@canton-network/splice-pulumi-common/src/ratelimit/envoyRateLimiter';
 
@@ -22,19 +24,13 @@ import {
 import { loadIPRanges } from './whitelisting/ipRanges';
 
 // Rule number ranges
-const WAF_RULE_MIN = 10;
-const IP_WHITELIST_RULE_MIN = 1000010;
+const WAF_RULE_MIN = CLOUD_ARMOR_WAF_RULE_MIN_PRIORITY;
+const IP_WHITELIST_RULE_MIN = CLOUD_ARMOR_WAF_RULE_MAX_PRIORITY;
 const THROTTLE_BAN_RULE_MIN = 100000010;
 const THROTTLE_BAN_RULE_MAX = 200000010;
 const DEFAULT_DENY_RULE_NUMBER = 2147483647;
+const PREVIEW_DENY_RULE_NUMBER = DEFAULT_DENY_RULE_NUMBER - 1;
 const RULE_SPACING = 100;
-
-// Types for API endpoint throttling/banning configuration
-export interface ApiEndpoint {
-  name: string;
-  path: string;
-  hostname: string;
-}
 
 export type CloudArmorConfig = config.CloudArmorConfig;
 
@@ -89,13 +85,19 @@ export function configureCloudArmorPolicy(
     }
   );
 
-  const ruleOpts = { ...opts, parent: securityPolicy, deletedWith: securityPolicy };
+  const ruleOpts = {
+    ...opts,
+    parent: securityPolicy,
+    deletedWith: securityPolicy,
+    deleteBeforeReplace: true,
+  };
 
   // Step 2: Add predefined WAF rules
   if (cac.wafRules.enabled) {
     addWafRules(
       securityPolicy,
       cac.wafRules.groups,
+      cac.wafRules.excludedHostPrefixes,
       cac.allRulesPreviewOnly || cac.wafRules.previewOnly,
       ruleOpts
     );
@@ -131,9 +133,17 @@ export function configureCloudArmorPolicy(
 function addWafRules(
   securityPolicy: CloudArmorPolicy,
   groups: WafRuleGroup[],
+  excludedHostPrefixes: string[],
   preview: boolean,
   opts: pulumi.ResourceOptions
 ): void {
+  const excludedHostsExpr =
+    excludedHostPrefixes.length > 0
+      ? hostCondition('waf-excluded-hosts', CLUSTER_HOSTNAME, {
+          hostPrefixRegex: excludedHostPrefixes.map(p => p.toLowerCase()).join('|'),
+          perNodeHost: false,
+        })
+      : undefined;
   groups.forEach((group, i) => {
     const priority = WAF_RULE_MIN + i * RULE_SPACING;
     if (priority >= IP_WHITELIST_RULE_MIN) {
@@ -147,10 +157,10 @@ function addWafRules(
         description: group.description,
         priority,
         preview,
-        action: 'deny(403)',
+        action: 'deny(502)',
         match: {
           expr: {
-            expression: wafRuleExpression(group),
+            expression: wafRuleExpression(group, excludedHostsExpr),
           },
         },
       },
@@ -252,9 +262,12 @@ function addThrottleAndBanRules(
         );
         const hostExpr = hostCondition(
           confEntryHead,
-          [getDnsNames().cantonDnsName, getDnsNames().daDnsName],
-          hostname,
-          hostPrefixRegex
+          CLUSTER_HOSTNAME,
+          hostname
+            ? { hostname }
+            : hostPrefixRegex
+              ? { hostPrefixRegex, perNodeHost: true }
+              : undefined
         );
         const matchExpr = matchExpression(confEntryHead, pathExpr, hostExpr);
 
@@ -298,13 +311,39 @@ function addThrottleAndBanRules(
 }
 
 /**
- * Adds a default deny rule to a security policy
+ * Adds a default deny rule to a security policy, plus - when all rules are in preview
+ * mode - a preview-only deny-all rule just before it.
  */
 function addDefaultDenyRule(
   securityPolicy: CloudArmorPolicy,
   preview: boolean,
   opts: pulumi.ResourceOptions
 ): void {
+  if (preview) {
+    // The default rule cannot be in preview mode, so in all-preview mode it has to
+    // allow all traffic and therefore never reports anything as denied. This extra rule
+    // sits just before it and records what an enforced setup would have blocked, so the
+    // preview metrics reflect the reality of a non-preview deployment.
+    new PolicyRule(
+      'preview-deny-all',
+      {
+        securityPolicy: securityPolicy.name,
+        region: securityPolicy.region,
+        description: 'Preview-only deny all rule, mirroring the enforced default deny rule',
+        priority: PREVIEW_DENY_RULE_NUMBER,
+        preview: true,
+        action: 'deny(403)',
+        match: {
+          versionedExpr: 'SRC_IPS_V1',
+          config: {
+            srcIpRanges: ['*'],
+          },
+        },
+      },
+      opts
+    );
+  }
+
   // The default rule is created together with the policy and cannot be added or
   // removed, only patched (the GCP provider turns a create at this priority into a
   // patch, and skips the delete). So we always declare it: dropping the resource when

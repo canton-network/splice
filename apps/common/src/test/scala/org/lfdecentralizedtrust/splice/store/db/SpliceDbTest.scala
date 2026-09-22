@@ -3,6 +3,7 @@ package org.lfdecentralizedtrust.splice.store.db
 import com.digitalasset.canton.BaseTest
 import com.digitalasset.canton.config.DbConfig.Postgres
 import com.digitalasset.canton.config.DbParametersConfig
+import com.digitalasset.canton.config.RequireTypes.PositiveInt
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.store.db.DbStorageSetup.DbBasicConfig
@@ -103,7 +104,8 @@ trait SpliceDbTest extends DbTest with BeforeAndAfterAll { this: Suite =>
                 acs_incremental_snapshot_data_next,
                 acs_incremental_snapshot_data_backfill,
                 acs_incremental_snapshot,
-                dso_unavailable_parties
+                dso_unavailable_parties,
+                interned_strings
             RESTART IDENTITY CASCADE""".asUpdate
           _ <- debugPrintPgActivity()
         } yield (),
@@ -163,7 +165,10 @@ trait SplicePostgresTest extends SpliceDbTest { this: Suite =>
   ): com.digitalasset.canton.config.DbConfig.Postgres =
     Postgres(
       basicConfig.toPostgresConfig,
-      parameters = DbParametersConfig(unsafeCleanOnValidationError = true),
+      parameters = DbParametersConfig(
+        unsafeCleanOnValidationError = true,
+        maxConnections = Some(PositiveInt.tryCreate(30)),
+      ),
     )
 
   override protected def createSetup(): DbStorageSetup =

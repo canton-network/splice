@@ -3,11 +3,11 @@
 
 package org.lfdecentralizedtrust.splice.integration.tests
 
+import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.logging.SuppressionRule
-import com.digitalasset.canton.topology.transaction.ParticipantPermission
 import com.digitalasset.canton.topology.{ForceFlag, ForceFlags, PartyId}
 import com.digitalasset.daml.lf.data.Ref.{PackageId, PackageName, PackageVersion}
 import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
@@ -65,6 +65,8 @@ abstract class ExpiryWithMinimalVettedPackagesIntegrationTestBase
       .filterNot(DarResourcesUtil.minimalPackageVersions.contains(_))
   )
 
+  protected val enablePersistedUnavailableParties: Boolean
+
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
       .simpleTopology1Sv(this.getClass.getSimpleName)
@@ -118,6 +120,16 @@ abstract class ExpiryWithMinimalVettedPackagesIntegrationTestBase
           _.copy(ignoredAmuletVersions = ignoredAmuletVersions)
         )(c)
       )
+      .addConfigTransforms((_, c) =>
+        ConfigTransforms.updateAllSvAppConfigs_(conf =>
+          conf.copy(parameters =
+            conf.parameters.copy(enabledFeatures =
+              conf.parameters.enabledFeatures
+                .copy(enablePersistedUnavailableParties = enablePersistedUnavailableParties)
+            )
+          )
+        )(c)
+      )
 
   protected val danglingSubscriptionCid = new Subscription.ContractId("00" * 33 + "01")
   protected val danglingSubscriptionRequestCid =
@@ -154,43 +166,11 @@ abstract class ExpiryWithMinimalVettedPackagesIntegrationTestBase
     }
 
     val aliceUserId = aliceWalletClient.config.ledgerApiUser
-    val aliceParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
-    val sv1ParticipantId = sv1Backend.participantClientWithAdminToken.id
-    val aliceParticipantId = aliceValidatorBackend.participantClient.id
-    val sv1Participant = sv1Backend.participantClientWithAdminToken
-    val aliceParticipant = aliceValidatorBackend.participantClient
-
-    clue("Wait for alice's PartyToParticipant mapping to be visible on sv1") {
-      eventually() {
-        sv1Participant.topology.party_to_participant_mappings
-          .list(synchronizerId, filterParty = aliceParty.toProtoPrimitive) should not be empty
-      }
-    }
-
-    // Multi-host alice on sv1Participant to be able to create bare Amulet and LockedAmulet contracts
-    actAndCheck(
-      "Multi-host alice on sv1Participant (alice keeps her old host)",
-      eventuallySucceeds() {
-        aliceParticipant.topology.party_to_participant_mappings.propose_delta(
-          party = aliceParty,
-          adds = Seq((sv1ParticipantId, ParticipantPermission.Submission)),
-          store = synchronizerId,
-        )
-        sv1Participant.topology.party_to_participant_mappings.propose_delta(
-          party = aliceParty,
-          adds = Seq((sv1ParticipantId, ParticipantPermission.Submission)),
-          store = synchronizerId,
-        )
-      },
-    )(
-      "alice is fully authorized on both participants",
-      _ => {
-        val hosts = sv1Participant.topology.party_to_participant_mappings
-          .list(synchronizerId, filterParty = aliceParty.toProtoPrimitive)
-          .flatMap(_.item.participants)
-        hosts.exists(h => h.participantId == sv1ParticipantId && !h.onboarding) shouldBe true
-        hosts.exists(h => h.participantId == aliceParticipantId && !h.onboarding) shouldBe true
-      },
+    val aliceParty = onboardWalletUserHostedAlsoOn(
+      aliceWalletClient,
+      aliceValidatorBackend,
+      sv1Backend.participantClientWithAdminToken,
+      synchronizerId,
     )
 
     val numAmulets = 2
@@ -238,6 +218,8 @@ abstract class ExpiryWithMinimalVettedPackagesIntegrationTestBase
 class AmuletExpiryV1FallbackIntegrationTest
     extends ExpiryWithMinimalVettedPackagesIntegrationTestBase {
 
+  override protected val enablePersistedUnavailableParties: Boolean = true
+
   "Amulet expiry falls back to V1 choices when alice's validator has not vetted splice-amulet 0.1.17" in {
     implicit env =>
       setupAliceWithDustAmulets()
@@ -266,6 +248,8 @@ class AmuletExpiryV1FallbackIntegrationTest
   */
 class ExpiryWithIgnoredAmuletVersionIntegrationTest
     extends ExpiryWithMinimalVettedPackagesIntegrationTestBase {
+
+  override protected val enablePersistedUnavailableParties: Boolean = false
 
   // Amulet version 0.1.19 is just below the minimumInitialization version.
   override val ignoredAmuletVersions: Set[String] = Set(
@@ -359,7 +343,9 @@ class ExpiryWithIgnoredAmuletVersionIntegrationTest
       )(
         s"All dust contracts remain because alice's preferred version is in ignoredAmuletVersions",
         _ => {
-          sv1Backend.dsoDelegateBasedAutomation.unavailablePartiesStore.getAll should
+          sv1Backend.dsoDelegateBasedAutomation.unavailablePartiesStore
+            .listParties()(TraceContext.empty)
+            .futureValue should
             contain(alice)
 
           aliceWalletClient.list().amulets should have length 2L withClue "amulets"
@@ -400,6 +386,8 @@ class ExpiryWithIgnoredAmuletVersionIntegrationTest
 class ExpiryWithNoVettedAmuletVersionIntegrationTest
     extends ExpiryWithMinimalVettedPackagesIntegrationTestBase {
 
+  override protected val enablePersistedUnavailableParties: Boolean = true
+
   "Amulet expiry ignores parties with no vetted amulet version" in { implicit env =>
     val alice = setupAliceWithDustAmulets()
 
@@ -435,7 +423,9 @@ class ExpiryWithNoVettedAmuletVersionIntegrationTest
     )(
       "Alice is ignored and her dust amulets are not expired",
       _ => {
-        val ignored = sv1Backend.dsoDelegateBasedAutomation.unavailablePartiesStore.getAll
+        val ignored = sv1Backend.dsoDelegateBasedAutomation.unavailablePartiesStore
+          .listParties()(TraceContext.empty)
+          .futureValue
         ignored should contain(alice)
         ignored should not contain dsoParty
         aliceWalletClient.list().amulets should have length 2L withClue "dust amulets"

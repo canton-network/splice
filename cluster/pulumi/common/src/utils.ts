@@ -29,6 +29,7 @@ export const PRIVATE_CONFIGS_PATH = config.optionalEnv('PRIVATE_CONFIGS_PATH');
 
 export const HELM_REPO = spliceEnvConfig.requireEnv('OCI_DEV_HELM_REGISTRY');
 export const DOCKER_REPO = spliceEnvConfig.requireEnv('CACHE_DEV_DOCKER_REGISTRY');
+export const CACHE_GHCR = spliceEnvConfig.requireEnv('CACHE_GHCR');
 
 export const ObservabilityReleaseName = 'prometheus-grafana-monitoring';
 
@@ -60,6 +61,15 @@ export const CLUSTER_NAME = `cn-${CLUSTER_BASENAME}net`;
 // cluster/pulumi/infra/src/cloudArmor.ts). Shared so that alerts can be scoped to
 // exactly the policy of this cluster.
 export const CLOUD_ARMOR_POLICY_NAME = `waf-whitelist-throttle-ban-${CLUSTER_BASENAME}`;
+
+// Priority range reserved for the preconfigured (OWASP CRS based) WAF rules of the
+// Cloud Armor policy (see cluster/pulumi/infra/src/cloudArmor.ts). Shared so that alerts
+// can tell a WAF rule rejection apart from an IP whitelist, throttle or default deny
+// rejection: the request logs only carry the priority of the rule that matched, not its
+// name.
+export const CLOUD_ARMOR_WAF_RULE_MIN_PRIORITY = 10;
+// Exclusive upper bound: the IP whitelist rules start at this priority.
+export const CLOUD_ARMOR_WAF_RULE_MAX_PRIORITY = 1000010;
 
 export const sequencerTokenExpirationTime: string | undefined = config.optionalEnv(
   'SEQUENCER_TOKEN_EXPIRATION_TIME'

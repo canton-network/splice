@@ -1768,6 +1768,7 @@ class DbScanStoreTest
       mkParticipantId("whatever"),
       dsoParty,
       BackfillingRequirement.BackfillingNotRequired,
+      internedStringStore(storage),
       loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = true,

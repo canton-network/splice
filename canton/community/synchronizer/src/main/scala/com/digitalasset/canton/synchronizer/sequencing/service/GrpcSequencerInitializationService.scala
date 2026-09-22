@@ -75,49 +75,15 @@ class GrpcSequencerInitializationService(
 
   override def initializeSequencerFromGenesisState(
       responseObserver: StreamObserver[InitializeSequencerFromGenesisStateResponse]
-  ): StreamObserver[InitializeSequencerFromGenesisStateRequest] = {
-    implicit val traceContext: TraceContext = TraceContextGrpc.fromGrpcContext
-    GrpcStreamingUtils.streamFromClient[
-      InitializeSequencerFromGenesisStateRequest,
-      InitializeSequencerFromGenesisStateResponse,
-      Option[v30.StaticSynchronizerParameters],
-    ](
-      _.topologySnapshot,
-      _.synchronizerParameters,
-      (topologySnapshot, synchronizerParams) =>
-        initializeSequencerFromState(
-          topologySnapshot,
-          synchronizerParams,
-          doResetTimes = true,
-          ignoreLsuPsidCheck = false,
-        ).map(InitializeSequencerFromGenesisStateResponse(_)),
-      responseObserver,
-    )
-  }
+  ): StreamObserver[InitializeSequencerFromGenesisStateRequest] =
+    // stubbed in splice
+    ???
 
   override def initializeSequencerFromLsuPredecessor(
       responseObserver: StreamObserver[InitializeSequencerFromLsuPredecessorResponse]
-  ): StreamObserver[InitializeSequencerFromLsuPredecessorRequest] = {
-    implicit val traceContext: TraceContext = TraceContextGrpc.fromGrpcContext
-    GrpcStreamingUtils.streamFromClient(
-      _.topologySnapshot,
-      req => (req.synchronizerParameters, req.ignorePsidCheck),
-      (
-          topologySnapshot: ByteString,
-          ctx: (Option[v30.StaticSynchronizerParameters], Boolean),
-      ) => {
-        val (synchronizerParams, ignoreLsuPsidCheck) = ctx
-
-        initializeSequencerFromGenesisStateV2(
-          topologySnapshot,
-          synchronizerParams,
-          doResetTimes = false,
-          ignoreLsuPsidCheck = ignoreLsuPsidCheck,
-        ).map(_ => InitializeSequencerFromLsuPredecessorResponse())
-      },
-      responseObserver,
-    )
-  }
+  ): StreamObserver[InitializeSequencerFromLsuPredecessorRequest] =
+    // stubbed in splice
+    ???
 
   /** Initializes the sequencer from a topology state snapshot.
     *
@@ -159,24 +125,9 @@ class GrpcSequencerInitializationService(
 
   override def initializeSequencerFromGenesisStateV2(
       responseObserver: StreamObserver[InitializeSequencerFromGenesisStateV2Response]
-  ): StreamObserver[InitializeSequencerFromGenesisStateV2Request] = {
-    implicit val traceContext: TraceContext = TraceContextGrpc.fromGrpcContext
-    GrpcStreamingUtils.streamFromClient(
-      _.topologySnapshot,
-      _.synchronizerParameters,
-      (
-          topologySnapshot: ByteString,
-          synchronizerParams: Option[v30.StaticSynchronizerParameters],
-      ) =>
-        initializeSequencerFromGenesisStateV2(
-          topologySnapshot,
-          synchronizerParams,
-          doResetTimes = true,
-          ignoreLsuPsidCheck = false,
-        ).map(InitializeSequencerFromGenesisStateV2Response(_)),
-      responseObserver,
-    )
-  }
+  ): StreamObserver[InitializeSequencerFromGenesisStateV2Request] =
+    // stubbed in splice
+    ???
 
   private def initializeSequencerFromGenesisStateV2(
       topologySnapshot: ByteString,

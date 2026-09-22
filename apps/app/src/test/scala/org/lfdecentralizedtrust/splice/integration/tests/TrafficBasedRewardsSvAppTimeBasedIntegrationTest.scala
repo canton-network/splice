@@ -1,7 +1,7 @@
 package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.HasExecutionContext
-import com.digitalasset.canton.config.NonNegativeDuration
+import com.digitalasset.canton.config.{NonNegativeDuration, NonNegativeFiniteDuration}
 import com.digitalasset.canton.console.LocalInstanceReference
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.CloseContext
@@ -45,18 +45,24 @@ import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
   ProcessRewardsTrigger,
 }
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection
-import org.lfdecentralizedtrust.splice.scan.automation.RewardComputationTrigger
+import org.lfdecentralizedtrust.splice.scan.automation.{
+  PruneRewardAccountingTrigger,
+  RewardComputationTrigger,
+}
+import org.lfdecentralizedtrust.splice.scan.store.ScanRewardsReferenceStore
 import org.lfdecentralizedtrust.splice.sv.config.InitialRewardConfig
 import org.lfdecentralizedtrust.splice.util.{
   AmuletConfigSchedule,
   AmuletConfigUtil,
   ScanTestUtil,
+  SpliceUtil,
   TimeTestUtil,
   TriggerTestUtil,
   WalletTestUtil,
 }
 import org.slf4j.event.Level
 
+import scala.annotation.tailrec
 import scala.concurrent.duration.DurationInt
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 
@@ -67,6 +73,8 @@ import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInt
 // - BFT read in all three SV app's reward processing triggers
 //
 // - Reporting of mismatches in 'Confirmation' of root-hash
+//
+// - Pruning of reward processing data
 @org.lfdecentralizedtrust.splice.util.scalatesttags.SpliceAmulet_0_1_19
 class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
     extends IntegrationTestWithIsolatedEnvironment
@@ -82,6 +90,10 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
   // event-history consistency check cannot hold here.
   override protected def runEventHistorySanityCheck: Boolean = false
 
+  // Long enough that advancing a few rounds does not reach it
+  private val rewardAccountingRetentionPeriod: NonNegativeFiniteDuration =
+    NonNegativeFiniteDuration(SpliceUtil.defaultInitialTickDuration.asJava.multipliedBy(10))
+
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
       .simpleTopology4SvsWithSimTime(this.getClass.getSimpleName)
@@ -92,6 +104,11 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
             dryRunVersion = None,
             appRewardCouponThreshold = BigDecimal("0"),
           )
+        )(config)
+      )
+      .addConfigTransform((_, config) =>
+        ConfigTransforms.updateAllScanAppConfigs_(
+          _.copy(rewardAccountingRetentionPeriod = rewardAccountingRetentionPeriod)
         )(config)
       )
       // Prevent wallets from minting RewardCouponV2 before the test
@@ -354,6 +371,8 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
       confirmBftRead(bobParty)
 
       confirmMismatchingRootHashIsFlagged(bobParty)
+
+      advanceRoundsAndConfirmAllPriorRoundsPruned()
   }
 
   // sv2's CalculateRewardsTrigger and SummarizingMiningRoundTrigger report the
@@ -766,6 +785,152 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
         }
       },
     )
+  }
+
+  private def advanceRoundsAndConfirmAllPriorRoundsPruned()(implicit
+      env: SpliceTestConsoleEnvironment
+  ): Unit = {
+    val sv1Db = sv1ScanBackend.appState.storage match {
+      case db: DbStorage => db
+      case _ => fail("Expected DbStorage")
+    }
+    val sv2Db = sv2ScanBackend.appState.storage match {
+      case db: DbStorage => db
+      case _ => fail("Expected DbStorage")
+    }
+    val sv1HistoryId = sv1ScanBackend.appState.eventStore.updateHistory.historyId
+    val sv2HistoryId = sv2ScanBackend.appState.eventStore.updateHistory.historyId
+    val sv1RewardsRefStore = sv1ScanBackend.appState.rewardsReferenceStore
+    val sv2RewardsRefStore = sv2ScanBackend.appState.rewardsReferenceStore
+    val sv1PruneTrigger = sv1ScanBackend.automation.trigger[PruneRewardAccountingTrigger]
+    val sv2PruneTrigger = sv2ScanBackend.automation.trigger[PruneRewardAccountingTrigger]
+
+    def hasUnprunedRewardAccountingDataBelow(
+        db: DbStorage,
+        historyId: Long,
+        upperExclusive: Long,
+    ): Boolean = {
+      implicit val closeContext: CloseContext = CloseContext(db)
+      db
+        .querySingle(
+          sql"""select
+                  exists(select 1 from app_activity_party_totals
+                         where history_id = $historyId and round_number < $upperExclusive)
+                  or exists(select 1 from app_activity_round_totals
+                         where history_id = $historyId and round_number < $upperExclusive)
+                  or exists(select 1 from app_reward_party_totals
+                         where history_id = $historyId and round_number < $upperExclusive)
+                  or exists(select 1 from app_reward_round_totals
+                         where history_id = $historyId and round_number < $upperExclusive)
+                  or exists(select 1 from app_reward_batch_hashes
+                         where history_id = $historyId and round_number < $upperExclusive)
+                  or exists(select 1 from app_reward_root_hashes
+                         where history_id = $historyId and round_number < $upperExclusive)
+             """.as[Boolean].headOption,
+          "test.hasUnprunedRewardAccountingDataBelow",
+        )
+        .value
+        .futureValueUS
+        .value
+    }
+
+    def hasUnprunedArchiveDataForRound(
+        store: ScanRewardsReferenceStore,
+        roundNumber: Long,
+    ): Boolean =
+      store.lookupArchivedAtForOpenMiningRound(roundNumber).futureValue.isDefined
+
+    // The trigger prunes at most one round per invocation, so it is run until it
+    // reports that there is nothing left to prune.
+    def pruneUntilNothingLeftToPrune(trigger: PruneRewardAccountingTrigger): Unit = {
+      @tailrec def go(runs: Int): Unit = {
+        runs should be < 30
+        if (trigger.runOnce().futureValue) go(runs + 1) else ()
+      }
+      go(0)
+    }
+
+    def confirmFullyPruned(
+        db: DbStorage,
+        historyId: Long,
+        store: ScanRewardsReferenceStore,
+        upperExclusive: Long,
+    ): Unit = {
+      hasUnprunedRewardAccountingDataBelow(db, historyId, upperExclusive) shouldBe false
+      hasUnprunedArchiveDataForRound(store, upperExclusive - 1) shouldBe false
+    }
+
+    def confirmPruningMetrics(
+        scan: LocalInstanceReference,
+        atLeastRound: Long,
+    ): Unit = {
+      def pruningMetricValue(name: String, labels: Map[String, String] = Map.empty): Long =
+        metricValue(scan, s"scan.reward_accounting_pruning.$name", labels)
+
+      eventually() {
+        pruningMetricValue("pruned_round") should be >= atLeastRound
+        forAll(
+          Seq(
+            "scan_rewards_reference_store_archived",
+            "app_activity_round_totals",
+            "app_reward_round_totals",
+          )
+        ) { table =>
+          pruningMetricValue("deleted_rows", Map("table" -> table)) should be > 0L
+        }
+      }
+    }
+
+    setTriggersWithin(triggersToPauseAtStart = Seq(sv1PruneTrigger, sv2PruneTrigger)) {
+      // Simulate SV2 scan ingestion lag and confirm that pruning does not happen
+      // until the ingestion has caught up.
+      val newLowestOpen = pauseScanVerdictIngestionWithin(sv2ScanBackend) {
+        advanceRoundsToNextRoundOpening
+        val newLowestOpen = oldestOpenRound
+
+        // We need the archived_at of newLowestOpen + 1 to be lower than the
+        // the active open round's openAt.
+        // So advancing by 3 rounds is a safe way to achieve this.
+        (1 to 3).foreach(_ => advanceRoundsToNextRoundOpening)
+
+        clue(s"sv1 retains rounds below $newLowestOpen while within the retention period") {
+          pruneUntilNothingLeftToPrune(sv1PruneTrigger)
+          hasUnprunedRewardAccountingDataBelow(sv1Db, sv1HistoryId, newLowestOpen) shouldBe true
+          hasUnprunedArchiveDataForRound(sv1RewardsRefStore, newLowestOpen - 1) shouldBe true
+        }
+
+        advanceTime(rewardAccountingRetentionPeriod.asJava)
+
+        clue(s"sv1 prunes rounds below $newLowestOpen once past the retention period") {
+          // Retried, as a round only becomes prunable once the reference store has
+          // ingested the archival of all of its reward-accounting contracts.
+          eventually() {
+            pruneUntilNothingLeftToPrune(sv1PruneTrigger)
+            confirmFullyPruned(sv1Db, sv1HistoryId, sv1RewardsRefStore, newLowestOpen)
+          }
+          confirmPruningMetrics(sv1ScanBackend, newLowestOpen - 1)
+        }
+
+        clue(
+          s"sv2 does not prune rounds below $newLowestOpen while its verdict ingestion is paused"
+        ) {
+          pruneUntilNothingLeftToPrune(sv2PruneTrigger)
+          hasUnprunedArchiveDataForRound(sv2RewardsRefStore, newLowestOpen - 1) shouldBe true
+        }
+
+        newLowestOpen
+      }
+
+      clue(s"sv2 eventually prunes data once verdict ingestion resumes") {
+        // Because of the delay in catchup of the verdict ingestion
+        // this can occasionally take longer than the default 20s eventually window
+        eventually(90.seconds) {
+          pruneUntilNothingLeftToPrune(sv2PruneTrigger)
+          confirmFullyPruned(sv2Db, sv2HistoryId, sv2RewardsRefStore, newLowestOpen)
+        }
+        confirmPruningMetrics(sv2ScanBackend, newLowestOpen - 1)
+      }
+    }
   }
 
   private def doTransfer(

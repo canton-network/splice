@@ -1209,50 +1209,6 @@ paths:
               schema:
                 "$ref": "#/components/schemas/GetMigrationIdResponse"
 
-  # TODO(DACH-NY/canton-network-internal#418) Move to SV app
-  /v0/synchronizer-identities/{domain_id_prefix}:
-    get:
-      tags: [internal, scan]
-      x-jvm-package: scan_soft_domain_migration_poc
-      operationId: "getSynchronizerIdentities"
-      parameters:
-        - name: "domain_id_prefix"
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/SynchronizerIdentities"
-        "404":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
-
-  # TODO(DACH-NY/canton-network-internal#418) Move to SV app
-  /v0/synchronizer-bootstrapping-transactions/{domain_id_prefix}:
-    get:
-      tags: [internal, scan]
-      x-jvm-package: scan_soft_domain_migration_poc
-      operationId: "getSynchronizerBootstrappingTransactions"
-      parameters:
-        - name: "domain_id_prefix"
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/SynchronizerBootstrappingTransactions"
-        "404":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/404"
-
   /v0/splice-instance-names:
     get:
       tags: [internal, scan]
@@ -3706,41 +3662,6 @@ components:
           type: integer
           format: int64
 
-    SynchronizerIdentities:
-      type: object
-      required:
-        - sequencer_id
-        - sequencer_identity_transactions
-        - mediator_id
-        - mediator_identity_transactions
-      properties:
-        sequencer_id:
-          type: string
-        sequencer_identity_transactions:
-          type: array
-          items:
-            type: string
-        mediator_id:
-          type: string
-        mediator_identity_transactions:
-          type: array
-          items:
-            type: string
-
-    SynchronizerBootstrappingTransactions:
-      type: object
-      required:
-        - domain_parameters
-        - sequencer_domain_state
-        - mediator_domain_state
-      properties:
-        domain_parameters:
-          type: string
-        sequencer_domain_state:
-          type: string
-        mediator_domain_state:
-          type: string
-
     GetMigrationInfoRequest:
       type: object
       required:
@@ -4353,8 +4274,15 @@ components:
     GetBulkObjectChecksumsRequest:
       type: object
       required:
+        - required_catchup_timestamp
         - object_keys
       properties:
+        required_catchup_timestamp:
+          description: |
+            If bulk storage is not caught up to this timestamp, the request must fail with a 404 error.
+            This is to differentiate between "The data is not available yet" and "The data is not available at all".
+          type: string
+          format: date-time
         object_keys:
           description: |
             The list of keys of the bulk storage objects for which checksums are requested.
@@ -4369,7 +4297,8 @@ components:
       properties:
         checksums:
           description: |
-            The list of checksums for the requested bulk storage objects (in the same order as the object_keys).
+            The list of (optional) checksums for the requested bulk storage objects (in the same order as the object_keys),
+            where `None` values indicate objects that do not exist.
           type: array
           items:
             type: object

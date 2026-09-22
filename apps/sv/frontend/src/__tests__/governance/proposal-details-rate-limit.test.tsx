@@ -12,9 +12,10 @@ import { server, svUrl } from '../setup/setup';
 
 // The SV app's per-client-IP rate limiter answers a burst of requests with a 429 and this body.
 const tooManyRequests = () =>
-  new HttpResponse('Too Many Requests: Server is busy, please try again later.', {
-    status: 429,
-  });
+  HttpResponse.json(
+    { error: 'Too Many Requests: Server is busy, please try again later.' },
+    { status: 429 }
+  );
 
 const contractId = voteRequests.dso_rules_vote_requests[0].contract_id;
 

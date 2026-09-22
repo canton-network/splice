@@ -28,6 +28,7 @@ import { InfoOutlined } from '@mui/icons-material';
 import dayjs from 'dayjs';
 import React, { useEffect, useMemo, useRef } from 'react';
 import { useInView } from 'react-intersection-observer';
+import { formatDatetimeWithOffset } from '../../utils/dateFormat';
 
 export type ProposalSortOrder = 'effectiveAtAsc' | 'effectiveAtDesc';
 
@@ -54,6 +55,9 @@ const getTotalVotes = (item: ProposalListingData): number =>
 
 const getEffectiveDate = (item: ProposalListingData): dayjs.Dayjs =>
   item.voteTakesEffect === 'Threshold' ? dayjs(0) : dayjs(item.voteTakesEffect);
+
+const formatEffectiveDate = (item: string | dayjs.ConfigType): string =>
+  item === 'Threshold' ? item : formatDatetimeWithOffset(item as dayjs.ConfigType);
 
 // Using stable sort: chain sorts from least to most significant criterion
 const sortProposals = (
@@ -435,14 +439,16 @@ const VoteRow: React.FC<VoteRowProps> = React.memo(props => {
             sx={governanceTableBodyCellSx}
             data-testid={`${uniqueId}-row-voting-threshold-deadline`}
           >
-            <TableBodyTypography>{votingThresholdDeadline}</TableBodyTypography>
+            <TableBodyTypography>
+              {formatDatetimeWithOffset(votingThresholdDeadline)}
+            </TableBodyTypography>
           </TableCell>
           <SubmittedByCell requester={requester} uniqueId={uniqueId} />
           <TableCell
             sx={governanceTableBodyCellSx}
             data-testid={`${uniqueId}-row-vote-takes-effect`}
           >
-            <TableBodyTypography>{voteTakesEffect}</TableBodyTypography>
+            <TableBodyTypography>{formatEffectiveDate(voteTakesEffect)}</TableBodyTypography>
           </TableCell>
         </>
       ) : (
@@ -451,7 +457,7 @@ const VoteRow: React.FC<VoteRowProps> = React.memo(props => {
             sx={governanceTableBodyCellSx}
             data-testid={`${uniqueId}-row-vote-takes-effect`}
           >
-            <TableBodyTypography>{voteTakesEffect}</TableBodyTypography>
+            <TableBodyTypography>{formatEffectiveDate(voteTakesEffect)}</TableBodyTypography>
           </TableCell>
           <SubmittedByCell requester={requester} uniqueId={uniqueId} />
           {showStatus && (

@@ -21,6 +21,7 @@ import com.digitalasset.canton.logging.{LogEntry, NamedLogging, SuppressingLogge
 import com.digitalasset.canton.protocol.{
   DynamicSynchronizerParameters,
   StaticSynchronizerParameters,
+  SynchronizerLimits,
 }
 import com.digitalasset.canton.telemetry.ConfiguredOpenTelemetry
 import com.digitalasset.canton.time.{NonNegativeFiniteDuration, WallClock}
@@ -656,6 +657,7 @@ object BaseTest {
       enableTransparencyChecks = false,
       protocolVersion = protocolVersion,
       serial = NonNegativeInt.zero,
+      synchronizerLimits = SynchronizerLimits.defaultFor(protocolVersion),
     )
 
   lazy val defaultMaxBytesToDecompress: MaxBytesToDecompress = MaxBytesToDecompress(

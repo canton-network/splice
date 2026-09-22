@@ -17,6 +17,14 @@ release-notes:: Upcoming
           ``/v0/dso`` endpoint. The scan is configured via the new ``.joinWithKeyOnboarding.sponsorScanUrl`` Helm value.
           SVs who set the ``.joinWithKeyOnboarding`` key config must set it before upgrading.
 
+    - Docker Compose
+
+        - The validator deployment can now also deploy the Canton Wallet Gateway and the Portfolio UI with the new ``-g`` flag of ``start.sh``.
+          This requires ``LEDGER_API_AUTH_AUDIENCE`` and ``VALIDATOR_AUTH_AUDIENCE`` in ``.env`` to be equal, and with ``-a`` an OAuth app for the Wallet Gateway UI set as ``WALLET_GATEWAY_UI_CLIENT_ID``,
+          see `Wallet Gateway and Splice Portfolio <https://docs.canton.network/global-synchronizer/deployment/validator-docker-compose#wallet-gateway-and-splice-portfolio>`__.
+
+          .. important:: From Splice 0.10.0 the Wallet Gateway will be deployed by default, so an ``.env`` with different audiences will no longer start. Enabling it with ``-g`` now prepares your deployment for that.
+
     - Helm
 
         - The deprecated `splice-domain` Helm chart has been removed.
@@ -25,3 +33,26 @@ release-notes:: Upcoming
 
         - Added a new public ``/v0/events/latest-record-time`` endpoint that returns the latest
           record time for which ``/v0/events`` will be able to return events.
+
+        - Added an automation to prune the DB tables having the temporary data used
+          by the verdict ingestion service and the traffic-based app reward calculations.
+
+          The default retention period is 1 week for this automation, after which the data will be removed from the DB.
+
+    - Validator App
+
+        - The minting-delegation reward collection for external parties now also collects
+          ``SvRewardCoupon`` rewards. An external party that is a beneficiary of SV rewards
+          will have those coupons minted on its behalf by its delegate, alongside the other
+          reward-coupon types.
+
+    - SV UI
+
+        - The ``AmuletRules_SetConfig`` proposal form can now set ``amuletSwitchOverTimes``.
+
+        - The ``DsoRulesConfig`` proposal form can now set ``svOperationsSwitchOverTimes``.
+
+    - Daml
+
+        - Fix a bug in MintingDelegation that wrongly allowed the delegate to share their own coupons within a minting delegation.
+

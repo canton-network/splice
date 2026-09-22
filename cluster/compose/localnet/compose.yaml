@@ -47,7 +47,7 @@ services:
       - "${TEST_PORT-$DB_PORT:}5432"
     entrypoint: /postgres-entrypoint.sh
     healthcheck:
-      test: "pg_isready -U ${DB_USER} -d postgres"
+      test: "pg_isready -h 127.0.0.1 -p 5432 -U ${DB_USER} -d postgres"
       interval: 10s
       timeout: 3s
       retries: 3

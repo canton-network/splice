@@ -31,10 +31,10 @@ lazy val `canton-ledger-api-value` = BuildCommon.`canton-ledger-api-value`
 lazy val `canton-ledger-json-api` = BuildCommon.`canton-ledger-json-api`
 lazy val `canton-sequencer-driver-api` = BuildCommon.`canton-sequencer-driver-api`
 lazy val `canton-community-reference-driver` = BuildCommon.`canton-community-reference-driver`
-lazy val `canton-observability-metrics-testing` = BuildCommon.`canton-observability-metrics-testing`
 lazy val `canton-traffic-enforcement-component` = BuildCommon.`canton-traffic-enforcement-component`
 lazy val `daml-lf-transaction-test-lib` = BuildCommon.`daml-lf-transaction-test-lib`
 lazy val `daml-lf-data-scalacheck` = BuildCommon.`daml-lf-data-scalacheck`
+lazy val `canton-fork-logback-test` = BuildCommon.`canton-fork-logback-test`
 
 lazy val `splice-wartremover-extension` = Wartremover.`splice-wartremover-extension`
 
@@ -135,7 +135,8 @@ lazy val root: Project = (project in file("."))
     `canton-community-synchronizer`,
     `canton-community-participant`,
     `canton-ledger-api-value`,
-    `canton-observability-metrics-testing`,
+    `canton-fork-community-common-test`,
+    `canton-fork-logback-test`,
     pulumi,
     `load-tester`,
     tools,
@@ -1188,13 +1189,24 @@ lazy val `lf-value-json` =
       CantonDependencies.excludeTranscodeConflictingDependencies,
     )
 
+lazy val `canton-fork-community-common-test` =
+  project
+    .in(file("canton-fork/community-common-test"))
+    .dependsOn(`canton-community-common`, `canton-community-testing`)
+    .settings(
+      scalacOptions --= JvmRulesPlugin.scalacOptionsToDisableForTests,
+      libraryDependencies += CantonDependencies.pekko_stream_testkit,
+      Headers.ApacheDAHeaderSettings,
+    )
+
 lazy val `apps-common` =
   project
     .in(file("apps/common"))
     .dependsOn(
       `canton-community-common`,
-      `canton-community-app` % "compile->compile;test->test",
-      `canton-community-testing` % "test->test",
+      `canton-community-app`,
+      `canton-community-testing` % Test,
+      `canton-fork-community-common-test` % Test,
       `lf-value-json`,
       `splice-wartremover-extension` % "compile->compile;test->test",
       // We include all DARs here to make sure they are available as resources.
@@ -2396,7 +2408,7 @@ lazy val `apps-app`: Project =
       `apps-sv` % "compile->compile;test->test",
       `apps-scan`,
       `apps-wallet`,
-      `canton-community-app` % "compile->compile;test->test",
+      `canton-community-app`,
       `canton-community-base`,
       `canton-community-integration-testing` % "test",
       `splice-amulet-test-daml` % "test",
@@ -2435,6 +2447,11 @@ lazy val `apps-app`: Project =
       assembly / assemblyJarName := "splice-node.jar",
       // include historic dars in the jar
       Compile / unmanagedResourceDirectories += { file(file(".").absolutePath) / "daml/dars" },
+      // scalafix walks classDirectory but is only ordered after compile, not copyResources, so a
+      // DAR copy can land mid-walk and delete the .tmp it stages through, failing scalafix with
+      // "Unable to load symbol table". Ordering compile after copyResources avoids the overlap.
+      Compile / compile := (Compile / compile).dependsOn(Compile / copyResources).value,
+      Test / compile := (Test / compile).dependsOn(Test / copyResources).value,
     )
 
 // https://tanin.nanakorn.com/technical/2018/09/10/parallelise-tests-in-sbt-on-circle-ci.html

@@ -4,15 +4,20 @@ import * as gcp from '@pulumi/gcp';
 import * as pulumi from '@pulumi/pulumi';
 import {
   CLOUD_ARMOR_POLICY_NAME,
+  CLOUD_ARMOR_WAF_RULE_MAX_PRIORITY,
+  CLOUD_ARMOR_WAF_RULE_MIN_PRIORITY,
   CLUSTER_BASENAME,
   CLUSTER_NAME,
   conditionalString,
   config,
+  GCP_PROJECT,
 } from '@canton-network/splice-pulumi-common';
 
 import { slackAlertNotificationChannel, slackToken } from './alertings';
 import {
+  type CloudArmorAlertConfig,
   type CloudArmorAlertsConfig,
+  type CloudArmorConfig,
   type GcpQuotaAlertsConfig,
   monitoringConfig,
   type NatPortUsageConfig,
@@ -32,6 +37,49 @@ function assertFilterLength(filter: string): string {
     );
   }
   return filter;
+}
+
+// Link to the Logs Explorer of the GCP project with the given logging query prefilled,
+// showing the last hour. Parentheses are encoded as well (encodeURIComponent leaves them
+// alone) so that the link survives being embedded in a markdown link.
+function gcpLogsQueryUrl(query: string): string {
+  const encodedQuery = encodeURIComponent(query.trim())
+    .replaceAll('(', '%28')
+    .replaceAll(')', '%29');
+  return `https://console.cloud.google.com/logs/query;query=${encodedQuery};duration=PT1H?project=${GCP_PROJECT}`;
+}
+
+// Markdown snippet for alert documentation: the logging query, ready to copy, plus a
+// link opening it in the Logs Explorer.
+function logsQueryDocumentation(intro: string, query: string): string {
+  return `${intro}\n\`\`\`\n${query.trim()}\n\`\`\`\n[Open in Logs Explorer](${gcpLogsQueryUrl(
+    query
+  )})`;
+}
+
+// The gateway is fronted by a regional external application load balancer, whose
+// request logs use `http_external_regional_lb_rule`; `http_load_balancer` is accepted
+// as well so the alerts keep working if the gateway ever becomes global.
+const lbResourceTypes = ['http_external_regional_lb_rule', 'http_load_balancer'];
+
+function lbResourceTypesLogFilter(): string {
+  return `resource.type=(${lbResourceTypes.map(t => `"${t}"`).join(' OR ')})`;
+}
+
+// Aggregation of a threshold based Cloud Armor alert: requests summed over windows of
+// `alignmentPeriodSeconds`, grouped by the given metric labels.
+function cloudArmorAggregations(
+  alertConfig: CloudArmorAlertConfig,
+  groupByFields: string[]
+): gcp.types.input.monitoring.AlertPolicyConditionConditionThresholdAggregation[] {
+  return [
+    {
+      alignmentPeriod: `${alertConfig.alignmentPeriodSeconds}s`,
+      crossSeriesReducer: 'REDUCE_SUM',
+      groupByFields,
+      perSeriesAligner: 'ALIGN_SUM',
+    },
+  ];
 }
 
 export function getNotificationChannel(
@@ -63,6 +111,25 @@ function getAlertStrategy(notificationChannel: gcp.monitoring.NotificationChanne
         renotifyInterval: `${4 * 60 * 60}s`, // 4 hours
       },
     ],
+  };
+}
+
+type AlertPolicyBaseArgs = Pick<
+  gcp.monitoring.AlertPolicyArgs,
+  'alertStrategy' | 'combiner' | 'notificationChannels' | 'userLabels'
+>;
+
+// Arguments shared by all our alert policies: same notification channel, same
+// strategy, and the cluster label that alert routing filters on.
+function getAlertPolicyBaseArgs(
+  notificationChannel: gcp.monitoring.NotificationChannel
+): AlertPolicyBaseArgs {
+  return {
+    alertStrategy: getAlertStrategy(notificationChannel),
+    combiner: 'OR',
+    notificationChannels: [notificationChannel.name],
+    userLabels: { cluster: CLUSTER_BASENAME },
+    // severity: 'SEVERITY_UNSPECIFIED', // "Policy Severity Level"
   };
 }
 
@@ -331,16 +398,7 @@ export function installGcpQuotaAlerts(
   const rollingWindowDuration = `${rollingWindowSeconds}s`;
   const retestWindowDuration = `${retestWindowSeconds}s`;
 
-  const baseArgs: Pick<
-    gcp.monitoring.AlertPolicyArgs,
-    'alertStrategy' | 'combiner' | 'notificationChannels' | 'userLabels'
-  > = {
-    alertStrategy: getAlertStrategy(notificationChannel),
-    combiner: 'OR',
-    notificationChannels: [notificationChannel.name],
-    userLabels: { cluster: CLUSTER_BASENAME },
-    // severity: 'SEVERITY_UNSPECIFIED', // "Policy Severity Level"
-  };
+  const baseArgs = getAlertPolicyBaseArgs(notificationChannel);
 
   new gcp.monitoring.AlertPolicy('quotaExceededAlert', {
     ...baseArgs,
@@ -450,15 +508,7 @@ export function installNatAlerts(
   notificationChannel: gcp.monitoring.NotificationChannel,
   natConfig: NatPortUsageConfig
 ): void {
-  const baseArgs: Pick<
-    gcp.monitoring.AlertPolicyArgs,
-    'alertStrategy' | 'combiner' | 'notificationChannels' | 'userLabels'
-  > = {
-    alertStrategy: getAlertStrategy(notificationChannel),
-    combiner: 'OR',
-    notificationChannels: [notificationChannel.name],
-    userLabels: { cluster: CLUSTER_BASENAME },
-  };
+  const baseArgs = getAlertPolicyBaseArgs(notificationChannel);
 
   const prometheusDefaults = {
     duration: '0s',
@@ -564,21 +614,15 @@ export function installCloudSqlTxIdUtilizationAlert(
 export function installCloudArmorAlerts(
   notificationChannel: gcp.monitoring.NotificationChannel,
   cloudArmorAlertsConfig: CloudArmorAlertsConfig,
-  hasPreviewOnlyRules: boolean
+  cloudArmorConfig: CloudArmorConfig
 ): void {
-  const { deniedRequestsThreshold } = cloudArmorAlertsConfig;
+  const { deniedRequests, wafRejections } = cloudArmorAlertsConfig;
+  const hasPreviewOnlyRules =
+    cloudArmorConfig.allRulesPreviewOnly ||
+    (cloudArmorConfig.wafRules.enabled && cloudArmorConfig.wafRules.previewOnly);
   // Scoped to the policy of this cluster; other clusters in the same GCP project
   // report to the same metric.
   const policyFilter = `resource.type="network_security_policy" AND resource.label.policy_name="${CLOUD_ARMOR_POLICY_NAME}"`;
-
-  const aggregations = [
-    {
-      alignmentPeriod: '300s',
-      crossSeriesReducer: 'REDUCE_SUM',
-      groupByFields: ['metric.label.backend_target_name'],
-      perSeriesAligner: 'ALIGN_SUM',
-    },
-  ];
 
   const deniedCondition = (
     displayName: string,
@@ -586,13 +630,13 @@ export function installCloudArmorAlerts(
   ): gcp.types.input.monitoring.AlertPolicyCondition => ({
     displayName,
     conditionThreshold: {
-      aggregations,
+      aggregations: cloudArmorAggregations(deniedRequests, ['metric.label.backend_target_name']),
       comparison: 'COMPARISON_GT',
-      duration: '0s',
+      duration: `${deniedRequests.durationSeconds}s`,
       filter: assertFilterLength(
         `${policyFilter} AND metric.type="${metricType}" AND metric.label.blocked="true"`
       ),
-      thresholdValue: deniedRequestsThreshold,
+      thresholdValue: deniedRequests.threshold,
       trigger: {
         count: 1,
       },
@@ -602,18 +646,27 @@ export function installCloudArmorAlerts(
   const enforcedDisplayName = `Cloud Armor denied requests in ${CLUSTER_BASENAME}`;
   const previewedDisplayName = `Cloud Armor would deny requests in ${CLUSTER_BASENAME}`;
 
+  const baseArgs = getAlertPolicyBaseArgs(notificationChannel);
+
+  // The metrics only carry the policy name, the rule that matched is only in the load
+  // balancer request logs (see installCloudArmorWafAlert for the resource types).
+  const deniedByPolicy = (field: string) =>
+    `(jsonPayload.${field}.name="${CLOUD_ARMOR_POLICY_NAME}" AND jsonPayload.${field}.outcome="DENY")`;
+  const deniedRequestsLogsQuery = `${lbResourceTypesLogFilter()}
+(${deniedByPolicy('enforcedSecurityPolicy')} OR ${deniedByPolicy('previewSecurityPolicy')})`;
+
   new gcp.monitoring.AlertPolicy('cloudArmorDeniedRequestsAlert', {
-    alertStrategy: getAlertStrategy(notificationChannel),
-    combiner: 'OR',
-    notificationChannels: [notificationChannel.name],
-    userLabels: { cluster: CLUSTER_BASENAME },
+    ...baseArgs,
     displayName: enforcedDisplayName,
     documentation: {
       subject: enforcedDisplayName,
       content: [
         `Requests to **${CLUSTER_BASENAME}** were denied by the Cloud Armor security policy \`${CLOUD_ARMOR_POLICY_NAME}\`.`,
         'This is either an abusive client being blocked at the GCP edge, or legitimate traffic that our rules (WAF signatures, IP whitelist, per endpoint throttles, default deny) reject by mistake.',
-        'Check the Cloud Armor request logs of the load balancer to see which rule matched.',
+        logsQueryDocumentation(
+          'Check the denied requests in the load balancer logs with the following filter, the `enforcedSecurityPolicy` / `previewSecurityPolicy` fields tell which rule matched:',
+          deniedRequestsLogsQuery
+        ),
       ].join('\n\n'),
       mimeType: 'text/markdown',
     },
@@ -631,6 +684,114 @@ export function installCloudArmorAlerts(
             ),
           ]
         : []),
+    ],
+  });
+
+  // The Cloud Armor metrics only expose whether a request was blocked, not which rule
+  // blocked it, so a WAF specific alert has to go through the load balancer request logs.
+  if (cloudArmorConfig.wafRules.enabled && cloudArmorConfig.logging.enabled) {
+    installCloudArmorWafAlert(baseArgs, wafRejections);
+  }
+}
+
+/**
+ * Alerts on requests rejected by one of the preconfigured (OWASP CRS based) WAF rules,
+ * as opposed to the IP whitelist, the per endpoint throttles or the default deny rule.
+ *
+ * Requires the backend request logging of the load balancer to be enabled
+ * (`cloudArmor.logging.enabled`), otherwise Cloud Armor decisions never reach Cloud
+ * Logging.
+ *
+ * @param alertConfig threshold and windows of the alert; a threshold of 0 means a single
+ * match already alerts.
+ */
+function installCloudArmorWafAlert(
+  baseArgs: AlertPolicyBaseArgs,
+  alertConfig: CloudArmorAlertConfig
+): void {
+  // Rules in preview mode are reported under previewSecurityPolicy and do not actually
+  // reject anything; for the WAF rules that previewed signal is exactly the attack
+  // detection we want, so both are matched.
+  const matchedWafRule = (field: string) =>
+    [
+      `jsonPayload.${field}.name="${CLOUD_ARMOR_POLICY_NAME}"`,
+      `jsonPayload.${field}.outcome="DENY"`,
+      `jsonPayload.${field}.priority>=${CLOUD_ARMOR_WAF_RULE_MIN_PRIORITY}`,
+      `jsonPayload.${field}.priority<${CLOUD_ARMOR_WAF_RULE_MAX_PRIORITY}`,
+    ].join(' AND ');
+
+  // The security policy name is cluster specific, so this is already scoped to this
+  // cluster even though load balancer logs carry no cluster label.
+  const filter = ensureTrailingNewline(`${lbResourceTypesLogFilter()}
+((${matchedWafRule('enforcedSecurityPolicy')}) OR (${matchedWafRule('previewSecurityPolicy')}))`);
+
+  const wafRejectionsMetric = new gcp.logging.Metric('cloud_armor_waf_rejections', {
+    name: `cloud_armor_waf_rejections_${CLUSTER_BASENAME}`,
+    description: 'Requests matching a Cloud Armor WAF (OWASP CRS) rule',
+    filter,
+    // Only the rule priorities are kept as labels: they have a low cardinality (one
+    // value per WAF rule) and identify the matching signature group, while request
+    // details would blow up the metric cardinality and have to be looked up in the logs.
+    labelExtractors: {
+      enforced_rule_priority: 'EXTRACT(jsonPayload.enforcedSecurityPolicy.priority)',
+      previewed_rule_priority: 'EXTRACT(jsonPayload.previewSecurityPolicy.priority)',
+    },
+    metricDescriptor: {
+      labels: [
+        {
+          description: 'Priority of the enforced Cloud Armor rule that matched',
+          key: 'enforced_rule_priority',
+        },
+        {
+          description: 'Priority of the previewed Cloud Armor rule that matched',
+          key: 'previewed_rule_priority',
+        },
+      ],
+      metricKind: 'DELTA',
+      valueType: 'INT64',
+    },
+  });
+
+  const displayName = `Cloud Armor WAF rule rejections in ${CLUSTER_BASENAME}`;
+  new gcp.monitoring.AlertPolicy('cloudArmorWafRejectionsAlert', {
+    ...baseArgs,
+    displayName,
+    documentation: {
+      subject: displayName,
+      content: [
+        `Requests to **${CLUSTER_BASENAME}** matched a WAF (OWASP CRS) rule of the Cloud Armor security policy \`${CLOUD_ARMOR_POLICY_NAME}\`.`,
+        'Unlike the generic Cloud Armor alert, this one fires only on attack signature matches (SQL injection, XSS, RCE, ...), not on IP whitelist, throttle or default deny rejections. WAF rules in preview mode are included: they only log, they do not reject.',
+        'Rule priority: `${metric.label.enforced_rule_priority}` enforced / `${metric.label.previewed_rule_priority}` previewed.',
+        logsQueryDocumentation(
+          'Check the matching requests in the load balancer logs with the following filter, the `preconfiguredExprIds` field tells an actual attack apart from a false positive on legitimate traffic:',
+          filter
+        ),
+      ].join('\n\n'),
+      mimeType: 'text/markdown',
+    },
+    conditions: [
+      {
+        displayName,
+        conditionThreshold: {
+          aggregations: cloudArmorAggregations(alertConfig, [
+            'metric.label.enforced_rule_priority',
+            'metric.label.previewed_rule_priority',
+          ]),
+          comparison: 'COMPARISON_GT',
+          duration: `${alertConfig.durationSeconds}s`,
+          // A monitoring filter must restrict resource.type, even though the log based
+          // metric is only ever written from the load balancer request logs.
+          filter: pulumi.interpolate`resource.type = one_of(${lbResourceTypes
+            .map(t => `"${t}"`)
+            .join(', ')}) AND metric.type = "logging.googleapis.com/user/${
+            wafRejectionsMetric.name
+          }"`,
+          thresholdValue: alertConfig.threshold,
+          trigger: {
+            count: 1,
+          },
+        },
+      },
     ],
   });
 }

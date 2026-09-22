@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.integration.tests
 
+import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
 import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.topology.transaction.ParticipantPermission
@@ -26,7 +27,7 @@ import org.slf4j.event.Level
 import java.time.Duration
 import scala.concurrent.duration.*
 
-class AutoIgnoreUnresponsivePartiesIntegrationTest
+abstract class AutoIgnoreUnresponsivePartiesIntegrationTestBase
     extends IntegrationTest
     with WalletTestUtil
     with TimeTestUtil
@@ -34,6 +35,8 @@ class AutoIgnoreUnresponsivePartiesIntegrationTest
 
   override protected def runTokenStandardCliSanityCheck: Boolean = false
   override protected def runUpdateHistorySanityCheck: Boolean = false
+
+  protected val enablePersistedUnavailableParties: Boolean
 
   override def environmentDefinition: SpliceEnvironmentDefinition =
     EnvironmentDefinition
@@ -65,50 +68,32 @@ class AutoIgnoreUnresponsivePartiesIntegrationTest
           _.copy(delegatelessAutomationExpiredAmuletBatchSize = 2)
         )(c)
       )
+      .addConfigTransforms((_, c) =>
+        ConfigTransforms.updateAllSvAppConfigs_(conf =>
+          conf.copy(parameters =
+            conf.parameters.copy(enabledFeatures =
+              conf.parameters.enabledFeatures
+                .copy(enablePersistedUnavailableParties = enablePersistedUnavailableParties)
+            )
+          )
+        )(c)
+      )
 
   "Expiry triggers auto-ignore parties whose participant is disconnected (MEDIATOR_SAYS_TX_TIMED_OUT)" in {
     implicit env =>
       val synchronizerId = decentralizedSynchronizerId
 
       val aliceUserId = aliceWalletClient.config.ledgerApiUser
-      val aliceParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
+      val aliceParty = onboardWalletUserHostedAlsoOn(
+        aliceWalletClient,
+        aliceValidatorBackend,
+        sv1Backend.participantClientWithAdminToken,
+        synchronizerId,
+      )
       val sv1ParticipantId = sv1Backend.participantClientWithAdminToken.id
       val aliceParticipantId = aliceValidatorBackend.participantClient.id
       val sv1Participant = sv1Backend.participantClientWithAdminToken
       val aliceParticipant = aliceValidatorBackend.participantClient
-
-      clue("Wait for alice's PartyToParticipant mapping to be visible on sv1") {
-        eventually() {
-          sv1Participant.topology.party_to_participant_mappings
-            .list(synchronizerId, filterParty = aliceParty.toProtoPrimitive) should not be empty
-        }
-      }
-
-      // Multi-host alice on sv1 (threshold=1) to be able to create amulets
-      actAndCheck(
-        "Multi-host alice on sv1Participant",
-        eventuallySucceeds() {
-          aliceParticipant.topology.party_to_participant_mappings.propose_delta(
-            party = aliceParty,
-            adds = Seq((sv1ParticipantId, ParticipantPermission.Submission)),
-            store = synchronizerId,
-          )
-          sv1Participant.topology.party_to_participant_mappings.propose_delta(
-            party = aliceParty,
-            adds = Seq((sv1ParticipantId, ParticipantPermission.Submission)),
-            store = synchronizerId,
-          )
-        },
-      )(
-        "alice is fully authorized on both participants",
-        _ => {
-          val hosts = sv1Participant.topology.party_to_participant_mappings
-            .list(synchronizerId, filterParty = aliceParty.toProtoPrimitive)
-            .flatMap(_.item.participants)
-          hosts.exists(h => h.participantId == sv1ParticipantId && !h.onboarding) shouldBe true
-          hosts.exists(h => h.participantId == aliceParticipantId && !h.onboarding) shouldBe true
-        },
-      )
 
       val numAmulets = 2
       val amuletAmount = BigDecimal(123.0)
@@ -191,7 +176,9 @@ class AutoIgnoreUnresponsivePartiesIntegrationTest
       )(
         "Alice is added to the ignored parties store after mediator timeout",
         _ => {
-          sv1Backend.dsoDelegateBasedAutomation.unavailablePartiesStore.getAll should contain(
+          sv1Backend.dsoDelegateBasedAutomation.unavailablePartiesStore
+            .listParties()(TraceContext.empty)
+            .futureValue should contain(
             aliceParty
           )
         },
@@ -201,5 +188,32 @@ class AutoIgnoreUnresponsivePartiesIntegrationTest
       clue("Reconnect alice's participant") {
         aliceValidatorBackend.participantClient.synchronizers.reconnect_all()
       }
+  }
+}
+
+class AutoIgnoreUnresponsivePartiesInMemoryIntegrationTest
+    extends AutoIgnoreUnresponsivePartiesIntegrationTestBase {
+  override protected val enablePersistedUnavailableParties: Boolean = false
+
+  "Ignored parties don't survive an SV app restart" in { implicit env =>
+    sv1Backend.stop()
+    sv1Backend.startSync()
+    sv1Backend.dsoDelegateBasedAutomation.unavailablePartiesStore
+      .listParties()(TraceContext.empty)
+      .futureValue shouldBe empty
+  }
+}
+
+class AutoIgnoreUnresponsivePartiesWithPersistenceIntegrationTest
+    extends AutoIgnoreUnresponsivePartiesIntegrationTestBase {
+
+  override protected val enablePersistedUnavailableParties: Boolean = true
+
+  "Ignored parties survive an SV app restart" in { implicit env =>
+    sv1Backend.stop()
+    sv1Backend.startSync()
+    sv1Backend.dsoDelegateBasedAutomation.unavailablePartiesStore
+      .listParties()(TraceContext.empty)
+      .futureValue should not be empty
   }
 }

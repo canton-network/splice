@@ -14,7 +14,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import ExpireRewardCouponV2Trigger.{Coupon, CouponCid, Task, getStakeholders}
 import org.lfdecentralizedtrust.splice.environment.{DarResources, PackageIdResolver}
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
-import org.lfdecentralizedtrust.splice.store.IgnoredPartiesStore
+import org.lfdecentralizedtrust.splice.store.UnavailablePartiesStore
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 import org.lfdecentralizedtrust.splice.sv.util.ContractStakeholders
 
@@ -25,7 +25,7 @@ class ExpireRewardCouponV2Trigger(
     override protected val svConfig: SvAppBackendConfig,
     override protected val context: TriggerContext,
     override protected val svTaskContext: SvTaskBasedTrigger.Context,
-    override protected val ignoredPartiesStore: IgnoredPartiesStore,
+    override protected val unavailablePartiesStore: UnavailablePartiesStore,
 )(implicit
     override val ec: ExecutionContext,
     mat: Materializer,
@@ -40,7 +40,7 @@ class ExpireRewardCouponV2Trigger(
       getStakeholders,
     )
     with SvTaskBasedTrigger[Task]
-    with IgnoredUnavailablePartiesGuard {
+    with UnavailablePartiesGuard {
   private val store = svTaskContext.dsoStore
 
   override def completeTaskAsDsoDelegate(task: Task, controller: String)(implicit

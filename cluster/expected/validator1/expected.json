@@ -597,6 +597,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -674,6 +675,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -863,14 +868,14 @@
         },
         "config": {
           "amulet": {
-            "registry": "https://scan.sv-2.mock.global.canton.network.digitalasset.com/registry/",
+            "registry": "https://scan.sv-2.mock.global.canton.network.digitalasset.com",
             "validatorUrl": "https://wallet.validator1.mock.global.canton.network.digitalasset.com/api/validator"
           },
           "token": {
             "registries": [
               {
                 "name": "Amulet registry",
-                "url": "https://scan.sv-2.mock.global.canton.network.digitalasset.com/registry/"
+                "url": "https://scan.sv-2.mock.global.canton.network.digitalasset.com"
               }
             ],
             "validatorUrl": "https://wallet.validator1.mock.global.canton.network.digitalasset.com/api/validator"
@@ -884,7 +889,7 @@
           }
         ]
       },
-      "version": "1.11.0"
+      "version": "1.12.2"
     },
     "name": "validator1-portfolio",
     "provider": "",
@@ -980,6 +985,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -1057,6 +1063,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -1373,7 +1383,7 @@
           }
         ]
       },
-      "version": "1.10.0"
+      "version": "1.11.1"
     },
     "name": "validator1-wallet-gateway",
     "provider": "",
