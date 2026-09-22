@@ -7,10 +7,6 @@ import { Contract } from '@canton-network/splice-common-frontend-utils';
 import { ActionRequiringConfirmation } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
 import { VoteRequest } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules/module';
 
-import { DecoderError } from '@mojotech/json-type-validation/dist/types/decoder';
-
-export type ActionFromForm = ActionRequiringConfirmation | { formError: DecoderError };
-
 /** function used to parse the keys from jsondiffpatch.Delta, which has the form
  * {
  *   key1: {
@@ -99,7 +95,7 @@ function parseDiffs(
 }
 
 export function hasConflictingFields(
-  action?: ActionFromForm,
+  action?: ActionRequiringConfirmation,
   voteRequests?: Contract<VoteRequest>[]
 ): { hasConflict: boolean; intersection: string[] } {
   if (!action) {
@@ -108,15 +104,12 @@ export function hasConflictingFields(
   if (!voteRequests) {
     return { hasConflict: false, intersection: [] };
   }
-  const currentDiffs = parseDiffs(
-    action as ActionRequiringConfirmation,
-    action as ActionRequiringConfirmation
-  );
+  const currentDiffs = parseDiffs(action, action);
   if (!currentDiffs) {
     return { hasConflict: false, intersection: [] };
   }
   const voteRequestsDiffs: string[] = voteRequests
-    .flatMap(r => parseDiffs(r.payload.action, action as ActionRequiringConfirmation))
+    .flatMap(r => parseDiffs(r.payload.action, action))
     .filter((e): e is string => e !== null);
   if (voteRequestsDiffs.length === 0) {
     return { hasConflict: false, intersection: [] };
