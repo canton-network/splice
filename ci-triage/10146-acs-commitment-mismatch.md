@@ -507,9 +507,9 @@ Inferred:
   Alice's processor re-buckets them under counter-participant sv1 at the PartyHostingChange; sv1 has
   nothing to re-bucket. The contract-level content of the digests is not logged, so this is the only
   candidate consistent with all of the above rather than a direct observation.
-- Why only since 2026-09-10 although the test construct dates from 2026-08-06: the old processor (Canton
-  3.5) fixed counter-participant sets at ACS-change time and did not re-evaluate them at hosting
-  changes; the new one does. Not verified against Canton source (vendored tree is too old).
+- Why only since 2026-09-10 although the test construct dates from 2026-06-01: NOT explained by the new
+  processor. See the 2026-09-21 correction at the end of this packet: the old processor also resolves
+  hosting at commitment time, and the new pipeline had been on main since 2026-08-21 with no hit.
 - The "first partial period" pattern of the earlier notes is a by-product of two things, not a cause:
   the period start is the sender's last request before the tick, and CI shards rarely survive to a
   second tick. There is no evidence that a second period would re-converge; with this mechanism it would
@@ -567,3 +567,49 @@ party already owned alice-only contracts, so the (sv1, alice) shared-ACS digests
 sv3's and bob's commitments for the same tick matched. The WARN is rare only because commitment sends are
 randomly delayed by up to 27 min and re-drawn at every reconnect. Duplicate of 10129 / run 34523566111.
 Fix the tests (host before onboarding, or replicate the party properly); do not widen the ignore.
+
+## Correction 2026-09-21: the "new processor re-buckets, the old one did not" explanation is withdrawn
+
+Prompted by review feedback on PR 7435 ("the old commitment processor also considered multi-hosting in the same
+way"). Checked, in order:
+
+```
+git log cn/main --format='%h %ad %s' --date=short -S'Multi-host alice' -- apps/app/src/test/scala/org/lfdecentralizedtrust/splice/integration/tests/ExpiryWithMinimalVettedPackagesIntegrationTest.scala apps/app/src/test/scala/org/lfdecentralizedtrust/splice/integration/tests/AutoIgnoreUnresponsivePartiesIntegrationTest.scala
+git log cn/main --format='%h %ad %s' --date=short --since=2026-08-15 --until=2026-09-12 -- nix/canton-sources.json
+for v in 20260818.20026 20260907.20230 20260909.20244 20260916.20284; do <count classes named ReceivedAcsCommitmentMatcher and classes containing PartyHostingChange in canton-open-source-3.6.0-snapshot.$v jar>; done
+sed -n '3142,3159p' canton/community/participant/src/main/scala/com/digitalasset/canton/participant/pruning/AcsCommitmentProcessor.scala   # vendored 3.5.7-SNAPSHOT
+<jar string search for CommitmentSendDelay / maxCommitmentSendDelay in 3.5.17 and 3.6.0-snapshot.20260916>
+```
+```
+70105a3d9b 2026-06-01 Auto-ignore parties vetting unsupported and ignored amulet versions (#5747)      (expiry base multi-host)
+ea94649e10 2026-06-03 Auto-ignore unresponsive parties in amulet-base expiry triggers (#5796)          (AutoIgnore multi-host)
+a7adcc5c0d 2026-08-21 Upgrade Canton to 3.6.0-snapshot.20260818.20026.0.v41046c3b (#6859)             (first 3.6 pin on main)
+3.6.0-snapshot.20260818.20026: ReceivedAcsCommitmentMatcher classes=9  PartyHostingChange-in-commitment-classes=6
+3.6.0-snapshot.20260907.20230: ReceivedAcsCommitmentMatcher classes=11 PartyHostingChange-in-commitment-classes=6
+3.6.0-snapshot.20260909.20244: ReceivedAcsCommitmentMatcher classes=11 PartyHostingChange-in-commitment-classes=6
+3.6.0-snapshot.20260916.20284: ReceivedAcsCommitmentMatcher classes=11 PartyHostingChange-in-commitment-classes=6
+old processor (vendored 3.5.7-SNAPSHOT, stakeholderCommitmentsPerParticipant): snapshotForPartyLookup.activeParticipantsOfParties(allParties) at the tick timestamp
+CommitmentSendDelay / maxCommitmentSendDelay present in 3.5.17 as well as 3.6
+```
+
+What this establishes:
+- The old processor maps stakeholder sets to hosting participants with the topology snapshot at the tick
+  timestamp (`AcsCommitmentProcessor.scala:3142-3159`, vendored 3.5.7-SNAPSHOT), so after the hosting change it
+  too would count alice-only contracts toward sv1. The reviewer's premise is right.
+- The redesigned pipeline (`ReceivedAcsCommitmentMatcher`, `PartyHostingChange`) is in every 3.6 snapshot main
+  has run since 2026-08-21, three weeks before the first hit on 2026-09-10. "3.6 arrived" does not explain the date.
+- The randomized send delay exists in 3.5.17 too; it is not what changed.
+- Splice-side, the 2026-09-03 config cleanup (#7035) removed only deprecated topology keys; no commitment
+  setting, ignore pattern or test file changed around 2026-09-09.
+- Between the 20260907 and 20260909.20244 snapshots 60 commitment classes changed (ReceivedAcsCommitmentMatcher,
+  RunningDigestProcessorImpl, BaseDigestProcessor, ConsistencyCheckProcessor among them), and 3.6 carries a
+  `disableLegacyAcsCommitmentProcessor` switch whose value the runs on 20260910 and 20260916 log as "(Old) ACS
+  commitment processor is disabled". Whether the legacy processor was still active before 2026-09-09, or the
+  matcher's behaviour changed in that snapshot, is not determinable from jars and logs here.
+
+Standing conclusion: the ACS divergence is real and was created by the test construct since June; what changed
+around 2026-09-09 is detection, on the Canton side, and the exact change is unidentified. The fix (PR 7435) stands
+on the divergence, not on the detection story. Two ways to settle the rest: the Canton changelog between the
+20260907 and 20260909 snapshots for the commitment matcher and the legacy-processor default, or one run of
+ExpiryWithIgnoredAmuletVersionIntegrationTest on 3.5.18 with a one-minute reconciliation interval.
+
