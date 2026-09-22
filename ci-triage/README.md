@@ -1,5 +1,7 @@
 # CI failure triage - 2026-09-15
 
+Handover and current status of every fix branch: `HANDOVER.md` (2026-09-22).
+
 Evidence packets for cn-test-failures refs. Each packet is reproducible: every command was run
 against the run's downloaded artifacts and the pasted output is what it produced (long hashes trimmed
 by a sed/cut baked into the command). Artifacts are streamed gzipped with `zcat` (no decompression).
