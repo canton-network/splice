@@ -83,6 +83,13 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
 - 10147 `[UNEXPECTED] State transition ... Connecting (unchanged)` WARN at standalone shutdown (Canton log level).
 - 10121 / 10142 SummarizingMiningRoundTrigger ERROR on a retryable "totals not yet computed"
   (`ray/fix-summarizing-round-log-noise`).
+- 10084 re-triaged 2026-09-22: `IndexerState.ensureNoProcessingForSynchronizer` (reconnect path) retries at 200 ms
+  forever with no `retryLogLevel`; `RetryWithDelay` promotes Forever retries to WARN after `complainAfterRetries = 10`
+  (private constant, identical in 3.6 snapshots 20260910 and 20260916). Confirming grep: `Ensure no processing for
+  synchronizer` INFO lines for 2 s then WARN pairs, then `Computing starting points` on the same participant. No config
+  key reaches it; fix is a Canton one-liner (`retryLogLevel = Some(Level.INFO)` on that Pause). 1 hit in 59 failed main
+  runs 09-10..09-21.
+
 
 ## H. Evidence loss
 - `ResetTopologyStatePlugin` `sys.exit(1)` in teardown (10137, 10139): no report, checkErrors skipped, later
