@@ -4226,6 +4226,34 @@
     "id": "",
     "inputs": {
       "action": "throttle",
+      "description": "Per source IP throttle rule for all svApp API endpoints",
+      "match": {
+        "expr": {
+          "expression": "request.path.lower().urlDecode().startsWith(R\"/api/sv\") && request.headers['host'].lower().matches(R\"^(?:sv)\\.[\\w-]+\\.(?:mock\\.network\\.canton\\.global|mock\\.global\\.canton\\.network\\.digitalasset\\.com)(?::[0-9]+)?$\")"
+        }
+      },
+      "preview": true,
+      "priority": 100000210,
+      "rateLimitOptions": {
+        "conformAction": "allow",
+        "enforceOnKey": "IP",
+        "exceedAction": "deny(429)",
+        "rateLimitThreshold": {
+          "count": 500,
+          "intervalSec": 60
+        }
+      },
+      "securityPolicy": "waf-whitelist-throttle-ban-mock"
+    },
+    "name": "throttle-all-endpoints-per-ip-svApp",
+    "provider": "",
+    "type": "gcp:compute/regionSecurityPolicyRule:RegionSecurityPolicyRule"
+  },
+  {
+    "custom": true,
+    "id": "",
+    "inputs": {
+      "action": "throttle",
       "description": "Per source IP throttle rule for all tokenRegistry API endpoints",
       "match": {
         "expr": {
@@ -4233,7 +4261,7 @@
         }
       },
       "preview": true,
-      "priority": 100000210,
+      "priority": 100000310,
       "rateLimitOptions": {
         "conformAction": "allow",
         "enforceOnKey": "IP",
