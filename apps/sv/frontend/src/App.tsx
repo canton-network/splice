@@ -96,7 +96,7 @@ const App: React.FC = () => {
           <Route path="validator-onboarding" element={<ValidatorOnboarding />} />
           <Route path="amulet-price" element={<AmuletPrice />} />
           <Route path="delegate-election" element={<DelegateElection />} />
-          <Route path="votes" element={<Navigate to="/governance" replace />} />
+          <Route path="votes" element={<Navigate to="/governance/proposals" replace />} />
 
           <Route path="governance" element={<Navigate to="/governance/proposals" replace />} />
           <Route path="governance/proposals" element={<Governance />} />

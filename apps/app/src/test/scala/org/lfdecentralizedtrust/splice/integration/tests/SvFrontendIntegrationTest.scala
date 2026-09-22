@@ -18,7 +18,6 @@ import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestC
 import org.lfdecentralizedtrust.splice.store.VoteResultsFilters
 import org.lfdecentralizedtrust.splice.util.*
 import org.openqa.selenium.By
-import org.openqa.selenium.support.ui.Select
 import org.slf4j.event.Level
 
 import scala.jdk.CollectionConverters.*
@@ -846,26 +845,6 @@ class SvFrontendIntegrationTest
         )
       )
     voteRequest
-  }
-
-  def changeAction(actionName: String)(implicit webDriver: WebDriverType) = {
-    eventually() {
-      find(
-        id("display-actions")
-      ) should not be empty withClue "Create Vote Request 'Action' dropdown"
-    }
-    val dropDownAction = new Select(webDriver.findElement(By.id("display-actions")))
-    val existingAction: String = dropDownAction.getFirstSelectedOption().getAttribute("value")
-    dropDownAction.selectByValue(actionName)
-
-    if (actionName != "SRARC_OffboardSv" && existingAction != actionName) {
-      logger.debug(
-        s"Changed action from $existingAction to $actionName, waiting for confirmation dialog"
-      )
-      waitForQuery(id("action-change-dialog-proceed"))
-      val proceedButton = webDriver.findElement(By.id("action-change-dialog-proceed"))
-      proceedButton.click()
-    }
   }
 
   def selectMuiOptionByValue(dropdownId: String, optionValue: String)(implicit
