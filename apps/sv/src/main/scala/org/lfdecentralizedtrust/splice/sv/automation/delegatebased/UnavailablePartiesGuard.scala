@@ -3,13 +3,11 @@
 
 package org.lfdecentralizedtrust.splice.sv.automation.delegatebased
 
-import com.digitalasset.base.error.utils.ErrorDetails
 import com.digitalasset.canton.logging.NamedLogging
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.tracing.TraceContext
 import io.grpc.StatusRuntimeException
-import io.grpc.protobuf.StatusProto
-import org.lfdecentralizedtrust.splice.automation.{TaskOutcome, TaskSuccess}
+import org.lfdecentralizedtrust.splice.automation.{BatchSplitting, TaskOutcome, TaskSuccess}
 import org.lfdecentralizedtrust.splice.store.UnavailablePartiesStore
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
 import org.lfdecentralizedtrust.splice.util.UnresponsiveParties
@@ -20,6 +18,41 @@ trait UnavailablePartiesGuard extends NamedLogging {
   protected def svConfig: SvAppBackendConfig
   protected def unavailablePartiesStore: UnavailablePartiesStore
   protected def svTaskContext: SvTaskBasedTrigger.Context
+
+  private def protectedParties: Set[PartyId] =
+    svConfig.protectedPartyIds + svTaskContext.dsoStore.key.dsoParty
+
+  /** Submits the given batch, isolating vetting failures by recursively splitting the batch
+    * and marking the parties on the lowest Amulet version of the offending contract
+    * as unavailable.
+    * If the feature is disabled, the batch is submitted as a whole.
+    */
+  protected def submitBatchWithSplitting[C](
+      contracts: Seq[C],
+      parties: C => Set[PartyId],
+  )(submit: Seq[C] => Future[Unit])(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[TaskOutcome] =
+    if (!svConfig.parameters.enabledFeatures.enableVettingFailureBatchSplitting) {
+      submit(contracts).map(_ => TaskSuccess(s"submitted batch of ${contracts.size} contracts"))
+    } else {
+      new BatchSplitting(
+        party =>
+          traceContext =>
+            svTaskContext.vettingLookupService.lookupVettingState(
+              party,
+              PackageIdResolver.Package.SpliceAmulet,
+            )(
+              traceContext
+            ),
+        unavailablePartiesStore,
+        protectedParties,
+        loggerFactory,
+      )
+        .processBatch(contracts, parties, submit)
+        .map(result => TaskSuccess(result.summary))
+    }
 
   protected def completeUnlessAmuletVersionIgnored(
       vettedVersion: String,
@@ -86,7 +119,9 @@ trait UnavailablePartiesGuard extends NamedLogging {
   ): PartialFunction[Throwable, Future[TaskOutcome]] = {
     case ex: StatusRuntimeException
         if enabled && svConfig.parameters.enabledFeatures.naiveUnresponsivePartiesAutoIgnore =>
-      val toIgnore = withoutDsoParty(extractUnresponsiveParties(ex))
+      val toIgnore = withoutDsoParty(
+        UnresponsiveParties.fromThrowable(ex).getOrElse(Set.empty)
+      )
       if (toIgnore.isEmpty) {
         Future.failed(ex)
       } else {
@@ -103,13 +138,5 @@ trait UnavailablePartiesGuard extends NamedLogging {
   // never ignore the DSO party itself: it is a stakeholder on every DSO contract
   private def withoutDsoParty(parties: Set[PartyId]): Set[PartyId] =
     parties - svTaskContext.dsoStore.key.dsoParty
-
-  private def extractUnresponsiveParties(ex: StatusRuntimeException): Set[PartyId] = {
-    val statusProto = StatusProto.fromThrowable(ex)
-    val errorDetails = ErrorDetails.from(statusProto)
-    errorDetails
-      .collectFirst { case UnresponsiveParties(parties) => parties }
-      .getOrElse(Set.empty)
-  }
 
 }
