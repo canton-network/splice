@@ -547,7 +547,7 @@ class SvFrontendIntegrationTest
       proposalContractId
     }
 
-    "NEW UI: Offboard SV" in { implicit env =>
+    "Offboard SV" in { implicit env =>
       val sv3PartyId = sv3Backend.getDsoInfo().svParty.toProtoPrimitive
 
       assertCreateProposal("SRARC_OffboardSv", "offboard-sv") { implicit webDriver =>
@@ -555,7 +555,7 @@ class SvFrontendIntegrationTest
       }
     }
 
-    "NEW UI: Offboard SV with custom effective date" in { implicit env =>
+    "Offboard SV with custom effective date" in { implicit env =>
       val sv4PartyId = sv4Backend.getDsoInfo().svParty.toProtoPrimitive
       val effectiveDate = "2099-01-31 00:12"
 
@@ -573,7 +573,7 @@ class SvFrontendIntegrationTest
       }
     }
 
-    "NEW UI: Grant, Update and Revoke Featured App Right" in { implicit env =>
+    "Grant, Update and Revoke Featured App Right" in { implicit env =>
       val providerParty = sv3Backend.getDsoInfo().svParty
       val providerPartyId = providerParty.toProtoPrimitive
       val activityWeight = BigDecimal("2.5")
@@ -652,7 +652,7 @@ class SvFrontendIntegrationTest
       }
     }
 
-    "NEW UI: Set Dso Rules Configuration" in { implicit env =>
+    "Set Dso Rules Configuration" in { implicit env =>
       assertCreateProposal("SRARC_SetConfig", "set-dso-config-rules") { implicit webDriver =>
         eventually() {
           inside(find(testId("config-field-numUnclaimedRewardsThreshold"))) { case Some(element) =>
@@ -662,7 +662,7 @@ class SvFrontendIntegrationTest
       }
     }
 
-    "NEW UI: Create Unclaimed Activity Record" in { implicit env =>
+    "Create Unclaimed Activity Record" in { implicit env =>
       val beneficiary = sv3Backend.getDsoInfo().svParty.toProtoPrimitive
       val amount = "100.5"
 
@@ -675,7 +675,7 @@ class SvFrontendIntegrationTest
       }
     }
 
-    "NEW UI: Set Amulet Rules Configuration" in { implicit env =>
+    "Set Amulet Rules Configuration" in { implicit env =>
       assertCreateProposal("CRARC_SetConfig", "set-amulet-config-rules") { implicit webDriver =>
         eventually() {
           inside(find(testId("config-field-transferPreapprovalFee"))) { case Some(element) =>
@@ -685,7 +685,7 @@ class SvFrontendIntegrationTest
       }
     }
 
-    "NEW UI: Update SV Reward Weight" in { implicit env =>
+    "Update SV Reward Weight" in { implicit env =>
       val sv3PartyId = sv3Backend.getDsoInfo().svParty.toProtoPrimitive
       val newWeight = "0_5000"
 
