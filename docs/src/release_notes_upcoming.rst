@@ -51,3 +51,8 @@ release-notes:: Upcoming
         - The ``AmuletRules_SetConfig`` proposal form can now set ``amuletSwitchOverTimes``.
 
         - The ``DsoRulesConfig`` proposal form can now set ``svOperationsSwitchOverTimes``.
+
+    - Daml
+
+        - Fix a bug in MintingDelegation that wrongly allowed the delegate to share their own coupons within a minting delegation.
+
