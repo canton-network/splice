@@ -4,13 +4,15 @@
 module Splice.Scripts.TestGovernanceLocks where
 
 import DA.Action (unless, when)
-import DA.Optional (isSome, isNone)
+import DA.Either
+import DA.Optional
 import DA.Time
 
 import Daml.Script
 import Splice.Amulet
 import Splice.Api.Token.HoldingV2 qualified as V2
 import Splice.Api.Token.MetadataV1
+import Splice.Api.Token.TransferInstructionV1 qualified as V1
 import Splice.ExternalPartyAmuletRules
 import Splice.GovernanceLock
 import Splice.Scripts.TokenStandard.TestAmuletTokenStandardTestEnv
@@ -19,9 +21,11 @@ import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
 import Splice.Testing.Utils
 import Splice.TokenStandard.Utils
 
+testGovernanceLockHappyPathRawChoices : Script ()
+testGovernanceLockHappyPathRawChoices = testGovernanceLockHappyPathScenario rawOperations
 
-testGovernanceLockHappyPath : Script ()
-testGovernanceLockHappyPath = do
+testGovernanceLockHappyPathScenario : GovernanceLockOperations -> Script ()
+testGovernanceLockHappyPathScenario ops = do
   TestEnv{..} <- setupTest
   let registry = registriesEnv.amuletV2
 
@@ -31,19 +35,19 @@ testGovernanceLockHappyPath = do
   AmuletRegistryV2.tapFaucet registry alice 180000.0
   AmuletRegistryV2.tapFaucet registry bob 10000.0
 
-  aliceLock <- governanceLockRawChoice registry alice 180000.0 someSvSpec
+  aliceLock <- expectSuccess $ ops.governanceLock registry alice 180000.0 someSvSpec
 
-  _bobLock <- governanceLockRawChoice registry bob 10000.0 someSvSpec
+  _bobLock <- expectSuccess $ ops.governanceLock registry bob 10000.0 someSvSpec
 
   now <- getTime
 
   -- Check that negative allocations are impossible
   actionMustFail (expectMessageContains "'locked amount' is less than 'minimum governance lock amount'") $
-    governanceLockRawChoice' registry bob (-10000.0) someSvSpec
+    ops.governanceLock registry bob (-10000.0) someSvSpec
 
   -- Check that we can't unlock with a time in the past
   actionMustFail (expectMessageContains "Ledger time is at or past deadline 'unlockAt' at") $
-    governanceUnlockRawChoice' registry aliceLock (Some 80000.0) (now `addRelTime` days (-60)) [alice]
+    ops.governanceUnlock registry aliceLock (Some 80000.0) (now `addRelTime` days (-60)) [alice]
 
   -- Check that bob can't unlock for alice - TODO(canton-network/splice-sv-fa-locking#39): disclose to bob with explicit disclosure for this.
   -- actionMustFail (expectMessageContains "noodle") $ governanceUnlockRawChoice' registry aliceLock (Some 80000.0) now [bob]
@@ -51,30 +55,30 @@ testGovernanceLockHappyPath = do
   let unlockTime = now `addRelTime` days 1
 
   -- Unlock 80k Amulet such that 1/8th should result in 10k Amulet withdrawable after 1/8th year.
-  (aliceVesting, Some aliceLock) <- governanceUnlockRawChoice registry aliceLock (Some 80000.0) (unlockTime) [alice]
+  (aliceVesting, Some aliceLock) <- expectSuccess $ ops.governanceUnlock registry aliceLock (Some 80000.0) (unlockTime) [alice]
 
   actionMustFail (expectMessageContains "'unlockAmount' is not greater than 'zero'") $
-    governanceUnlockRawChoice' registry aliceLock (Some $ -80000.0) (unlockTime) [alice]
+    ops.governanceUnlock registry aliceLock (Some $ -80000.0) (unlockTime) [alice]
 
   -- Assert that we have a lock remaining of 100k Amulet.
   checkLockedHolding alice aliceLock 100000.0
 
   -- Check that we can't withdraw immediately, before unlockTime has arrived on-ledger
   actionMustFail (expectMessageContains "Ledger time is strictly before deadline 'requestedAt' at") $
-    vestingWithdrawRawChoice' registry aliceVesting unlockTime [alice]
+    ops.vestingWithdraw registry aliceVesting unlockTime [alice]
 
   passTime (hours 12)
   now <- getTime
 
   -- Check that we can't withdraw between now and the unlockTime
   actionMustFail (expectMessageContains "'withdraw amount' is not greater than 'zero'") $
-    vestingWithdrawRawChoice' registry aliceVesting now [alice]
+    ops.vestingWithdraw registry aliceVesting now [alice]
 
   passTime (days 1)
 
   -- Check that we can't withdraw exactly at the unlock time (nothing is vested yet).
   actionMustFail (expectMessageContains "'withdraw amount' is not greater than 'zero'") $
-    vestingWithdrawRawChoice' registry aliceVesting unlockTime [alice]
+    ops.vestingWithdraw registry aliceVesting (unlockTime) [alice]
 
   passTime (days 47)
 
@@ -85,10 +89,10 @@ testGovernanceLockHappyPath = do
 
   let withdrawTime = unlockTime `addRelTime` (days 45 + hours 15 + minutes 45)
 
-  (unlocked, Some newVestingLock) <- vestingWithdrawRawChoice registry aliceVesting withdrawTime [alice]
+  (unlocked, Some newVestingLock) <- expectSuccess $ ops.vestingWithdraw registry aliceVesting withdrawTime [alice]
 
   actionMustFail (expectMessageContains "'withdraw amount' is not greater than 'zero'") $
-    vestingWithdrawRawChoice' registry newVestingLock withdrawTime [alice]
+    ops.vestingWithdraw registry newVestingLock withdrawTime [alice]
 
   -- Check that we did indeed unlock 10k amulet as expected - 1/8th of the total vesting amount of 80k.
   checkHolding' alice unlocked 10000.0
@@ -100,11 +104,100 @@ testGovernanceLockHappyPath = do
 
   let fullWithdrawTime = unlockTime `addRelTime` days 366
 
-  (unlockedHolding2, None) <- vestingWithdrawRawChoice registry newVestingLock fullWithdrawTime [alice]
+  (unlockedHolding2, None) <- expectSuccess $ ops.vestingWithdraw registry newVestingLock fullWithdrawTime [alice]
 
   -- Check that we withdrew all and exactly the 70k _remaining_ after the above withdrawal.
   checkHolding' alice unlockedHolding2 70000.0
   checkIsUnlocked alice unlockedHolding2
+
+testGovernanceLockCompatHappyPathTSv1 : Script ()
+testGovernanceLockCompatHappyPathTSv1 = testGovernanceLockCompatHappyPathScenario tsv1Operations
+
+testGovernanceLockCompatHappyPathScenario : CompatGovernanceLockOperations -> Script ()
+testGovernanceLockCompatHappyPathScenario ops = do
+  env@TestEnv{..} <- setupTest
+  let registry = registriesEnv.amuletV2
+
+  -- Using a featured app to get a whole and very divisible number of days.
+  let someSvSpec = GovernanceLockSpecification with
+        kind = GLK_FeaturedApp bob
+
+  AmuletRegistryV2.tapFaucet registry alice 180000.0
+  AmuletRegistryV2.tapFaucet registry bob 10000.0
+
+  aliceLock <- expectSuccess $ ops.governanceLock env alice 80000.0 someSvSpec
+
+  -- Unlock 80k Amulet such that 1/8th should result in 10k Amulet withdrawable after 1/8th year.
+  aliceVesting <- ops.governanceUnlock env aliceLock alice
+
+  -- Chosen to make the vesting period to exactly 1/4th of the specified 60 day vesting period.
+  -- 1/8th and 80k are reliably exactly representible in fixed-point binary
+  -- with at least three fractional places, so the arithmetic is exact and we can
+  -- comfortably use equality.
+
+  passTime (days 16)
+
+  newVestingLock <- fromSomeNote "Expected a continuing vested lock, but recevied None" <$> ops.vestingWithdraw env aliceVesting alice
+
+  -- Check that we did indeed unlock 10k amulet as expected - 1/8th of the total vesting amount of 80k.
+  WalletClientV2.checkHoldingWithAmountExists alice registry.instrumentId 20000.0
+
+  -- And check that we remain with 7/8ths of the vesting amount - 70k.
+  checkLockedHolding alice newVestingLock 60000.0
+
+  passTime (days 60)
+
+  rv <- ops.vestingWithdraw env newVestingLock alice
+  require "Expected no remaining vesting lock, received one" $ isNone rv
+
+  -- Check that we withdrew all and exactly the 70k _remaining_ after the above withdrawal.
+  WalletClientV2.checkHoldingWithAmountExists alice registry.instrumentId 60000.0
+
+
+testGovernanceLockMinimumLocksLockUnlockWithdraw : Script ()
+testGovernanceLockMinimumLocksLockUnlockWithdraw = testGovernanceLockMinimumLocksLockUnlockWithdrawScenario rawOperations
+
+testGovernanceLockMinimumLocksLockUnlockWithdrawScenario : GovernanceLockOperations -> Script ()
+testGovernanceLockMinimumLocksLockUnlockWithdrawScenario ops = do
+  TestEnv{..} <- setupTest
+  let registry = registriesEnv.amuletV2
+
+  let someSvSpec = GovernanceLockSpecification with
+        kind = GLK_SuperValidatorRightsOwner "TestSV"
+
+  AmuletRegistryV2.tapFaucet registry alice 180000.0
+  AmuletRegistryV2.tapFaucet registry bob 10000.0
+
+  actionMustFail (expectMessageContains "'locked amount' is less than 'minimum governance lock amount'") $ ops.governanceLock registry alice 8000.0 someSvSpec
+
+  successfulLockCid <- governanceLockRawChoice registry alice 20000.0 someSvSpec
+
+  unlockAt <- (`addRelTime` minutes 5) <$> getTime
+
+  actionMustFail (expectMessageContains "'locked amount' is less than 'minimum governance lock amount'") $ ops.governanceUnlock registry successfulLockCid (Some 5000.0) unlockAt [alice]
+
+  actionMustFail (expectMessageContains "'locked amount' is less than 'minimum governance lock amount'") $ ops.governanceUnlock registry successfulLockCid (Some 15000.0) unlockAt [alice]
+
+  -- Exact amount should succeed.
+  (firstWithdrawnCid, Some remainingLockCid) <- expectSuccess $ ops.governanceUnlock registry successfulLockCid (Some 10000.0) unlockAt [alice]
+
+  -- Unlock of full amount should succeed.
+  (_secondWithdrawnCid, None) <- expectSuccess $ ops.governanceUnlock registry remainingLockCid None unlockAt [alice]
+
+  passTime (days 180)
+
+  now <- getTime
+
+  -- Partial withdraw should work even if the remainder is less than the minimum
+  (_, Some stillVestingCid) <- expectSuccess $ ops.vestingWithdraw registry firstWithdrawnCid now [alice]
+
+  passTime (days 200)
+
+  now <- getTime
+
+  (_, None) <- expectSuccess $ ops.vestingWithdraw registry stillVestingCid now [alice]
+
+  pure ()
 
 testTopUpWithAmuletHappyPath : Script ()
 testTopUpWithAmuletHappyPath = do
@@ -136,49 +229,6 @@ testTopUpWithAmuletHappyPath = do
   -- We should've used the entire amount, hence None
   (bobLock', None) <- governanceLockTopUpRawChoice registry bobLock [] None 100.0 bob
   checkLockedHolding bob bobLock' 10100.0
-
-
-testGovernanceLockMinimumLocksLockUnlockWithdraw : Script ()
-testGovernanceLockMinimumLocksLockUnlockWithdraw = do
-  TestEnv{..} <- setupTest
-  let registry = registriesEnv.amuletV2
-
-  let someSvSpec = GovernanceLockSpecification with
-        kind = GLK_SuperValidatorRightsOwner "TestSV"
-
-  AmuletRegistryV2.tapFaucet registry alice 180000.0
-  AmuletRegistryV2.tapFaucet registry bob 10000.0
-
-  actionMustFail (expectMessageContains "'locked amount' is less than 'minimum governance lock amount'") $ governanceLockRawChoice' registry alice 8000.0 someSvSpec
-
-  successfulLockCid <- governanceLockRawChoice registry alice 20000.0 someSvSpec
-
-  unlockAt <- (`addRelTime` minutes 5) <$> getTime
-
-  actionMustFail (expectMessageContains "'locked amount' is less than 'minimum governance lock amount'") $ governanceUnlockRawChoice' registry successfulLockCid (Some 5000.0) unlockAt [alice]
-
-  actionMustFail (expectMessageContains "'locked amount' is less than 'minimum governance lock amount'") $ governanceUnlockRawChoice' registry successfulLockCid (Some 15000.0) unlockAt [alice]
-
-  -- Exact amount should succeed.
-  (firstWithdrawnCid, Some remainingLockCid) <- governanceUnlockRawChoice registry successfulLockCid (Some 10000.0) unlockAt [alice]
-
-  -- Unlock of full amount should succeed.
-  (_secondWithdrawnCid, None) <- governanceUnlockRawChoice registry remainingLockCid None unlockAt [alice]
-
-  passTime (days 180)
-
-  now <- getTime
-
-  -- Partial withdraw should work even if the remainder is less than the minimum
-  (_, Some stillVestingCid) <- vestingWithdrawRawChoice registry firstWithdrawnCid now [alice]
-
-  passTime (days 200)
-
-  now <- getTime
-
-  (_, None) <- vestingWithdrawRawChoice registry stillVestingCid now [alice]
-
-  pure ()
 
 testTopUpWithMergingLocks : Script ()
 testTopUpWithMergingLocks = do
@@ -289,9 +339,39 @@ submitWithTransferContext registry options commands = do
   context <- AmuletRegistryV2.getExternalPartyConfigStateContext registry
   trySubmit (options <> discloseMany' context.disclosures) $ commands context.choiceContext
 
+expectSuccess : (CanAssert m, Show err) => m (Either err a) -> m a
+expectSuccess a = a >>= errorIfLeft
+
 errorIfLeft : (Show e, CanAssert m) => Either e a -> m a
-errorIfLeft (Left e) = assertFail (show e)
+errorIfLeft (Left e) = assertFail $ "Expected success, but failed with " <> show e
 errorIfLeft (Right e) = pure e
+
+-- wishlist: add checking of interface-specific views to this.
+data GovernanceLockOperations = GovernanceLockOperations with
+  governanceLock
+    :  AmuletRegistryV2.AmuletRegistry
+    -> Party
+    -> Decimal
+    -> GovernanceLockSpecification
+    -> Script (Either SubmitError (ContractId GovernanceLock))
+  governanceUnlock
+    :  AmuletRegistryV2.AmuletRegistry
+    -> ContractId GovernanceLock
+    -> Optional Decimal
+    -> Time
+    -> [Party]
+    -> Script (Either SubmitError (ContractId VestingLock, Optional (ContractId GovernanceLock)))
+  vestingWithdraw
+    :  AmuletRegistryV2.AmuletRegistry
+    -> ContractId VestingLock
+    -> Time
+    -> [Party]
+    -> Script (Either SubmitError (ContractId V2.Holding, Optional (ContractId VestingLock)))
+
+rawOperations = GovernanceLockOperations with
+  governanceLock = governanceLockRawChoice'
+  governanceUnlock = governanceUnlockRawChoice'
+  vestingWithdraw = vestingWithdrawRawChoice'
 
 governanceLockRawChoice : AmuletRegistryV2.AmuletRegistry -> Party -> Decimal -> GovernanceLockSpecification -> Script (ContractId GovernanceLock)
 governanceLockRawChoice registry owner amount specification = errorIfLeft =<< governanceLockRawChoice' registry owner amount specification
@@ -299,6 +379,7 @@ governanceLockRawChoice registry owner amount specification = errorIfLeft =<< go
 governanceLockRawChoice' : AmuletRegistryV2.AmuletRegistry -> Party -> Decimal -> GovernanceLockSpecification -> Script (Either SubmitError (ContractId GovernanceLock))
 governanceLockRawChoice' registry owner amount specification = do
   let dso = registry.instrumentId.admin
+  now <- getTime
   [(eparCid, _)] <- query @ExternalPartyAmuletRules dso -- TODO(canton-network/splice-sv-fa-locking#39): low priority: determine if there's already a way to call choices on this in the test env.
   disc <- queryDisclosure' dso eparCid
   inputs <- WalletClientV2.listUnlockedHoldingCidsFor (basicAccount owner) owner registry.instrumentId
@@ -309,6 +390,8 @@ governanceLockRawChoice' registry owner amount specification = do
       specification
       extraArgs = emptyExtraArgs with context
       owner
+      requestedAt = now
+      meta = emptyMetadata
   pure $ (.governanceLock) <$> result
 
 governanceUnlockRawChoice
@@ -388,3 +471,59 @@ governanceLockTopUpRawChoice' registry cid lockInputs optHoldingInputs topUpAmou
   pure $ case result of
     Left e -> Left e
     Right (GovernanceLock_MergeAndTopUpResult governanceLock changeHolding) -> Right (governanceLock, changeHolding)
+
+data CompatGovernanceLockOperations = CompatGovernanceLockOperations with
+  governanceLock
+    :  TestEnv
+    -> Party
+    -> Decimal
+    -> GovernanceLockSpecification
+    -> Script (Either SubmitError (ContractId GovernanceLock))
+  governanceUnlock
+    :  TestEnv
+    -> ContractId GovernanceLock
+    -> Party
+    -> Script (ContractId VestingLock)
+  vestingWithdraw
+    :  TestEnv
+    -> ContractId VestingLock
+    -> Party
+    -> Script (Optional (ContractId VestingLock))
+
+tsv1Operations = CompatGovernanceLockOperations with
+    governanceLock
+    governanceUnlock
+    vestingWithdraw
+  where
+    governanceLock = governanceLockV1
+    governanceUnlock env cid actor = do
+      unlockResult <- WalletClientV2.withdrawTransferInstructionV1 env.registries actor (toInterfaceContractId cid)
+      pure $ fromInterfaceContractId $ fromSome unlockResult
+    vestingWithdraw env cid actor = do
+      withdrawResult <- WalletClientV2.withdrawTransferInstructionV1 env.registries actor (toInterfaceContractId cid)
+      pure $ fromInterfaceContractId <$> withdrawResult
+
+governanceLockV1 : TestEnv -> Party -> Decimal -> GovernanceLockSpecification -> Script (Either SubmitError (ContractId GovernanceLock))
+governanceLockV1 env owner amount spec = do
+  now <- getTime
+  inputs <- WalletClientV2.listUnlockedHoldingCidsFor (basicAccount owner) owner env.instrId
+  let encodedReason = "lock-subject=" <> case spec.kind of
+                        GLK_FeaturedApp party -> partyToText party
+                        GLK_SuperValidatorRightsOwner svName -> svName
+  let
+   transfer = V1.TransferFactory_Transfer with
+    expectedAdmin = env.instrId.admin
+    transfer = V1.Transfer with
+      sender = owner
+      receiver = case spec.kind of
+                   GLK_FeaturedApp _ -> featuredAppLockCanonicalParty
+                   GLK_SuperValidatorRightsOwner _ -> superValidatorLockCanonicalParty
+      amount
+      instrumentId = env.registriesEnv.amuletV1.instrumentId
+      requestedAt = now
+      executeBefore = now
+      inputHoldingCids = downcast <$> inputs
+      meta = reasonToMeta encodedReason emptyMetadata
+    extraArgs = emptyExtraArgs
+  optContractId <- WalletClientV2.transferV1 env.registries owner $ transfer
+  pure $ optionalToEither (UnknownError "Unexpected none in lock[") $ fromInterfaceContractId <$> optContractId

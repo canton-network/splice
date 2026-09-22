@@ -75,6 +75,8 @@ setupVestingLock = do
         endTime = unlockAt `addRelTime` testVestingPeriod
         vestingAmount = testVestingAmount
         specification = governanceToVestingSpecification testLockSpecification
+        originalLockCid = Some (coerceContractId governanceLockCid)
+        meta = mempty
 
   Some vestingLock <- queryContractId alice.primaryParty vestingLockCid
   vestingLock === expectedVestingLock
