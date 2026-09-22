@@ -27,6 +27,7 @@ const IP_WHITELIST_RULE_MIN = 1000010;
 const THROTTLE_BAN_RULE_MIN = 100000010;
 const THROTTLE_BAN_RULE_MAX = 200000010;
 const DEFAULT_DENY_RULE_NUMBER = 2147483647;
+const PREVIEW_DENY_RULE_NUMBER = DEFAULT_DENY_RULE_NUMBER - 1;
 const RULE_SPACING = 100;
 
 // Types for API endpoint throttling/banning configuration
@@ -292,13 +293,39 @@ function addThrottleAndBanRules(
 }
 
 /**
- * Adds a default deny rule to a security policy
+ * Adds a default deny rule to a security policy, plus - when all rules are in preview
+ * mode - a preview-only deny-all rule just before it.
  */
 function addDefaultDenyRule(
   securityPolicy: CloudArmorPolicy,
   preview: boolean,
   opts: pulumi.ResourceOptions
 ): void {
+  if (preview) {
+    // The default rule cannot be in preview mode, so in all-preview mode it has to
+    // allow all traffic and therefore never reports anything as denied. This extra rule
+    // sits just before it and records what an enforced setup would have blocked, so the
+    // preview metrics reflect the reality of a non-preview deployment.
+    new PolicyRule(
+      'preview-deny-all',
+      {
+        securityPolicy: securityPolicy.name,
+        region: securityPolicy.region,
+        description: 'Preview-only deny all rule, mirroring the enforced default deny rule',
+        priority: PREVIEW_DENY_RULE_NUMBER,
+        preview: true,
+        action: 'deny(403)',
+        match: {
+          versionedExpr: 'SRC_IPS_V1',
+          config: {
+            srcIpRanges: ['*'],
+          },
+        },
+      },
+      opts
+    );
+  }
+
   // The default rule is created together with the policy and cannot be added or
   // removed, only patched (the GCP provider turns a create at this priority into a
   // patch, and skips the delete). So we always declare it: dropping the resource when
