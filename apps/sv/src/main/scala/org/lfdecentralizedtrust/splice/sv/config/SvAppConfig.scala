@@ -729,7 +729,7 @@ final case class RangeConfig(
 )
 
 final case class UnavailablePartiesBackoffParameters(
-    baseIgnoreDuration: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofHours(1),
+    baseIgnoreDuration: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofMinutes(10),
     // 24h: 100k parties with 1 task each leads to 100k / (24*3600s) = 1.15 tasks/s
     maxIgnoreDuration: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofHours(24),
 )
