@@ -5,6 +5,7 @@ package org.lfdecentralizedtrust.splice.integration.tests
 
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
+import com.digitalasset.canton.lifecycle.CloseContext
 import com.digitalasset.canton.logging.SuppressionRule
 import com.digitalasset.canton.topology.PartyId
 import com.digitalasset.canton.topology.transaction.ParticipantPermission
@@ -28,8 +29,10 @@ import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
 import org.lfdecentralizedtrust.splice.sv.config.UnavailablePartiesBackoffParameters
 import org.lfdecentralizedtrust.splice.util.*
 import org.slf4j.event.Level
+import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 
 import java.time.Duration
+import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.duration.*
 
 abstract class AutoIgnoreUnresponsivePartiesIntegrationTestBase
@@ -47,6 +50,12 @@ abstract class AutoIgnoreUnresponsivePartiesIntegrationTestBase
     UnavailablePartiesBackoffParameters()
 
   protected def reconnectAliceAfterIgnore: Boolean = true
+
+  /** Set by the first test so the follow-up tests can query her row. */
+  protected val unresponsivePartyRef = new AtomicReference[Option[PartyId]](None)
+
+  protected def unresponsiveParty: PartyId =
+    unresponsivePartyRef.get().getOrElse(fail("alice's party was not recorded by the first test"))
 
   protected def ignoredParties(implicit env: SpliceTestConsoleEnvironment): Seq[PartyId] =
     sv1Backend.dsoDelegateBasedAutomation.unavailablePartiesStore
@@ -105,6 +114,7 @@ abstract class AutoIgnoreUnresponsivePartiesIntegrationTestBase
 
       val aliceUserId = aliceWalletClient.config.ledgerApiUser
       val aliceParty = onboardWalletUser(aliceWalletClient, aliceValidatorBackend)
+      unresponsivePartyRef.set(Some(aliceParty))
       val sv1ParticipantId = sv1Backend.participantClientWithAdminToken.id
       val aliceParticipantId = aliceValidatorBackend.participantClient.id
       val sv1Participant = sv1Backend.participantClientWithAdminToken
@@ -261,6 +271,22 @@ class AutoIgnoreUnresponsivePartiesWithPersistenceIntegrationTest
       maxIgnoreDuration = NonNegativeFiniteDuration.ofSeconds(30),
     )
 
+  private def ignoreDurationOf(
+      party: PartyId
+  )(implicit env: SpliceTestConsoleEnvironment): Option[Long] = {
+    val db = sv1Backend.appState.storage
+    implicit val closeContext: CloseContext = CloseContext(db)
+    db.querySingle(
+      sql"""select ignore_duration
+            from dso_unavailable_parties
+            where party = ${party.toProtoPrimitive}"""
+        .as[Long]
+        .headOption,
+      "test.lookupIgnoreDuration",
+    ).value
+      .futureValueUS
+  }
+
   private def resumeExpiryTriggers()(implicit env: SpliceTestConsoleEnvironment): Unit =
     env.svs.local.foreach { sv =>
       sv.dsoDelegateBasedAutomation.trigger[ExpiredAmuletTrigger].resume()
@@ -270,43 +296,41 @@ class AutoIgnoreUnresponsivePartiesWithPersistenceIntegrationTest
   "Ignored parties survive an SV app restart" in { implicit env =>
     sv1Backend.stop()
     sv1Backend.startSync()
-    eventually(timeUntilSuccess = 120.seconds) {
+    eventually() {
       ignoredParties should not be empty
     }
-    // the expiry triggers are configured as paused, so they come back paused after a restart
     resumeExpiryTriggers()
   }
 
   "A party that is still unavailable is retried and ignored again with a doubled window" in {
     implicit env =>
-      clue("Alice's ignore window elapses, so the transaction is retried") {
-        eventually(timeUntilSuccess = 120.seconds) {
-          ignoredParties shouldBe empty
-        }
-      }
+      val baseMicros = unavailablePartiesBackoffParameters.baseIgnoreDuration.underlying.toMicros
 
-      clue(
-        "The retry fails again, so alice is ignored again with a doubled ignored duration window"
-      ) {
-        eventually(timeUntilSuccess = 120.seconds) {
-          ignoredParties should not be empty
+      clue("Alice's window elapses, the retry fails again, and her ignore duration is doubled") {
+        eventually(60.seconds) {
+          ignoreDurationOf(unresponsiveParty) shouldBe Some(2 * baseMicros)
         }
       }
   }
 
   "A party that became available again is removed from the store" in { implicit env =>
-    clue("Reconnect alice's participant so that the next retry succeeds") {
-      aliceValidatorBackend.participantClient.synchronizers.reconnect_all()
-    }
-
-    clue("Alice is removed from the store once the expiry submission succeeds") {
-      eventually(timeUntilSuccess = 180.seconds) {
-        ignoredParties shouldBe empty
-      }
-      // as opposed to the previous test, alice is gone for good and not just past her window
-      always(durationOfSuccess = 60.seconds) {
-        ignoredParties shouldBe empty
-      }
-    }
+    loggerFactory.assertEventuallyLogsSeq(SuppressionRule.Level(Level.INFO))(
+      {
+        clue("Reconnect alice's participant so that the next retry succeeds") {
+          aliceValidatorBackend.participantClient.synchronizers.reconnect_all()
+        }
+        clue("Alice is removed from the store once the expiry submission succeeds") {
+          eventually(timeUntilSuccess = 60.seconds) {
+            ignoredParties shouldBe empty
+          }
+        }
+      },
+      logEntries =>
+        forAtLeast(1, logEntries) { entry =>
+          entry.message should include regex
+            raw"""Submission succeeded, recovered 1 unavailable parties: .*\Q${unresponsiveParty.toString}\E"""
+        },
+      timeUntilSuccess = 60.seconds,
+    )
   }
 }
