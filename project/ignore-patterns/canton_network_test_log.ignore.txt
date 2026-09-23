@@ -88,15 +88,6 @@ ForkJoinIdlenessExecutorService.*shutdown did not complete gracefully in allotte
 
 Consensus not reached.*BftScanConnection:BftCallExecutorTest.*
 Consensus not reached.*BftScanConnection:ConfigurationProvidedBftScanConnectionIntegrationTest.*
-# TODO (#6502): under TBAR the reward-accounting BFT reads emit two related
-# WARNs during bootstrap — "Consensus not reached." when the retry loop
-# gives up (no peer can converge to Ok) and "The following Scan URLs
-# disagreed with consensus" when a minority disagrees with the reached
-# consensus. Both are scoped to the two triggers that call these reads so
-# real BFT problems elsewhere still surface. Removed once #6392's two-phase
-# probe lands.
-Consensus not reached.*BftScanConnection:.*"span-name":"(SummarizingMiningRoundTrigger|CalculateRewardsTrigger)"
-The following Scan URLs disagreed with consensus.*BftScanConnection:.*"span-name":"(SummarizingMiningRoundTrigger|CalculateRewardsTrigger)"
 
 # internal selenium error. Potentially intermittent
 Exception managing firefox: error sending request for url .* http2 error: stream error received: refused stream before processing any application
@@ -188,3 +179,7 @@ Connection for .* with psid .* is no longer active \(status: .*\), skipping upda
 # ingestion restarts. This can result in long delays in signalWhenIngested.
 # See https://github.com/DACH-NY/cn-test-failures/issues/10095.
 signalWhenIngested.* has not completed after .* milliseconds
+
+# The BFT bootstrap test adds a dummy 5th SV with an unreachable scan URL (http://localhost:1)
+# to raise f from 0 to 1. All BFT peers attempt to connect to this URL and log warnings.
+Failed to connect to scan of.*NonZeroRoundBootstrapBftTimeBasedIntegrationTest

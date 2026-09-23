@@ -3,8 +3,8 @@
 
 import { Box, Typography } from '@mui/material';
 import type { ReactNode } from 'react';
-import { MemberIdentifier } from '../beta';
-import { IDENTIFIER_COMPACT_MAX_WIDTH_PX } from '../beta/identifierStyles';
+import { MemberIdentifier } from '../ui';
+import { IDENTIFIER_COMPACT_MAX_WIDTH_PX } from '../ui/identifierStyles';
 import {
   EFFECTIVE_AT_LABEL,
   CREATE_PROPOSAL_LABEL_PROPOSAL_TYPE,

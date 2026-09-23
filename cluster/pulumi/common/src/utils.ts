@@ -29,6 +29,7 @@ export const PRIVATE_CONFIGS_PATH = config.optionalEnv('PRIVATE_CONFIGS_PATH');
 
 export const HELM_REPO = spliceEnvConfig.requireEnv('OCI_DEV_HELM_REGISTRY');
 export const DOCKER_REPO = spliceEnvConfig.requireEnv('CACHE_DEV_DOCKER_REGISTRY');
+export const CACHE_GHCR = spliceEnvConfig.requireEnv('CACHE_GHCR');
 
 export const ObservabilityReleaseName = 'prometheus-grafana-monitoring';
 

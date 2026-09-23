@@ -280,11 +280,9 @@ function configureInternalGatewayService(
   const gcpInternalIPRanges = cluster.then(c =>
     c.nodePools.map(p => p.networkConfigs.map(c => c.podIpv4CidrBlock)).flat()
   );
-  const gatewayIPRanges = infraConfig.istio.enableGeneralIpWhitelist
-    ? pulumi.all([loadIPRanges(), gcpInternalIPRanges]).apply(([a, b]) => a.concat(b))
-    : pulumi
-        .all([loadInternalWhitelistedIps(), gcpInternalIPRanges])
-        .apply(([a, b]) => a.concat(b));
+  const gatewayIPRanges = pulumi
+    .all([loadInternalWhitelistedIps(), gcpInternalIPRanges])
+    .apply(([a, b]) => a.concat(b));
   return configureGatewayService(
     ingressNs,
     gatewayIPRanges,

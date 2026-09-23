@@ -34,7 +34,6 @@ import AuthCheck from './routes/authCheck';
 import Dso from './routes/dso';
 import Root from './routes/root';
 import ValidatorOnboarding from './routes/validatorOnboarding';
-import Voting from './routes/voting';
 import { useConfigPollInterval, useSvConfig } from './utils';
 import { Governance } from './routes/governance';
 import { VoteRequestDetails } from './routes/voteRequestDetails';
@@ -97,8 +96,7 @@ const App: React.FC = () => {
           <Route path="validator-onboarding" element={<ValidatorOnboarding />} />
           <Route path="amulet-price" element={<AmuletPrice />} />
           <Route path="delegate-election" element={<DelegateElection />} />
-          <Route path="governance-old" element={<Voting />} />
-          <Route path="votes" element={<Navigate to="/governance-old" replace />} />
+          <Route path="votes" element={<Navigate to="/governance/proposals" replace />} />
 
           <Route path="governance" element={<Navigate to="/governance/proposals" replace />} />
           <Route path="governance/proposals" element={<Governance />} />

@@ -31,7 +31,7 @@ class DockerComposeValidatorFrontendIntegrationTest
   val testDumpDir: Path = Paths.get("apps/app/src/test/resources/dumps")
   val partyHint = "da-ComposeValidator-1"
 
-  // The wallet gateway and portfolio UI deployed by default by `start.sh` (see compose-wallet-gateway.yaml)
+  // The wallet gateway and portfolio UI deployed by `start.sh -g` (see compose-wallet-gateway.yaml)
   override protected val walletGatewayUrl = "http://walletgateway.localhost/"
   override protected val portfolioUrl = "http://portfolio.localhost/"
   override protected val walletGatewayNetworkName = "Splice validator"
@@ -110,7 +110,7 @@ class DockerComposeValidatorFrontendIntegrationTest
         .resolve("compose-validator-backup")
         .resolve(java.time.Instant.now.toEpochMilli.toString)
 
-    withComposeValidator() {
+    withComposeValidator(startFlags = Seq("-g")) {
       withFrontEnd("frontend") { implicit webDriver =>
         eventuallySucceeds()(go to s"http://wallet.localhost")
         actAndCheck(timeUntilSuccess = 60.seconds)(
@@ -388,7 +388,7 @@ class DockerComposeValidatorFrontendIntegrationTest
       clue("Restart the validator, with auth") {
         startComposeValidator(
           extraClue = "with auth",
-          startFlags = Seq("-a", "-P", "da-composeValidator-13"),
+          startFlags = Seq("-a", "-g", "-P", "da-composeValidator-13"),
           extraEnv = Seq(
             "GCP_CLUSTER_BASENAME" -> "cidaily" // Any cluster should work, as long as its UI auth0 apps were created with the localhost callback URLs
           ),
