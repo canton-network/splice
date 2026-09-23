@@ -20,6 +20,10 @@ release-notes:: Upcoming
         - The old governance UI, previously still reachable at ``/governance-old``, has been removed from the SV UI.
           ``/votes`` and ``/governance`` now both lead to the current governance UI.
 
+        - The following request fields now have a ``maxItems`` bound of 1000; requests exceeding it are rejected with 400:
+
+          - ``/v0/admin/sv/voterequest``: ``vote_request_contract_ids``
+
     - Docker Compose
 
         - The validator deployment can now also deploy the Canton Wallet Gateway and the Portfolio UI with the new ``-g`` flag of ``start.sh``.
@@ -41,6 +45,14 @@ release-notes:: Upcoming
           by the verdict ingestion service and the traffic-based app reward calculations.
 
           The default retention period is 1 week for this automation, after which the data will be removed from the DB.
+
+        - The following request fields now have a ``maxItems`` bound of 1000; requests exceeding it are rejected with 400:
+
+          - ``/v0/open-and-issuing-mining-rounds``: ``cached_open_mining_round_contract_ids``, ``cached_issuing_round_contract_ids``
+          - ``/v0/state/acs``, ``/v1/state/acs``, ``/v2/state/acs``: ``party_ids``, ``templates``
+          - ``/v0/holdings/state``, ``/v1/holdings/state``, ``/v2/holdings/state``: ``owner_party_ids``
+          - ``/v0/holdings/summary``, ``/v1/holdings/summary``: ``owner_party_ids``
+          - ``/v0/voterequest``: ``vote_request_contract_ids``
 
     - Validator App
 
