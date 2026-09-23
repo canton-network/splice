@@ -542,7 +542,8 @@ abstract class StoreTestBase
       owner: PartyId,
       amount: BigDecimal,
       dso: PartyId = dsoParty,
-      svName: String = "sv1",
+      kind: governancelockCodegen.GovernanceLockKind =
+        new governancelockCodegen.governancelockkind.GLK_SuperValidatorRightsOwner("sv1"),
       contractId: String = nextCid(),
   ): Contract[
     governancelockCodegen.GovernanceLock.ContractId,
@@ -556,9 +557,7 @@ abstract class StoreTestBase
         owner.toProtoPrimitive,
         amount.bigDecimal,
         new LockedAmulet.ContractId(nextCid()),
-        new governancelockCodegen.GovernanceLockSpecification(
-          new governancelockCodegen.governancelockkind.GLK_SuperValidatorRightsOwner(svName)
-        ),
+        new governancelockCodegen.GovernanceLockSpecification(kind),
         Optional.empty(),
         Instant.now().truncatedTo(ChronoUnit.MICROS),
         new Metadata(java.util.Collections.emptyMap()),

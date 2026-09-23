@@ -2434,6 +2434,80 @@ class DbSvDsoStoreTest
     } yield store
   }
 
+  "listProvisionalGovernanceLocksWithFeaturedAppRightSample" should {
+
+    "return only provisional locks whose provider has a live FeaturedAppRight" in {
+      val readyProvider = userParty(1)
+      val readyLock = governanceLock(
+        userParty(2),
+        amount = BigDecimal(10),
+        kind = new splice.governancelock.governancelockkind.GLK_ProvisionalFeaturedApp(
+          readyProvider.toProtoPrimitive
+        ),
+      )
+      val readyRight = featuredAppRight(readyProvider)
+
+      val notReadyProvider = userParty(3)
+      val notReadyLock = governanceLock(
+        userParty(4),
+        amount = BigDecimal(20),
+        kind = new splice.governancelock.governancelockkind.GLK_ProvisionalFeaturedApp(
+          notReadyProvider.toProtoPrimitive
+        ),
+      )
+      // No matching FeaturedAppRight is created for notReadyProvider.
+
+      val confirmedProvider = userParty(5)
+      val confirmedLock = governanceLock(
+        userParty(6),
+        amount = BigDecimal(30),
+        kind = new splice.governancelock.governancelockkind.GLK_FeaturedApp(
+          confirmedProvider.toProtoPrimitive
+        ),
+      )
+      val confirmedRight = featuredAppRight(confirmedProvider)
+      // confirmedLock has a matching right but isn't provisional, so it should be excluded.
+
+      for {
+        store <- mkStore()
+        _ <- dummyDomain.create(readyLock)(store.multiDomainAcsStore)
+        _ <- dummyDomain.create(readyRight)(store.multiDomainAcsStore)
+        _ <- dummyDomain.create(notReadyLock)(store.multiDomainAcsStore)
+        _ <- dummyDomain.create(confirmedLock)(store.multiDomainAcsStore)
+        _ <- dummyDomain.create(confirmedRight)(store.multiDomainAcsStore)
+        result <- store.listProvisionalGovernanceLocksWithFeaturedAppRightSample()
+      } yield {
+        result.map { case (lock, right) => (lock.contractId, right) } should
+          contain theSameElementsAs Seq((readyLock.contractId, readyRight.contractId))
+      }
+    }
+
+    "not return duplicate rows when a provider has more than one live FeaturedAppRight" in {
+      val provider = userParty(1)
+      val lock = governanceLock(
+        userParty(2),
+        amount = BigDecimal(10),
+        kind = new splice.governancelock.governancelockkind.GLK_ProvisionalFeaturedApp(
+          provider.toProtoPrimitive
+        ),
+      )
+      val right1 = featuredAppRight(provider)
+      val right2 = featuredAppRight(provider)
+
+      for {
+        store <- mkStore()
+        _ <- dummyDomain.create(lock)(store.multiDomainAcsStore)
+        _ <- dummyDomain.create(right1)(store.multiDomainAcsStore)
+        _ <- dummyDomain.create(right2)(store.multiDomainAcsStore)
+        result <- store.listProvisionalGovernanceLocksWithFeaturedAppRightSample()
+      } yield {
+        result.map(_._1.contractId) should contain theSameElementsAs Seq(lock.contractId)
+        Seq(right1.contractId, right2.contractId) should contain(result.head._2)
+      }
+    }
+
+  }
+
   "listVoteRequestsReadyToBeClosed" should {
 
     val votesAccept =
