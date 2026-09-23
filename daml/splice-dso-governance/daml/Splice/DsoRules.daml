@@ -349,6 +349,9 @@ data DsoRules_ExpireDevelopmentFundCouponResult = DsoRules_ExpireDevelopmentFund
     result : DevelopmentFundCoupon_DsoExpireResult
   deriving (Serializable)
 
+data DsoRules_GovernanceLock_ConvertProvisionalFeaturedAppLockResult = DsoRules_GovernanceLock_ConvertProvisionalFeaturedAppLockResult
+  deriving (Serializable)
+
 data DsoRules_VestingLock_ExpireVestingLockResult = DsoRules_VestingLock_ExpireVestingLockResult with
   deriving (Serializable)
 
@@ -1612,6 +1615,18 @@ template DsoRules with
         _ <- getAndValidateSvParty this (Some sv)
         result <- exercise developmentFundCouponCid DevelopmentFundCoupon_DsoExpire
         pure $ DsoRules_ExpireDevelopmentFundCouponResult with result
+
+    nonconsuming choice DsoRules_GovernanceLock_ConvertProvisionalFeaturedAppLock : DsoRules_GovernanceLock_ConvertProvisionalFeaturedAppLockResult
+      -- ^ Converts a provisional featured app `GovernanceLock` to a true featured app lock.
+      with
+        governanceLockCid : ContractId GovernanceLock
+        featuredAppRightCid : ContractId FeaturedAppRight
+        sv : Party
+      controller sv
+      do
+        _ <- getAndValidateSvParty this (Some sv)
+        exercise governanceLockCid GovernanceLock_DsoConvertProvisionalFeaturedAppLock with featuredAppRightCid
+        pure DsoRules_GovernanceLock_ConvertProvisionalFeaturedAppLockResult
 
     nonconsuming choice DsoRules_VestingLock_ExpireVestingLock : DsoRules_VestingLock_ExpireVestingLockResult
       -- ^ Expires a fully vested `VestingLock`, so that SVs can garbage-collect

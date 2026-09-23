@@ -140,6 +140,20 @@ template GovernanceLock
           governanceLock = newGovernanceLock
           changeHolding = newChangeHolding
 
+    choice GovernanceLock_DsoConvertProvisionalFeaturedAppLock : GovernanceLock_DsoConvertProvisionalFeaturedAppLockResult
+      with
+        featuredAppRightCid : ContractId FeaturedAppRight
+      controller dso
+      do
+        case specification.kind of
+          GLK_ProvisionalFeaturedApp provider -> do
+            fetchChecked (ForOwner with dso; owner = provider) featuredAppRightCid
+            create this with
+              specification = GovernanceLockSpecification with
+                kind = GLK_FeaturedApp with provider
+            pure GovernanceLock_DsoConvertProvisionalFeaturedAppLockResult
+          kind -> error $ "GovernanceLock_DsoConvertProvisionalFeaturedAppLock: cannot convert lock of kind " <> show kind
+
     interface instance V1.TransferInstruction for GovernanceLock where
       view = V1.TransferInstructionView with
           originalInstructionCid = toInterfaceContractId <$> originalLockCid
@@ -305,6 +319,10 @@ data GovernanceLock_MergeAndTopUpResult
       governanceLock : ContractId GovernanceLock
       changeHolding : Optional (ContractId Amulet)
   deriving (Eq, Show, Serializable)
+
+data GovernanceLock_DsoConvertProvisionalFeaturedAppLockResult
+   = GovernanceLock_DsoConvertProvisionalFeaturedAppLockResult
+   deriving (Serializable)
 
 template VestingLock
   with
