@@ -13,7 +13,7 @@ import { Loading, useVotesHooks } from '@canton-network/splice-common-frontend';
 import { ContractId } from '@daml/types';
 import { VoteRequest } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
 import { useSvConfig } from '../utils';
-import { PageHeader } from '../components/beta';
+import { PageHeader } from '../components/ui';
 import {
   actionTagToTitle,
   buildVoteHistoryData,

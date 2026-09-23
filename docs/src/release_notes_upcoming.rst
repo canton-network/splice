@@ -17,6 +17,9 @@ release-notes:: Upcoming
           ``/v0/dso`` endpoint. The scan is configured via the new ``.joinWithKeyOnboarding.sponsorScanUrl`` Helm value.
           SVs who set the ``.joinWithKeyOnboarding`` key config must set it before upgrading.
 
+        - The old governance UI, previously still reachable at ``/governance-old``, has been removed from the SV UI.
+          ``/votes`` and ``/governance`` now both lead to the current governance UI.
+
     - Docker Compose
 
         - The validator deployment can now also deploy the Canton Wallet Gateway and the Portfolio UI with the new ``-g`` flag of ``start.sh``.

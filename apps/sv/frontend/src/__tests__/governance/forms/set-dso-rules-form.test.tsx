@@ -962,3 +962,65 @@ describe('Next Scheduled Logical Synchronizer Upgrade', () => {
     });
   });
 });
+
+describe('Next Scheduled Synchronizer Upgrade submission', () => {
+  test('sends the upgrade time to the backend as the entered UTC value', async () => {
+    let requestBody = '';
+    server.use(
+      http.post(`${svUrl}/v0/admin/sv/voterequest/create`, async ({ request }) => {
+        requestBody = await request.text();
+        return HttpResponse.json({});
+      })
+    );
+
+    const user = userEvent.setup();
+
+    render(
+      <Wrapper>
+        <SetDsoConfigRulesForm />
+      </Wrapper>
+    );
+
+    await user.type(screen.getByTestId('set-dso-config-rules-summary'), 'Summary of the proposal');
+    await user.type(screen.getByTestId('set-dso-config-rules-url'), 'https://example.com');
+
+    const effectiveDateLocal = dayjs().add(10, 'day').startOf('hour');
+    fireEvent.change(screen.getByTestId('set-dso-config-rules-effective-date-field'), {
+      target: { value: effectiveDateLocal.format(dateTimeFormatISO) },
+    });
+
+    const upgradeTimeUtc = effectiveDateLocal
+      .utc()
+      .add(2, 'hour')
+      .format(nextScheduledSynchronizerUpgradeFormat);
+    const upgradeTimeIfTreatedAsLocal = effectiveDateLocal
+      .add(2, 'hour')
+      .format(nextScheduledSynchronizerUpgradeFormat);
+    expect(upgradeTimeUtc).not.toBe(upgradeTimeIfTreatedAsLocal);
+
+    await user.type(
+      screen.getByTestId('config-field-nextScheduledSynchronizerUpgradeTime'),
+      upgradeTimeUtc
+    );
+    await user.type(
+      screen.getByTestId('config-field-nextScheduledSynchronizerUpgradeMigrationId'),
+      '12345'
+    );
+
+    await user.click(screen.getByTestId('set-dso-config-rules-action'));
+
+    const submitButton = screen.getByTestId('submit-button');
+    await waitFor(async () => {
+      expect(submitButton).not.toBeDisabled();
+    });
+
+    await user.click(submitButton);
+    await user.click(submitButton);
+
+    await waitFor(() => {
+      expect(requestBody).toContain(`"time":"${upgradeTimeUtc}"`);
+    });
+    expect(requestBody).toContain('"migrationId":"12345"');
+    expect(requestBody).not.toContain(upgradeTimeIfTreatedAsLocal);
+  });
+});
