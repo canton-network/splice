@@ -22,10 +22,13 @@ test_searchCurrentTimeBounds = do
   where
     assertDeadlineExceeded' now msg compare = require msg $ now > compare
     assertWithinDeadline' now msg compare = require msg $ now <= compare
-    testPasses (baseTime, trueTime) = do
-      foundTimes <- searchCurrentTimeBounds_impl (pure . (< trueTime)) (assertDeadlineExceeded' trueTime) (assertWithinDeadline' trueTime) baseTime
-      brackets trueTime foundTimes
-    testCases = [ (baseTime, trueTime) | baseTime <- times, trueTime <- times, trueTime > minBound, trueTime < maxBound ]
+    testPasses (baseTime, trueTime, granularityDescription, granularity) = do
+      foundTimes <- searchCurrentTimeBounds_impl (pure . (< trueTime)) (assertDeadlineExceeded' trueTime) (assertWithinDeadline' trueTime) baseTime granularity
+      brackets trueTime foundTimes granularityDescription granularity
+    testCases = [ (baseTime, trueTime, granularityDescription, granularity)
+                | baseTime <- times
+                , trueTime <- times, trueTime > minBound, trueTime < maxBound
+                , (granularityDescription, granularity) <- granularities ]
     baseTime = datetime 2026 Jan 1 21 23 10
     smallOffsets = microseconds 0 :: [ t | mag <- [microseconds 1, seconds 48, minutes 47, hours 2, days 1], t <- [negate mag, mag]]
     -- Unfortunately, searchTimeMaximumLowerBound does not work for the _full_ range; issues appear when the exponential offsets go past the bounds.
@@ -33,11 +36,13 @@ test_searchCurrentTimeBounds = do
     largeOffsets = days 0 :: [ days n | mag <- [365000, 3650, 30, 1], n <- [negate mag, mag]]
     times = [baseTime `addRelTime` (largeOffset + smallOffset)
               | largeOffset <- largeOffsets, smallOffset <- smallOffsets ]
-    brackets trueTime (beforeTime, afterTime) = do
+    granularities = [("1 day", days 1), ("6 hours", hours 6), ("1 minute", minutes 1), ("30 seconds", seconds 30)]
+    brackets trueTime (beforeTime, afterTime) granularityDescription granularity = do
       require "beforeTime must be before trueTime" $ trueTime > beforeTime
       require "trueTime must be before afterTime" $ trueTime <= afterTime
-      require "one day after beforeTime must be after trueTime" $ trueTime <= (beforeTime `addRelTime` days 1)
-      require "one day before afterTime must be before trueTime" $ trueTime > (beforeTime `addRelTime` days (-1))
+      require (granularityDescription <> " after beforeTime must be after trueTime") $ trueTime <= (beforeTime `addRelTime` granularity)
+      require (granularityDescription <> " before afterTime must be before trueTime") $
+        trueTime > (beforeTime `addRelTime` convertMicrosecondsToRelTime (-(convertRelTimeToMicroseconds granularity)))
 
 -- | Fully explicit test case for specificationFromReceiverAndReason, to ensure that the specification lines up.
 test_specificationFromReceiverAndReason : Script ()

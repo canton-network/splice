@@ -18,7 +18,7 @@ import DA.Traversable (forA)
 
 import Splice.Amulet
 import Splice.Amulet.TwoStepTransfer (holdingToTransferInputs)
-import Splice.AmuletConfig (defaultGovernanceLockFeaturedAppLockVestingDuration, defaultGovernanceLockMinimumLockAmount, defaultGovernanceLockSuperValidatorLockVestingDuration)
+import Splice.AmuletConfig (defaultGovernanceLockFeaturedAppLockVestingDuration, defaultGovernanceLockMinimumLockAmount, defaultGovernanceLockSearchTimeGranularity, defaultGovernanceLockSuperValidatorLockVestingDuration)
 import Splice.AmuletRules
 import Splice.Api.Token.HoldingV1 (Holding)
 import Splice.Api.Token.MetadataV1
@@ -78,7 +78,9 @@ template GovernanceLock
         extraArgs : ExtraArgs
         actors : [Party]
       controller actors
-      do governanceLock_unlockImpl self this unlockAmount unlockAt extraArgs actors
+      do
+        (context, state) <- unfeaturedPaymentContextAndConfigFromChoiceContext dso extraArgs.context
+        governanceLock_unlockImpl self this unlockAmount unlockAt actors context state
 
     choice GovernanceLock_MergeAndTopUp : GovernanceLock_MergeAndTopUpResult
       with
@@ -159,9 +161,10 @@ template GovernanceLock
       transferInstruction_rejectImpl _ _ = assertFail "Transfers representing governance locks cannot be rejected"
       transferInstruction_withdrawImpl self arg = do
           let V1.TransferInstruction_Withdraw {..} = arg
-          (_, unlockAt) <- searchCurrentTimeBounds requestedAt
+          (context, state) <- unfeaturedPaymentContextAndConfigFromChoiceContext dso extraArgs.context
+          (_, unlockAt) <- searchCurrentTimeBounds requestedAt state
           -- Need to call the body of unlock directly to avoid double consumption.
-          unlockResult <- governanceLock_unlockImpl (coerceContractId self) this None unlockAt extraArgs [owner]
+          unlockResult <- governanceLock_unlockImpl (coerceContractId self) this None unlockAt [owner] context state
           pure $ V1.TransferInstructionResult with
             output = case unlockResult.vestingLock of
               Some vestingLock -> V1.TransferInstructionResult_Pending with
@@ -176,13 +179,11 @@ template GovernanceLock
   -- TODO(canton-network/splice-sv-fa-locking#39): substitution, probably with a loose function for implementation sharing.
 
 
-governanceLock_unlockImpl : ContractId GovernanceLock -> GovernanceLock -> Optional Decimal -> Time -> ExtraArgs -> [Party] -> Update GovernanceLock_UnlockResult
-governanceLock_unlockImpl self this@(GovernanceLock {..}) unlockAmount unlockAt extraArgs actors
+governanceLock_unlockImpl : ContractId GovernanceLock -> GovernanceLock -> Optional Decimal -> Time -> [Party] -> ExternalPartyTransferContext -> ExternalPartyConfigState -> Update GovernanceLock_UnlockResult
+governanceLock_unlockImpl self this@(GovernanceLock {..}) unlockAmount unlockAt actors context state
     = do
         checkActors actors [[owner]] -- TODO(canton-network/splice-sv-fa-locking#39): custom controllers
         assertWithinDeadline "unlockAt" unlockAt
-
-        (context, state) <- unfeaturedPaymentContextAndConfigFromChoiceContext dso extraArgs.context
 
         let actualUnlockAmount = fromOptional amount unlockAmount
         let isFullUnlock = actualUnlockAmount == amount
@@ -241,9 +242,10 @@ loopUntilRightA f a = do
 -- | Takes a reference time, that must be at or before the current ledger time,
 -- and returns a pair where the first is before the current time and the second is
 -- after.
-searchCurrentTimeBounds : Time -> Update (Time, Time)
-searchCurrentTimeBounds
-  = searchCurrentTimeBounds_impl isLedgerTimeGE assertDeadlineExceeded assertWithinDeadline
+searchCurrentTimeBounds : Time -> ExternalPartyConfigState -> Update (Time, Time)
+searchCurrentTimeBounds basis state =
+  searchCurrentTimeBounds_impl isLedgerTimeGE assertDeadlineExceeded assertWithinDeadline basis $
+    fromOptional defaultGovernanceLockSearchTimeGranularity state.governanceLockSearchTimeGranularity
 
 -- | Implementation for searchCurrentTimeBounds, taking explicit functions to
 -- allow running outside of Update.
@@ -253,8 +255,9 @@ searchCurrentTimeBounds_impl
   -> (Text -> Time -> m ())
   -> (Text -> Time -> m ())
   -> Time
+  -> RelTime
   -> m (Time, Time)
-searchCurrentTimeBounds_impl isTimeGE assertDeadlineExceeded' assertWithinDeadline' basis = do
+searchCurrentTimeBounds_impl isTimeGE assertDeadlineExceeded' assertWithinDeadline' basis granularity = do
     afterBasis <- isTimeGE basis
     let seekF = if afterBasis then seekForward else seekBackward
     bounds@(ubBefore, lbAfter) <- loopUntilRightA binarySearch =<< loopUntilRightA seekF (1, basis)
@@ -266,28 +269,28 @@ searchCurrentTimeBounds_impl isTimeGE assertDeadlineExceeded' assertWithinDeadli
   where
     binarySearch : (Int, Time) -> m (Either (Int, Time) (Time, Time))
     binarySearch (-1, basis) = do
-      pure $ Right (basis, basis `addRelTime` days 1)
+      pure $ Right (basis, basis `addRelTime` granularity)
     binarySearch (seek, basis) = do
-      let nextBasis = basis `addRelTime` seekToDays seek
+      let nextBasis = basis `addRelTime` seekToGranularity seek
       gt <- isTimeGE nextBasis
       pure $ if gt
          then Left (seek - 1, nextBasis)
          else Left (seek - 1, basis)
     seekForward : (Int, Time) -> m (Either (Int, Time) (Int, Time))
     seekForward (seek, basis) = do
-      let nextBasis = basis `addRelTime` seekToDays seek
+      let nextBasis = basis `addRelTime` seekToGranularity seek
       gt <- isTimeGE nextBasis
       pure $ if gt
          then Left (seek + 1, nextBasis)
          else Right (seek - 1, basis)
     seekBackward : (Int, Time) -> m (Either (Int, Time) (Int, Time))
     seekBackward (seek, basis) = do
-      let nextBasis = basis `addRelTime` (- seekToDays seek)
+      let nextBasis = basis `addRelTime` (- seekToGranularity seek)
       gt <- isTimeGE nextBasis
       pure $ if gt
          then Right (seek - 1, nextBasis)
          else Left (seek + 1, nextBasis)
-    seekToDays seek = days $ 2 ^ seek
+    seekToGranularity seek = convertMicrosecondsToRelTime $ 2 ^ seek * convertRelTimeToMicroseconds granularity
 
 
 data GovernanceLock_UnlockResult
@@ -329,7 +332,9 @@ template VestingLock
         extraArgs : ExtraArgs
         actors : [Party]
       controller actors
-      do vestingLock_withdrawImpl self this requestedAt extraArgs actors
+      do
+        (context, _) <- unfeaturedPaymentContextAndConfigFromChoiceContext dso extraArgs.context
+        vestingLock_withdrawImpl self this requestedAt actors context
 
     choice VestingLock_DsoExpire : VestingLock_DsoExpireResult
       -- ^ Garbage-collect a fully vested lock, so that SV nodes are not left
@@ -365,8 +370,9 @@ template VestingLock
       transferInstruction_rejectImpl _ _ = assertFail "Transfers representing governance locks cannot be rejected"
       transferInstruction_withdrawImpl self arg = do
         let V1.TransferInstruction_Withdraw {..} = arg
-        (requestedAt, _) <- searchCurrentTimeBounds (endTime `addRelTime` (- vestingPeriod))
-        withdrawResult <- vestingLock_withdrawImpl (coerceContractId self) this requestedAt extraArgs [owner]
+        (context, state) <- unfeaturedPaymentContextAndConfigFromChoiceContext dso extraArgs.context
+        (requestedAt, _) <- searchCurrentTimeBounds (endTime `addRelTime` (- vestingPeriod)) state
+        withdrawResult <- vestingLock_withdrawImpl (coerceContractId self) this requestedAt [owner] context
         case withdrawResult.vestingLock of
           Some vestingLock -> pure $ V1.TransferInstructionResult with
             output = V1.TransferInstructionResult_Pending with
@@ -384,12 +390,11 @@ template VestingLock
   -- TODO(canton-network/splice-sv-fa-locking#39): substitution, probably with a loose function for implementation sharing.
 
 
-vestingLock_withdrawImpl : ContractId VestingLock -> VestingLock -> Time -> ExtraArgs -> [Party] -> Update VestingLock_WithdrawResult
-vestingLock_withdrawImpl _self this@(VestingLock {..}) requestedAt extraArgs actors
+vestingLock_withdrawImpl : ContractId VestingLock -> VestingLock -> Time -> [Party] -> ExternalPartyTransferContext -> Update VestingLock_WithdrawResult
+vestingLock_withdrawImpl _self this@(VestingLock {..}) requestedAt actors context
     = do
         checkActors actors [[owner]] -- TODO(canton-network/splice-sv-fa-locking#39): custom controllers
         assertDeadlineExceeded "requestedAt" requestedAt
-        context <- externalPartyTransferFromChoiceContext dso extraArgs.context
 
         let unvestedAmount = calculateUnvestedAmount requestedAt this
 
