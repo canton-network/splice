@@ -64,6 +64,7 @@ import org.lfdecentralizedtrust.splice.http.{
   HttpVotesHandler,
   UrlValidator,
 }
+import org.lfdecentralizedtrust.splice.http.HttpRequestLimits.maxSizeOrFail
 import org.lfdecentralizedtrust.splice.http.v0.{definitions, scan as v0}
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   AcsRequest,
@@ -246,6 +247,12 @@ class HttpScanHandler(
   )(extracted: TraceContext): Future[v0.ScanResource.GetOpenAndIssuingMiningRoundsResponse] = {
     implicit val tc = extracted
     withSpan(s"$workflowId.getOpenAndIssuingMiningRounds") { _ => _ =>
+      val cachedOpenMiningRoundContractIds = maxSizeOrFail(
+        "cached_open_mining_round_contract_ids",
+        body.cachedOpenMiningRoundContractIds,
+      )
+      val cachedIssuingRoundContractIds =
+        maxSizeOrFail("cached_issuing_round_contract_ids", body.cachedIssuingRoundContractIds)
       for {
         issuingRounds <- store.multiDomainAcsStore
           .listContracts(IssuingMiningRound.COMPANION)
@@ -253,8 +260,8 @@ class HttpScanHandler(
           .listContracts(OpenMiningRound.COMPANION)
         summarizingRounds <- store.multiDomainAcsStore
           .listContracts(SummarizingMiningRound.COMPANION)
-        issuingRoundsCachedByClient = body.cachedIssuingRoundContractIds.toSet
-        openRoundsCachedByClient = body.cachedOpenMiningRoundContractIds.toSet
+        issuingRoundsCachedByClient = cachedIssuingRoundContractIds.toSet
+        openRoundsCachedByClient = cachedOpenMiningRoundContractIds.toSet
         issuingRoundsResponseMap = selectRoundsToRespondWith(
           issuingRounds,
           issuingRoundsCachedByClient,
@@ -1545,16 +1552,18 @@ class HttpScanHandler(
   )(implicit
       tc: TraceContext
   ): Future[Either[String, T]] = {
+    val boundedPartyIds = partyIds.map(maxSizeOrFail("party_ids", _))
+    val boundedTemplates = templates.map(maxSizeOrFail("templates", _))
     def exactQuery(recordTimeTs: CantonTimestamp) = snapshotStore
       .queryAcsSnapshot(
         migrationId,
         recordTimeTs,
         after,
         PageLimit.tryCreate(pageSize),
-        partyIds
+        boundedPartyIds
           .getOrElse(Seq.empty)
           .map(PartyId.tryFromProtoPrimitive),
-        templates
+        boundedTemplates
           .getOrElse(Seq.empty)
           .map(_.split(":") match {
             case Array(packageName, moduleName, entityName) =>
@@ -1753,13 +1762,14 @@ class HttpScanHandler(
   )(implicit
       tc: TraceContext
   ): Future[Either[String, T]] = {
+    val boundedOwnerPartyIds = maxSizeOrFail("owner_party_ids", ownerPartyIds)
     def exactQuery(recordTimeTs: CantonTimestamp) = snapshotStore
       .getHoldingsState(
         migrationId,
         recordTimeTs,
         after,
         PageLimit.tryCreate(pageSize),
-        nonEmptyOrFail("ownerPartyIds", ownerPartyIds).map(PartyId.tryFromProtoPrimitive),
+        nonEmptyOrFail("owner_party_ids", boundedOwnerPartyIds).map(PartyId.tryFromProtoPrimitive),
       )
 
     queryWithOptionalAtOrBefore(
@@ -1881,6 +1891,7 @@ class HttpScanHandler(
         partyIds,
         asOfRound,
       ) = body
+      val boundedPartyIds = maxSizeOrFail("owner_party_ids", partyIds)
 
       def exactQuery(recordTimeTs: CantonTimestamp) = for {
         round <- asOfRound match {
@@ -1902,7 +1913,7 @@ class HttpScanHandler(
           .getHoldingsSummary(
             migrationId,
             recordTimeTs,
-            nonEmptyOrFail("partyIds", partyIds).map(PartyId.tryFromProtoPrimitive),
+            nonEmptyOrFail("owner_party_ids", boundedPartyIds).map(PartyId.tryFromProtoPrimitive),
             round,
           )
       } yield result
@@ -1965,6 +1976,7 @@ class HttpScanHandler(
         recordTimeMatch,
         partyIds,
       ) = body
+      val boundedPartyIds = maxSizeOrFail("owner_party_ids", partyIds)
 
       // The asOfRound parameter is only consumed by SpliceUtil.holdingFee, which feeds the
       // accumulated*HoldingFees* and totalAvailableCoin fields on HoldingsSummary. The v1
@@ -1976,7 +1988,7 @@ class HttpScanHandler(
           .getHoldingsSummary(
             migrationId,
             recordTimeTs,
-            nonEmptyOrFail("partyIds", partyIds).map(PartyId.tryFromProtoPrimitive),
+            nonEmptyOrFail("owner_party_ids", boundedPartyIds).map(PartyId.tryFromProtoPrimitive),
             0L,
           )
 
