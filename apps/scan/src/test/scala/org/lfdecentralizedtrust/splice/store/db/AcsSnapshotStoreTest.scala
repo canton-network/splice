@@ -16,6 +16,7 @@ import org.lfdecentralizedtrust.splice.store.{
   UpdateHistory,
 }
 import org.lfdecentralizedtrust.splice.util.{Contract, HoldingsSummary, PackageQualifiedName}
+import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.FutureUnlessShutdownOps
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.resource.DbStorage
@@ -1550,6 +1551,8 @@ class TablePerAcsSnapshotStoreTest extends AcsSnapshotStoreTest {
   }
 
   "idempotently index the stakeholders table" in {
+    import storage.api.jdbcProfile.api.*
+
     for {
       updateHistory <- mkUpdateHistory()
       store = mkStore(updateHistory)
@@ -1568,9 +1571,34 @@ class TablePerAcsSnapshotStoreTest extends AcsSnapshotStoreTest {
       oldestUnindexed = oldestUnindexedOpt.valueOrFail("snapshot should be unindexed")
       _ = oldestUnindexed should be(snapshot)
       _ <- store.indexSnapshotStakeholdersTable(oldestUnindexed)
+      expectedIndexNames = Set(
+        AcsSnapshotStore.AcsSnapshotDDL.stakeholderIndexName(
+          oldestUnindexed.historyId,
+          oldestUnindexed.snapshotRecordTime,
+        ),
+        AcsSnapshotStore.AcsSnapshotDDL.stakeholderTemplateIdIndexName(
+          oldestUnindexed.historyId,
+          oldestUnindexed.snapshotRecordTime,
+        ),
+      )
+      _ = expectedIndexNames should have size 2
+      indexNames <- storage
+        .query(
+          sql"""
+            select indexname
+            from pg_indexes
+            where schemaname = current_schema()
+              and tablename = ${oldestUnindexed.stakeholdersTableName}
+          """.as[String],
+          "listAcsSnapshotStakeholderIndexes",
+        )
+        .toFuture
       oldestAfter <- store.lookupOldestUnindexedSnapshot()
       // idempotency check, shouldn't fail
       _ <- store.indexSnapshotStakeholdersTable(oldestUnindexed)
-    } yield oldestAfter should be(None)
+    } yield {
+      indexNames.toSet should contain allElementsOf expectedIndexNames
+      oldestAfter should be(None)
+    }
   }
 }

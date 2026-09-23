@@ -119,7 +119,7 @@ class AcsSnapshotStore(
   ): Future[Option[PerTableAcsSnapshot]] = {
     storage
       .querySingle(
-        sql"""select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance, creates_table_name, stakeholders_table_name 
+        sql"""select snapshot_record_time, migration_id, history_id, first_row_id, last_row_id, unlocked_amulet_balance, locked_amulet_balance, creates_table_name, stakeholders_table_name
             from acs_snapshot
             where not indexes_created
             and   history_id = $historyId
@@ -887,19 +887,23 @@ class AcsSnapshotStore(
     // - if the `set indexes_created = true` executes, we know everything succeeded.
     // - otherwise, on retry the `create index IF NOT EXISTS` will just move on.
     for {
-      _ <- storage.update(
-        AcsSnapshotDDL.stakeholderIndexAction(
-          snapshot.stakeholdersTableName,
-          historyId,
-          snapshot.snapshotRecordTime,
+      _ <- storage.queryAndUpdate(
+        AdvisoryLocks.withDdlLock(
+          AcsSnapshotDDL.stakeholderIndexAction(
+            snapshot.stakeholdersTableName,
+            historyId,
+            snapshot.snapshotRecordTime,
+          )
         ),
         "index_stakeholders",
       )
-      _ <- storage.update(
-        AcsSnapshotDDL.stakeholderTemplateIdIndexAction(
-          snapshot.stakeholdersTableName,
-          historyId,
-          snapshot.snapshotRecordTime,
+      _ <- storage.queryAndUpdate(
+        AdvisoryLocks.withDdlLock(
+          AcsSnapshotDDL.stakeholderTemplateIdIndexAction(
+            snapshot.stakeholdersTableName,
+            historyId,
+            snapshot.snapshotRecordTime,
+          )
         ),
         "index_stakeholders_templateid",
       )
@@ -1472,7 +1476,7 @@ object AcsSnapshotStore {
 
   object AcsSnapshotDDL {
     def stakeholderIndexName(historyId: Long, snapshotRecordTime: CantonTimestamp) =
-      s"acs_snapshot_creates_${historyId}_${snapshotRecordTime.toEpochMilli}_s_ri"
+      s"acs_snapshot_creates_${historyId}_${snapshotRecordTime.toEpochMilli}_s_ca_ci"
 
     def stakeholderIndexAction(
         stakeholdersTableName: String,
@@ -1486,14 +1490,14 @@ object AcsSnapshotStore {
            on #$stakeholdersTableName (stakeholder, created_at, contract_id) """.asUpdate
 
     def stakeholderTemplateIdIndexName(historyId: Long, snapshotRecordTime: CantonTimestamp) =
-      s"acs_snapshot_creates_${historyId}_${snapshotRecordTime.toEpochMilli}_s_rid_ri"
+      s"acs_snapshot_creates_${historyId}_${snapshotRecordTime.toEpochMilli}_s_tid_ca_ci"
 
     def stakeholderTemplateIdIndexAction(
         stakeholdersTableName: String,
         historyId: Long,
         snapshotRecordTime: CantonTimestamp,
     ) =
-      sql"""create index if not exists #${stakeholderIndexName(
+      sql"""create index if not exists #${stakeholderTemplateIdIndexName(
           historyId,
           snapshotRecordTime,
         )}
