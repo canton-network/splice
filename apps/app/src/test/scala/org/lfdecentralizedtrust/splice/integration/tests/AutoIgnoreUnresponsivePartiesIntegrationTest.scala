@@ -120,6 +120,8 @@ abstract class AutoIgnoreUnresponsivePartiesIntegrationTestBase
         sv1Backend.participantClientWithAdminToken,
         synchronizerId,
       )
+      // record alice's party so the follow-up tests in this suite can query her row
+      unresponsivePartyRef.set(Some(aliceParty))
       val sv1ParticipantId = sv1Backend.participantClientWithAdminToken.id
       val aliceParticipantId = aliceValidatorBackend.participantClient.id
       val sv1Participant = sv1Backend.participantClientWithAdminToken
