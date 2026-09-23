@@ -231,6 +231,22 @@ final object TransferInstruction_Withdraw
         splice.api.token.transferinstructionv1.TransferInstruction.CHOICE_TransferInstruction_Withdraw,
     )
 
+object GovernanceLockTransferInstruction_Withdraw
+    extends InterfaceExerciseNodeCompanion.Mk(
+      interface = splice.api.token.transferinstructionv1.TransferInstruction.INTERFACE,
+      template = splice.governancelock.GovernanceLock.COMPANION,
+      choice =
+        splice.api.token.transferinstructionv1.TransferInstruction.CHOICE_TransferInstruction_Withdraw,
+    )
+
+object VestingLockTransferInstruction_Withdraw
+    extends InterfaceExerciseNodeCompanion.Mk(
+      interface = splice.api.token.transferinstructionv1.TransferInstruction.INTERFACE,
+      template = splice.governancelock.VestingLock.COMPANION,
+      choice =
+        splice.api.token.transferinstructionv1.TransferInstruction.CHOICE_TransferInstruction_Withdraw,
+    )
+
 case class Tap(
     node: ExerciseNode[splice.amuletrules.AmuletRules_DevNet_Tap, amuletCodegen.Amulet.ContractId]
 )
