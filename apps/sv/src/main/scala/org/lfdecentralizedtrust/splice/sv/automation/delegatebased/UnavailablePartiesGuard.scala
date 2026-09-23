@@ -64,9 +64,9 @@ trait UnavailablePartiesGuard extends NamedLogging {
         unavailablePartiesStore
           .removeParties(toRestore.toSeq)
           .map { restored =>
-            if (restored > 0)
+            if (restored.nonEmpty)
               logger.info(
-                s"Submission succeeded, recovered $restored unavailable parties."
+                s"Submission succeeded, recovered ${restored.size} unavailable parties: $restored"
               )
             outcome
           }
