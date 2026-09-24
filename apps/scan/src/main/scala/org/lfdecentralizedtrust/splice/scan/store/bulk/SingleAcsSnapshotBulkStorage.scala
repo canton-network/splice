@@ -11,7 +11,6 @@ import org.apache.pekko.util.ByteString
 import org.lfdecentralizedtrust.splice.scan.admin.http.ScanHttpEncodings
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore
 import org.lfdecentralizedtrust.splice.store.{
-  HistoryMetrics,
   PageLimit,
   S3BucketConnection,
   TimestampWithMigrationId,
@@ -25,6 +24,7 @@ import java.nio.charset.StandardCharsets
 import Position.*
 import org.apache.pekko.NotUsed
 import org.lfdecentralizedtrust.splice.scan.config.{BulkStorageConfig, ScanStorageConfig}
+import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorage.BulkStorageMetrics
 
 object Position {
   sealed trait Position
@@ -42,7 +42,7 @@ class SingleAcsSnapshotBulkStorage(
     appConfig: BulkStorageConfig,
     acsSnapshotStore: AcsSnapshotStore,
     s3Connection: S3BucketConnection,
-    historyMetrics: HistoryMetrics,
+    historyMetrics: BulkStorageMetrics,
     override val loggerFactory: NamedLoggerFactory,
 )(implicit tc: TraceContext, ec: ExecutionContext)
     extends NamedLogging {
@@ -91,7 +91,7 @@ class SingleAcsSnapshotBulkStorage(
         case End => Future.successful(None)
       }
       .map(events => {
-        historyMetrics.BulkStorage.incContractsCount(events.length)
+        historyMetrics.incContractsCount(events.length)
         events
       })
       .via(
@@ -107,7 +107,7 @@ class SingleAcsSnapshotBulkStorage(
                     .storageKey("ACS", objIdx)}",
               loggerFactory,
             ),
-          encoding => historyMetrics.BulkStorage.incAcsSnapshotObjects(encoding.key, "staging"),
+          encoding => historyMetrics.incAcsSnapshotObjects(encoding.key, "staging"),
         )
       )
       .fold(Seq.empty[String])(_ :+ _)
@@ -125,7 +125,7 @@ object SingleAcsSnapshotBulkStorage {
       appConfig: BulkStorageConfig,
       acsSnapshotStore: AcsSnapshotStore,
       s3Connection: S3BucketConnection,
-      historyMetrics: HistoryMetrics,
+      historyMetrics: BulkStorageMetrics,
       loggerFactory: NamedLoggerFactory,
   )(implicit
       tc: TraceContext,
@@ -151,7 +151,7 @@ object SingleAcsSnapshotBulkStorage {
       appConfig: BulkStorageConfig,
       acsSnapshotStore: AcsSnapshotStore,
       s3Connection: S3BucketConnection,
-      historyMetrics: HistoryMetrics,
+      historyMetrics: BulkStorageMetrics,
       loggerFactory: NamedLoggerFactory,
   )(implicit
       tc: TraceContext,

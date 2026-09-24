@@ -1,12 +1,13 @@
 package org.lfdecentralizedtrust.splice.scan.store
 
 import com.daml.metrics.api.noop.NoOpMetricsFactory
+import com.daml.metrics.api.MetricsContext
+import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryMetrics
 import com.digitalasset.canton.HasExecutionContext
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.topology.{ParticipantId, PartyId, SynchronizerId}
 import org.lfdecentralizedtrust.splice.store.{
-  HistoryMetrics,
   PageLimit,
   StoreTestBase,
   TimestampWithMigrationId,
@@ -935,7 +936,7 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
       loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = true,
-      HistoryMetrics(NoOpMetricsFactory, migrationId),
+      new UpdateHistoryMetrics(NoOpMetricsFactory)(MetricsContext.Empty),
     )
     uh.ingestionSink.initialize().map(_ => uh)
   }

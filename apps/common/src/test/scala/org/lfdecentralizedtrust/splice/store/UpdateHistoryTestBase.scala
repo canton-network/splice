@@ -27,6 +27,8 @@ import scala.concurrent.Future
 import scala.jdk.CollectionConverters.*
 import UpdateHistory.UpdateHistoryResponse
 import com.daml.metrics.api.noop.NoOpMetricsFactory
+import com.daml.metrics.api.MetricsContext
+import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryMetrics
 
 abstract class UpdateHistoryTestBase
     extends StoreTestBase
@@ -250,7 +252,7 @@ abstract class UpdateHistoryTestBase
       loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = true,
-      HistoryMetrics.apply(NoOpMetricsFactory, domainMigrationId),
+      new UpdateHistoryMetrics(NoOpMetricsFactory)(MetricsContext.Empty),
     )
   }
 
