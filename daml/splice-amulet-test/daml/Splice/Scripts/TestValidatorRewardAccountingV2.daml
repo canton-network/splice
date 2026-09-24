@@ -19,6 +19,7 @@ import Splice.Amulet
 import Splice.AmuletConfig
 import Splice.AmuletRules
 import Splice.Round
+import Splice.Types
 
 import Splice.Scripts.Util
 import Splice.Testing.Registries.AmuletRegistry.Parameters (defaultAmuletConfig)
@@ -111,3 +112,26 @@ test_splitAndBurn_traffic_based_skips_coupon = do
 
   coupons <- query @ValidatorRewardCoupon app.dso
   assertMsg "no ValidatorRewardCoupon should be created under TrafficBased" (null coupons)
+
+-- TODO(CIP-0120): confirm-one-step test (see top-of-file TODO). Remove once
+-- the end-to-end batch-processing tests exercise this template creation.
+test_ValidatorRewardCouponV2_create_and_query : Script ()
+test_ValidatorRewardCouponV2_create_and_query = do
+  app <- setupApp
+  node <- allocateParty "validator-node"
+  now <- getTime
+  let expiresAt = now `addRelTime` hours 36
+  couponCid <- submit app.dso $ createCmd ValidatorRewardCouponV2 with
+    dso = app.dso
+    node
+    round = Round 1
+    amount = 100.0
+    expiresAt
+    nodeIsObserver = True
+    beneficiary = None
+  Some coupon <- queryContractId app.dso couponCid
+  coupon.node === node
+  coupon.amount === 100.0
+  coupon.round === Round 1
+  coupon.nodeIsObserver === True
+  coupon.beneficiary === None
