@@ -3,6 +3,7 @@
 
 module Splice.ExternalPartyConfigState where
 
+import DA.Set (Set)
 import DA.TextMap
 
 import Splice.Api.Token.MetadataV1
@@ -30,6 +31,9 @@ template ExternalPartyConfigState
     targetArchiveAfter : Time -- ^ Lower bound on the time the contract gets archived, not enforced as a strict upper bound.
     rewardCalculationVersion : Optional RewardVersion -- ^ The reward calculation version to use for transactions relying on this config state.
     amuletSwitchOverTimes : Optional (TextMap Time) -- ^ Timepoints for synchronized switch-overs of amulet functionality both on and off-ledger.
+    trafficPrice : Optional Decimal -- ^ USD price per MB for traffic
+    requiredSynchronizers : Optional (Set Text) -- ^ Synchronizers traffic can be bought for, at the time the config state was created.
+    minTrafficTopupAmount : Optional Int -- ^ Minimum traffic top-up amount at the time the config state was created.
   where
     signatory dso
 
