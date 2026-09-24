@@ -299,3 +299,80 @@ test_UnhideValidatorRewardCouponsV2_rejects_already_observable = do
   submitMustFail app.dso $ exerciseCmd amuletRulesCid AmuletRules_UnhideValidatorRewardCouponsV2 with
     rewardCouponCids = [observableCid]
     nodes = [node]
+
+-- TODO(CIP-0120): confirm-one-step test (see top-of-file TODO). Remove once
+-- the end-to-end expiry trigger tests exercise this choice.
+test_ClaimExpiredValidatorRewardsV2_happy_path : Script ()
+test_ClaimExpiredValidatorRewardsV2_happy_path = do
+  app <- setupApp
+  node <- allocateParty "validator-node"
+  now <- getTime
+  let expiresAt = now `addRelTime` hours 1
+  couponCid <- submit app.dso $ createCmd ValidatorRewardCouponV2 with
+    dso = app.dso
+    node
+    round = Round 0
+    amount = 100.0
+    expiresAt
+    nodeIsObserver = True
+    beneficiary = None
+  -- fast-forward past expiry
+  setTime $ expiresAt `addRelTime` minutes 1
+
+  [(amuletRulesCid, _)] <- query @AmuletRules app.dso
+  _ <- submit app.dso $ exerciseCmd amuletRulesCid AmuletRules_ClaimExpiredValidatorRewardsV2 with
+    rewardCouponCids = [couponCid]
+    expiryObservers = [node]
+
+  -- coupon archived
+  None <- queryContractId app.dso couponCid
+  -- unclaimed reward created for the amount
+  unclaimed <- query @UnclaimedReward app.dso
+  case unclaimed of
+    [(_, r)] -> r.amount === 100.0
+    _ -> fail "expected exactly one UnclaimedReward after expiry"
+
+-- TODO(CIP-0120): confirm-one-step test (see top-of-file TODO). Remove once
+-- the end-to-end expiry trigger tests exercise this failure path.
+test_ClaimExpiredValidatorRewardsV2_rejects_deadline_not_exceeded : Script ()
+test_ClaimExpiredValidatorRewardsV2_rejects_deadline_not_exceeded = do
+  app <- setupApp
+  node <- allocateParty "validator-node"
+  now <- getTime
+  couponCid <- submit app.dso $ createCmd ValidatorRewardCouponV2 with
+    dso = app.dso
+    node
+    round = Round 0
+    amount = 100.0
+    expiresAt = now `addRelTime` hours 36  -- far in the future
+    nodeIsObserver = True
+    beneficiary = None
+
+  [(amuletRulesCid, _)] <- query @AmuletRules app.dso
+  submitMustFail app.dso $ exerciseCmd amuletRulesCid AmuletRules_ClaimExpiredValidatorRewardsV2 with
+    rewardCouponCids = [couponCid]
+    expiryObservers = [node]
+
+-- TODO(CIP-0120): confirm-one-step test (see top-of-file TODO). Remove once
+-- the end-to-end expiry trigger tests exercise this failure path.
+test_ClaimExpiredValidatorRewardsV2_rejects_wrong_observer_set : Script ()
+test_ClaimExpiredValidatorRewardsV2_rejects_wrong_observer_set = do
+  app <- setupApp
+  node <- allocateParty "validator-node"
+  intruder <- allocateParty "intruder"
+  now <- getTime
+  let expiresAt = now `addRelTime` hours 1
+  couponCid <- submit app.dso $ createCmd ValidatorRewardCouponV2 with
+    dso = app.dso
+    node
+    round = Round 0
+    amount = 100.0
+    expiresAt
+    nodeIsObserver = True
+    beneficiary = None
+  setTime $ expiresAt `addRelTime` minutes 1
+
+  [(amuletRulesCid, _)] <- query @AmuletRules app.dso
+  submitMustFail app.dso $ exerciseCmd amuletRulesCid AmuletRules_ClaimExpiredValidatorRewardsV2 with
+    rewardCouponCids = [couponCid]
+    expiryObservers = [intruder]  -- wrong: node should be there

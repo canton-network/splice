@@ -130,6 +130,9 @@ data AmuletRules_UnhideRewardCouponsV2Result = AmuletRules_UnhideRewardCouponsV2
 data AmuletRules_UnhideValidatorRewardCouponsV2Result = AmuletRules_UnhideValidatorRewardCouponsV2Result {}
   deriving (Serializable)
 
+data AmuletRules_ClaimExpiredValidatorRewardsV2Result = AmuletRules_ClaimExpiredValidatorRewardsV2Result {}
+  deriving (Serializable)
+
 data AmuletRules_ArchiveDryRunRewardAccountingV2Result = AmuletRules_ArchiveDryRunRewardAccountingV2Result {}
   deriving (Serializable)
 
@@ -751,6 +754,28 @@ template AmuletRules
         when (amount > 0.0) $
           void $ create UnclaimedReward with dso; amount
         return AmuletRules_ClaimExpiredRewardsV2Result {}
+
+    -- batch claim of expired validator rewards under CIP-0120
+    nonconsuming choice AmuletRules_ClaimExpiredValidatorRewardsV2 : AmuletRules_ClaimExpiredValidatorRewardsV2Result
+      with
+        rewardCouponCids : [ContractId ValidatorRewardCouponV2]
+        expiryObservers : [Party]
+      observer expiryObservers
+      controller dso
+      do
+        require "at least one coupon" (not (null rewardCouponCids))
+
+        coupons <- forA rewardCouponCids $ \cid -> do
+          coupon <- fetchAndArchive (ForDso with dso) cid
+          assertDeadlineExceeded "coupon.expiresAt" coupon.expiresAt
+          return coupon
+        let actualExpiryObservers = concat [ coupon.node :: optionalToList coupon.beneficiary | coupon <- coupons, coupon.nodeIsObserver ]
+        require "expiryObservers match coupons" (sort expiryObservers == dedupSort actualExpiryObservers)
+
+        let amount = sum [ coupon.amount | coupon <- coupons ]
+        when (amount > 0.0) $
+          void $ create UnclaimedReward with dso; amount
+        return AmuletRules_ClaimExpiredValidatorRewardsV2Result {}
 
     nonconsuming choice AmuletRules_StartProcessingRewardsV2 : AmuletRules_StartProcessingRewardsV2Result
       with
