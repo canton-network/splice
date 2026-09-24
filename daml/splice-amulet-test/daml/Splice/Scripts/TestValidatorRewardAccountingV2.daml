@@ -4,6 +4,7 @@
 module Splice.Scripts.TestValidatorRewardAccountingV2 where
 
 import DA.Assert
+import DA.Time
 
 import Daml.Script
 
@@ -16,3 +17,23 @@ test_ValidatorRewardVersion_distinct = do
   assertMsg
     "CcBurn and TrafficBased are distinct"
     (ValidatorRewardVersion_CcBurn /= ValidatorRewardVersion_TrafficBased)
+
+sampleValidatorRewardConfig : ValidatorRewardConfig
+sampleValidatorRewardConfig = ValidatorRewardConfig with
+  mintingVersion = ValidatorRewardVersion_TrafficBased
+  dryRunVersion = None
+  batchSize = 100
+  rewardCouponTimeToLive = hours 36
+  confirmingValidatorRewardPercentage = 0.3
+  maximumDecentralizationValue = 7
+
+test_ValidatorRewardConfig_equality : Script ()
+test_ValidatorRewardConfig_equality = do
+  sampleValidatorRewardConfig === sampleValidatorRewardConfig
+  assertMsg
+    "changing batchSize breaks equality"
+    (sampleValidatorRewardConfig /= (sampleValidatorRewardConfig with batchSize = 200))
+  assertMsg
+    "changing mintingVersion breaks equality"
+    (sampleValidatorRewardConfig /=
+      (sampleValidatorRewardConfig with mintingVersion = ValidatorRewardVersion_CcBurn))

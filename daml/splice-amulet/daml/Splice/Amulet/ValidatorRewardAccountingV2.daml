@@ -5,10 +5,29 @@
 -- Mirrors 'Splice.Amulet.RewardAccountingV2' for the validator side.
 module Splice.Amulet.ValidatorRewardAccountingV2 where
 
+import DA.Time
+
 -- | How validator rewards and their minting allowances are tracked and computed.
 data ValidatorRewardVersion
   = ValidatorRewardVersion_CcBurn
       -- ^ Weight-based, CC-burn-triggered coupons (pre CIP-0120).
   | ValidatorRewardVersion_TrafficBased
       -- ^ Traffic-based validator rewards introduced in CIP-0120.
+  deriving (Eq, Show, Serializable)
+
+-- | Configuration for how validator reward accounting and calculation should be performed.
+data ValidatorRewardConfig = ValidatorRewardConfig with
+    mintingVersion : ValidatorRewardVersion
+      -- ^ Scheme to use for minting validator rewards.
+    dryRunVersion : Optional ValidatorRewardVersion
+      -- ^ Scheme to use for dry-run. If None, dry-runs are disabled.
+    batchSize : Int
+      -- ^ Batch size for the Merkle tree over validator allowances.
+    rewardCouponTimeToLive : RelTime
+      -- ^ Time to live for validator reward coupons.
+    confirmingValidatorRewardPercentage : Decimal
+      -- ^ Fraction of each activity record's weight assigned to confirming
+      -- validators (0.3 in CIP-0120).
+    maximumDecentralizationValue : Int
+      -- ^ Cap on the per-party fault-tolerance denominator (7 in CIP-0120).
   deriving (Eq, Show, Serializable)
