@@ -2,12 +2,9 @@
 -- SPDX-License-Identifier: Apache-2.0
 
 -- | Validator-reward accounting based on off-ledger calculations (CIP-0120).
--- Mirrors 'Splice.Amulet.RewardAccountingV2' for the validator side.
---
--- Leaf and batch types are reused from 'Splice.Amulet.RewardAccountingV2'
--- ('MintingAllowance' and 'Batch') rather than being redeclared here.
--- The app-vs-validator differentiation lives in the choice body that
--- consumes a batch, not in the data shape.
+-- Uses the shared 'MintingAllowance' and 'Batch' types from
+-- 'Splice.Amulet.RewardAccountingV2'; the choice bodies here differentiate
+-- the validator flow from the app-reward flow.
 module Splice.Amulet.ValidatorRewardAccountingV2 where
 
 import DA.Action (unless)
