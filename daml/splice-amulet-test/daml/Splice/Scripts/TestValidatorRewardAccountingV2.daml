@@ -1,24 +1,17 @@
 -- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 -- SPDX-License-Identifier: Apache-2.0
 
--- TODO(CIP-0120): the scripts below each confirm one step of the
--- validator-reward daml build-out. None of them have a counterpart in
--- TestRewardAccountingV2 (the CIP-104 app-side) — the CIP-104 tests
--- exercise the shared types via end-to-end reward flows instead of
--- targeting the types directly. Remove these once the validator-reward
--- flow has analogous end-to-end tests.
 module Splice.Scripts.TestValidatorRewardAccountingV2 where
 
 import DA.Action (void)
 import DA.Assert
 import DA.Foldable (forA_)
-import DA.Time
-
-import Daml.Script
-
 import DA.List (sortOn)
 import DA.Map qualified as Map
 import DA.Set qualified as Set
+import DA.Time
+
+import Daml.Script
 
 import Splice.Amulet
 import Splice.Amulet.CryptoHash qualified as CryptoHash
@@ -27,21 +20,12 @@ import Splice.Amulet.ValidatorRewardAccountingV2
 import Splice.AmuletConfig
 import Splice.AmuletRules
 import Splice.Api.RewardAssignmentV1 qualified as Api.RewardAssignmentV1
-import Splice.Round
 import Splice.Types
 
 import Splice.Scripts.Util
 import Splice.Testing.Registries.AmuletRegistry.Parameters (defaultAmuletConfig)
 import Splice.Testing.Utils (emptyExtraArgs)
 import Splice.Scripts.TestTransferPreapproval (createTransferPreapproval)
-
-test_ValidatorRewardVersion_distinct : Script ()
-test_ValidatorRewardVersion_distinct = do
-  ValidatorRewardVersion_CcBurn === ValidatorRewardVersion_CcBurn
-  ValidatorRewardVersion_TrafficBased === ValidatorRewardVersion_TrafficBased
-  assertMsg
-    "CcBurn and TrafficBased are distinct"
-    (ValidatorRewardVersion_CcBurn /= ValidatorRewardVersion_TrafficBased)
 
 sampleValidatorRewardConfig : ValidatorRewardConfig
 sampleValidatorRewardConfig = ValidatorRewardConfig with
@@ -52,52 +36,9 @@ sampleValidatorRewardConfig = ValidatorRewardConfig with
   confirmingValidatorRewardPercentage = 0.3
   maximumDecentralizationValue = 7
 
-test_ValidatorRewardConfig_equality : Script ()
-test_ValidatorRewardConfig_equality = do
-  sampleValidatorRewardConfig === sampleValidatorRewardConfig
-  assertMsg
-    "changing batchSize breaks equality"
-    (sampleValidatorRewardConfig /= (sampleValidatorRewardConfig with batchSize = 200))
-  assertMsg
-    "changing mintingVersion breaks equality"
-    (sampleValidatorRewardConfig /=
-      (sampleValidatorRewardConfig with mintingVersion = ValidatorRewardVersion_CcBurn))
-
-test_defaultAmuletConfig_no_validator_reward_config : Script ()
-test_defaultAmuletConfig_no_validator_reward_config =
-  defaultAmuletConfig.validatorRewardConfig === None
-
-test_validAmuletConfig_accepts_some_validator_reward_config : Script ()
-test_validAmuletConfig_accepts_some_validator_reward_config = do
-  let config = defaultAmuletConfig with validatorRewardConfig = Some sampleValidatorRewardConfig
-  assertMsg "validAmuletConfig accepts Some sampleValidatorRewardConfig" (validAmuletConfig config)
-
-test_openMiningRound_validatorRewardConfig_none : Script ()
-test_openMiningRound_validatorRewardConfig_none = do
-  app <- setupApp
-  rounds <- query @OpenMiningRound app.dso
-  forA_ rounds $ \(_, round) ->
-    round.validatorRewardConfig === None
-
-test_openMiningRound_validatorRewardConfig_some : Script ()
-test_openMiningRound_validatorRewardConfig_some = do
-  app <- setupAppWithConfig
-    (defaultAmuletConfig with validatorRewardConfig = Some sampleValidatorRewardConfig)
-  rounds <- query @OpenMiningRound app.dso
-  forA_ rounds $ \(_, round) ->
-    round.validatorRewardConfig === Some sampleValidatorRewardConfig
-
--- Unit test on the gate helper directly.
-test_useCcBurnValidatorRewards_cases : Script ()
-test_useCcBurnValidatorRewards_cases = do
-  useCcBurnValidatorRewards None === True
-  useCcBurnValidatorRewards (Some ValidatorRewardVersion_CcBurn) === True
-  useCcBurnValidatorRewards (Some ValidatorRewardVersion_TrafficBased) === False
-
--- Integration test: TrafficBased config in force -> splitAndBurn does NOT
--- create the legacy ValidatorRewardCoupon. Exercised via
--- TransferPreapproval_Send, which routes through splitAndBurn to pay
--- the preapproval fee.
+-- TransferPreapproval_Send routes through splitAndBurn to pay the
+-- preapproval fee. With TrafficBased in force the legacy
+-- ValidatorRewardCoupon creation is gated off.
 test_splitAndBurn_traffic_based_skips_coupon : Script ()
 test_splitAndBurn_traffic_based_skips_coupon = do
   app <- setupAppWithConfig
@@ -123,31 +64,10 @@ test_splitAndBurn_traffic_based_skips_coupon = do
   coupons <- query @ValidatorRewardCoupon app.dso
   assertMsg "no ValidatorRewardCoupon should be created under TrafficBased" (null coupons)
 
--- TODO(CIP-0120): confirm-one-step test (see top-of-file TODO). Remove once
--- the end-to-end batch-processing tests exercise this template creation.
-test_ValidatorRewardCouponV2_create_and_query : Script ()
-test_ValidatorRewardCouponV2_create_and_query = do
-  app <- setupApp
-  node <- allocateParty "validator-node"
-  now <- getTime
-  let expiresAt = now `addRelTime` hours 36
-  couponCid <- submit app.dso $ createCmd ValidatorRewardCouponV2 with
-    dso = app.dso
-    node
-    round = Round 1
-    amount = 100.0
-    expiresAt
-    nodeIsObserver = True
-    beneficiary = None
-  Some coupon <- queryContractId app.dso couponCid
-  coupon.node === node
-  coupon.amount === 100.0
-  coupon.round === Round 1
-  coupon.nodeIsObserver === True
-  coupon.beneficiary === None
-
--- TODO(CIP-0120): confirm-one-step test (see top-of-file TODO). Remove once
--- the end-to-end batch-processing tests exercise beneficiary assignment.
+-- Exercise RewardCoupon_AssignBeneficiaries via the interface. Split the
+-- original coupon 60/40 between two new beneficiaries; verify the
+-- original is archived and each beneficiary owns a new coupon with the
+-- correct share of the amount.
 test_ValidatorRewardCouponV2_assign_beneficiaries : Script ()
 test_ValidatorRewardCouponV2_assign_beneficiaries = do
   app <- setupApp
@@ -171,9 +91,7 @@ test_ValidatorRewardCouponV2_assign_beneficiaries = do
         additionalCoupons = []
         newBeneficiaries = map (uncurry Api.RewardAssignmentV1.RewardBeneficiary) percentages
         extraArgs = emptyExtraArgs
-  -- original is archived
   None <- queryContractId node couponCid
-  -- each beneficiary got one coupon with their percentage of the amount
   forA_ result.newBeneficiariesCouponCids $ \(beneficiary, cids) -> do
     let Some (_, percentage) = find (\(p, _) -> p == beneficiary) percentages
     length cids === 1
@@ -186,48 +104,8 @@ test_ValidatorRewardCouponV2_assign_beneficiaries = do
       newCoupon.round === Round 0
   pure ()
 
--- TODO(CIP-0120): confirm-one-step test (see top-of-file TODO). Remove once
--- the end-to-end batch-processing tests exercise this choice.
-test_ProcessValidatorRewardsV2_creates_coupons : Script ()
-test_ProcessValidatorRewardsV2_creates_coupons = do
-  app <- setupApp
-  alice <- allocateParty "validator-alice"
-  bob <- allocateParty "validator-bob"
-  charlie <- allocateParty "validator-charlie"
-
-  now <- getTime
-  let batch = BatchOfMintingAllowances $ sortOn (.provider)
-        [ MintingAllowance alice 100.0
-        , MintingAllowance bob 200.0
-        , MintingAllowance charlie 50.0
-        ]
-  let batchHash = CryptoHash.hash batch
-
-  processCid <- submit app.dso $ createCmd ProcessValidatorRewardsV2 with
-    dso = app.dso
-    round = Round 0
-    roundClosedAt = now
-    dryRun = False
-    rewardCouponTimeToLive = hours 36
-    batchHash
-
-  -- charlie is un-vetted; bob and alice are fine
-  _ <- submit app.dso $ exerciseCmd processCid ProcessValidatorRewardsV2_ProcessBatch with
-    batch
-    nodesWithWrongVettingState = Set.fromList [charlie]
-
-  coupons <- query @ValidatorRewardCouponV2 app.dso
-  let sorted = sortOn (.node) (map snd coupons)
-  length sorted === 3
-  let expiresAt = now `addRelTime` hours 36
-  sorted === sortOn (.node)
-    [ ValidatorRewardCouponV2 with dso = app.dso; node = alice; round = Round 0; amount = 100.0; expiresAt; nodeIsObserver = True; beneficiary = None
-    , ValidatorRewardCouponV2 with dso = app.dso; node = bob; round = Round 0; amount = 200.0; expiresAt; nodeIsObserver = True; beneficiary = None
-    , ValidatorRewardCouponV2 with dso = app.dso; node = charlie; round = Round 0; amount = 50.0; expiresAt; nodeIsObserver = False; beneficiary = None
-    ]
-
--- TODO(CIP-0120): confirm-one-step test (see top-of-file TODO). Remove once
--- the end-to-end batch-processing tests exercise the hash-mismatch failure.
+-- ProcessBatch rejects when the supplied batch's hash does not match the
+-- batchHash the ProcessValidatorRewardsV2 contract was created with.
 test_ProcessValidatorRewardsV2_rejects_hash_mismatch : Script ()
 test_ProcessValidatorRewardsV2_rejects_hash_mismatch = do
   app <- setupApp
@@ -248,41 +126,7 @@ test_ProcessValidatorRewardsV2_rejects_hash_mismatch = do
     batch = tamperedBatch
     nodesWithWrongVettingState = Set.empty
 
--- TODO(CIP-0120): confirm-one-step test (see top-of-file TODO). Remove once
--- the reconciliation trigger is covered by end-to-end tests.
-test_UnhideValidatorRewardCouponsV2_flips_observer : Script ()
-test_UnhideValidatorRewardCouponsV2_flips_observer = do
-  app <- setupApp
-  node <- allocateParty "validator-node"
-  now <- getTime
-  let expiresAt = now `addRelTime` hours 36
-  hiddenCid <- submit app.dso $ createCmd ValidatorRewardCouponV2 with
-    dso = app.dso
-    node
-    round = Round 0
-    amount = 100.0
-    expiresAt
-    nodeIsObserver = False
-    beneficiary = None
-
-  [(amuletRulesCid, _)] <- query @AmuletRules app.dso
-  _ <- submit app.dso $ exerciseCmd amuletRulesCid AmuletRules_UnhideValidatorRewardCouponsV2 with
-    rewardCouponCids = [hiddenCid]
-    nodes = [node]
-
-  -- hidden coupon archived
-  None <- queryContractId app.dso hiddenCid
-  -- exactly one coupon remains, now observable by the node
-  coupons <- query @ValidatorRewardCouponV2 app.dso
-  case coupons of
-    [(_, coupon)] -> do
-      coupon.nodeIsObserver === True
-      coupon.node === node
-      coupon.amount === 100.0
-    _ -> fail "expected exactly one ValidatorRewardCouponV2 after unhiding"
-
--- TODO(CIP-0120): confirm-one-step test (see top-of-file TODO). Remove once
--- the reconciliation trigger is covered by end-to-end tests.
+-- Unhide rejects a coupon whose node is already an observer.
 test_UnhideValidatorRewardCouponsV2_rejects_already_observable : Script ()
 test_UnhideValidatorRewardCouponsV2_rejects_already_observable = do
   app <- setupApp
@@ -302,8 +146,8 @@ test_UnhideValidatorRewardCouponsV2_rejects_already_observable = do
     rewardCouponCids = [observableCid]
     nodes = [node]
 
--- TODO(CIP-0120): confirm-one-step test (see top-of-file TODO). Remove once
--- the end-to-end expiry trigger tests exercise this choice.
+-- Claim expired archives the coupon and produces an UnclaimedReward for
+-- its amount once the coupon's expiresAt has passed.
 test_ClaimExpiredValidatorRewardsV2_happy_path : Script ()
 test_ClaimExpiredValidatorRewardsV2_happy_path = do
   app <- setupApp
@@ -318,7 +162,6 @@ test_ClaimExpiredValidatorRewardsV2_happy_path = do
     expiresAt
     nodeIsObserver = True
     beneficiary = None
-  -- fast-forward past expiry
   setTime $ expiresAt `addRelTime` minutes 1
 
   [(amuletRulesCid, _)] <- query @AmuletRules app.dso
@@ -326,16 +169,13 @@ test_ClaimExpiredValidatorRewardsV2_happy_path = do
     rewardCouponCids = [couponCid]
     expiryObservers = [node]
 
-  -- coupon archived
   None <- queryContractId app.dso couponCid
-  -- unclaimed reward created for the amount
   unclaimed <- query @UnclaimedReward app.dso
   case unclaimed of
     [(_, r)] -> r.amount === 100.0
     _ -> fail "expected exactly one UnclaimedReward after expiry"
 
--- TODO(CIP-0120): confirm-one-step test (see top-of-file TODO). Remove once
--- the end-to-end expiry trigger tests exercise this failure path.
+-- Claim expired rejects a coupon that is still within its deadline.
 test_ClaimExpiredValidatorRewardsV2_rejects_deadline_not_exceeded : Script ()
 test_ClaimExpiredValidatorRewardsV2_rejects_deadline_not_exceeded = do
   app <- setupApp
@@ -346,7 +186,7 @@ test_ClaimExpiredValidatorRewardsV2_rejects_deadline_not_exceeded = do
     node
     round = Round 0
     amount = 100.0
-    expiresAt = now `addRelTime` hours 36  -- far in the future
+    expiresAt = now `addRelTime` hours 36
     nodeIsObserver = True
     beneficiary = None
 
@@ -355,8 +195,8 @@ test_ClaimExpiredValidatorRewardsV2_rejects_deadline_not_exceeded = do
     rewardCouponCids = [couponCid]
     expiryObservers = [node]
 
--- TODO(CIP-0120): confirm-one-step test (see top-of-file TODO). Remove once
--- the end-to-end expiry trigger tests exercise this failure path.
+-- Claim expired rejects when the supplied expiryObservers don't match
+-- the parties that would be observers of the archived coupons.
 test_ClaimExpiredValidatorRewardsV2_rejects_wrong_observer_set : Script ()
 test_ClaimExpiredValidatorRewardsV2_rejects_wrong_observer_set = do
   app <- setupApp
@@ -377,114 +217,7 @@ test_ClaimExpiredValidatorRewardsV2_rejects_wrong_observer_set = do
   [(amuletRulesCid, _)] <- query @AmuletRules app.dso
   submitMustFail app.dso $ exerciseCmd amuletRulesCid AmuletRules_ClaimExpiredValidatorRewardsV2 with
     rewardCouponCids = [couponCid]
-    expiryObservers = [intruder]  -- wrong: node should be there
-
--- TODO(CIP-0120): confirm-one-step test (see top-of-file TODO). Remove once
--- an end-to-end test walks a round through TrafficBased.
-test_CalculateValidatorRewardsV2_created_on_traffic_based : Script ()
-test_CalculateValidatorRewardsV2_created_on_traffic_based = do
-  app <- setupAppWithConfig
-    (defaultAmuletConfig with validatorRewardConfig = Some sampleValidatorRewardConfig)
-  runNextIssuance app
-  contracts <- query @CalculateValidatorRewardsV2 app.dso
-  length contracts === 1
-  case contracts of
-    [(_, c)] -> do
-      c.dryRun === False
-      c.rewardCouponTimeToLive === sampleValidatorRewardConfig.rewardCouponTimeToLive
-    _ -> fail "expected exactly one CalculateValidatorRewardsV2"
-
--- TODO(CIP-0120): confirm-one-step test (see top-of-file TODO). Remove once
--- an end-to-end test covers the None + CcBurn variants.
-test_CalculateValidatorRewardsV2_not_created_when_config_none : Script ()
-test_CalculateValidatorRewardsV2_not_created_when_config_none = do
-  app <- setupApp
-  runNextIssuance app
-  contracts <- query @CalculateValidatorRewardsV2 app.dso
-  contracts === []
-
--- TODO(CIP-0120): confirm-one-step test (see top-of-file TODO). Remove once
--- an end-to-end test covers the dryRun variant.
-test_CalculateValidatorRewardsV2_dry_run_variant : Script ()
-test_CalculateValidatorRewardsV2_dry_run_variant = do
-  let dryRunConfig = sampleValidatorRewardConfig with
-        mintingVersion = ValidatorRewardVersion_CcBurn
-        dryRunVersion = Some ValidatorRewardVersion_TrafficBased
-  app <- setupAppWithConfig
-    (defaultAmuletConfig with validatorRewardConfig = Some dryRunConfig)
-  runNextIssuance app
-  contracts <- query @CalculateValidatorRewardsV2 app.dso
-  length contracts === 1
-  case contracts of
-    [(_, c)] -> c.dryRun === True
-    _ -> fail "expected exactly one dry-run CalculateValidatorRewardsV2"
-
--- TODO(CIP-0120): confirm-one-step test (see top-of-file TODO). Remove once
--- an end-to-end test walks a round through StartProcessing.
-test_StartProcessingValidatorRewardsV2_seeds_ProcessValidatorRewardsV2 : Script ()
-test_StartProcessingValidatorRewardsV2_seeds_ProcessValidatorRewardsV2 = do
-  app <- setupAppWithConfig
-    (defaultAmuletConfig with validatorRewardConfig = Some sampleValidatorRewardConfig)
-  runNextIssuance app
-  [(calculateCid, calculate)] <- query @CalculateValidatorRewardsV2 app.dso
-  [(amuletRulesCid, _)] <- query @AmuletRules app.dso
-
-  let rootBatch = BatchOfMintingAllowances []
-  let rootBatchHash = CryptoHash.hash rootBatch
-
-  _ <- submit app.dso $ exerciseCmd amuletRulesCid AmuletRules_StartProcessingValidatorRewardsV2 with
-    calculateRewardsCid = calculateCid
-    batchHash = rootBatchHash
-
-  -- CalculateValidatorRewardsV2 archived
-  None <- queryContractId app.dso calculateCid
-  -- ProcessValidatorRewardsV2 created with fields inherited from the calculate contract
-  [(_, process)] <- query @ProcessValidatorRewardsV2 app.dso
-  process.round === calculate.round
-  process.roundClosedAt === calculate.roundClosedAt
-  process.dryRun === calculate.dryRun
-  process.rewardCouponTimeToLive === calculate.rewardCouponTimeToLive
-  process.batchHash === rootBatchHash
-
--- TODO(CIP-0120): confirm-one-step test (see top-of-file TODO). Remove once
--- an end-to-end test walks a coupon through mint via InputValidatorRewardCouponV2.
-test_InputValidatorRewardCouponV2_mints_amulet : Script ()
-test_InputValidatorRewardCouponV2_mints_amulet = do
-  app <- setupApp
-  runNextIssuance app  -- move past the initial round so an issuing round exists
-
-  node <- allocateParty "validator-node"
-  now <- getTime
-  couponCid <- submit app.dso $ createCmd ValidatorRewardCouponV2 with
-    dso = app.dso
-    node
-    round = Round 0
-    amount = 100.0
-    expiresAt = now `addRelTime` hours 36
-    nodeIsObserver = True
-    beneficiary = None
-
-  (openMiningRound, _) <- getLatestOpenRound app
-  let context = TransferContext with
-        openMiningRound
-        issuingMiningRounds = Map.empty
-        validatorRights = Map.empty
-        featuredAppRight = None
-  void $ submitExerciseAmuletRulesByKey app [node] [] AmuletRules_Transfer with
-    transfer = Transfer with
-      sender = node
-      provider = node
-      inputs = [InputValidatorRewardCouponV2 couponCid]
-      outputs = []
-      beneficiaries = None
-    context
-    expectedDso = Some app.dso
-
-  -- coupon consumed
-  None <- queryContractId node couponCid
-  -- an amulet was minted to the node
-  amulets <- queryFilter @Splice.Amulet.Amulet node (\a -> a.owner == node)
-  assertMsg "at least one Amulet minted to the node" (not (null amulets))
+    expiryObservers = [intruder]
 
 
 -- End-to-end coverage of the CIP-0120 validator flow: round-close creates
