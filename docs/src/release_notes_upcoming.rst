@@ -41,6 +41,7 @@ release-notes:: Upcoming
           by the verdict ingestion service and the traffic-based app reward calculations.
 
           The default retention period is 1 week for this automation, after which the data will be removed from the DB.
+          Scan apps might observe increased load for a short time (~30-60min) after the upgrade, as the automation that prunes intermediate app reward computation data catches up.
 
     - Validator App
 
