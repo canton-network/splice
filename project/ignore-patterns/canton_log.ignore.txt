@@ -212,6 +212,7 @@ INTERNAL/Missing package-id.*in package metadata view
 # We can get temporarily blacklisted during onboarding triggering a retry for this.
 Now retrying operation 'request current time'
 
+<<<<<<< Updated upstream
 # TODO(DACH-NY/cn-test-failures#9445) remove once Canton stops failing the whole
 # GetConnectedSynchronizers call for one synchronizer that is mid-reconnect.
 StateService/GetConnectedSynchronizers.*INTERNAL/Failed retrieving SynchronizerTopologyClient
@@ -219,3 +220,7 @@ StateService/GetConnectedSynchronizers.*INTERNAL/Failed retrieving SynchronizerT
 # topology-init download rejection under the test concurrency limit (3); the
 # client retries and succeeds
 SERVER_OVERLOADED.*Reached the limit of concurrent requests for.*DownloadTopologyStateForInit
+=======
+# Deprecated admin API auth config
+Scope-based tokens have been configured (targetScope is set without a targetAudience). This feature is deprecated in Canton 3.5 and will be removed in version 3.7. Please migrate to audience-based tokens.
+>>>>>>> Stashed changes

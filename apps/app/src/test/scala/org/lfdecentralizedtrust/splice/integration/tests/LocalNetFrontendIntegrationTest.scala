@@ -200,7 +200,7 @@ class LocalNetFrontendIntegrationTest
       val participantClient = new ParticipantClientReference(
         env,
         appProviderParticipant.name,
-        appProviderParticipant.config.copy(token = Some(token)),
+        appProviderParticipant.config.copy(ledgerApiToken = Some(token)),
       )
       participantClient.synchronizers
         .list_connected()
