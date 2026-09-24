@@ -477,6 +477,29 @@ template RewardCouponV2
       rewardCoupon_assignBeneficiariesImpl self arg = rewardCouponV2_assignBeneficiariesImpl this self arg
 
 
+-- | A coupon for receiving traffic-based validator rewards under CIP-0120.
+-- See Splice.Amulet.ValidatorRewardAccountingV2 for the batch-processing side.
+template ValidatorRewardCouponV2
+  with
+    dso : Party
+    node : Party -- ^ The validator node that earned the minting right.
+    round : Round -- ^ The round in which the node's activity was recorded.
+    amount : Decimal -- ^ The amount of reward that can be minted for this coupon. Denominated in Amulet.
+    expiresAt : Time -- ^ Time-based expiry. Used to determine when the reward can no longer be minted.
+    nodeIsObserver : Bool
+      -- ^ Whether the node should be an observer, which they are unless
+      -- their vetting state at the time of coupon creation does not allow it.
+      -- DSO automation will then attempt to make the node an observer when they
+      -- change their vetting state unless the coupon expired in the meantime.
+    beneficiary : Optional Party
+      -- ^ The party that can mint the reward for the activity by the node.
+      -- If not set, this is the node.
+  where
+    signatory dso
+    observer if nodeIsObserver then [node] ++ optionalToList beneficiary else []
+    ensure amount > 0.0
+
+
 -- | A coupon for receiving validator rewards proportional to the usage fee paid by a user
 -- hosted by a validator operator.
 template ValidatorRewardCoupon
