@@ -15,7 +15,13 @@ import DA.Time
 
 import Daml.Script
 
+import DA.List (sortOn)
+import DA.Set qualified as Set
+
 import Splice.Amulet
+import Splice.Amulet.CryptoHash qualified as CryptoHash
+import Splice.Amulet.RewardAccountingV2 (Batch(..), MintingAllowance(..))
+import Splice.Amulet.ValidatorRewardAccountingV2
 import Splice.AmuletConfig
 import Splice.AmuletRules
 import Splice.Api.RewardAssignmentV1 qualified as Api.RewardAssignmentV1
@@ -177,3 +183,65 @@ test_ValidatorRewardCouponV2_assign_beneficiaries = do
       newCoupon.nodeIsObserver === True
       newCoupon.round === Round 0
   pure ()
+
+-- TODO(CIP-0120): confirm-one-step test (see top-of-file TODO). Remove once
+-- the end-to-end batch-processing tests exercise this choice.
+test_ProcessValidatorRewardsV2_creates_coupons : Script ()
+test_ProcessValidatorRewardsV2_creates_coupons = do
+  app <- setupApp
+  alice <- allocateParty "validator-alice"
+  bob <- allocateParty "validator-bob"
+  charlie <- allocateParty "validator-charlie"
+
+  now <- getTime
+  let batch = BatchOfMintingAllowances $ sortOn (.provider)
+        [ MintingAllowance alice 100.0
+        , MintingAllowance bob 200.0
+        , MintingAllowance charlie 50.0
+        ]
+  let batchHash = CryptoHash.hash batch
+
+  processCid <- submit app.dso $ createCmd ProcessValidatorRewardsV2 with
+    dso = app.dso
+    round = Round 0
+    roundClosedAt = now
+    dryRun = False
+    rewardCouponTimeToLive = hours 36
+    batchHash
+
+  -- charlie is un-vetted; bob and alice are fine
+  _ <- submit app.dso $ exerciseCmd processCid ProcessValidatorRewardsV2_ProcessBatch with
+    batch
+    nodesWithWrongVettingState = Set.fromList [charlie]
+
+  coupons <- query @ValidatorRewardCouponV2 app.dso
+  let sorted = sortOn (.node) (map snd coupons)
+  length sorted === 3
+  let expiresAt = now `addRelTime` hours 36
+  sorted === sortOn (.node)
+    [ ValidatorRewardCouponV2 with dso = app.dso; node = alice; round = Round 0; amount = 100.0; expiresAt; nodeIsObserver = True; beneficiary = None
+    , ValidatorRewardCouponV2 with dso = app.dso; node = bob; round = Round 0; amount = 200.0; expiresAt; nodeIsObserver = True; beneficiary = None
+    , ValidatorRewardCouponV2 with dso = app.dso; node = charlie; round = Round 0; amount = 50.0; expiresAt; nodeIsObserver = False; beneficiary = None
+    ]
+
+-- TODO(CIP-0120): confirm-one-step test (see top-of-file TODO). Remove once
+-- the end-to-end batch-processing tests exercise the hash-mismatch failure.
+test_ProcessValidatorRewardsV2_rejects_hash_mismatch : Script ()
+test_ProcessValidatorRewardsV2_rejects_hash_mismatch = do
+  app <- setupApp
+  alice <- allocateParty "validator-alice"
+  now <- getTime
+  let originalBatch = BatchOfMintingAllowances [MintingAllowance alice 100.0]
+  let tamperedBatch = BatchOfMintingAllowances [MintingAllowance alice 999.0]
+
+  processCid <- submit app.dso $ createCmd ProcessValidatorRewardsV2 with
+    dso = app.dso
+    round = Round 0
+    roundClosedAt = now
+    dryRun = False
+    rewardCouponTimeToLive = hours 36
+    batchHash = CryptoHash.hash originalBatch
+
+  submitMustFail app.dso $ exerciseCmd processCid ProcessValidatorRewardsV2_ProcessBatch with
+    batch = tamperedBatch
+    nodesWithWrongVettingState = Set.empty
