@@ -376,3 +376,43 @@ test_ClaimExpiredValidatorRewardsV2_rejects_wrong_observer_set = do
   submitMustFail app.dso $ exerciseCmd amuletRulesCid AmuletRules_ClaimExpiredValidatorRewardsV2 with
     rewardCouponCids = [couponCid]
     expiryObservers = [intruder]  -- wrong: node should be there
+
+-- TODO(CIP-0120): confirm-one-step test (see top-of-file TODO). Remove once
+-- an end-to-end test walks a round through TrafficBased.
+test_CalculateValidatorRewardsV2_created_on_traffic_based : Script ()
+test_CalculateValidatorRewardsV2_created_on_traffic_based = do
+  app <- setupAppWithConfig
+    (defaultAmuletConfig with validatorRewardConfig = Some sampleValidatorRewardConfig)
+  runNextIssuance app
+  contracts <- query @CalculateValidatorRewardsV2 app.dso
+  length contracts === 1
+  case contracts of
+    [(_, c)] -> do
+      c.dryRun === False
+      c.rewardCouponTimeToLive === sampleValidatorRewardConfig.rewardCouponTimeToLive
+    _ -> fail "expected exactly one CalculateValidatorRewardsV2"
+
+-- TODO(CIP-0120): confirm-one-step test (see top-of-file TODO). Remove once
+-- an end-to-end test covers the None + CcBurn variants.
+test_CalculateValidatorRewardsV2_not_created_when_config_none : Script ()
+test_CalculateValidatorRewardsV2_not_created_when_config_none = do
+  app <- setupApp
+  runNextIssuance app
+  contracts <- query @CalculateValidatorRewardsV2 app.dso
+  contracts === []
+
+-- TODO(CIP-0120): confirm-one-step test (see top-of-file TODO). Remove once
+-- an end-to-end test covers the dryRun variant.
+test_CalculateValidatorRewardsV2_dry_run_variant : Script ()
+test_CalculateValidatorRewardsV2_dry_run_variant = do
+  let dryRunConfig = sampleValidatorRewardConfig with
+        mintingVersion = ValidatorRewardVersion_CcBurn
+        dryRunVersion = Some ValidatorRewardVersion_TrafficBased
+  app <- setupAppWithConfig
+    (defaultAmuletConfig with validatorRewardConfig = Some dryRunConfig)
+  runNextIssuance app
+  contracts <- query @CalculateValidatorRewardsV2 app.dso
+  length contracts === 1
+  case contracts of
+    [(_, c)] -> c.dryRun === True
+    _ -> fail "expected exactly one dry-run CalculateValidatorRewardsV2"

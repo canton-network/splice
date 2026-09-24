@@ -34,13 +34,14 @@ import Splice.TokenStandard.Utils
 import Splice.Amulet
 import Splice.Amulet.CryptoHash qualified as CryptoHash
 import Splice.Amulet.RewardAccountingV2
+import Splice.Amulet.ValidatorRewardAccountingV2 (CalculateValidatorRewardsV2(..))
 import Splice.Amulet.TokenApiUtils
 import Splice.AmuletConfig
   ( transferConfigToTransferConfigV2, AmuletConfig(..), TransferConfig(..), TransferConfigV2(..), validAmuletConfig
   , defaultTransferPreapprovalFee, getDevelopmentFundManagerBlacklist, getExternalPartyConfigStateTickDuration
   , getTransferPreapprovalBaseDuration, useTrafficBasedAppRewards
   , RewardVersion(..), useFeaturedAppMarkers
-  , useCcBurnValidatorRewards
+  , useCcBurnValidatorRewards, useTrafficBasedValidatorRewards
   )
 import qualified Splice.AmuletConfig as Unit
 import Splice.ExternalPartyConfigState
@@ -562,6 +563,24 @@ template AmuletRules
               round = roundToArchive.round
               roundClosedAt = now
               rewardCouponTimeToLive = rewardConfig.rewardCouponTimeToLive
+              dryRun = True
+
+        -- trigger off-ledger validator-reward calculation if needed (CIP-0120)
+        forA_ roundToArchive.validatorRewardConfig $ \validatorRewardConfig -> do
+          when (useTrafficBasedValidatorRewards (Some validatorRewardConfig.mintingVersion)) $ do
+            void $ create CalculateValidatorRewardsV2 with
+              dso
+              round = roundToArchive.round
+              roundClosedAt = now
+              rewardCouponTimeToLive = validatorRewardConfig.rewardCouponTimeToLive
+              dryRun = False
+
+          when (useTrafficBasedValidatorRewards validatorRewardConfig.dryRunVersion) $ do
+            void $ create CalculateValidatorRewardsV2 with
+              dso
+              round = roundToArchive.round
+              roundClosedAt = now
+              rewardCouponTimeToLive = validatorRewardConfig.rewardCouponTimeToLive
               dryRun = True
 
         -- create the new open round
