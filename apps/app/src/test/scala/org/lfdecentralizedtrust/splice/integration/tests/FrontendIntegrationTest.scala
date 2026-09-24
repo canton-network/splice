@@ -775,6 +775,19 @@ trait FrontendTestCommon extends TestCommon with WebBrowser with CustomMatchers 
         )
       }
 
+    // Looks the element up on every attempt, so a re-render between find and set is retried
+    def setDeep(
+        selector: String,
+        value: String,
+        timeUntilSuccess: FiniteDuration = 20.seconds,
+    )(implicit webDriver: WebDriverType): Unit =
+      eventually(timeUntilSuccess) {
+        val element = findDeep(selector).valueOrFail(
+          s"No visible element matching '$selector' to set a value on"
+        )
+        setDeepValue(element, value)
+      }
+
     def setDeepValue(element: WebElement, value: String)(implicit
         webDriver: WebDriverType
     ): Unit =

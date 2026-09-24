@@ -558,34 +558,6 @@ class HttpScanHandler(
   )()(extracted: TraceContext): Future[v0.ScanResource.ListDsoSequencersResponse] = {
     implicit val tc = extracted
 
-    def extractSequencersForSynchronizersFromLegacyState(
-        nodeName: String,
-        synchronizerConfig: SynchronizerNodeConfig,
-    ) = {
-      val sequencers = for {
-        sequencer <- synchronizerConfig.sequencer.toScala
-        availableAfter <- sequencer.availableAfter.toScala
-      } yield definitions.DsoSequencer(
-        sequencer.migrationId,
-        None,
-        sequencer.sequencerId,
-        sequencer.url,
-        nodeName,
-        OffsetDateTime.ofInstant(availableAfter, ZoneOffset.UTC),
-      )
-      val legacySequencers = for {
-        legacyConfig <- synchronizerConfig.legacySequencerConfig.toScala.toList
-      } yield definitions.DsoSequencer(
-        legacyConfig.migrationId,
-        None,
-        legacyConfig.sequencerId,
-        legacyConfig.url,
-        nodeName,
-        OffsetDateTime.MIN,
-      )
-      (legacySequencers ++ sequencers).distinct
-    }
-
     def extractSequencersForSynchronizers(
         nodeName: String,
         synchronizerConfig: SynchronizerNodeConfig,
@@ -612,15 +584,10 @@ class HttpScanHandler(
     def extractSequencersFromNodeState(nodeState: SvNodeState) = {
       nodeState.state.synchronizerNodes.asScala.toVector
         .flatMap { case (synchronizerId, domainConfig) =>
-          val legacyConfig = extractSequencersForSynchronizersFromLegacyState(
+          extractSequencersForSynchronizers(
             nodeState.svName,
             domainConfig,
-          )
-          val physicalSequencers = extractSequencersForSynchronizers(
-            nodeState.svName,
-            domainConfig,
-          )
-          (legacyConfig ++ physicalSequencers).map(synchronizerId -> _)
+          ).map(synchronizerId -> _)
         }
     }
 
@@ -2846,7 +2813,19 @@ class HttpScanHandler(
             .asRuntimeException()
         )
       ) { bulkStorage =>
-        bulkStorage.getObjectChecksums(body.objectKeys).map { checksums =>
+        for {
+          progress <- bulkStorage.getStagingProgressTimestamp()
+          _ = if (
+            progress < CantonTimestamp.tryFromInstant(body.requiredCatchupTimestamp.toInstant)
+          ) {
+            throw Status.NOT_FOUND
+              .withDescription(
+                s"Bulk storage is not caught up to the required timestamp ${body.requiredCatchupTimestamp}. Current progress: $progress"
+              )
+              .asRuntimeException()
+          }
+          checksums <- bulkStorage.getObjectChecksums(body.objectKeys)
+        } yield {
           ScanResource.GetBulkObjectChecksumsResponse.OK(
             definitions.GetBulkObjectChecksumsResponse(
               checksums.map(definitions.GetBulkObjectChecksumsResponse.Checksums(_)).toVector

@@ -195,7 +195,6 @@ class ValidatorApp(
               config,
               participantAdminConnection,
               scanConnection,
-              domainMigrationId,
               retryProvider,
               loggerFactory,
             )
@@ -767,7 +766,6 @@ class ValidatorApp(
           config,
           participantAdminConnection,
           scanConnection,
-          domainMigrationId,
           retryProvider,
           loggerFactory,
         ),

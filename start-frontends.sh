@@ -78,7 +78,9 @@ function start_frontend() {
 
   tmux_cmd "${app}-${user}" "${frontend_dir}" \
     "trap \"rm -f ${config_file}\" EXIT && \
-    BROWSER=none PORT=$port JSON_API_URL=$JSON_API_URL VITE_SPLICE_CONFIG=\"\$(cat $config_file)\" \
+    BROWSER=none PORT=$port JSON_API_URL=$JSON_API_URL \
+    VITE_DISABLE_QUERY_DEVTOOLS=${VITE_DISABLE_QUERY_DEVTOOLS:-false} \
+    VITE_SPLICE_CONFIG=\"\$(cat $config_file)\" \
     npm start 2>&1 | tee -a $log_file"
 }
 

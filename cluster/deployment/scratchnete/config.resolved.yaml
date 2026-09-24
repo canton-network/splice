@@ -16,12 +16,22 @@ cloudArmor:
       throttleAcrossAllEndpointsPerIp:
         maxRequestsBeforeHttp429: 20000
         withinIntervalSeconds: 60
+    svApp:
+      hostPrefixRegex: 'sv'
+      pathPrefix: '/api/sv'
+      restrictToRateLimitedPaths: false
+      throttleAcrossAllEndpointsPerIp:
+        maxRequestsBeforeHttp429: 500
+        withinIntervalSeconds: 60
     tokenRegistry:
       hostPrefixRegex: 'scan'
       pathPrefix: '/registry'
       throttleAcrossAllEndpointsPerIp:
         maxRequestsBeforeHttp429: 10000
         withinIntervalSeconds: 60
+  wafRules:
+    excludedHostPrefixes:
+      - 'grafana'
 cluster:
   nodePools:
     apps:
@@ -70,13 +80,21 @@ monitoring:
           seconds: 3600
         computeDuration:
           seconds: 1200
+        usePv36Metrics: false
       acsSnapshots:
         saveLatencyThresholdSeconds: 5400
         updateLatencyThresholdSeconds: 3
       cantonBft:
         mempoolMaxSizeThreshold: 100
       cloudArmor:
-        deniedRequestsThreshold: 0
+        deniedRequests:
+          alignmentPeriodSeconds: 300
+          durationSeconds: 0
+          threshold: 100
+        wafRejections:
+          alignmentPeriodSeconds: 300
+          durationSeconds: 0
+          threshold: 10
       cloudSql:
         maintenance: false
       cometbft:
@@ -188,6 +206,7 @@ pulumiProjectConfig:
       enabled: false
       enterprisePlus: false
       flags:
+        autovacuum_freeze_max_age: '500000000'
         maintenance_work_mem: '2000000'
         max_wal_size: '20480'
         random_page_cost: '1.1'
@@ -350,6 +369,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config{\n  how-long-to-blacklist {\n    type=linear\n    maximum-epoch-blacklisted=62\n  }\n  how-many-can-we-blacklist=num-faults-tolerated\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -358,9 +380,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -425,6 +444,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config{\n  how-long-to-blacklist {\n    type=linear\n    maximum-epoch-blacklisted=62\n  }\n  how-many-can-we-blacklist=num-faults-tolerated\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -435,7 +457,7 @@ svs:
     validatorApp:
       additionalEnvVars:
         - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
+          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 10m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -500,6 +522,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config{\n  how-long-to-blacklist {\n    type=linear\n    maximum-epoch-blacklisted=62\n  }\n  how-many-can-we-blacklist=num-faults-tolerated\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -508,9 +533,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -575,6 +597,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config{\n  how-long-to-blacklist {\n    type=linear\n    maximum-epoch-blacklisted=62\n  }\n  how-many-can-we-blacklist=num-faults-tolerated\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -583,9 +608,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -650,6 +672,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config{\n  how-long-to-blacklist {\n    type=linear\n    maximum-epoch-blacklisted=62\n  }\n  how-many-can-we-blacklist=num-faults-tolerated\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -658,9 +683,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -725,6 +747,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config{\n  how-long-to-blacklist {\n    type=linear\n    maximum-epoch-blacklisted=62\n  }\n  how-many-can-we-blacklist=num-faults-tolerated\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -733,9 +758,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -800,6 +822,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config{\n  how-long-to-blacklist {\n    type=linear\n    maximum-epoch-blacklisted=62\n  }\n  how-many-can-we-blacklist=num-faults-tolerated\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -808,9 +833,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -875,6 +897,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config{\n  how-long-to-blacklist {\n    type=linear\n    maximum-epoch-blacklisted=62\n  }\n  how-many-can-we-blacklist=num-faults-tolerated\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -883,9 +908,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -950,6 +972,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config{\n  how-long-to-blacklist {\n    type=linear\n    maximum-epoch-blacklisted=62\n  }\n  how-many-can-we-blacklist=num-faults-tolerated\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -958,9 +983,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -1025,6 +1047,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config{\n  how-long-to-blacklist {\n    type=linear\n    maximum-epoch-blacklisted=62\n  }\n  how-many-can-we-blacklist=num-faults-tolerated\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -1033,9 +1058,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -1100,6 +1122,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config{\n  how-long-to-blacklist {\n    type=linear\n    maximum-epoch-blacklisted=62\n  }\n  how-many-can-we-blacklist=num-faults-tolerated\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -1108,9 +1133,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -1175,6 +1197,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config{\n  how-long-to-blacklist {\n    type=linear\n    maximum-epoch-blacklisted=62\n  }\n  how-many-can-we-blacklist=num-faults-tolerated\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -1183,9 +1208,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -1250,6 +1272,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config{\n  how-long-to-blacklist {\n    type=linear\n    maximum-epoch-blacklisted=62\n  }\n  how-many-can-we-blacklist=num-faults-tolerated\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -1258,9 +1283,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -1325,6 +1347,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config{\n  how-long-to-blacklist {\n    type=linear\n    maximum-epoch-blacklisted=62\n  }\n  how-many-can-we-blacklist=num-faults-tolerated\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -1333,9 +1358,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -1400,6 +1422,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config{\n  how-long-to-blacklist {\n    type=linear\n    maximum-epoch-blacklisted=62\n  }\n  how-many-can-we-blacklist=num-faults-tolerated\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -1408,9 +1433,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -1475,6 +1497,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config{\n  how-long-to-blacklist {\n    type=linear\n    maximum-epoch-blacklisted=62\n  }\n  how-many-can-we-blacklist=num-faults-tolerated\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -1483,9 +1508,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -1550,6 +1572,9 @@ svs:
           cpu: '1'
           memory: '2Gi'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config{\n  how-long-to-blacklist {\n    type=linear\n    maximum-epoch-blacklisted=62\n  }\n  how-many-can-we-blacklist=num-faults-tolerated\n}\n"
       resources:
         limits:
           cpu: '3'
@@ -1558,9 +1583,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       resources:
         limits:
           memory: '4Gi'
@@ -1629,6 +1651,9 @@ svs:
           memory: '2Gi'
     subdomain: 'sv-1'
     svApp:
+      additionalEnvVars:
+        - name: 'ADDITIONAL_CONFIG_CANTONBFT_EXPONENTIAL_BLACKLISTING'
+          value: "canton.sv-apps.sv.canton-bft-sequencing-parameters.blacklist-leader-selection-policy-config{\n  how-long-to-blacklist {\n    type=linear\n    maximum-epoch-blacklisted=62\n  }\n  how-many-can-we-blacklist=num-faults-tolerated\n}\n"
       auth0:
         clientId: 'bxjt0vzLyRG2rk2fapXfOzH5lzK4mrl7'
       resources:
@@ -1639,9 +1664,6 @@ svs:
           cpu: '1'
           memory: '2Gi'
     validatorApp:
-      additionalEnvVars:
-        - name: 'ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT'
-          value: "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
       auth0:
         clientId: 'fBFpzZSRuufk9ueV2pSEkOXNYXuQtVmY'
       resources:

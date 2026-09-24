@@ -86,17 +86,8 @@ unexpected exception: Task slick.*rejected from slick.util.AsyncExecutorWithMetr
 Timeout 10 seconds expired, but tasks still running. Shutting down forcibly
 ForkJoinIdlenessExecutorService.*shutdown did not complete gracefully in allotted
 
-Consensus not reached.*BftScanConnection:BftScanConnectionTest.*
+Consensus not reached.*BftScanConnection:BftCallExecutorTest.*
 Consensus not reached.*BftScanConnection:ConfigurationProvidedBftScanConnectionIntegrationTest.*
-# TODO (#6502): under TBAR the reward-accounting BFT reads emit two related
-# WARNs during bootstrap — "Consensus not reached." when the retry loop
-# gives up (no peer can converge to Ok) and "The following Scan URLs
-# disagreed with consensus" when a minority disagrees with the reached
-# consensus. Both are scoped to the two triggers that call these reads so
-# real BFT problems elsewhere still surface. Removed once #6392's two-phase
-# probe lands.
-Consensus not reached.*BftScanConnection:.*"span-name":"(SummarizingMiningRoundTrigger|CalculateRewardsTrigger)"
-The following Scan URLs disagreed with consensus.*BftScanConnection:.*"span-name":"(SummarizingMiningRoundTrigger|CalculateRewardsTrigger)"
 
 # internal selenium error. Potentially intermittent
 Exception managing firefox: error sending request for url .* http2 error: stream error received: refused stream before processing any application
@@ -112,6 +103,9 @@ Splice unsafe shutdown future
 
 # SV UI polls cometbft status endpoint even when there's no cometBFT (we have this in the full network docker compose test)
 .*CometBFT is not configured for this app.*
+
+# The portfolio UI warns about the plain-HTTP validator URL used by the docker compose deployment
+Using a non-TLS validator endpoint\. This is acceptable only in trusted environments
 
 Failed to connect to scan of Digital-Asset-Eng-3.*AppUpgradeIntegrationTest
 
@@ -178,3 +172,14 @@ api/sv/v0/onboard/validator \(POST\) resulted in a timeout
 # The same warning is emitted by both the FlywayExecutor and the ClassPathScanner loggers.
 # a single pattern matching the message (the unloadable sbt tests jar) covers both.
 Skipping unloadable jar file: file:.*-tests\.jar
+
+Connection for .* with psid .* is no longer active \(status: .*\), skipping update of the connection config
+
+# Onboarding multiple users in tests may lead to repeated STALE_STREAM_AUTHORIZATION and
+# ingestion restarts. This can result in long delays in signalWhenIngested.
+# See https://github.com/DACH-NY/cn-test-failures/issues/10095.
+signalWhenIngested.* has not completed after .* milliseconds
+
+# The BFT bootstrap test adds a dummy 5th SV with an unreachable scan URL (http://localhost:1)
+# to raise f from 0 to 1. All BFT peers attempt to connect to this URL and log warnings.
+Failed to connect to scan of.*NonZeroRoundBootstrapBftTimeBasedIntegrationTest
