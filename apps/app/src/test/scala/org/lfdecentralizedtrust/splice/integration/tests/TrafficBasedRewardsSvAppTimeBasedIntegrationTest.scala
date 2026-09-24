@@ -1003,6 +1003,7 @@ class TrafficBasedRewardsSvAppTimeBasedIntegrationTest
       existing.optDevelopmentFundManager,
       existing.externalPartyConfigStateTickDuration,
       Optional.of(newRc),
+      existing.validatorRewardConfig,
       existing.transferPreapprovalBaseDuration,
       existing.developmentFundManagerBlacklist,
       existing.minDevelopmentFundMintingDelay,
