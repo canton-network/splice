@@ -1,0 +1,18 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+module Splice.Scripts.TestValidatorRewardAccountingV2 where
+
+import DA.Assert
+
+import Daml.Script
+
+import Splice.Amulet.ValidatorRewardAccountingV2
+
+test_ValidatorRewardVersion_distinct : Script ()
+test_ValidatorRewardVersion_distinct = do
+  ValidatorRewardVersion_CcBurn === ValidatorRewardVersion_CcBurn
+  ValidatorRewardVersion_TrafficBased === ValidatorRewardVersion_TrafficBased
+  assertMsg
+    "CcBurn and TrafficBased are distinct"
+    (ValidatorRewardVersion_CcBurn /= ValidatorRewardVersion_TrafficBased)
