@@ -377,7 +377,10 @@ template TradeSettlementAgreement with
       controller venue
       do
         let authorizer = choiceArg.allocation.authorizer
-        assertMsg "Receipt allocation authorizer must be owned by trader" (regularAccountOwner authorizer == trader)
+        require' ("receipt allocation authorizer owner", regularAccountOwner authorizer)
+          isEqualR ("trader", trader)
+        require' ("receipt allocation authorizer provider", authorizer.provider)
+          isEqualR ("no provider", None)
         -- Important: validate the factory call to create a receipt allocation
         -- to avoid accidentally delegating sending assets to the venue.
         ensureIsReceiptAllocation [venue] trader authorizer choiceArg

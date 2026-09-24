@@ -99,7 +99,7 @@ test_ensureReceiptAllocation = do
     choiceArgV2 with
       actors = [bob]
 
-  test' (expectMessageContains "Receipt allocation authorizer must be owned by trader")
+  test' (expectMessageContains "receipt allocation authorizer owner")
     allocationV2 with
       authorizer = bobAccount
 
