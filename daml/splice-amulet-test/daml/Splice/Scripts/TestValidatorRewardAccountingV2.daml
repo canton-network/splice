@@ -8,7 +8,7 @@ import DA.Time
 
 import Daml.Script
 
-import Splice.Amulet.ValidatorRewardAccountingV2
+import Splice.AmuletConfig
 
 test_ValidatorRewardVersion_distinct : Script ()
 test_ValidatorRewardVersion_distinct = do
