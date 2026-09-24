@@ -416,3 +416,30 @@ test_CalculateValidatorRewardsV2_dry_run_variant = do
   case contracts of
     [(_, c)] -> c.dryRun === True
     _ -> fail "expected exactly one dry-run CalculateValidatorRewardsV2"
+
+-- TODO(CIP-0120): confirm-one-step test (see top-of-file TODO). Remove once
+-- an end-to-end test walks a round through StartProcessing.
+test_StartProcessingValidatorRewardsV2_seeds_ProcessValidatorRewardsV2 : Script ()
+test_StartProcessingValidatorRewardsV2_seeds_ProcessValidatorRewardsV2 = do
+  app <- setupAppWithConfig
+    (defaultAmuletConfig with validatorRewardConfig = Some sampleValidatorRewardConfig)
+  runNextIssuance app
+  [(calculateCid, calculate)] <- query @CalculateValidatorRewardsV2 app.dso
+  [(amuletRulesCid, _)] <- query @AmuletRules app.dso
+
+  let rootBatch = BatchOfMintingAllowances []
+  let rootBatchHash = CryptoHash.hash rootBatch
+
+  _ <- submit app.dso $ exerciseCmd amuletRulesCid AmuletRules_StartProcessingValidatorRewardsV2 with
+    calculateRewardsCid = calculateCid
+    batchHash = rootBatchHash
+
+  -- CalculateValidatorRewardsV2 archived
+  None <- queryContractId app.dso calculateCid
+  -- ProcessValidatorRewardsV2 created with fields inherited from the calculate contract
+  [(_, process)] <- query @ProcessValidatorRewardsV2 app.dso
+  process.round === calculate.round
+  process.roundClosedAt === calculate.roundClosedAt
+  process.dryRun === calculate.dryRun
+  process.rewardCouponTimeToLive === calculate.rewardCouponTimeToLive
+  process.batchHash === rootBatchHash
