@@ -1,20 +1,24 @@
 -- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 -- SPDX-License-Identifier: Apache-2.0
 
--- TODO(CIP-0120): the scripts below cover the config types in isolation.
--- Remove them once the validator-reward flow has functional tests analogous
--- to those in TestRewardAccountingV2 that exercise the types end-to-end.
--- The CIP-104 app-side does not carry equivalents for RewardVersion /
--- RewardConfig / defaultAmuletConfig.rewardConfig in isolation.
+-- TODO(CIP-0120): the scripts below each confirm one step of the
+-- validator-reward daml build-out. None of them have a counterpart in
+-- TestRewardAccountingV2 (the CIP-104 app-side) — the CIP-104 tests
+-- exercise the shared types via end-to-end reward flows instead of
+-- targeting the types directly. Remove these once the validator-reward
+-- flow has analogous end-to-end tests.
 module Splice.Scripts.TestValidatorRewardAccountingV2 where
 
 import DA.Assert
+import DA.Foldable (forA_)
 import DA.Time
 
 import Daml.Script
 
 import Splice.AmuletConfig
+import Splice.Round
 
+import Splice.Scripts.Util
 import Splice.Testing.Registries.AmuletRegistry.Parameters (defaultAmuletConfig)
 
 test_ValidatorRewardVersion_distinct : Script ()
@@ -53,3 +57,18 @@ test_validAmuletConfig_accepts_some_validator_reward_config : Script ()
 test_validAmuletConfig_accepts_some_validator_reward_config = do
   let config = defaultAmuletConfig with validatorRewardConfig = Some sampleValidatorRewardConfig
   assertMsg "validAmuletConfig accepts Some sampleValidatorRewardConfig" (validAmuletConfig config)
+
+test_openMiningRound_validatorRewardConfig_none : Script ()
+test_openMiningRound_validatorRewardConfig_none = do
+  app <- setupApp
+  rounds <- query @OpenMiningRound app.dso
+  forA_ rounds $ \(_, round) ->
+    round.validatorRewardConfig === None
+
+test_openMiningRound_validatorRewardConfig_some : Script ()
+test_openMiningRound_validatorRewardConfig_some = do
+  app <- setupAppWithConfig
+    (defaultAmuletConfig with validatorRewardConfig = Some sampleValidatorRewardConfig)
+  rounds <- query @OpenMiningRound app.dso
+  forA_ rounds $ \(_, round) ->
+    round.validatorRewardConfig === Some sampleValidatorRewardConfig
