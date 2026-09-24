@@ -96,6 +96,16 @@ data ValidatorRewardVersion
       -- ^ Traffic-based validator rewards introduced in CIP-0120.
   deriving (Eq, Show, Serializable)
 
+-- | True when the pre-CIP-0120 CC-burn-triggered ValidatorRewardCoupon
+-- creation should still run for a round. Pre-CIP-0120 network state
+-- (`None`) and explicit CcBurn both keep the legacy path; TrafficBased
+-- switches it off in favour of the DSO-signed batch flow.
+useCcBurnValidatorRewards : Optional ValidatorRewardVersion -> Bool
+useCcBurnValidatorRewards rv = case rv of
+  None -> True
+  Some ValidatorRewardVersion_CcBurn -> True
+  Some ValidatorRewardVersion_TrafficBased -> False
+
 -- | Configuration for how validator reward accounting and calculation should be performed.
 data ValidatorRewardConfig = ValidatorRewardConfig with
     mintingVersion : ValidatorRewardVersion
