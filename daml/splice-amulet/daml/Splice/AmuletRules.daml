@@ -34,7 +34,7 @@ import Splice.TokenStandard.Utils
 import Splice.Amulet
 import Splice.Amulet.CryptoHash qualified as CryptoHash
 import Splice.Amulet.RewardAccountingV2
-import Splice.Amulet.ValidatorRewardAccountingV2 (CalculateValidatorRewardsV2(..))
+import Splice.Amulet.ValidatorRewardAccountingV2 (CalculateValidatorRewardsV2(..), ProcessValidatorRewardsV2(..))
 import Splice.Amulet.TokenApiUtils
 import Splice.AmuletConfig
   ( transferConfigToTransferConfigV2, AmuletConfig(..), TransferConfig(..), TransferConfigV2(..), validAmuletConfig
@@ -123,6 +123,9 @@ data AmuletRules_ClaimExpiredRewardsV2Result = AmuletRules_ClaimExpiredRewardsV2
   deriving (Serializable)
 
 data AmuletRules_StartProcessingRewardsV2Result = AmuletRules_StartProcessingRewardsV2Result {}
+  deriving (Serializable)
+
+data AmuletRules_StartProcessingValidatorRewardsV2Result = AmuletRules_StartProcessingValidatorRewardsV2Result {}
   deriving (Serializable)
 
 data AmuletRules_UnhideRewardCouponsV2Result = AmuletRules_UnhideRewardCouponsV2Result {}
@@ -812,6 +815,23 @@ template AmuletRules
           batchHash
 
         return AmuletRules_StartProcessingRewardsV2Result {}
+
+    nonconsuming choice AmuletRules_StartProcessingValidatorRewardsV2 : AmuletRules_StartProcessingValidatorRewardsV2Result
+      with
+        calculateRewardsCid : ContractId CalculateValidatorRewardsV2
+        batchHash : CryptoHash.Hash
+      controller dso
+      do
+        calculateRewards <- fetchAndArchive (ForDso with dso) calculateRewardsCid
+        create ProcessValidatorRewardsV2 with
+          dso
+          round = calculateRewards.round
+          roundClosedAt = calculateRewards.roundClosedAt
+          dryRun = calculateRewards.dryRun
+          rewardCouponTimeToLive = calculateRewards.rewardCouponTimeToLive
+          batchHash
+
+        return AmuletRules_StartProcessingValidatorRewardsV2Result {}
 
     -- batch conversion of coupons not yet observable by their providers
     nonconsuming choice AmuletRules_UnhideRewardCouponsV2 : AmuletRules_UnhideRewardCouponsV2Result
