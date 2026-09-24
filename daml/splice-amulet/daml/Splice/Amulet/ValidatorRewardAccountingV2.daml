@@ -3,4 +3,9 @@
 
 -- | Validator-reward accounting based on off-ledger calculations (CIP-0120).
 -- Mirrors 'Splice.Amulet.RewardAccountingV2' for the validator side.
+--
+-- Leaf and batch types are reused from 'Splice.Amulet.RewardAccountingV2'
+-- ('MintingAllowance' and 'Batch') rather than being redeclared here.
+-- The app-vs-validator differentiation lives in the choice body that
+-- consumes a batch, not in the data shape.
 module Splice.Amulet.ValidatorRewardAccountingV2 where
