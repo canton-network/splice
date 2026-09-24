@@ -127,6 +127,9 @@ data AmuletRules_StartProcessingRewardsV2Result = AmuletRules_StartProcessingRew
 data AmuletRules_UnhideRewardCouponsV2Result = AmuletRules_UnhideRewardCouponsV2Result {}
   deriving (Serializable)
 
+data AmuletRules_UnhideValidatorRewardCouponsV2Result = AmuletRules_UnhideValidatorRewardCouponsV2Result {}
+  deriving (Serializable)
+
 data AmuletRules_ArchiveDryRunRewardAccountingV2Result = AmuletRules_ArchiveDryRunRewardAccountingV2Result {}
   deriving (Serializable)
 
@@ -788,6 +791,27 @@ template AmuletRules
         require "providers match coupons" (dedupSort providers == dedupSort actualProviders)
 
         return AmuletRules_UnhideRewardCouponsV2Result {}
+
+    -- batch conversion of validator reward coupons not yet observable by their nodes
+    nonconsuming choice AmuletRules_UnhideValidatorRewardCouponsV2 : AmuletRules_UnhideValidatorRewardCouponsV2Result
+      with
+        rewardCouponCids : [ContractId ValidatorRewardCouponV2]
+        nodes : [Party]
+      observer nodes
+      controller dso
+      do
+        require "at least one coupon" (not (null rewardCouponCids))
+
+        actualNodes <- forA rewardCouponCids $ \cid -> do
+          coupon <- fetchAndArchive (ForDso with dso) cid
+          require "node is no observer on the coupon" (not (coupon.nodeIsObserver))
+          assertWithinDeadline "coupon.expiresAt" coupon.expiresAt
+          create coupon with nodeIsObserver = True
+          pure coupon.node
+
+        require "nodes match coupons" (dedupSort nodes == dedupSort actualNodes)
+
+        return AmuletRules_UnhideValidatorRewardCouponsV2Result {}
 
     -- Choice to cleanup the state of stuck dry-runs in case getting them unstuck is too expensive.
     nonconsuming choice AmuletRules_ArchiveDryRunRewardAccountingV2 : AmuletRules_ArchiveDryRunRewardAccountingV2Result
