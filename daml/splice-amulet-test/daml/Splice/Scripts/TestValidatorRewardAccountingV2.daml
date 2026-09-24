@@ -16,7 +16,7 @@ import DA.Time
 
 import Daml.Script
 
-import DA.List (find, sortOn)
+import DA.List (sortOn)
 import DA.Map qualified as Map
 import DA.Set qualified as Set
 
