@@ -21,6 +21,23 @@ import Splice.Amulet.RewardAccountingV2 (Batch(..), MintingAllowance(..), batchP
 import Splice.Types
 import Splice.Util
 
+-- | State contract tracking the need to calculate and confirm the validator
+-- reward amounts for the given round.
+template CalculateValidatorRewardsV2 with
+    dso : Party
+    round : Round
+    roundClosedAt : Time
+      -- ^ The time at which the round was closed. Equal to the creation time
+      -- of this contract. Stored for debugging and metrics.
+    rewardCouponTimeToLive : RelTime
+      -- ^ Copied from the AmuletConfig at round-open time so the value can't drift
+      -- if the config changes while processing is in flight.
+    dryRun : Bool
+      -- ^ Whether to only simulate the confirmation without creating any
+      -- ValidatorRewardCouponV2 contracts.
+  where
+    signatory dso
+
 data ProcessValidatorRewardsV2_ProcessBatchResult = ProcessValidatorRewardsV2_ProcessBatchResult {}
   deriving (Eq, Show, Serializable)
 
@@ -85,3 +102,6 @@ template ProcessValidatorRewardsV2 with
 
 instance HasCheckedFetch ProcessValidatorRewardsV2 ForDso where
   contractGroupId ProcessValidatorRewardsV2 with .. = ForDso with ..
+
+instance HasCheckedFetch CalculateValidatorRewardsV2 ForDso where
+  contractGroupId CalculateValidatorRewardsV2 with .. = ForDso with ..
