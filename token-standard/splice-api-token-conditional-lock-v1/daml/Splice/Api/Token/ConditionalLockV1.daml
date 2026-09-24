@@ -43,9 +43,11 @@ data Guard
       parties : [Party]
         -- ^ Unique list of parties.
       threshold : Int
-        -- ^ Satisfied when at least `threshold` of `parties` are among the enacting actors.
-        -- MUST satisfy 1 <= threshold <= length parties. A `threshold` of 1 expresses any
-        -- one of these parties.
+        -- ^ Satisfied when at least `threshold` of `parties` are among the acting parties
+        -- of `ConditionalLock_Enact`: its `actors` and the approvers recorded for the
+        -- enacted rule and legs (`ConditionalLockView.approvals`). MUST satisfy
+        -- 1 <= threshold <= length parties. A `threshold` of 1 expresses any one of
+        -- these parties.
   deriving (Eq, Ord, Show, Serializable)
 
 -- | One way a rule can become enactable. Satisfied when every guard in `allOf` is satisfied.
@@ -109,13 +111,27 @@ data Rule = Rule with
       -- A rule id that has been enacted under a `lockId` MUST NOT be reused in later
       -- terms for that lock, including after an amendment.
     enactors : [Party]
-      -- ^ Parties entitled to enact this rule. At least one MUST be among the actors.
-      -- MUST be non-empty and duplicate-free.
+      -- ^ Parties entitled to enact this rule. At least one MUST be among the acting
+      -- parties of `ConditionalLock_Enact`. MUST be non-empty and duplicate-free.
     anyOf : [Alternative]
       -- ^ Disjunction: the rule is enactable when at least one alternative is
       -- satisfied. MUST be non-empty. Registries advertise the maximum length as
       -- `max-alternatives-per-rule` (CIP section 3.8).
     outcome : Outcome
+  deriving (Eq, Ord, Show, Serializable)
+
+-- | Approval of one enactment of a rule, recorded under a lock by
+-- `ConditionalLock_Approve`.
+data Approval = Approval with
+    ruleId : Text
+      -- ^ The approved rule.
+    legs : [Leg]
+      -- ^ The approved enactor-supplied legs, in the order they are supplied to
+      -- `ConditionalLock_Enact.legs`. The approval counts only for an enactment of
+      -- `ruleId` with exactly these legs.
+    approvers : [Party]
+      -- ^ Non-empty, duplicate-free list of parties that approved, each in the rule's
+      -- `enactors` or in a `Guard_Parties` of its `anyOf`.
   deriving (Eq, Ord, Show, Serializable)
 
 -- | The release policy, provided by the authorizer's wallet.
@@ -148,7 +164,7 @@ data LockTerms = LockTerms with
       -- `splice.lfdecentralizedtrust.org/lock-context`.
   deriving (Eq, Show, Serializable)
 
--- | Result of instructing, enacting, expiring, cancelling, or amending a lock.
+-- | Result of instructing, enacting, approving, expiring, cancelling, or amending a lock.
 data ConditionalLockResult = ConditionalLockResult with
     output : ConditionalLockResult_Output
     authorizerChangeCids : [ContractId Holding]
@@ -167,6 +183,8 @@ data ConditionalLockResult_Output
         -- never by `ConditionalLock_Amend`.
   | ConditionalLockResult_Locked with
       lockCid : ContractId ConditionalLock
+        -- ^ The active lock. For `ConditionalLock_Approve`, the lock carrying the
+        -- recorded approval, under the same `lockId`.
       holdingCids : [ContractId Holding]
         -- ^ The locked holdings backing the lock. MAY be empty for registries that do
         -- not represent their holdings on-ledger.
@@ -337,6 +355,9 @@ data ConditionalLockAction
   = CLA_Enact with
       ruleId : Text
         -- ^ The rule that can be enacted.
+  | CLA_Approve with
+      ruleId : Text
+        -- ^ The rule whose enactment can be approved.
   | CLA_Expire
   | CLA_Cancel
   | CLA_Amend
@@ -356,6 +377,12 @@ data ConditionalLockView = ConditionalLockView with
       -- ^ Ids of the rules already enacted under this `lockId`, across continuations
       -- and amendments. Wallets use it to validate a `ConditionalLock_Amend` before
       -- submitting; registries use it to enforce fire-once.
+    approvals : [Approval]
+      -- ^ Approvals recorded by `ConditionalLock_Approve`, at most one entry per
+      -- `(ruleId, legs)` and each party in at most one entry per rule. Registries MUST
+      -- retain the approvals of rules still in `terms.rules` across continuations, MUST
+      -- drop those of a rule when it fires, and MUST clear all of them on
+      -- `ConditionalLock_Amend`.
     holdingCids : [ContractId Holding]
       -- ^ The locked holdings backing this lock. MAY be empty for registries that do
       -- not represent their holdings on-ledger.
@@ -374,7 +401,9 @@ data ConditionalLockView = ConditionalLockView with
       -- `CLA_Enact` has one entry per rule in `terms.rules`. Presence means the rule
       -- exists and the listed groups are entitled to enact it, not that any of its
       -- alternatives is currently satisfied; wallets evaluate `anyOf` themselves
-      -- against ledger time and the witness they hold.
+      -- against ledger time and the witness they hold. `CLA_Approve` has one entry per
+      -- rule with a `Guard_Parties` in its `anyOf`, one group per party entitled
+      -- to approve it.
     meta : Metadata
   deriving (Eq, Show, Serializable)
 
@@ -385,6 +414,7 @@ interface ConditionalLock where
   conditionalLock_expireImpl : ContractId ConditionalLock -> ConditionalLock_Expire -> Update ConditionalLockResult
   conditionalLock_cancelImpl : ContractId ConditionalLock -> ConditionalLock_Cancel -> Update ConditionalLockResult
   conditionalLock_amendImpl : ContractId ConditionalLock -> ConditionalLock_Amend -> Update ConditionalLockResult
+  conditionalLock_approveImpl : ContractId ConditionalLock -> ConditionalLock_Approve -> Update ConditionalLockResult
 
   -- | Choice observers for `ConditionalLock_Enact`. `ConditionalLock_Enact`'s
   -- arguments include `witness.preimages`, so every choice observer learns every
@@ -410,16 +440,25 @@ interface ConditionalLock where
   -- the current terms together with those introduced by `newTerms`.
   conditionalLock_amendExtraObservers : ConditionalLock_Amend -> [Party]
 
+  -- | Choice observers for `ConditionalLock_Approve`. Usually the named parties of
+  -- the current terms, which observe the lock the choice replaces. It MUST be total
+  -- and MUST NOT fail; a `ruleId` that is not in `terms.rules` MUST yield the empty
+  -- list and let the body reject the exercise.
+  conditionalLock_approveExtraObservers : ConditionalLock_Approve -> [Party]
+
   nonconsuming choice ConditionalLock_Enact : ConditionalLockResult
-    -- ^ Fire one rule. Implementations MUST fail if ledger time is at or after
-    -- `terms.expiresAt`; if no party in the rule's `enactors` is among `actors`; if
-    -- no alternative in the rule's `anyOf` is satisfied (CIP section 3.5); or if
-    -- `legs` are not valid for the outcome (CIP section 3.6).
+    -- ^ Fire one rule. The acting parties are `actors` together with the approvers
+    -- recorded in `approvals` for exactly this `ruleId` and `legs`. Implementations
+    -- MUST fail if ledger time is at or after `terms.expiresAt`; if no party in the
+    -- rule's `enactors` is among the acting parties; if no alternative in the rule's
+    -- `anyOf` is satisfied (CIP section 3.5); or if `legs` are not valid for the
+    -- outcome (CIP section 3.6).
     with
       ruleId : Text
       actors : [Party]
-        -- ^ MUST include at least one of the rule's `enactors`.
-        -- Implementations MUST check these parties to avoid unauthorized enactment.
+        -- ^ Together with the recorded approvers, MUST include at least one of the
+        -- rule's `enactors`. Implementations MUST check these parties to avoid
+        -- unauthorized enactment.
       witness : Witness
       legs : [Leg]
         -- ^ Enactor-supplied legs. MUST be empty unless the rule's outcome is an
@@ -463,8 +502,8 @@ interface ConditionalLock where
   nonconsuming choice ConditionalLock_Amend : ConditionalLockResult
     -- ^ Replace the terms, optionally adding funds, with the consent of every named
     -- party of the current terms and the authorizer. Result is `Locked` with the new
-    -- lock, which retains `lockId`. Implementations MUST fail at or after the
-    -- current `terms.expiresAt`.
+    -- lock, which retains `lockId` and carries no `approvals`. Implementations MUST
+    -- fail at or after the current `terms.expiresAt`.
     --
     -- An amendment MUST NOT return `Pending`: every approval that `newTerms`
     -- introduces MUST be given in the amending transaction, so `actors` MUST also
@@ -494,3 +533,29 @@ interface ConditionalLock where
     observer conditionalLock_amendExtraObservers this arg
     controller actors
     do conditionalLock_amendImpl this self arg
+
+  nonconsuming choice ConditionalLock_Approve : ConditionalLockResult
+    -- ^ Record an approval of one enactment of a rule, counted by
+    -- `ConditionalLock_Enact`. Result is `Locked`, with a new `lockCid` under the same
+    -- `lockId`. The recorded approvers are the parties in `actors` that are in the rule's
+    -- `enactors` or in a `Guard_Parties` of its `anyOf`; approving the same
+    -- `(ruleId, legs)` again adds them to that approval. Approvals are irrevocable, and
+    -- a party approves at most one list of legs per rule. Implementations MUST fail if
+    -- ledger time is at or after `terms.expiresAt`; if `ruleId` is not in
+    -- `terms.rules`; if the rule has no `Guard_Parties`; if no party in `actors` would
+    -- be recorded that is not already recorded for `(ruleId, legs)`; if a party to be
+    -- recorded has approved the rule with other legs; or if `legs` are not valid for
+    -- the outcome (CIP section 3.6).
+    with
+      ruleId : Text
+      legs : [Leg]
+        -- ^ The enactor-supplied legs approved, under the same constraints as
+        -- `ConditionalLock_Enact.legs`; so empty for an `Outcome_Unlock` and for an
+        -- `Outcome_Release` with empty `receivers`.
+      actors : [Party]
+        -- ^ The parties approving. Implementations MUST check these parties to avoid
+        -- unauthorized approval.
+      extraArgs : ExtraArgs
+    observer conditionalLock_approveExtraObservers this arg
+    controller actors
+    do conditionalLock_approveImpl this self arg

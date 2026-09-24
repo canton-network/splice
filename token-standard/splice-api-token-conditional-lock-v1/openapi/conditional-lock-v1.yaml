@@ -261,6 +261,38 @@ paths:
         "404":
           $ref: "#/components/responses/404"
 
+  /registry/conditional-lock/v1/{lockContractId}/choice-contexts/approve:
+    post:
+      operationId: "getConditionalLockApproveContext"
+      description: |
+        Get the choice context to approve the enactment of a rule on a conditional lock.
+      parameters:
+        - name: lockContractId
+          description: "The contract ID of the conditional lock to approve a rule on."
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GetChoiceContextRequest"
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChoiceContext"
+        "400":
+          $ref: "#/components/responses/400"
+        "409":
+          $ref: "#/components/responses/409"
+        "404":
+          $ref: "#/components/responses/404"
+
 components:
   responses:
     "400":
