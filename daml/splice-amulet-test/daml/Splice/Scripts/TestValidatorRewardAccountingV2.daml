@@ -9,6 +9,7 @@
 -- flow has analogous end-to-end tests.
 module Splice.Scripts.TestValidatorRewardAccountingV2 where
 
+import DA.Action (void)
 import DA.Assert
 import DA.Foldable (forA_)
 import DA.Time
@@ -16,6 +17,7 @@ import DA.Time
 import Daml.Script
 
 import DA.List (sortOn)
+import DA.Map qualified as Map
 import DA.Set qualified as Set
 
 import Splice.Amulet
@@ -443,3 +445,43 @@ test_StartProcessingValidatorRewardsV2_seeds_ProcessValidatorRewardsV2 = do
   process.dryRun === calculate.dryRun
   process.rewardCouponTimeToLive === calculate.rewardCouponTimeToLive
   process.batchHash === rootBatchHash
+
+-- TODO(CIP-0120): confirm-one-step test (see top-of-file TODO). Remove once
+-- an end-to-end test walks a coupon through mint via InputValidatorRewardCouponV2.
+test_InputValidatorRewardCouponV2_mints_amulet : Script ()
+test_InputValidatorRewardCouponV2_mints_amulet = do
+  app <- setupApp
+  runNextIssuance app  -- move past the initial round so an issuing round exists
+
+  node <- allocateParty "validator-node"
+  now <- getTime
+  couponCid <- submit app.dso $ createCmd ValidatorRewardCouponV2 with
+    dso = app.dso
+    node
+    round = Round 0
+    amount = 100.0
+    expiresAt = now `addRelTime` hours 36
+    nodeIsObserver = True
+    beneficiary = None
+
+  (openMiningRound, _) <- getLatestOpenRound app
+  let context = TransferContext with
+        openMiningRound
+        issuingMiningRounds = Map.empty
+        validatorRights = Map.empty
+        featuredAppRight = None
+  void $ submitExerciseAmuletRulesByKey app [node] [] AmuletRules_Transfer with
+    transfer = Transfer with
+      sender = node
+      provider = node
+      inputs = [InputValidatorRewardCouponV2 couponCid]
+      outputs = []
+      beneficiaries = None
+    context
+    expectedDso = Some app.dso
+
+  -- coupon consumed
+  None <- queryContractId node couponCid
+  -- an amulet was minted to the node
+  amulets <- queryFilter @Splice.Amulet.Amulet node (\a -> a.owner == node)
+  assertMsg "at least one Amulet minted to the node" (not (null amulets))
