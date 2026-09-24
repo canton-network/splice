@@ -196,6 +196,7 @@ class UnsupportedPackageVettingIntegrationTest
           currentConfig.optDevelopmentFundManager,
           currentConfig.externalPartyConfigStateTickDuration,
           currentConfig.rewardConfig,
+          currentConfig.validatorRewardConfig,
           currentConfig.transferPreapprovalBaseDuration,
           currentConfig.developmentFundManagerBlacklist,
           currentConfig.minDevelopmentFundMintingDelay,
