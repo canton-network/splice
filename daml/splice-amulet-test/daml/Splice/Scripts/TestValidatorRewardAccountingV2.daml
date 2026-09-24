@@ -18,11 +18,13 @@ import Daml.Script
 import Splice.Amulet
 import Splice.AmuletConfig
 import Splice.AmuletRules
+import Splice.Api.RewardAssignmentV1 qualified as Api.RewardAssignmentV1
 import Splice.Round
 import Splice.Types
 
 import Splice.Scripts.Util
 import Splice.Testing.Registries.AmuletRegistry.Parameters (defaultAmuletConfig)
+import Splice.Testing.Utils (emptyExtraArgs)
 import Splice.Scripts.TestTransferPreapproval (createTransferPreapproval)
 
 test_ValidatorRewardVersion_distinct : Script ()
@@ -135,3 +137,43 @@ test_ValidatorRewardCouponV2_create_and_query = do
   coupon.round === Round 1
   coupon.nodeIsObserver === True
   coupon.beneficiary === None
+
+-- TODO(CIP-0120): confirm-one-step test (see top-of-file TODO). Remove once
+-- the end-to-end batch-processing tests exercise beneficiary assignment.
+test_ValidatorRewardCouponV2_assign_beneficiaries : Script ()
+test_ValidatorRewardCouponV2_assign_beneficiaries = do
+  app <- setupApp
+  node <- allocateParty "validator-node"
+  bob <- allocateParty "bob"
+  charlie <- allocateParty "charlie"
+  now <- getTime
+  let expiresAt = now `addRelTime` hours 36
+  couponCid <- submit app.dso $ createCmd ValidatorRewardCouponV2 with
+    dso = app.dso
+    node
+    round = Round 0
+    amount = 100.0
+    expiresAt
+    nodeIsObserver = True
+    beneficiary = None
+  let percentages = [(bob, 0.6), (charlie, 0.4)]
+  result <- submit (actAs node <> readAs app.dso) $
+    exerciseCmd (toInterfaceContractId @Api.RewardAssignmentV1.RewardCoupon couponCid)
+      Api.RewardAssignmentV1.RewardCoupon_AssignBeneficiaries with
+        additionalCoupons = []
+        newBeneficiaries = map (uncurry Api.RewardAssignmentV1.RewardBeneficiary) percentages
+        extraArgs = emptyExtraArgs
+  -- original is archived
+  None <- queryContractId node couponCid
+  -- each beneficiary got one coupon with their percentage of the amount
+  forA_ result.newBeneficiariesCouponCids $ \(beneficiary, cids) -> do
+    let Some (_, percentage) = find (\(p, _) -> p == beneficiary) percentages
+    length cids === 1
+    forA_ cids $ \cid -> do
+      Some newCoupon <- queryContractId beneficiary (fromInterfaceContractId @ValidatorRewardCouponV2 cid)
+      newCoupon.node === node
+      newCoupon.beneficiary === Some beneficiary
+      newCoupon.amount === 100.0 * percentage
+      newCoupon.nodeIsObserver === True
+      newCoupon.round === Round 0
+  pure ()

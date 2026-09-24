@@ -499,6 +499,18 @@ template ValidatorRewardCouponV2
     observer if nodeIsObserver then [node] ++ optionalToList beneficiary else []
     ensure amount > 0.0
 
+    interface instance Api.RewardAssignmentV1.RewardCoupon for ValidatorRewardCouponV2 where
+      view = Api.RewardAssignmentV1.RewardCouponView with
+        dso
+        provider = node
+        beneficiary
+        amount
+        expiresAt
+        meta = Api.Token.MetadataV1.emptyMetadata
+        maxNumNewBeneficiaries = maxNumNewCouponV2Beneficiaries
+
+      rewardCoupon_assignBeneficiariesImpl self arg = validatorRewardCouponV2_assignBeneficiariesImpl this self arg
+
 
 -- | A coupon for receiving validator rewards proportional to the usage fee paid by a user
 -- hosted by a validator operator.
@@ -718,6 +730,42 @@ rewardCouponV2_assignBeneficiariesImpl coupon _self arg = do
   return Api.RewardAssignmentV1.RewardCoupon_AssignBeneficiariesResult with
     newBeneficiariesCouponCids = perBeneficiaryCids
 
+-- | Implementation of the 'RewardCoupon_AssignBeneficiaries' choice for 'ValidatorRewardCouponV2'.
+validatorRewardCouponV2_assignBeneficiariesImpl
+  : ValidatorRewardCouponV2
+  -> ContractId Api.RewardAssignmentV1.RewardCoupon
+  -> Api.RewardAssignmentV1.RewardCoupon_AssignBeneficiaries
+  -> Update Api.RewardAssignmentV1.RewardCoupon_AssignBeneficiariesResult
+validatorRewardCouponV2_assignBeneficiariesImpl coupon _self arg = do
+  let newBeneficiaries = arg.newBeneficiaries
+  require "Beneficiary has not been assigned yet" (isNone coupon.beneficiary)
+  require "Beneficaries are unique" (unique (map (.beneficiary) newBeneficiaries))
+  require "Beneficiary percentages are between 0.0 and 1.0"
+    (all (\b -> 0.0 < b.percentage && b.percentage <= 1.0) newBeneficiaries)
+  require "Beneficiary percentages add up to 1.0" (sum (map (.percentage) newBeneficiaries) == 1.0)
+  require ("No more than " <> show maxNumNewCouponV2Beneficiaries <> " beneficiaries assigned")
+    (length newBeneficiaries <= maxNumNewCouponV2Beneficiaries)
+
+  additionalCoupons <- forA arg.additionalCoupons $ \cid -> do
+    c <- fetchAndArchive (ForOwner with dso = coupon.dso; owner = coupon.node) (fromInterfaceContractId @ValidatorRewardCouponV2 cid)
+    require "Additional coupon has not been assigned yet" (isNone c.beneficiary)
+    require "Additional coupon has same node" (c.node == coupon.node)
+    pure c
+
+  let allCoupons = coupon :: additionalCoupons
+
+  -- create coupons for new beneficiaries for each coupon
+  perBeneficiaryCids <- forA newBeneficiaries $ \newBeneficiary -> do
+    cids <- forA allCoupons $ \c ->
+      toInterfaceContractId <$> create c with
+        amount = c.amount * newBeneficiary.percentage
+        beneficiary = Some newBeneficiary.beneficiary
+        nodeIsObserver = True
+    pure (newBeneficiary.beneficiary, cids)
+
+  return Api.RewardAssignmentV1.RewardCoupon_AssignBeneficiariesResult with
+    newBeneficiariesCouponCids = perBeneficiaryCids
+
 -- tx history v2 logging
 ------------------------
 
@@ -764,6 +812,12 @@ instance HasCheckedFetch RewardCouponV2 ForOwner where
 
 instance HasCheckedFetch RewardCouponV2 ForDso where
   contractGroupId RewardCouponV2{..} = ForDso with dso
+
+instance HasCheckedFetch ValidatorRewardCouponV2 ForOwner where
+  contractGroupId ValidatorRewardCouponV2{..} = ForOwner with dso; owner = fromOptional node beneficiary
+
+instance HasCheckedFetch ValidatorRewardCouponV2 ForDso where
+  contractGroupId ValidatorRewardCouponV2{..} = ForDso with dso
 
 instance HasCheckedFetch Api.RewardAssignmentV1.RewardCouponView ForOwner where
   contractGroupId Api.RewardAssignmentV1.RewardCouponView{..} =
