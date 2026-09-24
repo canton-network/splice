@@ -1,0 +1,14 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- | Validator-reward accounting based on off-ledger calculations (CIP-0120).
+-- Mirrors 'Splice.Amulet.RewardAccountingV2' for the validator side.
+module Splice.Amulet.ValidatorRewardAccountingV2 where
+
+-- | How validator rewards and their minting allowances are tracked and computed.
+data ValidatorRewardVersion
+  = ValidatorRewardVersion_CcBurn
+      -- ^ Weight-based, CC-burn-triggered coupons (pre CIP-0120).
+  | ValidatorRewardVersion_TrafficBased
+      -- ^ Traffic-based validator rewards introduced in CIP-0120.
+  deriving (Eq, Show, Serializable)
