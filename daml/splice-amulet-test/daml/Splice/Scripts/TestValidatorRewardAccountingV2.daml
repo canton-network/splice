@@ -15,11 +15,14 @@ import DA.Time
 
 import Daml.Script
 
+import Splice.Amulet
 import Splice.AmuletConfig
+import Splice.AmuletRules
 import Splice.Round
 
 import Splice.Scripts.Util
 import Splice.Testing.Registries.AmuletRegistry.Parameters (defaultAmuletConfig)
+import Splice.Scripts.TestTransferPreapproval (createTransferPreapproval)
 
 test_ValidatorRewardVersion_distinct : Script ()
 test_ValidatorRewardVersion_distinct = do
@@ -72,3 +75,39 @@ test_openMiningRound_validatorRewardConfig_some = do
   rounds <- query @OpenMiningRound app.dso
   forA_ rounds $ \(_, round) ->
     round.validatorRewardConfig === Some sampleValidatorRewardConfig
+
+-- Unit test on the gate helper directly.
+test_useCcBurnValidatorRewards_cases : Script ()
+test_useCcBurnValidatorRewards_cases = do
+  useCcBurnValidatorRewards None === True
+  useCcBurnValidatorRewards (Some ValidatorRewardVersion_CcBurn) === True
+  useCcBurnValidatorRewards (Some ValidatorRewardVersion_TrafficBased) === False
+
+-- Integration test: TrafficBased config in force -> splitAndBurn does NOT
+-- create the legacy ValidatorRewardCoupon. Exercised via
+-- TransferPreapproval_Send, which routes through splitAndBurn to pay
+-- the preapproval fee.
+test_splitAndBurn_traffic_based_skips_coupon : Script ()
+test_splitAndBurn_traffic_based_skips_coupon = do
+  app <- setupAppWithConfig
+    (defaultAmuletConfig with validatorRewardConfig = Some sampleValidatorRewardConfig)
+  (alice, aliceValidator) <- setupSelfHostedUser app "alice"
+  (bob, _bobValidator) <- setupSelfHostedUser app "bob"
+  runNextIssuance app
+  runAmuletDepositBots app
+
+  now <- getTime
+  transferPreapprovalCid <- createTransferPreapproval
+    alice.primaryParty aliceValidator.primaryParty app.dso (now `addRelTime` days 1)
+  context <- getPaymentTransferContext app bob
+  amuletCid <- tap app bob 50.0
+  _ <- submit (actAs bob.primaryParty <> readAs app.dso) $
+    exerciseCmd transferPreapprovalCid TransferPreapproval_Send with
+      sender = bob.primaryParty
+      context
+      inputs = [InputAmulet amuletCid]
+      amount = 10.0
+      description = None
+
+  coupons <- query @ValidatorRewardCoupon app.dso
+  assertMsg "no ValidatorRewardCoupon should be created under TrafficBased" (null coupons)
