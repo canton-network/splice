@@ -40,6 +40,7 @@ import Splice.AmuletConfig
   , defaultTransferPreapprovalFee, getDevelopmentFundManagerBlacklist, getExternalPartyConfigStateTickDuration
   , getTransferPreapprovalBaseDuration, useTrafficBasedAppRewards
   , RewardVersion(..), useFeaturedAppMarkers
+  , useCcBurnValidatorRewards
   )
 import qualified Splice.AmuletConfig as Unit
 import Splice.ExternalPartyConfigState
@@ -2302,12 +2303,16 @@ splitAndBurn eventLogCid sender amount inputs context dso developmentFundManager
   amulet <- fetchAndArchive (ForOwner with dso; owner = sender) amuletCid
   -- record event
   logAmuletBurn dso eventLogCid sender amount usage (toInterfaceContractId amuletCid)
-  -- create validator activity rewards over the whole burn.
-  create ValidatorRewardCoupon with
-    dso
-    round = transferResult.round
-    user = sender
-    amount = amount + sum transferResult.summary.outputFees
+  -- Gate legacy ValidatorRewardCoupon creation: skipped once the round is
+  -- configured for the CIP-0120 traffic-based scheme (DSO-signed batches
+  -- produce ValidatorRewardCouponV2 instead).
+  contextMiningRound <- fetchPublicReferenceData (ForDso dso) context.openMiningRound (OpenMiningRound_Fetch dso)
+  when (useCcBurnValidatorRewards ((.mintingVersion) <$> contextMiningRound.validatorRewardConfig)) $
+    void $ create ValidatorRewardCoupon with
+      dso
+      round = transferResult.round
+      user = sender
+      amount = amount + sum transferResult.summary.outputFees
   let amuletAsOfRoundZero = amulet.amount.initialAmount + amulet.amount.ratePerRound.rate * intToDecimal amulet.amount.createdAt.number
   -- adjust the balance changes to account for the archival. This primarily matters for the tx log parsers in scan and the wallet.
   let result = transferResult with
