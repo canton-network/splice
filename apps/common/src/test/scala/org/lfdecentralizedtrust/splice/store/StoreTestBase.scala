@@ -304,6 +304,7 @@ abstract class StoreTestBase
       new RelTime(1_000_000),
       Optional.empty(), // trafficPrice
       Optional.empty(), // rewardConfig
+      Optional.empty(), // validatorRewardConfig
     )
 
     contract(

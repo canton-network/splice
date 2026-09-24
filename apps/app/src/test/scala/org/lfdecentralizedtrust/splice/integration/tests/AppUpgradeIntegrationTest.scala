@@ -249,6 +249,7 @@ class AppUpgradeIntegrationTest
             amuletConfig.optDevelopmentFundManager,
             amuletConfig.externalPartyConfigStateTickDuration,
             amuletConfig.rewardConfig,
+            amuletConfig.validatorRewardConfig,
             amuletConfig.transferPreapprovalBaseDuration,
             amuletConfig.developmentFundManagerBlacklist,
             amuletConfig.minDevelopmentFundMintingDelay,
