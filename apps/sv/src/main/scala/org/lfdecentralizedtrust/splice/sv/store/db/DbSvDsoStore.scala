@@ -2280,6 +2280,12 @@ class DbSvDsoStore(
     } yield result.map(contractFromRow(FeaturedAppActivityMarker.COMPANION)(_))
   }
 
+  override def listFeaturedAppRights(limit: Limit)(implicit
+      tc: TraceContext
+  ): Future[Seq[AssignedContract[FeaturedAppRight.ContractId, FeaturedAppRight]]] = {
+    multiDomainAcsStore.listAssignedContracts(FeaturedAppRight.COMPANION, limit)
+  }
+
   override def close(): Unit = {
     dsoStoreMetrics.close()
     super.close()

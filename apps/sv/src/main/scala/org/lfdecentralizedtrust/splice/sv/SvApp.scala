@@ -42,7 +42,13 @@ import org.lfdecentralizedtrust.splice.auth.{
 import org.lfdecentralizedtrust.splice.automation.{AutomationService, DomainTimeAutomationService}
 import org.lfdecentralizedtrust.splice.codegen.java.da.time.types.RelTime
 import org.lfdecentralizedtrust.splice.codegen.java.splice
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppRight
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.*
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.{
+  SRARC_GrantFeaturedAppRight,
+  SRARC_UpdateFeaturedAppRight,
+}
 import org.lfdecentralizedtrust.splice.config.SharedSpliceAppParameters
 import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.environment.BaseLedgerConnection.INITIAL_ROUND_USER_METADATA_KEY
@@ -84,7 +90,12 @@ import org.lfdecentralizedtrust.splice.sv.util.{
   SvOnboardingToken,
   ValidatorOnboardingSecret,
 }
-import org.lfdecentralizedtrust.splice.util.{Contract, HasHealth, TemplateJsonDecoder}
+import org.lfdecentralizedtrust.splice.util.{
+  AssignedContract,
+  Contract,
+  HasHealth,
+  TemplateJsonDecoder,
+}
 
 import java.time.Instant
 import java.util.Optional
@@ -894,6 +905,67 @@ object SvApp {
     }
   }
 
+  private def validateFeaturedAppRightAction(
+      action: ActionRequiringConfirmation,
+      store: SvDsoStore,
+  )(implicit ec: ExecutionContext, tc: TraceContext): Future[Either[String, Unit]] = {
+
+    def opsOf(c: AssignedContract[FeaturedAppRight.ContractId, FeaturedAppRight]): Set[String] =
+      c.payload.opsParties.toScala.map(_.asScala.toSet).getOrElse(Set.empty)
+
+    def validateGrant(
+        provider: String,
+        opsParties: Option[Seq[String]],
+        store: SvDsoStore,
+    ): Future[Either[String, Unit]] = {
+      val proposed = opsParties.getOrElse(Seq.empty).toSet
+      store.listFeaturedAppRights().map { rights =>
+        val existingOps = rights.flatMap(opsOf).toSet
+        val dupProvider = rights.exists(_.payload.provider == provider)
+        val overlap = proposed intersect existingOps
+        if (dupProvider) Left(s"provider $provider already has a FeaturedAppRight")
+        else if (overlap.nonEmpty) Left(s"opsParties already used: ${overlap.mkString(", ")}")
+        else if (proposed(provider)) Left(s"provider cannot be its own opsParty")
+        else Right(())
+      }
+    }
+
+    def validateUpdate(
+        id: FeaturedAppRight.ContractId,
+        newOpsParties: Option[Seq[String]],
+        store: SvDsoStore,
+    ): Future[Either[String, Unit]] = {
+      val proposed = newOpsParties.getOrElse(Seq.empty).toSet
+      store.listFeaturedAppRights().map { rights =>
+        val others = rights.filterNot(_.contractId == id)
+        val existingOps = others.flatMap(opsOf).toSet
+        val overlap = proposed intersect existingOps
+        if (overlap.nonEmpty) Left(s"opsParties already used: ${overlap.mkString(", ")}")
+        else Right(())
+      }
+    }
+
+    action match {
+      case arc: ARC_DsoRules =>
+        arc.dsoAction match {
+          case g: SRARC_GrantFeaturedAppRight =>
+            val provider = g.dsoRules_GrantFeaturedAppRightValue.provider
+            val opsParties =
+              g.dsoRules_GrantFeaturedAppRightValue.opsParties.toScala.map(_.asScala.toSeq)
+            validateGrant(provider, opsParties, store)
+
+          case u: SRARC_UpdateFeaturedAppRight =>
+            val rightCid = u.dsoRules_UpdateFeaturedAppRightValue.rightCid
+            val newOpsParties = u.dsoRules_UpdateFeaturedAppRightValue.update.newOpsParties.toScala
+              .map(_.asScala.toSeq)
+            validateUpdate(rightCid, newOpsParties, store)
+
+          case _ => Future.successful(Right(()))
+        }
+      case _ => Future.successful(Right(()))
+    }
+  }
+
   def createVoteRequest(
       requester: String,
       action: Json,
@@ -921,53 +993,57 @@ object SvApp {
       "Splice.DsoRules",
       "ActionRequiringConfirmation",
     )(action)
-    dsoStoreWithIngestion.store
-      .lookupVoteRequestByThisSvAndActionWithOffset(decodedAction)
-      .flatMap {
-        case QueryResult(_, Some(vote)) =>
-          Future.successful(
-            Left(s"This vote request has already been created ${vote.contractId}.")
-          )
-        case QueryResult(offset, None) =>
-          for {
-            res <- retryProvider.retryForClientCalls(
-              "createVoteRequest",
-              "createVoteRequest",
+    validateFeaturedAppRightAction(decodedAction, dsoStoreWithIngestion.store).flatMap {
+      case Left(reason) => Future.successful(Left(reason))
+      case Right(_) =>
+        dsoStoreWithIngestion.store
+          .lookupVoteRequestByThisSvAndActionWithOffset(decodedAction)
+          .flatMap {
+            case QueryResult(_, Some(vote)) =>
+              Future.successful(
+                Left(s"This vote request has already been created ${vote.contractId}.")
+              )
+            case QueryResult(offset, None) =>
               for {
-                dsoRules <- dsoStoreWithIngestion.store.getDsoRules()
-                reason = new Reason(reasonUrl, reasonDescription)
-                request = new DsoRules_RequestVote(
-                  requester,
-                  decodedAction,
-                  reason,
-                  java.util.Optional.of(decodedExpiration),
-                  effectiveTime,
+                res <- retryProvider.retryForClientCalls(
+                  "createVoteRequest",
+                  "createVoteRequest",
+                  for {
+                    dsoRules <- dsoStoreWithIngestion.store.getDsoRules()
+                    reason = new Reason(reasonUrl, reasonDescription)
+                    request = new DsoRules_RequestVote(
+                      requester,
+                      decodedAction,
+                      reason,
+                      java.util.Optional.of(decodedExpiration),
+                      effectiveTime,
+                    )
+                    cmd = dsoRules.exercise(_.exerciseDsoRules_RequestVote(request))
+                    res <- dsoStoreWithIngestion
+                      .connection(SpliceLedgerConnectionPriority.Low)
+                      .submit(
+                        actAs = Seq(dsoStoreWithIngestion.store.key.svParty),
+                        readAs = Seq(dsoStoreWithIngestion.store.key.dsoParty),
+                        cmd,
+                      )
+                      .withDedup(
+                        commandId = SpliceLedgerConnection.CommandId(
+                          "org.lfdecentralizedtrust.splice.sv.requestVote",
+                          Seq(
+                            dsoStoreWithIngestion.store.key.dsoParty,
+                            dsoStoreWithIngestion.store.key.svParty,
+                          ),
+                          action.toString,
+                        ),
+                        deduplicationOffset = offset,
+                      )
+                      .yieldResult()
+                  } yield res,
+                  logger,
                 )
-                cmd = dsoRules.exercise(_.exerciseDsoRules_RequestVote(request))
-                res <- dsoStoreWithIngestion
-                  .connection(SpliceLedgerConnectionPriority.Low)
-                  .submit(
-                    actAs = Seq(dsoStoreWithIngestion.store.key.svParty),
-                    readAs = Seq(dsoStoreWithIngestion.store.key.dsoParty),
-                    cmd,
-                  )
-                  .withDedup(
-                    commandId = SpliceLedgerConnection.CommandId(
-                      "org.lfdecentralizedtrust.splice.sv.requestVote",
-                      Seq(
-                        dsoStoreWithIngestion.store.key.dsoParty,
-                        dsoStoreWithIngestion.store.key.svParty,
-                      ),
-                      action.toString,
-                    ),
-                    deduplicationOffset = offset,
-                  )
-                  .yieldResult()
-              } yield res,
-              logger,
-            )
-          } yield Right(res.exerciseResult.voteRequest)
-      }
+              } yield Right(res.exerciseResult.voteRequest)
+          }
+    }
   }
 
   def archiveDryRunRewardAccountingContracts(

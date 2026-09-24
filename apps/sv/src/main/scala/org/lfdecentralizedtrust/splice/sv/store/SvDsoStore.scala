@@ -7,6 +7,7 @@ import cats.implicits.toTraverseOps
 import com.digitalasset.daml.lf.data.Time.Timestamp
 import org.lfdecentralizedtrust.splice.automation.MultiDomainExpiredContractTrigger.ListExpiredContracts
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
+  FeaturedAppRight,
   UnclaimedDevelopmentFundCoupon,
   UnclaimedReward,
 }
@@ -1194,6 +1195,10 @@ trait SvDsoStore
     splice.ans.amuletconversionratefeed.AmuletConversionRateFeed.ContractId,
     splice.ans.amuletconversionratefeed.AmuletConversionRateFeed,
   ]]]
+
+  def listFeaturedAppRights(limit: Limit = defaultLimit)(implicit
+      tc: TraceContext
+  ): Future[Seq[AssignedContract[FeaturedAppRight.ContractId, FeaturedAppRight]]]
 
 }
 

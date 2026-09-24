@@ -723,7 +723,12 @@ abstract class TrafficBasedRewardsTimeBasedIntegrationTestBase
       new SRARC_UpdateFeaturedAppRight(
         new DsoRules_UpdateFeaturedAppRight(
           rightCid,
-          new FeaturedAppRight_Update("updating activity weight", newWeight.bigDecimal),
+          new FeaturedAppRight_Update(
+            "updating activity weight",
+            newWeight.bigDecimal,
+            java.util.Optional.empty(),
+            java.util.Optional.empty(),
+          ),
         )
       )
     )
