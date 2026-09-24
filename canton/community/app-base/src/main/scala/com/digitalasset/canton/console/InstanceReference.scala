@@ -406,6 +406,8 @@ trait RemoteInstanceReference extends InstanceReference {
   override val keys: KeyAdministrationGroup =
     new KeyAdministrationGroup(this, this, consoleEnvironment, loggerFactory)
 
+  def adminApiAdminToken: Option[String]
+
   def config: NodeConfig
 
   override def adminCommand[Result](
@@ -415,7 +417,7 @@ trait RemoteInstanceReference extends InstanceReference {
       name,
       grpcCommand,
       config.clientAdminApi,
-      adminToken,
+      adminApiAdminToken,
     )
 }
 
@@ -712,7 +714,9 @@ class RemoteParticipantReference(environment: ConsoleEnvironment, override val n
     extends ParticipantReference(environment, name)
     with RemoteInstanceReference {
 
-  def adminToken: Option[String] = config.token
+  def adminToken: Option[String] = config.ledgerApiToken
+
+  def adminApiAdminToken: Option[String] = config.adminApiToken
 
   @Help.Summary("Return remote participant config")
   def config: RemoteParticipantConfig =
@@ -725,10 +729,10 @@ class RemoteParticipantReference(environment: ConsoleEnvironment, override val n
       name,
       command,
       config.clientLedgerApi,
-      config.token,
+      config.ledgerApiToken,
     )
 
-  override protected[console] def token: Option[String] = config.token
+  override protected[console] def token: Option[String] = config.ledgerApiToken
 
   private lazy val testing_ = new ParticipantTestingGroup(this, consoleEnvironment, loggerFactory)
 
@@ -1472,6 +1476,8 @@ class RemoteSequencerReference(val environment: ConsoleEnvironment, val name: St
 
   def adminToken: Option[String] = config.token
 
+  def adminApiAdminToken: Option[String] = None
+
   override protected[canton] def executionContext: ExecutionContext =
     consoleEnvironment.environment.executionContext
 
@@ -1607,6 +1613,8 @@ class RemoteMediatorReference(val environment: ConsoleEnvironment, val name: Str
     with SequencerConnectionAdministration {
 
   def adminToken: Option[String] = config.token
+
+  def adminApiAdminToken: Option[String] = None
 
   @Help.Summary("Returns the remote mediator configuration")
   def config: RemoteMediatorConfig =

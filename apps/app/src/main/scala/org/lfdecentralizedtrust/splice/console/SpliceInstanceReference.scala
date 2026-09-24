@@ -258,16 +258,26 @@ trait AppBackendReference extends AppReference with LocalInstanceReference {
   private def getRemoteParticipantConfigWithToken(
       participantClientConfig: BaseParticipantClientConfig
   )(implicit ec: ExecutionContext): RemoteParticipantConfig = {
-    val tokenStrO = Await.result(
-      spliceConsoleEnvironment.httpClient
-        .getToken(participantClientConfig.ledgerApi.authConfig)
-        .map(_.map(_.accessToken)),
+    val (maybeLedgerApiToken, maybeAdminApiToken) = Await.result(
+      {
+        val maybeLedgerApiTokenF = spliceConsoleEnvironment.httpClient
+          .getToken(participantClientConfig.ledgerApi.authConfig)
+          .map(_.map(_.accessToken))
+        val maybeAdminApiTokenF = spliceConsoleEnvironment.httpClient
+          .getToken(participantClientConfig.adminApi.authConfig)
+          .map(_.map(_.accessToken))
+        for {
+          maybeLedgerApiToken <- maybeLedgerApiTokenF
+          maybeAdminApiToken <- maybeAdminApiTokenF
+        } yield (maybeLedgerApiToken, maybeAdminApiToken)
+      },
       30.seconds,
     )
     RemoteParticipantConfig(
-      participantClientConfig.adminApi,
+      participantClientConfig.adminApi.clientConfig,
       participantClientConfig.ledgerApi.clientConfig,
-      token = tokenStrO,
+      ledgerApiToken = maybeLedgerApiToken,
+      adminApiToken = maybeAdminApiToken,
     )
   }
   implicit val ec: ExecutionContext = executionContext
