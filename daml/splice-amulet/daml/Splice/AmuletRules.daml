@@ -446,6 +446,7 @@ template AmuletRules
         let configUsd = getValueAsOf now configSchedule
         let tickDuration = configUsd.tickDuration
         let rewardConfig = configUsd.rewardConfig
+        let validatorRewardConfig = configUsd.validatorRewardConfig
         let trafficPrice =
               if isSome rewardConfig
                 then Some configUsd.decentralizedSynchronizer.fees.extraTrafficPrice
@@ -479,13 +480,13 @@ template AmuletRules
 
         oldest <- create OpenMiningRound with
           dso; round = Round nr0; amuletPrice; opensAt = opensAt0; targetClosesAt = targetClosesAt0; issuingFor = issuingFor0; transferConfigUsd ; tickDuration ; issuanceConfig = issuanceConfig0
-          trafficPrice; rewardConfig
+          trafficPrice; rewardConfig; validatorRewardConfig
         newestOpen <- create OpenMiningRound with
           dso; round = Round nr1; amuletPrice; opensAt = opensAt1; targetClosesAt = targetClosesAt1; issuingFor = issuingFor1; transferConfigUsd ; tickDuration ; issuanceConfig = issuanceConfig1
-          trafficPrice; rewardConfig
+          trafficPrice; rewardConfig; validatorRewardConfig
         last <- create OpenMiningRound with
           dso; round = Round nr2; amuletPrice; opensAt = opensAt2; targetClosesAt = targetClosesAt2; issuingFor = issuingFor2; transferConfigUsd ; tickDuration ; issuanceConfig = issuanceConfig2
-          trafficPrice; rewardConfig
+          trafficPrice; rewardConfig; validatorRewardConfig
 
         exercise self AmuletRules_BootstrapExternalPartyConfigState with
           openMiningRoundTriple = OpenMiningRoundTriple with
@@ -536,6 +537,7 @@ template AmuletRules
             tickDuration = roundToArchive.tickDuration
             trafficPrice = roundToArchive.trafficPrice
             rewardConfig = roundToArchive.rewardConfig
+            validatorRewardConfig = roundToArchive.validatorRewardConfig
 
         -- trigger off-ledger reward calculation if needed
         forA_ roundToArchive.rewardConfig $ \rewardConfig -> do
@@ -563,6 +565,7 @@ template AmuletRules
               opensAt = addRelTime (max now latestRound.opensAt) tickDuration
               newOpenRoundIssuingFor = latestRound.issuingFor + latestRound.tickDuration
               rewardConfig = configUsd.rewardConfig
+              validatorRewardConfig = configUsd.validatorRewardConfig
           create OpenMiningRound with
               dso
               round = Round (latestRound.round.number + 1)
@@ -577,6 +580,7 @@ template AmuletRules
               issuanceConfig = getValueAsOf newOpenRoundIssuingFor configUsd.issuanceCurve
               tickDuration
               rewardConfig
+              validatorRewardConfig
               trafficPrice =
                 if isSome rewardConfig
                   then Some configUsd.decentralizedSynchronizer.fees.extraTrafficPrice
