@@ -245,3 +245,57 @@ test_ProcessValidatorRewardsV2_rejects_hash_mismatch = do
   submitMustFail app.dso $ exerciseCmd processCid ProcessValidatorRewardsV2_ProcessBatch with
     batch = tamperedBatch
     nodesWithWrongVettingState = Set.empty
+
+-- TODO(CIP-0120): confirm-one-step test (see top-of-file TODO). Remove once
+-- the reconciliation trigger is covered by end-to-end tests.
+test_UnhideValidatorRewardCouponsV2_flips_observer : Script ()
+test_UnhideValidatorRewardCouponsV2_flips_observer = do
+  app <- setupApp
+  node <- allocateParty "validator-node"
+  now <- getTime
+  let expiresAt = now `addRelTime` hours 36
+  hiddenCid <- submit app.dso $ createCmd ValidatorRewardCouponV2 with
+    dso = app.dso
+    node
+    round = Round 0
+    amount = 100.0
+    expiresAt
+    nodeIsObserver = False
+    beneficiary = None
+
+  [(amuletRulesCid, _)] <- query @AmuletRules app.dso
+  _ <- submit app.dso $ exerciseCmd amuletRulesCid AmuletRules_UnhideValidatorRewardCouponsV2 with
+    rewardCouponCids = [hiddenCid]
+    nodes = [node]
+
+  -- hidden coupon archived
+  None <- queryContractId app.dso hiddenCid
+  -- exactly one coupon remains, now observable by the node
+  coupons <- query @ValidatorRewardCouponV2 app.dso
+  case coupons of
+    [(_, coupon)] -> do
+      coupon.nodeIsObserver === True
+      coupon.node === node
+      coupon.amount === 100.0
+    _ -> fail "expected exactly one ValidatorRewardCouponV2 after unhiding"
+
+-- TODO(CIP-0120): confirm-one-step test (see top-of-file TODO). Remove once
+-- the reconciliation trigger is covered by end-to-end tests.
+test_UnhideValidatorRewardCouponsV2_rejects_already_observable : Script ()
+test_UnhideValidatorRewardCouponsV2_rejects_already_observable = do
+  app <- setupApp
+  node <- allocateParty "validator-node"
+  now <- getTime
+  observableCid <- submit app.dso $ createCmd ValidatorRewardCouponV2 with
+    dso = app.dso
+    node
+    round = Round 0
+    amount = 100.0
+    expiresAt = now `addRelTime` hours 36
+    nodeIsObserver = True
+    beneficiary = None
+
+  [(amuletRulesCid, _)] <- query @AmuletRules app.dso
+  submitMustFail app.dso $ exerciseCmd amuletRulesCid AmuletRules_UnhideValidatorRewardCouponsV2 with
+    rewardCouponCids = [observableCid]
+    nodes = [node]
