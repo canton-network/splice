@@ -3,7 +3,7 @@
 
 sdk-version: 3.5.2
 name: splice-api-token-conditional-lock-v1
-version: 1.0.0
+version: 0.2.0
 source: daml
 dependencies:
 - daml-prim

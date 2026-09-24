@@ -9,7 +9,7 @@ info:
     (splice-api-token-conditional-lock-v1) for the purpose of locking holdings
     under a release policy; e.g. HTLC legs, DvP between registries, escrow,
     vesting, and collateral.
-  version: 1.0.0
+  version: 0.2.0
 paths:
 
   /registry/conditional-lock/v1/lock-factory:
