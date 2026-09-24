@@ -1646,6 +1646,21 @@ summarizeAndConsumeInputs csum dso sender inps = do
         changeToHoldingFeesRate = s.changeToHoldingFeesRate
         totalDevelopmentFundAmount = s.totalDevelopmentFundAmount
 
+    summarizeAndConsumeInput _round s (InputValidatorRewardCouponV2 couponCid) = do
+      coupon <- fetchAndArchive forOwner couponCid
+      assertWithinDeadline "ValidatorRewardCouponV2.expiresAt" coupon.expiresAt
+      return TransferInputsSummary with
+        totalAmuletAmount = s.totalAmuletAmount
+        totalAppRewardAmount = s.totalAppRewardAmount
+        totalValidatorRewardAmount = s.totalValidatorRewardAmount + coupon.amount
+        totalUnclaimedActivityRecordAmount = s.totalUnclaimedActivityRecordAmount
+        totalValidatorFaucetAmount = s.totalValidatorFaucetAmount
+        totalSvRewardAmount = s.totalSvRewardAmount
+        totalHoldingFees = s.totalHoldingFees
+        amountArchivedAsOfRoundZero = s.amountArchivedAsOfRoundZero
+        changeToHoldingFeesRate = s.changeToHoldingFeesRate
+        totalDevelopmentFundAmount = s.totalDevelopmentFundAmount
+
     summarizeAndConsumeValidatorFaucetInput s couponCid = do
       coupon <- fetchAndArchive forOwner couponCid
       -- compute balance change
@@ -1988,6 +2003,7 @@ data TransferInput
   | InputUnclaimedActivityRecord (ContractId UnclaimedActivityRecord)
   | InputDevelopmentFundCoupon (ContractId DevelopmentFundCoupon)
   | InputRewardCouponV2 (ContractId RewardCouponV2)
+  | InputValidatorRewardCouponV2 (ContractId ValidatorRewardCouponV2)
   deriving (Eq, Ord, Show, Serializable)
 
 -- | Smart constructor for inputing validator faucet coupons into a transfer.
