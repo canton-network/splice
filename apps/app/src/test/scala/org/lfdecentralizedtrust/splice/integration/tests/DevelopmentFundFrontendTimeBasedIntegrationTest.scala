@@ -475,6 +475,7 @@ class DevelopmentFundFrontendTimeBasedIntegrationTest
       Optional.of(newDfm.toProtoPrimitive),
       existingConfig.externalPartyConfigStateTickDuration,
       existingConfig.rewardConfig,
+      existingConfig.validatorRewardConfig,
       existingConfig.transferPreapprovalBaseDuration,
       existingConfig.developmentFundManagerBlacklist,
       existingConfig.minDevelopmentFundMintingDelay,
