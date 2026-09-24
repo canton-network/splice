@@ -1,6 +1,11 @@
 -- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 -- SPDX-License-Identifier: Apache-2.0
 
+-- TODO(CIP-0120): the scripts below cover the config types in isolation.
+-- Remove them once the validator-reward flow has functional tests analogous
+-- to those in TestRewardAccountingV2 that exercise the types end-to-end.
+-- The CIP-104 app-side does not carry equivalents for RewardVersion /
+-- RewardConfig / defaultAmuletConfig.rewardConfig in isolation.
 module Splice.Scripts.TestValidatorRewardAccountingV2 where
 
 import DA.Assert
@@ -9,6 +14,8 @@ import DA.Time
 import Daml.Script
 
 import Splice.AmuletConfig
+
+import Splice.Testing.Registries.AmuletRegistry.Parameters (defaultAmuletConfig)
 
 test_ValidatorRewardVersion_distinct : Script ()
 test_ValidatorRewardVersion_distinct = do
@@ -37,3 +44,12 @@ test_ValidatorRewardConfig_equality = do
     "changing mintingVersion breaks equality"
     (sampleValidatorRewardConfig /=
       (sampleValidatorRewardConfig with mintingVersion = ValidatorRewardVersion_CcBurn))
+
+test_defaultAmuletConfig_no_validator_reward_config : Script ()
+test_defaultAmuletConfig_no_validator_reward_config =
+  defaultAmuletConfig.validatorRewardConfig === None
+
+test_validAmuletConfig_accepts_some_validator_reward_config : Script ()
+test_validAmuletConfig_accepts_some_validator_reward_config = do
+  let config = defaultAmuletConfig with validatorRewardConfig = Some sampleValidatorRewardConfig
+  assertMsg "validAmuletConfig accepts Some sampleValidatorRewardConfig" (validAmuletConfig config)
