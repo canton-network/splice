@@ -538,6 +538,11 @@ abstract class StoreTestBase
     )
   }
 
+  private def lockControllers(owner: PartyId): governancelockCodegen.ControllerSpecification =
+    new governancelockCodegen.ControllerSpecification(
+      List(List(owner.toProtoPrimitive).asJava).asJava
+    )
+
   protected def governanceLock(
       owner: PartyId,
       amount: BigDecimal,
@@ -548,7 +553,8 @@ abstract class StoreTestBase
   ): Contract[
     governancelockCodegen.GovernanceLock.ContractId,
     governancelockCodegen.GovernanceLock,
-  ] =
+  ] = {
+    val controllers = lockControllers(owner)
     contract(
       identifier = governancelockCodegen.GovernanceLock.TEMPLATE_ID_WITH_PACKAGE_ID,
       contractId = new governancelockCodegen.GovernanceLock.ContractId(contractId),
@@ -557,12 +563,19 @@ abstract class StoreTestBase
         owner.toProtoPrimitive,
         amount.bigDecimal,
         new LockedAmulet.ContractId(nextCid()),
-        new governancelockCodegen.GovernanceLockSpecification(kind),
+        new governancelockCodegen.GovernanceLockSpecification(
+          kind,
+          controllers,
+          controllers,
+          controllers,
+        ),
         Optional.empty(),
         Instant.now().truncatedTo(ChronoUnit.MICROS),
-        new Metadata(java.util.Collections.emptyMap()),
+        new Metadata(util.Collections.emptyMap()),
+        util.Map.of[String, governancelockCodegen.UnlockApproval](),
       ),
     )
+  }
 
   protected def vestingLock(
       owner: PartyId,
@@ -583,10 +596,12 @@ abstract class StoreTestBase
         endTime,
         vestingAmount.bigDecimal,
         new governancelockCodegen.VestingLockSpecification(
-          new governancelockCodegen.governancelockkind.GLK_SuperValidatorRightsOwner(svName)
+          new governancelockCodegen.governancelockkind.GLK_SuperValidatorRightsOwner(svName),
+          lockControllers(owner),
         ),
         Optional.empty(),
-        new Metadata(java.util.Collections.emptyMap()),
+        new Metadata(util.Collections.emptyMap()),
+        util.Map.of[String, Instant](),
       ),
     )
 

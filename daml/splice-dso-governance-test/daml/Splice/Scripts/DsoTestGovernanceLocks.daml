@@ -4,6 +4,7 @@
 module Splice.Scripts.DsoTestGovernanceLocks where
 
 import DA.Assert
+import DA.Map qualified as Map
 import DA.Optional (isNone, isSome)
 import DA.Time
 
@@ -37,8 +38,7 @@ setupSharedLock kind = do
 
   let registry = TSU.upcast app.registry : AmuletRegistryV2.AmuletRegistry
 
-  let spec = GovernanceLockSpecification with kind = kind alice
-  governanceLockCid <- governanceLockRawChoice registry alice.primaryParty testVestingAmount spec
+  governanceLockCid <- governanceLockRawChoice registry alice.primaryParty testVestingAmount (kind alice)
 
   pure SharedLockEnv with ..
 
@@ -64,13 +64,12 @@ testVestingAmount = 20000.0
 testVestingPeriod : RelTime
 testVestingPeriod = days 365 + hours 6
 
-testLockSpecification : GovernanceLockSpecification
-testLockSpecification = GovernanceLockSpecification with
-  kind = GLK_SuperValidatorRightsOwner "TestSV"
+testLockKind : GovernanceLockKind
+testLockKind = GLK_SuperValidatorRightsOwner "TestSV"
 
 setupVestingLock : Script VestingLockEnv
 setupVestingLock = do
-  SharedLockEnv{..} <- setupSharedLock \_ -> GLK_SuperValidatorRightsOwner "TestSV"
+  SharedLockEnv{..} <- setupSharedLock \_ -> testLockKind
 
   -- Reach the `VestingLock` the way production does:
   -- `ExternalPartyAmuletRules_LockForGovernance` -> `GovernanceLock_Unlock`
@@ -88,9 +87,10 @@ setupVestingLock = do
         vestingPeriod = testVestingPeriod
         endTime = unlockAt `addRelTime` testVestingPeriod
         vestingAmount = testVestingAmount
-        specification = governanceToVestingSpecification testLockSpecification
+        specification = governanceToVestingSpecification (ownerControlledSpecification alice.primaryParty testLockKind)
         originalLockCid = Some (coerceContractId governanceLockCid)
         meta = mempty
+        pendingWithdrawApprovals = Map.empty
 
   Some vestingLock <- queryContractId alice.primaryParty vestingLockCid
   vestingLock === expectedVestingLock
@@ -250,7 +250,7 @@ testDsoRulesConvertProvisionalFeaturedAppLock = do
 
   -- New GovernanceLock is created and is equivalent to the provisional lock with its kind updated to GLK_FeaturedApp
   let expectedConvertedLock = provisionalLock with
-        specification = GovernanceLockSpecification with
+        specification = provisionalLock.specification with
           kind = GLK_FeaturedApp with provider = env.alice.primaryParty
   [(_, actualConvertedLock)] <- query @GovernanceLock env.app.dso
   actualConvertedLock === expectedConvertedLock
