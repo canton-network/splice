@@ -719,13 +719,14 @@ abstract class StoreTestBase
       providerParty: PartyId,
       contractId: String = nextCid(),
       activityWeight: Option[BigDecimal] = None,
+      opsParties: Option[Seq[String]] = None,
   ) = {
     val template = new FeaturedAppRight(
       dsoParty.toProtoPrimitive,
       providerParty.toProtoPrimitive,
       activityWeight.map(_.bigDecimal).toJava,
       Option.empty[FeaturedAppKind].toJava,
-      Option.empty[java.util.List[String]].toJava,
+      opsParties.map(_.asJava).toJava,
     )
     contract(
       FeaturedAppRight.TEMPLATE_ID_WITH_PACKAGE_ID,
