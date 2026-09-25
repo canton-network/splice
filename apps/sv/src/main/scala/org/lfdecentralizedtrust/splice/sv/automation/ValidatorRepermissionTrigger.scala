@@ -48,7 +48,14 @@ class ValidatorRepermissionTrigger(
       tc: TraceContext
   ): Future[Seq[ValidatorRepermissionTrigger.Task]] = {
     for {
-      repermissions <- store.listValidatorRepermissions()
+      dsoRules <- store.getDsoRules()
+      isPermissioned = dsoRules.payload.config.svOperationsSwitchOverTimes.isPresent &&
+        dsoRules.payload.config.svOperationsSwitchOverTimes
+          .get()
+          .containsKey("permissionedSynchronizer")
+      repermissions <-
+        if (isPermissioned) store.listValidatorRepermissions()
+        else Future.successful(Seq.empty)
     } yield repermissions.map(ValidatorRepermissionTrigger.Task(_))
   }
 
