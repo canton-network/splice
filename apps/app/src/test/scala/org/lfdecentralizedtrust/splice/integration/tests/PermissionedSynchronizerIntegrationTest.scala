@@ -41,7 +41,19 @@ class PermissionedSynchronizerIntegrationTest
       .simpleTopology4Svs(this.getClass.getSimpleName)
       .addConfigTransforms((_, config) =>
         ConfigTransforms.updateAllSvAppConfigs { case (_, c) =>
-          c.copy(permissionedSynchronizer = true)
+          val newOnboarding = c.onboarding.map {
+            case foundDso: org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.FoundDso =>
+              val currentTimes = foundDso.initialSvOperationsSwitchOverTimes.getOrElse(Map.empty)
+              foundDso.copy(
+                initialSvOperationsSwitchOverTimes = Some(
+                  currentTimes ++ Map(
+                    "permissionedSynchronizer" -> com.digitalasset.canton.data.CantonTimestamp.MinValue
+                  )
+                )
+              )
+            case other => other
+          }
+          c.copy(onboarding = newOnboarding)
         }(config)
       )
       .addConfigTransforms((_, config) =>
