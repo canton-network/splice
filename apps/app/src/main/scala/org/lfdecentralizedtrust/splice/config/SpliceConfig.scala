@@ -11,80 +11,31 @@ import org.lfdecentralizedtrust.splice.auth.AuthConfig
 import org.lfdecentralizedtrust.splice.environment.{DarResources, PackageVettingLookupService}
 import org.lfdecentralizedtrust.splice.http.UrlValidator
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection.BftScanClientConfig
-import org.lfdecentralizedtrust.splice.scan.config.{
-  BulkStorageConfig,
-  CantonBftPeerConfig,
-  MediatorVerdictIngestionConfig,
-  ScanAppBackendConfig,
-  ScanAppClientConfig,
-  ScanCacheConfig,
-  ScanRollForwardLsuConfig,
-  ScanSynchronizerConfig,
-  ScanSynchronizerNodesConfig,
-  TokenStandardConfig,
-  CacheConfig as SpliceCacheConfig,
-}
-import org.lfdecentralizedtrust.splice.splitwell.config.{
-  SplitwellAppBackendConfig,
-  SplitwellAppClientConfig,
-  SplitwellDomains,
-  SplitwellSynchronizerConfig,
-}
+import org.lfdecentralizedtrust.splice.scan.config.{AnalyzableTimeWindowConfig, BulkStorageConfig, CantonBftPeerConfig, MediatorVerdictIngestionConfig, ScanAppBackendConfig, ScanAppClientConfig, ScanCacheConfig, ScanRollForwardLsuConfig, ScanSynchronizerConfig, ScanSynchronizerNodesConfig, TokenStandardConfig, CacheConfig as SpliceCacheConfig}
+import org.lfdecentralizedtrust.splice.splitwell.config.{SplitwellAppBackendConfig, SplitwellAppClientConfig, SplitwellDomains, SplitwellSynchronizerConfig}
 import org.lfdecentralizedtrust.splice.sv.config.*
 import org.lfdecentralizedtrust.splice.sv.SvAppClientConfig
 import org.lfdecentralizedtrust.splice.sv.config.SvOnboardingConfig.FoundDso
-import org.lfdecentralizedtrust.splice.util.{
-  Codec,
-  IpCidrRateLimits,
-  PerAttributeRateLimitConfig,
-  SpliceRateLimitConfig,
-}
+import org.lfdecentralizedtrust.splice.util.{Codec, IpCidrRateLimits, PerAttributeRateLimitConfig, SpliceRateLimitConfig}
 import org.lfdecentralizedtrust.splice.validator.config.*
-import org.lfdecentralizedtrust.splice.wallet.config.{
-  AppRewardBeneficiaryConfig,
-  AutoAcceptTransfersConfig,
-  RewardSharingConfig,
-  TransferPreapprovalConfig,
-  TreasuryConfig,
-  WalletAppClientConfig,
-  WalletSweepConfig,
-  WalletSynchronizerConfig,
-  WalletValidatorAppClientConfig,
-}
+import org.lfdecentralizedtrust.splice.wallet.config.{AppRewardBeneficiaryConfig, AutoAcceptTransfersConfig, RewardSharingConfig, TransferPreapprovalConfig, TreasuryConfig, WalletAppClientConfig, WalletSweepConfig, WalletSynchronizerConfig, WalletValidatorAppClientConfig}
 import com.daml.nonempty.NonEmpty
 import com.digitalasset.canton.SynchronizerAlias
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
-import com.digitalasset.canton.config.ConfigErrors.{
-  CantonConfigError,
-  GenericConfigError,
-  NoConfigFiles,
-  SubstitutionError,
-}
+import com.digitalasset.canton.config.ConfigErrors.{CantonConfigError, GenericConfigError, NoConfigFiles, SubstitutionError}
 import com.digitalasset.canton.config.*
 import com.digitalasset.canton.config.RequireTypes.NonNegativeNumeric
 import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.logging.{ErrorLoggingContext, NamedLoggerFactory, TracedLogger}
 import com.digitalasset.canton.participant.config.RemoteParticipantConfig
-import com.digitalasset.canton.admin.api.client.data.{
-  SequencerConnectionPoolDelays,
-  SubmissionRequestAmplification,
-  SynchronizerLimits,
-  TransactionProtocolLimits,
-}
+import com.digitalasset.canton.admin.api.client.data.{SequencerConnectionPoolDelays, SubmissionRequestAmplification, SynchronizerLimits, TransactionProtocolLimits}
 import com.digitalasset.canton.tracing.TraceContext
 import com.typesafe.config.{Config, ConfigRenderOptions}
 import com.typesafe.config.ConfigException.UnresolvedSubstitution
 import org.slf4j.{Logger, LoggerFactory}
 import pureconfig.configurable.{genericMapReader, genericMapWriter}
 import pureconfig.generic.{CoproductHint, FieldCoproductHint, ProductHint}
-import pureconfig.{
-  CamelCase,
-  ConfigCursor,
-  ConfigFieldMapping,
-  ConfigReader,
-  ConfigWriter,
-  KebabCase,
-}
+import pureconfig.{CamelCase, ConfigCursor, ConfigFieldMapping, ConfigReader, ConfigWriter, KebabCase}
 import pureconfig.error.{CannotConvert, FailureReason}
 import pureconfig.module.cats.{nonEmptyListReader, nonEmptyListWriter}
 import io.circe.parser.*
@@ -527,6 +478,8 @@ object SpliceConfig {
       deriveReader[ScanSynchronizerNodesConfig]
     implicit val scanRollForwardLsuConfigReader: ConfigReader[ScanRollForwardLsuConfig] =
       deriveReader[ScanRollForwardLsuConfig]
+    implicit val analyzableTimeWindowConfigReader: ConfigReader[AnalyzableTimeWindowConfig] =
+      deriveReader[AnalyzableTimeWindowConfig]
     implicit val scanConfigReader: ConfigReader[ScanAppBackendConfig] =
       deriveReader[ScanAppBackendConfig].emap { conf =>
         for {
@@ -1062,6 +1015,8 @@ object SpliceConfig {
       deriveWriter[ScanSynchronizerNodesConfig]
     implicit val scanRollForwardLsuConfigWriter: ConfigWriter[ScanRollForwardLsuConfig] =
       deriveWriter[ScanRollForwardLsuConfig]
+    implicit val analyzableTimeWindowConfigWriter: ConfigWriter[AnalyzableTimeWindowConfig] =
+      deriveWriter[AnalyzableTimeWindowConfig]
     implicit val scanConfigWriter: ConfigWriter[ScanAppBackendConfig] =
       deriveWriter[ScanAppBackendConfig]
     implicit val scanCacheConfigWriter: ConfigWriter[ScanCacheConfig] =

@@ -101,7 +101,7 @@ spec:
         - name: ADDITIONAL_CONFIG_ANALYZABLE_TIME_WINDOW_DURATION
           value: |
             canton.scan-apps.scan-app {
-              analyzable-time-window-duration = "{{ . }}"
+              analyzable-time-window.duration = "{{ . }}"
             }
         {{- end }}
         {{- with .Values.sponsorScanUrl }}

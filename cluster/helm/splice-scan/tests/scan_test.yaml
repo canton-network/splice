@@ -76,7 +76,7 @@ tests:
     asserts:
       - matchRegex:
           path: spec.template.spec.containers[0].env[?(@.name=='ADDITIONAL_CONFIG_ANALYZABLE_TIME_WINDOW_DURATION')].value
-          pattern: 'analyzable-time-window-duration = "30 days"'
+          pattern: 'analyzable-time-window.duration = "30 days"'
   - it: "sets successor synchronizer"
     set:
       # Things we need just to pass the schema
