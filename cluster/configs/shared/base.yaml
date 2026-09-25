@@ -113,6 +113,9 @@ monitoring:
         mediatorRetentionDays: 30
       ingestion:
         thresholdEntriesPerBatch: 80
+      busyAutomation:
+        # namespaces excluded from the "Busy task-based/polling-based automation" alerts
+        excludedNamespaces: []
       delegatelessContention:
         thresholdPerNamespace: 0.20
       delegatelessNonLocalContention:

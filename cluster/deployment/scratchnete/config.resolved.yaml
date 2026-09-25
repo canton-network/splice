@@ -84,6 +84,8 @@ monitoring:
       acsSnapshots:
         saveLatencyThresholdSeconds: 5400
         updateLatencyThresholdSeconds: 3
+      busyAutomation:
+        excludedNamespaces: []
       cantonBft:
         mempoolMaxSizeThreshold: 100
       cloudArmor:

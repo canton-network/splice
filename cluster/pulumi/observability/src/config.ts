@@ -139,6 +139,12 @@ const MonitoringConfigSchema = z
         ingestion: z.object({
           thresholdEntriesPerBatch: z.number(),
         }),
+        busyAutomation: z
+          .object({
+            // Namespaces that are excluded from the "Busy ... automation" alerts
+            excludedNamespaces: z.array(z.string()).default([]),
+          })
+          .default({ excludedNamespaces: [] }),
         delegatelessContention: z.object({
           thresholdPerNamespace: z.number(),
         }),

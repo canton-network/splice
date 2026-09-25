@@ -956,6 +956,14 @@ function createGrafanaAlerting(namespace: Input<string>) {
               .replaceAll(
                 '$INGESTION_ENTRIES_PER_BATCH_THRESHOLD',
                 monitoringConfig.alerting.alerts.ingestion.thresholdEntriesPerBatch.toString()
+              )
+              .replaceAll(
+                '$BUSY_AUTOMATION_EXCLUDED_NAMESPACES_FILTER',
+                monitoringConfig.alerting.alerts.busyAutomation.excludedNamespaces.length > 0
+                  ? `namespace!~"${monitoringConfig.alerting.alerts.busyAutomation.excludedNamespaces.join(
+                      '|'
+                    )}", `
+                  : ''
               ),
             'acs_snapshots_alerts.yaml': readGrafanaAlertingFile('acs_snapshots_alerts.yaml')
               .replaceAll(
