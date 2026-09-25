@@ -2,6 +2,7 @@ package org.lfdecentralizedtrust.splice.scan.store
 
 import com.daml.metrics.api.noop.NoOpMetricsFactory
 import com.digitalasset.canton.HasExecutionContext
+import com.digitalasset.canton.config.NonNegativeDuration
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.topology.{ParticipantId, PartyId, SynchronizerId}
@@ -13,7 +14,7 @@ import org.lfdecentralizedtrust.splice.store.{
   UpdateHistory,
 }
 import org.lfdecentralizedtrust.splice.scan.store.db.{DbAppActivityRecordStore, DbScanVerdictStore}
-import org.lfdecentralizedtrust.splice.scan.store.db.DbScanVerdictStore.{TrafficSummaryT, EnvelopeT}
+import org.lfdecentralizedtrust.splice.scan.store.db.DbScanVerdictStore.{EnvelopeT, TrafficSummaryT}
 import org.lfdecentralizedtrust.splice.store.db.SplicePostgresTest
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
@@ -932,6 +933,8 @@ class ScanEventStoreTest extends StoreTestBase with HasExecutionContext with Spl
       dsoParty,
       BackfillingRequirement.BackfillingNotRequired,
       internedStringStore(storage),
+      analyzableTimeWindowDuration =
+        NonNegativeDuration.tryFromDuration(scala.concurrent.duration.Duration.Inf),
       loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = true,

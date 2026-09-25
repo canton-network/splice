@@ -5,16 +5,14 @@ import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import org.lfdecentralizedtrust.splice.scan.rewards.{RewardComputationInputs, RewardIssuanceParams}
-import org.lfdecentralizedtrust.splice.scan.store.db.{
-  DbAppActivityRecordStore,
-  DbScanAppRewardsStore,
-}
+import org.lfdecentralizedtrust.splice.scan.store.db.{DbAppActivityRecordStore, DbScanAppRewardsStore}
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanAppRewardsStore.*
 import org.lfdecentralizedtrust.splice.store.{HistoryMetrics, StoreTestBase, UpdateHistory}
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingRequirement
 import org.lfdecentralizedtrust.splice.store.db.SplicePostgresTest
 import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnlessShutdownToFuture
 import com.daml.metrics.api.noop.NoOpMetricsFactory
+import com.digitalasset.canton.config.NonNegativeDuration
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanAppRewardsStore.RewardHash
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 
@@ -1305,6 +1303,8 @@ class DbScanAppRewardsStoreTest
       dsoParty,
       BackfillingRequirement.BackfillingNotRequired,
       internedStringStore(storage),
+      analyzableTimeWindowDuration =
+        NonNegativeDuration.tryFromDuration(scala.concurrent.duration.Duration.Inf),
       loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = false,

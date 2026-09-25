@@ -3,6 +3,7 @@ package org.lfdecentralizedtrust.splice.store.db
 import com.daml.ledger.javaapi.data.{DamlRecord, Unit as damlUnit}
 import com.daml.metrics.api.noop.NoOpMetricsFactory
 import com.digitalasset.canton.concurrent.FutureSupervisor
+import com.digitalasset.canton.config.NonNegativeDuration
 import com.digitalasset.canton.crypto.Fingerprint
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
@@ -61,8 +62,8 @@ import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.IngestionSink.IngestionStart.{
   InitializeAcsAtLatestOffset,
   InitializeAcsAtOffset,
-  UpdateHistoryInitAtLatestPrunedOffset,
   ResumeAtOffset,
+  UpdateHistoryInitAtLatestPrunedOffset,
 }
 
 abstract class ScanStoreTest
@@ -1732,6 +1733,8 @@ class DbScanStoreTest
       dsoParty,
       BackfillingRequirement.BackfillingNotRequired,
       internedStringStore(storage),
+      analyzableTimeWindowDuration =
+        NonNegativeDuration.tryFromDuration(scala.concurrent.duration.Duration.Inf),
       loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = true,

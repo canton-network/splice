@@ -1,20 +1,13 @@
 package org.lfdecentralizedtrust.splice.store.db
 
 import cats.data.NonEmptyVector
-import com.daml.ledger.javaapi.data.{Unit as damlUnit}
+import com.daml.ledger.javaapi.data.Unit as damlUnit
 import com.daml.ledger.javaapi.data.codegen.ContractId
 import com.daml.metrics.api.noop.NoOpMetricsFactory
 import org.lfdecentralizedtrust.splice.environment.DarResources
 import org.lfdecentralizedtrust.splice.environment.ledger.api.TransactionTreeUpdate
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore
-import org.lfdecentralizedtrust.splice.store.{
-  HardLimit,
-  HistoryMetrics,
-  PageLimit,
-  StoreErrors,
-  StoreTestBase,
-  UpdateHistory,
-}
+import org.lfdecentralizedtrust.splice.store.{HardLimit, HistoryMetrics, PageLimit, StoreErrors, StoreTestBase, UpdateHistory}
 import org.lfdecentralizedtrust.splice.util.{Contract, HoldingsSummary, PackageQualifiedName}
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
@@ -32,6 +25,7 @@ import java.time.Instant
 import scala.concurrent.Future
 import scala.util.{Failure, Success}
 import StoreTestBase.*
+import com.digitalasset.canton.config.NonNegativeDuration
 
 class AcsSnapshotStoreTest
     extends StoreTestBase
@@ -1403,6 +1397,8 @@ class AcsSnapshotStoreTest
       dsoParty,
       backfillingRequired,
       internedStringStore(storage),
+      analyzableTimeWindowDuration =
+        NonNegativeDuration.tryFromDuration(scala.concurrent.duration.Duration.Inf),
       loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = true,

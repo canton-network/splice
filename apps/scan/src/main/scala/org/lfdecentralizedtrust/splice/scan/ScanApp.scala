@@ -231,6 +231,7 @@ class ScanApp(
         store.acsContractFilter.ingestionFilter.primaryParty,
         BackfillingRequirement.NeedsBackfilling,
         internedStringStore,
+        config.analyzableTimeWindowDuration,
         loggerFactory,
         enableissue12777Workaround = true,
         enableImportUpdateBackfill = config.updateHistoryBackfillImportUpdatesEnabled,

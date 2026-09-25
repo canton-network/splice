@@ -2,7 +2,7 @@ package org.lfdecentralizedtrust.splice.performance.tests
 
 import com.daml.metrics.api.noop.NoOpMetricsFactory
 import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
-import com.digitalasset.canton.config.{ProcessingTimeout, StorageConfig}
+import com.digitalasset.canton.config.{NonNegativeDuration, ProcessingTimeout, StorageConfig}
 import com.digitalasset.canton.logging.NamedLoggerFactory
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.topology.PartyId
@@ -57,6 +57,7 @@ class UpdateHistoryIngestionPerformanceTest(
         loggerFactory,
         NoOpMetricsFactory,
       ),
+      analyzableTimeWindowDuration = NonNegativeDuration.tryFromDuration(scala.concurrent.duration.Duration.Inf),
       loggerFactory = loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = false,
