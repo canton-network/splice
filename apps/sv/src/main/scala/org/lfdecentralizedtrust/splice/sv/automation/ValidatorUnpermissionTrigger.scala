@@ -54,43 +54,56 @@ class ValidatorUnpermissionTrigger(
         participantId => {
           for {
             dsoRules <- store.getDsoRules()
-            synchronizerId = SynchronizerId.tryFromString(
-              dsoRules.payload.config.decentralizedSynchronizer.activeSynchronizerId
-            )
+            isPermissioned = dsoRules.payload.config.svOperationsSwitchOverTimes.isPresent &&
+              dsoRules.payload.config.svOperationsSwitchOverTimes
+                .get()
+                .containsKey("permissionedSynchronizer")
 
             outcome <-
-              if (payload.revoked) {
-                participantAdminConnection
-                  .ensureParticipantSynchronizerPermissionRemoved(
-                    synchronizerId,
-                    participantId,
+              if (!isPermissioned) {
+                Future.successful(
+                  TaskSuccess(
+                    "Skipped because permissionedSynchronizer switchover has not occurred"
                   )
-                  .map { _ =>
-                    TaskSuccess(
-                      s"Permanently revoked ParticipantSynchronizerPermission for participant $participantId"
-                    )
-                  }
-              } else {
-                for {
-                  existingMappings <- participantAdminConnection
-                    .listParticipantSynchronizerPermission(
-                      synchronizerId,
-                      participantId.filterString,
-                    )
-
-                  _ <- participantAdminConnection.ensureParticipantSynchronizerPermission(
-                    synchronizerId = synchronizerId,
-                    participantId = participantId,
-                    permission = Submission,
-                    retryFor = RetryFor.Automation,
-                    limits = existingMappings.headOption.flatMap(_.mapping.limits),
-                    loginAfter = payload.loginAfter.toScala
-                      .map(t => CantonTimestamp.assertFromInstant(t)),
-                  )
-                } yield TaskSuccess(
-                  s"Temporarily revoked ParticipantSynchronizerPermission for participant $participantId (loginAfter: ${payload.loginAfter.toScala
-                      .map(t => CantonTimestamp.assertFromInstant(t))})"
                 )
+              } else {
+                val synchronizerId = SynchronizerId.tryFromString(
+                  dsoRules.payload.config.decentralizedSynchronizer.activeSynchronizerId
+                )
+
+                if (payload.revoked) {
+                  participantAdminConnection
+                    .ensureParticipantSynchronizerPermissionRemoved(
+                      synchronizerId,
+                      participantId,
+                    )
+                    .map { _ =>
+                      TaskSuccess(
+                        s"Permanently revoked ParticipantSynchronizerPermission for participant $participantId"
+                      )
+                    }
+                } else {
+                  for {
+                    existingMappings <- participantAdminConnection
+                      .listParticipantSynchronizerPermission(
+                        synchronizerId,
+                        participantId.filterString,
+                      )
+
+                    _ <- participantAdminConnection.ensureParticipantSynchronizerPermission(
+                      synchronizerId = synchronizerId,
+                      participantId = participantId,
+                      permission = Submission,
+                      retryFor = RetryFor.Automation,
+                      limits = existingMappings.headOption.flatMap(_.mapping.limits),
+                      loginAfter = payload.loginAfter.toScala
+                        .map(t => CantonTimestamp.assertFromInstant(t)),
+                    )
+                  } yield TaskSuccess(
+                    s"Temporarily revoked ParticipantSynchronizerPermission for participant $participantId (loginAfter: ${payload.loginAfter.toScala
+                        .map(t => CantonTimestamp.assertFromInstant(t))})"
+                  )
+                }
               }
           } yield outcome
         },

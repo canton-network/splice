@@ -61,46 +61,65 @@ class GrantValidatorPermissionTrigger(
 
           for {
             dsoRules <- store.getDsoRules()
+            isPermissioned = dsoRules.payload.config.svOperationsSwitchOverTimes.isPresent &&
+              dsoRules.payload.config.svOperationsSwitchOverTimes
+                .get()
+                .containsKey("permissionedSynchronizer")
 
-            synchronizerConfig = Option(
-              dsoRules.payload.config.decentralizedSynchronizer.synchronizers
-                .get(dsoRules.payload.config.decentralizedSynchronizer.activeSynchronizerId)
-            )
-            minMemberTrafficToOnboardValidator = synchronizerConfig
-              .flatMap(_.minMemberTrafficToOnboardValidator.toScala)
-              .map(_.longValue())
-              .getOrElse(SvUtil.DefaultMinMemberTrafficToOnboardValidator)
-            totalPurchasedTraffic <- store.getTotalPurchasedMemberTraffic(memberId, synchronizerId)
-            unpermissions <- store.listValidatorUnpermissions(payload.memberId)
-
-            _ <-
-              if (
-                totalPurchasedTraffic >= minMemberTrafficToOnboardValidator && unpermissions.isEmpty
-              ) {
-                participantAdminConnection.ensureParticipantSynchronizerPermission(
-                  synchronizerId = synchronizerId,
-                  participantId = participantId,
-                  permission = Submission,
-                  retryFor = RetryFor.Automation,
+            outcome <-
+              if (!isPermissioned) {
+                Future.successful(
+                  TaskSuccess(
+                    "Skipped because permissionedSynchronizer switchover has not occurred"
+                  )
                 )
               } else {
-                Future.unit
+                val synchronizerConfig = Option(
+                  dsoRules.payload.config.decentralizedSynchronizer.synchronizers
+                    .get(dsoRules.payload.config.decentralizedSynchronizer.activeSynchronizerId)
+                )
+                val minMemberTrafficToOnboardValidator = synchronizerConfig
+                  .flatMap(_.minMemberTrafficToOnboardValidator.toScala)
+                  .map(_.longValue())
+                  .getOrElse(SvUtil.DefaultMinMemberTrafficToOnboardValidator)
+
+                for {
+                  totalPurchasedTraffic <- store.getTotalPurchasedMemberTraffic(
+                    memberId,
+                    synchronizerId,
+                  )
+                  unpermissions <- store.listValidatorUnpermissions(payload.memberId)
+
+                  _ <-
+                    if (
+                      totalPurchasedTraffic >= minMemberTrafficToOnboardValidator && unpermissions.isEmpty
+                    ) {
+                      participantAdminConnection.ensureParticipantSynchronizerPermission(
+                        synchronizerId = synchronizerId,
+                        participantId = participantId,
+                        permission = Submission,
+                        retryFor = RetryFor.Automation,
+                      )
+                    } else {
+                      Future.unit
+                    }
+                } yield {
+                  if (unpermissions.nonEmpty) {
+                    TaskSuccess(
+                      s"Skipped Submission permission for participant $participantId because a ValidatorUnpermission contract exists."
+                    )
+                  } else if (totalPurchasedTraffic >= minMemberTrafficToOnboardValidator) {
+                    TaskSuccess(
+                      s"Granted Submission permission for participant $participantId (Total Purchased: $totalPurchasedTraffic >= Threshold: $minMemberTrafficToOnboardValidator)"
+                    )
+                  } else {
+                    TaskSuccess(
+                      s"Skipped Submission permission for participant $participantId (Total Purchased: $totalPurchasedTraffic < Threshold: $minMemberTrafficToOnboardValidator)"
+                    )
+                  }
+                }
               }
-          } yield {
-            if (unpermissions.nonEmpty) {
-              TaskSuccess(
-                s"Skipped Submission permission for participant $participantId because a ValidatorUnpermission contract exists."
-              )
-            } else if (totalPurchasedTraffic >= minMemberTrafficToOnboardValidator) {
-              TaskSuccess(
-                s"Granted Submission permission for participant $participantId (Total Purchased: $totalPurchasedTraffic >= Threshold: $minMemberTrafficToOnboardValidator)"
-              )
-            } else {
-              TaskSuccess(
-                s"Skipped Submission permission for participant $participantId (Total Purchased: $totalPurchasedTraffic < Threshold: $minMemberTrafficToOnboardValidator)"
-              )
-            }
-          }
+          } yield outcome
         },
       )
   }

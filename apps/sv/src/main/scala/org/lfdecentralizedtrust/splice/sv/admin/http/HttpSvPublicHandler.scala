@@ -187,6 +187,11 @@ class HttpSvPublicHandler(
                 filterParticipant = token.candidateParticipantId.toProtoPrimitive,
               )
               .map(_.nonEmpty)
+            permissionedSynchronizer =
+              dsoRules.payload.config.svOperationsSwitchOverTimes.isPresent &&
+                dsoRules.payload.config.svOperationsSwitchOverTimes
+                  .get()
+                  .containsKey("permissionedSynchronizer")
             res <-
               if (!SvApp.validateSvNamespace(token.candidateParty, token.candidateParticipantId)) {
                 Future.failed(
@@ -194,7 +199,7 @@ class HttpSvPublicHandler(
                     s"Party ${token.candidateParty} does not have the same namespace than its participant ${token.candidateParticipantId}."
                   )
                 )
-              } else if (!isCandidatePartyHostedOnParticipant && !config.permissionedSynchronizer)
+              } else if (!isCandidatePartyHostedOnParticipant && !permissionedSynchronizer)
                 // Conflict instead of not authorized because this can happen if our participant just has not yet caught up
                 // and the client can just retry on that.
                 Future.failed(
@@ -319,25 +324,41 @@ class HttpSvPublicHandler(
   )(extracted: TraceContext): Future[r0.DevNetBuyMemberTrafficResponse] = {
     implicit val traceContext: TraceContext = extracted
     withSpan(s"$workflowId.devNetBuyMemberTraffic") { _ => _ =>
-      if (isDevNet && config.permissionedSynchronizer) {
-        for {
-          participantId <- ParticipantId.fromProtoPrimitive(
-            body.participantId,
-            "participant_id",
-          ) match {
-            case Right(id) => Future.successful(id)
-            case Left(err) =>
-              Future.failed(HttpErrorHandler.badRequest(s"Invalid participant ID: $err"))
-          }
-          _ <- devNetTapAndBuyMemberTraffic(participantId)
-
-        } yield r0.DevNetBuyMemberTrafficResponseOK("Success")
-      } else {
+      if (!isDevNet) {
         Future.failed(
           HttpErrorHandler.notImplemented(
-            "Traffic purchasing self-service is only available in DevNet when permissioned synchronizer is enabled."
+            "Traffic purchasing self-service is only available in DevNet."
           )
         )
+      } else {
+        for {
+          dsoRules <- dsoStore.getDsoRules()
+          isPermissioned = dsoRules.payload.config.svOperationsSwitchOverTimes.isPresent &&
+            dsoRules.payload.config.svOperationsSwitchOverTimes
+              .get()
+              .containsKey("permissionedSynchronizer")
+
+          res <-
+            if (!isPermissioned) {
+              Future.failed(
+                HttpErrorHandler.notImplemented(
+                  "Traffic purchasing self-service is only available in DevNet when permissioned synchronizer is enabled."
+                )
+              )
+            } else {
+              ParticipantId.fromProtoPrimitive(
+                body.participantId,
+                "participant_id",
+              ) match {
+                case Right(id) =>
+                  devNetTapAndBuyMemberTraffic(id).map(_ =>
+                    r0.DevNetBuyMemberTrafficResponseOK("Success")
+                  )
+                case Left(err) =>
+                  Future.failed(HttpErrorHandler.badRequest(s"Invalid participant ID: $err"))
+              }
+            }
+        } yield res
       }
     }
   }

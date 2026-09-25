@@ -463,12 +463,16 @@ class SV1Initializer(
             NonNegativeFiniteDuration.fromConfig(config.preparationTimeRecordTimeTolerance),
           mediatorDeduplicationTimeout =
             NonNegativeFiniteDuration.fromConfig(config.mediatorDeduplicationTimeout),
-          onboardingRestriction = if (config.permissionedSynchronizer) {
-            logger.info("Using RestrictedOpen onboarding restriction for the synchronizer")
-            RestrictedOpen
-          } else {
-            UnrestrictedOpen
-          },
+          onboardingRestriction =
+            if (
+              sv1Config.initialSvOperationsSwitchOverTimes
+                .exists(_.contains("permissionedSynchronizer"))
+            ) {
+              logger.info("Using RestrictedOpen onboarding restriction for the synchronizer")
+              RestrictedOpen
+            } else {
+              UnrestrictedOpen
+            },
         )
         for {
           physicalSynchronizerId <- retryProvider.ensureThatO(
@@ -486,7 +490,10 @@ class SV1Initializer(
                   threshold = PositiveInt.one,
                 )
               sv1PermissionTx <-
-                if (config.permissionedSynchronizer) {
+                if (
+                  sv1Config.initialSvOperationsSwitchOverTimes
+                    .exists(_.contains("permissionedSynchronizer"))
+                ) {
                   logger.debug(
                     "Proposing ParticipantSynchronizerPermission topology transaction for self"
                   )
