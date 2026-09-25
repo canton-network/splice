@@ -4056,6 +4056,13 @@ components:
           format: int32
         transaction_views:
           $ref: '#/components/schemas/TransactionViews'
+        round_number:
+          description: |
+            The oldest open mining round active at record_time. Same as the round assigned to `app_activity_records` associated with this verdict.
+            May be null: before the SV switch-over time that enables serving this field, if no active mining round could be determined at record_time
+            (e.g. no traffic summary, or round data not yet ingested), or for verdicts ingested before this field was added.
+          type: integer
+          format: int64
     TransactionViews:
       type: object
       required:
