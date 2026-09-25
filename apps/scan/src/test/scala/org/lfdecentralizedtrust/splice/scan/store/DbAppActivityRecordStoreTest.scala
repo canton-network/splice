@@ -16,6 +16,7 @@ import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingRequiremen
 import org.lfdecentralizedtrust.splice.store.db.SplicePostgresTest
 import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnlessShutdownToFuture
 import com.daml.metrics.api.noop.NoOpMetricsFactory
+import com.digitalasset.canton.config.NonNegativeDuration
 
 import scala.concurrent.Future
 
@@ -1238,6 +1239,8 @@ class DbAppActivityRecordStoreTest
       dsoParty,
       BackfillingRequirement.BackfillingNotRequired,
       internedStringStore(storage),
+      analyzableTimeWindowDuration =
+        NonNegativeDuration.tryFromDuration(scala.concurrent.duration.Duration.Inf),
       loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = false,
@@ -1271,6 +1274,8 @@ class DbAppActivityRecordStoreTest
       dsoParty,
       BackfillingRequirement.BackfillingNotRequired,
       internedStringStore(storage),
+      analyzableTimeWindowDuration =
+        NonNegativeDuration.tryFromDuration(scala.concurrent.duration.Duration.Inf),
       loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = false,

@@ -14,6 +14,7 @@ import com.daml.ledger.javaapi.data.{
   Value,
 }
 import com.daml.metrics.api.noop.NoOpMetricsFactory
+import com.digitalasset.canton.config.NonNegativeDuration
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.topology.{ParticipantId, PartyId}
 import com.digitalasset.daml.lf.data.Ref
@@ -146,6 +147,7 @@ class CryptoHashEquivalenceIntegrationTest extends IntegrationTest with WalletTe
           loggerFactory,
           NoOpMetricsFactory,
         ),
+        NonNegativeDuration.tryFromDuration(scala.concurrent.duration.Duration.Inf),
         loggerFactory,
         enableissue12777Workaround = true,
         enableImportUpdateBackfill = false,

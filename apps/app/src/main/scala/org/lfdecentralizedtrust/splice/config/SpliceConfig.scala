@@ -12,6 +12,7 @@ import org.lfdecentralizedtrust.splice.environment.{DarResources, PackageVetting
 import org.lfdecentralizedtrust.splice.http.UrlValidator
 import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftScanConnection.BftScanClientConfig
 import org.lfdecentralizedtrust.splice.scan.config.{
+  AnalyzableTimeWindowConfig,
   BulkStorageConfig,
   CantonBftPeerConfig,
   MediatorVerdictIngestionConfig,
@@ -527,6 +528,8 @@ object SpliceConfig {
       deriveReader[ScanSynchronizerNodesConfig]
     implicit val scanRollForwardLsuConfigReader: ConfigReader[ScanRollForwardLsuConfig] =
       deriveReader[ScanRollForwardLsuConfig]
+    implicit val analyzableTimeWindowConfigReader: ConfigReader[AnalyzableTimeWindowConfig] =
+      deriveReader[AnalyzableTimeWindowConfig]
     implicit val scanConfigReader: ConfigReader[ScanAppBackendConfig] =
       deriveReader[ScanAppBackendConfig].emap { conf =>
         for {
@@ -1062,6 +1065,8 @@ object SpliceConfig {
       deriveWriter[ScanSynchronizerNodesConfig]
     implicit val scanRollForwardLsuConfigWriter: ConfigWriter[ScanRollForwardLsuConfig] =
       deriveWriter[ScanRollForwardLsuConfig]
+    implicit val analyzableTimeWindowConfigWriter: ConfigWriter[AnalyzableTimeWindowConfig] =
+      deriveWriter[AnalyzableTimeWindowConfig]
     implicit val scanConfigWriter: ConfigWriter[ScanAppBackendConfig] =
       deriveWriter[ScanAppBackendConfig]
     implicit val scanCacheConfigWriter: ConfigWriter[ScanCacheConfig] =
