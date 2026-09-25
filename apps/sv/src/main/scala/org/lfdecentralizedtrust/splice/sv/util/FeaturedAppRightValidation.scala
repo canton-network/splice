@@ -6,6 +6,9 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppRig
 import org.lfdecentralizedtrust.splice.util.AssignedContract
 
 object FeaturedAppRightValidation {
+  type FeaturedAppRightValidator =
+    Seq[AssignedContract[FeaturedAppRight.ContractId, FeaturedAppRight]] => Either[String, Unit]
+
   private def opsOf(
       c: AssignedContract[FeaturedAppRight.ContractId, FeaturedAppRight]
   ): Set[String] =

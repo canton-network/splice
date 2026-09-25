@@ -904,6 +904,12 @@ object SvApp {
       action: ActionRequiringConfirmation,
       store: SvDsoStore,
   )(implicit ec: ExecutionContext, tc: TraceContext): Future[Either[String, Unit]] = {
+    def runValidator(
+        store: SvDsoStore,
+        validate: FeaturedAppRightValidation.FeaturedAppRightValidator,
+    )(implicit ec: ExecutionContext, tc: TraceContext): Future[Either[String, Unit]] =
+      store.listFeaturedAppRights().map(validate)
+
     action match {
       case arc: ARC_DsoRules =>
         arc.dsoAction match {
@@ -912,28 +918,17 @@ object SvApp {
             val opsParties =
               g.dsoRules_GrantFeaturedAppRightValue.opsParties.toScala.map(_.asScala.toSeq)
 
-            for {
-              featuredAppRights <- store.listFeaturedAppRights()
-              res = FeaturedAppRightValidation.validateGrant(
-                provider,
-                opsParties,
-                featuredAppRights,
-              )
-            } yield res
+            runValidator(store, FeaturedAppRightValidation.validateGrant(provider, opsParties, _))
 
           case u: SRARC_UpdateFeaturedAppRight =>
             val rightCid = u.dsoRules_UpdateFeaturedAppRightValue.rightCid
             val newOpsParties = u.dsoRules_UpdateFeaturedAppRightValue.update.newOpsParties.toScala
               .map(_.asScala.toSeq)
 
-            for {
-              featuredAppRights <- store.listFeaturedAppRights()
-              res = FeaturedAppRightValidation.validateUpdate(
-                rightCid,
-                newOpsParties,
-                featuredAppRights,
-              )
-            } yield res
+            runValidator(
+              store,
+              FeaturedAppRightValidation.validateUpdate(rightCid, newOpsParties, _),
+            )
 
           case _ => Future.successful(Right(()))
         }
