@@ -9,6 +9,7 @@ import DA.Assert
 import DA.Foldable (toList)
 import DA.Functor (($>))
 import DA.List.Total (head)
+import DA.Map (Map)
 import DA.Map qualified as Map
 import DA.Optional
 import DA.Text qualified as Text
@@ -17,17 +18,19 @@ import DA.Time
 import DA.Traversable (forA)
 
 import Splice.Amulet
+import Splice.Amulet.TokenApiUtils
 import Splice.Amulet.TwoStepTransfer (holdingToTransferInputs)
 import Splice.AmuletConfig (defaultGovernanceLockFeaturedAppLockVestingDuration, defaultGovernanceLockMinimumLockAmount, defaultGovernanceLockSearchTimeGranularity, defaultGovernanceLockSuperValidatorLockVestingDuration)
 import Splice.AmuletRules
 import Splice.Api.Token.HoldingV1 (Holding)
 import Splice.Api.Token.MetadataV1
 import Splice.Api.Token.TransferInstructionV1 qualified as V1
+import Splice.Api.Token.TransferEventsV2 as TransferEventsV2
 import Splice.Expiry
 import Splice.Fees (relTimeToSeconds)
 import Splice.ExternalPartyConfigState
+import Splice.Round
 import Splice.TokenStandard.Utils hiding (require, reasonMetaKey)
-import Splice.Amulet.TokenApiUtils
 import Splice.Types
 import Splice.Util
 
@@ -90,20 +93,28 @@ template GovernanceLock
           -- ^ Locks with the same owner and specification to merge into this lock
         holdingInputs : [ContractId Holding]
           -- ^ Holding inputs used to fund the top-up.
+        svRewardCouponInputs : [ContractId SvRewardCoupon]
+          -- ^ Sv Reward Coupon inputs used to fund the top-up.
+        svRewardCouponPercentage : Decimal
+          -- ^ Percentage (specified as a number between 0.0 and 1.0) of the sv reward coupons
+          -- minting allowance to top-up a governance lock with. The remainder is returned as change.
         extraArgs : ExtraArgs
       controller owner
       do
         require' ("topUpAmount", topUpAmount) isGreaterOrEqualR ("zero", 0.0)
+        require' ("svRewardCouponPercentage", svRewardCouponPercentage) isGreaterOrEqualR ("zero", 0.0)
+        require' ("svRewardCouponPercentage", svRewardCouponPercentage) isLessOrEqualR ("one", 1.0)
         let forOwner = ForOwner with dso; owner
-            holdingInputsPresence = length holdingInputs > 0
-            lockInputsPresence = length lockInputs > 0
-            positiveTopUpAmountBool = topUpAmount > 0.0
-        require "The arguments to the GovernanceLock_MergeAndTopUp must be valid"
-          $ (positiveTopUpAmountBool && holdingInputsPresence) || lockInputsPresence
 
         (context, _) <- unfeaturedPaymentContextAndConfigFromChoiceContext dso extraArgs.context
 
-        -- Unlock original governanceLock
+        (holdingsFromSvRewardCoupons, svRewardMintAllowance) <- getSvRewardInputAmuletAndChange
+          svRewardCouponInputs
+          svRewardCouponPercentage
+          extraArgs
+          forOwner
+          (toInterfaceContractId context.externalPartyConfigState)
+
         (unlockedAmuletCid, (_, lockProps)) <- unlockAmulet forOwner lockedAmulet
 
         -- Check if we have any locks to merge and extract required info
@@ -118,13 +129,20 @@ template GovernanceLock
 
         let unlockedAmountFromMergeLocks : Decimal = sum [amt | (amt, _) <- unlockedAmountsAndHoldings]
             unlockedHoldingsFromMergeLocks : [ContractId Holding] = [holding | (_, holding) <- unlockedAmountsAndHoldings]
-            newLockAmount = amount + topUpAmount + unlockedAmountFromMergeLocks
+            newLockAmount = amount + topUpAmount + unlockedAmountFromMergeLocks + svRewardMintAllowance
+            allInputHoldings = toInterfaceContractId unlockedAmuletCid
+              :: holdingInputs
+              <> unlockedHoldingsFromMergeLocks
+              <> holdingsFromSvRewardCoupons
 
         ([newLockedAmulet], newChangeHolding) <- lockAmulet
           forOwner
           [(newLockAmount, lockProps)]
-          (toInterfaceContractId unlockedAmuletCid :: holdingInputs <> unlockedHoldingsFromMergeLocks)
+          allInputHoldings
           context
+          $ if svRewardMintAllowance > 0.0
+              then "(includes minting and locking " <> show svRewardMintAllowance <> " SV rewards)"
+              else ""
 
         newGovernanceLock <- create GovernanceLock with
           dso
@@ -475,7 +493,7 @@ governanceLock_lockForGovernance_impl dso amount inputs specification extraArgs 
   let lockProperties = LockProperties with
         context = describeGovernanceSpecification specification
         expiresAt = maxBound
-  ([lockedAmulet], changeHolding) <- lockAmulet (ForOwner with dso; owner) [(amount, lockProperties)] inputs context
+  ([lockedAmulet], changeHolding) <- lockAmulet (ForOwner with dso; owner) [(amount, lockProperties)] inputs context ""
   governanceLock <- create GovernanceLock with
     dso
     owner
@@ -527,6 +545,11 @@ unfeaturedPaymentContextAndConfigFromChoiceContext dso choiceContext = do
           featuredAppRight = None
        , configState )
 
+getMiningRoundsFromChoiceContext : ChoiceContext -> Update ([ContractId IssuingMiningRound], ContractId OpenMiningRound)
+getMiningRoundsFromChoiceContext choiceContext = do
+  issuingMiningRoundCids <- getFromContextU @([ContractId IssuingMiningRound]) choiceContext issuingMiningRoundContextKey
+  openMiningRoundCid <- getFromContextU @(ContractId OpenMiningRound) choiceContext openMiningRoundContextKey
+  pure (issuingMiningRoundCids, openMiningRoundCid)
 
 -- Helpers for handling LockedAmulet
 -- =================================
@@ -544,7 +567,7 @@ splitLockedAmulet forOwner lockedAmuletCid spec@(unlockAmount, _) context = do
   (unlockedCid, (currentAmount, currentLockProps)) <- unlockAmulet forOwner lockedAmuletCid
   let remainderAmount = currentAmount - unlockAmount
   let specs = spec :: (if remainderAmount == 0.0 then [] else [(remainderAmount, currentLockProps)])
-  (splitLock::remainderLocks, None) <- lockAmulet forOwner specs [toInterfaceContractId unlockedCid] context
+  (splitLock::remainderLocks, None) <- lockAmulet forOwner specs [toInterfaceContractId unlockedCid] context ""
   pure $ ((, remainderAmount) <$> head remainderLocks, (splitLock, unlockAmount))
 
 partialUnlock : ForOwner -> ContractId LockedAmulet -> Decimal -> ExternalPartyTransferContext -> Update (Optional (ContractId LockedAmulet, Decimal), ContractId Amulet)
@@ -553,13 +576,13 @@ partialUnlock forOwner lockedAmuletCid unlockAmount context = do
   (unlockedAmuletCid, (currentAmount, lockProps)) <- unlockAmulet forOwner lockedAmuletCid
   let stillLockedAmount = currentAmount - unlockAmount
   if stillLockedAmount == 0.0 then pure (None, unlockedAmuletCid) else do
-    ([newLockedCid], Some unlockedAmulet) <- lockAmulet forOwner [(stillLockedAmount, lockProps)] [toInterfaceContractId unlockedAmuletCid] context
+    ([newLockedCid], Some unlockedAmulet) <- lockAmulet forOwner [(stillLockedAmount, lockProps)] [toInterfaceContractId unlockedAmuletCid] context ""
     pure (Some (newLockedCid, stillLockedAmount), unlockedAmulet)
 
 relockAmulet : ForOwner -> ContractId LockedAmulet -> LockProperties -> ExternalPartyTransferContext -> Update (ContractId LockedAmulet)
 relockAmulet forOwner lockedAmuletCid newLockProperties context = do
   (amuletCid, (currentAmount, _)) <- unlockAmulet forOwner lockedAmuletCid
-  ([newLockedCid], None) <- lockAmulet forOwner [(currentAmount, newLockProperties)] [toInterfaceContractId amuletCid] context
+  ([newLockedCid], None) <- lockAmulet forOwner [(currentAmount, newLockProperties)] [toInterfaceContractId amuletCid] context ""
   pure newLockedCid
 
 unlockAmulet : ForOwner -> ContractId LockedAmulet -> Update (ContractId Amulet, LockSpecification)
@@ -568,10 +591,10 @@ unlockAmulet forOwner lockedAmuletCid = do
   unlockResult <- exercise lockedAmuletCid LockedAmulet_UnlockV2
   return (unlockResult.amuletCid, (lock.amulet.amount.initialAmount, LockProperties with context = fromOptional "governance" lock.lock.optContext; expiresAt = lock.lock.expiresAt))
 
-lockAmulet : ForOwner -> [LockSpecification] -> [ContractId Holding] -> ExternalPartyTransferContext -> Update ([ContractId LockedAmulet], Optional (ContractId Amulet))
-lockAmulet forOwner@ForOwner {..} specs inputHoldingCids context = do
+lockAmulet : ForOwner -> [LockSpecification] -> [ContractId Holding] -> ExternalPartyTransferContext -> Text -> Update ([ContractId LockedAmulet], Optional (ContractId Amulet))
+lockAmulet forOwner@ForOwner {..} specs holdingInputs context reasonSuffix = do
   -- lock the amulet
-  transferInputs <- holdingToTransferInputs forOwner inputHoldingCids
+  transferInputsFromHoldings <- holdingToTransferInputs forOwner holdingInputs
   let mkOutput (amount, spec) =
             TransferOutput with
               receiver = owner
@@ -581,12 +604,12 @@ lockAmulet forOwner@ForOwner {..} specs inputHoldingCids context = do
                 expiresAt = spec.expiresAt -- We don't have any call to isLedgerTimeLE, so we can use the true maxBound here for arbitrary duration.
                 holders = [dso]
                 optContext = Some spec.context
-              meta = Some (reasonToMeta ("lock for " <> spec.context) emptyMetadata)
+              meta = Some $ reasonToMeta ("lock for " <> spec.context <> reasonSuffix) emptyMetadata
   let transfer = Splice.AmuletRules.Transfer with
         sender = owner
         provider = owner -- the sender is serving as its own "app provider"
         outputs = map mkOutput specs
-        inputs = transferInputs
+        inputs = transferInputsFromHoldings
         beneficiaries = None
 
   result <- executeExternalPartyTransfer forOwner.dso context transfer
@@ -662,6 +685,59 @@ lockTypeToCompatibilityPartyAndReason : GovernanceLockKind -> (Party, Text)
 lockTypeToCompatibilityPartyAndReason (GLK_FeaturedApp with provider) = (featuredAppLockCanonicalParty, "lock-subject=" <> partyToText provider)
 lockTypeToCompatibilityPartyAndReason (GLK_ProvisionalFeaturedApp with provider) = (provisionalFeaturedAppLockCanonicalParty, "lock-subject=" <> partyToText provider)
 lockTypeToCompatibilityPartyAndReason (GLK_SuperValidatorRightsOwner with svName) = (superValidatorLockCanonicalParty, "lock-subject=" <> svName)
+
+-- SV Reward Coupon Helpers
+---------------------------
+
+fetchAndValidateIssuingMiningRounds : [AnyValue] -> ForDso -> Update (Map Round IssuingMiningRound, Map Round (ContractId IssuingMiningRound))
+fetchAndValidateIssuingMiningRounds vals forDso = do
+  issuingMiningRounds <- forA vals $ \(AV_ContractId cid) -> do
+    let issuingMiningRoundCid = fromAnyContractId cid
+    issuingMiningRound <- fetchReferenceData @IssuingMiningRound forDso issuingMiningRoundCid
+    let round = issuingMiningRound.round
+    assertDeadlineExceeded ("issuingMiningRound[" <> show round.number <> "].opensAt") issuingMiningRound.opensAt
+    pure (round, (issuingMiningRound, issuingMiningRoundCid))
+  let issuingMiningRounds' = [(round, miningRound) | (round, (miningRound, _)) <- issuingMiningRounds]
+      issuingMiningRoundCids = [(round, miningRoundCid) | (round, (_, miningRoundCid)) <- issuingMiningRounds]
+  pure (Map.fromList issuingMiningRounds', Map.fromList issuingMiningRoundCids)
+
+
+getSvRewardInputAmuletAndChange
+  : [ContractId SvRewardCoupon]
+  -> Decimal
+  -> ExtraArgs
+  -> ForOwner
+  -> ContractId TransferEventsV2.EventLog
+  -> Update ([ContractId Holding], Decimal)
+getSvRewardInputAmuletAndChange [] _ _ _ _ = pure ([], 0.0)
+getSvRewardInputAmuletAndChange svRewardCouponInputs svRewardCouponPercentage extraArgs forOwner transferEventsV2EventLog = do
+  let dso = forOwner.dso
+  (currentIssuingMiningRoundCids, openMiningRoundCid) <- getMiningRoundsFromChoiceContext extraArgs.context
+  (_, issuingMiningRoundCidsMap) <-
+    fetchAndValidateIssuingMiningRounds (toAnyValue <$> currentIssuingMiningRoundCids) $ ForDso with dso
+
+  let transferContext = TransferContext with
+        openMiningRound = openMiningRoundCid
+        issuingMiningRounds = issuingMiningRoundCidsMap
+        validatorRights = Map.empty
+        featuredAppRight = None
+      transfer = Splice.AmuletRules.Transfer with
+        sender = forOwner.owner
+        provider = forOwner.owner -- the sender is serving as its own "app provider"
+        outputs = []
+        inputs = fmap InputSvRewardCoupon svRewardCouponInputs
+        beneficiaries = None
+      rewardsConfig = RewardsIssuanceConfig with
+        issueAppRewards = False
+        issueValidatorRewards = False
+
+  result <- executeTransfer transferEventsV2EventLog rewardsConfig transferContext dso [] transfer
+  let (Some changeFromSvCouponRewards) : Optional (ContractId Amulet) = result.senderChangeAmulet
+
+  amulet <- fetchChecked forOwner changeFromSvCouponRewards
+  let svRewardMintAllowance = amulet.amount.initialAmount * svRewardCouponPercentage
+
+  pure ([toInterfaceContractId changeFromSvCouponRewards], svRewardMintAllowance)
 
 instance HasCheckedFetch GovernanceLock ForOwner where
   contractGroupId GovernanceLock {..} = ForOwner with dso; owner
