@@ -90,26 +90,26 @@ data RewardConfig = RewardConfig with
 
 -- | How validator rewards and their minting allowances are tracked and computed.
 data ValidatorRewardVersion
-  = ValidatorRewardVersion_CcBurn
-      -- ^ Weight-based, CC-burn-triggered coupons (pre CIP-0120).
+  = ValidatorRewardVersion_AmuletBurn
+      -- ^ Weight-based, amulet-burn-triggered coupons (pre CIP-0120).
   | ValidatorRewardVersion_TrafficBased
       -- ^ Traffic-based validator rewards introduced in CIP-0120.
   deriving (Eq, Show, Serializable)
 
--- | True when the pre-CIP-0120 CC-burn-triggered ValidatorRewardCoupon
+-- | True when the pre-CIP-0120 amulet-burn-triggered ValidatorRewardCoupon
 -- creation should still run for a round. Pre-CIP-0120 network state
--- (`None`) and explicit CcBurn both keep the legacy path; TrafficBased
--- switches it off in favour of the DSO-signed batch flow.
-useCcBurnValidatorRewards : Optional ValidatorRewardVersion -> Bool
-useCcBurnValidatorRewards rv = case rv of
+-- (`None`) and explicit AmuletBurn both keep the legacy path; TrafficBased
+-- switches it off in favour of the batch flow signed by the DSO party.
+useAmuletBurnValidatorRewards : Optional ValidatorRewardVersion -> Bool
+useAmuletBurnValidatorRewards rv = case rv of
   None -> True
-  Some ValidatorRewardVersion_CcBurn -> True
+  Some ValidatorRewardVersion_AmuletBurn -> True
   Some ValidatorRewardVersion_TrafficBased -> False
 
 -- | True when a round should trigger the off-ledger validator-reward
 -- calculation flow (CIP-0120 TBVR).
 useTrafficBasedValidatorRewards : Optional ValidatorRewardVersion -> Bool
-useTrafficBasedValidatorRewards = not . useCcBurnValidatorRewards
+useTrafficBasedValidatorRewards = not . useAmuletBurnValidatorRewards
 
 -- | Configuration for how validator reward accounting and calculation should be performed.
 data ValidatorRewardConfig = ValidatorRewardConfig with
@@ -153,7 +153,7 @@ data AmuletConfig unit = AmuletConfig with
     rewardConfig : Optional RewardConfig
       -- ^ Configuration for the reward accounting and calculation. If None, then on-ledger reward tracking is used.
     validatorRewardConfig : Optional ValidatorRewardConfig
-      -- ^ Configuration for validator reward accounting under CIP-0120. If None, the pre-CIP-0120 CC-burn-triggered mechanism is used.
+      -- ^ Configuration for validator reward accounting under CIP-0120. If None, the pre-CIP-0120 amulet-burn-triggered mechanism is used.
     transferPreapprovalBaseDuration : Optional RelTime -- ^ Base duration of a transfer pre-approval granted for free on creation and renewal. Default: 90 days.
     developmentFundManagerBlacklist : Optional [Party]
       -- ^ List of blocked parties. They cannot allocate new coupons, and the coupons they allocated cannot be minted either.
