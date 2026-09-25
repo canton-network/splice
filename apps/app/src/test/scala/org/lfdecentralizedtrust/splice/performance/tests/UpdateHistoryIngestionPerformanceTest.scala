@@ -57,7 +57,8 @@ class UpdateHistoryIngestionPerformanceTest(
         loggerFactory,
         NoOpMetricsFactory,
       ),
-      analyzableTimeWindowDuration = NonNegativeDuration.tryFromDuration(scala.concurrent.duration.Duration.Inf),
+      analyzableTimeWindowDuration =
+        NonNegativeDuration.tryFromDuration(scala.concurrent.duration.Duration.Inf),
       loggerFactory = loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = false,

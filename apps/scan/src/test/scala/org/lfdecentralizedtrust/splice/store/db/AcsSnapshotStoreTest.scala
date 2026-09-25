@@ -7,7 +7,14 @@ import com.daml.metrics.api.noop.NoOpMetricsFactory
 import org.lfdecentralizedtrust.splice.environment.DarResources
 import org.lfdecentralizedtrust.splice.environment.ledger.api.TransactionTreeUpdate
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore
-import org.lfdecentralizedtrust.splice.store.{HardLimit, HistoryMetrics, PageLimit, StoreErrors, StoreTestBase, UpdateHistory}
+import org.lfdecentralizedtrust.splice.store.{
+  HardLimit,
+  HistoryMetrics,
+  PageLimit,
+  StoreErrors,
+  StoreTestBase,
+  UpdateHistory,
+}
 import org.lfdecentralizedtrust.splice.util.{Contract, HoldingsSummary, PackageQualifiedName}
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown

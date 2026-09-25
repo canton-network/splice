@@ -5,7 +5,10 @@ import com.digitalasset.canton.tracing.TraceContext
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import org.lfdecentralizedtrust.splice.scan.rewards.{RewardComputationInputs, RewardIssuanceParams}
-import org.lfdecentralizedtrust.splice.scan.store.db.{DbAppActivityRecordStore, DbScanAppRewardsStore}
+import org.lfdecentralizedtrust.splice.scan.store.db.{
+  DbAppActivityRecordStore,
+  DbScanAppRewardsStore,
+}
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanAppRewardsStore.*
 import org.lfdecentralizedtrust.splice.store.{HistoryMetrics, StoreTestBase, UpdateHistory}
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingRequirement
