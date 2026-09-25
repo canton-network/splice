@@ -125,7 +125,7 @@ groups:
             datasourceUid: prometheus
             model:
               editorMode: code
-              expr: sum by(namespace, node_type, node_name, job, trigger_name, migration, party) (rate(splice_trigger_completed_total{trigger_name!~"ScanVerdictStoreIngestion|ScanHistoryBackfillingTrigger|AcsSnapshotTrigger|ScanBackfillAggregatesTrigger|TxLogBackfillingTrigger|ReportValidatorLicenseMetricsExportTrigger"}[5m]))
+              expr: sum by(namespace, node_type, node_name, job, trigger_name, migration, party) (rate(splice_trigger_completed_total{$BUSY_AUTOMATION_EXCLUDED_NAMESPACES_FILTERtrigger_name!~"ScanVerdictStoreIngestion|ScanHistoryBackfillingTrigger|AcsSnapshotTrigger|ScanBackfillAggregatesTrigger|TxLogBackfillingTrigger|ReportValidatorLicenseMetricsExportTrigger"}[5m]))
               instant: true
               intervalMs: 1000
               legendFormat: __auto
@@ -193,7 +193,7 @@ groups:
             datasourceUid: prometheus
             model:
               editorMode: code
-              expr: sum by(namespace, node_type, node_name, job, trigger_name, migration, party) (rate(splice_trigger_iterations_total{trigger_name!~"ScanVerdictStoreIngestion|ScanHistoryBackfillingTrigger|AcsSnapshotTrigger|ScanBackfillAggregatesTrigger|TxLogBackfillingTrigger"}[5m]))
+              expr: sum by(namespace, node_type, node_name, job, trigger_name, migration, party) (rate(splice_trigger_iterations_total{$BUSY_AUTOMATION_EXCLUDED_NAMESPACES_FILTERtrigger_name!~"ScanVerdictStoreIngestion|ScanHistoryBackfillingTrigger|AcsSnapshotTrigger|ScanBackfillAggregatesTrigger|TxLogBackfillingTrigger"}[5m]))
               instant: true
               intervalMs: 1000
               legendFormat: __auto
