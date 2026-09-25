@@ -70,7 +70,7 @@ templates:
         {{ if .Annotations.description }}{{ .Annotations.description }}{{ end }}
       {{ end }}
 
-      {{ define "slack_gcloud_log_link" }}<https://console.cloud.google.com/logs/query;startTime={{ (.StartsAt.Add -600000000000).UTC.Format "2006-01-02T15:04:05Z"  }};endTime={{ (.StartsAt.Add 600000000000).UTC.Format "2006-01-02T15:04:05Z"  }};query=resource.labels.cluster_name%3D%22cn-$CLUSTER_BASENAMEnet%22%0A{{ .Labels.gcloud_filter }}?project=$GCP_PROJECT|cloud logs>{{ end }}
+      {{ define "slack_gcloud_log_link" }}<https://console.cloud.google.com/logs/query;startTime={{ (.StartsAt.Add -600000000000).UTC.Format "2006-01-02T15:04:05Z"  }};endTime={{ (.StartsAt.Add 600000000000).UTC.Format "2006-01-02T15:04:05Z"  }};query={{ if ne .Labels.gcloud_filter_skip_cluster "true" }}resource.labels.cluster_name%3D%22cn-$CLUSTER_BASENAMEnet%22%0A{{ end }}{{ .Labels.gcloud_filter }}?project=$GCP_PROJECT|cloud logs>{{ end }}
 
       {{ define "slack_color" -}}
         {{ $hasCritical := false }}{{ $hasWarning := false }}{{ $hasInfo := false }}{{ $hasOthers := false }}

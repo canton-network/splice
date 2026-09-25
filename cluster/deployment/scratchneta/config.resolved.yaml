@@ -91,6 +91,10 @@ monitoring:
           alignmentPeriodSeconds: 300
           durationSeconds: 0
           threshold: 100
+        throttleRejections:
+          alignmentPeriodSeconds: 300
+          durationSeconds: 0
+          threshold: 0
         wafRejections:
           alignmentPeriodSeconds: 300
           durationSeconds: 0
