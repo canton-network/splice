@@ -108,6 +108,16 @@ export function buildAmuletRulesConfigFromChanges(
 
   const amuletSwitchOverTimes = configValueToSwitchOverMap(getValue('amuletSwitchOverTimes', true));
 
+  const governanceLockSuperValidatorLockVestingDuration = getValue(
+    'governanceLockSuperValidatorLockVestingDuration',
+    true
+  );
+  const governanceLockFeaturedAppLockVestingDuration = getValue(
+    'governanceLockFeaturedAppLockVestingDuration',
+    true
+  );
+  const governanceLockSearchTimeGranularity = getValue('governanceLockSearchTimeGranularity', true);
+
   const amuletConfig: AmuletConfig<'USD'> = {
     tickDuration: { microseconds: getValue('tickDuration', false) },
     transferPreapprovalFee: getValue('transferPreapprovalFee', true),
@@ -208,6 +218,20 @@ export function buildAmuletRulesConfigFromChanges(
             },
             appRewardCouponThreshold: getValue('rewardConfigAppRewardCouponThreshold', false),
           },
+
+    governanceLockMinimumLockAmount: getValue('governanceLockMinimumLockAmount', true),
+    governanceLockSuperValidatorLockVestingDuration:
+      governanceLockSuperValidatorLockVestingDuration === null
+        ? null
+        : { microseconds: governanceLockSuperValidatorLockVestingDuration },
+    governanceLockFeaturedAppLockVestingDuration:
+      governanceLockFeaturedAppLockVestingDuration === null
+        ? null
+        : { microseconds: governanceLockFeaturedAppLockVestingDuration },
+    governanceLockSearchTimeGranularity:
+      governanceLockSearchTimeGranularity === null
+        ? null
+        : { microseconds: governanceLockSearchTimeGranularity },
   };
 
   return amuletConfig;

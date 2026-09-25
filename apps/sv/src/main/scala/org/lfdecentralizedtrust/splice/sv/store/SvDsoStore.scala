@@ -753,6 +753,12 @@ trait SvDsoStore
       : ListExpiredContracts[so.SvOnboardingConfirmed.ContractId, so.SvOnboardingConfirmed] =
     multiDomainAcsStore.listExpiredFromPayloadExpiry(so.SvOnboardingConfirmed.COMPANION)
 
+  def listExpiredVestingLocks: ListExpiredContracts[
+    splice.governancelock.VestingLock.ContractId,
+    splice.governancelock.VestingLock,
+  ] =
+    multiDomainAcsStore.listExpiredFromPayloadExpiry(splice.governancelock.VestingLock.COMPANION)
+
   def listExpiredAnsEntries(
       unavailablePartiesStore: Option[UnavailablePartiesStore]
   ): ListExpiredContracts[
@@ -1036,6 +1042,20 @@ trait SvDsoStore
       Option[
         AssignedContract[splice.amulet.FeaturedAppRight.ContractId, splice.amulet.FeaturedAppRight]
       ]
+    ]
+  ]
+
+  def listProvisionalGovernanceLocksWithFeaturedAppRightSample(
+      limit: Limit = defaultLimit
+  )(implicit tc: TraceContext): Future[
+    Seq[
+      (
+          Contract[
+            splice.governancelock.GovernanceLock.ContractId,
+            splice.governancelock.GovernanceLock,
+          ],
+          splice.amulet.FeaturedAppRight.ContractId,
+      )
     ]
   ]
 
@@ -1663,6 +1683,33 @@ object SvDsoStore {
         DsoAcsStoreRowData(
           contract,
           contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
+        )
+      },
+      mkFilter(splice.governancelock.VestingLock.COMPANION)(
+        co => co.payload.dso == dso,
+        versionGuard = { case (pkgVersionSupport, now) =>
+          (tc) => pkgVersionSupport.supportsGovernanceLock(Seq(dsoParty), now)(tc)
+        },
+      ) { contract =>
+        DsoAcsStoreRowData(
+          contract,
+          contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.endTime)),
+        )
+      },
+      mkFilter(splice.governancelock.GovernanceLock.COMPANION)(
+        co => co.payload.dso == dso,
+        versionGuard = { case (pkgVersionSupport, now) =>
+          (tc) => pkgVersionSupport.supportsGovernanceLock(Seq(dsoParty), now)(tc)
+        },
+      ) { contract =>
+        val provisionalFeaturedAppLockFor = contract.payload.specification.kind match {
+          case kind: splice.governancelock.governancelockkind.GLK_ProvisionalFeaturedApp =>
+            Some(PartyId.tryFromProtoPrimitive(kind.provider))
+          case _ => None
+        }
+        DsoAcsStoreRowData(
+          contract,
+          provisionalFeaturedAppLockFor = provisionalFeaturedAppLockFor,
         )
       },
     )

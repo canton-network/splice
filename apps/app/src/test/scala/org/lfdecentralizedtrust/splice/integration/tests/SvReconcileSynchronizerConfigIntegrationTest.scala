@@ -148,6 +148,10 @@ class SvReconcileSynchronizerConfigIntegrationTest extends SvIntegrationTestBase
     amuletConfig.developmentFundManagerBlacklist,
     amuletConfig.minDevelopmentFundMintingDelay,
     amuletConfig.amuletSwitchOverTimes,
+    amuletConfig.governanceLockMinimumLockAmount,
+    amuletConfig.governanceLockSuperValidatorLockVestingDuration,
+    amuletConfig.governanceLockFeaturedAppLockVestingDuration,
+    amuletConfig.governanceLockSearchTimeGranularity,
   )
 
 }

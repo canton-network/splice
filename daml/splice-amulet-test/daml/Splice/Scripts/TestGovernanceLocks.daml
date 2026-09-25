@@ -1,0 +1,784 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+module Splice.Scripts.TestGovernanceLocks where
+
+import Prelude hiding (forA)
+import DA.Action (unless, when)
+import DA.Either
+import DA.Optional
+import DA.TextMap qualified as TM
+import DA.Time
+import DA.Traversable (forA)
+
+import Daml.Script
+import Splice.Amulet
+import Splice.Amulet.TokenApiUtils (issuingMiningRoundContextKey, openMiningRoundContextKey)
+import Splice.Api.Token.HoldingV2 qualified as V2
+import Splice.Api.Token.MetadataV1
+import Splice.Api.Token.TransferInstructionV1 qualified as V1
+import Splice.ExternalPartyAmuletRules
+import Splice.GovernanceLock
+import Splice.Round
+import Splice.Scripts.TokenStandard.TestAmuletTokenStandardTestEnv
+import Splice.Testing.Registries.AmuletRegistryV2 qualified as AmuletRegistryV2
+import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
+import Splice.Testing.Utils
+import Splice.TokenStandard.Utils
+import Splice.Types (Round(..))
+
+testGovernanceLockHappyPathRawChoices : Script ()
+testGovernanceLockHappyPathRawChoices = testGovernanceLockHappyPathScenario rawOperations
+
+testGovernanceLockHappyPathScenario : GovernanceLockOperations -> Script ()
+testGovernanceLockHappyPathScenario ops = do
+  TestEnv{..} <- setupTest
+  let registry = registriesEnv.amuletV2
+
+  let someSvKind = GLK_SuperValidatorRightsOwner "TestSV"
+
+  AmuletRegistryV2.tapFaucet registry alice 180000.0
+  AmuletRegistryV2.tapFaucet registry bob 10000.0
+
+  aliceLock <- expectSuccess $ ops.governanceLock registry alice 180000.0 someSvKind
+
+  _bobLock <- expectSuccess $ ops.governanceLock registry bob 10000.0 someSvKind
+
+  now <- getTime
+
+  -- Check that negative allocations are impossible
+  actionMustFail (expectMessageContains "'locked amount' is less than 'minimum governance lock amount'") $
+    ops.governanceLock registry bob (-10000.0) someSvKind
+
+  -- Check that we can't unlock with a time in the past
+  actionMustFail (expectMessageContains "Ledger time is at or past deadline 'unlockAt' at") $
+    ops.governanceUnlock registry aliceLock (Some 80000.0) (now `addRelTime` days (-60)) [alice]
+
+  -- Check that bob can't unlock for alice - TODO(canton-network/splice-sv-fa-locking#39): disclose to bob with explicit disclosure for this.
+  -- actionMustFail (expectMessageContains "noodle") $ governanceUnlockRawChoice' registry aliceLock (Some 80000.0) now [bob]
+
+  let unlockTime = now `addRelTime` days 1
+
+  -- Unlock 80k Amulet such that 1/8th should result in 10k Amulet withdrawable after 1/8th year.
+  (Some aliceVesting, Some aliceLock, None) <- expectSuccess $ ops.governanceUnlock registry aliceLock (Some 80000.0) (unlockTime) [alice]
+
+  actionMustFail (expectMessageContains "'unlockAmount' is not greater than 'zero'") $
+    ops.governanceUnlock registry aliceLock (Some $ -80000.0) (unlockTime) [alice]
+
+  -- Assert that we have a lock remaining of 100k Amulet.
+  checkLockedHolding alice aliceLock 100000.0
+
+  -- Check that we can't withdraw immediately, before unlockTime has arrived on-ledger
+  actionMustFail (expectMessageContains "Ledger time is strictly before deadline 'requestedAt' at") $
+    ops.vestingWithdraw registry aliceVesting unlockTime [alice]
+
+  passTime (hours 12)
+  now <- getTime
+
+  -- Check that we can't withdraw between now and the unlockTime
+  actionMustFail (expectMessageContains "'withdraw amount' is not greater than 'zero'") $
+    ops.vestingWithdraw registry aliceVesting now [alice]
+
+  passTime (days 1)
+
+  -- Check that we can't withdraw exactly at the unlock time (nothing is vested yet).
+  actionMustFail (expectMessageContains "'withdraw amount' is not greater than 'zero'") $
+    ops.vestingWithdraw registry aliceVesting (unlockTime) [alice]
+
+  passTime (days 47)
+
+  -- Chosen to be exactly 1/8th of the specified 365.25 year.
+  -- 1/8th and 80k are reliably exactly representible in fixed-point binary
+  -- with at least three fractional places, so the arithmetic is exact and we can
+  -- comfortably use equality.
+
+  let withdrawTime = unlockTime `addRelTime` (days 45 + hours 15 + minutes 45)
+
+  (unlocked, Some newVestingLock) <- expectSuccess $ ops.vestingWithdraw registry aliceVesting withdrawTime [alice]
+
+  actionMustFail (expectMessageContains "'withdraw amount' is not greater than 'zero'") $
+    ops.vestingWithdraw registry newVestingLock withdrawTime [alice]
+
+  -- Check that we did indeed unlock 10k amulet as expected - 1/8th of the total vesting amount of 80k.
+  checkHolding' alice unlocked 10000.0
+
+  -- And check that we remain with 7/8ths of the vesting amount - 70k.
+  checkLockedHolding alice newVestingLock 70000.0
+
+  passTime (days 365)
+
+  let fullWithdrawTime = unlockTime `addRelTime` days 366
+
+  (unlockedHolding2, None) <- expectSuccess $ ops.vestingWithdraw registry newVestingLock fullWithdrawTime [alice]
+
+  -- Check that we withdrew all and exactly the 70k _remaining_ after the above withdrawal.
+  checkHolding' alice unlockedHolding2 70000.0
+  checkIsUnlocked alice unlockedHolding2
+
+testGovernanceLockCompatHappyPathTSv1 : Script ()
+testGovernanceLockCompatHappyPathTSv1 = testGovernanceLockCompatHappyPathScenario tsv1Operations
+
+testGovernanceLockCompatHappyPathScenario : CompatGovernanceLockOperations -> Script ()
+testGovernanceLockCompatHappyPathScenario ops = do
+  env@TestEnv{..} <- setupTest
+  let registry = registriesEnv.amuletV2
+
+  -- Using a featured app to get a whole and very divisible number of days.
+  let someFaKind = GLK_FeaturedApp bob
+
+  AmuletRegistryV2.tapFaucet registry alice 180000.0
+  AmuletRegistryV2.tapFaucet registry bob 10000.0
+
+  aliceLock <- expectSuccess $ ops.governanceLock env alice 80000.0 someFaKind
+
+  -- Unlock 80k Amulet such that 1/8th should result in 10k Amulet withdrawable after 1/8th year.
+  aliceVesting <- ops.governanceUnlock env aliceLock alice
+
+  -- Chosen to make the vesting period to exactly 1/4th of the specified 60 day vesting period.
+  -- 1/8th and 80k are reliably exactly representible in fixed-point binary
+  -- with at least three fractional places, so the arithmetic is exact and we can
+  -- comfortably use equality.
+
+  passTime (days 16)
+
+  newVestingLock <- fromSomeNote "Expected a continuing vested lock, but recevied None" <$> ops.vestingWithdraw env aliceVesting alice
+
+  -- Check that we did indeed unlock 10k amulet as expected - 1/8th of the total vesting amount of 80k.
+  WalletClientV2.checkHoldingWithAmountExists alice registry.instrumentId 20000.0
+
+  -- And check that we remain with 7/8ths of the vesting amount - 70k.
+  checkLockedHolding alice newVestingLock 60000.0
+
+  passTime (days 60)
+
+  rv <- ops.vestingWithdraw env newVestingLock alice
+  require "Expected no remaining vesting lock, received one" $ isNone rv
+
+  -- Check that we withdrew all and exactly the 70k _remaining_ after the above withdrawal.
+  WalletClientV2.checkHoldingWithAmountExists alice registry.instrumentId 60000.0
+
+
+testGovernanceLockMinimumLocksLockUnlockWithdraw : Script ()
+testGovernanceLockMinimumLocksLockUnlockWithdraw = testGovernanceLockMinimumLocksLockUnlockWithdrawScenario rawOperations
+
+testGovernanceLockMinimumLocksLockUnlockWithdrawScenario : GovernanceLockOperations -> Script ()
+testGovernanceLockMinimumLocksLockUnlockWithdrawScenario ops = do
+  TestEnv{..} <- setupTest
+  let registry = registriesEnv.amuletV2
+
+  let someSvKind = GLK_SuperValidatorRightsOwner "TestSV"
+
+  AmuletRegistryV2.tapFaucet registry alice 180000.0
+  AmuletRegistryV2.tapFaucet registry bob 10000.0
+
+  actionMustFail (expectMessageContains "'locked amount' is less than 'minimum governance lock amount'") $ ops.governanceLock registry alice 8000.0 someSvKind
+
+  successfulLockCid <- governanceLockRawChoice registry alice 20000.0 someSvKind
+
+  unlockAt <- (`addRelTime` minutes 5) <$> getTime
+
+  actionMustFail (expectMessageContains "'locked amount' is less than 'minimum governance lock amount'") $ ops.governanceUnlock registry successfulLockCid (Some 5000.0) unlockAt [alice]
+
+  actionMustFail (expectMessageContains "'locked amount' is less than 'minimum governance lock amount'") $ ops.governanceUnlock registry successfulLockCid (Some 15000.0) unlockAt [alice]
+
+  -- Exact amount should succeed.
+  (Some firstWithdrawnCid, Some remainingLockCid, None) <- expectSuccess $ ops.governanceUnlock registry successfulLockCid (Some 10000.0) unlockAt [alice]
+
+  -- Unlock of full amount should succeed.
+  (Some _secondWithdrawnCid, None, None) <- expectSuccess $ ops.governanceUnlock registry remainingLockCid None unlockAt [alice]
+
+  passTime (days 180)
+
+  now <- getTime
+
+  -- Partial withdraw should work even if the remainder is less than the minimum
+  (_, Some stillVestingCid) <- expectSuccess $ ops.vestingWithdraw registry firstWithdrawnCid now [alice]
+
+  passTime (days 200)
+
+  now <- getTime
+
+  (_, None) <- expectSuccess $ ops.vestingWithdraw registry stillVestingCid now [alice]
+
+  pure ()
+
+testTopUpWithAmuletHappyPath : Script ()
+testTopUpWithAmuletHappyPath = do
+  env@TestEnv{..} <- setupTest
+  let registry = registriesEnv.amuletV2
+
+  let someSvKind = GLK_SuperValidatorRightsOwner "TestSV"
+
+  AmuletRegistryV2.tapFaucet registry alice 280000.0
+
+  aliceLock <- governanceLockRawChoice registry alice 10000.0 someSvKind
+  checkLockedHolding alice aliceLock 10000.0
+
+  -- Simple Top up Test
+  (aliceLock', Some changeHolding) <- governanceLockTopUpRawChoice env aliceLock [] None 5000.0 [] 0.0 alice mempty None
+  checkLockedHolding alice aliceLock' 15000.0
+
+  -- Alice had 1000.0 coming from setupTest
+  checkHolding' alice changeHolding 266000.0
+
+  -- Test to ensure that the original holding that is locked is re-used as an input holdingCid (internally)
+  -- when doing top up
+  AmuletRegistryV2.tapFaucet registry bob 10100.0
+
+  bobLock <- governanceLockRawChoice registry bob 10000.0 someSvKind
+  checkLockedHolding bob bobLock 10000.0
+
+  -- We should've used the entire amount, hence None
+  (bobLock', None) <- governanceLockTopUpRawChoice env bobLock [] None 100.0 [] 0.0 bob mempty None
+  checkLockedHolding bob bobLock' 10100.0
+
+testTopUpWithMergingLocks : Script ()
+testTopUpWithMergingLocks = do
+  env@TestEnv{..} <- setupTest
+  let registry = registriesEnv.amuletV2
+
+  let someSvKind = GLK_SuperValidatorRightsOwner "TestSV"
+
+  AmuletRegistryV2.tapFaucet registry alice 9000000.0
+
+  aliceLock <- governanceLockRawChoice registry alice 50000.0 someSvKind
+  checkLockedHolding alice aliceLock 50000.0
+
+  aliceLock2 <- governanceLockRawChoice registry alice 10000.0 someSvKind
+  aliceLock3 <- governanceLockRawChoice registry alice 10000.0 someSvKind
+
+  -- We want to intentionally pass in no holdingInputs, test MergingLocks only
+  (aliceLock', aliceLockChange) <- governanceLockTopUpRawChoice env aliceLock [aliceLock2, aliceLock3] (Some []) 0.0 [] 0.0 alice mempty None
+  checkLockedHolding alice aliceLock' 70000.0
+  when (isSome aliceLockChange) $ fail "None is expected when no topUpAmount and only locks are provided for 'GovernanceLock_MergeAndTopUp'"
+
+  -- Now let's test with topUpAmount in addition to Merging Locks
+  aliceLock4 <- governanceLockRawChoice registry alice 25000.0 someSvKind
+  aliceLock5 <- governanceLockRawChoice registry alice 25000.0 someSvKind
+
+  (aliceLock'', aliceLockChange') <- governanceLockTopUpRawChoice env aliceLock' [aliceLock4, aliceLock5] None 30000.0 [] 0.0 alice mempty None
+  checkLockedHolding alice aliceLock'' 150000.0
+  when (isNone aliceLockChange') $ fail "Some is expected when topUpAmount is provided in addition to lockInputs for 'GovernanceLock_MergeAndTopUp'"
+
+testTopUpWithSvRewardCouponsHappyPath : Script ()
+testTopUpWithSvRewardCouponsHappyPath = do
+  env@TestEnv{..} <- setupTest
+  let registry = registriesEnv.amuletV2
+  let someSvKind = GLK_SuperValidatorRightsOwner "TestSV"
+      dso = env.instrId.admin
+  let createSvRewardCoupon provider beneficiary weight = submit (actAs dso) $ createCmd SvRewardCoupon with
+        dso
+        sv = provider
+        beneficiary = beneficiary
+        weight
+        round = Round 0
+  let aliceWeight = 10 * 100
+      aliceLockAmount = 10000.0
+      aliceBalance = 100000000.0
+
+  AmuletRegistryV2.tapFaucet registry alice aliceBalance
+  let aliceBalance = 100000000.0 + 1000.0 -- 1000.0 is from setupTest
+  WalletClientV2.checkUnlockedBalance alice env.instrId aliceBalance
+
+  aliceLock <- governanceLockRawChoice registry alice aliceLockAmount someSvKind
+  aliceLock2 <- governanceLockRawChoice registry alice aliceLockAmount someSvKind
+  aliceLock3 <- governanceLockRawChoice registry alice aliceLockAmount someSvKind
+  checkLockedHolding alice aliceLock aliceLockAmount
+
+  svRewardAlice1 <- createSvRewardCoupon provider1 alice aliceWeight
+  svRewardAlice2 <- createSvRewardCoupon provider1 alice aliceWeight
+  svRewardAlice3 <- createSvRewardCoupon provider1 alice aliceWeight
+  svRewardAlice4 <- createSvRewardCoupon provider1 alice aliceWeight
+
+  -- Advance until issuing mining round 0 is opened.
+  AmuletRegistryV2.runNextIssuance dso 0.5
+  AmuletRegistryV2.runNextIssuance dso 0.5
+
+  [(issuingMiningRoundCid, _)] <- queryFilter @IssuingMiningRound dso (\r -> r.round == Round 0)
+  [(openRoundCid, _)] <- queryFilter @OpenMiningRound dso (\r -> r.round == Round 3)
+  (Some issuingMiningRound) <- queryContractId dso issuingMiningRoundCid
+
+  issuingMiningRoundDisclosure <- queryDisclosure' dso issuingMiningRoundCid
+  openRoundDisclosure <- queryDisclosure' dso openRoundCid
+
+  openApiChoiceContext <- AmuletRegistryV2.getExternalPartyConfigStateContext registry
+  let context = openApiChoiceContext.choiceContext
+      extraArgs = getExtraArgsForRounds context issuingMiningRoundCid openRoundCid
+
+  let aliceBalanceWithoutInitialLocks = aliceBalance - (aliceLockAmount * 3.0)
+  -- Top up with 1 SvRewardCoupon
+  let svRewardCouponPercentage = 1.0
+      (expectedAmount, _) = calculateSvRewardCouponAmounts aliceLockAmount [aliceWeight] issuingMiningRound svRewardCouponPercentage
+  -- Should produce no change since svRewardCoupons are the only input and 100 percent is to be topped up
+  (newAliceLock, None) <-
+    governanceLockTopUpRawChoice env aliceLock [] (Some []) 0.0 [svRewardAlice1] svRewardCouponPercentage alice (issuingMiningRoundDisclosure <> openRoundDisclosure) (Some extraArgs)
+  newAliceLockAmount <- checkExpectedAmountFromSvRewardCoupon alice newAliceLock expectedAmount
+  WalletClientV2.checkUnlockedBalance alice env.instrId aliceBalanceWithoutInitialLocks
+
+  -- Top up with another 2 SvRewardCoupons, using the last modified governanceLock
+  let svRewardCouponPercentage = 0.4
+      (expectedAmount, expectedChange) = calculateSvRewardCouponAmounts newAliceLockAmount [aliceWeight, aliceWeight] issuingMiningRound svRewardCouponPercentage
+  (newAliceLock2, Some _) <-
+    governanceLockTopUpRawChoice env newAliceLock [] (Some []) 0.0 [svRewardAlice2, svRewardAlice3] svRewardCouponPercentage alice (issuingMiningRoundDisclosure <> openRoundDisclosure) (Some extraArgs)
+  newAliceLockAmount2 <- checkExpectedAmountFromSvRewardCoupon alice newAliceLock2 expectedAmount
+  WalletClientV2.checkUnlockedBalance alice env.instrId $ aliceBalanceWithoutInitialLocks + expectedChange
+
+  -- Top up with all inputs used (topUpAmount, mergeLock, svRewardCoupon)
+  let svRewardCouponPercentage = 0.5
+      (_, expectedChange') = calculateSvRewardCouponAmounts newAliceLockAmount2 [aliceWeight] issuingMiningRound svRewardCouponPercentage
+      topUpAmount = 1200.0
+      expectedUnlockedBalance = aliceBalanceWithoutInitialLocks + expectedChange + expectedChange' - topUpAmount
+  (newAliceLock3, Some _) <-
+    governanceLockTopUpRawChoice env aliceLock2 [aliceLock3] None topUpAmount [svRewardAlice4] svRewardCouponPercentage alice (issuingMiningRoundDisclosure <> openRoundDisclosure) (Some extraArgs)
+
+  WalletClientV2.checkUnlockedBalance alice env.instrId expectedUnlockedBalance
+  (Some newAliceLock3') <- queryContractId alice newAliceLock3
+  (Some newAliceLock2') <- queryContractId alice newAliceLock2
+  WalletClientV2.checkBalance alice env.instrId $ expectedUnlockedBalance + newAliceLock3'.amount + newAliceLock2'.amount
+
+testTopUpNegativePath : Script ()
+testTopUpNegativePath = do
+  env@TestEnv{..} <- setupTest
+  let registry = registriesEnv.amuletV2
+      dso = env.instrId.admin
+      someSvKind = GLK_SuperValidatorRightsOwner "TestSV"
+
+  AmuletRegistryV2.tapFaucet registry alice 280000.0
+
+  aliceLock <- governanceLockRawChoice registry alice 10000.0 someSvKind
+  checkLockedHolding alice aliceLock 10000.0
+
+  -- Test negative top up amount
+  actionMustFail (expectMessageContains "'topUpAmount' is less than 'zero'") $
+    governanceLockTopUpRawChoice' env aliceLock [] None (-5000.0) [] 0.0 alice mempty None
+
+  -- Test top up amount when we don't have enough funds
+  actionMustFail (expectMessageContains "Insufficient funds: you are missing 29000.0 to complete this transfer.") $
+    governanceLockTopUpRawChoice' env aliceLock [] None 300000.0 [] 0.0 alice mempty None
+
+  -- Test top up when the input holdings aren't enough (the original input holding amount is taken into account)
+  actionMustFail (expectMessageContains "Insufficient funds: you are missing 5000.0 to complete this transfer.") $
+    submitWithTransferContext registry (actAs alice)
+      $ \context -> exerciseCmd aliceLock GovernanceLock_MergeAndTopUp with
+        topUpAmount = 5000.0
+        holdingInputs = []
+        lockInputs = []
+        svRewardCouponInputs = []
+        svRewardCouponPercentage = 0.0
+        extraArgs = emptyExtraArgs with context
+
+  -- Test top up when the lock it is merging with has differnt attributes
+  aliceLock2 <- governanceLockRawChoice registry alice 10000.0
+    $ GLK_SuperValidatorRightsOwner "FakeSV"
+
+  actionMustFail (expectMessageContains "'governanceLock.specification' is not equal to 'expected value'") $
+    governanceLockTopUpRawChoice' env aliceLock [aliceLock2] (Some []) 0.0 [] 0.0 alice mempty None
+
+  -- Test top up with an illegal SvRewardCouponPercentage
+  let aliceWeight = 10 * 100
+      aliceLockAmount = 10000.0
+  aliceLock <- governanceLockRawChoice registry alice aliceLockAmount someSvKind
+  checkLockedHolding alice aliceLock aliceLockAmount
+  svRewardAlice1 <- submit (actAs dso) $ createCmd SvRewardCoupon with
+        dso
+        sv = provider1
+        beneficiary = alice
+        weight = aliceWeight
+        round = Round 0
+
+  -- Advance until issuing mining round 0 is opened.
+  AmuletRegistryV2.runNextIssuance dso 0.5
+  AmuletRegistryV2.runNextIssuance dso 0.5
+
+  [(issuingMiningRoundCid, _)] <- queryFilter @IssuingMiningRound dso (\r -> r.round == Round 0)
+  [(openRoundCid, _)] <- queryFilter @OpenMiningRound dso (\r -> r.round == Round 3)
+
+  openApiChoiceContext <- AmuletRegistryV2.getExternalPartyConfigStateContext registry
+  let context = openApiChoiceContext.choiceContext
+      extraArgs = getExtraArgsForRounds context issuingMiningRoundCid openRoundCid
+
+  actionMustFail (expectMessageContains "'svRewardCouponPercentage' is greater than 'one'.\nsvRewardCouponPercentage: 2.0\none: 1.0") $
+    submitWithTransferContext registry (actAs alice)
+      $ \_ -> exerciseCmd aliceLock GovernanceLock_MergeAndTopUp with
+        topUpAmount = 0.0
+        holdingInputs = []
+        lockInputs = []
+        svRewardCouponInputs = [svRewardAlice1]
+        svRewardCouponPercentage = 2.0
+        extraArgs
+
+testGovernanceLockProvisionalFullWithdrawScenario : GovernanceLockOperations -> Script ()
+testGovernanceLockProvisionalFullWithdrawScenario ops = do
+  TestEnv{..} <- setupTest
+  let registry = registriesEnv.amuletV2
+
+  let provisionalSpec = GLK_ProvisionalFeaturedApp with provider = bob
+
+  AmuletRegistryV2.tapFaucet registry alice 20000.0
+
+  aliceLock <- expectSuccess $ ops.governanceLock registry alice 20000.0 provisionalSpec
+
+  unlockAt <- (`addRelTime` minutes 5) <$> getTime
+
+  -- Full withdraw: no vesting lock, no remaining governance lock, liquid amulet returned
+  (None, None, Some unlocked) <- expectSuccess $ ops.governanceUnlock registry aliceLock None unlockAt [alice]
+
+  -- The full 20k is liquid immediately
+  checkHolding' alice unlocked 20000.0
+  checkIsUnlocked alice unlocked
+
+testGovernanceLockCompatProvisionalFullWithdrawTSv1 : Script ()
+testGovernanceLockCompatProvisionalFullWithdrawTSv1 = testGovernanceLockCompatProvisionalFullWithdrawScenario tsv1Operations
+
+testGovernanceLockCompatProvisionalFullWithdrawScenario : CompatGovernanceLockOperations -> Script ()
+testGovernanceLockCompatProvisionalFullWithdrawScenario ops = do
+  env@TestEnv{..} <- setupTest
+  let registry = registriesEnv.amuletV2
+
+  let provisionalSpec = GLK_ProvisionalFeaturedApp with provider = bob
+
+  AmuletRegistryV2.tapFaucet registry alice 20000.0
+
+  aliceLock <- expectSuccess $ ops.governanceLock env alice 20000.0 provisionalSpec
+
+  -- Full withdraw: no vesting lock
+  None <- ops.optGovernanceUnlock env aliceLock alice
+
+  -- The full 20k is liquid immediately
+  WalletClientV2.checkHoldingWithAmountExists alice env.instrId 20000.0
+
+testGovernanceLockProvisionalPartialWithdrawRawChoices : Script ()
+testGovernanceLockProvisionalPartialWithdrawRawChoices = testGovernanceLockProvisionalPartialWithdrawScenario rawOperations
+
+testGovernanceLockProvisionalPartialWithdrawScenario : GovernanceLockOperations -> Script ()
+testGovernanceLockProvisionalPartialWithdrawScenario ops = do
+  TestEnv{..} <- setupTest
+  let registry = registriesEnv.amuletV2
+
+  let provisionalSpec = GLK_ProvisionalFeaturedApp with provider = bob
+
+  AmuletRegistryV2.tapFaucet registry alice 30000.0
+
+  aliceLock <- expectSuccess $ ops.governanceLock registry alice 30000.0 provisionalSpec
+
+  unlockAt <- (`addRelTime` minutes 5) <$> getTime
+
+  -- Partial withdraw: liquid amulet for the unlocked part, remaining governance lock for the rest
+  (None, Some remainingLock, Some unlocked) <- expectSuccess $ ops.governanceUnlock registry aliceLock (Some 10000.0) unlockAt [alice]
+
+  -- The 10k unlocked part is liquid immediately
+  checkHolding' alice unlocked 10000.0
+  checkIsUnlocked alice unlocked
+
+  -- The remaining 10k stays locked
+  checkLockedHolding alice remainingLock 20000.0
+
+testGovernanceLockProvisionalFullWithdrawRawChoices : Script ()
+testGovernanceLockProvisionalFullWithdrawRawChoices = testGovernanceLockProvisionalFullWithdrawScenario rawOperations
+
+-- | Polymorphic checkHolding, to avoid repeated toInterfaceContractId when we have a LockedAmulet or Amulet ContractId.
+checkHolding' : Implements a V2.Holding => Party -> ContractId a -> Decimal -> Script ()
+checkHolding' party holding amount = WalletClientV2.checkHolding party (toInterfaceContractId holding) amount
+
+checkIsUnlocked : (Implements a V2.Holding) => Party -> ContractId a -> Script ()
+checkIsUnlocked p holdingCid = do
+  holdingO <- queryInterfaceContractId p $ toInterfaceContractId @V2.Holding holdingCid
+  now <- getTime
+  let holding = case holdingO of
+        None -> error $ "Holding " <> show holdingCid <> " was not found"
+        Some holding -> holding
+  unless (WalletClientV2.isUnlocked now holding.lock) $ fail $ "Holding " <> show holding <> " is not unlocked"
+
+-- | Find the holding for a GovernanceLock or VestingLock, and check that it has the correct amount.
+checkLockedHolding
+  :  (Template t, HasEnsure t, HasField "lockedAmulet" t (ContractId LockedAmulet))
+  => Party
+  -> ContractId t
+  -> Decimal
+  -> Script ()
+checkLockedHolding p lockCid amount = do
+  Some lock <- queryContractId p lockCid
+  checkHolding' p lock.lockedAmulet amount
+
+checkExpectedAmountFromSvRewardCoupon : Party -> ContractId GovernanceLock -> Decimal -> Script Decimal
+checkExpectedAmountFromSvRewardCoupon p lockCid expectedAmount = do
+  optLock <- queryContractId p lockCid
+  case optLock of
+    None -> fail $ "Couldn't find lock with cid: " <> show lockCid
+    Some lock -> do
+      require
+        ( "Top Up via SvRewardCoupon should be the expected amount, expected: "
+        <> show expectedAmount
+        <> ", actual: "
+        <> show lock.amount
+        ) $ expectedAmount == lock.amount
+      pure lock.amount
+
+calculateSvRewardCouponAmounts : Decimal -> [Int] -> IssuingMiningRound -> Decimal -> (Decimal, Decimal)
+calculateSvRewardCouponAmounts lockAmount svWeights issuingMiningRound svRewardCouponPercentage =
+  let svWeightsSummed : Decimal = sum $ intToDecimal <$> svWeights
+      expectedAmount = lockAmount + (svWeightsSummed * issuingMiningRound.issuancePerSvRewardCoupon * svRewardCouponPercentage)
+      expectedChange = svWeightsSummed * issuingMiningRound.issuancePerSvRewardCoupon * (1.0 - svRewardCouponPercentage)
+  in (expectedAmount, expectedChange)
+
+
+-- | a couple helpers to make the raw choice implementations easier to write
+submitWithTransferContext : AmuletRegistryV2.AmuletRegistry -> SubmitOptions -> (ChoiceContext -> Commands a) -> Script (Either SubmitError a)
+submitWithTransferContext registry options commands = do
+  context <- AmuletRegistryV2.getExternalPartyConfigStateContext registry
+  trySubmit (options <> discloseMany' context.disclosures) $ commands context.choiceContext
+
+expectSuccess : (CanAssert m, Show err) => m (Either err a) -> m a
+expectSuccess a = a >>= errorIfLeft
+
+errorIfLeft : (Show e, CanAssert m) => Either e a -> m a
+errorIfLeft (Left e) = assertFail $ "Expected success, but failed with " <> show e
+errorIfLeft (Right e) = pure e
+
+-- wishlist: add checking of interface-specific views to this.
+data GovernanceLockOperations = GovernanceLockOperations with
+  governanceLock
+    :  AmuletRegistryV2.AmuletRegistry
+    -> Party
+    -> Decimal
+    -> GovernanceLockKind
+    -> Script (Either SubmitError (ContractId GovernanceLock))
+  governanceUnlock
+    :  AmuletRegistryV2.AmuletRegistry
+    -> ContractId GovernanceLock
+    -> Optional Decimal
+    -> Time
+    -> [Party]
+    -> Script (Either SubmitError (Optional (ContractId VestingLock), Optional (ContractId GovernanceLock), Optional (ContractId Amulet)))
+  vestingWithdraw
+    :  AmuletRegistryV2.AmuletRegistry
+    -> ContractId VestingLock
+    -> Time
+    -> [Party]
+    -> Script (Either SubmitError (ContractId V2.Holding, Optional (ContractId VestingLock)))
+
+rawOperations = GovernanceLockOperations with
+  governanceLock = governanceLockRawChoice'
+  governanceUnlock = governanceUnlockRawChoice'
+  vestingWithdraw = vestingWithdrawRawChoice'
+
+governanceLockRawChoice : AmuletRegistryV2.AmuletRegistry -> Party -> Decimal -> GovernanceLockKind -> Script (ContractId GovernanceLock)
+governanceLockRawChoice registry owner amount kind = errorIfLeft =<< governanceLockRawChoice' registry owner amount kind
+
+governanceLockRawChoice' : AmuletRegistryV2.AmuletRegistry -> Party -> Decimal -> GovernanceLockKind -> Script (Either SubmitError (ContractId GovernanceLock))
+governanceLockRawChoice' registry owner amount kind =
+  governanceLockWithSpecRawChoice' registry owner amount (ownerControlledSpecification owner kind)
+
+governanceLockWithSpecRawChoice : AmuletRegistryV2.AmuletRegistry -> Party -> Decimal -> GovernanceLockSpecification -> Script (ContractId GovernanceLock)
+governanceLockWithSpecRawChoice registry owner amount specification = errorIfLeft =<< governanceLockWithSpecRawChoice' registry owner amount specification
+
+governanceLockWithSpecRawChoice' : AmuletRegistryV2.AmuletRegistry -> Party -> Decimal -> GovernanceLockSpecification -> Script (Either SubmitError (ContractId GovernanceLock))
+governanceLockWithSpecRawChoice' registry owner amount specification = do
+  let dso = registry.instrumentId.admin
+  now <- getTime
+  [(eparCid, _)] <- query @ExternalPartyAmuletRules dso -- TODO(canton-network/splice-sv-fa-locking#39): low priority: determine if there's already a way to call choices on this in the test env.
+  disc <- queryDisclosure' dso eparCid
+  inputs <- WalletClientV2.listUnlockedHoldingCidsFor (basicAccount owner) owner registry.instrumentId
+  result <- submitWithTransferContext registry (actAs [owner] <> discloseMany' disc) $
+    \context -> exerciseCmd eparCid ExternalPartyAmuletRules_LockForGovernance with
+      amount
+      inputs = coerceContractId <$> inputs -- These are Amulet and LockedAmulet, but we don't have convenient constraints to show that.
+      specification
+      extraArgs = emptyExtraArgs with context
+      owner
+      requestedAt = now
+      meta = emptyMetadata
+  pure $ (.governanceLock) <$> result
+
+governanceUnlockRawChoice
+  :  AmuletRegistryV2.AmuletRegistry
+  -> ContractId GovernanceLock
+  -> Optional Decimal
+  -> Time
+  -> [Party]
+  -> Script (Optional (ContractId VestingLock), Optional (ContractId GovernanceLock), Optional (ContractId Amulet))
+governanceUnlockRawChoice registry cid unlockAmount unlockAt actors = errorIfLeft =<< governanceUnlockRawChoice' registry cid unlockAmount unlockAt actors
+
+governanceUnlockRawChoice'
+  :  AmuletRegistryV2.AmuletRegistry
+  -> ContractId GovernanceLock
+  -> Optional Decimal
+  -> Time
+  -> [Party]
+  -> Script (Either SubmitError (Optional (ContractId VestingLock), Optional (ContractId GovernanceLock), Optional (ContractId Amulet)))
+governanceUnlockRawChoice' registry cid unlockAmount unlockAt actors = do
+  result <- governanceUnlockRawChoiceResult registry cid unlockAmount unlockAt actors mempty
+  forA result \case
+    GovernanceLock_UnlockResult_Completed vestingLock governanceLock unlockedAmulet ->
+      pure (vestingLock, governanceLock, unlockedAmulet)
+    GovernanceLock_UnlockResult_Pending _ ->
+      fail "Expected a completed unlock, but the unlock is pending"
+
+governanceUnlockRawChoiceResult
+  :  AmuletRegistryV2.AmuletRegistry
+  -> ContractId GovernanceLock
+  -> Optional Decimal
+  -> Time
+  -> [Party]
+  -> SubmitOptions
+  -> Script (Either SubmitError GovernanceLock_UnlockResult)
+governanceUnlockRawChoiceResult registry cid unlockAmount unlockAt actors options = do
+  submitWithTransferContext registry (actAs actors <> options) $ \context -> exerciseCmd cid GovernanceLock_Unlock with
+    unlockAmount
+    unlockAt
+    extraArgs = emptyExtraArgs with context
+    actors
+
+vestingWithdrawRawChoice
+  :  AmuletRegistryV2.AmuletRegistry
+  -> ContractId VestingLock
+  -> Time
+  -> [Party]
+  -> Script (ContractId V2.Holding, Optional (ContractId VestingLock))
+vestingWithdrawRawChoice registry cid requestedAt actors = errorIfLeft =<< vestingWithdrawRawChoice' registry cid requestedAt actors
+
+vestingWithdrawRawChoice'
+  :  AmuletRegistryV2.AmuletRegistry
+  -> ContractId VestingLock
+  -> Time
+  -> [Party]
+  -> Script (Either SubmitError (ContractId V2.Holding, Optional (ContractId VestingLock)))
+vestingWithdrawRawChoice' registry cid requestedAt actors = do
+  result <- vestingWithdrawRawChoiceResult registry cid requestedAt actors mempty
+  forA result \case
+    VestingLock_WithdrawResult_Completed vestingLock vested -> pure (upcast vested, vestingLock)
+    VestingLock_WithdrawResult_Pending _ -> fail "Expected a completed withdraw, but the withdraw is pending"
+
+vestingWithdrawRawChoiceResult
+  :  AmuletRegistryV2.AmuletRegistry
+  -> ContractId VestingLock
+  -> Time
+  -> [Party]
+  -> SubmitOptions
+  -> Script (Either SubmitError VestingLock_WithdrawResult)
+vestingWithdrawRawChoiceResult registry cid requestedAt actors options = do
+  submitWithTransferContext registry (actAs actors <> options) $ \context -> exerciseCmd cid VestingLock_Withdraw with
+    requestedAt
+    extraArgs = emptyExtraArgs with context
+    actors
+
+governanceLockTopUpRawChoice
+  : TestEnv
+  -> ContractId GovernanceLock
+  -> [ContractId GovernanceLock]
+  -> Optional [ContractId V2.Holding]
+  -> Decimal
+  -> [ContractId SvRewardCoupon]
+  -> Decimal
+  -> Party
+  -> Disclosures'
+  -> Optional ExtraArgs
+  -> Script (ContractId GovernanceLock, Optional (ContractId Amulet))
+governanceLockTopUpRawChoice env cid lockInputs optHoldingInputs topUpAmount svRewardCouponInputs svRewardCouponPercentage owner disc optExtraArgs = errorIfLeft
+  =<< governanceLockTopUpRawChoice' env cid lockInputs optHoldingInputs topUpAmount svRewardCouponInputs svRewardCouponPercentage owner disc optExtraArgs
+
+governanceLockTopUpRawChoice'
+  : TestEnv
+  -> ContractId GovernanceLock
+  -> [ContractId GovernanceLock]
+  -> Optional [ContractId V2.Holding]
+  -> Decimal
+  -> [ContractId SvRewardCoupon]
+  -> Decimal
+  -> Party
+  -> Disclosures'
+  -> Optional ExtraArgs
+  -> Script (Either SubmitError (ContractId GovernanceLock, Optional (ContractId Amulet)))
+governanceLockTopUpRawChoice' env cid lockInputs optHoldingInputs topUpAmount svRewardCouponInputs svRewardCouponPercentage owner disc optExtraArgs = do
+  holdingInputs <- case optHoldingInputs of
+    -- None should just grab all from wallet for user
+    None -> WalletClientV2.listUnlockedHoldingCidsFor (basicAccount owner) owner env.instrId
+    Some holdingInputs -> pure holdingInputs
+  result : Either SubmitError GovernanceLock_MergeAndTopUpResult <- submitWithTransferContext env.registriesEnv.amuletV2 (actAs [owner] <> discloseMany' disc) $
+    \context -> exerciseCmd cid GovernanceLock_MergeAndTopUp with
+                topUpAmount
+                lockInputs = lockInputs
+                holdingInputs = downcast <$> holdingInputs
+                svRewardCouponInputs = svRewardCouponInputs
+                svRewardCouponPercentage = svRewardCouponPercentage
+                extraArgs =  case optExtraArgs of
+                  -- None should default to empty
+                  None -> emptyExtraArgs with context
+                  Some extraArgs -> extraArgs
+  pure $ case result of
+    Left e -> Left e
+    Right (GovernanceLock_MergeAndTopUpResult governanceLock changeHolding) -> Right (governanceLock, changeHolding)
+
+data CompatGovernanceLockOperations = CompatGovernanceLockOperations with
+  governanceLock
+    :  TestEnv
+    -> Party
+    -> Decimal
+    -> GovernanceLockKind
+    -> Script (Either SubmitError (ContractId GovernanceLock))
+  optGovernanceUnlock
+    :  TestEnv
+    -> ContractId GovernanceLock
+    -> Party
+    -> Script (Optional (ContractId VestingLock))
+  governanceUnlock
+    :  TestEnv
+    -> ContractId GovernanceLock
+    -> Party
+    -> Script (ContractId VestingLock)
+  vestingWithdraw
+    :  TestEnv
+    -> ContractId VestingLock
+    -> Party
+    -> Script (Optional (ContractId VestingLock))
+
+tsv1Operations = CompatGovernanceLockOperations with
+    governanceLock
+    optGovernanceUnlock
+    governanceUnlock
+    vestingWithdraw
+  where
+    governanceLock = governanceLockV1
+    optGovernanceUnlock env cid actor = do
+      unlockResult <- WalletClientV2.withdrawTransferInstructionV1 env.registries actor (toInterfaceContractId cid)
+      pure $ fromInterfaceContractId <$> unlockResult
+    governanceUnlock env cid actor = fromSome <$> optGovernanceUnlock env cid actor
+    vestingWithdraw env cid actor = do
+      withdrawResult <- WalletClientV2.withdrawTransferInstructionV1 env.registries actor (toInterfaceContractId cid)
+      pure $ fromInterfaceContractId <$> withdrawResult
+
+governanceLockV1 : TestEnv -> Party -> Decimal -> GovernanceLockKind -> Script (Either SubmitError (ContractId GovernanceLock))
+governanceLockV1 env owner amount kind = do
+  now <- getTime
+  inputs <- WalletClientV2.listUnlockedHoldingCidsFor (basicAccount owner) owner env.instrId
+  let encodedReason = "lock-subject=" <> case kind of
+                        GLK_FeaturedApp party -> partyToText party
+                        GLK_ProvisionalFeaturedApp party -> partyToText party
+                        GLK_SuperValidatorRightsOwner svName -> svName
+  let
+   transfer = V1.TransferFactory_Transfer with
+    expectedAdmin = env.instrId.admin
+    transfer = V1.Transfer with
+      sender = owner
+      receiver = case kind of
+                   GLK_FeaturedApp _ -> featuredAppLockCanonicalParty
+                   GLK_ProvisionalFeaturedApp _ -> provisionalFeaturedAppLockCanonicalParty
+                   GLK_SuperValidatorRightsOwner _ -> superValidatorLockCanonicalParty
+      amount
+      instrumentId = env.registriesEnv.amuletV1.instrumentId
+      requestedAt = now
+      executeBefore = now
+      inputHoldingCids = downcast <$> inputs
+      meta = reasonToMeta encodedReason emptyMetadata
+    extraArgs = emptyExtraArgs
+  optContractId <- WalletClientV2.transferV1 env.registries owner $ transfer
+  pure $ optionalToEither (UnknownError "Unexpected none in lock[") $ fromInterfaceContractId <$> optContractId
+
+getExtraArgsForRounds : ChoiceContext -> ContractId IssuingMiningRound -> ContractId OpenMiningRound -> ExtraArgs
+getExtraArgsForRounds context issuingMiningRoundCid openRoundCid = ExtraArgs with
+  meta = emptyMetadata
+  context = context with
+    values = TM.union context.values $ TM.fromList
+      [ (issuingMiningRoundContextKey, AV_List [AV_ContractId $ toAnyContractId issuingMiningRoundCid])
+      , (openMiningRoundContextKey, AV_ContractId $ toAnyContractId openRoundCid)
+      ]

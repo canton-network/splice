@@ -119,6 +119,14 @@ data AmuletConfig unit = AmuletConfig with
       -- ^ Minimum delay between allocation and minting. Default: 0 days.
     amuletSwitchOverTimes : Optional (TextMap Time)
       -- ^ Timepoints for synchronized switch-overs of amulet functionality both on and off-ledger.
+    governanceLockMinimumLockAmount : Optional Decimal
+      -- ^ Minimum amount for a governance lock. Default: 10k Amulet.
+    governanceLockSuperValidatorLockVestingDuration : Optional RelTime
+      -- ^ Vesting duration for an SV governance lock. Default: 365.25 days.
+    governanceLockFeaturedAppLockVestingDuration : Optional RelTime
+      -- ^ Vesting duration for an FA governance lock. Default: 60 days.
+    governanceLockSearchTimeGranularity : Optional RelTime
+      -- ^ Granularity of the governance lock fallback timepoint determination. Default: 1 day.
   deriving (Eq, Show, Serializable)
 
 getExternalPartyConfigStateTickDuration : AmuletConfig a -> RelTime
@@ -218,6 +226,18 @@ data PackageConfig = PackageConfig
 validPackageConfig : PackageConfig -> Bool
 validPackageConfig _ = True
 
+defaultGovernanceLockMinimumLockAmount : Decimal
+defaultGovernanceLockMinimumLockAmount = 10000.0
+
+defaultGovernanceLockSuperValidatorLockVestingDuration : RelTime
+defaultGovernanceLockSuperValidatorLockVestingDuration = days 365 + hours 6
+
+defaultGovernanceLockFeaturedAppLockVestingDuration : RelTime
+defaultGovernanceLockFeaturedAppLockVestingDuration = days 60
+
+defaultGovernanceLockSearchTimeGranularity : RelTime
+defaultGovernanceLockSearchTimeGranularity = days 1
+
 instance Patchable RewardVersion where
   patch = patchScalar
 
@@ -238,6 +258,10 @@ instance Patchable (AmuletConfig USD) where
     transferPreapprovalBaseDuration = patch new.transferPreapprovalBaseDuration base.transferPreapprovalBaseDuration current.transferPreapprovalBaseDuration
     minDevelopmentFundMintingDelay = patch new.minDevelopmentFundMintingDelay base.minDevelopmentFundMintingDelay current.minDevelopmentFundMintingDelay
     amuletSwitchOverTimes = patch new.amuletSwitchOverTimes base.amuletSwitchOverTimes current.amuletSwitchOverTimes
+    governanceLockMinimumLockAmount = patch new.governanceLockMinimumLockAmount base.governanceLockMinimumLockAmount current.governanceLockMinimumLockAmount
+    governanceLockSuperValidatorLockVestingDuration = patch new.governanceLockSuperValidatorLockVestingDuration base.governanceLockSuperValidatorLockVestingDuration current.governanceLockSuperValidatorLockVestingDuration
+    governanceLockFeaturedAppLockVestingDuration = patch new.governanceLockFeaturedAppLockVestingDuration base.governanceLockFeaturedAppLockVestingDuration current.governanceLockFeaturedAppLockVestingDuration
+    governanceLockSearchTimeGranularity = patch new.governanceLockSearchTimeGranularity base.governanceLockSearchTimeGranularity current.governanceLockSearchTimeGranularity
 
 instance Patchable RewardConfig where
   patch new base current = RewardConfig with

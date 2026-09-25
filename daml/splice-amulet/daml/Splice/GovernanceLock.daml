@@ -1,0 +1,912 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+module Splice.GovernanceLock where
+
+import Prelude hiding (forA)
+import DA.Action (filterA, unless)
+import DA.Assert
+import DA.Foldable (forA_, mapA_, maximum, toList)
+import DA.Functor (($>))
+import DA.List.Total (head, minimumOn)
+import DA.Map (Map)
+import DA.Map qualified as Map
+import DA.Optional
+import DA.Set qualified as Set
+import DA.Text qualified as Text
+import DA.TextMap qualified as TextMap
+import DA.Time
+import DA.Traversable (forA)
+
+import Splice.Amulet
+import Splice.Amulet.TokenApiUtils
+import Splice.Amulet.TwoStepTransfer (holdingToTransferInputs)
+import Splice.AmuletConfig (defaultGovernanceLockFeaturedAppLockVestingDuration, defaultGovernanceLockMinimumLockAmount, defaultGovernanceLockSearchTimeGranularity, defaultGovernanceLockSuperValidatorLockVestingDuration)
+import Splice.AmuletRules
+import Splice.Api.Token.HoldingV1 (Holding)
+import Splice.Api.Token.MetadataV1
+import Splice.Api.Token.TransferInstructionV1 qualified as V1
+import Splice.Api.Token.TransferEventsV2 as TransferEventsV2
+import Splice.Expiry
+import Splice.Fees (relTimeToSeconds)
+import Splice.ExternalPartyConfigState
+import Splice.Round
+import Splice.TokenStandard.Utils hiding (require, reasonMetaKey)
+import Splice.Types
+import Splice.Util
+
+data ControllerSpecification = ControllerSpecification with
+    controllers : [[Party]]
+      -- ^ Sets of parties that can jointly authorize an action. The action happens once all parties of any one set approve it.
+  deriving (Eq, Show, Serializable)
+
+instance Semigroup ControllerSpecification where
+  (<>) (ControllerSpecification a) (ControllerSpecification b) = ControllerSpecification $ a <> b
+
+data GovernanceLockKind
+  = GLK_FeaturedApp with
+      provider : Party -- ^ Featured app provider party.
+  | GLK_ProvisionalFeaturedApp with
+      provider : Party -- ^ Provisional featured app provider party.
+  | GLK_SuperValidatorRightsOwner with
+      svName : Text  -- ^ Name of the SV rights owner for whom the funds are locked.
+  deriving (Eq, Show, Serializable)
+
+data GovernanceLockSpecification
+  = GovernanceLockSpecification with
+      kind : GovernanceLockKind
+      unlockControllers : ControllerSpecification
+        -- ^ Controllers that can unlock the lock.
+      substitutionControllers : ControllerSpecification
+        -- ^ Controllers that can approve a substitution.
+      vestingControllers : ControllerSpecification
+        -- ^ Controllers that can withdraw vested funds once the lock is vesting. Copied to the VestingLock on unlock.
+  deriving (Eq, Show, Serializable)
+
+data VestingLockSpecification
+  = VestingLockSpecification with
+      kind : GovernanceLockKind
+      vestingControllers : ControllerSpecification
+        -- ^ Controllers that can drive the return of vested funds to the owner.
+  deriving (Eq, Show, Serializable)
+
+-- | An unlock approval recorded by one unlock controller.
+data UnlockApproval = UnlockApproval with
+    unlockAmount : Optional Decimal  -- ^ Amount to unlock. None means the full amount.
+    unlockAt : Time  -- ^ Time at which the controller wants vesting to start.
+  deriving (Eq, Show, Serializable)
+
+-- | Specification where the lock owner alone controls all lock actions.
+-- Used for locks created via the TSv1 compatibility mode.
+ownerControlledSpecification : Party -> GovernanceLockKind -> GovernanceLockSpecification
+ownerControlledSpecification owner kind = GovernanceLockSpecification with
+  kind
+  unlockControllers = ControllerSpecification [[owner]]
+  substitutionControllers = ControllerSpecification [[owner]]
+  vestingControllers = ControllerSpecification [[owner]]
+
+template GovernanceLock
+  with
+    dso : Party
+    owner : Party  -- ^ Lock owner
+    amount : Decimal  -- ^ Locked amount
+    lockedAmulet : ContractId LockedAmulet
+    specification : GovernanceLockSpecification
+    originalLockCid : Optional (ContractId GovernanceLock)
+    requestedAt : Time  -- ^ Time of the request to create this lock.
+    meta : Metadata
+      -- ^ Metadata provided upon creation of the lock,
+      -- which can for example be used by apps and wallets to add extra
+      -- info to help the user manage their locks.
+    pendingUnlockApprovals : Map.Map Party UnlockApproval
+      -- ^ Unlock approvals recorded so far, for multi-step authorization.
+      -- Cleared when converting a provisional featured app lock to a full lock.
+  where
+    signatory dso, owner
+    observer governanceLockKindObservers specification.kind, governanceLockControllers specification
+    ensure amount > 0.0 && either error (const True) (validateGovernanceLockControllers @(Either Text) specification)
+
+    choice GovernanceLock_Unlock : GovernanceLock_UnlockResult
+      with
+        unlockAmount : Optional Decimal -- ^ Amount to unlock. Defaults to the full amount if not set.
+        unlockAt : Time  -- ^ Time as of which the unlock is to be registered and vesting starts. Must be in the future.
+        extraArgs : ExtraArgs
+        actors : [Party]
+      controller actors
+      do
+        (context, state) <- unfeaturedPaymentContextAndConfigFromChoiceContext dso extraArgs.context
+        governanceLock_unlockImpl self this unlockAmount unlockAt actors context state
+
+    choice GovernanceLock_MergeAndTopUp : GovernanceLock_MergeAndTopUpResult
+      with
+        topUpAmount : Decimal
+          -- ^ Amount that should be deposited extra from liquid funds.
+        lockInputs : [ContractId GovernanceLock]
+          -- ^ Locks with the same owner and specification to merge into this lock
+        holdingInputs : [ContractId Holding]
+          -- ^ Holding inputs used to fund the top-up.
+        svRewardCouponInputs : [ContractId SvRewardCoupon]
+          -- ^ Sv Reward Coupon inputs used to fund the top-up.
+        svRewardCouponPercentage : Decimal
+          -- ^ Percentage (specified as a number between 0.0 and 1.0) of the sv reward coupons
+          -- minting allowance to top-up a governance lock with. The remainder is returned as change.
+        extraArgs : ExtraArgs
+      controller owner
+      do
+        require' ("topUpAmount", topUpAmount) isGreaterOrEqualR ("zero", 0.0)
+        require' ("svRewardCouponPercentage", svRewardCouponPercentage) isGreaterOrEqualR ("zero", 0.0)
+        require' ("svRewardCouponPercentage", svRewardCouponPercentage) isLessOrEqualR ("one", 1.0)
+        let forOwner = ForOwner with dso; owner
+
+        (context, _) <- unfeaturedPaymentContextAndConfigFromChoiceContext dso extraArgs.context
+
+        (holdingsFromSvRewardCoupons, svRewardMintAllowance) <- getSvRewardInputAmuletAndChange
+          svRewardCouponInputs
+          svRewardCouponPercentage
+          extraArgs
+          forOwner
+          (toInterfaceContractId context.externalPartyConfigState)
+
+        (unlockedAmuletCid, (_, lockProps)) <- unlockAmulet forOwner lockedAmulet
+
+        -- Check if we have any locks to merge and extract required info
+        unlockedAmountsAndHoldings : [(Decimal, ContractId Holding)] <- forA lockInputs $ \governanceLockCid -> do
+          governanceLock <- fetchChecked @GovernanceLock forOwner governanceLockCid
+          requireMatchExpected ("governanceLock.dso", governanceLock.dso) dso
+          requireMatchExpected ("governanceLock.owner", governanceLock.owner) owner
+          requireMatchExpected ("governanceLock.specification", governanceLock.specification) specification
+
+          (amuletCid, (totalUnlockedLockAmount, _)) <- unlockAmulet forOwner governanceLock.lockedAmulet
+          pure (totalUnlockedLockAmount, toInterfaceContractId amuletCid)
+
+        let unlockedAmountFromMergeLocks : Decimal = sum [amt | (amt, _) <- unlockedAmountsAndHoldings]
+            unlockedHoldingsFromMergeLocks : [ContractId Holding] = [holding | (_, holding) <- unlockedAmountsAndHoldings]
+            newLockAmount = amount + topUpAmount + unlockedAmountFromMergeLocks + svRewardMintAllowance
+            allInputHoldings = toInterfaceContractId unlockedAmuletCid
+              :: holdingInputs
+              <> unlockedHoldingsFromMergeLocks
+              <> holdingsFromSvRewardCoupons
+
+        ([newLockedAmulet], newChangeHolding) <- lockAmulet
+          forOwner
+          [(newLockAmount, lockProps)]
+          allInputHoldings
+          context
+          $ if svRewardMintAllowance > 0.0
+              then "(includes minting and locking " <> show svRewardMintAllowance <> " SV rewards)"
+              else ""
+
+        newGovernanceLock <- create this with
+          amount = newLockAmount
+          lockedAmulet = newLockedAmulet
+          originalLockCid = Some $ fromOptional self originalLockCid
+
+        pure $ GovernanceLock_MergeAndTopUpResult with
+          governanceLock = newGovernanceLock
+          changeHolding = newChangeHolding
+
+    choice GovernanceLock_DsoConvertProvisionalFeaturedAppLock : GovernanceLock_DsoConvertProvisionalFeaturedAppLockResult
+      with
+        featuredAppRightCid : ContractId FeaturedAppRight
+      controller dso
+      do
+        case specification.kind of
+          GLK_ProvisionalFeaturedApp provider -> do
+            fetchChecked (ForOwner with dso; owner = provider) featuredAppRightCid
+            create this with
+              specification = specification with
+                kind = GLK_FeaturedApp with provider
+              pendingUnlockApprovals = Map.empty
+            pure GovernanceLock_DsoConvertProvisionalFeaturedAppLockResult
+          kind -> error $ "GovernanceLock_DsoConvertProvisionalFeaturedAppLock: cannot convert lock of kind " <> show kind
+
+    interface instance V1.TransferInstruction for GovernanceLock where
+      view = V1.TransferInstructionView with
+          originalInstructionCid = toInterfaceContractId <$> originalLockCid
+          transfer = V1.Transfer with
+            sender = owner
+            receiver
+            amount
+            instrumentId = amuletInstrumentId dso
+            requestedAt
+            executeBefore = maxBound
+            inputHoldingCids = []
+            meta = reasonToMeta encodedReason meta
+          status = V1.TransferPendingInternalWorkflow with
+            pendingActions = Map.fromList
+              [ (p, "withdraw transfer instruction to approve unlock")
+              | p <- Set.toList $ allControllers specification.unlockControllers
+              , not (Map.member p pendingUnlockApprovals)
+              ]
+          meta = emptyMetadata
+        where
+          (receiver, encodedReason) = lockTypeToCompatibilityPartyAndReason specification.kind
+      transferInstruction_acceptImpl _ _ = assertFail "Transfers representing governance locks cannot be accepted"
+      transferInstruction_rejectImpl _ _ = assertFail "Transfers representing governance locks cannot be rejected"
+      transferInstruction_withdrawImpl self arg = do
+          let V1.TransferInstruction_Withdraw {..} = arg
+          (context, state) <- unfeaturedPaymentContextAndConfigFromChoiceContext dso extraArgs.context
+          (_, unlockAt) <- searchCurrentTimeBounds requestedAt state
+          -- Need to call the body of unlock directly to avoid double consumption.
+          unlockResult <- governanceLock_unlockImpl (coerceContractId self) this None unlockAt [owner] context state
+          pure $ case unlockResult of
+            GovernanceLock_UnlockResult_Pending pendingLock -> V1.TransferInstructionResult with
+              output = V1.TransferInstructionResult_Pending with
+                transferInstructionCid = toInterfaceContractId pendingLock
+              senderChangeCids = []
+              meta = emptyMetadata
+            GovernanceLock_UnlockResult_Completed vestingLock _ unlockedAmulet -> V1.TransferInstructionResult with
+              output = case vestingLock of
+                Some vestingLock -> V1.TransferInstructionResult_Pending with
+                  transferInstructionCid = toInterfaceContractId vestingLock
+                None -> V1.TransferInstructionResult_Completed with
+                  receiverHoldingCids = []
+              senderChangeCids = toList $ fmap toInterfaceContractId unlockedAmulet
+              meta = emptyMetadata
+      transferInstruction_updateImpl _ _ = assertFail "Transfers representing governance locks cannot be updated"
+
+  -- TODO(canton-network/splice-sv-fa-locking#39): implement V2 Allocation interface on above. Most fields of the view are generated, as they are constants or specific presentations of the above.
+  -- TODO(canton-network/splice-sv-fa-locking#39): substitution, probably with a loose function for implementation sharing.
+
+
+governanceLock_unlockImpl : ContractId GovernanceLock -> GovernanceLock -> Optional Decimal -> Time -> [Party] -> ExternalPartyTransferContext -> ExternalPartyConfigState -> Update GovernanceLock_UnlockResult
+governanceLock_unlockImpl self this@(GovernanceLock {..}) unlockAmount unlockAt actors context state
+    = do
+        assertWithinDeadline "unlockAt" unlockAt
+        recorded <- governanceLock_updateUnlockApprovals this unlockAmount unlockAt actors
+        case recorded of
+          Left stillPending -> do
+            pendingLock <- create this with
+              pendingUnlockApprovals = stillPending
+              originalLockCid = Some $ fromOptional self originalLockCid
+            pure GovernanceLock_UnlockResult_Pending with pendingLock
+          Right approvedUnlockAt -> governanceLock_executeUnlock self this unlockAmount approvedUnlockAt context state
+
+governanceLock_executeUnlock : ContractId GovernanceLock -> GovernanceLock -> Optional Decimal -> Time -> ExternalPartyTransferContext -> ExternalPartyConfigState -> Update GovernanceLock_UnlockResult
+governanceLock_executeUnlock self this@(GovernanceLock {..}) unlockAmount unlockAt context state
+    = do
+        let actualUnlockAmount = fromOptional amount unlockAmount
+        let isFullUnlock = actualUnlockAmount == amount
+        require' ("unlockAmount", actualUnlockAmount) isGreaterR ("zero", 0.0)
+        require' ("unlockAmount", actualUnlockAmount) isLessOrEqualR ("amount", amount)
+        unless isFullUnlock $ do
+          requireMinimumLock state actualUnlockAmount
+          requireMinimumLock state (amount - actualUnlockAmount)
+
+        let vestingPeriod = vestingDurationFor specification.kind state
+        let endTime = unlockAt `addRelTime` vestingPeriod
+        let specification = governanceToVestingSpecification this.specification
+        let forOwner = ForOwner with dso; owner
+        let vestingLockProperties = LockProperties with
+              context = describeVestingSpecification specification
+              expiresAt = endTime
+
+        (optVestingLockedAmulet, optStillLocked, unlockedAmulet) <- if vestingPeriod == days 0
+          then do
+            (optStillLocked, unlockedAmulet) <- partialUnlock forOwner lockedAmulet actualUnlockAmount context
+            pure (None, optStillLocked, Some unlockedAmulet)
+          else do
+            (optStillLocked, vestingLockedAmulet) <- splitLockedAmulet forOwner lockedAmulet (actualUnlockAmount, vestingLockProperties) context
+            pure (Some vestingLockedAmulet, optStillLocked, None)
+
+        governanceLock <- forA optStillLocked (\(lockedAmulet, stillLockedAmount) -> create
+          this with
+            lockedAmulet
+            amount = stillLockedAmount
+            pendingUnlockApprovals = Map.empty)
+
+        vestingLock <- forA optVestingLockedAmulet (\(lockedAmulet, vestingAmount) -> create VestingLock with
+          dso
+          owner
+          lockedAmulet
+          vestingPeriod
+          endTime
+          vestingAmount
+          specification
+          originalLockCid = guard isFullUnlock $> coerceContractId self
+          meta
+          pendingWithdrawApprovals = Map.empty)
+
+        pure $ GovernanceLock_UnlockResult_Completed with
+          vestingLock
+          governanceLock
+          unlockedAmulet
+
+
+loopUntilRightA : Action m => (a -> m (Either a r)) -> a -> m r
+loopUntilRightA f a = do
+  res <- f a
+  case res of
+    Left a' -> loopUntilRightA f a'
+    Right r -> pure r
+
+
+-- | Takes a reference time, that must be at or before the current ledger time,
+-- and returns a pair where the first is before the current time and the second is
+-- after.
+searchCurrentTimeBounds : Time -> ExternalPartyConfigState -> Update (Time, Time)
+searchCurrentTimeBounds basis state =
+  searchCurrentTimeBounds_impl isLedgerTimeGE assertDeadlineExceeded assertWithinDeadline basis $
+    fromOptional defaultGovernanceLockSearchTimeGranularity state.governanceLockSearchTimeGranularity
+
+-- | Implementation for searchCurrentTimeBounds, taking explicit functions to
+-- allow running outside of Update.
+searchCurrentTimeBounds_impl
+ : forall m. Action m
+  => (Time -> m Bool)
+  -> (Text -> Time -> m ())
+  -> (Text -> Time -> m ())
+  -> Time
+  -> RelTime
+  -> m (Time, Time)
+searchCurrentTimeBounds_impl isTimeGE assertDeadlineExceeded' assertWithinDeadline' basis granularity = do
+    afterBasis <- isTimeGE basis
+    let seekF = if afterBasis then seekForward else seekBackward
+    bounds@(ubBefore, lbAfter) <- loopUntilRightA binarySearch =<< loopUntilRightA seekF (1, basis)
+    assertDeadlineExceeded' "ubBefore" ubBefore
+    assertDeadlineExceeded' "lbAfter - 1 day" (lbAfter `addRelTime` negate (days 1))
+    assertWithinDeadline' "lbAfter" lbAfter
+    assertWithinDeadline' "ubBefore + 1 day" (ubBefore `addRelTime` days 1)
+    pure bounds
+  where
+    binarySearch : (Int, Time) -> m (Either (Int, Time) (Time, Time))
+    binarySearch (-1, basis) = do
+      pure $ Right (basis, basis `addRelTime` granularity)
+    binarySearch (seek, basis) = do
+      let nextBasis = basis `addRelTime` seekToGranularity seek
+      gt <- isTimeGE nextBasis
+      pure $ if gt
+         then Left (seek - 1, nextBasis)
+         else Left (seek - 1, basis)
+    seekForward : (Int, Time) -> m (Either (Int, Time) (Int, Time))
+    seekForward (seek, basis) = do
+      let nextBasis = basis `addRelTime` seekToGranularity seek
+      gt <- isTimeGE nextBasis
+      pure $ if gt
+         then Left (seek + 1, nextBasis)
+         else Right (seek - 1, basis)
+    seekBackward : (Int, Time) -> m (Either (Int, Time) (Int, Time))
+    seekBackward (seek, basis) = do
+      let nextBasis = basis `addRelTime` (- seekToGranularity seek)
+      gt <- isTimeGE nextBasis
+      pure $ if gt
+         then Right (seek - 1, nextBasis)
+         else Left (seek + 1, nextBasis)
+    seekToGranularity seek = convertMicrosecondsToRelTime $ 2 ^ seek * convertRelTimeToMicroseconds granularity
+
+
+data GovernanceLock_UnlockResult
+  = GovernanceLock_UnlockResult_Pending with
+      pendingLock : ContractId GovernanceLock -- ^ The re-created lock that holds the recorded approvals.
+  | GovernanceLock_UnlockResult_Completed with
+      vestingLock : Optional (ContractId VestingLock)
+      governanceLock : Optional (ContractId GovernanceLock)
+      unlockedAmulet : Optional (ContractId Amulet)
+  deriving (Eq, Show, Serializable)
+
+data GovernanceLock_MergeAndTopUpResult
+  = GovernanceLock_MergeAndTopUpResult with
+      governanceLock : ContractId GovernanceLock
+      changeHolding : Optional (ContractId Amulet)
+  deriving (Eq, Show, Serializable)
+
+data GovernanceLock_DsoConvertProvisionalFeaturedAppLockResult
+   = GovernanceLock_DsoConvertProvisionalFeaturedAppLockResult
+   deriving (Serializable)
+
+template VestingLock
+  with
+    dso : Party
+    owner : Party
+    lockedAmulet : ContractId LockedAmulet
+    vestingPeriod : RelTime  -- ^ Duration over which the amount vests in a linear fashion.
+    endTime : Time  -- ^ Time at which vesting completes.
+    vestingAmount : Decimal  -- ^ The amount that is vesting.
+    specification : VestingLockSpecification
+    originalLockCid : Optional AnyContractId
+    meta : Metadata
+      -- ^ Metadata provided upon creation of the lock,
+      -- which can for example be used by apps and wallets to add extra
+      -- info to help the user manage their locks.
+    pendingWithdrawApprovals : Map.Map Party Time
+      -- ^ Approved `requestedAt` per vesting controller, for multi-step authorization.
+  where
+    signatory dso, owner
+    observer allControllers specification.vestingControllers
+    ensure vestingAmount > 0.0 && vestingPeriod >= aunit && either error (const True) (validateVestingLockControllers @(Either Text) specification)
+
+    choice VestingLock_Withdraw : VestingLock_WithdrawResult
+      -- ^ Withdraw all funds that have vested since the last withdrawal
+      -- and the time of this request.
+      with
+        requestedAt : Time -- ^ Time to use for determining the funds that have vested. Must be in the past.
+        extraArgs : ExtraArgs
+        actors : [Party]
+      controller actors
+      do
+        (context, _) <- unfeaturedPaymentContextAndConfigFromChoiceContext dso extraArgs.context
+        vestingLock_withdrawImpl self this requestedAt actors context
+
+    choice VestingLock_DsoExpire : VestingLock_DsoExpireResult
+      -- ^ Garbage-collect a fully vested lock, so that SV nodes are not left
+      -- storing locks that nobody has bothered to withdraw.
+      --
+      -- There is nothing to do with `lockedAmulet`. `GovernanceLock_Unlock`
+      -- relocks it with `expiresAt = endTime`, so at the instant the vesting
+      -- period completes its time-lock has expired and wallets already treat it
+      -- as a liquid holding.
+      controller dso
+      do
+        assertDeadlineExceeded "VestingLock.endTime" endTime
+        pure VestingLock_DsoExpireResult
+
+    interface instance V1.TransferInstruction for VestingLock where
+      view = V1.TransferInstructionView with
+          originalInstructionCid = coerceContractId <$> originalLockCid
+          transfer = V1.Transfer with
+            sender = owner
+            receiver
+            amount = vestingAmount
+            instrumentId = amuletInstrumentId dso
+            requestedAt = endTime `addRelTime` (- vestingPeriod)
+            executeBefore = endTime
+            inputHoldingCids = []
+            meta = reasonToMeta encodedReason meta
+          status = V1.TransferPendingInternalWorkflow with
+            pendingActions = Map.fromList $
+              [ (p, "withdraw vested amounts")
+              | p <- Set.toList $ allControllers specification.vestingControllers
+              , not (Map.member p pendingWithdrawApprovals)
+              ]
+          meta = emptyMetadata
+        where
+          (receiver, encodedReason) = lockTypeToCompatibilityPartyAndReason specification.kind
+      transferInstruction_acceptImpl _ _ = assertFail "Transfers representing governance locks cannot be accepted"
+      transferInstruction_rejectImpl _ _ = assertFail "Transfers representing governance locks cannot be rejected"
+      transferInstruction_withdrawImpl self arg = do
+        let V1.TransferInstruction_Withdraw {..} = arg
+        (context, state) <- unfeaturedPaymentContextAndConfigFromChoiceContext dso extraArgs.context
+        (requestedAt, _) <- searchCurrentTimeBounds (endTime `addRelTime` (- vestingPeriod)) state
+        withdrawResult <- vestingLock_withdrawImpl (coerceContractId self) this requestedAt [owner] context
+        pure $ case withdrawResult of
+          VestingLock_WithdrawResult_Pending pendingLock -> V1.TransferInstructionResult with
+            output = V1.TransferInstructionResult_Pending with
+              transferInstructionCid = toInterfaceContractId pendingLock
+            senderChangeCids = []
+            meta = emptyMetadata
+          VestingLock_WithdrawResult_Completed (Some vestingLock) vested -> V1.TransferInstructionResult with
+            output = V1.TransferInstructionResult_Pending with
+              transferInstructionCid = toInterfaceContractId vestingLock
+            senderChangeCids = [vested]
+            meta = emptyMetadata
+          VestingLock_WithdrawResult_Completed None vested -> V1.TransferInstructionResult with
+            output = V1.TransferInstructionResult_Completed with
+              receiverHoldingCids = []
+            senderChangeCids = [vested]
+            meta = emptyMetadata
+      transferInstruction_updateImpl _ _ = assertFail "Transfers representing governance locks cannot be updated"
+
+  -- TODO(canton-network/splice-sv-fa-locking#39): implement V2 Allocation interface on above. Most fields of the view are generated, as they are constants or specific presentations of the above.
+  -- TODO(canton-network/splice-sv-fa-locking#39): substitution, probably with a loose function for implementation sharing.
+
+
+vestingLock_withdrawImpl : ContractId VestingLock -> VestingLock -> Time -> [Party] -> ExternalPartyTransferContext -> Update VestingLock_WithdrawResult
+vestingLock_withdrawImpl self this@(VestingLock {..}) requestedAt actors context
+    = do
+        assertDeadlineExceeded "requestedAt" requestedAt
+        recorded <- vestingLock_updateWithdrawApprovals this requestedAt actors
+        case recorded of
+          Left stillPending -> do
+            pendingLock <- create this with
+              pendingWithdrawApprovals = stillPending
+              originalLockCid = Some $ fromOptional (coerceContractId self) originalLockCid
+            pure VestingLock_WithdrawResult_Pending with pendingLock
+          Right approvedRequestedAt -> vestingLock_executeWithdraw this approvedRequestedAt context
+
+vestingLock_executeWithdraw : VestingLock -> Time -> ExternalPartyTransferContext -> Update VestingLock_WithdrawResult
+vestingLock_executeWithdraw this@(VestingLock {..}) requestedAt context
+    = do
+        let unvestedAmount = calculateUnvestedAmount requestedAt this
+
+        case unvestedAmount of
+          None -> do -- No split or partial availability, and the holding is already available, so just make a final report and archive.
+            pure VestingLock_WithdrawResult_Completed with
+              vestingLock = None
+              vested = toInterfaceContractId lockedAmulet
+          Some stillLockedAmount -> do -- We have a fraction that is not the whole being withdrawn, do a partial unlock.
+            let withdrawAmount = vestingAmount - stillLockedAmount
+            require' ("withdraw amount", withdrawAmount) isGreaterR ("zero", 0.0)
+            (lockedOpt, unlocked) <- partialUnlock (ForOwner with dso; owner) lockedAmulet withdrawAmount context
+            vestingLock <- forA lockedOpt (\(lockedAmulet, vestingAmount) -> create this with
+              lockedAmulet
+              vestingPeriod = endTime `subTime` requestedAt
+              vestingAmount
+              pendingWithdrawApprovals = Map.empty)
+            pure VestingLock_WithdrawResult_Completed with
+              vestingLock
+              vested = toInterfaceContractId unlocked
+
+
+data VestingLock_DsoExpireResult
+  = VestingLock_DsoExpireResult
+    -- ^
+    -- The `VestingLock_DsoExpireResult` choice doesn't return anything because
+    -- an SV trigger that cleans up expired vesting locks doesn't care to do
+    -- anything with the now unlocked `lockedAmulet`.
+  deriving (Serializable)
+
+data VestingLock_WithdrawResult
+  = VestingLock_WithdrawResult_Pending with
+      pendingLock : ContractId VestingLock -- ^ The re-created lock that holds the recorded approvals.
+  | VestingLock_WithdrawResult_Completed with
+      vestingLock : Optional (ContractId VestingLock)
+        -- ^ Contract ID of the continuing vesting lock with remaining funds.
+      vested : ContractId Holding
+        -- ^ Holding of withdrawn available funds. May be either an Amulet or an expired LockedAmulet if the vesting period has passed. May be already spent in the latter case.
+  deriving (Eq, Show, Serializable)
+
+-- | Uses `None` to represent that no amount remains.
+calculateUnvestedAmount : Time -> VestingLock -> Optional Decimal
+calculateUnvestedAmount currentTime VestingLock{ .. }
+    | currentTime <= (endTime `addRelTime` (- vestingPeriod)) = Some vestingAmount
+    | currentTime >= endTime = None
+    | otherwise = Some $ (vestingAmount * relTimeToSeconds (endTime `subTime` currentTime)) / relTimeToSeconds vestingPeriod
+
+-- | Implementation for the LockForGovernance choice on ExternalPartyAmuletRules and core implementation of token standard v1 and v2 interfaces.
+governanceLock_lockForGovernance_impl
+  : Party
+ -> Decimal
+ -> [ContractId Holding]
+ -> GovernanceLockSpecification
+ -> ExtraArgs
+ -> Party
+ -> Time
+ -> Metadata
+ -> Update (ContractId GovernanceLock, Optional (ContractId Amulet))
+governanceLock_lockForGovernance_impl dso amount inputs specification extraArgs owner requestedAt meta = do
+  assertWithinDeadline "requestedAt + 1 day" $ requestedAt `addRelTime` days 1
+  validateGovernanceLockControllers specification
+  (context, state) <- unfeaturedPaymentContextAndConfigFromChoiceContext dso extraArgs.context
+  requireMinimumLock state amount
+  let lockProperties = LockProperties with
+        context = describeGovernanceSpecification specification
+        expiresAt = maxBound
+  ([lockedAmulet], changeHolding) <- lockAmulet (ForOwner with dso; owner) [(amount, lockProperties)] inputs context ""
+  governanceLock <- create GovernanceLock with
+    dso
+    owner
+    amount
+    lockedAmulet
+    specification
+    requestedAt
+    originalLockCid = None
+    meta
+    pendingUnlockApprovals = Map.empty
+  pure $ (governanceLock, changeHolding)
+
+  -- TODO(canton-network/splice-sv-fa-locking#39): implement V2 AllocationFactory in terms of above.
+
+governanceLockKindObservers : GovernanceLockKind -> [Party]
+governanceLockKindObservers (GLK_FeaturedApp party) = [party]
+governanceLockKindObservers (GLK_ProvisionalFeaturedApp party) = [party]
+governanceLockKindObservers (GLK_SuperValidatorRightsOwner _) = []
+
+-- | All parties that appear in any controller set.
+allControllers : ControllerSpecification -> Set.Set Party
+allControllers = Set.fromList . concat . (.controllers)
+
+governanceLockControllers : GovernanceLockSpecification -> Set.Set Party
+governanceLockControllers spec = allControllers $
+  spec.unlockControllers <> spec.substitutionControllers <> spec.vestingControllers
+
+validateGovernanceLockControllers : CanAssert m => GovernanceLockSpecification -> m ()
+validateGovernanceLockControllers spec =
+  validateControllers [("unlock", spec.unlockControllers), ("substitution", spec.substitutionControllers), ("vesting", spec.vestingControllers)]
+
+validateVestingLockControllers : CanAssert m => VestingLockSpecification -> m ()
+validateVestingLockControllers spec =
+  validateControllers [("vesting", spec.vestingControllers)]
+
+validateControllers : CanAssert m => [(Text, ControllerSpecification)] -> m ()
+validateControllers = mapA_ \(controllerType, ControllerSpecification{controllers}) -> do
+  require (controllerType <> "Controllers must not be empty") (not $ null controllers)
+  require (controllerType <> "Controllers must not contain an empty controller set") (all (not . null) controllers)
+
+-- | Updates approvals for a GovernanceLock unlock
+governanceLock_updateUnlockApprovals : GovernanceLock -> Optional Decimal -> Time -> [Party] -> Update (Either (Map.Map Party UnlockApproval) Time)
+governanceLock_updateUnlockApprovals GovernanceLock{..} unlockAmount unlockAt actors = do
+  result <- updateApprovals
+    specification.unlockControllers
+    actors
+    (UnlockApproval with unlockAmount; unlockAt)
+    pendingUnlockApprovals
+    (\approval -> approval.unlockAmount == unlockAmount)
+  forA result (effectiveUnlockAt . fmap ((.unlockAt) . snd))
+
+-- | Updates approvals for a VestingLock withdraw
+vestingLock_updateWithdrawApprovals : VestingLock -> Time -> [Party] -> Update (Either (Map.Map Party Time) Time)
+vestingLock_updateWithdrawApprovals VestingLock{..} requestedAt actors = do
+  result <- updateApprovals
+    specification.vestingControllers
+    actors
+    requestedAt
+    pendingWithdrawApprovals
+    (const True)
+  -- Taking the latest time over all controller sets releases the most vested funds to the owner
+  pure $ fmap (maximum . fmap snd) result
+
+-- | Updates approvals to include the approval of actors and checks if the
+-- updated approvals satisfy one of the sets of controllers.
+--
+-- A set of controllers is considered satisfied when all of its parties have a
+-- value within the updated approvals for which approvalIsValid holds true.
+--
+-- If any controller set is satisfied, the superset of all satisfied controller
+-- sets, along with their approvals, is returned as an approved Right value.
+--
+-- If no controller sets are satisfied, the updated approvals map is returned as
+-- a still-pending Left value.
+updateApprovals
+  :  (CanAssert m, Eq a)
+  => ControllerSpecification -- ^ The sets of controllers that can authorize the current action.
+  -> [Party] -- ^ The set of actors that have authorized the current action.
+  -> a -- ^ The approval authorized by these actors.
+  -> Map.Map Party a -- ^ The pre-existing set of pending approvals.
+  -> (a -> Bool) -- ^ Whether an approval should be considered valid.
+  -> m (Either (Map.Map Party a) [(Party, a)])
+updateApprovals ControllerSpecification{controllers} actors approval approvals approvalIsValid = do
+  require "actors must not be empty" (not $ null actors)
+  forA_ actors $ \actor ->
+    require ("actor " <> partyToText actor <> " must be a controller") (any (actor `elem`) controllers)
+  -- Reject calls that change no approval; otherwise a repeated call would re-create the lock and invalidate its contract id for others
+  require "at least one actor's approval must change"
+    (any (\actor -> Map.lookup actor approvals /= Some approval) actors)
+  let updated = foldl (\m actor -> Map.insert actor approval m) approvals actors
+      approvedBy p = optional False approvalIsValid (Map.lookup p updated)
+      satisfiedControllers = ControllerSpecification $ filter (all approvedBy) controllers
+  pure $ if null satisfiedControllers.controllers
+    then Left updated
+    else Right $ mapOptional (\p -> (p,) <$> Map.lookup p updated) (Set.toList $ allControllers satisfiedControllers)
+
+-- | The earliest of the approved unlock times that is still in the future.
+-- It must be no more than 24h ahead, to avoid a far-future vesting start.
+effectiveUnlockAt : [Time] -> Update Time
+effectiveUnlockAt times = do
+  futureTimes <- filterA isLedgerTimeLT times
+  case minimumOn identity futureTimes of
+    None -> assertFail "None of the approved unlock times is in the future"
+    Some earliest -> do
+      assertDeadlineExceeded "unlockAt - 1 day" (earliest `addRelTime` days (-1))
+      pure earliest
+
+governanceToVestingSpecification : GovernanceLockSpecification -> VestingLockSpecification
+governanceToVestingSpecification GovernanceLockSpecification {..} = VestingLockSpecification with
+  kind
+  vestingControllers
+
+describeGovernanceLockKind : GovernanceLockKind -> Text
+describeGovernanceLockKind (GLK_FeaturedApp with provider) = "Featured App party " <> partyToText provider
+describeGovernanceLockKind (GLK_ProvisionalFeaturedApp with provider) = "Provisional Featured App party " <> partyToText provider
+describeGovernanceLockKind (GLK_SuperValidatorRightsOwner with svName) = "SV rights for " <> svName
+
+describeGovernanceSpecification : GovernanceLockSpecification -> Text
+describeGovernanceSpecification lock = "Locked to support " <> describeGovernanceLockKind lock.kind
+
+describeVestingSpecification : VestingLockSpecification -> Text
+describeVestingSpecification lock = "Unlocking from supporting " <> describeGovernanceLockKind lock.kind
+
+-- Lock properties for LockSubject types
+
+vestingDurationFor : GovernanceLockKind -> ExternalPartyConfigState -> RelTime
+vestingDurationFor (GLK_FeaturedApp _) state = fromOptional defaultGovernanceLockFeaturedAppLockVestingDuration state.governanceLockFeaturedAppLockVestingDuration
+vestingDurationFor (GLK_ProvisionalFeaturedApp _) _ = days 0
+vestingDurationFor (GLK_SuperValidatorRightsOwner _) state = fromOptional defaultGovernanceLockSuperValidatorLockVestingDuration state.governanceLockSuperValidatorLockVestingDuration
+
+requireMinimumLock : ExternalPartyConfigState -> Decimal -> Update ()
+requireMinimumLock context amount = do
+  require' ("locked amount", amount) isGreaterOrEqualR ("minimum governance lock amount", fromOptional defaultGovernanceLockMinimumLockAmount context.governanceLockMinimumLockAmount)
+
+unfeaturedPaymentContextAndConfigFromChoiceContext : Party -> ChoiceContext -> Update (ExternalPartyTransferContext, ExternalPartyConfigState)
+unfeaturedPaymentContextAndConfigFromChoiceContext dso choiceContext = do
+  (configStateCid, configState) <- getExternalPartyConfigStateFromChoiceContext dso choiceContext
+  pure (ExternalPartyTransferContext with
+          externalPartyConfigState = configStateCid
+          featuredAppRight = None
+       , configState )
+
+getMiningRoundsFromChoiceContext : ChoiceContext -> Update ([ContractId IssuingMiningRound], ContractId OpenMiningRound)
+getMiningRoundsFromChoiceContext choiceContext = do
+  issuingMiningRoundCids <- getFromContextU @([ContractId IssuingMiningRound]) choiceContext issuingMiningRoundContextKey
+  openMiningRoundCid <- getFromContextU @(ContractId OpenMiningRound) choiceContext openMiningRoundContextKey
+  pure (issuingMiningRoundCids, openMiningRoundCid)
+
+-- Helpers for handling LockedAmulet
+-- =================================
+
+-- Invariant: _none_ of these functions move amounts to new parties or modify total amounts of amulet (except when minting from reward coupons).
+
+type LockSpecification = (Decimal, LockProperties)
+data LockProperties = LockProperties with
+  context : Text
+  expiresAt : Time
+
+splitLockedAmulet : ForOwner -> ContractId LockedAmulet -> LockSpecification -> ExternalPartyTransferContext -> Update (Optional (ContractId LockedAmulet, Decimal), (ContractId LockedAmulet, Decimal))
+splitLockedAmulet forOwner lockedAmuletCid spec@(unlockAmount, _) context = do
+  require' ("unlockAmount", unlockAmount) isGreaterR ("zero", 0.0)
+  (unlockedCid, (currentAmount, currentLockProps)) <- unlockAmulet forOwner lockedAmuletCid
+  let remainderAmount = currentAmount - unlockAmount
+  let specs = spec :: (if remainderAmount == 0.0 then [] else [(remainderAmount, currentLockProps)])
+  (splitLock::remainderLocks, None) <- lockAmulet forOwner specs [toInterfaceContractId unlockedCid] context ""
+  pure $ ((, remainderAmount) <$> head remainderLocks, (splitLock, unlockAmount))
+
+partialUnlock : ForOwner -> ContractId LockedAmulet -> Decimal -> ExternalPartyTransferContext -> Update (Optional (ContractId LockedAmulet, Decimal), ContractId Amulet)
+partialUnlock forOwner lockedAmuletCid unlockAmount context = do
+  require' ("unlockAmount", unlockAmount) isGreaterR ("zero", 0.0)
+  (unlockedAmuletCid, (currentAmount, lockProps)) <- unlockAmulet forOwner lockedAmuletCid
+  let stillLockedAmount = currentAmount - unlockAmount
+  if stillLockedAmount == 0.0 then pure (None, unlockedAmuletCid) else do
+    ([newLockedCid], Some unlockedAmulet) <- lockAmulet forOwner [(stillLockedAmount, lockProps)] [toInterfaceContractId unlockedAmuletCid] context ""
+    pure (Some (newLockedCid, stillLockedAmount), unlockedAmulet)
+
+relockAmulet : ForOwner -> ContractId LockedAmulet -> LockProperties -> ExternalPartyTransferContext -> Update (ContractId LockedAmulet)
+relockAmulet forOwner lockedAmuletCid newLockProperties context = do
+  (amuletCid, (currentAmount, _)) <- unlockAmulet forOwner lockedAmuletCid
+  ([newLockedCid], None) <- lockAmulet forOwner [(currentAmount, newLockProperties)] [toInterfaceContractId amuletCid] context ""
+  pure newLockedCid
+
+unlockAmulet : ForOwner -> ContractId LockedAmulet -> Update (ContractId Amulet, LockSpecification)
+unlockAmulet forOwner lockedAmuletCid = do
+  lock <- fetchChecked forOwner lockedAmuletCid
+  unlockResult <- exercise lockedAmuletCid LockedAmulet_UnlockV2
+  return (unlockResult.amuletCid, (lock.amulet.amount.initialAmount, LockProperties with context = fromOptional "governance" lock.lock.optContext; expiresAt = lock.lock.expiresAt))
+
+lockAmulet : ForOwner -> [LockSpecification] -> [ContractId Holding] -> ExternalPartyTransferContext -> Text -> Update ([ContractId LockedAmulet], Optional (ContractId Amulet))
+lockAmulet forOwner@ForOwner {..} specs holdingInputs context reasonSuffix = do
+  -- lock the amulet
+  transferInputsFromHoldings <- holdingToTransferInputs forOwner holdingInputs
+  let mkOutput (amount, spec) =
+            TransferOutput with
+              receiver = owner
+              amount = amount
+              receiverFeeRatio = 0.0 -- irrelevant as fees are always zero
+              lock = Some TimeLock with
+                expiresAt = spec.expiresAt -- We don't have any call to isLedgerTimeLE, so we can use the true maxBound here for arbitrary duration.
+                holders = [dso]
+                optContext = Some spec.context
+              meta = Some $ reasonToMeta ("lock for " <> spec.context <> reasonSuffix) emptyMetadata
+  let transfer = Splice.AmuletRules.Transfer with
+        sender = owner
+        provider = owner -- the sender is serving as its own "app provider"
+        outputs = map mkOutput specs
+        inputs = transferInputsFromHoldings
+        beneficiaries = None
+
+  result <- executeExternalPartyTransfer forOwner.dso context transfer
+  let lockedAmulets = (\(TransferResultLockedAmulet lockedAmulet) -> lockedAmulet) <$> result.createdAmulets
+  pure
+    ( lockedAmulets
+    , result.senderChangeAmulet
+    )
+
+-- TSv1 support
+-- ============
+
+-- Update this to the implementation CIP once that has a number assigned.
+cipAddressPrefix = "cip-0105_"
+
+-- | Special "dummy" namespace used to identify special parties.
+magicNamespace = "::1220000000000000000000000000000000000000000000000000000000000000abcd"
+
+featuredAppLockTag = "fa-lock"
+provisionalFeaturedAppLockTag = "provisional-" <> featuredAppLockTag
+superValidatorLockTag = "sv-lock"
+
+isGovernanceLockTransferParty : Party -> Bool
+isGovernanceLockTransferParty party = isSome $ Text.stripPrefix cipAddressPrefix (partyToText party) >>= Text.stripSuffix magicNamespace
+
+governanceLock_transferFactoryV1_transferImpl
+  :  Party
+  -> [Party]
+  -> V1.TransferFactory_Transfer
+  -> Update V1.TransferInstructionResult
+governanceLock_transferFactoryV1_transferImpl dso actors arg = do
+  let V1.TransferFactory_Transfer {expectedAdmin, transfer, extraArgs} = arg
+  checkActors actors [[transfer.sender]]
+
+  -- validate call to factory and retrieve context
+  requireMatchExpected ("admin", arg.expectedAdmin) dso
+
+  specification <- specificationFromReceiverAndReason transfer.sender transfer.receiver transfer.meta
+
+  (lockCid, changeCid) <- governanceLock_lockForGovernance_impl expectedAdmin transfer.amount transfer.inputHoldingCids specification extraArgs transfer.sender transfer.requestedAt transfer.meta
+  pure $ V1.TransferInstructionResult with
+    output = V1.TransferInstructionResult_Pending with
+      transferInstructionCid = toInterfaceContractId $ lockCid
+    senderChangeCids = optionalToList $ toInterfaceContractId <$> changeCid
+    meta = emptyMetadata
+
+specificationFromReceiverAndReason : CanAssert m => Party -> Party -> Metadata -> m GovernanceLockSpecification
+specificationFromReceiverAndReason owner receiver meta = do
+  let operationString = Text.stripPrefix cipAddressPrefix (partyToText receiver) >>= Text.stripSuffix magicNamespace
+  let subject = Text.stripPrefix "lock-subject=" =<< reasonMetaKey `TextMap.lookup` meta.values
+  case liftA2 (,) operationString subject of
+        Some (tag, subject) | tag == superValidatorLockTag -> pure $ ownerControlledSpecification owner $ GLK_SuperValidatorRightsOwner with
+          svName = subject
+        Some (tag, subject) | tag == featuredAppLockTag, Some subject <- partyFromText subject -> pure $ ownerControlledSpecification owner $ GLK_FeaturedApp with
+          provider = subject
+        Some (tag, subject) | tag == provisionalFeaturedAppLockTag, Some subject <- partyFromText subject -> pure $ ownerControlledSpecification owner $ GLK_ProvisionalFeaturedApp with
+          provider = subject
+        _ -> assertFail "Unknown receiver or lock-subject"
+
+makeCanonicalParty : Text -> Party
+makeCanonicalParty tag = fromSome $ partyFromText $ cipAddressPrefix <> tag <> magicNamespace
+
+featuredAppLockCanonicalParty : Party
+featuredAppLockCanonicalParty = makeCanonicalParty featuredAppLockTag
+
+provisionalFeaturedAppLockCanonicalParty : Party
+provisionalFeaturedAppLockCanonicalParty = makeCanonicalParty provisionalFeaturedAppLockTag
+
+superValidatorLockCanonicalParty : Party
+superValidatorLockCanonicalParty = makeCanonicalParty superValidatorLockTag
+
+lockTypeToCompatibilityPartyAndReason : GovernanceLockKind -> (Party, Text)
+lockTypeToCompatibilityPartyAndReason (GLK_FeaturedApp with provider) = (featuredAppLockCanonicalParty, "lock-subject=" <> partyToText provider)
+lockTypeToCompatibilityPartyAndReason (GLK_ProvisionalFeaturedApp with provider) = (provisionalFeaturedAppLockCanonicalParty, "lock-subject=" <> partyToText provider)
+lockTypeToCompatibilityPartyAndReason (GLK_SuperValidatorRightsOwner with svName) = (superValidatorLockCanonicalParty, "lock-subject=" <> svName)
+
+-- SV Reward Coupon Helpers
+---------------------------
+
+fetchAndValidateIssuingMiningRounds : [AnyValue] -> ForDso -> Update (Map Round IssuingMiningRound, Map Round (ContractId IssuingMiningRound))
+fetchAndValidateIssuingMiningRounds vals forDso = do
+  issuingMiningRounds <- forA vals $ \(AV_ContractId cid) -> do
+    let issuingMiningRoundCid = fromAnyContractId cid
+    issuingMiningRound <- fetchReferenceData @IssuingMiningRound forDso issuingMiningRoundCid
+    let round = issuingMiningRound.round
+    assertDeadlineExceeded ("issuingMiningRound[" <> show round.number <> "].opensAt") issuingMiningRound.opensAt
+    pure (round, (issuingMiningRound, issuingMiningRoundCid))
+  let issuingMiningRounds' = [(round, miningRound) | (round, (miningRound, _)) <- issuingMiningRounds]
+      issuingMiningRoundCids = [(round, miningRoundCid) | (round, (_, miningRoundCid)) <- issuingMiningRounds]
+  pure (Map.fromList issuingMiningRounds', Map.fromList issuingMiningRoundCids)
+
+
+getSvRewardInputAmuletAndChange
+  : [ContractId SvRewardCoupon]
+  -> Decimal
+  -> ExtraArgs
+  -> ForOwner
+  -> ContractId TransferEventsV2.EventLog
+  -> Update ([ContractId Holding], Decimal)
+getSvRewardInputAmuletAndChange [] _ _ _ _ = pure ([], 0.0)
+getSvRewardInputAmuletAndChange svRewardCouponInputs svRewardCouponPercentage extraArgs forOwner transferEventsV2EventLog = do
+  let dso = forOwner.dso
+  (currentIssuingMiningRoundCids, openMiningRoundCid) <- getMiningRoundsFromChoiceContext extraArgs.context
+  (_, issuingMiningRoundCidsMap) <-
+    fetchAndValidateIssuingMiningRounds (toAnyValue <$> currentIssuingMiningRoundCids) $ ForDso with dso
+
+  let transferContext = TransferContext with
+        openMiningRound = openMiningRoundCid
+        issuingMiningRounds = issuingMiningRoundCidsMap
+        validatorRights = Map.empty
+        featuredAppRight = None
+      transfer = Splice.AmuletRules.Transfer with
+        sender = forOwner.owner
+        provider = forOwner.owner -- the sender is serving as its own "app provider"
+        outputs = []
+        inputs = fmap InputSvRewardCoupon svRewardCouponInputs
+        beneficiaries = None
+      rewardsConfig = RewardsIssuanceConfig with
+        issueAppRewards = False
+        issueValidatorRewards = False
+
+  result <- executeTransfer transferEventsV2EventLog rewardsConfig transferContext dso [] transfer
+  let (Some changeFromSvCouponRewards) : Optional (ContractId Amulet) = result.senderChangeAmulet
+
+  amulet <- fetchChecked forOwner changeFromSvCouponRewards
+  let svRewardMintAllowance = amulet.amount.initialAmount * svRewardCouponPercentage
+
+  pure ([toInterfaceContractId changeFromSvCouponRewards], svRewardMintAllowance)
+
+instance HasCheckedFetch GovernanceLock ForOwner where
+  contractGroupId GovernanceLock {..} = ForOwner with dso; owner

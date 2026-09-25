@@ -31,6 +31,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.{
   expiry as expiryCodegen,
   externalpartyamuletrules as externalpartyamuletrulesCodegen,
   fees as feesCodegen,
+  governancelock as governancelockCodegen,
   round as roundCodegen,
   schedule as scheduleCodegen,
   validatorlicense as validatorLicenseCodegen,
@@ -536,6 +537,73 @@ abstract class StoreTestBase
       payload = template,
     )
   }
+
+  private def lockControllers(owner: PartyId): governancelockCodegen.ControllerSpecification =
+    new governancelockCodegen.ControllerSpecification(
+      List(List(owner.toProtoPrimitive).asJava).asJava
+    )
+
+  protected def governanceLock(
+      owner: PartyId,
+      amount: BigDecimal,
+      dso: PartyId = dsoParty,
+      kind: governancelockCodegen.GovernanceLockKind =
+        new governancelockCodegen.governancelockkind.GLK_SuperValidatorRightsOwner("sv1"),
+      contractId: String = nextCid(),
+  ): Contract[
+    governancelockCodegen.GovernanceLock.ContractId,
+    governancelockCodegen.GovernanceLock,
+  ] = {
+    val controllers = lockControllers(owner)
+    contract(
+      identifier = governancelockCodegen.GovernanceLock.TEMPLATE_ID_WITH_PACKAGE_ID,
+      contractId = new governancelockCodegen.GovernanceLock.ContractId(contractId),
+      payload = new governancelockCodegen.GovernanceLock(
+        dso.toProtoPrimitive,
+        owner.toProtoPrimitive,
+        amount.bigDecimal,
+        new LockedAmulet.ContractId(nextCid()),
+        new governancelockCodegen.GovernanceLockSpecification(
+          kind,
+          controllers,
+          controllers,
+          controllers,
+        ),
+        Optional.empty(),
+        Instant.now().truncatedTo(ChronoUnit.MICROS),
+        new Metadata(util.Collections.emptyMap()),
+        util.Map.of[String, governancelockCodegen.UnlockApproval](),
+      ),
+    )
+  }
+
+  protected def vestingLock(
+      owner: PartyId,
+      vestingAmount: BigDecimal,
+      endTime: Instant,
+      dso: PartyId = dsoParty,
+      svName: String = "sv1",
+      contractId: String = nextCid(),
+  ): Contract[governancelockCodegen.VestingLock.ContractId, governancelockCodegen.VestingLock] =
+    contract(
+      identifier = governancelockCodegen.VestingLock.TEMPLATE_ID_WITH_PACKAGE_ID,
+      contractId = new governancelockCodegen.VestingLock.ContractId(contractId),
+      payload = new governancelockCodegen.VestingLock(
+        dso.toProtoPrimitive,
+        owner.toProtoPrimitive,
+        new LockedAmulet.ContractId(nextCid()),
+        new RelTime(1_000_000),
+        endTime,
+        vestingAmount.bigDecimal,
+        new governancelockCodegen.VestingLockSpecification(
+          new governancelockCodegen.governancelockkind.GLK_SuperValidatorRightsOwner(svName),
+          lockControllers(owner),
+        ),
+        Optional.empty(),
+        new Metadata(util.Collections.emptyMap()),
+        util.Map.of[String, Instant](),
+      ),
+    )
 
   protected def appRewardCoupon(
       round: Int,

@@ -133,6 +133,11 @@ object SvOnboardingConfig {
           SwitchOverTimes.NoFeaturedAppChoiceContext -> CantonTimestamp.MinValue
         )
       ),
+      initialGovernanceLockMinimumLockAmount: Option[NonNegativeNumeric[BigDecimal]] = None,
+      initialGovernanceLockSuperValidatorLockVestingDuration: Option[NonNegativeFiniteDuration] =
+        None,
+      initialGovernanceLockFeaturedAppLockVestingDuration: Option[NonNegativeFiniteDuration] = None,
+      initialGovernanceLockSearchTimeGranularity: Option[NonNegativeFiniteDuration] = None,
   ) extends SvOnboardingConfig
 
   case class JoinWithKey(

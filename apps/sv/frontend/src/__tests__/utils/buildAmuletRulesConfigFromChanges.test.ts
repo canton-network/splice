@@ -248,6 +248,31 @@ describe('buildAmuletRulesConfigFromChanges', () => {
         currentValue: '0.5',
         newValue: '1.0',
       },
+      {
+        fieldName: 'governanceLockMinimumLockAmount',
+        label: 'Governance lock config: Minimum governance lock amount in Amulet',
+        currentValue: '',
+        newValue: '20000',
+      },
+      {
+        fieldName: 'governanceLockSuperValidatorLockVestingDuration',
+        label: 'Governance lock config: SV lock vesting duration (microseconds)',
+        currentValue: '3600000000',
+        newValue: '7200000000',
+      },
+      {
+        fieldName: 'governanceLockFeaturedAppLockVestingDuration',
+        label: 'Governance lock config: Featured app lock vesting duration (microseconds)',
+        currentValue: '7200000000',
+        newValue: '3600000000',
+      },
+      {
+        fieldName: 'governanceLockSearchTimeGranularity',
+        label:
+          'Governance lock config: Fallback timepoint determination granularity (microseconds)',
+        currentValue: '864000000000',
+        newValue: '43200000000',
+      },
     ];
 
     const result = buildAmuletRulesConfigFromChanges(changes);
@@ -301,6 +326,17 @@ describe('buildAmuletRulesConfigFromChanges', () => {
       batchSize: '200',
       rewardCouponTimeToLive: { microseconds: '259200000000' },
       appRewardCouponThreshold: '1.0',
+    });
+
+    expect(result.governanceLockMinimumLockAmount).toEqual('20000');
+    expect(result.governanceLockSuperValidatorLockVestingDuration).toEqual({
+      microseconds: '7200000000',
+    });
+    expect(result.governanceLockFeaturedAppLockVestingDuration).toEqual({
+      microseconds: '3600000000',
+    });
+    expect(result.governanceLockSearchTimeGranularity).toEqual({
+      microseconds: '43200000000',
     });
   });
 
@@ -479,6 +515,43 @@ describe('buildAmuletRulesConfigFromChanges', () => {
         optDevelopmentFundPercentage: '0.06',
       },
     });
+  });
+
+  test('should map empty governance lock configs to null', () => {
+    const changes: ConfigChange[] = [
+      {
+        fieldName: 'governanceLockMinimumLockAmount',
+        label: 'Governance lock config: Minimum governance lock amount in Amulet',
+        currentValue: '20000',
+        newValue: '',
+      },
+      {
+        fieldName: 'governanceLockSuperValidatorLockVestingDuration',
+        label: 'Governance lock config: SV lock vesting duration (microseconds)',
+        currentValue: '7200000000',
+        newValue: '',
+      },
+      {
+        fieldName: 'governanceLockFeaturedAppLockVestingDuration',
+        label: 'Governance lock config: Featured app lock vesting duration (microseconds)',
+        currentValue: '3600000000',
+        newValue: '',
+      },
+      {
+        fieldName: 'governanceLockSearchTimeGranularity',
+        label:
+          'Governance lock config: Granularity of the fallback timepoint determination (microseconds)',
+        currentValue: '864000000000',
+        newValue: '',
+      },
+    ];
+
+    const result = buildAmuletRulesConfigFromChanges(changes);
+
+    expect(result.governanceLockMinimumLockAmount).toBeNull();
+    expect(result.governanceLockSuperValidatorLockVestingDuration).toBeNull();
+    expect(result.governanceLockFeaturedAppLockVestingDuration).toBeNull();
+    expect(result.governanceLockSearchTimeGranularity).toBeNull();
   });
 });
 

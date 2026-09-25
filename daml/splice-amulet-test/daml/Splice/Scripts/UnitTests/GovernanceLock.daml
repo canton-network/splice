@@ -1,0 +1,141 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+module Splice.Scripts.UnitTests.GovernanceLock where
+
+import DA.Assert
+import DA.Date
+import DA.Either (isLeft)
+import DA.Foldable
+import DA.Map qualified as Map
+import DA.Optional
+import DA.Set qualified as Set
+import DA.TextMap qualified as TextMap
+import DA.Time
+
+import Daml.Script
+
+import Splice.Api.Token.MetadataV1
+import Splice.GovernanceLock
+import Splice.TokenStandard.Utils
+
+testOwner : Party
+testOwner = fromSome $ partyFromText "some-owner"
+
+test_searchCurrentTimeBounds : Script ()
+test_searchCurrentTimeBounds = do
+  sequence_ $ testPasses <$> testCases
+  where
+    assertDeadlineExceeded' now msg compare = require msg $ now > compare
+    assertWithinDeadline' now msg compare = require msg $ now <= compare
+    testPasses (baseTime, trueTime, granularityDescription, granularity) = do
+      foundTimes <- searchCurrentTimeBounds_impl (pure . (< trueTime)) (assertDeadlineExceeded' trueTime) (assertWithinDeadline' trueTime) baseTime granularity
+      brackets trueTime foundTimes granularityDescription granularity
+    testCases = [ (baseTime, trueTime, granularityDescription, granularity)
+                | baseTime <- times
+                , trueTime <- times, trueTime > minBound, trueTime < maxBound
+                , (granularityDescription, granularity) <- granularities ]
+    baseTime = datetime 2026 Jan 1 21 23 10
+    smallOffsets = microseconds 0 :: [ t | mag <- [microseconds 1, seconds 48, minutes 47, hours 2, days 1], t <- [negate mag, mag]]
+    -- Unfortunately, searchTimeMaximumLowerBound does not work for the _full_ range; issues appear when the exponential offsets go past the bounds.
+    -- It does work quickly for several thousand years.
+    largeOffsets = days 0 :: [ days n | mag <- [365000, 3650, 30, 1], n <- [negate mag, mag]]
+    times = [baseTime `addRelTime` (largeOffset + smallOffset)
+              | largeOffset <- largeOffsets, smallOffset <- smallOffsets ]
+    granularities = [("1 day", days 1), ("6 hours", hours 6), ("1 minute", minutes 1), ("30 seconds", seconds 30)]
+    brackets trueTime (beforeTime, afterTime) granularityDescription granularity = do
+      require "beforeTime must be before trueTime" $ trueTime > beforeTime
+      require "trueTime must be before afterTime" $ trueTime <= afterTime
+      require (granularityDescription <> " after beforeTime must be after trueTime") $ trueTime <= (beforeTime `addRelTime` granularity)
+      require (granularityDescription <> " before afterTime must be before trueTime") $
+        trueTime > (beforeTime `addRelTime` convertMicrosecondsToRelTime (-(convertRelTimeToMicroseconds granularity)))
+
+-- | Fully explicit test case for specificationFromReceiverAndReason, to ensure that the specification lines up.
+test_specificationFromReceiverAndReason : Script ()
+test_specificationFromReceiverAndReason = do
+    assertEq
+      (specificationFromReceiverAndReason testOwner (fromSome $ partyFromText "cip-0105_sv-lock::1220000000000000000000000000000000000000000000000000000000000000abcd") $ Metadata $ TextMap.singleton "splice.lfdecentralizedtrust.org/reason" "lock-subject=someSv")
+      $ Right @Text $ ownerControlledSpecification testOwner $ GLK_SuperValidatorRightsOwner with
+                 svName = "someSv"
+    assertEq
+      (Left "Unknown receiver or lock-subject")
+      (specificationFromReceiverAndReason testOwner featuredAppLockCanonicalParty emptyMetadata)
+    -- Re-enable after character check implementation.
+    -- assertEq
+    --  (Left "Unknown receiver or lock-subject")
+    --  (specificationFromReceiverAndReason superValidatorLockCanonicalParty $ reasonToMeta "lock-subject=invalid*supervalidator*name" emptyMetadata)
+
+-- | Fully explicit test case for lockTypeToCompatibilityPartyAndReason, to ensure that the specification lines up.
+test_lockTypeToCompatibilityPartyAndReason : Script ()
+test_lockTypeToCompatibilityPartyAndReason = do
+    -- Fully explicit case, to ensure that the specification lines up.
+    assertEq
+      (lockTypeToCompatibilityPartyAndReason $ GLK_SuperValidatorRightsOwner "someSv")
+      (superValidatorLockCanonicalParty, "lock-subject=someSv")
+
+-- | Round-trip testing to cover the GovernanceLockKind space in the parsers
+test_governanceLockSpecificationTSv1_roundTrip : Script ()
+test_governanceLockSpecificationTSv1_roundTrip = do
+    assertRoundTrip serializeThenParse $ ownerControlledSpecification testOwner $ GLK_SuperValidatorRightsOwner with
+                 svName = "some-other-sv"
+    assertRoundTrip serializeThenParse $ ownerControlledSpecification testOwner $ GLK_FeaturedApp with
+                 provider = fromSome $ partyFromText "some-other-sv"
+    assertRoundTrip parseThenSerialize $ (featuredAppLockCanonicalParty, "lock-subject=someFA::122abcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcab")
+  where
+    specificationFromReceiverAndReason' (party, reason) = specificationFromReceiverAndReason testOwner party $ Metadata $ TextMap.singleton reasonMetaKey reason
+    serializeThenParse : GovernanceLockSpecification -> Script GovernanceLockSpecification
+    serializeThenParse = specificationFromReceiverAndReason' . lockTypeToCompatibilityPartyAndReason . (.kind)
+    parseThenSerialize : (Party, Text) -> Script (Party, Text)
+    parseThenSerialize = fmap (lockTypeToCompatibilityPartyAndReason . (.kind)) . specificationFromReceiverAndReason'
+
+assertRoundTrip : (CanAssert m, Eq a, Show a) => (a -> m a) -> a -> m ()
+assertRoundTrip f a = f a >>= assertEq a
+
+test_updateApprovals : Script ()
+test_updateApprovals = do
+    a <- allocateParty "a"
+    x <- allocateParty "x"
+    s <- allocateParty "s"
+    other <- allocateParty "other"
+    let controllers = ControllerSpecification $ [[s, x], [s, a], [a, x]]
+        run : CanAssert m => [Party] -> Int -> Map.Map Party Int -> m (Either (Map.Map Party Int) (Set.Set Party))
+        run actors v approvals = do
+          result <- updateApprovals controllers actors v approvals (== v)
+          pure $ fmap (Set.fromList . fmap fst) result
+        runE : [Party] -> Int -> Map.Map Party Int -> Either Text (Either (Map.Map Party Int) (Set.Set Party)) = run
+
+    -- A single approval does not satisfy any set
+    Left approvals1 <- run [s] 1 Map.empty
+    Map.toList approvals1 === [(s, 1)]
+
+    -- A second approval with the same value satisfies the matching set
+    Right satisfied2 <- run [a] 1 approvals1
+    satisfied2 === Set.fromList [s, a]
+
+    -- An approval with a different value doesn't combine with earlier approvals
+    Left approvals3 <- run [a] 2 approvals1
+    Map.lookup a approvals3 === Some 2
+
+    -- A later approval replaces the earlier approval of the same party
+    Left approvals4 <- run [s] 3 approvals1
+    Map.lookup s approvals4 === Some 3
+
+    -- Joint approval in one call
+    Right satisfied5 <- run [s, x] 1 Map.empty
+    satisfied5 === Set.fromList [s, x]
+
+    -- All satisfied sets are returned, independent of their order
+    Right satisfied6 <- run [s, a, x] 1 Map.empty
+    satisfied6 === Set.fromList [s, a, x]
+    Right satisfied7 <- run [x] 1 (Map.fromList [(s, 1), (a, 1)])
+    satisfied7 === Set.fromList [s, a, x]
+
+    -- Empty actors and non-controllers are rejected
+    assertMsg "empty actors are rejected" (isLeft $ runE [] 1 Map.empty)
+    assertMsg "non-controllers are rejected" (isLeft $ runE [other] 1 Map.empty)
+
+    -- A call that changes no approval is rejected
+    assertMsg "an identical re-approval is rejected" (isLeft $ runE [s] 1 approvals1)
+    -- A joint call is accepted as long as at least one actor's approval changes
+    Right satisfied8 <- run [s, x] 1 approvals1
+    satisfied8 === Set.fromList [s, x]
