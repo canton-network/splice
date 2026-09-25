@@ -47,6 +47,12 @@ class DsoDelegateBasedAutomationService(
     DsoDelegateBasedAutomationService
 
   def start(): Unit = {
+    registerTrigger(
+      new SvOnboardingObserverTrigger(
+        triggerContext,
+        svTaskContext,
+      )
+    )
     registerTrigger(new AdvanceOpenMiningRoundTrigger(triggerContext, svTaskContext))
     registerTrigger(new UpdateExternalPartyConfigStateTrigger(triggerContext, svTaskContext))
     registerTrigger(new CompletedSvOnboardingTrigger(triggerContext, svTaskContext))
@@ -55,6 +61,7 @@ class DsoDelegateBasedAutomationService(
         new ExecuteConfirmedActionTrigger(
           triggerContext,
           svTaskContext,
+          config,
         )
       )
     }
@@ -150,6 +157,12 @@ class DsoDelegateBasedAutomationService(
 
     registerTrigger(
       new MergeValidatorLicenseContractsTrigger(
+        triggerContext,
+        svTaskContext,
+      )
+    )
+    registerTrigger(
+      new MergeValidatorUnpermissionContractsTrigger(
         triggerContext,
         svTaskContext,
       )
@@ -259,6 +272,7 @@ object DsoDelegateBasedAutomationService extends AutomationServiceCompanion {
     aTrigger[TerminatedSubscriptionTrigger],
     aTrigger[MergeSvRewardStateContractsTrigger],
     aTrigger[MergeValidatorLicenseContractsTrigger],
+    aTrigger[MergeValidatorUnpermissionContractsTrigger],
     aTrigger[FeaturedAppActivityMarkerTrigger],
     aTrigger[AllocateUnallocatedUnclaimedActivityRecordTrigger],
     aTrigger[ExpiredUnallocatedUnclaimedActivityRecordTrigger],
@@ -270,5 +284,6 @@ object DsoDelegateBasedAutomationService extends AutomationServiceCompanion {
     aTrigger[BootstrapExternalPartyConfigStateInstructionTrigger],
     aTrigger[ProcessRewardsTrigger],
     aTrigger[ProcessRewardsDryRunTrigger],
+    aTrigger[SvOnboardingObserverTrigger],
   )
 }

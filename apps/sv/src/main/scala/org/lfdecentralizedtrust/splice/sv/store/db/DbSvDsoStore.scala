@@ -66,6 +66,8 @@ import com.digitalasset.canton.resource.DbStorage.Implicits.BuilderChain.toSQLAc
 import com.digitalasset.canton.topology.{Member, ParticipantId, PartyId, SynchronizerId}
 import com.digitalasset.canton.tracing.TraceContext
 import io.grpc.Status
+import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorrepermission.ValidatorRepermission
+import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorunpermission.ValidatorUnpermission
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
 import slick.jdbc.GetResult
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
@@ -139,6 +141,46 @@ class DbSvDsoStore(
   import multiDomainAcsStore.waitUntilAcsIngested
 
   private def acsStoreId: AcsStoreId = multiDomainAcsStore.acsStoreId
+
+  override def listValidatorRepermissions(
+      limit: Limit = defaultLimit
+  )(implicit
+      tc: TraceContext
+  ): Future[Seq[Contract[ValidatorRepermission.ContractId, ValidatorRepermission]]] =
+    for {
+      result <- storage
+        .query(
+          selectFromAcsTable(
+            DsoTables.acsTableName,
+            acsStoreId,
+            domainMigrationId,
+            ValidatorRepermission.COMPANION,
+            orderLimit = sql"""limit ${sqlLimit(limit)}""",
+          ),
+          "listValidatorRepermissions",
+        )
+    } yield result.map(contractFromRow(ValidatorRepermission.COMPANION)(_))
+
+  def listValidatorUnpermissions(
+      participantId: String,
+      limit: Limit = defaultLimit,
+  )(implicit
+      tc: TraceContext
+  ): Future[Seq[Contract[ValidatorUnpermission.ContractId, ValidatorUnpermission]]] =
+    for {
+      result <- storage
+        .query(
+          selectFromAcsTable(
+            DsoTables.acsTableName,
+            acsStoreId,
+            domainMigrationId,
+            ValidatorUnpermission.COMPANION,
+            where = sql"""participant_id = ${lengthLimited(participantId)}""",
+            orderLimit = sql"""limit ${sqlLimit(limit)}""",
+          ),
+          "listValidatorUnpermissions",
+        )
+    } yield result.map(contractFromRow(ValidatorUnpermission.COMPANION)(_))
 
   override def listExpiredAnsSubscriptions(
       now: CantonTimestamp,
@@ -1680,11 +1722,14 @@ class DbSvDsoStore(
             )}
                 and member_traffic_member = ${lengthLimited(memberId.toProtoPrimitive)}
                 and member_traffic_domain = $synchronizerId
-             """.as[Long].headOption,
+             """.as[BigDecimal].headOption,
           "getTotalPurchasedMemberTraffic",
         )
         .value
-    } yield sum.getOrElse(0L)
+    } yield sum
+      .flatMap(s => Option(s))
+      .map(s => s.min(BigDecimal(Long.MaxValue)).toLong)
+      .getOrElse(0L)
   }
 
   override def lookupVoteRequest(
