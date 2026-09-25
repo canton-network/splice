@@ -76,6 +76,7 @@ import java.time.temporal.ChronoUnit
 import java.util.{Collections, Optional}
 import scala.concurrent.Future
 import scala.jdk.CollectionConverters.*
+import scala.jdk.OptionConverters.*
 import scala.util.Random
 
 abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
@@ -208,6 +209,78 @@ abstract class SvDsoStoreTest extends StoreTestBase with HasExecutionContext {
     )(
       _.lookupFeaturedAppRightWithOffset(userParty(1))
     )
+
+    "listFeaturedAppRights" should {
+
+      // ignored until the real FeaturedAppRight DAML + regenerated dars/lock land
+      "return all active rights including populated opsParties" ignore {
+        val withOps =
+          featuredAppRight(
+            providerParty(1),
+            opsParties = Some(Seq(providerParty(3).toProtoPrimitive)),
+          )
+        val withNone = featuredAppRight(providerParty(2))
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(dsoRules())(store.multiDomainAcsStore)
+          _ <- MonadUtil.sequentialTraverse(Seq(withOps, withNone))(
+            dummyDomain.create(_)(store.multiDomainAcsStore)
+          )
+          result <- store.listFeaturedAppRights()
+        } yield {
+          result should contain theSameElementsAs Seq(withOps, withNone).map(
+            AssignedContract(_, dummyDomain)
+          )
+          result
+            .find(_.payload.provider == providerParty(1).toProtoPrimitive)
+            .flatMap(_.payload.opsParties.toScala.map(_.asScala.toSeq)) should be(
+            Some(Seq(providerParty(3).toProtoPrimitive))
+          )
+        }
+      }
+
+      "exclude archived rights" ignore {
+        val active = featuredAppRight(providerParty(1))
+        val archived = featuredAppRight(providerParty(2))
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(dsoRules())(store.multiDomainAcsStore)
+          _ <- MonadUtil.sequentialTraverse(Seq(active, archived))(
+            dummyDomain.create(_)(store.multiDomainAcsStore)
+          )
+          _ <- dummyDomain.archive(archived)(store.multiDomainAcsStore)
+          result <- store.listFeaturedAppRights()
+        } yield {
+          result should contain theSameElementsAs Seq(
+            AssignedContract(active, dummyDomain)
+          )
+        }
+      }
+
+      "respect the limit" ignore {
+        val rights = (1 to 5).map(n => featuredAppRight(providerParty(n)))
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(dsoRules())(store.multiDomainAcsStore)
+          _ <- MonadUtil.sequentialTraverse(rights)(
+            dummyDomain.create(_)(store.multiDomainAcsStore)
+          )
+          result <- store.listFeaturedAppRights(PageLimit.tryCreate(3))
+        } yield {
+          result should have size 3
+        }
+      }
+
+      "return no rights when none exist" ignore {
+        for {
+          store <- mkStore()
+          _ <- dummyDomain.create(dsoRules())(store.multiDomainAcsStore)
+          result <- store.listFeaturedAppRights()
+        } yield {
+          result should be(empty)
+        }
+      }
+    }
 
     "getOpenMiningRoundTriple" should {
 
