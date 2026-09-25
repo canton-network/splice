@@ -6,6 +6,8 @@ import * as grafana from '@pulumiverse/grafana';
 import * as fs from 'fs';
 import * as yaml from 'js-yaml';
 import {
+  CLOUD_ARMOR_POLICY_NAME,
+  cloudArmorRulePriorityRegex,
   CLUSTER_BASENAME,
   CLUSTER_HOSTNAME,
   CLUSTER_NAME,
@@ -47,7 +49,13 @@ import {
   slackToken,
   supportTeamEmail,
 } from './alertings';
-import { monitoringConfig, prometheusConfig } from './config';
+import {
+  type CloudArmorAlertConfig,
+  cloudArmorConfig,
+  monitoringConfig,
+  prometheusConfig,
+} from './config';
+import { createGrafanaGcpDatasources, grafanaGcpLoggingPlugin } from './gcpGrafanaDatasources';
 import { createGrafanaDashboards } from './grafana-dashboards';
 
 function istioVirtualService(
@@ -313,6 +321,7 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
         grafana: {
           fullnameOverride: 'grafana',
           envFromSecret: postgres.secretName,
+          plugins: [grafanaGcpLoggingPlugin],
           ingress: {
             enabled: false,
           },
@@ -570,6 +579,7 @@ export function configureObservability(namespace: ExactNamespace): pulumi.Resour
   // In the observability cluster, we install a version of the dashboards with a filter
   // that prevents running expensive queries when the dashboard just loads
   createGrafanaDashboards(namespaceName);
+  createGrafanaGcpDatasources(namespaceName);
   // enable the slack alerts only for "prod" clusters
   const slackAccessToken = enableAlerts ? slackToken() : 'None';
   const slackNotificationChannel = (enableAlerts && slackAlertNotificationChannel) || 'None';
@@ -823,6 +833,63 @@ function substituteSpliceRateLimitsAlerts(alert: string): string {
       config.rejectionCountThreshold.toString()
     )
     .replaceAll('$SPLICE_RATE_LIMITS_FILTER', filter);
+}
+
+function substituteCloudArmorAlerts(alerts: string): string {
+  const { deniedRequests, wafRejections, throttleRejections } =
+    monitoringConfig.alerting.alerts.cloudArmor;
+  const hasPreviewOnlyRules =
+    cloudArmorConfig.allRulesPreviewOnly ||
+    (cloudArmorConfig.wafRules.enabled && cloudArmorConfig.wafRules.previewOnly);
+  // Rules in preview mode do not actually deny anything, so we also alert on the requests
+  // they would have denied. The rule specific alerts rely on the log based metrics, as the
+  // Cloud Armor metrics only expose whether a request was blocked, not by which rule.
+  // Each rule group has its own priority prefix, so the rule specific alerts just match
+  // on it. The public endpoint rules only ever deny when throttling, so any rejection
+  // with that prefix is a throttle rejection.
+  const enabledRules: { [uid: string]: boolean } = {
+    'cloud-armor-denied': true,
+    'cloud-armor-previewed-denied': hasPreviewOnlyRules,
+    'cloud-armor-waf-rejections':
+      cloudArmorConfig.logging.enabled && cloudArmorConfig.wafRules.enabled,
+    'cloud-armor-throttle-rejections': cloudArmorConfig.logging.enabled,
+  };
+  const windowSubstitutions = (name: string, config: CloudArmorAlertConfig) => (s: string) =>
+    s
+      .replaceAll(`$CLOUD_ARMOR_${name}_THRESHOLD`, config.threshold.toString())
+      .replaceAll(`$CLOUD_ARMOR_${name}_WINDOW`, `${config.alignmentPeriodSeconds}s`)
+      .replaceAll(`$CLOUD_ARMOR_${name}_FOR`, `${config.durationSeconds}s`)
+      // leave some room for the ingestion delay of the GCP metrics
+      .replaceAll(
+        `$CLOUD_ARMOR_${name}_RANGE_SECONDS`,
+        (config.alignmentPeriodSeconds + 600).toString()
+      );
+  const substituted = [
+    windowSubstitutions('DENIED', deniedRequests),
+    windowSubstitutions('WAF', wafRejections),
+    windowSubstitutions('THROTTLE', throttleRejections),
+  ].reduce(
+    (s, substitute) => substitute(s),
+    alerts
+      .replaceAll('$CLOUD_ARMOR_WAF_RULE_PRIORITY_REGEX', cloudArmorRulePriorityRegex('waf'))
+      .replaceAll(
+        '$CLOUD_ARMOR_THROTTLE_RULE_PRIORITY_REGEX',
+        cloudArmorRulePriorityRegex('publicEndpoints')
+      )
+      .replaceAll('$CLOUD_ARMOR_POLICY_NAME', CLOUD_ARMOR_POLICY_NAME)
+      .replaceAll('$CLUSTER_BASENAME', CLUSTER_BASENAME)
+      .replaceAll('$GCP_PROJECT', GCP_PROJECT)
+  );
+  const content = yaml.load(substituted) as GrafanaRuleFile;
+  content.groups.forEach(group => {
+    group.rules = group.rules.filter(rule => {
+      if (!(rule.uid in enabledRules)) {
+        throw new Error(`Unknown Cloud Armor alert rule ${rule.uid}`);
+      }
+      return enabledRules[rule.uid];
+    });
+  });
+  return yaml.dump(content, { lineWidth: -1 });
 }
 
 // AmuletMetrics was previously using owner.toString instead of owner.toProtoPrimitive
@@ -1140,6 +1207,13 @@ function createGrafanaAlerting(namespace: Input<string>) {
             'splice-rate-limiting_alerts.yaml': substituteSpliceRateLimitsAlerts(
               readGrafanaAlertingFile('splice-rate-limiting_alerts.yaml')
             ),
+            ...(cloudArmorConfig.enabled
+              ? {
+                  'cloud-armor_alerts.yaml': substituteCloudArmorAlerts(
+                    readGrafanaAlertingFile('cloud-armor_alerts.yaml')
+                  ),
+                }
+              : {}),
           },
         }).map(([k, v]) => [k, defaultAlertSubstitutions(v)])
       ),
@@ -1201,10 +1275,14 @@ function readGrafanaAlertingFile(file: string) {
     `${SPLICE_ROOT}/cluster/pulumi/observability/grafana-alerting/${file}`,
     'utf-8'
   );
-  // Ignore no data or data source error if the cluster is reset periodically
+  return ignoreNoDataOrDataSourceErrorIfNeeded(fileContent);
+}
+
+// Ignore no data or data source error if the cluster is reset periodically
+function ignoreNoDataOrDataSourceErrorIfNeeded(alerts: string): string {
   return shouldIgnoreNoDataOrDataSourceError
-    ? fileContent.replace(/(execErrState|noDataState): .+/g, '$1: OK')
-    : fileContent;
+    ? alerts.replace(/(execErrState|noDataState): .+/g, '$1: OK')
+    : alerts;
 }
 
 type ReportMatchOperator = '=~' | '!~';
@@ -1271,10 +1349,7 @@ function readAndSetAlertRulesGrafanaAlertingFile(file: string, rules: AlertRules
   });
   const newFileContent = yaml.dump(content);
 
-  // Ignore no data or data source error if the cluster is reset periodically
-  return shouldIgnoreNoDataOrDataSourceError
-    ? newFileContent.replace(/(execErrState|noDataState): .+/g, '$1: OK')
-    : newFileContent;
+  return ignoreNoDataOrDataSourceErrorIfNeeded(newFileContent);
 }
 
 function readAlertingManagerFile(file: string) {

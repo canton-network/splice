@@ -62,14 +62,36 @@ export const CLUSTER_NAME = `cn-${CLUSTER_BASENAME}net`;
 // exactly the policy of this cluster.
 export const CLOUD_ARMOR_POLICY_NAME = `waf-whitelist-throttle-ban-${CLUSTER_BASENAME}`;
 
-// Priority range reserved for the preconfigured (OWASP CRS based) WAF rules of the
-// Cloud Armor policy (see cluster/pulumi/infra/src/cloudArmor.ts). Shared so that alerts
-// can tell a WAF rule rejection apart from an IP whitelist, throttle or default deny
-// rejection: the request logs only carry the priority of the rule that matched, not its
-// name.
-export const CLOUD_ARMOR_WAF_RULE_MIN_PRIORITY = 10;
-// Exclusive upper bound: the IP whitelist rules start at this priority.
-export const CLOUD_ARMOR_WAF_RULE_MAX_PRIORITY = 1000010;
+// Every group of rules of the Cloud Armor policy
+// owns a block of 9 digit priorities sharing a unique leading digit. The request logs
+// only carry the priority of the rule that matched, not its name, so this lets alerts
+// and dashboards tell the groups apart by priority prefix alone, e.g.
+// `rule_priority=~"1[0-9]{8}"` for the WAF rules. The default deny rule and its
+// preview-only twin keep the two highest (10 digit) priorities.
+export const CLOUD_ARMOR_RULE_GROUP_PREFIXES = {
+  // preconfigured (OWASP CRS based) WAF rules
+  waf: 1,
+  // allow rules for the whitelisted source IPs
+  ipWhitelist: 2,
+  // allow / per source IP throttle rules of the public endpoints
+  publicEndpoints: 3,
+} as const;
+export type CloudArmorRuleGroup = keyof typeof CLOUD_ARMOR_RULE_GROUP_PREFIXES;
+// Number of priorities available to each rule group.
+export const CLOUD_ARMOR_RULE_GROUP_SIZE = 100_000_000;
+
+export function cloudArmorRulePriority(group: CloudArmorRuleGroup, offset: number): number {
+  if (!Number.isInteger(offset) || offset < 0 || offset >= CLOUD_ARMOR_RULE_GROUP_SIZE) {
+    throw new Error(
+      `Cloud Armor ${group} rule priority offset ${offset} is outside [0, ${CLOUD_ARMOR_RULE_GROUP_SIZE})`
+    );
+  }
+  return CLOUD_ARMOR_RULE_GROUP_PREFIXES[group] * CLOUD_ARMOR_RULE_GROUP_SIZE + offset;
+}
+
+export function cloudArmorRulePriorityRegex(group: CloudArmorRuleGroup): string {
+  return `${CLOUD_ARMOR_RULE_GROUP_PREFIXES[group]}[0-9]{8}`;
+}
 
 export const sequencerTokenExpirationTime: string | undefined = config.optionalEnv(
   'SEQUENCER_TOKEN_EXPIRATION_TIME'

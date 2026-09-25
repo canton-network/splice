@@ -5,8 +5,8 @@ import * as pulumi from '@pulumi/pulumi';
 import * as _ from 'lodash';
 import {
   CLOUD_ARMOR_POLICY_NAME,
-  CLOUD_ARMOR_WAF_RULE_MAX_PRIORITY,
-  CLOUD_ARMOR_WAF_RULE_MIN_PRIORITY,
+  CLOUD_ARMOR_RULE_GROUP_SIZE,
+  cloudArmorRulePriority,
   CLUSTER_BASENAME,
   CLUSTER_HOSTNAME,
 } from '@canton-network/splice-pulumi-common';
@@ -23,13 +23,10 @@ import {
 } from './cloudArmorRules';
 import { loadIPRanges } from './whitelisting/ipRanges';
 
-// Rule number ranges
-const WAF_RULE_MIN = CLOUD_ARMOR_WAF_RULE_MIN_PRIORITY;
-const IP_WHITELIST_RULE_MIN = CLOUD_ARMOR_WAF_RULE_MAX_PRIORITY;
-const THROTTLE_BAN_RULE_MIN = 100000010;
-const THROTTLE_BAN_RULE_MAX = 200000010;
 const DEFAULT_DENY_RULE_NUMBER = 2147483647;
 const PREVIEW_DENY_RULE_NUMBER = DEFAULT_DENY_RULE_NUMBER - 1;
+// Gap between the priorities of consecutive rules, leaving room to
+// insert rules in between.
 const RULE_SPACING = 100;
 
 export type CloudArmorConfig = config.CloudArmorConfig;
@@ -145,10 +142,7 @@ function addWafRules(
         })
       : undefined;
   groups.forEach((group, i) => {
-    const priority = WAF_RULE_MIN + i * RULE_SPACING;
-    if (priority >= IP_WHITELIST_RULE_MIN) {
-      throw new Error(`WAF rule priority ${priority} overlaps the IP whitelist priority range`);
-    }
+    const priority = cloudArmorRulePriority('waf', i * RULE_SPACING);
     new PolicyRule(
       group.name,
       {
@@ -188,7 +182,7 @@ function addIpWhitelistRules(
 ): void {
   // only the internal and SV whitelists, not the full set of external ranges
   loadIPRanges(true).apply(ranges => {
-    const chunks = ipWhitelistRuleChunks(ranges, THROTTLE_BAN_RULE_MIN - IP_WHITELIST_RULE_MIN);
+    const chunks = ipWhitelistRuleChunks(ranges, CLOUD_ARMOR_RULE_GROUP_SIZE);
 
     return chunks.map(
       (chunk, i) =>
@@ -198,7 +192,7 @@ function addIpWhitelistRules(
             securityPolicy: securityPolicy.name,
             region: securityPolicy.region,
             description: `Allow whitelisted source IPs (${i + 1} of ${chunks.length})`,
-            priority: IP_WHITELIST_RULE_MIN + i,
+            priority: cloudArmorRulePriority('ipWhitelist', i),
             preview,
             action: 'allow',
             match: {
@@ -230,14 +224,9 @@ function addThrottleAndBanRules(
   preview: boolean,
   opts: pulumi.ResourceOptions
 ): void {
-  _.sortBy(Object.entries(throttles), e => e[0]).reduce(
-    (priority, [confEntryHead, singleServiceThrottle]) => {
-      if (priority >= THROTTLE_BAN_RULE_MAX) {
-        throw new Error(
-          `Throttle rule priority ${priority} exceeds maximum ${THROTTLE_BAN_RULE_MAX}`
-        );
-      }
-
+  _.sortBy(Object.entries(throttles), e => e[0]).forEach(
+    ([confEntryHead, singleServiceThrottle], i) => {
+      const priority = cloudArmorRulePriority('publicEndpoints', i * RULE_SPACING);
       const {
         hostname,
         hostPrefixRegex,
@@ -304,9 +293,7 @@ function addThrottleAndBanRules(
           opts
         );
       }
-      return priority + RULE_SPACING;
-    },
-    THROTTLE_BAN_RULE_MIN
+    }
   );
 }
 
