@@ -464,7 +464,10 @@ class SV1Initializer(
           mediatorDeduplicationTimeout =
             NonNegativeFiniteDuration.fromConfig(config.mediatorDeduplicationTimeout),
           onboardingRestriction =
-            if (sv1Config.initialSvOperationsSwitchOverTimes.contains("permissionedSynchronizer")) {
+            if (
+              sv1Config.initialSvOperationsSwitchOverTimes
+                .exists(_.contains("permissionedSynchronizer"))
+            ) {
               logger.info("Using RestrictedOpen onboarding restriction for the synchronizer")
               RestrictedOpen
             } else {
@@ -488,7 +491,8 @@ class SV1Initializer(
                 )
               sv1PermissionTx <-
                 if (
-                  sv1Config.initialSvOperationsSwitchOverTimes.contains("permissionedSynchronizer")
+                  sv1Config.initialSvOperationsSwitchOverTimes
+                    .exists(_.contains("permissionedSynchronizer"))
                 ) {
                   logger.debug(
                     "Proposing ParticipantSynchronizerPermission topology transaction for self"
