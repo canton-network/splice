@@ -41,7 +41,7 @@ import Splice.AmuletConfig
   , defaultTransferPreapprovalFee, getDevelopmentFundManagerBlacklist, getExternalPartyConfigStateTickDuration
   , getTransferPreapprovalBaseDuration, useTrafficBasedAppRewards
   , RewardVersion(..), useFeaturedAppMarkers
-  , useCcBurnValidatorRewards, useTrafficBasedValidatorRewards
+  , useAmuletBurnValidatorRewards, useTrafficBasedValidatorRewards
   )
 import qualified Splice.AmuletConfig as Unit
 import Splice.ExternalPartyConfigState
@@ -2408,10 +2408,10 @@ splitAndBurn eventLogCid sender amount inputs context dso developmentFundManager
   -- record event
   logAmuletBurn dso eventLogCid sender amount usage (toInterfaceContractId amuletCid)
   -- Gate legacy ValidatorRewardCoupon creation: skipped once the round is
-  -- configured for the CIP-0120 traffic-based scheme (DSO-signed batches
-  -- produce ValidatorRewardCouponV2 instead).
+  -- configured for the CIP-0120 traffic-based scheme (batches signed by
+  -- the DSO party produce ValidatorRewardCouponV2 instead).
   contextMiningRound <- fetchPublicReferenceData (ForDso dso) context.openMiningRound (OpenMiningRound_Fetch dso)
-  when (useCcBurnValidatorRewards ((.mintingVersion) <$> contextMiningRound.validatorRewardConfig)) $
+  when (useAmuletBurnValidatorRewards ((.mintingVersion) <$> contextMiningRound.validatorRewardConfig)) $
     void $ create ValidatorRewardCoupon with
       dso
       round = transferResult.round

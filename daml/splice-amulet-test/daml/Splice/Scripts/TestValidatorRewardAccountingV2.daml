@@ -221,8 +221,8 @@ test_ClaimExpiredValidatorRewardsV2_rejects_wrong_observer_set = do
 
 
 -- End-to-end coverage of the CIP-0120 validator flow: round-close creates
--- a CalculateValidatorRewardsV2; the DSO starts processing with a root
--- batch hash; recursive ProcessValidatorRewardsV2_ProcessBatch calls
+-- a CalculateValidatorRewardsV2; the DSO party starts processing with a
+-- root batch hash; recursive ProcessValidatorRewardsV2_ProcessBatch calls
 -- unfold the Merkle tree and create coupons; hidden coupons are
 -- unhidden once nodes vet; each coupon mints an amulet.
 
@@ -231,7 +231,7 @@ create_and_process_validator_reward_batches :
 create_and_process_validator_reward_batches dryRun = do
   app <- setupAppWithConfig $ defaultAmuletConfig with
     validatorRewardConfig = Some $ ValidatorRewardConfig with
-      mintingVersion = if dryRun then ValidatorRewardVersion_CcBurn else ValidatorRewardVersion_TrafficBased
+      mintingVersion = if dryRun then ValidatorRewardVersion_AmuletBurn else ValidatorRewardVersion_TrafficBased
       dryRunVersion = if dryRun then Some ValidatorRewardVersion_TrafficBased else None
       batchSize = 100
       rewardCouponTimeToLive = hours 36
