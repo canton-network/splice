@@ -10,18 +10,39 @@ import com.digitalasset.canton.topology.{ForceFlag, ForceFlags, ParticipantId, P
 import com.digitalasset.daml.lf.data.Ref.{PackageId, PackageVersion}
 
 import java.time.Duration
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{FeaturedAppKind, FeaturedAppRight}
-import org.lfdecentralizedtrust.splice.codegen.java.splice.api.rewardassignmentv1.{RewardBeneficiary, RewardCoupon, RewardCoupon_AssignBeneficiaries}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
+  FeaturedAppKind,
+  FeaturedAppRight,
+}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.api.rewardassignmentv1.{
+  RewardBeneficiary,
+  RewardCoupon,
+  RewardCoupon_AssignBeneficiaries,
+}
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.sv.config.InitialRewardConfig
-import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{ConfigurableApp, updateAutomationConfig}
+import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
+  ConfigurableApp,
+  updateAutomationConfig,
+}
 import org.lfdecentralizedtrust.splice.environment.{DarResource, DarResources, RetryFor}
 import org.lfdecentralizedtrust.splice.environment.SpliceMetrics.MetricsPrefix
 import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.TopologyTransactionType.AuthorizedState
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
-import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{IntegrationTestWithIsolatedEnvironment, SpliceTestConsoleEnvironment}
-import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{ExpireRewardCouponV2Trigger, UnhideRewardCouponV2Trigger}
-import org.lfdecentralizedtrust.splice.util.{ChoiceContextWithDisclosures, TimeTestUtil, UploadablePackage, WalletTestUtil}
+import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
+  IntegrationTestWithIsolatedEnvironment,
+  SpliceTestConsoleEnvironment,
+}
+import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
+  ExpireRewardCouponV2Trigger,
+  UnhideRewardCouponV2Trigger,
+}
+import org.lfdecentralizedtrust.splice.util.{
+  ChoiceContextWithDisclosures,
+  TimeTestUtil,
+  UploadablePackage,
+  WalletTestUtil,
+}
 import org.lfdecentralizedtrust.splice.wallet.automation.AcceptedTransferOfferTrigger
 
 import scala.concurrent.duration.DurationInt

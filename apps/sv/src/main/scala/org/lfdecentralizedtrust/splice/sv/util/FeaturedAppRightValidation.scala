@@ -6,14 +6,16 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.FeaturedAppRig
 import org.lfdecentralizedtrust.splice.util.AssignedContract
 
 object FeaturedAppRightValidation {
-  private def opsOf(c: AssignedContract[FeaturedAppRight.ContractId, FeaturedAppRight]): Set[String] =
+  private def opsOf(
+      c: AssignedContract[FeaturedAppRight.ContractId, FeaturedAppRight]
+  ): Set[String] =
     c.payload.opsParties.toScala.map(_.asScala.toSet).getOrElse(Set.empty)
 
   def validateGrant(
-   provider: String,
-   opsParties: Option[Seq[String]],
-   featuredAppRights: Seq[AssignedContract[FeaturedAppRight.ContractId, FeaturedAppRight]],
- ): Either[String, Unit] = {
+      provider: String,
+      opsParties: Option[Seq[String]],
+      featuredAppRights: Seq[AssignedContract[FeaturedAppRight.ContractId, FeaturedAppRight]],
+  ): Either[String, Unit] = {
     val proposed = opsParties.getOrElse(Seq.empty).toSet
     val existingOps = featuredAppRights.flatMap(opsOf).toSet
     val dupProvider = featuredAppRights.exists(_.payload.provider == provider)
@@ -28,7 +30,7 @@ object FeaturedAppRightValidation {
       id: FeaturedAppRight.ContractId,
       newOpsParties: Option[Seq[String]],
       featuredAppRights: Seq[AssignedContract[FeaturedAppRight.ContractId, FeaturedAppRight]],
-    ): Either[String, Unit] = {
+  ): Either[String, Unit] = {
     val proposed = newOpsParties.getOrElse(Seq.empty).toSet
     val others = featuredAppRights.filterNot(_.contractId == id)
     val existingOps = others.flatMap(opsOf).toSet
