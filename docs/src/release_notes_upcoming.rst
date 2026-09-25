@@ -34,6 +34,11 @@ release-notes:: Upcoming
 
     - Scan App
 
+        - Removed the v0 and v1 ``/state/acs`` and ``/holdings/state`` endpoints that were already deprecated.
+          Any usages can be replaced with their V2 counterparts.
+          The only change is the type of the pagination token (``after`` in request, ``next_page_token`` in response),
+          which is now a String instead of a number.
+
         - Added a new public ``/v0/events/latest-record-time`` endpoint that returns the latest
           record time for which ``/v0/events`` will be able to return events.
 
