@@ -37,7 +37,7 @@ template OpenMiningRound
     validatorRewardConfig : Optional ValidatorRewardConfig
       -- ^ Configuration for off-ledger validator reward calculation for
       -- this round. If None, validator rewards use the pre-CIP-0120
-      -- CC-burn-triggered mechanism.
+      -- amulet-burn-triggered mechanism.
   where
     signatory dso
     ensure isDefinedRound round
