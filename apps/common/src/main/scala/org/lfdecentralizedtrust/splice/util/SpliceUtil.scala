@@ -398,8 +398,6 @@ object SpliceUtil {
         .map(t => new RelTime(TimeUnit.NANOSECONDS.toMicros(t.duration.toNanos)))
         .toJava,
       initialRewardConfig.toJava,
-      // validatorRewardConfig
-      Optional.empty(),
       // transferPreapprovalBaseDuration
       Optional.empty(),
       // developmentFundManagerBlacklist
@@ -407,6 +405,8 @@ object SpliceUtil {
       // minDevelopmentFundMintingDelay
       Optional.empty(),
       // amuletSwitchOverTimes
+      Optional.empty(),
+      // validatorRewardConfig
       Optional.empty(),
     )
 
