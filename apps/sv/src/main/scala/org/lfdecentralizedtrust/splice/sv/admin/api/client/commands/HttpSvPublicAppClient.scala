@@ -15,8 +15,10 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.svonboarding.{
   SvOnboardingConfirmed,
   SvOnboardingRequest,
 }
+import org.lfdecentralizedtrust.splice.admin.api.client.commands.HttpCommand
 import org.lfdecentralizedtrust.splice.environment.RetryProvider.QuietNonRetryableException
 import org.lfdecentralizedtrust.splice.http.v0.{definitions, sv_public as http}
+import org.lfdecentralizedtrust.splice.sv.admin.api.client.SvStreamClient
 import org.lfdecentralizedtrust.splice.sv.http.SvHttpClient.BaseCommandPublic
 import org.lfdecentralizedtrust.splice.util.{Codec, TemplateJsonDecoder}
 
@@ -186,20 +188,25 @@ object HttpSvPublicAppClient {
   ) extends QuietNonRetryableException(
         s"Party migration failed as required proposals were not found. Found base mappings: PartyToParticipant($partyToParticipantMappingSerial)"
       )
+
   case class OnboardSvPartyMigrationAuthorizeResponse(
-      acsSnapshot: ByteString
+      acsSnapshot: Seq[ByteString]
   )
 
   case class OnboardSvPartyMigrationAuthorize(
       participantId: ParticipantId,
       candidate: PartyId,
-  ) extends BaseCommandPublic[
-        http.OnboardSvPartyMigrationAuthorizeResponse,
+  ) extends HttpCommand[
+        SvStreamClient.OnboardSvPartyMigrationAuthorizeResponse,
         Either[
           OnboardSvPartyMigrationAuthorizeProposalNotFound,
           OnboardSvPartyMigrationAuthorizeResponse,
         ],
+        SvStreamClient,
       ] {
+    override val createGenClientFn = (fn, host, ec, mat) =>
+      SvStreamClient.httpClient(fn, host)(ec, mat)
+
     override val nonErrorStatusCodes = Set(StatusCodes.BadRequest)
 
     override def submitRequest(
@@ -208,7 +215,7 @@ object HttpSvPublicAppClient {
     ): EitherT[Future, Either[
       Throwable,
       HttpResponse,
-    ], http.OnboardSvPartyMigrationAuthorizeResponse] =
+    ], SvStreamClient.OnboardSvPartyMigrationAuthorizeResponse] =
       client.onboardSvPartyMigrationAuthorize(
         body = definitions.OnboardSvPartyMigrationAuthorizeRequest(
           candidate.toProtoPrimitive
@@ -219,14 +226,14 @@ object HttpSvPublicAppClient {
     override def handleOk()(implicit
         decoder: TemplateJsonDecoder
     ) = {
-      case http.OnboardSvPartyMigrationAuthorizeResponse.BadRequest(
+      case SvStreamClient.OnboardSvPartyMigrationAuthorizeResponse.BadRequest(
             definitions.OnboardSvPartyMigrationAuthorizeErrorResponse.members
               .AcceptedStateNotFoundErrorResponse(
                 response
               )
           ) =>
         Left(response.acceptedStateNotFound.error)
-      case http.OnboardSvPartyMigrationAuthorizeResponse.BadRequest(
+      case SvStreamClient.OnboardSvPartyMigrationAuthorizeResponse.BadRequest(
             definitions.OnboardSvPartyMigrationAuthorizeErrorResponse.members
               .ProposalNotFoundErrorResponse(
                 response
@@ -239,15 +246,11 @@ object HttpSvPublicAppClient {
             )
           )
         )
-      case http.OnboardSvPartyMigrationAuthorizeResponse.OK(
-            definitions.OnboardSvPartyMigrationAuthorizeResponse(
-              encodedAcsSnapshot
-            )
-          ) =>
+      case SvStreamClient.OnboardSvPartyMigrationAuthorizeResponse.OK(acsSnapshotChunks) =>
         Right(
           Right(
             OnboardSvPartyMigrationAuthorizeResponse(
-              ByteString.copyFrom(Base64.getDecoder.decode(encodedAcsSnapshot))
+              acsSnapshotChunks.map(chunk => ByteString.copyFrom(chunk.asByteBuffer))
             )
           )
         )
