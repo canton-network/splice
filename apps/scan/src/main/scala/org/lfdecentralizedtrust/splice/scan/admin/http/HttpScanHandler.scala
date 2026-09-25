@@ -106,9 +106,7 @@ import org.lfdecentralizedtrust.splice.scan.store.{
 }
 import org.lfdecentralizedtrust.splice.scan.store.AppActivityStore.RoundIngestionStatus
 import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorageReader
-import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{
-  QueryAcsSnapshotResult,
-}
+import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{QueryAcsSnapshotResult}
 import org.lfdecentralizedtrust.splice.scan.store.bulk.AcsSnapshotBulkStorage.AcsSnapshotObjects
 import org.lfdecentralizedtrust.splice.scan.store.bulk.UpdateHistoryBulkStorage.UpdateHistoryObjectsResponse
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
