@@ -17,6 +17,9 @@ import com.google.protobuf.ByteString
 import io.grpc.{Status, StatusRuntimeException}
 import io.grpc.Status.Code
 import io.opentelemetry.api.trace.Tracer
+import org.apache.pekko.http.scaladsl.model.{ContentTypes, HttpEntity}
+import org.apache.pekko.stream.scaladsl.Source
+import org.apache.pekko.util.ByteString as PekkoByteString
 import org.lfdecentralizedtrust.splice.admin.http.HttpErrorHandler
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules
 import org.lfdecentralizedtrust.splice.codegen.java.splice.svonboarding.SvOnboardingRequest
@@ -26,8 +29,13 @@ import org.lfdecentralizedtrust.splice.environment.*
 import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.TopologyResult
 import org.lfdecentralizedtrust.splice.environment.TopologyAdminConnection.TopologyTransactionType.AuthorizedState
 import org.lfdecentralizedtrust.splice.http.HttpVotesHandler
-import org.lfdecentralizedtrust.splice.http.v0.{definitions, sv_public as v0}
+import org.lfdecentralizedtrust.splice.http.v0.{
+  definitions,
+  sv_public as v0,
+  sv_public_stream as v0Stream,
+}
 import org.lfdecentralizedtrust.splice.http.v0.sv_public.SvPublicResource as r0
+import org.lfdecentralizedtrust.splice.http.v0.sv_public_stream.SvPublicStreamResource as rStream
 import org.lfdecentralizedtrust.splice.store.{ActiveVotesStore, AppStoreWithIngestion}
 import org.lfdecentralizedtrust.splice.store.AppStoreWithIngestion.SpliceLedgerConnectionPriority
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.QueryResult
@@ -61,6 +69,7 @@ class HttpSvPublicHandler(
     ec: ExecutionContext,
     protected val tracer: Tracer,
 ) extends v0.SvPublicHandler[TraceContext]
+    with v0Stream.SvPublicStreamHandler[TraceContext]
     with Spanning
     with NamedLogging
     with HttpVotesHandler {
@@ -428,12 +437,12 @@ class HttpSvPublicHandler(
     * Protection: Endpoint is protected by IP allowlisting
     */
   override def onboardSvPartyMigrationAuthorize(
-      respond: r0.OnboardSvPartyMigrationAuthorizeResponse.type
+      respond: rStream.OnboardSvPartyMigrationAuthorizeResponse.type
   )(
       body: definitions.OnboardSvPartyMigrationAuthorizeRequest
   )(
       extracted: TraceContext
-  ): Future[r0.OnboardSvPartyMigrationAuthorizeResponse] = {
+  ): Future[rStream.OnboardSvPartyMigrationAuthorizeResponse] = {
     implicit val traceContext: TraceContext = extracted
     withSpan(s"$workflowId.onboardSvPartyMigrationAuthorize") { _ => _ =>
       (for {
@@ -470,7 +479,7 @@ class HttpSvPublicHandler(
 
   private def authorizeParticipantForHostingDsoParty(
       participantId: ParticipantId
-  )(implicit tc: TraceContext): Future[r0.OnboardSvPartyMigrationAuthorizeResponse] = {
+  )(implicit tc: TraceContext): Future[rStream.OnboardSvPartyMigrationAuthorizeResponse] = {
     dsoPartyMigration
       .authorizeParticipantForHostingDsoParty(participantId)
       .fold(
@@ -479,7 +488,7 @@ class HttpSvPublicHandler(
                 .RequiredProposalNotFound(
                   partyToParticipantSerial
                 ) =>
-            r0.OnboardSvPartyMigrationAuthorizeResponseBadRequest(
+            rStream.OnboardSvPartyMigrationAuthorizeResponseBadRequest(
               definitions.ProposalNotFoundErrorResponse(
                 proposalNotFound = definitions.ProposalNotFoundErrorResponse.ProposalNotFound(
                   BigInt(partyToParticipantSerial.value)
@@ -487,12 +496,11 @@ class HttpSvPublicHandler(
               )
             )
         },
-        { acsBytes =>
-          // TODO(M3-57) consider if a more space-efficient encoding is necessary
-          val encoded = Base64.getEncoder.encodeToString(acsBytes.toByteArray)
-          r0.OnboardSvPartyMigrationAuthorizeResponseOK(
-            definitions.OnboardSvPartyMigrationAuthorizeResponse(
-              encoded
+        { acsChunks =>
+          rStream.OnboardSvPartyMigrationAuthorizeResponseOK(
+            HttpEntity(
+              ContentTypes.`application/octet-stream`,
+              Source(acsChunks.map(chunk => PekkoByteString(chunk.asReadOnlyByteBuffer()))),
             )
           )
         },
