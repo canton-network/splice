@@ -206,8 +206,8 @@ class DbValidatorStore(
                 acsStoreId,
                 domainMigrationId,
                 TransferPreapproval.COMPANION,
-                additionalWhere =
-                  sql"""and contract_expires_at < ${now.plus(renewalDuration.asJava)}
+                additionalWhere = sql"""and contract_expires_at > $now
+                    and contract_expires_at < ${now.plus(renewalDuration.asJava)}
               """,
               ),
               "listExpiringTransferPreapprovals",
