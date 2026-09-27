@@ -405,7 +405,6 @@ case class SvAppBackendConfig(
     // validator user. Additionally, sv1 app is expected to create that user,
     // so it needs to know the expected user name.
     validatorLedgerApiUser: String,
-    permissionedSynchronizer: Boolean = false,
     auth: AuthConfig,
     participantClient: SvParticipantClientConfig,
     override val automation: AutomationConfig = AutomationConfig(),

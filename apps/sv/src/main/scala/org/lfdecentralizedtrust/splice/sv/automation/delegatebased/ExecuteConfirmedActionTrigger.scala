@@ -56,7 +56,6 @@ import scala.jdk.CollectionConverters.*
 class ExecuteConfirmedActionTrigger(
     override protected val context: TriggerContext,
     override protected val svTaskContext: SvTaskBasedTrigger.Context,
-    config: org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig,
 )(implicit
     override val ec: ExecutionContext,
     mat: Materializer,
@@ -261,13 +260,13 @@ class ExecuteConfirmedActionTrigger(
               instructionO <- store.lookupBootstrapExternalPartyConfigStateInstruction()
               configStateExists <- store.existsExternalPartyConfigStateWithOffset()
             } yield instructionO.isDefined || configStateExists.value
-          case grantAction: SRARC_GrantValidatorLicense if config.permissionedSynchronizer =>
+          case grantAction: SRARC_GrantValidatorLicense =>
             store.multiDomainAcsStore
               .lookupContractById(ValidatorLicenseRequest.COMPANION)(
                 grantAction.dsoRules_GrantValidatorLicenseValue.validatorLicenseRequestCid
               )
               .map(_.isEmpty)
-          case rejectAction: SRARC_RejectValidatorLicense if config.permissionedSynchronizer =>
+          case rejectAction: SRARC_RejectValidatorLicense =>
             store.multiDomainAcsStore
               .lookupContractById(ValidatorLicenseRequest.COMPANION)(
                 rejectAction.dsoRules_RejectValidatorLicenseValue.validatorLicenseRequestCid
