@@ -195,8 +195,6 @@ class JoiningNodeInitializer(
 
     for {
       dsoPartyId <- getDsoPartyId(initConnection)
-      permissionedSynchronizer <- getPermissionedFlagFromSponsor()
-
       // If we're not onboarded yet, this waits for the sponsoring SV
 
       // Register domain with manualConnect=true. Confusingly, this still connects the first time.
@@ -229,8 +227,10 @@ class JoiningNodeInitializer(
       )
 
       _ <-
-        if (permissionedSynchronizer && isBootstrapping) {
-          sendOnboardingRequest(svParty, dsoPartyId)
+        if (isBootstrapping) {
+          getPermissionedFlagFromSponsor().flatMap { isPerm =>
+            if (isPerm) sendOnboardingRequest(svParty, dsoPartyId) else Future.unit
+          }
         } else {
           Future.unit
         }
@@ -248,8 +248,10 @@ class JoiningNodeInitializer(
       _ <-
         // even if the participant is initialized, if it doesn't host DSO, we still need to send sendOnboardingRequest
         // however, when dsoPartyIsAuthorized, then we avoid sending sendOnboardingRequest, to account for cases where sponser sv is down.
-        if (permissionedSynchronizer && !isBootstrapping && !dsoPartyIsAuthorized)
-          sendOnboardingRequest(svParty, dsoPartyId)
+        if (!isBootstrapping && !dsoPartyIsAuthorized)
+          getPermissionedFlagFromSponsor().flatMap { isPerm =>
+            if (isPerm) sendOnboardingRequest(svParty, dsoPartyId) else Future.unit
+          }
         else Future.unit
 
       _ <-
@@ -374,11 +376,12 @@ class JoiningNodeInitializer(
                 isOnboardedInDsoRules(dsoStore), {
                   for {
                     (joiningConfig, svConnection) <- svConnection
+                    isPerm <- getPermissionedFlagFromSponsor()
                     _ <- withSvStore.startOnboardingWithDsoPartyHosted(
                       dsoAutomation,
                       svConnection,
                       joiningConfig,
-                      permissionedSynchronizer,
+                      isPerm,
                     )
                   } yield ()
                 },
@@ -392,6 +395,7 @@ class JoiningNodeInitializer(
           )
           for {
             (joiningConfig, svConnection) <- svConnection
+            isPerm <- getPermissionedFlagFromSponsor()
             dsoAutomation <- withSvStore
               .startOnboardingWithDsoPartyMigration(
                 initConnection,
@@ -400,7 +404,7 @@ class JoiningNodeInitializer(
                 joiningConfig,
                 packageVersionSupport,
                 decentralizedSynchronizerId,
-                permissionedSynchronizer,
+                isPerm,
               )
             _ = dsoAutomation.registerLsuTriggers()
           } yield dsoAutomation
