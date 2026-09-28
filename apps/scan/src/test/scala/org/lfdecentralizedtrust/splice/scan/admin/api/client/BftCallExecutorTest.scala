@@ -71,7 +71,7 @@ class BftCallExecutorTest
       BftCallExecutor
         .executeCall(mocks.call, mocks.connections(), nTargetSuccess = 1, logger)
         .failed
-        .futureValue should be(notFoundFailure)
+        .futureValue shouldBe a[BaseAppConnection.UnexpectedHttpJsonResponse]
     }
 
     "Forward the error response when n == 1" in {
@@ -80,7 +80,7 @@ class BftCallExecutorTest
       BftCallExecutor
         .executeCall(mocks.call, mocks.connections(), nTargetSuccess = 1, logger)
         .failed
-        .futureValue should be(tcpFailure)
+        .futureValue shouldBe a[StreamTcpException]
     }
 
     "fall through to ConsensusNotReached when all scans throw  error response" in {
