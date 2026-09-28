@@ -753,11 +753,20 @@ trait SvDsoStore
       : ListExpiredContracts[so.SvOnboardingConfirmed.ContractId, so.SvOnboardingConfirmed] =
     multiDomainAcsStore.listExpiredFromPayloadExpiry(so.SvOnboardingConfirmed.COMPANION)
 
-  def listExpiredVestingLocks: ListExpiredContracts[
+  def listExpiredVestingLocks(
+      unavailablePartiesStore: Option[UnavailablePartiesStore]
+  ): ListExpiredContracts[
     splice.governancelock.VestingLock.ContractId,
     splice.governancelock.VestingLock,
   ] =
-    multiDomainAcsStore.listExpiredFromPayloadExpiry(splice.governancelock.VestingLock.COMPANION)
+    multiDomainAcsStore.listExpiredFromPayloadExpiry(
+      splice.governancelock.VestingLock.COMPANION,
+      unavailablePartiesStore,
+      // TODO(canton-network/splice-sv-fa-locking#76): Make sure custom
+      // controllers parties are listed here as well when they are implemented
+      // in Daml.
+      ignoredPartyFields = Seq("owner"),
+    )
 
   def listExpiredAnsEntries(
       unavailablePartiesStore: Option[UnavailablePartiesStore]
