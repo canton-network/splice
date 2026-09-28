@@ -284,11 +284,14 @@ paths:
       operationId: "getMemberTrafficStatus"
       description: |
         Get a member's traffic status as reported by the sequencer, according to
-        ledger state at the time of the request.
+        ledger state at the time of the request. Served for the global
+        synchronizer only: `actual` comes from the sequencer this Scan is attached
+        to, and a registered synchronizer's consumption is held by its operator.
       parameters:
         - name: "domain_id"
           description: |
-            The synchronizer ID to look up traffic for.
+            The synchronizer ID to look up traffic for. Must be the global
+            synchronizer; any other id is rejected with a 400.
           in: "path"
           required: true
           schema:

@@ -11,7 +11,7 @@ import org.lfdecentralizedtrust.splice.util.{SynchronizerFeesTestUtil, WalletTes
 import org.lfdecentralizedtrust.splice.wallet.store.TxLogEntry.Http.BuyTrafficRequestStatus
 import com.digitalasset.canton.HasExecutionContext
 import com.digitalasset.canton.logging.SuppressionRule
-import com.digitalasset.canton.topology.Member
+import com.digitalasset.canton.topology.{Member, SynchronizerId}
 import org.slf4j.event.Level
 
 class MemberTrafficIntegrationTest
@@ -134,6 +134,20 @@ class MemberTrafficIntegrationTest
       statusAsPerScan.actual.totalConsumed shouldBe actualStateAsPerSequencer.extraTrafficConsumed.value
       statusAsPerScan.actual.totalLimit shouldBe actualStateAsPerSequencer.extraTrafficPurchased.value
       statusAsPerScan.target.totalPurchased shouldBe actualTotalPurchasedAsPerDso
+    }
+
+    "refuse a traffic status lookup for a synchronizer it does not serve" in { implicit env =>
+      val memberId = aliceValidatorBackend.participantClient.id
+      // Well-formed, and not the decentralized synchronizer. Serving it would pair this
+      // sequencer's consumption with another synchronizer's purchase total.
+      val otherSynchronizerId = SynchronizerId.tryFromString(
+        "dedicated-sync::1220dededededededededededededededededededededededededededededede"
+      )
+
+      assertThrowsAndLogsCommandFailures(
+        sv1ScanBackend.getMemberTrafficStatus(otherSynchronizerId, memberId),
+        _.errorMessage should include("Traffic status is served for synchronizer"),
+      )
     }
   }
 

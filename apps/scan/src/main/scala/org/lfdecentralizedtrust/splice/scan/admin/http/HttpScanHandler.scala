@@ -2545,9 +2545,18 @@ class HttpScanHandler(
               HttpErrorHandler.badRequest(s"Could not decode domain ID: $error")
             )
         }
-        actual <- synchronizerNodeService
-          .sequencerAdminConnection()
-          .flatMap(_.getSequencerTrafficControlState(member))
+        sequencerConnection <- synchronizerNodeService.sequencerAdminConnection()
+        served <- sequencerConnection.getPhysicalSynchronizerId().map(_.logical)
+        _ <-
+          if (domain == served) Future.unit
+          else
+            Future.failed(
+              HttpErrorHandler.badRequest(
+                s"Traffic status is served for synchronizer $served only, not $domain. " +
+                  s"Consumed traffic for a registered synchronizer is held by its operator."
+              )
+            )
+        actual <- sequencerConnection.getSequencerTrafficControlState(member)
         actualConsumed = actual.extraTrafficConsumed.value
         actualLimit = actual.extraTrafficLimit.value
         targetTotalPurchased <- store.getTotalPurchasedMemberTraffic(member, domain)
