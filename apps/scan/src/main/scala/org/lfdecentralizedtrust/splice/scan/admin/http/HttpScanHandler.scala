@@ -1631,6 +1631,12 @@ class HttpScanHandler(
         ),
       result.afterToken.map {
         case QueryAcsSnapshotPaginationToken.RowIdQueryAcsSnapshotPaginationToken(after) => after
+        case QueryAcsSnapshotPaginationToken
+              .CreatedAtContractIdAcsSnapshotPaginationToken(_, _) =>
+          // this endpoint will be removed before this can happen
+          throw io.grpc.Status.INTERNAL
+            .withDescription("Bug: v0 endpoint call tried to return a non-Long after token.")
+            .asRuntimeException()
       },
     )
   }
@@ -1651,6 +1657,12 @@ class HttpScanHandler(
         ),
       result.afterToken.map {
         case QueryAcsSnapshotPaginationToken.RowIdQueryAcsSnapshotPaginationToken(after) => after
+        case QueryAcsSnapshotPaginationToken
+              .CreatedAtContractIdAcsSnapshotPaginationToken(_, _) =>
+          // this endpoint will be removed before this can happen
+          throw io.grpc.Status.INTERNAL
+            .withDescription("Bug: v1 endpoint call tried to return a non-Long after token.")
+            .asRuntimeException()
       },
     )
 
