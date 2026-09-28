@@ -4,5 +4,7 @@
 import dayjs from 'dayjs';
 import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils';
 
-export const formatDatetimeWithOffset = (d: dayjs.ConfigType): string =>
-  dayjs(d).format(`${dateTimeFormatISO} [(UTC]Z[)]`);
+export const formatDatetimeWithOffset = (d: dayjs.ConfigType): string => {
+  const date = dayjs(d);
+  return date.isValid() ? date.format(`${dateTimeFormatISO} [(UTC]Z[)]`) : '';
+};
