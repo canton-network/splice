@@ -80,7 +80,7 @@ jobs:
             canton {}
             SMOKECONF
             echo "Running bundled splice-node generate remote-config"
-            "$smoke_dir/splice-node/bin/splice-node" -c "$smoke_conf" generate remote-config
+            "$smoke_dir/splice-node/bin/splice-node" generate remote-config -c "$smoke_conf"
 
       - name: Post-SBT job
         if: ${{ !cancelled() }}
