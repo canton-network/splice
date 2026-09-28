@@ -170,65 +170,65 @@ class HttpScanHandlerBulkStorageTest extends AnyWordSpec with BaseTest {
       )
     }
 
-    "GetBulkHistoryProgressResponse returns true when enough progress was made" in {
+    "GetBulkObjectsProgress returns true when enough progress was made" in {
       val snapshotProgress = snapshotProgressAt("2023-12-31T00:00:00Z")
       val updateRange = updateProgress("2024-01-01T00:00:00Z", "2024-01-02T00:00:00Z")
       val bulkStorage = bulkStorageReader(Some(snapshotProgress), Some(updateRange))
       val h = handler(bulkStorage = Some(bulkStorage))
       val requiredCatchupTimestamp = Instant.parse("2023-12-31T00:00:00Z").atOffset(ZoneOffset.UTC)
       val response = h
-        .getBulkHistoryProgress(ScanResource.GetBulkHistoryProgressResponse)(
+        .getBulkObjectsProgress(ScanResource.GetBulkObjectsProgressResponse)(
           requiredCatchupTimestamp
         )(TraceContext.empty)
         .futureValue
-      inside(response) { case ScanResource.GetBulkHistoryProgressResponseOK(value) =>
+      inside(response) { case ScanResource.GetBulkObjectsProgressResponseOK(value) =>
         value.beyondRequestedRecordTime shouldBe true
       }
     }
 
 
-    "GetBulkHistoryProgressResponse returns false when snapshot progress is behind the required catch-up timestamp" in {
+    "GetBulkObjectsProgress returns false when snapshot progress is behind the required catch-up timestamp" in {
       val snapshotProgress = snapshotProgressAt("2023-12-31T00:00:00Z")
       val updateRange = updateProgress("2024-01-01T00:00:00Z", "2024-01-02T00:00:00Z")
       val bulkStorage = bulkStorageReader(Some(snapshotProgress), Some(updateRange))
       val h = handler(bulkStorage = Some(bulkStorage))
       val requiredCatchupTimestamp = Instant.parse("2024-01-01T00:00:00Z").atOffset(ZoneOffset.UTC)
       val response = h
-        .getBulkHistoryProgress(ScanResource.GetBulkHistoryProgressResponse)(
+        .getBulkObjectsProgress(ScanResource.GetBulkObjectsProgressResponse)(
           requiredCatchupTimestamp
         )(TraceContext.empty)
         .futureValue
-      inside(response) { case ScanResource.GetBulkHistoryProgressResponseOK(value) =>
+      inside(response) { case ScanResource.GetBulkObjectsProgressResponseOK(value) =>
         value.beyondRequestedRecordTime shouldBe false
       }
     }
 
-    "GetBulkHistoryProgressResponse returns false when updates progress is behind the required catch-up timestamp" in {
+    "GetBulkObjectsProgress returns false when updates progress is behind the required catch-up timestamp" in {
       val snapshotProgress = snapshotProgressAt("2024-01-02T00:00:00Z")
       val updateRange = updateProgress("2023-12-30T00:00:00Z", "2023-12-31T00:00:00Z")
       val bulkStorage = bulkStorageReader(Some(snapshotProgress), Some(updateRange))
       val h = handler(bulkStorage = Some(bulkStorage))
       val requiredCatchupTimestamp = Instant.parse("2024-01-01T00:00:00Z").atOffset(ZoneOffset.UTC)
       val response = h
-        .getBulkHistoryProgress(ScanResource.GetBulkHistoryProgressResponse)(
+        .getBulkObjectsProgress(ScanResource.GetBulkObjectsProgressResponse)(
           requiredCatchupTimestamp
         )(TraceContext.empty)
         .futureValue
-      inside(response) { case ScanResource.GetBulkHistoryProgressResponseOK(value) =>
+      inside(response) { case ScanResource.GetBulkObjectsProgressResponseOK(value) =>
         value.beyondRequestedRecordTime shouldBe false
       }
     }
 
-    "GetBulkHistoryProgressResponse returns false when progress is not initialized" in {
+    "GetBulkObjectsProgress returns false when progress is not initialized" in {
       val bulkStorage = bulkStorageReader(None, None)
       val h = handler(bulkStorage = Some(bulkStorage))
       val requiredCatchupTimestamp = Instant.parse("2024-01-01T00:00:00Z").atOffset(ZoneOffset.UTC)
       val response = h
-        .getBulkHistoryProgress(ScanResource.GetBulkHistoryProgressResponse)(
+        .getBulkObjectsProgress(ScanResource.GetBulkObjectsProgressResponse)(
           requiredCatchupTimestamp
         )(TraceContext.empty)
         .futureValue
-      inside(response) { case ScanResource.GetBulkHistoryProgressResponseOK(value) =>
+      inside(response) { case ScanResource.GetBulkObjectsProgressResponseOK(value) =>
         value.beyondRequestedRecordTime shouldBe false
       }
     }

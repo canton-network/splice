@@ -1731,10 +1731,10 @@ paths:
     get:
       tags: [ internal, pre-alpha, scan ]
       x-jvm-package: scan
-      operationId: "getBulkHistoryProgress"
+      operationId: "getBulkObjectsProgress"
       description: |
         **Under Development, do not use in production yet** Query whether bulk storage object creation has advanced to a certain record time.
-        Meant for internal use only, as part of the processing pipeline of bulk history objects.
+        Meant for internal use only, as part of the processing pipeline of bulk objects.
       parameters:
         - name: "at_or_before_record_time"
           in: "query"
@@ -1748,7 +1748,7 @@ paths:
           content:
             application/json:
               schema:
-                "$ref": "#/components/schemas/GetBulkHistoryProgressResponse"
+                "$ref": "#/components/schemas/GetBulkObjectsProgressResponse"
         "501":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/501"
 
@@ -4057,7 +4057,7 @@ components:
             The sha256 digest of the bulk storage object, for verification of integrity and consistency across SVs.
           type: string
 
-    GetBulkHistoryProgressResponse:
+    GetBulkObjectsProgressResponse:
       type: object
       required:
         - beyond_requested_record_time
