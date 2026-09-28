@@ -1358,20 +1358,23 @@ class HttpScanHandler(
       extracted: TraceContext
   ): Future[ScanResource.GetDateOfMostRecentSnapshotBeforeResponse] = {
     implicit val tc: TraceContext = extracted
+
+    def notFound = ScanResource.GetDateOfMostRecentSnapshotBeforeResponseNotFound(
+      definitions.ErrorResponse(s"No snapshots found before $before")
+    )
+
     withSpan(s"$workflowId.getDateOfMostRecentSnapshotBefore") { _ => _ =>
       snapshotStore
         .lookupSnapshotAtOrBefore(migrationId, Codec.tryDecode(Codec.OffsetDateTime)(before))
         .map {
+          case None => notFound
+          case Some(snapshot) if !snapshot.indexesCreated => notFound
           case Some(snapshot) =>
             ScanResource.GetDateOfMostRecentSnapshotBeforeResponseOK(
               definitions
                 .AcsSnapshotTimestampResponse(
                   Codec.encode(snapshot.snapshotRecordTime)
                 )
-            )
-          case None =>
-            ScanResource.GetDateOfMostRecentSnapshotBeforeResponseNotFound(
-              definitions.ErrorResponse(s"No snapshots found before $before")
             )
         }
     }
@@ -1384,19 +1387,21 @@ class HttpScanHandler(
   ): Future[ScanResource.GetDateOfFirstSnapshotAfterResponse] = {
     implicit val tc: TraceContext = extracted
     withSpan(s"$workflowId.getDateOfFirstSnapshotAfter") { _ => _ =>
+      def notFound = ScanResource.GetDateOfFirstSnapshotAfterResponseNotFound(
+        definitions.ErrorResponse(s"No snapshots found after $after")
+      )
+
       snapshotStore
         .lookupSnapshotAfter(migrationId, Codec.tryDecode(Codec.OffsetDateTime)(after))
         .map {
+          case None => notFound
+          case Some(snapshot) if !snapshot.indexesCreated => notFound
           case Some(snapshot) =>
             ScanResource.GetDateOfFirstSnapshotAfterResponseOK(
               definitions
                 .AcsSnapshotTimestampResponse(
                   Codec.encode(snapshot.snapshotRecordTime)
                 )
-            )
-          case None =>
-            ScanResource.GetDateOfFirstSnapshotAfterResponseNotFound(
-              definitions.ErrorResponse(s"No snapshots found after $after")
             )
         }
     }

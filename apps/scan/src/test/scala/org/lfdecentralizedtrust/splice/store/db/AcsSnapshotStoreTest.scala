@@ -33,7 +33,10 @@ import java.time.Instant
 import scala.concurrent.Future
 import scala.util.{Failure, Success}
 import StoreTestBase.*
-import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.IncrementalAcsSnapshotTable
+import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{
+  IncrementalAcsSnapshotTable,
+  PerTableAcsSnapshot,
+}
 import org.lfdecentralizedtrust.splice.scan.config.AnalyzableTimeWindowConfig
 
 trait AcsSnapshotStoreTest
@@ -53,6 +56,28 @@ trait AcsSnapshotStoreTest
   protected val timestamp3 = CantonTimestamp.Epoch.plusSeconds(3600 * 3)
   protected val timestamp4 = CantonTimestamp.Epoch.plusSeconds(3600 * 4)
   protected val timestamps = Seq(timestamp1, timestamp2, timestamp3, timestamp4)
+
+  protected def indexSnapshot(
+      store: AcsSnapshotStore,
+      migrationId: Long,
+      snapshotRecordTime: CantonTimestamp,
+  ) = for {
+    snapshot <- store.lookupSnapshotAtOrBefore(
+      migrationId,
+      snapshotRecordTime,
+    )
+    _ <- snapshot match {
+      case Some(snapshot: PerTableAcsSnapshot) =>
+        store.indexSnapshotStakeholdersTable(snapshot)
+      case Some(_) => Future.unit
+      case None =>
+        Future.failed(
+          io.grpc.Status.FAILED_PRECONDITION
+            .withDescription("This should've been just created")
+            .asRuntimeException()
+        )
+    }
+  } yield ()
 
   "AcsSnapshotStoreTest" should {
 
@@ -1173,6 +1198,7 @@ trait AcsSnapshotStoreTest
               snapshot.value,
               nextSnapshotTargetRecordTime = timestamp1.plusSeconds(20L),
             )
+            _ <- indexSnapshot(storeM1, snapshot.value.migrationId, snapshot.value.targetRecordTime)
           } yield ())
 
           _ <- clueF(s"Snapshot A: should return correct result at T9")(for {
@@ -1217,6 +1243,7 @@ trait AcsSnapshotStoreTest
               snapshot.value,
               nextSnapshotTargetRecordTime = timestamp1.plusSeconds(30L),
             )
+            _ <- indexSnapshot(storeM1, snapshot.value.migrationId, snapshot.value.targetRecordTime)
           } yield ())
 
           _ <- clueF(s"Snapshot B: should return correct result at T20")(for {
@@ -1527,6 +1554,7 @@ class TablePerAcsSnapshotStoreTest extends AcsSnapshotStoreTest {
           snapshot.value,
           nextSnapshotTargetRecordTime = timestamp3,
         )
+        _ <- indexSnapshot(store, snapshot.value.migrationId, snapshot.value.targetRecordTime)
       } yield ())
 
       snapshotContent <- store.queryAcsSnapshot(
@@ -1563,7 +1591,13 @@ class TablePerAcsSnapshotStoreTest extends AcsSnapshotStoreTest {
         amuletRules(),
         timestamp1.minusSeconds(1L),
       )
-      _ <- store.insertNewSnapshot(nextTable, DefaultMigrationId, timestamp1)
+      _ <- store.insertNewSnapshot(
+        nextTable,
+        DefaultMigrationId,
+        timestamp1,
+        // Index as part of this test
+        shouldIndexSnapshot = false,
+      )
       snapshotOpt <- store.lookupSnapshotAtOrBefore(
         migrationId = DefaultMigrationId,
         CantonTimestamp.MaxValue,

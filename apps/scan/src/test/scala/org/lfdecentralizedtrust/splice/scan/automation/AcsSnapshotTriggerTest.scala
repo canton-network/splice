@@ -729,7 +729,7 @@ class AcsSnapshotTriggerTest
   private def historyId = 1L
 
   private def snapshotAt(migrationId: Long, time: CantonTimestamp) =
-    LegacyAcsSnapshot(time, migrationId, historyId, 0, 100, None, None)
+    LegacyAcsSnapshot(time, migrationId, historyId, 0, 100, None, None, true)
 
   private def cantonTimestamp(isoStr: String) =
     CantonTimestamp.assertFromInstant(java.time.Instant.parse(isoStr))
