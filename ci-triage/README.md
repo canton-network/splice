@@ -323,3 +323,29 @@ Same packet conventions. Artifacts under `log/<ref>/<artifact-name>/` (git-ignor
 - Both refs triaged on 2026-09-28 (10227, 10214) were found by chasing the failing value to a concrete
   timestamped write rather than by matching a signature. 10227 turned out to be a known family with a new
   symptom; 10214 is new and is the only one of the two whose root cause is splice code.
+
+## Ref -> run -> job mapping (2026-09-28, third batch)
+
+| My ref | GH run | Branch / sha | Failed job | Canton |
+|--------|--------|--------------|------------|--------|
+| 10204 | 35740669383 | main 57ed1c31b3 (#7453) | 106790129333 `resource-intensive (0)` (cancelled, attempt 1) | 3.6.0-snapshot.20260916.20284.0.vf27c4824 |
+| 10212 | 35873276062 | main 5484da7cab (#7457) | 107223309546 `wall-clock-time (1)` | 3.6.0-snapshot.20260916.20284.0.vf27c4824 |
+| 10225 | 36148619987 | main 759345b108 | 108116692364 `wall-clock-time (3)` | 3.6.0-snapshot.20260916.20284.0.vf27c4824 |
+
+| My ref | Failure (one line) | Duplicate of | Resolution / status |
+|--------|--------------------|--------------|---------------------|
+| 10204 | resource-intensive (0): `Timeout: Canton instance(s) failed to start within 300 seconds` at 15:32:58, Canton launched detached 37.5 min earlier (14:55:24); every setup step 9-47x slower than sibling shard (1) on the same runner pool; no test ran; zero artifacts because `upload_logs` "Sanitize filenames" failed in the container hook and the three uploads were skipped | new (family J) | `10204-slow-runner-canton-never-ready-logs-lost.md`. Infra flake, rerun. Evidence-loss fix `s11/fix-10204-upload-logs-after-sanitize-failure` |
+| 10212 | checkErrors only (24/24 tests pass): sv1Participant `acknowledge-signed` to globalSequencerSv1 DEADLINE_EXCEEDED after 120 s + `Failed to acknowledge clean timestamp` (14:44:42.9). In ValidatorSequencerConnectionIntegrationTest setup sv2-sv4 start onboarding within 0.4 s, the BFT ordering topology steps 1 -> 4 at 14:42:40.55 (epoch 90), sv1 is below weak quorum and blacklisted for epochs 91-93; the ack sent at 14:42:42.898 is rejected by the mempool but not answered until the client cancels. | 10165 (family B) | Packet `10212-sv1-ack-deadline-bft-1-to-4-validator-sequencer-connection.md`. Canton-side, self-healed; no fix branch. |
+| 10225 | checkErrors only (24/24 tests passed): globalMediatorSv1 `acknowledge-signed` to globalSequencerSv1 DEADLINE_EXCEEDED after 120 s (2 WARNs at 15:44:17.901). ValidatorSequencerConnectionIntegrationTest's 4-SV initDso stepped the ordering topology 1 -> 4 at 15:42:13.9 with sv1 authenticated 1 < weak quorum 2; sv1's mempool rejected 23 submissions 15:42:14.2-15:42:18.1, including the ack at 15:42:17.900, which stayed open until the client's 120 s deadline; sv1 blacklisted epochs 65-67 | 10165 umbrella (family B), signature (1) | Packet `10225-mediator-ack-stall-bft-1-to-4.md`. No fix branch: Canton-side. Adds to 10165: the mempool rejection does not complete the AcknowledgeSigned call, so a 4 s P2P gap costs a 120 s ack timeout and a WARN. |
+
+## Cross-cutting observations (2026-09-28, third batch)
+
+- 10212 and 10225 are the same family B signature (1) from the same suite, ValidatorSequencerConnectionIntegrationTest,
+  two days apart on the same Canton pin: its 4-SV initDso steps the BFT ordering topology 1 -> 4 in one change. The
+  suite is a repeat trigger and is added to the family B suite list.
+- 10225 sharpens the 10165 hand-off: the mempool rejects the ack within 1 ms, but the AcknowledgeSigned call is not
+  completed until the client's 120 s deadline, so a few seconds of P2P unreadiness always costs a 120 s timeout and a
+  WARN. Neither packet checked the Canton jar for why the rejection does not complete the call.
+- 10204 lost all evidence twice over: a degraded runner pod never got Canton ready, and the log upload was skipped
+  because a best-effort step before it failed. The fix branch only makes the upload run; the main log artifact can
+  still fail on unsanitized `:` filenames, while the runner-log uploads would succeed.

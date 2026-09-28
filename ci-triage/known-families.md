@@ -29,7 +29,17 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   `custom-timeouts` entry for `onboardSvSequencer`, or extend the `onboard/validator` timeout ignore.
 - Umbrella 10165 (10094 and 10153 closed as dups; 10161 same). Occurs during any initDso with 3-4 SVs
   (ValidatorIntegrationTest, SvOnboardingIntegrationTest, SvDsoPartyManagementIntegrationTest,
-  DistributedDomainIntegrationTest).
+  DistributedDomainIntegrationTest, ValidatorSequencerConnectionIntegrationTest).
+- 10212 (run 35873276062, wall-clock-time (1), canton 3.6.0-snapshot.20260916.20284): signature (1) on
+  sv1Participant during ValidatorSequencerConnectionIntegrationTest setup. sv2-sv4 call `onboard/sv/start`
+  within 0.4 s, so the topology steps 1 -> 4 in one change (epoch 90); sv1 blacklisted epochs 91-93. The stuck
+  ack's clean timestamp is 1 us before the new topology's activationTime.
+- 10225 (run 36148619987, wall-clock-time (3), canton 3.6.0-snapshot.20260916.20284): signature (1) from
+  ValidatorSequencerConnectionIntegrationTest's 4-SV initDso. The mempool rejected the mediator's ack within
+  1 ms (`P2P connectivity is not ready (authenticated = 1 < dissemination quorum = 2), rejecting`), but the
+  AcknowledgeSigned call stayed open until the 120 s client deadline (`cancelled`, then `sending response`
+  114 ms later): the 120 s timeout comes from the rejection not completing the call, not from a 120 s outage
+  (rejections lasted 15:42:14.206-15:42:18.110).
 - Signature (3): a participant's topology broadcast is refused by the blacklisted sequencer and the party never
   reaches that synchronizer, surfacing as `INVALID_PRESCRIBED_SYNCHRONIZER_ID(9,...): Not all informees are on the
   specified synchronizer: <target>, but on Set(<other synchronizer>)` on a wallet/app-install command. 10227
@@ -192,6 +202,13 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   setup, `unable to download https://github.com/nix-systems/default/archive/<rev>.tar.gz: HTTP error 504` after
   cache misses in the runner binary cache and cache.nixos.org. Signature: no `Tests:` line, failure within 2-6 min of
   job start, every shard of the run at once. Fix: rerun failed jobs; ask runner owners to cache the flake inputs.
+- 10204 (run 35740669383, main 57ed1c31b3, resource-intensive (0), GH conclusion cancelled): one degraded runner pod.
+  Signature: `Timeout: Canton instance(s) failed to start within 300 seconds` in "Wait for Canton to be ready", `Run tests`
+  skipped, run has zero artifacts. Confirm: compare step durations with a sibling shard of the same run
+  (`##[end-action ...;duration_ms=`); here Set up SBT 1868 s vs 51 s, Restore precompiled classes 1071 s vs 23 s.
+  Not family H: there tests run and SIGINT lands at +60 min. Logs lost because `upload_logs` "Sanitize filenames"
+  failed in the container hook and the default `success()` skipped the uploads; fix
+  `s11/fix-10204-upload-logs-after-sanitize-failure`. Resolution: rerun.
 
 ## M. State leaking between suites of one shard through a shared Postgres table
 - Signature: an assertion that a store is empty (or has an exact size) fails with an entity whose embedded test
