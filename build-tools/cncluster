@@ -107,6 +107,37 @@ function _needs_auth0_validator_management_api_creds() {
         exit 1
     fi
 }
+
+function _gcloud_account_active() {
+    # print-access-token exits 0 even when reauthentication fails, so we check stdout is non-empty.
+    local token
+    token=$(gcloud auth print-access-token 2>/dev/null)
+    [ -n "${token}" ]
+}
+
+function _gcloud_adc_configured() {
+    # Returns 0 when application-default credentials are available.
+    local token
+    token=$(gcloud auth application-default print-access-token 2>/dev/null)
+    [ -n "${token}" ]
+}
+
+function _ensure_gcloud_auth() {
+    if ! _gcloud_account_active; then
+        if [ -n "${CI:-}" ]; then
+            _error "Not authenticated to Google Cloud. In CI, ensure a service account is activated (e.g., via gcloud auth activate-service-account)."
+        fi
+        _log "Google Cloud authentication required. Running gcloud auth login..."
+        # we use --no-launch-browser to prevent gcloud from trying to open a browser, which is useful in headless environments (i.e. tmux)
+        gcloud auth login --no-launch-browser
+    fi
+
+    if [ -z "${CI:-}" ] && ! _gcloud_adc_configured; then
+        _log "Google Cloud application-default credentials required. Running gcloud auth application-default login..."
+        gcloud auth application-default login --no-launch-browser
+    fi
+}
+
 function _cluster_show() {
     _log "CLOUDSDK_COMPUTE_REGION : ${CLOUDSDK_COMPUTE_REGION}"
     _log "CLOUDSDK_CORE_PROJECT   : ${CLOUDSDK_CORE_PROJECT}"
@@ -2496,6 +2527,10 @@ if [ ! ${subcommand_whitelist[${SUBCOMMAND_NAME}]+_} ]; then
     subcmd_help
 
     _error  "Unknown subcommand: ${SUBCOMMAND_NAME}"
+fi
+
+if [ "${SUBCOMMAND_NAME}" != "help" ] && [ "${SUBCOMMAND_NAME}" != "_autocomplete" ]; then
+    _ensure_gcloud_auth
 fi
 
 "subcmd_${SUBCOMMAND_NAME}" "$@"
