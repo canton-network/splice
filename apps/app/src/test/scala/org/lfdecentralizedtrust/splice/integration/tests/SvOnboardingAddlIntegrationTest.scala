@@ -274,7 +274,6 @@ class SvOnboardingAddlIntegrationTest
                   "PAR::sv2::1220f3e2",
                   SvUtil.DefaultSV1Weight,
                   "no reason",
-                  java.util.Optional.of(sv1ScanBackend.getMigrationId()),
                 )
               )
             ),
