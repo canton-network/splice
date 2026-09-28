@@ -85,11 +85,7 @@ class ExpireVestingLockTimeBasedIntegrationTest
         ConfigTransforms.updateAllSvAppFoundDsoConfigs_(
           _.copy(
             initialGovernanceLockSuperValidatorLockVestingDuration =
-              Some(NonNegativeFiniteDuration.ofMillis(vestingDuration.toMillis)),
-            // Makes `TransferInstruction_Withdraw` pick `unlockAt = requestedAt + unlockDelay`,
-            // as sim time does not move between locking and unlocking.
-            initialGovernanceLockSearchTimeGranularity =
-              Some(NonNegativeFiniteDuration.ofMillis(unlockDelay.toMillis)),
+              Some(NonNegativeFiniteDuration.ofMillis(vestingDuration.toMillis))
           )
         )(config)
       )
@@ -99,8 +95,8 @@ class ExpireVestingLockTimeBasedIntegrationTest
     val owner = RichPartyId.local(sv1Party)
     val participant = sv1Backend.participantClientWithAdminToken
 
-    val unlockAt = getLedgerTime.toInstant.plus(unlockDelay)
-    val endTime = unlockAt.plus(vestingDuration)
+    val unlockAt = getLedgerTime.plus(unlockDelay)
+    val endTime = unlockAt.toInstant.plus(vestingDuration)
 
     // `createGovernanceLockViaTokenStandard` feeds all of the owner's unlocked
     // holdings into the `TransferFactory_Transfer` choice. Thus, the tap has to
@@ -123,7 +119,12 @@ class ExpireVestingLockTimeBasedIntegrationTest
             lockSubject = sv1Name,
             amount = lockAmount,
           )
-          unlockGovernanceLockViaTokenStandard(participant, owner, governanceLock)
+          unlockGovernanceLockViaTokenStandard(
+            participant,
+            owner,
+            governanceLock,
+            meta = Map(governanceLockUnlockAtMetaKey -> unlockAt.toMicros.toString),
+          )
         }
       },
     )(

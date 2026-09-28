@@ -13,6 +13,7 @@ import org.lfdecentralizedtrust.splice.util.{TimeTestUtil, TokenStandardMetadata
 import org.lfdecentralizedtrust.splice.wallet.store.{BalanceChangeTxLogEntry, TxLogEntry}
 
 import java.time.Duration
+import java.time.temporal.ChronoUnit
 
 class GovernanceLockTimeBasedIntegrationTest
     extends IntegrationTestWithIsolatedEnvironment
@@ -27,12 +28,10 @@ class GovernanceLockTimeBasedIntegrationTest
       .addConfigTransforms((_, config) =>
         ConfigTransforms.updateAllSvAppFoundDsoConfigs_(
           _.copy(
-            // Shorten the SV vesting period and search time granularity so we can test partial and
-            // full withdrawal while only advancing the clock a couple minutes
+            // Shorten the SV vesting period so we can test partial and full withdrawal while only
+            // advancing the clock a couple minutes
             initialGovernanceLockSuperValidatorLockVestingDuration =
-              Some(NonNegativeFiniteDuration.ofMinutes(2)),
-            initialGovernanceLockSearchTimeGranularity =
-              Some(NonNegativeFiniteDuration.ofSeconds(1)),
+              Some(NonNegativeFiniteDuration.ofMinutes(2))
           )
         )(config)
       )
@@ -98,10 +97,12 @@ class GovernanceLockTimeBasedIntegrationTest
       advanceTimeAndWaitForRoundOpening
 
       // Withdraw the governance lock; it's relocked as a VestingLock and funds remain locked
+      val unlockAt = getLedgerTime.plusSeconds(1)
       val (vestingLockCid, vestingLockView) = unlockGovernanceLockViaTokenStandard(
         aliceValidatorBackend.participantClientWithAdminToken,
         owner,
         governanceLockCid,
+        Map(governanceLockUnlockAtMetaKey -> unlockAt.toMicros.toString),
       ).value
       val vestingLock =
         aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
@@ -115,6 +116,9 @@ class GovernanceLockTimeBasedIntegrationTest
       vestingLockView.transfer.sender shouldBe ownerParty.toProtoPrimitive
       vestingLockView.transfer.receiver shouldBe superValidatorLockMagicParty.toProtoPrimitive
       matchSVKind(vestingLock.specification.kind)
+      vestingLock.endTime
+        .minus(vestingLock.vestingPeriod.microseconds, ChronoUnit.MICROS) shouldBe
+        unlockAt.toInstant
 
       clue("Scan serves a withdraw choice context for the VestingLock") {
         sv1ScanBackend
@@ -126,8 +130,9 @@ class GovernanceLockTimeBasedIntegrationTest
         aliceWalletClient.balance().lockedQty should beAround(lockAmount)
       }
 
-      // Advance 30 seconds into the 2 minute vesting period and withdraw
-      advanceTime(Duration.ofSeconds(30))
+      // Advance part of the way into the 2 minute vesting period and withdraw with an explicit
+      // withdraw time of 30 seconds into the vesting period
+      advanceTime(Duration.ofSeconds(31))
 
       val (_, (remainingVestingLockCid, remainingVestingAmount)) = actAndCheck(
         "the owner withdraws the VestingLock mid-vesting",
@@ -135,6 +140,7 @@ class GovernanceLockTimeBasedIntegrationTest
           aliceValidatorBackend.participantClientWithAdminToken,
           owner,
           vestingLockCid,
+          meta = Map(vestingLockWithdrawAtMetaKey -> unlockAt.plusSeconds(30).toMicros.toString),
         ),
       )(
         "a new VestingLock remains with half of the total vesting amount",
@@ -156,18 +162,17 @@ class GovernanceLockTimeBasedIntegrationTest
           view.transfer.receiver shouldBe superValidatorLockMagicParty.toProtoPrimitive
           matchSVKind(remainingVestingLock.specification.kind)
           val remainingVestingAmount = BigDecimal(remainingVestingLock.vestingAmount)
+          // The explicit withdraw time vests exactly 1/4 of the total lock amount
           val expectedLockAmount = lockAmount / 4 * 3
-          // The 1 second search time granularity requires a looser assertion as the calculated
-          // vested amount is not precisely equal to 1/4 of the total lock amount
-          val expectedLockAmountRange = (expectedLockAmount - 100, expectedLockAmount + 100)
-          assertInRange(remainingVestingAmount, expectedLockAmountRange)
-          assertInRange(aliceWalletClient.balance().lockedQty, expectedLockAmountRange)
+          remainingVestingAmount shouldBe expectedLockAmount
+          aliceWalletClient.balance().lockedQty shouldBe expectedLockAmount
           (cid, remainingVestingAmount)
         },
       )
 
-      // Advance past the end of the vesting period and withdraw
-      advanceTime(Duration.ofMinutes(2))
+      // Advance past the end of the vesting period and withdraw with an explicit withdraw time of
+      // the exact end of the vesting period
+      advanceTime(Duration.ofSeconds(90))
 
       actAndCheck(
         "the owner withdraws the fully-vested VestingLock",
@@ -175,6 +180,7 @@ class GovernanceLockTimeBasedIntegrationTest
           aliceValidatorBackend.participantClientWithAdminToken,
           owner,
           remainingVestingLockCid,
+          meta = Map(vestingLockWithdrawAtMetaKey -> unlockAt.plusSeconds(120).toMicros.toString),
         ),
       )(
         "the VestingLock is archived and no pending TransferInstruction remains",

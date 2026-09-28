@@ -5,6 +5,7 @@ module Splice.Scripts.TestGovernanceLocks where
 
 import Prelude hiding (forA)
 import DA.Action (unless, when)
+import DA.Assert ((===))
 import DA.Either
 import DA.Optional
 import DA.TextMap qualified as TM
@@ -25,6 +26,7 @@ import Splice.Testing.Registries.AmuletRegistryV2 qualified as AmuletRegistryV2
 import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
 import Splice.Testing.Utils
 import Splice.TokenStandard.Utils
+import Splice.TokenStandard.Utils.Internal.Conversions (timeToMeta)
 import Splice.Types (Round(..))
 
 testGovernanceLockHappyPathRawChoices : Script ()
@@ -132,7 +134,7 @@ testGovernanceLockCompatHappyPathScenario ops = do
   aliceLock <- expectSuccess $ ops.governanceLock env alice 80000.0 someFaKind
 
   -- Unlock 80k Amulet such that 1/8th should result in 10k Amulet withdrawable after 1/8th year.
-  aliceVesting <- ops.governanceUnlock env aliceLock alice
+  aliceVesting <- expectSuccess $ ops.governanceUnlock env aliceLock alice emptyMetadata
 
   -- Chosen to make the vesting period to exactly 1/4th of the specified 60 day vesting period.
   -- 1/8th and 80k are reliably exactly representible in fixed-point binary
@@ -141,7 +143,8 @@ testGovernanceLockCompatHappyPathScenario ops = do
 
   passTime (days 16)
 
-  newVestingLock <- fromSomeNote "Expected a continuing vested lock, but recevied None" <$> ops.vestingWithdraw env aliceVesting alice
+  newVestingLock <- fromSomeNote "Expected a continuing vested lock, but received None" <$>
+    (expectSuccess $ ops.vestingWithdraw env aliceVesting alice emptyMetadata)
 
   -- Check that we did indeed unlock 10k amulet as expected - 1/8th of the total vesting amount of 80k.
   WalletClientV2.checkHoldingWithAmountExists alice registry.instrumentId 20000.0
@@ -151,12 +154,57 @@ testGovernanceLockCompatHappyPathScenario ops = do
 
   passTime (days 60)
 
-  rv <- ops.vestingWithdraw env newVestingLock alice
+  rv <- expectSuccess $ ops.vestingWithdraw env newVestingLock alice emptyMetadata
   require "Expected no remaining vesting lock, received one" $ isNone rv
 
   -- Check that we withdrew all and exactly the 70k _remaining_ after the above withdrawal.
   WalletClientV2.checkHoldingWithAmountExists alice registry.instrumentId 60000.0
 
+testGovernanceLockCompatTimesFromMetaTSv1 : Script ()
+testGovernanceLockCompatTimesFromMetaTSv1 = testGovernanceLockCompatTimesFromMetaTSv1Scenario tsv1Operations
+
+testGovernanceLockCompatTimesFromMetaTSv1Scenario : CompatGovernanceLockOperations -> Script ()
+testGovernanceLockCompatTimesFromMetaTSv1Scenario ops = do
+  env@TestEnv{..} <- setupTest
+  let registry = registriesEnv.amuletV2
+      someFaKind = GLK_FeaturedApp bob
+
+  AmuletRegistryV2.tapFaucet registry alice 80000.0
+
+  aliceLock <- expectSuccess $ ops.governanceLock env alice 80000.0 someFaKind
+
+  now <- getTime
+
+  -- The unlock time must be in the future, but no more than 1 day ahead
+  actionMustFail (expectMessageContains "Ledger time is at or past deadline 'unlockAt' at") $
+    ops.governanceUnlock env aliceLock alice (timeToMeta unlockAtMetaKey now emptyMetadata)
+  actionMustFail (expectMessageContains "Ledger time is strictly before deadline 'unlockAt - 1 day' at") $
+    ops.governanceUnlock env aliceLock alice (timeToMeta unlockAtMetaKey (now `addRelTime` (days 1 + seconds 1)) emptyMetadata)
+  actionMustFail (expectMessageContains "Cannot parse time") $
+    ops.governanceUnlock env aliceLock alice (Metadata $ TM.fromList [(unlockAtMetaKey, "not-a-time")])
+
+  -- Unlock with an explicit unlock time, which becomes the start of vesting
+  let unlockAt = now `addRelTime` hours 1
+  aliceVesting <- expectSuccess $ ops.governanceUnlock env aliceLock alice (timeToMeta unlockAtMetaKey unlockAt emptyMetadata)
+  Some vestingLock <- queryContractId alice aliceVesting
+  vestingLock.endTime `addRelTime` negate vestingLock.vestingPeriod === unlockAt
+  vestingLock.vestingPeriod === days 60
+
+  passTime (days 16)
+  now <- getTime
+
+  -- The withdraw time must be in the past
+  actionMustFail (expectMessageContains "Ledger time is strictly before deadline 'requestedAt' at") $
+    ops.vestingWithdraw env aliceVesting alice (timeToMeta withdrawAtMetaKey (now `addRelTime` seconds 1) emptyMetadata)
+  actionMustFail (expectMessageContains "Cannot parse time") $
+    ops.vestingWithdraw env aliceVesting alice (Metadata $ TM.fromList [(withdrawAtMetaKey, "not-a-time")])
+
+  -- Withdraw with an explicit withdraw time after 1/4th of the 60 day vesting period
+  Some newVestingLock <- expectSuccess $ ops.vestingWithdraw env aliceVesting alice (timeToMeta withdrawAtMetaKey (unlockAt `addRelTime` days 15) emptyMetadata)
+
+  -- 1/4th of the 80k is withdrawn and 3/4th remain vesting
+  WalletClientV2.checkHoldingWithAmountExists alice registry.instrumentId 20000.0
+  checkLockedHolding alice newVestingLock 60000.0
 
 testGovernanceLockMinimumLocksLockUnlockWithdraw : Script ()
 testGovernanceLockMinimumLocksLockUnlockWithdraw = testGovernanceLockMinimumLocksLockUnlockWithdrawScenario rawOperations
@@ -442,7 +490,7 @@ testGovernanceLockCompatProvisionalFullWithdrawScenario ops = do
   aliceLock <- expectSuccess $ ops.governanceLock env alice 20000.0 provisionalSpec
 
   -- Full withdraw: no vesting lock
-  None <- ops.optGovernanceUnlock env aliceLock alice
+  None <- expectSuccess $ ops.optGovernanceUnlock env aliceLock alice emptyMetadata
 
   -- The full 20k is liquid immediately
   WalletClientV2.checkHoldingWithAmountExists alice env.instrId 20000.0
@@ -720,17 +768,36 @@ data CompatGovernanceLockOperations = CompatGovernanceLockOperations with
     :  TestEnv
     -> ContractId GovernanceLock
     -> Party
-    -> Script (Optional (ContractId VestingLock))
+    -> Metadata
+    -> Script (Either SubmitError (Optional (ContractId VestingLock)))
   governanceUnlock
     :  TestEnv
     -> ContractId GovernanceLock
     -> Party
-    -> Script (ContractId VestingLock)
+    -> Metadata
+    -> Script (Either SubmitError (ContractId VestingLock))
   vestingWithdraw
     :  TestEnv
     -> ContractId VestingLock
     -> Party
-    -> Script (Optional (ContractId VestingLock))
+    -> Metadata
+    -> Script (Either SubmitError (Optional (ContractId VestingLock)))
+
+withdrawTransferInstructionV1
+  :  forall t1 t2. (HasToInterface t1 V1.TransferInstruction, HasFromInterface t2 V1.TransferInstruction)
+  => TestEnv
+  -> ContractId t1
+  -> Party
+  -> Metadata
+  -> Script (Either SubmitError (Optional (ContractId t2)))
+withdrawTransferInstructionV1 env cid actor meta = do
+  result <- submitWithTransferContext env.registriesEnv.amuletV2 (actAs actor)
+    \context -> exerciseCmd (toInterfaceContractId @V1.TransferInstruction cid) V1.TransferInstruction_Withdraw with extraArgs = ExtraArgs with context; meta
+  pure $ fmap
+    (\case
+      V1.TransferInstructionResult_Pending cid -> Some $ fromInterfaceContractId @t2 cid
+      _ -> None)
+    ((.output) <$> result)
 
 tsv1Operations = CompatGovernanceLockOperations with
     governanceLock
@@ -739,13 +806,9 @@ tsv1Operations = CompatGovernanceLockOperations with
     vestingWithdraw
   where
     governanceLock = governanceLockV1
-    optGovernanceUnlock env cid actor = do
-      unlockResult <- WalletClientV2.withdrawTransferInstructionV1 env.registries actor (toInterfaceContractId cid)
-      pure $ fromInterfaceContractId <$> unlockResult
-    governanceUnlock env cid actor = fromSome <$> optGovernanceUnlock env cid actor
-    vestingWithdraw env cid actor = do
-      withdrawResult <- WalletClientV2.withdrawTransferInstructionV1 env.registries actor (toInterfaceContractId cid)
-      pure $ fromInterfaceContractId <$> withdrawResult
+    optGovernanceUnlock = withdrawTransferInstructionV1
+    governanceUnlock env cid actor meta = ((<$>) fromSome) <$> optGovernanceUnlock env cid actor meta
+    vestingWithdraw = withdrawTransferInstructionV1
 
 governanceLockV1 : TestEnv -> Party -> Decimal -> GovernanceLockKind -> Script (Either SubmitError (ContractId GovernanceLock))
 governanceLockV1 env owner amount kind = do
