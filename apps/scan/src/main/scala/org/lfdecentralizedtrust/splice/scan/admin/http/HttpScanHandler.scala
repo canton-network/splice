@@ -2659,16 +2659,6 @@ class HttpScanHandler(
         )
       ) { bulkStorage =>
         for {
-          progress <- bulkStorage.getStagingProgressTimestamp()
-          _ = if (
-            progress < CantonTimestamp.tryFromInstant(body.requiredCatchupTimestamp.toInstant)
-          ) {
-            throw Status.NOT_FOUND
-              .withDescription(
-                s"Bulk storage is not caught up to the required timestamp ${body.requiredCatchupTimestamp}. Current progress: $progress"
-              )
-              .asRuntimeException()
-          }
           checksums <- bulkStorage.getObjectChecksums(body.objectKeys)
         } yield {
           ScanResource.GetBulkObjectChecksumsResponse.OK(
@@ -2678,6 +2668,32 @@ class HttpScanHandler(
           )
         }
       }
+    }
+  }
+
+  override def getBulkHistoryProgress(respond: ScanResource.GetBulkHistoryProgressResponse.type)(
+      atOrBeforeRecordTime: java.time.OffsetDateTime
+  )(extracted: TraceContext): scala.concurrent.Future[ScanResource.GetBulkHistoryProgressResponse] = {
+    implicit val tc = extracted
+    withSpan(s"$workflowId.getBulkObjectChecksums") { _ =>
+      _ =>
+        bulkStorage.fold(
+          Future.failed[ScanResource.GetBulkHistoryProgressResponse](
+            Status.UNIMPLEMENTED
+              .withDescription("Bulk storage is not configured")
+              .asRuntimeException()
+          )
+        ) { bulkStorage =>
+          for {
+            progress <- bulkStorage.getStagingProgressTimestamp()
+          } yield {
+            ScanResource.GetBulkHistoryProgressResponse.OK(
+              definitions.GetBulkHistoryProgressResponse(
+                progress >= CantonTimestamp.tryFromInstant(atOrBeforeRecordTime.toInstant)
+              )
+            )
+          }
+        }
     }
   }
 

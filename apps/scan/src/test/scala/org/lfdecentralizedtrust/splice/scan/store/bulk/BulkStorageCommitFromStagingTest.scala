@@ -261,7 +261,7 @@ class BulkStorageCommitFromStagingTest
           )
           when(mockConn.url) thenReturn Uri(s"http://scan_$i")
           when(
-            mockConn.getBulkObjectChecksums(any[CantonTimestamp], any[Seq[String]])(
+            mockConn.getBulkObjectChecksums(any[Seq[String]])(
               any[ExecutionContext],
               any[TraceContext],
             )

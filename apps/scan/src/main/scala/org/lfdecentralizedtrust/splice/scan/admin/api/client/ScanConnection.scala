@@ -359,7 +359,7 @@ trait ScanConnection
       tc: TraceContext,
   ): Future[Option[GetRewardAccountingBatchResponse]]
 
-  def getBulkObjectChecksums(requiredCatchupTimestamp: CantonTimestamp, objectKeys: Seq[String])(
+  def getBulkObjectChecksums(objectKeys: Seq[String])(
       implicit
       ec: ExecutionContext,
       tc: TraceContext,

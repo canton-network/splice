@@ -159,8 +159,7 @@ class HttpScanHandlerBulkStorageTest extends AnyWordSpec with BaseTest {
     "return UNIMPLEMENTED when bulk storage is not configured for checksum lookups" in {
       val h = handler(bulkStorage = None)
       val request = definitions.GetBulkObjectChecksumsRequest(
-        requiredCatchupTimestamp = Instant.parse("2024-01-01T00:00:00Z").atOffset(ZoneOffset.UTC),
-        objectKeys = Vector("object-1"),
+        objectKeys = Vector("object-1")
       )
       assertGrpcError(
         h.getBulkObjectChecksums(ScanResource.GetBulkObjectChecksumsResponse)(request)(
@@ -171,56 +170,67 @@ class HttpScanHandlerBulkStorageTest extends AnyWordSpec with BaseTest {
       )
     }
 
-    "return NOT_FOUND when snapshot progress is behind the required catch-up timestamp" in {
+    "GetBulkHistoryProgressResponse returns true when enough progress was made" in {
       val snapshotProgress = snapshotProgressAt("2023-12-31T00:00:00Z")
       val updateRange = updateProgress("2024-01-01T00:00:00Z", "2024-01-02T00:00:00Z")
       val bulkStorage = bulkStorageReader(Some(snapshotProgress), Some(updateRange))
       val h = handler(bulkStorage = Some(bulkStorage))
-      val request = definitions.GetBulkObjectChecksumsRequest(
-        requiredCatchupTimestamp = Instant.parse("2024-01-01T00:00:00Z").atOffset(ZoneOffset.UTC),
-        objectKeys = Vector("object-1"),
-      )
-      assertGrpcError(
-        h.getBulkObjectChecksums(ScanResource.GetBulkObjectChecksumsResponse)(request)(
-          TraceContext.empty
-        ),
-        Status.Code.NOT_FOUND,
-        "Bulk storage is not caught up to the required timestamp",
-      )
+      val requiredCatchupTimestamp = Instant.parse("2023-12-31T00:00:00Z").atOffset(ZoneOffset.UTC)
+      val response = h
+        .getBulkHistoryProgress(ScanResource.GetBulkHistoryProgressResponse)(
+          requiredCatchupTimestamp
+        )(TraceContext.empty)
+        .futureValue
+      inside(response) { case ScanResource.GetBulkHistoryProgressResponseOK(value) =>
+        value.beyondRequestedRecordTime shouldBe true
+      }
     }
 
-    "return NOT_FOUND when updates progress is behind the required catch-up timestamp" in {
+
+    "GetBulkHistoryProgressResponse returns false when snapshot progress is behind the required catch-up timestamp" in {
+      val snapshotProgress = snapshotProgressAt("2023-12-31T00:00:00Z")
+      val updateRange = updateProgress("2024-01-01T00:00:00Z", "2024-01-02T00:00:00Z")
+      val bulkStorage = bulkStorageReader(Some(snapshotProgress), Some(updateRange))
+      val h = handler(bulkStorage = Some(bulkStorage))
+      val requiredCatchupTimestamp = Instant.parse("2024-01-01T00:00:00Z").atOffset(ZoneOffset.UTC)
+      val response = h
+        .getBulkHistoryProgress(ScanResource.GetBulkHistoryProgressResponse)(
+          requiredCatchupTimestamp
+        )(TraceContext.empty)
+        .futureValue
+      inside(response) { case ScanResource.GetBulkHistoryProgressResponseOK(value) =>
+        value.beyondRequestedRecordTime shouldBe false
+      }
+    }
+
+    "GetBulkHistoryProgressResponse returns false when updates progress is behind the required catch-up timestamp" in {
       val snapshotProgress = snapshotProgressAt("2024-01-02T00:00:00Z")
       val updateRange = updateProgress("2023-12-30T00:00:00Z", "2023-12-31T00:00:00Z")
       val bulkStorage = bulkStorageReader(Some(snapshotProgress), Some(updateRange))
       val h = handler(bulkStorage = Some(bulkStorage))
-      val request = definitions.GetBulkObjectChecksumsRequest(
-        requiredCatchupTimestamp = Instant.parse("2024-01-01T00:00:00Z").atOffset(ZoneOffset.UTC),
-        objectKeys = Vector("object-1"),
-      )
-      assertGrpcError(
-        h.getBulkObjectChecksums(ScanResource.GetBulkObjectChecksumsResponse)(request)(
-          TraceContext.empty
-        ),
-        Status.Code.NOT_FOUND,
-        "Bulk storage is not caught up to the required timestamp",
-      )
+      val requiredCatchupTimestamp = Instant.parse("2024-01-01T00:00:00Z").atOffset(ZoneOffset.UTC)
+      val response = h
+        .getBulkHistoryProgress(ScanResource.GetBulkHistoryProgressResponse)(
+          requiredCatchupTimestamp
+        )(TraceContext.empty)
+        .futureValue
+      inside(response) { case ScanResource.GetBulkHistoryProgressResponseOK(value) =>
+        value.beyondRequestedRecordTime shouldBe false
+      }
     }
 
-    "return NOT_FOUND when progress is not initialized" in {
+    "GetBulkHistoryProgressResponse returns false when progress is not initialized" in {
       val bulkStorage = bulkStorageReader(None, None)
       val h = handler(bulkStorage = Some(bulkStorage))
-      val request = definitions.GetBulkObjectChecksumsRequest(
-        requiredCatchupTimestamp = Instant.parse("2024-01-01T00:00:00Z").atOffset(ZoneOffset.UTC),
-        objectKeys = Vector("object-1"),
-      )
-      assertGrpcError(
-        h.getBulkObjectChecksums(ScanResource.GetBulkObjectChecksumsResponse)(request)(
-          TraceContext.empty
-        ),
-        Status.Code.NOT_FOUND,
-        "Bulk storage is not caught up to the required timestamp",
-      )
+      val requiredCatchupTimestamp = Instant.parse("2024-01-01T00:00:00Z").atOffset(ZoneOffset.UTC)
+      val response = h
+        .getBulkHistoryProgress(ScanResource.GetBulkHistoryProgressResponse)(
+          requiredCatchupTimestamp
+        )(TraceContext.empty)
+        .futureValue
+      inside(response) { case ScanResource.GetBulkHistoryProgressResponseOK(value) =>
+        value.beyondRequestedRecordTime shouldBe false
+      }
     }
   }
 }

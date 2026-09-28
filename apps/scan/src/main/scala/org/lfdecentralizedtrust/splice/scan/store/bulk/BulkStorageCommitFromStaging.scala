@@ -38,13 +38,14 @@ class BulkStorageCommitFromStaging[T](
       objects: Seq[ObjectKeyAndChecksum],
   ): Future[Boolean] = {
     logger.debug(
-      s"Checking BFT agreement for objects: ${objects.map(_.key).mkString(", ")}"
+      s"Checking BFT agreement for objects: ${objects.map(_.key).mkString(", ")} (requires catchup to $requiredCatchupTimestamp)"
     )
     if (appConfig.bftCheckEnabled) {
       for {
         connection <- scanConnection.connection
+        // FIXME: check requiredCatchupTimestamp
         bft <- connection
-          .getBulkObjectChecksums(requiredCatchupTimestamp, objects.map(_.key))
+          .getBulkObjectChecksums(objects.map(_.key))
           .map(Some(_))
           .recoverWith { case ex @ HttpErrorWithHttpCode(code, _) =>
             if (code == StatusCodes.BadGateway) {
