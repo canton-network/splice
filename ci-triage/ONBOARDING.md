@@ -7,11 +7,11 @@ Everything reproducible is on one git branch; this page is the short path into i
 
 ```
 git fetch <remote> ray/ci-triage-2026-09-15 && git checkout ray/ci-triage-2026-09-15
-cp -r ci-triage/skill/ci-triage ~/.claude/skills/
+cp -r .claude/skills/ci-triage ~/.claude/skills/
 ```
 Then read, in this order: `ci-triage/HANDOVER.md` (status of every fix branch, open items, environment notes),
 `ci-triage/README.md` (ref -> run -> job mapping and one line per ref), and
-`ci-triage/skill/ci-triage/references/known-families.md` (flake families A to L with the grep that confirms each).
+`.claude/skills/ci-triage/references/known-families.md` (flake families A to L with the grep that confirms each).
 
 ## 2. Run a triage
 
@@ -57,7 +57,7 @@ has several failed jobs and several refs, never assign refs by elimination; reco
 - Rate limiter rejections are metered, not logged; a 429 in the logs does not say which limiter fired.
 - sbt: `direnv allow` then `USER=$(id -un) direnv exec . bash -c 'sbt --batch ...'` (the template's global
   CLAUDE.md has the full recipe). If the dev shell cannot realize because the overlay is full, source
-  `ci-triage/skill/ci-triage/references/sandbox-sbt-env.sh` instead.
+  `.claude/skills/ci-triage/references/sandbox-sbt-env.sh` instead.
 - `origin` (hyperledger-labs, SSH) is refused from a sandbox; use the HTTPS remote for canton-network/splice.
   DACH-NY repos need a token that covers that org (`sbx secret set <sandbox> github -t "$(gh auth token)"`).
 

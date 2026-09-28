@@ -28,7 +28,22 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   sequencer onboardings, or gate on P2P authentication; for (2) a non-blocking onboard handler or a
   `custom-timeouts` entry for `onboardSvSequencer`, or extend the `onboard/validator` timeout ignore.
 - Umbrella 10165 (10094 and 10153 closed as dups; 10161 same). Occurs during any initDso with 3-4 SVs
-  (ValidatorIntegrationTest, SvOnboardingIntegrationTest, SvDsoPartyManagementIntegrationTest).
+  (ValidatorIntegrationTest, SvOnboardingIntegrationTest, SvDsoPartyManagementIntegrationTest,
+  DistributedDomainIntegrationTest).
+- Signature (3): a participant's topology broadcast is refused by the blacklisted sequencer and the party never
+  reaches that synchronizer, surfacing as `INVALID_PRESCRIBED_SYNCHRONIZER_ID(9,...): Not all informees are on the
+  specified synchronizer: <target>, but on Set(<other synchronizer>)` on a wallet/app-install command. 10227
+  (run 36160174141, wall-clock-time (9), canton 3.6.0-snapshot.20260925.20321). First hard test failure in this
+  family; the earlier three symptoms are checkErrors WARNs.
+- Second Canton gap found via 10227, worth reporting separately: the topology-broadcast path
+  (`SequencerBasedRegisterTopologyTransactionHandle` / `StoreBasedSynchronizerOutbox`) does NOT fail over to
+  another sequencer connection on a refused send, although `RichSequencerClientImpl` retries an ordinary send on a
+  new connection in the same millisecond (`Retry has not been configured for GrpcRequestRefusedByServer, giving
+  up.`). `SequencerConnectionPoolImpl` keeps returning the blacklisted node, so each 10 s outbox flush can draw it
+  again and a transient blacklist becomes a ~30 s stall of all topology dispatch for that participant.
+  Confirming grep: pair `returning Set(sequencer-connection-SEQ::svN` with the next `was refused by SEQ::svN ...
+  because it is overloaded` and check whether a second `returning Set(...)` for the SAME message id follows
+  (ordinary send) or a `Failed broadcasting topology transactions` does (broadcast).
 
 ## C. False off-boarding conclusion during onboarding state transfer (10048 family) - FIXED
 - Signatures: `Received topology for epoch N, but this node isn't part of it (i.e., it has been off-boarded)` on a
