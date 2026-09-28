@@ -1,14 +1,14 @@
-# GitHub Copilot Instructions
+# Agent Instructions
 
-This document provides instructions for GitHub Copilot to follow when assisting with development in this repository.
+This document provides instructions for AI coding agents (GitHub Copilot, Claude Code, and others) to follow when assisting with development in this repository.
 
 ## Testing
 
-Every contribution must be tested in an automated test. For further details see the [Testing README](../TESTING.md).
+Every contribution must be tested in an automated test. For further details see the [Testing README](TESTING.md).
 
 ## DB Migrations
 
-Refer to [the main README on migrations](../apps/common/src/main/resources/db/migration/README.md).
+Refer to [the main README on migrations](apps/common/src/main/resources/db/migration/README.md).
 
 ## Daml Changes
 
