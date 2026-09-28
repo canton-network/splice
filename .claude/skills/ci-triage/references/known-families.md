@@ -209,4 +209,11 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
 - Deterministic, not a flake, whenever the shard split co-locates the two suites: check the `cmd:` line of the job
   log for the shard's suite order before calling it timing-dependent.
 - Do not fix by weakening the assertion or cleaning the table in the test; that hides an unscoped production query.
+- Expect the objection "but `cleanDb()` truncates every table between tests". It does, and `resetAllAppTables` in
+  `SpliceDbTest` does list this table, but `cleanDb` is a hook on canton's `DbTest` trait that only the store UNIT
+  tests mix in. The integration bases (`IntegrationTest`, `IntegrationTestWithIsolatedEnvironment` in
+  `SpliceTests.scala`) do not. Settle it empirically rather than by reading the class hierarchy:
+  `zcat canton_network_test.clog.gz | grep -ac 'Resetting all Splice app database tables'` was 0 for a shard of
+  nine suites, and the table's Flyway migration line occurs exactly once. Integration suites isolate by building a
+  new environment (new config id, new DSO party), not by truncating app tables.
 

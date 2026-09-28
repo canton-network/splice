@@ -349,6 +349,84 @@ The failing suite runs entirely inside the previous suite's window, with 6.8 min
 15:26:21.810  the stale row would finally have aged out
 ```
 
+## 9. Why `cleanDb()` does not prevent this
+
+The obvious objection is that the test framework truncates every app table between tests, and it does contain
+exactly that helper. It is not reached from integration tests.
+
+`cleanDb` is an abstract hook on canton's `DbTest` trait, invoked once per test:
+
+```
+git show 95dc17d3d9:canton-fork/community-common-test/src/main/scala/com/digitalasset/canton/store/db/DbTest.scala \
+  | sed -n '44p;107p'
+```
+```
+  protected def cleanDb(storage: DbStorage)(implicit tc: TraceContext): FutureUnlessShutdown[?]
+    Await.result(cleanDb(storage.underlying), 120.seconds)
+```
+
+The store unit test for this very store overrides it with `resetAllAppTables`, which does truncate the table:
+
+```
+git show 95dc17d3d9:apps/common/src/test/scala/org/lfdecentralizedtrust/splice/store/DbUnavailablePartiesStoreTest.scala | sed -n '349,352p'
+git show 95dc17d3d9:apps/common/src/test/scala/org/lfdecentralizedtrust/splice/store/db/SpliceDbTest.scala | sed -n '65p;107p;109p'
+```
+```
+  override protected def cleanDb(
+      storage: DbStorage
+  )(implicit traceContext: TraceContext): FutureUnlessShutdown[?] =
+    resetAllAppTables(storage)
+          _ <- sql"""TRUNCATE
+                dso_unavailable_parties,
+            RESTART IDENTITY CASCADE""".asUpdate
+```
+
+But the integration-test bases do not mix `DbTest` in. `IntegrationTest` (which
+`AutoIgnoreUnresponsivePartiesIntegrationTestBase` extends) is:
+
+```
+git show 95dc17d3d9:apps/app/src/test/scala/org/lfdecentralizedtrust/splice/integration/tests/SpliceTests.scala | sed -n '134,139p'
+```
+```
+  trait IntegrationTest
+      extends BaseIntegrationTest[SpliceConfig, SpliceEnvironment]
+      with SharedSpliceEnvironment
+      with BeforeAndAfterEach
+      with TestCommon
+      with LedgerApiExtensions {
+```
+
+and nothing under the integration or util test trees references the hook at all:
+
+```
+git grep -ln "DbTest\|PostgresTest\|resetAllAppTables" 95dc17d3d9 -- \
+  apps/app/src/test/scala/org/lfdecentralizedtrust/splice/integration \
+  apps/app/src/test/scala/org/lfdecentralizedtrust/splice/util
+```
+```
+(no output)
+```
+
+The empirical check settles it. `resetAllAppTables` logs `Resetting all Splice app database tables` at INFO
+before it truncates, and that line does not occur once in this shard's 20 minutes and nine suites:
+
+```
+zcat log/10214/logs-wall-clock-time-7/canton_network_test.clog.gz | grep -ac 'Resetting all Splice app database tables'
+zcat log/10214/logs-wall-clock-time-7/canton.clog.gz            | grep -ac 'Resetting all Splice app database tables'
+```
+```
+0
+0
+```
+
+So the cleanup exists and covers the right table, but only store unit tests run it. Integration suites isolate
+themselves by building a fresh environment (new config id, new DSO party, restarted apps), not by truncating
+app tables. That is precisely why the row's `store_id` matters: it is the only thing distinguishing the two
+suites' rows in the one table they share, and the read path ignores it.
+
+Parallelism is not involved. The two suites run strictly sequentially in the same JVM: the previous suite's
+test succeeds at 15:16:22.283 and the next suite starts at 15:16:22.289 (section 3).
+
 ## Verdict
 
 New. Not a duplicate of any catalogue family, and not a Canton issue.
@@ -385,10 +463,11 @@ left to the owner):
 
 NOT verified:
 
-- The test configuration that assigns the database was not read; the shared-database conclusion rests on the
-  single `073 - dso unavailable parties` migration for the whole shard (section 5) plus the behavioural
-  evidence that the failing suite's `listParties()` returned a party only the other suite's store ever wrote
-  (section 4).
+- The test configuration that assigns the database name was not read. The shared-database conclusion rests on
+  three independent observations instead: the single `073 - dso unavailable parties` migration for the whole
+  shard (section 5), the absence of any `Resetting all Splice app database tables` line (section 9), and the
+  behavioural evidence that the failing suite's `listParties()` returned a party only the other suite's store
+  ever wrote (section 4).
 - The numeric `store_id` values of the two stores are not logged, so "different store ids" rests on the
   descriptor inputs (DSO party, participant, sv party) differing between suites, which the logs do show.
 - Whether other shards or runs hit this. Only this job was examined; the prediction that it is deterministic
