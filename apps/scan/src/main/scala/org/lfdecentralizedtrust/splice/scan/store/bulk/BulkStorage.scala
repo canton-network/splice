@@ -35,6 +35,15 @@ import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorage.{
   updatesStagingKvStoreKey,
 }
 import org.lfdecentralizedtrust.splice.scan.util.PeerBftScanConnection
+import org.lfdecentralizedtrust.splice.scan.store.bulk.backfilling.{
+  BftBulkObjectListing,
+  BulkStorageBackfilling,
+  CatchUpWithPeers,
+  KvBackfillingProgress,
+  PeerRotation,
+  ScanPeerObjectSource,
+  VerifiedObjectCopier,
+}
 import org.lfdecentralizedtrust.splice.util.TemplateJsonDecoder
 
 import scala.concurrent.duration.*
@@ -87,7 +96,12 @@ class BulkStorage(
       .tick(0.seconds, appConfig.updatesPollingInterval.underlying, ())
       .mapAsync(1)(_ =>
         if (updateHistory.isReady)
-          updateHistory.isHistoryBackfilled(currentMigrationId)
+          for {
+            historyBackfilled <- updateHistory.isHistoryBackfilled(currentMigrationId)
+            peerCopyComplete <-
+              if (appConfig.backfilling.enabled) backfillingProgress.isComplete
+              else Future.successful(true)
+          } yield historyBackfilled && peerCopyComplete
         else Future.successful(false)
       )
       .filter(identity)
@@ -119,6 +133,33 @@ class BulkStorage(
     historyMetrics.BulkStorage.latestUpdatesSegmentCommitted,
     loggerFactory,
   )
+
+  lazy val backfillingProgress = new KvBackfillingProgress(
+    updatesStagingProgress,
+    acsStagingProgress,
+    kvProvider,
+    loggerFactory,
+  )
+  val backfilling: Option[BulkStorageBackfilling] =
+    Option.when(appConfig.backfilling.enabled) {
+      new BulkStorageBackfilling(
+        appConfig.backfilling,
+        storageConfig,
+        currentMigrationId,
+        new BftBulkObjectListing(scanConnection),
+        new VerifiedObjectCopier(
+          new ScanPeerObjectSource(scanConnection),
+          new PeerRotation,
+          stagingConnection,
+          committedConnection,
+          appConfig.backfilling.downloadParallelism,
+          loggerFactory,
+        ),
+        backfillingProgress,
+        CatchUpWithPeers,
+        loggerFactory,
+      )
+    }
 
   val reader = new BulkStorageReader(
     acsStagingProgress,
@@ -219,8 +260,12 @@ class BulkStorage(
 
   // Services are only started once initialization has completed.
   private lazy val services =
-    Seq[PekkoRetryableService[?]](acsStaging, acsCommitted, updatesStaging, updatesCommitted)
-      .map(_.asPekkoRetryingService(automationConfig, backoffClock, retryProvider))
+    (backfilling.toList ++ Seq[PekkoRetryableService[?]](
+      acsStaging,
+      acsCommitted,
+      updatesStaging,
+      updatesCommitted,
+    )).map(_.asPekkoRetryingService(automationConfig, backoffClock, retryProvider))
 
   private def initialize(): Future[BulkStorage] = {
     val resetAll =
@@ -233,6 +278,7 @@ class BulkStorage(
           _ <- acsCommittedProgress.reset
           _ <- updatesStagingProgress.reset
           _ <- updatesCommittedProgress.reset
+          _ <- backfillingProgress.resetCompletion()
         } yield ()
       } else Future.unit
     resetAll.map { _ =>
