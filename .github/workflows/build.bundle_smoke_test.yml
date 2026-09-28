@@ -40,7 +40,6 @@ jobs:
   bundle_smoke_test:
     needs: check_release_pr
     # if: needs.check_release_pr.outputs.is_release == 'true'
-    if: true
     runs-on: self-hosted-k8s-large
     name: Build bundle and smoke-test startup
     container:
