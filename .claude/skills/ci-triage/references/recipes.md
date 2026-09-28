@@ -42,7 +42,8 @@ timestamps) and `npm-<app>-<user>.out.gz` (Vite dev servers), `webpage-*.html.gz
 
 ## 4. Timelines
 ```
-zcat $T | grep -a -E "Starting test suite|Test (succeeded|failed): |Starting '" | grep -a 'T13:1[5-8]' | sed -E 's/"logger_name":.*//; s/\{"@timestamp":"([^"]+)","message":"/\1 /' | cut -c1-170
+W='T13:1[5-8]'   # time window around the flagged timestamps, here 13:15-13:18
+zcat $T | grep -a -E "Starting test suite|Test (succeeded|failed): |Starting '" | grep -a "$W" | sed -E 's/"logger_name":.*//; s/\{"@timestamp":"([^"]+)","message":"/\1 /' | cut -c1-170
 ```
 Generic line formatter (timestamp, level, logger, message):
 ```
@@ -55,7 +56,7 @@ JS console errors; `WebDriver:Navigate` and `browsingContext.domContentLoaded` m
 ## 5. Canton pin and backport state
 ```
 git show <sha>:nix/canton-sources.json | grep -m1 version
-git fetch https://github.com/canton-network/splice.git +release-line-0.8.x:refs/remotes/origin/release-line-0.8.x
+git fetch origin <release-line>          # e.g. release-line-0.8.4; the run's headBranch
 git merge-base --is-ancestor <fix-sha> origin/<branch> && echo present || echo MISSING
 git log --format='%h %ad %s' --date=short origin/<release>..origin/main -- <test file>     # main-only fixes to that file
 ```
@@ -65,7 +66,7 @@ git log --format='%h %ad %s' --date=short origin/<release>..origin/main -- <test
 V=<version>; curl -sSLo canton-$V.tgz https://www.canton.io/releases/canton-open-source-$V.tar.gz
 tar -xzf canton-$V.tgz --wildcards '*/lib/canton-open-source-*.jar'
 python3 -c "import zipfile;z=zipfile.ZipFile('<jar>');print([n for n in z.namelist() if b'<log string>' in z.read(n)])"
-javap -p -c <class>   # exact line numbers via LineNumberTable
+javap -p -c -l -cp <jar> <fully.qualified.Class>   # -l prints the LineNumberTable for exact line numbers
 ```
 Public mirror `digital-asset/canton` is squashed (`[main] Update <date>` commits, no shared shas); compare
 sources or jars, not commit ids.
@@ -76,11 +77,16 @@ sources or jars, not commit ids.
 `.github/actions/scripts/check-logs.sh` prints ignored lines with the suffix and real problems without it.
 
 ## 8. Fix branch
+A separate worktree keeps the triage branch checked out. `-b` refuses to overwrite an existing branch; for a
+stacked follow-up, add a worktree for the existing branch instead.
 ```
-git checkout -B <user>/fix-<ref>-<slug> origin/main                     # e.g. <user>/fix-10172-multiarch-check-retry
-git checkout -B <user>/backport-<ref>-<pr>-<release-line> origin/<release-line>   # e.g. <user>/backport-10169-7299-release-line-0.8.3
-git cherry-pick -x -s <sha>                                              # backports
-git commit -s -m "[ci] <one subject line>"
+git fetch origin main
+git worktree add -b <user>/fix-<ref>-<slug> ../fix-<ref> origin/main       # e.g. <user>/fix-10172-multiarch-check-retry
+git worktree add -b <user>/backport-<ref>-<pr>-<release-line> ../backport-<ref> origin/<release-line>   # e.g. <user>/backport-10169-7299-release-line-0.8.3
+git worktree add ../fix-<ref> <user>/fix-<ref>-<slug>                        # stacked follow-up on an existing fix branch
+git -C ../backport-<ref> cherry-pick -x -s <sha>                             # backports
+git -C ../fix-<ref> commit -s -m "[ci] <one subject line>"
+git worktree remove ../fix-<ref>                                             # when done (the branch stays)
 ```
 The ref in the branch name is the cn-test-failures issue the branch fixes (the parent ref when it closes a family).
 Cheap checks: `sbt --batch "apps-app/Test/scalafmtCheck"`, `npx --no-install prettier --check <files>`.
