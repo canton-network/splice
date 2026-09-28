@@ -1945,63 +1945,71 @@ class DbSvDsoStore(
   }
 
   override def listProvisionalGovernanceLocksWithFeaturedAppRightSample(
-      limit: Limit = defaultLimit
-  )(implicit tc: TraceContext): Future[Seq[
-    (
-        Contract[
-          splice.governancelock.GovernanceLock.ContractId,
-          splice.governancelock.GovernanceLock,
-        ],
-        FeaturedAppRight.ContractId,
-    )
-  ]] = waitUntilAcsIngested {
-    val opName = "listProvisionalGovernanceLocksWithFeaturedAppRightSample"
-    for {
-      result <- storage.query(
-        (sql"""
-          select #${AcsQueries.SelectFromAcsTableResult.sqlColumnsCommaSeparated("sample.")},
-                 sample.fa_right_contract_id
+      unavailablePartiesStore: Option[UnavailablePartiesStore] = None
+  ): ListExpiredContracts[
+    splice.governancelock.GovernanceLock.ContractId,
+    splice.governancelock.GovernanceLock,
+  ] = (_, limit) =>
+    implicit tc =>
+      waitUntilAcsIngested {
+        val opName = "listProvisionalGovernanceLocksWithFeaturedAppRightSample"
+        for {
+          ignoredParties <- UnavailablePartiesStore.listParties(unavailablePartiesStore)
+          filterClause =
+            if (ignoredParties.nonEmpty)
+              (sql" and " ++ notInClause(
+                "acs.create_arguments->>'owner'",
+                ignoredParties,
+              ) ++ sql" and " ++ notInClause(
+                "acs.provisional_featured_app_lock_for",
+                ignoredParties,
+              ) ++
+                sql" and not (jsonb_path_query_array(acs.create_arguments, '$$.specification.*.controllers[*][*]') ??| ${ignoredParties
+                    .map(p => lengthLimited(p.toProtoPrimitive))
+                    .toArray: Array[String2066]})").toActionBuilder
+            else sql""
+          synchronizerId <- getDsoRules().map(_.domain)
+          result <- storage.query(
+            (sql"""
+          select #${AcsQueries.SelectFromAcsTableWithStateResult.sqlColumnsCommaSeparated(
+                "sample."
+              )}
           from (
-            select #${AcsQueries.SelectFromAcsTableResult.sqlColumnsCommaSeparated("acs.")},
-                   fa_right.contract_id as fa_right_contract_id
+            select #${AcsQueries.SelectFromAcsTableWithStateResult.sqlColumnsCommaSeparated()}
             from #${DsoTables.acsTableName} acs
-            cross join lateral (
-              select contract_id
-              from #${DsoTables.acsTableName} fa_right
-              where fa_right.store_id = acs.store_id
-                and fa_right.migration_id = acs.migration_id
-                and fa_right.package_name = ${FeaturedAppRight.PACKAGE_NAME}
-                and fa_right.template_id_qualified_name = ${QualifiedName(
-            FeaturedAppRight.TEMPLATE_ID_WITH_PACKAGE_ID
-          )}
-                and fa_right.assigned_domain is not null
-                and fa_right.featured_app_right_provider = acs.provisional_featured_app_lock_for
-              limit 1
-            ) fa_right
             where acs.store_id = $acsStoreId
               and acs.migration_id = $domainMigrationId
               and acs.package_name = ${splice.governancelock.GovernanceLock.PACKAGE_NAME}
               and acs.template_id_qualified_name = ${QualifiedName(
-            splice.governancelock.GovernanceLock.TEMPLATE_ID_WITH_PACKAGE_ID
-          )}
+                splice.governancelock.GovernanceLock.TEMPLATE_ID_WITH_PACKAGE_ID
+              )}
+              and acs.assigned_domain = $synchronizerId
               and acs.provisional_featured_app_lock_for is not null
+              and exists (
+                select 1
+                from #${DsoTables.acsTableName} fa_right
+                where fa_right.store_id = acs.store_id
+                  and fa_right.migration_id = acs.migration_id
+                  and fa_right.package_name = ${FeaturedAppRight.PACKAGE_NAME}
+                  and fa_right.template_id_qualified_name = ${QualifiedName(
+                FeaturedAppRight.TEMPLATE_ID_WITH_PACKAGE_ID
+              )}
+                  and fa_right.assigned_domain is not null
+                  and fa_right.featured_app_right_provider = acs.provisional_featured_app_lock_for
+              )
+              """ ++ filterClause ++ sql"""
             limit 1000
           ) sample
           order by random()
           limit ${sqlLimit(limit)}
-          """).toActionBuilder.as[(AcsQueries.SelectFromAcsTableResult, String)](
-          GetResult(r => (r.<<[AcsQueries.SelectFromAcsTableResult], r.<<[String]))
-        ),
-        opName,
-      )
-      limited = applyLimit(opName, limit, result)
-    } yield limited.map { case (glRow, faRightCid) =>
-      (
-        contractFromRow(splice.governancelock.GovernanceLock.COMPANION)(glRow),
-        new FeaturedAppRight.ContractId(faRightCid),
-      )
-    }
-  }
+          """).toActionBuilder.as[AcsQueries.SelectFromAcsTableWithStateResult],
+            opName,
+          )
+          limited = applyLimit(opName, limit, result)
+        } yield limited.map(
+          assignedContractFromRow(splice.governancelock.GovernanceLock.COMPANION)(_)
+        )
+      }
 
   override def lookupAnsEntryContext(reference: SubscriptionRequest.ContractId)(implicit
       tc: TraceContext

@@ -476,6 +476,8 @@ case class SvAppBackendConfig(
     // As RewardCouponV2 have default TTL of 36h, at max 216 (36*6) should be active
     // So try to unhide all in single batch and avoid race among SVs
     delegatelessAutomationUnhideRewardCouponV2BatchSize: Int = 220,
+    // How many provisional featured app locks to convert per batch
+    delegatelessAutomationProvisionalFeaturedAppLockConversionBatchSize: Int = 50,
     // configuration to periodically take topology snapshots
     topologySnapshotConfig: Option[PeriodicBackupDumpConfig] = None,
     bftSequencerConnection: Boolean = true,

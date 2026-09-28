@@ -220,6 +220,7 @@ trait TokenStandardTest extends ExternallySignedPartyTestUtil {
 
   val superValidatorLockMagicParty = makeLockMagicParty("sv-lock")
   val featuredAppLockMagicParty = makeLockMagicParty("fa-lock")
+  val provisionalFeaturedAppLockMagicParty = makeLockMagicParty("provisional-fa-lock")
 
   def makeGovernanceLockSubject(lockSubject: String): String =
     s"lock-subject=$lockSubject"
