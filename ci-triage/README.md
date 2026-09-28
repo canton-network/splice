@@ -277,3 +277,30 @@ given as (run, job, ref) tuples in the request; nothing inferred.
 | `ray/fix-10184-mediator-pruning-backoff-ignore` | 439cf863f1 | 10184: sim-time-only ignore for the mediator pruning scheduler backoff after a >= 30 d jump | rg against the run: WARN line 1, `Pruned up to` 0, whole log 1; not run through CI |
 | `ray/fix-10183-reset-namespace-late-proposer` | 5792168c1f | 10183: `ResetDecentralizedNamespace` tolerates a rejected proposal from an owner whose signature the threshold no longer needs; assertion accepts ALREADY_EXISTS and NO_APPROPRIATE_SIGNING_KEY | apps-app/Test/scalafmtCheck (see packet); NOT compiled/run; rename once the ref is confirmed |
 | `ray/fix-10197-bft-read-confirmation-wait` | 964e7df114 | 10197: 90 s budget for the two-confirmation check in TrafficBasedRewardsSvAppTimeBasedIntegrationTest.confirmBftRead | apps-app/Test/scalafmtCheck (see packet); NOT compiled/run |
+
+# CI failure triage - 2026-09-28
+
+Same packet conventions. Artifacts under `log/<ref>/<artifact-name>/` (git-ignored), job logs via
+`gh api repos/canton-network/splice/actions/jobs/<job>/logs`. Tuples given by the requester; nothing inferred.
+
+## Ref -> run -> job mapping
+
+| My ref | GH run | Branch / sha | Failed job | Canton |
+|--------|--------|--------------|------------|--------|
+| 10227 | 36160174141 | main ccc8e26641 (#7476) | 108154882163 `wall-clock-time (9)` | 3.6.0-snapshot.20260925.20321.0.vaecbf95c |
+
+## Overview
+
+| My ref | Failure (one line) | Duplicate of | Resolution / status |
+|--------|--------------------|--------------|---------------------|
+| 10227 | DistributedDomainIntegrationTest "SV onboarding on distributed domain": `eventuallySucceeds()(onboardWalletUser(...))` fails after 28.3 s, four attempts each ending in HTTP 400 `INVALID_PRESCRIBED_SYNCHRONIZER_ID ... global-domain::...::36-0, but on Set(splitwell::...::35-0)`. The ordering topology stepped to 4 at 16:47:12 and the newcomer SEQ::sv3 was blacklisted for epochs 84-86 (16:47:22 to 16:47:53); the connection pool handed alice's PartyToParticipant broadcast to sv3, which refused it with SEQUENCER_OVERLOADED, and the topology-broadcast path does not fail over to another connection the way an ordinary send does. The party reached splitwell but not global-domain until the fourth 10 s outbox flush at 16:48:03.355, 1.74 s after the test gave up. | 10165 umbrella (family B), 4th symptom | Packet `10227-bft-blacklist-blocks-topology-broadcast-no-failover.md`. No fix branch: root cause is Canton-side. Two gaps, (1) family B blacklisting of a not-yet-authenticated newcomer (already under 10165), (2) NEW: no sequencer failover on the topology broadcast path, which turns a transient single-node blacklist into a 30 s stall of all topology dispatch for that participant. Splice-side contributors described, not written: `onboardUser` accepts "party observed on ledger API" (satisfied by splitwell) before prescribing global-domain, and `installWalletForUser`'s 12-retry / 7.1 s budget is shorter than one 10 s outbox cycle. |
+
+## Cross-cutting observations
+
+- 10227 is the first family B occurrence whose symptom is a hard test failure rather than a checkErrors WARN.
+  The difference is gap (2) above: with failover on the topology broadcast the blacklisted newcomer would have
+  cost one millisecond instead of 30 s. That is worth raising with Canton independently of the blacklisting,
+  because it affects every participant that happens to draw a blacklisted sequencer from its connection pool.
+- The run is the Canton bump to 3.6.0-snapshot.20260925.20321.0.vaecbf95c (#7476), from
+  3.6.0-snapshot.20260916.20284.0.vf27c4824. Whether gap (2) is new in that snapshot was not verified; the
+  blacklisting half (family B) predates it and is unchanged.
