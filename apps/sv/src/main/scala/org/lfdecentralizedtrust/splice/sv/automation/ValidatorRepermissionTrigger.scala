@@ -26,7 +26,7 @@ import org.lfdecentralizedtrust.splice.environment.{
 }
 import org.lfdecentralizedtrust.splice.environment.ledger.api.DedupOffset
 import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
-import org.lfdecentralizedtrust.splice.util.Contract
+import org.lfdecentralizedtrust.splice.util.{Contract, SwitchOverTimes}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -49,10 +49,7 @@ class ValidatorRepermissionTrigger(
   ): Future[Seq[ValidatorRepermissionTrigger.Task]] = {
     for {
       dsoRules <- store.getDsoRules()
-      isPermissioned = dsoRules.payload.config.svOperationsSwitchOverTimes.isPresent &&
-        dsoRules.payload.config.svOperationsSwitchOverTimes
-          .get()
-          .containsKey("permissionedSynchronizer")
+      isPermissioned = SwitchOverTimes.isPermissionedSynchronizerEnabled(dsoRules.payload)
       repermissions <-
         if (isPermissioned) store.listValidatorRepermissions()
         else Future.successful(Seq.empty)

@@ -63,7 +63,12 @@ import org.lfdecentralizedtrust.splice.sv.onboarding.SynchronizerNodeReconciler.
 }
 import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvStore, SvSvStore}
 import org.lfdecentralizedtrust.splice.sv.util.{SvOnboardingToken, SvUtil}
-import org.lfdecentralizedtrust.splice.util.{Contract, PackageVetting, TemplateJsonDecoder}
+import org.lfdecentralizedtrust.splice.util.{
+  Contract,
+  PackageVetting,
+  SwitchOverTimes,
+  TemplateJsonDecoder,
+}
 
 import java.security.interfaces.ECPrivateKey
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutor, Future}
@@ -1125,8 +1130,7 @@ class JoiningNodeInitializer(
         "dso_info_from_sponsor_for_permissioned_flag",
         "DSO info from sponsoring SV",
         getDsoInfoFromSponsor(conf, upgradesConfig).map { dsoInfo =>
-          val switchOverTimes = dsoInfo.dsoRules.payload.config.svOperationsSwitchOverTimes
-          switchOverTimes.isPresent && switchOverTimes.get().containsKey("permissionedSynchronizer")
+          SwitchOverTimes.isPermissionedSynchronizerEnabled(dsoInfo.dsoRules.payload)
         },
         logger,
       )

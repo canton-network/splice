@@ -42,7 +42,7 @@ import org.lfdecentralizedtrust.splice.sv.util.SvUtil.{
   DefaultDevNetPublicSetupTrafficAmount,
   generateRandomOnboardingSecret,
 }
-import org.lfdecentralizedtrust.splice.util.{Codec, Contract}
+import org.lfdecentralizedtrust.splice.util.{Codec, Contract, SwitchOverTimes}
 
 import java.util.Base64
 import scala.concurrent.{ExecutionContext, Future}
@@ -188,10 +188,7 @@ class HttpSvPublicHandler(
               )
               .map(_.nonEmpty)
             permissionedSynchronizer =
-              dsoRules.payload.config.svOperationsSwitchOverTimes.isPresent &&
-                dsoRules.payload.config.svOperationsSwitchOverTimes
-                  .get()
-                  .containsKey("permissionedSynchronizer")
+              SwitchOverTimes.isPermissionedSynchronizerEnabled(dsoRules.payload)
             res <-
               if (!SvApp.validateSvNamespace(token.candidateParty, token.candidateParticipantId)) {
                 Future.failed(
@@ -333,10 +330,7 @@ class HttpSvPublicHandler(
       } else {
         for {
           dsoRules <- dsoStore.getDsoRules()
-          isPermissioned = dsoRules.payload.config.svOperationsSwitchOverTimes.isPresent &&
-            dsoRules.payload.config.svOperationsSwitchOverTimes
-              .get()
-              .containsKey("permissionedSynchronizer")
+          isPermissioned = SwitchOverTimes.isPermissionedSynchronizerEnabled(dsoRules.payload)
 
           res <-
             if (!isPermissioned) {

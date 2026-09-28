@@ -17,11 +17,12 @@ import org.lfdecentralizedtrust.splice.automation.{
 import org.lfdecentralizedtrust.splice.codegen.java.splice.decentralizedsynchronizer.MemberTraffic
 import org.lfdecentralizedtrust.splice.environment.{ParticipantAdminConnection, RetryFor}
 import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
-import org.lfdecentralizedtrust.splice.util.AssignedContract
+import org.lfdecentralizedtrust.splice.util.{AssignedContract, SwitchOverTimes}
 import com.digitalasset.canton.topology.Member
 
 import scala.concurrent.{ExecutionContext, Future}
 import org.lfdecentralizedtrust.splice.sv.util.SvUtil
+
 import scala.jdk.OptionConverters.*
 
 class GrantValidatorPermissionTrigger(
@@ -61,10 +62,7 @@ class GrantValidatorPermissionTrigger(
 
           for {
             dsoRules <- store.getDsoRules()
-            isPermissioned = dsoRules.payload.config.svOperationsSwitchOverTimes.isPresent &&
-              dsoRules.payload.config.svOperationsSwitchOverTimes
-                .get()
-                .containsKey("permissionedSynchronizer")
+            isPermissioned = SwitchOverTimes.isPermissionedSynchronizerEnabled(dsoRules.payload)
 
             outcome <-
               if (!isPermissioned) {

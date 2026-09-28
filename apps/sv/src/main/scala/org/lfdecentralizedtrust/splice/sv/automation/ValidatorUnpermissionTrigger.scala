@@ -18,7 +18,7 @@ import org.lfdecentralizedtrust.splice.automation.{
 import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorunpermission.ValidatorUnpermission
 import org.lfdecentralizedtrust.splice.environment.{ParticipantAdminConnection, RetryFor}
 import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
-import org.lfdecentralizedtrust.splice.util.AssignedContract
+import org.lfdecentralizedtrust.splice.util.{AssignedContract, SwitchOverTimes}
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.OptionConverters.*
@@ -54,10 +54,7 @@ class ValidatorUnpermissionTrigger(
         participantId => {
           for {
             dsoRules <- store.getDsoRules()
-            isPermissioned = dsoRules.payload.config.svOperationsSwitchOverTimes.isPresent &&
-              dsoRules.payload.config.svOperationsSwitchOverTimes
-                .get()
-                .containsKey("permissionedSynchronizer")
+            isPermissioned = SwitchOverTimes.isPermissionedSynchronizerEnabled(dsoRules.payload)
 
             outcome <-
               if (!isPermissioned) {

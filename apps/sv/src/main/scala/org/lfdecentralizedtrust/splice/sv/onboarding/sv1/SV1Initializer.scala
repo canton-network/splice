@@ -81,7 +81,12 @@ import org.lfdecentralizedtrust.splice.sv.onboarding.SynchronizerNodeReconciler.
 import org.lfdecentralizedtrust.splice.sv.automation.singlesv.SvPackageVettingTrigger
 import org.lfdecentralizedtrust.splice.sv.store.{SvDsoStore, SvStore, SvSvStore}
 import org.lfdecentralizedtrust.splice.sv.util.SvUtil
-import org.lfdecentralizedtrust.splice.util.{ContractWithState, PackageVetting, TemplateJsonDecoder}
+import org.lfdecentralizedtrust.splice.util.{
+  ContractWithState,
+  PackageVetting,
+  SwitchOverTimes,
+  TemplateJsonDecoder,
+}
 import org.lfdecentralizedtrust.splice.util.SpliceUtil.{defaultAmuletConfig, defaultAnsConfig}
 
 import java.util.concurrent.TimeUnit
@@ -466,7 +471,7 @@ class SV1Initializer(
           onboardingRestriction =
             if (
               sv1Config.initialSvOperationsSwitchOverTimes
-                .exists(_.contains("permissionedSynchronizer"))
+                .exists(_.contains(SwitchOverTimes.PermissionedSynchronizer))
             ) {
               logger.info("Using RestrictedOpen onboarding restriction for the synchronizer")
               RestrictedOpen
@@ -492,7 +497,7 @@ class SV1Initializer(
               sv1PermissionTx <-
                 if (
                   sv1Config.initialSvOperationsSwitchOverTimes
-                    .exists(_.contains("permissionedSynchronizer"))
+                    .exists(_.contains(SwitchOverTimes.PermissionedSynchronizer))
                 ) {
                   logger.debug(
                     "Proposing ParticipantSynchronizerPermission topology transaction for self"

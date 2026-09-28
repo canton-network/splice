@@ -27,7 +27,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.validatorlicense.Vali
 import org.lfdecentralizedtrust.splice.environment.SpliceLedgerConnection
 import org.lfdecentralizedtrust.splice.environment.ledger.api.DedupOffset
 import org.lfdecentralizedtrust.splice.sv.store.SvDsoStore
-import org.lfdecentralizedtrust.splice.util.AssignedContract
+import org.lfdecentralizedtrust.splice.util.{AssignedContract, SwitchOverTimes}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -61,10 +61,7 @@ class ValidatorLicenseRequestTrigger(
 
     for {
       dsoRules <- dsoStore.getDsoRules()
-      isPermissioned = dsoRules.payload.config.svOperationsSwitchOverTimes.isPresent &&
-        dsoRules.payload.config.svOperationsSwitchOverTimes
-          .get()
-          .containsKey("permissionedSynchronizer")
+      isPermissioned = SwitchOverTimes.isPermissionedSynchronizerEnabled(dsoRules.payload)
 
       // Note: Receiving a ValidatorLicenseRequest implies that the corresponding PartyToParticipant mapping and the ParticipantSynchronizerPermission is already available in the Participant, so we avoid checking them again here.
       outcome <-

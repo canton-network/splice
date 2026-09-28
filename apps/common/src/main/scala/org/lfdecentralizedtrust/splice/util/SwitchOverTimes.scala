@@ -26,4 +26,11 @@ object SwitchOverTimes {
     shouldSwitchOver(clock, dsoRules, NoFeaturedAppChoiceContext)
 
   val NoFeaturedAppChoiceContext = "no-featured-app-choice-context"
+
+  val PermissionedSynchronizer = "permissioned-synchronizer"
+
+  def isPermissionedSynchronizerEnabled(dsoRules: DsoRules): Boolean = {
+    dsoRules.config.svOperationsSwitchOverTimes.isPresent &&
+    dsoRules.config.svOperationsSwitchOverTimes.get().containsKey(PermissionedSynchronizer)
+  }
 }
