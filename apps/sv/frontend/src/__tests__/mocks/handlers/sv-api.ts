@@ -38,6 +38,16 @@ export const buildSvMock = (svUrl: string): HttpHandler[] => [
 
   dsoInfoHandler(svUrl, '/v1/dso'),
 
+  // Not registered is the default answer: the UI asks while someone is proposing a
+  // registration, so a 404 is the expected case rather than an error.
+  // The body matters: the generated client only reports a 404 it can parse as a 404.
+  http.get(`${svUrl}/v0/admin/sv/synchronizers/:synchronizerId/registration`, ({ params }) => {
+    return HttpResponse.json<ErrorResponse>(
+      { error: `No RegisteredSynchronizer found for synchronizer id: ${params.synchronizerId}` },
+      { status: 404 }
+    );
+  }),
+
   http.get(`${svUrl}/v0/admin/sv/voterequests`, () => {
     return HttpResponse.json<ListDsoRulesVoteRequestsResponse>(voteRequests);
   }),

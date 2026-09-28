@@ -7,6 +7,8 @@ import { dateTimeFormatISO } from '@canton-network/splice-common-frontend-utils'
 import { ActionRequiringConfirmation } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
 
 import { useAppForm } from '../../hooks/form';
+import { useListDsoRulesVoteRequests } from '../../hooks/useListVoteRequests';
+import { useSvAdminClient } from '../../contexts/SvAdminServiceContext';
 import { useDsoInfos } from '../../contexts/SvContext';
 import { useProposalMutation } from '../../hooks/useProposalMutation';
 import { createProposalActions, getInitialExpiration } from '../../utils/governance';
@@ -57,6 +59,8 @@ export const RegisterSynchronizerForm: React.FC = _ => {
   const createProposalAction = createProposalActions.find(
     a => a.value === 'SRARC_RegisterSynchronizer'
   );
+  const { lookupSynchronizerRegistration } = useSvAdminClient();
+  const voteRequestsQuery = useListDsoRulesVoteRequests();
 
   const defaultValues: RegisterSynchronizerFormData = {
     action: createProposalAction?.name || '',
@@ -112,6 +116,38 @@ export const RegisterSynchronizerForm: React.FC = _ => {
     },
   });
 
+  // Uniqueness of the registry is enforced off-ledger, so this check is the enforcement:
+  // DsoRules_RegisterSynchronizer only requires a non-empty id and would create a duplicate,
+  // which then has to be archived by an offboard vote. A duplicate is a validation error
+  // rather than a hint, so the proposal cannot be submitted with an id that is already taken.
+  const validateNotAlreadyRegistered = async (value: string) => {
+    const id = value.trim();
+    if (validateSynchronizerId(id)) return undefined;
+
+    // A duplicate can also be a second proposal in flight, which no on-ledger state shows yet.
+    const proposed = (voteRequestsQuery.data ?? []).some(vr => {
+      const action = vr.payload.action;
+      if (action.tag !== 'ARC_DsoRules') return false;
+      const dsoAction = action.value.dsoAction;
+      return (
+        dsoAction.tag === 'SRARC_RegisterSynchronizer' && dsoAction.value.synchronizerId === id
+      );
+    });
+    if (proposed) return 'Another open proposal already asks to register this synchronizer id.';
+
+    try {
+      const registration = await lookupSynchronizerRegistration(id);
+      return registration
+        ? 'This synchronizer id is already registered. Registering it again creates a duplicate, which has to be archived by an offboard vote.'
+        : undefined;
+    } catch (e) {
+      // The lookup being unavailable is not evidence of a duplicate, so it does not block the
+      // proposal: the vote is the last check either way.
+      console.error('Failed to look up the synchronizer registration', e);
+      return undefined;
+    }
+  };
+
   return (
     <FormLayout
       form={form}
@@ -149,6 +185,9 @@ export const RegisterSynchronizerForm: React.FC = _ => {
             validators={{
               onBlur: ({ value }) => validateSynchronizerId(value),
               onChange: ({ value }) => validateSynchronizerId(value),
+              onChangeAsyncDebounceMs: 500,
+              onChangeAsync: ({ value }) => validateNotAlreadyRegistered(value),
+              onBlurAsync: ({ value }) => validateNotAlreadyRegistered(value),
             }}
           >
             {field => (

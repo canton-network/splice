@@ -249,6 +249,34 @@ class HttpSvOperatorHandler(
     }
   }
 
+  /** Intended use: the SV app UI, to warn a proposer that a synchronizer id is already
+    * registered. Forwarded to Scan, which holds the registry; the SV app does not ingest it.
+    */
+  override def lookupSynchronizerRegistration(
+      respond: r0.LookupSynchronizerRegistrationResponse.type
+  )(synchronizerId: String)(
+      extracted: ActAsKnownUserRequest
+  ): Future[r0.LookupSynchronizerRegistrationResponse] = {
+    implicit val ActAsKnownUserRequest(traceContext) = extracted
+    withSpan(s"$workflowId.lookupSynchronizerRegistration") { _ => _ =>
+      for {
+        scanConnection <- scanConnectionF
+        registrationOpt <- scanConnection.lookupSynchronizerRegistration(synchronizerId)
+      } yield registrationOpt match {
+        case None =>
+          r0.LookupSynchronizerRegistrationResponse.NotFound(
+            definitions.ErrorResponse(
+              s"No RegisteredSynchronizer found for synchronizer id: $synchronizerId"
+            )
+          )
+        case Some(registration) =>
+          r0.LookupSynchronizerRegistrationResponse.OK(
+            definitions.LookupSynchronizerRegistrationResponse(registration.toHttp)
+          )
+      }
+    }
+  }
+
   override def listValidatorLicenses(
       respond: r0.ListValidatorLicensesResponse.type
   )(after: Option[Long], limit: Option[Int])(

@@ -21,6 +21,7 @@ import {
   ListDsoRulesVoteResultsResponse,
   ListFeaturedAppRightsByProviderResponse,
   LookupFeaturedAppRightByContractIdResponse,
+  LookupSynchronizerRegistrationResponse,
   ListValidatorLicensesResponse,
   ListVoteRequestByTrackingCidResponse,
   ListVoteResultsRequest,
@@ -104,6 +105,10 @@ export interface SvAdminClient {
   lookupFeaturedAppRightByContractId: (
     contractId: string
   ) => Promise<LookupFeaturedAppRightByContractIdResponse>;
+  /** Resolves to undefined when the synchronizer is not registered (the endpoint 404s). */
+  lookupSynchronizerRegistration: (
+    synchronizerId: string
+  ) => Promise<LookupSynchronizerRegistrationResponse | undefined>;
 }
 
 class ApiMiddleware
@@ -258,6 +263,20 @@ export const SvAdminClientProvider: React.FC<React.PropsWithChildren<SvAdminProp
         contractId: string
       ): Promise<LookupFeaturedAppRightByContractIdResponse> => {
         return await svAdminClient.lookupFeaturedAppRightByContractId(contractId);
+      },
+      lookupSynchronizerRegistration: async (
+        synchronizerId: string
+      ): Promise<LookupSynchronizerRegistrationResponse | undefined> => {
+        // Not being registered is the expected answer while proposing one, not an error.
+        try {
+          return await svAdminClient.lookupSynchronizerRegistration(synchronizerId);
+        } catch (e) {
+          // Not `instanceof`: the client is compiled to ES5, where it never matches an Error subclass.
+          if ((e as openapi.ApiException<undefined>).code === 404) {
+            return undefined;
+          }
+          throw e;
+        }
       },
     };
   }, [url, userAccessToken]);
