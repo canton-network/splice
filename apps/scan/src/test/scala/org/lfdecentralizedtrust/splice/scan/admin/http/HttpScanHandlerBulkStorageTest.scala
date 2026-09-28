@@ -96,6 +96,7 @@ class HttpScanHandlerBulkStorageTest extends AnyWordSpec with BaseTest {
       updateHistoryMaxPageSize = 100,
       publicUrlO = publicUrlO,
       lsuRollForwardConfigO = None,
+      perAcsSnapshotTablesEnabled = true,
     )
   }
 

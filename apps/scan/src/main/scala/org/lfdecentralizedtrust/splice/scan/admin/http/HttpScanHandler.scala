@@ -108,7 +108,6 @@ import org.lfdecentralizedtrust.splice.scan.store.AppActivityStore.RoundIngestio
 import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorageReader
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{
   IncrementalAcsSnapshotTable,
-  QueryAcsSnapshotPaginationToken,
   QueryAcsSnapshotResult,
 }
 import org.lfdecentralizedtrust.splice.scan.store.bulk.AcsSnapshotBulkStorage.AcsSnapshotObjects
