@@ -1654,14 +1654,16 @@ class TablePerAcsSnapshotStoreTest extends AcsSnapshotStoreTest {
         // Index as part of this test
         shouldIndexSnapshot = false,
       )
-      beforeIndex <- store.queryAcsSnapshot(
-        DefaultMigrationId,
-        timestamp1,
-        None,
-        PageLimit.tryCreate(10),
-        Seq.empty,
-        Seq.empty,
-      ).failed
+      beforeIndex <- store
+        .queryAcsSnapshot(
+          DefaultMigrationId,
+          timestamp1,
+          None,
+          PageLimit.tryCreate(10),
+          Seq.empty,
+          Seq.empty,
+        )
+        .failed
       _ <- indexSnapshot(store, DefaultMigrationId, timestamp1)
       afterIndex <- store.queryAcsSnapshot(
         DefaultMigrationId,
