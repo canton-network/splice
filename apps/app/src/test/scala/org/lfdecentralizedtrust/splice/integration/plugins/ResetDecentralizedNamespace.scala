@@ -4,7 +4,7 @@ import org.lfdecentralizedtrust.splice.console.{ParticipantClientReference, SvAp
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests
 import com.daml.nonempty.NonEmpty
 import com.digitalasset.canton.config.RequireTypes.PositiveInt
-import com.digitalasset.canton.console.ConsoleMacros
+import com.digitalasset.canton.console.{CommandFailure, ConsoleMacros}
 import com.digitalasset.canton.discard.Implicits.DiscardOps
 import com.digitalasset.canton.logging.{SuppressingLogger, SuppressionRule}
 import com.digitalasset.canton.topology.SynchronizerId
@@ -73,7 +73,11 @@ final class ResetDecentralizedNamespace extends ResetTopologyStatePlugin {
                     synchronize = None,
                   )
                   .discard,
-                forAll(_)(_.message should include("FAILED_PRECONDITION/SERIAL_MISMATCH")),
+                forAll(_)(
+                  _.message should (include("FAILED_PRECONDITION/SERIAL_MISMATCH") or
+                    include("ALREADY_EXISTS/TOPOLOGY_MAPPING_ALREADY_EXISTS") or
+                    include("NOT_FOUND/TOPOLOGY_NO_APPROPRIATE_SIGNING_KEY_IN_STORE"))
+                ),
               )
           }
 
@@ -94,7 +98,13 @@ final class ResetDecentralizedNamespace extends ResetTopologyStatePlugin {
                   s"Failed to remove $namespace as there is no SV with that namespace, svs found: ${usableSvsByNamespace.keySet}"
                 ),
               )
-              proposeDecentralizedNamespaceReset(sv)
+              try proposeDecentralizedNamespaceReset(sv)
+              catch {
+                case _: CommandFailure =>
+                  logger.info(
+                    s"Proposal from $namespace was rejected, checking whether the other owners already authorized the reset"
+                  )
+              }
             }
           logger.info(
             "All required proposals to reset SV namespace submitted, waiting for it to be effective"
