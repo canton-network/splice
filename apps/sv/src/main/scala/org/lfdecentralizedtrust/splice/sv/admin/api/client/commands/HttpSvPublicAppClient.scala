@@ -22,7 +22,6 @@ import org.lfdecentralizedtrust.splice.sv.admin.api.client.SvStreamClient
 import org.lfdecentralizedtrust.splice.sv.http.SvHttpClient.BaseCommandPublic
 import org.lfdecentralizedtrust.splice.util.{Codec, TemplateJsonDecoder}
 
-import java.util.Base64
 import scala.concurrent.Future
 
 object HttpSvPublicAppClient {
@@ -259,10 +258,13 @@ object HttpSvPublicAppClient {
 
   case class OnboardSvSequencer(
       sequencerId: SequencerId
-  ) extends BaseCommandPublic[
-        http.OnboardSvSequencerResponse,
-        ByteString,
+  ) extends HttpCommand[
+        SvStreamClient.OnboardSvSequencerResponse,
+        Seq[ByteString],
+        SvStreamClient,
       ] {
+    override val createGenClientFn = (fn, host, ec, mat) =>
+      SvStreamClient.httpClient(fn, host)(ec, mat)
 
     override def submitRequest(
         client: Client,
@@ -270,7 +272,7 @@ object HttpSvPublicAppClient {
     ): EitherT[Future, Either[
       Throwable,
       HttpResponse,
-    ], http.OnboardSvSequencerResponse] =
+    ], SvStreamClient.OnboardSvSequencerResponse] =
       client.onboardSvSequencer(
         body = definitions.OnboardSvSequencerRequest(
           Codec.encode(sequencerId)
@@ -279,10 +281,10 @@ object HttpSvPublicAppClient {
       )
 
     override def handleOk()(implicit decoder: TemplateJsonDecoder) = {
-      case http.OnboardSvSequencerResponse.OK(
-            definitions.OnboardSvSequencerResponse(onboardingState)
-          ) =>
-        Right(ByteString.copyFrom(Base64.getDecoder().decode(onboardingState)))
+      case SvStreamClient.OnboardSvSequencerResponse.OK(onboardingStateChunks) =>
+        Right(onboardingStateChunks.map(chunk => ByteString.copyFrom(chunk.asByteBuffer)))
+      case SvStreamClient.OnboardSvSequencerResponse.BadRequest(response) =>
+        Left(response.error)
     }
   }
 

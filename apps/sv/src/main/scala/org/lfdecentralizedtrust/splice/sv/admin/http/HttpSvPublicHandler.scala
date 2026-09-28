@@ -49,7 +49,6 @@ import org.lfdecentralizedtrust.splice.sv.util.{Secrets, SvOnboardingToken}
 import org.lfdecentralizedtrust.splice.sv.util.SvUtil.generateRandomOnboardingSecret
 import org.lfdecentralizedtrust.splice.util.{Codec, Contract}
 
-import java.util.Base64
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
@@ -512,10 +511,10 @@ class HttpSvPublicHandler(
     * Protection: Endpoint is protected by IP allowlisting
     */
   override def onboardSvSequencer(
-      respond: r0.OnboardSvSequencerResponse.type
+      respond: rStream.OnboardSvSequencerResponse.type
   )(
       body: definitions.OnboardSvSequencerRequest
-  )(extracted: TraceContext): Future[r0.OnboardSvSequencerResponse] = {
+  )(extracted: TraceContext): Future[rStream.OnboardSvSequencerResponse] = {
     implicit val traceContext: TraceContext = extracted
     withSpan(s"$workflowId.onboardSvSequencer") { _ => _ =>
       Codec.decode(Codec.Sequencer)(body.sequencerId) match {
@@ -530,10 +529,14 @@ class HttpSvPublicHandler(
                 sequencerId,
               )
             )
-            .map(onboardingState =>
-              r0.OnboardSvSequencerResponseOK(
-                definitions.OnboardSvSequencerResponse(
-                  Base64.getEncoder.encodeToString(onboardingState.toByteArray)
+            .map(onboardingStateChunks =>
+              rStream.OnboardSvSequencerResponseOK(
+                HttpEntity(
+                  ContentTypes.`application/octet-stream`,
+                  Source(
+                    onboardingStateChunks
+                      .map(chunk => PekkoByteString(chunk.asReadOnlyByteBuffer()))
+                  ),
                 )
               )
             )
@@ -654,7 +657,7 @@ class HttpSvPublicHandler(
       isCantonBftSequencer: Boolean,
       sequencerAdminConnection: SequencerAdminConnection,
       sequencerId: SequencerId,
-  )(implicit traceContext: TraceContext): Future[ByteString] = {
+  )(implicit traceContext: TraceContext): Future[Seq[ByteString]] = {
     logger.info(
       s"Waiting for sequencer $sequencerId to be onboarded before querying its onboarding state"
     )

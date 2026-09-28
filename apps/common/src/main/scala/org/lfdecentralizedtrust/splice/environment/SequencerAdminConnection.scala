@@ -195,12 +195,11 @@ class SequencerAdminConnection(
 
   def getOnboardingState(sequencerIdOrTimestamp: Either[SequencerId, CantonTimestamp])(implicit
       traceContext: TraceContext
-  ): Future[ByteString] = {
-    val responseObserver =
-      new ByteStringStreamObserver[OnboardingStateV2Response](_.onboardingStateForSequencer)
+  ): Future[Seq[ByteString]] = {
+    val responseObserver = new SeqAccumulatingObserver[OnboardingStateV2Response]
     runCmd(
       SequencerAdminCommands.OnboardingStateV2(responseObserver, sequencerIdOrTimestamp)
-    ).flatMap(_ => responseObserver.resultBytes)
+    ).flatMap(_ => responseObserver.resultFuture.map(_.map(_.onboardingStateForSequencer)))
   }
 
   /** Streams onboarding state from the gRPC admin service directly to a bucket without writing to memory
@@ -339,7 +338,7 @@ class SequencerAdminConnection(
   }
 
   def initializeFromOnboardingState(
-      onboardingState: ByteString
+      onboardingState: Seq[ByteString]
   )(implicit traceContext: TraceContext): Future[InitializeSequencerResponse] =
     runCmd(
       SequencerAdminCommands.InitializeFromOnboardingStateV2(
