@@ -29,6 +29,7 @@ import Splice.AmuletAllocation as AmuletAllocationV1
 import Splice.AmuletAllocationV2 as AmuletAllocationV2
 import Splice.AmuletTransferInstruction
 import Splice.AmuletRules
+import Splice.GovernanceLock
 import Splice.Types
 import Splice.Util
 
@@ -45,6 +46,12 @@ data ExternalPartyAmuletRules_ExpireAmuletAllocationsResult = ExternalPartyAmule
 
 data ExternalPartyAmuletRules_ExpireAmuletAllocationsV2Result = ExternalPartyAmuletRules_ExpireAmuletAllocationsV2Result {}
   -- intentionally no results to save storage space in Scan
+  deriving (Eq, Show, Serializable)
+
+data ExternalPartyAmuletRules_LockForGovernanceResult = ExternalPartyAmuletRules_LockForGovernanceResult
+  with
+    governanceLock : ContractId GovernanceLock
+    changeHolding : Optional (ContractId Amulet)
   deriving (Eq, Show, Serializable)
 
 -- | Rules contract that can be used in transactions that require signatures
@@ -126,6 +133,23 @@ template ExternalPartyAmuletRules
            nonce
            description
          pure (ExternalPartyAmuletRules_CreateTransferCommandResult cmd)
+
+    nonconsuming choice ExternalPartyAmuletRules_LockForGovernance : ExternalPartyAmuletRules_LockForGovernanceResult
+      with
+        amount : Decimal
+        inputs : [ContractId V1.Holding]
+        specification : GovernanceLockSpecification
+        extraArgs : ExtraArgs
+        owner : Party
+        requestedAt : Time
+        meta : Metadata
+      controller owner
+      do
+        (governanceLock, changeHolding) <- governanceLock_lockForGovernance_impl dso amount inputs specification extraArgs owner requestedAt meta
+        pure $ ExternalPartyAmuletRules_LockForGovernanceResult with
+          governanceLock
+          changeHolding
+
 
     interface instance Api.Token.TransferInstructionV1.TransferFactory for ExternalPartyAmuletRules where
       view = Api.Token.TransferInstructionV1.TransferFactoryView with
@@ -343,6 +367,8 @@ amulet_transferFactoryV1_transferImpl
   -> [Party]
   -> Api.Token.TransferInstructionV1.TransferFactory_Transfer
   -> Update Api.Token.TransferInstructionV1.TransferInstructionResult
+amulet_transferFactoryV1_transferImpl this actors arg | isGovernanceLockTransferParty arg.transfer.receiver =
+  governanceLock_transferFactoryV1_transferImpl this.dso actors arg
 amulet_transferFactoryV1_transferImpl this actors arg = do
   let Api.Token.TransferInstructionV1.TransferFactory_Transfer {expectedAdmin, transfer, extraArgs} = arg
   let dso = this.dso

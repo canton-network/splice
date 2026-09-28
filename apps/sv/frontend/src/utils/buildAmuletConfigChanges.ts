@@ -139,6 +139,36 @@ export function buildAmuletConfigChanges(
       currentValue: switchOverMapToConfigValue(before?.amuletSwitchOverTimes),
       newValue: switchOverMapToConfigValue(after?.amuletSwitchOverTimes),
     },
+    {
+      fieldName: 'governanceLockMinimumLockAmount',
+      label: 'Governance lock config: Minimum governance lock amount (Amulet)',
+      currentValue: before?.governanceLockMinimumLockAmount || '',
+      newValue: after?.governanceLockMinimumLockAmount || '',
+      description:
+        'Minimum amount in Amulet required to create a governance lock (default: 10000 Amulet)',
+    },
+    {
+      fieldName: 'governanceLockSuperValidatorLockVestingDuration',
+      label: 'Governance lock config: SV lock vesting duration (microseconds)',
+      currentValue: before?.governanceLockSuperValidatorLockVestingDuration?.microseconds || '',
+      newValue: after?.governanceLockSuperValidatorLockVestingDuration?.microseconds || '',
+      description: 'Vesting duration for SV governance locks (default: 365.25 days)',
+    },
+    {
+      fieldName: 'governanceLockFeaturedAppLockVestingDuration',
+      label: 'Governance lock config: Featured app lock vesting duration (microseconds)',
+      currentValue: before?.governanceLockFeaturedAppLockVestingDuration?.microseconds || '',
+      newValue: after?.governanceLockFeaturedAppLockVestingDuration?.microseconds || '',
+      description: 'Vesting duration for featured app governance locks (default: 60 days)',
+    },
+    {
+      fieldName: 'governanceLockSearchTimeGranularity',
+      label: 'Governance lock config: Fallback timepoint determination granularity (microseconds)',
+      currentValue: before?.governanceLockSearchTimeGranularity?.microseconds || '',
+      newValue: after?.governanceLockSearchTimeGranularity?.microseconds || '',
+      description:
+        'Granularity used by the governance lock fallback timepoint determination (default: 1 day)',
+    },
   ] as ConfigChange[];
 
   return showAllFields ? changes : changes.filter(c => c.currentValue !== c.newValue);

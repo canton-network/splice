@@ -1031,6 +1031,10 @@ template AmuletRules
           transferConfig = transferConfigToTransferConfigV2 validatedRounds.latestUsableRound.transferConfigUsd
           rewardCalculationVersion = (.mintingVersion) <$> validatedRounds.latestUsableRound.rewardConfig
           amuletSwitchOverTimes = config.amuletSwitchOverTimes
+          governanceLockMinimumLockAmount = config.governanceLockMinimumLockAmount
+          governanceLockSuperValidatorLockVestingDuration = config.governanceLockSuperValidatorLockVestingDuration
+          governanceLockFeaturedAppLockVestingDuration = config.governanceLockFeaturedAppLockVestingDuration
+          governanceLockSearchTimeGranularity = config.governanceLockSearchTimeGranularity
         pure AmuletRules_UpdateExternalPartyConfigStatesResult with ..
 
 
@@ -2400,6 +2404,10 @@ bootstrapExternalPartyConfigState AmuletRules{..} openMiningRoundTriple = do
         transferConfig = transferConfig
         rewardCalculationVersion = (.mintingVersion) <$> validatedRounds.latestUsableRound.rewardConfig
         amuletSwitchOverTimes = config.amuletSwitchOverTimes
+        governanceLockMinimumLockAmount = config.governanceLockMinimumLockAmount
+        governanceLockSuperValidatorLockVestingDuration = config.governanceLockSuperValidatorLockVestingDuration
+        governanceLockFeaturedAppLockVestingDuration = config.governanceLockFeaturedAppLockVestingDuration
+        governanceLockSearchTimeGranularity = config.governanceLockSearchTimeGranularity
       configState1 = configState0 with
         targetArchiveAfter = configState0.targetArchiveAfter `addRelTime` getExternalPartyConfigStateTickDuration config
   create configState0

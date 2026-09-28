@@ -1,0 +1,356 @@
+-- Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
+-- SPDX-License-Identifier: Apache-2.0
+
+-- | Tests for custom unlock, substitution, and vesting controllers on governance locks.
+module Splice.Scripts.TestGovernanceLockControllers where
+
+import DA.Assert
+import DA.Foldable (forA_)
+import DA.List (sort)
+import DA.Map qualified as Map
+import DA.Optional (isNone, isSome)
+import DA.Time
+
+import Daml.Script
+import Splice.Amulet (Amulet, LockedAmulet)
+import Splice.Api.Token.HoldingV1 (Holding)
+import Splice.Api.Token.TransferInstructionV1 qualified as V1
+import Splice.GovernanceLock
+import Splice.Scripts.TestGovernanceLocks
+import Splice.Scripts.TokenStandard.TestAmuletTokenStandardTestEnv
+import Splice.Testing.Registries.AmuletRegistryV2 qualified as AmuletRegistryV2
+import Splice.Testing.TokenStandard.WalletClientV2 qualified as WalletClientV2
+import Splice.Testing.Utils
+
+-- | Controllers from the CIP example: owner A, featured app X, staking app S.
+-- Any two of the three can unlock or substitute; S or A alone can withdraw vested funds.
+twoOfThreeSpecification : Party -> Party -> Party -> GovernanceLockSpecification
+twoOfThreeSpecification a x s = GovernanceLockSpecification with
+  kind = GLK_FeaturedApp x
+  unlockControllers = ControllerSpecification $ [[s, x], [s, a], [a, x]]
+  substitutionControllers = ControllerSpecification $ [[s, x], [s, a], [a, x]]
+  vestingControllers = ControllerSpecification $ [[s], [a]]
+
+testCustomControllersCreationValidation : Script ()
+testCustomControllersCreationValidation = do
+  TestEnv{..} <- setupTest
+  let registry = registriesEnv.amuletV2
+  AmuletRegistryV2.tapFaucet registry alice 50000.0
+  let spec = ownerControlledSpecification alice (GLK_FeaturedApp bob)
+  let controllerTypes =
+        [ ("unlock", \cs -> spec with unlockControllers = ControllerSpecification cs)
+        , ("substitution", \cs -> spec with substitutionControllers = ControllerSpecification cs)
+        , ("vesting", \cs -> spec with vestingControllers = ControllerSpecification cs)
+        ]
+
+  forA_ controllerTypes \(controllerType, setControllers) -> do
+    actionMustFail (expectMessageContains (controllerType <> "Controllers must not be empty")) $
+      governanceLockWithSpecRawChoice' registry alice 10000.0 (setControllers [])
+    actionMustFail (expectMessageContains (controllerType <> "Controllers must not contain an empty controller set")) $
+      governanceLockWithSpecRawChoice' registry alice 10000.0 (setControllers [[]])
+
+testCustomControllersAreObservers : Script ()
+testCustomControllersAreObservers = do
+  TestEnv{..} <- setupTest
+  let registry = registriesEnv.amuletV2
+  AmuletRegistryV2.tapFaucet registry alice 50000.0
+
+  lockCid <- governanceLockWithSpecRawChoice registry alice 50000.0 (twoOfThreeSpecification alice bob charlie)
+  forA_ [alice, bob, charlie] \party -> do
+    optLock <- queryContractId party lockCid
+    assertMsg ("controller " <> show party <> " can see the lock") (isSome optLock)
+
+  optLock <- queryContractId provider1 lockCid
+  assertMsg "a non-controller cannot see the lock" (isNone optLock)
+
+testVestingControllersAreCopiedToVestingLock : Script ()
+testVestingControllersAreCopiedToVestingLock = do
+  TestEnv{..} <- setupTest
+  let registry = registriesEnv.amuletV2
+  AmuletRegistryV2.tapFaucet registry alice 50000.0
+
+  let spec = (ownerControlledSpecification alice (GLK_FeaturedApp bob)) with vestingControllers = ControllerSpecification [[charlie]]
+  lockCid <- governanceLockWithSpecRawChoice registry alice 50000.0 spec
+
+  unlockAt <- (`addRelTime` hours 1) <$> getTime
+  (Some vestingCid, None, None) <- governanceUnlockRawChoice registry lockCid None unlockAt [alice]
+
+  Some vestingLock <- queryContractId charlie vestingCid
+  vestingLock.specification.vestingControllers === ControllerSpecification [[charlie]]
+  vestingLock.pendingWithdrawApprovals === Map.empty
+
+submitLockChoice
+  :  (Template t, HasEnsure t, HasField "lockedAmulet" t (ContractId LockedAmulet))
+  => Party
+  -> ContractId t
+  -> (SubmitOptions -> Script (Either SubmitError a))
+  -> Script (Either SubmitError a)
+submitLockChoice owner cid run = do
+  Some lock <- queryContractId owner cid
+  lockDisclosure <- queryDisclosure' owner cid
+  amuletDisclosure <- queryDisclosure' owner lock.lockedAmulet
+  run (discloseMany' lockDisclosure <> discloseMany' amuletDisclosure)
+
+unlockAs
+  :  AmuletRegistryV2.AmuletRegistry
+  -> Party
+  -> ContractId GovernanceLock
+  -> Optional Decimal
+  -> Time
+  -> [Party]
+  -> Script (Either SubmitError GovernanceLock_UnlockResult)
+unlockAs registry owner cid unlockAmount unlockAt actors = do
+  submitLockChoice owner cid $ governanceUnlockRawChoiceResult registry cid unlockAmount unlockAt actors
+
+expectPendingUnlock : GovernanceLock_UnlockResult -> Script (ContractId GovernanceLock)
+expectPendingUnlock GovernanceLock_UnlockResult_Pending{..} = pure pendingLock
+expectPendingUnlock result = fail $ "Expected a pending unlock, got " <> show result
+
+expectCompletedUnlock : GovernanceLock_UnlockResult -> Script (Optional (ContractId VestingLock), Optional (ContractId GovernanceLock), Optional (ContractId Amulet))
+expectCompletedUnlock GovernanceLock_UnlockResult_Completed{..} = pure (vestingLock, governanceLock, unlockedAmulet)
+expectCompletedUnlock result = fail $ "Expected a completed unlock, got " <> show result
+
+setupTwoOfThreeLock : Script (TestEnv, AmuletRegistryV2.AmuletRegistry, ContractId GovernanceLock)
+setupTwoOfThreeLock = do
+  env@TestEnv{..} <- setupTest
+  let registry = registriesEnv.amuletV2
+  AmuletRegistryV2.tapFaucet registry alice 50000.0
+  lockCid <- governanceLockWithSpecRawChoice registry alice 50000.0 (twoOfThreeSpecification alice bob charlie)
+  pure (env, registry, lockCid)
+
+testCustomControllersJointUnlock : Script ()
+testCustomControllersJointUnlock = do
+  (TestEnv{..}, registry, lockCid) <- setupTwoOfThreeLock
+  unlockAt <- (`addRelTime` hours 1) <$> getTime
+
+  (Some vestingCid, Some remainingCid, None) <- expectCompletedUnlock =<< expectSuccess
+    (unlockAs registry alice lockCid (Some 10000.0) unlockAt [charlie, alice])
+
+  checkLockedHolding alice vestingCid 10000.0
+  checkLockedHolding alice remainingCid 40000.0
+  Some remaining <- queryContractId alice remainingCid
+  remaining.pendingUnlockApprovals === Map.empty
+
+testCustomControllersSequentialUnlock : Script ()
+testCustomControllersSequentialUnlock = do
+  (TestEnv{..}, registry, lockCid) <- setupTwoOfThreeLock
+  now <- getTime
+  let aliceUnlockAt = now `addRelTime` hours 1
+      charlieUnlockAt = now `addRelTime` hours 2
+
+  -- alice approves first, but can't unlock solely, so the unlock is pending
+  pendingCid <- expectPendingUnlock =<< expectSuccess
+    (unlockAs registry alice lockCid (Some 10000.0) aliceUnlockAt [alice])
+  Some pending <- queryContractId alice pendingCid
+  Map.keys pending.pendingUnlockApprovals === [alice]
+  checkLockedHolding alice pendingCid 50000.0
+
+  -- charlie completes the unlock
+  (Some vestingCid, Some _, None) <- expectCompletedUnlock =<< expectSuccess
+    (unlockAs registry alice pendingCid (Some 10000.0) charlieUnlockAt [charlie])
+
+  -- The earliest approved time that's still in the future wins
+  Some vesting <- queryContractId alice vestingCid
+  vesting.endTime === aliceUnlockAt `addRelTime` vesting.vestingPeriod
+
+testCustomControllersAmountMismatch : Script ()
+testCustomControllersAmountMismatch = do
+  (TestEnv{..}, registry, lockCid) <- setupTwoOfThreeLock
+  unlockAt <- (`addRelTime` hours 1) <$> getTime
+
+  pending1 <- expectPendingUnlock =<< expectSuccess (unlockAs registry alice lockCid (Some 10000.0) unlockAt [charlie])
+  -- A different amount doesn't combine with charlie's approval
+  pending2 <- expectPendingUnlock =<< expectSuccess (unlockAs registry alice pending1 (Some 20000.0) unlockAt [alice])
+  -- alice changes her approval to the same amount, which completes the unlock
+  (Some vestingCid, Some _, None) <- expectCompletedUnlock =<< expectSuccess
+    (unlockAs registry alice pending2 (Some 10000.0) unlockAt [alice])
+  checkLockedHolding alice vestingCid 10000.0
+
+testCustomControllersExpiredApprovalTime : Script ()
+testCustomControllersExpiredApprovalTime = do
+  (TestEnv{..}, registry, lockCid) <- setupTwoOfThreeLock
+  now <- getTime
+  pending <- expectPendingUnlock =<< expectSuccess
+    (unlockAs registry alice lockCid None (now `addRelTime` hours 1) [charlie])
+
+  passTime (hours 2)
+  later <- getTime
+  let aliceUnlockAt = later `addRelTime` hours 1
+
+  (Some vestingCid, None, None) <- expectCompletedUnlock =<< expectSuccess
+    (unlockAs registry alice pending None aliceUnlockAt [alice])
+  -- charlie's time is in the past, so only alice's time counts
+  Some vesting <- queryContractId alice vestingCid
+  vesting.endTime === aliceUnlockAt `addRelTime` vesting.vestingPeriod
+
+testCustomControllersUnlockTimeCap : Script ()
+testCustomControllersUnlockTimeCap = do
+  (TestEnv{..}, registry, lockCid) <- setupTwoOfThreeLock
+  now <- getTime
+  -- A pending approval is not capped
+  pending <- expectPendingUnlock =<< expectSuccess
+    (unlockAs registry alice lockCid None (now `addRelTime` days 2) [charlie])
+  -- The earliest future time is 2 days ahead, so triggers failure
+  actionMustFail (expectMessageContains "Ledger time is strictly before deadline 'unlockAt - 1 day'") $
+    unlockAs registry alice pending None (now `addRelTime` days 3) [alice]
+
+testCustomControllersUnlockTimeOverAllSatisfiedSets : Script ()
+testCustomControllersUnlockTimeOverAllSatisfiedSets = do
+  TestEnv{..} <- setupTest
+  let registry = registriesEnv.amuletV2
+  AmuletRegistryV2.tapFaucet registry alice 50000.0
+  let spec = (ownerControlledSpecification alice (GLK_FeaturedApp bob)) with
+        unlockControllers = ControllerSpecification [[charlie, bob], [alice, bob]]
+  lockCid <- governanceLockWithSpecRawChoice registry alice 50000.0 spec
+  now <- getTime
+  let aliceUnlockAt = now `addRelTime` hours 1
+  pending1 <- expectPendingUnlock =<< expectSuccess (unlockAs registry alice lockCid None (now `addRelTime` hours 2) [charlie])
+  pending2 <- expectPendingUnlock =<< expectSuccess (unlockAs registry alice pending1 None aliceUnlockAt [alice])
+  -- bob's approval satisfies both sets. The earliest time over both sets (alice's) wins,
+  -- even though alice is only in the second set.
+  (Some vestingCid, None, None) <- expectCompletedUnlock =<< expectSuccess
+    (unlockAs registry alice pending2 None (now `addRelTime` hours 3) [bob])
+  Some vesting <- queryContractId alice vestingCid
+  vesting.endTime === aliceUnlockAt `addRelTime` vesting.vestingPeriod
+
+testCustomControllersIdenticalReapprovalRejected : Script ()
+testCustomControllersIdenticalReapprovalRejected = do
+  (TestEnv{..}, registry, lockCid) <- setupTwoOfThreeLock
+  unlockAt <- (`addRelTime` hours 1) <$> getTime
+  pending <- expectPendingUnlock =<< expectSuccess (unlockAs registry alice lockCid None unlockAt [charlie])
+  -- Repeating the same approval is rejected, so the pending lock keeps its contract id
+  actionMustFail (expectMessageContains "at least one actor's approval must change") $
+    unlockAs registry alice pending None unlockAt [charlie]
+  Some _ <- queryContractId alice pending
+  pure ()
+
+testCustomControllersNonControllerUnlock : Script ()
+testCustomControllersNonControllerUnlock = do
+  (TestEnv{..}, registry, lockCid) <- setupTwoOfThreeLock
+  unlockAt <- (`addRelTime` hours 1) <$> getTime
+  actionMustFail (expectMessageContains "must be a controller") $
+    unlockAs registry alice lockCid None unlockAt [provider1]
+
+withdrawAs
+  :  AmuletRegistryV2.AmuletRegistry
+  -> Party
+  -> ContractId VestingLock
+  -> Time
+  -> [Party]
+  -> Script (Either SubmitError VestingLock_WithdrawResult)
+withdrawAs registry owner cid requestedAt actors = do
+  submitLockChoice owner cid $ vestingWithdrawRawChoiceResult registry cid requestedAt actors
+
+expectPendingWithdraw : VestingLock_WithdrawResult -> Script (ContractId VestingLock)
+expectPendingWithdraw (VestingLock_WithdrawResult_Pending pendingLock) = pure pendingLock
+expectPendingWithdraw result = fail $ "Expected a pending withdraw, got " <> show result
+
+expectCompletedWithdraw : VestingLock_WithdrawResult -> Script (Optional (ContractId VestingLock), ContractId Holding)
+expectCompletedWithdraw (VestingLock_WithdrawResult_Completed vestingLock vested) = pure (vestingLock, vested)
+expectCompletedWithdraw result = fail $ "Expected a completed withdraw, got " <> show result
+
+-- | Creates a 20k FA lock owned by alice with the given vesting controllers, unlocks it fully as the owner, and waits 30 days.
+setupVestingLockWithControllers
+  :  (TestEnv -> [[Party]])
+  -> Script (TestEnv, AmuletRegistryV2.AmuletRegistry, ContractId VestingLock, Time)
+setupVestingLockWithControllers vestingControllersFor = do
+  env@TestEnv{..} <- setupTest
+  let registry = registriesEnv.amuletV2
+  AmuletRegistryV2.tapFaucet registry alice 20000.0
+  let spec = (ownerControlledSpecification alice (GLK_FeaturedApp bob)) with
+        vestingControllers = ControllerSpecification $ vestingControllersFor env
+  lockCid <- governanceLockWithSpecRawChoice registry alice 20000.0 spec
+  unlockAt <- (`addRelTime` hours 1) <$> getTime
+  (Some vestingCid, None, None) <- governanceUnlockRawChoice registry lockCid None unlockAt [alice]
+  passTime (days 30)
+  pure (env, registry, vestingCid, unlockAt)
+
+testCustomControllersSequentialWithdraw : Script ()
+testCustomControllersSequentialWithdraw = do
+  (TestEnv{..}, registry, vestingCid, unlockAt) <- setupVestingLockWithControllers (\env -> [[env.charlie, env.alice]])
+  let charlieTime = unlockAt `addRelTime` days 20
+      aliceTime = unlockAt `addRelTime` days 10
+
+  pendingCid <- expectPendingWithdraw =<< expectSuccess (withdrawAs registry alice vestingCid charlieTime [charlie])
+  Some pending <- queryContractId alice pendingCid
+  Map.toList pending.pendingWithdrawApprovals === [(charlie, charlieTime)]
+
+  (Some remainingCid, _) <- expectCompletedWithdraw =<< expectSuccess (withdrawAs registry alice pendingCid aliceTime [alice])
+
+  -- The latest approved time (charlie's) determines the vested amount
+  Some remaining <- queryContractId alice remainingCid
+  remaining.vestingPeriod === remaining.endTime `subTime` charlieTime
+  remaining.pendingWithdrawApprovals === Map.empty
+
+testCustomControllersWithdrawTimeOverAllSatisfiedSets : Script ()
+testCustomControllersWithdrawTimeOverAllSatisfiedSets = do
+  (TestEnv{..}, registry, vestingCid, unlockAt) <- setupVestingLockWithControllers (\env -> [[env.charlie, env.bob], [env.alice, env.bob]])
+  let aliceTime = unlockAt `addRelTime` days 25
+  pending1 <- expectPendingWithdraw =<< expectSuccess (withdrawAs registry alice vestingCid (unlockAt `addRelTime` days 20) [charlie])
+  pending2 <- expectPendingWithdraw =<< expectSuccess (withdrawAs registry alice pending1 aliceTime [alice])
+  -- bob's approval satisfies both sets. The latest time over both sets (alice's) wins,
+  -- even though alice is only in the second set.
+  (Some remainingCid, _) <- expectCompletedWithdraw =<< expectSuccess
+    (withdrawAs registry alice pending2 (unlockAt `addRelTime` days 10) [bob])
+  Some remaining <- queryContractId alice remainingCid
+  remaining.vestingPeriod === remaining.endTime `subTime` aliceTime
+
+testCustomControllersNonOwnerWithdraw : Script ()
+testCustomControllersNonOwnerWithdraw = do
+  (TestEnv{..}, registry, vestingCid, unlockAt) <- setupVestingLockWithControllers (\env -> [[env.charlie], [env.alice]])
+  (Some remainingCid, _) <- expectCompletedWithdraw =<< expectSuccess
+    (withdrawAs registry alice vestingCid (unlockAt `addRelTime` days 15) [charlie])
+  checkLockedHolding alice remainingCid 15000.0
+
+testCustomControllersNonControllerWithdraw : Script ()
+testCustomControllersNonControllerWithdraw = do
+  (TestEnv{..}, registry, vestingCid, unlockAt) <- setupVestingLockWithControllers (\env -> [[env.charlie], [env.alice]])
+  actionMustFail (expectMessageContains "must be a controller") $
+    withdrawAs registry alice vestingCid (unlockAt `addRelTime` days 15) [provider1]
+
+transferInstructionPendingParties : Party -> ContractId V1.TransferInstruction -> Script [Party]
+transferInstructionPendingParties p cid = do
+  Some view <- queryInterfaceContractId p cid
+  case view.status of
+    V1.TransferPendingInternalWorkflow{..} -> pure $ Map.keys pendingActions
+    status -> fail $ "Unexpected transfer instruction status " <> show status
+
+testCustomControllersTSv1Withdraw : Script ()
+testCustomControllersTSv1Withdraw = do
+  env@TestEnv{..} <- setupTest
+  let registry = registriesEnv.amuletV2
+  AmuletRegistryV2.tapFaucet registry alice 20000.0
+  let spec = (ownerControlledSpecification alice (GLK_FeaturedApp bob)) with
+        unlockControllers = ControllerSpecification [[alice, charlie]]
+  lockCid <- governanceLockWithSpecRawChoice registry alice 20000.0 spec
+
+  pendingParties <- transferInstructionPendingParties alice (toInterfaceContractId lockCid)
+  pendingParties === sort [alice, charlie]
+
+  -- alice withdraws the TSv1 transfer instruction
+  Some pendingInstructionCid <- WalletClientV2.withdrawTransferInstructionV1 env.registries alice (toInterfaceContractId lockCid)
+  let pendingLockCid = fromInterfaceContractId @GovernanceLock pendingInstructionCid
+  Some _ <- queryContractId alice pendingLockCid
+  pendingParties <- transferInstructionPendingParties alice pendingInstructionCid
+  pendingParties === [charlie]
+
+  -- charlie completes the unlock
+  unlockAt <- (`addRelTime` hours 1) <$> getTime
+  (Some vestingLockCid, None, None) <- expectCompletedUnlock =<< expectSuccess
+    (unlockAs registry alice pendingLockCid None unlockAt [charlie])
+
+  vestingPendingParties <- transferInstructionPendingParties alice (toInterfaceContractId vestingLockCid)
+  vestingPendingParties === [alice]
+
+testCustomControllersApprovalsPersistOnTopUp : Script ()
+testCustomControllersApprovalsPersistOnTopUp = do
+  (env@TestEnv{..}, registry, lockCid) <- setupTwoOfThreeLock
+  AmuletRegistryV2.tapFaucet registry alice 10000.0
+  unlockAt <- (`addRelTime` hours 1) <$> getTime
+
+  pendingCid <- expectPendingUnlock =<< expectSuccess (unlockAs registry alice lockCid None unlockAt [charlie])
+  Some pending <- queryContractId alice pendingCid
+  (toppedUpCid, _) <- governanceLockTopUpRawChoice env pendingCid [] None 5000.0 [] 0.0 alice mempty None
+
+  Some toppedUp <- queryContractId alice toppedUpCid
+  toppedUp.pendingUnlockApprovals === pending.pendingUnlockApprovals
