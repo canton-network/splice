@@ -76,11 +76,12 @@ jobs:
             tar -xzf "$bundle_tar" -C "$smoke_dir"
             # Running a simple command that initialises logging is enough to catch
             # packaging issues such as a missing or malformed logback.xml.
-            cat > /tmp/smoke.conf <<'EOF'
+            smoke_conf="$smoke_dir/smoke.conf"
+            cat > "$smoke_conf" <<'SMOKECONF'
             canton {}
-            EOF
+            SMOKECONF
             echo "Running bundled splice-node generate remote-config"
-            "$smoke_dir/splice-node/bin/splice-node" -c /tmp/smoke.conf generate remote-config
+            "$smoke_dir/splice-node/bin/splice-node" -c "$smoke_conf" generate remote-config
 
       - name: Post-SBT job
         if: ${{ !cancelled() }}
