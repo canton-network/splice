@@ -113,7 +113,7 @@ abstract class AcsSnapshotTriggerBase(
           size match {
             case Some(v) =>
               snapshotMetrics.snapshotSize.updateValue(v.createRows)
-              snapshotMetrics.snapshotSize.updateValue(v.stakeholderRows)
+              snapshotMetrics.snapshotStakeholdersSize.updateValue(v.stakeholderRows)
             case None =>
               snapshotMetrics.snapshotSize.updateValue(-1)
               snapshotMetrics.snapshotStakeholdersSize.updateValue(-1)
