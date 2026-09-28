@@ -34,6 +34,7 @@ import scala.concurrent.Future
 import scala.util.{Failure, Success}
 import StoreTestBase.*
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.IncrementalAcsSnapshotTable
+import org.lfdecentralizedtrust.splice.scan.config.AnalyzableTimeWindowConfig
 
 trait AcsSnapshotStoreTest
     extends StoreTestBase
@@ -1288,6 +1289,7 @@ trait AcsSnapshotStoreTest
       dsoParty,
       backfillingRequired,
       internedStringStore(storage),
+      analyzableTimeWindowDuration = AnalyzableTimeWindowConfig.UnlimitedAtw,
       loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = true,

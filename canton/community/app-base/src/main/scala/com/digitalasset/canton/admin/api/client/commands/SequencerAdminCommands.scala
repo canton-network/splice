@@ -287,9 +287,9 @@ object SequencerAdminCommands {
     override def timeoutType: TimeoutType = DefaultUnboundedTimeout
   }
 
-  final case class InitializeFromOnboardingStateV2(onboardingState: ByteString)
+  final case class InitializeFromOnboardingStateV2(onboardingState: Seq[ByteString])
       extends GrpcAdminCommand[
-        proto.InitializeSequencerFromOnboardingStateV2Request,
+        Seq[proto.InitializeSequencerFromOnboardingStateV2Request],
         proto.InitializeSequencerFromOnboardingStateV2Response,
         InitializeSequencerResponse,
       ] {
@@ -303,21 +303,17 @@ object SequencerAdminCommands {
 
     override protected def submitRequest(
         service: proto.SequencerInitializationServiceGrpc.SequencerInitializationServiceStub,
-        request: proto.InitializeSequencerFromOnboardingStateV2Request,
+        request: Seq[proto.InitializeSequencerFromOnboardingStateV2Request],
     ): Future[proto.InitializeSequencerFromOnboardingStateV2Response] =
-      GrpcStreamingUtils.streamToServer(
+      GrpcStreamingUtils.streamToServerChunked(
         service.initializeSequencerFromOnboardingStateV2,
-        (onboardingState: Array[Byte]) =>
-          proto.InitializeSequencerFromOnboardingStateV2Request(
-            ByteString.copyFrom(onboardingState)
-          ),
-        new ByteArrayInputStream(request.onboardingState.toByteArray),
+        request,
       )
 
     override protected def createRequest()
-        : Either[String, proto.InitializeSequencerFromOnboardingStateV2Request] =
+        : Either[String, Seq[proto.InitializeSequencerFromOnboardingStateV2Request]] =
       Right(
-        proto.InitializeSequencerFromOnboardingStateV2Request(onboardingState)
+        onboardingState.map(chunk => proto.InitializeSequencerFromOnboardingStateV2Request(chunk))
       )
 
     override protected def handleResponse(

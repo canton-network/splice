@@ -851,7 +851,8 @@
       },
       "inboundPort": 5012,
       "namespace": "sv",
-      "protocol": "http"
+      "protocol": "http",
+      "xffNumTrustedHops": 2
     },
     "name": "splice-sv-scan-app-rate-limit",
     "provider": "",
@@ -880,6 +881,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -958,6 +960,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": false,
@@ -1305,6 +1311,29 @@
       "spec": {
         "configPatches": [
           {
+            "applyTo": "NETWORK_FILTER",
+            "match": {
+              "context": "SIDECAR_INBOUND",
+              "listener": {
+                "filterChain": {
+                  "filter": {
+                    "name": "envoy.filters.network.http_connection_manager"
+                  }
+                },
+                "portNumber": 5012
+              }
+            },
+            "patch": {
+              "operation": "MERGE",
+              "value": {
+                "typed_config": {
+                  "@type": "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager",
+                  "xff_num_trusted_hops": 2
+                }
+              }
+            }
+          },
+          {
             "applyTo": "HTTP_FILTER",
             "match": {
               "context": "SIDECAR_INBOUND",
@@ -1559,10 +1588,6 @@
             {
               "name": "ADDITIONAL_CONFIG_NO_BFT_SEQUENCER_CONNECTION",
               "value": "canton.validator-apps.validator_backend.disable-sv-validator-bft-sequencer-connection = true"
-            },
-            {
-              "name": "ADDITIONAL_CONFIG_TOPOLOGY_METRICS_EXPORT",
-              "value": "canton.validator-apps.validator_backend.automation.topology-metrics-polling-interval = 5m\n"
             },
             {
               "name": "ADDITIONAL_CONFIG_PARTICIPANT_PRUNING",

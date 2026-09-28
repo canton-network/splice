@@ -160,6 +160,24 @@ class BulkStorageReader(
       }
   }
 
+  def getStagingProgressTimestamp(): Future[CantonTimestamp] = {
+    for {
+      updates <- updateHistoryStagingProgress.readLatestProcessedSegment
+      snapshots <- acsSnapshotStagingProgress.readLatestProcessedSnapshotTimestamp
+    } yield {
+      (updates, snapshots) match {
+        case (Some(updatesSegment), Some(snapshotTs)) =>
+          if (updatesSegment.toTimestamp.timestamp > snapshotTs.timestamp) {
+            snapshotTs.timestamp
+          } else {
+            updatesSegment.toTimestamp.timestamp
+          }
+        case _ =>
+          CantonTimestamp.MinValue
+      }
+    }
+  }
+
   def getObjectChecksums(
       objectKeys: Seq[String]
   ): Future[Seq[Option[String]]] = {

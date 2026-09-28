@@ -131,9 +131,14 @@ function wafSignatureCondition(context: string, signature: WafSignature): string
 /**
  * Builds the match expression of a WAF rule: the request matches if any of the
  * group's signatures fires.
+ *
+ * @param excludedHostsExpr condition matching the hosts the WAF rules must not apply to
  */
-export function wafRuleExpression(group: WafRuleGroup): string {
-  const expr = group.signatures.map(s => wafSignatureCondition(group.name, s)).join(' || ');
+export function wafRuleExpression(group: WafRuleGroup, excludedHostsExpr?: string): string {
+  const signatureExpr = group.signatures
+    .map(s => wafSignatureCondition(group.name, s))
+    .join(' || ');
+  const expr = excludedHostsExpr ? `!(${excludedHostsExpr}) && (${signatureExpr})` : signatureExpr;
   if (expr.length > MAX_EXPRESSION_LENGTH) {
     throw new Error(
       `Cloud Armor WAF expression for ${group.name} exceeds the ${MAX_EXPRESSION_LENGTH} character limit (current: ${expr.length}). ` +
@@ -153,35 +158,43 @@ export function checkSubexpressionLength(context: string, expr: string): string 
 }
 
 /**
- * Builds the host match condition for an endpoint, or undefined to match any host.
+ * How a rule selects the hosts it applies to:
+ * - `hostname`: one exact host
+ * - `hostPrefixRegex`: an RE2 fragment matching the leading label(s) under the cluster
+ *   DNS name, e.g. `scan` or `sequencer-[0-9]+`. `perNodeHost` adds the node label in
+ *   between, i.e. `<prefix>.<node>.<cluster dns name>` instead of
+ *   `<prefix>.<cluster dns name>`.
+ */
+export type HostMatch = { hostname: string } | { hostPrefixRegex: string; perNodeHost: boolean };
+
+/**
+ * Builds the host match condition of a rule, or undefined to match any host.
  *
- * A cluster is served under more than one DNS name (see getDnsNames), so a prefix match
- * has to cover all of them, otherwise traffic on the other name falls through to the
- * default deny rule.
+ * Only `clusterHostname` is matched. A cluster resolves under a second DNS name too (see
+ * getDnsNames), but everything is served under CLUSTER_HOSTNAME, so matching just that
+ * one keeps the expressions short and the rules unambiguous.
  *
- * @param context config key of the endpoint, only used for error messages
- * @param dnsNames all DNS names the cluster is served under
- * @param hostname exact hostname to match
- * @param hostPrefixRegex RE2 fragment matching the leading label(s) of a per-node hostname
+ * @param context config key of the rule, only used for error messages
+ * @param clusterHostname the cluster's DNS name, i.e. CLUSTER_HOSTNAME
+ * @param match which hosts the rule applies to, or undefined for all of them
  */
 export function hostCondition(
   context: string,
-  dnsNames: string[],
-  hostname?: string,
-  hostPrefixRegex?: string
+  clusterHostname: string,
+  match?: HostMatch
 ): string | undefined {
-  let hostnameRegex;
-  if (hostname) {
-    hostnameRegex = _.escapeRegExp(hostname.toLowerCase());
-  } else if (hostPrefixRegex) {
-    if (dnsNames.length === 0) {
-      throw new Error(`No cluster DNS names to build a host condition for ${context}`);
-    }
-    const dnsAlternatives = dnsNames.map(n => _.escapeRegExp(n.toLowerCase())).join('|');
-    hostnameRegex = `(?:${hostPrefixRegex})\\.[\\w-]+\\.(?:${dnsAlternatives})`;
-  } else {
+  if (!match) {
     return undefined;
   }
+  const clusterHostRegex = _.escapeRegExp(clusterHostname.toLowerCase());
+  const hostnameRegex =
+    'hostname' in match
+      ? _.escapeRegExp(match.hostname.toLowerCase())
+      : [
+          `(?:${match.hostPrefixRegex})`,
+          ...(match.perNodeHost ? ['[\\w-]+'] : []),
+          clusterHostRegex,
+        ].join('\\.');
   // the host header may carry a port, and Cloud Armor does not strip it
   return checkSubexpressionLength(
     context,

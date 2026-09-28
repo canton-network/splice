@@ -37,7 +37,6 @@ class SynchronizerConnector(
     config: ValidatorAppBackendConfig,
     participantAdminConnection: ParticipantAdminConnection,
     scanConnection: BftScanConnection,
-    migrationId: Long,
     retryProvider: RetryProvider,
     val loggerFactory: NamedLoggerFactory,
 )(implicit ec: ExecutionContext)
@@ -214,7 +213,7 @@ class SynchronizerConnector(
           if (connections.isEmpty) {
             throw Status.NOT_FOUND
               .withDescription(
-                s"sequencer connections for migration id $migrationId and serial $synchronizerSerial is empty at $time, validate with your SV sponsor that your migration id is correct"
+                s"sequencer connections for serial $synchronizerSerial is empty at $time"
               )
               .asRuntimeException()
           } else {
@@ -222,7 +221,7 @@ class SynchronizerConnector(
               case None =>
                 throw Status.NOT_FOUND
                   .withDescription(
-                    s"sequencer connections for migration id $migrationId and serial $synchronizerSerial is empty at $time, validate with your SV sponsor that your migration id is correct"
+                    s"sequencer connections for serial $synchronizerSerial is empty at $time"
                   )
                   .asRuntimeException()
               case Some(nonEmptyConnections) =>
@@ -286,35 +285,18 @@ class SynchronizerConnector(
             sequencers.synchronizerId == decentralizedSynchronizerId
           )
           .flatMap { sequencers =>
-            val serialOrMigrationSequencers =
+            val serialSequencers =
               sequencers.sequencers
-                .groupBy(_.id)
-                .view
-                .mapValues { sequencersForId =>
-                  val serialMatch =
-                    sequencersForId.find(_.serial.contains(synchronizerSerial.unwrap.toLong))
-                  // it might be that some SV did not update the url for the latest serial
-                  // in that case we don't want to fallback to the migration id one
-                  // the migration id fallback is valid only if the SV did not sync the per serial urls yet for the first time
-                  val sequencerHasAnyEntryWithSerial = sequencersForId.exists(_.serial.nonEmpty)
-                  if (sequencerHasAnyEntryWithSerial) serialMatch
-                  else
-                    serialMatch.orElse(
-                      sequencersForId.find(s => s.serial.isEmpty && s.migrationId == migrationId)
-                    )
-                }
-                .values
-                .flatten
-                .toSeq
+                .filter(_.serial == synchronizerSerial.unwrap.toLong)
             val svFilteredSequencers = config.domains.global.trustedSynchronizerConfig match {
               case Some(config) =>
                 val allowedNamesSet = config.svNames.toList.toSet
                 logger.debug(
                   s"Filtering sequencers to only include: ${allowedNamesSet.toList.mkString(", ")}"
                 )
-                serialOrMigrationSequencers.filter(s => allowedNamesSet.contains(s.svName))
+                serialSequencers.filter(s => allowedNamesSet.contains(s.svName))
               case None =>
-                serialOrMigrationSequencers
+                serialSequencers
             }
             val validConnections = extractValidConnections(
               svFilteredSequencers,
@@ -337,7 +319,7 @@ class SynchronizerConnector(
     // sequencer connections will be ignore if they are with a invalid Alias, empty url or not yet available (`before availableAfter`)
     sequencers
       .collect {
-        case DsoSequencer(_, _, id, url, _, availableAfter)
+        case DsoSequencer(_, id, url, _, availableAfter)
             if url.nonEmpty && !domainTime.toInstant
               .isBefore(availableAfter) =>
           for {

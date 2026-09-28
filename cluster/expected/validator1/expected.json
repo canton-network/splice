@@ -597,6 +597,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -674,6 +675,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": true,
@@ -980,6 +985,7 @@
         "enabled": true,
         "enterprisePlus": false,
         "flags": {
+          "autovacuum_freeze_max_age": "500000000",
           "maintenance_work_mem": "2000000",
           "max_wal_size": "20480",
           "random_page_cost": "1.1",
@@ -1057,6 +1063,10 @@
           {
             "name": "work_mem",
             "value": "16384"
+          },
+          {
+            "name": "autovacuum_freeze_max_age",
+            "value": "500000000"
           }
         ],
         "deletionProtectionEnabled": true,

@@ -33,6 +33,10 @@ export type CloudArmorLoggingConfig = z.infer<typeof CloudArmorLoggingConfigSche
 const CloudArmorWafRulesConfigSchema = z.object({
   enabled: z.boolean().default(true),
   groups: WafRuleGroupsSchema.default([]),
+  // Leading hostname labels (`<prefix>.<cluster dns name>`) whose traffic the WAF rules
+  // skip. Grafana is excluded because its dashboard JSON and query payloads regularly
+  // trip the OWASP CRS signatures, and it is only reachable from whitelisted IPs anyway.
+  excludedHostPrefixes: z.array(z.string().regex(/^[A-Za-z0-9-]+$/, 'DNS label')).default([]),
   // The preconfigured WAF rules deny by default, but are kept in Cloud Armor preview
   // mode so they only produce logs and alerts. That gives us attack detection and the
   // data to spot false positives before we let them block real traffic.
@@ -120,22 +124,25 @@ export const InfraConfigSchema = z.object({
       })
       .optional(),
     enableGCReaperJob: z.boolean().default(false),
-    gkeGateway: z.object({
-      proxyForIstioHttp: z.boolean(),
-    }),
-    istio: z.object({
-      enableIngressAccessLogging: z.boolean(),
-      enableClusterAccessLogging: z.boolean().default(false),
-      enablePublicTokenRegistry: z.boolean().default(false),
-      enableGeneralIpWhitelist: z.boolean().default(false),
-      istiodValues: z.object({}).catchall(z.any()).default({}),
-      flowControl: z.object({
-        // public APIs like the sequencer
-        public: flowControlConfigSchema,
-        // internal APIs like the participant
-        internal: flowControlConfigSchema,
-      }),
-    }),
+    gkeGateway: z
+      .object({
+        proxyForIstioHttp: z.boolean(),
+      })
+      .strict(),
+    istio: z
+      .object({
+        enableIngressAccessLogging: z.boolean(),
+        enableClusterAccessLogging: z.boolean().default(false),
+        enablePublicTokenRegistry: z.boolean().default(false),
+        istiodValues: z.object({}).catchall(z.any()).default({}),
+        flowControl: z.object({
+          // public APIs like the sequencer
+          public: flowControlConfigSchema,
+          // internal APIs like the participant
+          internal: flowControlConfigSchema,
+        }),
+      })
+      .strict(),
     enableSweetSecurity: z.boolean().default(false),
     extraCustomResources: z.object({}).catchall(z.any()).default({}),
   }),
