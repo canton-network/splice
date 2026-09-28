@@ -16,6 +16,7 @@ import org.lfdecentralizedtrust.splice.store.{
   UpdateHistory,
 }
 import org.lfdecentralizedtrust.splice.util.{Contract, HoldingsSummary, PackageQualifiedName}
+import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.FutureUnlessShutdownOps
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.resource.DbStorage
@@ -1546,6 +1547,58 @@ class TablePerAcsSnapshotStoreTest extends AcsSnapshotStoreTest {
       snapshotContent.createdEventsInPage.map(
         _.event.getContractId
       ) should contain theSameElementsInOrderAs Seq(c1, c2, c3).map(_.contractId.contractId)
+    }
+  }
+
+  "idempotently index the stakeholders table" in {
+    import storage.api.jdbcProfile.api.*
+
+    for {
+      updateHistory <- mkUpdateHistory()
+      store = mkStore(updateHistory)
+      _ <- ingestCreate(
+        updateHistory,
+        amuletRules(),
+        timestamp1.minusSeconds(1L),
+      )
+      _ <- store.insertNewSnapshot(nextTable, DefaultMigrationId, timestamp1)
+      snapshotOpt <- store.lookupSnapshotAtOrBefore(
+        migrationId = DefaultMigrationId,
+        CantonTimestamp.MaxValue,
+      )
+      snapshot = snapshotOpt.valueOrFail("snapshot should've just been created")
+      oldestUnindexedOpt <- store.lookupOldestUnindexedSnapshot()
+      oldestUnindexed = oldestUnindexedOpt.valueOrFail("snapshot should be unindexed")
+      _ = oldestUnindexed should be(snapshot)
+      _ <- store.indexSnapshotStakeholdersTable(oldestUnindexed)
+      expectedIndexNames = Set(
+        AcsSnapshotStore.AcsSnapshotDDL.stakeholderIndexName(
+          oldestUnindexed.historyId,
+          oldestUnindexed.snapshotRecordTime,
+        ),
+        AcsSnapshotStore.AcsSnapshotDDL.stakeholderTemplateIdIndexName(
+          oldestUnindexed.historyId,
+          oldestUnindexed.snapshotRecordTime,
+        ),
+      )
+      _ = expectedIndexNames should have size 2
+      indexNames <- storage
+        .query(
+          sql"""
+            select indexname
+            from pg_indexes
+            where schemaname = current_schema()
+              and tablename = ${oldestUnindexed.stakeholdersTableName}
+          """.as[String],
+          "listAcsSnapshotStakeholderIndexes",
+        )
+        .toFuture
+      oldestAfter <- store.lookupOldestUnindexedSnapshot()
+      // idempotency check, shouldn't fail
+      _ <- store.indexSnapshotStakeholdersTable(oldestUnindexed)
+    } yield {
+      indexNames.toSet should contain allElementsOf expectedIndexNames
+      oldestAfter should be(None)
     }
   }
 }

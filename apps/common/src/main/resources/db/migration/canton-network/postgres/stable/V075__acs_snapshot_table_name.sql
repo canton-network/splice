@@ -4,7 +4,9 @@
 alter table acs_snapshot
     add column creates_table_name text default null,
     add column stakeholders_table_name text default null,
-    -- these values won't be set anymore
+    -- default true for all existing snapshots, any new ones will set it to false until the indexes are created
+    add column indexes_created boolean default true,
+  -- these values won't be set anymore
     drop constraint acs_snapshot_first_row_id_fkey,
     drop constraint acs_snapshot_last_row_id_fkey,
     alter column first_row_id drop not null,
@@ -15,6 +17,8 @@ alter table acs_snapshot
         ((first_row_id is null and last_row_id is null and creates_table_name is not null and stakeholders_table_name is not null) or
             -- legacy table
          (first_row_id is not null and last_row_id is not null and creates_table_name is null and stakeholders_table_name is null));
+
+create index acs_snapshot_unindexed on acs_snapshot (history_id, snapshot_record_time) where not indexes_created;
 
 -- TODO: template ids can be interned already
 
