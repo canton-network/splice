@@ -63,7 +63,7 @@ object BftCallExecutor {
       endpoint: String,
       callConfig: BftCallConfig,
       consensusFailureLogLevel: Level = Level.WARN,
-      disagreementLogLevel: Level = Level.INFO,
+      disagreementLogLevel: Level = Level.WARN, // In eventual consistency endpoints, we don't typically expect disagreements once data is available
       notEnoughScansLogLevel: Level = Level.WARN,
       shortenResponsesForLog: T => Any = identity[T],
   )(implicit

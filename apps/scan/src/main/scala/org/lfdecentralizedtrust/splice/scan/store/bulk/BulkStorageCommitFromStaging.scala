@@ -43,31 +43,29 @@ class BulkStorageCommitFromStaging[T](
     if (appConfig.bftCheckEnabled) {
       for {
         connection <- scanConnection.connection
-        // FIXME: check requiredCatchupTimestamp
         bft <- connection
-          .getBulkObjectChecksums(objects.map(_.key))
+          .getBulkObjectChecksums(requiredCatchupTimestamp, objects.map(_.key))
           .map(Some(_))
-          .recoverWith { case ex @ HttpErrorWithHttpCode(code, _) =>
-            if (code == StatusCodes.BadGateway) {
-              logger.debug(
-                s"Consensus on checksums for objects ${objects.map(_.key).mkString(", ")} not reached. Assuming that this is because not all peers have processed the objects yet."
-              )
+          .recoverWith {
+            case ex @ HttpErrorWithHttpCode(StatusCodes.ServiceUnavailable, _) =>
+              logger.debug("Not enough scans have the data yet, will retry after delay")
               Future.successful(None)
-            } else {
-              throw ex
-            }
-          }
+            case ex @ HttpErrorWithHttpCode(StatusCodes.BadGateway, _) =>
+              logger.error("Could not reach consensus on checksums for objects. This indicates that different peers have different data, and must be investigated.")
+              Future.successful(None)
+         }
       } yield {
         bft match {
           case Some(bftChecksums) =>
+            // Consensus achieved from peers, comparing the consensus checksums to mine.
             val consensusChecksums = bftChecksums.checksums.filter(_.value.isDefined)
             logger.debug(
               s"Consensus achieved on ${consensusChecksums.length} out of ${objects.length} objects"
             )
 
             if (consensusChecksums.length < objects.length) {
-              logger.debug(
-                s"Not all objects are known to the BFT peers yet. Will retry after delay."
+              logger.error(
+                s"Not all objects are known to the BFT peers, despite them indicating that they have caught up to the required timestamp. This indicates that different peers have different data, and must be investigated."
               )
               false
             } else {
@@ -135,6 +133,7 @@ class BulkStorageCommitFromStaging[T](
               }
             }
           case None =>
+            // No consensus yet
             false
         }
       }

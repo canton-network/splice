@@ -20,11 +20,8 @@ import org.apache.pekko.stream.scaladsl.{Flow, Keep}
 import org.apache.pekko.stream.testkit.scaladsl.{TestSink, TestSource}
 import org.lfdecentralizedtrust.splice.environment.SpliceLedgerClient
 import org.lfdecentralizedtrust.splice.http.HttpClient
-import org.lfdecentralizedtrust.splice.http.v0.definitions.GetBulkObjectChecksumsResponse
-import org.lfdecentralizedtrust.splice.scan.admin.api.client.{
-  BftScanConnection,
-  SingleScanConnection,
-}
+import org.lfdecentralizedtrust.splice.http.v0.definitions.{GetBulkObjectChecksumsResponse, GetBulkObjectsProgressResponse}
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.{BftScanConnection, SingleScanConnection}
 import org.lfdecentralizedtrust.splice.scan.config.BulkStorageConfig
 import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChecksum
 import org.lfdecentralizedtrust.splice.store.{HasS3Mock, StoreTestBase}
@@ -261,7 +258,7 @@ class BulkStorageCommitFromStagingTest
           )
           when(mockConn.url) thenReturn Uri(s"http://scan_$i")
           when(
-            mockConn.getBulkObjectChecksums(any[Seq[String]])(
+            mockConn.getBulkObjectChecksums(any[CantonTimestamp], any[Seq[String]])(
               any[ExecutionContext],
               any[TraceContext],
             )
@@ -274,6 +271,15 @@ class BulkStorageCommitFromStagingTest
                 )
             }
           }
+          when(
+            mockConn.getBulkObjectsProgress(any[CantonTimestamp])(
+              any[ExecutionContext],
+              any[TraceContext],
+            )
+          ).thenAnswer(
+            // FIXME: also return false sometimes
+            Future.successful(new GetBulkObjectsProgressResponse(true))
+          )
           mockConn
         }
 

@@ -1736,7 +1736,7 @@ paths:
         **Under Development, do not use in production yet** Query whether bulk storage object creation has advanced to a certain record time.
         Meant for internal use only, as part of the processing pipeline of bulk objects.
       parameters:
-        - name: "at_or_before_record_time"
+        - name: "record_time"
           in: "query"
           required: true
           schema:

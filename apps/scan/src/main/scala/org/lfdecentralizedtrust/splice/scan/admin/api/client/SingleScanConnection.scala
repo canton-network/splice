@@ -33,6 +33,7 @@ import org.lfdecentralizedtrust.splice.environment.{
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.http.v0.definitions.{
   GetBulkObjectChecksumsResponse,
+  GetBulkObjectsProgressResponse,
   GetRewardAccountingActivityTotalsResponse,
   GetRewardAccountingBatchResponse,
   GetRewardAccountingRootHashResponse,
@@ -1022,6 +1023,7 @@ class SingleScanConnection private[client] (
     )
 
   override def getBulkObjectChecksums(
+      requiredCatchupTimestamp: CantonTimestamp,
       objectKeys: Seq[String],
   )(implicit ec: ExecutionContext, tc: TraceContext): Future[GetBulkObjectChecksumsResponse] = {
     runHttpCmd(
@@ -1062,6 +1064,16 @@ class SingleScanConnection private[client] (
     ).flatMap(response =>
       SingleScanConnection.decoded(BulkStorageObjects.updateObjectsPage(response))
     )
+
+  // Not intended to be called via BftScanConnection, so not defined in ScanConnection trait.
+  def getBulkObjectsProgress(
+      recordTime: CantonTimestamp
+  )(implicit ec: ExecutionContext, tc: TraceContext): Future[GetBulkObjectsProgressResponse] = {
+    runHttpCmd(
+      config.adminApi.url,
+      HttpScanAppClient.GetBulkObjectsProgress(recordTime),
+    )
+  }
 }
 
 object SingleScanConnection {
