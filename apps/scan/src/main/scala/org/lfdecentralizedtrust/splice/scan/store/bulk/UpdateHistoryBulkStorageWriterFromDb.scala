@@ -10,8 +10,8 @@ import org.apache.pekko.NotUsed
 import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.stream.scaladsl.Flow
 import org.lfdecentralizedtrust.splice.scan.config.{BulkStorageConfig, ScanStorageConfig}
+import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorage.BulkStorageMetrics
 import org.lfdecentralizedtrust.splice.store.{
-  HistoryMetrics,
   PageLimit,
   S3BucketConnection,
   TimestampWithMigrationId,
@@ -25,7 +25,7 @@ class UpdateHistoryBulkStorageWriterFromDb(
     appConfig: BulkStorageConfig,
     updateHistory: UpdateHistory,
     s3Connection: S3BucketConnection,
-    historyMetrics: HistoryMetrics,
+    historyMetrics: BulkStorageMetrics,
     currentMigrationId: Long,
     val loggerFactory: NamedLoggerFactory,
 )(implicit actorSystem: ActorSystem, ec: ExecutionContext)

@@ -35,12 +35,12 @@ import org.lfdecentralizedtrust.splice.scan.store.{
   ScanKeyValueStore,
 }
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.QueryAcsSnapshotResult
+import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorage.BulkStorageMetrics
 import org.lfdecentralizedtrust.splice.store.db.SplicePostgresTest
 import org.lfdecentralizedtrust.splice.store.events.SpliceCreatedEvent
 import org.lfdecentralizedtrust.splice.store.{
   HardLimit,
   HasS3Mock,
-  HistoryMetrics,
   Limit,
   S3BucketConnection,
   StoreTestBase,
@@ -94,7 +94,7 @@ class AcsSnapshotBulkStorageWriterFromDbTest
             appConfig,
             store,
             bucketConnection,
-            new HistoryMetrics(metricsFactory)(MetricsContext.Empty),
+            new BulkStorageMetrics(metricsFactory)(MetricsContext.Empty),
             loggerFactory,
           )
           .runWith(Sink.ignore)
@@ -208,7 +208,7 @@ class AcsSnapshotBulkStorageWriterFromDbTest
       val retryProvider = {
         RetryProvider(loggerFactory, timeouts, FutureSupervisor.Noop, NoOpMetricsFactory)
       }
-      val historyMetrics = new HistoryMetrics(metricsFactory)(MetricsContext.Empty)
+      val historyMetrics = new BulkStorageMetrics(metricsFactory)(MetricsContext.Empty)
       val acsSnapshotWriter = new AcsSnapshotBulkStorageWriterFromDb(
         bulkStorageTestConfig,
         appConfig,
@@ -221,7 +221,7 @@ class AcsSnapshotBulkStorageWriterFromDbTest
         "latest_acs_snapshot_in_bulk_storage",
         "first_acs_snapshot_in_bulk_storage",
         kvProvider,
-        historyMetrics.BulkStorage.latestAcsSnapshotStaging,
+        historyMetrics.latestAcsSnapshotStaging,
         loggerFactory,
       )
       val bulkStorage = new AcsSnapshotBulkStorage(

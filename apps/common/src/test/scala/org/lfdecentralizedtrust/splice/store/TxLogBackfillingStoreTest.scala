@@ -7,6 +7,8 @@ import org.lfdecentralizedtrust.splice.util.{Contract, ResourceTemplateDecoder, 
 import com.digitalasset.canton.HasActorSystem
 import com.digitalasset.canton.concurrent.FutureSupervisor
 import com.daml.metrics.api.noop.NoOpMetricsFactory
+import com.daml.metrics.api.MetricsContext
+import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryMetrics
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.resource.DbStorage
@@ -565,7 +567,7 @@ class TxLogBackfillingStoreTest
       loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = true,
-      HistoryMetrics.apply(NoOpMetricsFactory, migrationId),
+      new UpdateHistoryMetrics(NoOpMetricsFactory)(MetricsContext.Empty),
     )
   }
 

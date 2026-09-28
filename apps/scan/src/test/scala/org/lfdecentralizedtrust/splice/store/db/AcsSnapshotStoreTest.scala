@@ -4,12 +4,13 @@ import cats.data.NonEmptyVector
 import com.daml.ledger.javaapi.data.{Unit as damlUnit}
 import com.daml.ledger.javaapi.data.codegen.ContractId
 import com.daml.metrics.api.noop.NoOpMetricsFactory
+import com.daml.metrics.api.MetricsContext
+import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryMetrics
 import org.lfdecentralizedtrust.splice.environment.DarResources
 import org.lfdecentralizedtrust.splice.environment.ledger.api.TransactionTreeUpdate
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore
 import org.lfdecentralizedtrust.splice.store.{
   HardLimit,
-  HistoryMetrics,
   PageLimit,
   StoreErrors,
   StoreTestBase,
@@ -1406,7 +1407,7 @@ class AcsSnapshotStoreTest
       loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = true,
-      HistoryMetrics(NoOpMetricsFactory, migrationId),
+      new UpdateHistoryMetrics(NoOpMetricsFactory)(MetricsContext.Empty),
     )
     updateHistory.ingestionSink.initialize().map(_ => updateHistory)
   }

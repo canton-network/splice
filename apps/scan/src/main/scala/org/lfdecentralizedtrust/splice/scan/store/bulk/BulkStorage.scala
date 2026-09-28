@@ -3,8 +3,13 @@
 
 package org.lfdecentralizedtrust.splice.scan.store.bulk
 
-import com.daml.metrics.api.MetricHandle.LabeledMetricsFactory
-import com.digitalasset.canton.lifecycle.{AsyncOrSyncCloseable, FlagCloseableAsync, LifeCycle}
+import com.daml.metrics.api.MetricHandle.{Counter, Gauge, LabeledMetricsFactory}
+import com.digitalasset.canton.lifecycle.{
+  AsyncOrSyncCloseable,
+  FlagCloseableAsync,
+  LifeCycle,
+  SyncCloseable,
+}
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.time.Clock
 import com.digitalasset.canton.tracing.TraceContext
@@ -12,22 +17,30 @@ import io.grpc.Status
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.actor.{ActorSystem, Cancellable}
 import org.lfdecentralizedtrust.splice.config.{AutomationConfig, S3Config, UpgradesConfig}
-import org.lfdecentralizedtrust.splice.environment.{RetryProvider, SpliceLedgerClient}
+import org.lfdecentralizedtrust.splice.environment.{
+  RetryProvider,
+  SpliceLedgerClient,
+  SpliceMetrics,
+}
 import org.lfdecentralizedtrust.splice.scan.config.{BulkStorageConfig, ScanStorageConfig}
 import org.lfdecentralizedtrust.splice.scan.store.{
   AcsSnapshotStore,
   ScanKeyValueProvider,
   ScanStore,
 }
-import org.lfdecentralizedtrust.splice.store.{HistoryMetrics, S3BucketConnection, UpdateHistory}
+import org.lfdecentralizedtrust.splice.store.{S3BucketConnection, UpdateHistory}
 
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import com.digitalasset.canton.discard.Implicits.DiscardOps
 import cats.implicits.*
+import com.daml.metrics.api.MetricQualification.Traffic
+import com.daml.metrics.api.{MetricInfo, MetricName, MetricsContext}
+import com.digitalasset.canton.data.CantonTimestamp
 import org.apache.pekko.stream.scaladsl.Source
 import org.lfdecentralizedtrust.splice.PekkoRetryableService
 import org.lfdecentralizedtrust.splice.http.HttpClient
 import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorage.{
+  BulkStorageMetrics,
   acsCommittedKvStoreKey,
   acsStagingKvStoreKey,
   firstAcsSnapshotTimestampKvStoreKey,
@@ -70,7 +83,9 @@ class BulkStorage(
 
   val stagingConnection = S3BucketConnection(stagingS3Config, loggerFactory)
   val committedConnection = S3BucketConnection(committedS3Config, loggerFactory)
-  val historyMetrics = HistoryMetrics(metricsFactory, currentMigrationId)
+  val historyMetrics = new BulkStorageMetrics(metricsFactory)(
+    MetricsContext("current_migration_id" -> currentMigrationId.toString)
+  )
   val scanConnection = new PeerBftScanConnection(
     store,
     svName,
@@ -97,26 +112,26 @@ class BulkStorage(
     acsStagingKvStoreKey,
     firstAcsSnapshotTimestampKvStoreKey,
     kvProvider,
-    historyMetrics.BulkStorage.latestAcsSnapshotStaging,
+    historyMetrics.latestAcsSnapshotStaging,
     loggerFactory,
   )
   val acsCommittedProgress = new AcsSnapshotBulkStoragePersistentProgress(
     acsCommittedKvStoreKey,
     firstAcsSnapshotTimestampKvStoreKey,
     kvProvider,
-    historyMetrics.BulkStorage.latestAcsSnapshotCommitted,
+    historyMetrics.latestAcsSnapshotCommitted,
     loggerFactory,
   )
   private val updatesStagingProgress = new UpdateHistoryBulkStoragePersistentProgress(
     updatesStagingKvStoreKey,
     kvProvider,
-    historyMetrics.BulkStorage.latestUpdatesSegmentStaging,
+    historyMetrics.latestUpdatesSegmentStaging,
     loggerFactory,
   )
   private val updatesCommittedProgress = new UpdateHistoryBulkStoragePersistentProgress(
     updatesCommittedKvStoreKey,
     kvProvider,
-    historyMetrics.BulkStorage.latestUpdatesSegmentCommitted,
+    historyMetrics.latestUpdatesSegmentCommitted,
     loggerFactory,
   )
 
@@ -161,7 +176,7 @@ class BulkStorage(
               enc.key
           }
           .getOrElse("unknown")
-        historyMetrics.BulkStorage.incAcsSnapshotObjects(encoding, "committed")
+        historyMetrics.incAcsSnapshotObjects(encoding, "committed")
       },
     loggerFactory,
   )
@@ -204,7 +219,7 @@ class BulkStorage(
               enc.key
           }
           .getOrElse("unknown")
-        historyMetrics.BulkStorage.incUpdateObjects(encoding, "committed")
+        historyMetrics.incUpdateObjects(encoding, "committed")
       },
     loggerFactory,
   )
@@ -243,7 +258,8 @@ class BulkStorage(
 
   final override def closeAsync(): Seq[AsyncOrSyncCloseable] = {
     LifeCycle.close(scanConnection)(logger)
-    services.flatMap(_.closeAsync())
+    services.flatMap(_.closeAsync()) :+
+      SyncCloseable("bulk_storage_metrics", LifeCycle.close(historyMetrics)(logger))
   }
 }
 
@@ -306,6 +322,113 @@ object BulkStorage {
         retryProvider,
         loggerFactory,
       ).initialize()
+    }
+  }
+
+  class BulkStorageMetrics(
+      metricsFactory: LabeledMetricsFactory
+  )(implicit val metricsContext: MetricsContext)
+      extends AutoCloseable {
+    private val bulkStoragePrefix: MetricName = SpliceMetrics.MetricsHistoryPrefix :+ "bulk-storage"
+
+    val latestUpdatesSegmentStaging: Gauge[CantonTimestamp] =
+      SpliceMetrics.cantonTimestampGauge(
+        metricsFactory,
+        MetricInfo(
+          name = bulkStoragePrefix :+ "latest-updates-segment-staging",
+          summary =
+            "The end timestamp of the latest segment for which all updates have been dumped to the staging bucket of bulk storage",
+          Traffic,
+        ),
+        initial = CantonTimestamp.MinValue,
+      )(metricsContext)
+
+    val latestUpdatesSegmentCommitted: Gauge[CantonTimestamp] =
+      SpliceMetrics.cantonTimestampGauge(
+        metricsFactory,
+        MetricInfo(
+          name = bulkStoragePrefix :+ "latest-updates-segment-committed",
+          summary =
+            "The end timestamp of the latest segment for which all updates have been dumped to the committed bucket of bulk storage",
+          Traffic,
+        ),
+        initial = CantonTimestamp.MinValue,
+      )(metricsContext)
+
+    val latestAcsSnapshotStaging: Gauge[CantonTimestamp] =
+      SpliceMetrics.cantonTimestampGauge(
+        metricsFactory,
+        MetricInfo(
+          name = bulkStoragePrefix :+ "latest-acs-snapshot-staging",
+          summary =
+            "The timestamp of the latest ACS snapshot which has been fully dumped to the staging bucket of bulk storage",
+          Traffic,
+        ),
+        initial = CantonTimestamp.MinValue,
+      )(metricsContext)
+
+    val latestAcsSnapshotCommitted: Gauge[CantonTimestamp] =
+      SpliceMetrics.cantonTimestampGauge(
+        metricsFactory,
+        MetricInfo(
+          name = bulkStoragePrefix :+ "latest-acs-snapshot-committed",
+          summary =
+            "The timestamp of the latest ACS snapshot which has been fully dumped to the committed bucket of bulk storage",
+          Traffic,
+        ),
+        initial = CantonTimestamp.MinValue,
+      )(metricsContext)
+
+    val objectsCount: Counter =
+      metricsFactory.counter(
+        MetricInfo(
+          name = bulkStoragePrefix :+ "object-count",
+          summary = "The number of S3 objects created",
+          Traffic,
+        )
+      )(metricsContext)
+
+    def updatesCount: Counter =
+      metricsFactory.counter(
+        MetricInfo(
+          name = bulkStoragePrefix :+ "updates-count",
+          summary =
+            "The number of updates processed for bulk storage since the last application restart",
+          Traffic,
+        )
+      )(metricsContext)
+
+    def contractsCount: Counter =
+      metricsFactory.counter(
+        MetricInfo(
+          name = bulkStoragePrefix :+ "contracts-count",
+          summary =
+            "The number of active contracts processed for bulk storage since the last application restart",
+          Traffic,
+        )
+      )(metricsContext)
+
+    def incAcsSnapshotObjects(encoding: String, bucket: String): Unit =
+      objectsCount.inc()(
+        MetricsContext("object_type" -> "ACS_snapshots", "encoding" -> encoding, "bucket" -> bucket)
+      )
+
+    def incUpdateObjects(encoding: String, bucket: String): Unit =
+      objectsCount.inc()(
+        MetricsContext("object_type" -> "updates", "encoding" -> encoding, "bucket" -> bucket)
+      )
+
+    def incUpdatesCount(count: Int): Unit =
+      updatesCount.inc(count.toLong)(MetricsContext.Empty)
+
+    def incContractsCount(count: Int): Unit =
+      contractsCount.inc(count.toLong)(MetricsContext.Empty)
+
+    override def close(): Unit = {
+      latestUpdatesSegmentStaging.close()
+      latestUpdatesSegmentCommitted.close()
+      latestAcsSnapshotStaging.close()
+      latestAcsSnapshotCommitted.close()
     }
   }
 }

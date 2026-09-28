@@ -8,7 +8,9 @@ import cats.syntax.semigroup.*
 import com.daml.ledger.api.v2.TraceContextOuterClass
 import com.daml.ledger.javaapi.data.codegen.{ContractId, DamlRecord}
 import com.daml.ledger.javaapi.data.{CreatedEvent, Event, ExercisedEvent, Identifier, Transaction}
-import com.daml.metrics.api.MetricsContext
+import com.daml.metrics.api.MetricHandle.{Counter, Gauge, LabeledMetricsFactory, Meter, Timer}
+import com.daml.metrics.api.MetricQualification.{Latency, Traffic}
+import com.daml.metrics.api.{MetricInfo, MetricName, MetricsContext}
 import com.daml.nonempty.NonEmpty
 import com.google.protobuf.ByteString
 import com.digitalasset.canton.util.HexString
@@ -57,7 +59,10 @@ import org.lfdecentralizedtrust.splice.store.ImportUpdatesBackfilling.{
   DestinationImportUpdatesBackfillingInfo,
 }
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.IngestionSink.IngestionStart
-import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingRequirement
+import org.lfdecentralizedtrust.splice.store.UpdateHistory.{
+  BackfillingRequirement,
+  UpdateHistoryMetrics,
+}
 import slick.jdbc.canton.SQLActionBuilder
 
 import java.util.concurrent.atomic.AtomicReference
@@ -70,7 +75,7 @@ import com.digitalasset.canton.util.MonadUtil
 import org.apache.pekko.NotUsed
 import org.apache.pekko.stream.Materializer
 import org.apache.pekko.stream.scaladsl.Source
-import org.lfdecentralizedtrust.splice.environment.BaseLedgerConnection
+import org.lfdecentralizedtrust.splice.environment.{BaseLedgerConnection, SpliceMetrics}
 
 /** Stores all original daml updates visible to `updateStreamParty`.
   *
@@ -100,7 +105,7 @@ class UpdateHistory(
     override protected val loggerFactory: NamedLoggerFactory,
     enableissue12777Workaround: Boolean,
     enableImportUpdateBackfill: Boolean,
-    metrics: HistoryMetrics,
+    metrics: UpdateHistoryMetrics,
 )(implicit
     ec: ExecutionContext,
     closeContext: CloseContext,
@@ -125,7 +130,7 @@ class UpdateHistory(
     }
     (for {
       lastIngestedRecordTime <- newState.lastIngestedRecordTime
-    } yield metrics.UpdateHistory.latestRecordTime.updateValue(lastIngestedRecordTime)(
+    } yield metrics.latestRecordTime.updateValue(lastIngestedRecordTime)(
       MetricsContext(
         "update_stream_party" -> updateStreamParty.toProtoPrimitive,
         "store_name" -> storeName,
@@ -342,7 +347,7 @@ class UpdateHistory(
             }
 
             val timeIngestion = (future: Future[Unit]) =>
-              metrics.UpdateHistory.latency
+              metrics.latency
                 .timeFuture(future)(
                   metrics.metricsContextFromUpdate(updateOrCheckpoint, backfilling = false)
                 )
@@ -408,10 +413,10 @@ class UpdateHistory(
                 .queryAndUpdate(action, "ingestUpdate")
                 .map { ingestedEvents =>
                   recordTime.foreach(advanceLastIngestedRecordTime)
-                  metrics.UpdateHistory.eventCount.inc(ingestedEvents.numCreatedEvents)(
+                  metrics.eventCount.inc(ingestedEvents.numCreatedEvents)(
                     MetricsContext("event_type" -> "created")
                   )
-                  metrics.UpdateHistory.eventCount.inc(ingestedEvents.numExercisedEvents)(
+                  metrics.eventCount.inc(ingestedEvents.numExercisedEvents)(
                     MetricsContext("event_type" -> "exercised")
                   )
                 }
@@ -473,7 +478,7 @@ class UpdateHistory(
     val safeParticipantOffset = lengthLimited(LegacyOffset.Api.fromLong(reassignment.offset))
     val safeUnassignId = lengthLimited(event.unassignId)
     val safeContractId = lengthLimited(event.contractId.contractId)
-    metrics.UpdateHistory.unassignments.mark()
+    metrics.unassignments.mark()
     sqlu"""
       insert into update_history_unassignments(
         history_id,update_id,record_time,
@@ -519,7 +524,7 @@ class UpdateHistory(
     val safeCreatedAt = CantonTimestamp.assertFromInstant(event.createdEvent.createdAt)
     val safeSignatories = event.createdEvent.getSignatories.asScala.toSeq.map(lengthLimited)
     val safeObservers = event.createdEvent.getObservers.asScala.toSeq.map(lengthLimited)
-    metrics.UpdateHistory.assignments.mark()
+    metrics.assignments.mark()
     for {
       _ <- DBIO.from(internEventStrings(templateId, event.createdEvent.getPackageName, None))
       result <- sqlu"""
@@ -552,7 +557,7 @@ class UpdateHistory(
       tree: Transaction,
       migrationId: Long,
   )(implicit tc: TraceContext): DBIOAction[IngestedEvents, NoStream, Effect.Read & Effect.Write] = {
-    metrics.UpdateHistory.transactionsTrees.mark()
+    metrics.transactionsTrees.mark()
     insertTransactionUpdateRow(tree, migrationId)
       .flatMap(updateRowId => {
         // Note: the order of elements in the eventsById map doesn't matter, and is not preserved here.
@@ -2617,6 +2622,95 @@ object UpdateHistory {
   // so we read them back as an arbitrary value.
   private def missingString: String = ""
   private def missingStringSeq: Seq[String] = Seq.empty
+
+  class UpdateHistoryMetrics(metricsFactory: LabeledMetricsFactory)(implicit
+      val metricsContext: MetricsContext
+  ) extends AutoCloseable {
+    private val updateHistoryPrefix: MetricName = SpliceMetrics.MetricsHistoryPrefix :+ "updates"
+
+    val assignments: Meter = metricsFactory.meter(
+      MetricInfo(
+        name = updateHistoryPrefix :+ "assignments",
+        summary =
+          "Total number of assignments in update history (note that this should be used only for tracking the delta over time, the absolute value may be wrong)",
+        Traffic,
+      )
+    )(metricsContext)
+
+    val unassignments: Meter = metricsFactory.meter(
+      MetricInfo(
+        name = updateHistoryPrefix :+ "unassignments",
+        summary = "Total number of unassignments in update history",
+        Traffic,
+      )
+    )(metricsContext)
+
+    val transactionsTrees: Meter = metricsFactory.meter(
+      MetricInfo(
+        name = updateHistoryPrefix :+ "transactions",
+        summary = "Total number of transaction trees in update history",
+        Traffic,
+      )
+    )(metricsContext)
+
+    val eventCount: Counter =
+      metricsFactory.counter(
+        MetricInfo(
+          name = updateHistoryPrefix :+ "event-count",
+          summary = "The number of events that have been ingested",
+          Traffic,
+        )
+      )(metricsContext)
+
+    lazy val latestRecordTime: Gauge[CantonTimestamp] =
+      SpliceMetrics.cantonTimestampGauge(
+        metricsFactory,
+        MetricInfo(
+          name = updateHistoryPrefix :+ "latest-record-time",
+          summary = "The latest record time that has been ingested",
+          Traffic,
+        ),
+        initial = CantonTimestamp.MinValue,
+      )(metricsContext)
+
+    val latency: Timer =
+      metricsFactory.timer(
+        MetricInfo(
+          name = updateHistoryPrefix :+ "latency",
+          summary = "How long it takes to ingest a single update history entry",
+          qualification = Latency,
+        )
+      )(metricsContext)
+
+    override def close(): Unit = {
+      latestRecordTime.close()
+    }
+
+    def metricsContextFromUpdate(
+        treeUpdateOrOffsetCheckpoint: TreeUpdateOrOffsetCheckpoint,
+        backfilling: Boolean,
+    ): MetricsContext = {
+      treeUpdateOrOffsetCheckpoint match {
+        case TreeUpdateOrOffsetCheckpoint.Update(treeUpdate, _) =>
+          metricsContextFromUpdate(treeUpdate, backfilling)
+        case TreeUpdateOrOffsetCheckpoint.Checkpoint(_) =>
+          MetricsContext("update_type" -> "Checkpoint", "backfilling" -> backfilling.toString)
+      }
+    }
+
+    def metricsContextFromUpdate(
+        treeUpdate: TreeUpdate,
+        backfilling: Boolean,
+    ): MetricsContext = {
+      val updateType = treeUpdate match {
+        case ReassignmentUpdate(_) =>
+          "ReassignmentUpdate"
+        case TransactionTreeUpdate(_) =>
+          "TransactionTreeUpdate"
+      }
+      MetricsContext("update_type" -> updateType, "backfilling" -> backfilling.toString)
+    }
+  }
 }
 
 final case class TimestampWithMigrationId(

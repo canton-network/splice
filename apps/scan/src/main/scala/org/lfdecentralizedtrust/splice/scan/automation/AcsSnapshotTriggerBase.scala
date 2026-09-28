@@ -4,6 +4,7 @@
 package org.lfdecentralizedtrust.splice.scan.automation
 
 import com.daml.metrics.Timed
+import com.daml.metrics.api.MetricHandle.{Gauge, Timer}
 import org.lfdecentralizedtrust.splice.automation.{
   PollingParallelTaskExecutionTrigger,
   TaskNoop,
@@ -18,14 +19,15 @@ import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{
   IncrementalAcsSnapshotTable,
 }
 import com.digitalasset.canton.data.CantonTimestamp
+import com.digitalasset.canton.lifecycle.{AsyncOrSyncCloseable, LifeCycle, SyncCloseable}
 import com.digitalasset.canton.logging.TracedLogger
 import com.digitalasset.canton.logging.pretty.{Pretty, PrettyPrinting}
 import com.digitalasset.canton.tracing.TraceContext
 import io.opentelemetry.api.trace.Tracer
 import org.apache.pekko.stream.Materializer
+import org.lfdecentralizedtrust.splice.scan.automation.AcsSnapshotTriggerBase.AcsSnapshotsMetricsBase
 import org.lfdecentralizedtrust.splice.scan.config.ScanStorageConfig
 import org.lfdecentralizedtrust.splice.store.UpdateHistory
-import org.lfdecentralizedtrust.splice.store.HistoryMetrics.AcsSnapshotsMetrics
 import org.lfdecentralizedtrust.splice.store.db.AdvisoryLocks
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -44,7 +46,7 @@ abstract class AcsSnapshotTriggerBase(
 
   protected val snapshotTable: IncrementalAcsSnapshotTable
 
-  protected def snapshotMetrics: AcsSnapshotsMetrics
+  protected def snapshotMetrics: AcsSnapshotsMetricsBase
 
   // The time interval to process per trigger invocation.
   // Setting this to a large value allows snapshot generation to catch up faster when it's behind,
@@ -192,6 +194,10 @@ abstract class AcsSnapshotTriggerBase(
   ): Future[Option[IncrementalAcsSnapshot]] = {
     store.getIncrementalSnapshot(snapshotTable)
   }
+
+  override def closeAsync(): Seq[AsyncOrSyncCloseable] =
+    super.closeAsync() :+
+      SyncCloseable("acs_snapshot_metrics", LifeCycle.close(snapshotMetrics)(logger))
 }
 
 object AcsSnapshotTriggerBase {
@@ -481,5 +487,21 @@ object AcsSnapshotTriggerBase {
     override def pretty: Pretty[this.type] = prettyOfClass(
       param("snapshot", _.snapshot)
     )
+  }
+
+  trait AcsSnapshotsMetricsBase extends AutoCloseable {
+    def latestRecordTimeUpdate: Gauge[CantonTimestamp]
+    def latestRecordTimeSave: Gauge[CantonTimestamp]
+    def latencyUpdate: Timer
+    def latencySave: Timer
+    def waitingForLock: Gauge[Int]
+    def snapshotSize: Gauge[Int]
+
+    override def close(): Unit = {
+      latestRecordTimeUpdate.close()
+      latestRecordTimeSave.close()
+      waitingForLock.close()
+      snapshotSize.close()
+    }
   }
 }

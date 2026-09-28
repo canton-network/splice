@@ -7,11 +7,7 @@ import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
 import com.digitalasset.canton.tracing.{Spanning, TraceContext}
 import org.lfdecentralizedtrust.splice.scan.config.{BulkStorageConfig, ScanStorageConfig}
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore
-import org.lfdecentralizedtrust.splice.store.{
-  HistoryMetrics,
-  S3BucketConnection,
-  TimestampWithMigrationId,
-}
+import org.lfdecentralizedtrust.splice.store.{S3BucketConnection, TimestampWithMigrationId}
 
 import scala.concurrent.{ExecutionContext, Future}
 import cats.data.OptionT
@@ -19,13 +15,14 @@ import cats.implicits.*
 import org.apache.pekko.NotUsed
 import org.apache.pekko.actor.ActorSystem
 import org.apache.pekko.stream.scaladsl.Flow
+import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorage.BulkStorageMetrics
 
 class AcsSnapshotBulkStorageWriterFromDb(
     storageConfig: ScanStorageConfig,
     appConfig: BulkStorageConfig,
     acsSnapshotStore: AcsSnapshotStore,
     s3Connection: S3BucketConnection,
-    historyMetrics: HistoryMetrics,
+    historyMetrics: BulkStorageMetrics,
     val loggerFactory: NamedLoggerFactory,
 )(implicit ec: ExecutionContext)
     extends AcsSnapshotBulkStorageWriter

@@ -10,11 +10,13 @@ import org.lfdecentralizedtrust.splice.scan.store.db.{
   DbScanAppRewardsStore,
 }
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanAppRewardsStore.*
-import org.lfdecentralizedtrust.splice.store.{HistoryMetrics, StoreTestBase, UpdateHistory}
+import org.lfdecentralizedtrust.splice.store.{StoreTestBase, UpdateHistory}
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.BackfillingRequirement
 import org.lfdecentralizedtrust.splice.store.db.SplicePostgresTest
 import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnlessShutdownToFuture
 import com.daml.metrics.api.noop.NoOpMetricsFactory
+import com.daml.metrics.api.MetricsContext
+import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryMetrics
 import org.lfdecentralizedtrust.splice.scan.store.db.DbScanAppRewardsStore.RewardHash
 import slick.jdbc.canton.ActionBasedSQLInterpolation.Implicits.actionBasedSQLInterpolationCanton
 
@@ -1308,7 +1310,7 @@ class DbScanAppRewardsStoreTest
       loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = false,
-      HistoryMetrics(NoOpMetricsFactory, migrationId),
+      new UpdateHistoryMetrics(NoOpMetricsFactory)(MetricsContext.Empty),
     )
     updateHistory.ingestionSink.initialize().map { _ =>
       val appActivityRecordStore = new DbAppActivityRecordStore(

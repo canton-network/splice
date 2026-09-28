@@ -3,6 +3,7 @@
 
 package org.lfdecentralizedtrust.splice.scan.store.bulk
 
+import com.daml.metrics.api.MetricsContext
 import com.daml.metrics.api.noop.NoOpMetricsFactory
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
 import com.digitalasset.canton.resource.DbStorage
@@ -20,13 +21,9 @@ import org.apache.pekko.stream.scaladsl.Source
 import org.lfdecentralizedtrust.splice.config.AutomationConfig
 import org.lfdecentralizedtrust.splice.environment.RetryProvider
 import org.lfdecentralizedtrust.splice.scan.config.{BulkStorageConfig, ScanStorageConfig}
+import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorage.BulkStorageMetrics
 import org.lfdecentralizedtrust.splice.scan.store.{ScanKeyValueProvider, ScanKeyValueStore}
-import org.lfdecentralizedtrust.splice.store.{
-  HasS3Mock,
-  HistoryMetrics,
-  StoreTestBase,
-  TimestampWithMigrationId,
-}
+import org.lfdecentralizedtrust.splice.store.{HasS3Mock, StoreTestBase, TimestampWithMigrationId}
 
 import scala.concurrent.Future
 import scala.util.Using
@@ -66,7 +63,6 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
       val committedConnection =
         new S3BucketConnectionForUnitTests(s3ConfigMock("committed"), loggerFactory)
       val metricsFactory = new InMemoryMetricsFactory
-//      val historyMetrics = new HistoryMetrics(metricsFactory)(MetricsContext.Empty)
       val kvProvider = mkKvProvider.futureValue
       def ts(day: Int): CantonTimestamp = CantonTimestamp.tryFromInstant(
         Instant.parse(s"2026-01-01T00:00:00Z").plus(day.toLong, java.time.temporal.ChronoUnit.DAYS)
@@ -76,14 +72,14 @@ class AcsSnapshotBulkStorageCommitFromStagingTest
         BulkStorage.acsStagingKvStoreKey,
         BulkStorage.firstAcsSnapshotTimestampKvStoreKey,
         kvProvider,
-        HistoryMetrics(metricsFactory, 0L).BulkStorage.latestAcsSnapshotStaging,
+        new BulkStorageMetrics(metricsFactory)(MetricsContext.Empty).latestAcsSnapshotStaging,
         loggerFactory,
       )
       val acsCommittedProgress = new AcsSnapshotBulkStoragePersistentProgress(
         BulkStorage.acsCommittedKvStoreKey,
         BulkStorage.firstAcsSnapshotTimestampKvStoreKey,
         kvProvider,
-        HistoryMetrics(metricsFactory, 0L).BulkStorage.latestAcsSnapshotCommitted,
+        new BulkStorageMetrics(metricsFactory)(MetricsContext.Empty).latestAcsSnapshotCommitted,
         loggerFactory,
       )
       val reader = new BulkStorageReader(
