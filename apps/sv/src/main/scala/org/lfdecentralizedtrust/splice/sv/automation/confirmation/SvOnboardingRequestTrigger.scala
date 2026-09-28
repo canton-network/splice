@@ -3,7 +3,6 @@
 
 package org.lfdecentralizedtrust.splice.sv.automation.confirmation
 
-import com.digitalasset.canton.data.CantonTimestamp
 import org.lfdecentralizedtrust.splice.automation.{
   OnAssignedContractTrigger,
   TaskOutcome,
@@ -18,7 +17,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
   DsoRules_ConfirmSvOnboarding,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.svonboarding.SvOnboardingRequest
-import org.lfdecentralizedtrust.splice.environment.{PackageVersionSupport, SpliceLedgerConnection}
+import org.lfdecentralizedtrust.splice.environment.SpliceLedgerConnection
 import org.lfdecentralizedtrust.splice.environment.ledger.api.DedupOffset
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.QueryResult
 import org.lfdecentralizedtrust.splice.sv.config.SvAppBackendConfig
@@ -39,7 +38,6 @@ class SvOnboardingRequestTrigger(
     svStore: SvSvStore,
     config: SvAppBackendConfig,
     connection: SpliceLedgerConnection,
-    packageVersionSupport: PackageVersionSupport,
 )(implicit
     ec: ExecutionContext,
     mat: Materializer,
@@ -61,7 +59,6 @@ class SvOnboardingRequestTrigger(
       weightBps: Long,
       candidateParticipantId: String,
       reason: String,
-      migrationIdOpt: java.util.Optional[java.lang.Long],
   ): ActionRequiringConfirmation = {
     new ARC_DsoRules(
       new SRARC_ConfirmSvOnboarding(
@@ -71,7 +68,6 @@ class SvOnboardingRequestTrigger(
           candidateParticipantId,
           weightBps,
           reason,
-          migrationIdOpt,
         )
       )
     )
@@ -123,16 +119,7 @@ class SvOnboardingRequestTrigger(
               Future.failed(err.asRuntimeException())
             case Right(_) =>
               for {
-                featureSupport <- packageVersionSupport.supportsPermissionedSynchronizer(
-                  Seq(dsoParty),
-                  CantonTimestamp.now(),
-                )
-                migrationIdOpt =
-                  if (featureSupport.supported) {
-                    java.util.Optional.of(java.lang.Long.valueOf(dsoStore.domainMigrationId))
-                  } else {
-                    java.util.Optional.empty[java.lang.Long]()
-                  }
+
                 res <- confirm(
                   party,
                   name,
@@ -140,7 +127,6 @@ class SvOnboardingRequestTrigger(
                   svOnboarding.payload.candidateParticipantId,
                   svOnboarding.payload.token,
                   dsoRules,
-                  migrationIdOpt,
                 )
               } yield res
           }
@@ -188,7 +174,6 @@ class SvOnboardingRequestTrigger(
       participantId: String,
       reason: String,
       dsoRules: AssignedContract[DsoRules.ContractId, DsoRules],
-      migrationIdOpt: java.util.Optional[java.lang.Long],
   )(implicit tc: TraceContext): Future[TaskOutcome] = {
     val action =
       dsoRulesConfirmSvOnboardingAction(
@@ -197,7 +182,6 @@ class SvOnboardingRequestTrigger(
         weightBps,
         participantId,
         reason,
-        migrationIdOpt,
       )
     for {
       queryResult <- dsoStore.lookupConfirmationByActionWithOffset(svParty, action)

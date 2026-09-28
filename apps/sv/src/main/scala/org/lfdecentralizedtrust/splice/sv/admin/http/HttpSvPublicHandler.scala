@@ -60,7 +60,6 @@ class HttpSvPublicHandler(
     retryProvider: RetryProvider,
     dsoPartyMigration: DsoPartyMigration,
     protected val loggerFactory: NamedLoggerFactory,
-    packageVersionSupport: PackageVersionSupport,
 )(implicit
     ec: ExecutionContext,
     protected val tracer: Tracer,
@@ -775,21 +774,8 @@ class HttpSvPublicHandler(
           .asRuntimeException()
       )
     for {
-      featureSupport <- OptionT.liftF(
-        packageVersionSupport.supportsPermissionedSynchronizer(
-          Seq(dsoParty),
-          clock.now,
-        )
-      )
-      migrationIdOpt =
-        if (featureSupport.supported) {
-          java.util.Optional.of(java.lang.Long.valueOf(dsoStore.domainMigrationId))
-        } else {
-          java.util.Optional.empty[java.lang.Long]()
-        }
-
       confirmations <- OptionT.liftF(
-        dsoStore.listSvOnboardingConfirmations(svOnboardingRequest, weight, migrationIdOpt)
+        dsoStore.listSvOnboardingConfirmations(svOnboardingRequest, weight)
       )
 
       confirmedBy = confirmations
