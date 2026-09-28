@@ -1476,7 +1476,7 @@ object AcsSnapshotStore {
 
   object AcsSnapshotDDL {
     def stakeholderIndexName(historyId: Long, snapshotRecordTime: CantonTimestamp) =
-      s"acs_snapshot_creates_${historyId}_${snapshotRecordTime.toEpochMilli}_s_ca_ci"
+      s"acs_snapshot_stakeholders_${historyId}_${snapshotRecordTime.toEpochMilli}_s_ca_ci"
 
     def stakeholderIndexAction(
         stakeholdersTableName: String,
@@ -1490,7 +1490,7 @@ object AcsSnapshotStore {
            on #$stakeholdersTableName (stakeholder, created_at, contract_id) """.asUpdate
 
     def stakeholderTemplateIdIndexName(historyId: Long, snapshotRecordTime: CantonTimestamp) =
-      s"acs_snapshot_creates_${historyId}_${snapshotRecordTime.toEpochMilli}_s_tid_ca_ci"
+      s"acs_snapshot_stakeholders_${historyId}_${snapshotRecordTime.toEpochMilli}_s_tid_ca_ci"
 
     def stakeholderTemplateIdIndexAction(
         stakeholdersTableName: String,
