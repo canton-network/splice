@@ -48,6 +48,7 @@ import org.lfdecentralizedtrust.splice.scan.config.ScanAppClientConfig
 import org.lfdecentralizedtrust.splice.scan.store.ScanStore
 import org.lfdecentralizedtrust.splice.store.{DsoRulesStore, VoteResultsFilters}
 import org.lfdecentralizedtrust.splice.store.HistoryBackfilling.SourceMigrationInfo
+import org.lfdecentralizedtrust.splice.scan.admin.api.client.commands.HttpScanAppClient.BulkStorageObjects
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryResponse
 import org.lfdecentralizedtrust.splice.util.{
   ChoiceContextWithDisclosures,
@@ -946,6 +947,28 @@ class BftScanConnection(
     bftCall(
       _.getBulkObjectChecksums(requiredCatchupTimestamp, objectKeys),
       "getBulkObjectChecksums",
+      consensusFailureLogLevel = Level.DEBUG,
+    )
+
+  override def listBulkAcsSnapshotObjects(atOrBeforeRecordTime: CantonTimestamp)(implicit
+      ec: ExecutionContext,
+      tc: TraceContext,
+  ): Future[Option[BulkStorageObjects.SnapshotObjects]] =
+    bftCall(
+      _.listBulkAcsSnapshotObjects(atOrBeforeRecordTime),
+      "listBulkAcsSnapshotObjects",
+      consensusFailureLogLevel = Level.DEBUG,
+    )
+
+  override def listBulkUpdateHistoryObjects(
+      startRecordTime: CantonTimestamp,
+      endRecordTime: CantonTimestamp,
+      pageSize: Int,
+      nextPageToken: Option[String],
+  )(implicit ec: ExecutionContext, tc: TraceContext): Future[BulkStorageObjects.UpdateObjectsPage] =
+    bftCall(
+      _.listBulkUpdateHistoryObjects(startRecordTime, endRecordTime, pageSize, nextPageToken),
+      "listBulkUpdateHistoryObjects",
       consensusFailureLogLevel = Level.DEBUG,
     )
 

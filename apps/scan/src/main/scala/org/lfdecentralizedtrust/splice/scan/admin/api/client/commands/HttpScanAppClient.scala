@@ -54,6 +54,7 @@ import org.lfdecentralizedtrust.splice.scan.admin.http.{
   ProtobufJsonScanHttpEncodings,
 }
 import org.lfdecentralizedtrust.splice.store.HistoryBackfilling.SourceMigrationInfo
+import org.lfdecentralizedtrust.splice.store.S3BucketConnection.ObjectKeyAndChecksum
 import org.lfdecentralizedtrust.splice.store.{MultiDomainAcsStore, VoteResultsFilters}
 import org.lfdecentralizedtrust.splice.store.UpdateHistory.UpdateHistoryResponse
 import org.lfdecentralizedtrust.splice.util.{
@@ -3310,6 +3311,51 @@ object HttpScanAppClient {
       case http.GetBulkObjectChecksumsResponse.OK(response) => Right(response)
       case http.GetBulkObjectChecksumsResponse.NotImplemented(err) => Left(err.error)
     }
+  }
+
+  object BulkStorageObjects {
+    final case class SnapshotObjects(
+        recordTime: CantonTimestamp,
+        objects: Seq[ObjectKeyAndChecksum],
+    )
+    final case class UpdateObjectsPage(
+        objects: Seq[ObjectKeyAndChecksum],
+        nextPageToken: Option[String],
+    )
+
+    private val DownloadUrl =
+      s".*${scala.util.matching.Regex.quote("/api/scan/v0/history/bulk/download/")}([^/?]+)".r
+
+    def objectKeyFromDownloadUrl(url: String): Either[String, String] =
+      url match {
+        case DownloadUrl(encodedKey) =>
+          Right(java.net.URLDecoder.decode(encodedKey, java.nio.charset.StandardCharsets.UTF_8))
+        case _ => Left(s"Not a bulk storage download url: $url")
+      }
+
+    def decodeObjectRefs(
+        refs: Seq[definitions.BulkStorageObjectRef]
+    ): Either[String, Seq[ObjectKeyAndChecksum]] =
+      refs.foldLeft[Either[String, Vector[ObjectKeyAndChecksum]]](Right(Vector.empty)) {
+        (acc, ref) =>
+          for {
+            objects <- acc
+            key <- objectKeyFromDownloadUrl(ref.url)
+          } yield objects :+ ObjectKeyAndChecksum(key, ref.digest)
+      }
+
+    def snapshotObjects(
+        response: definitions.ListBulkAcsSnapshotObjectsResponse
+    ): Either[String, SnapshotObjects] =
+      for {
+        recordTime <- CantonTimestamp.fromInstant(response.recordTime.toInstant)
+        objects <- decodeObjectRefs(response.objectRefs)
+      } yield SnapshotObjects(recordTime, objects)
+
+    def updateObjectsPage(
+        response: definitions.ListBulkUpdateHistoryObjectsResponse
+    ): Either[String, UpdateObjectsPage] =
+      decodeObjectRefs(response.objectRefs).map(UpdateObjectsPage(_, response.nextPageToken))
   }
 
   case class BulkStorageDownload(
