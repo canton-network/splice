@@ -6,6 +6,18 @@ This document provides instructions for AI coding agents (GitHub Copilot, Claude
 
 Every contribution must be tested in an automated test. For further details see the [Testing README](TESTING.md).
 
+## Building and Running Tests
+
+* Run `sbt` inside the direnv/nix dev shell, e.g. `direnv exec . sbt -batch "apps-scan/testOnly <FullyQualifiedSuite>"`. `-batch` avoids the interactive prompt; redirect output to a file and grep for `^\[error\]` and `Tests:`.
+* Test code compiles with `-Xfatal-warnings` and `-Wunused:privates`/`-Wunused:params`, so an unused private member or parameter fails `Test/compile`.
+* To format specific files: `sbt "scalafmtOnly <files...>"`.
+* Integration tests under `apps/app/src/test` need a running Canton from `./start-canton.sh`, including suites based on `IntegrationTestWithIsolatedEnvironment`. Without it they fail with `java.io.FileNotFoundException: canton.tokens`.
+  * Start only what the test needs: `./start-canton.sh -d -w` for wallclock tests, `-s` for simtime tests. Add `-p local` to use a local Postgres instead of Docker.
+  * `start-canton.sh` manages Postgres itself; do not start it separately with `scripts/postgres.sh`. Stop with `./stop-canton.sh` (pass the same Postgres mode, e.g. `./stop-canton.sh local`).
+  * Restart Canton (`./stop-canton.sh` then `./start-canton.sh`) whenever `nix/canton-sources.json` changes, e.g. after a checkout or rebase: it pins the Canton version that `start-canton.sh` runs.
+  * Run a single test with `sbt "apps-app/testOnly <FullyQualifiedSuite> -- -z \"<test name>\""`.
+* If dependency resolution fails with a 404 for a Canton snapshot artifact (e.g. `com.daml:bindings-java:<version>-snapshot...`), the pinned snapshot has likely expired; rebase onto the latest `main` and reload direnv.
+
 ## DB Migrations
 
 Refer to [the main README on migrations](apps/common/src/main/resources/db/migration/README.md).
