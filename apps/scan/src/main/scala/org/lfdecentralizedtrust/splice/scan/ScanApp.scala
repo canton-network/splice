@@ -411,6 +411,7 @@ class ScanApp(
         dsoAnsResolver,
         config.miningRoundsCacheTimeToLiveOverride,
         config.enableForcedAcsSnapshots,
+        config.perAcsSnapshotTablesEnabled,
         clock,
         loggerFactory,
         packageVersionSupport,

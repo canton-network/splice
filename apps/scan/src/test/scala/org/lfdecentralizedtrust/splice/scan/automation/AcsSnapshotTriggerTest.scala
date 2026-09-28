@@ -14,13 +14,11 @@ import org.scalatest.wordspec.AnyWordSpec
 
 import scala.concurrent.Future
 
-trait AcsSnapshotTriggerTest
+class AcsSnapshotTriggerTest
     extends AnyWordSpec
     with BaseTest
     with HasExecutionContext
     with HasActorSystem {
-
-  protected def storageConfig: ScanStorageConfig
 
   "AcsSnapshotTrigger" should {
 
@@ -692,6 +690,15 @@ trait AcsSnapshotTriggerTest
     }
   }
 
+  private def storageConfig = ScanStorageConfig(
+    dbAcsSnapshotPeriodHours = 1,
+    bulkAcsSnapshotPeriodHours = 1, // ignored in this test
+    bulkDbReadChunkSize = 1, // ignored in this test
+    bulkZstdFrameSize = 0L, // ignored in this test
+    bulkMaxFileSize = 0L, // ignored in this test
+    zstdCompressionLevel = 0, // ignored in this test
+  )
+
   private def unused0[T]: () => Future[T] = () => fail("This argument should not be used")
   private def unused1[T]: Long => Future[T] = _ => fail("This argument should not be used")
 
@@ -740,28 +747,4 @@ trait AcsSnapshotTriggerTest
   private def migration2 = 2L
   private def migration3 = 3L
   private def migration4 = 4L
-}
-
-class LegacyAcsSnapshotTriggerTest extends AcsSnapshotTriggerTest {
-  protected def storageConfig = ScanStorageConfig(
-    dbAcsSnapshotPeriodHours = 1,
-    perAcsSnapshotTablesEnabled = false,
-    bulkAcsSnapshotPeriodHours = 1, // ignored in this test
-    bulkDbReadChunkSize = 1, // ignored in this test
-    bulkZstdFrameSize = 0L, // ignored in this test
-    bulkMaxFileSize = 0L, // ignored in this test
-    zstdCompressionLevel = 0, // ignored in this test
-  )
-}
-
-class V2AcsSnapshotTriggerTest extends AcsSnapshotTriggerTest {
-  protected def storageConfig = ScanStorageConfig(
-    dbAcsSnapshotPeriodHours = 1,
-    perAcsSnapshotTablesEnabled = true,
-    bulkAcsSnapshotPeriodHours = 1, // ignored in this test
-    bulkDbReadChunkSize = 1, // ignored in this test
-    bulkZstdFrameSize = 0L, // ignored in this test
-    bulkMaxFileSize = 0L, // ignored in this test
-    zstdCompressionLevel = 0, // ignored in this test
-  )
 }

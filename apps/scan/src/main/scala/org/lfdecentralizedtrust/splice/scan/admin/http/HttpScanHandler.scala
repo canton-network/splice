@@ -109,6 +109,7 @@ import org.lfdecentralizedtrust.splice.scan.store.{
 import org.lfdecentralizedtrust.splice.scan.store.AppActivityStore.RoundIngestionStatus
 import org.lfdecentralizedtrust.splice.scan.store.bulk.BulkStorageReader
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{
+  IncrementalAcsSnapshotTable,
   QueryAcsSnapshotPaginationToken,
   QueryAcsSnapshotResult,
 }
@@ -171,6 +172,7 @@ class HttpScanHandler(
     dsoAnsResolver: DsoAnsResolver,
     miningRoundsCacheTimeToLiveOverride: Option[NonNegativeFiniteDuration],
     enableForcedAcsSnapshots: Boolean,
+    perAcsSnapshotTablesEnabled: Boolean,
     clock: Clock,
     protected val loggerFactory: NamedLoggerFactory,
     protected val packageVersionSupport: PackageVersionSupport,
@@ -1448,6 +1450,12 @@ class HttpScanHandler(
           )
         )
       } else {
+        val snapshotTable: IncrementalAcsSnapshotTable =
+          if (perAcsSnapshotTablesEnabled) {
+            AcsSnapshotStore.IncrementalAcsSnapshotTable.NextV2
+          } else {
+            AcsSnapshotStore.IncrementalAcsSnapshotTable.Next
+          }
         for {
           synchronizerId <- store
             .lookupAmuletRules()
@@ -1500,7 +1508,7 @@ class HttpScanHandler(
               // - wall clock tests must take manual snapshots anyway, because they can't wait
               // - simtime tests will advanceTime(N.hours)
               snapshotStore.insertNewSnapshot(
-                lastSnapshot,
+                snapshotTable,
                 snapshotStore.currentMigrationId,
                 snapshotTime,
               )
