@@ -7,8 +7,9 @@ Everything reproducible is on one git branch; this page is the short path into i
 
 ```
 git fetch <remote> ray/ci-triage-2026-09-15 && git checkout ray/ci-triage-2026-09-15
-cp -r .claude/skills/ci-triage ~/.claude/skills/
 ```
+The branch carries the skill at `.claude/skills/ci-triage/`, so Claude Code picks it up from the checkout; no
+install step. In a session that was already running before the checkout, run `/reload-skills` once.
 Then read, in this order: `ci-triage/HANDOVER.md` (status of every fix branch, open items, environment notes),
 `ci-triage/README.md` (ref -> run -> job mapping and one line per ref), and
 `.claude/skills/ci-triage/references/known-families.md` (flake families A to L with the grep that confirms each).
