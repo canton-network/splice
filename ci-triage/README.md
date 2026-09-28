@@ -304,3 +304,22 @@ Same packet conventions. Artifacts under `log/<ref>/<artifact-name>/` (git-ignor
 - The run is the Canton bump to 3.6.0-snapshot.20260925.20321.0.vaecbf95c (#7476), from
   3.6.0-snapshot.20260916.20284.0.vf27c4824. Whether gap (2) is new in that snapshot was not verified; the
   blacklisting half (family B) predates it and is unchanged.
+
+## Ref -> run -> job mapping (2026-09-28, second batch)
+
+| My ref | GH run | Branch / sha | Failed job | Canton |
+|--------|--------|--------------|------------|--------|
+| 10214 | 35876878745 | main 95dc17d3d9 (#7439) | 107236070917 `wall-clock-time (7)` | 3.6.0-snapshot.20260916.20284.0.vf27c4824 |
+
+| My ref | Failure (one line) | Duplicate of | Resolution / status |
+|--------|--------------------|--------------|---------------------|
+| 10214 | AutoIgnoreUnresponsivePartiesWithPersistenceIntegrationTest "A party that became available again is removed from the store": `ignoredParties shouldBe empty` fails with `Vector(alice__wallet__user-9ad8328b::...)`, the alice party of ExpiryWithNoVettedAmuletVersionIntegrationTest, which runs immediately before it in the shard and deliberately leaves its party in the persisted store (written 15:16:21.810 with the default 10 min ignore duration, still live until 15:26:21). The feature under test worked: the suite's own party was recovered at 15:19:07.920, 28 s before the 15:19:35.895 deadline. `DbUnavailablePartiesStore.listPartiesAt` selects from `dso_unavailable_parties` with no `store_id` predicate, so one SV app sees every other store's rows; the schema is migrated once per shard (15:01:00.578) and the DB is shared by all nine suites. | - (new) | Packet `10214-unavailable-parties-store-not-scoped-by-store-id.md`. NOT a flake: deterministic for any shard that co-locates these two suites. No fix branch; the defect is production code, described and left to the owner: add `and store_id = $storeId` to `listPartiesAt` and scope `removeParties` the same way (it deletes `where party = any(...)`, so one store's recovery can delete another's row). `store_id` is already written on insert and already used by `removePartiesUpToStoreId`. The unscoped read predates #7439; the PR added the first assertion sensitive to it. Still present on origin/main 5eb871da28. |
+
+## Cross-cutting observations (2026-09-28, second batch)
+
+- 10214 is a test-isolation failure whose root cause is a production query, not the test. The earlier tests in
+  the same suite use `contain` / `not be empty` and are blind to the leak; only the new `shouldBe empty`
+  assertion catches it. Worth keeping the assertion as written rather than weakening it.
+- Both refs triaged on 2026-09-28 (10227, 10214) were found by chasing the failing value to a concrete
+  timestamped write rather than by matching a signature. 10227 turned out to be a known family with a new
+  symptom; 10214 is new and is the only one of the two whose root cause is splice code.

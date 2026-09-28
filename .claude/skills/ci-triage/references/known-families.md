@@ -193,3 +193,20 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   cache misses in the runner binary cache and cache.nixos.org. Signature: no `Tests:` line, failure within 2-6 min of
   job start, every shard of the run at once. Fix: rerun failed jobs; ask runner owners to cache the flake inputs.
 
+## M. State leaking between suites of one shard through a shared Postgres table
+- Signature: an assertion that a store is empty (or has an exact size) fails with an entity whose embedded test
+  config id is NOT the failing suite's. Splice test parties carry the config id: `alice__wallet__user-<config>`.
+  Compare it against the failing suite's own `config=` in the logger name before anything else.
+- Confirm: `zcat canton_network_test.clog.gz | grep -aoE '"logger_name":"[^"]*IntegrationTest/config=[0-9a-f]{8}' |
+  sed -E 's/.*:([A-Za-z0-9]+IntegrationTest)\/config=([0-9a-f]{8})/\2 \1/' | sort -u` maps config ids to suites;
+  then check that no write in the failing suite's own window ever names that entity. One Flyway migration line for
+  the table in the whole log means one database per shard, shared by every suite in it.
+- 10214 (run 35876878745, wall-clock-time (7)): `dso_unavailable_parties`.
+  `DbUnavailablePartiesStore.listPartiesAt` has no `store_id` predicate although `store_id` is written on insert
+  and used by `removePartiesUpToStoreId`; `removeParties` deletes `where party = any(...)`, unscoped in the other
+  direction. ExpiryWithNoVettedAmuletVersionIntegrationTest leaves its party with the default 10 min ignore
+  duration, and AutoIgnoreUnresponsivePartiesWithPersistenceIntegrationTest runs entirely inside that window.
+- Deterministic, not a flake, whenever the shard split co-locates the two suites: check the `cmd:` line of the job
+  log for the shard's suite order before calling it timing-dependent.
+- Do not fix by weakening the assertion or cleaning the table in the test; that hides an unscoped production query.
+
