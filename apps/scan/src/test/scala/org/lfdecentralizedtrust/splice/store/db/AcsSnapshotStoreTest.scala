@@ -1637,4 +1637,43 @@ class TablePerAcsSnapshotStoreTest extends AcsSnapshotStoreTest {
       oldestAfter should be(None)
     }
   }
+
+  "not allow querying unindexed snapshots" in {
+    for {
+      updateHistory <- mkUpdateHistory()
+      store = mkStore(updateHistory)
+      _ <- ingestCreate(
+        updateHistory,
+        amuletRules(),
+        timestamp1.minusSeconds(1L),
+      )
+      _ <- store.insertNewSnapshot(
+        nextTable,
+        DefaultMigrationId,
+        timestamp1,
+        // Index as part of this test
+        shouldIndexSnapshot = false,
+      )
+      beforeIndex <- store.queryAcsSnapshot(
+        DefaultMigrationId,
+        timestamp1,
+        None,
+        PageLimit.tryCreate(10),
+        Seq.empty,
+        Seq.empty,
+      ).failed
+      _ <- indexSnapshot(store, DefaultMigrationId, timestamp1)
+      afterIndex <- store.queryAcsSnapshot(
+        DefaultMigrationId,
+        timestamp1,
+        None,
+        PageLimit.tryCreate(10),
+        Seq.empty,
+        Seq.empty,
+      )
+    } yield {
+      beforeIndex.getMessage should include("Failed to find ACS snapshot")
+      afterIndex.createdEventsInPage should not be empty
+    }
+  }
 }
