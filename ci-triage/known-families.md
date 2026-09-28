@@ -83,6 +83,9 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
 - Sibling: `advanceTime(PT25H)` then `LOCAL_VERDICT_INACTIVE_CONTRACTS` on transfer-preapproval send in
   WalletMintingDelegationTimeBasedIntegrationTest = 10060 / splice #7223, fixed on main by #7261; release lines
   need the backport (10154, 10166, 10171; `ray/backport-7261-release-line-0.8.3`).
+  9929 is the same failure on main before #7261 (79e56f457f, 2026-09-02). Confirming grep: decode the rejection's
+  `grpc-status-details-bin` for the CONTRACT_ID; it is an IssuingMiningRound that `ExpireIssuingMiningRoundTrigger`
+  closes within 2 s of the PT25H jump.
 
 ## E. Missing backports to release lines (check first for any release-line-* failure)
 - #7261 (minting delegation time jump), #7305 (per-port Vite deps cache, 10156 / 9704), #7304 (wallet allocation

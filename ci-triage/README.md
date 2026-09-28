@@ -349,3 +349,13 @@ Same packet conventions. Artifacts under `log/<ref>/<artifact-name>/` (git-ignor
 - 10204 lost all evidence twice over: a degraded runner pod never got Canton ready, and the log upload was skipped
   because a best-effort step before it failed. The fix branch only makes the upload run; the main log artifact can
   still fail on unsanitized `:` filenames, while the runner-log uploads would succeed.
+
+## Ref -> run -> job mapping (2026-09-28, fourth batch)
+
+| My ref | GH run | Branch / sha | Failed job | Canton |
+|--------|--------|--------------|------------|--------|
+| 9929 | 33638801492 | main 79e56f457f (#7071) | 100276792474 `simtime (2)` | 3.5.16-snapshot.20260901.19217.0.v1ed99f4c |
+
+| My ref | Failure (one line) | Duplicate of | Resolution / status |
+|--------|--------------------|--------------|---------------------|
+| 9929 | WalletMintingDelegationTimeBasedIntegrationTest: `transfer-preapproval/send` -> `LOCAL_VERDICT_INACTIVE_CONTRACTS` at 14:15:12.905 right after `advanceTime(PT25H)`; the inactive contract is the IssuingMiningRound that ExpireIssuingMiningRoundTrigger closed at 14:15:12.254. 13/14 tests passed. | cn-test-failures 10060 / splice #7223 (same as 10154, 10166, 10171) | [9929-minting-delegation-25h-jump-issuing-round-closed-under-preapproval-send.md](9929-minting-delegation-25h-jump-issuing-round-closed-under-preapproval-send.md). Fixed on main by #7261 (0c43730f70, 2026-09-16); this main run (2026-09-02) predates it. No fix branch; close as duplicate. |
