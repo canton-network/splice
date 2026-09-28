@@ -16,7 +16,6 @@ import DA.TextMap (TextMap)
 import qualified DA.Set as Set
 import qualified DA.Text as T
 import DA.Time
-import DA.Optional (fromSomeNote)
 
 import Splice.Amulet
 import Splice.Amulet.RewardAccountingV2 qualified as RewardAccountingV2
@@ -1349,7 +1348,6 @@ template DsoRules with
         newParticipantId : Text
         newSvRewardWeight : Int
         reason : Text
-        migrationId : Optional Int
       controller dso
       do
         ensureNeverOperatedNode newSvParty this
@@ -1369,17 +1367,6 @@ template DsoRules with
           expiresAt
           svPartyIsObserver = Some False
 
-        let activeSynchronizer = config.decentralizedSynchronizer.activeSynchronizerId
-        let actualMigrationId = fromSomeNote "migrationId must be provided for SV onboarding" migrationId
-        _ <- create (MemberTraffic with
-          dso
-          memberId = newParticipantId
-          synchronizerId = activeSynchronizer
-          migrationId = actualMigrationId
-          totalPurchased = maxBound : Int
-          numPurchases = 1
-          amuletSpent = 0.0
-          usdSpent = 0.0)
         return DsoRules_ConfirmSvOnboardingResult with ..
 
     nonconsuming choice DsoRules_MakeSvOnboardingConfirmedObserver : DsoRules_MakeSvOnboardingConfirmedObserverResult
