@@ -20,7 +20,7 @@ alter table acs_snapshot
 
 create index acs_snapshot_unindexed on acs_snapshot (history_id, snapshot_record_time) where not indexes_created;
 
--- TODO: template ids can be interned already
+-- TODO (#7438): template ids can be interned already
 
 -- Same as acs_incremental_snapshot_data_next,
 -- but includes ALL update_history_creates data necessary to build a CreatedEvent.
