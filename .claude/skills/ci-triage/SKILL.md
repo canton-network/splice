@@ -9,7 +9,8 @@ Input: one or more `(GitHub run URL or id, job name, cn-test-failures ref)` tupl
 issue number in the failure tracker `DACH-NY/cn-test-failures`, readable with a GitHub login that has DACH-NY
 access. Output: one evidence packet per ref in `ci-triage/`, a row in `ci-triage/README.md`, a duplicate verdict,
 and optionally a fix branch. Everything you write must be reproducible by someone else: every claim is a command
-plus its verbatim output. Read `references/conventions.md` once before starting; it overrides defaults.
+plus its verbatim output, with credential values redacted. Read `references/conventions.md` once before starting;
+it overrides defaults.
 
 The skill lives on main; the triage data does not. Packets, `ci-triage/README.md`, `ci-triage/HANDOVER.md` and the
 flake family catalogue `ci-triage/known-families.md` live on the shared triage branch, which is never merged. If it
@@ -22,8 +23,10 @@ is not checked out, ask the user which triage branch is current before writing a
    the user states it. If you cannot read the tracker, ask for the run URL rather than guess.
 2. Fetch the job log by job id (`references/recipes.md` section 1). Classify in one pass:
    - `Tests: succeeded N, failed 0` + `contains problems` = checkErrors failure: the only evidence is the
-     flagged log lines. The console masks `{}` as `***` and prints every ignored line with the suffix
-     `(ignore this line in check-sbt-output.sh)`; the real problems are the `@timestamp` lines WITHOUT it.
+     flagged log lines. `check-logs.sh` prints them in `Found problems`, `Found unmasked secrets` and
+     `Found deprecated config paths` blocks; ignored lines are in the `Found ignored entries` block and carry the
+     suffix `(ignore this line in check-sbt-output.sh)`. The console masks `{}` as `***`. An unmasked-secrets
+     block prints the leaked value itself: record the key, file and count, never the value.
    - `*** FAILED ***` = assertion or command failure: take the failing clue and stack head.
    - no report, job cancelled or exit without summary = evidence loss (JVM exit, timeout); say so.
 3. Duplicate check BEFORE deep analysis: compare the flagged line and the shard's suite list against
@@ -39,11 +42,12 @@ is not checked out, ask the user which triage branch is current before writing a
 6. Decide flake versus real, and where the fix belongs (test, splice app, Canton, infra). For a candidate
    fix that already exists on main, check `git merge-base --is-ancestor <sha> origin/<branch>`: a missing
    backport is the most common resolution for release-line failures.
-7. Write the packet from `references/packet-template.md`: command, then verbatim output, per finding.
+7. Write the packet from `references/packet-template.md`: command, then verbatim output (redacted), per finding.
    Add the README row (mapping table, overview table, cross-cutting notes when a pattern spans refs).
    Add new families or occurrences to `ci-triage/known-families.md`.
 8. Fix, only when it is test-side and small enough to review in one screen: one branch per PR off
-   `origin/main` (or the release line for a backport, `cherry-pick -x -s`), named
+   `origin/main` (or the release line for a backport, `cherry-pick -x -s`), in its own worktree so the triage
+   branch stays checked out (`references/recipes.md` section 8), named
    `<user>/fix-<ref>-<slug>` (backports: `<user>/backport-<ref>-<pr>-<release-line>`), where `<user>` is your own
    short git prefix, so the branch carries the cn-test-failures ref; when one branch fixes several refs, use the
    parent ref and list the others in the README row. Single-subject commit with a CI tag and DCO sign-off, no
