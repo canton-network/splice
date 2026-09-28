@@ -49,9 +49,9 @@ class ValidatorRepermissionTrigger(
   ): Future[Seq[ValidatorRepermissionTrigger.Task]] = {
     for {
       dsoRules <- store.getDsoRules()
-      isPermissioned = SwitchOverTimes.isPermissionedSynchronizerEnabled(dsoRules.payload)
       repermissions <-
-        if (isPermissioned) store.listValidatorRepermissions()
+        if (SwitchOverTimes.permissionedSynchronizerScheduled(dsoRules.payload))
+          store.listValidatorRepermissions()
         else Future.successful(Seq.empty)
     } yield repermissions.map(ValidatorRepermissionTrigger.Task(_))
   }

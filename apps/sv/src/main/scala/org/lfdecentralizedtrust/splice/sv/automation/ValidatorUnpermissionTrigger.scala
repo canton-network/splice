@@ -54,10 +54,8 @@ class ValidatorUnpermissionTrigger(
         participantId => {
           for {
             dsoRules <- store.getDsoRules()
-            isPermissioned = SwitchOverTimes.isPermissionedSynchronizerEnabled(dsoRules.payload)
-
             outcome <-
-              if (!isPermissioned) {
+              if (!SwitchOverTimes.permissionedSynchronizerScheduled(dsoRules.payload)) {
                 Future.successful(
                   TaskSuccess(
                     "Skipped because permissionedSynchronizer switchover has not occurred"

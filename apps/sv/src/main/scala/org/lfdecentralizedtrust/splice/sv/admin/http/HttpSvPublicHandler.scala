@@ -187,8 +187,6 @@ class HttpSvPublicHandler(
                 filterParticipant = token.candidateParticipantId.toProtoPrimitive,
               )
               .map(_.nonEmpty)
-            permissionedSynchronizer =
-              SwitchOverTimes.isPermissionedSynchronizerEnabled(dsoRules.payload)
             res <-
               if (!SvApp.validateSvNamespace(token.candidateParty, token.candidateParticipantId)) {
                 Future.failed(
@@ -196,7 +194,10 @@ class HttpSvPublicHandler(
                     s"Party ${token.candidateParty} does not have the same namespace than its participant ${token.candidateParticipantId}."
                   )
                 )
-              } else if (!isCandidatePartyHostedOnParticipant && !permissionedSynchronizer)
+              } else if (
+                !isCandidatePartyHostedOnParticipant && !SwitchOverTimes
+                  .permissionedSynchronizerScheduled(dsoRules.payload)
+              )
                 // Conflict instead of not authorized because this can happen if our participant just has not yet caught up
                 // and the client can just retry on that.
                 Future.failed(
@@ -330,10 +331,9 @@ class HttpSvPublicHandler(
       } else {
         for {
           dsoRules <- dsoStore.getDsoRules()
-          isPermissioned = SwitchOverTimes.isPermissionedSynchronizerEnabled(dsoRules.payload)
 
           res <-
-            if (!isPermissioned) {
+            if (!SwitchOverTimes.permissionedSynchronizerScheduled(dsoRules.payload)) {
               Future.failed(
                 HttpErrorHandler.notImplemented(
                   "Traffic purchasing self-service is only available in DevNet when permissioned synchronizer is enabled."

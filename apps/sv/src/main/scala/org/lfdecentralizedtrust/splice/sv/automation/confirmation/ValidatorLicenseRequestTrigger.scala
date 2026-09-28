@@ -61,11 +61,10 @@ class ValidatorLicenseRequestTrigger(
 
     for {
       dsoRules <- dsoStore.getDsoRules()
-      isPermissioned = SwitchOverTimes.isPermissionedSynchronizerEnabled(dsoRules.payload)
 
       // Note: Receiving a ValidatorLicenseRequest implies that the corresponding PartyToParticipant mapping and the ParticipantSynchronizerPermission is already available in the Participant, so we avoid checking them again here.
       outcome <-
-        if (!isPermissioned) {
+        if (!SwitchOverTimes.permissionedSynchronizerScheduled(dsoRules.payload)) {
           Future.successful(
             TaskSuccess("Skipped because permissionedSynchronizer switchover has not occurred")
           )

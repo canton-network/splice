@@ -1130,7 +1130,7 @@ class JoiningNodeInitializer(
         "dso_info_from_sponsor_for_permissioned_flag",
         "DSO info from sponsoring SV",
         getDsoInfoFromSponsor(conf, upgradesConfig).map { dsoInfo =>
-          SwitchOverTimes.isPermissionedSynchronizerEnabled(dsoInfo.dsoRules.payload)
+          SwitchOverTimes.permissionedSynchronizerScheduled(dsoInfo.dsoRules.payload)
         },
         logger,
       )
