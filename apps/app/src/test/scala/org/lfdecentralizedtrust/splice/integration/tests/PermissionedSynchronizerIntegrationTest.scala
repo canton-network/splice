@@ -44,7 +44,7 @@ class PermissionedSynchronizerIntegrationTest
           val currentTimes = foundDso.initialSvOperationsSwitchOverTimes.getOrElse(Map.empty)
           foundDso.copy(
             initialSvOperationsSwitchOverTimes = Some(
-              currentTimes ++ Map(
+              currentTimes + (
                 SwitchOverTimes.PermissionedSynchronizer -> com.digitalasset.canton.data.CantonTimestamp.MinValue
               )
             )
