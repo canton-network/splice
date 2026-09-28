@@ -32,7 +32,7 @@ import java.time.Instant
 import scala.concurrent.Future
 import scala.util.{Failure, Success}
 import StoreTestBase.*
-import com.digitalasset.canton.config.NonNegativeDuration
+import org.lfdecentralizedtrust.splice.scan.config.AnalyzableTimeWindowConfig
 
 class AcsSnapshotStoreTest
     extends StoreTestBase
@@ -1404,8 +1404,7 @@ class AcsSnapshotStoreTest
       dsoParty,
       backfillingRequired,
       internedStringStore(storage),
-      analyzableTimeWindowDuration =
-        NonNegativeDuration.tryFromDuration(scala.concurrent.duration.Duration.Inf),
+      analyzableTimeWindowDuration = AnalyzableTimeWindowConfig.UnlimitedAtw,
       loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = true,

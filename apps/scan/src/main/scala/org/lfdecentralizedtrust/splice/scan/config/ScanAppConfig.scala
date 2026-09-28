@@ -128,11 +128,18 @@ case class ScanAppBackendConfig(
 }
 
 case class AnalyzableTimeWindowConfig(
-    duration: NonNegativeDuration =
-      NonNegativeDuration.tryFromDuration(scala.concurrent.duration.Duration.Inf)
+    duration: NonNegativeDuration = AnalyzableTimeWindowConfig.UnlimitedAtw
 ) {
-  private val minimumAtw = NonNegativeDuration.tryFromJavaDuration(java.time.Duration.ofDays(7L))
-  require(duration.duration > minimumAtw.duration)
+  require(
+    duration.duration > AnalyzableTimeWindowConfig.MinimumAtw.duration,
+    s"The analyzable time window must be at least ${AnalyzableTimeWindowConfig.MinimumAtw}",
+  )
+}
+object AnalyzableTimeWindowConfig {
+  private val MinimumAtw = NonNegativeDuration.tryFromJavaDuration(java.time.Duration.ofDays(7L))
+  val UnlimitedAtw: NonNegativeDuration =
+    NonNegativeDuration.tryFromDuration(scala.concurrent.duration.Duration.Inf)
+
 }
 
 final case class ScanRollForwardLsuConfig(

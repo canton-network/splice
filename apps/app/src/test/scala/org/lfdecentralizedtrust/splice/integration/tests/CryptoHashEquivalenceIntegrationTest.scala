@@ -14,7 +14,6 @@ import com.daml.ledger.javaapi.data.{
   Value,
 }
 import com.daml.metrics.api.noop.NoOpMetricsFactory
-import com.digitalasset.canton.config.NonNegativeDuration
 import com.digitalasset.canton.resource.DbStorage
 import com.digitalasset.canton.topology.{ParticipantId, PartyId}
 import com.digitalasset.daml.lf.data.Ref
@@ -29,6 +28,7 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.rewardaccounti
 }
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.IntegrationTest
+import org.lfdecentralizedtrust.splice.scan.config.AnalyzableTimeWindowConfig
 import org.lfdecentralizedtrust.splice.scan.store.db.{
   DbAppActivityRecordStore,
   DbScanAppRewardsStore,
@@ -147,7 +147,7 @@ class CryptoHashEquivalenceIntegrationTest extends IntegrationTest with WalletTe
           loggerFactory,
           NoOpMetricsFactory,
         ),
-        NonNegativeDuration.tryFromDuration(scala.concurrent.duration.Duration.Inf),
+        AnalyzableTimeWindowConfig.UnlimitedAtw,
         loggerFactory,
         enableissue12777Workaround = true,
         enableImportUpdateBackfill = false,

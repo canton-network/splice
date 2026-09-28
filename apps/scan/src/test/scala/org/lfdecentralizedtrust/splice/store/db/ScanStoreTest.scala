@@ -3,7 +3,6 @@ package org.lfdecentralizedtrust.splice.store.db
 import com.daml.ledger.javaapi.data.{DamlRecord, Unit as damlUnit}
 import com.daml.metrics.api.noop.NoOpMetricsFactory
 import com.digitalasset.canton.concurrent.FutureSupervisor
-import com.digitalasset.canton.config.NonNegativeDuration
 import com.digitalasset.canton.crypto.Fingerprint
 import com.digitalasset.canton.data.CantonTimestamp
 import com.digitalasset.canton.lifecycle.FutureUnlessShutdown
@@ -59,6 +58,7 @@ import scala.jdk.CollectionConverters.*
 import scala.jdk.OptionConverters.*
 import scala.math.BigDecimal.javaBigDecimal2bigDecimal
 import org.lfdecentralizedtrust.splice.config.IngestionConfig
+import org.lfdecentralizedtrust.splice.scan.config.AnalyzableTimeWindowConfig
 import org.lfdecentralizedtrust.splice.store.MultiDomainAcsStore.IngestionSink.IngestionStart.{
   InitializeAcsAtLatestOffset,
   InitializeAcsAtOffset,
@@ -1733,8 +1733,7 @@ class DbScanStoreTest
       dsoParty,
       BackfillingRequirement.BackfillingNotRequired,
       internedStringStore(storage),
-      analyzableTimeWindowDuration =
-        NonNegativeDuration.tryFromDuration(scala.concurrent.duration.Duration.Inf),
+      analyzableTimeWindowDuration = AnalyzableTimeWindowConfig.UnlimitedAtw,
       loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = true,
