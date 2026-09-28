@@ -455,27 +455,6 @@ paths:
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
         "500":
           $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/500"
-  /v0/onboard/sv/sequencer:
-    post:
-      tags: [sv]
-      x-jvm-package: sv_public
-      x-external-audience: svs
-      operationId: "onboardSvSequencer"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              "$ref": "#/components/schemas/OnboardSvSequencerRequest"
-      responses:
-        "200":
-          description: ok
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/OnboardSvSequencerResponse"
-        "400":
-          $ref: "../../../../common/src/main/openapi/common-external.yaml#/components/responses/400"
   /v0/devnet/onboard/validator/prepare:
     post:
       tags: [sv]
@@ -989,22 +968,6 @@ components:
           confirmed: "#/components/schemas/SvOnboardingStateConfirmed"
           completed: "#/components/schemas/SvOnboardingStateCompleted"
           unknown: "#/components/schemas/SvOnboardingStateUnknown"
-
-    OnboardSvSequencerRequest:
-      type: object
-      required:
-        - sequencer_id
-      properties:
-        sequencer_id:
-          type: string
-
-    OnboardSvSequencerResponse:
-      type: object
-      required:
-        - onboarding_state
-      properties:
-        onboarding_state:
-          type: string
 
     OnboardSvMediatorRequest:
       type: object

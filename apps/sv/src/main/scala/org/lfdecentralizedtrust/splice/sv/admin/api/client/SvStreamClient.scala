@@ -40,6 +40,12 @@ object SvStreamClient {
         extends OnboardSvPartyMigrationAuthorizeResponse
     case class Unauthorized(value: ErrorResponse) extends OnboardSvPartyMigrationAuthorizeResponse
   }
+
+  sealed abstract class OnboardSvSequencerResponse
+  object OnboardSvSequencerResponse {
+    case class OK(value: Seq[ByteString]) extends OnboardSvSequencerResponse
+    case class BadRequest(value: ErrorResponse) extends OnboardSvSequencerResponse
+  }
 }
 
 class SvStreamClient(host: String = "https://example.com")(implicit
@@ -47,7 +53,7 @@ class SvStreamClient(host: String = "https://example.com")(implicit
     ec: ExecutionContext,
     mat: Materializer,
 ) {
-  import SvStreamClient.OnboardSvPartyMigrationAuthorizeResponse
+  import SvStreamClient.{OnboardSvPartyMigrationAuthorizeResponse, OnboardSvSequencerResponse}
 
   val basePath: String = "/api/sv"
 
@@ -137,6 +143,43 @@ class SvStreamClient(host: String = "https://example.com")(implicit
                 Unmarshal(resp.entity)
                   .to[ErrorResponse](errorResponseDecoder, implicitly, implicitly)
                   .map(x => Right(OnboardSvPartyMigrationAuthorizeResponse.Unauthorized(x)))
+              case _ => FastFuture.successful(Left(Right(resp)))
+            }
+          )
+          .recover({ case e: Throwable => Left(Left(e)) })
+      )
+    )
+  }
+
+  def onboardSvSequencer(
+      body: definitions.OnboardSvSequencerRequest,
+      headers: List[HttpHeader] = Nil,
+  ): EitherT[Future, Either[Throwable, HttpResponse], OnboardSvSequencerResponse] = {
+    val allHeaders = headers ++ scala.collection.immutable.Seq[Option[HttpHeader]]().flatten
+    makeRequest(
+      HttpMethods.POST,
+      host + basePath + "/v0/onboard/sv/sequencer",
+      allHeaders,
+      body,
+      HttpProtocols.`HTTP/1.1`,
+    ).flatMap(req =>
+      EitherT(
+        httpClient(req)
+          .flatMap(resp =>
+            resp.status match {
+              case StatusCodes.OK =>
+                resp.entity.dataBytes
+                  .runWith(Sink.seq)
+                  .map(chunks =>
+                    Right(OnboardSvSequencerResponse.OK(chunks)): Either[Either[
+                      Throwable,
+                      HttpResponse,
+                    ], OnboardSvSequencerResponse]
+                  )
+              case StatusCodes.BadRequest =>
+                Unmarshal(resp.entity)
+                  .to[ErrorResponse](errorResponseDecoder, implicitly, implicitly)
+                  .map(x => Right(OnboardSvSequencerResponse.BadRequest(x)))
               case _ => FastFuture.successful(Left(Right(resp)))
             }
           )
