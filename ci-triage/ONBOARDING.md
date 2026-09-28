@@ -12,7 +12,7 @@ The branch carries the skill at `.claude/skills/ci-triage/`, so Claude Code pick
 install step. In a session that was already running before the checkout, run `/reload-skills` once.
 Then read, in this order: `ci-triage/HANDOVER.md` (status of every fix branch, open items, environment notes),
 `ci-triage/README.md` (ref -> run -> job mapping and one line per ref), and
-`.claude/skills/ci-triage/references/known-families.md` (flake families A to L with the grep that confirms each).
+`ci-triage/known-families.md` (flake families A to M with the grep that confirms each).
 
 ## 2. Run a triage
 
@@ -46,8 +46,8 @@ has several failed jobs and several refs, never assign refs by elimination; reco
 
 - `canton/` in the repo is a stale rsync copy (`canton/VERSION` says 3.5.7-SNAPSHOT). What runs is pinned in
   `nix/canton-sources.json` at the run's sha. Cite Canton behaviour against the jar of that version (recipe in
-  `references/recipes.md` section 6, tarballs from canton.io, about 300 MB each), and put the version next to any
-  source citation. Runtime log evidence stands on its own; source citations do not.
+  `.claude/skills/ci-triage/references/recipes.md` section 6, tarballs from canton.io, about 300 MB each), and
+  put the version next to any source citation. Runtime log evidence stands on its own; source citations do not.
 - The sandbox root overlay has 0.2 to 2 GB free. Keep `TMPDIR`, artifacts and jars under `log/` on the repo mount.
   Never pipe a large `zcat` into `sort` (it spills to `/tmp` and kills every running command); count with `awk`.
   Never run `nix-collect-garbage`.
@@ -58,7 +58,7 @@ has several failed jobs and several refs, never assign refs by elimination; reco
 - Rate limiter rejections are metered, not logged; a 429 in the logs does not say which limiter fired.
 - sbt: `direnv allow` then `USER=$(id -un) direnv exec . bash -c 'sbt --batch ...'` (the template's global
   CLAUDE.md has the full recipe). If the dev shell cannot realize because the overlay is full, source
-  `.claude/skills/ci-triage/references/sandbox-sbt-env.sh` instead.
+  `ci-triage/sandbox-sbt-env.sh` instead.
 - `origin` (hyperledger-labs, SSH) is refused from a sandbox; use the HTTPS remote for canton-network/splice.
   DACH-NY repos need a token that covers that org (`sbx secret set <sandbox> github -t "$(gh auth token)"`).
 

@@ -11,10 +11,10 @@ of the handover; every packet contains the commands that fetched them.
 |---|---|---|
 | Evidence packets (43) | `ci-triage/<ref>-<slug>.md` | One per ref, or one per family with numbered occurrence sections (`10155-10158-...` holds family A, ten hits) |
 | Index | `ci-triage/README.md` | Ref -> run -> job mapping, one-line overview per ref, cross-cutting notes, fix-branch table (the table below supersedes its status column) |
-| Triage skill | `.claude/skills/ci-triage/` | `SKILL.md` procedure, `references/{conventions,recipes,packet-template,known-families}.md`. Carried by the branch, no install: `/ci-triage <run id or url> <ref>` (`/reload-skills` first if the session predates the checkout) |
-| Flake families A-L | `.claude/skills/ci-triage/references/known-families.md` | Signature, confirming grep, parent ref, dups, fix per family. Check it before deep analysis |
+| Triage skill | `.claude/skills/ci-triage/` | `SKILL.md` procedure, `references/{conventions,recipes,packet-template}.md`. Moving to main (branch `s11/claude-onboarding`); this branch carries an identical copy until then, no install: `/ci-triage <run id or url> <ref>` (`/reload-skills` first if the session predates the checkout) |
+| Flake families A-M | `ci-triage/known-families.md` | Signature, confirming grep, parent ref, dups, fix per family. Check it before deep analysis |
 | Fix branches | local branches `ray/fix-<ref>-<slug>` (Raymond's prefix; yours will be `<user>/`) in the sandbox that produced them | Status table in section 3; lift with `git fetch sandbox-<name> <branch>` on the host, then push |
-| sbt without the nix dev shell | `.claude/skills/ci-triage/references/sandbox-sbt-env.sh` | Only when `direnv exec . sbt` cannot realize the dev shell (root overlay full); paths are those of the splice-ready template image |
+| sbt without the nix dev shell | `ci-triage/sandbox-sbt-env.sh` | Only when `direnv exec . sbt` cannot realize the dev shell (root overlay full); paths are those of the splice-ready template image |
 
 Not on the branch, by design: `CLAUDE.md` files (local), the memory files of the assistant, `log/` (12 GB of
 artifacts and jars).
@@ -32,8 +32,8 @@ Colleague, in a fresh sandbox:
 ```
 git fetch <remote> ray/ci-triage-2026-09-15 && git checkout ray/ci-triage-2026-09-15
 ```
-The skill comes with the branch at `.claude/skills/ci-triage/`; `/reload-skills` if the session predates the
-checkout.
+The skill comes with the branch at `.claude/skills/ci-triage/` (identical to the copy headed for main, so merging
+main in later is conflict-free); `/reload-skills` if the session predates the checkout.
 Continue committing packets on the same branch with `git commit -s -m "[skip ci] ..."`, one subject line, ASCII only.
 
 ## 3. Fix branch status
