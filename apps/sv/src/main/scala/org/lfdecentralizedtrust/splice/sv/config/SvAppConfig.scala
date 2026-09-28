@@ -344,14 +344,19 @@ final case class SvParticipantClientConfig(
 ) extends BaseParticipantClientConfig(adminApi, ledgerApi)
 
 final case class BftSequencingParameters(
-    pbftViewChangeTimeout: PositiveFiniteDuration,
-    segmentLength: PositiveLong,
-    blacklistLeaderSelectionPolicyConfig: BlacklistLeaderSelectionPolicyConfig,
-    maxRequestsInBatch: Short,
-    maxBatchesPerBlockProposal: Short,
-    pbftViewChangeTimeoutStep: NonNegativeFiniteDuration,
-    pbftViewChangeTimeoutUpperBound: NonNegativeFiniteDuration,
-    stricterDetectionOfRequestsPotentiallyChangingOrderingTopology: Boolean,
+    pbftViewChangeTimeout: PositiveFiniteDuration =
+      BftSequencingParameters.default.pbftViewChangeTimeout,
+    segmentLength: PositiveLong = BftSequencingParameters.default.segmentLength,
+    blacklistLeaderSelectionPolicyConfig: BlacklistLeaderSelectionPolicyConfig =
+      BftSequencingParameters.default.blacklistLeaderSelectionPolicyConfig,
+    maxRequestsInBatch: Short = BftSequencingParameters.default.maxRequestsInBatch,
+    maxBatchesPerBlockProposal: Short = BftSequencingParameters.default.maxBatchesPerBlockProposal,
+    pbftViewChangeTimeoutStep: NonNegativeFiniteDuration =
+      BftSequencingParameters.default.pbftViewChangeTimeoutStep,
+    pbftViewChangeTimeoutUpperBound: NonNegativeFiniteDuration =
+      BftSequencingParameters.default.pbftViewChangeTimeoutUpperBound,
+    stricterDetectionOfRequestsPotentiallyChangingOrderingTopology: Boolean =
+      BftSequencingParameters.default.stricterDetectionOfRequestsPotentiallyChangingOrderingTopology,
 ) {
   import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framework.data.topology.SequencingParameters
   def toInternal(protocolVersion: ProtocolVersion): SequencingParameters =
@@ -511,6 +516,10 @@ case class SvAppBackendConfig(
       PackageVettingLookupService.CacheConfig(),
     useInternalSequencerApi: Boolean = false,
     ignoredAmuletVersions: Set[String] = Set.empty,
+    // Capped exponential backoff used by the persisted unavailable parties store
+    // (used when `enablePersistedUnavailableParties` is set)
+    unavailablePartiesBackoffParameters: UnavailablePartiesBackoffParameters =
+      UnavailablePartiesBackoffParameters(),
     cantonBftSequencingParameters: Option[BftSequencingParameters] = Some(
       BftSequencingParameters.default
     ),
@@ -722,4 +731,10 @@ final case class AmuletConversionRateFeedConfig(
 final case class RangeConfig(
     min: BigDecimal,
     max: BigDecimal,
+)
+
+final case class UnavailablePartiesBackoffParameters(
+    baseIgnoreDuration: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofMinutes(10),
+    // 24h: 100k parties with 1 task each leads to 100k / (24*3600s) = 1.15 tasks/s
+    maxIgnoreDuration: NonNegativeFiniteDuration = NonNegativeFiniteDuration.ofHours(24),
 )

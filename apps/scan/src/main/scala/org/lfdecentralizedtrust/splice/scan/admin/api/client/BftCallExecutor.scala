@@ -40,6 +40,7 @@ object BftCallExecutor {
       callConfig: BftCallConfig,
       consensusFailureLogLevel: Level = Level.WARN,
       disagreementLogLevel: Level = Level.INFO,
+      notEnoughScansLogLevel: Level,
       shortenResponsesForLog: T => Any = identity[T],
   )(implicit
       ec: ExecutionContext,
@@ -65,7 +66,7 @@ object BftCallExecutor {
           s"(out of $totalNumber configured ones), which are fewer than the necessary " +
           s"${callConfig.targetSuccess} to achieve BFT guarantees."
       val exception = HttpErrorWithHttpCode(StatusCodes.BadGateway, msg)
-      LoggerUtil.logThrowableAtLevel(consensusFailureLogLevel, msg, exception)
+      LoggerUtil.logThrowableAtLevel(notEnoughScansLogLevel, msg, exception)
       markBftCall("not_enough_scans")
       Future.failed(exception)
     } else {
@@ -357,7 +358,8 @@ object BftCallExecutor {
               // This method is very sensitive to unavailable SVs.
               // Do not log warnings for failures to reach consensus, as this would be too noisy,
               // and instead rely on metrics to situations when backfilling is not progressing.
-              Level.INFO,
+              consensusFailureLogLevel = Level.INFO,
+              notEnoughScansLogLevel = Level.INFO,
             ).map(_._1)
             lastImportUpdateId <- bftCallWithScanUris(
               connections,
@@ -371,7 +373,8 @@ object BftCallExecutor {
               // This method is very sensitive to unavailable SVs.
               // Do not log warnings for failures to reach consensus, as this would be too noisy,
               // and instead rely on metrics to situations when backfilling is not progressing.
-              Level.INFO,
+              consensusFailureLogLevel = Level.INFO,
+              notEnoughScansLogLevel = Level.INFO,
             ).map(_._1)
           } yield {
             @SuppressWarnings(Array("org.wartremover.warts.IterableOps"))

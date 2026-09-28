@@ -64,11 +64,14 @@ const CloudArmorAlertConfigSchema = z
 
 export type CloudArmorAlertConfig = z.infer<typeof CloudArmorAlertConfigSchema>;
 
+// Grafana alerts on the requests rejected by the Cloud Armor policy.
 const CloudArmorAlertsConfigSchema = z.object({
   // Requests denied by any rule of the Cloud Armor policy (metric based).
   deniedRequests: CloudArmorAlertConfigSchema,
   // Requests matching a WAF (OWASP CRS) rule (log based).
   wafRejections: CloudArmorAlertConfigSchema.prefault({ threshold: 0 }),
+  // Requests rejected by a per endpoint throttle rule (log based).
+  throttleRejections: CloudArmorAlertConfigSchema.prefault({ threshold: 0 }),
 });
 
 export type CloudArmorAlertsConfig = z.infer<typeof CloudArmorAlertsConfigSchema>;

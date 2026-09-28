@@ -17,17 +17,27 @@ release-notes:: Upcoming
           ``/v0/dso`` endpoint. The scan is configured via the new ``.joinWithKeyOnboarding.sponsorScanUrl`` Helm value.
           SVs who set the ``.joinWithKeyOnboarding`` key config must set it before upgrading.
 
+        - The old governance UI, previously still reachable at ``/governance-old``, has been removed from the SV UI.
+          ``/votes`` and ``/governance`` now both lead to the current governance UI.
+
     - Docker Compose
 
-        - The validator deployment now also deploys the Canton Wallet Gateway and the Portfolio UI by default. Pass the new ``-G`` flag to ``start.sh`` to skip them.
-          This requires ``LEDGER_API_AUTH_AUDIENCE`` and ``VALIDATOR_AUTH_AUDIENCE`` in ``.env`` to be equal, which is now the case for the shipped defaults.
-          If your ``.env`` uses different audiences, ``start.sh`` fails until you set them to the same value (which for authenticated deployments means updating your OIDC provider) or pass ``-G``.
+        - The validator deployment can now also deploy the Canton Wallet Gateway and the Portfolio UI with the new ``-g`` flag of ``start.sh``.
+          This requires ``LEDGER_API_AUTH_AUDIENCE`` and ``VALIDATOR_AUTH_AUDIENCE`` in ``.env`` to be equal, and with ``-a`` an OAuth app for the Wallet Gateway UI set as ``WALLET_GATEWAY_UI_CLIENT_ID``,
+          see `Wallet Gateway and Splice Portfolio <https://docs.canton.network/global-synchronizer/deployment/validator-docker-compose#wallet-gateway-and-splice-portfolio>`__.
+
+          .. important:: From Splice 0.10.0 the Wallet Gateway will be deployed by default, so an ``.env`` with different audiences will no longer start. Enabling it with ``-g`` now prepares your deployment for that.
 
     - Helm
 
         - The deprecated `splice-domain` Helm chart has been removed.
 
     - Scan App
+
+        - Removed the v0 and v1 ``/state/acs`` and ``/holdings/state`` endpoints that were already deprecated.
+          Any usages can be replaced with their V2 counterparts.
+          The only change is the type of the pagination token (``after`` in request, ``next_page_token`` in response),
+          which is now a String instead of a number.
 
         - Added a new public ``/v0/events/latest-record-time`` endpoint that returns the latest
           record time for which ``/v0/events`` will be able to return events.
@@ -43,3 +53,14 @@ release-notes:: Upcoming
           ``SvRewardCoupon`` rewards. An external party that is a beneficiary of SV rewards
           will have those coupons minted on its behalf by its delegate, alongside the other
           reward-coupon types.
+
+    - SV UI
+
+        - The ``AmuletRules_SetConfig`` proposal form can now set ``amuletSwitchOverTimes``.
+
+        - The ``DsoRulesConfig`` proposal form can now set ``svOperationsSwitchOverTimes``.
+
+    - Daml
+
+        - Fix a bug in MintingDelegation that wrongly allowed the delegate to share their own coupons within a minting delegation.
+

@@ -27,6 +27,7 @@ import scala.concurrent.Future
 import scala.jdk.CollectionConverters.*
 import UpdateHistory.UpdateHistoryResponse
 import com.daml.metrics.api.noop.NoOpMetricsFactory
+import com.digitalasset.canton.config.NonNegativeDuration
 
 abstract class UpdateHistoryTestBase
     extends StoreTestBase
@@ -238,6 +239,8 @@ abstract class UpdateHistoryTestBase
       participantId: ParticipantId = participant1,
       storeName: String = storeName1,
       backfillingRequired: BackfillingRequirement = BackfillingRequirement.NeedsBackfilling,
+      analyzableTimeWindowDuration: NonNegativeDuration =
+        NonNegativeDuration.tryFromDuration(scala.concurrent.duration.Duration.Inf),
   ): UpdateHistory = {
     new UpdateHistory(
       storage,
@@ -247,6 +250,7 @@ abstract class UpdateHistoryTestBase
       updateStreamParty,
       backfillingRequired,
       internedStringStore(storage),
+      analyzableTimeWindowDuration,
       loggerFactory,
       enableissue12777Workaround = true,
       enableImportUpdateBackfill = true,

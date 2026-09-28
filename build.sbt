@@ -1392,7 +1392,17 @@ lazy val `apps-sv` =
             pkg = "org.lfdecentralizedtrust.splice.http.v0",
             modules = List("pekko-http-v1.0.0", "circe"),
             customExtraction = true,
-          )
+          ),
+          // Separate file as we only generate the server but hand-write the client as guardrail doesn't work well for streaming responses
+          ScalaServer(
+            new File("apps/sv/src/main/openapi/sv-stream-server.yaml"),
+            pkg = "org.lfdecentralizedtrust.splice.http.v0",
+            modules = List("pekko-http-v1.0.0", "circe"),
+            imports = List(
+              "org.lfdecentralizedtrust.splice.admin.http.ResponseEntityGuardrailSupport._"
+            ),
+            customExtraction = true,
+          ),
         ),
     )
 
@@ -1434,7 +1444,7 @@ lazy val `apps-scan` =
             pkg = "org.lfdecentralizedtrust.splice.http.v0",
             modules = List("pekko-http-v1.0.0", "circe"),
             imports = List(
-              "org.lfdecentralizedtrust.splice.scan.admin.http.ResponseEntityGuardrailSupport._"
+              "org.lfdecentralizedtrust.splice.admin.http.ResponseEntityGuardrailSupport._"
             ),
             customExtraction = true,
           ),

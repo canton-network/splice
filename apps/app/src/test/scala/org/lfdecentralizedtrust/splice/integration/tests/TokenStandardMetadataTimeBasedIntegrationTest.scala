@@ -110,7 +110,7 @@ class TokenStandardMetadataTimeBasedIntegrationTest
         advanceTime(Duration.ofSeconds(1L)) // because the sanity plugin will run another snapshot
         // hope: this test won't have created more than Limit.MaxLimit contracts, so they all fit in a single response
         val totalSupply = sv1ScanBackend
-          .getAcsSnapshotAt(forcedSnapshotTime, migrationId, partyIds = Some(Vector(dsoParty)))
+          .getAcsSnapshotAtV2(forcedSnapshotTime, migrationId, partyIds = Some(Vector(dsoParty)))
           .valueOrFail("Snapshot was just taken, so this has to exist")
           .createdEvents
           .map { createdEvent =>

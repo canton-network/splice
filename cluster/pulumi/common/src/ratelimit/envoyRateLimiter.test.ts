@@ -14,7 +14,7 @@ import {
   buildXffNumTrustedHopsPatch,
   directIngressXffNumTrustedHops,
   extractPathPrefixes,
-  gkeL7GatewayXffNumTrustedHops,
+  gkeL7GatewayNumTrustedProxies,
   globalPerIpRateLimitFilterName,
   globalPerIpRateLimitStatPrefix,
   globalRateLimitFilterName,
@@ -335,19 +335,15 @@ test('buildHttpFilterPatches keeps the filter order by pinning the insertion poi
 });
 
 test('buildXffNumTrustedHopsPatch keys the per-IP buckets on the client behind extra proxies', () => {
-  const patch = buildXffNumTrustedHopsPatch(5008, gkeL7GatewayXffNumTrustedHops) as {
+  const patch = buildXffNumTrustedHopsPatch(5008, gkeL7GatewayNumTrustedProxies) as {
     applyTo: string;
     match: {
       context: string;
       listener: { portNumber: number; filterChain: { filter: { name: string } } };
     };
-    patch: { operation: string; value: { typed_config: { value: unknown } } };
+    patch: { operation: string; value: { typed_config: Record<string, unknown> } };
   };
 
-  // the sidecar derives the address masked_remote_address keys on from x-forwarded-for, so the
-  // hop count must match the ingress topology: with the GKE L7 gateway the ALB appends the client
-  // and the load balancer address, and the istio gateway appends the proxy-only subnet address
-  expect(gkeL7GatewayXffNumTrustedHops).toEqual(directIngressXffNumTrustedHops + 2);
   expect(patch.applyTo).toEqual('NETWORK_FILTER');
   expect(patch.match.context).toEqual('SIDECAR_INBOUND');
   // like the http filter patches, only the externally reachable port is patched
@@ -357,8 +353,12 @@ test('buildXffNumTrustedHopsPatch keys the per-IP buckets on the client behind e
   );
   // merged into the connection manager istio generates, which must keep all its other settings
   expect(patch.patch.operation).toEqual('MERGE');
-  expect(patch.patch.value.typed_config.value).toEqual({
-    xff_num_trusted_hops: gkeL7GatewayXffNumTrustedHops,
+  // istiod merges the typed config into the one it generated and panics on a descriptor mismatch,
+  // dropping every listener patch, so this must be the concrete type and not a TypedStruct
+  expect(patch.patch.value.typed_config).toEqual({
+    '@type':
+      'type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager',
+    xff_num_trusted_hops: gkeL7GatewayNumTrustedProxies,
   });
 });
 
