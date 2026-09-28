@@ -98,35 +98,23 @@ class GovernanceLockTimeBasedIntegrationTest
       advanceTimeAndWaitForRoundOpening
 
       // Withdraw the governance lock; it's relocked as a VestingLock and funds remain locked
-      val (_, vestingLockCid) = actAndCheck(
-        "the owner withdraws the GovernanceLock",
-        withdrawTransferInstruction(
-          aliceValidatorBackend.participantClientWithAdminToken,
-          owner,
-          governanceLockCid,
-        ),
-      )(
-        "a VestingLock is now the pending TransferInstruction to the magic party",
-        _ => {
-          val (cid, view) = listTransferInstructions(
-            aliceValidatorBackend.participantClientWithAdminToken,
+      val (vestingLockCid, vestingLockView) = unlockGovernanceLockViaTokenStandard(
+        aliceValidatorBackend.participantClientWithAdminToken,
+        owner,
+        governanceLockCid,
+      ).value
+      val vestingLock =
+        aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
+          .filterJava(governancelock.VestingLock.COMPANION)(
             ownerParty,
-          ).loneElement
-          val vestingLock =
-            aliceValidatorBackend.participantClientWithAdminToken.ledger_api_extensions.acs
-              .filterJava(governancelock.VestingLock.COMPANION)(
-                ownerParty,
-                predicate = _.id.contractId == cid.contractId,
-              )
-              .loneElement
-              .data
-          cid.contractId should not be governanceLockCid.contractId
-          view.transfer.sender shouldBe ownerParty.toProtoPrimitive
-          view.transfer.receiver shouldBe superValidatorLockMagicParty.toProtoPrimitive
-          matchSVKind(vestingLock.specification.kind)
-          cid
-        },
-      )
+            predicate = _.id.contractId == vestingLockCid.contractId,
+          )
+          .loneElement
+          .data
+      vestingLockCid.contractId should not be governanceLockCid.contractId
+      vestingLockView.transfer.sender shouldBe ownerParty.toProtoPrimitive
+      vestingLockView.transfer.receiver shouldBe superValidatorLockMagicParty.toProtoPrimitive
+      matchSVKind(vestingLock.specification.kind)
 
       clue("Scan serves a withdraw choice context for the VestingLock") {
         sv1ScanBackend

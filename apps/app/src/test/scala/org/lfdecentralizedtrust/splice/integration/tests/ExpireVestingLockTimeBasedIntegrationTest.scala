@@ -3,31 +3,22 @@
 
 package org.lfdecentralizedtrust.splice.integration.tests
 
-import com.daml.ledger.javaapi.data.Identifier
 import com.digitalasset.canton.HasExecutionContext
 import com.digitalasset.canton.config.NonNegativeFiniteDuration
-import com.digitalasset.canton.logging.SuppressionRule
-import org.slf4j.event.Level
-import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{Amulet, LockedAmulet}
 import org.lfdecentralizedtrust.splice.codegen.java.splice.governancelock.VestingLock
-import org.lfdecentralizedtrust.splice.codegen.java.splice.governancelock.governancelockkind.GLK_SuperValidatorRightsOwner
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms
 import org.lfdecentralizedtrust.splice.config.ConfigTransforms.{
   ConfigurableApp,
   updateAutomationConfig,
 }
+import org.lfdecentralizedtrust.splice.console.LedgerApiExtensions.RichPartyId
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.{
   IntegrationTestWithIsolatedEnvironment,
   SpliceTestConsoleEnvironment,
 }
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.ExpireVestingLockTrigger
-import org.lfdecentralizedtrust.splice.util.{
-  GovernanceLockTestUtil,
-  TimeTestUtil,
-  TriggerTestUtil,
-  WalletTestUtil,
-}
+import org.lfdecentralizedtrust.splice.util.{TimeTestUtil, TriggerTestUtil, WalletTestUtil}
 
 import java.time.Duration
 
@@ -50,22 +41,7 @@ class ExpireVestingLockTimeBasedIntegrationTest
     with WalletTestUtil
     with TimeTestUtil
     with TriggerTestUtil
-    with GovernanceLockTestUtil {
-
-  // The token-standard CLI knows nothing about the governance-lock choices:
-  // `txparse` labels an event by the nearest token-standard choice above it,
-  // and neither `ExternalPartyAmuletRules_LockForGovernance` nor
-  // `GovernanceLock_Unlock` is one, so the `Amulet`/`LockedAmulet` events they
-  // produce come out as `"parentChoice": "none (root node)"` and `--strict`
-  // rejects them.
-  //
-  // TODO(canton-network/splice-sv-fa-locking#80): Remove this "sanity check
-  // ignore" when `GovernanceLockTestUtil` is rewritten to use TSv1 choices to
-  // control the locks for tests.
-  override protected lazy val sanityChecksIgnoredRootCreates: Seq[Identifier] = Seq(
-    Amulet.TEMPLATE_ID_WITH_PACKAGE_ID,
-    LockedAmulet.TEMPLATE_ID_WITH_PACKAGE_ID,
-  )
+    with TokenStandardTest {
 
   private val batchSize = 2
   private val numLocks = 3
@@ -73,7 +49,9 @@ class ExpireVestingLockTimeBasedIntegrationTest
   // Sim-time budget, all of it inside one 10-minute round tick
   // (`SpliceUtil.defaultInitialTickDuration`):
   //   t0            fixture built
-  //   t0 + 1 min    unlockAt (must be strictly in the future)
+  //   t0 + 1 min    unlockAt (`TransferInstruction_Withdraw` picks the first
+  //                 `requestedAt + n * granularity` point strictly after the
+  //                 ledger time; granularity = unlockDelay, see the config below)
   //   t0 + 6 min    endTime  (= unlockAt + vestingDuration, taken from the config below)
   //   t0 + 7 min    after advanceTime (strictly past endTime)
   // Advances spanning many round ticks make the round automation work through a backlog that
@@ -107,80 +85,50 @@ class ExpireVestingLockTimeBasedIntegrationTest
         ConfigTransforms.updateAllSvAppFoundDsoConfigs_(
           _.copy(
             initialGovernanceLockSuperValidatorLockVestingDuration =
-              Some(NonNegativeFiniteDuration.ofMillis(vestingDuration.toMillis))
+              Some(NonNegativeFiniteDuration.ofMillis(vestingDuration.toMillis)),
+            // Makes `TransferInstruction_Withdraw` pick `unlockAt = requestedAt + unlockDelay`,
+            // as sim time does not move between locking and unlocking.
+            initialGovernanceLockSearchTimeGranularity =
+              Some(NonNegativeFiniteDuration.ofMillis(unlockDelay.toMillis)),
           )
         )(config)
       )
 
   "ExpireVestingLockTrigger archives fully vested VestingLocks in batches" in { implicit env =>
-    val sv1UserId = sv1Backend.config.ledgerApiUser
     val sv1Party = sv1Backend.getDsoInfo().svParty
+    val owner = RichPartyId.local(sv1Party)
     val participant = sv1Backend.participantClientWithAdminToken
 
     val unlockAt = getLedgerTime.toInstant.plus(unlockDelay)
     val endTime = unlockAt.plus(vestingDuration)
 
-    // `lockForGovernance` calls `listUnlockedHoldingCids` and feeds them into
-    // the `ExternalPartyAmuletRules_LockForGovernance` choice. Thus, the tap
-    // has to have landed before the first lock is submitted.
+    // `createGovernanceLockViaTokenStandard` feeds all of the owner's unlocked
+    // holdings into the `TransferFactory_Transfer` choice. Thus, the tap has to
+    // have landed before the first lock is submitted.
     actAndCheck(
       s"Tap $tapAmount CC for sv1",
       sv1WalletClient.tap(walletAmuletToUsd(tapAmount)),
     )(
       "the tapped amulet is visible",
-      _ => listUnlockedHoldingCids(participant, sv1Party) should have length 1,
+      _ => listHoldings(participant, sv1Party).filter(_._2.lock.isEmpty) should have length 1,
     )
 
-    // Similar problem to what is described in `sanityChecksIgnoredRootCreates`
-    // comment above but originating from the `UserWalletTxLogParser`.
-    // `sv1`'s SV party is also a wallet party, so a `UserWalletService` gets
-    // instantiated for this party with `DbUserWalletStore`
-    // with `UserWalletTxLogParser`. And the parser runs over the transactions
-    // created by this test.
-    //
-    // Commit 6ec1ff60499512b3e612b70d9071e7f9b07ae546 updated
-    // `UserWalletTxLogParser` to handle `TransferInstruction_Withdraw`
-    // implemented by `GovernanceLock` and `VestingLock` templates. But
-    // `GovernanceLockTestUtil` uses
-    // `ExternalPartyAmuletRules_LockForGovernance` and `GovernanceLock_Unlock`.
-    //
-    // TODO(canton-network/splice-sv-fa-locking#80): Remove this log supression
-    // when `GovernanceLockTestUtil` is rewritten to use TSv1 choices to control
-    // the locks for tests.
-    val (vestingLocks, _) = loggerFactory.assertEventuallyLogsSeq(
-      SuppressionRule.LevelAndAbove(Level.ERROR)
-    )(
-      actAndCheck(
-        s"Lock and unlock $numLocks times, vesting until $endTime", {
-          (1 to numLocks).map { _ =>
-            val governanceLock = lockForGovernance(
-              participant,
-              sv1UserId,
-              sv1Party,
-              lockAmount,
-              ownerControlledSpecification(sv1Party, new GLK_SuperValidatorRightsOwner(sv1Name)),
-            )
-            unlockGovernanceLock(
-              participant,
-              sv1UserId,
-              governanceLock,
-              unlockAmount = None,
-              unlockAt = unlockAt,
-              actors = Seq(sv1Party),
-            )._1
-          }
-        },
-      )(
-        "SvDsoStore ingests all VestingLocks",
-        _ => listVestingLocks should have length numLocks.toLong,
-      ),
-      logs => {
-        logs should have length (2 * numLocks).toLong
-        forAll(logs) { line =>
-          line.errorMessage should include("Unexpected amulet archive event")
-          line.loggerName should include("DbMultiDomainAcsStore")
+    actAndCheck(
+      s"Lock and unlock $numLocks times, vesting until $endTime", {
+        (1 to numLocks).map { _ =>
+          val governanceLock = createGovernanceLockViaTokenStandard(
+            participant,
+            owner,
+            superValidatorLockMagicParty,
+            lockSubject = sv1Name,
+            amount = lockAmount,
+          )
+          unlockGovernanceLockViaTokenStandard(participant, owner, governanceLock)
         }
       },
+    )(
+      "SvDsoStore ingests all VestingLocks",
+      _ => listVestingLocks should have length numLocks.toLong,
     )
 
     clue("The locks are not yet expired, so the trigger has no work") {

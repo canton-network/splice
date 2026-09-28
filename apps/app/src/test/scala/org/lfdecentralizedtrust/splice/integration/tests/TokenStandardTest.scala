@@ -233,6 +233,10 @@ trait TokenStandardTest extends ExternallySignedPartyTestUtil {
   )(implicit
       env: SpliceTestConsoleEnvironment
   ): transferinstructionv1.TransferInstruction.ContractId = {
+    // `owner` may already have pending instructions to `lockParty` (earlier
+    // `GovernanceLock`s or `VestingLock`s), so only look at the new one.
+    val existingInstructionCids =
+      listTransferInstructions(participant, owner.partyId).map(_._1).toSet
     executeTransferViaTokenStandard(
       participant,
       owner,
@@ -242,9 +246,43 @@ trait TokenStandardTest extends ExternallySignedPartyTestUtil {
       description = Some(makeGovernanceLockSubject(lockSubject)),
     )
     listTransferInstructions(participant, owner.partyId).collect {
-      case (cid, view) if view.transfer.receiver == lockParty.toProtoPrimitive => cid
+      case (cid, view)
+          if view.transfer.receiver == lockParty.toProtoPrimitive &&
+            !existingInstructionCids.contains(cid) =>
+        cid
     }.loneElement
   }
+
+  /** Fully unlocks a governance lock by withdrawing its transfer instruction.
+    */
+  def unlockGovernanceLockViaTokenStandard(
+      participant: ParticipantClientReference,
+      owner: RichPartyId,
+      governanceLockCid: transferinstructionv1.TransferInstruction.ContractId,
+  )(implicit env: SpliceTestConsoleEnvironment): Option[
+    (
+        transferinstructionv1.TransferInstruction.ContractId,
+        transferinstructionv1.TransferInstructionView,
+    )
+  ] =
+    actAndCheck(
+      "the owner unlocks the GovernanceLock",
+      withdrawTransferInstruction(participant, owner, governanceLockCid),
+    )(
+      "a VestingLock is not the pending TransferInstruction",
+      _ =>
+        listTransferInstructions(participant, owner.partyId).collect {
+          case t @ (_, view)
+              if view.originalInstructionCid.toScala.exists(
+                _.contractId == governanceLockCid.contractId
+              ) =>
+            t
+        } match {
+          case Seq() => None
+          case Seq(vestingLockCid) => Some(vestingLockCid)
+          case many => fail(s"Expected at most one VestingLock for $governanceLockCid, got $many")
+        },
+    )._2
 
   def acceptTransferInstruction(
       participant: ParticipantClientReference,
