@@ -1,10 +1,7 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
-import {
-  clusterSubConfig,
-  SplicePostgresConfig,
-  SplicePostgresSchema,
-} from '@canton-network/splice-pulumi-common';
+import { clusterSubConfig, SplicePostgresSchema } from '@canton-network/splice-pulumi-common';
+import { CloudArmorConfigSchema } from '@canton-network/splice-pulumi-common/src/config/cloudArmorConfig';
 import { z } from 'zod';
 
 const quotaMetricNameSchema = z
@@ -74,31 +71,6 @@ const CloudArmorAlertsConfigSchema = z.object({
   throttleRejections: CloudArmorAlertConfigSchema.prefault({ threshold: 0 }),
 });
 
-export type CloudArmorAlertsConfig = z.infer<typeof CloudArmorAlertsConfigSchema>;
-
-// Subset of the Cloud Armor config (owned by the infra stack, see
-// cluster/pulumi/infra/src/config.ts) that the alerts need. Parsed leniently, as the
-// infra stack is the one validating the full config.
-const CloudArmorConfigSchema = z.object({
-  enabled: z.boolean().default(false),
-  allRulesPreviewOnly: z.boolean().default(false),
-  // Cloud Armor rule decisions are only logged if the load balancer backend request
-  // logging is enabled, which the WAF log based alert depends on.
-  logging: z
-    .object({
-      enabled: z.boolean().default(false),
-    })
-    .prefault({}),
-  wafRules: z
-    .object({
-      enabled: z.boolean().default(true),
-      previewOnly: z.boolean().default(true),
-    })
-    .prefault({}),
-});
-
-export type CloudArmorConfig = z.infer<typeof CloudArmorConfigSchema>;
-
 export const cloudArmorConfig = CloudArmorConfigSchema.parse(clusterSubConfig('cloudArmor'));
 
 const MuteTimeWindowSchema = z.object({
@@ -110,7 +82,6 @@ const MuteTimeWindowSchema = z.object({
   ),
   weekdays: z.array(z.string()).optional(), // e.g. ['monday', 'tuesday:friday']
 });
-export type MuteTimeWindow = z.infer<typeof MuteTimeWindowSchema>;
 
 const MuteTimeIntervalSchema = z.array(
   z.object({
@@ -119,12 +90,7 @@ const MuteTimeIntervalSchema = z.array(
     timeWindows: z.array(MuteTimeWindowSchema),
   })
 );
-export type MuteTimeInterval = z.infer<typeof MuteTimeIntervalSchema>[number];
 
-// Observability needs to be migrated
-const defaultObservabilityPostgresConfig: SplicePostgresConfig = {
-  deployment: 'legacy-helm-chart',
-};
 const MonitoringConfigSchema = z
   .object({
     enableGrafanaServiceAccountToken: z.boolean(),
