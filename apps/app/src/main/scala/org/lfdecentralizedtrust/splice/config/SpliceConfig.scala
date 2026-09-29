@@ -403,7 +403,8 @@ object SpliceConfig {
       private val
       elc: ErrorLoggingContext
   ) {
-    import BaseCantonConfig.Readers.*
+    // TODO(#7525) Fail on unknown keys.
+    import BaseCantonConfig.Readers.{preventAllUnknownKeys as _, *}
 
     import cantonConfigReaders.*
 
