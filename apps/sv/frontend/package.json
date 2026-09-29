@@ -24,7 +24,7 @@
     "@mui/x-date-pickers": "^8.14.1",
     "@tanstack/react-form": "^1.23.0",
     "dayjs": "^1.11.9",
-    "dompurify": "^3.4.2",
+    "dompurify": "^3.4.16",
     "jose": "^4.15.9",
     "jsondiffpatch": "^0.7.3",
     "oidc-client-ts": "2.2.1",

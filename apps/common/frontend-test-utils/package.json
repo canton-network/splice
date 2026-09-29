@@ -27,7 +27,7 @@
     "start": "tsc --watch"
   },
   "dependencies": {
-    "dompurify": "^3.4.2",
+    "dompurify": "^3.4.16",
     "jose": "^4.15.9",
     "jsondiffpatch": "^0.7.3",
     "msw": "^2.14.2",
