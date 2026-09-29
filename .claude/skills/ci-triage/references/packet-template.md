@@ -3,8 +3,6 @@
 File: `ci-triage/<ref>-<short-slug>.md`. Title line first, then one paragraph of verdict, then numbered
 sections. Every section is: one sentence of what the command shows, the command in a fence, the verbatim
 output in a fence (long hashes trimmed by the sed/cut in the command itself, e.g. `s/1220[0-9a-f]{60}/../g`).
-Credential values are the one exception to verbatim: redact them in the command itself (`sed -E "$REDACT"`,
-`references/recipes.md` section 2), keeping the key name, file and (where present) timestamp so the finding stays reproducible.
 
 ```
 # <ref> - <one-line failure description> (run <run id>)
