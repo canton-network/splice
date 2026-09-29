@@ -86,6 +86,8 @@ case class ScanAppBackendConfig(
       NonNegativeFiniteDuration.ofDays(7),
     miningRoundsCacheTimeToLiveOverride: Option[NonNegativeFiniteDuration] = None,
     enableForcedAcsSnapshots: Boolean = false,
+    // Whether each ACS snapshot should be stored in its own table
+    perAcsSnapshotTablesEnabled: Boolean = false,
     analyzableTimeWindow: AnalyzableTimeWindowConfig = AnalyzableTimeWindowConfig(),
     // The migration id is normally read from the DB (the highest known migration id in the
     // update history). It only needs to be resolved from a sponsor to bootstrap a node that does

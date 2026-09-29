@@ -1,11 +1,11 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import * as _ from 'lodash';
+import { WafRuleGroup } from '@canton-network/splice-pulumi-common/src/config/cloudArmorConfig';
 import {
   extractPathPrefixes,
   PerEndpointLimits,
 } from '@canton-network/splice-pulumi-common/src/ratelimit/envoyRateLimiter';
-import { z } from 'zod';
 
 // limits from https://cloud.google.com/armor/quotas#limits, in which a
 // "subexpression" is an arg to && or ||
@@ -56,39 +56,7 @@ const OWASP_CRS_VERSIONS: Record<string, string> = {
   v422: 'v042200',
 };
 
-/**
- * One of Cloud Armor's preconfigured WAF rule sets (see
- * https://cloud.google.com/armor/docs/waf-rules), with the individual OWASP CRS
- * signatures we opt out of.
- */
-const WafSignatureSchema = z.object({
-  // preconfigured rule set name, e.g. 'sqli-v422-stable'
-  name: z.string(),
-  // https://cloud.google.com/armor/docs/rule-tuning#sensitivity_levels: 1 only
-  // evaluates the paranoia level 1 signatures, which are the ones least prone to
-  // false positives. If unset, Cloud Armor's default (all levels) applies.
-  sensitivity: z.number().int().min(0).max(4).optional(),
-  // numeric OWASP CRS ids of the signatures to skip, e.g. '942190' for
-  // 'owasp-crs-v042200-id942190-sqli'. These are the signatures that produced false
-  // positives on our own traffic.
-  optOutRuleIds: z.array(z.string().regex(/^[0-9]+$/, 'numeric OWASP CRS id')).default([]),
-});
-
-export const WafRuleGroupSchema = z.object({
-  name: z.string().min(1),
-  description: z.string(),
-  signatures: z.array(WafSignatureSchema).min(1),
-});
-
-export const WafRuleGroupsSchema = z
-  .array(WafRuleGroupSchema)
-  .refine(
-    groups => new Set(groups.map(g => g.name)).size === groups.length,
-    'WAF rule group names must be unique, they are used as the Cloud Armor rule names'
-  );
-
-type WafSignature = z.infer<typeof WafSignatureSchema>;
-export type WafRuleGroup = z.infer<typeof WafRuleGroupSchema>;
+type WafSignature = WafRuleGroup['signatures'][number];
 
 /**
  * Expands a numeric OWASP CRS id into the full opt-out rule id Cloud Armor expects,

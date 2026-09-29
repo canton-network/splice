@@ -1,14 +1,11 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 import * as gcp from '@pulumi/gcp';
-import { CLOUD_ARMOR_POLICY_NAME, CLUSTER_BASENAME } from '@canton-network/splice-pulumi-common';
-
-// The gateway is fronted by a regional external application load balancer, whose
-// request logs use `http_external_regional_lb_rule`; `http_load_balancer` is accepted
-// as well so the metrics keep working if the gateway ever becomes global. The PromQL
-// queries on these metrics must match a single monitored resource exactly, so the
-// dashboards and alerts only query `http_external_regional_lb_rule`.
-const lbResourceTypes = ['http_external_regional_lb_rule', 'http_load_balancer'];
+import {
+  CLOUD_ARMOR_POLICY_NAME,
+  CLUSTER_BASENAME,
+  LB_REQUEST_LOG_RESOURCE_TYPES,
+} from '@canton-network/splice-pulumi-common';
 
 // Enforced rules are reported under enforcedSecurityPolicy, rules in preview mode under
 // previewSecurityPolicy. A single request can be matched by both (e.g. a denying preview
@@ -42,7 +39,7 @@ export function installCloudArmorRejectionsMetrics(): void {
     new gcp.logging.Metric(`cloud_armor_${mode}_rejections`, {
       name: rejectionsMetricName(mode),
       description: `Requests ${mode === 'enforced' ? 'rejected' : 'that would be rejected'} by a ${mode} Cloud Armor rule`,
-      filter: `resource.type=(${lbResourceTypes.map(t => `"${t}"`).join(' OR ')})
+      filter: `resource.type=(${LB_REQUEST_LOG_RESOURCE_TYPES.map(t => `"${t}"`).join(' OR ')})
 ${deniedByPolicyLogFilter(mode)}
 `,
       labelExtractors: {

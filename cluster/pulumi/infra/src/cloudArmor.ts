@@ -9,17 +9,20 @@ import {
   cloudArmorRulePriority,
   CLUSTER_BASENAME,
   CLUSTER_HOSTNAME,
+  lbRequestLogResourceTypesFilter,
 } from '@canton-network/splice-pulumi-common';
+import {
+  CloudArmorConfig,
+  WafRuleGroup,
+} from '@canton-network/splice-pulumi-common/src/config/cloudArmorConfig';
 import { PerEndpointLimits } from '@canton-network/splice-pulumi-common/src/ratelimit/envoyRateLimiter';
 
-import * as config from './config';
 import {
   allowedPathsCondition,
   hostCondition,
   ipWhitelistRuleChunks,
   matchExpression,
   wafRuleExpression,
-  WafRuleGroup,
 } from './cloudArmorRules';
 import { loadIPRanges } from './whitelisting/ipRanges';
 
@@ -28,8 +31,6 @@ const PREVIEW_DENY_RULE_NUMBER = DEFAULT_DENY_RULE_NUMBER - 1;
 // Gap between the priorities of consecutive rules, leaving room to
 // insert rules in between.
 const RULE_SPACING = 100;
-
-export type CloudArmorConfig = config.CloudArmorConfig;
 
 type ThrottleConfig = CloudArmorConfig['publicEndpoints'];
 
@@ -117,7 +118,33 @@ export function configureCloudArmorPolicy(
   // Step 5: Add default deny rule
   addDefaultDenyRule(securityPolicy, cac.allRulesPreviewOnly, ruleOpts);
 
+  if (cac.logging.enabled && cac.logging.excludeAcceptedRequests) {
+    excludeAcceptedRequestLogs(securityPolicy, opts);
+  }
+
   return securityPolicy;
+}
+
+function excludeAcceptedRequestLogs(
+  securityPolicy: CloudArmorPolicy,
+  opts?: pulumi.ComponentResourceOptions
+): gcp.logging.ProjectExclusion {
+  const name = `cloud-armor-accepted-requests-${CLUSTER_BASENAME}`;
+  return new gcp.logging.ProjectExclusion(
+    name,
+    {
+      name,
+      description: `Drops the load balancer request logs of requests accepted by the Cloud Armor policy ${CLOUD_ARMOR_POLICY_NAME}`,
+      filter: [
+        lbRequestLogResourceTypesFilter(),
+        `jsonPayload.enforcedSecurityPolicy.name="${CLOUD_ARMOR_POLICY_NAME}"`,
+        // drop only explicit accepts, so that any other outcome is kept
+        'jsonPayload.enforcedSecurityPolicy.outcome="ACCEPT"',
+        '(NOT jsonPayload.previewSecurityPolicy:* OR jsonPayload.previewSecurityPolicy.outcome="ACCEPT")',
+      ].join('\n'),
+    },
+    { ...opts, parent: securityPolicy }
+  );
 }
 
 /**

@@ -93,6 +93,19 @@ export function cloudArmorRulePriorityRegex(group: CloudArmorRuleGroup): string 
   return `${CLOUD_ARMOR_RULE_GROUP_PREFIXES[group]}[0-9]{8}`;
 }
 
+// The GKE gateway is fronted by a regional external application load balancer, whose
+// request logs (carrying the Cloud Armor decisions) use `http_external_regional_lb_rule`;
+// `http_load_balancer` is accepted as well so filters keep working if the gateway ever
+// becomes global.
+export const LB_REQUEST_LOG_RESOURCE_TYPES = [
+  'http_external_regional_lb_rule',
+  'http_load_balancer',
+];
+
+export function lbRequestLogResourceTypesFilter(): string {
+  return `resource.type=(${LB_REQUEST_LOG_RESOURCE_TYPES.map(t => `"${t}"`).join(' OR ')})`;
+}
+
 export const sequencerTokenExpirationTime: string | undefined = config.optionalEnv(
   'SEQUENCER_TOKEN_EXPIRATION_TIME'
 );

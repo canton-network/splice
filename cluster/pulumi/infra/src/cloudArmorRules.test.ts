@@ -1,5 +1,6 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
+import { WafRuleGroupsSchema } from '@canton-network/splice-pulumi-common/src/config/cloudArmorConfig';
 import { expect, test, describe } from '@jest/globals';
 import fs from 'fs';
 import yaml from 'js-yaml';
@@ -15,7 +16,6 @@ import {
   MAX_IP_WHITELIST_RULES,
   MAX_SUBEXPRESSION_LENGTH,
   wafRuleExpression,
-  WafRuleGroupsSchema,
 } from './cloudArmorRules';
 
 const clusterHostname = 'scratchd.network.canton.global';

@@ -377,7 +377,7 @@ class AcsSnapshotBulkStorageWriterFromDbTest
                         .RowIdQueryAcsSnapshotPaginationToken(value)
                     ) =>
                   value
-                case None => 0L
+                case _ => 0L
               }
               val remaining = snapshotSize - afterAsLong
               val numElems = math.min(limit.limit.toLong, remaining)
@@ -436,7 +436,7 @@ class AcsSnapshotBulkStorageWriterFromDbTest
               .sorted
               .headOption
               .map(next =>
-                AcsSnapshotStore.AcsSnapshot(
+                AcsSnapshotStore.LegacyAcsSnapshot(
                   // only record time and migration ID are used, everything else is ignored
                   snapshotRecordTime = next,
                   migrationId = 0L,
@@ -445,6 +445,7 @@ class AcsSnapshotBulkStorageWriterFromDbTest
                   0L,
                   None,
                   None,
+                  indexesCreated = true,
                 )
               )
           }
