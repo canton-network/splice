@@ -5,7 +5,7 @@ package org.lfdecentralizedtrust.splice.scan.store
 
 import cats.data.NonEmptyVector
 import com.daml.ledger.javaapi.data.{CreatedEvent, Identifier}
-import com.daml.nonempty.NonEmpty
+import com.digitalasset.nonempty.NonEmpty
 import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{Amulet, LockedAmulet}
 import org.lfdecentralizedtrust.splice.scan.store.AcsSnapshotStore.{
   AcsSnapshot,
@@ -59,12 +59,9 @@ class AcsSnapshotStore(
     with NamedLogging {
   import org.lfdecentralizedtrust.splice.util.FutureUnlessShutdownUtil.futureUnlessShutdownToFuture
 
+  private implicit val dbProfile: DbStorage.Profile = storage.profile
   override val profile: JdbcProfile = storage.profile.jdbc
   import profile.api.jdbcActionExtensionMethods
-
-  private implicit def rowsAlteredByIdempotencyCheck[A](implicit
-      row: DbStorage.RowsAltered[A]
-  ): DbStorage.RowsAltered[Option[A]] = _.exists(row(_))
 
   private def historyId = updateHistory.historyId
 
@@ -1497,11 +1494,6 @@ object AcsSnapshotStore {
       createRows: Int,
       stakeholderRows: Int,
   )
-
-  object SaveIncrementalAcsSnapshotInsertedRows {
-    implicit val rowsAltered: DbStorage.RowsAltered[SaveIncrementalAcsSnapshotInsertedRows] =
-      (a: SaveIncrementalAcsSnapshotInsertedRows) => a.stakeholderRows > 0 || a.createRows > 0
-  }
 
   object AcsSnapshotDDL {
     def stakeholderIndexName(historyId: Long, snapshotRecordTime: CantonTimestamp) =

@@ -393,8 +393,9 @@ trait FrontendTestCommon extends TestCommon with WebBrowser with CustomMatchers 
       timeUntilSuccess: FiniteDuration = 20.seconds,
       maxPollInterval: FiniteDuration = 100.millis,
       retryOnTestFailuresOnly: Boolean = true,
+      logElapsed: Option[String] = None,
   )(testCode: => T): T =
-    super.eventually(timeUntilSuccess, maxPollInterval, retryOnTestFailuresOnly) {
+    super.eventually(timeUntilSuccess, maxPollInterval, retryOnTestFailuresOnly, logElapsed) {
       try {
         testCode
       } catch {

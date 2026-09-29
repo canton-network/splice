@@ -83,7 +83,7 @@ object SynchronizerParameters {
   * @param synchronizerLimits
   *   Size limits on various collections, globally enforced on this synchronizer.
   */
-final case class StaticSynchronizerParameters private (
+final case class StaticSynchronizerParameters(
     requiredSigningSpecs: RequiredSigningSpecs,
     requiredEncryptionSpecs: RequiredEncryptionSpecs,
     requiredSymmetricKeySchemes: NonEmpty[Set[SymmetricKeyScheme]],
@@ -1231,7 +1231,7 @@ object DynamicSynchronizerParametersHistory {
   * @throws java.lang.IllegalArgumentException
   *   when [[catchUpIntervalSkip]] * [[nrIntervalsToTriggerCatchUp]] overflows.
   */
-final case class AcsCommitmentsCatchUpParameters private (
+final case class AcsCommitmentsCatchUpParameters(
     catchUpIntervalSkip: PositiveInt,
     nrIntervalsToTriggerCatchUp: PositiveInt,
 ) extends PrettyPrinting {

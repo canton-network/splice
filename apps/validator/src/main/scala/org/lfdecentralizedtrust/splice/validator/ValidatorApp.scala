@@ -774,6 +774,7 @@ class ValidatorApp(
         config.svValidator,
         config.sequencerRequestAmplificationPatience.toInternal,
         config.sequencerConnectionPoolDelays.toInternal,
+        config.subscriptionLivenessLimits.toInternal,
         config.contactPoint,
         initialSynchronizerTime,
         config.maxVettingDelay,

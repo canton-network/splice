@@ -101,7 +101,7 @@ trait ConsoleEnvironment extends NamedLogging with FlagCloseable with NoTracing 
   private[console] def predefCode(interactive: Boolean, noTty: Boolean = false): String =
     ConsoleEnvironmentBinding.predefCode(interactive, noTty)
 
-  private[console] val tracer: Tracer = environment.tracerProvider.tracer
+  val tracer: Tracer = environment.tracerProvider.tracer
 
   /** Definition of the startup order of local instances. Nodes support starting up in any order
     * however to avoid delays/warnings we opt to start in the most desirable order for simple
@@ -109,7 +109,7 @@ trait ConsoleEnvironment extends NamedLogging with FlagCloseable with NoTracing 
     * return a int for the instance (typically just a static value based on type), and then the
     * console will start these instances for lower to higher values.
     */
-  private def startupOrderPrecedence(instance: LocalInstanceReference): Int =
+  def startupOrderPrecedence(instance: LocalInstanceReference): Int =
     instance match {
       case _: LocalSequencerReference =>
         1 // everything depends on a sequencer so start that first
@@ -321,7 +321,7 @@ trait ConsoleEnvironment extends NamedLogging with FlagCloseable with NoTracing 
           Help.Summary("Help with console commands"),
           Help.Description("Type help(\"<command>\") for detailed help for <command>."),
           Help.Topic(Help.defaultTopLevelTopic),
-        ),
+        )
       ) :+
       (Help.Item(
         "exit",

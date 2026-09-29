@@ -10,7 +10,7 @@ import com.google.protobuf.ByteString
 
 final case class SequencingParameters(payload: Option[ByteString]) extends PrettyPrinting {
 
-  private[canton] def toInternal(
+  def toInternal(
       protocolVersion: ProtocolVersion
   ): protocol.SequencingParameters = {
     val rpv = protocol.SequencingParameters.protocolVersionRepresentativeFor(protocolVersion)

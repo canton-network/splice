@@ -125,7 +125,8 @@ class DeclarativeParticipantApi(
   ): Either[String, ParticipantId] =
     for {
       _ <- createDarDirectoryIfNecessary(config.fetchedDarDirectory, config.dars)
-      uid <- queryAdminApi(TopologyAdminCommands.Init.GetId())
+      result <- queryAdminApi(TopologyAdminCommands.Init.GetId())
+      uid <- result.uniqueIdentifier.toRight("Node is not initialized")
     } yield ParticipantId(uid)
 
   override protected def sync(config: DeclarativeParticipantConfig, context: ParticipantId)(implicit
@@ -955,26 +956,29 @@ class DeclarativeParticipantApi(
   )(implicit
       traceContext: TraceContext
   ): Either[String, UpdateResult] =
-    queryAdminApi(TopologyAdminCommands.Init.GetId()).flatMap { participantId =>
+    queryAdminApi(TopologyAdminCommands.Init.GetId()).flatMap { participantIdResult =>
       queryAdminApi(ListConnectedSynchronizers()).flatMap { connectedSynchronizers =>
         val want =
           computeWanted(mirrorDarsIfNecessary(fetchDarDirectory, dars), connectedSynchronizers)
 
         def fetchVettedPackages(store: Option[TopologyStoreId]) =
-          queryAdminApi(
-            TopologyAdminCommands.Read.ListVettedPackages(
-              BaseQuery(
-                store = store,
-                proposals = false,
-                timeQuery = TimeQuery.HeadState,
-                ops = Some(TopologyChangeOp.Replace),
-                filterSigningKey = "",
-                protocolVersion = None,
-                clientVersion = Some(ReleaseVersion.current),
-              ),
-              filterParticipant = ParticipantId(participantId).filterString,
-            )
-          )
+          participantIdResult.uniqueIdentifier.toRight("Node is not initialized").flatMap {
+            participantId =>
+              queryAdminApi(
+                TopologyAdminCommands.Read.ListVettedPackages(
+                  BaseQuery(
+                    store = store,
+                    proposals = false,
+                    timeQuery = TimeQuery.HeadState,
+                    ops = Some(TopologyChangeOp.Replace),
+                    filterSigningKey = "",
+                    protocolVersion = None,
+                    clientVersion = Some(ReleaseVersion.current),
+                  ),
+                  filterParticipant = ParticipantId(participantId).filterString,
+                )
+              )
+          }
 
         def fetchDars(limit: PositiveInt): Either[String, Seq[((String, SynchronizerId), String)]] =
           for {
@@ -1045,6 +1049,7 @@ class DeclarativeParticipantApi(
                 expectedMainPackageId = "",
                 requestHeaders = Map.empty,
                 logger,
+                None,
               )
             ).map(_ => ())
           },
