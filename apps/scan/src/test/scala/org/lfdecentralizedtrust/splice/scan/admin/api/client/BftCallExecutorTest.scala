@@ -17,8 +17,6 @@ import org.lfdecentralizedtrust.splice.scan.admin.api.client.BftCallExecutor.Dat
   Never,
   NotYet,
 }
-import org.lfdecentralizedtrust.splice.environment.BaseAppConnection
-import org.lfdecentralizedtrust.splice.metrics.ScanConnectionMetrics
 import org.scalatest.wordspec.AsyncWordSpec
 
 import scala.concurrent.Future
