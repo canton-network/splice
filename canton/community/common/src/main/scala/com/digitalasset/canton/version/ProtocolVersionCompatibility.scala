@@ -32,7 +32,7 @@ object ProtocolVersionCompatibility {
   ): NonEmpty[List[ProtocolVersion]] = {
     val unstableAndBeta =
       if (cantonNodeParameters.alphaVersionSupport && cantonNodeParameters.nonStandardConfig)
-        ProtocolVersion.alpha ++ ReleaseVersionToProtocolVersions
+        ProtocolVersion.alpha.forgetNE ++ ReleaseVersionToProtocolVersions
           .getBetaProtocolVersions(release)
       else if (cantonNodeParameters.betaVersionSupport)
         ReleaseVersionToProtocolVersions.getBetaProtocolVersions(release)
@@ -63,7 +63,7 @@ object ProtocolVersionCompatibility {
 
     val alpha =
       if (includeAlphaVersions)
-        ProtocolVersion.alpha
+        ProtocolVersion.alpha.forgetNE
       else List.empty
 
     val supportedPVs = ReleaseVersionToProtocolVersions.getOrElse(

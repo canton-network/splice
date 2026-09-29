@@ -80,7 +80,6 @@ final class UseBftSequencer(
     maxBatchesPerBlockProposal: Short = DefaultMaxBatchesPerProposal,
     availabilityMinProposalCreationDelay: FiniteDuration = 50.millis,
     dedicatedExecutionContextDivisor: Option[Int] = DefaultDedicatedExecutionContextDivisor,
-    availabilityMaxProposalCreationDelay: FiniteDuration = 50.millis,
 ) extends EnvironmentSetupPlugin {
 
   private val tmpDir = better.files.File(System.getProperty("java.io.tmpdir"))

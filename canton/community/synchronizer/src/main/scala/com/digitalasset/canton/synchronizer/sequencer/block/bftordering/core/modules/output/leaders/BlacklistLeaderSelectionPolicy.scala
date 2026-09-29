@@ -15,7 +15,6 @@ import com.digitalasset.canton.synchronizer.sequencer.block.bftordering.framewor
   FutureContext,
 }
 import com.digitalasset.canton.tracing.TraceContext
-import com.digitalasset.canton.version.ProtocolVersion
 
 import scala.collection.mutable
 
@@ -23,7 +22,6 @@ import scala.collection.mutable
 class BlacklistLeaderSelectionPolicy[E <: Env[E]](
     initialState: BlacklistLeaderSelectionPolicyState,
     initialOrderingTopology: OrderingTopology,
-    protocolVersion: ProtocolVersion,
     store: OutputMetadataStore[E],
     metrics: BftOrderingMetrics,
     override val loggerFactory: NamedLoggerFactory,
@@ -32,11 +30,7 @@ class BlacklistLeaderSelectionPolicy[E <: Env[E]](
     with NamedLogging {
 
   private var state =
-    BlacklistLeaderSelectionPolicyStateWithTopology(
-      initialState,
-      initialOrderingTopology,
-      protocolVersion,
-    )
+    BlacklistLeaderSelectionPolicyStateWithTopology(initialState, initialOrderingTopology)
 
   private var blockToLeader: Map[BlockNumber, BftNodeId] =
     state.computeBlockToLeader()
@@ -167,7 +161,6 @@ object BlacklistLeaderSelectionPolicy {
   def create[E <: Env[E]](
       state: BlacklistLeaderSelectionPolicyState,
       orderingTopology: OrderingTopology,
-      protocolVersion: ProtocolVersion,
       store: OutputMetadataStore[E],
       metrics: BftOrderingMetrics,
       loggerFactory: NamedLoggerFactory,
@@ -175,7 +168,6 @@ object BlacklistLeaderSelectionPolicy {
     new BlacklistLeaderSelectionPolicy(
       state,
       orderingTopology,
-      protocolVersion,
       store,
       metrics,
       loggerFactory,

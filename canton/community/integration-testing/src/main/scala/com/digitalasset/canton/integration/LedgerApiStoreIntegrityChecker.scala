@@ -5,7 +5,6 @@ package com.digitalasset.canton.integration
 
 import com.digitalasset.canton.LedgerParticipantId
 import com.digitalasset.canton.config.{SharedCantonConfig, StorageConfig}
-import com.digitalasset.canton.config.CantonRequireTypes.InstanceName
 import com.digitalasset.canton.console.FeatureFlag
 import com.digitalasset.canton.integration.plugins.UseExternalProcess
 import com.digitalasset.canton.logging.{NamedLoggerFactory, NamedLogging}
@@ -157,7 +156,7 @@ class LedgerApiStoreIntegrityChecker(
           participantLoggingName = s"not running local participant ${notRunningParticipant.name}",
           storageConfig = actualConfig.participants
             .getOrElse(
-              InstanceName.tryCreate(notRunningParticipant.name),
+              notRunningParticipant.name,
               throw new IllegalStateException(
                 s"No configuration found for a not running participant $notRunningParticipant."
               ),

@@ -231,15 +231,12 @@ object ConsoleCommandTimeout {
     config.NonNegativeDuration.tryFromDuration(30.seconds)
   val defaultTestingBongTimeout: config.NonNegativeDuration =
     config.NonNegativeDuration.tryFromDuration(1.minute)
-  val defaultRequestTimeout: NonNegativeDuration =
-    config.NonNegativeDuration.tryFromDuration(20.seconds)
 }
 
 /** Timeout settings configuration */
 final case class TimeoutSettings(
     console: ConsoleCommandTimeout = ConsoleCommandTimeout(),
     processing: ProcessingTimeout = ProcessingTimeout(),
-    requestTimeout: NonNegativeDuration = NonNegativeDuration.tryFromDuration(40.seconds),
 )
 
 sealed trait ClockConfig extends Product with Serializable
@@ -1230,16 +1227,6 @@ object CantonConfig {
     lazy implicit val bftBlockOrdererLeaderSelectionPolicyHowLongToBlacklistLinearConfigReader
         : ConfigReader[BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.Linear] =
       deriveReader[BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.Linear]
-    lazy implicit val bftBlockOrdererLeaderSelectionPolicyHowLongToBlacklistLinearWithParametersConfigReader
-        : ConfigReader[
-          BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.LinearWithParameters
-        ] =
-      deriveReader[BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.LinearWithParameters]
-    lazy implicit val bftBlockOrdererLeaderSelectionPolicyHowLongToBlacklistExponentialConfigReader
-        : ConfigReader[
-          BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.Exponential
-        ] =
-      deriveReader[BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.Exponential]
     lazy implicit val bftBlockOrdererLeaderSelectionPolicyHowLongToBlacklistNoBlacklistingConfigReader
         : ConfigReader[
           BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.NoBlacklisting.type
@@ -2115,16 +2102,6 @@ object CantonConfig {
     lazy implicit val bftBlockOrdererLeaderSelectionPolicyHowLongToBlacklistLinearConfigWriter
         : ConfigWriter[BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.Linear] =
       deriveWriter[BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.Linear]
-    lazy implicit val bftBlockOrdererLeaderSelectionPolicyHowLongToBlacklistLinearWithParametersConfigWriter
-        : ConfigWriter[
-          BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.LinearWithParameters
-        ] =
-      deriveWriter[BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.LinearWithParameters]
-    lazy implicit val bftBlockOrdererLeaderSelectionPolicyHowLongToBlacklistExponentialConfigWriter
-        : ConfigWriter[
-          BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.Exponential
-        ] =
-      deriveWriter[BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.Exponential]
     lazy implicit val bftBlockOrdererLeaderSelectionPolicyHowLongToBlacklistNoBlacklistingConfigWriter
         : ConfigWriter[
           BlacklistLeaderSelectionPolicyConfig.HowLongToBlacklist.NoBlacklisting.type
@@ -2479,7 +2456,7 @@ object CantonConfig {
     * @return
     *   [[scala.Right]] [[com.typesafe.config.Config]] if parsing was successful.
     */
-  def parseAndMergeConfigs(
+  private def parseAndMergeConfigs(
       files: NonEmpty[Seq[File]]
   )(implicit elc: ErrorLoggingContext): Either[CantonConfigError, Config] = {
     val baseConfig = ConfigFactory.load()

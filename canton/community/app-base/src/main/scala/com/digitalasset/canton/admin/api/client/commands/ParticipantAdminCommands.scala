@@ -68,7 +68,6 @@ import com.digitalasset.canton.topology.{
   PartyId,
   PhysicalSynchronizerId,
   SequencerId,
-  Synchronizer,
   SynchronizerId,
 }
 import com.digitalasset.canton.tracing.TraceContext
@@ -195,13 +194,7 @@ object ParticipantAdminCommands {
       }
     }
 
-    final case class DarData(
-        darPath: String,
-        description: String,
-        expectedMainPackageId: String,
-        // We sometimes want to upload DARs that are inside JARs, which is hard with just a path.
-        darDataO: Option[ByteString] = None,
-    )
+    final case class DarData(darPath: String, description: String, expectedMainPackageId: String)
     final case class UploadDar(
         dars: Seq[DarData],
         synchronizerId: Option[SynchronizerId],
@@ -215,17 +208,12 @@ object ParticipantAdminCommands {
           .traverse(dar =>
             for {
               _ <- Either.cond(dar.darPath.nonEmpty, (), "Provided DAR path is empty")
-              filenameAndDarData <- dar.darDataO.fold(loadDarData(dar.darPath))(darData =>
-                Right(Paths.get(dar.darPath).getFileName.toString -> darData)
-              )
+              filenameAndDarData <- loadDarData(dar.darPath)
               (filename, darData) = filenameAndDarData
               descriptionOrFilename =
                 if (dar.description.isEmpty)
                   PathUtils.getFilenameWithoutExtension(Path.of(filename))
                 else dar.description
-              _ = logger.info(s"Sending upload dar for ${descriptionOrFilename}")(
-                TraceContext.empty
-              )
             } yield v30.UploadDarRequest.UploadDarData(
               darData,
               Some(descriptionOrFilename),
@@ -289,9 +277,8 @@ object ParticipantAdminCommands {
           expectedMainPackageId: String,
           requestHeaders: Map[String, String],
           logger: TracedLogger,
-          darDataO: Option[ByteString],
       ): UploadDar = UploadDar(
-        Seq(DarData(darPath, description, expectedMainPackageId, darDataO)),
+        Seq(DarData(darPath, description, expectedMainPackageId)),
         synchronizerId,
         vetAllPackages = vetAllPackages,
         synchronizeVetting = synchronizeVetting,
@@ -730,8 +717,8 @@ object ParticipantAdminCommands {
     }
 
     final case class ImportPartyAcs(
-        inputStream: java.io.InputStream,
-        synchronizer: Synchronizer,
+        file: File,
+        synchronizerId: SynchronizerId,
         workflowIdPrefix: String,
         contractImportMode: ContractImportMode,
         representativePackageIdOverride: RepresentativePackageIdOverride,
@@ -755,7 +742,7 @@ object ParticipantAdminCommands {
           service: PartyManagementServiceStub,
           request: Unit,
       ): Future[v30.ImportPartyAcsResponse] =
-        ResourceUtil.withResource(inputStream) { inputStream =>
+        ResourceUtil.withResource(new FileInputStream(file)) { inputStream =>
           val isFirstChunk = new AtomicBoolean(true)
           GrpcStreamingUtils.streamToServer(
             service.importPartyAcs,
@@ -763,7 +750,7 @@ object ParticipantAdminCommands {
               val isFirst = isFirstChunk.getAndSet(false)
               v30.ImportPartyAcsRequest(
                 ByteString.copyFrom(bytes),
-                synchronizerId = Option.when(isFirst)(synchronizer.toProtoPrimitive),
+                synchronizerId = Option.when(isFirst)(synchronizerId.toProtoPrimitive),
                 workflowIdPrefix =
                   if (isFirst) OptionUtil.emptyStringAsNone(workflowIdPrefix) else None,
                 contractImportMode = Option.when(isFirst)(contractImportMode.toProtoV30),
@@ -916,51 +903,6 @@ object ParticipantAdminCommands {
             inputStream,
           )
         }
-
-      override protected def handleResponse(
-          response: v30.ImportAcsResponse
-      ): Either[String, Unit] = Right(())
-    }
-
-    final case class ImportAcsBytes(
-        acsChunk: Seq[ByteString],
-        workflowIdPrefix: String,
-        contractImportMode: ContractImportMode,
-        representativePackageIdOverride: RepresentativePackageIdOverride,
-        excludedStakeholders: Set[PartyId],
-        synchronizerId: SynchronizerId,
-    ) extends GrpcAdminCommand[
-          Unit,
-          v30.ImportAcsResponse,
-          Unit,
-        ] {
-
-      override type Svc = ParticipantRepairServiceStub
-
-      override def createService(channel: ManagedChannel): ParticipantRepairServiceStub =
-        v30.ParticipantRepairServiceGrpc.stub(channel)
-
-      override protected def createRequest(): Either[String, Unit] =
-        Right(())
-
-      override protected def submitRequest(
-          service: ParticipantRepairServiceStub,
-          request: Unit,
-      ): Future[v30.ImportAcsResponse] = {
-        GrpcStreamingUtils.streamToServerChunked(
-          service.importAcs,
-          acsChunk.map(chunk =>
-            v30.ImportAcsRequest(
-              chunk,
-              Some(workflowIdPrefix),
-              Some(contractImportMode.toProtoV30),
-              excludedStakeholders.map(_.toProtoPrimitive).toSeq,
-              Some(representativePackageIdOverride.toProtoV30),
-              Some(synchronizerId.toProtoPrimitive),
-            )
-          ),
-        )
-      }
 
       override protected def handleResponse(
           response: v30.ImportAcsResponse
