@@ -131,6 +131,9 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   canton main unchanged 2026-09-15.22). Signature: one teardown failure, then every later test fails at `Creating
   fixture` with `Could not create Prometheus HTTP server` / `Address already in use` (:25000) and shared-environment
   suites abort with zero tests. Confirming grep: the old environment's `config=<id>` keeps logging after the failure.
+  10235 (wall-clock-time (9), run 36544106177): trigger was `UpdateHistorySanityCheckPlugin` calling `.automation` on
+  a scan that was started but never initialized; its `is_initialized` filter only checks that the node object exists.
+  Fix `s11/fix-10235-sanity-check-skip-uninitialized-scans` (filter on `Try(scan.appState).isSuccess`).
 
 ## H2. LSU: validator init against a non-active psid
 - 10088-B (5-min hang, infinite retry) -> fixed by #7311 (WARN + skip). 10174: the WARN fails checkErrors because #7311's
@@ -237,3 +240,40 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   nine suites, and the table's Flyway migration line occurs exactly once. Integration suites isolate by building a
   new environment (new config id, new DSO party), not by truncating app tables.
 
+## N. Per-table ACS snapshots (#6515, cc4539a9ac, from 2026-09-29): scan regressions
+- Snapshot visible before its indexes exist: tests run with `perAcsSnapshotTablesEnabled`; the snapshot-timestamp
+  endpoints (`getDateOfMostRecentSnapshotBefore`, `getDateOfFirstSnapshotAfter`) return 404 for a snapshot whose
+  `indexes_created` is still false (no fallback to an older indexed one) until `AcsSnapshotIndexTrigger` indexes it,
+  0.3-1 s after "Saved incremental snapshot". 10236 (+ 10237, 10241, 10242): ScanTimeBasedIntegrationTest "snapshotting",
+  `.value` on None at line 254, docker-canton-simtime (0); 4 of 5 runs since #6515, 0 of 7 before. Confirming grep:
+  `Saved incremental snapshot at <T>` followed within 1 s by a snapshot-timestamp `No snapshots found` 404 and then
+  `Successfully indexed tables of snapshot <T>`. Test fix `s11/fix-10236-scan-snapshot-wait-for-index`; app-side
+  fallback described for the #6515 author.
+- Table name collision within one millisecond: `AcsSnapshotStore` names per-snapshot tables and indexes with
+  `targetRecordTime.toEpochMilli`, so two forced snapshots in the same ms fail with `relation
+  "acs_snapshot_creates_v1_<historyId>_<ms>" already exists` (SQLSTATE 42P07) and `/api/scan/v0/state/acs/force` returns
+  HTTP 500. 10238 (TokenStandardMetadataTimeBasedIntegrationTest, simtime (2)). Confirming grep: the two `Forcing ACS
+  snapshot at <t>` lines share the same epoch ms. Fix: scan app (names from micros or the snapshot id), owner #6515.
+
+## O. Teardown: scan serves a request after its DbStorage closed (sbt output check)
+- Signature: all tests pass; `Found problems in the sbt output:` `[delay-util-0] [org.apache.pekko.dispatch.Dispatcher]
+  executeTask was rejected twice!` + `RejectedExecutionException` (4 lines), at the end of
+  TrafficBasedRewardsSvAppTimeBasedIntegrationTest.
+- Mechanism: `NodeBootstrapBase.onClosed` closes the node (stores, DbStorage) before the HTTP binding; an SV's
+  `ProcessRewardsDryRunTrigger` calls `/api/scan/v0/internal/reward-accounting-process/rounds/N/batches/<hash>` during
+  teardown; the lookup retries forever on the closed Slick executor; the binding waits 4.5 s; the retry's DelayUtil
+  timer fires after the environment executor is gone.
+- Confirming grep: `lookupBatchByHash` `transient error (request infinite retries)` on a scan AFTER its `'db-storage' is
+  now in state Failed(Component is closed)`, plus `Task closing http binding admin service still not completed after
+  4500 milliseconds` for that scan.
+- Occurrences: 10233 (sv1Scan), 10234 (sv4Scan), canton 3.6.0-snapshot.20260925. Fix: close httpAdminService first (app,
+  described). Do not ignore the Pekko line.
+
+## P. Participant reconnect never completes after a sequencer-alias-only config change (Canton 3.6.0-snapshot.20260928)
+- Signature: `ParticipantAdminConnection` "reconnect to the synchronizer ... for new sequencer configuration to take
+  effect", then on the participant `Ensured <psid> persistent state` is the last connect-path line; every later `Trying
+  to connect` has no `About to connect`; `connect to Synchronizer 'global' has not completed after ~10 s` every 2 min.
+- Downstream: the sponsor SV returns NOT_CONNECTED_TO_SYNCHRONIZER to joining SVs; later environments time out waiting
+  for sv1 init; a teardown-plugin failure then leaks the environment (family H).
+- Occurrence: 10235 (sv1Validator init in Ans4SvsIntegrationTest, DefaultSequencer -> SEQ::sv1, same endpoint). Canton-side,
+  open; what the stuck connect waits on needs a thread dump.

@@ -359,3 +359,53 @@ Same packet conventions. Artifacts under `log/<ref>/<artifact-name>/` (git-ignor
 | My ref | Failure (one line) | Duplicate of | Resolution / status |
 |--------|--------------------|--------------|---------------------|
 | 9929 | WalletMintingDelegationTimeBasedIntegrationTest: `transfer-preapproval/send` -> `LOCAL_VERDICT_INACTIVE_CONTRACTS` at 14:15:12.905 right after `advanceTime(PT25H)`; the inactive contract is the IssuingMiningRound that ExpireIssuingMiningRoundTrigger closed at 14:15:12.254. 13/14 tests passed. | cn-test-failures 10060 / splice #7223 (same as 10154, 10166, 10171) | [9929-minting-delegation-25h-jump-issuing-round-closed-under-preapproval-send.md](9929-minting-delegation-25h-jump-issuing-round-closed-under-preapproval-send.md). Fixed on main by #7261 (0c43730f70, 2026-09-16); this main run (2026-09-02) predates it. No fix branch; close as duplicate. |
+
+# CI failure triage - 2026-09-29
+
+## Ref -> run -> job mapping
+
+| My ref | GH run | Branch / sha | Failed job | Canton |
+|--------|--------|--------------|------------|--------|
+| 10233 | 36536754273 | main 9dd73aad3b (#7499) | 109302874217 `simtime (2)` | 3.6.0-snapshot.20260925.20321.0.vaecbf95c |
+| 10234 | 36541322662 | main 95e122223c (#7513) | 109317557663 `simtime (2)` | 3.6.0-snapshot.20260925.20321.0.vaecbf95c |
+| 10235 | 36544106177 | main e5b10c8d8f (#6203) | 109326655201 `wall-clock-time (9)` | 3.6.0-snapshot.20260928.20326.0.v5616afeb |
+| 10236 | 36548278932 | main cc4539a9ac (#6515) | 109340147492 `docker-canton-simtime (0)` | 3.6.0-snapshot.20260928.20326.0.v5616afeb |
+| 10237 | 36548918726 | main 0a2f98714e (#7511) | 109342193703 `docker-canton-simtime (0)` | 3.6.0-snapshot.20260928.20326.0.v5616afeb |
+| 10238 | 36548918726 | main 0a2f98714e (#7511) | 109342320998 `simtime (2)` | 3.6.0-snapshot.20260928.20326.0.v5616afeb |
+| 10241 | 36562243359 | main ab0ba59509 (#7505) | 109385885359 `docker-canton-simtime (0)` | 3.6.0-snapshot.20260928.20326.0.v5616afeb |
+| 10242 | 36562304394 | main 802b9faea0 (#7508) | 109386185648 `docker-canton-simtime (0)` | 3.6.0-snapshot.20260928.20326.0.v5616afeb |
+
+## Overview
+
+| My ref | Failure (one line) | Duplicate of | Resolution / status |
+|--------|--------------------|--------------|---------------------|
+| 10233 | sbt output check only (10/10 tests pass): Pekko `executeTask was rejected twice!` + `RejectedExecutionException` at 07:42:21.466, end of TrafficBasedRewardsSvAppTimeBasedIntegrationTest teardown. sv1Scan served sv1 ProcessRewardsDryRunTrigger's reward-accounting batch request (15.709) after closing its DbStorage (15.711); the query retried until a DelayUtil delay fired into the closed env executor (21.465). | new (family O) | [10233-scan-http-accepts-request-after-db-closed-in-teardown-pekko-rejected.md](10233-scan-http-accepts-request-after-db-closed-in-teardown-pekko-rejected.md). App fix described (NodeBootstrapBase.onClosed: close httpAdminService before the node); Canton DbStorage retries after close. No branch. |
+| 10234 | Same, sv4Scan: request at 08:25:41.565, 50 ms after its DbStorage closed; Pekko lines at 08:25:47.371. 11/11 tests pass. | 10233 | Same packet, section 6. |
+| 10235 | wall-clock-time (9): 5 pass / 6 fail / 4 suites aborted. sv1Validator re-registers sv1Participant's global synchronizer under alias SEQ::sv1 (same endpoint) at 08:57:00.5; the reconnect stalls after "Ensured persistent state" (08:57:01.684) and never completes (14 more queued attempts to 09:23). Ans4Svs sv3 onboarding NOT_CONNECTED, then sv1 init timeouts in 3 fresh envs, then SvOnboardingConfig teardown throws on uninitialized sv2Scan -> env leak -> 5 suites :25000 BindException. | new (family P, Canton participant reconnect hang); tail = family H teardown leak (10176 shape) | [10235-sv1-participant-reconnect-hangs-after-sequencer-alias-change-cascade.md](10235-sv1-participant-reconnect-hangs-after-sequencer-alias-change-cascade.md). Canton owner for the hang. Cascade fix `s11/fix-10235-sanity-check-skip-uninitialized-scans` (b63ea6493f). |
+| 10236 | ScanTimeBasedIntegrationTest "snapshotting": `.value` on None at line 254. The 06:00 ACS snapshot was saved at 09:36:16.640 and indexed at 17.198; since #6515 the snapshot-timestamp endpoints 404 in between, and the second `eventually` accepts None. 3/4 tests passed. | new: regression from #6515 (cc4539a9ac), family N | [10236-scan-snapshot-read-before-index-created-6515.md](10236-scan-snapshot-read-before-index-created-6515.md). Test fix `s11/fix-10236-scan-snapshot-wait-for-index` (7ae2e53dd4), compiled, not run. App-side fallback described for the #6515 author. |
+| 10237 | Same, 0.32 s window (09:41:59.696 -> 09:42:00.011). | 10236 | Same packet, section 7. |
+| 10238 | TokenStandardMetadataTimeBasedIntegrationTest "Scan implements token metadata API": second of two back-to-back forced ACS snapshots (record times 09:52:01.001488 / .001636, same ms) fails with `relation "acs_snapshot_creates_v1_14_35521001" already exists` (09:49:15.760), HTTP 500. | new: regression from #6515 (cc4539a9ac), family N | [10238-per-table-acs-snapshot-name-collision-same-millisecond.md](10238-per-table-acs-snapshot-name-collision-same-millisecond.md). Scan-side fix for the #6515 owner: per-snapshot table/index names from `toMicros` (or snapshot id), not `toEpochMilli`. 1 of 5 post-#6515 runs. No fix branch. |
+| 10241 | Same as 10236, 0.86 s window (11:47:22.653 -> 11:47:23.513). | 10236 | 10236 packet, section 8. |
+| 10242 | Same as 10236, 1.02 s window (11:48:44.068 -> 11:48:45.091). | 10236 | 10236 packet, section 9. |
+
+## Cross-cutting observations (2026-09-29)
+
+- #6515 (cc4539a9ac, "Implement Table per ACS Snapshot", merged 09:18Z) accounts for five refs by two separate
+  mechanisms: the unindexed-snapshot 404 window (10236, 10237, 10241, 10242; 4 of 5 docker-canton-simtime (0) runs since,
+  0 of 7 before) and the same-millisecond table name collision (10238). Both are scan-side; only 10236 has a test-side
+  mitigation. Worth raising with the #6515 author as one report.
+- The update history sanity check teardown plugin is now the trigger in two teardown-leak cascades (10176: pause
+  timeout; 10235: uninitialized scan). `ray/fix-10176-sanity-check-pause-timeout` and
+  `s11/fix-10235-sanity-check-skip-uninitialized-scans` touch the same file, merge cleanly, and together remove both
+  known triggers; only the Canton `EnvironmentSetup` change stops the cascade for any plugin failure.
+- 10233/10234: every hit adds a 4.5 s stall to TrafficBasedRewardsSvAppTimeBasedIntegrationTest's teardown even when the
+  Pekko line does not print; the same close-order gap applies to every splice app with an HTTP API.
+- Canton moved from 3.6.0-snapshot.20260925 to 20260928 (#7512, 08:31Z) between 10234 and 10235; family P (10235) is
+  on the new pin only, so far one occurrence.
+
+## Fix branches written 2026-09-29 (unpushed)
+
+| Branch | Commit | Fixes | Verified here |
+|--------|--------|-------|---------------|
+| s11/fix-10236-scan-snapshot-wait-for-index | 7ae2e53dd4 | 10236, 10237, 10241, 10242 (test side) | apps-app/Test/compile + scalafmtCheck; not run |
+| s11/fix-10235-sanity-check-skip-uninitialized-scans | b63ea6493f | 10235 cascade (not the Canton hang) | apps-app/Test/compile + scalafmtCheck; not run |
