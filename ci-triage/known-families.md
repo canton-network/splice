@@ -221,6 +221,9 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   `Getting BFT scan connection started` then 13-21 min silence, then `Timeout while waiting for initialization`.
   Confirm: per-node `kubernetes.io/node/cpu/allocatable_utilization` and the `Scheduled` events for validator-app pods
   (queries in the packet). Resolution: rerun; bootstrap.sc 5 min DAR-upload wait turns slow init into a restart loop.
+- 10248 (not infra, listed here as a build-output check item): `Found problems in the sbt output:` with only
+  ``[info] Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.``; vite >= 8.2.0 advisory for CommonJS
+  globals in a vite config. Fix the config (`import.meta.dirname`), do not ignore the line. Fix `s11/fix-10248-vite-config-import-meta-dirname`.
 
 ## M. State leaking between suites of one shard through a shared Postgres table
 - Signature: an assertion that a store is empty (or has an exact size) fails with an entity whose embedded test

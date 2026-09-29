@@ -375,6 +375,7 @@ Same packet conventions. Artifacts under `log/<ref>/<artifact-name>/` (git-ignor
 | 10241 | 36562243359 | main ab0ba59509 (#7505) | 109385885359 `docker-canton-simtime (0)` | 3.6.0-snapshot.20260928.20326.0.v5616afeb |
 | 10242 | 36562304394 | main 802b9faea0 (#7508) | 109386185648 `docker-canton-simtime (0)` | 3.6.0-snapshot.20260928.20326.0.v5616afeb |
 | 10247 | 36584417962 | main 1293c69b23 (#7487) | 109461475341 `simtime (2)` | 3.6.0-snapshot.20260928.20326.0.v5616afeb |
+| 10248 | (not given; job pasted by user) | main at or after 6b4c166b71 (#7522) | `dependencies_scan` / `Executing "sbt bundle"` | n/a (frontend build) |
 | 10249 | CircleCI build 507404 (step 114) | deployed splice main 6b4c166b71 (#7522) | `deploy_basic` / `deploy_cluster` / `Apply Pulumi configuration to cluster` (cimain) | 3.6.0-snapshot.20260928.20326.0.v5616afeb |
 
 ## Overview
@@ -390,6 +391,7 @@ Same packet conventions. Artifacts under `log/<ref>/<artifact-name>/` (git-ignor
 | 10241 | Same as 10236, 0.86 s window (11:47:22.653 -> 11:47:23.513). | 10236 | 10236 packet, section 8. |
 | 10242 | Same as 10236, 1.02 s window (11:48:44.068 -> 11:48:45.091). | 10236 | 10236 packet, section 9. |
 | 10247 | Same as 10238: forced snapshots at record times 11:22:52.001218 / .001318 (same ms), second fails with `relation "acs_snapshot_creates_v1_22_5570572001" already exists` (15:10:47.916), HTTP 500. 32/33 tests passed. | 10238 | 10238 packet, section 8. Still unfixed on origin/main 6b4c166b71 (`toEpochMilli` at AcsSnapshotStore.scala:819/821/1506/1520). No fix branch (scan-side, #6515 owner). |
+| 10248 | `sbt bundle` passes, sbt output check flags ``[info] Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.``: vite 8.2+ advisory for `__dirname` at `apps/sv/frontend/vite.config.mjs:32`, surfaced by #7522 moving the sv frontend from vite 8.0.7 to 8.3.1. | new (build) | [10248-sbt-bundle-vite-native-config-loader-warning-dirname.md](10248-sbt-bundle-vite-native-config-loader-warning-dirname.md). Fix `s11/fix-10248-vite-config-import-meta-dirname` (a02660b19c): `import.meta.dirname`. Uncached `apps-sv-frontend/bundle` fails the check on main, passes with the fix. |
 | 10249 | cimain deploy: `validator1/validator-validator1` fails the 600 s Helm wait on 6 of 6 `pulumi up` attempts (17:31-18:42). Its validator-app, with the splitwell and sv-3 ones, sat on node k48f at 69-105 % CPU (others 2-9 %); init took 13-27 min instead of about 50 s, and validator1's DAR-upload bootstrap aborts after 5 min, restarting the app 5 times. | new (family J, infra) | [10249-deploy-basic-validator1-init-starved-on-saturated-node-dar-bootstrap-timeout.md](10249-deploy-basic-validator1-init-starved-on-saturated-node-dar-bootstrap-timeout.md). Rerun. Deployment robustness described (bootstrap.sc timeout turns slow init into a restart loop; validator-app spread / CPU request). No branch. |
 
 ## Cross-cutting observations (2026-09-29)
@@ -415,3 +417,4 @@ Same packet conventions. Artifacts under `log/<ref>/<artifact-name>/` (git-ignor
 |--------|--------|-------|---------------|
 | s11/fix-10236-scan-snapshot-before-skips-unindexed | cd34fe9285 | 10236, 10237, 10241, 10242 (scan endpoints; supersedes the test-side 7ae2e53dd4) | baseline fails on main; 5/5 `snapshotting` passes, AcsSnapshotStore suites 54/54, scalafmtCheck |
 | s11/fix-10235-sanity-check-skip-uninitialized-scans | b63ea6493f | 10235 cascade (not the Canton hang) | apps-app/Test/compile + scalafmtCheck; not run |
+| s11/fix-10248-vite-config-import-meta-dirname | a02660b19c | 10248 (vite config `__dirname`) | uncached `apps-sv-frontend/bundle` + check-sbt-output.sh before (fails) and after (passes); vitest global setup probe; prettier |
