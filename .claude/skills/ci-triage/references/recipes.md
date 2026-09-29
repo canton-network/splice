@@ -12,13 +12,9 @@ Job logs expire after ~90 days (HTTP 410); artifacts sooner. `gh run view --log`
 ```
 sed -E 's/\x1b\[[0-9;]*m//g' log/$REF/job.log | grep -a -E 'FAILED \*\*\*|Tests: succeeded|All tests passed|contains problems|error\] +org|Run completed|##\[error\]' | sed -E 's/^[^Z]*Z //' | sort -u
 ```
-Flagged lines only (the ones that actually fail checkErrors): the `Found problems`, `Found unmasked secrets` and
-`Found deprecated config paths` blocks of `check-logs.sh`, with credential values redacted. Unmasked-secret
-lines are bare `key=value` or JWT matches with no `@timestamp`, so do not filter on it. Pipe any other output
-that may carry a credential through `sed -E "$REDACT"` too.
+Flagged lines only (the ones that actually fail checkErrors):
 ```
-REDACT='s/((secret|token|private-key|password)=)[^,[:space:]]*/\1<redacted>/g; s/(Bearer\s*)e[A-Za-z0-9_-]{2,}\.[A-Za-z0-9_-]{2,}\.[A-Za-z0-9_-]{2,}/\1<redacted>/g; s/eyJhbGc[A-Za-z0-9_-]*\.[A-Za-z0-9_-]{2,}\.[A-Za-z0-9_-]{2,}/<redacted>/g'
-sed -E 's/\x1b\[[0-9;]*m//g; s/^[^Z]*Z //' log/$REF/job.log | awk '/^Found (problems|unmasked secrets|deprecated config paths) in /{p=1} p; /^Total: [0-9]+ lines with /{p=0}' | sed -E "$REDACT" | cut -c1-600
+sed -E 's/\x1b\[[0-9;]*m//g; s/^[^Z]*Z //' log/$REF/job.log | awk '/^Found (problems|unmasked secrets|deprecated config paths) in /{p=1} p; /^Total: [0-9]+ lines with /{p=0}' | cut -c1-600
 ```
 Failing assertion and stack head:
 ```

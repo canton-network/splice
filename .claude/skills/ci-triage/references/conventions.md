@@ -2,9 +2,6 @@
 
 - Refs and runs: record the user's (run, job, ref) tuples verbatim. Never infer refs by elimination.
 - Pure ASCII in every file, commit message and PR text. No em dashes, smart quotes, arrows, emoji.
-- Secrets: the triage branch is shared, so never write a credential value into a packet, README or commit, even
-  when `check-logs.sh` flagged it as an unmasked secret. Pipe such output through `sed -E "$REDACT"` (recipes
-  section 2) and keep the key name, file and (where present) timestamp.
 - No code comments in fixes; the reasoning goes in the packet and the commit subject.
 - No AI attribution anywhere (no Co-Authored-By, no "generated with"). `Signed-off-by` is the only trailer.
 - Commit messages: one subject line plus the DCO sign-off. CI tag mandatory: `[skip ci]` on the triage branch
