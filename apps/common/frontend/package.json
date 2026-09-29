@@ -32,7 +32,7 @@
     "msw": "^2.14.2",
     "react-intersection-observer": "^11.0.1",
     "react-oidc-context": "2.2.2",
-    "react-router": "^7.12.0",
+    "react-router": "^7.18.2",
     "uuid": "^14.0.0",
     "web-vitals": "4.2.4",
     "xunit-viewer": "^10.6.1",
