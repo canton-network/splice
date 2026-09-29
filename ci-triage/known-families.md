@@ -215,6 +215,12 @@ Format: signature to grep | confirming check | mechanism | parent ref and duplic
   Not family H: there tests run and SIGINT lands at +60 min. Logs lost because `upload_logs` "Sanitize filenames"
   failed in the container hook and the default `success()` skipped the uploads; fix
   `s11/fix-10204-upload-logs-after-sanitize-failure`. Resolution: rerun.
+- 10249 (CircleCI deploy_basic build 507404, cimain, splice 6b4c166b71): one GKE node CPU-saturated after a scale-up
+  (three validator-apps, splitwell-app, sv-da-1 sequencer and mediator); init on that node 25-35x slower. Signature:
+  Helm `validator1/validator-validator1 ... context deadline exceeded` on every attempt, validator-app log
+  `Getting BFT scan connection started` then 13-21 min silence, then `Timeout while waiting for initialization`.
+  Confirm: per-node `kubernetes.io/node/cpu/allocatable_utilization` and the `Scheduled` events for validator-app pods
+  (queries in the packet). Resolution: rerun; bootstrap.sc 5 min DAR-upload wait turns slow init into a restart loop.
 
 ## M. State leaking between suites of one shard through a shared Postgres table
 - Signature: an assertion that a store is empty (or has an exact size) fails with an entity whose embedded test
