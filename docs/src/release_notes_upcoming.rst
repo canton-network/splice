@@ -55,12 +55,6 @@ release-notes:: Upcoming
           will have those coupons minted on its behalf by its delegate, alongside the other
           reward-coupon types.
 
-        - The topology metrics (``splice.synchronizer-topology.*``, enabled via ``topologyMetricsPollingInterval``)
-          now query the full party-to-participant topology state from the participant admin API only once on startup
-          and afterwards track changes through the Ledger API update stream, instead of querying the full state
-          on every polling interval. When topology metrics are enabled, the validator now grants its
-          ledger API user the ``CanReadAsAnyParty`` right, which is required to read topology events for all parties.
-
     - SV UI
 
         - The ``AmuletRules_SetConfig`` proposal form can now set ``amuletSwitchOverTimes``.
@@ -70,4 +64,3 @@ release-notes:: Upcoming
     - Daml
 
         - Fix a bug in MintingDelegation that wrongly allowed the delegate to share their own coupons within a minting delegation.
-
