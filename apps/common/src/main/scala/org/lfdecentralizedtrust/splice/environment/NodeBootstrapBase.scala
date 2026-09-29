@@ -165,35 +165,44 @@ abstract class NodeBootstrapBase[
   /** Attempt to start the node.
     */
   def start(): EitherT[Future, String, Unit] = {
-    warnIfDataChecksumsDisabled()
-    initialize(httpAdminService).leftMap { err =>
-      logger.info(s"Failed to initialize node, trying to clean up: $err")
-      close()
-      err
-    }
+    checkDataChecksums()
+      .flatMap(_ => initialize(httpAdminService))
+      .leftMap { err =>
+        logger.info(s"Failed to initialize node, trying to clean up: $err")
+        close()
+        err
+      }
   }
 
-  private def warnIfDataChecksumsDisabled(): Unit =
-    storage
-      .query(
-        sql"show data_checksums".as[String].headOption,
-        "checkDataChecksumsEnabled",
-      )
-      .onComplete {
-        case Success(UnlessShutdown.Outcome(Some(value))) if value.trim.toLowerCase == "on" =>
-          logger.info("PostgreSQL data checksums are enabled.")
-        case Success(UnlessShutdown.Outcome(value)) =>
-          logger.warn(
-            s"PostgreSQL data checksums are not enabled on the database (result: $value). See https://www.postgresql.org/docs/current/checksums.html"
-          )
-        case Success(UnlessShutdown.AbortedDueToShutdown) =>
-          ()
-        case Failure(ex) =>
-          logger.warn(
-            s"Could not determine whether PostgreSQL data checksums are enabled on the database.",
-            ex,
-          )
-      }
+  private def checkDataChecksums(): EitherT[Future, String, Unit] =
+    EitherT(
+      storage
+        .query(
+          sql"show data_checksums".as[String].headOption,
+          "checkDataChecksumsEnabled",
+        )
+        .unwrap
+        .transform {
+          case Success(UnlessShutdown.Outcome(Some(value))) if value.trim.toLowerCase == "on" =>
+            logger.info("PostgreSQL data checksums are enabled.")
+            Success(Right(()))
+          case Success(UnlessShutdown.Outcome(value)) =>
+            val msg =
+              s"PostgreSQL data checksums are not enabled on the database (result: $value). Enable them with pg_checksums --enable (see https://www.postgresql.org/docs/current/checksums.html), or set `parameters.unsafe-allow-disabled-data-checksums = true` to start anyway."
+            if (nodeConfig.parameters.unsafeAllowDisabledDataChecksums) {
+              logger.warn(msg)
+              Success(Right(()))
+            } else Success(Left(msg))
+          case Success(UnlessShutdown.AbortedDueToShutdown) =>
+            Success(Left("Aborting startup due to shutdown"))
+          case Failure(ex) =>
+            logger.warn(
+              s"Could not determine whether PostgreSQL data checksums are enabled on the database.",
+              ex,
+            )
+            Success(Right(()))
+        }
+    )
 
   @SuppressWarnings(Array("com.digitalasset.canton.RequireBlocking"))
   override def onClosed(): Unit = blocking {

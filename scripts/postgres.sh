@@ -38,6 +38,7 @@ function docker_start() {
     --name "$DOCKER_POSTGRES_CONTAINER_NAME" \
     -e POSTGRES_USER="$POSTGRES_USER" \
     -e POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
+    -e POSTGRES_INITDB_ARGS=--data-checksums \
     -p "$POSTGRES_PORT":5432 \
     $DOCKER_POSTGRES_IMAGE_NAME \
     postgres \
